@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppt-agent.local/schemas/slide-json.schema.json",
+  "title": "SlideJSON",
+  "description": "单页 slide 的结构化描述（内容与意图），区别于最终渲染的 html。",
+  "type": "object",
+  "required": ["id", "idx", "layout", "title"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "slide 唯一 id"
+    },
+    "idx": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "页序，0 基"
+    },
+    "layout": {
+      "type": "string",
+      "description": "版式枚举，来自 60-design-system/layouts.md",
+      "enum": [
+        "cover", "toc", "section-divider", "bullets", "two-column",
+        "three-column", "big-quote", "stat-highlight", "kpi-grid", "table",
+        "code", "diff", "terminal", "flow-diagram", "timeline", "roadmap",
+        "mindmap", "comparison", "pros-cons", "image-hero", "image-grid",
+        "chart", "arch-diagram", "process-steps", "cta", "thanks"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "description": "页标题"
+    },
+    "subtitle": {
+      "type": "string"
+    },
+    "bullets": {
+      "type": "array",
+      "description": "要点列表（适用于 bullets/列表型版式）",
+      "items": { "type": "string" }
+    },
+    "content_intent": {
+      "type": "string",
+      "description": "当页不是简单要点时，对内容意图的自然语言描述，供生成阶段使用"
+    },
+    "chart_intent": {
+      "type": "object",
+      "description": "图表意图，来自 60-design-system/charts.md",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["bar", "line", "pie", "radar", "area", "scatter", "gantt", "flow", "arch"]
+        },
+        "data_hint": {
+          "type": "string",
+          "description": "对数据来源/结构的描述"
+        }
+      },
+      "required": ["type"]
+    },
+    "animations": {
+      "type": "array",
+      "description": "本页期望的动效引用（来自 60-design-system/animations.md）",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "target": { "type": "string", "description": "目标元素选择器或语义标识" },
+          "name": { "type": "string", "description": "动效名称" },
+          "trigger": { "type": "string", "enum": ["enter", "step", "auto"] }
+        },
+        "required": ["name"]
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "description": "本页引用的个人仓库插件（按 manifest 移植）",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plugin_id": { "type": "string" },
+          "params": { "type": "object" }
+        },
+        "required": ["plugin_id"]
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "备注（非演讲者模式；仅作者备忘）"
+    },
+    "steps": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "页内分步数量（用于 viewer 的上一步/下一步）"
+    }
+  }
+}

@@ -1,0 +1,416 @@
+openapi: 3.1.0
+info:
+  title: AI PPT Builder API
+  version: 0.1.0
+  description: |
+    专注 frontend 的 PPT Coding Agent 的后端契约。
+    REST 用于控制/查询，SSE 用于流式输出（见 /runs/{id}/events）。
+    无鉴权（单用户单机，默认监听回环）。
+servers:
+  - url: http://127.0.0.1:8787/api/v1
+    description: 本地开发
+
+tags:
+  - name: projects
+  - name: decks
+  - name: slides
+  - name: runs
+  - name: plugins
+  - name: export
+
+paths:
+  /projects:
+    get:
+      tags: [projects]
+      summary: 列出项目
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Project' }
+    post:
+      tags: [projects]
+      summary: 创建项目（输入主题，触发可后续生成大纲）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProjectRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /projects/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [projects]
+      summary: 获取项目
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [projects]
+      summary: 删除项目
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /projects/{id}/deck:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [decks]
+      summary: 获取项目的 Deck
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Deck' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /decks/{id}/slides:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [slides]
+      summary: 列出 Deck 的 slides
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Slide' }
+
+  /slides/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [slides]
+      summary: 获取单页 slide（含 slide-json 与 html 路径）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Slide' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /slides/{id}/versions:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [slides]
+      summary: 列出该 slide 的版本
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Version' }
+
+  /slides/{id}/rollback:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [slides]
+      summary: 回滚到指定版本（会产生一条新版本）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version_no]
+              properties:
+                version_no: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Slide' }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /projects/{id}/runs:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [runs]
+      summary: 发起一次 Agent 执行（生成/编辑/指令）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRunRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Run' }
+        '400': { $ref: '#/components/responses/Error' }
+
+  /runs/{id}/events:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - name: Last-Event-ID
+        in: header
+        required: false
+        schema: { type: string }
+        description: 断线重连续传（从该 seq 之后续发）
+    get:
+      tags: [runs]
+      summary: 订阅 Run 的 SSE 事件流
+      responses:
+        '200':
+          description: SSE 流（text/event-stream）。事件 schema 见 sse-events.md
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /runs/{id}/input:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [runs]
+      summary: 向运行中的 Run 注入控制输入（HITL）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RunInputRequest' }
+      responses:
+        '202': { description: Accepted（已入队，将在 checkpoint 消费） }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /runs/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [runs]
+      summary: 取消 Run（安全终止，保留已落盘产物）
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /plugins:
+    get:
+      tags: [plugins]
+      summary: 列出个人仓库插件
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Plugin' }
+    post:
+      tags: [plugins]
+      summary: 收藏插件（提交 manifest + 资源，服务端校验 schema）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePluginRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plugin' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /plugins/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [plugins]
+      summary: 获取插件
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Plugin' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [plugins]
+      summary: 删除插件
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /projects/{id}/export:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [export]
+      summary: 导出 PNG/PDF（backlog，未实现）
+      x-status: backlog
+      responses:
+        '501': { description: Not Implemented（MVP 不提供） }
+
+components:
+  responses:
+    Error:
+      description: 统一错误响应
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object }
+
+    Project:
+      type: object
+      required: [id, title, work_dir, created_at, updated_at]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        work_dir: { type: string }
+        created_at: { type: integer }
+        updated_at: { type: integer }
+
+    CreateProjectRequest:
+      type: object
+      required: [topic]
+      properties:
+        topic: { type: string, description: 主题文本 }
+        brief: { type: string }
+        slide_count: { type: integer, minimum: 1 }
+        language: { type: string, enum: [zh, en] }
+
+    Deck:
+      type: object
+      required: [id, project_id, theme, status, common_style_path]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        theme: { type: string }
+        status: { type: string, enum: [draft, generating, ready] }
+        common_style_path: { type: string }
+
+    Slide:
+      type: object
+      required: [id, deck_id, idx, layout, title, json_path, html_path, current_version]
+      properties:
+        id: { type: string }
+        deck_id: { type: string }
+        idx: { type: integer }
+        layout: { type: string }
+        title: { type: string }
+        json_path: { type: string }
+        html_path: { type: string }
+        current_version: { type: integer }
+        last_export_at: { type: [integer, "null"], description: 'backlog 预留' }
+
+    Version:
+      type: object
+      required: [id, target_type, target_id, version_no, snapshot_path, created_at]
+      properties:
+        id: { type: string }
+        target_type: { type: string, enum: [slide, deck, common_style] }
+        target_id: { type: string }
+        version_no: { type: integer }
+        snapshot_path: { type: string }
+        run_id: { type: [string, "null"] }
+        created_at: { type: integer }
+
+    CreateRunRequest:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [outline, generate, edit, command] }
+        scope: { type: string, enum: [page, overview, deck], default: deck }
+        page_index: { type: integer, minimum: 0 }
+        mode: { type: string, enum: [normal, talk, ask], default: normal }
+        instruction: { type: string, description: 用户自然语言或指令原文 }
+        command:
+          type: string
+          description: 显式指令名（page/overview/prompt/recap/talk/ask），可由 instruction 解析得到
+        selection:
+          $ref: '#/components/schemas/SelectionRef'
+
+    SelectionRef:
+      type: object
+      description: 'backlog：框选编辑的多模态选区（MVP 预留，可为空）'
+      properties:
+        bbox:
+          type: array
+          items: { type: number }
+          minItems: 4
+          maxItems: 4
+          description: '[x, y, w, h]'
+        dom_selector_range: { type: string }
+        screenshot_crop: { type: string, description: 'data URL 或资源引用' }
+
+    Run:
+      type: object
+      required: [id, project_id, kind, status]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        kind: { type: string }
+        scope: { type: string }
+        page_index: { type: [integer, "null"] }
+        mode: { type: string }
+        status: { type: string, enum: [pending, running, waiting, done, failed, canceled] }
+        events_url: { type: string, description: SSE 订阅地址 }
+
+    RunInputRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, description: 注入的用户消息 }
+        reply_to: { type: string, description: '若回应某个 needs_input 事件，填其 id' }
+
+    Plugin:
+      type: object
+      required: [id, name, kind, manifest_path, dir, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string, enum: [style, fx] }
+        manifest_path: { type: string }
+        dir: { type: string }
+        created_at: { type: integer }
+
+    CreatePluginRequest:
+      type: object
+      required: [name, kind, manifest]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [style, fx] }
+        manifest: { type: object, description: 'manifest.json 内容，须符合 plugin-manifest schema' }
+        files:
+          type: object
+          description: '资源文件名 → 内容（html/css/js）'
+          additionalProperties: { type: string }

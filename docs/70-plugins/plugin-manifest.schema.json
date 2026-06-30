@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppt-agent.local/schemas/plugin-manifest.schema.json",
+  "title": "PluginManifest",
+  "description": "个人仓库插件清单。定义插件的元数据、挂载约定、参数 schema 与资源。",
+  "type": "object",
+  "required": ["name", "version", "kind", "description", "mount", "assets"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "插件名（小写短横线）"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "语义化版本"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["style", "fx"],
+      "description": "style=html/css 片段；fx=js 特效"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "一句话用途，供 AI 语义检索匹配"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "便于检索的标签"
+    },
+    "mount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "挂载目标：CSS 选择器或语义位（如 'slide-root'、'.cover'）。缺省为 slide 根"
+        },
+        "position": {
+          "type": "string",
+          "enum": ["append", "prepend", "replace", "wrap"],
+          "description": "注入方式"
+        }
+      }
+    },
+    "params": {
+      "type": "object",
+      "description": "参数 schema（JSON Schema 子集）。每个参数须含 type 与 default",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type", "default"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["string", "number", "boolean", "color", "enum"]
+          },
+          "default": {},
+          "enum": {
+            "type": "array",
+            "description": "当 type=enum 时的候选值"
+          },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "description": "资源文件清单（相对插件目录）",
+      "additionalProperties": false,
+      "properties": {
+        "html": { "type": "string", "description": "template.html 等" },
+        "css": { "type": "string" },
+        "js": { "type": "string", "description": "effect.js 等" }
+      }
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "可选依赖声明",
+      "properties": {
+        "tokens": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "依赖的 design token 名"
+        },
+        "cdn": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "可选 CDN 资源 URL（MVP 谨慎使用）"
+        }
+      }
+    },
+    "cleanup": {
+      "type": "boolean",
+      "default": false,
+      "description": "fx 插件是否需要页离开清理（RAF/监听），fx 建议为 true"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "fx" } } },
+      "then": {
+        "properties": {
+          "assets": { "required": ["js"] }
+        }
+      }
+    }
+  ]
+}
