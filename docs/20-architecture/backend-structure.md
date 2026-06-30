@@ -33,33 +33,47 @@ backend/
 │   │   ├── deck_handler.go
 │   │   ├── slide_handler.go
 │   │   ├── run_handler.go     # 创建 run / 订阅 events / 注入 input
-│   │   └── plugin_handler.go
+│   │   └── asset_handler.go   # 个人仓库资产 CRUD
 │   ├── service/               # Service 层（用例编排）
 │   │   ├── project.go
 │   │   ├── deck.go
 │   │   ├── slide.go
 │   │   ├── version.go
-│   │   └── plugin.go
-│   ├── run/                   # Run 引擎（见 agent-runtime.md）
+│   │   └── asset.go
+│   ├── run/                   # Run 外壳（见 agent-runtime.md）
 │   │   ├── engine.go          # run 生命周期状态机
 │   │   ├── bus.go             # 事件总线（SSE 扇出）
 │   │   ├── input.go           # 控制输入队列（HITL）
 │   │   └── checkpoint.go
-│   ├── agent/                 # Agent 业务逻辑
-│   │   ├── outline/           # 大纲生成
-│   │   ├── generate/          # slide 生成
-│   │   ├── edit/              # 编辑（page/overview）
-│   │   ├── command/           # 指令解析与分派（/page /overview ...）
-│   │   └── prompt/            # prompt 模板装配
+│   ├── harness/               # ★ Agent Harness（见 agent-harness.md / tools.md）
+│   │   ├── loop.go            # ReAct 主循环（thought→tool_call→observation）
+│   │   ├── gate.go            # 动态工具门控（按 scope/mode 裁剪工具集）
+│   │   ├── subagent.go        # 子代理委派（逐页生成）
+│   │   ├── stop.go            # 停止条件（max_turns/finish/熔断/取消）
+│   │   ├── context.go         # 上下文预算/压缩/渐进披露
+│   │   └── tools/             # 工具实现（确定性脚本，带 schema）
+│   │       ├── registry.go    # 工具注册与 function schema
+│   │       ├── slide_tools.go # read/patch/write_slide、validate_slide、mount_asset
+│   │       ├── style_tools.go # read/patch_common_style、apply_theme
+│   │       ├── asset_tools.go # search/read/create/patch/delete_asset
+│   │       └── finish.go
+│   ├── agent/                 # Agent 业务编排（构造 harness 配置）
+│   │   ├── outline/           # 大纲生成（两阶段第一步）
+│   │   ├── generate/          # slide 生成（子代理逐页）
+│   │   ├── edit/              # 编辑（current/page/overview 局部 patch）
+│   │   ├── command/           # 指令解析（scope 四件套 + mode）
+│   │   └── prompt/            # prompt 模板装配（system/tools/context/user）
 │   ├── llm/                   # LLM 客户端
-│   │   ├── client.go          # interface: Chat/Stream
+│   │   ├── client.go          # interface: Chat/Stream/CallTool
 │   │   └── deepseek.go        # DeepSeek 实现
 │   ├── store/                 # 持久化
-│   │   ├── sqlite/            # SQLite 实现（元数据/版本/插件索引）
-│   │   ├── fs/                # 文件系统（slide 产物、work_dir）
+│   │   ├── sqlite/            # SQLite 实现（元数据/版本/资产索引/run_events）
+│   │   ├── fs/                # 文件系统（slide 产物、work_dir、_assets）
 │   │   └── store.go           # store interface 定义
-│   ├── model/                 # 领域模型（Project/Deck/Slide/Run/Plugin/Version）
-│   └── designsystem/          # 设计系统资产加载（主题/版式/动效目录）
+│   ├── asset/                 # 资产协议：校验、seed 载入、移植
+│   ├── model/                 # 领域模型（Project/Deck/Slide/Run/Asset/Version）
+│   └── designsystem/          # 公共层/产出规范辅助（tokens 校验、lint）
+├── seed/assets/               # 出厂预置资产（themes/layouts/components/fx）
 ├── migrations/                # SQLite 迁移脚本（对应 30-data-model/sqlite-schema.sql）
 ├── go.mod
 └── go.sum
@@ -68,11 +82,15 @@ backend/
 ## 依赖方向（强约束）
 
 ```
-httpapi  ──▶ service ──▶ store(interface)
-                │            ▲
-                ├──▶ run ────┘
-                └──▶ agent ──▶ llm(interface) + prompt + designsystem
+httpapi ──▶ service ──▶ store(interface)
+               │           ▲
+               ├──▶ run ───┘         （Run 外壳：状态机/SSE/输入队列）
+               │     └──▶ harness ──▶ harness/tools ──▶ store + asset
+               │                └──▶ llm(interface)  （CallTool / Stream）
+               └──▶ agent ──▶ prompt + designsystem  （构造 harness 配置）
 ```
+
+> Run 外壳驱动 Harness；Harness 经工具改产物；工具调 store/asset 落盘。LLM 只被 harness 通过 `CallTool` 使用。
 
 | ID | 规则 |
 |---|---|
@@ -96,8 +114,8 @@ httpapi  ──▶ service ──▶ store(interface)
   /runs/{id}/events    GET (SSE)      # 订阅事件流
   /runs/{id}/input     POST           # HITL 控制输入
   /runs/{id}           DELETE         # 取消 run
-  /plugins             GET POST
-  /plugins/{id}        GET DELETE
+  /assets              GET POST
+  /assets/{id}         GET PATCH DELETE
 ```
 
 ## 配置

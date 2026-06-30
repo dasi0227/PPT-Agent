@@ -1,18 +1,33 @@
 ---
 id: ARCH-RUNTIME
-title: Agent Run 引擎（SSE + HITL）
+title: Agent Run 引擎（生命周期外壳，SSE + HITL）
 status: approved
 owner: backend
-depends_on: [ARCH-SYSTEM, ADR-0004, API-RUN]
+depends_on: [ARCH-SYSTEM, ARCH-HARNESS, ADR-0004, API-RUN]
 verifies: []
 ---
 
-# Agent Run 引擎（SSE 流式 + Human-in-the-loop）
+# Agent Run 引擎（生命周期外壳：SSE 流式 + Human-in-the-loop）
 
-## 核心抽象：Run
+## 核心抽象：Run 是「外壳」，Harness 是「大脑」
 
-一次 Agent 执行 = 一个 **Run**。Run 把「LLM 调用 + 文件产出 + 版本记录 + 事件流 + 控制输入」统一为一个有生命周期的单元。
-所有生成/编辑/指令最终都创建并驱动一个 Run。
+一次 Agent 执行 = 一个 **Run**。Run 是**生命周期外壳**：负责状态机、事件流（SSE）、控制输入队列、取消。
+Run 内部驱动一个 **Harness**（ReAct 循环 + 工具化），后者才是真正做事的 agent 大脑。
+
+```
+Run（本文件：状态机 + SSE + 控制输入 + 取消）
+  └── 内部驱动 ──▶ Harness（见 agent-harness.md：thought→tool_call→observation 循环）
+```
+
+职责切分（不要混淆）：
+
+| 关注点 | 归属 |
+|---|---|
+| 状态机、对外 API、SSE 帧、断线续传、控制输入队列、取消 | **Run（本文件）** |
+| ReAct 循环、工具集与动态门控、停止条件、上下文压缩、子代理 | **Harness（[agent-harness](agent-harness.md)）** |
+| 具体工具的参数 schema 与执行语义 | **Tools（[tools](tools.md)）** |
+
+所有生成/编辑/指令/资产操作都创建一个 Run，Run 据 scope/mode 构造对应 Harness。
 
 ## 生命周期状态机
 
@@ -46,13 +61,18 @@ verifies: []
 | 事件 | 含义 |
 |---|---|
 | `run.started` | Run 开始 |
+| `thought` | Harness 一轮推理（ReAct 的 Reason） |
+| `tool_call` | LLM 发起一次工具调用（名 + 参数） |
+| `tool_result` | 工具执行的 observation（ReAct 的 Act 结果） |
 | `progress` | 进度（含 `current`/`total`/`stage`） |
 | `token` | LLM 流式 token（用于实时显示） |
-| `artifact` | 一个产出落盘（slide html / 公共样式层 / 版本） |
+| `artifact` | 一个产出落盘（slide html / 公共样式层 / 资产 / 版本） |
 | `needs_input` | 暂停等待用户输入（含 `prompt` 与可选 `schema`） |
 | `info` | 信息性消息（如 `/talk` 的分析输出） |
 | `done` | 完成（含结果引用） |
 | `error` | 错误（含错误码） |
+
+> `thought`/`tool_call`/`tool_result` 是 Harness ReAct 循环每一轮的可观测投影（[ARCH-HARNESS-003](agent-harness.md)），使整个执行可追溯。
 
 ## Human-in-the-loop 机制
 

@@ -56,15 +56,25 @@ curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
   -H 'Content-Type: application/json' \
   -d '{"kind":"outline","instruction":"做一份8页的技术分享"}'
 
-# 单页编辑（/page 2）
+# 当前页编辑（默认 /current，前端填当前预览页号）
 curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
   -H 'Content-Type: application/json' \
-  -d '{"kind":"edit","scope":"page","page_index":2,"command":"page","instruction":"把标题改大一号"}'
+  -d '{"kind":"edit","scope":"current","page_index":3,"instruction":"把标题改大一号"}'
 
-# 全局编辑（/overview）
+# 指定单页编辑（/page 2）
 curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
   -H 'Content-Type: application/json' \
-  -d '{"kind":"edit","scope":"overview","command":"overview","instruction":"主色改成品牌蓝"}'
+  -d '{"kind":"edit","scope":"page","page_index":2,"instruction":"把标题改大一号"}'
+
+# 跨页/全局（/overview）
+curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"edit","scope":"overview","instruction":"主色改成品牌蓝"}'
+
+# 改仓库资产（/repo）
+curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"edit","scope":"repo","instruction":"把霓虹卡片组件圆角调大"}'
 
 # 只说不做（/talk）
 curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
@@ -102,17 +112,25 @@ curl -s -X POST http://127.0.0.1:8787/api/v1/runs/{runId}/input \
 curl -s -X DELETE http://127.0.0.1:8787/api/v1/runs/{runId}   # 204
 ```
 
-## 插件（个人仓库）
+## 资产（个人仓库）
 
 ```bash
-# 收藏插件（服务端校验 manifest schema）
-curl -s -X POST http://127.0.0.1:8787/api/v1/plugins \
+# 新增资产（服务端校验 asset-manifest schema）
+curl -s -X POST http://127.0.0.1:8787/api/v1/assets \
   -H 'Content-Type: application/json' \
-  -d '{"name":"particle-burst","kind":"fx","manifest":{...},"files":{"effect.js":"..."}}'
+  -d '{"manifest":{"name":"particle-burst","kind":"fx","version":"1.0.0","description":"粒子特效","mount":{"position":"append"},"assets":{"js":"effect.js"}},"payload":{"effect.js":"..."}}'
 # 422 VALIDATION_FAILED 当 manifest 不合规
 
-curl -s http://127.0.0.1:8787/api/v1/plugins
-curl -s -X DELETE http://127.0.0.1:8787/api/v1/plugins/{id}
+# 列出（可按 kind 过滤）
+curl -s 'http://127.0.0.1:8787/api/v1/assets?kind=theme'
+
+# 修改资产（锚定替换载荷，产生资产版本）
+curl -s -X PATCH http://127.0.0.1:8787/api/v1/assets/{id} \
+  -H 'Content-Type: application/json' \
+  -d '{"edits":[{"file":"style.css","old_text":"border-radius: 8px","new_text":"border-radius: 20px"}]}'
+
+# 删除
+curl -s -X DELETE http://127.0.0.1:8787/api/v1/assets/{id}
 ```
 
 ## 导出（backlog）

@@ -26,9 +26,10 @@ Project (1) ──── (1) Deck (1) ──── (N) Slide
    │                 │                  └── (N) Version  (slide 级快照)
    │                 └── (N) Version       (deck 级/公共样式层快照)
    │
-   └── (N) Run        (一次 Agent 执行，关联 project/deck/slide)
+   └── (N) Run        (一次 Agent 执行，关联 project/deck/slide；repo scope 可无 project)
 
-Plugin (N)            (个人仓库，全局，不强绑 project)
+Asset (N)             (个人仓库统一资产，全局，不强绑 project；kind=layout|component|theme|fx)
+   └── (N) Version    (资产级快照，可回滚)
 ```
 
 ## 实体定义
@@ -83,25 +84,33 @@ Plugin (N)            (个人仓库，全局，不强绑 project)
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | TEXT | 主键 |
-| project_id | TEXT | 外键 |
+| project_id | TEXT NULL | 外键（repo scope 的 run 可无项目） |
 | kind | TEXT | `outline`\|`generate`\|`edit`\|`command` |
-| scope | TEXT | `page`\|`overview`\|`deck` |
+| scope | TEXT | `current`\|`page`\|`overview`\|`repo` |
 | page_index | INTEGER NULL | 针对页时的页序 |
 | mode | TEXT | `normal`\|`talk`\|`ask` |
+| command | TEXT NULL | 显式指令名（prompt/recap/talk/ask 等） |
 | status | TEXT | `pending`\|`running`\|`waiting`\|`done`\|`failed`\|`canceled` |
 | created_at / updated_at | INTEGER | |
 
-### Plugin
+### Asset（个人仓库统一资产）
+四类资产共享统一信封，载荷存文件系统。预置与用户新增同表，`source` 区分。
+
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | TEXT | 主键 |
-| name | TEXT | 插件名 |
-| kind | TEXT | `style`\|`fx` |
+| name | TEXT | 资产名 |
+| kind | TEXT | `layout`\|`component`\|`theme`\|`fx` |
+| version | TEXT | 语义化版本 |
+| source | TEXT | `preset`（出厂预置）\|`user`（用户新增） |
+| description | TEXT | 一句话用途（供 AI 检索） |
+| tags | TEXT | JSON 数组文本 |
 | manifest_path | TEXT | manifest.json 相对路径 |
-| dir | TEXT | 插件资源目录 |
-| created_at | INTEGER | |
+| dir | TEXT | 资产资源目录 |
+| created_at / updated_at | INTEGER | |
 
-`DATA-PLUGIN-001`：Plugin 的 manifest MUST 符合 [plugin-manifest.schema.json](../70-plugins/plugin-manifest.schema.json)。
+`DATA-ASSET-001`：Asset 的 manifest MUST 符合 [asset-manifest.schema.json](../60-design-system/asset-manifest.schema.json)。
+`DATA-ASSET-002`：`kind=theme` 的资产 MUST 提供「必需 token 全集」（见 [design-tokens](../60-design-system/design-tokens.md)）。
 
 ## 数据约束汇总
 
@@ -109,8 +118,9 @@ Plugin (N)            (个人仓库，全局，不强绑 project)
 |---|---|
 | `DATA-MODEL-001` | 元数据入 SQLite，slide 大文本入 fs；二者通过路径字段关联 |
 | `DATA-SLIDE-001` | slide-json 符合 slide-json schema |
-| `DATA-PLUGIN-001` | plugin manifest 符合 manifest schema |
-| `DATA-VERSION-001` | 任意可编辑产物变更 MUST 产生新版本，支持回滚 |
+| `DATA-ASSET-001` | asset manifest 符合 asset-manifest schema |
+| `DATA-ASSET-002` | theme 资产提供必需 token 全集 |
+| `DATA-VERSION-001` | 任意可编辑产物变更 MUST 产生新版本，支持回滚（含 slide/deck/common_style/asset） |
 | `DATA-MODEL-002` | 外键关系 MUST 在删除时级联或受保护（不留孤儿记录） |
 
 ## 验收标准（Given-When-Then）
@@ -129,7 +139,7 @@ Plugin (N)            (个人仓库，全局，不强绑 project)
 
 ```bash
 sqlite3 :memory: < docs/30-data-model/sqlite-schema.sql
-# JSON Schema 校验：见 slide-json.schema.json / plugin-manifest.schema.json
+# JSON Schema 校验：见 slide-json.schema.json / asset-manifest.schema.json
 ```
 
 ## 依赖

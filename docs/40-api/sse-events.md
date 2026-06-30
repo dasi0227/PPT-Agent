@@ -32,13 +32,18 @@ data: <json>
 | event | data 字段 | 说明 |
 |---|---|---|
 | `run.started` | `{ run_id, kind, scope, mode }` | Run 开始 |
+| `thought` | `{ text }` | Harness 一轮推理（ReAct Reason）|
+| `tool_call` | `{ tool, args, call_id }` | LLM 发起工具调用（function call）|
+| `tool_result` | `{ call_id, ok, observation }` | 工具执行 observation（ReAct Act 结果）|
 | `progress` | `{ stage, current, total, message? }` | 进度（如逐页生成 current/total） |
 | `token` | `{ text }` | LLM 流式增量文本 |
-| `artifact` | `{ artifact_type, ref, page_index? }` | 一个产物落盘（`slide_html`/`common_style`/`version`） |
+| `artifact` | `{ artifact_type, ref, page_index? }` | 一个产物落盘（`slide_html`/`common_style`/`asset`/`version`） |
 | `needs_input` | `{ id, prompt, schema?, choices? }` | 暂停等待输入；客户端用 `reply_to=id` 应答 |
 | `info` | `{ text }` | 信息性输出（`/talk` 的分析、提示） |
-| `done` | `{ result }` | 完成；result 含产物引用（deck_id/slide_id/version_no 等） |
+| `done` | `{ result }` | 完成；result 含产物引用（deck_id/slide_id/asset_id/version_no 等） |
 | `error` | `{ code, message }` | 错误，对应错误码表 |
+
+> `thought`/`tool_call`/`tool_result` 是 Harness ReAct 循环每一轮的可观测投影，持久化于 `run_events`，支撑追溯与断线续传。
 
 ## 序列约定
 
@@ -55,7 +60,7 @@ data: <json>
 ```
 id: 1
 event: run.started
-data: {"run_id":"r1","kind":"generate","scope":"deck","mode":"normal"}
+data: {"run_id":"r1","kind":"generate","scope":"overview","mode":"normal"}
 
 id: 2
 event: progress

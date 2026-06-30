@@ -47,12 +47,13 @@ verifies: []
     └── assets/
         └── img/                      # 项目内图片等静态资源
 
-<PPT_WORK_ROOT>/_plugins/             # 个人仓库（全局，跨项目）
-└── <plugin_id>/
-    ├── manifest.json                 # 符合 plugin-manifest schema
-    ├── template.html                 # 样式型插件的 html 片段（可选）
+<PPT_WORK_ROOT>/_assets/              # 个人仓库（全局，跨项目；预置 + 用户新增同处）
+└── <asset_id>/
+    ├── manifest.json                 # 统一信封，符合 asset-manifest schema
+    ├── template.html                 # layout/component 的 html 载荷（可选）
     ├── style.css                     # 可选
-    └── effect.js                     # 特效型插件脚本（可选）
+    ├── tokens.css                    # theme 的 token 全集载荷（kind=theme）
+    └── effect.js                     # fx 的特效脚本（kind=fx）
 ```
 
 ## state.json 结构（单一状态游标）
@@ -78,7 +79,7 @@ verifies: []
 | `slides/<idx>/slide.json` | `slides.json_path` | slide-json |
 | `slides/<idx>/index.html` | `slides.html_path` | slide html |
 | `versions/...` | `versions.snapshot_path` | 版本快照 |
-| `_plugins/<id>/manifest.json` | `plugins.manifest_path` | 插件清单 |
+| `_assets/<id>/manifest.json` | `assets.manifest_path` | 资产清单 |
 
 | ID | 约束 |
 |---|---|

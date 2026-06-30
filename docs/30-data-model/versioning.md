@@ -21,6 +21,7 @@ verifies: []
 | `slide` | 单页 html | 该页 `index.html`（必要时含 slide.css/js） |
 | `common_style` | 公共样式层 | `common/tokens.css` |
 | `deck` | deck 结构 | `deck.json`（页顺序/主题引用） |
+| `asset` | 个人仓库资产 | 该资产目录快照（manifest + 载荷） |
 
 ## 版本生成规则
 

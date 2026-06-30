@@ -9,6 +9,9 @@ verifies: []
 
 # 版式库目录
 
+> 整页板式是**资产的一种**（`kind=layout`），遵循 [asset-protocol](asset-protocol.md)，作为 preset 由 [seed-assets](seed-assets.md) 载入，可经 `/repo` 增删改。
+> 注意区分：`layout`=整页盒子骨架；`component`=页内可复用小块（见 [components](components.md)）。
+
 版式（layout）= 单页的结构模板。slide-json 的 `layout` 字段从本目录枚举取值（与
 [slide-json.schema.json](../30-data-model/slide-json.schema.json) 的 enum 保持一致）。
 

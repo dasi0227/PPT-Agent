@@ -15,7 +15,7 @@ tags:
   - name: decks
   - name: slides
   - name: runs
-  - name: plugins
+  - name: assets
   - name: export
 
 paths:
@@ -210,10 +210,12 @@ paths:
         '204': { description: No Content }
         '404': { $ref: '#/components/responses/Error' }
 
-  /plugins:
+  /assets:
     get:
-      tags: [plugins]
-      summary: 列出个人仓库插件
+      tags: [assets]
+      summary: 列出个人仓库资产（含预置与用户新增）
+      parameters:
+        - { name: kind, in: query, required: false, schema: { type: string, enum: [layout, component, theme, fx] } }
       responses:
         '200':
           description: OK
@@ -221,39 +223,55 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/Plugin' }
+                items: { $ref: '#/components/schemas/Asset' }
     post:
-      tags: [plugins]
-      summary: 收藏插件（提交 manifest + 资源，服务端校验 schema）
+      tags: [assets]
+      summary: 新增资产（提交 manifest + 载荷，服务端校验资产协议 schema）
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CreatePluginRequest' }
+            schema: { $ref: '#/components/schemas/CreateAssetRequest' }
       responses:
         '201':
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Plugin' }
+              schema: { $ref: '#/components/schemas/Asset' }
         '422': { $ref: '#/components/responses/Error' }
 
-  /plugins/{id}:
+  /assets/{id}:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
     get:
-      tags: [plugins]
-      summary: 获取插件
+      tags: [assets]
+      summary: 获取资产
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Plugin' }
+              schema: { $ref: '#/components/schemas/Asset' }
         '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [assets]
+      summary: 修改资产（载荷/元数据；产生资产版本）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchAssetRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
     delete:
-      tags: [plugins]
-      summary: 删除插件
+      tags: [assets]
+      summary: 删除资产
       responses:
         '204': { description: No Content }
         '404': { $ref: '#/components/responses/Error' }
@@ -349,13 +367,13 @@ components:
       required: [kind]
       properties:
         kind: { type: string, enum: [outline, generate, edit, command] }
-        scope: { type: string, enum: [page, overview, deck], default: deck }
-        page_index: { type: integer, minimum: 0 }
+        scope: { type: string, enum: [current, page, overview, repo], default: current }
+        page_index: { type: integer, minimum: 0, description: 'current/page scope 的目标页；current 由前端填当前预览页' }
         mode: { type: string, enum: [normal, talk, ask], default: normal }
-        instruction: { type: string, description: 用户自然语言或指令原文 }
         command:
           type: string
-          description: 显式指令名（page/overview/prompt/recap/talk/ask），可由 instruction 解析得到
+          description: 显式指令名（prompt/recap/talk/ask 等），可由 instruction 解析得到
+        instruction: { type: string, description: 用户自然语言或指令原文 }
         selection:
           $ref: '#/components/schemas/SelectionRef'
 
@@ -392,25 +410,48 @@ components:
         content: { type: string, description: 注入的用户消息 }
         reply_to: { type: string, description: '若回应某个 needs_input 事件，填其 id' }
 
-    Plugin:
+    Asset:
       type: object
-      required: [id, name, kind, manifest_path, dir, created_at]
+      required: [id, name, kind, version, source, manifest_path, dir, created_at]
       properties:
         id: { type: string }
         name: { type: string }
-        kind: { type: string, enum: [style, fx] }
+        kind: { type: string, enum: [layout, component, theme, fx] }
+        version: { type: string }
+        source: { type: string, enum: [preset, user] }
+        description: { type: string }
+        tags: { type: array, items: { type: string } }
         manifest_path: { type: string }
         dir: { type: string }
         created_at: { type: integer }
 
-    CreatePluginRequest:
+    CreateAssetRequest:
       type: object
-      required: [name, kind, manifest]
+      required: [manifest, payload]
       properties:
-        name: { type: string }
-        kind: { type: string, enum: [style, fx] }
-        manifest: { type: object, description: 'manifest.json 内容，须符合 plugin-manifest schema' }
-        files:
+        manifest:
           type: object
-          description: '资源文件名 → 内容（html/css/js）'
+          description: '统一信封（含 name/kind/version/description 等），须符合 asset-manifest schema'
+        payload:
+          type: object
+          description: '按 kind 对应载荷：html/css（layout/component）、tokens（theme）、js（fx）'
           additionalProperties: { type: string }
+
+    PatchAssetRequest:
+      type: object
+      description: '修改资产载荷或元数据；采用锚定文本替换或整体替换载荷'
+      properties:
+        manifest: { type: object }
+        payload:
+          type: object
+          additionalProperties: { type: string }
+        edits:
+          type: array
+          description: '锚定文本替换（与 patch_slide 同构）'
+          items:
+            type: object
+            required: [file, old_text, new_text]
+            properties:
+              file: { type: string }
+              old_text: { type: string }
+              new_text: { type: string }

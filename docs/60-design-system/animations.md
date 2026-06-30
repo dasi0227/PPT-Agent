@@ -9,6 +9,8 @@ verifies: []
 
 # 动效库
 
+> 动态特效是**资产的一种**（`kind=fx`），遵循 [asset-protocol](asset-protocol.md)，作为 preset 由 [seed-assets](seed-assets.md) 载入，可经 `/repo` 增删改、经 `mount_asset` 挂载进页。
+
 定义可挂载到 slide 的动效及其挂载约定。分两类：轻量 **CSS 动画** 与电影感 **Canvas FX**。
 参考项目分别提供 27 CSS + 20 Canvas FX；MVP 精选若干，保证质量。
 

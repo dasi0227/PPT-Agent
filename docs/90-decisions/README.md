@@ -20,7 +20,10 @@ verifies: []
 | [ADR-0003](0003-frontend-react-vite.md) | 前端 React + Vite + TS + Tailwind + shadcn/ui | accepted |
 | [ADR-0004](0004-transport-sse-hitl.md) | SSE + 控制 POST 实现流式与 HITL | accepted |
 | [ADR-0005](0005-theme-tokens-css-layer.md) | design tokens + 公共 CSS 层 | accepted |
-| [ADR-0006](0006-plugin-manifest-protocol.md) | 统一 manifest 插件协议 | accepted |
+| [ADR-0006](0006-plugin-manifest-protocol.md) | 统一 manifest 插件协议 | superseded by ADR-0009 |
+| [ADR-0007](0007-harness-react-tools.md) | Harness 采用 ReAct + 工具化 | accepted |
+| [ADR-0008](0008-llm-interface-abstraction.md) | LLM interface 抽象，假设 DeepSeek 良好 | accepted |
+| [ADR-0009](0009-unified-asset-protocol.md) | 个人仓库统一资产协议（4 类） | accepted |
 
 ## ADR 模板
 

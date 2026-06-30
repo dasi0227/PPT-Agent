@@ -29,12 +29,15 @@ verifies: []
 | 人在环 | Human-in-the-loop (HITL) | 用户在 Run 执行中途注入输入、回答 Agent 提问、影响后续执行的能力。 |
 | 控制输入 | Control Input | 通过 `POST /runs/{id}/input` 向运行中的 Run 注入的消息。 |
 | needs_input | needs_input | Run 暂停并等待用户输入时发出的 SSE 事件。 |
-| 指令 | Command | 以 `/` 开头的用户特殊指令（`/page` `/overview` `/prompt` `/recap` `/talk` `/ask`）。 |
+| 指令 | Command | 以 `/` 开头的用户指令。scope：`/current` `/page` `/overview` `/repo`；mode：`/prompt` `/recap` `/talk` `/ask`。 |
 | 模式 | Mode | Agent 的行为模式（如 `/talk` 只说不做、`/ask` 必须提问）。 |
-| 插件 | Plugin | 个人仓库中可复用的 html 样式或 js 特效单元，遵循统一 manifest 协议。 |
-| 清单 | Manifest | 插件的元数据描述文件（manifest.json），定义参数、挂载点、资源。 |
-| 挂载点 | Mount Point | 插件被注入 slide 时的目标位置约定。 |
-| 个人仓库 | Personal Repo | 用户收藏的插件集合的本地仓库。 |
+| 资产 | Asset | 个人仓库中可复用的单元，遵循统一资产协议；4 类：layout/component/theme/fx。 |
+| 整页板式 | Layout | 整页盒子布局骨架（粒度=一整页）。资产 kind 之一。 |
+| 组件样式 | Component | 页内可复用的小块（粒度<一页，如卡片/徽标）。资产 kind 之一。 |
+| 动态特效 | FX | js 驱动的动效（含 init/cleanup 契约）。资产 kind 之一。 |
+| 清单 | Manifest | 资产的元数据描述文件（manifest.json），统一信封 + 定义参数、挂载点、载荷。 |
+| 挂载点 | Mount Point | 资产被注入 slide 时的目标位置约定。 |
+| 个人仓库 | Personal Repo | 4 类资产的本地仓库（出厂预置 + 用户新增，同协议）。 |
 | 版本 | Version | Slide / Deck 的一次快照，支持回滚。 |
 | 工作目录 | work_dir | 单个 Project 的根目录，`state.json` 位于其根。 |
 | 预览 | Preview | 在沙箱 iframe 中渲染 slide 的在线查看能力。 |

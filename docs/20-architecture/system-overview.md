@@ -22,9 +22,9 @@ verifies: []
          ▼                 ▼                        ▼
 ┌──────────────────────────── 后端（Go + net/http + chi） ───────────────────┐
 │  ┌──────────┐   ┌───────────────┐   ┌────────────┐   ┌──────────────────┐  │
-│  │ HTTP 层   │──▶│ Service 层     │──▶│ Run 引擎    │──▶│ LLM 客户端(DeepSeek)│ │
-│  │(handler) │   │(project/deck/ │   │(SSE+HITL,   │   └──────────────────┘  │
-│  │          │   │ slide/plugin) │   │ checkpoint) │                         │
+│  │ HTTP 层   │──▶│ Service 层     │──▶│ Run+Harness │──▶│ LLM 客户端(DeepSeek)│ │
+│  │(handler) │   │(project/deck/ │   │(SSE+HITL +  │   │  CallTool/Stream  │ │
+│  │          │   │ slide/asset)  │   │ ReAct+工具)  │   └──────────────────┘  │
 │  └──────────┘   └───────┬───────┘   └─────┬──────┘                         │
 │                         │                  │                                │
 │                         ▼                  ▼                                │

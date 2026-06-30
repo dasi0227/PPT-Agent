@@ -49,7 +49,7 @@ frontend/
 │   │   │   ├── OverviewGrid.tsx
 │   │   │   └── usePostMessage.ts
 │   │   ├── editor/            # 编辑相关 UI（范围选择、版本回滚）
-│   │   └── plugins/           # 个人仓库 UI
+│   │   └── assets/            # 个人仓库 UI（4 类资产管理）
 │   ├── components/            # shadcn/ui 衍生通用组件
 │   └── lib/                   # 工具（深链解析、key 绑定）
 └── public/

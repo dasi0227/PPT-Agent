@@ -9,6 +9,9 @@ verifies: []
 
 # 预置主题目录
 
+> 主题是**资产的一种**（`kind=theme`），遵循 [asset-protocol](asset-protocol.md)。本文件定义主题的语义与预置清单；
+> 主题作为 preset 资产由 [seed-assets](seed-assets.md) 载入个人仓库，可经 `/repo` 增删改、经 `apply_theme` 应用到公共层。
+
 主题 = 一组 design token 取值。本文件维护 MVP 预置主题清单及其语义（何时用）。
 参考项目有 12–36 套主题；MVP 先精选若干，保证质量与可维护，后续可扩。
 

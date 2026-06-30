@@ -45,11 +45,11 @@ CREATE TABLE IF NOT EXISTS slides (
 CREATE INDEX IF NOT EXISTS idx_slides_deck ON slides(deck_id);
 
 -- ───────────────────────── Version ─────────────────────────
--- 通用版本表：target_type 区分 slide / deck / common_style 快照
+-- 通用版本表：target_type 区分 slide / deck / common_style / asset 快照
 CREATE TABLE IF NOT EXISTS versions (
     id            TEXT    PRIMARY KEY,
     target_type   TEXT    NOT NULL
-                          CHECK (target_type IN ('slide','deck','common_style')),
+                          CHECK (target_type IN ('slide','deck','common_style','asset')),
     target_id     TEXT    NOT NULL,
     version_no    INTEGER NOT NULL,
     snapshot_path TEXT    NOT NULL,
@@ -62,14 +62,15 @@ CREATE INDEX IF NOT EXISTS idx_versions_target ON versions(target_type, target_i
 -- ───────────────────────── Run ─────────────────────────
 CREATE TABLE IF NOT EXISTS runs (
     id          TEXT    PRIMARY KEY,
-    project_id  TEXT    NOT NULL,
+    project_id  TEXT,                          -- repo scope 的 run 可无项目（NULL）
     kind        TEXT    NOT NULL
                         CHECK (kind IN ('outline','generate','edit','command')),
-    scope       TEXT    NOT NULL DEFAULT 'deck'
-                        CHECK (scope IN ('page','overview','deck')),
+    scope       TEXT    NOT NULL DEFAULT 'current'
+                        CHECK (scope IN ('current','page','overview','repo')),
     page_index  INTEGER,
     mode        TEXT    NOT NULL DEFAULT 'normal'
                         CHECK (mode IN ('normal','talk','ask')),
+    command     TEXT,                          -- 显式指令名：prompt/recap/talk/ask 等
     status      TEXT    NOT NULL DEFAULT 'pending'
                         CHECK (status IN ('pending','running','waiting','done','failed','canceled')),
     created_at  INTEGER NOT NULL,
@@ -79,7 +80,8 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 
--- ───────────────────────── Run 事件（可选持久化，用于断线重连续传） ─────────────────────────
+-- ───────────────────────── Run 事件（持久化，用于断线重连续传 + harness 可观测） ─────────────────────────
+-- type 含 harness 事件：thought / tool_call / tool_result / progress / token / artifact / needs_input / info / done / error
 CREATE TABLE IF NOT EXISTS run_events (
     run_id     TEXT    NOT NULL,
     seq        INTEGER NOT NULL,
@@ -90,13 +92,21 @@ CREATE TABLE IF NOT EXISTS run_events (
     FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
 );
 
--- ───────────────────────── Plugin（个人仓库，全局） ─────────────────────────
-CREATE TABLE IF NOT EXISTS plugins (
+-- ───────────────────────── Asset（个人仓库统一资产，全局） ─────────────────────────
+-- 四类资产共享统一信封；预置(preset)与用户新增(user)同表，载荷存文件系统
+CREATE TABLE IF NOT EXISTS assets (
     id            TEXT    PRIMARY KEY,
     name          TEXT    NOT NULL,
-    kind          TEXT    NOT NULL CHECK (kind IN ('style','fx')),
+    kind          TEXT    NOT NULL CHECK (kind IN ('layout','component','theme','fx')),
+    version       TEXT    NOT NULL DEFAULT '1.0.0',
+    source        TEXT    NOT NULL DEFAULT 'user' CHECK (source IN ('preset','user')),
+    description   TEXT    NOT NULL DEFAULT '',
+    tags          TEXT    NOT NULL DEFAULT '[]',  -- JSON 数组文本
     manifest_path TEXT    NOT NULL,
     dir           TEXT    NOT NULL,
     created_at    INTEGER NOT NULL,
-    UNIQUE (name)
+    updated_at    INTEGER NOT NULL,
+    UNIQUE (name, kind)
 );
+CREATE INDEX IF NOT EXISTS idx_assets_kind ON assets(kind);
+CREATE INDEX IF NOT EXISTS idx_assets_source ON assets(source);

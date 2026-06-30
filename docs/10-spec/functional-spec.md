@@ -46,12 +46,14 @@ verifies: []
 
 | ID | 约束 | 优先级 |
 |---|---|---|
-| `SPEC-GLOBAL-001` | 所有生成与编辑操作通过 Run 引擎执行，输出经 SSE 流式返回 | P0 |
+| `SPEC-GLOBAL-001` | 所有生成与编辑操作通过 Run 外壳 + Harness（ReAct 循环 + 工具化）执行，输出经 SSE 流式返回 | P0 |
 | `SPEC-GLOBAL-002` | Run 执行中途可接受控制输入（HITL），在 checkpoint 处消费 | P0 |
 | `SPEC-GLOBAL-003` | 所有 slide 产出遵循 [html-output-spec](../60-design-system/html-output-spec.md)（16:9、零运行时依赖、可访问性、中英文） | P0 |
 | `SPEC-GLOBAL-004` | 任意编辑须保留可回滚版本（见 [versioning](../30-data-model/versioning.md)） | P0 |
 | `SPEC-GLOBAL-005` | 无登录注册；单用户单机 | P0 |
-| `SPEC-GLOBAL-006` | 全局样式与单页样式分层；单页编辑不得改公共样式层，反之亦然 | P0 |
+| `SPEC-GLOBAL-006` | 全局样式与单页样式分层；scope 隔离由 harness **工具门控机制**保证（见 [agent-harness](../20-architecture/agent-harness.md)） | P0 |
+| `SPEC-GLOBAL-007` | 编辑采用**锚定局部 patch**（edit_file 同构），非整页重写（[ARCH-TOOLS](../20-architecture/tools.md)） | P0 |
+| `SPEC-GLOBAL-008` | 个人仓库为 4 类统一资产，preset 与 user 同协议（[asset-protocol](../60-design-system/asset-protocol.md)） | P0 |
 
 ## 验收标准（Given-When-Then）
 

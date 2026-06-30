@@ -27,9 +27,11 @@ verifies: []
 
 | scope | 注入 | 不注入 |
 |---|---|---|
-| page | 仅当前页 html + slide-json + 相关 token 名 | 其它页 html、公共层全文（仅给 token 清单） |
-| overview | 公共层 tokens.css 全文 + token 语义说明 | 任何单页 html |
-| deck | deck 结构 + 各页标题/版式（轻量） | 各页 html 全文（除非必要） |
+| current / page | 仅目标页 html + slide-json + 相关 token 名 | 其它页 html、公共层全文（仅给 token 清单） |
+| overview | 公共层 tokens.css 全文 + token 语义说明 + 各页标题/版式（轻量索引） | 各页 html 全文（逐页 patch 时由子代理各自注入单页） |
+| repo | 目标资产载荷 + 资产协议 schema 摘要 | 任何 PPT 项目的页/公共层 |
+
+> 装配出的上下文与 harness 动态工具集是一对：注入什么 = 该 scope 工具能操作什么。
 
 ## 设计系统切片（渐进式）
 

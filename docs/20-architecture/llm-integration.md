@@ -3,7 +3,7 @@ id: ARCH-LLM
 title: LLM 接入（DeepSeek）
 status: approved
 owner: backend
-depends_on: [ARCH-RUNTIME, AGENT-PROMPTS]
+depends_on: [ARCH-RUNTIME, ARCH-HARNESS, AGENT-PROMPTS, ADR-0008]
 verifies: []
 ---
 
@@ -22,10 +22,30 @@ type Client interface {
     Chat(ctx context.Context, req ChatRequest) (ChatResponse, error)
     // 流式补全：通过 channel 推送增量 token
     Stream(ctx context.Context, req ChatRequest) (<-chan StreamChunk, error)
+    // function calling：带工具集，返回 LLM 选择的工具调用（或文本/finish）
+    CallTool(ctx context.Context, req ToolCallRequest) (ToolCallResponse, error)
 }
 ```
 
-`deepseek.go` 实现该接口，对接 DeepSeek 的 OpenAI 兼容 Chat Completions 端点。
+`deepseek.go` 实现该接口，对接 DeepSeek 的 OpenAI 兼容 Chat Completions + tools 端点。
+
+> **接口抽象不等于现在做多供应商**：当前仅 DeepSeek 一个实现（[ADR](../90-decisions/0008-llm-interface-abstraction.md)）。以 interface 暴露只是「不焊死」——未来加 OpenAI/Claude 仅需新增实现类，不改 harness。这与「严格专用」不冲突：专用的是 PPT 业务，不是 LLM 厂商。
+
+## function calling 与 harness
+
+- `CallTool` 接收 harness 动态裁剪后的工具集（function schema），返回 LLM 选择的 `tool_call`（工具名 + JSON 参数）或 `finish`。
+- harness 据此执行工具、回灌 observation（见 [agent-harness](agent-harness.md)）。
+
+### function call 容错（最小策略，按 ADR-0008）
+
+当前**假设 DeepSeek function calling 表现良好**，不做复杂纠偏，但守住一条底线：
+
+| ID | 约束 |
+|---|---|
+| `ARCH-LLM-FC-001` | function call 返回**无法解析**（非法 JSON / 缺必需参数）时，MUST 走「最小失败退出」：记录错误 → 发 `error` 事件 → Run 转 `failed`，**不进入重试死循环** |
+| `ARCH-LLM-FC-002` | 智能纠偏（JSON 修复 / 结构化重提示）列为**后续增强**，不在 MVP 实现 |
+
+> 多 LLM 切换与高级容错：见 backlog，本期不做。
 
 ## 配置
 

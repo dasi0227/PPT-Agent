@@ -32,14 +32,26 @@ verifies: []
 | AC-VIEWER-001 | SPEC-VIEWER-001 | iframe 一致渲染 | e2e |
 | AC-VIEWER-005 | SPEC-VIEWER-004/005 | 总览点击跳转 | e2e |
 | AC-VIEWER-006 | SPEC-VIEWER-006 | 切页无刷新 | e2e（load 计数） |
-| AC-REPO-001 | SPEC-REPO-001/002 | 收藏插件 + manifest 校验 | 单测 |
-| AC-REPO-004 | SPEC-REPO-004 | Agent 移植插件 | 集成测试 |
+| AC-REPO-001 | SPEC-REPO-001/002 | 4 类资产 + manifest 校验 | 单测 |
+| AC-REPO-004 | SPEC-REPO-004/005 | seed 冷启动开箱可用 | 集成测试 |
+| AC-REPO-006 | SPEC-REPO-006 | Agent 检索并移植资产 | 集成测试 |
+| AC-CMD-CURRENT-001 | SPEC-CMD-CURRENT-001 | /current=当前页，默认 scope | 集成测试 |
 | AC-CMD-PAGE-001 | SPEC-CMD-PAGE-001 | /page 锁定单页 | 集成测试 |
-| AC-CMD-OVERVIEW-001 | SPEC-CMD-OVERVIEW-001 | /overview 改公共层 | 集成测试 |
+| AC-CMD-OVERVIEW-001 | SPEC-CMD-OVERVIEW-002 | /overview 优先改公共层 | 集成测试 |
+| AC-CMD-OVERVIEW-003 | SPEC-CMD-OVERVIEW-003 | /overview 跨页走子代理 | 集成测试 |
+| AC-CMD-REPO-001 | SPEC-CMD-REPO-001/004 | /repo 只改资产不碰页 | 集成测试 |
 | AC-CMD-PROMPT-001 | SPEC-CMD-PROMPT-001 | /prompt 只改写不动文件 | 集成测试 |
 | AC-CMD-RECAP-001 | SPEC-CMD-RECAP-001 | /recap 输出进度 | 集成测试 |
-| AC-CMD-TALK-001 | SPEC-CMD-TALK-001 | /talk 只说不做 | 集成测试 |
+| AC-CMD-TALK-001 | SPEC-CMD-TALK-001 | /talk 只说不做（无 artifact） | 集成测试 |
 | AC-CMD-ASK-001 | SPEC-CMD-ASK-001 | /ask 必要时提问 | 集成测试 |
+| AC-HARNESS-001 | ARCH-HARNESS-001 | 动态工具门控（scope 隔离） | 单测 |
+| AC-HARNESS-002 | ARCH-HARNESS-002 | 经工具改产物，非直吐 | 集成测试 |
+| AC-HARNESS-004 | ARCH-HARNESS-STOP | MAX_TURNS/finish 退出 | 单测 |
+| AC-TOOLS-003 | ARCH-TOOLS-003 | patch 锚点唯一性 | 单测 |
+| AC-TOOLS-004 | ARCH-TOOLS-004 | 落盘前 validate | 单测 |
+| AC-ASSET-001 | ASSET-001 | 资产 manifest 校验 | 单测 |
+| AC-ASSET-002 | ASSET-002 | theme token 全集 | 单测 |
+| AC-SEED-001 | DS-SEED-001 | seed 载入仓库 | 集成测试 |
 
 ## 详细场景
 

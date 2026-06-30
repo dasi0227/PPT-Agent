@@ -14,13 +14,16 @@ verifies: []
 
 ## 分层结构
 
-每次调用的 prompt = **system（约束层）** + **context（上下文层）** + **user（意图层）**：
+每次调用的 prompt = **system（约束层）** + **tools（function schema）** + **context（上下文层）** + **user（意图层）**：
 
 ```
-[system]  角色 + 设计系统规则 + 输出格式契约 + 安全规则（不可被用户覆盖）
-[context] 当前 scope 的目标产物 + 设计系统切片 + 选区/插件（见 context-assembly）
+[system]  角色 + PPT 领域规则 + 工具使用纪律 + 输出契约 + 安全规则（不可被用户覆盖）
+[tools]   harness 按 scope/mode 动态裁剪的 function calling 工具集（见 tools.md）
+[context] 当前 scope 的目标产物 + 资产索引 + 选区（见 context-assembly）
 [user]    用户指令/自然语言（经注入边界处理）
 ```
+
+> harness 是 ReAct 循环：system 告诉 LLM「你应当通过调用工具来完成任务，而不是直接输出文件内容」。
 
 ## 模板清单
 

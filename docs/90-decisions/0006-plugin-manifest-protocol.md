@@ -1,13 +1,16 @@
 ---
 id: ADR-0006
 title: 统一 manifest 插件协议
-status: accepted
+status: superseded
 owner: shared
 depends_on: [ADR-0005]
 verifies: []
 ---
 
 # ADR-0006：统一 manifest 插件协议
+
+> **已被 [ADR-0009](0009-unified-asset-protocol.md) 取代**：插件协议泛化为「个人仓库统一资产协议（4 类：layout/component/theme/fx）」。
+> plugin（style/fx 两类）是新资产协议的子集。本 ADR 保留作历史记录，实现以 ADR-0009 为准。
 
 ## 背景
 

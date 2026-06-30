@@ -33,14 +33,13 @@
 |---|---|---|
 | [00-overview/](00-overview/) | 愿景、范围、术语、用户旅程、backlog | vision、scope、glossary、personas-and-flows、backlog |
 | [10-spec/](10-spec/) | 功能规格 + 验收标准（带 SPEC-ID） | functional-spec、feat-\*、acceptance-criteria |
-| [20-architecture/](20-architecture/) | 系统/后端/前端结构、agent runtime、预览机制、LLM 接入 | system-overview、backend-structure、frontend-structure、agent-runtime、preview-mechanism、llm-integration |
+| [20-architecture/](20-architecture/) | 系统/后端/前端结构、**harness（ReAct+工具）**、Run 外壳、预览、LLM | system-overview、backend-structure、frontend-structure、**agent-harness**、**tools**、agent-runtime、preview-mechanism、llm-integration |
 | [30-data-model/](30-data-model/) | 实体、SQLite DDL、文件布局、slide-json schema、版本 | data-model、sqlite-schema.sql、filesystem-layout、slide-json.schema.json、versioning |
 | [40-api/](40-api/) | REST + SSE 契约、OpenAPI、run 生命周期 | api-overview、openapi.yaml、rest-endpoints、sse-events、run-lifecycle |
-| [50-agent/](50-agent/) | 指令系统、模式、prompt 模板、上下文装配 | agent-overview、commands/\*、modes、prompt-templates、context-assembly |
-| [60-design-system/](60-design-system/) | token、主题、版式、图表、动效、HTML 产出规范 | design-tokens、themes、layouts、charts、animations、html-output-spec |
-| [70-plugins/](70-plugins/) | 个人仓库 manifest 协议 + schema + 挂载流程 | plugin-protocol、plugin-manifest.schema.json、authoring-and-mount |
+| [50-agent/](50-agent/) | 指令系统（scope 四件套+mode）、prompt、上下文装配 | agent-overview、commands/\*（current/page/overview/repo/prompt/recap/talk/ask）、modes、prompt-templates、context-assembly |
+| [60-design-system/](60-design-system/) | **统一资产协议**（4 类）、token、主题/版式/组件/图表/动效、HTML 产出、seed | asset-protocol、asset-manifest.schema.json、design-tokens、themes、layouts、components、charts、animations、html-output-spec、seed-assets |
 | [80-dev/](80-dev/) | 开发计划、规则、编码规范、测试策略、DoD | dev-plan、dev-rules、coding-standards、test-strategy、definition-of-done |
-| [90-decisions/](90-decisions/) | ADR 架构决策记录 | 0001~0006 |
+| [90-decisions/](90-decisions/) | ADR 架构决策记录 | 0001~0009 |
 
 ---
 
@@ -95,5 +94,6 @@ verifies: []                # 本文档验证了哪些上游需求（开发计�
 | 前端 | React + Vite + TS + Tailwind + shadcn/ui | [ADR-0003](90-decisions/0003-frontend-react-vite.md) |
 | 传输 / HITL | SSE + 控制 POST | [ADR-0004](90-decisions/0004-transport-sse-hitl.md) |
 | 主题系统 | design tokens + 公共 CSS 层 | [ADR-0005](90-decisions/0005-theme-tokens-css-layer.md) |
-| 插件协议 | 统一 manifest | [ADR-0006](90-decisions/0006-plugin-manifest-protocol.md) |
-| LLM | DeepSeek API | — |
+| Agent Harness | ReAct 循环 + function calling + 动态工具门控 + 子代理 | [ADR-0007](90-decisions/0007-harness-react-tools.md) |
+| LLM 接入 | DeepSeek（interface 抽象，假设 fc 良好） | [ADR-0008](90-decisions/0008-llm-interface-abstraction.md) |
+| 个人仓库 | 统一资产协议（4 类：layout/component/theme/fx） | [ADR-0009](90-decisions/0009-unified-asset-protocol.md) |
