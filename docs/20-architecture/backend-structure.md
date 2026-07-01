@@ -1,18 +1,19 @@
 ---
 id: ARCH-BACKEND
-title: 后端结构（Go + chi）
+title: 后端结构（Go + Gin）
 status: approved
 owner: backend
 depends_on: [ARCH-SYSTEM, ADR-0001, ADR-0002]
 verifies: []
 ---
 
-# 后端结构（Go + net/http + chi）
+# 后端结构（Go + Gin）
 
 ## 设计原则
 
-- **标准库优先**：以 `net/http` 为基，`chi` 仅做路由与中间件，不引入重框架（打磨原生 Go，见 [ADR-0001](../90-decisions/0001-backend-go-chi.md)）。
+- **拥抱主流框架**：以 **Gin** 组织 HTTP 层，充分用其路由/中间件/绑定校验生态，面向企业实践编码（见 [ADR-0001](../90-decisions/0001-backend-go-chi.md)）。
 - **清晰分层**：handler → service → store，依赖单向向下，禁止反向依赖。
+- **框架不渗透**：`gin.Context` 仅存在于 handler 层；service/store 只收领域类型，保留可替换性。
 - **接口隔离**：store 与 llm 以 interface 定义，便于替换与测试。
 - **串行化共享状态**：写 SQLite / state.json 经单写入通道，避免竞态（[ARCH-SYS-005](system-overview.md)）。
 
@@ -25,9 +26,9 @@ backend/
 │       └── main.go            # 装配依赖、启动 http server（监听回环）
 ├── internal/
 │   ├── httpapi/               # HTTP 层（handler + 路由 + 中间件）
-│   │   ├── router.go          # chi 路由注册
-│   │   ├── middleware.go      # 日志、recover、请求 ID、CORS（本地）
-│   │   ├── sse.go             # SSE 写出辅助（flush、心跳、事件编码）
+│   │   ├── router.go          # gin 引擎与路由分组注册（RouterGroup）
+│   │   ├── middleware.go      # gin 中间件：日志、recover、请求 ID、CORS（本地）
+│   │   ├── sse.go             # SSE 写出辅助（c.Stream/Flusher、心跳、事件编码）
 │   │   ├── errors.go          # 统一错误响应 + 错误码映射
 │   │   ├── project_handler.go  # 项目 CRUD（含原 deck 的主题/状态/design 字段）
 │   │   ├── thread_handler.go  # 对话线程 CRUD + 历史
