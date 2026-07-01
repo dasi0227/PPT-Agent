@@ -47,13 +47,17 @@ verifies: []
 │   └── ...
 │
 └── _assets/                         # 个人仓库（全局，跨 project 共享；预置 + 用户新增同处）
-    └── <asset_id>/
-        ├── manifest.json            # 统一信封，符合 asset-manifest schema
-        ├── template.html            # layout/component 的 html 载荷（可选）
-        ├── style.css                # 可选
-        ├── tokens.css               # theme 的 token 全集载荷（kind=theme）
-        └── effect.js                # fx 的特效脚本（kind=fx）
+    ├── themes/                       # kind=theme（二级子目录按 kind 分，与 seed 源对齐）
+    │   └── <asset_id>/{manifest.json, tokens.css}
+    ├── layouts/                      # kind=layout
+    │   └── <asset_id>/{manifest.json, template.html, style.css}
+    ├── components/                   # kind=component
+    │   └── <asset_id>/{manifest.json, template.html, style.css}
+    └── fx/                           # kind=fx
+        └── <asset_id>/{manifest.json, effect.js}
 ```
+
+> 二级子目录按 `kind` 分（`themes`/`layouts`/`components`/`fx`），与出厂 seed 源（[seed-assets](../60-design-system/seed-assets.md)）同构，seeding 直接映射；`kind` 不可变，故资产不会跨目录移动。定位资产以 SQLite `assets.dir`/`manifest_path` 为准，不依赖遍历目录。
 
 ## 多项目切换与隔离
 
@@ -86,7 +90,7 @@ verifies: []
 | `slides/<idx>/slide.json` | `slides.json_path` | slide-json |
 | `slides/<idx>/index.html` | `slides.html_path` | slide html |
 | `versions/...` | `versions.snapshot_path` | 版本快照 |
-| `_assets/<id>/manifest.json` | `assets.manifest_path` | 资产清单 |
+| `_assets/<kind_dir>/<id>/manifest.json` | `assets.manifest_path` | 资产清单（`<kind_dir>`∈themes/layouts/components/fx） |
 
 | ID | 约束 |
 |---|---|

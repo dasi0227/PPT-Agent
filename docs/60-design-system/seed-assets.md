@@ -47,7 +47,7 @@ backend/seed/assets/
 ├── components/<name>/{manifest.json, template.html, style.css}
 └── fx/<name>/{manifest.json, effect.js}
 ```
-启动时由 `internal/asset` 的 seeding 逻辑载入 work_root 的 `_assets/`。
+启动时由 `internal/asset` 的 seeding 逻辑载入 work_root 的 `_assets/`。运行时仓库与 seed 源**同构**（均按 kind 分 `themes`/`layouts`/`components`/`fx` 子目录），seeding 为 `seed/assets/<kind_dir>/<name>` → `_assets/<kind_dir>/<asset_id>` 的直接映射（见 [filesystem-layout](../30-data-model/filesystem-layout.md)）。
 
 ## 验收标准（Given-When-Then）
 
