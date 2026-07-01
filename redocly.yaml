@@ -1,0 +1,13 @@
+# Redocly 校验配置。校验命令：npx @redocly/cli lint docs/40-api/openapi.yaml
+# 采用 recommended 规则集；仅关闭与本项目设计决策相抵触的规则。
+apis:
+  main:
+    root: docs/40-api/openapi.yaml
+
+extends:
+  - recommended
+
+rules:
+  # 单用户单机、无鉴权，后端默认仅监听回环（ARCH-SYS-006）。
+  # 契约刻意不声明 security，故关闭"每个操作必须声明 security"的规则。
+  security-defined: off
