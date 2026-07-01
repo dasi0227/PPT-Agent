@@ -46,38 +46,55 @@ curl -s -X POST http://127.0.0.1:8787/api/v1/slides/{slideId}/rollback \
 ```
 - `API-SLIDE-001`：回滚产生新版本（见 [versioning](../30-data-model/versioning.md)）。
 
-## Run（生成 / 编辑 / 指令）
+## 线程（对话，隔离历史，共享 project 产物）
+
+```bash
+# 在项目下新建对话线程
+curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/threads \
+  -H 'Content-Type: application/json' -d '{"title":"内容打磨"}'
+
+# 列出项目的线程
+curl -s http://127.0.0.1:8787/api/v1/projects/{id}/threads
+
+# 读取线程历史（恢复：关闭再打开接着聊）
+curl -s http://127.0.0.1:8787/api/v1/threads/{threadId}/history
+
+# 归档/删除线程（不影响 PPT 产物）
+curl -s -X DELETE http://127.0.0.1:8787/api/v1/threads/{threadId}
+```
+
+## Run（生成 / 编辑 / 指令，挂在线程下）
 
 ### 发起 Run
 
 ```bash
-# 生成大纲
-curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
+# 生成大纲（在某线程下）
+curl -s -X POST http://127.0.0.1:8787/api/v1/threads/{threadId}/runs \
   -H 'Content-Type: application/json' \
   -d '{"kind":"outline","instruction":"做一份8页的技术分享"}'
 
 # 当前页编辑（默认 /current，前端填当前预览页号）
-curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
+curl -s -X POST http://127.0.0.1:8787/api/v1/threads/{threadId}/runs \
   -H 'Content-Type: application/json' \
   -d '{"kind":"edit","scope":"current","page_index":3,"instruction":"把标题改大一号"}'
 
 # 指定单页编辑（/page 2）
-curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
+curl -s -X POST http://127.0.0.1:8787/api/v1/threads/{threadId}/runs \
   -H 'Content-Type: application/json' \
   -d '{"kind":"edit","scope":"page","page_index":2,"instruction":"把标题改大一号"}'
 
 # 跨页/全局（/overview）
-curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
+curl -s -X POST http://127.0.0.1:8787/api/v1/threads/{threadId}/runs \
   -H 'Content-Type: application/json' \
   -d '{"kind":"edit","scope":"overview","instruction":"主色改成品牌蓝"}'
 
 # 改仓库资产（/repo）
-curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
+curl -s -X POST http://127.0.0.1:8787/api/v1/threads/{threadId}/runs \
   -H 'Content-Type: application/json' \
   -d '{"kind":"edit","scope":"repo","instruction":"把霓虹卡片组件圆角调大"}'
 
 # 只说不做（/talk）
-curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/runs \
+curl -s -X POST http://127.0.0.1:8787/api/v1/threads/{threadId}/runs \
   -H 'Content-Type: application/json' \
   -d '{"kind":"command","command":"talk","mode":"talk","instruction":"分析下整体节奏"}'
 ```
@@ -142,8 +159,8 @@ curl -s -X POST http://127.0.0.1:8787/api/v1/projects/{id}/export   # 501 Not Im
 ## 验收标准（Given-When-Then）
 
 - **AC-REST-RUN-001**
-  - GIVEN 一个项目
-  - WHEN `POST /projects/{id}/runs` kind=outline
+  - GIVEN 一个项目下的一条线程
+  - WHEN `POST /threads/{id}/runs` kind=outline
   - THEN 201 返回 Run，`status∈{pending,running}`，含 `events_url`
 
 - **AC-REST-INPUT-409**

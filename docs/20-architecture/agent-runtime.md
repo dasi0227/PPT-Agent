@@ -95,12 +95,26 @@ Run（本文件：状态机 + SSE + 控制输入 + 取消）
 | `ARCH-RUN-005` | 同一 Run 的事件 MUST 单调有序（带递增 `seq`），支持断线重连续传（`Last-Event-ID`） |
 | `ARCH-RUN-006` | `/talk` 模式 Run MUST NOT 产生 `artifact`（只发 `info`/`token`/`done`） |
 
+## 并发与隔离（多 PPT / 多线程）
+
+三层隔离见 [data-model](../30-data-model/data-model.md)：Project（PPT/work_dir）→ Thread（对话）→ Run（turn）。
+
+| ID | 约束 |
+|---|---|
+| `ARCH-RUN-LOCK-001` | **每 project 一把执行锁**：同一 project 的 Run 串行执行，防 `state.json`/产物文件竞态 |
+| `ARCH-RUN-LOCK-002` | **跨 project 并行**：不同 project 的 Run 可并发（work_dir 物理隔离，无共享状态） |
+| `ARCH-RUN-LOCK-003` | 同 project 多 thread **共享产物**，因此仍受同一把 project 锁约束：不同 thread 的写 Run 串行 |
+| `ARCH-RUN-LOCK-004` | Run 挂在 thread 下；thread 提供对话历史，Run 执行前由 [context-assembly](../50-agent/context-assembly.md) 载入该 thread 历史 |
+| `ARCH-RUN-LOCK-005` | 锁等待 MUST 有上限；超时 Run 转 `failed` 并提示（不无限阻塞） |
+
+> 结论：多个 PPT 可真正并行处理；同一个 PPT 内即便开多条对话线程，写操作也会排队，保证产物一致。
+
 ## 时序：整套生成 + 中途注入
 
 ```
 Client                     Backend(Run Engine)            LLM
-  │ POST /projects/{id}/runs                                │
-  │ ─────────────────────────▶ create Run(pending)          │
+  │ POST /threads/{id}/runs                                 │
+  │ ─────────────────────────▶ 取 project 锁 → create Run   │
   │ ◀──────────── 201 {run_id, events_url}                  │
   │ GET /runs/{id}/events (SSE)                              │
   │ ─────────────────────────▶ start → running              │
@@ -133,10 +147,15 @@ Client                     Backend(Run Engine)            LLM
   - WHEN 执行完成
   - THEN 事件流中无 `artifact`，文件系统无新增/变更
 
+- **AC-RUN-LOCK-001**（`ARCH-RUN-LOCK-001/002`）
+  - GIVEN 项目 A 有一个 running 的 Run
+  - WHEN 同时对项目 A 发第二个写 Run、对项目 B 发一个写 Run
+  - THEN 项目 A 的第二个 Run 排队等待，项目 B 的 Run 立即并行执行
+
 ## 校验方式
 
 ```bash
-go test ./internal/run -run 'TestRunLifecycle|TestHITLInput|TestSSEResume'
+go test ./internal/run -run 'TestRunLifecycle|TestHITLInput|TestSSEResume|TestPerProjectLock'
 ```
 
 ## 依赖

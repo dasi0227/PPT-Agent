@@ -26,11 +26,25 @@ Project (1) ──── (1) Deck (1) ──── (N) Slide
    │                 │                  └── (N) Version  (slide 级快照)
    │                 └── (N) Version       (deck 级/公共样式层快照)
    │
-   └── (N) Run        (一次 Agent 执行，关联 project/deck/slide；repo scope 可无 project)
+   ├── (N) Thread     (对话线程，可恢复；共享本 project 产物)
+   │        └── (N) Run   (一次执行/turn，跑 harness 循环)
+   │
+   └──（Run 也直接挂 project：project 是隔离与锁的单元）
 
 Asset (N)             (个人仓库统一资产，全局，不强绑 project；kind=layout|component|theme|fx)
    └── (N) Version    (资产级快照，可回滚)
 ```
+
+## 三层隔离模型（对齐 Codex 的 project/thread/turn）
+
+| 层 | 隔离什么 | 载体 | 键 |
+|---|---|---|---|
+| Project | 一个 PPT 的产物文件 + 元信息 | `PPT_WORK_ROOT/<project_id>/` 目录 + SQLite `project_id` | `project_id` |
+| Thread | **对话历史/上下文**（可恢复、可多条并行） | `threads` 表 + `threads/<thread_id>.jsonl` | `thread_id` |
+| Run | 单次执行（turn）的事件流 | `runs` + `run_events`（带 `thread_id`） | `run_id` |
+
+- **共享产物语义（Codex 一致）**：同一 project 下多个 thread **共享同一份产物文件**；thread 只隔离对话历史，不分叉文件。试验性改版靠[版本回滚](versioning.md)。
+- **每 project 一把执行锁**：同 project 的 Run 串行（防 state.json/文件打架），跨 project 并行（work_dir 物理隔离）。详见 [agent-runtime](../20-architecture/agent-runtime.md)。
 
 ## 实体定义
 
@@ -80,11 +94,27 @@ Asset (N)             (个人仓库统一资产，全局，不强绑 project；k
 
 详见 [versioning](versioning.md)。
 
+### Thread（对话线程）
+一个 project 下可有多条 thread，各自独立可恢复的对话历史，但**共享 project 产物**。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | TEXT | 主键 |
+| project_id | TEXT | 外键 → Project |
+| title | TEXT | 线程标题（可由首条消息生成） |
+| history_path | TEXT | 对话历史文件相对路径（`threads/<id>.jsonl`） |
+| status | TEXT | `active`\|`archived` |
+| created_at / updated_at | INTEGER | |
+
+`DATA-THREAD-001`：同 project 的多个 thread 共享产物文件；thread 仅隔离对话历史。
+`DATA-THREAD-002`：thread 历史以追加式 jsonl 持久化，支持恢复（关闭再打开接着聊）。
+
 ### Run
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | TEXT | 主键 |
-| project_id | TEXT NULL | 外键（repo scope 的 run 可无项目） |
+| thread_id | TEXT NULL | 外键 → Thread（挂在某对话线程下；repo 类快操作可无 thread） |
+| project_id | TEXT NULL | 外键（冗余便于按项目查询/加锁；repo scope 的 run 可无项目） |
 | kind | TEXT | `outline`\|`generate`\|`edit`\|`command` |
 | scope | TEXT | `current`\|`page`\|`overview`\|`repo` |
 | page_index | INTEGER NULL | 针对页时的页序 |
@@ -120,8 +150,10 @@ Asset (N)             (个人仓库统一资产，全局，不强绑 project；k
 | `DATA-SLIDE-001` | slide-json 符合 slide-json schema |
 | `DATA-ASSET-001` | asset manifest 符合 asset-manifest schema |
 | `DATA-ASSET-002` | theme 资产提供必需 token 全集 |
+| `DATA-THREAD-001` | 同 project 多 thread 共享产物，仅隔离对话历史 |
 | `DATA-VERSION-001` | 任意可编辑产物变更 MUST 产生新版本，支持回滚（含 slide/deck/common_style/asset） |
 | `DATA-MODEL-002` | 外键关系 MUST 在删除时级联或受保护（不留孤儿记录） |
+| `DATA-MODEL-003` | 删除 project MUST 级联删除其 thread/run/deck/slide/version 与 work_dir 目录 |
 
 ## 验收标准（Given-When-Then）
 

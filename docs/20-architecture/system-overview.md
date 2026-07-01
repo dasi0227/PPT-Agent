@@ -60,10 +60,10 @@ verifies: []
 
 ## 数据流（生成一次的典型路径）
 
-1. 前端 `POST /projects/{id}/runs`（含指令）。
-2. HTTP 层校验 → Service 创建 Run → 返回 `run_id` + SSE 订阅地址。
+1. 前端 `POST /threads/{id}/runs`（含指令，挂在某对话线程下）。
+2. HTTP 层校验 → Service 取 project 锁 → 创建 Run → 返回 `run_id` + SSE 订阅地址。
 3. 前端 `GET /runs/{id}/events`（SSE）订阅。
-4. Run 引擎调用 LLM，逐页产出，写文件 + 落版本，发 `progress`/`token` 事件。
+4. Run 外壳驱动 Harness（ReAct 循环）：调 LLM、经工具产出，写文件 + 落版本，发 `thought`/`tool_call`/`progress` 事件。
 5. 用户可 `POST /runs/{id}/input` 注入控制输入；Run 在 checkpoint 消费。
 6. 完成发 `done`；前端刷新预览。
 

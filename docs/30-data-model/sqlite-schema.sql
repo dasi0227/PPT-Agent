@@ -59,10 +59,25 @@ CREATE TABLE IF NOT EXISTS versions (
 );
 CREATE INDEX IF NOT EXISTS idx_versions_target ON versions(target_type, target_id);
 
+-- ───────────────────────── Thread（对话线程，一 project 多 thread，共享产物） ─────────────────────────
+CREATE TABLE IF NOT EXISTS threads (
+    id            TEXT    PRIMARY KEY,
+    project_id    TEXT    NOT NULL,
+    title         TEXT    NOT NULL DEFAULT '',
+    history_path  TEXT    NOT NULL,                -- threads/<id>.jsonl
+    status        TEXT    NOT NULL DEFAULT 'active'
+                          CHECK (status IN ('active','archived')),
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_threads_project ON threads(project_id);
+
 -- ───────────────────────── Run ─────────────────────────
 CREATE TABLE IF NOT EXISTS runs (
     id          TEXT    PRIMARY KEY,
-    project_id  TEXT,                          -- repo scope 的 run 可无项目（NULL）
+    thread_id   TEXT,                          -- 挂在某对话线程下（repo 类快操作可 NULL）
+    project_id  TEXT,                          -- 冗余便于按项目查询/加锁；repo scope 可 NULL
     kind        TEXT    NOT NULL
                         CHECK (kind IN ('outline','generate','edit','command')),
     scope       TEXT    NOT NULL DEFAULT 'current'
@@ -75,8 +90,10 @@ CREATE TABLE IF NOT EXISTS runs (
                         CHECK (status IN ('pending','running','waiting','done','failed','canceled')),
     created_at  INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL,
+    FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_runs_thread ON runs(thread_id);
 CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 

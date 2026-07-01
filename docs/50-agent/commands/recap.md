@@ -30,6 +30,7 @@ verifies: []
 
 ## 数据来源
 
+- 当前 **thread 的对话历史**（`threads/<id>.jsonl`）——回顾"我们聊过什么"的主要来源。
 - `state.json`（当前状态游标）。
 - SQLite：`slides`（页标题/版式）、`versions`（最近变更）、`runs`（最近执行）。
 

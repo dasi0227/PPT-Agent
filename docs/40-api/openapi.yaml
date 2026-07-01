@@ -12,6 +12,7 @@ servers:
 
 tags:
   - name: projects
+  - name: threads
   - name: decks
   - name: slides
   - name: runs
@@ -148,12 +149,79 @@ paths:
               schema: { $ref: '#/components/schemas/Slide' }
         '404': { $ref: '#/components/responses/Error' }
 
-  /projects/{id}/runs:
+  /projects/{id}/threads:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [threads]
+      summary: 列出项目下的对话线程
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Thread' }
+    post:
+      tags: [threads]
+      summary: 在项目下新建对话线程
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Thread' }
+
+  /threads/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [threads]
+      summary: 获取线程（含元信息；历史另经 /threads/{id}/history）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Thread' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [threads]
+      summary: 归档/删除线程（不影响 project 产物）
+      responses:
+        '204': { description: No Content }
+        '404': { $ref: '#/components/responses/Error' }
+
+  /threads/{id}/history:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [threads]
+      summary: 读取线程对话历史（用于恢复：关闭再打开接着聊）
+      responses:
+        '200':
+          description: OK（jsonl 或消息数组）
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
+
+  /threads/{id}/runs:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
     post:
       tags: [runs]
-      summary: 发起一次 Agent 执行（生成/编辑/指令）
+      summary: 在线程下发起一次 Agent 执行（生成/编辑/指令）
       requestBody:
         required: true
         content:
@@ -166,6 +234,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Run' }
         '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
 
   /runs/{id}/events:
     parameters:
@@ -390,12 +459,25 @@ components:
         dom_selector_range: { type: string }
         screenshot_crop: { type: string, description: 'data URL 或资源引用' }
 
-    Run:
+    Thread:
       type: object
-      required: [id, project_id, kind, status]
+      required: [id, project_id, status, created_at]
       properties:
         id: { type: string }
         project_id: { type: string }
+        title: { type: string }
+        history_path: { type: string }
+        status: { type: string, enum: [active, archived] }
+        created_at: { type: integer }
+        updated_at: { type: integer }
+
+    Run:
+      type: object
+      required: [id, kind, status]
+      properties:
+        id: { type: string }
+        thread_id: { type: [string, "null"] }
+        project_id: { type: [string, "null"] }
         kind: { type: string }
         scope: { type: string }
         page_index: { type: [integer, "null"] }

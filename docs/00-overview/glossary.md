@@ -13,7 +13,8 @@ verifies: []
 
 | 术语 | 英文 / 标识 | 定义 |
 |---|---|---|
-| 项目 | Project | 一份 PPT 工程的顶层容器，对应一个 `work_dir`。一个项目含一个 Deck。 |
+| 项目 | Project | 一份 PPT 工程的顶层容器，对应一个 `work_dir`。一个项目含一个 Deck，可含多条 Thread。是隔离与执行锁的单元。 |
+| 线程 | Thread | 一条可恢复的对话历史（对齐 Codex thread）。一个 Project 可有多条 Thread，**共享该 Project 产物**，仅隔离对话历史。 |
 | 演示文稿 | Deck | 一组有序 slide 的集合，归属一个 Project。 |
 | 幻灯片 | Slide | 单页，含 slide-json（结构化元数据）与 slide html/css/js（产出物）。 |
 | 大纲 | Outline | Deck 的结构化骨架，即 slide-json 数组，描述每页的标题、要点、版式、图表意图。 |
@@ -24,7 +25,7 @@ verifies: []
 | 主题 | Theme | 一套 design token 取值组合，换一个主题即全局换肤。 |
 | 版式 | Layout | 单页的结构模板（cover/toc/bullets/two-column/kpi-grid/table/code/timeline 等）。 |
 | 动效 | Animation / FX | CSS 动画或 Canvas 特效，按约定挂载到 slide 元素。 |
-| 运行 | Run | 一次 Agent 执行单元，从用户指令开始，经 LLM 生成/编辑，到产出结束。有生命周期状态机。 |
+| 运行 | Run | 一次 Agent 执行单元（turn），挂在某 Thread 下，从用户指令开始，经 harness 循环到产出结束。有生命周期状态机。 |
 | 检查点 | Checkpoint | Run 执行过程中可暂停、可排空输入队列、可发起提问的节点。 |
 | 人在环 | Human-in-the-loop (HITL) | 用户在 Run 执行中途注入输入、回答 Agent 提问、影响后续执行的能力。 |
 | 控制输入 | Control Input | 通过 `POST /runs/{id}/input` 向运行中的 Run 注入的消息。 |

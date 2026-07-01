@@ -24,6 +24,7 @@ verifies: []
 | [ADR-0007](0007-harness-react-tools.md) | Harness 采用 ReAct + 工具化 | accepted |
 | [ADR-0008](0008-llm-interface-abstraction.md) | LLM interface 抽象，假设 DeepSeek 良好 | accepted |
 | [ADR-0009](0009-unified-asset-protocol.md) | 个人仓库统一资产协议（4 类） | accepted |
+| [ADR-0010](0010-project-thread-run-isolation.md) | 三层隔离模型（Project/Thread/Run） | accepted |
 
 ## ADR 模板
 

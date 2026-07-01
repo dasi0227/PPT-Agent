@@ -30,18 +30,21 @@ backend/
 │   │   ├── sse.go             # SSE 写出辅助（flush、心跳、事件编码）
 │   │   ├── errors.go          # 统一错误响应 + 错误码映射
 │   │   ├── project_handler.go
+│   │   ├── thread_handler.go  # 对话线程 CRUD + 历史
 │   │   ├── deck_handler.go
 │   │   ├── slide_handler.go
-│   │   ├── run_handler.go     # 创建 run / 订阅 events / 注入 input
+│   │   ├── run_handler.go     # 在 thread 下创建 run / 订阅 events / 注入 input
 │   │   └── asset_handler.go   # 个人仓库资产 CRUD
 │   ├── service/               # Service 层（用例编排）
 │   │   ├── project.go
+│   │   ├── thread.go          # 线程创建/列表/历史读写
 │   │   ├── deck.go
 │   │   ├── slide.go
 │   │   ├── version.go
 │   │   └── asset.go
 │   ├── run/                   # Run 外壳（见 agent-runtime.md）
 │   │   ├── engine.go          # run 生命周期状态机
+│   │   ├── lock.go            # 每 project 一把执行锁（同项目串行，跨项目并行）
 │   │   ├── bus.go             # 事件总线（SSE 扇出）
 │   │   ├── input.go           # 控制输入队列（HITL）
 │   │   └── checkpoint.go
@@ -71,7 +74,7 @@ backend/
 │   │   ├── fs/                # 文件系统（slide 产物、work_dir、_assets）
 │   │   └── store.go           # store interface 定义
 │   ├── asset/                 # 资产协议：校验、seed 载入、移植
-│   ├── model/                 # 领域模型（Project/Deck/Slide/Run/Asset/Version）
+│   ├── model/                 # 领域模型（Project/Thread/Deck/Slide/Run/Asset/Version）
 │   └── designsystem/          # 公共层/产出规范辅助（tokens 校验、lint）
 ├── seed/assets/               # 出厂预置资产（themes/layouts/components/fx）
 ├── migrations/                # SQLite 迁移脚本（对应 30-data-model/sqlite-schema.sql）
@@ -104,18 +107,21 @@ httpapi ──▶ service ──▶ store(interface)
 
 ```
 /api/v1
-  /projects            GET POST
-  /projects/{id}       GET DELETE
-  /projects/{id}/deck  GET
-  /decks/{id}/slides   GET
-  /slides/{id}         GET
-  /slides/{id}/versions GET
-  /projects/{id}/runs  POST           # 发起一次 Agent 执行
-  /runs/{id}/events    GET (SSE)      # 订阅事件流
-  /runs/{id}/input     POST           # HITL 控制输入
-  /runs/{id}           DELETE         # 取消 run
-  /assets              GET POST
-  /assets/{id}         GET PATCH DELETE
+  /projects              GET POST
+  /projects/{id}         GET DELETE
+  /projects/{id}/threads GET POST       # 对话线程
+  /threads/{id}          GET DELETE
+  /threads/{id}/history  GET            # 线程历史（恢复）
+  /projects/{id}/deck    GET
+  /decks/{id}/slides     GET
+  /slides/{id}           GET
+  /slides/{id}/versions  GET
+  /threads/{id}/runs     POST           # 在线程下发起一次 Agent 执行
+  /runs/{id}/events      GET (SSE)      # 订阅事件流
+  /runs/{id}/input       POST           # HITL 控制输入
+  /runs/{id}             DELETE         # 取消 run
+  /assets                GET POST
+  /assets/{id}           GET PATCH DELETE
 ```
 
 ## 配置

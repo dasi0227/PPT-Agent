@@ -39,7 +39,7 @@
 | [50-agent/](50-agent/) | 指令系统（scope 四件套+mode）、prompt、上下文装配 | agent-overview、commands/\*（current/page/overview/repo/prompt/recap/talk/ask）、modes、prompt-templates、context-assembly |
 | [60-design-system/](60-design-system/) | **统一资产协议**（4 类）、token、主题/版式/组件/图表/动效、HTML 产出、seed | asset-protocol、asset-manifest.schema.json、design-tokens、themes、layouts、components、charts、animations、html-output-spec、seed-assets |
 | [80-dev/](80-dev/) | 开发计划、规则、编码规范、测试策略、DoD | dev-plan、dev-rules、coding-standards、test-strategy、definition-of-done |
-| [90-decisions/](90-decisions/) | ADR 架构决策记录 | 0001~0009 |
+| [90-decisions/](90-decisions/) | ADR 架构决策记录 | 0001~0010 |
 
 ---
 

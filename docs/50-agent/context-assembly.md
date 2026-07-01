@@ -17,11 +17,12 @@ verifies: []
 | 来源 | 内容 |
 |---|---|
 | Run 参数 | kind/scope/mode/page_index/instruction/selection |
-| 目标产物 | page scope → 当前页 html + slide-json；overview → 公共层 tokens.css；deck → deck.json + 各页标题 |
+| **线程历史** | 当前 thread 的对话历史（`threads/<id>.jsonl`），提供跨 Run 连续性；长会话按预算滚动压缩 |
+| 目标产物 | page scope → 当前页 html + slide-json；overview → 公共层 tokens.css + 各页标题索引；repo → 目标资产载荷 |
 | 设计系统切片 | 相关版式/图表/动效目录条目（不全量塞入） |
-| 个人仓库 | 用户提及或相关的插件 manifest |
+| 个人仓库 | 用户提及或相关的资产 manifest |
 | 选区（backlog） | `selection`：{ screenshot_crop, dom_selector_range, bbox }（MVP 预留） |
-| 历史 | 最近相关版本/run 摘要（供 /recap 与编辑连续性） |
+| 历史摘要 | 最近相关版本/run 摘要（供 /recap 与编辑连续性） |
 
 ## 按 scope 的装配策略
 
