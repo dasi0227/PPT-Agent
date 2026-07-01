@@ -25,6 +25,7 @@ verifies: []
 | [ADR-0008](0008-llm-interface-abstraction.md) | LLM interface 抽象，假设 DeepSeek 良好 | accepted |
 | [ADR-0009](0009-unified-asset-protocol.md) | 个人仓库统一资产协议（4 类） | accepted |
 | [ADR-0010](0010-project-thread-run-isolation.md) | 三层隔离模型（Project/Thread/Run） | accepted |
+| [ADR-0011](0011-security-posture.md) | 安全姿态（单机自用：跳过企业级安全，保留路径护栏） | accepted |
 
 ## ADR 模板
 

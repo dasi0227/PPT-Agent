@@ -188,6 +188,9 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 | `ARCH-TOOLS-003` | `patch_*` 的 `old_text` 不唯一/不存在 MUST 整体失败并返回可操作错误 observation |
 | `ARCH-TOOLS-004` | 写页工具 MUST 在落盘前隐式跑 `validate_slide`，不合规则拒绝落盘 |
 | `ARCH-TOOLS-005` | 工具执行 MUST 串行化共享状态写入（state.json/SQLite），防竞态 |
+| `ARCH-TOOLS-006` | **路径边界（正确性护栏）**：所有工具的文件读写 MUST 限定在当前 project 的 work_dir 或全局 `_assets/` 内。路径 MUST 规范化后做前缀校验，拒绝 `..`/绝对路径/符号链接逃逸；越界 MUST 整体失败并返回错误 observation，不写任何文件 |
+
+> `ARCH-TOOLS-006` 不是"安全剧场"，而是防止 LLM 生成异常路径（如 `../../../`）把 work_dir 之外的本机文件写坏的**正确性边界**。单机无登录场景下，用户级权限/RBAC/网络攻击面防护均不做（见 [ADR-0011](../90-decisions/0011-security-posture.md)）。
 
 ## 验收标准（Given-When-Then）
 
@@ -201,10 +204,15 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
   - WHEN 执行
   - THEN validate 失败 → 拒绝落盘 → 返回错误 observation
 
+- **AC-TOOLS-006**（`ARCH-TOOLS-006`）
+  - GIVEN 一个带越界路径（如 `../../etc/x` 或绝对路径）的工具调用
+  - WHEN 执行
+  - THEN 路径校验失败，整体拒绝，work_dir 外无任何文件被写入
+
 ## 校验方式
 
 ```bash
-go test ./internal/harness/tools -run 'TestPatchAnchorUnique|TestValidateBeforeWrite|TestToolSchema'
+go test ./internal/harness/tools -run 'TestPatchAnchorUnique|TestValidateBeforeWrite|TestToolSchema|TestPathBoundary'
 # 工具 schema 合法性：逐个 validate 为合法 JSON Schema
 ```
 
