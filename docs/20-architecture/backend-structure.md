@@ -11,10 +11,10 @@ verifies: []
 
 ## 设计原则
 
-- **拥抱主流框架**：以 **Gin** 组织 HTTP 层，充分用其路由/中间件/绑定校验生态，面向企业实践编码（见 [ADR-0001](../90-decisions/0001-backend-go-gin.md)）。
+- **拥抱主流框架**：HTTP 用 **Gin**、ORM 用 **GORM**（驱动 `modernc.org/sqlite` 纯 Go）、配置 **Viper**、日志 **zap**、依赖注入 **google/wire**，面向企业实践编码（见 [ADR-0001](../90-decisions/0001-backend-go-gin.md)、[ADR-0012](../90-decisions/0012-backend-lib-stack.md)）。
 - **清晰分层**：handler → service → store，依赖单向向下，禁止反向依赖。
-- **框架不渗透**：`gin.Context` 仅存在于 handler 层；service/store 只收领域类型，保留可替换性。
-- **接口隔离**：store 与 llm 以 interface 定义，便于替换与测试。
+- **框架不渗透**：`gin.Context` 仅在 handler 层；GORM tag 仅在 `store/sqlite` 的 PO；`model/` 与 service 签名只用纯领域类型（PO↔model 在 store 边界互转）。
+- **接口隔离**：store 与 llm 以 interface 定义，GORM 仅为 store 的一种实现，可替换、好测试。
 - **串行化共享状态**：写 SQLite / state.json 经单写入通道，避免竞态（[ARCH-SYS-005](system-overview.md)）。
 
 ## 目录结构
@@ -23,9 +23,15 @@ verifies: []
 backend/
 ├── cmd/
 │   └── server/
-│       └── main.go            # 装配依赖、启动 http server（监听回环）
+│       ├── main.go             # 入口：调 wire 生成的 injector 装配并启动
+│       ├── wire.go             # wire provider set 声明（+build wireinject）
+│       └── wire_gen.go         # wire 生成的装配代码（勿手改）
 ├── internal/
-│   ├── httpapi/               # HTTP 层（handler + 路由 + 中间件）
+│   ├── config/                 # 配置（Viper：env + 可选配置文件 → 强类型 config）
+│   │   └── config.go
+│   ├── logger/                 # 日志（zap 封装：结构化、带 run_id 等字段）
+│   │   └── logger.go
+│   ├── httpapi/                # HTTP 层（gin handler + 路由 + 中间件）
 │   │   ├── router.go          # gin 引擎与路由分组注册（RouterGroup）
 │   │   ├── middleware.go      # gin 中间件：日志、recover、请求 ID、CORS（本地）
 │   │   ├── sse.go             # SSE 写出辅助（c.Stream/Flusher、心跳、事件编码）
@@ -69,11 +75,19 @@ backend/
 │   │   ├── client.go          # interface: Chat/Stream/CallTool
 │   │   └── deepseek.go        # DeepSeek 实现
 │   ├── store/                 # 持久化
-│   │   ├── sqlite/            # SQLite 实现（元数据/版本/资产索引/run_events）
+│   │   ├── sqlite/            # GORM 实现（元数据/版本/资产索引/run_events）
+│   │   │   ├── db.go          # GORM+modernc 初始化（WAL/busy_timeout/单一 *sql.DB）
+│   │   │   ├── po.go          # 持久化对象（带 GORM tag，仅本包内）+ PO↔model 互转
+│   │   │   ├── project.go     # projects 表读写
+│   │   │   ├── thread.go      # threads 表读写
+│   │   │   ├── slide.go       # slides 表读写
+│   │   │   ├── version.go     # versions 表读写
+│   │   │   ├── run.go         # runs + run_events 表读写
+│   │   │   └── asset.go       # assets 表读写
 │   │   ├── fs/                # 文件系统（slide 产物、work_dir、_assets）
 │   │   └── store.go           # store interface 定义
 │   ├── asset/                 # 资产协议：校验、seed 载入、移植
-│   ├── model/                 # 领域模型（Project/Thread/Slide/Run/Asset/Version）
+│   ├── model/                 # 领域模型（纯类型，无 ORM/框架依赖）
 │   └── designsystem/          # 公共层/产出规范辅助（tokens 校验、lint）
 ├── seed/assets/               # 出厂预置资产（themes/layouts/components/fx）
 ├── migrations/                # SQLite 迁移脚本（对应 30-data-model/sqlite-schema.sql）
@@ -101,6 +115,7 @@ httpapi ──▶ service ──▶ store(interface)
 | `ARCH-BACKEND-003` | `model` MUST 无外部依赖（纯领域类型） |
 | `ARCH-BACKEND-004` | SQLite 写入 MUST 经单一串行通道（[ARCH-SYS-005](system-overview.md)） |
 | `ARCH-BACKEND-005` | SSE 写出 MUST 在每事件后 flush，并周期发送心跳注释行 |
+| `ARCH-BACKEND-006` | ORM/框架类型（GORM tag、`gin.Context` 等）MUST NOT 出现在 `model/` 与 service 层签名；GORM tag 仅限 `store/sqlite` 的 PO（[ADR-0012](../90-decisions/0012-backend-lib-stack.md)） |
 
 ## 路由分组（详见 [40-api](../40-api/rest-endpoints.md)）
 
@@ -124,8 +139,8 @@ httpapi ──▶ service ──▶ store(interface)
 
 ## 配置
 
-- 通过环境变量：`DEEPSEEK_API_KEY`、`PPT_WORK_ROOT`（work_dir 根）、`PPT_LISTEN_ADDR`（默认 `127.0.0.1:8787`）。
-- 配置加载集中于 `cmd/server/main.go`，不散落到各包。
+- 由 **Viper** 统一加载（env + 可选配置文件），装配为强类型 config 结构体，集中于 `internal/config`，不散落到各包。
+- 关键项：`DEEPSEEK_API_KEY`、`PPT_WORK_ROOT`（work_dir 根）、`PPT_LISTEN_ADDR`（默认 `127.0.0.1:8787`）。
 
 ## 验收标准（Given-When-Then）
 

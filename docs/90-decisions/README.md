@@ -26,6 +26,7 @@ verifies: []
 | [ADR-0009](0009-unified-asset-protocol.md) | 个人仓库统一资产协议（4 类） | accepted |
 | [ADR-0010](0010-project-thread-run-isolation.md) | 三层隔离模型（Project/Thread/Run） | accepted |
 | [ADR-0011](0011-security-posture.md) | 安全姿态（单机自用：跳过企业级安全，保留路径护栏） | accepted |
+| [ADR-0012](0012-backend-lib-stack.md) | 后端库栈（GORM + modernc + Viper + zap + wire） | accepted |
 
 ## ADR 模板
 
