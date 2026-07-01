@@ -76,7 +76,7 @@ backend/
 │   │   └── deepseek.go        # DeepSeek 实现
 │   ├── store/                 # 持久化
 │   │   ├── sqlite/            # GORM 实现（元数据/版本/资产索引/run_events）
-│   │   │   ├── db.go          # GORM+modernc 初始化（WAL/busy_timeout/单一 *sql.DB）
+│   │   │   ├── db.go          # GORM 初始化（glebarez/sqlite→modernc，纯 Go；WAL/busy_timeout/单一 *sql.DB）
 │   │   │   ├── po.go          # 持久化对象（带 GORM tag，仅本包内）+ PO↔model 互转
 │   │   │   ├── project.go     # projects 表读写
 │   │   │   ├── thread.go      # threads 表读写

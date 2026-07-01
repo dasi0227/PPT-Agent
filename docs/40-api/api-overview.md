@@ -72,6 +72,8 @@ npx @redocly/cli lint docs/40-api/openapi.yaml
 # 契约测试：用 schemathesis / dredd 对实现做契约校验
 ```
 
+> **lint 例外**：`recommended` 规则集的 `security-defined`（要求每个 operation 声明 `security`）与本 API 的无鉴权设计（[ARCH-SYS-006](../20-architecture/system-overview.md)：单机回环、无鉴权）相抵触。故在 `redocly.yaml` 中**仅关闭该条规则**，不在 `openapi.yaml` 添加虚假的 `security` 声明（契约须诚实）。lint 例外应带注释指向 `ARCH-SYS-006` 以自解释。
+
 ## 依赖
 
 - [ARCH-BACKEND](../20-architecture/backend-structure.md)、[ARCH-RUNTIME](../20-architecture/agent-runtime.md)
