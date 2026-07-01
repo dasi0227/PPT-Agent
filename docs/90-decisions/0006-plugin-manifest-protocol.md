@@ -18,7 +18,9 @@ verifies: []
 
 ## 决策
 
-定义**统一 manifest 协议**：每个插件含 `manifest.json`（符合 [plugin-manifest.schema.json](../70-plugins/plugin-manifest.schema.json)）+ 隔离的 html/css/js 资源。manifest 声明 `kind`、`description`（供 AI 检索）、`mount`（挂载点/方式）、`params`（参数 schema）、`assets`、`requires`。
+定义**统一 manifest 协议**：每个插件含 `manifest.json`（当年规划的 `70-plugins/plugin-manifest.schema.json`，已废弃）+ 隔离的 html/css/js 资源。manifest 声明 `kind`、`description`（供 AI 检索）、`mount`（挂载点/方式）、`params`（参数 schema）、`assets`、`requires`。
+
+> 注：`70-plugins/` 目录及其 schema/流程文档在转向统一资产协议时已移除，现行等价物见 [ADR-0009](0009-unified-asset-protocol.md) 与 [asset-protocol](../60-design-system/asset-protocol.md)、[asset-manifest.schema.json](../60-design-system/asset-manifest.schema.json)。本 ADR 正文保留原始表述作历史留存，不再维护指向 `70-plugins/` 的链接。
 
 ## 选项与权衡
 
@@ -29,7 +31,7 @@ verifies: []
 
 ## 后果
 
-- 协议与流程见 [plugin-protocol](../70-plugins/plugin-protocol.md) 与 [authoring-and-mount](../70-plugins/authoring-and-mount.md)。
+- 协议与流程当年规划在 `70-plugins/plugin-protocol.md` 与 `70-plugins/authoring-and-mount.md`（已废弃，被 ADR-0009 取代）。
 - 插件视觉默认引用 token，随主题换肤；fx 插件遵循动效清理约定。
 - 移植后产物仍须通过 html-output-spec 校验。
 - MVP 仅本地信任、不远程加载；安全审查列为未来增强。
