@@ -1,0 +1,86 @@
+backend/cmd/server/wire.go
+  s_0566b3e0bb49c5::t_02753677455a4f 1-34
+backend/migrations/migrations_test.go
+  s_0566b3e0bb49c5::t_85c714a8a2c22e 1-45
+frontend/src/main.tsx
+  s_0566b3e0bb49c5::t_d27bc397ce5557 1-12
+frontend/src/scaffold.test.ts
+  s_0566b3e0bb49c5::t_fdf0b38d06fe70 1-8
+frontend/tsconfig.json
+  s_0566b3e0bb49c5::t_be5231ed59892c 1-22
+frontend/src/App.tsx
+  s_0566b3e0bb49c5::t_81e77bd7913a78 1-8
+frontend/package.json
+  s_0566b3e0bb49c5::t_e89e62e0554afb 20,28
+  s_0566b3e0bb49c5::t_c432de4fcdfdcd 1-19,21-27,29-32
+backend/internal/httpapi/errors.go
+  s_0566b3e0bb49c5::t_51db68af21739c 1-36
+backend/cmd/server/main.go
+  s_0566b3e0bb49c5::t_d17cbf9b3d688e 1-14,16,19-21,23-25,27-45
+  s_0566b3e0bb49c5::t_469da21461a0c9 15,17-18,22,26
+frontend/tsconfig.node.json
+  s_0566b3e0bb49c5::t_dd00b124f3f4cf 1-13
+backend/go.mod
+  s_0566b3e0bb49c5::t_9d871973090018 3
+frontend/src/vite-env.d.ts
+  s_0566b3e0bb49c5::t_f1303884a9cbe9 1
+backend/internal/httpapi/router.go
+  s_0566b3e0bb49c5::t_223c590354037c 1-39
+backend/cmd/server/providers.go
+  s_0566b3e0bb49c5::t_257b6a3134b4e8 20-21
+  s_0566b3e0bb49c5::t_4f803bba6c0c1c 1-19,22-24
+backend/internal/httpapi/sse.go
+  s_0566b3e0bb49c5::t_6f7f98295a2198 1-57
+frontend/vite.config.ts
+  s_0566b3e0bb49c5::t_1ff1dd36a7b273 1-16
+backend/internal/service/health.go
+  s_0566b3e0bb49c5::t_fd581b636503f9 1-21
+frontend/index.html
+  s_0566b3e0bb49c5::t_cd1520db1a6824 1-12
+frontend/eslint.config.js
+  s_0566b3e0bb49c5::t_87799efd5ab1a3 1-23
+backend/internal/httpapi/middleware.go
+  s_0566b3e0bb49c5::t_d142e68265dd1c 1-55
+backend/internal/store/sqlite/store_test.go
+  s_0566b3e0bb49c5::t_c1e3d591be8c54 1-106
+backend/internal/store/sqlite/store.go
+  s_0566b3e0bb49c5::t_1cca8d511638ea 1-30
+frontend/.gitignore
+  s_0566b3e0bb49c5::t_48070233d9f494 7
+  s_0566b3e0bb49c5::t_c18c44da8c4360 1-6
+backend/migrations/0001_init.sql
+  s_0566b3e0bb49c5::t_2a0fcf00111b9d 1-119
+backend/internal/store/store.go
+  s_0566b3e0bb49c5::t_75ad9f6ec9d697 1-9
+frontend/src/api/types.ts
+  s_0566b3e0bb49c5::t_d5e9839ec885d0 1-3
+backend/internal/llm/client.go
+  s_0566b3e0bb49c5::t_8358759b01e64e 1-16
+backend/internal/httpapi/health_handler.go
+  s_0566b3e0bb49c5::t_758365bcedda4f 1-26
+.github/workflows/ci.yml
+  s_0566b3e0bb49c5::t_ba6f45b7a42b83 1-72
+.gitignore
+  s_0566b3e0bb49c5::t_0059cff55a416a 1-20
+redocly.yaml
+  s_0566b3e0bb49c5::t_3e1a1f74e8eca0 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "91998171f1f4dfea607ddc88a79b5b9bd1660b70",
+  "prompts": {},
+  "sessions": {
+    "s_0566b3e0bb49c5": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a44ddd3b816aa546afa4d53",
+        "model": "openrouter-3o__max",
+        "display_model_name": "openrouter-3o"
+      },
+      "human_author": "wanyiwei <wanyiwei@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
