@@ -11,7 +11,7 @@ verifies: []
 
 ## 设计原则
 
-- **拥抱主流框架**：以 **Gin** 组织 HTTP 层，充分用其路由/中间件/绑定校验生态，面向企业实践编码（见 [ADR-0001](../90-decisions/0001-backend-go-chi.md)）。
+- **拥抱主流框架**：以 **Gin** 组织 HTTP 层，充分用其路由/中间件/绑定校验生态，面向企业实践编码（见 [ADR-0001](../90-decisions/0001-backend-go-gin.md)）。
 - **清晰分层**：handler → service → store，依赖单向向下，禁止反向依赖。
 - **框架不渗透**：`gin.Context` 仅存在于 handler 层；service/store 只收领域类型，保留可替换性。
 - **接口隔离**：store 与 llm 以 interface 定义，便于替换与测试。
@@ -149,4 +149,4 @@ go test -race ./...
 
 ## 依赖
 
-- [ARCH-SYSTEM](system-overview.md)、[ADR-0001](../90-decisions/0001-backend-go-chi.md)、[ADR-0002](../90-decisions/0002-persistence-sqlite-fs.md)
+- [ARCH-SYSTEM](system-overview.md)、[ADR-0001](../90-decisions/0001-backend-go-gin.md)、[ADR-0002](../90-decisions/0002-persistence-sqlite-fs.md)

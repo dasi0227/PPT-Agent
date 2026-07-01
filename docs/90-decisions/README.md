@@ -15,7 +15,7 @@ verifies: []
 
 | ADR | 决策 | 状态 |
 |---|---|---|
-| [ADR-0001](0001-backend-go-chi.md) | 后端 Go + Gin | accepted |
+| [ADR-0001](0001-backend-go-gin.md) | 后端 Go + Gin | accepted |
 | [ADR-0002](0002-persistence-sqlite-fs.md) | SQLite + 文件系统混合持久化 | accepted |
 | [ADR-0003](0003-frontend-react-vite.md) | 前端 React + Vite + TS + Tailwind + shadcn/ui | accepted |
 | [ADR-0004](0004-transport-sse-hitl.md) | SSE + 控制 POST 实现流式与 HITL | accepted |

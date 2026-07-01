@@ -89,7 +89,7 @@ verifies: []                # 本文档验证了哪些上游需求（开发计�
 
 | 维度 | 选型 | ADR |
 |---|---|---|
-| 后端 | Go + Gin | [ADR-0001](90-decisions/0001-backend-go-chi.md) |
+| 后端 | Go + Gin | [ADR-0001](90-decisions/0001-backend-go-gin.md) |
 | 持久化 | SQLite + 文件系统 | [ADR-0002](90-decisions/0002-persistence-sqlite-fs.md) |
 | 前端 | React + Vite + TS + Tailwind + shadcn/ui | [ADR-0003](90-decisions/0003-frontend-react-vite.md) |
 | 传输 / HITL | SSE + 控制 POST | [ADR-0004](90-decisions/0004-transport-sse-hitl.md) |
