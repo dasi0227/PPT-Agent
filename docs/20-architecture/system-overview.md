@@ -23,8 +23,8 @@ verifies: []
 ┌──────────────────────────── 后端（Go + net/http + chi） ───────────────────┐
 │  ┌──────────┐   ┌───────────────┐   ┌────────────┐   ┌──────────────────┐  │
 │  │ HTTP 层   │──▶│ Service 层     │──▶│ Run+Harness │──▶│ LLM 客户端(DeepSeek)│ │
-│  │(handler) │   │(project/deck/ │   │(SSE+HITL +  │   │  CallTool/Stream  │ │
-│  │          │   │ slide/asset)  │   │ ReAct+工具)  │   └──────────────────┘  │
+│  │(handler) │   │(project/slide/│   │(SSE+HITL +  │   │  CallTool/Stream  │ │
+│  │          │   │ asset/version)│   │ ReAct+工具)  │   └──────────────────┘  │
 │  └──────────┘   └───────┬───────┘   └─────┬──────┘                         │
 │                         │                  │                                │
 │                         ▼                  ▼                                │
@@ -41,10 +41,10 @@ verifies: []
 |---|---|---|
 | 前端 SPA | 对话交互、指令输入、编辑器状态、沙箱预览 | [frontend-structure](frontend-structure.md) |
 | HTTP 层 | 路由、请求校验、SSE 写出、错误码 | [backend-structure](backend-structure.md) |
-| Service 层 | 业务用例编排（项目/Deck/Slide/插件/版本） | [backend-structure](backend-structure.md) |
+| Service 层 | 业务用例编排（项目/Slide/资产/版本） | [backend-structure](backend-structure.md) |
 | Run 引擎 | Agent 执行单元、SSE 流、HITL 控制输入、checkpoint | [agent-runtime](agent-runtime.md) |
 | LLM 客户端 | DeepSeek 接入、流式、重试/超时 | [llm-integration](llm-integration.md) |
-| Store 层 | SQLite 持久化（元数据/版本/插件索引） | [30-data-model](../30-data-model/data-model.md) |
+| Store 层 | SQLite 持久化（元数据/版本/资产索引） | [30-data-model](../30-data-model/data-model.md) |
 | 文件系统 | slide html/css/js 等大文本产物 | [filesystem-layout](../30-data-model/filesystem-layout.md) |
 
 ## 关键架构约束

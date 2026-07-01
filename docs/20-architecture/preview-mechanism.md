@@ -17,7 +17,7 @@ verifies: []
 
 ## 渲染模型
 
-- 每份 Deck 在预览时加载到一个**沙箱 iframe**。
+- 每份演示文稿在预览时加载到一个**沙箱 iframe**。
 - iframe 内运行轻量预览运行时 `public/slide-runtime/`，负责：切换当前页 active、页内分步、键盘绑定、上报状态。
 - 宿主 SPA 与 iframe 经 `postMessage` 双向通信，宿主不直接操作 iframe 内 DOM。
 

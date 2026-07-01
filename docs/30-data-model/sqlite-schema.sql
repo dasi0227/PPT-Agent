@@ -5,33 +5,23 @@
 
 PRAGMA foreign_keys = ON;
 
--- ───────────────────────── Project ─────────────────────────
+-- ───────────────────────── Project（合并原 Deck：一 project 恰一份演示文稿，1:1 无需拆表） ─────────────────────────
 CREATE TABLE IF NOT EXISTS projects (
     id          TEXT    PRIMARY KEY,
     title       TEXT    NOT NULL,
     work_dir    TEXT    NOT NULL,
+    theme       TEXT    NOT NULL DEFAULT 'default',
+    status      TEXT    NOT NULL DEFAULT 'draft'
+                        CHECK (status IN ('draft','generating','ready')),
+    design_path TEXT    NOT NULL DEFAULT '',        -- 公共样式层（design tokens）文件相对路径
     created_at  INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL
 );
 
--- ───────────────────────── Deck ─────────────────────────
-CREATE TABLE IF NOT EXISTS decks (
-    id                 TEXT    PRIMARY KEY,
-    project_id         TEXT    NOT NULL,
-    theme              TEXT    NOT NULL DEFAULT 'default',
-    status             TEXT    NOT NULL DEFAULT 'draft'
-                               CHECK (status IN ('draft','generating','ready')),
-    common_style_path  TEXT    NOT NULL,
-    created_at         INTEGER NOT NULL,
-    updated_at         INTEGER NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_decks_project ON decks(project_id);
-
 -- ───────────────────────── Slide ─────────────────────────
 CREATE TABLE IF NOT EXISTS slides (
     id               TEXT    PRIMARY KEY,
-    deck_id          TEXT    NOT NULL,
+    project_id       TEXT    NOT NULL,
     idx              INTEGER NOT NULL,
     layout           TEXT    NOT NULL,
     title            TEXT    NOT NULL DEFAULT '',
@@ -39,17 +29,17 @@ CREATE TABLE IF NOT EXISTS slides (
     html_path        TEXT    NOT NULL,
     current_version  INTEGER NOT NULL DEFAULT 0,
     last_export_at   INTEGER,                       -- backlog：图片导出预留，可空
-    FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE,
-    UNIQUE (deck_id, idx)
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    UNIQUE (project_id, idx)
 );
-CREATE INDEX IF NOT EXISTS idx_slides_deck ON slides(deck_id);
+CREATE INDEX IF NOT EXISTS idx_slides_project ON slides(project_id);
 
 -- ───────────────────────── Version ─────────────────────────
--- 通用版本表：target_type 区分 slide / deck / common_style / asset 快照
+-- 通用版本表：target_type 区分 slide / project / design / asset 快照
 CREATE TABLE IF NOT EXISTS versions (
     id            TEXT    PRIMARY KEY,
     target_type   TEXT    NOT NULL
-                          CHECK (target_type IN ('slide','deck','common_style','asset')),
+                          CHECK (target_type IN ('slide','project','design','asset')),
     target_id     TEXT    NOT NULL,
     version_no    INTEGER NOT NULL,
     snapshot_path TEXT    NOT NULL,

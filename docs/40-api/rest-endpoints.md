@@ -26,14 +26,13 @@ curl -s -X POST http://127.0.0.1:8787/api/v1/projects \
 
 ```bash
 curl -s http://127.0.0.1:8787/api/v1/projects/{id}
-curl -s -X DELETE http://127.0.0.1:8787/api/v1/projects/{id}   # 204；级联删除 deck/slides
+curl -s -X DELETE http://127.0.0.1:8787/api/v1/projects/{id}   # 204；级联删除 slides
 ```
 
-## Deck / Slide
+## Slide
 
 ```bash
-curl -s http://127.0.0.1:8787/api/v1/projects/{id}/deck
-curl -s http://127.0.0.1:8787/api/v1/decks/{deckId}/slides
+curl -s http://127.0.0.1:8787/api/v1/projects/{id}/slides
 curl -s http://127.0.0.1:8787/api/v1/slides/{slideId}
 curl -s http://127.0.0.1:8787/api/v1/slides/{slideId}/versions
 ```

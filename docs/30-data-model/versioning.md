@@ -11,7 +11,7 @@ verifies: []
 
 ## 目标
 
-任何可编辑产物（单页 slide html、公共样式层、deck 结构）的每次变更都产生**可回滚快照**，
+任何可编辑产物（单页 slide html、公共样式层、project 结构）的每次变更都产生**可回滚快照**，
 支撑 [SPEC-EDIT-005](../10-spec/feat-nl-editing.md) 与 [SPEC-GLOBAL-004](../10-spec/functional-spec.md)。
 
 ## 版本对象
@@ -19,8 +19,8 @@ verifies: []
 | target_type | 含义 | 快照内容 |
 |---|---|---|
 | `slide` | 单页 html | 该页 `index.html`（必要时含 slide.css/js） |
-| `common_style` | 公共样式层 | `common/tokens.css` |
-| `deck` | deck 结构 | `deck.json`（页顺序/主题引用） |
+| `design` | 公共样式层 | `common/tokens.css` |
+| `project` | project 结构 | `project.json`（页顺序/主题引用） |
 | `asset` | 个人仓库资产 | 该资产目录快照（manifest + 载荷） |
 
 ## 版本生成规则

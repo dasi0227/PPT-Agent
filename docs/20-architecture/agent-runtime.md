@@ -127,7 +127,7 @@ Client                     Backend(Run Engine)            LLM
   │                            [checkpoint] drain queue      │
   │ ◀── progress(3/8 深色生效)  ─────────────────────────────▶│ gen page3(dark)
   │ ...                                                      │
-  │ ◀── done {deck_id}                                       │
+  │ ◀── done {project_id}                                    │
 ```
 
 ## 验收标准（Given-When-Then）

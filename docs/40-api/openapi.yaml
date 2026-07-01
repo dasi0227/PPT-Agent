@@ -13,7 +13,6 @@ servers:
 tags:
   - name: projects
   - name: threads
-  - name: decks
   - name: slides
   - name: runs
   - name: assets
@@ -68,26 +67,12 @@ paths:
         '204': { description: No Content }
         '404': { $ref: '#/components/responses/Error' }
 
-  /projects/{id}/deck:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string } }
-    get:
-      tags: [decks]
-      summary: 获取项目的 Deck
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Deck' }
-        '404': { $ref: '#/components/responses/Error' }
-
-  /decks/{id}/slides:
+  /projects/{id}/slides:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string } }
     get:
       tags: [slides]
-      summary: 列出 Deck 的 slides
+      summary: 列出项目的 slides
       responses:
         '200':
           description: OK
@@ -378,11 +363,14 @@ components:
 
     Project:
       type: object
-      required: [id, title, work_dir, created_at, updated_at]
+      required: [id, title, work_dir, theme, status, design_path, created_at, updated_at]
       properties:
         id: { type: string }
         title: { type: string }
         work_dir: { type: string }
+        theme: { type: string }
+        status: { type: string, enum: [draft, generating, ready] }
+        design_path: { type: string, description: 公共样式层（design tokens）文件相对路径 }
         created_at: { type: integer }
         updated_at: { type: integer }
 
@@ -395,22 +383,12 @@ components:
         slide_count: { type: integer, minimum: 1 }
         language: { type: string, enum: [zh, en] }
 
-    Deck:
+    Slide:
       type: object
-      required: [id, project_id, theme, status, common_style_path]
+      required: [id, project_id, idx, layout, title, json_path, html_path, current_version]
       properties:
         id: { type: string }
         project_id: { type: string }
-        theme: { type: string }
-        status: { type: string, enum: [draft, generating, ready] }
-        common_style_path: { type: string }
-
-    Slide:
-      type: object
-      required: [id, deck_id, idx, layout, title, json_path, html_path, current_version]
-      properties:
-        id: { type: string }
-        deck_id: { type: string }
         idx: { type: integer }
         layout: { type: string }
         title: { type: string }
@@ -424,7 +402,7 @@ components:
       required: [id, target_type, target_id, version_no, snapshot_path, created_at]
       properties:
         id: { type: string }
-        target_type: { type: string, enum: [slide, deck, common_style] }
+        target_type: { type: string, enum: [slide, project, design, asset] }
         target_id: { type: string }
         version_no: { type: integer }
         snapshot_path: { type: string }

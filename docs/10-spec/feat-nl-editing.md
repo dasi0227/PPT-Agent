@@ -34,18 +34,18 @@ verifies: []
 
 ## 输入 / 输出
 
-- **输入**：`{ deck_id, scope: "page"|"overview", page_index?: number, instruction: string, selection?: SelectionRef }`
+- **输入**：`{ project_id, scope: "page"|"overview", page_index?: number, instruction: string, selection?: SelectionRef }`
 - **输出**：SSE 事件流 + 落库的新版本引用。
 
 ## 验收标准（Given-When-Then）
 
 - **AC-EDIT-003**（`SPEC-EDIT-003`）
-  - GIVEN 8 页 Deck，当前在第 3 页
+  - GIVEN 8 页演示文稿，当前在第 3 页
   - WHEN 执行「把标题改大一号」（page scope）
   - THEN 仅第 3 页 html 变化，公共样式层与其它页不变，且生成新版本
 
 - **AC-EDIT-004**（`SPEC-EDIT-004`）
-  - GIVEN 8 页 Deck
+  - GIVEN 8 页演示文稿
   - WHEN 执行 `/overview 把主色改成品牌蓝`
   - THEN 仅公共样式层（design tokens）变化，8 页 html 文件不变，但渲染后全局变蓝
 

@@ -25,10 +25,10 @@ verifies: []
 
 | ID | 需求 | 优先级 |
 |---|---|---|
-| `SPEC-CMD-OVERVIEW-001` | `/overview` MUST 设 `scope=overview`，harness 注册 `patch_common_style`/`apply_theme`/`patch_slide(*)` | P0 |
+| `SPEC-CMD-OVERVIEW-001` | `/overview` MUST 设 `scope=overview`，harness 注册 `patch_design`/`apply_theme`/`patch_slide(*)` | P0 |
 | `SPEC-CMD-OVERVIEW-002` | 能用公共层 token 表达的调整 MUST 优先改公共层，不逐页改（改动面最小化） | P0 |
 | `SPEC-CMD-OVERVIEW-003` | 仅当 token 无法表达（如逐页结构性添加）时，才 `patch_slide(*)`，且 MUST 走**子代理逐页**执行 | P0 |
-| `SPEC-CMD-OVERVIEW-004` | 公共层变更 MUST 产生 `common_style` 版本；跨页 patch 每页各自版本，可回滚 | P0 |
+| `SPEC-CMD-OVERVIEW-004` | 公共层变更 MUST 产生 `design` 版本；跨页 patch 每页各自版本，可回滚 | P0 |
 | `SPEC-CMD-OVERVIEW-005` | 换主题 MUST 经 `apply_theme`，写入公共层必需 token 全集，不残缺 | P0 |
 | `SPEC-CMD-OVERVIEW-006` | 跨页 patch MUST 每页各自跑 `validate_slide`，任一页失败不影响其它页落盘 | P1 |
 
@@ -36,7 +36,7 @@ verifies: []
 
 | 用户意图 | harness 行为 | 改动面 |
 |---|---|---|
-| 「主色改蓝」 | `patch_common_style` 改 `--color-primary` | 1 个文件（公共层） |
+| 「主色改蓝」 | `patch_design` 改 `--color-primary` | 1 个文件（公共层） |
 | 「换 ocean 主题」 | `apply_theme(ocean)` 写公共层 token 全集 | 1 个文件（公共层） |
 | 「每页加页脚 logo」 | 子代理逐页 `patch_slide` | N 个页文件 |
 
@@ -53,12 +53,12 @@ verifies: []
 ## 验收标准（Given-When-Then）
 
 - **AC-CMD-OVERVIEW-001**（`SPEC-CMD-OVERVIEW-002`）
-  - GIVEN 8 页 Deck
+  - GIVEN 8 页演示文稿
   - WHEN `/overview 主色改成品牌蓝`
   - THEN 仅 `common/tokens.css` 变更，8 页 html 文件 hash 不变，但渲染后全局变蓝
 
 - **AC-CMD-OVERVIEW-003**（`SPEC-CMD-OVERVIEW-003/006`）
-  - GIVEN 8 页 Deck
+  - GIVEN 8 页演示文稿
   - WHEN `/overview 每页右下角加页脚 logo`
   - THEN 子代理逐页 patch，8 页各生成新版本，公共层不变
 

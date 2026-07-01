@@ -34,12 +34,12 @@ verifies: []
 ## 验收标准（Given-When-Then）
 
 - **AC-CMD-PAGE-001**（`SPEC-CMD-PAGE-001/002`）
-  - GIVEN 8 页 Deck
+  - GIVEN 8 页演示文稿
   - WHEN `/page 3 把标题改大一号`
   - THEN 仅第 3 页 html 变更，公共样式层与其它 7 页 hash 不变，并生成新版本
 
 - **AC-CMD-PAGE-003**（`SPEC-CMD-PAGE-003`）
-  - GIVEN 8 页 Deck
+  - GIVEN 8 页演示文稿
   - WHEN `/page 99 ...`
   - THEN 返回 `BAD_REQUEST`，无文件变更
 

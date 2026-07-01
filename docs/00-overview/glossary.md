@@ -13,11 +13,11 @@ verifies: []
 
 | 术语 | 英文 / 标识 | 定义 |
 |---|---|---|
-| 项目 | Project | 一份 PPT 工程的顶层容器，对应一个 `work_dir`。一个项目含一个 Deck，可含多条 Thread。是隔离与执行锁的单元。 |
+| 项目 | Project | 一份 PPT 工程的顶层容器，对应一个 `work_dir`。**合并了原 Deck**：直接含一组有序 slide + 主题 + 公共样式层，可含多条 Thread。是隔离与执行锁的单元。 |
 | 线程 | Thread | 一条可恢复的对话历史（对齐 Codex thread）。一个 Project 可有多条 Thread，**共享该 Project 产物**，仅隔离对话历史。 |
-| 演示文稿 | Deck | 一组有序 slide 的集合，归属一个 Project。 |
+| 演示文稿 | Presentation | 一个 Project 所承载的一组有序 slide 的整体（概念词；实体即 Project 本身，合并原 Deck 后不再单列 Deck 表）。 |
 | 幻灯片 | Slide | 单页，含 slide-json（结构化元数据）与 slide html/css/js（产出物）。 |
-| 大纲 | Outline | Deck 的结构化骨架，即 slide-json 数组，描述每页的标题、要点、版式、图表意图。 |
+| 大纲 | Outline | Project 的结构化骨架，即 slide-json 数组，描述每页的标题、要点、版式、图表意图。 |
 | slide-json | slide-json | 单页的结构化描述（schema 见 30-data-model）。是「内容与意图」，区别于最终渲染的 html。 |
 | 设计系统 | Design System | 主题 token + 版式库 + 图表样式 + 动效库 + HTML 产出规范的总称（见 60-design-system）。 |
 | 设计令牌 | Design Token | 颜色/字体/间距/圆角/阴影等原子设计变量，以 CSS 自定义属性承载。 |
@@ -39,7 +39,7 @@ verifies: []
 | 清单 | Manifest | 资产的元数据描述文件（manifest.json），统一信封 + 定义参数、挂载点、载荷。 |
 | 挂载点 | Mount Point | 资产被注入 slide 时的目标位置约定。 |
 | 个人仓库 | Personal Repo | 4 类资产的本地仓库（出厂预置 + 用户新增，同协议）。 |
-| 版本 | Version | Slide / Deck 的一次快照，支持回滚。 |
+| 版本 | Version | Slide / Project / 公共样式层 的一次快照，支持回滚。 |
 | 工作目录 | work_dir | 单个 Project 的根目录，`state.json` 位于其根。 |
 | 预览 | Preview | 在沙箱 iframe 中渲染 slide 的在线查看能力。 |
 | 总览 | Overview Grid | 缩略所有页、点击跳转的网格视图。 |

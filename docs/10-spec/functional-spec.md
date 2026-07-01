@@ -68,7 +68,7 @@ verifies: []
   - THEN 该消息在下一个 checkpoint 被纳入上下文，且影响后续输出
 
 - **AC-GLOBAL-006**（覆盖 `SPEC-GLOBAL-006`）
-  - GIVEN 一个多页 Deck
+  - GIVEN 一个多页演示文稿
   - WHEN 执行 `/page 2` 编辑第 2 页
   - THEN 仅第 2 页的 slide html 变更，公共样式层与其它页文件 hash 不变
 

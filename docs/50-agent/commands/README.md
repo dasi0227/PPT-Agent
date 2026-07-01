@@ -47,7 +47,7 @@ MVP 约定：**scope 指令单选互斥，mode 指令单选互斥，且本期不
 | scope | 注册的写工具 | 子代理 | 隔离断言 |
 |---|---|---|---|
 | `/current` / `/page x` | `patch_slide(目标页)`、`mount_asset(目标页)` | 否 | 只目标页变 |
-| `/overview` | `patch_common_style`、`apply_theme`（优先）；必要时 `patch_slide(*)` | 是（逐页 patch） | 改动面最小化 |
+| `/overview` | `patch_design`、`apply_theme`（优先）；必要时 `patch_slide(*)` | 是（逐页 patch） | 改动面最小化 |
 | `/repo` | `create_asset`、`patch_asset`、`delete_asset` | 否 | 只资产变，不碰 PPT 页 |
 
 mode 进一步收窄：`/talk` 不注册任何产物工具；`/prompt` 只产文本；`/recap` 只读。

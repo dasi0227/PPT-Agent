@@ -13,18 +13,19 @@ verifies: []
 
 | 数据 | 存储 | 理由 |
 |---|---|---|
-| 元数据（项目/Deck/Slide 索引/版本记录/插件索引/Run 记录） | SQLite | 可查询、事务安全 |
-| slide html / css / js、公共样式层、slide-json、插件资源 | 文件系统（work_dir） | 大文本、git 友好、直接可渲染 |
+| 元数据（项目/Slide 索引/版本记录/资产索引/Run 记录） | SQLite | 可查询、事务安全 |
+| slide html / css / js、公共样式层、slide-json、资产资源 | 文件系统（work_dir） | 大文本、git 友好、直接可渲染 |
 
 详见 [filesystem-layout](filesystem-layout.md) 与 [sqlite-schema.sql](sqlite-schema.sql)。
 
 ## 实体关系（ER）
 
 ```
-Project (1) ──── (1) Deck (1) ──── (N) Slide
-   │                 │                  │
-   │                 │                  └── (N) Version  (slide 级快照)
-   │                 └── (N) Version       (deck 级/公共样式层快照)
+Project (1) ──── (N) Slide
+   │                  │
+   │                  └── (N) Version  (slide 级快照)
+   │
+   ├── (N) Version    (project 级结构快照 / design 公共样式层快照)
    │
    ├── (N) Thread     (对话线程，可恢复；共享本 project 产物)
    │        └── (N) Run   (一次执行/turn，跑 harness 循环)
@@ -34,6 +35,8 @@ Project (1) ──── (1) Deck (1) ──── (N) Slide
 Asset (N)             (个人仓库统一资产，全局，不强绑 project；kind=layout|component|theme|fx)
    └── (N) Version    (资产级快照，可回滚)
 ```
+
+> **Project 合并了原 Deck**：一个 Project 恰含一份演示文稿（有序 slide 集合 + 主题 + 公共样式层），二者是严格 1:1，无需拆表（见 [ADR-0002](../90-decisions/0002-persistence-sqlite-fs.md)）。
 
 ## 三层隔离模型（对齐 Codex 的 project/thread/turn）
 
@@ -49,28 +52,23 @@ Asset (N)             (个人仓库统一资产，全局，不强绑 project；k
 ## 实体定义
 
 ### Project
+（合并原 Deck：一个 Project 恰含一份演示文稿。）
+
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | TEXT (uuid) | 主键 |
 | title | TEXT | 项目标题 |
 | work_dir | TEXT | 工作目录绝对/相对路径 |
-| created_at / updated_at | INTEGER (unix) | 时间戳 |
-
-### Deck
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| id | TEXT | 主键 |
-| project_id | TEXT | 外键 → Project |
 | theme | TEXT | 当前主题 id（design-system） |
 | status | TEXT | `draft`\|`generating`\|`ready` |
-| common_style_path | TEXT | 公共样式层文件相对路径 |
-| created_at / updated_at | INTEGER | |
+| design_path | TEXT | 公共样式层（design tokens）文件相对路径 |
+| created_at / updated_at | INTEGER (unix) | 时间戳 |
 
 ### Slide
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | TEXT | 主键 |
-| deck_id | TEXT | 外键 → Deck |
+| project_id | TEXT | 外键 → Project |
 | idx | INTEGER | 页序（0 基） |
 | layout | TEXT | 版式枚举 |
 | title | TEXT | 标题 |
@@ -85,7 +83,7 @@ Asset (N)             (个人仓库统一资产，全局，不强绑 project；k
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | TEXT | 主键 |
-| target_type | TEXT | `slide`\|`deck`\|`common_style` |
+| target_type | TEXT | `slide`\|`project`\|`design`\|`asset` |
 | target_id | TEXT | 关联实体 id |
 | version_no | INTEGER | 递增版本号 |
 | snapshot_path | TEXT | 快照文件相对路径 |
@@ -151,9 +149,9 @@ Asset (N)             (个人仓库统一资产，全局，不强绑 project；k
 | `DATA-ASSET-001` | asset manifest 符合 asset-manifest schema |
 | `DATA-ASSET-002` | theme 资产提供必需 token 全集 |
 | `DATA-THREAD-001` | 同 project 多 thread 共享产物，仅隔离对话历史 |
-| `DATA-VERSION-001` | 任意可编辑产物变更 MUST 产生新版本，支持回滚（含 slide/deck/common_style/asset） |
+| `DATA-VERSION-001` | 任意可编辑产物变更 MUST 产生新版本，支持回滚（含 slide/project/design/asset） |
 | `DATA-MODEL-002` | 外键关系 MUST 在删除时级联或受保护（不留孤儿记录） |
-| `DATA-MODEL-003` | 删除 project MUST 级联删除其 thread/run/deck/slide/version 与 work_dir 目录 |
+| `DATA-MODEL-003` | 删除 project MUST 级联删除其 thread/run/slide/version 与 work_dir 目录 |
 
 ## 验收标准（Given-When-Then）
 

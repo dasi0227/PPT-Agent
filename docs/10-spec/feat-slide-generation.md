@@ -30,7 +30,7 @@ verifies: []
 | `SPEC-GEN-005` | 动效 MUST 通过约定属性（如 `data-animate` / `data-fx`）挂载，可被运行时启用 | P1 |
 | `SPEC-GEN-006` | 整套生成 MUST 通过 Run 引擎，逐页产出并经 SSE 报告进度（`progress` 含当前页/总页数） | P0 |
 | `SPEC-GEN-007` | 生成过程支持 HITL：用户中途注入要求 MUST 在下一页 checkpoint 生效 | P0 |
-| `SPEC-GEN-008` | 每页生成完成 MUST 落文件并记录版本；整套完成 MUST 更新 Deck 状态 | P0 |
+| `SPEC-GEN-008` | 每页生成完成 MUST 落文件并记录版本；整套完成 MUST 更新 project 状态 | P0 |
 | `SPEC-GEN-009` | 单页重生成 MUST 只影响该页文件，不动其它页与公共样式层 | P0 |
 | `SPEC-GEN-010` | 产出 MUST 固定 16:9 舞台、零运行时强依赖（CDN webfont/highlight/chart 允许） | P0 |
 

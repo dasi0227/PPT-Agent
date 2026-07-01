@@ -43,12 +43,12 @@ verifies: []
 ## 验收标准（Given-When-Then）
 
 - **AC-VIEWER-001**（`SPEC-VIEWER-001`）
-  - GIVEN 一份已生成 Deck
+  - GIVEN 一份已生成演示文稿
   - WHEN 打开预览
   - THEN 每页在独立 iframe 渲染，视觉与导出/演示态一致（同 CSS/主题/视口）
 
 - **AC-VIEWER-005**（`SPEC-VIEWER-004/005`）
-  - GIVEN 8 页 Deck
+  - GIVEN 8 页演示文稿
   - WHEN 打开总览并点击第 6 张缩略图
   - THEN 主视图跳转到第 6 页
 

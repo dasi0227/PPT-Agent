@@ -29,16 +29,14 @@ backend/
 │   │   ├── middleware.go      # 日志、recover、请求 ID、CORS（本地）
 │   │   ├── sse.go             # SSE 写出辅助（flush、心跳、事件编码）
 │   │   ├── errors.go          # 统一错误响应 + 错误码映射
-│   │   ├── project_handler.go
+│   │   ├── project_handler.go  # 项目 CRUD（含原 deck 的主题/状态/design 字段）
 │   │   ├── thread_handler.go  # 对话线程 CRUD + 历史
-│   │   ├── deck_handler.go
-│   │   ├── slide_handler.go
+│   │   ├── slide_handler.go   # 项目 slides 列表 + 单页 + 版本 + 回滚
 │   │   ├── run_handler.go     # 在 thread 下创建 run / 订阅 events / 注入 input
 │   │   └── asset_handler.go   # 个人仓库资产 CRUD
 │   ├── service/               # Service 层（用例编排）
-│   │   ├── project.go
+│   │   ├── project.go         # 项目用例（合并原 deck：主题/状态/公共样式层）
 │   │   ├── thread.go          # 线程创建/列表/历史读写
-│   │   ├── deck.go
 │   │   ├── slide.go
 │   │   ├── version.go
 │   │   └── asset.go
@@ -57,7 +55,7 @@ backend/
 │   │   └── tools/             # 工具实现（确定性脚本，带 schema）
 │   │       ├── registry.go    # 工具注册与 function schema
 │   │       ├── slide_tools.go # read/patch/write_slide、validate_slide、mount_asset
-│   │       ├── style_tools.go # read/patch_common_style、apply_theme
+│   │       ├── style_tools.go # read/patch_design、apply_theme
 │   │       ├── asset_tools.go # search/read/create/patch/delete_asset
 │   │       └── finish.go
 │   ├── agent/                 # Agent 业务编排（构造 harness 配置）
@@ -74,7 +72,7 @@ backend/
 │   │   ├── fs/                # 文件系统（slide 产物、work_dir、_assets）
 │   │   └── store.go           # store interface 定义
 │   ├── asset/                 # 资产协议：校验、seed 载入、移植
-│   ├── model/                 # 领域模型（Project/Thread/Deck/Slide/Run/Asset/Version）
+│   ├── model/                 # 领域模型（Project/Thread/Slide/Run/Asset/Version）
 │   └── designsystem/          # 公共层/产出规范辅助（tokens 校验、lint）
 ├── seed/assets/               # 出厂预置资产（themes/layouts/components/fx）
 ├── migrations/                # SQLite 迁移脚本（对应 30-data-model/sqlite-schema.sql）
@@ -112,8 +110,7 @@ httpapi ──▶ service ──▶ store(interface)
   /projects/{id}/threads GET POST       # 对话线程
   /threads/{id}          GET DELETE
   /threads/{id}/history  GET            # 线程历史（恢复）
-  /projects/{id}/deck    GET
-  /decks/{id}/slides     GET
+  /projects/{id}/slides  GET            # 项目的 slides（原 /decks/{id}/slides）
   /slides/{id}           GET
   /slides/{id}/versions  GET
   /threads/{id}/runs     POST           # 在线程下发起一次 Agent 执行

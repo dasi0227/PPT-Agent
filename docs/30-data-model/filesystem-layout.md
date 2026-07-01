@@ -25,7 +25,7 @@ verifies: []
 <PPT_WORK_ROOT>/
 ├── <project_id_A>/                  # 一个 PPT 的 work_dir（多 PPT = 多个此目录）
 │   ├── state.json                   # 单一状态游标 + 项目级元信息（见下）
-│   ├── deck.json                    # deck 概要（顺序、主题引用）
+│   ├── project.json                 # project 概要（页顺序、主题引用）
 │   ├── threads/                     # ★ 对话线程历史（一 project 多 thread）
 │   │   ├── <thread_id>.jsonl        #   一条 thread 的追加式对话历史（可恢复）
 │   │   └── ...
@@ -39,8 +39,8 @@ verifies: []
 │   │   └── ...
 │   ├── versions/
 │   │   ├── slide-000/{v0.html, v1.html}
-│   │   ├── common-style/{v0.css, v1.css}
-│   │   └── deck/{v0.json}
+│   │   ├── design/{v0.css, v1.css}
+│   │   └── project/{v0.json}
 │   └── assets/img/                  # 项目内图片等静态资源
 │
 ├── <project_id_B>/                  # 另一个 PPT，完全独立的 work_dir
@@ -69,7 +69,8 @@ verifies: []
   "project_id": "uuid",
   "title": "云原生可观测性实践",
   "current_state": "editing",
-  "deck": { "theme": "tokyo-night", "slide_count": 8 },
+  "theme": "tokyo-night",
+  "slide_count": 8,
   "language": "zh",
   "updated_at": 1750000000
 }
@@ -81,7 +82,7 @@ verifies: []
 
 | 文件 | SQLite 字段 | 说明 |
 |---|---|---|
-| `common/tokens.css` | `decks.common_style_path` | 公共样式层 |
+| `common/tokens.css` | `projects.design_path` | 公共样式层 |
 | `slides/<idx>/slide.json` | `slides.json_path` | slide-json |
 | `slides/<idx>/index.html` | `slides.html_path` | slide html |
 | `versions/...` | `versions.snapshot_path` | 版本快照 |

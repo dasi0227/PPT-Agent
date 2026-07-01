@@ -27,8 +27,7 @@ verifies: []
 |---|---|
 | 项目（PPT） | `GET/POST /projects`，`GET/DELETE /projects/{id}` |
 | 线程（对话） | `GET/POST /projects/{id}/threads`，`GET/DELETE /threads/{id}`，`GET /threads/{id}/history` |
-| Deck | `GET /projects/{id}/deck` |
-| Slide | `GET /decks/{id}/slides`，`GET /slides/{id}`，`GET /slides/{id}/versions`，`POST /slides/{id}/rollback` |
+| Slide | `GET /projects/{id}/slides`，`GET /slides/{id}`，`GET /slides/{id}/versions`，`POST /slides/{id}/rollback` |
 | Run | `POST /threads/{id}/runs`，`GET /runs/{id}/events`(SSE)，`POST /runs/{id}/input`，`DELETE /runs/{id}` |
 | 资产（个人仓库） | `GET/POST /assets`，`GET/PATCH/DELETE /assets/{id}` |
 | 导出（backlog） | `POST /projects/{id}/export`（`x-status: backlog`） |

@@ -53,7 +53,7 @@ else:
 | scope | 注册的写工具 | 隔离效果 |
 |---|---|---|
 | `current` / `page x` | `read_slide`、`patch_slide(锁定页)`、`mount_asset(锁定页)`、`validate_slide`、`finish` | LLM 无法调用改其它页 / 改公共层的工具 |
-| `overview` | `read_slide(*)`、`patch_common_style`、`apply_theme`、`patch_slide(*)`、`validate_slide`、`finish` | 优先改公共层；跨页改走子代理 |
+| `overview` | `read_slide(*)`、`patch_design`、`apply_theme`、`patch_slide(*)`、`validate_slide`、`finish` | 优先改公共层；跨页改走子代理 |
 | `repo` | `search_assets`、`read_asset`、`create_asset`、`patch_asset`、`delete_asset`、`validate_asset`、`finish` | 只动仓库资产，无任何 PPT 页工具 |
 
 | mode | 影响 |

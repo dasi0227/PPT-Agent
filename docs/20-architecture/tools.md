@@ -20,8 +20,8 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 | `read_slide` | 只读 | 读某页当前 html | current/page/overview |
 | `patch_slide` | 写·页 | **锚定文本替换**某页 html（old→new） | current/page/overview |
 | `write_slide` | 写·页 | 整页写入（仅生成阶段/子代理） | generate(子代理) |
-| `read_common_style` | 只读 | 读公共层 tokens.css | overview |
-| `patch_common_style` | 写·公共层 | 锚定替换公共层 token | overview |
+| `read_design` | 只读 | 读公共层 tokens.css | overview |
+| `patch_design` | 写·公共层 | 锚定替换公共层 token | overview |
 | `apply_theme` | 写·公共层 | 应用 theme 资产到公共层 | overview |
 | `search_assets` | 只读 | 检索个人仓库资产 | all |
 | `read_asset` | 只读 | 读某资产载荷 | all |
@@ -83,7 +83,7 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 }
 ```
 
-### apply_theme / patch_common_style（/overview 核心）
+### apply_theme / patch_design（/overview 核心）
 
 ```json
 {
@@ -98,7 +98,7 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 ```
 ```json
 {
-  "name": "patch_common_style",
+  "name": "patch_design",
   "description": "锚定替换公共层 tokens.css（用于微调单个 token，而非整体换主题）。",
   "parameters": {
     "type": "object",

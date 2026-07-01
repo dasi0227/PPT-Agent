@@ -35,7 +35,7 @@ verifies: []
 ## 输入 / 输出
 
 - **输入**：`{ topic: string, brief?: string, slide_count?: number, language?: "zh"|"en" }`
-- **输出**：`{ deck_id, slides: SlideJSON[], style_candidates?: ThemeRef[] }`
+- **输出**：`{ project_id, slides: SlideJSON[], style_candidates?: ThemeRef[] }`
 
 ## 验收标准（Given-When-Then）
 
