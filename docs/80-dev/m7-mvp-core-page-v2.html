@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>M7 MVP Core Page Prototype v2</title>
+  <style>
+    :root {
+      --bench: #e9edf0;
+      --bench-deep: #d7dde2;
+      --ink: #111827;
+      --ink-soft: #4b5563;
+      --muted: #6b7280;
+      --line: rgba(17, 24, 39, 0.14);
+      --line-strong: rgba(17, 24, 39, 0.26);
+      --paper: #f9faf7;
+      --paper-2: #f1f5f9;
+      --console: #111827;
+      --console-2: #182230;
+      --cyan: #00a7c7;
+      --blue: #2563eb;
+      --green: #16a34a;
+      --amber: #d97706;
+      --red: #dc2626;
+      --tape: #b7791f;
+      --shadow: 0 28px 80px rgba(17, 24, 39, 0.22);
+      --mono: "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+      --body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+      --display: "Arial Narrow", "DIN Condensed", "Roboto Condensed", var(--body);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(17, 24, 39, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(17, 24, 39, 0.035) 1px, transparent 1px),
+        radial-gradient(circle at 22% 8%, rgba(0, 167, 199, 0.16), transparent 28%),
+        radial-gradient(circle at 78% 18%, rgba(37, 99, 235, 0.1), transparent 30%),
+        var(--bench);
+      background-size: 32px 32px, 32px 32px, auto, auto, auto;
+      font-family: var(--body);
+      overflow: hidden;
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: 64px 1fr;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 320px 1fr 380px;
+      gap: 20px;
+      align-items: center;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(249, 250, 247, 0.78);
+      backdrop-filter: blur(20px);
+    }
+
+    .identity {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .mark {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      border: 2px solid var(--ink);
+      border-radius: 12px;
+      background: var(--paper);
+      box-shadow: 5px 5px 0 var(--cyan);
+    }
+
+    .mark::before,
+    .mark::after {
+      content: "";
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      height: 3px;
+      background: var(--ink);
+      border-radius: 99px;
+    }
+
+    .mark::before {
+      top: 11px;
+    }
+
+    .mark::after {
+      top: 22px;
+      right: 15px;
+    }
+
+    .identity h1 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: 23px;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      text-transform: uppercase;
+    }
+
+    .identity p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .run-strip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-width: 0;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 100%;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.52);
+      white-space: nowrap;
+    }
+
+    .signal {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 0 5px rgba(22, 163, 74, 0.12);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn {
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      padding: 9px 13px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.52);
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+    }
+
+    .btn.dark {
+      color: #fff;
+      border-color: var(--ink);
+      background: var(--ink);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 278px minmax(560px, 1fr) 384px;
+      gap: 18px;
+      min-height: 0;
+      padding: 18px;
+    }
+
+    .rail,
+    .stage,
+    .console {
+      min-height: 0;
+      border: 1px solid var(--line-strong);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .rail {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      background: rgba(249, 250, 247, 0.76);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 50px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .deck-card {
+      margin: 16px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background:
+        linear-gradient(120deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.38)),
+        var(--paper);
+    }
+
+    .deck-card h2 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: 30px;
+      line-height: 0.95;
+      letter-spacing: -0.06em;
+    }
+
+    .deck-card p {
+      margin: 11px 0 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .scope-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+      margin: 0 16px 14px;
+    }
+
+    .scope {
+      padding: 8px 5px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.5);
+      font-family: var(--mono);
+      font-size: 10px;
+      text-align: center;
+    }
+
+    .scope.active {
+      color: #fff;
+      border-color: var(--cyan);
+      background: var(--cyan);
+    }
+
+    .film {
+      position: relative;
+      padding: 4px 16px 18px;
+      overflow: auto;
+    }
+
+    .film::before,
+    .film::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 10px;
+      background:
+        repeating-linear-gradient(
+          to bottom,
+          rgba(17, 24, 39, 0.5) 0 8px,
+          transparent 8px 17px
+        );
+      opacity: 0.28;
+    }
+
+    .film::before {
+      left: 7px;
+    }
+
+    .film::after {
+      right: 7px;
+    }
+
+    .slide-cell {
+      position: relative;
+      display: grid;
+      grid-template-columns: 82px 1fr;
+      gap: 11px;
+      padding: 10px;
+      margin: 0 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.58);
+    }
+
+    .slide-cell.current {
+      border-color: var(--cyan);
+      background: rgba(0, 167, 199, 0.09);
+      box-shadow: 4px 4px 0 rgba(0, 167, 199, 0.26);
+    }
+
+    .mini-slide {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      border: 1px solid rgba(17, 24, 39, 0.18);
+      border-radius: 10px;
+      overflow: hidden;
+      background: linear-gradient(135deg, #f8fafc, #dbeafe);
+    }
+
+    .mini-slide::before {
+      content: "";
+      position: absolute;
+      inset: 12px 9px auto;
+      height: 5px;
+      border-radius: 99px;
+      background: var(--ink);
+    }
+
+    .mini-slide::after {
+      content: "";
+      position: absolute;
+      left: 9px;
+      right: 24px;
+      top: 24px;
+      height: 4px;
+      border-radius: 99px;
+      background: rgba(17, 24, 39, 0.22);
+    }
+
+    .cell-meta {
+      min-width: 0;
+    }
+
+    .cell-meta b {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.3;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cell-meta span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .stage {
+      display: grid;
+      grid-template-rows: 58px 1fr 58px;
+      background:
+        linear-gradient(120deg, rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0.2)),
+        rgba(249, 250, 247, 0.66);
+    }
+
+    .stage-head,
+    .stage-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .stage-foot {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+    }
+
+    .view-tabs {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .tab {
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--ink-soft);
+      background: rgba(255, 255, 255, 0.5);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .tab.active {
+      color: #fff;
+      border-color: var(--ink);
+      background: var(--ink);
+    }
+
+    .stage-note {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .projector {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 0;
+      padding: 30px;
+    }
+
+    .projector::before {
+      content: "";
+      position: absolute;
+      left: -18px;
+      top: 28%;
+      width: calc(100% + 36px);
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: 0.62;
+    }
+
+    .iframe-shell {
+      position: relative;
+      width: min(100%, 1080px);
+      aspect-ratio: 16 / 9;
+      border: 2px solid var(--ink);
+      border-radius: 22px;
+      background: var(--paper);
+      box-shadow:
+        12px 12px 0 rgba(17, 24, 39, 0.16),
+        0 32px 90px rgba(17, 24, 39, 0.28);
+      overflow: hidden;
+    }
+
+    .iframe-shell::before {
+      content: "sandbox iframe";
+      position: absolute;
+      z-index: 5;
+      top: 14px;
+      right: 16px;
+      padding: 5px 8px;
+      border: 1px solid rgba(17, 24, 39, 0.14);
+      border-radius: 999px;
+      color: rgba(17, 24, 39, 0.58);
+      background: rgba(255, 255, 255, 0.62);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .slide {
+      display: grid;
+      grid-template-columns: 0.94fr 1.06fr;
+      gap: 5%;
+      align-items: center;
+      height: 100%;
+      padding: 7% 8%;
+      background:
+        radial-gradient(circle at 78% 16%, rgba(0, 167, 199, 0.24), transparent 20%),
+        linear-gradient(135deg, #f8fafc 0%, #eef2ff 58%, #dbeafe 100%);
+    }
+
+    .slide h3 {
+      margin: 0;
+      font-family: var(--display);
+      font-size: clamp(40px, 5.3vw, 76px);
+      line-height: 0.88;
+      letter-spacing: -0.075em;
+      text-transform: uppercase;
+    }
+
+    .slide p {
+      margin: 22px 0 0;
+      max-width: 460px;
+      color: #475569;
+      font-size: clamp(15px, 1.35vw, 20px);
+      line-height: 1.62;
+    }
+
+    .signal-card {
+      padding: 26px;
+      border: 1px solid rgba(17, 24, 39, 0.14);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.68);
+      box-shadow: 0 28px 70px rgba(15, 23, 42, 0.12);
+    }
+
+    .trace {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 14px;
+      align-items: center;
+      margin: 0 0 16px;
+    }
+
+    .trace:last-child {
+      margin-bottom: 0;
+    }
+
+    .trace-label {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: #334155;
+    }
+
+    .trace-line {
+      height: 18px;
+      border-radius: 99px;
+      background:
+        repeating-linear-gradient(90deg, var(--blue) 0 12px, rgba(37, 99, 235, 0.18) 12px 22px);
+    }
+
+    .trace:nth-child(2) .trace-line {
+      background:
+        repeating-linear-gradient(90deg, var(--cyan) 0 10px, rgba(0, 167, 199, 0.16) 10px 18px);
+    }
+
+    .trace:nth-child(3) .trace-line {
+      background:
+        repeating-linear-gradient(90deg, var(--green) 0 16px, rgba(22, 163, 74, 0.15) 16px 28px);
+    }
+
+    .nav {
+      display: flex;
+      gap: 9px;
+      align-items: center;
+    }
+
+    .key {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 26px;
+      padding: 0 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.56);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .console {
+      display: grid;
+      grid-template-rows: 50px auto 1fr auto;
+      color: #e5e7eb;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(0, 167, 199, 0.2), transparent 28%),
+        linear-gradient(180deg, var(--console-2), var(--console));
+    }
+
+    .console .section-head {
+      border-bottom-color: rgba(255, 255, 255, 0.1);
+      color: #94a3b8;
+    }
+
+    .run-card {
+      margin: 16px;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.055);
+    }
+
+    .run-card h2 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.3;
+    }
+
+    .run-card p {
+      margin: 6px 0 14px;
+      color: #94a3b8;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
+    .meter {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+    }
+
+    .meter span {
+      display: block;
+      width: 68%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--cyan), #7dd3fc);
+    }
+
+    .events {
+      padding: 0 16px 16px;
+      overflow: auto;
+    }
+
+    .event {
+      position: relative;
+      padding: 13px 0 13px 26px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+    }
+
+    .event::before {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 17px;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--cyan);
+      box-shadow: 0 0 0 5px rgba(0, 167, 199, 0.13);
+    }
+
+    .event.warn::before {
+      background: var(--amber);
+      box-shadow: 0 0 0 5px rgba(217, 119, 6, 0.15);
+    }
+
+    .event b {
+      display: block;
+      color: #f8fafc;
+      font-size: 12px;
+    }
+
+    .event span {
+      display: block;
+      margin-top: 5px;
+      color: #94a3b8;
+      font-size: 11px;
+      line-height: 1.48;
+    }
+
+    .composer {
+      padding: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(0, 0, 0, 0.16);
+    }
+
+    .mode-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 7px;
+      margin-bottom: 11px;
+    }
+
+    .mode {
+      padding: 8px 4px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.04);
+      font-family: var(--mono);
+      font-size: 10px;
+      text-align: center;
+    }
+
+    .mode.active {
+      color: #031316;
+      border-color: var(--cyan);
+      background: var(--cyan);
+    }
+
+    textarea {
+      width: 100%;
+      height: 106px;
+      resize: none;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 16px;
+      padding: 13px;
+      color: #f8fafc;
+      outline: 0;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    textarea::placeholder {
+      color: #64748b;
+    }
+
+    .send-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 11px;
+    }
+
+    .send-row span {
+      color: #94a3b8;
+      font-family: var(--mono);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    .send {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: #031316;
+      background: var(--cyan);
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 1180px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        min-height: auto;
+      }
+
+      .topbar,
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace {
+        overflow: visible;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="identity">
+        <div class="mark" aria-hidden="true"></div>
+        <div>
+          <h1>PPT Coding Agent</h1>
+          <p>M7 viewer bench / iframe first</p>
+        </div>
+      </div>
+      <div class="run-strip">
+        <span class="chip"><i class="signal"></i> 127.0.0.1:8787 connected</span>
+        <span class="chip">project: cloud-observability-demo</span>
+        <span class="chip">theme: swiss-modern</span>
+      </div>
+      <div class="top-actions">
+        <button class="btn">Open asset shelf</button>
+        <button class="btn">Version stack</button>
+        <button class="btn dark">Present deck</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="rail">
+        <div class="section-head">
+          <span>film rail</span>
+          <span>6 slides</span>
+        </div>
+        <section class="deck-card">
+          <h2>云原生可观测性实践</h2>
+          <p>左侧页轨是 M7 的当前页事实来源。用户不写 scope 时，输入默认锁定到正在预览的这一页。</p>
+        </section>
+        <nav class="scope-grid" aria-label="scope">
+          <div class="scope active">/current</div>
+          <div class="scope">/overview</div>
+          <div class="scope">/repo</div>
+        </nav>
+        <section class="film" aria-label="slide list">
+          <article class="slide-cell">
+            <div class="mini-slide"></div>
+            <div class="cell-meta"><b>为什么可观测性需要产品化</b><span>slide 1 · v2 · ready</span></div>
+          </article>
+          <article class="slide-cell current">
+            <div class="mini-slide"></div>
+            <div class="cell-meta"><b>三类信号如何协同</b><span>slide 2 · /current · locked</span></div>
+          </article>
+          <article class="slide-cell">
+            <div class="mini-slide"></div>
+            <div class="cell-meta"><b>从采集到异常定位</b><span>slide 3 · v1 · ready</span></div>
+          </article>
+          <article class="slide-cell">
+            <div class="mini-slide"></div>
+            <div class="cell-meta"><b>MTTR 与告警噪声变化</b><span>slide 4 · v1 · ready</span></div>
+          </article>
+          <article class="slide-cell">
+            <div class="mini-slide"></div>
+            <div class="cell-meta"><b>落地路径与团队分工</b><span>slide 5 · v0 · draft</span></div>
+          </article>
+          <article class="slide-cell">
+            <div class="mini-slide"></div>
+            <div class="cell-meta"><b>总结与行动建议</b><span>slide 6 · v0 · draft</span></div>
+          </article>
+        </section>
+      </aside>
+
+      <section class="stage">
+        <div class="stage-head">
+          <div class="view-tabs">
+            <div class="tab active">main preview</div>
+            <div class="tab">overview grid</div>
+            <div class="tab">?preview=2</div>
+          </div>
+          <div class="stage-note">postMessage: goto(index), step(dir), reload-slide(index)</div>
+        </div>
+
+        <div class="projector">
+          <div class="iframe-shell" role="img" aria-label="sandbox iframe preview mock">
+            <div class="slide">
+              <div>
+                <h3>Signals should converge before people do</h3>
+                <p>指标、日志、链路不是三张孤立图表。M7 的预览必须把当前页、步骤和编辑结果稳定投到同一个舞台上。</p>
+              </div>
+              <div class="signal-card">
+                <div class="trace"><div class="trace-label">metrics</div><div class="trace-line"></div></div>
+                <div class="trace"><div class="trace-label">logs</div><div class="trace-line"></div></div>
+                <div class="trace"><div class="trace-label">traces</div><div class="trace-line"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="stage-foot">
+          <div class="nav">
+            <button class="btn">Prev</button>
+            <button class="btn dark">Next</button>
+            <button class="btn">Overview O</button>
+          </div>
+          <div class="stage-note"><span class="key">←</span> <span class="key">→</span> <span class="key">Space</span> src unchanged · load count stable</div>
+        </footer>
+      </section>
+
+      <aside class="console">
+        <div class="section-head">
+          <span>agent console</span>
+          <span>SSE live</span>
+        </div>
+
+        <section class="run-card">
+          <h2>正在编辑当前页</h2>
+          <p>run_6f8a · stage=page · slide=2 · checkpoint=tool</p>
+          <div class="meter"><span></span></div>
+        </section>
+
+        <section class="events" aria-label="run events">
+          <article class="event">
+            <b>Command parsed</b>
+            <span>scope=/current，前端上报 page_index=2，后端完成权威校验。</span>
+          </article>
+          <article class="event">
+            <b>Patch slide</b>
+            <span>通过唯一 old_text 锚点更新 HTML，写入当前页版本。</span>
+          </article>
+          <article class="event warn">
+            <b>Needs input</b>
+            <span>是否把右侧图表改成流程图，并保留当前 swiss-modern 主题？</span>
+          </article>
+          <article class="event">
+            <b>Reload slide</b>
+            <span>编辑完成后只刷新第 2 页，不重载整套 iframe。</span>
+          </article>
+        </section>
+
+        <section class="composer">
+          <div class="mode-row">
+            <div class="mode active">/current</div>
+            <div class="mode">/page</div>
+            <div class="mode">/talk</div>
+            <div class="mode">/ask</div>
+          </div>
+          <textarea>把当前页右侧图表改成三段式流程图，标题更工程化一点。</textarea>
+          <div class="send-row">
+            <span>发送时携带 thread_id、current_page、mode；事件进入 runStore。</span>
+            <button class="send">Run edit</button>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>

@@ -2,6 +2,7 @@ package assetops
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,11 +13,14 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
+var errInjected = errors.New("injected failure")
+
 type memStore struct {
 	assets      map[string]model.Asset
 	versions    []model.Version
 	nextVerByTg map[string]int
 	slideVer    map[int]int
+	failCreate  bool
 }
 
 func newMemStore() *memStore {
@@ -50,8 +54,21 @@ func (m *memStore) NextVersionNo(_ context.Context, tt, tid string) (int, error)
 }
 
 func (m *memStore) CreateVersion(_ context.Context, v model.Version) error {
+	if m.failCreate {
+		return errInjected
+	}
 	m.versions = append(m.versions, v)
 	m.nextVerByTg[v.TargetType+"|"+v.TargetID] = v.VersionNo + 1
+	return nil
+}
+
+func (m *memStore) DeleteVersion(_ context.Context, tt, tid string, no int) error {
+	for i, v := range m.versions {
+		if v.TargetType == tt && v.TargetID == tid && v.VersionNo == no {
+			m.versions = append(m.versions[:i], m.versions[i+1:]...)
+			break
+		}
+	}
 	return nil
 }
 
@@ -232,6 +249,38 @@ func TestApplyThemeWritesFullTokensAndVersions(t *testing.T) {
 	}
 	if len(store.versions) != 1 || store.versions[0].TargetType != "design" {
 		t.Fatalf("apply_theme should create design version, got %+v", store.versions)
+	}
+}
+
+func TestApplyThemeRestoresTokensWhenVersionCreateFails(t *testing.T) {
+	workRoot := t.TempDir()
+	projectRoot := filepath.Join(workRoot, "p1")
+	tokens, err := asset.ReadSeedFile("assets/themes/tokyo-night/tokens.css")
+	if err != nil {
+		t.Fatalf("read seed tokens: %v", err)
+	}
+	assetDir := "_assets/themes/tokyo-night"
+	writeFile(t, workRoot, assetDir+"/manifest.json", `{
+  "name":"tokyo-night","version":"1.0.0","kind":"theme","source":"preset",
+  "description":"theme","assets":{"tokens":"tokens.css"}
+}`)
+	writeFile(t, workRoot, assetDir+"/tokens.css", string(tokens))
+	writeFile(t, projectRoot, "common/tokens.css", ":root{--color-primary:#000;}")
+	store := newMemStore()
+	store.failCreate = true
+	store.assets["theme-1"] = model.Asset{ID: "theme-1", Name: "tokyo-night", Kind: "theme", Source: "preset", ManifestPath: assetDir + "/manifest.json", Dir: assetDir}
+
+	tool := NewApplyThemeTool(store, projectRoot, workRoot, "p1", "r1", func() int64 { return 1 }, seqID())
+	_, err = tool.Execute(context.Background(), map[string]any{"theme_asset_id": "theme-1"})
+	if err != errInjected {
+		t.Fatalf("expected injected version error, got %v", err)
+	}
+	written, _ := os.ReadFile(filepath.Join(projectRoot, "common/tokens.css"))
+	if string(written) != ":root{--color-primary:#000;}" {
+		t.Fatalf("tokens.css must be restored on version failure: %s", written)
+	}
+	if len(store.versions) != 0 {
+		t.Fatalf("failed apply_theme must not record versions, got %+v", store.versions)
 	}
 }
 

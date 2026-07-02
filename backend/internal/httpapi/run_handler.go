@@ -2,15 +2,21 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/agent/command"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 )
+
+const sseHeartbeatInterval = time.Second
 
 // RunHandler 暴露 Run 的创建、SSE 订阅、HITL 输入、取消端点。
 type RunHandler struct {
@@ -51,6 +57,10 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 	var body createRunBody
 	if err := c.ShouldBindJSON(&body); err != nil {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
+		return
+	}
+	if err := applyRawCommand(&body); err != nil {
+		AbortWithError(c, ErrBadRequest(err.Error()))
 		return
 	}
 	if body.Kind == "" {
@@ -98,6 +108,44 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 	})
 }
 
+func applyRawCommand(body *createRunBody) error {
+	raw := strings.TrimSpace(body.Instruction)
+	if !strings.HasPrefix(raw, "/") {
+		return nil
+	}
+	parsed, err := command.Parse(raw)
+	if err != nil {
+		return err
+	}
+	if body.Scope != "" && model.Scope(body.Scope) != parsed.Scope {
+		return fmt.Errorf("scope conflicts with raw command: %s vs %s", body.Scope, parsed.Scope)
+	}
+	if body.Mode != "" && model.Mode(body.Mode) != parsed.Mode {
+		return fmt.Errorf("mode conflicts with raw command: %s vs %s", body.Mode, parsed.Mode)
+	}
+	if body.Command != "" && body.Command != parsed.Command {
+		return fmt.Errorf("command conflicts with raw command: %s vs %s", body.Command, parsed.Command)
+	}
+	if body.PageIndex != nil {
+		if parsed.PageIndex != nil && *body.PageIndex != *parsed.PageIndex {
+			return fmt.Errorf("page_index conflicts with raw command")
+		}
+		if parsed.PageIndex == nil && parsed.Scope != model.ScopeCurrent {
+			return fmt.Errorf("page_index conflicts with raw command scope %s", parsed.Scope)
+		}
+	}
+	body.Scope = string(parsed.Scope)
+	body.Mode = string(parsed.Mode)
+	body.Command = parsed.Command
+	body.Instruction = parsed.Instruction
+	if parsed.PageIndex != nil {
+		body.PageIndex = parsed.PageIndex
+	} else if parsed.Scope != model.ScopeCurrent {
+		body.PageIndex = nil
+	}
+	return nil
+}
+
 // Events GET /runs/{id}/events (SSE，支持 Last-Event-ID 续传)
 func (h *RunHandler) Events(c *gin.Context) {
 	runID := c.Param("id")
@@ -116,6 +164,8 @@ func (h *RunHandler) Events(c *gin.Context) {
 		return
 	}
 	defer stop()
+	ticker := time.NewTicker(sseHeartbeatInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -127,6 +177,10 @@ func (h *RunHandler) Events(c *gin.Context) {
 				return
 			}
 			if ev.Type.Terminal() {
+				return
+			}
+		case <-ticker.C:
+			if werr := sw.heartbeat(); werr != nil {
 				return
 			}
 		case <-ctx.Done():

@@ -69,7 +69,15 @@ func setupServer(t *testing.T, client llm.Client, runner run.Runner) (*httptest.
 	runSvc := service.NewRunServiceWithFactory(st, engine, func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
 		return runner
 	})
-	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc), httpapi.NewSlideHandler(service.NewSlideService(st)), httpapi.NewAssetHandler(service.NewAssetService(st, root)))
+	router := httpapi.NewRouter(
+		cfg, zap.NewNop(),
+		httpapi.NewHealthHandler(service.NewHealthService(st)),
+		httpapi.NewRunHandler(runSvc),
+		httpapi.NewProjectHandler(service.NewProjectService(st, service.WorkRoot(root))),
+		httpapi.NewThreadHandler(service.NewThreadService(st)),
+		httpapi.NewSlideHandler(service.NewSlideService(st)),
+		httpapi.NewAssetHandler(service.NewAssetService(st, root)),
+	)
 
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)
@@ -145,6 +153,36 @@ func TestE2ESSEResumeOverHTTP(t *testing.T) {
 	}
 }
 
+func TestE2ESSEHeartbeatDuringIdleRun(t *testing.T) {
+	started := make(chan struct{})
+	blocking := scriptRunnerE2E{fn: func(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, p run.Prompter) harness.Outcome {
+		close(started)
+		<-ctx.Done()
+		return harness.Outcome{Status: harness.OutcomeCanceled}
+	}}
+	srv, threadID := setupServer(t, &llmtest.FakeClient{}, blocking)
+	runID := createRun(t, srv, threadID)
+	<-started
+	defer cancelRun(t, srv, runID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/api/v1/runs/"+runID+"/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("sse get: %v", err)
+	}
+	defer resp.Body.Close()
+
+	sc := bufio.NewScanner(resp.Body)
+	for sc.Scan() {
+		if sc.Text() == ": ping" {
+			return
+		}
+	}
+	t.Fatalf("idle SSE stream should emit heartbeat before timeout, scanner err=%v", sc.Err())
+}
+
 // scriptRunnerE2E 让端到端测试注入自定义 runner 逻辑。
 type scriptRunnerE2E struct {
 	fn func(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, p run.Prompter) harness.Outcome
@@ -185,6 +223,16 @@ func postInput(t *testing.T, srv *httptest.Server, runID, body string) int {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode
+}
+
+func cancelRun(t *testing.T, srv *httptest.Server, runID string) {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/v1/runs/"+runID, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("cancel run: %v", err)
+	}
+	_ = resp.Body.Close()
 }
 
 type sseEvent struct {

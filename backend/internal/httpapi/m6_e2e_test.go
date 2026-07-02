@@ -77,7 +77,7 @@ func TestE2ERepoSearchAndMountAsset(t *testing.T) {
 	if !strings.Contains(html, `data-fx="particle-burst"`) || !strings.Contains(html, `import { init }`) {
 		t.Fatalf("particle fx not mounted into slide: %s", html)
 	}
-	versions, err := store.ListVersions(context.Background(), "slide", "slide-000")
+	versions, err := store.ListVersions(context.Background(), "slide", model.SlideVersionTarget("p1", 0))
 	if err != nil {
 		t.Fatalf("list slide versions: %v", err)
 	}
@@ -142,7 +142,15 @@ func setupM6MountServer(t *testing.T, client llm.Client) (*httptest.Server, stri
 	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
 	runSvc := service.NewRunService(st, engine, client, service.WorkRoot(work))
 	assetSvc := service.NewAssetService(st, work)
-	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc), httpapi.NewSlideHandler(service.NewSlideService(st)), httpapi.NewAssetHandler(assetSvc))
+	router := httpapi.NewRouter(
+		cfg, zap.NewNop(),
+		httpapi.NewHealthHandler(service.NewHealthService(st)),
+		httpapi.NewRunHandler(runSvc),
+		httpapi.NewProjectHandler(service.NewProjectService(st, service.WorkRoot(work))),
+		httpapi.NewThreadHandler(service.NewThreadService(st)),
+		httpapi.NewSlideHandler(service.NewSlideService(st)),
+		httpapi.NewAssetHandler(assetSvc),
+	)
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)
 	return srv, "th1", workDir, st

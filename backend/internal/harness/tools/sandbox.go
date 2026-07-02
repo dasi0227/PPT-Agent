@@ -64,6 +64,14 @@ func (s *Sandbox) Write(rel string, data []byte) error {
 	return os.WriteFile(abs, data, 0o644)
 }
 
+func (s *Sandbox) Delete(rel string) error {
+	abs, err := s.Resolve(rel)
+	if err != nil {
+		return err
+	}
+	return os.Remove(abs)
+}
+
 func within(root, target string) bool {
 	if target == root {
 		return true

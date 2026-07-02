@@ -10,23 +10,25 @@ import (
 
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
-	engine *gin.Engine
-	cfg    *config.Config
-	log    *zap.Logger
-	health *HealthHandler
-	run    *RunHandler
-	slide  *SlideHandler
-	asset  *AssetHandler
+	engine  *gin.Engine
+	cfg     *config.Config
+	log     *zap.Logger
+	health  *HealthHandler
+	run     *RunHandler
+	project *ProjectHandler
+	thread  *ThreadHandler
+	slide   *SlideHandler
+	asset   *AssetHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, slideH *SlideHandler, assetH *AssetHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler) *Router {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, slide: slideH, asset: assetH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH}
 	r.register()
 	return r
 }
@@ -34,6 +36,18 @@ func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH 
 func (r *Router) register() {
 	v1 := r.engine.Group("/api/v1")
 	v1.GET("/healthz", r.health.Healthz)
+
+	// Project / Thread：API 契约入口，前端不需要绕过 HTTP 直接造数据。
+	v1.GET("/projects", r.project.List)
+	v1.POST("/projects", r.project.Create)
+	v1.GET("/projects/:id", r.project.Get)
+	v1.DELETE("/projects/:id", r.project.Delete)
+	v1.GET("/projects/:id/slides", r.project.ListSlides)
+	v1.GET("/projects/:id/threads", r.thread.List)
+	v1.POST("/projects/:id/threads", r.thread.Create)
+	v1.GET("/threads/:id", r.thread.Get)
+	v1.DELETE("/threads/:id", r.thread.Delete)
+	v1.GET("/threads/:id/history", r.thread.History)
 
 	// Run：创建 / SSE 订阅 / HITL 输入 / 取消（40-api/rest-endpoints）。
 	v1.POST("/threads/:id/runs", r.run.CreateRun)

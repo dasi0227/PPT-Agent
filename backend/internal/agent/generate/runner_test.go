@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
+	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -129,7 +131,19 @@ func setupGen(t *testing.T, pageCount int) (*memStore, string, []model.Slide) {
 	}
 	store := newMemStore()
 	store.slides = slides
-	store.themes = []model.Asset{{Name: "tokyo-night", Kind: "theme", Source: "preset"}}
+	tokens, err := asset.ReadSeedFile("assets/themes/tokyo-night/tokens.css")
+	if err != nil {
+		t.Fatalf("read seed tokens: %v", err)
+	}
+	writeAtGen(t, dir, "_assets/themes/tokyo-night/manifest.json", `{
+  "name":"tokyo-night","version":"1.0.0","kind":"theme","source":"preset",
+  "description":"theme","assets":{"tokens":"tokens.css"}
+}`)
+	writeAtGen(t, dir, "_assets/themes/tokyo-night/tokens.css", string(tokens))
+	store.themes = []model.Asset{{
+		ID: "theme-preset", Name: "tokyo-night", Kind: "theme", Source: "preset",
+		ManifestPath: "_assets/themes/tokyo-night/manifest.json", Dir: "_assets/themes/tokyo-night",
+	}}
 	return store, dir, slides
 }
 
@@ -137,7 +151,7 @@ func newGenRunner(store *memStore, dir, theme, marker string, pageIndex *int) *R
 	seq := 0
 	newID := func() string { seq++; return "v-" + itoa(seq) }
 	return NewRunner(newWriteSlideClient(marker), store, Params{
-		RunID: "r1", ProjectID: "p1", WorkDir: dir, Theme: theme, PageIndex: pageIndex,
+		RunID: "r1", ProjectID: "p1", WorkDir: dir, WorkRoot: dir, Theme: theme, PageIndex: pageIndex,
 	}, func() int64 { return 1 }, newID)
 }
 
@@ -185,6 +199,36 @@ func TestGenerateColdStartFallbackUsesSeedTheme(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "common/tokens.css")); err != nil {
 		t.Fatalf("tokens.css should be written from fallback seed theme: %v", err)
+	}
+}
+
+func TestGenerateUsesThemeFromAssetRepository(t *testing.T) {
+	store, dir, _ := setupGen(t, 1)
+	tokens, err := asset.ReadSeedFile("assets/themes/tokyo-night/tokens.css")
+	if err != nil {
+		t.Fatalf("read seed tokens: %v", err)
+	}
+	userTokens := strings.Replace(string(tokens), "--color-primary: #7aa2f7;", "--color-primary: #123456;", 1)
+	writeAtGen(t, dir, "_assets/themes/custom-brand/manifest.json", `{
+  "name":"custom-brand","version":"1.0.0","kind":"theme","source":"user",
+  "description":"custom","assets":{"tokens":"tokens.css"}
+}`)
+	writeAtGen(t, dir, "_assets/themes/custom-brand/tokens.css", userTokens)
+	store.themes = append(store.themes, model.Asset{
+		ID: "theme-user", Name: "custom-brand", Kind: "theme", Source: "user",
+		ManifestPath: "_assets/themes/custom-brand/manifest.json", Dir: "_assets/themes/custom-brand",
+	})
+
+	out := newGenRunner(store, dir, "custom-brand", "custom", nil).Run(context.Background(), &pageEmitter{}, nil, nil)
+	if out.Status != harness.OutcomeFinished {
+		t.Fatalf("generate should use repository theme, got %s: %s", out.Status, out.Message)
+	}
+	written, err := os.ReadFile(filepath.Join(dir, "common/tokens.css"))
+	if err != nil {
+		t.Fatalf("read generated tokens: %v", err)
+	}
+	if string(written) != userTokens {
+		t.Fatalf("tokens.css must come from _assets user theme, got:\n%s", written)
 	}
 }
 
@@ -241,4 +285,15 @@ func hashTree(t *testing.T, dir string, slides []model.Slide) map[string]string 
 		out[p] = fmt.Sprintf("%x", sum)
 	}
 	return out
+}
+
+func writeAtGen(t *testing.T, dir, rel, content string) {
+	t.Helper()
+	full := filepath.Join(dir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

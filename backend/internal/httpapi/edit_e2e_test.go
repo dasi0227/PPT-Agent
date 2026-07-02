@@ -106,7 +106,15 @@ func setupEditServer(t *testing.T, pages int, client llm.Client) (*httptest.Serv
 
 	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
 	runSvc := service.NewRunService(st, engine, client, service.WorkRoot(workDir))
-	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc), httpapi.NewSlideHandler(service.NewSlideService(st)), httpapi.NewAssetHandler(service.NewAssetService(st, work)))
+	router := httpapi.NewRouter(
+		cfg, zap.NewNop(),
+		httpapi.NewHealthHandler(service.NewHealthService(st)),
+		httpapi.NewRunHandler(runSvc),
+		httpapi.NewProjectHandler(service.NewProjectService(st, service.WorkRoot(work))),
+		httpapi.NewThreadHandler(service.NewThreadService(st)),
+		httpapi.NewSlideHandler(service.NewSlideService(st)),
+		httpapi.NewAssetHandler(service.NewAssetService(st, work)),
+	)
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)
 	return srv, "th1", workDir, ids

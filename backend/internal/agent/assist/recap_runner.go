@@ -73,7 +73,7 @@ func (r *RecapRunner) recentChanges(ctx context.Context, slides []model.Slide) [
 	}
 	var all []change
 	for _, s := range slides {
-		vs, err := r.store.ListVersions(ctx, "slide", fmt.Sprintf("slide-%03d", s.Idx))
+		vs, err := r.store.ListVersions(ctx, "slide", model.SlideVersionTarget(r.projectID, s.Idx))
 		if err != nil {
 			continue
 		}
@@ -81,7 +81,7 @@ func (r *RecapRunner) recentChanges(ctx context.Context, slides []model.Slide) [
 			all = append(all, change{at: v.CreatedAt, text: fmt.Sprintf("第%d页 v%d (run %s)", s.Idx, v.VersionNo, shortID(v.RunID))})
 		}
 	}
-	for _, v := range must(r.store.ListVersions(ctx, "design", "design")) {
+	for _, v := range must(r.store.ListVersions(ctx, "design", model.DesignVersionTarget(r.projectID))) {
 		all = append(all, change{at: v.CreatedAt, text: fmt.Sprintf("公共层 v%d (run %s)", v.VersionNo, shortID(v.RunID))})
 	}
 	sort.Slice(all, func(i, j int) bool { return all[i].at > all[j].at })

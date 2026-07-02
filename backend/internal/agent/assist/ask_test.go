@@ -89,6 +89,15 @@ func (m *askMemStore) CreateVersion(_ context.Context, v model.Version) error {
 	m.next[v.TargetType+"|"+v.TargetID] = v.VersionNo + 1
 	return nil
 }
+func (m *askMemStore) DeleteVersion(_ context.Context, tt, tid string, no int) error {
+	for i, v := range m.versions {
+		if v.TargetType == tt && v.TargetID == tid && v.VersionNo == no {
+			m.versions = append(m.versions[:i], m.versions[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
 func (m *askMemStore) SetSlideVersion(context.Context, string, int, int) error { return nil }
 func (m *askMemStore) ListAssets(context.Context, string) ([]model.Asset, error) {
 	return nil, nil

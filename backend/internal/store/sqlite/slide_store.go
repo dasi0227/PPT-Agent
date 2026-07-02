@@ -89,3 +89,10 @@ func (s *Store) ListVersions(ctx context.Context, targetType, targetID string) (
 	}
 	return out, nil
 }
+
+// DeleteVersion 删除一条版本登记，用于复合写失败补偿。
+func (s *Store) DeleteVersion(ctx context.Context, targetType, targetID string, versionNo int) error {
+	return s.db.WithContext(ctx).
+		Where("target_type = ? AND target_id = ? AND version_no = ?", targetType, targetID, versionNo).
+		Delete(&versionPO{}).Error
+}

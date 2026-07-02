@@ -15,6 +15,7 @@ type memStore struct {
 	versions    []model.Version
 	slideVer    map[int]int
 	nextVerByTg map[string]int
+	failCreate  bool
 }
 
 func newMemStore() *memStore {
@@ -24,8 +25,20 @@ func (m *memStore) NextVersionNo(_ context.Context, tt, tid string) (int, error)
 	return m.nextVerByTg[tt+"|"+tid], nil
 }
 func (m *memStore) CreateVersion(_ context.Context, v model.Version) error {
+	if m.failCreate {
+		return os.ErrPermission
+	}
 	m.versions = append(m.versions, v)
 	m.nextVerByTg[v.TargetType+"|"+v.TargetID] = v.VersionNo + 1
+	return nil
+}
+func (m *memStore) DeleteVersion(_ context.Context, tt, tid string, no int) error {
+	for i, v := range m.versions {
+		if v.TargetType == tt && v.TargetID == tid && v.VersionNo == no {
+			m.versions = append(m.versions[:i], m.versions[i+1:]...)
+			break
+		}
+	}
 	return nil
 }
 func (m *memStore) SetSlideVersion(_ context.Context, _ string, idx, no int) error {
@@ -111,7 +124,7 @@ func TestPatchValidPersistsAndVersions(t *testing.T) {
 	if !contains(string(raw), "新标题") || contains(string(raw), "原标题") {
 		t.Errorf("patch not applied: %s", raw)
 	}
-	if len(store.versions) != 1 || store.versions[0].TargetID != "slide-003" {
+	if len(store.versions) != 1 || store.versions[0].TargetID != model.SlideVersionTarget("p1", 3) {
 		t.Errorf("expected 1 slide-003 version, got %+v", store.versions)
 	}
 	if store.slideVer[3] != 0 {
@@ -150,6 +163,25 @@ func TestPatchAnchorMissing(t *testing.T) {
 	})
 	if res.OK {
 		t.Fatal("expected failure: anchor missing")
+	}
+}
+
+func TestPatchRestoresFileWhenVersionCreateFails(t *testing.T) {
+	tool, store, dir := setupPatch(t, 0, validSlide)
+	store.failCreate = true
+
+	res, err := tool.Execute(context.Background(), map[string]any{
+		"slide_idx": 0, "edits": edits("原标题", "新标题"),
+	})
+	if err == nil {
+		t.Fatal("expected CreateVersion error")
+	}
+	if res.OK {
+		t.Fatalf("result must not be OK on DB failure: %+v", res)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "slides/000/index.html"))
+	if string(raw) != validSlide {
+		t.Fatalf("current slide must be restored on DB failure:\n%s", raw)
 	}
 }
 

@@ -21,6 +21,7 @@ type memStore struct {
 	versions    []model.Version
 	slideVer    map[int]int
 	nextVerByTg map[string]int
+	failCreate  bool
 }
 
 func newMemStore() *memStore {
@@ -30,8 +31,20 @@ func (m *memStore) NextVersionNo(_ context.Context, tt, tid string) (int, error)
 	return m.nextVerByTg[tt+"|"+tid], nil
 }
 func (m *memStore) CreateVersion(_ context.Context, v model.Version) error {
+	if m.failCreate {
+		return os.ErrPermission
+	}
 	m.versions = append(m.versions, v)
 	m.nextVerByTg[v.TargetType+"|"+v.TargetID] = v.VersionNo + 1
+	return nil
+}
+func (m *memStore) DeleteVersion(_ context.Context, tt, tid string, no int) error {
+	for i, v := range m.versions {
+		if v.TargetType == tt && v.TargetID == tid && v.VersionNo == no {
+			m.versions = append(m.versions[:i], m.versions[i+1:]...)
+			break
+		}
+	}
 	return nil
 }
 func (m *memStore) SetSlideVersion(_ context.Context, _ string, idx, no int) error {
@@ -342,5 +355,28 @@ func TestPatchDesignProducesDesignVersion(t *testing.T) {
 	}
 	if len(store.versions) != 1 || store.versions[0].TargetType != "design" {
 		t.Errorf("expected 1 design version, got %+v", store.versions)
+	}
+}
+
+func TestPatchDesignRestoresTokensWhenVersionCreateFails(t *testing.T) {
+	dir := setupProject(t, 1)
+	store := newMemStore()
+	store.failCreate = true
+	sb := mustSandbox(t, dir)
+	before, _ := os.ReadFile(filepath.Join(dir, "common/tokens.css"))
+	tool := NewPatchDesignTool(store, sb, "p1", "r1", func() int64 { return 1 }, seqID())
+
+	res, err := tool.Execute(context.Background(), map[string]any{
+		"edits": []any{map[string]any{"old_text": "#ff0000", "new_text": "#0047ff"}},
+	})
+	if err == nil {
+		t.Fatal("expected CreateVersion error")
+	}
+	if res.OK {
+		t.Fatalf("result must not be OK on DB failure: %+v", res)
+	}
+	after, _ := os.ReadFile(filepath.Join(dir, "common/tokens.css"))
+	if string(after) != string(before) {
+		t.Fatalf("tokens.css must be restored on DB failure:\n%s", after)
 	}
 }

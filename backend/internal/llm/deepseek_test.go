@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -54,6 +55,48 @@ func TestCallToolParsesToolCall(t *testing.T) {
 	}
 }
 
+func TestCallToolSendsAssistantToolCallsAndObservation(t *testing.T) {
+	var body map[string]any
+	d := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	})
+
+	_, err := d.CallTool(context.Background(), ToolCallRequest{Messages: []Message{
+		{Role: RoleUser, Content: "do it"},
+		{Role: RoleAssistant, Content: "thinking", ToolCalls: []ToolCall{{
+			ID: "deepseek-call-1", Name: "demo", Args: map[string]any{"x": "1"},
+		}}},
+		{Role: RoleTool, ToolCallID: "deepseek-call-1", Content: "ok"},
+	}})
+	if err != nil {
+		t.Fatalf("calltool: %v", err)
+	}
+	messages, ok := body["messages"].([]any)
+	if !ok || len(messages) != 3 {
+		t.Fatalf("expected 3 wire messages, got %#v", body["messages"])
+	}
+	assistant, _ := messages[1].(map[string]any)
+	toolCalls, ok := assistant["tool_calls"].([]any)
+	if !ok || len(toolCalls) != 1 {
+		t.Fatalf("assistant message must include tool_calls, got %#v", assistant)
+	}
+	toolCall, _ := toolCalls[0].(map[string]any)
+	if toolCall["id"] != "deepseek-call-1" || toolCall["type"] != "function" {
+		t.Fatalf("bad wire tool call envelope: %#v", toolCall)
+	}
+	fn, _ := toolCall["function"].(map[string]any)
+	if fn["name"] != "demo" || fn["arguments"] != `{"x":"1"}` {
+		t.Fatalf("bad wire function call: %#v", fn)
+	}
+	toolMsg, _ := messages[2].(map[string]any)
+	if toolMsg["role"] != "tool" || toolMsg["tool_call_id"] != "deepseek-call-1" || toolMsg["content"] != "ok" {
+		t.Fatalf("tool observation must reference matching call id, got %#v", toolMsg)
+	}
+}
+
 // ARCH-LLM-FC-001：function call 参数非法 JSON → ErrBadToolCall（最小失败退出）。
 func TestCallToolBadArgs(t *testing.T) {
 	d := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -63,6 +106,20 @@ func TestCallToolBadArgs(t *testing.T) {
 	_, err := d.CallTool(context.Background(), ToolCallRequest{})
 	if !errors.Is(err, ErrBadToolCall) {
 		t.Fatalf("want ErrBadToolCall, got %v", err)
+	}
+}
+
+func TestCallToolRepairsTrailingCloseBraceArgs(t *testing.T) {
+	d := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"choices":[{"message":{"role":"assistant",
+		"tool_calls":[{"id":"c1","type":"function","function":{"name":"finish","arguments":"{\"summary\":\"done\"}}"}}]}}]}`))
+	})
+	resp, err := d.CallTool(context.Background(), ToolCallRequest{})
+	if err != nil {
+		t.Fatalf("calltool: %v", err)
+	}
+	if resp.ToolCall == nil || resp.ToolCall.Args["summary"] != "done" {
+		t.Fatalf("bad repaired args: %+v", resp.ToolCall)
 	}
 }
 

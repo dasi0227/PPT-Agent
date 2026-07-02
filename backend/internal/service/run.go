@@ -62,6 +62,7 @@ func NewRunService(s store.Store, engine *run.Engine, client llm.Client, workRoo
 				RunID:     r.ID,
 				ProjectID: proj.ID,
 				WorkDir:   proj.WorkDir,
+				WorkRoot:  string(workRoot),
 				Theme:     theme,
 				PageIndex: p.PageIndex,
 			}, nil, nil)

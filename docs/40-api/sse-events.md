@@ -52,9 +52,9 @@ data: <json>
 | stage | 语义 | current / total |
 |---|---|---|
 | `turn` | Harness ReAct 循环的第 N 轮（每轮 LLM function-call 前发一次） | `current` = 第几轮，`total` = MAX_TURNS |
-| `generate` | 逐页生成阶段（M3 起）：第 N 页 / 共 K 页 | `current` = 已完成/正在处理页序，`total` = 总页数 |
+| `page` | 逐页生成阶段（M3 起）：第 N 页 / 共 K 页 | `current` = 已完成/正在处理页序，`total` = 总页数 |
 
-> M1 阶段只落 `turn` 语义（agent 尚无业务级"逐页/逐资产"阶段可投影）。业务级 stage（`generate` 等）随对应 agent 落地后启用，客户端 MUST 按 `stage` 分派展示，禁止假设固定枚举。
+> M1 阶段只落 `turn` 语义（agent 尚无业务级"逐页/逐资产"阶段可投影）。业务级 stage（如 `page`）随对应 agent 落地后启用，客户端 MUST 按 `stage` 分派展示，禁止假设固定枚举。
 
 ## 序列约定
 
@@ -75,7 +75,7 @@ data: {"run_id":"r1","kind":"generate","scope":"overview","mode":"normal"}
 
 id: 2
 event: progress
-data: {"stage":"generate","current":1,"total":8}
+data: {"stage":"page","current":1,"total":8}
 
 id: 3
 event: artifact

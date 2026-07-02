@@ -85,11 +85,17 @@ func (t *ApplyThemeTool) Execute(ctx context.Context, args map[string]any) (tool
 	if miss := asset.ValidateThemeTokens(tokens); len(miss) != 0 {
 		return fail(fmt.Sprintf("theme 缺少必需 token，拒绝应用：%v", miss)), nil
 	}
+	previous, readErr := projectSandbox.Read(designRel)
 	if err := projectSandbox.Write(designRel, tokens); err != nil {
 		return fail("写入公共层失败：" + err.Error()), nil
 	}
 	versionNo, err := t.snapshotDesign(ctx, projectSandbox, string(tokens))
 	if err != nil {
+		if readErr == nil {
+			_ = projectSandbox.Write(designRel, previous)
+		} else {
+			_ = projectSandbox.Delete(designRel)
+		}
 		return tools.Result{}, err
 	}
 	t.applied = true
@@ -101,7 +107,8 @@ func (t *ApplyThemeTool) Execute(ctx context.Context, args map[string]any) (tool
 }
 
 func (t *ApplyThemeTool) snapshotDesign(ctx context.Context, sandbox *tools.Sandbox, css string) (int, error) {
-	no, err := t.store.NextVersionNo(ctx, "design", "design")
+	target := model.DesignVersionTarget(t.projectID)
+	no, err := t.store.NextVersionNo(ctx, "design", target)
 	if err != nil {
 		return 0, err
 	}
@@ -110,7 +117,7 @@ func (t *ApplyThemeTool) snapshotDesign(ctx context.Context, sandbox *tools.Sand
 		return 0, err
 	}
 	if err := t.store.CreateVersion(ctx, model.Version{
-		ID: t.newID(), TargetType: "design", TargetID: "design", VersionNo: no,
+		ID: t.newID(), TargetType: "design", TargetID: target, VersionNo: no,
 		SnapshotPath: snap, RunID: t.runID, CreatedAt: t.clock(),
 	}); err != nil {
 		return 0, err

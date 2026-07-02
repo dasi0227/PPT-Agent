@@ -93,8 +93,34 @@ func toWireMessages(msgs []Message) []wireMessage {
 	out := make([]wireMessage, len(msgs))
 	for i, m := range msgs {
 		out[i] = wireMessage{Role: string(m.Role), Content: m.Content, ToolCallID: m.ToolCallID}
+		if len(m.ToolCalls) > 0 {
+			out[i].ToolCalls = make([]wireToolCall, 0, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				out[i].ToolCalls = append(out[i].ToolCalls, toWireToolCall(tc))
+			}
+		}
 	}
 	return out
+}
+
+func toWireToolCall(tc ToolCall) wireToolCall {
+	var out wireToolCall
+	out.ID = tc.ID
+	out.Type = "function"
+	out.Function.Name = tc.Name
+	out.Function.Arguments = encodeToolArguments(tc.Args)
+	return out
+}
+
+func encodeToolArguments(args map[string]any) string {
+	if args == nil {
+		return "{}"
+	}
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
 }
 
 func toWireTools(tools []ToolSchema) []wireTool {
@@ -142,7 +168,7 @@ func (d *DeepSeek) CallTool(ctx context.Context, req ToolCallRequest) (ToolCallR
 		args := map[string]any{}
 		// function call 参数无法解析 → 最小失败退出（ARCH-LLM-FC-001）。
 		if strings.TrimSpace(tc.Function.Arguments) != "" {
-			if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+			if err := decodeToolArguments(tc.Function.Arguments, &args); err != nil {
 				return ToolCallResponse{}, fmt.Errorf("%w: %v", ErrBadToolCall, err)
 			}
 		}
@@ -152,6 +178,24 @@ func (d *DeepSeek) CallTool(ctx context.Context, req ToolCallRequest) (ToolCallR
 		out.ToolCall = &ToolCall{ID: tc.ID, Name: tc.Function.Name, Args: args}
 	}
 	return out, nil
+}
+
+func decodeToolArguments(s string, out *map[string]any) error {
+	if err := json.Unmarshal([]byte(s), out); err == nil {
+		return nil
+	}
+
+	decoder := json.NewDecoder(strings.NewReader(s))
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	rest := strings.TrimSpace(s[decoder.InputOffset():])
+	for _, r := range rest {
+		if r != '}' {
+			return fmt.Errorf("unexpected trailing tool arguments: %q", rest)
+		}
+	}
+	return nil
 }
 
 // Stream 流式补全；返回的 channel 在 ctx 取消或流结束时关闭，goroutine 及时退出（ARCH-LLM-002）。

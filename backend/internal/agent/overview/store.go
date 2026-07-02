@@ -13,5 +13,6 @@ type Store interface {
 	GetAsset(ctx context.Context, id string) (model.Asset, error)
 	NextVersionNo(ctx context.Context, targetType, targetID string) (int, error)
 	CreateVersion(ctx context.Context, v model.Version) error
+	DeleteVersion(ctx context.Context, targetType, targetID string, versionNo int) error
 	SetSlideVersion(ctx context.Context, projectID string, idx, versionNo int) error
 }

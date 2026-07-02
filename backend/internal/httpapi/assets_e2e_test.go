@@ -43,6 +43,8 @@ func setupAssetServer(t *testing.T) (*httptest.Server, *sqlitestore.Store) {
 		zap.NewNop(),
 		httpapi.NewHealthHandler(service.NewHealthService(st)),
 		httpapi.NewRunHandler(runSvc),
+		httpapi.NewProjectHandler(service.NewProjectService(st, service.WorkRoot(root))),
+		httpapi.NewThreadHandler(service.NewThreadService(st)),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
 		httpapi.NewAssetHandler(service.NewAssetService(st, root)),
 	)

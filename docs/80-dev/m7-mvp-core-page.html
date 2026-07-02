@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>M7 MVP Core Page Prototype</title>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --panel: #141922;
+      --panel-2: #10141c;
+      --panel-3: #1b2230;
+      --line: rgba(255, 255, 255, 0.1);
+      --line-strong: rgba(255, 255, 255, 0.18);
+      --text: #eef2ff;
+      --muted: #8f9aaf;
+      --soft: #c4ccda;
+      --brand: #86efac;
+      --brand-2: #60a5fa;
+      --warn: #fbbf24;
+      --danger: #fb7185;
+      --stage: #f8fafc;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --radius-sm: 10px;
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 14%, rgba(96, 165, 250, 0.18), transparent 28%),
+        radial-gradient(circle at 82% 10%, rgba(134, 239, 172, 0.14), transparent 30%),
+        linear-gradient(135deg, #090b10 0%, var(--bg) 45%, #111827 100%);
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    .app-shell {
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      height: 100vh;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 280px 1fr 360px;
+      align-items: center;
+      gap: 16px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(12, 15, 20, 0.86);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      color: #052e16;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--brand), #22d3ee);
+      box-shadow: 0 10px 28px rgba(34, 211, 238, 0.22);
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    .brand-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .brand-subtitle {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 2px;
+    }
+
+    .top-meta {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      color: var(--soft);
+      font-size: 12px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--soft);
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--brand);
+      box-shadow: 0 0 0 4px rgba(134, 239, 172, 0.12);
+    }
+
+    .top-actions {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 12px;
+      color: var(--soft);
+      background: rgba(255, 255, 255, 0.04);
+      cursor: default;
+    }
+
+    .btn.primary {
+      color: #04130b;
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--brand), #67e8f9);
+      font-weight: 700;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 280px minmax(560px, 1fr) 360px;
+      gap: 14px;
+      padding: 14px;
+      min-height: 0;
+    }
+
+    .panel {
+      min-height: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: rgba(20, 25, 34, 0.78);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 46px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--soft);
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .left-panel,
+    .right-panel {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .project-card {
+      margin: 14px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03));
+    }
+
+    .project-card h1 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.35;
+      letter-spacing: -0.02em;
+    }
+
+    .project-card p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .scope-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin: 0 14px 14px;
+    }
+
+    .scope-tab {
+      padding: 8px 6px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.03);
+      text-align: center;
+      font-size: 11px;
+    }
+
+    .scope-tab.active {
+      color: #052e16;
+      border-color: transparent;
+      background: var(--brand);
+      font-weight: 800;
+    }
+
+    .slide-list {
+      padding: 0 14px 14px;
+      overflow: auto;
+    }
+
+    .slide-item {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 10px;
+      padding: 9px;
+      margin-bottom: 9px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.035);
+    }
+
+    .slide-item.active {
+      border-color: rgba(134, 239, 172, 0.55);
+      background: rgba(134, 239, 172, 0.08);
+    }
+
+    .thumb {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      border-radius: 8px;
+      overflow: hidden;
+      background: linear-gradient(135deg, #e5e7eb, #f8fafc);
+    }
+
+    .thumb::before,
+    .thumb::after {
+      content: "";
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      height: 5px;
+      border-radius: 99px;
+      background: #0f172a;
+      opacity: 0.76;
+    }
+
+    .thumb::before {
+      top: 12px;
+    }
+
+    .thumb::after {
+      top: 24px;
+      right: 24px;
+      opacity: 0.22;
+    }
+
+    .slide-info {
+      min-width: 0;
+    }
+
+    .slide-kicker {
+      color: var(--muted);
+      font-size: 10px;
+      margin-bottom: 4px;
+    }
+
+    .slide-title {
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .slide-status {
+      margin-top: 8px;
+      color: var(--brand);
+      font-size: 10px;
+    }
+
+    .stage-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      background:
+        radial-gradient(circle at 50% 5%, rgba(96, 165, 250, 0.12), transparent 38%),
+        rgba(16, 20, 28, 0.82);
+    }
+
+    .viewer-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .viewer-tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .viewer-tab {
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .viewer-tab.active {
+      color: var(--text);
+      border-color: rgba(96, 165, 250, 0.52);
+      background: rgba(96, 165, 250, 0.14);
+    }
+
+    .viewer-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stage-wrap {
+      display: grid;
+      place-items: center;
+      min-height: 0;
+      padding: 28px;
+    }
+
+    .stage-frame {
+      position: relative;
+      width: min(100%, 1040px);
+      aspect-ratio: 16 / 9;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 18px;
+      background: var(--stage);
+      overflow: hidden;
+      box-shadow:
+        0 30px 90px rgba(0, 0, 0, 0.44),
+        0 0 0 10px rgba(255, 255, 255, 0.03);
+    }
+
+    .stage-frame::before {
+      content: "sandbox iframe · postMessage goto(index)";
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      z-index: 3;
+      color: rgba(15, 23, 42, 0.45);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .mock-slide {
+      height: 100%;
+      color: #0f172a;
+      background:
+        radial-gradient(circle at 88% 12%, rgba(96, 165, 250, 0.28), transparent 22%),
+        linear-gradient(135deg, #f8fafc 0%, #edf2f7 48%, #dbeafe 100%);
+      padding: 7.5% 8%;
+      display: grid;
+      grid-template-columns: 1.12fr 0.88fr;
+      gap: 6%;
+      align-items: center;
+    }
+
+    .mock-slide h2 {
+      margin: 0;
+      font-size: clamp(32px, 4vw, 62px);
+      line-height: 0.96;
+      letter-spacing: -0.06em;
+    }
+
+    .mock-slide p {
+      margin: 22px 0 0;
+      max-width: 520px;
+      color: #475569;
+      font-size: clamp(15px, 1.4vw, 20px);
+      line-height: 1.65;
+    }
+
+    .mock-chart {
+      height: 68%;
+      padding: 24px;
+      border-radius: 28px;
+      color: #0f172a;
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: 0 22px 60px rgba(15, 23, 42, 0.12);
+      display: grid;
+      align-items: end;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .bar {
+      border-radius: 999px 999px 10px 10px;
+      background: linear-gradient(180deg, #2563eb, #86efac);
+    }
+
+    .stage-footer {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .kbd {
+      padding: 4px 7px;
+      border: 1px solid var(--line-strong);
+      border-radius: 7px;
+      color: var(--soft);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 11px;
+    }
+
+    .right-panel {
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .run-card {
+      margin: 14px;
+      padding: 14px;
+      border: 1px solid rgba(134, 239, 172, 0.22);
+      border-radius: var(--radius-md);
+      background:
+        linear-gradient(135deg, rgba(134, 239, 172, 0.09), rgba(96, 165, 250, 0.06)),
+        rgba(255, 255, 255, 0.03);
+    }
+
+    .run-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .run-title {
+      font-weight: 800;
+      font-size: 13px;
+    }
+
+    .run-subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .progress {
+      height: 7px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .progress span {
+      display: block;
+      width: 64%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--brand), var(--brand-2));
+    }
+
+    .event-list {
+      padding: 0 14px;
+      overflow: auto;
+    }
+
+    .event {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 10px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .event-icon {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      color: #052e16;
+      background: var(--brand);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .event.warn .event-icon {
+      color: #422006;
+      background: var(--warn);
+    }
+
+    .event-title {
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .event-copy {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .composer {
+      padding: 14px;
+      border-top: 1px solid var(--line);
+      background: rgba(16, 20, 28, 0.78);
+    }
+
+    .mode-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .mode {
+      padding: 7px 4px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.03);
+      text-align: center;
+      font-size: 11px;
+    }
+
+    .mode.active {
+      color: var(--text);
+      border-color: rgba(134, 239, 172, 0.42);
+      background: rgba(134, 239, 172, 0.1);
+    }
+
+    textarea {
+      width: 100%;
+      height: 92px;
+      resize: none;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      padding: 12px;
+      color: var(--text);
+      outline: none;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    textarea::placeholder {
+      color: #667085;
+    }
+
+    .composer-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">P</div>
+        <div class="brand-copy">
+          <div class="brand-title">AI PPT Agent</div>
+          <div class="brand-subtitle">M7 MVP · Online Viewer + Guided Editing</div>
+        </div>
+      </div>
+
+      <div class="top-meta">
+        <span class="pill"><span class="dot"></span> Backend connected</span>
+        <span class="pill">Project: cloud-observability-demo</span>
+        <span class="pill">Thread: 体验线程</span>
+      </div>
+
+      <div class="top-actions">
+        <button class="btn">资产仓库</button>
+        <button class="btn">版本历史</button>
+        <button class="btn primary">开始演示</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="panel left-panel">
+        <div class="panel-header">
+          <span>Deck Navigator</span>
+          <span>6 slides</span>
+        </div>
+
+        <section class="project-card">
+          <h1>云原生可观测性实践</h1>
+          <p>面向技术分享场景，当前主题为 swiss-modern。左侧页号是 /current 与 /page 的前端事实来源。</p>
+        </section>
+
+        <nav class="scope-tabs" aria-label="scope">
+          <div class="scope-tab active">/current</div>
+          <div class="scope-tab">/overview</div>
+          <div class="scope-tab">/repo</div>
+        </nav>
+
+        <section class="slide-list" aria-label="slides">
+          <article class="slide-item">
+            <div class="thumb"></div>
+            <div class="slide-info">
+              <div class="slide-kicker">01 · title</div>
+              <div class="slide-title">为什么可观测性需要产品化</div>
+              <div class="slide-status">v2 · ready</div>
+            </div>
+          </article>
+          <article class="slide-item active">
+            <div class="thumb"></div>
+            <div class="slide-info">
+              <div class="slide-kicker">02 · current</div>
+              <div class="slide-title">指标、日志、链路的协同模型</div>
+              <div class="slide-status">locked for edit</div>
+            </div>
+          </article>
+          <article class="slide-item">
+            <div class="thumb"></div>
+            <div class="slide-info">
+              <div class="slide-kicker">03 · diagram</div>
+              <div class="slide-title">从信号采集到异常定位</div>
+              <div class="slide-status">v1 · ready</div>
+            </div>
+          </article>
+          <article class="slide-item">
+            <div class="thumb"></div>
+            <div class="slide-info">
+              <div class="slide-kicker">04 · chart</div>
+              <div class="slide-title">MTTR 与告警噪声的变化</div>
+              <div class="slide-status">v1 · ready</div>
+            </div>
+          </article>
+          <article class="slide-item">
+            <div class="thumb"></div>
+            <div class="slide-info">
+              <div class="slide-kicker">05 · case</div>
+              <div class="slide-title">落地路径与团队分工</div>
+              <div class="slide-status">v0 · draft</div>
+            </div>
+          </article>
+          <article class="slide-item">
+            <div class="thumb"></div>
+            <div class="slide-info">
+              <div class="slide-kicker">06 · ending</div>
+              <div class="slide-title">总结与行动建议</div>
+              <div class="slide-status">v0 · draft</div>
+            </div>
+          </article>
+        </section>
+      </aside>
+
+      <section class="panel stage-panel">
+        <div class="viewer-toolbar">
+          <div class="viewer-tabs">
+            <div class="viewer-tab active">主预览</div>
+            <div class="viewer-tab">总览网格</div>
+            <div class="viewer-tab">单页预览 ?preview=2</div>
+          </div>
+          <div class="viewer-meta">
+            <span class="kbd">←</span>
+            <span class="kbd">→</span>
+            <span class="kbd">Space</span>
+            <span>Slide 2 / 6 · iframe src unchanged</span>
+          </div>
+        </div>
+
+        <div class="stage-wrap">
+          <div class="stage-frame" role="img" aria-label="sandbox iframe preview mock">
+            <div class="mock-slide">
+              <div>
+                <h2>指标、日志、链路如何协同</h2>
+                <p>预览舞台必须使用与最终演示一致的 16:9 视口、主题 token 和公共 CSS。宿主只通过 postMessage 驱动页码和步骤，不直接改 iframe DOM。</p>
+              </div>
+              <div class="mock-chart" aria-hidden="true">
+                <div class="bar" style="height: 38%"></div>
+                <div class="bar" style="height: 72%"></div>
+                <div class="bar" style="height: 54%"></div>
+                <div class="bar" style="height: 86%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer class="stage-footer">
+          <div>Hash: <span class="kbd">#/2</span></div>
+          <div class="nav-controls">
+            <button class="btn">上一页</button>
+            <button class="btn primary">下一页</button>
+            <button class="btn">总览 O</button>
+          </div>
+          <div style="text-align: right;">Step 1 / 3 · reload-slide(index) after edit</div>
+        </footer>
+      </section>
+
+      <aside class="panel right-panel">
+        <div class="panel-header">
+          <span>Agent Run</span>
+          <span>SSE</span>
+        </div>
+
+        <section class="run-card">
+          <div class="run-head">
+            <div>
+              <div class="run-title">正在编辑当前页</div>
+              <div class="run-subtitle">run_6f8a · stage=page · slide=2</div>
+            </div>
+            <span class="pill">running</span>
+          </div>
+          <div class="progress"><span></span></div>
+        </section>
+
+        <section class="event-list" aria-label="events">
+          <article class="event">
+            <div class="event-icon">1</div>
+            <div>
+              <div class="event-title">command.parse</div>
+              <div class="event-copy">scope=/current，前端上报 page_index=2，后端完成权威校验。</div>
+            </div>
+          </article>
+          <article class="event">
+            <div class="event-icon">2</div>
+            <div>
+              <div class="event-title">tool.patch_slide</div>
+              <div class="event-copy">按 old_text 唯一锚点更新 slide.html，生成当前页新版本。</div>
+            </div>
+          </article>
+          <article class="event warn">
+            <div class="event-icon">?</div>
+            <div>
+              <div class="event-title">needs_input</div>
+              <div class="event-copy">是否保留当前蓝绿色主题，还是切换到 tokyo-night？</div>
+            </div>
+          </article>
+          <article class="event">
+            <div class="event-icon">3</div>
+            <div>
+              <div class="event-title">preview.reload-slide</div>
+              <div class="event-copy">编辑完成后只刷新第 2 页，整套 iframe 不发生重载。</div>
+            </div>
+          </article>
+        </section>
+
+        <section class="composer">
+          <div class="mode-row">
+            <div class="mode active">/current</div>
+            <div class="mode">/page</div>
+            <div class="mode">/talk</div>
+            <div class="mode">/ask</div>
+          </div>
+          <textarea placeholder="例如：把当前页改成更像架构图，弱化右侧柱状图，强调三类信号之间的关系。">把当前页右侧图表改成三段式流程图，标题更工程化一点。</textarea>
+          <div class="composer-actions">
+            <div class="hint">提交时带 thread_id、current_page、mode；SSE 统一进入 runStore。</div>
+            <button class="btn primary">发送指令</button>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>

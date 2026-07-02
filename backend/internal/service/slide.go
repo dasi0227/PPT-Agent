@@ -38,7 +38,7 @@ func (svc *SlideService) ListVersions(ctx context.Context, slideID string) ([]mo
 	if err != nil {
 		return nil, err
 	}
-	return svc.store.ListVersions(ctx, "slide", slideTarget(sl.Idx))
+	return svc.store.ListVersions(ctx, "slide", model.SlideVersionTarget(sl.ProjectID, sl.Idx))
 }
 
 // RollbackSlide 回滚某页到 versionNo：用历史快照覆盖当前 html + 记一条**新版本**（DATA-VERSION-004）。
@@ -52,7 +52,7 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	if err != nil {
 		return model.Slide{}, err
 	}
-	target := slideTarget(sl.Idx)
+	target := model.SlideVersionTarget(sl.ProjectID, sl.Idx)
 
 	// 定位历史版本快照路径。
 	versions, err := svc.store.ListVersions(ctx, "slide", target)
@@ -78,6 +78,14 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	if err != nil {
 		return model.Slide{}, fmt.Errorf("read snapshot %s: %w", snapshotPath, err)
 	}
+	previous, readErr := sandbox.Read(sl.HTMLPath)
+	restoreCurrent := func() {
+		if readErr == nil {
+			_ = sandbox.Write(sl.HTMLPath, previous)
+		} else {
+			_ = sandbox.Delete(sl.HTMLPath)
+		}
+	}
 
 	// 1) 用历史内容覆盖当前 html。
 	if err := sandbox.Write(sl.HTMLPath, historical); err != nil {
@@ -87,28 +95,33 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	// 2) 记一条新版本（内容=历史，version_no 递增），关联无 run。
 	newNo, err := svc.store.NextVersionNo(ctx, "slide", target)
 	if err != nil {
+		restoreCurrent()
 		return model.Slide{}, err
 	}
-	snap := fmt.Sprintf("versions/%s/v%d.html", target, newNo)
+	snap := fmt.Sprintf("versions/slide-%03d/v%d.html", sl.Idx, newNo)
 	if err := sandbox.Write(snap, historical); err != nil {
+		restoreCurrent()
 		return model.Slide{}, err
 	}
 	if err := svc.store.CreateVersion(ctx, model.Version{
 		ID: svc.newID(), TargetType: "slide", TargetID: target, VersionNo: newNo,
 		SnapshotPath: snap, CreatedAt: svc.clock(),
 	}); err != nil {
+		restoreCurrent()
+		_ = sandbox.Delete(snap)
 		return model.Slide{}, err
 	}
 
 	// 3) current_version 指向新版本（DATA-VERSION-005）。
 	if err := svc.store.SetSlideVersion(ctx, sl.ProjectID, sl.Idx, newNo); err != nil {
+		restoreCurrent()
+		_ = svc.store.DeleteVersion(ctx, "slide", target, newNo)
+		_ = sandbox.Delete(snap)
 		return model.Slide{}, err
 	}
 
 	sl.CurrentVersion = newNo
 	return sl, nil
 }
-
-func slideTarget(idx int) string { return fmt.Sprintf("slide-%03d", idx) }
 
 func nowUnix() int64 { return time.Now().Unix() }

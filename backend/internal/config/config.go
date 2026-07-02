@@ -1,9 +1,12 @@
 package config
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/subosito/gotenv"
 	"github.com/spf13/viper"
 )
 
@@ -19,6 +22,9 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	if err := loadDotEnv(); err != nil {
+		return nil, err
+	}
 	v := viper.New()
 	v.SetDefault("env", "development")
 	v.SetDefault("listen_addr", "127.0.0.1:8787")
@@ -48,4 +54,11 @@ func Load() (*Config, error) {
 		cfg.DBPath = filepath.Join(cfg.WorkRoot, "ppt.db")
 	}
 	return cfg, nil
+}
+
+func loadDotEnv() error {
+	if err := gotenv.Load(".env"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }

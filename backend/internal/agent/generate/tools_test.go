@@ -18,6 +18,7 @@ type memStore struct {
 	projStatus  string
 	themes      []model.Asset
 	nextVerByTg map[string]int
+	failCreate  bool
 }
 
 func newMemStore() *memStore {
@@ -31,8 +32,20 @@ func (m *memStore) NextVersionNo(_ context.Context, tt, tid string) (int, error)
 	return m.nextVerByTg[tt+"|"+tid], nil
 }
 func (m *memStore) CreateVersion(_ context.Context, v model.Version) error {
+	if m.failCreate {
+		return os.ErrPermission
+	}
 	m.versions = append(m.versions, v)
 	m.nextVerByTg[v.TargetType+"|"+v.TargetID] = v.VersionNo + 1
+	return nil
+}
+func (m *memStore) DeleteVersion(_ context.Context, tt, tid string, no int) error {
+	for i, v := range m.versions {
+		if v.TargetType == tt && v.TargetID == tid && v.VersionNo == no {
+			m.versions = append(m.versions[:i], m.versions[i+1:]...)
+			break
+		}
+	}
 	return nil
 }
 func (m *memStore) SetSlideVersion(_ context.Context, _ string, idx, no int) error {
@@ -118,6 +131,22 @@ func TestWriteSlideRejectsInvalid(t *testing.T) {
 	}
 	if len(store.versions) != 0 {
 		t.Error("must not create version on validation failure")
+	}
+}
+
+func TestWriteSlideRemovesNewFileWhenVersionCreateFails(t *testing.T) {
+	store := newMemStore()
+	store.failCreate = true
+	tool, dir := newWriteTool(t, store, 0)
+	res, err := tool.Execute(context.Background(), map[string]any{"slide_idx": 0, "html": goodHTML})
+	if err == nil {
+		t.Fatal("expected CreateVersion error")
+	}
+	if res.OK {
+		t.Fatalf("result must not be OK on DB failure: %+v", res)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "slides/000/index.html")); !os.IsNotExist(err) {
+		t.Fatalf("new current file must be removed on DB failure, stat err=%v", err)
 	}
 }
 

@@ -139,8 +139,8 @@ func TestRecapReadOnly(t *testing.T) {
 			{Idx: 1, Layout: "bullets", Title: "目录", CurrentVersion: 2},
 		},
 		versions: map[string][]model.Version{
-			"slide|slide-001": {{VersionNo: 2, CreatedAt: 100, RunID: "run12345678"}},
-			"design|design":   {{VersionNo: 1, CreatedAt: 90, RunID: "run90000000"}},
+			"slide|" + model.SlideVersionTarget("p1", 1): {{VersionNo: 2, CreatedAt: 100, RunID: "run12345678"}},
+			"design|" + model.DesignVersionTarget("p1"):  {{VersionNo: 1, CreatedAt: 90, RunID: "run90000000"}},
 		},
 	}
 	em := &captureEmitter{}

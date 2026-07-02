@@ -25,6 +25,29 @@ func (s *Store) GetProject(ctx context.Context, id string) (model.Project, error
 	return po.toModel(), nil
 }
 
+func (s *Store) ListProjects(ctx context.Context) ([]model.Project, error) {
+	var pos []projectPO
+	if err := s.db.WithContext(ctx).Order("created_at DESC").Find(&pos).Error; err != nil {
+		return nil, err
+	}
+	out := make([]model.Project, len(pos))
+	for i, po := range pos {
+		out[i] = po.toModel()
+	}
+	return out, nil
+}
+
+func (s *Store) DeleteProject(ctx context.Context, id string) error {
+	res := s.db.WithContext(ctx).Where("id = ?", id).Delete(&projectPO{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return run.ErrRunNotFound
+	}
+	return nil
+}
+
 func (s *Store) CreateThread(ctx context.Context, m model.Thread) error {
 	return s.db.WithContext(ctx).Create(threadToPO(m)).Error
 }
@@ -35,6 +58,31 @@ func (s *Store) GetThread(ctx context.Context, id string) (model.Thread, error) 
 		return model.Thread{}, mapErr(err)
 	}
 	return po.toModel(), nil
+}
+
+func (s *Store) ListThreads(ctx context.Context, projectID string) ([]model.Thread, error) {
+	var pos []threadPO
+	if err := s.db.WithContext(ctx).
+		Where("project_id = ?", projectID).
+		Order("created_at ASC").Find(&pos).Error; err != nil {
+		return nil, err
+	}
+	out := make([]model.Thread, len(pos))
+	for i, po := range pos {
+		out[i] = po.toModel()
+	}
+	return out, nil
+}
+
+func (s *Store) DeleteThread(ctx context.Context, id string) error {
+	res := s.db.WithContext(ctx).Where("id = ?", id).Delete(&threadPO{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return run.ErrRunNotFound
+	}
+	return nil
 }
 
 // CreateRun 写入 run 记录。空 thread_id/project_id 落 NULL（schema 允许，repo scope 无归属）。

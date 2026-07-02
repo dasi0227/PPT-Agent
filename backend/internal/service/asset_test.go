@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"go.uber.org/zap"
@@ -24,6 +26,7 @@ type failingAssetStore struct {
 	failCreateVersion bool
 	failDeleteAsset   bool
 	createAssetErr    error
+	upsertAssetErr    error
 }
 
 func (s *failingAssetStore) CreateAsset(ctx context.Context, a model.Asset) error {
@@ -38,6 +41,13 @@ func (s *failingAssetStore) CreateVersion(ctx context.Context, v model.Version) 
 		return errInjected
 	}
 	return s.Store.CreateVersion(ctx, v)
+}
+
+func (s *failingAssetStore) UpsertAsset(ctx context.Context, a model.Asset) error {
+	if s.upsertAssetErr != nil {
+		return s.upsertAssetErr
+	}
+	return s.Store.UpsertAsset(ctx, a)
 }
 
 func (s *failingAssetStore) DeleteAsset(ctx context.Context, id string) error {
@@ -167,6 +177,29 @@ func TestAssetServiceCreateSnapshotFailureRollsBackVisibleAsset(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "_assets/components/snapshot-fails")); !os.IsNotExist(err) {
 		t.Fatalf("asset dir must be removed on snapshot failure, stat err=%v", err)
 	}
+	if _, err := os.Stat(filepath.Join(root, "versions/asset-id-1/v0")); !os.IsNotExist(err) {
+		t.Fatalf("snapshot dir must be removed on snapshot failure, stat err=%v", err)
+	}
+}
+
+func TestAssetServiceCreateInvalidExtraPayloadPathCleansDirectory(t *testing.T) {
+	ctx := context.Background()
+	svc, _, root := newAssetServiceForTest(t)
+
+	_, err := svc.CreateAsset(ctx, CreateAssetParams{
+		Manifest: componentManifest("extra-path-fails"),
+		Payload: map[string]string{
+			"template.html": `<div class="extra-path-fails">标题</div>`,
+			"style.css":     `.extra-path-fails{color:var(--color-primary);}`,
+			"../evil.css":   `body{color:red;}`,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected invalid extra payload path to fail")
+	}
+	if _, err := os.Stat(filepath.Join(root, "_assets/components/extra-path-fails")); !os.IsNotExist(err) {
+		t.Fatalf("asset dir must be removed when payload write validation fails, stat err=%v", err)
+	}
 }
 
 func TestAssetServiceDeleteDBFailureKeepsDirectoryForRetry(t *testing.T) {
@@ -192,6 +225,60 @@ func TestAssetServiceDeleteDBFailureKeepsDirectoryForRetry(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(a.Dir))); err != nil {
 		t.Fatalf("asset dir must remain when DB delete fails: %v", err)
+	}
+}
+
+func TestAssetServicePatchSnapshotFailureRestoresPayload(t *testing.T) {
+	ctx := context.Background()
+	svc, st, root := newAssetServiceForTest(t)
+	a, err := svc.CreateAsset(ctx, CreateAssetParams{
+		Manifest: componentManifest("patch-snapshot-fails"),
+		Payload: map[string]string{
+			"template.html": `<div class="patch-snapshot-fails">标题</div>`,
+			"style.css":     `.patch-snapshot-fails{border-radius: 8px;color:var(--color-primary);}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create asset: %v", err)
+	}
+	svc.store = &failingAssetStore{Store: st, failCreateVersion: true}
+
+	_, err = svc.PatchAsset(ctx, a.ID, PatchAssetParams{Edits: []AssetPatchEdit{{
+		File: "style.css", OldText: "border-radius: 8px", NewText: "border-radius: 24px",
+	}}})
+	if !errors.Is(err, errInjected) {
+		t.Fatalf("expected injected snapshot error, got %v", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(a.Dir), "style.css"))
+	if strings.Contains(string(raw), "24px") || !strings.Contains(string(raw), "8px") {
+		t.Fatalf("payload must be restored on snapshot failure: %s", raw)
+	}
+}
+
+func TestAssetServicePatchUpsertFailureRestoresPayload(t *testing.T) {
+	ctx := context.Background()
+	svc, st, root := newAssetServiceForTest(t)
+	a, err := svc.CreateAsset(ctx, CreateAssetParams{
+		Manifest: componentManifest("patch-upsert-fails"),
+		Payload: map[string]string{
+			"template.html": `<div class="patch-upsert-fails">标题</div>`,
+			"style.css":     `.patch-upsert-fails{border-radius: 8px;color:var(--color-primary);}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create asset: %v", err)
+	}
+	svc.store = &failingAssetStore{Store: st, upsertAssetErr: errInjected}
+
+	_, err = svc.PatchAsset(ctx, a.ID, PatchAssetParams{Edits: []AssetPatchEdit{{
+		File: "style.css", OldText: "border-radius: 8px", NewText: "border-radius: 24px",
+	}}})
+	if !errors.Is(err, errInjected) {
+		t.Fatalf("expected injected upsert error, got %v", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(a.Dir), "style.css"))
+	if strings.Contains(string(raw), "24px") || !strings.Contains(string(raw), "8px") {
+		t.Fatalf("payload must be restored on upsert failure: %s", raw)
 	}
 }
 
@@ -362,6 +449,133 @@ func TestAssetServiceRollbackPresetToFactorySnapshot(t *testing.T) {
 	versions, _ = st.ListVersions(ctx, "asset", "asset-"+preset.ID)
 	if len(versions) != 3 || versions[2].VersionNo != 2 {
 		t.Fatalf("rollback should append v2, got %+v", versions)
+	}
+}
+
+func TestAssetServiceRollbackSnapshotFailureRestoresCurrentPayload(t *testing.T) {
+	ctx := context.Background()
+	svc, st, root := newAssetServiceForTest(t)
+	a, err := svc.CreateAsset(ctx, CreateAssetParams{
+		Manifest: componentManifest("rollback-snapshot-fails"),
+		Payload: map[string]string{
+			"template.html": `<div class="rollback-snapshot-fails">标题</div>`,
+			"style.css":     `.rollback-snapshot-fails{border-radius: 8px;color:var(--color-primary);}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create asset: %v", err)
+	}
+	if _, err := svc.PatchAsset(ctx, a.ID, PatchAssetParams{Edits: []AssetPatchEdit{{
+		File: "style.css", OldText: "border-radius: 8px", NewText: "border-radius: 24px",
+	}}}); err != nil {
+		t.Fatalf("patch asset: %v", err)
+	}
+	svc.store = &failingAssetStore{Store: st, failCreateVersion: true}
+
+	_, err = svc.RollbackAsset(ctx, a.ID, 0)
+	if !errors.Is(err, errInjected) {
+		t.Fatalf("expected injected snapshot error, got %v", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(a.Dir), "style.css"))
+	if strings.Contains(string(raw), "8px") || !strings.Contains(string(raw), "24px") {
+		t.Fatalf("payload must be restored when rollback snapshot fails: %s", raw)
+	}
+	versions, _ := st.ListVersions(ctx, "asset", "asset-"+a.ID)
+	if len(versions) != 2 {
+		t.Fatalf("failed rollback must not append version rows, got %+v", versions)
+	}
+}
+
+func TestAssetServiceRollbackUpsertFailureRestoresCurrentPayload(t *testing.T) {
+	ctx := context.Background()
+	svc, st, root := newAssetServiceForTest(t)
+	a, err := svc.CreateAsset(ctx, CreateAssetParams{
+		Manifest: componentManifest("rollback-upsert-fails"),
+		Payload: map[string]string{
+			"template.html": `<div class="rollback-upsert-fails">标题</div>`,
+			"style.css":     `.rollback-upsert-fails{border-radius: 8px;color:var(--color-primary);}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create asset: %v", err)
+	}
+	if _, err := svc.PatchAsset(ctx, a.ID, PatchAssetParams{Edits: []AssetPatchEdit{{
+		File: "style.css", OldText: "border-radius: 8px", NewText: "border-radius: 24px",
+	}}}); err != nil {
+		t.Fatalf("patch asset: %v", err)
+	}
+	svc.store = &failingAssetStore{Store: st, upsertAssetErr: errInjected}
+
+	_, err = svc.RollbackAsset(ctx, a.ID, 0)
+	if !errors.Is(err, errInjected) {
+		t.Fatalf("expected injected upsert error, got %v", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(a.Dir), "style.css"))
+	if strings.Contains(string(raw), "8px") || !strings.Contains(string(raw), "24px") {
+		t.Fatalf("payload must be restored when rollback upsert fails: %s", raw)
+	}
+}
+
+func TestAssetServiceConcurrentPatchSameAssetIsSerialized(t *testing.T) {
+	ctx := context.Background()
+	svc, st, root := newAssetServiceForTest(t)
+	var slots []string
+	for i := 0; i < 20; i++ {
+		slots = append(slots, fmt.Sprintf("slot-%02d", i))
+	}
+	a, err := svc.CreateAsset(ctx, CreateAssetParams{
+		Manifest: componentManifest("concurrent-card"),
+		Payload: map[string]string{
+			"template.html": `<div class="concurrent-card">` + strings.Join(slots, " ") + `</div>`,
+			"style.css":     `.concurrent-card{color:var(--color-primary);}`,
+		},
+	})
+	if err != nil {
+		t.Fatalf("create asset: %v", err)
+	}
+
+	start := make(chan struct{})
+	errs := make(chan error, len(slots))
+	var wg sync.WaitGroup
+	for i := range slots {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := svc.PatchAsset(ctx, a.ID, PatchAssetParams{Edits: []AssetPatchEdit{{
+				File: "template.html", OldText: fmt.Sprintf("slot-%02d", i), NewText: fmt.Sprintf("done-%02d", i),
+			}}})
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent patch should be serialized, got %v", err)
+		}
+	}
+
+	raw, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(a.Dir), "template.html"))
+	html := string(raw)
+	for i := range slots {
+		if !strings.Contains(html, fmt.Sprintf("done-%02d", i)) || strings.Contains(html, fmt.Sprintf("slot-%02d", i)) {
+			t.Fatalf("final payload lost patch %02d: %s", i, html)
+		}
+	}
+	versions, err := st.ListVersions(ctx, "asset", "asset-"+a.ID)
+	if err != nil {
+		t.Fatalf("list versions: %v", err)
+	}
+	if len(versions) != len(slots)+1 {
+		t.Fatalf("create + 20 patches should produce 21 versions, got %d: %+v", len(versions), versions)
+	}
+	for i, v := range versions {
+		if v.VersionNo != i {
+			t.Fatalf("versions must be contiguous, got %+v", versions)
+		}
 	}
 }
 

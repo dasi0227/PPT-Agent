@@ -90,6 +90,64 @@ func TestReActLoop(t *testing.T) {
 	}
 }
 
+func TestReActLoopPreservesToolCallTranscript(t *testing.T) {
+	client := &transcriptClient{}
+	demo := scopedTool{name: "demo", class: tools.ClassWrite, scopes: []model.Scope{model.ScopeCurrent}}
+	loop := New(client, Config{
+		RunID: "r1", Kind: model.KindEdit, Scope: model.ScopeCurrent, Mode: model.ModeNormal,
+		Tools: []tools.Tool{demo, finishTool()},
+	})
+
+	out := loop.Run(context.Background(), &captureEmitter{}, nil)
+	if out.Status != OutcomeFinished {
+		t.Fatalf("want finished, got %s (%s)", out.Status, out.Message)
+	}
+	if len(client.requests) != 2 {
+		t.Fatalf("expected two LLM turns, got %d", len(client.requests))
+	}
+	msgs := client.requests[1].Messages
+	if len(msgs) < 4 {
+		t.Fatalf("second turn should include assistant tool call + observation, got %+v", msgs)
+	}
+	assistant := msgs[len(msgs)-2]
+	if assistant.Role != llm.RoleAssistant || len(assistant.ToolCalls) != 1 {
+		t.Fatalf("missing assistant tool_calls before observation: %+v", assistant)
+	}
+	tc := assistant.ToolCalls[0]
+	if tc.ID != "deepseek-call-1" || tc.Name != "demo" {
+		t.Fatalf("assistant tool_call must preserve LLM id/name, got %+v", tc)
+	}
+	toolMsg := msgs[len(msgs)-1]
+	if toolMsg.Role != llm.RoleTool || toolMsg.ToolCallID != "deepseek-call-1" || toolMsg.Content != "ok" {
+		t.Fatalf("tool observation must use matching tool_call_id, got %+v", toolMsg)
+	}
+}
+
+type transcriptClient struct {
+	requests []llm.ToolCallRequest
+}
+
+func (c *transcriptClient) Chat(context.Context, llm.ChatRequest) (llm.ChatResponse, error) {
+	return llm.ChatResponse{}, nil
+}
+
+func (c *transcriptClient) Stream(context.Context, llm.ChatRequest) (<-chan llm.StreamChunk, error) {
+	ch := make(chan llm.StreamChunk)
+	close(ch)
+	return ch, nil
+}
+
+func (c *transcriptClient) CallTool(_ context.Context, req llm.ToolCallRequest) (llm.ToolCallResponse, error) {
+	c.requests = append(c.requests, req)
+	if len(c.requests) == 1 {
+		return llm.ToolCallResponse{
+			Thought:  "use demo",
+			ToolCall: &llm.ToolCall{ID: "deepseek-call-1", Name: "demo", Args: map[string]any{"x": "1"}},
+		}, nil
+	}
+	return llm.ToolCallResponse{ToolCall: &llm.ToolCall{ID: "deepseek-call-2", Name: "finish", Args: map[string]any{"summary": "ok"}}}, nil
+}
+
 // AC-HARNESS-001：/page scope 下，改公共层/别页的工具 MUST NOT 出现在门控后的集合。
 func TestDynamicToolGating(t *testing.T) {
 	pageTool := scopedTool{name: "patch_slide", class: tools.ClassWrite, scopes: []model.Scope{model.ScopeCurrent, model.ScopePage, model.ScopeOverview}}

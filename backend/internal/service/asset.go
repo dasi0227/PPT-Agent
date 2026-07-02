@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,10 +74,42 @@ type AssetService struct {
 	workRoot string
 	clock    func() int64
 	newID    func() string
+	locks    *AssetLockManager
 }
 
 func NewAssetService(s store.Store, workRoot string) *AssetService {
-	return &AssetService{store: s, workRoot: workRoot, clock: nowUnixAsset, newID: uuid.NewString}
+	return NewAssetServiceWithLocks(s, workRoot, defaultAssetLocks)
+}
+
+func NewAssetServiceWithLocks(s store.Store, workRoot string, locks *AssetLockManager) *AssetService {
+	if locks == nil {
+		locks = defaultAssetLocks
+	}
+	return &AssetService{store: s, workRoot: workRoot, clock: nowUnixAsset, newID: uuid.NewString, locks: locks}
+}
+
+// AssetLockManager serializes global asset mutations across REST and agent AssetService instances.
+type AssetLockManager struct {
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex
+}
+
+var defaultAssetLocks = NewAssetLockManager()
+
+func NewAssetLockManager() *AssetLockManager {
+	return &AssetLockManager{locks: map[string]*sync.Mutex{}}
+}
+
+func (m *AssetLockManager) Lock(key string) func() {
+	m.mu.Lock()
+	l, ok := m.locks[key]
+	if !ok {
+		l = &sync.Mutex{}
+		m.locks[key] = l
+	}
+	m.mu.Unlock()
+	l.Lock()
+	return l.Unlock
 }
 
 func (svc *AssetService) ListAssets(ctx context.Context, kind string) ([]model.Asset, error) {
@@ -93,6 +126,8 @@ func (svc *AssetService) CreateAsset(ctx context.Context, p CreateAssetParams) (
 	if err := validateNewAsset(m, p.Payload); err != nil {
 		return model.Asset{}, err
 	}
+	unlock := svc.locks.Lock(assetNameLockKey(string(m.Kind), m.Name))
+	defer unlock()
 	if exists, err := svc.assetNameExists(ctx, string(m.Kind), m.Name); err != nil {
 		return model.Asset{}, err
 	} else if exists {
@@ -113,13 +148,16 @@ func (svc *AssetService) CreateAsset(ctx context.Context, p CreateAssetParams) (
 		return model.Asset{}, err
 	}
 	if err := sandbox.Write(path.Join(relDir, "manifest.json"), raw); err != nil {
+		_ = removeDir(sandbox, relDir)
 		return model.Asset{}, err
 	}
 	for rel, body := range p.Payload {
 		if err := validatePayloadPath(rel); err != nil {
+			_ = removeDir(sandbox, relDir)
 			return model.Asset{}, err
 		}
 		if err := sandbox.Write(path.Join(relDir, rel), []byte(body)); err != nil {
+			_ = removeDir(sandbox, relDir)
 			return model.Asset{}, err
 		}
 	}
@@ -154,6 +192,9 @@ func (svc *AssetService) CreateAsset(ctx context.Context, p CreateAssetParams) (
 }
 
 func (svc *AssetService) PatchAsset(ctx context.Context, id string, p PatchAssetParams) (model.Asset, error) {
+	unlock := svc.locks.Lock(assetIDLockKey(id))
+	defer unlock()
+
 	if len(p.Edits) == 0 {
 		return model.Asset{}, validationError("edits must not be empty")
 	}
@@ -181,6 +222,7 @@ func (svc *AssetService) PatchAsset(ctx context.Context, id string, p PatchAsset
 	}
 
 	contents := map[string]string{}
+	originals := map[string][]byte{}
 	for i, e := range p.Edits {
 		if strings.TrimSpace(e.File) == "" {
 			return model.Asset{}, validationError("edit #%d file is required", i+1)
@@ -199,6 +241,7 @@ func (svc *AssetService) PatchAsset(ctx context.Context, id string, p PatchAsset
 			if err != nil {
 				return model.Asset{}, err
 			}
+			originals[fileRel] = raw
 			content = string(raw)
 		}
 		n := strings.Count(content, e.OldText)
@@ -224,21 +267,30 @@ func (svc *AssetService) PatchAsset(ctx context.Context, id string, p PatchAsset
 		}
 	}
 
+	oldAsset := a
 	a.UpdatedAt = svc.clock()
 	if err := svc.store.UpsertAsset(ctx, a); err != nil {
+		restoreFiles(sandbox, originals)
 		return model.Asset{}, err
 	}
 	if _, err := svc.snapshotAsset(ctx, sandbox, a, ""); err != nil {
+		restoreFiles(sandbox, originals)
+		_ = svc.store.UpsertAsset(ctx, oldAsset)
 		return model.Asset{}, err
 	}
 	return a, nil
 }
 
 func (svc *AssetService) DeleteAsset(ctx context.Context, id string) error {
+	unlock := svc.locks.Lock(assetIDLockKey(id))
+	defer unlock()
+
 	a, err := svc.store.GetAsset(ctx, id)
 	if err != nil {
 		return err
 	}
+	unlockName := svc.locks.Lock(assetNameLockKey(a.Kind, a.Name))
+	defer unlockName()
 	if a.Source == string(asset.SourcePreset) {
 		return ErrPresetAssetDelete
 	}
@@ -260,7 +312,10 @@ func (svc *AssetService) DeleteAsset(ctx context.Context, id string) error {
 
 // RollbackAsset 用历史资产目录快照覆盖当前资产目录，并记录一个新的 asset 版本。
 func (svc *AssetService) RollbackAsset(ctx context.Context, id string, versionNo int) (model.Asset, error) {
-	versions, err := svc.store.ListVersions(ctx, "asset", assetTarget(id))
+	unlock := svc.locks.Lock(assetIDLockKey(id))
+	defer unlock()
+
+	versions, err := svc.store.ListVersions(ctx, "asset", model.AssetVersionTarget(id))
 	if err != nil {
 		return model.Asset{}, err
 	}
@@ -295,16 +350,34 @@ func (svc *AssetService) RollbackAsset(ctx context.Context, id string, versionNo
 		return model.Asset{}, err
 	}
 	relDir := path.Join("_assets", kindDir, m.Name)
+	unlockName := svc.locks.Lock(assetNameLockKey(string(m.Kind), m.Name))
+	defer unlockName()
 
 	current, getErr := svc.store.GetAsset(ctx, id)
 	createdAt := svc.clock()
 	if getErr == nil && current.CreatedAt != 0 {
 		createdAt = current.CreatedAt
 	}
+	hadCurrent := getErr == nil
+	backupDir := ""
+	if hadCurrent {
+		backupDir = path.Join("_tmp", "asset-rollback", id+"-"+svc.newID())
+		if err := copyDir(sandbox, current.Dir, backupDir); err != nil {
+			return model.Asset{}, err
+		}
+		defer func() { _ = removeDir(sandbox, backupDir) }()
+	}
+	restoreCurrent := func() {
+		_ = removeDir(sandbox, relDir)
+		if hadCurrent {
+			_ = copyDir(sandbox, backupDir, current.Dir)
+		}
+	}
 	if err := removeDir(sandbox, relDir); err != nil && !os.IsNotExist(err) {
 		return model.Asset{}, err
 	}
 	if err := copyDir(sandbox, snapshot, relDir); err != nil {
+		restoreCurrent()
 		return model.Asset{}, err
 	}
 	now := svc.clock()
@@ -325,9 +398,14 @@ func (svc *AssetService) RollbackAsset(ctx context.Context, id string, versionNo
 		a.Source = string(asset.SourceUser)
 	}
 	if err := svc.store.UpsertAsset(ctx, a); err != nil {
+		restoreCurrent()
 		return model.Asset{}, err
 	}
 	if _, err := svc.snapshotAsset(ctx, sandbox, a, ""); err != nil {
+		restoreCurrent()
+		if hadCurrent {
+			_ = svc.store.UpsertAsset(ctx, current)
+		}
 		return model.Asset{}, err
 	}
 	return a, nil
@@ -347,7 +425,7 @@ func (svc *AssetService) assetNameExists(ctx context.Context, kind, name string)
 }
 
 func (svc *AssetService) ensureAssetBaseline(ctx context.Context, sandbox *tools.Sandbox, a model.Asset) error {
-	versions, err := svc.store.ListVersions(ctx, "asset", assetTarget(a.ID))
+	versions, err := svc.store.ListVersions(ctx, "asset", model.AssetVersionTarget(a.ID))
 	if err != nil {
 		return err
 	}
@@ -359,18 +437,20 @@ func (svc *AssetService) ensureAssetBaseline(ctx context.Context, sandbox *tools
 }
 
 func (svc *AssetService) snapshotAsset(ctx context.Context, sandbox *tools.Sandbox, a model.Asset, runID string) (int, error) {
-	no, err := svc.store.NextVersionNo(ctx, "asset", assetTarget(a.ID))
+	target := model.AssetVersionTarget(a.ID)
+	no, err := svc.store.NextVersionNo(ctx, "asset", target)
 	if err != nil {
 		return 0, err
 	}
-	snap := fmt.Sprintf("versions/%s/v%d", assetTarget(a.ID), no)
+	snap := fmt.Sprintf("versions/%s/v%d", target, no)
 	if err := copyDir(sandbox, a.Dir, snap); err != nil {
 		return 0, err
 	}
 	if err := svc.store.CreateVersion(ctx, model.Version{
-		ID: svc.newID(), TargetType: "asset", TargetID: assetTarget(a.ID), VersionNo: no,
+		ID: svc.newID(), TargetType: "asset", TargetID: target, VersionNo: no,
 		SnapshotPath: snap, RunID: runID, CreatedAt: svc.clock(),
 	}); err != nil {
+		_ = removeDir(sandbox, snap)
 		return 0, err
 	}
 	return no, nil
@@ -460,10 +540,6 @@ func kindDir(k asset.Kind) (string, error) {
 	}
 }
 
-func assetTarget(id string) string {
-	return "asset-" + id
-}
-
 func copyDir(sandbox *tools.Sandbox, srcRel, dstRel string) error {
 	src, err := resolveSandboxPath(sandbox, srcRel)
 	if err != nil {
@@ -512,6 +588,20 @@ func removeDir(sandbox *tools.Sandbox, rel string) error {
 		return err
 	}
 	return os.RemoveAll(abs)
+}
+
+func restoreFiles(sandbox *tools.Sandbox, originals map[string][]byte) {
+	for rel, raw := range originals {
+		_ = sandbox.Write(rel, raw)
+	}
+}
+
+func assetIDLockKey(id string) string {
+	return "asset:" + id
+}
+
+func assetNameLockKey(kind, name string) string {
+	return "asset-name:" + kind + "/" + name
 }
 
 func resolveSandboxPath(sandbox *tools.Sandbox, rel string) (string, error) {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,8 +27,15 @@ type Params struct {
 	RunID     string
 	ProjectID string
 	WorkDir   string // project work_dir（sandbox 根）
+	WorkRoot  string // 全局 work_root（_assets 所在）；空时按 WorkDir 父目录兜底
 	Theme     string // 所选主题 id；空则回退 project.Theme→首个 preset
 	PageIndex *int   // 非空=单页重生成，仅动该页（AC-GEN-009）；空=整套生成
+}
+
+type resolvedTheme struct {
+	Name  string
+	Asset *model.Asset
+	Seed  bool
 }
 
 // Runner 用逐页子代理跑「slide-json[] + 主题 → slide html」，满足 run.Runner。
@@ -105,7 +113,7 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 			return r.errOut(em, "INTERNAL", err.Error())
 		}
 
-		outcome := r.generatePage(ctx, em, cp, sandbox, sj)
+		outcome := r.generatePage(ctx, em, cp, sandbox, sj, theme.Name)
 		if outcome.Status != harness.OutcomeFinished {
 			// 某页失败：整体失败（保留已落盘页）。
 			return outcome
@@ -117,17 +125,17 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 	}
 	return harness.Outcome{
 		Status:  harness.OutcomeFinished,
-		Summary: fmt.Sprintf("已生成 %d 页 slide html（主题 %s）", total, theme),
+		Summary: fmt.Sprintf("已生成 %d 页 slide html（主题 %s）", total, theme.Name),
 	}
 }
 
 // generatePage 为单页派发一个独立 harness 子代理（独立上下文 ARCH-HARNESS-005）。
-func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, sj slidejson.SlideJSON) harness.Outcome {
+func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, sj slidejson.SlideJSON, themeName string) harness.Outcome {
 	writeTool := NewWriteSlideTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, sj.Idx, r.clock, r.newID)
 
 	pp := prompt.SlideParams{
 		Slide:     sj,
-		Theme:     r.params.Theme,
+		Theme:     themeName,
 		TokensRel: "../../common/tokens.css",
 		BaseRel:   "../../common/base.css",
 		Layouts:   slidejson.LayoutEnum(),
@@ -153,29 +161,39 @@ func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harnes
 	return outcome
 }
 
-// resolveTheme 解析所选主题 id：param → 首个 preset theme（DS-SEED-004 兜底）。
-func (r *Runner) resolveTheme(ctx context.Context) (string, error) {
-	if r.params.Theme != "" {
-		return r.params.Theme, nil
-	}
+// resolveTheme 解析所选主题 id/name：仓库资产优先，seed 仅作冷启动/兜底。
+func (r *Runner) resolveTheme(ctx context.Context) (resolvedTheme, error) {
 	themes, err := r.store.ListAssets(ctx, "theme")
 	if err != nil {
-		return "", err
+		return resolvedTheme{}, err
 	}
-	if len(themes) == 0 {
-		if _, err := asset.ReadSeedFile(path.Join("assets", "themes", "swiss-modern", "tokens.css")); err == nil {
-			return "swiss-modern", nil
+	if r.params.Theme != "" {
+		for _, a := range themes {
+			if a.ID == r.params.Theme || a.Name == r.params.Theme {
+				aa := a
+				return resolvedTheme{Name: a.Name, Asset: &aa}, nil
+			}
 		}
-		return "", fmt.Errorf("无可用主题资产（seed 未载入？）")
+		if _, err := asset.ReadSeedFile(path.Join("assets", "themes", r.params.Theme, "tokens.css")); err == nil {
+			return resolvedTheme{Name: r.params.Theme, Seed: true}, nil
+		}
+		return resolvedTheme{}, fmt.Errorf("主题资产不存在：%s", r.params.Theme)
 	}
-	return themes[0].Name, nil
+	if len(themes) > 0 {
+		aa := themes[0]
+		return resolvedTheme{Name: aa.Name, Asset: &aa}, nil
+	}
+	if _, err := asset.ReadSeedFile(path.Join("assets", "themes", "swiss-modern", "tokens.css")); err == nil {
+		return resolvedTheme{Name: "swiss-modern", Seed: true}, nil
+	}
+	return resolvedTheme{}, fmt.Errorf("无可用主题资产（seed 未载入？）")
 }
 
 // writeCommon 写公共层：tokens.css=所选主题 tokens 的拷贝，base.css=seed 基座（DS-TOKENS-003）。
-func (r *Runner) writeCommon(sandbox *tools.Sandbox, theme string) error {
-	tokens, err := asset.ReadSeedFile(path.Join("assets", "themes", theme, "tokens.css"))
+func (r *Runner) writeCommon(sandbox *tools.Sandbox, theme resolvedTheme) error {
+	tokens, err := r.readThemeTokens(theme)
 	if err != nil {
-		return fmt.Errorf("读取主题 %s tokens 失败：%w", theme, err)
+		return err
 	}
 	if err := sandbox.Write("common/tokens.css", tokens); err != nil {
 		return err
@@ -185,6 +203,46 @@ func (r *Runner) writeCommon(sandbox *tools.Sandbox, theme string) error {
 		return fmt.Errorf("读取 base.css 失败：%w", err)
 	}
 	return sandbox.Write("common/base.css", base)
+}
+
+func (r *Runner) readThemeTokens(theme resolvedTheme) ([]byte, error) {
+	if theme.Asset == nil || theme.Seed {
+		tokens, err := asset.ReadSeedFile(path.Join("assets", "themes", theme.Name, "tokens.css"))
+		if err != nil {
+			return nil, fmt.Errorf("读取主题 %s tokens 失败：%w", theme.Name, err)
+		}
+		return tokens, nil
+	}
+	workRoot := r.params.WorkRoot
+	if workRoot == "" {
+		workRoot = filepath.Dir(r.params.WorkDir)
+	}
+	assetSandbox, err := tools.NewSandbox(workRoot)
+	if err != nil {
+		return nil, err
+	}
+	manifestRaw, err := assetSandbox.Read(theme.Asset.ManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("读取主题 manifest 失败：%w", err)
+	}
+	if err := asset.ValidateManifestRaw(manifestRaw); err != nil {
+		return nil, fmt.Errorf("theme manifest 校验失败：%w", err)
+	}
+	m, err := asset.Parse(manifestRaw)
+	if err != nil {
+		return nil, err
+	}
+	if m.Kind != asset.KindTheme {
+		return nil, fmt.Errorf("资产 %s 不是 theme", theme.Name)
+	}
+	tokens, err := assetSandbox.Read(path.Join(theme.Asset.Dir, m.Assets.Tokens))
+	if err != nil {
+		return nil, fmt.Errorf("读取主题 %s tokens 失败：%w", theme.Name, err)
+	}
+	if miss := asset.ValidateThemeTokens(tokens); len(miss) != 0 {
+		return nil, fmt.Errorf("theme 缺少必需 token：%v", miss)
+	}
+	return tokens, nil
 }
 
 // loadSlideJSON 从磁盘读取该页 slide.json（大纲阶段已落盘）。

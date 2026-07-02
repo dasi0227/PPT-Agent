@@ -118,6 +118,7 @@ func (t *PatchSlideTool) Execute(ctx context.Context, args map[string]any) (tool
 
 	versionNo, err := t.snapshotVersion(ctx, idx, content)
 	if err != nil {
+		_ = t.sandbox.Write(rel, raw)
 		return tools.Result{}, err
 	}
 
@@ -131,7 +132,7 @@ func (t *PatchSlideTool) Execute(ctx context.Context, args map[string]any) (tool
 
 // snapshotVersion 快照当前页 html 并登记新版本（DATA-VERSION-001），更新 current_version。
 func (t *PatchSlideTool) snapshotVersion(ctx context.Context, idx int, html string) (int, error) {
-	target := fmt.Sprintf("slide-%03d", idx)
+	target := model.SlideVersionTarget(t.projectID, idx)
 	no, err := t.store.NextVersionNo(ctx, "slide", target)
 	if err != nil {
 		return 0, err
@@ -148,6 +149,8 @@ func (t *PatchSlideTool) snapshotVersion(ctx context.Context, idx int, html stri
 		return 0, err
 	}
 	if err := t.store.SetSlideVersion(ctx, t.projectID, idx, no); err != nil {
+		_ = t.store.DeleteVersion(ctx, "slide", target, no)
+		_ = t.sandbox.Delete(snap)
 		return 0, err
 	}
 	return no, nil

@@ -13,9 +13,13 @@ type Store interface {
 
 	CreateProject(ctx context.Context, p model.Project) error
 	GetProject(ctx context.Context, id string) (model.Project, error)
+	ListProjects(ctx context.Context) ([]model.Project, error)
+	DeleteProject(ctx context.Context, id string) error
 
 	CreateThread(ctx context.Context, t model.Thread) error
 	GetThread(ctx context.Context, id string) (model.Thread, error)
+	ListThreads(ctx context.Context, projectID string) ([]model.Thread, error)
+	DeleteThread(ctx context.Context, id string) error
 
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)
@@ -30,6 +34,7 @@ type Store interface {
 	NextVersionNo(ctx context.Context, targetType, targetID string) (int, error)
 	CreateVersion(ctx context.Context, v model.Version) error
 	ListVersions(ctx context.Context, targetType, targetID string) ([]model.Version, error)
+	DeleteVersion(ctx context.Context, targetType, targetID string, versionNo int) error
 	SetSlideVersion(ctx context.Context, projectID string, idx, versionNo int) error
 
 	CreateAsset(ctx context.Context, a model.Asset) error

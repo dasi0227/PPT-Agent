@@ -90,9 +90,14 @@ func (l *Loop) Run(ctx context.Context, em Emitter, cp Checkpointer) Outcome {
 		}
 
 		callSeq++
-		callID := fmt.Sprintf("call_%d", callSeq)
 		tc := resp.ToolCall
+		callID := tc.ID
+		if callID == "" {
+			callID = fmt.Sprintf("call_%d", callSeq)
+		}
+		tc.ID = callID
 		em.Emit(model.EventToolCall, ToolCallPayload{Tool: tc.Name, Args: tc.Args, CallID: callID})
+		msgs = appendToolCall(msgs, *tc, resp.Thought)
 
 		tool, ok := l.byName[tc.Name]
 		if !ok {
@@ -144,6 +149,14 @@ func (l *Loop) Run(ctx context.Context, em Emitter, cp Checkpointer) Outcome {
 	}
 
 	return Outcome{Status: OutcomeMaxTurns, Code: CodeMaxTurns, Message: "max turns exceeded", Turns: l.cfg.MaxTurns}
+}
+
+func appendToolCall(msgs []llm.Message, tc llm.ToolCall, thought string) []llm.Message {
+	return append(msgs, llm.Message{
+		Role:      llm.RoleAssistant,
+		Content:   thought,
+		ToolCalls: []llm.ToolCall{tc},
+	})
 }
 
 func appendObservation(msgs []llm.Message, callID, obs string) []llm.Message {

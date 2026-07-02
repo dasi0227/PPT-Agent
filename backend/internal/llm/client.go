@@ -13,11 +13,13 @@ const (
 	RoleTool      Role = "tool"
 )
 
-// Message 是一条对话消息。ToolCallID 在 role=tool 时关联对应的工具调用。
+// Message 是一条对话消息。
+// ToolCalls 在 role=assistant 时记录 LLM 发起的工具调用；ToolCallID 在 role=tool 时关联对应的工具调用。
 type Message struct {
 	Role       Role
 	Content    string
 	ToolCallID string
+	ToolCalls  []ToolCall
 }
 
 // ToolSchema 是注册给 LLM 的 function schema（动态门控后的子集，ARCH-HARNESS-001）。

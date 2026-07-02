@@ -47,11 +47,15 @@ func initApp() (*App, func(), error) {
 	workRoot := provideWorkRoot(configConfig)
 	runService := service.NewRunService(store, engine, client, workRoot)
 	runHandler := httpapi.NewRunHandler(runService)
+	projectService := service.NewProjectService(store, workRoot)
+	projectHandler := httpapi.NewProjectHandler(projectService)
+	threadService := service.NewThreadService(store)
+	threadHandler := httpapi.NewThreadHandler(threadService)
 	slideService := service.NewSlideService(store)
 	slideHandler := httpapi.NewSlideHandler(slideService)
 	assetService := provideAssetService(store, workRoot)
 	assetHandler := httpapi.NewAssetHandler(assetService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, slideHandler, assetHandler)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	mainSeedDone, err := provideSeed(configConfig, store, zapLogger)
@@ -74,7 +78,7 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideLockManager,
 	provideWorkRoot,
 	provideAssetService,
-	provideEngine, service.NewHealthService, service.NewRunService, service.NewSlideService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
+	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewSlideService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
 	httpapi.NewAssetHandler,
 	provideHTTPServer,
 	provideSeed,

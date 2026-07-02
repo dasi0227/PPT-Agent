@@ -99,6 +99,7 @@ func (t *PatchDesignTool) Execute(ctx context.Context, args map[string]any) (too
 
 	versionNo, err := t.snapshotVersion(ctx, content)
 	if err != nil {
+		_ = t.sandbox.Write(designRel, raw)
 		return tools.Result{}, err
 	}
 
@@ -112,7 +113,8 @@ func (t *PatchDesignTool) Execute(ctx context.Context, args map[string]any) (too
 
 // snapshotVersion 快照 tokens.css 并登记 design 版本（SPEC-CMD-OVERVIEW-004）。
 func (t *PatchDesignTool) snapshotVersion(ctx context.Context, css string) (int, error) {
-	no, err := t.store.NextVersionNo(ctx, "design", "design")
+	target := model.DesignVersionTarget(t.projectID)
+	no, err := t.store.NextVersionNo(ctx, "design", target)
 	if err != nil {
 		return 0, err
 	}
@@ -121,7 +123,7 @@ func (t *PatchDesignTool) snapshotVersion(ctx context.Context, css string) (int,
 		return 0, err
 	}
 	v := model.Version{
-		ID: t.newID(), TargetType: "design", TargetID: "design", VersionNo: no,
+		ID: t.newID(), TargetType: "design", TargetID: target, VersionNo: no,
 		SnapshotPath: snap, RunID: t.runID, CreatedAt: t.clock(),
 	}
 	if err := t.store.CreateVersion(ctx, v); err != nil {

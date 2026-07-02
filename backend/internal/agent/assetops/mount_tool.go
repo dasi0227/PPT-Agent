@@ -124,6 +124,7 @@ func (t *MountAssetTool) Execute(ctx context.Context, args map[string]any) (tool
 	}
 	versionNo, err := t.snapshotSlide(ctx, projectSandbox, idx, nextHTML)
 	if err != nil {
+		_ = projectSandbox.Write(rel, currentRaw)
 		return tools.Result{}, err
 	}
 	t.mounted = true
@@ -240,7 +241,7 @@ func (t *MountAssetTool) renderFX(idx int, current string, a model.Asset, m asse
 }
 
 func (t *MountAssetTool) snapshotSlide(ctx context.Context, sandbox *tools.Sandbox, idx int, html string) (int, error) {
-	target := fmt.Sprintf("slide-%03d", idx)
+	target := model.SlideVersionTarget(t.projectID, idx)
 	no, err := t.store.NextVersionNo(ctx, "slide", target)
 	if err != nil {
 		return 0, err
@@ -256,6 +257,8 @@ func (t *MountAssetTool) snapshotSlide(ctx context.Context, sandbox *tools.Sandb
 		return 0, err
 	}
 	if err := t.store.SetSlideVersion(ctx, t.projectID, idx, no); err != nil {
+		_ = t.store.DeleteVersion(ctx, "slide", target, no)
+		_ = sandbox.Delete(snap)
 		return 0, err
 	}
 	return no, nil

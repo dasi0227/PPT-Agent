@@ -1,0 +1,145 @@
+package service
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+)
+
+// ThreadService 管理一个 project 下的对话线程与 history jsonl。
+type ThreadService struct {
+	store store.Store
+	clock func() int64
+	newID func() string
+}
+
+type CreateThreadParams struct {
+	Title string
+}
+
+func NewThreadService(s store.Store) *ThreadService {
+	return &ThreadService{store: s, clock: func() int64 { return time.Now().Unix() }, newID: uuid.NewString}
+}
+
+func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p CreateThreadParams) (model.Thread, error) {
+	proj, err := svc.store.GetProject(ctx, projectID)
+	if err != nil {
+		return model.Thread{}, err
+	}
+	id := svc.newID()
+	now := svc.clock()
+	th := model.Thread{
+		ID:          id,
+		ProjectID:   projectID,
+		Title:       strings.TrimSpace(p.Title),
+		HistoryPath: filepath.ToSlash(filepath.Join("threads", id+".jsonl")),
+		Status:      "active",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := writeEmptyHistory(proj.WorkDir, th.HistoryPath); err != nil {
+		return model.Thread{}, err
+	}
+	if err := svc.store.CreateThread(ctx, th); err != nil {
+		_ = removeHistory(proj.WorkDir, th.HistoryPath)
+		return model.Thread{}, err
+	}
+	return th, nil
+}
+
+func (svc *ThreadService) ListThreads(ctx context.Context, projectID string) ([]model.Thread, error) {
+	if _, err := svc.store.GetProject(ctx, projectID); err != nil {
+		return nil, err
+	}
+	return svc.store.ListThreads(ctx, projectID)
+}
+
+func (svc *ThreadService) GetThread(ctx context.Context, id string) (model.Thread, error) {
+	return svc.store.GetThread(ctx, id)
+}
+
+func (svc *ThreadService) DeleteThread(ctx context.Context, id string) error {
+	th, err := svc.store.GetThread(ctx, id)
+	if err != nil {
+		return err
+	}
+	proj, err := svc.store.GetProject(ctx, th.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err := svc.store.DeleteThread(ctx, id); err != nil {
+		return err
+	}
+	return removeHistory(proj.WorkDir, th.HistoryPath)
+}
+
+func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]any, error) {
+	th, err := svc.store.GetThread(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	proj, err := svc.store.GetProject(ctx, th.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	sb, err := tools.NewSandbox(proj.WorkDir)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := sb.Read(th.HistoryPath)
+	if os.IsNotExist(err) {
+		return []map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []map[string]any
+	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var msg map[string]any
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			return nil, err
+		}
+		out = append(out, msg)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []map[string]any{}
+	}
+	return out, nil
+}
+
+func writeEmptyHistory(workDir, rel string) error {
+	sb, err := tools.NewSandbox(workDir)
+	if err != nil {
+		return err
+	}
+	return sb.Write(rel, []byte{})
+}
+
+func removeHistory(workDir, rel string) error {
+	sb, err := tools.NewSandbox(workDir)
+	if err != nil {
+		return err
+	}
+	if err := sb.Delete(rel); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
