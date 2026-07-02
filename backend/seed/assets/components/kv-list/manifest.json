@@ -1,0 +1,14 @@
+{
+  "name": "kv-list",
+  "version": "1.0.0",
+  "kind": "component",
+  "source": "preset",
+  "description": "键值列表：成对的键与值",
+  "tags": ["kv", "list", "definition"],
+  "mount": { "target": ".slide-content", "position": "append" },
+  "params": {
+    "key": { "type": "string", "default": "键", "description": "键名" },
+    "value": { "type": "string", "default": "值", "description": "键值" }
+  },
+  "assets": { "html": "template.html", "css": "style.css" }
+}

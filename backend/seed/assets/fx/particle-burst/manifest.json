@@ -1,0 +1,11 @@
+{
+  "name": "particle-burst",
+  "version": "1.0.0",
+  "kind": "fx",
+  "source": "preset",
+  "description": "粒子迸发：中心向外扩散的粒子动效（Canvas）",
+  "tags": ["canvas", "particle", "burst"],
+  "mount": { "target": "[data-fx=\"particle-burst\"]", "position": "append" },
+  "cleanup": true,
+  "assets": { "js": "effect.js" }
+}

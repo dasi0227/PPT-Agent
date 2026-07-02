@@ -1,0 +1,10 @@
+{
+  "name": "table",
+  "version": "1.0.0",
+  "kind": "layout",
+  "source": "preset",
+  "description": "表格：数据表",
+  "tags": ["table", "data"],
+  "mount": { "position": "replace" },
+  "assets": { "html": "template.html", "css": "style.css" }
+}

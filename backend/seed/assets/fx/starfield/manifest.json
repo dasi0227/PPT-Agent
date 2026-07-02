@@ -1,0 +1,11 @@
+{
+  "name": "starfield",
+  "version": "1.0.0",
+  "kind": "fx",
+  "source": "preset",
+  "description": "星空：缓慢移动的星点背景（Canvas）",
+  "tags": ["canvas", "star", "background"],
+  "mount": { "target": "[data-fx=\"starfield\"]", "position": "append" },
+  "cleanup": true,
+  "assets": { "js": "effect.js" }
+}

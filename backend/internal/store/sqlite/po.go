@@ -1,6 +1,10 @@
 package sqlite
 
-import "github.com/dasi0227/PPT-Agent/backend/internal/model"
+import (
+	"encoding/json"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+)
 
 // 持久化对象（PO）：GORM tag 仅出现在本包（ARCH-BACKEND-006）。PO↔model 在 store 边界互转。
 
@@ -172,5 +176,47 @@ func versionToPO(m model.Version) versionPO {
 	return versionPO{
 		ID: m.ID, TargetType: m.TargetType, TargetID: m.TargetID, VersionNo: m.VersionNo,
 		SnapshotPath: m.SnapshotPath, RunID: runID, CreatedAt: m.CreatedAt,
+	}
+}
+
+type assetPO struct {
+	ID           string `gorm:"column:id;primaryKey"`
+	Name         string `gorm:"column:name"`
+	Kind         string `gorm:"column:kind"`
+	Version      string `gorm:"column:version"`
+	Source       string `gorm:"column:source"`
+	Description  string `gorm:"column:description"`
+	Tags         string `gorm:"column:tags"` // JSON 数组文本
+	ManifestPath string `gorm:"column:manifest_path"`
+	Dir          string `gorm:"column:dir"`
+	CreatedAt    int64  `gorm:"column:created_at"`
+	UpdatedAt    int64  `gorm:"column:updated_at"`
+}
+
+func (assetPO) TableName() string { return "assets" }
+
+func (a assetPO) toModel() model.Asset {
+	var tags []string
+	if a.Tags != "" {
+		_ = json.Unmarshal([]byte(a.Tags), &tags)
+	}
+	return model.Asset{
+		ID: a.ID, Name: a.Name, Kind: a.Kind, Version: a.Version, Source: a.Source,
+		Description: a.Description, Tags: tags, ManifestPath: a.ManifestPath, Dir: a.Dir,
+		CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt,
+	}
+}
+
+func assetToPO(m model.Asset) assetPO {
+	tags := "[]"
+	if len(m.Tags) > 0 {
+		if raw, err := json.Marshal(m.Tags); err == nil {
+			tags = string(raw)
+		}
+	}
+	return assetPO{
+		ID: m.ID, Name: m.Name, Kind: m.Kind, Version: m.Version, Source: m.Source,
+		Description: m.Description, Tags: tags, ManifestPath: m.ManifestPath, Dir: m.Dir,
+		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }

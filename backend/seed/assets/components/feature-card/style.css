@@ -1,0 +1,17 @@
+/* component: feature-card —— 特性卡片。 */
+.feature-card {
+  padding: var(--space-6);
+  background: var(--color-muted);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+.feature-card__title {
+  font-size: var(--text-h1);
+  color: var(--color-primary);
+  margin: 0 0 var(--space-4);
+}
+.feature-card__desc {
+  font-size: var(--text-body);
+  color: var(--color-fg);
+  margin: 0;
+}

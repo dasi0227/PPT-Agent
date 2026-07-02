@@ -1,0 +1,18 @@
+/* component: stat-badge —— 关键数字徽标。视觉全走 token（DS-COMP-002）。 */
+.stat-badge {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-muted);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+.stat-badge__value {
+  font-size: var(--text-h1);
+  color: var(--color-primary);
+}
+.stat-badge__label {
+  font-size: var(--text-caption);
+  color: var(--color-fg);
+}

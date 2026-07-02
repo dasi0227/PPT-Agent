@@ -1,0 +1,200 @@
+// Package generate 是真实的 slide 生成 agent（slide-json[] + 主题 → slide html）。
+// 复用 M1 的 run+harness+llm：父层做确定性 Go 编排（分页/进度/落状态/公共层），
+// 每页派发一个独立 harness.Loop 子代理（独立上下文，ARCH-HARNESS-005）。编辑不走子代理（那是 M4）。
+package generate
+
+import (
+	"context"
+	"fmt"
+	"path"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
+	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
+	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
+	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+)
+
+// Params 是构造一次生成 Run 所需的输入。
+type Params struct {
+	RunID     string
+	ProjectID string
+	WorkDir   string // project work_dir（sandbox 根）
+	Theme     string // 所选主题 id；空则回退 project.Theme→首个 preset
+	PageIndex *int   // 非空=单页重生成，仅动该页（AC-GEN-009）；空=整套生成
+}
+
+// Runner 用逐页子代理跑「slide-json[] + 主题 → slide html」，满足 run.Runner。
+type Runner struct {
+	client llm.Client
+	store  Store
+	params Params
+	clock  func() int64
+	newID  func() string
+}
+
+// NewRunner 构造生成 runner。clock/newID 可注入以便测试确定性；nil 用默认。
+func NewRunner(client llm.Client, store Store, p Params, clock func() int64, newID func() string) *Runner {
+	if clock == nil {
+		clock = func() int64 { return time.Now().Unix() }
+	}
+	if newID == nil {
+		newID = uuid.NewString
+	}
+	return &Runner{client: client, store: store, params: p, clock: clock, newID: newID}
+}
+
+func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, _ run.Prompter) harness.Outcome {
+	sandbox, err := tools.NewSandbox(r.params.WorkDir)
+	if err != nil {
+		return r.errOut(em, "INTERNAL", err.Error())
+	}
+
+	slides, err := r.store.ListSlides(ctx, r.params.ProjectID)
+	if err != nil {
+		return r.errOut(em, "INTERNAL", err.Error())
+	}
+	if len(slides) == 0 {
+		return r.errOut(em, "BAD_STATE", "无可生成的 slide（请先完成大纲）")
+	}
+
+	theme, err := r.resolveTheme(ctx)
+	if err != nil {
+		return r.errOut(em, "BAD_STATE", err.Error())
+	}
+
+	// 目标页集合：单页重生成只动该页，不碰公共层与别页（AC-GEN-009）。
+	single := r.params.PageIndex != nil
+	if single {
+		idx := *r.params.PageIndex
+		if idx < 0 || idx >= len(slides) {
+			return r.errOut(em, "BAD_REQUEST", fmt.Sprintf("页号越界：%d（共 %d 页）", idx, len(slides)))
+		}
+	} else {
+		// 整套生成：写公共层（tokens=所选主题拷贝 + base 基座）。单页重生成绝不动公共层。
+		if err := r.writeCommon(sandbox, theme); err != nil {
+			return r.errOut(em, "INTERNAL", err.Error())
+		}
+		_ = r.store.SetProjectStatus(ctx, r.params.ProjectID, "generating")
+	}
+
+	targets := slides
+	if single {
+		targets = slides[*r.params.PageIndex : *r.params.PageIndex+1]
+	}
+
+	total := len(targets)
+	for i, sl := range targets {
+		if ctx.Err() != nil {
+			return harness.Outcome{Status: harness.OutcomeCanceled, Code: harness.CodeCanceled, Message: "run canceled"}
+		}
+		// 逐页 progress（AC-GEN-006）：stage=page，current/total 为业务页进度。
+		em.Emit(model.EventProgress, harness.ProgressPayload{
+			Stage: "page", Current: i + 1, Total: total,
+			Message: fmt.Sprintf("生成第 %d 页（%s）", sl.Idx, sl.Layout),
+		})
+
+		sj, err := r.loadSlideJSON(sandbox, sl)
+		if err != nil {
+			return r.errOut(em, "INTERNAL", err.Error())
+		}
+
+		outcome := r.generatePage(ctx, em, cp, sandbox, sj)
+		if outcome.Status != harness.OutcomeFinished {
+			// 某页失败：整体失败（保留已落盘页）。
+			return outcome
+		}
+	}
+
+	if !single {
+		_ = r.store.SetProjectStatus(ctx, r.params.ProjectID, "ready")
+	}
+	return harness.Outcome{
+		Status:  harness.OutcomeFinished,
+		Summary: fmt.Sprintf("已生成 %d 页 slide html（主题 %s）", total, theme),
+	}
+}
+
+// generatePage 为单页派发一个独立 harness 子代理（独立上下文 ARCH-HARNESS-005）。
+func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, sj slidejson.SlideJSON) harness.Outcome {
+	writeTool := NewWriteSlideTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, sj.Idx, r.clock, r.newID)
+
+	pp := prompt.SlideParams{
+		Slide:     sj,
+		Theme:     r.params.Theme,
+		TokensRel: "../../common/tokens.css",
+		BaseRel:   "../../common/base.css",
+		Layouts:   slidejson.LayoutEnum(),
+	}
+
+	loop := harness.New(r.client, harness.Config{
+		RunID:        r.params.RunID,
+		Kind:         model.KindGenerate,
+		Scope:        model.ScopeCurrent,
+		Mode:         model.ModeNormal,
+		SystemPrompt: prompt.SlideSystem(pp),
+		Instruction:  prompt.SlideUser(pp),
+		Tools:        []tools.Tool{writeTool, NewValidateSlideTool(), tools.NewFinishTool()},
+	})
+	outcome := loop.Run(ctx, em, cp)
+	// 防守：LLM 声称完成但未真正写入该页 → 视为失败（避免空页混过 AC-GEN-001）。
+	if outcome.Status == harness.OutcomeFinished && !writeTool.Written() {
+		return harness.Outcome{
+			Status: harness.OutcomeLLMError, Code: "NO_OUTPUT",
+			Message: fmt.Sprintf("第 %d 页未产出 html", sj.Idx),
+		}
+	}
+	return outcome
+}
+
+// resolveTheme 解析所选主题 id：param → 首个 preset theme（DS-SEED-004 兜底）。
+func (r *Runner) resolveTheme(ctx context.Context) (string, error) {
+	if r.params.Theme != "" {
+		return r.params.Theme, nil
+	}
+	themes, err := r.store.ListAssets(ctx, "theme")
+	if err != nil {
+		return "", err
+	}
+	if len(themes) == 0 {
+		return "", fmt.Errorf("无可用主题资产（seed 未载入？）")
+	}
+	return themes[0].Name, nil
+}
+
+// writeCommon 写公共层：tokens.css=所选主题 tokens 的拷贝，base.css=seed 基座（DS-TOKENS-003）。
+func (r *Runner) writeCommon(sandbox *tools.Sandbox, theme string) error {
+	tokens, err := asset.ReadSeedFile(path.Join("assets", "themes", theme, "tokens.css"))
+	if err != nil {
+		return fmt.Errorf("读取主题 %s tokens 失败：%w", theme, err)
+	}
+	if err := sandbox.Write("common/tokens.css", tokens); err != nil {
+		return err
+	}
+	base, err := asset.ReadSeedFile(path.Join("common", "base.css"))
+	if err != nil {
+		return fmt.Errorf("读取 base.css 失败：%w", err)
+	}
+	return sandbox.Write("common/base.css", base)
+}
+
+// loadSlideJSON 从磁盘读取该页 slide.json（大纲阶段已落盘）。
+func (r *Runner) loadSlideJSON(sandbox *tools.Sandbox, sl model.Slide) (slidejson.SlideJSON, error) {
+	raw, err := sandbox.Read(fmt.Sprintf("slides/%03d/slide.json", sl.Idx))
+	if err != nil {
+		// 回退：磁盘无 slide.json 时用 store 元数据最小重建（layout/title 足够生成）。
+		return slidejson.SlideJSON{ID: sl.ID, Idx: sl.Idx, Layout: sl.Layout, Title: sl.Title}, nil
+	}
+	return slidejson.Parse(raw)
+}
+
+func (r *Runner) errOut(em harness.Emitter, code, msg string) harness.Outcome {
+	em.Emit(model.EventError, harness.ErrorPayload{Code: code, Message: msg})
+	return harness.Outcome{Status: harness.OutcomeLLMError, Code: code, Message: msg}
+}

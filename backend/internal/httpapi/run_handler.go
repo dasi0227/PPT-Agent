@@ -31,6 +31,7 @@ type createRunBody struct {
 	Brief       string `json:"brief"`
 	SlideCount  int    `json:"slide_count"`
 	Language    string `json:"language"`
+	Theme       string `json:"theme"`
 }
 
 type runResponse struct {
@@ -75,6 +76,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		Brief:       body.Brief,
 		SlideCount:  body.SlideCount,
 		Language:    body.Language,
+		Theme:       body.Theme,
 	})
 	if err != nil {
 		if errors.Is(err, run.ErrRunNotFound) {

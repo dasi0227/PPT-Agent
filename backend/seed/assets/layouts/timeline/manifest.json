@@ -1,0 +1,10 @@
+{
+  "name": "timeline",
+  "version": "1.0.0",
+  "kind": "layout",
+  "source": "preset",
+  "description": "时间线：时序事件",
+  "tags": ["timeline", "sequence"],
+  "mount": { "position": "replace" },
+  "assets": { "html": "template.html", "css": "style.css" }
+}

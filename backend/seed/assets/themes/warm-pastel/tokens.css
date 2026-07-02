@@ -1,0 +1,36 @@
+/* theme: warm-pastel —— 暖柔马卡龙：浅色、柔和高饱和。
+   提供 design-tokens.md 必需 token 全集（DS-THEMES-001）。 */
+:root {
+  /* 颜色 */
+  --color-bg: #fff7f0;
+  --color-fg: #4a3b45;
+  --color-primary: #ff8fab;
+  --color-accent: #7bd0c1;
+  --color-muted: #ffe8d6;
+  /* 字体（含中文回退，DS-THEMES-004） */
+  --font-sans: "Inter", "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  --font-serif: "Noto Serif SC", Georgia, serif;
+  --font-mono: "JetBrains Mono", monospace;
+  /* 字号 */
+  --text-title: 82px;
+  --text-h1: 58px;
+  --text-body: 32px;
+  --text-caption: 22px;
+  /* 间距 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 26px;
+  --space-8: 42px;
+  /* 圆角 */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  /* 阴影 */
+  --shadow-card: 0 2px 10px rgba(74, 59, 69, 0.12);
+  --shadow-pop: 0 12px 30px rgba(74, 59, 69, 0.18);
+  /* 舞台（16:9 基准，无单位数值） */
+  --stage-w: 1920;
+  --stage-h: 1080;
+}

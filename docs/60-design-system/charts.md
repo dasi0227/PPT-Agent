@@ -47,6 +47,8 @@ verifies: []
   - WHEN 重渲染
   - THEN 图表配色随主题 token 变化
 
+> **验证方式（后端阶段）**：后端无浏览器渲染，AC-CHARTS-001 以**静态校验**保证——图表产物（如 seed `svg-bar` 组件、chart 版式）配色 MUST 全部走 `var(--color-*)`，由 lint-slide 的「无硬编码主题色」检查项强制；再以「切主题 → tokens.css 取值变化」单测证明随主题变。真实浏览器换肤 e2e 于 M7 预览补齐。
+
 - **AC-CHARTS-005**（`DS-CHARTS-005`）
   - GIVEN 本表 type 集合与 schema enum
   - WHEN 对比

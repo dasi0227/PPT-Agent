@@ -33,6 +33,7 @@ var providerSet = wire.NewSet(
 	httpapi.NewRouter,
 	engineFromRouter,
 	provideHTTPServer,
+	provideSeed,
 	provideApp,
 )
 

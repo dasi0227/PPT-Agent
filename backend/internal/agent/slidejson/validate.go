@@ -57,6 +57,15 @@ func Validate(s SlideJSON) error {
 	return ValidateRaw(raw)
 }
 
+// Parse 反序列化一段 slide.json 文本为 SlideJSON（不做 schema 校验）。
+func Parse(raw []byte) (SlideJSON, error) {
+	var s SlideJSON
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return SlideJSON{}, fmt.Errorf("parse slide-json: %w", err)
+	}
+	return s, nil
+}
+
 // LayoutEnum 返回 schema 中 layout 的合法枚举值（供工具错误提示与 prompt 使用）。
 func LayoutEnum() []string {
 	return append([]string(nil), layoutEnum...)

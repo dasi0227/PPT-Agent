@@ -1,0 +1,11 @@
+{
+  "name": "counter-up",
+  "version": "1.0.0",
+  "kind": "fx",
+  "source": "preset",
+  "description": "数字滚动：数值从 0 递增到目标值",
+  "tags": ["js", "counter", "number"],
+  "mount": { "target": "[data-animate=\"counter-up\"]", "position": "wrap" },
+  "cleanup": true,
+  "assets": { "js": "effect.js" }
+}

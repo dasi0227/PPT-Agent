@@ -1,0 +1,10 @@
+{
+  "name": "code",
+  "version": "1.0.0",
+  "kind": "layout",
+  "source": "preset",
+  "description": "代码：高亮代码块",
+  "tags": ["code", "snippet"],
+  "mount": { "position": "replace" },
+  "assets": { "html": "template.html", "css": "style.css" }
+}

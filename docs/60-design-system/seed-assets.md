@@ -41,13 +41,17 @@ preset 与 user 资产同协议、同表，仅 `source` 不同。
 ## seed 存放（仓库内）
 
 ```
-backend/seed/assets/
-├── themes/<name>/{manifest.json, tokens.css}
-├── layouts/<name>/{manifest.json, template.html, style.css}
-├── components/<name>/{manifest.json, template.html, style.css}
-└── fx/<name>/{manifest.json, effect.js}
+backend/seed/
+├── common/base.css                                  # 主题无关公共基座（16:9 舞台 + 基础样式，只引用 token）
+└── assets/
+    ├── themes/<name>/{manifest.json, tokens.css}
+    ├── layouts/<name>/{manifest.json, template.html, style.css}
+    ├── components/<name>/{manifest.json, template.html, style.css}
+    └── fx/<name>/{manifest.json, effect.js}
 ```
-启动时由 `internal/asset` 的 seeding 逻辑载入 work_root 的 `_assets/`。运行时仓库与 seed 源**同构**（均按 kind 分 `themes`/`layouts`/`components`/`fx` 子目录），seeding 为 `seed/assets/<kind_dir>/<name>` → `_assets/<kind_dir>/<asset_id>` 的直接映射（见 [filesystem-layout](../30-data-model/filesystem-layout.md)）。
+启动时由 `internal/asset` 的 seeding 逻辑载入 work_root 的 `_assets/`。运行时仓库与 seed 源**同构**（均按 kind 分 `themes`/`layouts`/`components`/`fx` 子目录），seeding 为 `seed/assets/<kind_dir>/<name>` → `_assets/<kind_dir>/<asset_id>` 的直接映射（见 [filesystem-layout](../30-data-model/filesystem-layout.md)）。`seed/common/` 一并载入 `_assets/common/` 作为公共基座源。
+
+> **公共样式层生成**：整套生成时，`common/base.css` 取自 seed 基座（主题无关）；`common/tokens.css` 为**所选 theme 的 tokens.css 拷贝**——换肤即换 tokens.css 内容来源（[DS-TOKENS-003](design-tokens.md)），base 结构不动。
 
 ## 验收标准（Given-When-Then）
 

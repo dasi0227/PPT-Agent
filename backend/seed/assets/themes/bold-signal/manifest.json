@@ -1,0 +1,9 @@
+{
+  "name": "bold-signal",
+  "version": "1.0.0",
+  "kind": "theme",
+  "source": "preset",
+  "description": "高对比信号：强对比单一强调色，适合路演与发布冲击力",
+  "tags": ["dark", "high-contrast", "keynote"],
+  "assets": { "tokens": "tokens.css" }
+}

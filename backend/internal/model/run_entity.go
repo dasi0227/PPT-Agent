@@ -29,4 +29,6 @@ type CreateRunParams struct {
 	Brief      string
 	SlideCount int
 	Language   string
+	// slide 生成入参（kind=generate）：所选主题 id；空则回退 project.Theme→首个 preset。
+	Theme string
 }

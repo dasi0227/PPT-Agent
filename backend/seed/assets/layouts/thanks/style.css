@@ -1,0 +1,10 @@
+/* layout: thanks —— 致谢结束页。 */
+.thanks-content {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-4);
+}
+.thanks-title {
+  font-size: var(--text-title);
+}

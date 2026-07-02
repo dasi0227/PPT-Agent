@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
 func provideHTTPServer(cfg *config.Config, engine *gin.Engine) *http.Server {
@@ -19,8 +22,21 @@ func provideHTTPServer(cfg *config.Config, engine *gin.Engine) *http.Server {
 	}
 }
 
-func provideApp(server *http.Server, log *zap.Logger) *App {
+func provideApp(server *http.Server, log *zap.Logger, _ seedDone) *App {
 	return &App{server: server, log: log}
+}
+
+// seedDone 是冷启动 seeding 完成的哨兵：provideApp 依赖它，保证服务启动前 seed 就绪（DS-SEED-001）。
+type seedDone struct{}
+
+// provideSeed 首启把 seed 资产载入 work_root 的 _assets/ 并 upsert SQLite（幂等）。
+func provideSeed(cfg *config.Config, s store.Store, log *zap.Logger) (seedDone, error) {
+	seeder := asset.NewSeeder(s, cfg.WorkRoot, nil, nil)
+	if err := seeder.Seed(context.Background()); err != nil {
+		return seedDone{}, err
+	}
+	log.Info("seed assets loaded", zap.String("work_root", cfg.WorkRoot))
+	return seedDone{}, nil
 }
 
 func engineFromRouter(r *httpapi.Router) *gin.Engine { return r.Engine() }

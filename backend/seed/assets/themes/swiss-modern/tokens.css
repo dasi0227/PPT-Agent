@@ -1,0 +1,36 @@
+/* theme: swiss-modern —— 瑞士现代：极简、网格、无衬线、浅色。
+   提供 design-tokens.md 必需 token 全集（DS-THEMES-001）。 */
+:root {
+  /* 颜色 */
+  --color-bg: #ffffff;
+  --color-fg: #111418;
+  --color-primary: #d0021b;
+  --color-accent: #1c1c1c;
+  --color-muted: #f2f3f5;
+  /* 字体（含中文回退，DS-THEMES-004） */
+  --font-sans: "Inter", "Helvetica Neue", "Noto Sans SC", system-ui, sans-serif;
+  --font-serif: "Noto Serif SC", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+  /* 字号 */
+  --text-title: 84px;
+  --text-h1: 60px;
+  --text-body: 32px;
+  --text-caption: 22px;
+  /* 间距 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 40px;
+  /* 圆角 */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  /* 阴影 */
+  --shadow-card: 0 1px 3px rgba(17, 20, 24, 0.12);
+  --shadow-pop: 0 8px 24px rgba(17, 20, 24, 0.18);
+  /* 舞台（16:9 基准，无单位数值） */
+  --stage-w: 1920;
+  --stage-h: 1080;
+}

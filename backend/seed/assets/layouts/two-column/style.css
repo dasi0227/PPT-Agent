@@ -1,0 +1,14 @@
+/* layout: two-column —— 两栏。 */
+.two-column-grid {
+  margin-top: var(--space-8);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-8);
+  flex: 1;
+}
+.two-column-cell {
+  background: var(--color-muted);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  font-size: var(--text-body);
+}

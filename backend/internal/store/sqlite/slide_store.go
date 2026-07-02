@@ -62,7 +62,8 @@ func (s *Store) NextVersionNo(ctx context.Context, targetType, targetID string) 
 
 // CreateVersion 登记一条版本快照记录（DATA-VERSION-003）。
 func (s *Store) CreateVersion(ctx context.Context, v model.Version) error {
-	return s.db.WithContext(ctx).Create(versionToPO(v)).Error
+	po := versionToPO(v)
+	return s.db.WithContext(ctx).Create(&po).Error
 }
 
 // ListVersions 返回某目标的全部版本（按 version_no 升序）。

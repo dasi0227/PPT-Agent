@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/demo"
+	"github.com/dasi0227/PPT-Agent/backend/internal/agent/generate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/outline"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -36,6 +37,19 @@ func NewRunService(s store.Store, engine *run.Engine, client llm.Client) *RunSer
 				Brief:      p.Brief,
 				SlideCount: p.SlideCount,
 				Language:   p.Language,
+			}, nil, nil)
+		}
+		if r.Kind == model.KindGenerate {
+			theme := p.Theme
+			if theme == "" {
+				theme = proj.Theme // 回退 project 主题；仍空则由 generate.Runner 回退首个 preset
+			}
+			return generate.NewRunner(client, s, generate.Params{
+				RunID:     r.ID,
+				ProjectID: proj.ID,
+				WorkDir:   proj.WorkDir,
+				Theme:     theme,
+				PageIndex: p.PageIndex,
 			}, nil, nil)
 		}
 		return demo.New(client, r.ID, p.Scope, p.Mode, p.Instruction)

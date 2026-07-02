@@ -1,0 +1,11 @@
+/* layout: code —— 代码块。 */
+.code-block {
+  margin-top: var(--space-8);
+  background: var(--color-muted);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  font-family: var(--font-mono);
+  font-size: var(--text-body);
+  color: var(--color-fg);
+  overflow: auto;
+}

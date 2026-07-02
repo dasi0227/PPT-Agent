@@ -1,0 +1,10 @@
+{
+  "name": "comparison",
+  "version": "1.0.0",
+  "kind": "layout",
+  "source": "preset",
+  "description": "对比：A vs B",
+  "tags": ["comparison", "versus"],
+  "mount": { "position": "replace" },
+  "assets": { "html": "template.html", "css": "style.css" }
+}
