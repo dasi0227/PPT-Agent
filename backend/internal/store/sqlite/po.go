@@ -112,3 +112,65 @@ func eventToPO(m model.Event) runEventPO {
 		Payload: m.Payload, CreatedAt: m.CreatedAt,
 	}
 }
+
+type slidePO struct {
+	ID             string `gorm:"column:id;primaryKey"`
+	ProjectID      string `gorm:"column:project_id"`
+	Idx            int    `gorm:"column:idx"`
+	Layout         string `gorm:"column:layout"`
+	Title          string `gorm:"column:title"`
+	JSONPath       string `gorm:"column:json_path"`
+	HTMLPath       string `gorm:"column:html_path"`
+	CurrentVersion int    `gorm:"column:current_version"`
+	LastExportAt   *int64 `gorm:"column:last_export_at"`
+}
+
+func (slidePO) TableName() string { return "slides" }
+
+func (s slidePO) toModel() model.Slide {
+	return model.Slide{
+		ID: s.ID, ProjectID: s.ProjectID, Idx: s.Idx, Layout: s.Layout, Title: s.Title,
+		JSONPath: s.JSONPath, HTMLPath: s.HTMLPath, CurrentVersion: s.CurrentVersion, LastExportAt: s.LastExportAt,
+	}
+}
+
+func slideToPO(m model.Slide) slidePO {
+	return slidePO{
+		ID: m.ID, ProjectID: m.ProjectID, Idx: m.Idx, Layout: m.Layout, Title: m.Title,
+		JSONPath: m.JSONPath, HTMLPath: m.HTMLPath, CurrentVersion: m.CurrentVersion, LastExportAt: m.LastExportAt,
+	}
+}
+
+type versionPO struct {
+	ID           string  `gorm:"column:id;primaryKey"`
+	TargetType   string  `gorm:"column:target_type"`
+	TargetID     string  `gorm:"column:target_id"`
+	VersionNo    int     `gorm:"column:version_no"`
+	SnapshotPath string  `gorm:"column:snapshot_path"`
+	RunID        *string `gorm:"column:run_id"`
+	CreatedAt    int64   `gorm:"column:created_at"`
+}
+
+func (versionPO) TableName() string { return "versions" }
+
+func (v versionPO) toModel() model.Version {
+	runID := ""
+	if v.RunID != nil {
+		runID = *v.RunID
+	}
+	return model.Version{
+		ID: v.ID, TargetType: v.TargetType, TargetID: v.TargetID, VersionNo: v.VersionNo,
+		SnapshotPath: v.SnapshotPath, RunID: runID, CreatedAt: v.CreatedAt,
+	}
+}
+
+func versionToPO(m model.Version) versionPO {
+	var runID *string
+	if m.RunID != "" {
+		runID = &m.RunID
+	}
+	return versionPO{
+		ID: m.ID, TargetType: m.TargetType, TargetID: m.TargetID, VersionNo: m.VersionNo,
+		SnapshotPath: m.SnapshotPath, RunID: runID, CreatedAt: m.CreatedAt,
+	}
+}

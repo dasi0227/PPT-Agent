@@ -22,4 +22,11 @@ type Store interface {
 	SetRunStatus(ctx context.Context, id string, status model.RunStatus) error
 	AppendEvent(ctx context.Context, e model.Event) error
 	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
+
+	SetProjectStatus(ctx context.Context, id, status string) error
+	ReplaceSlides(ctx context.Context, projectID string, slides []model.Slide) error
+	ListSlides(ctx context.Context, projectID string) ([]model.Slide, error)
+	NextVersionNo(ctx context.Context, targetType, targetID string) (int, error)
+	CreateVersion(ctx context.Context, v model.Version) error
+	ListVersions(ctx context.Context, targetType, targetID string) ([]model.Version, error)
 }

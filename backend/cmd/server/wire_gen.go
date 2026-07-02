@@ -44,7 +44,7 @@ func initApp() (*App, func(), error) {
 	lockManager := provideLockManager()
 	engine := provideEngine(store, lockManager, zapLogger)
 	client := provideLLMClient(configConfig)
-	runService := service.NewRunService(store, engine, client, zapLogger)
+	runService := service.NewRunService(store, engine, client)
 	runHandler := httpapi.NewRunHandler(runService)
 	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler)
 	ginEngine := engineFromRouter(router)

@@ -28,6 +28,9 @@ type createRunBody struct {
 	Mode        string `json:"mode"`
 	Command     string `json:"command"`
 	Instruction string `json:"instruction"`
+	Brief       string `json:"brief"`
+	SlideCount  int    `json:"slide_count"`
+	Language    string `json:"language"`
 }
 
 type runResponse struct {
@@ -69,6 +72,9 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		Mode:        mode,
 		Command:     body.Command,
 		Instruction: body.Instruction,
+		Brief:       body.Brief,
+		SlideCount:  body.SlideCount,
+		Language:    body.Language,
 	})
 	if err != nil {
 		if errors.Is(err, run.ErrRunNotFound) {

@@ -25,4 +25,8 @@ type CreateRunParams struct {
 	Mode        Mode
 	Command     string
 	Instruction string
+	// 大纲生成入参（kind=outline）：主题在 Instruction，其余可选。
+	Brief      string
+	SlideCount int
+	Language   string
 }

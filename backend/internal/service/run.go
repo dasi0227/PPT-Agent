@@ -4,30 +4,40 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/demo"
+	"github.com/dasi0227/PPT-Agent/backend/internal/agent/outline"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
-// RunnerFactory 按 Run 元数据与入参构造一次执行的 runner。
-// 抽出工厂便于测试注入替身，也为 M2+ 按 kind/scope 选择真实 agent 预留扩展点。
-type RunnerFactory func(r model.Run, p model.CreateRunParams) run.Runner
+// RunnerFactory 按 Run 元数据、入参与所属 project 构造一次执行的 runner。
+// 抽出工厂便于测试注入替身，也按 kind 选择真实 agent（M2：kind=outline → outline.Runner）。
+type RunnerFactory func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner
 
 // RunService 编排一次 Agent 执行：解析 thread→project 归属、构造 runner、委派 engine。
-// M1 使用 demo runner；真实业务 agent 在 M2+ 接入。
 type RunService struct {
 	store   store.Store
 	engine  *run.Engine
 	factory RunnerFactory
 }
 
-// NewRunService 用默认 demo runner 工厂装配（生产路径）。
-func NewRunService(s store.Store, engine *run.Engine, client llm.Client, log *zap.Logger) *RunService {
-	factory := func(r model.Run, p model.CreateRunParams) run.Runner {
+// NewRunService 用默认工厂装配（生产路径）：kind=outline 走 outline agent，其余用 demo。
+func NewRunService(s store.Store, engine *run.Engine, client llm.Client) *RunService {
+	factory := func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
+		if r.Kind == model.KindOutline {
+			return outline.NewRunner(client, s, outline.Params{
+				RunID:      r.ID,
+				ProjectID:  proj.ID,
+				WorkDir:    proj.WorkDir,
+				Topic:      p.Instruction,
+				Brief:      p.Brief,
+				SlideCount: p.SlideCount,
+				Language:   p.Language,
+			}, nil, nil)
+		}
 		return demo.New(client, r.ID, p.Scope, p.Mode, p.Instruction)
 	}
 	return &RunService{store: s, engine: engine, factory: factory}
@@ -44,6 +54,10 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	if err != nil {
 		return model.Run{}, err
 	}
+	proj, err := svc.store.GetProject(ctx, th.ProjectID)
+	if err != nil {
+		return model.Run{}, err
+	}
 
 	r := model.Run{
 		ID:        uuid.NewString(),
@@ -56,7 +70,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		Command:   p.Command,
 	}
 
-	runner := svc.factory(r, p)
+	runner := svc.factory(r, p, proj)
 	return svc.engine.Start(ctx, r, runner)
 }
 

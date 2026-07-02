@@ -65,7 +65,7 @@ func setupServer(t *testing.T, client llm.Client, runner run.Runner) (*httptest.
 
 	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
 	// 用注入的 runner 替换默认 demo runner，便于端到端断言。
-	runSvc := service.NewRunServiceWithFactory(st, engine, func(r model.Run, p model.CreateRunParams) run.Runner {
+	runSvc := service.NewRunServiceWithFactory(st, engine, func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
 		return runner
 	})
 	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc))
