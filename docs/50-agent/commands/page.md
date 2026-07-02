@@ -26,10 +26,12 @@ verifies: []
 | ID | 需求 | 优先级 |
 |---|---|---|
 | `SPEC-CMD-PAGE-001` | `/page x` MUST 将 Run 设为 `scope=page, page_index=x` | P0 |
-| `SPEC-CMD-PAGE-002` | 编辑 MUST 只修改第 x 页文件，不动其它页与公共样式层 | P0 |
+| `SPEC-CMD-PAGE-002` | 编辑 MUST 只修改第 x 页文件，不动其它页与公共样式层；单页写工具（`patch_slide`/`mount_asset`）均须锁定该页 | P0 |
 | `SPEC-CMD-PAGE-003` | x 越界 MUST 报错（`BAD_REQUEST`），不创建破坏性 Run | P0 |
 | `SPEC-CMD-PAGE-004` | 页号基数（0/1 基）MUST 在前端展示与后端存储间一致转换（存储 0 基） | P0 |
 | `SPEC-CMD-PAGE-005` | 仅 `/page x`（无指令文本）MUST 仅跳转预览，不触发编辑 Run | P1 |
+
+> **M6 资产移植**：`/page` 可通过 `search_assets` + `mount_asset` 把 layout/component/fx 移植到第 x 页；`mount_asset` 与 `patch_slide` 一样锁定 `page_index=x`，写入前必须通过 html-output-spec，成功后产该页版本。fx 的脚本路径依赖 M7 预览静态服务暴露 `_assets/`。
 
 ## 验收标准（Given-When-Then）
 

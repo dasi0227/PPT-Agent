@@ -147,6 +147,11 @@ curl -s -X PATCH http://127.0.0.1:8787/api/v1/assets/{id} \
 
 # 删除
 curl -s -X DELETE http://127.0.0.1:8787/api/v1/assets/{id}
+
+# 回滚资产到指定版本（回滚本身会产生新版本）
+curl -s -X POST http://127.0.0.1:8787/api/v1/assets/{id}/rollback \
+  -H 'Content-Type: application/json' \
+  -d '{"version_no":0}'
 ```
 
 ## 导出（backlog）

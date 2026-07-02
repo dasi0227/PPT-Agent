@@ -30,9 +30,11 @@ verifies: []
 | ID | 需求 | 优先级 |
 |---|---|---|
 | `SPEC-CMD-CURRENT-001` | 无 scope 指令时 MUST 默认 `/current`，page_index = 前端上报的当前预览页 | P0 |
-| `SPEC-CMD-CURRENT-002` | 编辑 MUST 只改当前页，隔离同 `/page`（工具集只注册 `patch_slide(当前页)`） | P0 |
+| `SPEC-CMD-CURRENT-002` | 编辑 MUST 只改当前页，隔离同 `/page`（单页写工具如 `patch_slide`/`mount_asset` 均锁定当前页） | P0 |
 | `SPEC-CMD-CURRENT-003` | 前端 MUST 在发起 Run 时上报当前页号；缺失 MUST 报错或追问 | P0 |
 | `SPEC-CMD-CURRENT-004` | 当前页号 MUST 与 `/page x` 走同一存储基数（0 基） | P0 |
+
+> **M6 资产移植**：`/current` 可通过 `search_assets` + `mount_asset` 把 layout/component/fx 移植到当前页；`mount_asset` 与 `patch_slide` 一样锁定前端上报的当前页，写入前必须通过 html-output-spec，成功后产该页版本。fx 的脚本路径依赖 M7 预览静态服务暴露 `_assets/`。
 
 ## 验收标准（Given-When-Then）
 

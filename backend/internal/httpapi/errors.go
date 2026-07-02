@@ -22,6 +22,9 @@ func ErrBadRequest(msg string) *APIError {
 }
 func ErrNotFound(msg string) *APIError { return &APIError{http.StatusNotFound, "NOT_FOUND", msg, nil} }
 func ErrConflict(msg string) *APIError { return &APIError{http.StatusConflict, "CONFLICT", msg, nil} }
+func ErrValidationFailed(msg string) *APIError {
+	return &APIError{http.StatusUnprocessableEntity, "VALIDATION_FAILED", msg, nil}
+}
 func ErrInternal(msg string) *APIError {
 	return &APIError{http.StatusInternalServerError, "INTERNAL", msg, nil}
 }

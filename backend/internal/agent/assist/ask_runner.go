@@ -17,6 +17,7 @@ type AskParams struct {
 	RunID       string
 	ProjectID   string
 	WorkDir     string
+	WorkRoot    string
 	Scope       model.Scope
 	PageIndex   int
 	Instruction string
@@ -81,6 +82,7 @@ func (r *AskRunner) Run(ctx context.Context, em harness.Emitter, cp harness.Chec
 		RunID:       r.params.RunID,
 		ProjectID:   r.params.ProjectID,
 		WorkDir:     r.params.WorkDir,
+		WorkRoot:    r.params.WorkRoot,
 		Scope:       r.params.Scope,
 		PageIndex:   r.params.PageIndex,
 		Instruction: instruction,

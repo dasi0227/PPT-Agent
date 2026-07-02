@@ -43,7 +43,8 @@ func (r harnessRunner) Run(ctx context.Context, em harness.Emitter, cp harness.C
 
 func setupServer(t *testing.T, client llm.Client, runner run.Runner) (*httptest.Server, string) {
 	t.Helper()
-	cfg := &config.Config{DBPath: filepath.Join(t.TempDir(), "e2e.db")}
+	root := t.TempDir()
+	cfg := &config.Config{DBPath: filepath.Join(root, "e2e.db"), WorkRoot: root}
 	db, cleanup, err := sqlitestore.Open(cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -68,7 +69,7 @@ func setupServer(t *testing.T, client llm.Client, runner run.Runner) (*httptest.
 	runSvc := service.NewRunServiceWithFactory(st, engine, func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
 		return runner
 	})
-	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc), httpapi.NewSlideHandler(service.NewSlideService(st)))
+	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc), httpapi.NewSlideHandler(service.NewSlideService(st)), httpapi.NewAssetHandler(service.NewAssetService(st, root)))
 
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)

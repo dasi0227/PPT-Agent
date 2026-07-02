@@ -29,7 +29,7 @@ verifies: []
 | 线程（对话） | `GET/POST /projects/{id}/threads`，`GET/DELETE /threads/{id}`，`GET /threads/{id}/history` |
 | Slide | `GET /projects/{id}/slides`，`GET /slides/{id}`，`GET /slides/{id}/versions`，`POST /slides/{id}/rollback` |
 | Run | `POST /threads/{id}/runs`，`GET /runs/{id}/events`(SSE)，`POST /runs/{id}/input`，`DELETE /runs/{id}` |
-| 资产（个人仓库） | `GET/POST /assets`，`GET/PATCH/DELETE /assets/{id}` |
+| 资产（个人仓库） | `GET/POST /assets`，`GET/PATCH/DELETE /assets/{id}`，`POST /assets/{id}/rollback` |
 | 导出（backlog） | `POST /projects/{id}/export`（`x-status: backlog`） |
 
 ## 错误码表

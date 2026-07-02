@@ -56,6 +56,10 @@ func provideLockManager() *run.LockManager { return run.NewLockManager() }
 // provideWorkRoot 从配置暴露全局 work_root（供 /repo 资产操作）。
 func provideWorkRoot(cfg *config.Config) service.WorkRoot { return service.WorkRoot(cfg.WorkRoot) }
 
+func provideAssetService(s store.Store, workRoot service.WorkRoot) *service.AssetService {
+	return service.NewAssetService(s, string(workRoot))
+}
+
 func provideEngine(rs run.Store, locks *run.LockManager, log *zap.Logger) *run.Engine {
 	return run.NewEngine(rs, locks, log)
 }

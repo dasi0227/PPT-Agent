@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/agent/assetops"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
@@ -23,6 +24,7 @@ type Params struct {
 	RunID       string
 	ProjectID   string
 	WorkDir     string      // project work_dir（sandbox 根）
+	WorkRoot    string      // 全局 work_root（_assets 所在）
 	Scope       model.Scope // current | page（归一为锁定某页）
 	PageIndex   int         // 锁定编辑的页序（0 基；current 由上报页填充，越界校验在 service）
 	Instruction string      // 用户自然语言编辑指令
@@ -75,7 +77,9 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 	// 越权工具（改别页/公共层）根本不在候选集中，机制级隔离。
 	patch := NewPatchSlideTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, idx, r.clock, r.newID)
 	toolset := []tools.Tool{
+		assetops.NewSearchAssetsTool(r.store),
 		NewReadSlideTool(sandbox, idx),
+		assetops.NewMountAssetTool(r.store, r.params.WorkDir, r.params.WorkRoot, r.params.ProjectID, r.params.RunID, &idx, r.clock, r.newID),
 		patch,
 		NewValidateSlideTool(),
 		tools.NewFinishTool(),

@@ -32,7 +32,9 @@ verifies: []
 | `SPEC-CMD-OVERVIEW-005` | 换主题 MUST 经 `apply_theme`，写入公共层必需 token 全集，不残缺 | P0 |
 | `SPEC-CMD-OVERVIEW-006` | 跨页 patch MUST 每页各自跑 `validate_slide`，任一页失败不影响其它页落盘 | P1 |
 
-> **M5 实现偏差（已记录）**：M5 落 `patch_design`（公共层优先）+ `fanout_page_patch`（跨页逐页子代理，复用 `edit.PatchSlideTool` 锁定单页，每页各自版本、失败隔离）。`apply_theme`（`SPEC-CMD-OVERVIEW-005`）依赖 M6 资产系统且其 AC 不在 M5 verifies，**留 M6**。M5 `/overview` 注册的工具集为 `read_design`/`patch_design`/`fanout_page_patch`/`finish`。实现见 `internal/agent/overview`。
+> **实现状态（M5→M6）**：M5 落 `patch_design`（公共层优先）+ `fanout_page_patch`（跨页逐页子代理，复用 `edit.PatchSlideTool` 锁定单页，每页各自版本、失败隔离）。M6 已补齐 `apply_theme`（读 theme 资产 token 全集写公共层并产 `design` 版本），并接入 `search_assets`/`mount_asset` 支持在 overview 下按 `slide_idx` 移植 layout/component/fx。M6 后 `/overview` 注册工具集为 `search_assets`/`read_design`/`apply_theme`/`patch_design`/`mount_asset`/`fanout_page_patch`/`finish`。实现见 `internal/agent/overview` 与 `internal/agent/assetops`。
+
+> **FX 预览依赖（M6）**：`mount_asset` 挂载 fx 时写入指向 `_assets/.../effect.js` 的 module script 相对路径；M7 预览/静态服务必须保证 project work_dir 与全局 `_assets/` 均可被 iframe 访问，或在 M7 改成统一静态 URL。
 
 ## 三种典型操作的落点
 

@@ -38,6 +38,12 @@ func (m *memStore) SetSlideVersion(_ context.Context, _ string, idx, no int) err
 	m.slideVer[idx] = no
 	return nil
 }
+func (m *memStore) ListAssets(_ context.Context, _ string) ([]model.Asset, error) {
+	return nil, nil
+}
+func (m *memStore) GetAsset(_ context.Context, _ string) (model.Asset, error) {
+	return model.Asset{}, os.ErrNotExist
+}
 
 // scriptClient 按调用序返回预设 tool call；用于驱动主循环/子代理。
 type scriptClient struct {

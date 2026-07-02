@@ -34,7 +34,7 @@ preset 与 user 资产同协议、同表，仅 `source` 不同。
 |---|---|
 | `DS-SEED-001` | 首次启动 MUST 把 seed 资产载入个人仓库（`source=preset`），写入 `_assets/` 与 SQLite |
 | `DS-SEED-002` | seed 资产 MUST 通过 asset-manifest schema 校验后才载入（与 user 资产同校验） |
-| `DS-SEED-003` | 用户 MAY 修改/删除 preset 资产；修改后 `source` 仍记 preset 但版本递增（可回滚到出厂态） |
+| `DS-SEED-003` | 用户 MAY 本地修改 preset 资产；修改后 `source` 仍记 preset 但版本递增，首次修改前保留 factory baseline，可回滚到出厂态；preset 禁止删除，删除仅允许 user 资产 |
 | `DS-SEED-004` | 生成时若某 kind 无可用资产，MUST 有兜底：layout 回退 `bullets`，theme 回退首个 preset |
 | `DS-SEED-005` | seed 内容版本随产品发布管理；升级产品 SHOULD 幂等更新未被用户改动的 preset |
 

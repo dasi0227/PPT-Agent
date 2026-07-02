@@ -16,16 +16,17 @@ type Router struct {
 	health *HealthHandler
 	run    *RunHandler
 	slide  *SlideHandler
+	asset  *AssetHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, slideH *SlideHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, slideH *SlideHandler, assetH *AssetHandler) *Router {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, slide: slideH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, slide: slideH, asset: assetH}
 	r.register()
 	return r
 }
@@ -44,6 +45,13 @@ func (r *Router) register() {
 	v1.GET("/slides/:id", r.slide.GetSlide)
 	v1.GET("/slides/:id/versions", r.slide.ListVersions)
 	v1.POST("/slides/:id/rollback", r.slide.Rollback)
+
+	v1.GET("/assets", r.asset.List)
+	v1.POST("/assets", r.asset.Create)
+	v1.GET("/assets/:id", r.asset.Get)
+	v1.PATCH("/assets/:id", r.asset.Patch)
+	v1.DELETE("/assets/:id", r.asset.Delete)
+	v1.POST("/assets/:id/rollback", r.asset.Rollback)
 }
 
 // Engine 暴露底层 gin 引擎供 server 启动使用。

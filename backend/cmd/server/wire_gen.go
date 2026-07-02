@@ -49,7 +49,9 @@ func initApp() (*App, func(), error) {
 	runHandler := httpapi.NewRunHandler(runService)
 	slideService := service.NewSlideService(store)
 	slideHandler := httpapi.NewSlideHandler(slideService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, slideHandler)
+	assetService := provideAssetService(store, workRoot)
+	assetHandler := httpapi.NewAssetHandler(assetService)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, slideHandler, assetHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	mainSeedDone, err := provideSeed(configConfig, store, zapLogger)
@@ -71,7 +73,9 @@ func initApp() (*App, func(), error) {
 var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMClient,
 	provideLockManager,
 	provideWorkRoot,
+	provideAssetService,
 	provideEngine, service.NewHealthService, service.NewRunService, service.NewSlideService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
+	httpapi.NewAssetHandler,
 	provideHTTPServer,
 	provideSeed,
 	provideApp,

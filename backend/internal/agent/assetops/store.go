@@ -1,4 +1,4 @@
-package overview
+package assetops
 
 import (
 	"context"
@@ -6,8 +6,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-// Store 是 overview 落库所需的最小持久化能力（消费方定义接口，避免反向依赖）。
-// 方法集与 edit.Store 一致，使跨页子代理可复用 edit.PatchSlideTool。
+// Store 是跨 scope 资产工具所需的最小持久化能力。
 type Store interface {
 	ListAssets(ctx context.Context, kind string) ([]model.Asset, error)
 	GetAsset(ctx context.Context, id string) (model.Asset, error)

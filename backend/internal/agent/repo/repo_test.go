@@ -11,6 +11,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/edit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/overview"
+	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -43,6 +44,73 @@ func (m *memStore) GetAsset(_ context.Context, id string) (model.Asset, error) {
 }
 func (m *memStore) UpsertAsset(_ context.Context, a model.Asset) error {
 	m.assets[a.ID] = a
+	return nil
+}
+
+type memAssetManager struct {
+	store   *memStore
+	sandbox *tools.Sandbox
+}
+
+func (m memAssetManager) CreateAsset(_ context.Context, manifest asset.Manifest, _ map[string]string) (model.Asset, error) {
+	a := model.Asset{
+		ID: "new-" + manifest.Name, Name: manifest.Name, Kind: string(manifest.Kind), Source: string(asset.SourceUser),
+		Description: manifest.Description, Tags: manifest.Tags,
+		ManifestPath: "_assets/components/" + manifest.Name + "/manifest.json",
+		Dir:          "_assets/components/" + manifest.Name,
+	}
+	m.store.assets[a.ID] = a
+	return a, nil
+}
+
+func (m memAssetManager) PatchAsset(ctx context.Context, id, file string, edits []AssetEdit) (model.Asset, error) {
+	a, err := m.store.GetAsset(ctx, id)
+	if err != nil {
+		return model.Asset{}, err
+	}
+	manifestRaw, err := m.sandbox.Read(a.ManifestPath)
+	if err != nil {
+		return model.Asset{}, err
+	}
+	manifest, err := asset.Parse(manifestRaw)
+	if err != nil {
+		return model.Asset{}, err
+	}
+	rel := manifest.Assets.CSS
+	if file == "html" {
+		rel = manifest.Assets.HTML
+	}
+	raw, err := m.sandbox.Read(a.Dir + "/" + rel)
+	if err != nil {
+		return model.Asset{}, err
+	}
+	content := string(raw)
+	for i, e := range edits {
+		n := strings.Count(content, e.OldText)
+		if n == 0 {
+			return model.Asset{}, os.ErrNotExist
+		}
+		if n > 1 {
+			return model.Asset{}, os.ErrInvalid
+		}
+		content = strings.Replace(content, e.OldText, e.NewText, 1)
+		_ = i
+	}
+	if err := m.sandbox.Write(a.Dir+"/"+rel, []byte(content)); err != nil {
+		return model.Asset{}, err
+	}
+	return a, nil
+}
+
+func (m memAssetManager) DeleteAsset(_ context.Context, id string) error {
+	a, ok := m.store.assets[id]
+	if !ok {
+		return os.ErrNotExist
+	}
+	if a.Source == string(asset.SourcePreset) {
+		return os.ErrPermission
+	}
+	delete(m.store.assets, id)
 	return nil
 }
 
@@ -140,10 +208,13 @@ func TestRepoScopeAssetOnly(t *testing.T) {
 	root, store := setupRepo(t)
 	// 故意把页/公共层写工具也塞进候选，验证 Gate 机制级排除它们。
 	sb := mustSandbox(t, root)
+	manager := memAssetManager{store: store, sandbox: sb}
 	all := []tools.Tool{
 		NewSearchAssetsTool(store),
 		NewReadAssetTool(store, sb),
-		NewPatchAssetTool(store, sb, func() int64 { return 1 }),
+		NewCreateAssetTool(manager),
+		NewPatchAssetTool(manager),
+		NewDeleteAssetTool(manager),
 		NewValidateAssetTool(store, sb),
 		tools.NewFinishTool(),
 		// 越权：页/公共层写工具（属其它 scope）
@@ -164,7 +235,7 @@ func TestRepoScopeAssetOnly(t *testing.T) {
 		}
 	}
 	// 资产工具 MUST 全在。
-	for _, want := range []string{"search_assets", "read_asset", "patch_asset", "validate_asset", "finish"} {
+	for _, want := range []string{"search_assets", "read_asset", "create_asset", "patch_asset", "delete_asset", "validate_asset", "finish"} {
 		if !names[want] {
 			t.Errorf("repo scope should register %q", want)
 		}
@@ -177,7 +248,7 @@ func TestPatchAssetOnlyChangesAsset(t *testing.T) {
 	before := hashTree(t, root)
 	sb := mustSandbox(t, root)
 
-	tool := NewPatchAssetTool(store, sb, func() int64 { return 2 })
+	tool := NewPatchAssetTool(memAssetManager{store: store, sandbox: sb})
 	res, err := tool.Execute(context.Background(), map[string]any{
 		"asset_id": "a-neon", "file": "css",
 		"edits": []any{map[string]any{"old_text": "border-radius: 8px", "new_text": "border-radius: 24px"}},
@@ -221,7 +292,7 @@ func TestPatchAssetAnchorNotUnique(t *testing.T) {
 	sb := mustSandbox(t, root)
 	before := hashTree(t, root)
 
-	tool := NewPatchAssetTool(store, sb, func() int64 { return 2 })
+	tool := NewPatchAssetTool(memAssetManager{store: store, sandbox: sb})
 	res, _ := tool.Execute(context.Background(), map[string]any{
 		"asset_id": "a-neon", "file": "css",
 		"edits": []any{map[string]any{"old_text": "x:1px", "new_text": "x:2px"}},
@@ -245,7 +316,7 @@ func TestPatchAssetPathBoundary(t *testing.T) {
 	store.assets["a-neon"] = a
 	sb := mustSandbox(t, root)
 
-	tool := NewPatchAssetTool(store, sb, func() int64 { return 2 })
+	tool := NewPatchAssetTool(memAssetManager{store: store, sandbox: sb})
 	res, _ := tool.Execute(context.Background(), map[string]any{
 		"asset_id": "a-neon", "file": "css",
 		"edits": []any{map[string]any{"old_text": "x", "new_text": "y"}},
@@ -255,10 +326,60 @@ func TestPatchAssetPathBoundary(t *testing.T) {
 	}
 }
 
+// AC-REPO-001：/repo 工具集补齐新增资产；新增经 service adapter 落 user 资产。
+func TestCreateAssetTool(t *testing.T) {
+	store := newMemStore()
+	sb := mustSandbox(t, t.TempDir())
+	manager := memAssetManager{store: store, sandbox: sb}
+	tool := NewCreateAssetTool(manager)
+	res, err := tool.Execute(context.Background(), map[string]any{
+		"manifest": map[string]any{
+			"name": "api-card", "version": "1.0.0", "kind": "component", "source": "preset",
+			"description": "card", "mount": map[string]any{"position": "append"},
+			"assets": map[string]any{"html": "template.html", "css": "style.css"},
+		},
+		"payload": map[string]any{
+			"template.html": "<div>card</div>",
+			"style.css":     ".api-card{color:var(--color-primary);}",
+		},
+	})
+	if err != nil || !res.OK {
+		t.Fatalf("create_asset: %v %s", err, res.Observation)
+	}
+	if !strings.Contains(res.Observation, "source=user") {
+		t.Fatalf("create observation should show source=user: %s", res.Observation)
+	}
+	if _, ok := store.assets["new-api-card"]; !ok {
+		t.Fatal("created asset should be stored through manager")
+	}
+}
+
+// AC-REPO-001：delete_asset 禁删 preset，返回可操作 observation。
+func TestDeleteAssetRejectsPreset(t *testing.T) {
+	root, store := setupRepo(t)
+	a := store.assets["a-neon"]
+	a.Source = string(asset.SourcePreset)
+	store.assets["a-neon"] = a
+	sb := mustSandbox(t, root)
+	tool := NewDeleteAssetTool(memAssetManager{store: store, sandbox: sb})
+
+	res, err := tool.Execute(context.Background(), map[string]any{"asset_id": "a-neon"})
+	if err != nil {
+		t.Fatalf("delete_asset unexpected error: %v", err)
+	}
+	if res.OK {
+		t.Fatal("delete preset must fail")
+	}
+	if _, ok := store.assets["a-neon"]; !ok {
+		t.Fatal("preset asset must remain")
+	}
+}
+
 // runner 装配：scope=repo 的 runner 跑通（nop LLM 直接 finish），无 panic。
 func TestRepoRunnerFinishes(t *testing.T) {
 	root, store := setupRepo(t)
-	r := NewRunner(nopLLM{}, store, Params{RunID: "r1", WorkRoot: root, Instruction: "把 neon-card 圆角调大"},
+	sb := mustSandbox(t, root)
+	r := NewRunner(nopLLM{}, store, memAssetManager{store: store, sandbox: sb}, Params{RunID: "r1", WorkRoot: root, Instruction: "把 neon-card 圆角调大"},
 		func() int64 { return 1 }, func() string { return "v" })
 	out := r.Run(context.Background(), nopEmitter{}, nil, nil)
 	if out.Status != harness.OutcomeFinished {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/agent/assetops"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
@@ -19,6 +20,7 @@ type Params struct {
 	RunID       string
 	ProjectID   string
 	WorkDir     string // project work_dir（sandbox 根）
+	WorkRoot    string // 全局 work_root（_assets 所在）
 	PageCount   int    // 项目页数（fanout 默认全页、越界校验用）
 	Instruction string // 用户自然语言全局调整指令
 }
@@ -62,11 +64,14 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 		PageCount:   r.params.PageCount,
 	}
 
-	// 工具集（overview scope）：read_design/patch_design（优先）+ fanout_page_patch（必要时）+ finish。
-	// apply_theme 依赖 M6 资产系统，M5 不注册（见 overview.md 偏差说明）。
+	// 工具集（overview scope）：公共层优先；换主题走 apply_theme；结构性跨页调整走 fanout；
+	// 单页资产移植可用 mount_asset，仍由 slide_idx 精确指定目标页并落页版本。
 	toolset := []tools.Tool{
+		assetops.NewSearchAssetsTool(r.store),
 		NewReadDesignTool(sandbox),
+		assetops.NewApplyThemeTool(r.store, r.params.WorkDir, r.params.WorkRoot, r.params.ProjectID, r.params.RunID, r.clock, r.newID),
 		NewPatchDesignTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, r.clock, r.newID),
+		assetops.NewMountAssetTool(r.store, r.params.WorkDir, r.params.WorkRoot, r.params.ProjectID, r.params.RunID, nil, r.clock, r.newID),
 		NewFanoutPagePatchTool(r.client, r.store, sandbox, r.params.ProjectID, r.params.RunID, r.params.PageCount, r.clock, r.newID),
 		tools.NewFinishTool(),
 	}

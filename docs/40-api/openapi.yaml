@@ -278,6 +278,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Asset' }
+        '400': { $ref: '#/components/responses/Error' }
     post:
       tags: [assets]
       summary: 新增资产（提交 manifest + 载荷，服务端校验资产协议 schema）
@@ -292,6 +293,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Asset' }
+        '409': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
 
   /assets/{id}:
@@ -329,6 +331,27 @@ paths:
       responses:
         '204': { description: No Content }
         '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  /assets/{id}/rollback:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [assets]
+      summary: 回滚资产到指定版本（回滚本身产生新资产版本）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RollbackAssetRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '404': { $ref: '#/components/responses/Error' }
+        '400': { $ref: '#/components/responses/Error' }
 
   /projects/{id}/export:
     parameters:
@@ -515,3 +538,9 @@ components:
               file: { type: string }
               old_text: { type: string }
               new_text: { type: string }
+
+    RollbackAssetRequest:
+      type: object
+      required: [version_no]
+      properties:
+        version_no: { type: integer, minimum: 0 }

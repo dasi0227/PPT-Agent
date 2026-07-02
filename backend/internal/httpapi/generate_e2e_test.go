@@ -116,7 +116,7 @@ func TestE2EGenerateDeck(t *testing.T) {
 	// 真实工厂（kind=generate → generate.Runner）+ fake LLM。
 	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
 	runSvc := service.NewRunService(st, engine, &genFakeClient{}, service.WorkRoot(workDir))
-	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc), httpapi.NewSlideHandler(service.NewSlideService(st)))
+	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc), httpapi.NewSlideHandler(service.NewSlideService(st)), httpapi.NewAssetHandler(service.NewAssetService(st, workRoot)))
 	srv := newTestServer(t, router)
 
 	runID := createGenerateRun(t, srv, "th1")

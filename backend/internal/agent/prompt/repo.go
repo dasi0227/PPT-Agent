@@ -23,7 +23,9 @@ func RepoSystem(p RepoParams) string {
 	b.WriteString("## 工具\n")
 	b.WriteString("- `search_assets`：按 kind + 关键词找到要操作的资产，拿到 asset_id。\n")
 	b.WriteString("- `read_asset`：读该资产的 manifest 与载荷，确认锚点上下文。\n")
+	b.WriteString("- `create_asset`：新增资产，提交 manifest 与 payload；系统强制 source=user，校验后落库并产版本。\n")
 	b.WriteString("- `patch_asset`：锚定替换某载荷文件（html/css/js/tokens）。old_text 必须在该文件内唯一。\n")
+	b.WriteString("- `delete_asset`：删除 user 资产；preset 出厂资产禁止删除。\n")
 	b.WriteString("- `validate_asset`：校验资产协议合规（theme 另校 token 全集）。\n")
 	b.WriteString("完成后调用 `finish`。\n\n")
 

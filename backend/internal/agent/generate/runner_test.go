@@ -173,6 +173,21 @@ func TestGenerateDeck(t *testing.T) {
 	}
 }
 
+// AC-SEED-004：仓库异常无 theme 资产时，生成回退内嵌 preset 主题，不崩溃。
+func TestGenerateColdStartFallbackUsesSeedTheme(t *testing.T) {
+	store, dir, _ := setupGen(t, 1)
+	store.themes = nil
+
+	r := newGenRunner(store, dir, "", "fallback", nil)
+	out := r.Run(context.Background(), &pageEmitter{}, nil, nil)
+	if out.Status != harness.OutcomeFinished {
+		t.Fatalf("generate should fall back to seed theme, got %s: %s", out.Status, out.Message)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "common/tokens.css")); err != nil {
+		t.Fatalf("tokens.css should be written from fallback seed theme: %v", err)
+	}
+}
+
 // AC-GEN-009：重生成第 5 页 → 仅该页 hash 变化，其余页与公共层不变。
 func TestSinglePageRegenIsolation(t *testing.T) {
 	store, dir, slides := setupGen(t, 7)

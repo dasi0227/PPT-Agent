@@ -32,7 +32,7 @@ verifies: []
 | `SPEC-CMD-REPO-005` | 资产变更 SHOULD 版本化（资产也有版本，便于回滚） | P1 |
 | `SPEC-CMD-REPO-006` | 新增资产的来源不限定（可手写、可从某页提炼，但不强制从页提炼） | P1 |
 
-> **M5 实现偏差（已记录）**：M5 落工具门控隔离 + `search_assets`/`read_asset`/`patch_asset`/`validate_asset`（够验证 `AC-CMD-REPO-001` 的「只改资产不碰页/公共层」隔离）。`patch_asset` 锚定替换资产载荷（路径边界=work_root），改后重校资产协议。**`create_asset`/`delete_asset`（`SPEC-CMD-REPO-002` 的增/删）与资产版本化（`SPEC-CMD-REPO-005`）留 M6**，其 AC 不在 M5 verifies。门控**只注册资产工具、绝不注册任何 PPT 页/公共层写工具**（机制级满足 001/004）。实现见 `internal/agent/repo`。
+> **实现状态（M5→M6）**：M5 先落工具门控隔离 + `search_assets`/`read_asset`/`patch_asset`/`validate_asset`。M6 已补齐 `create_asset`/`delete_asset` 与资产版本化；repo 写工具通过 service adapter 复用 `internal/service.AssetService`，由 service 统一执行 asset-manifest 校验、theme token 全集校验、文件落盘、`versions/asset-<id>/v<n>/` 快照和 preset 删除保护。preset 可被本地个性化 patch，首次修改前保留 factory baseline，可通过资产 rollback 恢复；delete 只允许 user asset，preset 禁删。资产 rollback M6 通过 REST `POST /assets/{id}/rollback` 暴露，`rollback_asset` agent 工具后续再补。门控**只注册资产工具、绝不注册任何 PPT 页/公共层写工具**（机制级满足 001/004）。实现见 `internal/agent/repo` 与 `internal/service/asset.go`。
 
 ## 与 mount_asset 的区别
 

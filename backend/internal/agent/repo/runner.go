@@ -1,7 +1,6 @@
 // Package repo 是仓库资产编辑 agent（/repo scope）。核心是**工具门控隔离**：
-// scope=repo 时 harness 只注册资产工具（search/read/patch/validate_asset），
+// scope=repo 时 harness 只注册资产工具（search/read/create/patch/delete/validate_asset），
 // **绝不注册任何 PPT 页/公共层写工具**——机制级证明「不碰页/公共层」（SPEC-CMD-REPO-001/004）。
-// M5 做 read/search/patch/validate；create/delete 与资产版本化留 M6。
 package repo
 
 import (
@@ -30,19 +29,20 @@ type Params struct {
 type Runner struct {
 	client llm.Client
 	store  Store
+	assets AssetManager
 	params Params
 	clock  func() int64
 	newID  func() string
 }
 
-func NewRunner(client llm.Client, store Store, p Params, clock func() int64, newID func() string) *Runner {
+func NewRunner(client llm.Client, store Store, assets AssetManager, p Params, clock func() int64, newID func() string) *Runner {
 	if clock == nil {
 		clock = func() int64 { return time.Now().Unix() }
 	}
 	if newID == nil {
 		newID = uuid.NewString
 	}
-	return &Runner{client: client, store: store, params: p, clock: clock, newID: newID}
+	return &Runner{client: client, store: store, assets: assets, params: p, clock: clock, newID: newID}
 }
 
 func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, _ run.Prompter) harness.Outcome {
@@ -59,7 +59,9 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 	toolset := []tools.Tool{
 		NewSearchAssetsTool(r.store),
 		NewReadAssetTool(r.store, sandbox),
-		NewPatchAssetTool(r.store, sandbox, r.clock),
+		NewCreateAssetTool(r.assets),
+		NewPatchAssetTool(r.assets),
+		NewDeleteAssetTool(r.assets),
 		NewValidateAssetTool(r.store, sandbox),
 		tools.NewFinishTool(),
 	}

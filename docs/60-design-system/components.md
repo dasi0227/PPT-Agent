@@ -32,6 +32,8 @@ verifies: []
 | `style.css`（可选） | 组件私有样式（引用 token） |
 | manifest `params` | 可参数化字段（文本、颜色、尺寸等） |
 
+参数填充采用显式占位符 `{{paramName}}`；mount 时只替换占位符并做 HTML escape，不会按 default 文本做全文替换，以避免误伤普通正文或 class 名。
+
 ## 组件设计约束
 
 | ID | 约束 |

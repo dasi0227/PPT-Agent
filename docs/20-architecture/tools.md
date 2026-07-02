@@ -69,7 +69,7 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 > **实现归属（M4）**：`patch_slide` 是 **agent 层编辑工具**（`internal/agent/edit`），锚定替换的思路与业务无关的通用 patch 原语一致，但**版本化 + lint-slide 校验 + 锁定 slideIdx** 属编辑业务语义，故不落在 `harness/tools` 原语层（保持原语层业务无关）。落盘前隐式 `validate_slide`（复用 `internal/designsystem.LintSlide`）、路径边界（`harness/tools.Sandbox`）、成功后产新版本并更新 `slides.current_version` 均在该工具内完成。它锁定单页（`scope=current|page`），与 M3 的 `write_slide`（整页覆盖、仅生成阶段）语义互补。
 
 > **实现归属（M5）**：`patch_slide` 的 `Scopes()` 扩为 `{current, page, overview}`——`/overview` 的跨页 patch 由 `internal/agent/overview` 的 `fanout_page_patch` 工具**逐页 spawn 子代理**（`harness.Loop`，`Scope=overview`）复用同一 `edit.PatchSlideTool`，每子代理仍锁定单页，满足 [ARCH-HARNESS-005](agent-harness.md)「跨页走子代理」。`read_slide`/`validate_slide` 同步扩 `overview` 供子代理使用。`patch_design`（改 `common/tokens.css` 产 `design` 版本）落 `internal/agent/overview`，`Scopes()={overview}`。
-> **M5 偏差（已记录）**：`apply_theme` 依赖 M6 资产系统（读 theme token 全集写公共层），且 M5 verifies 未列其 AC，**留 M6**；M5 `/overview` 只注册 `read_design`/`patch_design`/`fanout_page_patch`/`finish`。
+> **M6 状态**：`apply_theme` 已落 `internal/agent/assetops` 并注册到 `/overview`，读取 theme 资产 token 全集写入 `common/tokens.css` 且产 `design` 版本；`mount_asset` 同包实现并注册到 `{current,page,overview}`，移植 layout/component/fx 后必须通过 `lint-slide` 才落页版本。M6 后 `/overview` 工具集为 `search_assets`/`read_design`/`apply_theme`/`patch_design`/`mount_asset`/`fanout_page_patch`/`finish`。
 
 ### write_slide（生成阶段）
 
@@ -135,6 +135,8 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 }
 ```
 
+> **FX 静态资源假设（M6）**：`mount_asset` 挂载 `fx` 时会把 `_assets/.../effect.js` 以相对路径写入单页 module script。该路径依赖 M7 预览/静态服务能同时暴露 project work_dir 与全局 `_assets/`；若 M7 改为统一静态路由（如 `/assets/...`），这里应改成服务端稳定 URL，而不是跨目录相对路径。
+
 ### search_assets
 
 ```json
@@ -170,7 +172,7 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 ```
 （`patch_asset` 用 asset_id + 锚定 edits；`delete_asset` 用 asset_id。）
 
-> **实现归属（M5）**：`/repo` 资产工具落 `internal/agent/repo`，`Scopes()={repo}`。M5 做 `search_assets`/`read_asset`/`patch_asset`/`validate_asset` 四件（够验证 [AC-CMD-REPO-001](../50-agent/commands/repo.md) 隔离）；`patch_asset` 锚定替换资产载荷文件（html/css/js/tokens），路径边界=work_root，改后重校资产协议（theme 另校 token 全集）。**M5 偏差（已记录）**：`create_asset`/`delete_asset` 与**资产版本化**（`SPEC-CMD-REPO-005`，SHOULD）留 M6；其 AC 不在 M5 verifies。`/repo` 的门控**只注册资产工具、绝不注册任何页/公共层写工具**，机制级满足 `SPEC-CMD-REPO-001/004`。
+> **实现归属（M5→M6）**：`/repo` 资产工具落 `internal/agent/repo`，`Scopes()={repo}`。M5 做 `search_assets`/`read_asset`/`patch_asset`/`validate_asset` 四件（够验证 [AC-CMD-REPO-001](../50-agent/commands/repo.md) 隔离）。M6 补齐 `create_asset`/`delete_asset` 与资产版本化：repo 写工具经 service adapter 复用 `internal/service.AssetService`，由 service 统一负责 asset-manifest 校验、theme token 全集校验、文件落盘和 `versions/asset-<id>/v<n>/` 快照；preset 允许本地 patch/rollback（首次修改前保留 factory baseline），但 `delete_asset` 禁删 preset，仅允许删除 user 资产。资产 rollback 入口 M6 先暴露 REST `POST /assets/{id}/rollback`；`rollback_asset` agent 工具留后续补。`/repo` 的门控**只注册资产工具、绝不注册任何页/公共层写工具**，机制级满足 `SPEC-CMD-REPO-001/004`。
 
 ### finish
 

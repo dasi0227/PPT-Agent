@@ -8,6 +8,12 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
+// CreateAsset 创建一条资产元数据记录。与 seeding 的 UpsertAsset 不同，REST/agent 新增资产不静默合并。
+func (s *Store) CreateAsset(ctx context.Context, a model.Asset) error {
+	po := assetToPO(a)
+	return s.db.WithContext(ctx).Create(&po).Error
+}
+
 // UpsertAsset 按 (name,kind) 幂等写入资产元数据（seeding 与 /repo 共用）。
 // 已存在则更新可变字段；用于冷启动幂等（DS-SEED-005）。
 func (s *Store) UpsertAsset(ctx context.Context, a model.Asset) error {
@@ -53,6 +59,11 @@ func (s *Store) GetAsset(ctx context.Context, id string) (model.Asset, error) {
 		return model.Asset{}, err
 	}
 	return po.toModel(), nil
+}
+
+// DeleteAsset 删除资产元数据；载荷目录由 service 层在版本快照后删除。
+func (s *Store) DeleteAsset(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Delete(&assetPO{}, "id = ?", id).Error
 }
 
 // SetSlideVersion 更新某页当前版本号（单页生成/重生成落版本后同步 slides.current_version）。

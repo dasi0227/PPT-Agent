@@ -90,6 +90,12 @@ func (m *askMemStore) CreateVersion(_ context.Context, v model.Version) error {
 	return nil
 }
 func (m *askMemStore) SetSlideVersion(context.Context, string, int, int) error { return nil }
+func (m *askMemStore) ListAssets(context.Context, string) ([]model.Asset, error) {
+	return nil, nil
+}
+func (m *askMemStore) GetAsset(context.Context, string) (model.Asset, error) {
+	return model.Asset{}, os.ErrNotExist
+}
 
 const askSlide = `<!doctype html><html><head>` +
 	`<link rel="stylesheet" href="../../common/tokens.css">` +

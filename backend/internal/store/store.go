@@ -32,8 +32,10 @@ type Store interface {
 	ListVersions(ctx context.Context, targetType, targetID string) ([]model.Version, error)
 	SetSlideVersion(ctx context.Context, projectID string, idx, versionNo int) error
 
+	CreateAsset(ctx context.Context, a model.Asset) error
 	UpsertAsset(ctx context.Context, a model.Asset) error
 	ListAssets(ctx context.Context, kind string) ([]model.Asset, error)
 	CountAssets(ctx context.Context) (int, error)
 	GetAsset(ctx context.Context, id string) (model.Asset, error)
+	DeleteAsset(ctx context.Context, id string) error
 }

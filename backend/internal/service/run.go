@@ -12,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/outline"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/overview"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/repo"
+	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -35,9 +36,10 @@ type RunService struct {
 
 // NewRunService 用默认工厂装配（生产路径）：按 kind/scope/command 选择真实 agent，其余用 demo。
 func NewRunService(s store.Store, engine *run.Engine, client llm.Client, workRoot WorkRoot) *RunService {
+	assetSvc := NewAssetService(s, string(workRoot))
 	factory := func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
 		// 命令/模式维度优先路由（KindCommand）：prompt/recap/talk/ask。
-		if runner := buildCommandRunner(r, p, proj, client, s); runner != nil {
+		if runner := buildCommandRunner(r, p, proj, client, s, string(workRoot)); runner != nil {
 			return runner
 		}
 		if r.Kind == model.KindOutline {
@@ -65,7 +67,7 @@ func NewRunService(s store.Store, engine *run.Engine, client llm.Client, workRoo
 			}, nil, nil)
 		}
 		if r.Kind == model.KindEdit {
-			return buildEditRunner(r, p, proj, client, s, string(workRoot))
+			return buildEditRunner(r, p, proj, client, s, repoAssetAdapter{svc: assetSvc}, string(workRoot))
 		}
 		return demo.New(client, r.ID, p.Scope, p.Mode, p.Instruction)
 	}
@@ -73,7 +75,7 @@ func NewRunService(s store.Store, engine *run.Engine, client llm.Client, workRoo
 }
 
 // buildCommandRunner 处理 command/mode 维度（/prompt /recap /talk /ask）。返回 nil 表示不属于本类。
-func buildCommandRunner(r model.Run, p model.CreateRunParams, proj model.Project, client llm.Client, s store.Store) run.Runner {
+func buildCommandRunner(r model.Run, p model.CreateRunParams, proj model.Project, client llm.Client, s store.Store, workRoot string) run.Runner {
 	switch r.Command {
 	case "prompt":
 		return assist.NewPromptRunner(client, r.ID, p.Instruction)
@@ -93,6 +95,7 @@ func buildCommandRunner(r model.Run, p model.CreateRunParams, proj model.Project
 			RunID:       r.ID,
 			ProjectID:   proj.ID,
 			WorkDir:     proj.WorkDir,
+			WorkRoot:    workRoot,
 			Scope:       r.Scope,
 			PageIndex:   idx,
 			Instruction: p.Instruction,
@@ -102,18 +105,19 @@ func buildCommandRunner(r model.Run, p model.CreateRunParams, proj model.Project
 }
 
 // buildEditRunner 按 scope 子路由编辑：current/page→edit（单页），overview→overview，repo→repo。
-func buildEditRunner(r model.Run, p model.CreateRunParams, proj model.Project, client llm.Client, s store.Store, workRoot string) run.Runner {
+func buildEditRunner(r model.Run, p model.CreateRunParams, proj model.Project, client llm.Client, s store.Store, assets repo.AssetManager, workRoot string) run.Runner {
 	switch r.Scope {
 	case model.ScopeOverview:
 		return overview.NewRunner(client, s, overview.Params{
 			RunID:       r.ID,
 			ProjectID:   proj.ID,
 			WorkDir:     proj.WorkDir,
+			WorkRoot:    workRoot,
 			PageCount:   p.PageCount,
 			Instruction: p.Instruction,
 		}, nil, nil)
 	case model.ScopeRepo:
-		return repo.NewRunner(client, s, repo.Params{
+		return repo.NewRunner(client, s, assets, repo.Params{
 			RunID:       r.ID,
 			WorkRoot:    workRoot,
 			Instruction: p.Instruction,
@@ -128,11 +132,32 @@ func buildEditRunner(r model.Run, p model.CreateRunParams, proj model.Project, c
 			RunID:       r.ID,
 			ProjectID:   proj.ID,
 			WorkDir:     proj.WorkDir,
+			WorkRoot:    workRoot,
 			Scope:       r.Scope,
 			PageIndex:   idx,
 			Instruction: p.Instruction,
 		}, nil, nil)
 	}
+}
+
+type repoAssetAdapter struct {
+	svc *AssetService
+}
+
+func (a repoAssetAdapter) CreateAsset(ctx context.Context, manifest asset.Manifest, payload map[string]string) (model.Asset, error) {
+	return a.svc.CreateAsset(ctx, CreateAssetParams{Manifest: manifest, Payload: payload})
+}
+
+func (a repoAssetAdapter) PatchAsset(ctx context.Context, id, file string, edits []repo.AssetEdit) (model.Asset, error) {
+	out := make([]AssetPatchEdit, len(edits))
+	for i, e := range edits {
+		out[i] = AssetPatchEdit{File: file, OldText: e.OldText, NewText: e.NewText}
+	}
+	return a.svc.PatchAsset(ctx, id, PatchAssetParams{Edits: out})
+}
+
+func (a repoAssetAdapter) DeleteAsset(ctx context.Context, id string) error {
+	return a.svc.DeleteAsset(ctx, id)
 }
 
 // NewRunServiceWithFactory 允许注入自定义 runner 工厂（测试用）。

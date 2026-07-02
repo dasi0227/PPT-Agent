@@ -32,6 +32,12 @@ func (m *memStore) SetSlideVersion(_ context.Context, _ string, idx, no int) err
 	m.slideVer[idx] = no
 	return nil
 }
+func (m *memStore) ListAssets(_ context.Context, _ string) ([]model.Asset, error) {
+	return nil, nil
+}
+func (m *memStore) GetAsset(_ context.Context, _ string) (model.Asset, error) {
+	return model.Asset{}, os.ErrNotExist
+}
 
 // validSlide 是一份合规 slide html（含公共层引用 + 舞台 + 一个可锚定的标题）。
 const validSlide = `<!doctype html><html><head>` +

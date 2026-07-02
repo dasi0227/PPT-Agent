@@ -163,6 +163,9 @@ func (r *Runner) resolveTheme(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if len(themes) == 0 {
+		if _, err := asset.ReadSeedFile(path.Join("assets", "themes", "swiss-modern", "tokens.css")); err == nil {
+			return "swiss-modern", nil
+		}
 		return "", fmt.Errorf("无可用主题资产（seed 未载入？）")
 	}
 	return themes[0].Name, nil

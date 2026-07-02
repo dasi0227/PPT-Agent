@@ -28,7 +28,9 @@ func EditSystem(p EditParams) string {
 	b.WriteString("通过 `patch_slide` 工具做**锚定文本替换**：提供 old_text（该页内**唯一**出现的原文片段）与 new_text。\n")
 	b.WriteString("- 每个 old_text MUST 在该页内唯一，否则整体失败——请补足周边上下文使其唯一后重试。\n")
 	b.WriteString("- 需要确认最新内容时先调用 `read_slide`；落盘前系统会隐式校验 html-output-spec。\n")
+	b.WriteString("- 需要把仓库里的 layout/component/fx 移植到本页时，先 `search_assets` 找资产，再用 `mount_asset`；mount 后系统同样会校验 html-output-spec。\n")
 	fmt.Fprintf(&b, "- 调用 patch_slide 时 slide_idx MUST 为 %d。\n", p.PageIndex)
+	fmt.Fprintf(&b, "- 调用 mount_asset 时 slide_idx 也 MUST 为 %d。\n", p.PageIndex)
 	b.WriteString("完成后调用 `finish` 结束。若工具返回错误，请据错误修正后重试。\n\n")
 
 	b.WriteString("## 硬约束（保持产出合规）\n")
