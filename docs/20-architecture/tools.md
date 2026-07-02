@@ -66,6 +66,8 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 ```
 执行语义：脚本校验每个 `old_text` 在该页**唯一** → 替换 → 跑 `validate_slide` → 落盘 + 版本；任一锚点不唯一/不存在则**整体失败**，返回错误 observation（LLM 据此补上下文重试）。
 
+> **实现归属（M4）**：`patch_slide` 是 **agent 层编辑工具**（`internal/agent/edit`），锚定替换的思路与业务无关的通用 patch 原语一致，但**版本化 + lint-slide 校验 + 锁定 slideIdx** 属编辑业务语义，故不落在 `harness/tools` 原语层（保持原语层业务无关）。落盘前隐式 `validate_slide`（复用 `internal/designsystem.LintSlide`）、路径边界（`harness/tools.Sandbox`）、成功后产新版本并更新 `slides.current_version` 均在该工具内完成。它锁定单页（`scope=current|page`），与 M3 的 `write_slide`（整页覆盖、仅生成阶段）语义互补。
+
 ### write_slide（生成阶段）
 
 ```json

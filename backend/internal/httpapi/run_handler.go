@@ -83,6 +83,10 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 			AbortWithError(c, ErrNotFound("thread not found"))
 			return
 		}
+		if errors.Is(err, service.ErrInvalidPageIndex) {
+			AbortWithError(c, ErrBadRequest("invalid or missing page_index"))
+			return
+		}
 		AbortWithError(c, ErrInternal(err.Error()))
 		return
 	}

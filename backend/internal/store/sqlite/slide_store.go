@@ -39,6 +39,15 @@ func (s *Store) ListSlides(ctx context.Context, projectID string) ([]model.Slide
 	return out, nil
 }
 
+// GetSlide 按 slide id 读取单页元数据（rollback 用 id 反查 idx/project）。
+func (s *Store) GetSlide(ctx context.Context, id string) (model.Slide, error) {
+	var po slidePO
+	if err := s.db.WithContext(ctx).First(&po, "id = ?", id).Error; err != nil {
+		return model.Slide{}, err
+	}
+	return po.toModel(), nil
+}
+
 // SetProjectStatus 更新 project 状态游标（draft/generating/ready）。
 func (s *Store) SetProjectStatus(ctx context.Context, id, status string) error {
 	return s.db.WithContext(ctx).Model(&projectPO{}).

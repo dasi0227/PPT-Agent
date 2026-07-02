@@ -46,7 +46,9 @@ func initApp() (*App, func(), error) {
 	client := provideLLMClient(configConfig)
 	runService := service.NewRunService(store, engine, client)
 	runHandler := httpapi.NewRunHandler(runService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler)
+	slideService := service.NewSlideService(store)
+	slideHandler := httpapi.NewSlideHandler(slideService)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, slideHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	mainSeedDone, err := provideSeed(configConfig, store, zapLogger)
@@ -67,7 +69,7 @@ func initApp() (*App, func(), error) {
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
 var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMClient,
 	provideLockManager,
-	provideEngine, service.NewHealthService, service.NewRunService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewRouter, engineFromRouter,
+	provideEngine, service.NewHealthService, service.NewRunService, service.NewSlideService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideSeed,
 	provideApp,

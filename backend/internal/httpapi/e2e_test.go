@@ -68,7 +68,7 @@ func setupServer(t *testing.T, client llm.Client, runner run.Runner) (*httptest.
 	runSvc := service.NewRunServiceWithFactory(st, engine, func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
 		return runner
 	})
-	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc))
+	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc), httpapi.NewSlideHandler(service.NewSlideService(st)))
 
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)

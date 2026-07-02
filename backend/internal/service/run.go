@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/demo"
+	"github.com/dasi0227/PPT-Agent/backend/internal/agent/edit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/generate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/outline"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -52,6 +53,21 @@ func NewRunService(s store.Store, engine *run.Engine, client llm.Client) *RunSer
 				PageIndex: p.PageIndex,
 			}, nil, nil)
 		}
+		if r.Kind == model.KindEdit {
+			// page_index 越界/缺失已在 CreateRun 前置校验；此处必非 nil。
+			idx := 0
+			if p.PageIndex != nil {
+				idx = *p.PageIndex
+			}
+			return edit.NewRunner(client, s, edit.Params{
+				RunID:       r.ID,
+				ProjectID:   proj.ID,
+				WorkDir:     proj.WorkDir,
+				Scope:       r.Scope,
+				PageIndex:   idx,
+				Instruction: p.Instruction,
+			}, nil, nil)
+		}
 		return demo.New(client, r.ID, p.Scope, p.Mode, p.Instruction)
 	}
 	return &RunService{store: s, engine: engine, factory: factory}
@@ -71,6 +87,14 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	proj, err := svc.store.GetProject(ctx, th.ProjectID)
 	if err != nil {
 		return model.Run{}, err
+	}
+
+	// 编辑（单页 scope）：page_index 越界/缺失 MUST 在创建 Run 前拒绝，保证不落 Run、不落文件
+	// （AC-CMD-PAGE-003 / SPEC-CMD-CURRENT-003）。current 与 page 都要求 0 ≤ idx < 页数。
+	if p.Kind == model.KindEdit && (p.Scope == model.ScopeCurrent || p.Scope == model.ScopePage) {
+		if err := svc.validatePageIndex(ctx, proj.ID, p.PageIndex); err != nil {
+			return model.Run{}, err
+		}
 	}
 
 	r := model.Run{
@@ -101,4 +125,19 @@ func (svc *RunService) Cancel(ctx context.Context, runID string) error {
 // Subscribe 订阅 SSE 事件流（支持 Last-Event-ID）。
 func (svc *RunService) Subscribe(ctx context.Context, runID string, afterSeq int64) (<-chan model.Event, func(), error) {
 	return svc.engine.Subscribe(ctx, runID, afterSeq)
+}
+
+// validatePageIndex 校验 page_index 存在且在 [0, 页数) 内（AC-CMD-PAGE-003）。
+func (svc *RunService) validatePageIndex(ctx context.Context, projectID string, pageIndex *int) error {
+	if pageIndex == nil {
+		return ErrInvalidPageIndex
+	}
+	slides, err := svc.store.ListSlides(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if *pageIndex < 0 || *pageIndex >= len(slides) {
+		return ErrInvalidPageIndex
+	}
+	return nil
 }

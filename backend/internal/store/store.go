@@ -26,6 +26,7 @@ type Store interface {
 	SetProjectStatus(ctx context.Context, id, status string) error
 	ReplaceSlides(ctx context.Context, projectID string, slides []model.Slide) error
 	ListSlides(ctx context.Context, projectID string) ([]model.Slide, error)
+	GetSlide(ctx context.Context, id string) (model.Slide, error)
 	NextVersionNo(ctx context.Context, targetType, targetID string) (int, error)
 	CreateVersion(ctx context.Context, v model.Version) error
 	ListVersions(ctx context.Context, targetType, targetID string) ([]model.Version, error)

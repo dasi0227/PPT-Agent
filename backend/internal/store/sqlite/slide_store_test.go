@@ -2,7 +2,10 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"gorm.io/gorm"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
@@ -49,6 +52,33 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	got2, _ := s.ListSlides(ctx, "p1")
 	if len(got2) != 3 {
 		t.Fatalf("want 3 after replace, got %d", len(got2))
+	}
+}
+
+func TestGetSlideByID(t *testing.T) {
+	s := newTestStore(t)
+	seedProject(t, s)
+	ctx := context.Background()
+
+	slides := []model.Slide{
+		{ID: "s0", ProjectID: "p1", Idx: 0, Layout: "cover", Title: "封面", JSONPath: "slides/000/slide.json", HTMLPath: "slides/000/index.html"},
+		{ID: "s1", ProjectID: "p1", Idx: 1, Layout: "thanks", Title: "谢谢", JSONPath: "slides/001/slide.json", HTMLPath: "slides/001/index.html"},
+	}
+	if err := s.ReplaceSlides(ctx, "p1", slides); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+
+	got, err := s.GetSlide(ctx, "s1")
+	if err != nil {
+		t.Fatalf("get slide: %v", err)
+	}
+	if got.Idx != 1 || got.ProjectID != "p1" || got.HTMLPath != "slides/001/index.html" {
+		t.Fatalf("unexpected slide: %+v", got)
+	}
+
+	// 不存在的 id MUST 返回 gorm.ErrRecordNotFound（handler 映射 404）。
+	if _, err := s.GetSlide(ctx, "missing"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("want ErrRecordNotFound, got %v", err)
 	}
 }
 

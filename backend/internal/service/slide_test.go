@@ -1,0 +1,135 @@
+package service_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
+)
+
+// setupRollback 建库 + project work_dir + 一页两版本快照（v0/v1），当前 v1。
+func setupRollback(t *testing.T) (*service.SlideService, *sqlitestore.Store, string, string) {
+	t.Helper()
+	work := t.TempDir()
+	cfg := &config.Config{DBPath: filepath.Join(work, "t.db"), WorkRoot: work}
+	db, cleanup, err := sqlitestore.Open(cfg, zap.NewNop())
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(cleanup)
+	st, err := sqlitestore.NewStore(db, zap.NewNop())
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().Unix()
+	workDir := filepath.Join(work, "p1")
+	if err := st.CreateProject(ctx, model.Project{ID: "p1", Title: "t", WorkDir: workDir, Theme: "x", Status: "ready", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	// slide 000，current_version=1。
+	slide := model.Slide{ID: "s1", ProjectID: "p1", Idx: 0, Layout: "cover", Title: "T",
+		JSONPath: "slides/000/slide.json", HTMLPath: "slides/000/index.html", CurrentVersion: 1}
+	if err := st.ReplaceSlides(ctx, "p1", []model.Slide{slide}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 落两版本快照 + 当前 html=v1 内容。
+	writeAt(t, workDir, "versions/slide-000/v0.html", "<html>V0</html>")
+	writeAt(t, workDir, "versions/slide-000/v1.html", "<html>V1</html>")
+	writeAt(t, workDir, "slides/000/index.html", "<html>V1</html>")
+	for no := 0; no <= 1; no++ {
+		if err := st.CreateVersion(ctx, model.Version{
+			ID: "ver" + itoa(no), TargetType: "slide", TargetID: "slide-000", VersionNo: no,
+			SnapshotPath: "versions/slide-000/v" + itoa(no) + ".html", CreatedAt: now,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return service.NewSlideService(st), st, workDir, "s1"
+}
+
+// AC-VERSION-004 / AC-EDIT-005：回滚到 v0 → 文件内容==v0，新增 v2（内容=v0），current_version=2。
+func TestRollbackCreatesNewVersion(t *testing.T) {
+	svc, st, workDir, slideID := setupRollback(t)
+	ctx := context.Background()
+
+	sl, err := svc.RollbackSlide(ctx, slideID, 0)
+	if err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+
+	// 文件恢复为 v0 内容。
+	raw, _ := os.ReadFile(filepath.Join(workDir, "slides/000/index.html"))
+	if string(raw) != "<html>V0</html>" {
+		t.Errorf("file not restored to v0: %q", raw)
+	}
+	// 新增 v2（不删旧版本），内容=v0。
+	versions, _ := st.ListVersions(ctx, "slide", "slide-000")
+	if len(versions) != 3 {
+		t.Fatalf("expected 3 versions after rollback (v0,v1,v2), got %d", len(versions))
+	}
+	newSnap, _ := os.ReadFile(filepath.Join(workDir, "versions/slide-000/v2.html"))
+	if string(newSnap) != "<html>V0</html>" {
+		t.Errorf("new version snapshot content should equal v0, got %q", newSnap)
+	}
+	// current_version 指向新版本 2（DATA-VERSION-005）。
+	if sl.CurrentVersion != 2 {
+		t.Errorf("returned current_version=%d, want 2", sl.CurrentVersion)
+	}
+	slides, _ := st.ListSlides(ctx, "p1")
+	if slides[0].CurrentVersion != 2 {
+		t.Errorf("persisted current_version=%d, want 2", slides[0].CurrentVersion)
+	}
+}
+
+// 回滚到不存在的版本号 → ErrVersionNotFound。
+func TestRollbackUnknownVersion(t *testing.T) {
+	svc, _, _, slideID := setupRollback(t)
+	if _, err := svc.RollbackSlide(context.Background(), slideID, 99); err != service.ErrVersionNotFound {
+		t.Errorf("want ErrVersionNotFound, got %v", err)
+	}
+}
+
+// store.GetSlide 按 id 反查。
+func TestGetSlideByID(t *testing.T) {
+	_, st, _, slideID := setupRollback(t)
+	sl, err := st.GetSlide(context.Background(), slideID)
+	if err != nil {
+		t.Fatalf("get slide: %v", err)
+	}
+	if sl.Idx != 0 || sl.ProjectID != "p1" {
+		t.Errorf("unexpected slide: %+v", sl)
+	}
+}
+
+func writeAt(t *testing.T, dir, rel, content string) {
+	t.Helper()
+	full := filepath.Join(dir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b []byte
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	return string(b)
+}
