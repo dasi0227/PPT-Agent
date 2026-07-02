@@ -10,6 +10,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/logger"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
@@ -40,9 +41,14 @@ func initApp() (*App, func(), error) {
 	}
 	healthService := service.NewHealthService(store)
 	healthHandler := httpapi.NewHealthHandler(healthService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler)
-	engine := engineFromRouter(router)
-	server := provideHTTPServer(configConfig, engine)
+	lockManager := provideLockManager()
+	engine := provideEngine(store, lockManager, zapLogger)
+	client := provideLLMClient(configConfig)
+	runService := service.NewRunService(store, engine, client, zapLogger)
+	runHandler := httpapi.NewRunHandler(runService)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler)
+	ginEngine := engineFromRouter(router)
+	server := provideHTTPServer(configConfig, ginEngine)
 	app := provideApp(server, zapLogger)
 	return app, func() {
 		cleanup2()
@@ -53,7 +59,9 @@ func initApp() (*App, func(), error) {
 // wire.go:
 
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
-var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), service.NewHealthService, httpapi.NewHealthHandler, httpapi.NewRouter, engineFromRouter,
+var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMClient,
+	provideLockManager,
+	provideEngine, service.NewHealthService, service.NewRunService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideApp,
 )

@@ -9,6 +9,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/logger"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
@@ -21,8 +22,14 @@ var providerSet = wire.NewSet(
 	sqlitestore.Open,
 	sqlitestore.NewStore,
 	wire.Bind(new(store.Store), new(*sqlitestore.Store)),
+	wire.Bind(new(run.Store), new(*sqlitestore.Store)),
+	provideLLMClient,
+	provideLockManager,
+	provideEngine,
 	service.NewHealthService,
+	service.NewRunService,
 	httpapi.NewHealthHandler,
+	httpapi.NewRunHandler,
 	httpapi.NewRouter,
 	engineFromRouter,
 	provideHTTPServer,

@@ -35,7 +35,7 @@ data: <json>
 | `thought` | `{ text }` | Harness 一轮推理（ReAct Reason）|
 | `tool_call` | `{ tool, args, call_id }` | LLM 发起工具调用（function call）|
 | `tool_result` | `{ call_id, ok, observation }` | 工具执行 observation（ReAct Act 结果）|
-| `progress` | `{ stage, current, total, message? }` | 进度（如逐页生成 current/total） |
+| `progress` | `{ stage, current, total, message? }` | 进度。`stage` 语义见下。`current/total` 按 stage 定义 |
 | `token` | `{ text }` | LLM 流式增量文本 |
 | `artifact` | `{ artifact_type, ref, page_index? }` | 一个产物落盘（`slide_html`/`design`/`asset`/`version`） |
 | `needs_input` | `{ id, prompt, schema?, choices? }` | 暂停等待输入；客户端用 `reply_to=id` 应答 |
@@ -44,6 +44,17 @@ data: <json>
 | `error` | `{ code, message }` | 错误，对应错误码表 |
 
 > `thought`/`tool_call`/`tool_result` 是 Harness ReAct 循环每一轮的可观测投影，持久化于 `run_events`，支撑追溯与断线续传。
+
+### progress.stage 语义
+
+`progress` 是 Run 执行进度的诚实投影，`stage` 取值随里程碑推进逐步细化。当前允许的 stage：
+
+| stage | 语义 | current / total |
+|---|---|---|
+| `turn` | Harness ReAct 循环的第 N 轮（每轮 LLM function-call 前发一次） | `current` = 第几轮，`total` = MAX_TURNS |
+| `generate` | 逐页生成阶段（M3 起）：第 N 页 / 共 K 页 | `current` = 已完成/正在处理页序，`total` = 总页数 |
+
+> M1 阶段只落 `turn` 语义（agent 尚无业务级"逐页/逐资产"阶段可投影）。业务级 stage（`generate` 等）随对应 agent 落地后启用，客户端 MUST 按 `stage` 分派展示，禁止假设固定枚举。
 
 ## 序列约定
 

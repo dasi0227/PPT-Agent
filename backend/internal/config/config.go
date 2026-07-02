@@ -14,6 +14,8 @@ type Config struct {
 	WorkRoot    string // PPT_WORK_ROOT：work_dir 根
 	DBPath      string // SQLite 文件路径；空则落在 WorkRoot 下
 	DeepSeekKey string // 仅来自环境变量，MUST NOT 落库/落日志（DEV-RULES R13）
+	DeepSeekURL string // DEEPSEEK_BASE_URL；空走默认端点
+	DeepSeekMdl string // DEEPSEEK_MODEL；默认 deepseek-chat
 }
 
 func Load() (*Config, error) {
@@ -30,6 +32,8 @@ func Load() (*Config, error) {
 	_ = v.BindEnv("work_root", "PPT_WORK_ROOT")
 	_ = v.BindEnv("db_path", "PPT_DB_PATH")
 	_ = v.BindEnv("deepseek_key", "DEEPSEEK_API_KEY")
+	_ = v.BindEnv("deepseek_url", "DEEPSEEK_BASE_URL")
+	_ = v.BindEnv("deepseek_mdl", "DEEPSEEK_MODEL")
 
 	cfg := &Config{
 		Env:         v.GetString("env"),
@@ -37,6 +41,8 @@ func Load() (*Config, error) {
 		WorkRoot:    v.GetString("work_root"),
 		DBPath:      v.GetString("db_path"),
 		DeepSeekKey: v.GetString("deepseek_key"),
+		DeepSeekURL: v.GetString("deepseek_url"),
+		DeepSeekMdl: v.GetString("deepseek_mdl"),
 	}
 	if cfg.DBPath == "" {
 		cfg.DBPath = filepath.Join(cfg.WorkRoot, "ppt.db")

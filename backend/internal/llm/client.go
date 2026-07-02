@@ -1,16 +1,73 @@
-// Package llm 定义 LLM 客户端契约（interface），具体实现（DeepSeek）可替换（ARCH-BACKEND-001）。
-// 具体实现随 M1 落地；此处仅锁定契约。
+// Package llm 定义 LLM 客户端契约（interface），DeepSeek 为其一实现（ARCH-LLM-001）。
 package llm
 
 import "context"
 
-// Message 是一条对话消息（role: system/user/assistant/tool）。
+// Role 是消息角色；system 承载系统级约束，user 承载用户内容，二者不混淆（ARCH-LLM-005）。
+type Role string
+
+const (
+	RoleSystem    Role = "system"
+	RoleUser      Role = "user"
+	RoleAssistant Role = "assistant"
+	RoleTool      Role = "tool"
+)
+
+// Message 是一条对话消息。ToolCallID 在 role=tool 时关联对应的工具调用。
 type Message struct {
-	Role    string
+	Role       Role
+	Content    string
+	ToolCallID string
+}
+
+// ToolSchema 是注册给 LLM 的 function schema（动态门控后的子集，ARCH-HARNESS-001）。
+type ToolSchema struct {
+	Name        string
+	Description string
+	Parameters  map[string]any // JSON Schema
+}
+
+// ChatRequest 是一次补全请求。
+type ChatRequest struct {
+	Messages []Message
+}
+
+// ChatResponse 是一次性补全结果。
+type ChatResponse struct {
 	Content string
 }
 
-// Client 抽象 LLM 调用；所有方法接受 context.Context 以支持取消（DEV-CODING）。
+// StreamChunk 是流式增量。Done 为 true 时表示流结束（Err 携带非正常终止原因）。
+type StreamChunk struct {
+	Text string
+	Done bool
+	Err  error
+}
+
+// ToolCallRequest 携带 harness 动态裁剪后的工具集。
+type ToolCallRequest struct {
+	Messages []Message
+	Tools    []ToolSchema
+}
+
+// ToolCall 是 LLM 选择的一次工具调用。
+type ToolCall struct {
+	ID   string
+	Name string
+	Args map[string]any
+}
+
+// ToolCallResponse 是 CallTool 的结果：要么是工具调用，要么是纯文本/finish。
+// Thought 是本轮推理文本（ReAct Reason），投影为 SSE thought 事件。
+type ToolCallResponse struct {
+	Thought  string
+	ToolCall *ToolCall
+	Text     string
+}
+
+// Client 抽象 LLM 调用；所有方法接受 context.Context 以支持取消（ARCH-LLM-002）。
 type Client interface {
-	Chat(ctx context.Context, msgs []Message) (string, error)
+	Chat(ctx context.Context, req ChatRequest) (ChatResponse, error)
+	Stream(ctx context.Context, req ChatRequest) (<-chan StreamChunk, error)
+	CallTool(ctx context.Context, req ToolCallRequest) (ToolCallResponse, error)
 }
