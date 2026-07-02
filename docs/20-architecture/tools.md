@@ -68,6 +68,9 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 
 > **实现归属（M4）**：`patch_slide` 是 **agent 层编辑工具**（`internal/agent/edit`），锚定替换的思路与业务无关的通用 patch 原语一致，但**版本化 + lint-slide 校验 + 锁定 slideIdx** 属编辑业务语义，故不落在 `harness/tools` 原语层（保持原语层业务无关）。落盘前隐式 `validate_slide`（复用 `internal/designsystem.LintSlide`）、路径边界（`harness/tools.Sandbox`）、成功后产新版本并更新 `slides.current_version` 均在该工具内完成。它锁定单页（`scope=current|page`），与 M3 的 `write_slide`（整页覆盖、仅生成阶段）语义互补。
 
+> **实现归属（M5）**：`patch_slide` 的 `Scopes()` 扩为 `{current, page, overview}`——`/overview` 的跨页 patch 由 `internal/agent/overview` 的 `fanout_page_patch` 工具**逐页 spawn 子代理**（`harness.Loop`，`Scope=overview`）复用同一 `edit.PatchSlideTool`，每子代理仍锁定单页，满足 [ARCH-HARNESS-005](agent-harness.md)「跨页走子代理」。`read_slide`/`validate_slide` 同步扩 `overview` 供子代理使用。`patch_design`（改 `common/tokens.css` 产 `design` 版本）落 `internal/agent/overview`，`Scopes()={overview}`。
+> **M5 偏差（已记录）**：`apply_theme` 依赖 M6 资产系统（读 theme token 全集写公共层），且 M5 verifies 未列其 AC，**留 M6**；M5 `/overview` 只注册 `read_design`/`patch_design`/`fanout_page_patch`/`finish`。
+
 ### write_slide（生成阶段）
 
 ```json
@@ -166,6 +169,8 @@ Harness 的每个动作都是一个**工具**：带 JSON 参数 schema 的确定
 }
 ```
 （`patch_asset` 用 asset_id + 锚定 edits；`delete_asset` 用 asset_id。）
+
+> **实现归属（M5）**：`/repo` 资产工具落 `internal/agent/repo`，`Scopes()={repo}`。M5 做 `search_assets`/`read_asset`/`patch_asset`/`validate_asset` 四件（够验证 [AC-CMD-REPO-001](../50-agent/commands/repo.md) 隔离）；`patch_asset` 锚定替换资产载荷文件（html/css/js/tokens），路径边界=work_root，改后重校资产协议（theme 另校 token 全集）。**M5 偏差（已记录）**：`create_asset`/`delete_asset` 与**资产版本化**（`SPEC-CMD-REPO-005`，SHOULD）留 M6；其 AC 不在 M5 verifies。`/repo` 的门控**只注册资产工具、绝不注册任何页/公共层写工具**，机制级满足 `SPEC-CMD-REPO-001/004`。
 
 ### finish
 

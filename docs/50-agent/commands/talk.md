@@ -46,7 +46,7 @@ verifies: []
 ## 校验方式
 
 ```bash
-go test ./internal/agent/command -run TestTalkNoArtifact
+go test ./internal/agent/assist -run TestTalkNoArtifact
 # 断言：事件流无 artifact，work_dir 无变更
 ```
 

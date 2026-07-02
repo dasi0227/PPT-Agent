@@ -25,6 +25,7 @@ var providerSet = wire.NewSet(
 	wire.Bind(new(run.Store), new(*sqlitestore.Store)),
 	provideLLMClient,
 	provideLockManager,
+	provideWorkRoot,
 	provideEngine,
 	service.NewHealthService,
 	service.NewRunService,

@@ -23,7 +23,8 @@ func NewReadSlideTool(sandbox *tools.Sandbox, slideIdx int) *ReadSlideTool {
 func (t *ReadSlideTool) Name() string       { return "read_slide" }
 func (t *ReadSlideTool) Class() tools.Class { return tools.ClassRead }
 func (t *ReadSlideTool) Scopes() []model.Scope {
-	return []model.Scope{model.ScopeCurrent, model.ScopePage}
+	// current/page 主循环编辑；overview 跨页子代理（Scope=overview）也复用它读锁定页。
+	return []model.Scope{model.ScopeCurrent, model.ScopePage, model.ScopeOverview}
 }
 
 func (t *ReadSlideTool) Description() string {

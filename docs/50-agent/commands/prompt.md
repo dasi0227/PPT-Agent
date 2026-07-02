@@ -39,8 +39,8 @@ verifies: []
 ## 校验方式
 
 ```bash
-go test ./internal/agent/command -run TestPromptRewriteNoSideEffect
-# 断言：执行前后 work_dir 无文件变更
+go test ./internal/agent/assist -run TestPromptRewriteNoSideEffect
+# 断言：执行前后无 artifact，work_dir 无文件变更
 ```
 
 ## 依赖

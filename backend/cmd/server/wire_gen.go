@@ -44,7 +44,8 @@ func initApp() (*App, func(), error) {
 	lockManager := provideLockManager()
 	engine := provideEngine(store, lockManager, zapLogger)
 	client := provideLLMClient(configConfig)
-	runService := service.NewRunService(store, engine, client)
+	workRoot := provideWorkRoot(configConfig)
+	runService := service.NewRunService(store, engine, client, workRoot)
 	runHandler := httpapi.NewRunHandler(runService)
 	slideService := service.NewSlideService(store)
 	slideHandler := httpapi.NewSlideHandler(slideService)
@@ -69,6 +70,7 @@ func initApp() (*App, func(), error) {
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
 var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMClient,
 	provideLockManager,
+	provideWorkRoot,
 	provideEngine, service.NewHealthService, service.NewRunService, service.NewSlideService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideSeed,

@@ -32,6 +32,8 @@ verifies: []
 | `SPEC-CMD-REPO-005` | 资产变更 SHOULD 版本化（资产也有版本，便于回滚） | P1 |
 | `SPEC-CMD-REPO-006` | 新增资产的来源不限定（可手写、可从某页提炼，但不强制从页提炼） | P1 |
 
+> **M5 实现偏差（已记录）**：M5 落工具门控隔离 + `search_assets`/`read_asset`/`patch_asset`/`validate_asset`（够验证 `AC-CMD-REPO-001` 的「只改资产不碰页/公共层」隔离）。`patch_asset` 锚定替换资产载荷（路径边界=work_root），改后重校资产协议。**`create_asset`/`delete_asset`（`SPEC-CMD-REPO-002` 的增/删）与资产版本化（`SPEC-CMD-REPO-005`）留 M6**，其 AC 不在 M5 verifies。门控**只注册资产工具、绝不注册任何 PPT 页/公共层写工具**（机制级满足 001/004）。实现见 `internal/agent/repo`。
+
 ## 与 mount_asset 的区别
 
 | | `/repo` | 在 PPT 里用资产 |
@@ -55,8 +57,7 @@ verifies: []
 ## 校验方式
 
 ```bash
-go test ./internal/agent/command -run TestRepoScopeAssetOnly
-go test ./internal/asset -run 'TestAssetCRUD|TestAssetValidate'
+go test ./internal/agent/repo -run 'TestRepoScopeAssetOnly|TestPatchAssetOnlyChangesAsset'
 ```
 
 ## 依赖

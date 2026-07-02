@@ -105,7 +105,7 @@ func setupEditServer(t *testing.T, pages int, client llm.Client) (*httptest.Serv
 	writeAtE(t, workDir, "common/base.css", ".slide-stage{}")
 
 	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
-	runSvc := service.NewRunService(st, engine, client)
+	runSvc := service.NewRunService(st, engine, client, service.WorkRoot(workDir))
 	router := httpapi.NewRouter(cfg, zap.NewNop(), httpapi.NewHealthHandler(service.NewHealthService(st)), httpapi.NewRunHandler(runSvc), httpapi.NewSlideHandler(service.NewSlideService(st)))
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)

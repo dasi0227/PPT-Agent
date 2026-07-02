@@ -31,4 +31,6 @@ type CreateRunParams struct {
 	Language   string
 	// slide 生成入参（kind=generate）：所选主题 id；空则回退 project.Theme→首个 preset。
 	Theme string
+	// overview 入参（scope=overview）：项目页数，由 service 就地补齐（fanout 默认全页/越界校验）。
+	PageCount int
 }

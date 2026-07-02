@@ -12,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
@@ -51,6 +52,9 @@ func provideLLMClient(cfg *config.Config) llm.Client {
 }
 
 func provideLockManager() *run.LockManager { return run.NewLockManager() }
+
+// provideWorkRoot 从配置暴露全局 work_root（供 /repo 资产操作）。
+func provideWorkRoot(cfg *config.Config) service.WorkRoot { return service.WorkRoot(cfg.WorkRoot) }
 
 func provideEngine(rs run.Store, locks *run.LockManager, log *zap.Logger) *run.Engine {
 	return run.NewEngine(rs, locks, log)

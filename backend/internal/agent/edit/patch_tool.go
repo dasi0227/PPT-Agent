@@ -40,7 +40,9 @@ func NewPatchSlideTool(store Store, sandbox *tools.Sandbox, projectID, runID str
 func (t *PatchSlideTool) Name() string       { return "patch_slide" }
 func (t *PatchSlideTool) Class() tools.Class { return tools.ClassWrite }
 func (t *PatchSlideTool) Scopes() []model.Scope {
-	return []model.Scope{model.ScopeCurrent, model.ScopePage}
+	// current/page 主循环编辑；overview 跨页 patch 时由子代理（Scope=overview）复用本工具，
+	// 每子代理仍锁定单页（slideIdx）。与 tools.md 工具总表 patch_slide 可用 scope 一致。
+	return []model.Scope{model.ScopeCurrent, model.ScopePage, model.ScopeOverview}
 }
 func (t *PatchSlideTool) Patched() bool { return t.patched }
 

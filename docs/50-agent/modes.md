@@ -46,7 +46,8 @@ verifies: []
 ## 校验方式
 
 ```bash
-go test ./internal/agent -run TestModeMatrix
+go test ./internal/httpapi -run TestE2EModeNotPersisted   # AC-MODE-005：mode 不隐式延续
+go test ./internal/agent/assist -run 'TestTalkNoArtifact|TestAskQuestionsWhenUncertain|TestAskProceedsWhenClear'
 ```
 
 ## 依赖

@@ -59,7 +59,7 @@ verifies: []
 ## 校验方式
 
 ```bash
-go test ./internal/agent/command -run TestRecapReadOnly
+go test ./internal/agent/assist -run TestRecapReadOnly
 ```
 
 ## 依赖

@@ -50,7 +50,7 @@ verifies: []
 ## 校验方式
 
 ```bash
-go test ./internal/agent/command -run 'TestAskQuestionsWhenUncertain|TestAskProceedsWhenClear'
+go test ./internal/agent/assist -run 'TestAskQuestionsWhenUncertain|TestAskProceedsWhenClear'
 ```
 
 ## 依赖

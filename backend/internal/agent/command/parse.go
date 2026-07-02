@@ -1,7 +1,8 @@
 // Package command 是指令的权威解析层（AGENT-CMD-INDEX）：把用户输入行首的指令
 // 解析为 Run 的 scope/mode/page_index/instruction/command 字段，供 harness 动态裁剪工具集。
-// M4 只落 scope 维度的 /current（默认）与 /page x；mode 维度（prompt/recap/talk/ask）与
-// /overview、/repo 留到 M5。
+// scope 维度：/current（默认）、/page x、/overview、/repo。
+// 命令/模式维度：/prompt、/recap 是一次性命令（command，mode 仍 normal）；
+// /talk、/ask 是真正的模式（写 runs.mode）。映射见 commands/README.md「指令 → Run 字段映射」。
 package command
 
 import (
@@ -16,13 +17,13 @@ import (
 type Parsed struct {
 	Scope       model.Scope
 	Mode        model.Mode
-	PageIndex   *int   // /page x 显式页号；/current 时为 nil（由调用方用当前预览页填充）
-	Instruction string // 去除指令前缀后的自然语言编辑指令
-	Command     string // 显式指令名（M4 恒空；mode 指令留到 M5）
+	PageIndex   *int   // /page x 显式页号；其余 scope 为 nil（current 由调用方用当前预览页填充）
+	Instruction string // 去除指令前缀后的自然语言指令
+	Command     string // 显式命令名：prompt/recap/talk/ask；scope 类指令为空
 }
 
 // ErrMultipleScopes 表示一次输入出现多个 scope 主指令（AGENT-CMD-007 不支持组合）。
-var ErrMultipleScopes = fmt.Errorf("一次只能使用一个 scope 指令（/current 或 /page x），不支持组合")
+var ErrMultipleScopes = fmt.Errorf("一次只能使用一个 scope 指令（/current、/page x、/overview、/repo），不支持组合")
 
 // ErrPageNeedsIndex 表示 /page 缺少页号（AGENT-CMD-002）。
 var ErrPageNeedsIndex = fmt.Errorf("/page 指令必须携带页号，如 /page 3")
@@ -31,14 +32,8 @@ var ErrPageNeedsIndex = fmt.Errorf("/page 指令必须携带页号，如 /page 3
 type ErrUnknownCommand struct{ Name string }
 
 func (e *ErrUnknownCommand) Error() string {
-	return fmt.Sprintf("未知指令 %q；M4 可用：/current、/page x", e.Name)
+	return fmt.Sprintf("未知指令 %q；可用 scope：/current、/page x、/overview、/repo；可用命令：/prompt、/recap、/talk、/ask", e.Name)
 }
-
-// knownM5Scopes 是本期（M4）尚未实现、但属已知指令的 scope（给出明确提示而非"未知"）。
-var knownM5Scopes = map[string]bool{"/overview": true, "/repo": true}
-
-// knownModes 是 mode 指令（M5 落地）；M4 遇到给出明确提示。
-var knownModes = map[string]bool{"/prompt": true, "/recap": true, "/talk": true, "/ask": true}
 
 // Parse 解析用户输入。仅当指令出现在**行首**才识别为指令（AGENT-CMD-001）。
 // 无 scope 指令时默认 /current（AGENT-CMD-006）。
@@ -52,18 +47,9 @@ func Parse(input string) (Parsed, error) {
 
 	head, rest := splitHead(trimmed)
 
-	// 越权到 M5 的已知 scope/mode：明确提示，不静默降级（AGENT-CMD-004 的精神）。
-	if knownM5Scopes[head] {
-		return Parsed{}, fmt.Errorf("指令 %s 属于 M5（跨页/仓库），M4 暂不支持", head)
-	}
-	if knownModes[head] {
-		return Parsed{}, fmt.Errorf("模式指令 %s 属于 M5，M4 暂不支持", head)
-	}
-
 	switch head {
 	case "/current":
-		// /current 后若又出现 scope 指令 → 组合，报错（AGENT-CMD-007）。
-		if startsWithScope(rest) {
+		if startsWithCommand(rest) {
 			return Parsed{}, ErrMultipleScopes
 		}
 		return Parsed{Scope: model.ScopeCurrent, Mode: model.ModeNormal, Instruction: strings.TrimSpace(rest)}, nil
@@ -73,10 +59,48 @@ func Parse(input string) (Parsed, error) {
 		if err != nil {
 			return Parsed{}, err
 		}
-		if startsWithScope(instr) {
+		if startsWithCommand(instr) {
 			return Parsed{}, ErrMultipleScopes
 		}
 		return Parsed{Scope: model.ScopePage, Mode: model.ModeNormal, PageIndex: &idx, Instruction: strings.TrimSpace(instr)}, nil
+
+	case "/overview":
+		if startsWithCommand(rest) {
+			return Parsed{}, ErrMultipleScopes
+		}
+		return Parsed{Scope: model.ScopeOverview, Mode: model.ModeNormal, Instruction: strings.TrimSpace(rest)}, nil
+
+	case "/repo":
+		if startsWithCommand(rest) {
+			return Parsed{}, ErrMultipleScopes
+		}
+		return Parsed{Scope: model.ScopeRepo, Mode: model.ModeNormal, Instruction: strings.TrimSpace(rest)}, nil
+
+	// /prompt、/recap 是一次性命令（不是 mode）：scope 归 current、mode 归 normal，仅置 Command。
+	case "/prompt":
+		if startsWithCommand(rest) {
+			return Parsed{}, ErrMultipleScopes
+		}
+		return Parsed{Scope: model.ScopeCurrent, Mode: model.ModeNormal, Command: "prompt", Instruction: strings.TrimSpace(rest)}, nil
+
+	case "/recap":
+		if startsWithCommand(rest) {
+			return Parsed{}, ErrMultipleScopes
+		}
+		return Parsed{Scope: model.ScopeCurrent, Mode: model.ModeNormal, Command: "recap", Instruction: strings.TrimSpace(rest)}, nil
+
+	// /talk、/ask 是真正的 mode：写 runs.mode，同时记 Command 以便审计。
+	case "/talk":
+		if startsWithCommand(rest) {
+			return Parsed{}, ErrMultipleScopes
+		}
+		return Parsed{Scope: model.ScopeCurrent, Mode: model.ModeTalk, Command: "talk", Instruction: strings.TrimSpace(rest)}, nil
+
+	case "/ask":
+		if startsWithCommand(rest) {
+			return Parsed{}, ErrMultipleScopes
+		}
+		return Parsed{Scope: model.ScopeCurrent, Mode: model.ModeAsk, Command: "ask", Instruction: strings.TrimSpace(rest)}, nil
 
 	default:
 		return Parsed{}, &ErrUnknownCommand{Name: head}
@@ -108,11 +132,12 @@ func parsePageArgs(rest string) (int, string, error) {
 	return idx, instr, nil
 }
 
-// startsWithScope 判断文本是否以 scope 指令开头（用于检测组合）。
-func startsWithScope(s string) bool {
+// startsWithCommand 判断文本是否以任一主指令（scope 或命令/模式）开头，用于检测组合（AGENT-CMD-007）。
+func startsWithCommand(s string) bool {
 	head, _ := splitHead(strings.TrimSpace(s))
 	switch head {
-	case "/current", "/page", "/overview", "/repo":
+	case "/current", "/page", "/overview", "/repo",
+		"/prompt", "/recap", "/talk", "/ask":
 		return true
 	}
 	return false

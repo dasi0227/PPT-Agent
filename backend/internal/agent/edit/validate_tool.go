@@ -19,7 +19,8 @@ func NewValidateSlideTool() *ValidateSlideTool { return &ValidateSlideTool{} }
 func (t *ValidateSlideTool) Name() string       { return "validate_slide" }
 func (t *ValidateSlideTool) Class() tools.Class { return tools.ClassValidate }
 func (t *ValidateSlideTool) Scopes() []model.Scope {
-	return []model.Scope{model.ScopeCurrent, model.ScopePage}
+	// current/page 主循环 + overview 跨页子代理均可显式自查。
+	return []model.Scope{model.ScopeCurrent, model.ScopePage, model.ScopeOverview}
 }
 
 func (t *ValidateSlideTool) Description() string {

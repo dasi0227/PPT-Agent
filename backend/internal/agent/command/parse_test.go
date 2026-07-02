@@ -88,11 +88,78 @@ func TestUnknownCommand(t *testing.T) {
 	}
 }
 
-// M5 scope/mode 指令在 M4 给出明确提示（不静默降级）。
-func TestM5CommandsRejected(t *testing.T) {
-	for _, in := range []string{"/overview 改主色", "/repo 改组件", "/talk 聊聊", "/ask 问", "/prompt 改写", "/recap"} {
-		if _, err := Parse(in); err == nil {
-			t.Errorf("expected rejection for M5 command %q", in)
+// AC-CMD-OVERVIEW：/overview → scope=overview，mode=normal，无 command。
+func TestOverviewScope(t *testing.T) {
+	p, err := Parse("/overview 主色改成品牌蓝")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if p.Scope != model.ScopeOverview || p.Mode != model.ModeNormal || p.Command != "" {
+		t.Errorf("got %+v", p)
+	}
+	if p.Instruction != "主色改成品牌蓝" {
+		t.Errorf("instruction=%q", p.Instruction)
+	}
+}
+
+// AC-CMD-REPO：/repo → scope=repo，mode=normal，无 command。
+func TestRepoScope(t *testing.T) {
+	p, err := Parse("/repo 把 neon-card 圆角调大")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if p.Scope != model.ScopeRepo || p.Mode != model.ModeNormal || p.Command != "" {
+		t.Errorf("got %+v", p)
+	}
+	if p.Instruction != "把 neon-card 圆角调大" {
+		t.Errorf("instruction=%q", p.Instruction)
+	}
+}
+
+// /prompt、/recap 是命令而非 mode：scope=current、mode=normal，仅置 Command。
+func TestPromptRecapAreCommandsNotModes(t *testing.T) {
+	pp, err := Parse("/prompt 我想让这页好看点")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if pp.Command != "prompt" || pp.Mode != model.ModeNormal || pp.Scope != model.ScopeCurrent {
+		t.Errorf("prompt got %+v", pp)
+	}
+	if pp.Instruction != "我想让这页好看点" {
+		t.Errorf("prompt instruction=%q", pp.Instruction)
+	}
+	pr, err := Parse("/recap")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if pr.Command != "recap" || pr.Mode != model.ModeNormal {
+		t.Errorf("recap got %+v", pr)
+	}
+}
+
+// /talk、/ask 是真正的 mode：写入 Mode，且记 Command。
+func TestTalkAskAreModes(t *testing.T) {
+	pt, err := Parse("/talk 我想把整体改成深色")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if pt.Mode != model.ModeTalk || pt.Command != "talk" {
+		t.Errorf("talk got %+v", pt)
+	}
+	pa, err := Parse("/ask 帮我把这页做成图表")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if pa.Mode != model.ModeAsk || pa.Command != "ask" {
+		t.Errorf("ask got %+v", pa)
+	}
+}
+
+// AGENT-CMD-007：任意两个主指令组合仍报错（含新指令）。
+func TestNoComboWithM5Commands(t *testing.T) {
+	for _, in := range []string{"/overview /repo x", "/page 3 /overview x", "/talk /ask x", "/prompt /recap"} {
+		if _, err := Parse(in); !errors.Is(err, ErrMultipleScopes) {
+			t.Errorf("want ErrMultipleScopes for %q, got %v", in, err)
 		}
 	}
 }
