@@ -1,0 +1,88 @@
+import { render, screen, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach } from 'vitest';
+import App from './App';
+import { useProjectStore } from './stores/projectStore';
+import { useDeckStore } from './stores/deckStore';
+import { useRunStore } from './stores/runStore';
+
+// Mock ResizeObserver
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
+describe('App Level Interactions', () => {
+  beforeEach(() => {
+    useProjectStore.setState({
+      projects: [
+        { id: 'p1', title: 'Project 1', theme: 'default', slide_count: 2, created_at: '', updated_at: '' },
+        { id: 'p2', title: 'Project 2', theme: 'default', slide_count: 1, created_at: '', updated_at: '' }
+      ],
+      activeProjectId: 'p1',
+      slidesByProjectId: {
+        'p1': [
+          { id: 's1', project_id: 'p1', page_index: 0, content_html: '<h1>P1S1</h1>', version_no: 1, updated_at: '' },
+          { id: 's2', project_id: 'p1', page_index: 1, content_html: '<h1>P1S2</h1>', version_no: 1, updated_at: '' }
+        ]
+      },
+      threadsByProjectId: {},
+      loadingProjects: false
+    });
+    
+    useDeckStore.setState({
+      currentPage: 0,
+      previewMode: 'main'
+    });
+
+    useRunStore.setState({
+      activeRunId: null,
+      status: 'idle',
+      timelineItems: [],
+      pendingInput: null
+    });
+  });
+
+  it('switches projects and active slide updates', async () => {
+    render(<App />);
+    
+    // Check initial state
+    expect(screen.getAllByText('Project 1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Project 2').length).toBeGreaterThan(0);
+    
+    // Switch to Project 2
+    act(() => {
+      useProjectStore.getState().selectProject('p2');
+    });
+    
+    expect(useProjectStore.getState().activeProjectId).toBe('p2');
+  });
+
+  it('switches current page', async () => {
+    render(<App />);
+    
+    // P1 has 2 slides
+    const slide2Btn = screen.getByText('Slide 2');
+    act(() => {
+      slide2Btn.click();
+    });
+    
+    expect(useDeckStore.getState().currentPage).toBe(1);
+  });
+  
+  it('shows run events in agent panel', async () => {
+    render(<App />);
+    
+    act(() => {
+      useRunStore.setState({
+        status: 'running',
+        timelineItems: [
+          { id: '1', type: 'markdown', text: 'Hello from Agent', timestamp: Date.now() }
+        ]
+      });
+    });
+    
+    expect(screen.getByText('Hello from Agent')).toBeInTheDocument();
+    expect(screen.getByText('Thinking...')).toBeInTheDocument(); // because status='running'
+  });
+});
