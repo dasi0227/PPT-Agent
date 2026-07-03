@@ -18,6 +18,16 @@ export const PreviewWorkspace: React.FC = () => {
     }
   }, [currentPage, previewMode]);
 
+  // Update content via postMessage instead of srcDoc when slide content changes
+  useEffect(() => {
+    if (iframeRef.current && iframeRef.current.contentWindow && previewMode === 'main') {
+      iframeRef.current.contentWindow.postMessage({ 
+        type: 'update', 
+        content: slides[currentPage]?.content_html || ''
+      }, '*');
+    }
+  }, [slides, currentPage, previewMode]);
+
   return (
     <div className="flex flex-col h-full bg-background relative">
       {/* Toolbar */}
@@ -55,8 +65,7 @@ export const PreviewWorkspace: React.FC = () => {
             {hasSlides ? (
               <iframe
                 ref={iframeRef}
-                src="/slide-runtime/index.html" // Assume we have a dummy runtime or we inject srcdoc
-                srcDoc={slides[currentPage]?.content_html || `<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;"><h1>Slide ${currentPage + 1}</h1></body></html>`}
+                src="/slide-runtime/index.html"
                 sandbox="allow-scripts allow-same-origin"
                 className="w-full h-full border-none"
                 title="Slide Preview"

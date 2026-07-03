@@ -13,7 +13,7 @@ interface ProjectState {
   selectProject: (projectId: string) => void;
   loadProjectSlides: (projectId: string) => Promise<void>;
   loadProjectThreads: (projectId: string) => Promise<void>;
-  createProject: (title: string, theme: string) => Promise<void>;
+  createProject: (topic: string, brief?: string, slide_count?: number, language?: string) => Promise<void>;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -65,9 +65,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  createProject: async (title: string, theme: string) => {
+  createProject: async (topic: string, brief: string = '', slide_count: number = 10, language: string = 'zh') => {
     try {
-      const project = await projectsApi.create(title, theme);
+      const project = await projectsApi.create(topic, brief, slide_count, language);
       set((state) => ({
         projects: [...state.projects, project],
         activeProjectId: project.id

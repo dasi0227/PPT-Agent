@@ -3,6 +3,7 @@ import { Send } from 'lucide-react';
 import { useRunStore } from '../../stores/runStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
+import { projectsApi } from '../../api/projects';
 
 export const CommandComposer: React.FC = () => {
   const [text, setText] = useState('');
@@ -29,10 +30,15 @@ export const CommandComposer: React.FC = () => {
     const threads = threadsByProjectId[activeProjectId] || [];
     let threadId = threads[0]?.id;
 
-    // In a real app we'd create a thread if none exists, assuming one exists or backend handles
     if (!threadId) {
-      // Simplification: fallback to a dummy thread id or handle error
-      threadId = 'default_thread';
+      try {
+        const newThread = await projectsApi.createThread(activeProjectId);
+        threadId = newThread.id;
+        useProjectStore.getState().loadProjectThreads(activeProjectId);
+      } catch (err) {
+        console.error('Failed to create thread', err);
+        return;
+      }
     }
 
     await createRun(threadId, {

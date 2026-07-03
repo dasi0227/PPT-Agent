@@ -13,7 +13,7 @@ export const ProjectTabs: React.FC = () => {
   }, [loadProjects]);
 
   const handleCreate = async () => {
-    await createProject('New Presentation', 'default');
+    await createProject('New Presentation');
   };
 
   return (

@@ -9,11 +9,13 @@ export interface SSEOptions {
 
 export function subscribeRunEvents(runId: string, options: SSEOptions): () => void {
   const url = new URL(`/api/v1/runs/${runId}/events`, window.location.origin);
-  // Note: Standard EventSource doesn't support setting Last-Event-ID header directly in constructor.
-  // It handles it automatically for reconnects.
-  // For initial custom Last-Event-ID, we might need fetch-stream, but let's stick to standard EventSource for MVP 
-  // unless we use fetch-stream polyfill. We can pass it as a query param if backend supports, but spec says Header.
-  // For now, EventSource is standard.
+  // Add Last-Event-ID as a query parameter if standard EventSource is used,
+  // assuming the backend fallback logic supports reading it from query params.
+  // The backend run_handler.go should parse `last_event_id` query param if header is absent.
+  if (options.lastEventId) {
+    url.searchParams.set('last_event_id', options.lastEventId);
+  }
+  
   const source = new EventSource(url.toString());
 
   const handleMessage = (e: MessageEvent) => {
