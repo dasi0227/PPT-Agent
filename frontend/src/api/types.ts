@@ -1,12 +1,10 @@
 export interface Project {
   id: string;
   title: string;
-  work_dir: string;
   theme: string;
-  status: 'draft' | 'generating' | 'ready';
-  design_path: string;
-  created_at: number | string;
-  updated_at: number | string;
+  status: string;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface Slide {

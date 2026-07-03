@@ -15,8 +15,8 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
     }
     if (url.includes('/threads')) return { ok: true, status: 200, json: async () => [] } as unknown as Response;
     return { ok: true, status: 200, json: async () => [
-      { id: 'p1', title: 'Project 1', work_dir: '.ppt-workspace/p1', theme: 'default', status: 'draft', design_path: 'projects/p1/design/tokens.css', created_at: '', updated_at: '' },
-      { id: 'p2', title: 'Project 2', work_dir: '.ppt-workspace/p2', theme: 'default', status: 'ready', design_path: 'projects/p2/design/tokens.css', created_at: '', updated_at: '' }
+      { id: 'p1', title: 'Project 1', theme: 'default', status: 'draft', created_at: 0, updated_at: 0 },
+      { id: 'p2', title: 'Project 2', theme: 'default', status: 'draft', created_at: 0, updated_at: 0 }
     ] } as unknown as Response;
   }
   return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
