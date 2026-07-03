@@ -18,7 +18,7 @@ export const DeckNavigator: React.FC = () => {
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-border">
-        <h2 className="font-semibold text-text-900 truncate" title={project.title}>{project.title}</h2>
+        <h2 className="font-semibold text-text-900 truncate" title={project.topic}>{project.topic || 'Untitled Project'}</h2>
         <div className="flex items-center text-xs text-text-600 mt-1 space-x-3">
           <span className="flex items-center"><Layers className="w-3 h-3 mr-1"/> {project.theme}</span>
           <span className="flex items-center"><FileText className="w-3 h-3 mr-1"/> {slides.length} pages</span>

@@ -1,7 +1,9 @@
 export interface Project {
   id: string;
-  title: string;
+  topic: string;
+  brief: string;
   theme: string;
+  language: string;
   slide_count: number;
   created_at: string;
   updated_at: string;
@@ -10,10 +12,11 @@ export interface Project {
 export interface Slide {
   id: string;
   project_id: string;
-  page_index: number;
-  content_html: string;
-  notes?: string;
-  version_no: number;
+  idx: number;
+  html_path: string;
+  notes: string;
+  current_version: number;
+  created_at: string;
   updated_at: string;
 }
 

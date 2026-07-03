@@ -23,7 +23,7 @@ export const PreviewWorkspace: React.FC = () => {
     if (iframeRef.current && iframeRef.current.contentWindow && previewMode === 'main') {
       iframeRef.current.contentWindow.postMessage({ 
         type: 'update', 
-        content: slides[currentPage]?.content_html || ''
+        content: slides[currentPage]?.html_path || ''
       }, '*');
     }
   }, [slides, currentPage, previewMode]);
@@ -90,7 +90,7 @@ export const PreviewWorkspace: React.FC = () => {
                   }}
                 >
                   <iframe
-                    srcDoc={slide.content_html || `<html><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:24px;"><h1>${i + 1}</h1></body></html>`}
+                    src={slide.html_path || '/slide-runtime/index.html'}
                     sandbox="allow-scripts"
                     className="w-full h-full border-none pointer-events-none origin-top-left"
                     style={{ transform: 'scale(0.25)', width: '400%', height: '400%' }}

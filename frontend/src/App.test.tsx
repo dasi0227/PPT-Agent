@@ -16,16 +16,16 @@ describe('App Level Interactions', () => {
   beforeEach(() => {
     useProjectStore.setState({
       projects: [
-        { id: 'p1', title: 'Project 1', theme: 'default', slide_count: 2, created_at: '', updated_at: '' },
-        { id: 'p2', title: 'Project 2', theme: 'default', slide_count: 1, created_at: '', updated_at: '' }
-      ],
-      activeProjectId: 'p1',
-      slidesByProjectId: {
-        'p1': [
-          { id: 's1', project_id: 'p1', page_index: 0, content_html: '<h1>P1S1</h1>', version_no: 1, updated_at: '' },
-          { id: 's2', project_id: 'p1', page_index: 1, content_html: '<h1>P1S2</h1>', version_no: 1, updated_at: '' }
-        ]
-      },
+          { id: 'p1', topic: 'Project 1', brief: '', theme: 'default', language: 'zh', slide_count: 2, created_at: '', updated_at: '' },
+          { id: 'p2', topic: 'Project 2', brief: '', theme: 'default', language: 'zh', slide_count: 1, created_at: '', updated_at: '' }
+        ],
+        activeProjectId: 'p1',
+        slidesByProjectId: {
+          'p1': [
+            { id: 's1', project_id: 'p1', idx: 0, html_path: '/slides/p1/s1.html', notes: '', current_version: 1, created_at: '', updated_at: '' },
+            { id: 's2', project_id: 'p1', idx: 1, html_path: '/slides/p1/s2.html', notes: '', current_version: 1, created_at: '', updated_at: '' }
+          ]
+        },
       threadsByProjectId: {},
       loadingProjects: false
     });
@@ -62,12 +62,12 @@ describe('App Level Interactions', () => {
   it('switches current page', async () => {
     await act(async () => {
       useProjectStore.setState({
-        projects: [{ id: 'p1', title: 'Project 1', theme: 'default', slide_count: 2, created_at: '', updated_at: '' }],
+        projects: [{ id: 'p1', topic: 'Project 1', brief: '', theme: 'default', language: 'zh', slide_count: 2, created_at: '', updated_at: '' }],
         activeProjectId: 'p1',
         slidesByProjectId: {
           'p1': [
-            { id: 's1', project_id: 'p1', page_index: 0, content_html: '<h1>P1S1</h1>', version_no: 1, updated_at: '' },
-            { id: 's2', project_id: 'p1', page_index: 1, content_html: '<h1>P1S2</h1>', version_no: 1, updated_at: '' }
+            { id: 's1', project_id: 'p1', idx: 0, html_path: '/slides/p1/s1.html', notes: '', current_version: 1, created_at: '', updated_at: '' },
+            { id: 's2', project_id: 'p1', idx: 1, html_path: '/slides/p1/s2.html', notes: '', current_version: 1, created_at: '', updated_at: '' }
           ]
         }
       });

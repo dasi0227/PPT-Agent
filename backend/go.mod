@@ -1,6 +1,6 @@
 module github.com/dasi0227/PPT-Agent/backend
 
-go 1.22.12
+go 1.26.4
 
 require (
 	github.com/gin-gonic/gin v1.10.0
