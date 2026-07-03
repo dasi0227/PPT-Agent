@@ -6,38 +6,94 @@
   <style>
     body {
       margin: 0;
-      padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       height: 100vh;
-      background: #f0f0f0;
+      background: #fff;
       font-family: sans-serif;
+      overflow: hidden;
     }
-    #content {
+    #deck {
+      position: relative;
       width: 100%;
       height: 100%;
     }
-    iframe {
+    .slide-frame {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
       border: none;
+      background: #fff;
+    }
+    .slide-frame[data-active="false"] {
+      display: none;
     }
   </style>
 </head>
 <body>
-  <div id="content">
-    <iframe id="slide-frame" src="about:blank"></iframe>
-  </div>
+  <div id="deck"></div>
 
   <script>
-    const frame = document.getElementById('slide-frame');
+    const deck = document.getElementById('deck');
+    const state = {
+      slides: [],
+      activeIndex: 0
+    };
+
+    function sameSlides(nextSlides) {
+      if (state.slides.length !== nextSlides.length) {
+        return false;
+      }
+
+      return state.slides.every((slide, index) => slide === nextSlides[index]);
+    }
+
+    function setActive(index) {
+      const frames = Array.from(deck.querySelectorAll('[data-slide-frame]'));
+      if (!frames.length) {
+        return;
+      }
+
+      const nextIndex = Math.max(0, Math.min(index, frames.length - 1));
+      state.activeIndex = nextIndex;
+
+      frames.forEach((frame, frameIndex) => {
+        frame.dataset.active = frameIndex === nextIndex ? 'true' : 'false';
+      });
+    }
+
+    function loadSlides(slides) {
+      if (sameSlides(slides)) {
+        return;
+      }
+
+      deck.innerHTML = '';
+      state.slides = slides.slice();
+
+      slides.forEach((slidePath, index) => {
+        const frame = document.createElement('iframe');
+        frame.className = 'slide-frame';
+        frame.dataset.slideFrame = 'true';
+        frame.dataset.active = 'false';
+        frame.dataset.index = String(index);
+        frame.src = slidePath;
+        frame.title = `Slide ${index + 1}`;
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+        deck.appendChild(frame);
+      });
+    }
+
     window.addEventListener('message', (event) => {
-      const { type, content, index } = event.data;
-      if (type === 'update' && content) {
-        frame.src = content; // In a real app this might be an HTML path
-      } else if (type === 'goto') {
-        // Handle goto logic if the iframe supports it natively
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+
+      const { type, slides, index } = event.data || {};
+
+      if (type === 'update' && Array.isArray(slides) && slides.length > 0) {
+        loadSlides(slides);
+        setActive(typeof index === 'number' ? index : state.activeIndex);
+      } else if (type === 'goto' && typeof index === 'number') {
+        setActive(index);
       }
     });
   </script>

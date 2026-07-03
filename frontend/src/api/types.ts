@@ -1,23 +1,23 @@
 export interface Project {
   id: string;
-  topic: string;
-  brief: string;
+  title: string;
+  work_dir: string;
   theme: string;
-  language: string;
-  slide_count: number;
-  created_at: string;
-  updated_at: string;
+  status: 'draft' | 'generating' | 'ready';
+  design_path: string;
+  created_at: number | string;
+  updated_at: number | string;
 }
 
 export interface Slide {
   id: string;
   project_id: string;
   idx: number;
+  layout: string;
+  title: string;
   html_path: string;
-  notes: string;
+  json_path: string;
   current_version: number;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface Thread {

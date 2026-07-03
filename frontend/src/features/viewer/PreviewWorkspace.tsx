@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { LayoutGrid, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -11,6 +11,12 @@ export const PreviewWorkspace: React.FC = () => {
 
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
   const hasSlides = slides.length > 0;
+  const slidePaths = useMemo(() => slides.map((slide) => slide.html_path), [slides]);
+  const currentPageRef = useRef(currentPage);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
 
   useEffect(() => {
     if (iframeRef.current && iframeRef.current.contentWindow && previewMode === 'main') {
@@ -18,15 +24,16 @@ export const PreviewWorkspace: React.FC = () => {
     }
   }, [currentPage, previewMode]);
 
-  // Update content via postMessage instead of srcDoc when slide content changes
+  // Load the whole deck into the runtime once, then let `goto` switch active pages.
   useEffect(() => {
-    if (iframeRef.current && iframeRef.current.contentWindow && previewMode === 'main') {
+    if (iframeRef.current && iframeRef.current.contentWindow && previewMode === 'main' && slidePaths.length > 0) {
       iframeRef.current.contentWindow.postMessage({ 
         type: 'update', 
-        content: slides[currentPage]?.html_path || ''
+        slides: slidePaths,
+        index: currentPageRef.current
       }, '*');
     }
-  }, [slides, currentPage, previewMode]);
+  }, [activeProjectId, previewMode, slidePaths]);
 
   return (
     <div className="flex flex-col h-full bg-background relative">

@@ -40,7 +40,7 @@ export const ProjectTabs: React.FC = () => {
                     : "bg-background text-text-600 border-transparent hover:bg-black/5"
                 )}
               >
-                {proj.topic || 'Untitled Project'}
+                  {proj.title || 'Untitled Project'}
                 {isActive && runStatus === 'running' && (
                   <span className="ml-2 inline-block w-2 h-2 rounded-full bg-mode-normal animate-pulse" />
                 )}
