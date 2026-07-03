@@ -1,0 +1,20 @@
+/* component: svg-bar —— 静态柱状图（纯 SVG）。
+   配色全部走 token（DS-CHARTS-001 / AC-CHARTS-001）：切主题时柱色随 --color-primary/--color-accent 变化。 */
+.svg-bar {
+  margin: 0;
+}
+.svg-bar__caption {
+  font-size: var(--text-caption);
+  color: var(--color-fg);
+  margin-bottom: var(--space-2);
+}
+.svg-bar__svg {
+  width: 100%;
+  height: auto;
+}
+.svg-bar__bar {
+  fill: var(--color-primary);
+}
+.svg-bar__bar--accent {
+  fill: var(--color-accent);
+}

@@ -1,0 +1,36 @@
+/* theme: tokyo-night —— 东京夜：深色、冷色霓虹。
+   提供 design-tokens.md 必需 token 全集（DS-THEMES-001）。 */
+:root {
+  /* 颜色 */
+  --color-bg: #1a1b26;
+  --color-fg: #c0caf5;
+  --color-primary: #7aa2f7;
+  --color-accent: #bb9af7;
+  --color-muted: #24283b;
+  /* 字体（含中文回退，DS-THEMES-004） */
+  --font-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --font-serif: "Noto Serif SC", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+  /* 字号 */
+  --text-title: 84px;
+  --text-h1: 60px;
+  --text-body: 32px;
+  --text-caption: 22px;
+  /* 间距 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 40px;
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  /* 阴影 */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55);
+  /* 舞台（16:9 基准，无单位数值） */
+  --stage-w: 1920;
+  --stage-h: 1080;
+}

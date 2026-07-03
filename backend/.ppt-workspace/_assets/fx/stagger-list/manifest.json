@@ -1,0 +1,11 @@
+{
+  "name": "stagger-list",
+  "version": "1.0.0",
+  "kind": "fx",
+  "source": "preset",
+  "description": "列表逐项进入：子项依次上浮淡入",
+  "tags": ["css", "list", "stagger"],
+  "mount": { "target": "[data-animate=\"stagger-list\"]", "position": "wrap" },
+  "cleanup": true,
+  "assets": { "js": "effect.js" }
+}

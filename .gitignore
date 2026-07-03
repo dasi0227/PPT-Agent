@@ -6,13 +6,13 @@
 /server
 *.test
 
-# 运行时工作目录与数据库（PPT_WORK_ROOT 默认落点）
+# 运行时工作目录与数据库
 /.ppt-workspace
 *.db
 *.db-shm
 *.db-wal
 
-# 环境变量（含 DEEPSEEK_API_KEY，MUST NOT 落库/入库）
+# 环境变量
 .env
 .env.*
 

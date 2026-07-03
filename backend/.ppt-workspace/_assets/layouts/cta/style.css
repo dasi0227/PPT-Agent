@@ -1,0 +1,15 @@
+/* layout: cta —— 行动号召（可作结尾页）。 */
+.cta-content {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-6);
+}
+.cta-button {
+  margin-top: var(--space-6);
+  padding: var(--space-4) var(--space-8);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-body);
+}

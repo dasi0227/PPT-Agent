@@ -1,0 +1,13 @@
+/* layout: section-divider —— 章节分隔。 */
+.divider-content {
+  justify-content: center;
+  gap: var(--space-4);
+}
+.divider-index {
+  font-size: var(--text-title);
+  color: var(--color-primary);
+  margin: 0;
+}
+.divider-title {
+  font-size: var(--text-title);
+}

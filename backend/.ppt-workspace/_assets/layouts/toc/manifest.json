@@ -1,0 +1,10 @@
+{
+  "name": "toc",
+  "version": "1.0.0",
+  "kind": "layout",
+  "source": "preset",
+  "description": "目录：章节列表",
+  "tags": ["toc", "agenda"],
+  "mount": { "position": "replace" },
+  "assets": { "html": "template.html", "css": "style.css" }
+}

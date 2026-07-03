@@ -1,0 +1,14 @@
+{
+  "name": "quote-block",
+  "version": "1.0.0",
+  "kind": "component",
+  "source": "preset",
+  "description": "引用块：突出引文与出处",
+  "tags": ["quote", "citation"],
+  "mount": { "target": ".slide-content", "position": "append" },
+  "params": {
+    "text": { "type": "string", "default": "引用内容", "description": "引文文本" },
+    "cite": { "type": "string", "default": "出处", "description": "引文出处" }
+  },
+  "assets": { "html": "template.html", "css": "style.css" }
+}

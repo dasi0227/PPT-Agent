@@ -1,0 +1,10 @@
+{
+  "name": "cover",
+  "version": "1.0.0",
+  "kind": "layout",
+  "source": "preset",
+  "description": "封面：大标题、副标题、作者/日期",
+  "tags": ["cover", "title"],
+  "mount": { "position": "replace" },
+  "assets": { "html": "template.html", "css": "style.css" }
+}

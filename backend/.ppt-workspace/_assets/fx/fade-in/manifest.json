@@ -1,0 +1,11 @@
+{
+  "name": "fade-in",
+  "version": "1.0.0",
+  "kind": "fx",
+  "source": "preset",
+  "description": "淡入：元素进入时透明度过渡",
+  "tags": ["css", "enter", "fade"],
+  "mount": { "target": "[data-animate=\"fade-in\"]", "position": "wrap" },
+  "cleanup": true,
+  "assets": { "js": "effect.js" }
+}

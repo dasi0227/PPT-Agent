@@ -1,0 +1,10 @@
+{
+  "name": "image-hero",
+  "version": "1.0.0",
+  "kind": "layout",
+  "source": "preset",
+  "description": "大图主视觉：全幅图 + 叠字",
+  "tags": ["image", "hero"],
+  "mount": { "position": "replace" },
+  "assets": { "html": "template.html", "css": "style.css" }
+}
