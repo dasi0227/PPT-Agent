@@ -1,0 +1,206 @@
+frontend/src/setupTests.ts
+  s_8df90be4f9f7b3::t_4da19223b1f74d 18-19 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a47546ee42e0d96cfc7045e","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Range":[18,19]}]}]}
+frontend/src/api/types.ts
+  s_8df90be4f9f7b3::t_205b376c38bffa 5-7 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a47546ae42e0d96cfc70454","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Range":[5,7]}]}]}
+frontend/src/features/deck/DeckNavigator.tsx
+  s_8df90be4f9f7b3::t_8daa72d670447b 21 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a47546be42e0d96cfc70457","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Single":21}]}]}
+frontend/src/App.test.tsx
+  s_8df90be4f9f7b3::t_0ab507aead5849 18-20,65 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a47548ae42e0d96cfc70461","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Range":[18,20]},{"Single":65}]}]}
+frontend/src/features/workspace/ProjectTabs.tsx
+  s_8df90be4f9f7b3::t_8daa72d670447b 43 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a47546be42e0d96cfc70457","tool_type":"agent","tool_id":"SearchReplace","line_ranges":[{"Single":43}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "015a9dec020c2048a27e7eb8dd2c43b4547e85c6",
+  "prompts": {},
+  "sessions": {
+    "s_8df90be4f9f7b3": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a46542eb816aa546afa84ff",
+        "model": "gemini-3.1-pro__max",
+        "display_model_name": "Gemini-3.1-Pro-Preview"
+      },
+      "human_author": "wanyiwei <wanyiwei@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {
+    "frontend/src/App.test.tsx": [
+      {
+        "hash": "s_8df90be4f9f7b3::t_0ab507aead5849",
+        "line_ranges": [
+          {
+            "Range": [
+              18,
+              20
+            ]
+          },
+          {
+            "Single": 65
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a47548ae42e0d96cfc70461",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Range": [
+                  18,
+                  20
+                ]
+              },
+              {
+                "Single": 65
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "frontend/src/api/types.ts": [
+      {
+        "hash": "s_8df90be4f9f7b3::t_205b376c38bffa",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              7
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a47546ae42e0d96cfc70454",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  7
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "frontend/src/features/deck/DeckNavigator.tsx": [
+      {
+        "hash": "s_8df90be4f9f7b3::t_8daa72d670447b",
+        "line_ranges": [
+          {
+            "Single": 21
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a47546be42e0d96cfc70457",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Single": 21
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "frontend/src/features/workspace/ProjectTabs.tsx": [
+      {
+        "hash": "s_8df90be4f9f7b3::t_8daa72d670447b",
+        "line_ranges": [
+          {
+            "Single": 43
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a47546be42e0d96cfc70457",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Single": 43
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "frontend/src/setupTests.ts": [
+      {
+        "hash": "s_8df90be4f9f7b3::t_4da19223b1f74d",
+        "line_ranges": [
+          {
+            "Range": [
+              18,
+              19
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a47546ee42e0d96cfc7045e",
+            "tool_type": "agent",
+            "tool_id": "SearchReplace",
+            "line_ranges": [
+              {
+                "Range": [
+                  18,
+                  19
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "s_8df90be4f9f7b3": {
+      "tool": "trae",
+      "conversation_id": "6a46542eb816aa546afa84ff",
+      "session_id": "6a46542eb816aa546afa84ff",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_8df90be4f9f7b3::t_0ab507aead5849": {
+      "tool": "trae",
+      "conversation_id": "6a46542eb816aa546afa84ff",
+      "session_id": "6a46542eb816aa546afa84ff",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_8df90be4f9f7b3::t_205b376c38bffa": {
+      "tool": "trae",
+      "conversation_id": "6a46542eb816aa546afa84ff",
+      "session_id": "6a46542eb816aa546afa84ff",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_8df90be4f9f7b3::t_4da19223b1f74d": {
+      "tool": "trae",
+      "conversation_id": "6a46542eb816aa546afa84ff",
+      "session_id": "6a46542eb816aa546afa84ff",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_8df90be4f9f7b3::t_8daa72d670447b": {
+      "tool": "trae",
+      "conversation_id": "6a46542eb816aa546afa84ff",
+      "session_id": "6a46542eb816aa546afa84ff",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
