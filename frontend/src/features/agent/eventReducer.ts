@@ -1,4 +1,4 @@
-export type TimelineItemType = 'markdown' | 'thought' | 'tool_call' | 'plan' | 'artifact' | 'final_result' | 'needs_input' | 'error';
+export type TimelineItemType = 'markdown' | 'thought' | 'tool_call' | 'artifact' | 'final_result' | 'needs_input' | 'error';
 
 export interface BaseTimelineItem {
   id: string;
@@ -24,12 +24,6 @@ export interface ToolCallItem extends BaseTimelineItem {
   status: 'running' | 'success' | 'failed';
   observation?: any;
   artifacts: ArtifactItem[];
-}
-
-export interface PlanItem extends BaseTimelineItem {
-  type: 'plan';
-  title: string;
-  steps: Array<{ id: string, title: string, status: string, detail?: string }>;
 }
 
 export interface ArtifactItem extends BaseTimelineItem {
@@ -62,13 +56,49 @@ export type TimelineItem =
   | MarkdownMessageItem
   | ThoughtItem
   | ToolCallItem
-  | PlanItem
   | ArtifactItem
   | FinalResultItem
   | NeedsInputItem
   | ErrorItem;
 
-import { SSEEvent } from '../../api/types';
+import { SSEEvent, PlanState, PlanStep } from '../../api/types';
+
+// reducePlan 维护该 run 唯一的 PlanState（写入聚焦 thread 的 session.plan）。
+// - 'plan'：创建/替换整份计划（V2-PLAN-001，一次 run 至多一份）。
+// - 'plan.update'：按 step_id 更新对应 step；未命中则忽略并记告警（V2-SSE-002）。
+export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState | null {
+  switch (event.event) {
+    case 'plan': {
+      const steps: PlanStep[] = (event.data.steps || []).map((s: any) => ({
+        id: s.id,
+        title: s.title,
+        status: s.status,
+        detail: s.detail,
+      }));
+      return { id: event.data.id, title: event.data.title, steps };
+    }
+    case 'plan.update': {
+      if (!prev || event.data.id !== prev.id) {
+        console.warn('[plan.update] ignored: no matching plan', event.data);
+        return prev;
+      }
+      const idx = prev.steps.findIndex((s) => s.id === event.data.step_id);
+      if (idx === -1) {
+        console.warn('[plan.update] ignored: step_id not in plan', event.data.step_id);
+        return prev;
+      }
+      const steps = prev.steps.slice();
+      steps[idx] = {
+        ...steps[idx],
+        status: event.data.status,
+        detail: event.data.detail ?? steps[idx].detail,
+      };
+      return { ...prev, steps };
+    }
+    default:
+      return prev;
+  }
+}
 
 export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): TimelineItem[] {
   const timestamp = Date.now();

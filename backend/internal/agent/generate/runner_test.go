@@ -23,6 +23,8 @@ type pageEmitter struct {
 	mu       sync.Mutex
 	pageMsgs []harness.ProgressPayload
 	errored  bool
+	plans    []harness.PlanPayload
+	updates  []harness.PlanUpdatePayload
 }
 
 func (e *pageEmitter) Emit(evt model.EventType, payload any) {
@@ -32,6 +34,14 @@ func (e *pageEmitter) Emit(evt model.EventType, payload any) {
 	case model.EventProgress:
 		if p, ok := payload.(harness.ProgressPayload); ok && p.Stage == "page" {
 			e.pageMsgs = append(e.pageMsgs, p)
+		}
+	case model.EventPlan:
+		if p, ok := payload.(harness.PlanPayload); ok {
+			e.plans = append(e.plans, p)
+		}
+	case model.EventPlanUpdate:
+		if p, ok := payload.(harness.PlanUpdatePayload); ok {
+			e.updates = append(e.updates, p)
 		}
 	case model.EventError:
 		e.errored = true

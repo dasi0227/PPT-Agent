@@ -30,14 +30,14 @@ describe('Agent Cards', () => {
   });
 
   it('PlanCard renders states', () => {
-    const item = {
-      id: '1', type: 'plan' as const, title: 'My Plan', timestamp: 0,
+    const plan = {
+      id: 'plan_r1', title: 'My Plan',
       steps: [
-        { id: 's1', title: 'Step 1', status: 'completed' },
-        { id: 's2', title: 'Step 2', status: 'in_progress' }
-      ]
+        { id: 's1', title: 'Step 1', status: 'completed' as const },
+        { id: 's2', title: 'Step 2', status: 'in_progress' as const },
+      ],
     };
-    render(<PlanCard item={item} />);
+    render(<PlanCard plan={plan} />);
     expect(screen.getByText('My Plan')).toBeInTheDocument();
     expect(screen.getByText('Step 1')).toBeInTheDocument();
     expect(screen.getByText('Step 2')).toBeInTheDocument();

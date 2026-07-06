@@ -38,6 +38,30 @@ type ArtifactPayload struct {
 	PageIndex    *int   `json:"page_index,omitempty"`
 }
 
+// PlanStepPayload 是 plan 事件里的单个步骤（V2-CONTRACTS §2）。
+// status 枚举：pending | in_progress | completed | failed | skipped。
+type PlanStepPayload struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// PlanPayload 在 PLAN 阶段一次性发出完整步骤清单（V2-PLAN-001，非终态）。
+type PlanPayload struct {
+	ID    string            `json:"id"`
+	Title string            `json:"title"`
+	Steps []PlanStepPayload `json:"steps"`
+}
+
+// PlanUpdatePayload 增量更新单个 step 状态（V2-PLAN-002：step_id 必须命中已发 plan）。
+type PlanUpdatePayload struct {
+	ID     string `json:"id"`
+	StepID string `json:"step_id"`
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
 type InfoPayload struct {
 	Text string `json:"text"`
 }

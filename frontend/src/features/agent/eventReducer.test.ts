@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { reduceSSEEvent, TimelineItem } from './eventReducer';
-import { SSEEvent } from '../../api/types';
+import { reduceSSEEvent, reducePlan, TimelineItem } from './eventReducer';
+import { SSEEvent, PlanState } from '../../api/types';
 
 describe('eventReducer', () => {
   it('should reduce thought to ThoughtItem', () => {
@@ -49,5 +49,61 @@ describe('eventReducer', () => {
     
     expect(state).toHaveLength(1);
     expect((state[0] as any).artifacts).toHaveLength(1);
+  });
+});
+
+describe('reducePlan', () => {
+  const planEvent: SSEEvent = {
+    event: 'plan',
+    data: {
+      id: 'plan_r1', title: '构建 2 页',
+      steps: [
+        { id: 'p0', title: '第 1 页', status: 'pending' },
+        { id: 'p1', title: '第 2 页', status: 'pending' },
+      ],
+    },
+  };
+
+  it('creates PlanState from plan event', () => {
+    const plan = reducePlan(null, planEvent);
+    expect(plan?.id).toBe('plan_r1');
+    expect(plan?.steps).toHaveLength(2);
+    expect(plan?.steps[0].status).toBe('pending');
+  });
+
+  it('replaces existing plan on new plan event (only one per run)', () => {
+    const first = reducePlan(null, planEvent);
+    const replaced = reducePlan(first, {
+      event: 'plan',
+      data: { id: 'plan_r1', title: 'v2', steps: [{ id: 'p0', title: 'x', status: 'pending' }] },
+    });
+    expect(replaced?.steps).toHaveLength(1);
+    expect(replaced?.title).toBe('v2');
+  });
+
+  it('updates matching step status via plan.update', () => {
+    const plan = reducePlan(null, planEvent)!;
+    const updated = reducePlan(plan, {
+      event: 'plan.update',
+      data: { id: 'plan_r1', step_id: 'p1', status: 'in_progress' },
+    });
+    expect(updated?.steps[1].status).toBe('in_progress');
+    expect(updated?.steps[0].status).toBe('pending'); // untouched
+  });
+
+  it('ignores plan.update with unknown step_id (V2-SSE-002)', () => {
+    const plan = reducePlan(null, planEvent)!;
+    const same = reducePlan(plan, {
+      event: 'plan.update',
+      data: { id: 'plan_r1', step_id: 'nope', status: 'completed' },
+    });
+    expect(same).toBe(plan); // returns prev unchanged
+  });
+
+  it('ignores plan.update when no plan or mismatched plan id', () => {
+    expect(reducePlan(null, { event: 'plan.update', data: { id: 'x', step_id: 'p0', status: 'completed' } })).toBeNull();
+    const plan: PlanState = { id: 'plan_r1', title: 't', steps: [{ id: 'p0', title: 'a', status: 'pending' }] };
+    const mismatch = reducePlan(plan, { event: 'plan.update', data: { id: 'other', step_id: 'p0', status: 'completed' } });
+    expect(mismatch).toBe(plan);
   });
 });

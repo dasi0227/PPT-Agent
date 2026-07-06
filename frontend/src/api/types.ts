@@ -77,6 +77,12 @@ export interface PlanStep {
   detail?: string;
 }
 
+export interface PlanState {
+  id: string;
+  title: string;
+  steps: PlanStep[];
+}
+
 export interface SSEEvent {
   id?: string;
   event: SSEEventName;

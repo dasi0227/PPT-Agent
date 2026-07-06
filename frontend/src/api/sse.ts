@@ -29,7 +29,7 @@ export function subscribeRunEvents(runId: string, options: SSEOptions): () => vo
     }
   };
 
-  const eventTypes = ['run.started', 'thought', 'tool_call', 'tool_result', 'progress', 'token', 'artifact', 'needs_input', 'info', 'done', 'error'];
+  const eventTypes = ['run.started', 'thought', 'tool_call', 'tool_result', 'progress', 'token', 'artifact', 'plan', 'plan.update', 'needs_input', 'info', 'done', 'error'];
   
   eventTypes.forEach(type => {
     source.addEventListener(type, handleMessage);

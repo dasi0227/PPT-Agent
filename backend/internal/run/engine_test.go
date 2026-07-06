@@ -137,6 +137,65 @@ func TestSSESequenceAndSingleDone(t *testing.T) {
 	}
 }
 
+// AC-V2-CTR-003：plan/plan.update 走 run_events 持久化并参与 Last-Event-ID 续传，无重复。
+func TestPlanEventsPersistAndResume(t *testing.T) {
+	e, st := newEngine()
+	runner := scriptRunner{fn: func(_ context.Context, em harness.Emitter, _ harness.Checkpointer, _ Prompter) harness.Outcome {
+		em.Emit(model.EventPlan, harness.PlanPayload{ID: "plan_r1", Title: "构建 2 页", Steps: []harness.PlanStepPayload{
+			{ID: "p0", Title: "第 1 页", Status: "pending"},
+			{ID: "p1", Title: "第 2 页", Status: "pending"},
+		}})
+		em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: "plan_r1", StepID: "p0", Status: "in_progress"})
+		em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: "plan_r1", StepID: "p0", Status: "completed"})
+		return harness.Outcome{Status: harness.OutcomeFinished}
+	}}
+	r, _ := e.Start(context.Background(), model.Run{ID: "r1", ProjectID: "p1"}, runner)
+	waitStatus(t, st, r.ID, model.RunDone)
+
+	// 全量订阅：恰好一个 plan，两个 plan.update，且非终态不改变"恰好一个 done"。
+	ch, stop, err := e.Subscribe(context.Background(), r.ID, 0)
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	all := drainEvents(ch)
+	stop()
+	if countType(all, model.EventPlan) != 1 {
+		t.Errorf("want exactly 1 plan, got %d", countType(all, model.EventPlan))
+	}
+	if countType(all, model.EventPlanUpdate) != 2 {
+		t.Errorf("want 2 plan.update, got %d", countType(all, model.EventPlanUpdate))
+	}
+	assertSeqContiguous(t, all)
+	assertExactlyOneDone(t, all)
+
+	// plan 的 seq，用于验证续传跳过。
+	var planSeq int64
+	for _, ev := range all {
+		if ev.Type == model.EventPlan {
+			planSeq = ev.Seq
+		}
+	}
+
+	// 从 plan 之后续订：不再重复收到 plan，只收到后续 plan.update/done。
+	ch2, stop2, err := e.Subscribe(context.Background(), r.ID, planSeq)
+	if err != nil {
+		t.Fatalf("resume subscribe: %v", err)
+	}
+	defer stop2()
+	resumed := drainEvents(ch2)
+	for _, ev := range resumed {
+		if ev.Seq <= planSeq {
+			t.Errorf("resume must skip seq<=%d, got %d", planSeq, ev.Seq)
+		}
+		if ev.Type == model.EventPlan {
+			t.Error("resume must not re-deliver plan (no duplicate)")
+		}
+	}
+	if countType(resumed, model.EventPlanUpdate) != 2 {
+		t.Errorf("resume should still carry 2 plan.update, got %d", countType(resumed, model.EventPlanUpdate))
+	}
+}
+
 // AC-SSE-003：带 Last-Event-ID 续传，收到 seq>N 的事件，无重复。
 func TestSSEResume(t *testing.T) {
 	e, st := newEngine()

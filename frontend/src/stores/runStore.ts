@@ -1,14 +1,10 @@
 import { create } from 'zustand';
 import { runsApi } from '../api/runs';
 import { subscribeRunEvents } from '../api/sse';
-import { RunPayload, RunScope, PlanStep } from '../api/types';
-import { TimelineItem, reduceSSEEvent } from '../features/agent/eventReducer';
+import { RunPayload, RunScope, PlanState } from '../api/types';
+import { TimelineItem, reduceSSEEvent, reducePlan } from '../features/agent/eventReducer';
 
-export interface PlanState {
-  id: string;
-  title: string;
-  steps: PlanStep[];
-}
+export type { PlanState } from '../api/types';
 
 export type RunStatus = 'idle' | 'running' | 'done' | 'error' | 'needs_input';
 
@@ -137,6 +133,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
             return {
               timelineItems: reduceSSEEvent(prev.timelineItems, event),
+              plan: reducePlan(prev.plan, event),
               status,
               pendingInput,
               progress,

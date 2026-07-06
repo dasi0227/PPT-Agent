@@ -97,6 +97,13 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 		targets = slides[*r.params.PageIndex : *r.params.PageIndex+1]
 	}
 
+	// 整套生成：先发一次完整 plan（V2-PLAN-001），逐页再用 plan.update 推进。
+	// 单页重生成走精简路径，不发跨页 plan（V2-AGENT-PIPELINE §7）。
+	plan := buildPlan(r.params.RunID, slides)
+	if !single {
+		em.Emit(model.EventPlan, plan)
+	}
+
 	total := len(targets)
 	for i, sl := range targets {
 		if ctx.Err() != nil {
@@ -107,6 +114,11 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 			Stage: "page", Current: i + 1, Total: total,
 			Message: fmt.Sprintf("生成第 %d 页（%s）", sl.Idx, sl.Layout),
 		})
+		if !single {
+			em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{
+				ID: plan.ID, StepID: pageStepID(sl.Idx), Status: planStatusInProgress,
+			})
+		}
 
 		sj, err := r.loadSlideJSON(sandbox, sl)
 		if err != nil {
@@ -115,12 +127,25 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 
 		outcome := r.generatePage(ctx, em, cp, sandbox, sj, theme.Name)
 		if outcome.Status != harness.OutcomeFinished {
-			// 某页失败：整体失败（保留已落盘页）。
+			// 某页失败：标记该 step failed 后整体失败（保留已落盘页）。
+			if !single {
+				em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{
+					ID: plan.ID, StepID: pageStepID(sl.Idx), Status: planStatusFailed,
+				})
+			}
 			return outcome
+		}
+		if !single {
+			em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{
+				ID: plan.ID, StepID: pageStepID(sl.Idx), Status: planStatusCompleted,
+			})
 		}
 	}
 
 	if !single {
+		// 逐页完成后：校验与交付步收尾（本里程碑校验为占位性完成，V2-M5 强化）。
+		em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: planStepValidate, Status: planStatusCompleted})
+		em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: planStepDeliver, Status: planStatusCompleted})
 		_ = r.store.SetProjectStatus(ctx, r.params.ProjectID, "ready")
 	}
 	return harness.Outcome{

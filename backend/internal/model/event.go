@@ -11,6 +11,8 @@ const (
 	EventProgress   EventType = "progress"
 	EventToken      EventType = "token"
 	EventArtifact   EventType = "artifact"
+	EventPlan       EventType = "plan"
+	EventPlanUpdate EventType = "plan.update"
 	EventNeedsInput EventType = "needs_input"
 	EventInfo       EventType = "info"
 	EventDone       EventType = "done"
