@@ -1,0 +1,30 @@
+backend/internal/agent/prompt/slide.go
+  s_1486677ef7401e::t_b5de6b6ef91d71 19-24
+  s_0566b3e0bb49c5::t_2cc8fa136f4b84 41,151-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6fe0082eb4b5fe5198cc340a48ff8106fc11dcbd",
+  "prompts": {},
+  "sessions": {
+    "s_0566b3e0bb49c5": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a44ddd3b816aa546afa4d53",
+        "model": "openrouter-3o__max"
+      },
+      "human_author": "wanyiwei <wanyiwei@bytedance.com>"
+    },
+    "s_1486677ef7401e": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a4b41d42b948e37694f7d3e",
+        "model": "openrouter-3o__max"
+      },
+      "human_author": "wanyiwei <wanyiwei@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
