@@ -1,0 +1,82 @@
+frontend/src/features/agent/CommandComposer.tsx
+  s_1486677ef7401e::t_3bbbd5e043f5f3 137
+  s_1486677ef7401e::t_2823907a8557f9 35,37-39
+  s_1486677ef7401e::t_3b56f6c0179327 82-87
+  s_1486677ef7401e::t_87d9e4c138a1b5 1,7,9-30,34,40-47,51-60,62,64,66-79,90,94-101,104-110,113,122,129-132,144-147
+  s_1486677ef7401e::t_0d3de8e1d2abc1 5,8
+frontend/src/App.test.tsx
+  s_1486677ef7401e::t_3ded5440cf6163 7,32-38,44
+  s_1486677ef7401e::t_daf226b19b64de 96-110
+frontend/src/features/agent/Cards.test.tsx
+  s_1486677ef7401e::t_e97e62719e1105 53-63
+  s_1486677ef7401e::t_5ec2332d4049ea 9-10
+frontend/src/features/agent/CommandComposer.test.tsx
+  s_9d08af63e58193::t_de5ae70e8ae8e4 1-7,10,56-57,75,78-80,83,85-87,90,95,100,106,119-120
+  s_9d08af63e58193::t_1c1cb334d6506f 12-13
+  s_1486677ef7401e::t_35930ff470952f 89
+  s_1486677ef7401e::t_edbd7df1503339 110
+  s_1486677ef7401e::t_180f7818f14ac1 9,17-28,33,36-55,59,61-68,70-74,76-77,81-82,84,88,91-94,96-99,101-105,107-109,111-118
+  s_9d08af63e58193::t_9263182463c444 11,14-16,58,60
+  s_1486677ef7401e::t_7b12fd893e10bd 8,29-32,34-35
+  s_1486677ef7401e::t_f302d5b3780645 69
+frontend/src/api/types.ts
+  s_1486677ef7401e::t_aaf97c04f341ec 25-28
+  s_9d08af63e58193::t_d316eafd3a1d10 36,40-41,53
+  s_1486677ef7401e::t_4f81ad43c4723a 42-47,49,51-52,54-58,66-79,82
+frontend/src/stores/projectStore.ts
+  s_1486677ef7401e::t_1ac9932b499875 2,4-5,19-25,47-48,51
+frontend/src/features/agent/ThreadTabs.tsx
+  s_1486677ef7401e::t_412356bd5122c8 1-111
+frontend/src/features/agent/useActiveSession.ts
+  s_1486677ef7401e::t_8ea867c1bc9a5c 1-19
+frontend/src/features/viewer/PreviewWorkspace.tsx
+  s_1486677ef7401e::t_3e6dca673cc17d 82
+  s_1486677ef7401e::t_cf8e0dc975f4e1 6
+frontend/src/stores/runStore.multithread.test.ts
+  s_1486677ef7401e::t_68b6fd125c8db9 1-95
+frontend/src/stores/threadStore.ts
+  s_1486677ef7401e::t_c47b18b70f3323 1-144
+frontend/src/features/agent/Timeline.tsx
+  s_1486677ef7401e::t_e0c90d4064b933 2,12
+frontend/src/features/agent/AgentPanel.tsx
+  s_1486677ef7401e::t_f82c7fc777b93d 57-58
+  s_1486677ef7401e::t_438d984a474209 4-5,10
+frontend/src/stores/runStore.ts
+  s_9d08af63e58193::t_77464f2dfa17d5 19,32
+  s_1486677ef7401e::t_fc2867c0ad4969 4,7-15,17,21-22,24,27-28,36-38,40-53,55-142,144-148,150-155,157-158,160-166,168,170-206
+frontend/src/features/workspace/ProjectTabs.tsx
+  s_1486677ef7401e::t_445fcd6fbf57bd 3,9
+frontend/src/api/threads.ts
+  s_1486677ef7401e::t_3eb6426f47a4a9 1-15
+frontend/src/api/projects.ts
+  s_1486677ef7401e::t_823ea3e8c9258d 2
+frontend/src/features/agent/NeedsInputCard.tsx
+  s_1486677ef7401e::t_57121d5c658340 5,8-10,16-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ff95c5f9b885abd72a67f27ab6bd4178fe7bb3bc",
+  "prompts": {},
+  "sessions": {
+    "s_1486677ef7401e": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a4b41d42b948e37694f7d3e",
+        "model": "openrouter-3o__max"
+      },
+      "human_author": "wanyiwei <wanyiwei@bytedance.com>"
+    },
+    "s_9d08af63e58193": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a4636ccb816aa546afa7374",
+        "model": "gpt-5.5__max",
+        "display_model_name": "GPT-5.5"
+      },
+      "human_author": "wanyiwei <wanyiwei@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
