@@ -14,7 +14,7 @@ func TestMigrationMatchesDocsSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
 	}
-	docsPath := filepath.Join("..", "..", "docs", "30-data-model", "sqlite-schema.sql")
+	docsPath := filepath.Join("..", "..", "docs", "v1", "30-data-model", "sqlite-schema.sql")
 	docs, err := os.ReadFile(docsPath)
 	if err != nil {
 		t.Fatalf("read docs schema %s: %v", docsPath, err)

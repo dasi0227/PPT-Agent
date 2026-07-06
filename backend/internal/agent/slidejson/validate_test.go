@@ -8,7 +8,7 @@ import (
 
 // 内嵌 schema MUST 与 docs 权威 schema 保持一致（DEV-RULES R1）。
 func TestSchemaMatchesDocs(t *testing.T) {
-	docsPath := filepath.Join("..", "..", "..", "..", "docs", "30-data-model", "slide-json.schema.json")
+	docsPath := filepath.Join("..", "..", "..", "..", "docs", "v1", "30-data-model", "slide-json.schema.json")
 	docs, err := os.ReadFile(docsPath)
 	if err != nil {
 		t.Fatalf("read docs schema %s: %v", docsPath, err)

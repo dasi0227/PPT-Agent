@@ -11,7 +11,7 @@ import (
 
 // docPath 定位 docs 权威文档（从本包目录回溯到仓库根）。
 func docPath(parts ...string) string {
-	base := []string{"..", "..", "..", "docs"}
+	base := []string{"..", "..", "..", "docs", "v1"}
 	return filepath.Join(append(base, parts...)...)
 }
 
