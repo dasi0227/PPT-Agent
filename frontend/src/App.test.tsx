@@ -4,6 +4,7 @@ import { App } from './App';
 import { useProjectStore } from './stores/projectStore';
 import { useDeckStore } from './stores/deckStore';
 import { useRunStore } from './stores/runStore';
+import { useThreadStore } from './stores/threadStore';
 
 // Mock ResizeObserver
 globalThis.ResizeObserver = class {
@@ -26,21 +27,21 @@ describe('App Level Interactions', () => {
             { id: 's2', project_id: 'p1', idx: 1, layout: 'content', title: 'Slide 2', html_path: '/slides/p1/s2.html', json_path: '/slides/p1/s2.json', current_version: 1 }
           ]
         },
-      threadsByProjectId: {},
       loadingProjects: false
     });
-    
+
+    useThreadStore.setState({
+      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'Thread', created_at: 0, updated_at: 0 }] },
+      openThreadIdsByProjectId: { p1: ['t1'] },
+      activeThreadIdByProjectId: { p1: 't1' },
+    });
+
     useDeckStore.setState({
       currentPage: 0,
       previewMode: 'main'
     });
 
-    useRunStore.setState({
-      activeRunId: null,
-      status: 'idle',
-      timelineItems: [],
-      pendingInput: null
-    });
+    useRunStore.setState({ sessions: {} });
   });
 
   it('switches projects and active slide updates', async () => {
@@ -92,10 +93,21 @@ describe('App Level Interactions', () => {
     
     await act(async () => {
       useRunStore.setState({
-        status: 'running',
-        timelineItems: [
-          { id: '1', type: 'markdown', text: 'Hello from Agent', timestamp: Date.now() }
-        ]
+        sessions: {
+          t1: {
+            activeRunId: 'r1',
+            status: 'running',
+            mode: 'normal',
+            scope: 'current',
+            timelineItems: [
+              { id: '1', type: 'markdown', text: 'Hello from Agent', timestamp: Date.now() }
+            ],
+            pendingInput: null,
+            progress: null,
+            eventSourceClose: null,
+            plan: null,
+          }
+        }
       });
     });
     

@@ -26,7 +26,6 @@ describe('PreviewWorkspace', () => {
           { id: 's2', project_id: 'p1', idx: 1, layout: 'content', title: 'Slide 2', html_path: '/slides/p1/s2.html', json_path: '/slides/p1/s2.json', current_version: 1 }
         ]
       },
-      threadsByProjectId: {},
       loadingProjects: false
     });
 

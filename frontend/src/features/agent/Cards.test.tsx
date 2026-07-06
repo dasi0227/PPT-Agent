@@ -6,6 +6,8 @@ import { PlanCard } from './PlanCard';
 import { FinalResultCard } from './FinalResultCard';
 import { NeedsInputCard } from './NeedsInputCard';
 import { useRunStore } from '../../stores/runStore';
+import { useProjectStore } from '../../stores/projectStore';
+import { useThreadStore } from '../../stores/threadStore';
 
 describe('Agent Cards', () => {
   it('ToolCallCard renders running/success/failed states', () => {
@@ -48,7 +50,17 @@ describe('Agent Cards', () => {
   });
 
   it('NeedsInputCard renders and handles input', () => {
-    useRunStore.setState({ pendingInput: { id: '1', prompt: 'Select one', choices: ['A', 'B'] } });
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
+    useRunStore.setState({
+      sessions: {
+        t1: {
+          activeRunId: 'r1', status: 'needs_input', mode: 'ask', scope: 'current',
+          timelineItems: [], progress: null, eventSourceClose: null, plan: null,
+          pendingInput: { id: '1', prompt: 'Select one', choices: ['A', 'B'] },
+        },
+      },
+    });
     render(<NeedsInputCard item={{ id: '1', type: 'needs_input', prompt: 'Select one', choices: ['A', 'B'], timestamp: 0 }} />);
     expect(screen.getByText('Select one')).toBeInTheDocument();
     expect(screen.getByText('A')).toBeInTheDocument();

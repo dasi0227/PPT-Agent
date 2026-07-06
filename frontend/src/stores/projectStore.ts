@@ -1,26 +1,32 @@
 import { create } from 'zustand';
-import { Project, Slide, Thread } from '../api/types';
+import { Project, Slide } from '../api/types';
 import { projectsApi } from '../api/projects';
+import { useThreadStore } from './threadStore';
+import { useRunStore } from './runStore';
 
 interface ProjectState {
   projects: Project[];
   activeProjectId: string | null;
   slidesByProjectId: Record<string, Slide[]>;
-  threadsByProjectId: Record<string, Thread[]>;
   loadingProjects: boolean;
 
   loadProjects: () => Promise<void>;
   selectProject: (projectId: string) => void;
   loadProjectSlides: (projectId: string) => Promise<void>;
-  loadProjectThreads: (projectId: string) => Promise<void>;
   createProject: (topic: string, brief?: string, slide_count?: number, language?: string) => Promise<void>;
+}
+
+// 切 project 时关闭上一个 project 下所有 thread 的 SSE 连接（对齐 m7-design-spec §6.1）。
+function closePreviousProjectSessions(prevProjectId: string | null) {
+  if (!prevProjectId) return;
+  const openIds = useThreadStore.getState().openThreadIdsByProjectId[prevProjectId] || [];
+  if (openIds.length > 0) useRunStore.getState().closeSessions(openIds);
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projects: [],
   activeProjectId: null,
   slidesByProjectId: {},
-  threadsByProjectId: {},
   loadingProjects: false,
 
   loadProjects: async () => {
@@ -38,9 +44,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   selectProject: (projectId: string) => {
+    const prev = get().activeProjectId;
+    if (prev !== projectId) closePreviousProjectSessions(prev);
     set({ activeProjectId: projectId });
     get().loadProjectSlides(projectId);
-    get().loadProjectThreads(projectId);
+    useThreadStore.getState().loadThreads(projectId);
   },
 
   loadProjectSlides: async (projectId: string) => {
@@ -54,23 +62,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  loadProjectThreads: async (projectId: string) => {
-    try {
-      const threads = await projectsApi.getThreads(projectId);
-      set((state) => ({
-        threadsByProjectId: { ...state.threadsByProjectId, [projectId]: threads }
-      }));
-    } catch (err) {
-      console.error(err);
-    }
-  },
-
   createProject: async (topic: string, brief: string = '', slide_count: number = 10, language: string = 'zh') => {
     try {
       const project = await projectsApi.create(topic, brief, slide_count, language);
       set((state) => ({
         projects: [...state.projects, project],
-        activeProjectId: project.id
       }));
       get().selectProject(project.id);
     } catch (err) {

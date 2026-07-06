@@ -1,148 +1,206 @@
 import { create } from 'zustand';
 import { runsApi } from '../api/runs';
 import { subscribeRunEvents } from '../api/sse';
-import { RunPayload } from '../api/types';
+import { RunPayload, RunScope, PlanStep } from '../api/types';
 import { TimelineItem, reduceSSEEvent } from '../features/agent/eventReducer';
 
-interface RunState {
-  activeRunId: string | null;
-  status: 'idle' | 'running' | 'done' | 'error' | 'needs_input';
-  mode: string;
-  scope: string;
-  timelineItems: TimelineItem[];
-  pendingInput: { id: string, prompt: string, choices?: string[] } | null;
-  eventSourceClose: (() => void) | null;
-  progress: { stage: string, current: number, total: number } | null;
-
-  createRun: (threadId: string, payload: RunPayload) => Promise<void>;
-  subscribeRun: (runId: string, lastEventId?: string) => void;
-  replyNeedsInput: (runId: string, replyTo: string, content: string) => Promise<void>;
-  cancelRun: (runId: string) => Promise<void>;
-  clearRun: () => void;
+export interface PlanState {
+  id: string;
+  title: string;
+  steps: PlanStep[];
 }
 
-export const useRunStore = create<RunState>((set, get) => ({
+export type RunStatus = 'idle' | 'running' | 'done' | 'error' | 'needs_input';
+
+export interface RunSession {
+  activeRunId: string | null;
+  status: RunStatus;
+  mode: string;
+  scope: RunScope;
+  timelineItems: TimelineItem[];
+  pendingInput: { id: string; prompt: string; choices?: string[] } | null;
+  progress: { stage: string; current: number; total: number } | null;
+  eventSourceClose: (() => void) | null;
+  plan: PlanState | null;   // v2 M3 填充
+}
+
+// 稳定的 idle 空会话常量：getSession 对缺失 key 返回它，避免组件读到 undefined。
+export const IDLE_SESSION: RunSession = Object.freeze({
   activeRunId: null,
   status: 'idle',
   mode: 'normal',
-  scope: '/current',
+  scope: 'current',
   timelineItems: [],
   pendingInput: null,
-  eventSourceClose: null,
   progress: null,
+  eventSourceClose: null,
+  plan: null,
+});
 
-  createRun: async (threadId, payload) => {
-    try {
-      // clear previous
-      const existingClose = get().eventSourceClose;
-      if (existingClose) existingClose();
-      
-      set({ 
-        activeRunId: null, 
-        status: 'running', 
-        timelineItems: [], 
-        pendingInput: null,
-        mode: payload.mode,
-        scope: payload.scope,
-        progress: null
-      });
+function freshSession(overrides: Partial<RunSession> = {}): RunSession {
+  return {
+    activeRunId: null,
+    status: 'idle',
+    mode: 'normal',
+    scope: 'current',
+    timelineItems: [],
+    pendingInput: null,
+    progress: null,
+    eventSourceClose: null,
+    plan: null,
+    ...overrides,
+  };
+}
 
-      const run = await runsApi.create(threadId, payload);
-      set({ activeRunId: run.id });
-      get().subscribeRun(run.id);
-    } catch (err) {
-      set({ status: 'error' });
-      console.error(err);
-    }
-  },
+interface RunStoreV2 {
+  sessions: Record<string, RunSession>;   // key = threadId
 
-  subscribeRun: (runId, lastEventId) => {
-    const existingClose = get().eventSourceClose;
-    if (existingClose) existingClose();
+  getSession: (threadId: string) => RunSession;
+  createRun: (threadId: string, payload: RunPayload) => Promise<void>;
+  subscribeRun: (threadId: string, runId: string, lastEventId?: string) => void;
+  replyNeedsInput: (threadId: string, runId: string, replyTo: string, content: string) => Promise<void>;
+  cancelRun: (threadId: string, runId: string) => Promise<void>;
+  clearRun: (threadId: string) => void;
+  closeSessions: (threadIds: string[]) => void;
+}
 
-    const close = subscribeRunEvents(runId, {
-      lastEventId,
-      onMessage: (event) => {
-        set((state) => {
-          let newStatus = state.status;
-          let newPendingInput = state.pendingInput;
-          let newProgress = state.progress;
+export const useRunStore = create<RunStoreV2>((set, get) => {
+  // 只更新指定 threadId 的分片，绝不串写别的 thread。
+  const patchSession = (threadId: string, patch: Partial<RunSession>) => {
+    set((state) => {
+      const prev = state.sessions[threadId] ?? freshSession();
+      return { sessions: { ...state.sessions, [threadId]: { ...prev, ...patch } } };
+    });
+  };
 
-          if (event.event === 'needs_input') {
-            newStatus = 'needs_input';
-            newPendingInput = { 
-              id: event.data.id, 
-              prompt: event.data.prompt, 
-              choices: event.data.choices 
-            };
-          } else if (event.event === 'done') {
-            newStatus = 'done';
-            newPendingInput = null;
-          } else if (event.event === 'error') {
-            newStatus = 'error';
-            newPendingInput = null;
-          } else if (event.event === 'progress') {
-            newProgress = {
-              stage: event.data.stage,
-              current: event.data.current,
-              total: event.data.total
-            };
-          }
+  const updateSession = (threadId: string, updater: (prev: RunSession) => Partial<RunSession>) => {
+    set((state) => {
+      const prev = state.sessions[threadId] ?? freshSession();
+      return { sessions: { ...state.sessions, [threadId]: { ...prev, ...updater(prev) } } };
+    });
+  };
 
-          return {
-            timelineItems: reduceSSEEvent(state.timelineItems, event),
-            status: newStatus,
-            pendingInput: newPendingInput,
-            progress: newProgress
-          };
+  return {
+    sessions: {},
+
+    getSession: (threadId) => get().sessions[threadId] ?? IDLE_SESSION,
+
+    createRun: async (threadId, payload) => {
+      try {
+        // 关闭该 thread 之前的连接（仅本分片）
+        get().sessions[threadId]?.eventSourceClose?.();
+
+        patchSession(threadId, {
+          activeRunId: null,
+          status: 'running',
+          timelineItems: [],
+          pendingInput: null,
+          mode: payload.mode ?? 'normal',
+          scope: payload.scope ?? 'current',
+          progress: null,
+          plan: null,
+          eventSourceClose: null,
         });
 
-        // Close connection on terminal states
-        if (event.event === 'done' || event.event === 'error') {
-          get().eventSourceClose?.();
-          set({ eventSourceClose: null });
-        }
-      },
-      onError: (err) => {
-        console.error('SSE Error', err);
-        set({ status: 'error' });
+        const run = await runsApi.create(threadId, payload);
+        patchSession(threadId, { activeRunId: run.id });
+        get().subscribeRun(threadId, run.id);
+      } catch (err) {
+        patchSession(threadId, { status: 'error' });
+        console.error(err);
       }
-    });
+    },
 
-    set({ eventSourceClose: close });
-  },
+    subscribeRun: (threadId, runId, lastEventId) => {
+      get().sessions[threadId]?.eventSourceClose?.();
 
-  replyNeedsInput: async (runId, replyTo, content) => {
-    try {
-      set({ status: 'running', pendingInput: null });
-      await runsApi.submitInput(runId, { reply_to: replyTo, content });
-    } catch (err) {
-      console.error('Failed to submit input', err);
-      set({ status: 'error' });
-    }
-  },
+      const close = subscribeRunEvents(runId, {
+        lastEventId,
+        onMessage: (event) => {
+          updateSession(threadId, (prev) => {
+            let status = prev.status;
+            let pendingInput = prev.pendingInput;
+            let progress = prev.progress;
 
-  cancelRun: async (runId) => {
-    try {
-      await runsApi.cancel(runId);
-      const close = get().eventSourceClose;
-      if (close) close();
-      set({ status: 'done', eventSourceClose: null });
-    } catch (err) {
-      console.error('Failed to cancel run', err);
-    }
-  },
+            if (event.event === 'needs_input') {
+              status = 'needs_input';
+              pendingInput = { id: event.data.id, prompt: event.data.prompt, choices: event.data.choices };
+            } else if (event.event === 'done') {
+              status = 'done';
+              pendingInput = null;
+            } else if (event.event === 'error') {
+              status = 'error';
+              pendingInput = null;
+            } else if (event.event === 'progress') {
+              progress = { stage: event.data.stage, current: event.data.current, total: event.data.total };
+            }
 
-  clearRun: () => {
-    const close = get().eventSourceClose;
-    if (close) close();
-    set({
-      activeRunId: null,
-      status: 'idle',
-      timelineItems: [],
-      pendingInput: null,
-      eventSourceClose: null,
-      progress: null
-    });
-  }
-}));
+            return {
+              timelineItems: reduceSSEEvent(prev.timelineItems, event),
+              status,
+              pendingInput,
+              progress,
+            };
+          });
+
+          if (event.event === 'done' || event.event === 'error') {
+            get().sessions[threadId]?.eventSourceClose?.();
+            patchSession(threadId, { eventSourceClose: null });
+          }
+        },
+        onError: (err) => {
+          console.error('SSE Error', err);
+          patchSession(threadId, { status: 'error' });
+        },
+      });
+
+      patchSession(threadId, { eventSourceClose: close });
+    },
+
+    replyNeedsInput: async (threadId, runId, replyTo, content) => {
+      try {
+        patchSession(threadId, { status: 'running', pendingInput: null });
+        await runsApi.submitInput(runId, { reply_to: replyTo, content });
+      } catch (err) {
+        console.error('Failed to submit input', err);
+        patchSession(threadId, { status: 'error' });
+      }
+    },
+
+    cancelRun: async (threadId, runId) => {
+      try {
+        await runsApi.cancel(runId);
+        get().sessions[threadId]?.eventSourceClose?.();
+        patchSession(threadId, { status: 'done', eventSourceClose: null });
+      } catch (err) {
+        console.error('Failed to cancel run', err);
+      }
+    },
+
+    clearRun: (threadId) => {
+      get().sessions[threadId]?.eventSourceClose?.();
+      patchSession(threadId, {
+        activeRunId: null,
+        status: 'idle',
+        timelineItems: [],
+        pendingInput: null,
+        progress: null,
+        plan: null,
+        eventSourceClose: null,
+      });
+    },
+
+    // 切 project 时关闭该 project 下所有 thread 的连接（避免离开后仍串事件）。
+    closeSessions: (threadIds) => {
+      const { sessions } = get();
+      threadIds.forEach((id) => sessions[id]?.eventSourceClose?.());
+      set((state) => {
+        const next = { ...state.sessions };
+        threadIds.forEach((id) => {
+          if (next[id]) next[id] = { ...next[id], eventSourceClose: null };
+        });
+        return { sessions: next };
+      });
+    },
+  };
+});

@@ -1,12 +1,13 @@
 import React from 'react';
 import { Timeline } from './Timeline';
 import { CommandComposer } from './CommandComposer';
-import { useRunStore } from '../../stores/runStore';
+import { ThreadTabs } from './ThreadTabs';
+import { useActiveSession } from './useActiveSession';
 import { Bot, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export const AgentPanel: React.FC = () => {
-  const { status, mode, progress } = useRunStore();
+  const { status, mode, progress } = useActiveSession();
 
   const getModeColor = () => {
     switch (mode) {
@@ -52,6 +53,8 @@ export const AgentPanel: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ThreadTabs />
 
       <Timeline />
       

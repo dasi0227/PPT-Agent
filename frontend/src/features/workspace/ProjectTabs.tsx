@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
-import { useRunStore } from '../../stores/runStore';
+import { useActiveSession } from '../agent/useActiveSession';
 import { cn } from '../../lib/utils';
 import { Loader2, Plus } from 'lucide-react';
 
 export const ProjectTabs: React.FC = () => {
   const { projects, activeProjectId, selectProject, loadingProjects, loadProjects, createProject } = useProjectStore();
-  const { status: runStatus } = useRunStore();
+  const { status: runStatus } = useActiveSession();
 
   useEffect(() => {
     loadProjects();

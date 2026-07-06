@@ -2,16 +2,19 @@ import React, { useState } from 'react';
 import { HelpCircle, Send } from 'lucide-react';
 import { NeedsInputItem } from './eventReducer';
 import { useRunStore } from '../../stores/runStore';
+import { useActiveThreadId, useActiveSession } from './useActiveSession';
 
 export const NeedsInputCard: React.FC<{ item: NeedsInputItem }> = ({ item }) => {
-  const { activeRunId, replyNeedsInput, pendingInput } = useRunStore();
+  const threadId = useActiveThreadId();
+  const { activeRunId, pendingInput } = useActiveSession();
+  const replyNeedsInput = useRunStore((s) => s.replyNeedsInput);
   const [text, setText] = useState('');
 
   const isPending = pendingInput?.id === item.id;
 
   const handleSubmit = (content: string) => {
-    if (activeRunId && isPending) {
-      replyNeedsInput(activeRunId, item.id, content);
+    if (threadId && activeRunId && isPending) {
+      replyNeedsInput(threadId, activeRunId, item.id, content);
     }
   };
 

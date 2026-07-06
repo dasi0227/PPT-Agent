@@ -3,6 +3,7 @@ import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { LayoutGrid, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { EmptyState } from './EmptyState';
 
 export const PreviewWorkspace: React.FC = () => {
   const { currentPage, previewMode, enterOverview, exitOverview, goNext, goPrev } = useDeckStore();
@@ -78,7 +79,7 @@ export const PreviewWorkspace: React.FC = () => {
                 title="Slide Preview"
               />
             ) : (
-              <div className="text-text-400">No content to preview</div>
+              <EmptyState />
             )}
           </div>
         ) : (

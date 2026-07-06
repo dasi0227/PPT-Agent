@@ -1,5 +1,5 @@
 import { fetchClient } from './client';
-import { Project, Slide, Thread } from './types';
+import { Project, Slide } from './types';
 
 export const projectsApi = {
   list: () => fetchClient<Project[]>('/projects'),
@@ -9,9 +9,4 @@ export const projectsApi = {
   }),
   get: (id: string) => fetchClient<Project>(`/projects/${id}`),
   getSlides: (id: string) => fetchClient<Slide[]>(`/projects/${id}/slides`),
-  getThreads: (id: string) => fetchClient<Thread[]>(`/projects/${id}/threads`),
-  createThread: (id: string) => fetchClient<Thread>(`/projects/${id}/threads`, {
-    method: 'POST',
-    body: JSON.stringify({})
-  }),
 };

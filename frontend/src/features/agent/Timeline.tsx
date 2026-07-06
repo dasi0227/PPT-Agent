@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { useRunStore } from '../../stores/runStore';
+import { useActiveSession } from './useActiveSession';
 import { MarkdownMessage } from './MarkdownMessage';
 import { ThoughtCard } from './ThoughtCard';
 import { ToolCallCard } from './ToolCallCard';
@@ -9,7 +9,7 @@ import { FinalResultCard } from './FinalResultCard';
 import { NeedsInputCard } from './NeedsInputCard';
 
 export const Timeline: React.FC = () => {
-  const { timelineItems, status } = useRunStore();
+  const { timelineItems, status } = useActiveSession();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
