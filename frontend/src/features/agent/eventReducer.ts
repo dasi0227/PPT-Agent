@@ -137,6 +137,17 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       });
 
     case 'artifact':
+      // design_spec 是设计语言中间产物：独立成弱强调卡，不并入 tool_call（便于醒目展示）。
+      if (event.data.artifact_type === 'design_spec') {
+        return [...state, {
+          id: newId,
+          type: 'artifact',
+          artifact_type: 'design_spec',
+          ref: event.data.ref,
+          delivery: 'intermediate',
+          timestamp
+        }];
+      }
       // Try to attach to nearest running/success tool_call that hasn't finished (simplistic heuristic)
       // or just last tool_call
       const lastToolCallIndex = [...state].reverse().findIndex(item => item.type === 'tool_call');

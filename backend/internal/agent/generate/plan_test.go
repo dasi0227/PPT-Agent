@@ -2,10 +2,92 @@ package generate
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
+
+// orderedEmitter 按顺序记录关键事件类型（含 design progress / design_spec artifact / plan）。
+type orderedEmitter struct {
+	mu    sync.Mutex
+	types []model.EventType
+	stages []string
+}
+
+func (e *orderedEmitter) Emit(evt model.EventType, payload any) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.types = append(e.types, evt)
+	if evt == model.EventProgress {
+		if p, ok := payload.(harness.ProgressPayload); ok {
+			e.stages = append(e.stages, p.Stage)
+		}
+	}
+	if evt == model.EventArtifact {
+		if p, ok := payload.(harness.ArtifactPayload); ok {
+			e.stages = append(e.stages, "artifact:"+p.ArtifactType)
+		}
+	}
+}
+
+func firstIndexOf(types []model.EventType, want model.EventType) int {
+	for i, tp := range types {
+		if tp == want {
+			return i
+		}
+	}
+	return -1
+}
+
+// AC-V2-PIPE-001：整套 generate → progress{design} → artifact{design_spec} → plan → plan.update → done 顺序正确。
+func TestPipelineStagesOrder(t *testing.T) {
+	store, dir, _ := setupGen(t, 3)
+	em := &orderedEmitter{}
+	out := newGenRunner(store, dir, "tokyo-night", "gen1", nil).Run(context.Background(), em, nil, nil)
+	if out.Status != harness.OutcomeFinished {
+		t.Fatalf("want finished, got %s (%s)", out.Status, out.Message)
+	}
+
+	// design_spec artifact 存在。
+	sawDesignSpec := false
+	for _, s := range em.stages {
+		if s == "artifact:design_spec" {
+			sawDesignSpec = true
+		}
+	}
+	if !sawDesignSpec {
+		t.Fatalf("missing artifact{design_spec}; stages=%v", em.stages)
+	}
+
+	// design progress 阶段先于 plan。
+	designStageIdx := -1
+	for i, s := range em.stages {
+		if s == "design" {
+			designStageIdx = i
+			break
+		}
+	}
+	if designStageIdx == -1 {
+		t.Fatalf("missing progress{design}; stages=%v", em.stages)
+	}
+
+	planIdx := firstIndexOf(em.types, model.EventPlan)
+	artifactIdx := firstIndexOf(em.types, model.EventArtifact)
+	if planIdx == -1 || artifactIdx == -1 {
+		t.Fatalf("plan(%d)/artifact(%d) missing", planIdx, artifactIdx)
+	}
+	// artifact{design_spec} 在 plan 之前（对齐 40 文档示例流）。
+	if artifactIdx >= planIdx {
+		t.Errorf("design_spec artifact (%d) must precede plan (%d)", artifactIdx, planIdx)
+	}
+	// plan 在首个 plan.update 之前（V2-SSE-001）。
+	updIdx := firstIndexOf(em.types, model.EventPlanUpdate)
+	if updIdx != -1 && planIdx >= updIdx {
+		t.Errorf("plan (%d) must precede first plan.update (%d)", planIdx, updIdx)
+	}
+}
 
 // AC-V2-CTR-002：整套生成事件流出现恰好一个 plan，其后 plan.update 的 step_id 均命中该 plan。
 func TestPlanEmittedOnceAndStepsHit(t *testing.T) {

@@ -51,9 +51,10 @@ func (e *pageEmitter) Emit(evt model.EventType, payload any) {
 // writeSlideClient 是每页返回一次 write_slide(合规 html) + finish 的 fake LLM。
 // marker 注入 html（作为 data 属性），用于区分不同轮次的产物（验证单页重生成 hash 变化）。
 type writeSlideClient struct {
-	mu     sync.Mutex
-	seen   map[string]bool // 已为某 idx 提交过 write_slide
-	marker string
+	mu         sync.Mutex
+	seen       map[string]bool // 已为某 idx 提交过 write_slide
+	marker     string
+	designDone bool // 设计总监阶段是否已提交 design_spec
 }
 
 func newWriteSlideClient(marker string) *writeSlideClient {
@@ -69,10 +70,23 @@ func (c *writeSlideClient) Stream(context.Context, llm.ChatRequest) (<-chan llm.
 	return ch, nil
 }
 
-// CallTool：从 user 指令解析出 slide_idx（"slide_idx=N"），首次返回 write_slide，之后 finish。
+// CallTool：设计总监阶段（工具集含 submit_design_spec）先提交合法 design_spec 再 finish；
+// 逐页阶段从 user 指令解析 slide_idx，首次 write_slide，之后 finish。
 func (c *writeSlideClient) CallTool(_ context.Context, req llm.ToolCallRequest) (llm.ToolCallResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if hasTool(req.Tools, "submit_design_spec") {
+		if !c.designDone {
+			c.designDone = true
+			return llm.ToolCallResponse{
+				Thought:  "确定设计语言",
+				ToolCall: &llm.ToolCall{ID: "d1", Name: "submit_design_spec", Args: designSpecArgs()},
+			}, nil
+		}
+		return llm.ToolCallResponse{ToolCall: &llm.ToolCall{ID: "d2", Name: "finish", Args: map[string]any{"summary": "design done"}}}, nil
+	}
+
 	idx := parseIdxFromMessages(req.Messages)
 	key := itoa(idx)
 	if !c.seen[key] {
@@ -88,6 +102,32 @@ func (c *writeSlideClient) CallTool(_ context.Context, req llm.ToolCallRequest) 
 		}, nil
 	}
 	return llm.ToolCallResponse{ToolCall: &llm.ToolCall{ID: "c2", Name: "finish", Args: map[string]any{"summary": "done"}}}, nil
+}
+
+func hasTool(schemas []llm.ToolSchema, name string) bool {
+	for _, s := range schemas {
+		if s.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// designSpecArgs 返回一份合法的 design_spec（非 AI 默认三件套）。
+func designSpecArgs() map[string]any {
+	return map[string]any{
+		"subject": map[string]any{"topic": "测试主题", "audience": "工程师", "job": "演示"},
+		"palette": []any{
+			map[string]any{"name": "ink", "hex": "#12161C", "role": "背景/正文"},
+			map[string]any{"name": "signal", "hex": "#3BA7A0", "role": "主强调"},
+			map[string]any{"name": "amber", "hex": "#E0A340", "role": "次强调"},
+		},
+		"type": map[string]any{
+			"display": map[string]any{"family": "Space Grotesk", "weights": []any{500, 700}, "usage": "大标题"},
+			"body":    map[string]any{"family": "Inter", "weights": []any{400}, "usage": "正文"},
+		},
+		"signature": "右下角链路脉冲 SVG",
+	}
 }
 
 func parseIdxFromMessages(msgs []llm.Message) int {
@@ -237,8 +277,12 @@ func TestGenerateUsesThemeFromAssetRepository(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read generated tokens: %v", err)
 	}
-	if string(written) != userTokens {
-		t.Fatalf("tokens.css must come from _assets user theme, got:\n%s", written)
+	// V2 §6：用户指定主题 → 以主题 tokens 为基底，主色不被覆盖；仅叠加 signature 相关增量（如 display 字体）。
+	if !strings.Contains(string(written), "--color-primary: #123456;") {
+		t.Fatalf("user theme primary color must be preserved as base, got:\n%s", written)
+	}
+	if !strings.HasPrefix(string(written), userTokens) {
+		t.Fatalf("theme tokens must be the base (spec overlay appended after), got:\n%s", written)
 	}
 }
 

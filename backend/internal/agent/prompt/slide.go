@@ -8,7 +8,24 @@ import (
 )
 
 // SlideVersion 标记 slide.gen 模板版本，便于生成质量回归追溯（AGENT-PROMPT-004）。
-const SlideVersion = "slide.gen@v1"
+// @v2：注入 design_spec 摘要，保证跨页设计语言一致（V2-PROMPT-001）。
+const SlideVersion = "slide.gen@v2"
+
+// DesignBrief 是注入逐页生成的 design_spec 摘要（跨页设计语言一致的契约）。
+type DesignBrief struct {
+	Topic        string
+	Audience     string
+	PaletteRoles []string // 形如 "signal→主强调"
+	DisplayFont  string
+	BodyFont     string
+	UtilityFont  string
+	LayoutConcept string
+	LayoutRhythm  string
+	Signature     string
+	MotionPolicy  string
+	StepTitle     string // 本页在计划中的角色标题
+	StepDetail    string
+}
 
 // SlideParams 是 slide.gen 的参数。用户内容只进 user 层（AGENT-PROMPT-003 防注入）。
 type SlideParams struct {
@@ -17,6 +34,7 @@ type SlideParams struct {
 	TokensRel string              // 公共层 tokens.css 相对本页 index.html 的路径
 	BaseRel   string              // 公共层 base.css 相对路径
 	Layouts   []string            // 合法 layout 枚举（权威同源）
+	Design    *DesignBrief        // 非空时注入 design_spec 摘要（整套生成 Stage3）
 }
 
 // SlideSystem 组装 slide.gen 的 system 层：base + 产出契约 + html-output-spec 硬约束。
@@ -50,7 +68,44 @@ func SlideSystem(p SlideParams) string {
 	b.WriteString("## 语言与排版\n")
 	b.WriteString("- 中英文一等公民：字体走 `var(--font-sans)`（已含中文回退）。\n")
 	b.WriteString("- 语义标签、合理标题层级、足够对比度。\n")
+
+	if p.Design != nil {
+		writeDesignBrief(&b, p.Design)
+	}
 	return b.String()
+}
+
+// writeDesignBrief 追加"本项目统一设计语言"段（来自设计总监的 design_spec 摘要）。
+func writeDesignBrief(b *strings.Builder, d *DesignBrief) {
+	b.WriteString("\n## 本项目统一设计语言（必须遵守，来自设计总监）\n")
+	if d.Topic != "" {
+		fmt.Fprintf(b, "- 主题世界：%s", d.Topic)
+		if d.Audience != "" {
+			fmt.Fprintf(b, " · 面向 %s", d.Audience)
+		}
+		b.WriteString("\n")
+	}
+	if len(d.PaletteRoles) > 0 {
+		b.WriteString("- 色板（只用这些语义，全部走 token）：\n")
+		for _, r := range d.PaletteRoles {
+			fmt.Fprintf(b, "  - %s\n", r)
+		}
+	}
+	fmt.Fprintf(b, "- 字体角色：display=%s（克制用于大标题，可走 var(--font-display)）、body=%s", d.DisplayFont, d.BodyFont)
+	if d.UtilityFont != "" {
+		fmt.Fprintf(b, "、utility=%s", d.UtilityFont)
+	}
+	b.WriteString("\n")
+	if d.LayoutConcept != "" || d.LayoutRhythm != "" {
+		fmt.Fprintf(b, "- 版式概念：%s；节奏：%s\n", d.LayoutConcept, d.LayoutRhythm)
+	}
+	if d.Signature != "" {
+		fmt.Fprintf(b, "- signature 元素：%s\n  → 在合适位置体现该 signature，使本页与全篇同源（但不喧宾夺主）。\n", d.Signature)
+	}
+	if d.MotionPolicy != "" {
+		fmt.Fprintf(b, "- 动效策略：%s\n", d.MotionPolicy)
+	}
+	b.WriteString("\n> 这些设计决策已落成公共层 tokens.css 的变量；本页所有主题相关视觉值 MUST 用 var(--token)，不得引入与设计语言冲突的字体或颜色。\n")
 }
 
 // SlideUser 组装 user 层：仅承载本页 slide-json 的内容意图（意图层）。
@@ -81,6 +136,13 @@ func SlideUser(p SlideParams) string {
 	}
 	if s.Steps > 1 {
 		fmt.Fprintf(&b, "- 分步：%d 步（用 data-step 标记分步元素）\n", s.Steps)
+	}
+	if p.Design != nil && p.Design.StepTitle != "" {
+		fmt.Fprintf(&b, "- 本页在计划中的角色：%s", p.Design.StepTitle)
+		if p.Design.StepDetail != "" {
+			fmt.Fprintf(&b, " — %s", p.Design.StepDetail)
+		}
+		b.WriteString("\n")
 	}
 	fmt.Fprintf(&b, "\n调用 write_slide 提交，slide_idx=%d。", s.Idx)
 	return b.String()

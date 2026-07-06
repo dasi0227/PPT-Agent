@@ -50,6 +50,17 @@ describe('eventReducer', () => {
     expect(state).toHaveLength(1);
     expect((state[0] as any).artifacts).toHaveLength(1);
   });
+
+  it('design_spec artifact becomes standalone card (not merged into tool_call)', () => {
+    let state: TimelineItem[] = [];
+    state = reduceSSEEvent(state, { event: 'tool_call', data: { call_id: 'c1', tool: 'submit_design_spec', args: {} } });
+    state = reduceSSEEvent(state, { event: 'artifact', data: { artifact_type: 'design_spec', ref: 'design/design-spec.json' } });
+    // tool_call 不被并入；design_spec 独立成卡。
+    expect(state).toHaveLength(2);
+    expect(state[1].type).toBe('artifact');
+    expect((state[1] as any).artifact_type).toBe('design_spec');
+    expect((state[0] as any).artifacts).toHaveLength(0);
+  });
 });
 
 describe('reducePlan', () => {

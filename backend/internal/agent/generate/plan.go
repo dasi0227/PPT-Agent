@@ -53,3 +53,19 @@ func pageTitle(sl model.Slide) string {
 	}
 	return fmt.Sprintf("第 %d 页", sl.Idx+1)
 }
+
+// planStep 是 plan 的一个 step 的轻量视图（供 runner 取标题/详情）。
+type planStep struct {
+	Title  string
+	Detail string
+}
+
+// stepByID 返回指定 step 的标题/详情；未命中返回空。
+func stepByID(p harness.PlanPayload, id string) planStep {
+	for _, s := range p.Steps {
+		if s.ID == id {
+			return planStep{Title: s.Title, Detail: s.Detail}
+		}
+	}
+	return planStep{}
+}

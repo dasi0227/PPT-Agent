@@ -26,9 +26,10 @@ import (
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
 
-// genFakeClient：每页返回一次 write_slide(合规 html)，之后 finish（按 user 指令中的 slide_idx 区分页）。
+// genFakeClient：设计总监阶段提交 design_spec；每页返回一次 write_slide(合规 html)，之后 finish。
 type genFakeClient struct {
-	seen map[int]bool
+	seen       map[int]bool
+	designDone bool
 }
 
 func (c *genFakeClient) Chat(context.Context, llm.ChatRequest) (llm.ChatResponse, error) {
@@ -42,6 +43,28 @@ func (c *genFakeClient) Stream(context.Context, llm.ChatRequest) (<-chan llm.Str
 func (c *genFakeClient) CallTool(_ context.Context, req llm.ToolCallRequest) (llm.ToolCallResponse, error) {
 	if c.seen == nil {
 		c.seen = map[int]bool{}
+	}
+	// 设计总监阶段：工具集含 submit_design_spec。
+	for _, tool := range req.Tools {
+		if tool.Name == "submit_design_spec" {
+			if !c.designDone {
+				c.designDone = true
+				return llm.ToolCallResponse{ToolCall: &llm.ToolCall{Name: "submit_design_spec", Args: map[string]any{
+					"subject": map[string]any{"topic": "端到端主题", "audience": "工程师", "job": "演示"},
+					"palette": []any{
+						map[string]any{"name": "ink", "hex": "#12161C", "role": "背景/正文"},
+						map[string]any{"name": "signal", "hex": "#3BA7A0", "role": "主强调"},
+						map[string]any{"name": "amber", "hex": "#E0A340", "role": "次强调"},
+					},
+					"type": map[string]any{
+						"display": map[string]any{"family": "Space Grotesk", "weights": []any{700}, "usage": "大标题"},
+						"body":    map[string]any{"family": "Inter", "weights": []any{400}, "usage": "正文"},
+					},
+					"signature": "右下角链路脉冲 SVG",
+				}}}, nil
+			}
+			return llm.ToolCallResponse{ToolCall: &llm.ToolCall{Name: "finish", Args: map[string]any{"summary": "design done"}}}, nil
+		}
 	}
 	idx := 0
 	for i := len(req.Messages) - 1; i >= 0; i-- {

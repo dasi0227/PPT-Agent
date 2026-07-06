@@ -65,6 +65,8 @@ func NewRunService(s store.Store, engine *run.Engine, client llm.Client, workRoo
 				WorkRoot:  string(workRoot),
 				Theme:     theme,
 				PageIndex: p.PageIndex,
+				Brief:     p.Brief,
+				Language:  p.Language,
 			}, nil, nil)
 		}
 		if r.Kind == model.KindEdit {

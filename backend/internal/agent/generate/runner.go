@@ -30,6 +30,8 @@ type Params struct {
 	WorkRoot  string // 全局 work_root（_assets 所在）；空时按 WorkDir 父目录兜底
 	Theme     string // 所选主题 id；空则回退 project.Theme→首个 preset
 	PageIndex *int   // 非空=单页重生成，仅动该页（AC-GEN-009）；空=整套生成
+	Brief     string // 设计总监上下文：项目简报（可空）
+	Language  string // 设计总监上下文：语言（zh/en，可空）
 }
 
 type resolvedTheme struct {
@@ -79,14 +81,23 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 
 	// 目标页集合：单页重生成只动该页，不碰公共层与别页（AC-GEN-009）。
 	single := r.params.PageIndex != nil
+	var spec *DesignSpec
 	if single {
 		idx := *r.params.PageIndex
 		if idx < 0 || idx >= len(slides) {
 			return r.errOut(em, "BAD_REQUEST", fmt.Sprintf("页号越界：%d（共 %d 页）", idx, len(slides)))
 		}
+		// 单页重生成走精简路径：读现有 design_spec（若有），不重跑设计总监（§7）。
+		spec, _ = readDesignSpec(sandbox)
 	} else {
-		// 整套生成：写公共层（tokens=所选主题拷贝 + base 基座）。单页重生成绝不动公共层。
-		if err := r.writeCommon(sandbox, theme); err != nil {
+		// 整套生成 Stage 1：设计总监节点产出 design_spec（V2-AGENT-PIPELINE §3）。
+		spec, err = r.runDesignDirector(ctx, em, cp, sandbox, slides, theme.Name)
+		if err != nil {
+			// V2-STOP-001：无法产出合法 design_spec → 整体 failed，不进入后续阶段。
+			return r.errOut(em, "DESIGN_FAILED", err.Error())
+		}
+		// 整套生成：写公共层（tokens 由 design_spec 生成；用户指定主题时以主题为基底叠加）。
+		if err := r.writeCommon(sandbox, theme, spec); err != nil {
 			return r.errOut(em, "INTERNAL", err.Error())
 		}
 		_ = r.store.SetProjectStatus(ctx, r.params.ProjectID, "generating")
@@ -125,7 +136,13 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 			return r.errOut(em, "INTERNAL", err.Error())
 		}
 
-		outcome := r.generatePage(ctx, em, cp, sandbox, sj, theme.Name)
+		// 注入 design_spec 摘要，保证跨页设计语言一致（slide.gen@v2）。
+		var brief *prompt.DesignBrief
+		if spec != nil {
+			step := stepByID(plan, pageStepID(sl.Idx))
+			brief = briefFromSpec(spec, sj, step.Title, step.Detail)
+		}
+		outcome := r.generatePage(ctx, em, cp, sandbox, sj, theme.Name, brief)
 		if outcome.Status != harness.OutcomeFinished {
 			// 某页失败：标记该 step failed 后整体失败（保留已落盘页）。
 			if !single {
@@ -155,7 +172,7 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 }
 
 // generatePage 为单页派发一个独立 harness 子代理（独立上下文 ARCH-HARNESS-005）。
-func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, sj slidejson.SlideJSON, themeName string) harness.Outcome {
+func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, sj slidejson.SlideJSON, themeName string, brief *prompt.DesignBrief) harness.Outcome {
 	writeTool := NewWriteSlideTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, sj.Idx, r.clock, r.newID)
 
 	pp := prompt.SlideParams{
@@ -164,6 +181,7 @@ func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harnes
 		TokensRel: "../../common/tokens.css",
 		BaseRel:   "../../common/base.css",
 		Layouts:   slidejson.LayoutEnum(),
+		Design:    brief,
 	}
 
 	loop := harness.New(r.client, harness.Config{
@@ -214,9 +232,11 @@ func (r *Runner) resolveTheme(ctx context.Context) (resolvedTheme, error) {
 	return resolvedTheme{}, fmt.Errorf("无可用主题资产（seed 未载入？）")
 }
 
-// writeCommon 写公共层：tokens.css=所选主题 tokens 的拷贝，base.css=seed 基座（DS-TOKENS-003）。
-func (r *Runner) writeCommon(sandbox *tools.Sandbox, theme resolvedTheme) error {
-	tokens, err := r.readThemeTokens(theme)
+// writeCommon 写公共层：base.css=seed 基座；tokens.css 依主题协同策略生成（V2-AGENT-PIPELINE §3.4/§6）。
+//   - 用户未指定主题：由 design_spec 生成项目专属 tokens（自由创作）。
+//   - 用户指定主题资产：以主题 tokens 为基底，仅叠加字体角色等 signature 相关增量，不覆盖主色。
+func (r *Runner) writeCommon(sandbox *tools.Sandbox, theme resolvedTheme, spec *DesignSpec) error {
+	tokens, err := r.resolveTokens(theme, spec)
 	if err != nil {
 		return err
 	}
@@ -228,6 +248,23 @@ func (r *Runner) writeCommon(sandbox *tools.Sandbox, theme resolvedTheme) error 
 		return fmt.Errorf("读取 base.css 失败：%w", err)
 	}
 	return sandbox.Write("common/base.css", base)
+}
+
+// resolveTokens 按主题协同策略产出 tokens.css 内容。
+func (r *Runner) resolveTokens(theme resolvedTheme, spec *DesignSpec) ([]byte, error) {
+	// 用户未显式指定主题：优先用 design_spec 生成项目专属 tokens。
+	if r.params.Theme == "" && spec != nil {
+		return tokensFromSpec(*spec), nil
+	}
+	// 用户指定了主题：以主题 tokens 为基底，叠加 spec 的字体角色（不覆盖主色）。
+	base, err := r.readThemeTokens(theme)
+	if err != nil {
+		return nil, err
+	}
+	if spec != nil {
+		base = tokensWithSpecOverlay(base, *spec)
+	}
+	return base, nil
 }
 
 func (r *Runner) readThemeTokens(theme resolvedTheme) ([]byte, error) {
