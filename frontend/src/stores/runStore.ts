@@ -58,6 +58,8 @@ interface RunStoreV2 {
   cancelRun: (threadId: string, runId: string) => Promise<void>;
   clearRun: (threadId: string) => void;
   closeSessions: (threadIds: string[]) => void;
+  rekeySession: (oldId: string, newId: string) => void;
+  dropSessions: (threadIds: string[]) => void;
 }
 
 export const useRunStore = create<RunStoreV2>((set, get) => {
@@ -196,6 +198,32 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         threadIds.forEach((id) => {
           if (next[id]) next[id] = { ...next[id], eventSourceClose: null };
         });
+        return { sessions: next };
+      });
+    },
+
+    // 软创建 flush：把临时 threadId 的整块 session 迁移到真实 threadId（连同
+    // timeline/plan/status/pendingInput/progress/eventSourceClose）。改绑 MUST 在
+    // 建立 SSE / createRun 之前完成，之后只用真实 id 订阅。
+    rekeySession: (oldId, newId) => {
+      if (oldId === newId) return;
+      set((state) => {
+        const existing = state.sessions[oldId];
+        if (!existing) return {};
+        const next = { ...state.sessions };
+        delete next[oldId];
+        next[newId] = existing;
+        return { sessions: next };
+      });
+    },
+
+    // 丢弃草稿/删除 thread：关连接并移除分片 key（零残留）。
+    dropSessions: (threadIds) => {
+      const { sessions } = get();
+      threadIds.forEach((id) => sessions[id]?.eventSourceClose?.());
+      set((state) => {
+        const next = { ...state.sessions };
+        threadIds.forEach((id) => { delete next[id]; });
         return { sessions: next };
       });
     },

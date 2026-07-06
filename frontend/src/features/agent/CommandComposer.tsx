@@ -7,6 +7,7 @@ import { useDeckStore } from '../../stores/deckStore';
 import { useComposerStore } from '../../stores/composerStore';
 import { useActiveSession } from './useActiveSession';
 import { RunPayload } from '../../api/types';
+import { isDraftId } from '../../lib/draft';
 import { ModeSwitcher } from './ModeSwitcher';
 import { mapModeToPayload, smartDefault, InteractionMode } from './modeMapping';
 
@@ -33,6 +34,7 @@ export const CommandComposer: React.FC = () => {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { activeProjectId, slidesByProjectId } = useProjectStore();
+  const flushProject = useProjectStore((s) => s.flushProject);
   const { currentPage } = useDeckStore();
   const createRun = useRunStore((s) => s.createRun);
   const { status } = useActiveSession();
@@ -79,9 +81,26 @@ export const CommandComposer: React.FC = () => {
       });
     }
 
+    // 软创建：草稿 project 在提交首个 run 时才 flush 落库（topic=输入文本，携带 outline 选项）。
+    let projectId = activeProjectId;
+    if (isDraftId(projectId)) {
+      try {
+        projectId = await flushProject(projectId, {
+          topic: raw,
+          brief: payload.brief,
+          slide_count: payload.slide_count,
+          language: payload.language,
+        });
+      } catch (err) {
+        console.error('Failed to flush draft project', err);
+        return;
+      }
+    }
+
+    // 再确保有真实 thread（草稿 thread 则 flush），全程只用真实 id。
     let threadId: string;
     try {
-      threadId = await ensureActiveThread(activeProjectId);
+      threadId = await ensureActiveThread(projectId);
     } catch (err) {
       console.error('Failed to ensure active thread', err);
       return;

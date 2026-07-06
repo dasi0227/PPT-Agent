@@ -5,6 +5,7 @@ export interface Project {
   status: string;
   created_at: number;
   updated_at: number;
+  draft?: boolean;   // 软创建：仅前端草稿，未 flush 落库（不发 POST /projects）
 }
 
 export interface Slide {
@@ -26,6 +27,7 @@ export interface Thread {
   status?: string;
   created_at: number;
   updated_at: number;
+  draft?: boolean;   // 软创建：仅前端草稿，未 flush 落库（不发 POST .../threads）
 }
 
 export interface Run {

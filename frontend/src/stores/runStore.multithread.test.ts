@@ -92,4 +92,40 @@ describe('runStore multithread sharding', () => {
     expect(useRunStore.getState().sessions['tA'].progress).toEqual({ stage: 'page', current: 2, total: 8 });
     expect(useRunStore.getState().getSession('tB').progress).toBeNull();
   });
+
+  it('rekeySession migrates full session from draft id to real id', async () => {
+    const store = useRunStore.getState();
+    await store.createRun('draft_x', { kind: 'outline', instruction: 'A' });
+    lastConn().onMessage({ id: '1', event: 'thought', data: { text: 'hi' } });
+    lastConn().onMessage({ id: '2', event: 'progress', data: { stage: 'design', current: 1, total: 1 } });
+
+    const before = useRunStore.getState().sessions['draft_x'];
+    expect(before.timelineItems).toHaveLength(1);
+    expect(before.status).toBe('running');
+
+    useRunStore.getState().rekeySession('draft_x', 'real_1');
+
+    const after = useRunStore.getState().sessions;
+    expect(after['draft_x']).toBeUndefined();
+    expect(after['real_1']).toBe(before); // 同一引用整块搬迁
+    expect(after['real_1'].timelineItems).toHaveLength(1);
+    expect(after['real_1'].progress).toEqual({ stage: 'design', current: 1, total: 1 });
+  });
+
+  it('rekeySession is a no-op when old id has no session', () => {
+    useRunStore.getState().rekeySession('draft_missing', 'real_2');
+    expect(useRunStore.getState().sessions['real_2']).toBeUndefined();
+  });
+
+  it('dropSessions closes and removes listed session keys', async () => {
+    const store = useRunStore.getState();
+    await store.createRun('tA', { kind: 'outline', instruction: 'A' });
+    await store.createRun('tB', { kind: 'outline', instruction: 'B' });
+    const connA = connections[0];
+
+    useRunStore.getState().dropSessions(['tA']);
+    expect(connA.closed).toBe(true);
+    expect(useRunStore.getState().sessions['tA']).toBeUndefined();
+    expect(useRunStore.getState().sessions['tB']).toBeDefined();
+  });
 });

@@ -9,4 +9,5 @@ export const projectsApi = {
   }),
   get: (id: string) => fetchClient<Project>(`/projects/${id}`),
   getSlides: (id: string) => fetchClient<Slide[]>(`/projects/${id}/slides`),
+  delete: (id: string) => fetchClient<void>(`/projects/${id}`, { method: 'DELETE' }),
 };

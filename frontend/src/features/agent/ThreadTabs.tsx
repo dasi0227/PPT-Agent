@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, X, ChevronDown } from 'lucide-react';
+import { Plus, X, ChevronDown, Trash2 } from 'lucide-react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useRunStore, RunStatus } from '../../stores/runStore';
+import { isDraftId } from '../../lib/draft';
 import { cn } from '../../lib/utils';
 
 function statusDot(status: RunStatus): string | null {
@@ -17,29 +18,37 @@ function statusDot(status: RunStatus): string | null {
 export const ThreadTabs: React.FC = () => {
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const {
-    threadsByProjectId, openThreadIdsByProjectId, activeThreadIdByProjectId,
-    openThread, closeThread, createThread, setActiveThread,
+    threadsByProjectId, draftThreadsByProjectId, openThreadIdsByProjectId, activeThreadIdByProjectId,
+    openThread, closeThread, createDraftThread, deleteThread, setActiveThread,
   } = useThreadStore();
   const sessions = useRunStore((s) => s.sessions);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   if (!activeProjectId) return null;
 
-  const allThreads = threadsByProjectId[activeProjectId] || [];
+  const allThreads = [
+    ...(threadsByProjectId[activeProjectId] || []),
+    ...(draftThreadsByProjectId[activeProjectId] || []),
+  ];
   const openIds = openThreadIdsByProjectId[activeProjectId] || [];
   const activeId = activeThreadIdByProjectId[activeProjectId] ?? null;
   const openThreads = openIds
     .map((id) => allThreads.find((t) => t.id === id))
     .filter((t): t is NonNullable<typeof t> => !!t);
-  const historyThreads = allThreads.filter((t) => !openIds.includes(t.id));
+  const historyThreads = allThreads.filter((t) => !openIds.includes(t.id) && !t.draft);
 
   const titleOf = (t: { title?: string }, i: number) => t.title || `对话 ${i + 1}`;
 
-  const handleNew = async () => {
+  const handleNew = () => {
+    createDraftThread(activeProjectId, `新对话 ${allThreads.length + 1}`);
+  };
+
+  const handleDelete = async (threadId: string, label: string) => {
+    if (!window.confirm(`删除对话「${label}」？历史记录将不可恢复。`)) return;
     try {
-      await createThread(activeProjectId, `新对话 ${allThreads.length + 1}`);
+      await deleteThread(activeProjectId, threadId);
     } catch (err) {
-      console.error('Failed to create thread', err);
+      console.error('Failed to delete thread', err);
     }
   };
 
@@ -48,6 +57,7 @@ export const ThreadTabs: React.FC = () => {
       {openThreads.map((t, i) => {
         const isActive = t.id === activeId;
         const dot = statusDot((sessions[t.id]?.status) ?? 'idle');
+        const draft = isDraftId(t.id);
         return (
           <div
             key={t.id}
@@ -59,6 +69,17 @@ export const ThreadTabs: React.FC = () => {
           >
             {dot && <span className={cn('w-1.5 h-1.5 rounded-full', dot)} />}
             <span className="max-w-[110px] truncate">{titleOf(t, i)}</span>
+            {/* 真实 thread：删除入口（DELETE 后端，二次确认）。× 仅关闭标签。 */}
+            {!draft && (
+              <button
+                type="button"
+                aria-label={`删除 ${titleOf(t, i)}`}
+                onClick={(e) => { e.stopPropagation(); handleDelete(t.id, titleOf(t, i)); }}
+                className="p-0.5 rounded hover:bg-mode-error/15 hover:text-mode-error opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
             <button
               type="button"
               aria-label={`关闭 ${titleOf(t, i)}`}

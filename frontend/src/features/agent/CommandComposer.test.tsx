@@ -117,4 +117,46 @@ describe('CommandComposer', () => {
       page_index: 0,
     });
   });
+
+  it('draft project flushes project then thread before creating run', async () => {
+    setupStores([]);
+    // 草稿 project（无后端 thread），active 指向草稿 project。
+    useProjectStore.setState({
+      projects: [{ id: 'draft_p', title: 'New Presentation', theme: '', status: 'draft', created_at: 0, updated_at: 0, draft: true }],
+      activeProjectId: 'draft_p',
+      slidesByProjectId: { draft_p: [] },
+      loadingProjects: false,
+    });
+    useThreadStore.setState({
+      threadsByProjectId: {}, draftThreadsByProjectId: {},
+      openThreadIdsByProjectId: {}, activeThreadIdByProjectId: {},
+    });
+    useComposerStore.setState({ interactionMode: 'outline', userTouchedMode: false });
+
+    const user = userEvent.setup();
+    // 每种 POST 返回带 id 的真实资源。
+    const requests: Array<{ url: string; method?: string; body: any }> = [];
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      requests.push({ url, method: init?.method, body: init?.body ? JSON.parse(init.body.toString()) : undefined });
+      let id = 'r1';
+      if (url.endsWith('/projects')) id = 'realP';
+      else if (url.includes('/threads') && !url.includes('/runs')) id = 'realT';
+      return { ok: true, status: 200, json: async () => ({ id, project_id: 'realP' }) } as unknown as Response;
+    };
+
+    render(<CommandComposer />);
+    await user.type(screen.getByRole('textbox'), '给投资人讲我们的 AI 产品');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    // 顺序：POST /projects → POST /projects/realP/threads → POST /threads/realT/runs
+    await waitFor(() => expect(requests).toHaveLength(3));
+    expect(requests[0].url).toBe('/api/v1/projects');
+    expect(requests[0].body).toMatchObject({ topic: '给投资人讲我们的 AI 产品' });
+    expect(requests[1].url).toBe('/api/v1/projects/realP/threads');
+    expect(requests[2].url).toBe('/api/v1/threads/realT/runs');
+    expect(requests[2].body).toMatchObject({ kind: 'outline', instruction: '给投资人讲我们的 AI 产品' });
+    // 没有任何 draft_* 泄漏到请求路径。
+    expect(requests.some((r) => r.url.includes('draft_'))).toBe(false);
+  });
 });
