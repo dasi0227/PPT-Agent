@@ -91,7 +91,12 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome harness.Outcome)
 	switch outcome.Status {
 	case harness.OutcomeFinished:
 		e.setStatus(ctx, a.run.ID, model.RunDone)
-		_ = a.bus.Emit(ctx, model.EventDone, harness.DonePayload{Result: map[string]any{"summary": outcome.Summary}})
+		// 结构化交付优先（V2-M5 Stage 5）；缺省回退 {summary}（兼容 edit/outline/command）。
+		result := outcome.Result
+		if result == nil {
+			result = map[string]any{"summary": outcome.Summary}
+		}
+		_ = a.bus.Emit(ctx, model.EventDone, harness.DonePayload{Result: result})
 	case harness.OutcomeCanceled:
 		e.setStatus(ctx, a.run.ID, model.RunCanceled)
 		_ = a.bus.Emit(ctx, model.EventError, harness.ErrorPayload{Code: harness.CodeCanceled, Message: "run canceled"})

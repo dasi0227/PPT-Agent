@@ -26,4 +26,6 @@ type Outcome struct {
 	Code    string // 非正常退出的错误码
 	Message string // 非正常退出的可读消息
 	Turns   int    // 实际执行轮数
+	// Result 是结构化交付载体（V2-M5）：非空时 done 事件用它作 result；空则回退 {summary}。
+	Result map[string]any
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -116,8 +117,10 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 	}
 
 	total := len(targets)
+	var warnings []Warning // 交付告警累积（页失败/修复超限），不阻塞整体 done（V2-STOP-002）。
 	for i, sl := range targets {
 		if ctx.Err() != nil {
+			// V2-STOP-003：取消 → 安全终止，保留已落盘页与 design_spec。
 			return harness.Outcome{Status: harness.OutcomeCanceled, Code: harness.CodeCanceled, Message: "run canceled"}
 		}
 		// 逐页 progress（AC-GEN-006）：stage=page，current/total 为业务页进度。
@@ -137,20 +140,22 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 		}
 
 		// 注入 design_spec 摘要，保证跨页设计语言一致（slide.gen@v2）。
-		var brief *prompt.DesignBrief
-		if spec != nil {
-			step := stepByID(plan, pageStepID(sl.Idx))
-			brief = briefFromSpec(spec, sj, step.Title, step.Detail)
+		brief := r.pageBrief(plan, spec, sj)
+		outcome := r.generatePage(ctx, em, cp, sandbox, sj, theme.Name, brief, nil)
+		if outcome.Status == harness.OutcomeCanceled {
+			return outcome // 取消优先：安全终止（V2-STOP-003）。
 		}
-		outcome := r.generatePage(ctx, em, cp, sandbox, sj, theme.Name, brief)
 		if outcome.Status != harness.OutcomeFinished {
-			// 某页失败：标记该 step failed 后整体失败（保留已落盘页）。
-			if !single {
-				em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{
-					ID: plan.ID, StepID: pageStepID(sl.Idx), Status: planStatusFailed,
-				})
+			// 单页精简路径：某页失败即整体失败（保留已落盘页），不进入跨页流程。
+			if single {
+				return outcome
 			}
-			return outcome
+			// 整套生成：某页失败不阻塞整体 done，标 failed 入 warnings，继续其余页（V2-STOP-002）。
+			em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{
+				ID: plan.ID, StepID: pageStepID(sl.Idx), Status: planStatusFailed,
+			})
+			warnings = append(warnings, Warning{PageIndex: sl.Idx, Code: warnFixExceeded, Message: outcome.Message})
+			continue
 		}
 		if !single {
 			em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{
@@ -159,20 +164,160 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 		}
 	}
 
-	if !single {
-		// 逐页完成后：校验与交付步收尾（本里程碑校验为占位性完成，V2-M5 强化）。
-		em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: planStepValidate, Status: planStatusCompleted})
-		em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: planStepDeliver, Status: planStatusCompleted})
-		_ = r.store.SetProjectStatus(ctx, r.params.ProjectID, "ready")
+	// 单页重生成走精简路径：不做跨页校验/结构化交付（§7）。
+	if single {
+		return harness.Outcome{
+			Status:  harness.OutcomeFinished,
+			Summary: fmt.Sprintf("已重生成第 %d 页 slide html（主题 %s）", targets[0].Idx, theme.Name),
+		}
 	}
+
+	// Stage 4：全局校验 + 有限修复子循环（跨页一致性）。
+	em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: planStepValidate, Status: planStatusInProgress})
+	fixWarnings, canceled := r.validateAndFix(ctx, em, cp, sandbox, plan, slides, spec, theme.Name, failedPages(warnings))
+	if canceled {
+		return harness.Outcome{Status: harness.OutcomeCanceled, Code: harness.CodeCanceled, Message: "run canceled"}
+	}
+	warnings = append(warnings, fixWarnings...)
+	em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: planStepValidate, Status: planStatusCompleted})
+
+	// Stage 5：结构化交付（done.result）。
+	em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: planStepDeliver, Status: planStatusInProgress})
+	_ = r.store.SetProjectStatus(ctx, r.params.ProjectID, "ready")
+	em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: planStepDeliver, Status: planStatusCompleted})
+
 	return harness.Outcome{
 		Status:  harness.OutcomeFinished,
 		Summary: fmt.Sprintf("已生成 %d 页 slide html（主题 %s）", total, theme.Name),
+		Result:  r.deliverResult(slides, spec, theme, warnings),
 	}
 }
 
+// pageBrief 组装某页注入的 design_spec 摘要（含该页在计划中的角色）。
+func (r *Runner) pageBrief(plan harness.PlanPayload, spec *DesignSpec, sj slidejson.SlideJSON) *prompt.DesignBrief {
+	if spec == nil {
+		return nil
+	}
+	step := stepByID(plan, pageStepID(sj.Idx))
+	return briefFromSpec(spec, sj, step.Title, step.Detail)
+}
+
+// validateAndFix 是 Stage 4：逐页读盘跨页校验，不合格页触发有限修复子循环（slide.fix@v1）。
+// 返回修复超限的告警与是否被取消。emit progress{validate}；修复步复用 plan.update(pageStep)。
+func (r *Runner) validateAndFix(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, plan harness.PlanPayload, slides []model.Slide, spec *DesignSpec, themeName string, skip map[int]bool) ([]Warning, bool) {
+	var warnings []Warning
+	total := len(slides)
+	for i, sl := range slides {
+		if ctx.Err() != nil {
+			return warnings, true
+		}
+		// progress{validate}：current=已校验页，total=总页数（V2-CONTRACTS §2.2）。
+		em.Emit(model.EventProgress, harness.ProgressPayload{
+			Stage: "validate", Current: i + 1, Total: total,
+			Message: fmt.Sprintf("校验第 %d 页", sl.Idx+1),
+		})
+		if skip[sl.Idx] {
+			continue // Stage 3 已失败并计入 warnings，不重复校验。
+		}
+		rel := fmt.Sprintf("slides/%03d/index.html", sl.Idx)
+		html, err := sandbox.Read(rel)
+		if err != nil {
+			warnings = append(warnings, Warning{PageIndex: sl.Idx, Code: warnFixExceeded, Message: "校验阶段读取页面失败：" + err.Error()})
+			continue
+		}
+		issues := crossPageLint(html, spec)
+		if len(issues) == 0 {
+			continue
+		}
+		// 有限修复子循环：最多 maxFixRounds 次，仍不合格则该页 failed 入 warnings（V2-STOP-002）。
+		if fixed, canceled := r.fixPage(ctx, em, cp, sandbox, plan, sl, spec, themeName, issues); canceled {
+			return warnings, true
+		} else if !fixed {
+			em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: pageStepID(sl.Idx), Status: planStatusFailed})
+			warnings = append(warnings, Warning{
+				PageIndex: sl.Idx, Code: warnFixExceeded,
+				Message: fmt.Sprintf("第 %d 页经 %d 轮修复仍不合规：%s", sl.Idx+1, maxFixRounds, strings.Join(issues, "；")),
+			})
+		}
+	}
+	return warnings, false
+}
+
+// fixPage 对单页执行有限次修复子循环：回灌 lint 错误 → 子代理重写 → 重新校验。
+// 返回是否修复成功、是否被取消。
+func (r *Runner) fixPage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, plan harness.PlanPayload, sl model.Slide, spec *DesignSpec, themeName string, issues []string) (bool, bool) {
+	rel := fmt.Sprintf("slides/%03d/index.html", sl.Idx)
+	for round := 0; round < maxFixRounds; round++ {
+		if ctx.Err() != nil {
+			return false, true
+		}
+		// 修复步：复用该页 plan.update(in_progress) 表征正在修复。
+		em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{
+			ID: plan.ID, StepID: pageStepID(sl.Idx), Status: planStatusInProgress,
+			Detail: fmt.Sprintf("修复第 %d 轮", round+1),
+		})
+		sj, err := r.loadSlideJSON(sandbox, sl)
+		if err != nil {
+			return false, false
+		}
+		brief := r.pageBrief(plan, spec, sj)
+		outcome := r.generatePage(ctx, em, cp, sandbox, sj, themeName, brief, issues)
+		if outcome.Status == harness.OutcomeCanceled {
+			return false, true
+		}
+		if outcome.Status != harness.OutcomeFinished {
+			continue // 本轮修复未产出，进入下一轮（受 maxFixRounds 限制）。
+		}
+		html, err := sandbox.Read(rel)
+		if err != nil {
+			continue
+		}
+		issues = crossPageLint(html, spec)
+		if len(issues) == 0 {
+			em.Emit(model.EventPlanUpdate, harness.PlanUpdatePayload{ID: plan.ID, StepID: pageStepID(sl.Idx), Status: planStatusCompleted})
+			return true, false
+		}
+	}
+	return false, false
+}
+
+// deliverResult 组装 Stage 5 结构化交付载体（V2-AGENT-PIPELINE §8.2）。
+func (r *Runner) deliverResult(slides []model.Slide, spec *DesignSpec, theme resolvedTheme, warnings []Warning) map[string]any {
+	if warnings == nil {
+		warnings = []Warning{}
+	}
+	themeLabel := theme.Name
+	if r.params.Theme == "" {
+		themeLabel = "project-custom" // 未指定主题：tokens 由 design_spec 生成。
+	}
+	result := map[string]any{
+		"project_id":  r.params.ProjectID,
+		"slide_count": len(slides),
+		"theme":       themeLabel,
+		"warnings":    warnings,
+	}
+	if spec != nil {
+		result["design_spec_ref"] = "design/design-spec.json"
+		result["signature"] = spec.Signature
+	}
+	return result
+}
+
+// failedPages 把已产生的告警转为页号集合，供 Stage 4 跳过已失败页。
+func failedPages(warnings []Warning) map[int]bool {
+	if len(warnings) == 0 {
+		return nil
+	}
+	m := make(map[int]bool, len(warnings))
+	for _, w := range warnings {
+		m[w.PageIndex] = true
+	}
+	return m
+}
+
 // generatePage 为单页派发一个独立 harness 子代理（独立上下文 ARCH-HARNESS-005）。
-func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, sj slidejson.SlideJSON, themeName string, brief *prompt.DesignBrief) harness.Outcome {
+// fixErrors 非空时进入修复子循环（slide.fix@v1），只修列出的不合规项。
+func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, sj slidejson.SlideJSON, themeName string, brief *prompt.DesignBrief, fixErrors []string) harness.Outcome {
 	writeTool := NewWriteSlideTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, sj.Idx, r.clock, r.newID)
 
 	pp := prompt.SlideParams{
@@ -182,6 +327,7 @@ func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harnes
 		BaseRel:   "../../common/base.css",
 		Layouts:   slidejson.LayoutEnum(),
 		Design:    brief,
+		FixErrors: fixErrors,
 	}
 
 	loop := harness.New(r.client, harness.Config{

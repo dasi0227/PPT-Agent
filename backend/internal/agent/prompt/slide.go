@@ -11,14 +11,17 @@ import (
 // @v2：注入 design_spec 摘要，保证跨页设计语言一致（V2-PROMPT-001）。
 const SlideVersion = "slide.gen@v2"
 
+// SlideFixVersion 标记修复子循环模板版本（V2-M5 Stage 4，V2-PROMPT-001）。
+const SlideFixVersion = "slide.fix@v1"
+
 // DesignBrief 是注入逐页生成的 design_spec 摘要（跨页设计语言一致的契约）。
 type DesignBrief struct {
-	Topic        string
-	Audience     string
-	PaletteRoles []string // 形如 "signal→主强调"
-	DisplayFont  string
-	BodyFont     string
-	UtilityFont  string
+	Topic         string
+	Audience      string
+	PaletteRoles  []string // 形如 "signal→主强调"
+	DisplayFont   string
+	BodyFont      string
+	UtilityFont   string
 	LayoutConcept string
 	LayoutRhythm  string
 	Signature     string
@@ -35,6 +38,7 @@ type SlideParams struct {
 	BaseRel   string              // 公共层 base.css 相对路径
 	Layouts   []string            // 合法 layout 枚举（权威同源）
 	Design    *DesignBrief        // 非空时注入 design_spec 摘要（整套生成 Stage3）
+	FixErrors []string            // 非空时为 Stage 4 修复子循环（slide.fix@v1）：只修列出的不合规项
 }
 
 // SlideSystem 组装 slide.gen 的 system 层：base + 产出契约 + html-output-spec 硬约束。
@@ -143,6 +147,14 @@ func SlideUser(p SlideParams) string {
 			fmt.Fprintf(&b, " — %s", p.Design.StepDetail)
 		}
 		b.WriteString("\n")
+	}
+	// Stage 4 修复子循环（slide.fix@v1）：仅追加上一次的不合规项，要求只修列出的问题。
+	if len(p.FixErrors) > 0 {
+		b.WriteString("\n上一次生成的本页存在以下不合规项，请修复后重新 write_slide：\n")
+		for _, e := range p.FixErrors {
+			fmt.Fprintf(&b, "- %s\n", e)
+		}
+		b.WriteString("只修复列出的问题，尽量不改动其它已合规部分。\n")
 	}
 	fmt.Fprintf(&b, "\n调用 write_slide 提交，slide_idx=%d。", s.Idx)
 	return b.String()

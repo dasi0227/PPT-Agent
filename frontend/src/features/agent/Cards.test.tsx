@@ -43,10 +43,35 @@ describe('Agent Cards', () => {
     expect(screen.getByText('Step 2')).toBeInTheDocument();
   });
 
-  it('FinalResultCard renders', () => {
-    render(<FinalResultCard item={{ id: '1', type: 'final_result', result: { url: 'abc' }, timestamp: 0 }} />);
+  it('FinalResultCard renders summary fallback (edit/outline/command)', () => {
+    render(<FinalResultCard item={{ id: '1', type: 'final_result', result: { summary: '已更新第 3 页标题' }, timestamp: 0 }} />);
     expect(screen.getByText('最终交付')).toBeInTheDocument();
-    expect(screen.getByText(/abc/)).toBeInTheDocument();
+    expect(screen.getByText('已更新第 3 页标题')).toBeInTheDocument();
+  });
+
+  it('FinalResultCard renders structured result (generate)', () => {
+    render(<FinalResultCard item={{
+      id: '1', type: 'final_result', timestamp: 0,
+      result: { project_id: 'p1', slide_count: 8, theme: 'swiss-modern', signature: '链路脉冲', design_spec_ref: 'design/design-spec.json', warnings: [] },
+    }} />);
+    expect(screen.getByText('最终交付')).toBeInTheDocument();
+    expect(screen.getByText('8')).toBeInTheDocument();
+    expect(screen.getByText('swiss-modern')).toBeInTheDocument();
+    expect(screen.getByText('链路脉冲')).toBeInTheDocument();
+  });
+
+  it('FinalResultCard lists failed pages from warnings', () => {
+    render(<FinalResultCard item={{
+      id: '1', type: 'final_result', timestamp: 0,
+      result: {
+        project_id: 'p1', slide_count: 4, theme: 'project-custom', signature: 'sig',
+        warnings: [{ page_index: 1, code: 'FIX_EXCEEDED', message: '经 2 轮修复仍不合规' }],
+      },
+    }} />);
+    expect(screen.getByText('1 项告警')).toBeInTheDocument();
+    expect(screen.getByText('第 2 页')).toBeInTheDocument();
+    expect(screen.getByText('[FIX_EXCEEDED]')).toBeInTheDocument();
+    expect(screen.getByText('经 2 轮修复仍不合规')).toBeInTheDocument();
   });
 
   it('NeedsInputCard renders and handles input', () => {
