@@ -1,18 +1,37 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { useDeckStore } from './deckStore';
 
-describe('deckStore per-page view preference', () => {
+describe('deckStore globalView', () => {
   beforeEach(() => {
-    useDeckStore.setState({ viewByPage: {} });
+    useDeckStore.setState({ globalView: 'html', viewByPage: {} });
   });
 
-  test('effectiveView smart default and override', () => {
+  test('default is html; effectiveView falls back to outline when hasHtml=false', () => {
     const s = useDeckStore.getState();
+    expect(s.globalView).toBe('html');
     expect(s.effectiveView('s1', true)).toBe('html');
     expect(s.effectiveView('s2', false)).toBe('outline');
-    s.setPageView('s2', 'html'); // 覆盖：即便无 html 也返回 html（UI 层禁用不可选）
-    expect(useDeckStore.getState().effectiveView('s2', false)).toBe('html');
-    s.setPageView('s1', 'outline'); // 有 html 也可手动切回大纲
-    expect(useDeckStore.getState().effectiveView('s1', true)).toBe('outline');
+  });
+
+  test('globalView=outline forces outline regardless of hasHtml', () => {
+    useDeckStore.getState().setGlobalView('outline');
+    const s = useDeckStore.getState();
+    expect(s.effectiveView('s1', true)).toBe('outline');
+    expect(s.effectiveView('s2', false)).toBe('outline');
+  });
+
+  test('setGlobalView(html) restores default and picks html when available', () => {
+    useDeckStore.getState().setGlobalView('outline');
+    useDeckStore.getState().setGlobalView('html');
+    expect(useDeckStore.getState().globalView).toBe('html');
+    expect(useDeckStore.getState().effectiveView('s1', true)).toBe('html');
+    expect(useDeckStore.getState().effectiveView('s2', false)).toBe('outline');
+  });
+
+  test('setPageView writes viewByPage but does NOT influence effectiveView (API compat)', () => {
+    useDeckStore.getState().setPageView('s1', 'outline');
+    // 即便页级偏好设为 outline，effectiveView 仍由 globalView 决策：默认 html + 有 html → html。
+    expect(useDeckStore.getState().viewByPage['s1']).toBe('outline');
+    expect(useDeckStore.getState().effectiveView('s1', true)).toBe('html');
   });
 });

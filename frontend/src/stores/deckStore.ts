@@ -9,6 +9,7 @@ interface DeckState {
   iframeReady: boolean;
   loadCount: number;
   viewByPage: Record<string, PageView>;
+  globalView: PageView;
 
   setCurrentPage: (index: number) => void;
   goNext: () => void;
@@ -17,7 +18,9 @@ interface DeckState {
   exitOverview: () => void;
   setIframeReady: (ready: boolean) => void;
   reloadSlide: (index: number) => void;
+  // 保留但不再参与 effectiveView 决策；仅写入 viewByPage 以维持 API 兼容（Phase 3 后可清理）。
   setPageView: (slideId: string, view: PageView) => void;
+  setGlobalView: (view: PageView) => void;
   effectiveView: (slideId: string, hasHtml: boolean) => PageView;
 }
 
@@ -28,6 +31,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   iframeReady: false,
   loadCount: 0,
   viewByPage: {},
+  globalView: 'html',
 
   setCurrentPage: (index) => set({ currentPage: index }),
   goNext: () => set((state) => ({ currentPage: state.currentPage + 1 })),
@@ -37,11 +41,13 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   setIframeReady: (ready) => set({ iframeReady: ready }),
   reloadSlide: () => set((state) => ({ loadCount: state.loadCount + 1 })),
 
-  // 每页视图偏好按 slideId 独立记忆。
+  // 写入 viewByPage，但决策由 globalView 主导（保留仅为兼容 Phase 3 之前的调用点）。
   setPageView: (slideId, view) => set((state) => ({ viewByPage: { ...state.viewByPage, [slideId]: view } })),
-  // 智能默认：用户手动选过则尊重其偏好，否则有 html 显 HTML、仅有 json 显大纲。
-  effectiveView: (slideId, hasHtml) => {
-    const v = get().viewByPage[slideId];
-    return v ?? (hasHtml ? 'html' : 'outline');
+  setGlobalView: (view) => set({ globalView: view }),
+
+  // 全局视图优先：outline 全部走大纲；html 全局时按页 hasHtml 兜底（无 html → outline）。
+  effectiveView: (_slideId, hasHtml) => {
+    if (get().globalView === 'outline') return 'outline';
+    return hasHtml ? 'html' : 'outline';
   },
 }));
