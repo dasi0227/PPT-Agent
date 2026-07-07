@@ -1,0 +1,179 @@
+docs/v2/20-multi-thread-windows.md
+  s_79ebc42778d699::t_25cdc12db00799 183
+  s_79ebc42778d699::t_20ab1192eb62d1 1-182
+docs/v2/README.md
+  s_79ebc42778d699::t_c022f9de3c64e6 14
+  s_79ebc42778d699::t_97e230d6577cf7 11-13
+  s_79ebc42778d699::t_b2e9b0fe3aa346 15-17
+docs/v2/00-background-and-goals.md
+  s_79ebc42778d699::t_06b485a6817635 112
+  s_79ebc42778d699::t_1adfc2f94756ad 1-111
+docs/v2/40-api-and-data-contracts.md
+  s_79ebc42778d699::t_c337baf2cbee6a 197
+  s_79ebc42778d699::t_3f97ec53ef7828 1-196
+docs/v2/10-interaction-modes.md
+  s_79ebc42778d699::t_378c40ba3c898a 1-208
+  s_79ebc42778d699::t_1f07a53f56b2e2 209
+docs/v2/50-frontend-architecture-v2.md
+  s_79ebc42778d699::t_d0b921cdd270b1 190
+  s_79ebc42778d699::t_4ade00faea2a0e 1-189
+docs/v2/60-prompts-v2.md
+  s_79ebc42778d699::t_09714c5274c399 167
+  s_79ebc42778d699::t_a7c3915fbfa157 1-166
+docs/v2/70-dev-plan-v2.md
+  s_79ebc42778d699::t_7d1ef1e2cf70fa 138
+  s_79ebc42778d699::t_e4633cbcbe6c81 1-5,7-137,139-163
+  s_79ebc42778d699::t_0ff7419a4e4de0 164
+  s_79ebc42778d699::t_dbf9f6e3564cc9 6
+docs/v2/30-agent-pipeline-v2.md
+  s_79ebc42778d699::t_8fef3d274963d3 1-65,67-267
+  s_79ebc42778d699::t_8b928400af3896 66
+  s_79ebc42778d699::t_2d839c124e2d9b 268
+docs/superpowers/specs/2026-07-07-outline-page-modes-design.md
+  s_79ebc42778d699::t_c3008062f27894 97 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4c6e706165e6237dd8d08f","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Single":97}]}]}
+  s_79ebc42778d699::t_8320b0d5ceb00d 1-59,61-96,98-212 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4c6ddb6165e6237dd8d083","tool_type":"agent","tool_id":"Write","line_ranges":[{"Range":[1,59]},{"Range":[61,96]},{"Range":[98,212]}]}]}
+  s_79ebc42778d699::t_5a316cd6134965 60 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a4c6e666165e6237dd8d08c","tool_type":"agent","tool_id":"Edit","line_ranges":[{"Single":60}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "23d8f39460a5801b5adc237bf2bcf73aad1a3b05",
+  "prompts": {},
+  "sessions": {
+    "s_79ebc42778d699": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a472830e42e0d96cfc6fb15",
+        "model": "openrouter-3o__max"
+      },
+      "human_author": "wanyiwei <wanyiwei@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {
+    "docs/superpowers/specs/2026-07-07-outline-page-modes-design.md": [
+      {
+        "hash": "s_79ebc42778d699::t_c3008062f27894",
+        "line_ranges": [
+          {
+            "Single": 97
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4c6e706165e6237dd8d08f",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Single": 97
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_79ebc42778d699::t_8320b0d5ceb00d",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              59
+            ]
+          },
+          {
+            "Range": [
+              61,
+              96
+            ]
+          },
+          {
+            "Range": [
+              98,
+              212
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4c6ddb6165e6237dd8d083",
+            "tool_type": "agent",
+            "tool_id": "Write",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  59
+                ]
+              },
+              {
+                "Range": [
+                  61,
+                  96
+                ]
+              },
+              {
+                "Range": [
+                  98,
+                  212
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_79ebc42778d699::t_5a316cd6134965",
+        "line_ranges": [
+          {
+            "Single": 60
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a4c6e666165e6237dd8d08c",
+            "tool_type": "agent",
+            "tool_id": "Edit",
+            "line_ranges": [
+              {
+                "Single": 60
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "s_79ebc42778d699": {
+      "tool": "trae",
+      "conversation_id": "6a472830e42e0d96cfc6fb15",
+      "session_id": "6a472830e42e0d96cfc6fb15",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_79ebc42778d699::t_5a316cd6134965": {
+      "tool": "trae",
+      "conversation_id": "6a472830e42e0d96cfc6fb15",
+      "session_id": "6a472830e42e0d96cfc6fb15",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_79ebc42778d699::t_8320b0d5ceb00d": {
+      "tool": "trae",
+      "conversation_id": "6a472830e42e0d96cfc6fb15",
+      "session_id": "6a472830e42e0d96cfc6fb15",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_79ebc42778d699::t_c3008062f27894": {
+      "tool": "trae",
+      "conversation_id": "6a472830e42e0d96cfc6fb15",
+      "session_id": "6a472830e42e0d96cfc6fb15",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
