@@ -8,6 +8,17 @@ export interface Project {
   draft?: boolean;   // 软创建：仅前端草稿，未 flush 落库（不发 POST /projects）
 }
 
+export interface SlideContent {
+  layout: string;
+  title: string;
+  subtitle?: string;
+  bullets?: string[];
+  content_intent?: string;
+  chart_intent?: { type: string; data_hint?: string };
+  steps?: number;
+  notes?: string;
+}
+
 export interface Slide {
   id: string;
   project_id: string;
@@ -17,6 +28,9 @@ export interface Slide {
   html_path: string;
   json_path: string;
   current_version: number;
+  order: number;
+  outline_dirty: boolean;
+  content?: SlideContent;
 }
 
 export interface Thread {

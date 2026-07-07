@@ -22,6 +22,7 @@ function setupStores(slides: Array<{ html_path?: string }> = []) {
       p1: slides.map((s, i) => ({
         id: `s${i}`, project_id: 'p1', idx: i, layout: 'bullets',
         title: `Slide ${i}`, html_path: s.html_path ?? '', json_path: '', current_version: 1,
+        order: i * 10, outline_dirty: false,
       })),
     },
     loadingProjects: false,
