@@ -150,12 +150,12 @@ func (t *SubmitOutlineTool) checkStructure(slides []slidejson.SlideJSON) error {
 }
 
 // writeFiles 落盘每页 slide.json 与 project.json，返回 slide 元数据（DATA-FS-LAYOUT）。
+// 磁盘目录以稳定 slide_id 命名；order 采用间隔分配（i*10），支撑后续重排零迁移。
 func (t *SubmitOutlineTool) writeFiles(slides []slidejson.SlideJSON) ([]model.Slide, error) {
 	metas := make([]model.Slide, len(slides))
 	for i, s := range slides {
-		dir := fmt.Sprintf("slides/%03d", s.Idx)
-		jsonPath := dir + "/slide.json"
-		htmlPath := dir + "/index.html" // 路径登记，html 由 M3 生成
+		jsonPath := model.SlideJSONPath(s.ID)
+		htmlPath := model.SlideHTMLPath(s.ID) // 路径登记，html 由 M3 生成
 		raw, err := json.MarshalIndent(s, "", "  ")
 		if err != nil {
 			return nil, err
@@ -165,7 +165,7 @@ func (t *SubmitOutlineTool) writeFiles(slides []slidejson.SlideJSON) ([]model.Sl
 		}
 		metas[i] = model.Slide{
 			ID: s.ID, ProjectID: t.projectID, Idx: s.Idx, Layout: s.Layout, Title: s.Title,
-			JSONPath: jsonPath, HTMLPath: htmlPath, CurrentVersion: 0,
+			JSONPath: jsonPath, HTMLPath: htmlPath, CurrentVersion: 0, Order: i * 10,
 		}
 	}
 	projectDoc := map[string]any{

@@ -93,7 +93,7 @@ func TestOutlineSubmitValid(t *testing.T) {
 	if len(store.slides) != 7 {
 		t.Fatalf("want 7 slides in store, got %d", len(store.slides))
 	}
-	// 服务端权威回填 id/idx。
+	// 服务端权威回填 id/idx，并按间隔分配 order。
 	for i, s := range store.slides {
 		if s.Idx != i {
 			t.Errorf("slide %d idx=%d", i, s.Idx)
@@ -101,12 +101,18 @@ func TestOutlineSubmitValid(t *testing.T) {
 		if s.ID == "" {
 			t.Errorf("slide %d missing id", i)
 		}
-		if s.JSONPath == "" {
-			t.Errorf("slide %d missing json_path", i)
+		if s.Order != i*10 {
+			t.Errorf("slide %d order=%d, want %d", i, s.Order, i*10)
+		}
+		if s.JSONPath != model.SlideJSONPath(s.ID) {
+			t.Errorf("slide %d json_path=%q, want %q", i, s.JSONPath, model.SlideJSONPath(s.ID))
+		}
+		if s.HTMLPath != model.SlideHTMLPath(s.ID) {
+			t.Errorf("slide %d html_path=%q, want %q", i, s.HTMLPath, model.SlideHTMLPath(s.ID))
 		}
 	}
-	// slide.json 落盘且合法。
-	raw, err := os.ReadFile(filepath.Join(dir, "slides/000/slide.json"))
+	// slide.json 落盘到 slides/<id>/ 且合法。
+	raw, err := os.ReadFile(filepath.Join(dir, model.SlideJSONPath(store.slides[0].ID)))
 	if err != nil {
 		t.Fatalf("read slide.json: %v", err)
 	}
@@ -229,7 +235,7 @@ func TestOutlineStripsHTMLLeak(t *testing.T) {
 		t.Fatalf("expected ok (html stripped, not rejected): %s", res.Observation)
 	}
 	// 落盘的第 1 页 slide.json 不得含 html 字段（两阶段边界）。
-	raw, err := os.ReadFile(filepath.Join(dir, "slides/001/slide.json"))
+	raw, err := os.ReadFile(filepath.Join(dir, model.SlideJSONPath(store.slides[1].ID)))
 	if err != nil {
 		t.Fatalf("read slide.json: %v", err)
 	}
