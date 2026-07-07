@@ -13,6 +13,7 @@ type Store interface {
 	CreateVersion(ctx context.Context, v model.Version) error
 	DeleteVersion(ctx context.Context, targetType, targetID string, versionNo int) error
 	SetSlideVersion(ctx context.Context, slideID string, versionNo int) error
+	SetOutlineDirty(ctx context.Context, slideID string, dirty bool) error
 	SetProjectStatus(ctx context.Context, id, status string) error
 	ListAssets(ctx context.Context, kind string) ([]model.Asset, error)
 }

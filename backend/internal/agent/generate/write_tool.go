@@ -89,6 +89,8 @@ func (t *WriteSlideTool) Execute(ctx context.Context, args map[string]any) (tool
 	}
 
 	t.written = true
+	// 产物已与 slide.json 同步：清该页脏标记（best-effort，不阻断已成功的写入）。
+	_ = t.store.SetOutlineDirty(ctx, t.slideID, false)
 	return tools.Result{
 		OK:          true,
 		Observation: fmt.Sprintf("第 %d 页已写入并通过校验，版本 v%d", idx, versionNo),

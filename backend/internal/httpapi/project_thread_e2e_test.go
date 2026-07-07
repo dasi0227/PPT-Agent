@@ -44,7 +44,7 @@ func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
 		zap.NewNop(),
 		httpapi.NewHealthHandler(service.NewHealthService(st)),
 		httpapi.NewRunHandler(runSvc),
-		httpapi.NewProjectHandler(projectSvc),
+		httpapi.NewProjectHandler(projectSvc, service.NewSlideService(st)),
 		httpapi.NewThreadHandler(threadSvc),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
 		httpapi.NewAssetHandler(service.NewAssetService(st, root)),

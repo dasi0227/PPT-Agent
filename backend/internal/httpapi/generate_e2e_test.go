@@ -144,7 +144,7 @@ func TestE2EGenerateDeck(t *testing.T) {
 		cfg, zap.NewNop(),
 		httpapi.NewHealthHandler(service.NewHealthService(st)),
 		httpapi.NewRunHandler(runSvc),
-		httpapi.NewProjectHandler(service.NewProjectService(st, service.WorkRoot(workRoot))),
+		httpapi.NewProjectHandler(service.NewProjectService(st, service.WorkRoot(workRoot)), service.NewSlideService(st)),
 		httpapi.NewThreadHandler(service.NewThreadService(st)),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
 		httpapi.NewAssetHandler(service.NewAssetService(st, workRoot)),

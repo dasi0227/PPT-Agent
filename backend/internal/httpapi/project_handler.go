@@ -12,11 +12,12 @@ import (
 )
 
 type ProjectHandler struct {
-	svc *service.ProjectService
+	svc      *service.ProjectService
+	slideSvc *service.SlideService
 }
 
-func NewProjectHandler(svc *service.ProjectService) *ProjectHandler {
-	return &ProjectHandler{svc: svc}
+func NewProjectHandler(svc *service.ProjectService, slideSvc *service.SlideService) *ProjectHandler {
+	return &ProjectHandler{svc: svc, slideSvc: slideSvc}
 }
 
 type projectResponse struct {
@@ -99,7 +100,11 @@ func (h *ProjectHandler) ListSlides(c *gin.Context) {
 	case err == nil:
 		out := make([]slideResponse, len(slides))
 		for i, sl := range slides {
-			out[i] = toSlideResponse(sl)
+			resp := toSlideResponse(sl)
+			if content, cerr := h.slideSvc.ReadContent(c.Request.Context(), sl.ID); cerr == nil {
+				resp.Content = content
+			}
+			out[i] = resp
 		}
 		c.JSON(http.StatusOK, out)
 	case errors.Is(err, run.ErrRunNotFound):

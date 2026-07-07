@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 )
@@ -29,6 +30,9 @@ type slideResponse struct {
 	HTMLPath       string `json:"html_path"`
 	JSONPath       string `json:"json_path"`
 	CurrentVersion int    `json:"current_version"`
+	Order          int    `json:"order"`
+	OutlineDirty   bool   `json:"outline_dirty"`
+	Content        any    `json:"content,omitempty"`
 }
 
 type versionResponse struct {
@@ -51,7 +55,11 @@ func (h *SlideHandler) GetSlide(c *gin.Context) {
 		AbortWithError(c, ErrInternal(err.Error()))
 		return
 	}
-	c.JSON(http.StatusOK, toSlideResponse(sl))
+	resp := toSlideResponse(sl)
+	if content, cerr := h.svc.ReadContent(c.Request.Context(), sl.ID); cerr == nil {
+		resp.Content = content
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListVersions GET /slides/{id}/versions
@@ -101,5 +109,48 @@ func toSlideResponse(sl model.Slide) slideResponse {
 	return slideResponse{
 		ID: sl.ID, ProjectID: sl.ProjectID, Idx: sl.Idx, Layout: sl.Layout, Title: sl.Title,
 		HTMLPath: sl.HTMLPath, JSONPath: sl.JSONPath, CurrentVersion: sl.CurrentVersion,
+		Order: sl.Order, OutlineDirty: sl.OutlineDirty,
+	}
+}
+
+// PatchSlide PATCH /slides/{id}：字段级即时保存 slide.json（不产版本）。
+// 活跃 run → 409 RUN_ACTIVE；校验失败 → 422；未找到 → 404。
+func (h *SlideHandler) PatchSlide(c *gin.Context) {
+	var body struct {
+		Title         *string                  `json:"title"`
+		Subtitle      *string                  `json:"subtitle"`
+		ContentIntent *string                  `json:"content_intent"`
+		Layout        *string                  `json:"layout"`
+		Bullets       *[]string                `json:"bullets"`
+		ChartIntent   *slidejson.ChartIntent   `json:"chart_intent"`
+		Steps         *int                     `json:"steps"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		AbortWithError(c, ErrBadRequest("invalid body"))
+		return
+	}
+	id := c.Param("id")
+	sl, err := h.svc.PatchContent(c.Request.Context(), id, service.SlidePatch{
+		Title: body.Title, Subtitle: body.Subtitle, ContentIntent: body.ContentIntent,
+		Layout: body.Layout, Bullets: body.Bullets, ChartIntent: body.ChartIntent, Steps: body.Steps,
+	})
+	switch {
+	case err == nil:
+		meta, gerr := h.svc.GetSlide(c.Request.Context(), id)
+		if gerr != nil {
+			AbortWithError(c, ErrInternal(gerr.Error()))
+			return
+		}
+		resp := toSlideResponse(meta)
+		resp.Content = sl
+		c.JSON(http.StatusOK, resp)
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		AbortWithError(c, ErrNotFound("slide not found"))
+	case errors.Is(err, service.ErrRunActive):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	case service.IsValidationError(err):
+		AbortWithError(c, ErrValidationFailed(err.Error()))
+	default:
+		AbortWithError(c, ErrInternal(err.Error()))
 	}
 }

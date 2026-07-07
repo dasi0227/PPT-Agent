@@ -15,6 +15,7 @@ type memStore struct {
 	slides      []model.Slide
 	versions    []model.Version
 	slideVer    map[string]int
+	dirtyByID   map[string]bool
 	projStatus  string
 	themes      []model.Asset
 	nextVerByTg map[string]int
@@ -22,7 +23,7 @@ type memStore struct {
 }
 
 func newMemStore() *memStore {
-	return &memStore{slideVer: map[string]int{}, nextVerByTg: map[string]int{}}
+	return &memStore{slideVer: map[string]int{}, dirtyByID: map[string]bool{}, nextVerByTg: map[string]int{}}
 }
 
 func (m *memStore) ListSlides(_ context.Context, _ string) ([]model.Slide, error) {
@@ -50,6 +51,10 @@ func (m *memStore) DeleteVersion(_ context.Context, tt, tid string, no int) erro
 }
 func (m *memStore) SetSlideVersion(_ context.Context, slideID string, no int) error {
 	m.slideVer[slideID] = no
+	return nil
+}
+func (m *memStore) SetOutlineDirty(_ context.Context, slideID string, dirty bool) error {
+	m.dirtyByID[slideID] = dirty
 	return nil
 }
 func (m *memStore) SetProjectStatus(_ context.Context, _, status string) error {
@@ -97,6 +102,7 @@ func itoa(n int) string {
 func TestWriteSlideValidPersists(t *testing.T) {
 	store := newMemStore()
 	tool, dir, slideID := newWriteTool(t, store, 0)
+	store.dirtyByID[slideID] = true // 预置脏标记，验证写页成功后被清除
 	res, err := tool.Execute(context.Background(), map[string]any{"slide_idx": 0, "html": goodHTML})
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -115,6 +121,9 @@ func TestWriteSlideValidPersists(t *testing.T) {
 	}
 	if store.slideVer[slideID] != 0 {
 		t.Errorf("slide %s version not synced: %d", slideID, store.slideVer[slideID])
+	}
+	if store.dirtyByID[slideID] {
+		t.Errorf("slide %s outline_dirty should be cleared after regenerate", slideID)
 	}
 }
 

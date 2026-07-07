@@ -103,7 +103,7 @@ func setupM5Server(t *testing.T, pages int) (*httptest.Server, string, string) {
 		cfg, zap.NewNop(),
 		httpapi.NewHealthHandler(service.NewHealthService(st)),
 		httpapi.NewRunHandler(runSvc),
-		httpapi.NewProjectHandler(service.NewProjectService(st, service.WorkRoot(work))),
+		httpapi.NewProjectHandler(service.NewProjectService(st, service.WorkRoot(work)), service.NewSlideService(st)),
 		httpapi.NewThreadHandler(service.NewThreadService(st)),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
 		httpapi.NewAssetHandler(service.NewAssetService(st, work)),
