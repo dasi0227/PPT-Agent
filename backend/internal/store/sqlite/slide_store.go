@@ -55,6 +55,19 @@ func (s *Store) SetProjectStatus(ctx context.Context, id, status string) error {
 		Updates(map[string]any{"status": status, "updated_at": nowUnix()}).Error
 }
 
+// SetOutlineDirty 置某页 outline_dirty 脏标记（slide.json 已改但 html 未同步）。
+func (s *Store) SetOutlineDirty(ctx context.Context, slideID string, dirty bool) error {
+	return s.db.WithContext(ctx).Model(&slidePO{}).
+		Where("id = ?", slideID).Update("outline_dirty", dirty).Error
+}
+
+// UpdateSlideMeta 同步某页元数据 title/layout（手动 PATCH 改这两项时保持 DB 与 slide.json 一致）。
+func (s *Store) UpdateSlideMeta(ctx context.Context, slideID, title, layout string) error {
+	return s.db.WithContext(ctx).Model(&slidePO{}).
+		Where("id = ?", slideID).
+		Updates(map[string]any{"title": title, "layout": layout}).Error
+}
+
 // NextVersionNo 返回 (target_type,target_id) 维度下一个版本号（单调递增，不复用 DATA-VERSION-002）。
 func (s *Store) NextVersionNo(ctx context.Context, targetType, targetID string) (int, error) {
 	var maxNo *int

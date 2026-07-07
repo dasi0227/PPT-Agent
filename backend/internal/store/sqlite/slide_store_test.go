@@ -158,6 +158,23 @@ func TestListSlidesOrderedByOrder(t *testing.T) {
 	}
 }
 
+func TestSetOutlineDirtyAndUpdateMeta(t *testing.T) {
+	s := newTestStore(t)
+	seedProject(t, s)
+	ctx := context.Background()
+	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1", Order: 10, Layout: "cover", Title: "A"}})
+	if err := s.SetOutlineDirty(ctx, "s1", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateSlideMeta(ctx, "s1", "B", "content"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetSlide(ctx, "s1")
+	if !got.OutlineDirty || got.Title != "B" || got.Layout != "content" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func itoaLocal(n int) string {
 	if n == 0 {
 		return "0"
