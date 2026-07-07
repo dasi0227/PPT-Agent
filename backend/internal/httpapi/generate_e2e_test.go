@@ -138,7 +138,7 @@ func TestE2EGenerateDeck(t *testing.T) {
 	}
 
 	// 真实工厂（kind=generate → generate.Runner）+ fake LLM。
-	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
+	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
 	runSvc := service.NewRunService(st, engine, &genFakeClient{}, service.WorkRoot(workRoot))
 	router := httpapi.NewRouter(
 		cfg, zap.NewNop(),

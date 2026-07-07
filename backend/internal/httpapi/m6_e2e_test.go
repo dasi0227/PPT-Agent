@@ -139,7 +139,7 @@ func setupM6MountServer(t *testing.T, client llm.Client) (*httptest.Server, stri
 		t.Fatal(err)
 	}
 
-	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
+	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
 	runSvc := service.NewRunService(st, engine, client, service.WorkRoot(work))
 	assetSvc := service.NewAssetService(st, work)
 	router := httpapi.NewRouter(

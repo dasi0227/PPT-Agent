@@ -34,7 +34,7 @@ func setupAssetServer(t *testing.T) (*httptest.Server, *sqlitestore.Store) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
+	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
 	runSvc := service.NewRunServiceWithFactory(st, engine, func(model.Run, model.CreateRunParams, model.Project) run.Runner {
 		return noOpRunner{}
 	})

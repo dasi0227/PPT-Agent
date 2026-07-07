@@ -93,7 +93,7 @@ func (r scriptRunner) Run(ctx context.Context, em harness.Emitter, cp harness.Ch
 
 func newEngine() (*Engine, *memStore) {
 	st := newMemStore()
-	return NewEngine(st, NewLockManager(), zap.NewNop()), st
+	return NewEngine(st, NewLockManager(), nil, zap.NewNop()), st
 }
 
 // drainEvents 收集 SSE 事件直到 channel 关闭。

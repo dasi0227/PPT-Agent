@@ -61,5 +61,5 @@ func provideAssetService(s store.Store, workRoot service.WorkRoot) *service.Asse
 }
 
 func provideEngine(rs run.Store, locks *run.LockManager, log *zap.Logger) *run.Engine {
-	return run.NewEngine(rs, locks, log)
+	return run.NewEngine(rs, locks, nil, log)
 }

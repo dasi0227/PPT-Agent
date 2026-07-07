@@ -25,14 +25,15 @@ type active struct {
 type Engine struct {
 	store Store
 	locks *LockManager
+	hw    HistoryWriter
 	log   *zap.Logger
 
 	mu      sync.Mutex
 	actives map[string]*active
 }
 
-func NewEngine(store Store, locks *LockManager, log *zap.Logger) *Engine {
-	return &Engine{store: store, locks: locks, log: log, actives: map[string]*active{}}
+func NewEngine(store Store, locks *LockManager, hw HistoryWriter, log *zap.Logger) *Engine {
+	return &Engine{store: store, locks: locks, hw: hw, log: log, actives: map[string]*active{}}
 }
 
 // Start 创建 Run（pending）并异步执行 runner。返回创建后的 Run 元数据。
@@ -46,7 +47,7 @@ func (e *Engine) Start(ctx context.Context, r model.Run, runner Runner) (model.R
 		return model.Run{}, err
 	}
 
-	bus := NewBus(r.ID, e.store)
+	bus := NewBus(r.ID, r.ThreadID, e.store, e.hw)
 	queue := NewInputQueue()
 	runCtx, cancel := context.WithCancel(context.Background())
 

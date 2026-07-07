@@ -97,7 +97,7 @@ func setupM5Server(t *testing.T, pages int) (*httptest.Server, string, string) {
 	writeAtE(t, workDir, "common/tokens.css", ":root{--color-primary:#ff0000;}")
 	writeAtE(t, workDir, "common/base.css", ".slide-stage{}")
 
-	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
+	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
 	runSvc := service.NewRunService(st, engine, &m5FakeClient{}, service.WorkRoot(work))
 	router := httpapi.NewRouter(
 		cfg, zap.NewNop(),

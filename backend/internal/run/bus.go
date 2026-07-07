@@ -12,8 +12,10 @@ import (
 // Bus 是单个 Run 的事件总线：分配连续 seq、持久化、扇出给订阅者（SSE）。
 // seq 单调递增且连续（API-SSE-001）；终态事件恰好一个（API-SSE-002）由 engine 保证。
 type Bus struct {
-	runID string
-	store Store
+	runID    string
+	threadID string
+	store    Store
+	hw       HistoryWriter
 
 	mu          sync.Mutex
 	seq         int64
@@ -23,8 +25,51 @@ type Bus struct {
 	terminated  bool // 已发过终态事件，防止重复终态
 }
 
-func NewBus(runID string, store Store) *Bus {
-	return &Bus{runID: runID, store: store, subscribers: map[int]chan model.Event{}}
+func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
+	return &Bus{runID: runID, threadID: threadID, store: store, hw: hw, subscribers: map[int]chan model.Event{}}
+}
+
+// isWhitelistedForHistory 报告事件是否需要 append 到 <workdir>/history.jsonl（UX §2.2）。
+// thought/tool_call/tool_result/artifact/progress/plan 均为中间产物，不落盘（避免 jsonl 膨胀）。
+func isWhitelistedForHistory(evt model.EventType) bool {
+	switch evt {
+	case model.EventRunStarted, model.EventToken, model.EventInfo, model.EventNeedsInput, model.EventDone, model.EventError:
+		return true
+	}
+	return false
+}
+
+// buildHistoryEntry 把 SSE 事件映射成 history schema（UX §2.3）。
+// 返回 (entry, ok)；ok=false 时该事件不落盘（例如 run.started 无 user_input）。
+func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
+	var data map[string]any
+	_ = json.Unmarshal([]byte(e.Payload), &data)
+	entry := HistoryEntry{Seq: e.Seq, TS: e.CreatedAt, RunID: e.RunID, Data: data}
+	switch e.Type {
+	case model.EventRunStarted:
+		text, _ := data["user_input"].(string)
+		if text == "" {
+			return HistoryEntry{}, false
+		}
+		entry.Turn = "user"
+		entry.Type = "user_turn"
+		entry.Data = map[string]any{"text": text, "mode": data["mode"], "scope": data["scope"]}
+	case model.EventToken, model.EventInfo:
+		entry.Turn = "agent"
+		entry.Type = "markdown"
+	case model.EventNeedsInput:
+		entry.Turn = "agent"
+		entry.Type = "needs_input"
+	case model.EventDone:
+		entry.Turn = "agent"
+		entry.Type = "final_result"
+	case model.EventError:
+		entry.Turn = "agent"
+		entry.Type = "error"
+	default:
+		return HistoryEntry{}, false
+	}
+	return entry, true
 }
 
 // Emit 分配下一个 seq，持久化后扇出。终态事件（done/error）只允许发一次。
@@ -58,6 +103,12 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error 
 	// 先持久化再扇出：保证断线重连能从 store 补齐（ARCH-RUN-005）。
 	if err := b.store.AppendEvent(ctx, e); err != nil {
 		return err
+	}
+	// history.jsonl 副作用：仅白名单事件，失败吞掉不阻塞 SSE 主流程。
+	if b.hw != nil && isWhitelistedForHistory(evt) && b.threadID != "" {
+		if entry, ok := buildHistoryEntry(e); ok {
+			_ = b.hw.Append(ctx, b.threadID, entry)
+		}
 	}
 	for _, ch := range subs {
 		select {

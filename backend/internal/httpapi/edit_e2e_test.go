@@ -105,7 +105,7 @@ func setupEditServer(t *testing.T, pages int, client llm.Client) (*httptest.Serv
 	writeAtE(t, workDir, "common/tokens.css", ":root{--color-bg:#000}")
 	writeAtE(t, workDir, "common/base.css", ".slide-stage{}")
 
-	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
+	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
 	runSvc := service.NewRunService(st, engine, client, service.WorkRoot(workDir))
 	router := httpapi.NewRouter(
 		cfg, zap.NewNop(),

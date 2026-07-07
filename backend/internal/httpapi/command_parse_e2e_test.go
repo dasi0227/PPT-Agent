@@ -84,7 +84,7 @@ func setupCommandParseServer(t *testing.T) (*httptest.Server, *capturedRunCreate
 	}
 
 	captured := &capturedRunCreate{}
-	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
+	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
 	runSvc := service.NewRunServiceWithFactory(st, engine, func(r model.Run, p model.CreateRunParams, _ model.Project) run.Runner {
 		captured.run = r
 		captured.params = p
