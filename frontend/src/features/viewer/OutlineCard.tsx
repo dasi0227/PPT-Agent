@@ -22,6 +22,15 @@ export const OutlineCard: React.FC<OutlineCardProps> = ({ slide, editable, onPat
   const [title, setTitle] = useState(content.title ?? '');
   const [bulletsText, setBulletsText] = useState((content.bullets ?? []).join('\n'));
 
+  // isEmpty：user 尚未编辑任何有效大纲字段。用于展示占位而非空白页（#6）。
+  const isEmpty =
+    !content.title
+    && !(content.bullets && content.bullets.length > 0)
+    && !content.subtitle
+    && !content.content_intent;
+
+  const layoutBadge = content.layout || slide.layout;
+
   const commitTitle = () => {
     const next = title.trim();
     if (next !== (content.title ?? '')) onPatch({ title: next });
@@ -32,6 +41,32 @@ export const OutlineCard: React.FC<OutlineCardProps> = ({ slide, editable, onPat
     const cur = content.bullets ?? [];
     if (next.join('\u0000') !== cur.join('\u0000')) onPatch({ bullets: next });
   };
+
+  // 空态 · compact：网格缩略图中的 Slide N + 未编辑大纲。
+  if (isEmpty && compact) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-white p-3 relative">
+        <span className="absolute top-3 left-3 px-2 py-0.5 rounded-full bg-background text-[10px] text-text-400 border border-border uppercase">
+          {layoutBadge}
+        </span>
+        <div className="text-text-400 text-xs">Slide {(slide.order ?? slide.idx) + 1}</div>
+        <div className="text-text-400 text-[10px] mt-1">未编辑大纲</div>
+      </div>
+    );
+  }
+
+  // 空态 · 主区：给出显式的编辑引导。
+  if (isEmpty && !compact) {
+    return (
+      <div className="relative w-full aspect-video bg-white ring-1 ring-border rounded-md shadow-sm flex flex-col items-center justify-center p-8">
+        <span className="absolute top-3 left-3 px-2 py-0.5 rounded-full bg-background text-[10px] text-text-400 border border-border uppercase">
+          {layoutBadge}
+        </span>
+        <h1 className="text-3xl text-text-400 font-semibold">未命名</h1>
+        <p className="text-text-400 text-sm mt-3">使用右侧对话或点击标题开始编辑</p>
+      </div>
+    );
+  }
 
   return (
     <div
