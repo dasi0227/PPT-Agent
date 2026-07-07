@@ -45,8 +45,13 @@ function setupStores(slides: Array<{ html_path?: string }> = []) {
 function mockFetch() {
   const requests: Array<{ url: string; body: any }> = [];
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input.toString();
+    // history GET 由 useActiveSession 副作用触发，与命令流无关，不计入断言。
+    if (url.includes('/history')) {
+      return { ok: true, status: 200, json: async () => ([]) } as unknown as Response;
+    }
     requests.push({
-      url: input.toString(),
+      url,
       body: init?.body ? JSON.parse(init.body.toString()) : undefined,
     });
     return { ok: true, status: 200, json: async () => ({ id: 'r1' }) } as unknown as Response;
@@ -139,6 +144,10 @@ describe('CommandComposer', () => {
     const requests: Array<{ url: string; method?: string; body: any }> = [];
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
+      // history GET 由 useActiveSession 触发，非命令流；不计入断言。
+      if (url.includes('/history')) {
+        return { ok: true, status: 200, json: async () => ([]) } as unknown as Response;
+      }
       requests.push({ url, method: init?.method, body: init?.body ? JSON.parse(init.body.toString()) : undefined });
       let id = 'r1';
       if (url.endsWith('/projects')) id = 'realP';
