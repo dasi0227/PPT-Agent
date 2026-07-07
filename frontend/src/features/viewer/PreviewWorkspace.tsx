@@ -1,13 +1,18 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useActiveSession } from '../agent/useActiveSession';
+import { slidesApi, SlidePatch } from '../../api/slides';
 import { LayoutGrid, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { EmptyState } from './EmptyState';
+import { OutlineCard } from './OutlineCard';
 
 export const PreviewWorkspace: React.FC = () => {
-  const { currentPage, previewMode, enterOverview, exitOverview, goNext, goPrev } = useDeckStore();
-  const { activeProjectId, slidesByProjectId } = useProjectStore();
+  const { currentPage, previewMode, enterOverview, exitOverview, goNext, goPrev, effectiveView, setPageView } = useDeckStore();
+  const { activeProjectId, slidesByProjectId, loadProjectSlides } = useProjectStore();
+  const session = useActiveSession();
+  const runActive = session.status === 'running' || session.status === 'needs_input';
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
@@ -15,26 +20,38 @@ export const PreviewWorkspace: React.FC = () => {
   const slidePaths = useMemo(() => slides.map((slide) => slide.html_path), [slides]);
   const currentPageRef = useRef(currentPage);
 
+  const currentSlide = hasSlides ? slides[Math.min(currentPage, slides.length - 1)] : undefined;
+  const currentHasHtml = !!currentSlide?.html_path;
+  const currentView = currentSlide ? effectiveView(currentSlide.id, currentHasHtml) : 'html';
+  const showIframe = previewMode === 'main' && currentView === 'html' && currentHasHtml;
+
+  const patchSlide = (slideId: string, patch: SlidePatch) => {
+    if (!activeProjectId) return;
+    slidesApi.patch(slideId, patch)
+      .then(() => loadProjectSlides(activeProjectId))
+      .catch((err) => console.error(err));
+  };
+
   useEffect(() => {
     currentPageRef.current = currentPage;
   }, [currentPage]);
 
   useEffect(() => {
-    if (iframeRef.current && iframeRef.current.contentWindow && previewMode === 'main') {
+    if (iframeRef.current && iframeRef.current.contentWindow && showIframe) {
       iframeRef.current.contentWindow.postMessage({ type: 'goto', index: currentPage }, '*');
     }
-  }, [currentPage, previewMode]);
+  }, [currentPage, showIframe]);
 
   // Load the whole deck into the runtime once, then let `goto` switch active pages.
   useEffect(() => {
-    if (iframeRef.current && iframeRef.current.contentWindow && previewMode === 'main' && slidePaths.length > 0) {
-      iframeRef.current.contentWindow.postMessage({ 
-        type: 'update', 
+    if (iframeRef.current && iframeRef.current.contentWindow && showIframe && slidePaths.length > 0) {
+      iframeRef.current.contentWindow.postMessage({
+        type: 'update',
         slides: slidePaths,
         index: currentPageRef.current
       }, '*');
     }
-  }, [activeProjectId, previewMode, slidePaths]);
+  }, [activeProjectId, showIframe, slidePaths]);
 
   return (
     <div className="flex flex-col h-full bg-background relative">
@@ -52,34 +69,76 @@ export const PreviewWorkspace: React.FC = () => {
             <MonitorPlay className="w-4 h-4" />
           </button>
         </div>
-        
-        <div className="flex items-center space-x-2">
-          <button onClick={goPrev} disabled={currentPage === 0} className="p-1 text-text-600 hover:bg-black/5 disabled:opacity-50 rounded">
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <span className="text-sm text-text-600 min-w-[3rem] text-center">
-            {hasSlides ? `${currentPage + 1} / ${slides.length}` : '0 / 0'}
-          </span>
-          <button onClick={goNext} disabled={currentPage >= slides.length - 1} className="p-1 text-text-600 hover:bg-black/5 disabled:opacity-50 rounded">
-            <ChevronRight className="w-5 h-5" />
-          </button>
+
+        <div className="flex items-center space-x-4">
+          {/* 大纲 / HTML 段控：值 = effectiveView(currentSlide)，无 html 时 HTML 段禁用 */}
+          {previewMode === 'main' && currentSlide && (
+            <div className="flex items-center rounded-md border border-border overflow-hidden text-xs">
+              <button
+                onClick={() => setPageView(currentSlide.id, 'outline')}
+                className={cn(
+                  "px-2.5 py-1 transition-colors",
+                  currentView === 'outline' ? "bg-mode-normal/10 text-mode-normal font-medium" : "text-text-600 hover:bg-black/5"
+                )}
+              >
+                大纲
+              </button>
+              <button
+                onClick={() => currentHasHtml && setPageView(currentSlide.id, 'html')}
+                disabled={!currentHasHtml}
+                title={currentHasHtml ? undefined : '该页尚未生成'}
+                className={cn(
+                  "px-2.5 py-1 transition-colors border-l border-border",
+                  currentView === 'html' ? "bg-mode-normal/10 text-mode-normal font-medium" : "text-text-600 hover:bg-black/5",
+                  !currentHasHtml && "opacity-40 cursor-not-allowed hover:bg-transparent"
+                )}
+              >
+                HTML
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center space-x-2">
+            <button onClick={goPrev} disabled={currentPage === 0} className="p-1 text-text-600 hover:bg-black/5 disabled:opacity-50 rounded">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <span className="text-sm text-text-600 min-w-[3rem] text-center">
+              {hasSlides ? `${currentPage + 1} / ${slides.length}` : '0 / 0'}
+            </span>
+            <button onClick={goNext} disabled={currentPage >= slides.length - 1} className="p-1 text-text-600 hover:bg-black/5 disabled:opacity-50 rounded">
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Main Preview Area */}
       <div className="flex-1 overflow-hidden p-6 flex items-center justify-center relative">
         {previewMode === 'main' ? (
-          <div className="w-full h-full max-w-5xl aspect-video bg-white shadow-sm ring-1 ring-border rounded-md overflow-hidden flex items-center justify-center">
-            {hasSlides ? (
-              <iframe
-                ref={iframeRef}
-                src="/slide-runtime/index.html"
-                sandbox="allow-scripts allow-same-origin"
-                className="w-full h-full border-none"
-                title="Slide Preview"
-              />
+          <div className="w-full h-full max-w-5xl aspect-video flex items-center justify-center">
+            {!hasSlides ? (
+              <div className="w-full h-full bg-white shadow-sm ring-1 ring-border rounded-md overflow-hidden flex items-center justify-center">
+                <EmptyState />
+              </div>
+            ) : showIframe ? (
+              <div className="w-full h-full bg-white shadow-sm ring-1 ring-border rounded-md overflow-hidden flex items-center justify-center">
+                <iframe
+                  ref={iframeRef}
+                  src="/slide-runtime/index.html"
+                  sandbox="allow-scripts allow-same-origin"
+                  className="w-full h-full border-none"
+                  title="Slide Preview"
+                />
+              </div>
             ) : (
-              <EmptyState />
+              currentSlide && (
+                <OutlineCard
+                  slide={currentSlide}
+                  editable={!runActive}
+                  dirty={currentSlide.outline_dirty}
+                  onPatch={(patch) => patchSlide(currentSlide.id, patch)}
+                />
+              )
             )}
           </div>
         ) : (
@@ -89,7 +148,7 @@ export const PreviewWorkspace: React.FC = () => {
                 <div 
                   key={slide.id} 
                   className={cn(
-                    "aspect-video bg-white ring-1 ring-border rounded shadow-sm cursor-pointer hover:ring-mode-overview transition-all overflow-hidden relative",
+                    "aspect-video rounded shadow-sm cursor-pointer hover:ring-mode-overview transition-all overflow-hidden relative ring-1 ring-border",
                     currentPage === i && "ring-2 ring-mode-overview"
                   )}
                   onClick={() => {
@@ -97,13 +156,19 @@ export const PreviewWorkspace: React.FC = () => {
                     exitOverview();
                   }}
                 >
-                  <iframe
-                    src={slide.html_path || '/slide-runtime/index.html'}
-                    sandbox="allow-scripts"
-                    className="w-full h-full border-none pointer-events-none origin-top-left"
-                    style={{ transform: 'scale(0.25)', width: '400%', height: '400%' }}
-                    title={`Slide ${i + 1}`}
-                  />
+                  {slide.html_path ? (
+                    <iframe
+                      src={slide.html_path}
+                      sandbox="allow-scripts"
+                      className="w-full h-full border-none pointer-events-none origin-top-left bg-white"
+                      style={{ transform: 'scale(0.25)', width: '400%', height: '400%' }}
+                      title={`Slide ${i + 1}`}
+                    />
+                  ) : (
+                    <div className="w-full h-full pointer-events-none">
+                      <OutlineCard slide={slide} editable={false} dirty={slide.outline_dirty} onPatch={() => {}} compact />
+                    </div>
+                  )}
                   <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded backdrop-blur-sm">
                     {i + 1}
                   </div>
