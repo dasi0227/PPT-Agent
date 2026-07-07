@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -105,6 +106,7 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 	}
 	var out []map[string]any
 	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -112,17 +114,29 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 		}
 		var msg map[string]any
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
-			return nil, err
+			// 跳过损坏行：容错原则优先于强一致（UX §5.3）。
+			continue
 		}
 		out = append(out, msg)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+	// 按 seq 升序显式排序：防止 append 顺序被外部工具破坏后前端时间线错乱。
+	sort.SliceStable(out, func(i, j int) bool {
+		return historySeq(out[i]) < historySeq(out[j])
+	})
 	if out == nil {
 		out = []map[string]any{}
 	}
 	return out, nil
+}
+
+func historySeq(m map[string]any) float64 {
+	if v, ok := m["seq"].(float64); ok {
+		return v
+	}
+	return 0
 }
 
 func writeEmptyHistory(workDir, rel string) error {
