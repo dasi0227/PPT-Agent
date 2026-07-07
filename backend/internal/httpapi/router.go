@@ -41,6 +41,8 @@ func (r *Router) register() {
 	v1.GET("/projects/:id", r.project.Get)
 	v1.DELETE("/projects/:id", r.project.Delete)
 	v1.GET("/projects/:id/slides", r.project.ListSlides)
+	v1.POST("/projects/:id/slides", r.project.CreateSlide)
+	v1.POST("/projects/:id/slides/reorder", r.project.ReorderSlides)
 	v1.GET("/projects/:id/threads", r.thread.List)
 	v1.POST("/projects/:id/threads", r.thread.Create)
 	v1.GET("/threads/:id", r.thread.Get)
@@ -56,6 +58,7 @@ func (r *Router) register() {
 	// Slide：读取 / 版本列表 / 回滚（40-api openapi /slides/{id}...）。
 	v1.GET("/slides/:id", r.slide.GetSlide)
 	v1.PATCH("/slides/:id", r.slide.PatchSlide)
+	v1.DELETE("/slides/:id", r.slide.DeleteSlide)
 	v1.GET("/slides/:id/versions", r.slide.ListVersions)
 	v1.POST("/slides/:id/rollback", r.slide.Rollback)
 

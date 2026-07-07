@@ -120,3 +120,45 @@ func toProjectResponse(p model.Project) projectResponse {
 		DesignPath: p.DesignPath, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
+
+// CreateSlide POST /projects/:id/slides：在锚点后插入空白页（活跃 run → 409 RUN_ACTIVE）。
+func (h *ProjectHandler) CreateSlide(c *gin.Context) {
+	var body struct {
+		AfterSlideID string `json:"after_slide_id"`
+		Layout       string `json:"layout"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	sl, err := h.slideSvc.AddSlide(c.Request.Context(), c.Param("id"), body.AfterSlideID, body.Layout)
+	switch {
+	case err == nil:
+		resp := toSlideResponse(sl)
+		if content, cerr := h.slideSvc.ReadContent(c.Request.Context(), sl.ID); cerr == nil {
+			resp.Content = content
+		}
+		c.JSON(http.StatusCreated, resp)
+	case errors.Is(err, service.ErrRunActive):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	default:
+		AbortWithError(c, ErrInternal(err.Error()))
+	}
+}
+
+// ReorderSlides POST /projects/:id/slides/reorder：按 ordered_ids 重排（活跃 run → 409 RUN_ACTIVE）。
+func (h *ProjectHandler) ReorderSlides(c *gin.Context) {
+	var body struct {
+		OrderedIDs []string `json:"ordered_ids"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || len(body.OrderedIDs) == 0 {
+		AbortWithError(c, ErrBadRequest("ordered_ids is required"))
+		return
+	}
+	err := h.slideSvc.ReorderSlides(c.Request.Context(), c.Param("id"), body.OrderedIDs)
+	switch {
+	case err == nil:
+		c.Status(http.StatusOK)
+	case errors.Is(err, service.ErrRunActive):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	default:
+		AbortWithError(c, ErrInternal(err.Error()))
+	}
+}

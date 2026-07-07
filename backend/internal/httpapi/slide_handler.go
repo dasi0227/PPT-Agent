@@ -154,3 +154,18 @@ func (h *SlideHandler) PatchSlide(c *gin.Context) {
 		AbortWithError(c, ErrInternal(err.Error()))
 	}
 }
+
+// DeleteSlide DELETE /slides/:id：删除单页（无回收站；活跃 run → 409 RUN_ACTIVE）。
+func (h *SlideHandler) DeleteSlide(c *gin.Context) {
+	err := h.svc.DeleteSlide(c.Request.Context(), c.Param("id"))
+	switch {
+	case err == nil:
+		c.Status(http.StatusNoContent)
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		AbortWithError(c, ErrNotFound("slide not found"))
+	case errors.Is(err, service.ErrRunActive):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	default:
+		AbortWithError(c, ErrInternal(err.Error()))
+	}
+}
