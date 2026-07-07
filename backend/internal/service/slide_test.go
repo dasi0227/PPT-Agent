@@ -79,6 +79,123 @@ func TestPatchContentRejectedWhenRunActive(t *testing.T) {
 	}
 }
 
+// activateRun 在 p1 造一个 running run（附带合法 thread FK），用于 RUN_ACTIVE 互斥断言。
+func activateRun(t *testing.T, st *sqlitestore.Store) {
+	t.Helper()
+	ctx := context.Background()
+	if err := st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", Kind: model.KindOutline, Scope: model.ScopeCurrent, Mode: model.ModeNormal, Status: model.RunRunning}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAddSlideCreatesBlankJSONAndOrders：AddSlide 在锚点后插入空白页，磁盘落 slide.json，列表新增且顺序正确。
+func TestAddSlideCreatesBlankJSONAndOrders(t *testing.T) {
+	svc, st, workDir := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{
+		{ID: "a", ProjectID: "p1", Idx: 0, Order: 10, Layout: "cover", Title: "A", JSONPath: model.SlideJSONPath("a"), HTMLPath: model.SlideHTMLPath("a")},
+		{ID: "b", ProjectID: "p1", Idx: 1, Order: 20, Layout: "thanks", Title: "B", JSONPath: model.SlideJSONPath("b"), HTMLPath: model.SlideHTMLPath("b")},
+	})
+	got, err := svc.AddSlide(ctx, "p1", "a", "bullets")
+	if err != nil {
+		t.Fatalf("add slide: %v", err)
+	}
+	if got.Order <= 10 || got.Order >= 20 {
+		t.Fatalf("new slide order should sit between anchors, got %d", got.Order)
+	}
+	full := filepath.Join(workDir, filepath.FromSlash(model.SlideJSONPath(got.ID)))
+	if _, err := os.Stat(full); err != nil {
+		t.Fatalf("blank slide.json not written: %v", err)
+	}
+	list, _ := st.ListSlides(ctx, "p1")
+	if len(list) != 3 || list[0].ID != "a" || list[1].ID != got.ID || list[2].ID != "b" {
+		t.Fatalf("insert order wrong: %+v", list)
+	}
+}
+
+// TestAddSlideAtEndAppends：无后继锚点时 order = 锚点 + 10。
+func TestAddSlideAtEndAppends(t *testing.T) {
+	svc, st, _ := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{
+		{ID: "a", ProjectID: "p1", Idx: 0, Order: 10, Layout: "cover", Title: "A", JSONPath: model.SlideJSONPath("a"), HTMLPath: model.SlideHTMLPath("a")},
+	})
+	got, err := svc.AddSlide(ctx, "p1", "a", "bullets")
+	if err != nil {
+		t.Fatalf("add slide: %v", err)
+	}
+	if got.Order != 20 {
+		t.Fatalf("append order should be anchor+10=20, got %d", got.Order)
+	}
+}
+
+// TestDeleteSlideRemovesRowAndDir：DeleteSlide 删 DB 行 + slides/<id>/ 目录。
+func TestDeleteSlideRemovesRowAndDir(t *testing.T) {
+	svc, st, workDir := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{
+		{ID: "a", ProjectID: "p1", Idx: 0, Order: 10, Layout: "cover", Title: "A", JSONPath: model.SlideJSONPath("a"), HTMLPath: model.SlideHTMLPath("a")},
+		{ID: "b", ProjectID: "p1", Idx: 1, Order: 20, Layout: "thanks", Title: "B", JSONPath: model.SlideJSONPath("b"), HTMLPath: model.SlideHTMLPath("b")},
+	})
+	writeAt(t, workDir, model.SlideJSONPath("a"), `{"id":"a","idx":0,"layout":"cover","title":"A"}`)
+	writeAt(t, workDir, model.SlideHTMLPath("a"), `<html></html>`)
+	if err := svc.DeleteSlide(ctx, "a"); err != nil {
+		t.Fatalf("delete slide: %v", err)
+	}
+	list, _ := st.ListSlides(ctx, "p1")
+	if len(list) != 1 || list[0].ID != "b" {
+		t.Fatalf("delete wrong: %+v", list)
+	}
+	dir := filepath.Join(workDir, filepath.FromSlash(model.SlideDir("a")))
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("slide dir should be removed, stat err=%v", err)
+	}
+}
+
+// TestReorderSlidesAssignsIntervalOrder：ReorderSlides 按给定顺序赋 order=i*10。
+func TestReorderSlidesAssignsIntervalOrder(t *testing.T) {
+	svc, st, _ := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{
+		{ID: "a", ProjectID: "p1", Idx: 0, Order: 10, Layout: "cover", Title: "A"},
+		{ID: "b", ProjectID: "p1", Idx: 1, Order: 20, Layout: "bullets", Title: "B"},
+		{ID: "c", ProjectID: "p1", Idx: 2, Order: 30, Layout: "thanks", Title: "C"},
+	})
+	if err := svc.ReorderSlides(ctx, "p1", []string{"c", "a", "b"}); err != nil {
+		t.Fatalf("reorder: %v", err)
+	}
+	list, _ := st.ListSlides(ctx, "p1")
+	if list[0].ID != "c" || list[1].ID != "a" || list[2].ID != "b" {
+		t.Fatalf("reorder order wrong: %+v", list)
+	}
+	if list[0].Order != 0 || list[1].Order != 10 || list[2].Order != 20 {
+		t.Fatalf("interval order wrong: %+v", list)
+	}
+}
+
+// TestStructuralOpsRejectedWhenRunActive：活跃 run 时 Add/Delete/Reorder 均返回 ErrRunActive。
+func TestStructuralOpsRejectedWhenRunActive(t *testing.T) {
+	svc, st, _ := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{
+		{ID: "a", ProjectID: "p1", Idx: 0, Order: 10, Layout: "cover", Title: "A", JSONPath: model.SlideJSONPath("a"), HTMLPath: model.SlideHTMLPath("a")},
+		{ID: "b", ProjectID: "p1", Idx: 1, Order: 20, Layout: "thanks", Title: "B", JSONPath: model.SlideJSONPath("b"), HTMLPath: model.SlideHTMLPath("b")},
+	})
+	activateRun(t, st)
+	if _, err := svc.AddSlide(ctx, "p1", "a", "bullets"); !errors.Is(err, service.ErrRunActive) {
+		t.Fatalf("AddSlide want ErrRunActive, got %v", err)
+	}
+	if err := svc.DeleteSlide(ctx, "a"); !errors.Is(err, service.ErrRunActive) {
+		t.Fatalf("DeleteSlide want ErrRunActive, got %v", err)
+	}
+	if err := svc.ReorderSlides(ctx, "p1", []string{"b", "a"}); !errors.Is(err, service.ErrRunActive) {
+		t.Fatalf("ReorderSlides want ErrRunActive, got %v", err)
+	}
+}
+
 type failingSlideStore struct {
 	*sqlitestore.Store
 	failCreateVersion   bool

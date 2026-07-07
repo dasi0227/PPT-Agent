@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
@@ -114,4 +116,110 @@ func (svc *SlideService) PatchContent(ctx context.Context, slideID string, p Sli
 		}
 	}
 	return cur, nil
+}
+
+// AddSlide 在锚点页后插入一张空白页：写空白 slide.json + 落库（order 取锚点与后继中值）。
+// 受 RUN_ACTIVE 互斥；不产版本快照。afterSlideID 为空时追加到末尾。
+func (svc *SlideService) AddSlide(ctx context.Context, projectID, afterSlideID, layout string) (model.Slide, error) {
+	if active, err := svc.store.HasActiveRun(ctx, projectID); err != nil {
+		return model.Slide{}, err
+	} else if active {
+		return model.Slide{}, ErrRunActive
+	}
+	if layout == "" || !slidejson.IsValidLayout(layout) {
+		layout = "bullets"
+	}
+	proj, err := svc.store.GetProject(ctx, projectID)
+	if err != nil {
+		return model.Slide{}, err
+	}
+	sb, err := tools.NewSandbox(proj.WorkDir)
+	if err != nil {
+		return model.Slide{}, err
+	}
+	slides, err := svc.store.ListSlides(ctx, projectID)
+	if err != nil {
+		return model.Slide{}, err
+	}
+
+	newOrder := svc.insertOrder(slides, afterSlideID)
+	newIdx := len(slides)
+	id := svc.newID()
+	doc := slidejson.SlideJSON{ID: id, Idx: newIdx, Layout: layout, Title: ""}
+	raw, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return model.Slide{}, err
+	}
+	if err := sb.Write(model.SlideJSONPath(id), raw); err != nil {
+		return model.Slide{}, err
+	}
+	sl := model.Slide{
+		ID: id, ProjectID: projectID, Idx: newIdx, Layout: layout, Title: "",
+		JSONPath: model.SlideJSONPath(id), HTMLPath: model.SlideHTMLPath(id), Order: newOrder,
+	}
+	if err := svc.store.InsertSlide(ctx, sl); err != nil {
+		return model.Slide{}, err
+	}
+	return sl, nil
+}
+
+// insertOrder 计算锚点页之后的插入 order：与后继页求中值；无后继则锚点 +10；锚点缺失则追加到末尾。
+func (svc *SlideService) insertOrder(slides []model.Slide, afterSlideID string) int {
+	if len(slides) == 0 {
+		return 0
+	}
+	anchor := -1
+	for i, s := range slides {
+		if s.ID == afterSlideID {
+			anchor = i
+			break
+		}
+	}
+	if anchor < 0 {
+		return slides[len(slides)-1].Order + 10
+	}
+	if anchor == len(slides)-1 {
+		return slides[anchor].Order + 10
+	}
+	return (slides[anchor].Order + slides[anchor+1].Order) / 2
+}
+
+// DeleteSlide 删除单页：删 DB 行 + slides/<id>/ 目录 + 该页 versions 目录（无回收站）。
+// 受 RUN_ACTIVE 互斥；不产版本快照。
+func (svc *SlideService) DeleteSlide(ctx context.Context, slideID string) error {
+	sl, err := svc.store.GetSlide(ctx, slideID)
+	if err != nil {
+		return err
+	}
+	if active, err := svc.store.HasActiveRun(ctx, sl.ProjectID); err != nil {
+		return err
+	} else if active {
+		return ErrRunActive
+	}
+	proj, err := svc.store.GetProject(ctx, sl.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err := svc.store.DeleteSlideByID(ctx, slideID); err != nil {
+		return err
+	}
+	// best-effort 清磁盘：整页目录与版本目录一并移除（无回收站）。
+	_ = os.RemoveAll(filepath.Join(proj.WorkDir, filepath.FromSlash(model.SlideDir(slideID))))
+	_ = os.RemoveAll(filepath.Join(proj.WorkDir, filepath.FromSlash("versions/slide-"+slideID)))
+	return nil
+}
+
+// ReorderSlides 按给定顺序重排某 project 的页（order=i*10，磁盘零迁移）。
+// 受 RUN_ACTIVE 互斥；不产版本快照。
+func (svc *SlideService) ReorderSlides(ctx context.Context, projectID string, orderedIDs []string) error {
+	if active, err := svc.store.HasActiveRun(ctx, projectID); err != nil {
+		return err
+	} else if active {
+		return ErrRunActive
+	}
+	orderByID := make(map[string]int, len(orderedIDs))
+	for i, id := range orderedIDs {
+		orderByID[id] = i * 10
+	}
+	return svc.store.SetSlidesOrder(ctx, projectID, orderByID)
 }
