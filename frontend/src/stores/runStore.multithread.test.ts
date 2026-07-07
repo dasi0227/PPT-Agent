@@ -46,12 +46,13 @@ describe('runStore multithread sharding', () => {
     const connA = connections[0];
     const connB = connections[1];
 
-    // 向 A 派发一个 thought，只应写入 A 的分片
+    // 向 A 派发一个 thought，只应写入 A 的分片（此时 A 已含头插的 user_turn）。
     connA.onMessage({ id: '1', event: 'thought', data: { text: 'hello A' } });
 
     const sessions = useRunStore.getState().sessions;
-    expect(sessions['tA'].timelineItems).toHaveLength(1);
-    expect(sessions['tB'].timelineItems).toHaveLength(0);
+    // A: user_turn + thought；B: 仅 user_turn。
+    expect(sessions['tA'].timelineItems.map((i) => i.type)).toEqual(['user_turn', 'thought']);
+    expect(sessions['tB'].timelineItems.map((i) => i.type)).toEqual(['user_turn']);
 
     // 向 B 派发 done，A 状态不受影响
     connB.onMessage({ id: '2', event: 'done', data: { result: { summary: 'B done' } } });
@@ -100,7 +101,8 @@ describe('runStore multithread sharding', () => {
     lastConn().onMessage({ id: '2', event: 'progress', data: { stage: 'design', current: 1, total: 1 } });
 
     const before = useRunStore.getState().sessions['draft_x'];
-    expect(before.timelineItems).toHaveLength(1);
+    // user_turn (createRun 头插) + thought
+    expect(before.timelineItems.map((i) => i.type)).toEqual(['user_turn', 'thought']);
     expect(before.status).toBe('running');
 
     useRunStore.getState().rekeySession('draft_x', 'real_1');
@@ -108,7 +110,7 @@ describe('runStore multithread sharding', () => {
     const after = useRunStore.getState().sessions;
     expect(after['draft_x']).toBeUndefined();
     expect(after['real_1']).toBe(before); // 同一引用整块搬迁
-    expect(after['real_1'].timelineItems).toHaveLength(1);
+    expect(after['real_1'].timelineItems.map((i) => i.type)).toEqual(['user_turn', 'thought']);
     expect(after['real_1'].progress).toEqual({ stage: 'design', current: 1, total: 1 });
   });
 

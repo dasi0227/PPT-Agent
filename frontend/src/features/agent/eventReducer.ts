@@ -1,4 +1,4 @@
-export type TimelineItemType = 'markdown' | 'thought' | 'tool_call' | 'artifact' | 'final_result' | 'needs_input' | 'error';
+export type TimelineItemType = 'markdown' | 'thought' | 'tool_call' | 'artifact' | 'final_result' | 'needs_input' | 'error' | 'user_turn';
 
 export interface BaseTimelineItem {
   id: string;
@@ -8,6 +8,11 @@ export interface BaseTimelineItem {
 
 export interface MarkdownMessageItem extends BaseTimelineItem {
   type: 'markdown';
+  text: string;
+}
+
+export interface UserTurnItem extends BaseTimelineItem {
+  type: 'user_turn';
   text: string;
 }
 
@@ -59,7 +64,8 @@ export type TimelineItem =
   | ArtifactItem
   | FinalResultItem
   | NeedsInputItem
-  | ErrorItem;
+  | ErrorItem
+  | UserTurnItem;
 
 import { SSEEvent, PlanState, PlanStep } from '../../api/types';
 

@@ -3,6 +3,7 @@ import { runsApi } from '../api/runs';
 import { subscribeRunEvents } from '../api/sse';
 import { RunPayload, RunScope, PlanState } from '../api/types';
 import { TimelineItem, reduceSSEEvent, reducePlan } from '../features/agent/eventReducer';
+import { useProjectStore } from './projectStore';
 
 export type { PlanState } from '../api/types';
 
@@ -60,6 +61,7 @@ interface RunStoreV2 {
   closeSessions: (threadIds: string[]) => void;
   rekeySession: (oldId: string, newId: string) => void;
   dropSessions: (threadIds: string[]) => void;
+  hydrateTimeline: (threadId: string, items: TimelineItem[]) => void;
 }
 
 export const useRunStore = create<RunStoreV2>((set, get) => {
@@ -88,17 +90,24 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         // 关闭该 thread 之前的连接（仅本分片）
         get().sessions[threadId]?.eventSourceClose?.();
 
-        patchSession(threadId, {
+        // #1 立即回显：user_turn 头插，不等后端 200；不清空 timelineItems 以保留刚插入项。
+        const userItem: TimelineItem = {
+          id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          type: 'user_turn',
+          text: payload.instruction,
+          timestamp: Date.now(),
+        };
+        updateSession(threadId, (prev) => ({
+          timelineItems: [...prev.timelineItems, userItem],
           activeRunId: null,
           status: 'running',
-          timelineItems: [],
           pendingInput: null,
           mode: payload.mode ?? 'normal',
           scope: payload.scope ?? 'current',
           progress: null,
           plan: null,
           eventSourceClose: null,
-        });
+        }));
 
         const run = await runsApi.create(threadId, payload);
         patchSession(threadId, { activeRunId: run.id });
@@ -145,6 +154,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           if (event.event === 'done' || event.event === 'error') {
             get().sessions[threadId]?.eventSourceClose?.();
             patchSession(threadId, { eventSourceClose: null });
+            // #3 done/error 后自动刷新当前 project 的 slides，避免用户手动 F5。
+            const pid = useProjectStore.getState().activeProjectId;
+            if (pid) void useProjectStore.getState().loadProjectSlides(pid);
           }
         },
         onError: (err) => {
@@ -226,6 +238,14 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         threadIds.forEach((id) => { delete next[id]; });
         return { sessions: next };
       });
+    },
+
+    // #2 replay：把后端 history.jsonl 还原来的 items 塞进 timeline，仅在空态触发防重。
+    // 目的是刷新后能看到历史消息；运行时 in-memory 优先，避免 replay 覆盖已有事件。
+    hydrateTimeline: (threadId, items) => {
+      const existing = get().sessions[threadId]?.timelineItems ?? [];
+      if (existing.length > 0) return;
+      patchSession(threadId, { timelineItems: items });
     },
   };
 });
