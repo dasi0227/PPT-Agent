@@ -11,23 +11,24 @@ import (
 
 // WriteSlideTool 整页写入 slide html（生成阶段/子代理专用，write_slide）。
 // 语义（ARCH-TOOLS-004/006/002）：落盘前隐式跑 lint-slide 校验；越界路径整体失败；成功后落版本。
-// 锁定 slideIdx：子代理只能写自己那一页（隔离，AC-GEN-009）。
+// 锁定 slideIdx：子代理只能写自己那一页（隔离，AC-GEN-009）。磁盘/版本路径按稳定 slideID 定位。
 type WriteSlideTool struct {
 	store     Store
 	sandbox   *tools.Sandbox
 	projectID string
 	runID     string
-	slideIdx  int // 本子代理锁定的页序（-1 表示不锁定，仅整套编排内部使用）
+	slideIdx  int    // 本子代理锁定的页序（-1 表示不锁定，仅整套编排内部使用）
+	slideID   string // 锁定页的稳定身份，用于拼磁盘/版本路径
 	clock     func() int64
 	newID     func() string
 	written   bool // 标记本页是否已成功写入（供 runner 判定）
 }
 
-// NewWriteSlideTool 构造 write_slide，锁定到 slideIdx。
-func NewWriteSlideTool(store Store, sandbox *tools.Sandbox, projectID, runID string, slideIdx int, clock func() int64, newID func() string) *WriteSlideTool {
+// NewWriteSlideTool 构造 write_slide，锁定到 slideIdx（页序供 LLM 定位）与 slideID（路径定位）。
+func NewWriteSlideTool(store Store, sandbox *tools.Sandbox, projectID, runID string, slideIdx int, slideID string, clock func() int64, newID func() string) *WriteSlideTool {
 	return &WriteSlideTool{
 		store: store, sandbox: sandbox, projectID: projectID, runID: runID,
-		slideIdx: slideIdx, clock: clock, newID: newID,
+		slideIdx: slideIdx, slideID: slideID, clock: clock, newID: newID,
 	}
 }
 
@@ -69,15 +70,15 @@ func (t *WriteSlideTool) Execute(ctx context.Context, args map[string]any) (tool
 		return fail("html-output-spec 校验失败，拒绝落盘：" + reason), nil
 	}
 
-	rel := fmt.Sprintf("slides/%03d/index.html", idx)
+	rel := model.SlideHTMLPath(t.slideID)
 	old, readErr := t.sandbox.Read(rel)
 	// 路径边界（ARCH-TOOLS-006）：Sandbox.Write 内部规范化 + 前缀校验，越界整体失败。
 	if err := t.sandbox.Write(rel, []byte(html)); err != nil {
 		return fail(fmt.Sprintf("写入失败：%v", err)), nil
 	}
 
-	// 落版本（ARCH-TOOLS-002）：快照到 versions/slide-<idx>/vN.html 并登记，同步 slides.current_version。
-	versionNo, err := t.snapshotVersion(ctx, idx, html)
+	// 落版本（ARCH-TOOLS-002）：快照到 versions/slide-<id>/vN.html 并登记，同步 slides.current_version。
+	versionNo, err := t.snapshotVersion(ctx, html)
 	if err != nil {
 		if readErr == nil {
 			_ = t.sandbox.Write(rel, old)
@@ -95,13 +96,13 @@ func (t *WriteSlideTool) Execute(ctx context.Context, args map[string]any) (tool
 	}, nil
 }
 
-func (t *WriteSlideTool) snapshotVersion(ctx context.Context, idx int, html string) (int, error) {
-	target := model.SlideVersionTarget(t.projectID, idx)
+func (t *WriteSlideTool) snapshotVersion(ctx context.Context, html string) (int, error) {
+	target := model.SlideVersionTarget(t.projectID, t.slideID)
 	no, err := t.store.NextVersionNo(ctx, "slide", target)
 	if err != nil {
 		return 0, err
 	}
-	snap := fmt.Sprintf("versions/slide-%03d/v%d.html", idx, no)
+	snap := model.SlideVersionSnapshot(t.slideID, no)
 	if err := t.sandbox.Write(snap, []byte(html)); err != nil {
 		return 0, err
 	}
@@ -112,7 +113,7 @@ func (t *WriteSlideTool) snapshotVersion(ctx context.Context, idx int, html stri
 	if err := t.store.CreateVersion(ctx, v); err != nil {
 		return 0, err
 	}
-	if err := t.store.SetSlideVersion(ctx, t.projectID, idx, no); err != nil {
+	if err := t.store.SetSlideVersion(ctx, t.slideID, no); err != nil {
 		_ = t.store.DeleteVersion(ctx, "slide", target, no)
 		_ = t.sandbox.Delete(snap)
 		return 0, err

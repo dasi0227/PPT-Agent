@@ -14,7 +14,7 @@ import (
 type memStore struct {
 	slides      []model.Slide
 	versions    []model.Version
-	slideVer    map[int]int
+	slideVer    map[string]int
 	projStatus  string
 	themes      []model.Asset
 	nextVerByTg map[string]int
@@ -22,7 +22,7 @@ type memStore struct {
 }
 
 func newMemStore() *memStore {
-	return &memStore{slideVer: map[int]int{}, nextVerByTg: map[string]int{}}
+	return &memStore{slideVer: map[string]int{}, nextVerByTg: map[string]int{}}
 }
 
 func (m *memStore) ListSlides(_ context.Context, _ string) ([]model.Slide, error) {
@@ -48,8 +48,8 @@ func (m *memStore) DeleteVersion(_ context.Context, tt, tid string, no int) erro
 	}
 	return nil
 }
-func (m *memStore) SetSlideVersion(_ context.Context, _ string, idx, no int) error {
-	m.slideVer[idx] = no
+func (m *memStore) SetSlideVersion(_ context.Context, slideID string, no int) error {
+	m.slideVer[slideID] = no
 	return nil
 }
 func (m *memStore) SetProjectStatus(_ context.Context, _, status string) error {
@@ -68,7 +68,7 @@ const goodHTML = `<!doctype html><html><head>` +
 	`<link rel="stylesheet" href="../../common/base.css"></head>` +
 	`<body><div class="slide-scaler"><section class="slide-stage"><h1 class="slide-title">T</h1></section></div></body></html>`
 
-func newWriteTool(t *testing.T, store Store, idx int) (*WriteSlideTool, string) {
+func newWriteTool(t *testing.T, store Store, idx int) (*WriteSlideTool, string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	sb, err := tools.NewSandbox(dir)
@@ -77,7 +77,8 @@ func newWriteTool(t *testing.T, store Store, idx int) (*WriteSlideTool, string) 
 	}
 	seq := 0
 	newID := func() string { seq++; return "v-" + itoa(seq) }
-	return NewWriteSlideTool(store, sb, "p1", "r1", idx, func() int64 { return 1 }, newID), dir
+	slideID := "s" + itoa(idx)
+	return NewWriteSlideTool(store, sb, "p1", "r1", idx, slideID, func() int64 { return 1 }, newID), dir, slideID
 }
 
 func itoa(n int) string {
@@ -95,7 +96,7 @@ func itoa(n int) string {
 // AC-HTML-001 / ARCH-TOOLS-004：合规 html 写入成功、落盘、落版本、同步 slide 版本。
 func TestWriteSlideValidPersists(t *testing.T) {
 	store := newMemStore()
-	tool, dir := newWriteTool(t, store, 0)
+	tool, dir, slideID := newWriteTool(t, store, 0)
 	res, err := tool.Execute(context.Background(), map[string]any{"slide_idx": 0, "html": goodHTML})
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -106,27 +107,27 @@ func TestWriteSlideValidPersists(t *testing.T) {
 	if !tool.Written() {
 		t.Error("Written() should be true after success")
 	}
-	if _, err := os.Stat(filepath.Join(dir, "slides/000/index.html")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, model.SlideHTMLPath(slideID))); err != nil {
 		t.Errorf("index.html not written: %v", err)
 	}
 	if len(store.versions) != 1 || store.versions[0].TargetType != "slide" {
 		t.Errorf("expected 1 slide version, got %+v", store.versions)
 	}
-	if store.slideVer[0] != 0 {
-		t.Errorf("slide 0 version not synced: %d", store.slideVer[0])
+	if store.slideVer[slideID] != 0 {
+		t.Errorf("slide %s version not synced: %d", slideID, store.slideVer[slideID])
 	}
 }
 
 // ARCH-TOOLS-004：不合规 html（无公共层）落盘前被拒，不写文件。
 func TestWriteSlideRejectsInvalid(t *testing.T) {
 	store := newMemStore()
-	tool, dir := newWriteTool(t, store, 0)
+	tool, dir, slideID := newWriteTool(t, store, 0)
 	bad := `<!doctype html><html><body><div class="slide-stage">no common layer</div></body></html>`
 	res, _ := tool.Execute(context.Background(), map[string]any{"slide_idx": 0, "html": bad})
 	if res.OK {
 		t.Fatal("expected rejection for invalid html")
 	}
-	if _, err := os.Stat(filepath.Join(dir, "slides/000/index.html")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, model.SlideHTMLPath(slideID))); !os.IsNotExist(err) {
 		t.Error("must not write file when validation fails")
 	}
 	if len(store.versions) != 0 {
@@ -137,7 +138,7 @@ func TestWriteSlideRejectsInvalid(t *testing.T) {
 func TestWriteSlideRemovesNewFileWhenVersionCreateFails(t *testing.T) {
 	store := newMemStore()
 	store.failCreate = true
-	tool, dir := newWriteTool(t, store, 0)
+	tool, dir, slideID := newWriteTool(t, store, 0)
 	res, err := tool.Execute(context.Background(), map[string]any{"slide_idx": 0, "html": goodHTML})
 	if err == nil {
 		t.Fatal("expected CreateVersion error")
@@ -145,7 +146,7 @@ func TestWriteSlideRemovesNewFileWhenVersionCreateFails(t *testing.T) {
 	if res.OK {
 		t.Fatalf("result must not be OK on DB failure: %+v", res)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "slides/000/index.html")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, model.SlideHTMLPath(slideID))); !os.IsNotExist(err) {
 		t.Fatalf("new current file must be removed on DB failure, stat err=%v", err)
 	}
 }
@@ -153,7 +154,7 @@ func TestWriteSlideRemovesNewFileWhenVersionCreateFails(t *testing.T) {
 // 子代理页锁定：写非本页 slide_idx → 越权失败。
 func TestWriteSlidePageLock(t *testing.T) {
 	store := newMemStore()
-	tool, _ := newWriteTool(t, store, 3) // 锁定第 3 页
+	tool, _, _ := newWriteTool(t, store, 3) // 锁定第 3 页
 	res, _ := tool.Execute(context.Background(), map[string]any{"slide_idx": 5, "html": goodHTML})
 	if res.OK {
 		t.Fatal("expected rejection: writing another page")

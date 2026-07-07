@@ -218,7 +218,7 @@ func TestRepoScopeAssetOnly(t *testing.T) {
 		NewValidateAssetTool(store, sb),
 		tools.NewFinishTool(),
 		// 越权：页/公共层写工具（属其它 scope）
-		edit.NewPatchSlideTool(nil, sb, "p1", "r1", 0, func() int64 { return 1 }, func() string { return "v" }),
+		edit.NewPatchSlideTool(nil, sb, "p1", "r1", 0, "s0", func() int64 { return 1 }, func() string { return "v" }),
 		overview.NewPatchDesignTool(nil, sb, "p1", "r1", func() int64 { return 1 }, func() string { return "v" }),
 	}
 	loop := harness.New(nopLLM{}, harness.Config{

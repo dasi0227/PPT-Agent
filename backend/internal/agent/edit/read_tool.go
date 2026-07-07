@@ -14,10 +14,11 @@ import (
 type ReadSlideTool struct {
 	sandbox  *tools.Sandbox
 	slideIdx int
+	slideID  string
 }
 
-func NewReadSlideTool(sandbox *tools.Sandbox, slideIdx int) *ReadSlideTool {
-	return &ReadSlideTool{sandbox: sandbox, slideIdx: slideIdx}
+func NewReadSlideTool(sandbox *tools.Sandbox, slideIdx int, slideID string) *ReadSlideTool {
+	return &ReadSlideTool{sandbox: sandbox, slideIdx: slideIdx, slideID: slideID}
 }
 
 func (t *ReadSlideTool) Name() string       { return "read_slide" }
@@ -49,7 +50,7 @@ func (t *ReadSlideTool) Execute(_ context.Context, args map[string]any) (tools.R
 	if idx != t.slideIdx {
 		return fail(fmt.Sprintf("越权：本次编辑仅能读第 %d 页", t.slideIdx)), nil
 	}
-	raw, err := t.sandbox.Read(fmt.Sprintf("slides/%03d/index.html", idx))
+	raw, err := t.sandbox.Read(model.SlideHTMLPath(t.slideID))
 	if err != nil {
 		return fail(fmt.Sprintf("读取第 %d 页失败：%v", idx, err)), nil
 	}

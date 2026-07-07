@@ -12,14 +12,18 @@ import (
 
 // memStore 是 edit.Store 的内存实现。
 type memStore struct {
+	slides      []model.Slide
 	versions    []model.Version
-	slideVer    map[int]int
+	slideVer    map[string]int
 	nextVerByTg map[string]int
 	failCreate  bool
 }
 
 func newMemStore() *memStore {
-	return &memStore{slideVer: map[int]int{}, nextVerByTg: map[string]int{}}
+	return &memStore{slideVer: map[string]int{}, nextVerByTg: map[string]int{}}
+}
+func (m *memStore) ListSlides(_ context.Context, _ string) ([]model.Slide, error) {
+	return m.slides, nil
 }
 func (m *memStore) NextVersionNo(_ context.Context, tt, tid string) (int, error) {
 	return m.nextVerByTg[tt+"|"+tid], nil
@@ -41,8 +45,8 @@ func (m *memStore) DeleteVersion(_ context.Context, tt, tid string, no int) erro
 	}
 	return nil
 }
-func (m *memStore) SetSlideVersion(_ context.Context, _ string, idx, no int) error {
-	m.slideVer[idx] = no
+func (m *memStore) SetSlideVersion(_ context.Context, slideID string, no int) error {
+	m.slideVer[slideID] = no
 	return nil
 }
 func (m *memStore) ListAssets(_ context.Context, _ string) ([]model.Asset, error) {
@@ -59,14 +63,15 @@ const validSlide = `<!doctype html><html><head>` +
 	`<body><div class="slide-scaler"><section class="slide-stage">` +
 	`<h1 class="slide-title">原标题</h1></section></div></body></html>`
 
-func setupPatch(t *testing.T, idx int, html string) (*PatchSlideTool, *memStore, string) {
+func setupPatch(t *testing.T, idx int, html string) (*PatchSlideTool, *memStore, string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	sb, err := tools.NewSandbox(dir)
 	if err != nil {
 		t.Fatalf("sandbox: %v", err)
 	}
-	rel := filepath.Join(dir, "slides", padIdx(idx), "index.html")
+	slideID := "s" + itoa(idx)
+	rel := filepath.Join(dir, filepath.FromSlash(model.SlideHTMLPath(slideID)))
 	if err := os.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -76,16 +81,8 @@ func setupPatch(t *testing.T, idx int, html string) (*PatchSlideTool, *memStore,
 	store := newMemStore()
 	seq := 0
 	newID := func() string { seq++; return "v-" + itoa(seq) }
-	tool := NewPatchSlideTool(store, sb, "p1", "r1", idx, func() int64 { return 1 }, newID)
-	return tool, store, dir
-}
-
-func padIdx(n int) string {
-	s := itoa(n)
-	for len(s) < 3 {
-		s = "0" + s
-	}
-	return s
+	tool := NewPatchSlideTool(store, sb, "p1", "r1", idx, slideID, func() int64 { return 1 }, newID)
+	return tool, store, dir, slideID
 }
 
 func itoa(n int) string {
@@ -110,7 +107,7 @@ func edits(pairs ...string) []any {
 
 // AC-EDIT-005 / DATA-VERSION-001：合规锚定替换 → 落盘 + 产新版本 + 更新 current_version。
 func TestPatchValidPersistsAndVersions(t *testing.T) {
-	tool, store, dir := setupPatch(t, 3, validSlide)
+	tool, store, dir, slideID := setupPatch(t, 3, validSlide)
 	res, err := tool.Execute(context.Background(), map[string]any{
 		"slide_idx": 3, "edits": edits("原标题", "新标题"),
 	})
@@ -120,15 +117,15 @@ func TestPatchValidPersistsAndVersions(t *testing.T) {
 	if !res.OK {
 		t.Fatalf("expected ok, got: %s", res.Observation)
 	}
-	raw, _ := os.ReadFile(filepath.Join(dir, "slides/003/index.html"))
+	raw, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(model.SlideHTMLPath(slideID))))
 	if !contains(string(raw), "新标题") || contains(string(raw), "原标题") {
 		t.Errorf("patch not applied: %s", raw)
 	}
-	if len(store.versions) != 1 || store.versions[0].TargetID != model.SlideVersionTarget("p1", 3) {
-		t.Errorf("expected 1 slide-003 version, got %+v", store.versions)
+	if len(store.versions) != 1 || store.versions[0].TargetID != model.SlideVersionTarget("p1", slideID) {
+		t.Errorf("expected 1 slide version, got %+v", store.versions)
 	}
-	if store.slideVer[3] != 0 {
-		t.Errorf("current_version not synced: %d", store.slideVer[3])
+	if store.slideVer[slideID] != 0 {
+		t.Errorf("current_version not synced: %d", store.slideVer[slideID])
 	}
 }
 
@@ -139,14 +136,14 @@ func TestPatchAnchorNotUnique(t *testing.T) {
 		`<link rel="stylesheet" href="../../common/base.css"></head>` +
 		`<body><div class="slide-scaler"><section class="slide-stage">` +
 		`<span>x</span><span>x</span></section></div></body></html>`
-	tool, store, dir := setupPatch(t, 0, dup)
+	tool, store, dir, slideID := setupPatch(t, 0, dup)
 	res, _ := tool.Execute(context.Background(), map[string]any{
 		"slide_idx": 0, "edits": edits("<span>x</span>", "<span>y</span>"),
 	})
 	if res.OK {
 		t.Fatal("expected failure: anchor not unique")
 	}
-	raw, _ := os.ReadFile(filepath.Join(dir, "slides/000/index.html"))
+	raw, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(model.SlideHTMLPath(slideID))))
 	if string(raw) != dup {
 		t.Error("file must be unchanged on anchor failure")
 	}
@@ -157,7 +154,7 @@ func TestPatchAnchorNotUnique(t *testing.T) {
 
 // ARCH-TOOLS-003：锚点不存在 → 整体失败。
 func TestPatchAnchorMissing(t *testing.T) {
-	tool, _, _ := setupPatch(t, 0, validSlide)
+	tool, _, _, _ := setupPatch(t, 0, validSlide)
 	res, _ := tool.Execute(context.Background(), map[string]any{
 		"slide_idx": 0, "edits": edits("不存在的锚点", "x"),
 	})
@@ -167,7 +164,7 @@ func TestPatchAnchorMissing(t *testing.T) {
 }
 
 func TestPatchRestoresFileWhenVersionCreateFails(t *testing.T) {
-	tool, store, dir := setupPatch(t, 0, validSlide)
+	tool, store, dir, slideID := setupPatch(t, 0, validSlide)
 	store.failCreate = true
 
 	res, err := tool.Execute(context.Background(), map[string]any{
@@ -179,7 +176,7 @@ func TestPatchRestoresFileWhenVersionCreateFails(t *testing.T) {
 	if res.OK {
 		t.Fatalf("result must not be OK on DB failure: %+v", res)
 	}
-	raw, _ := os.ReadFile(filepath.Join(dir, "slides/000/index.html"))
+	raw, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(model.SlideHTMLPath(slideID))))
 	if string(raw) != validSlide {
 		t.Fatalf("current slide must be restored on DB failure:\n%s", raw)
 	}
@@ -187,7 +184,7 @@ func TestPatchRestoresFileWhenVersionCreateFails(t *testing.T) {
 
 // ARCH-TOOLS-004：替换后破坏 html-output-spec（删掉公共层引用）→ 拒绝落盘。
 func TestPatchRejectsInvalidResult(t *testing.T) {
-	tool, store, dir := setupPatch(t, 0, validSlide)
+	tool, store, dir, slideID := setupPatch(t, 0, validSlide)
 	res, _ := tool.Execute(context.Background(), map[string]any{
 		"slide_idx": 0,
 		"edits":     edits(`<link rel="stylesheet" href="../../common/base.css">`, ""),
@@ -195,7 +192,7 @@ func TestPatchRejectsInvalidResult(t *testing.T) {
 	if res.OK {
 		t.Fatal("expected failure: result violates html-output-spec")
 	}
-	raw, _ := os.ReadFile(filepath.Join(dir, "slides/000/index.html"))
+	raw, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(model.SlideHTMLPath(slideID))))
 	if string(raw) != validSlide {
 		t.Error("file must be unchanged when validation fails")
 	}
@@ -206,7 +203,7 @@ func TestPatchRejectsInvalidResult(t *testing.T) {
 
 // 页锁定：改非目标页 slide_idx → 越权失败。
 func TestPatchPageLock(t *testing.T) {
-	tool, _, _ := setupPatch(t, 3, validSlide)
+	tool, _, _, _ := setupPatch(t, 3, validSlide)
 	res, _ := tool.Execute(context.Background(), map[string]any{
 		"slide_idx": 5, "edits": edits("原标题", "x"),
 	})

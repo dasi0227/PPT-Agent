@@ -26,8 +26,8 @@ func (fakeOverviewTool) Execute(context.Context, map[string]any) (tools.Result, 
 // AC-HARNESS-001：page scope 下，越权工具（overview 的 patch_design）MUST NOT 进入注册 schema。
 func TestToolGatingExcludesCrossScope(t *testing.T) {
 	all := []tools.Tool{
-		NewReadSlideTool(nil, 3),
-		NewPatchSlideTool(nil, nil, "p1", "r1", 3, nil, nil),
+		NewReadSlideTool(nil, 3, "s3"),
+		NewPatchSlideTool(nil, nil, "p1", "r1", 3, "s3", nil, nil),
 		NewValidateSlideTool(),
 		tools.NewFinishTool(),
 		fakeOverviewTool{}, // 越权
@@ -53,7 +53,7 @@ func TestToolGatingExcludesCrossScope(t *testing.T) {
 // current scope 同样只注册单页工具（与 page 一致）。
 func TestToolGatingCurrentScope(t *testing.T) {
 	all := []tools.Tool{
-		NewPatchSlideTool(nil, nil, "p1", "r1", 0, nil, nil),
+		NewPatchSlideTool(nil, nil, "p1", "r1", 0, "s0", nil, nil),
 		fakeOverviewTool{},
 		tools.NewFinishTool(),
 	}
@@ -73,13 +73,23 @@ func TestContextScopeIsolation(t *testing.T) {
 	// 目标页 html 含哨兵；别页内容不应出现在上下文里（runner 只读目标页）。
 	target := 3
 	dir := t.TempDir()
-	writePage(t, dir, target, `<section class="slide-stage">TARGET-PAGE-sentinel</section>`)
-	writePage(t, dir, 0, `<section class="slide-stage">OTHER-PAGE-sentinel</section>`)
-	writePage(t, dir, 4, `<section class="slide-stage">ANOTHER-sentinel</section>`)
+	// store 提供页序→slideID 映射；页序 0..4 对应稳定 id sN。
+	slides := make([]model.Slide, 5)
+	for i := range slides {
+		id := "s" + itoa(i)
+		slides[i] = model.Slide{ID: id, ProjectID: "p1", Idx: i, Order: i * 10,
+			Layout: "bullets", Title: "T", JSONPath: model.SlideJSONPath(id), HTMLPath: model.SlideHTMLPath(id)}
+	}
+	writePage(t, dir, "s3", `<section class="slide-stage">TARGET-PAGE-sentinel</section>`)
+	writePage(t, dir, "s0", `<section class="slide-stage">OTHER-PAGE-sentinel</section>`)
+	writePage(t, dir, "s4", `<section class="slide-stage">ANOTHER-sentinel</section>`)
+
+	store := newMemStore()
+	store.slides = slides
 
 	// 用 runner 装配上下文：捕获发给 LLM 的消息。
 	capture := &captureClient{}
-	r := NewRunner(capture, newMemStore(), Params{
+	r := NewRunner(capture, store, Params{
 		RunID: "r1", ProjectID: "p1", WorkDir: dir, Scope: model.ScopePage,
 		PageIndex: target, Instruction: "把标题改大",
 	}, func() int64 { return 1 }, func() string { return "v" })
@@ -138,11 +148,11 @@ type nopEmitter struct{}
 
 func (nopEmitter) Emit(model.EventType, any) {}
 
-func writePage(t *testing.T, dir string, idx int, html string) {
+func writePage(t *testing.T, dir string, slideID string, html string) {
 	t.Helper()
 	full := `<!doctype html><html><head>` +
 		`<link rel="stylesheet" href="../../common/tokens.css">` +
 		`<link rel="stylesheet" href="../../common/base.css"></head><body>` +
 		`<div class="slide-scaler">` + html + `</div></body></html>`
-	writeFileAt(t, dir, "slides/"+padIdx(idx)+"/index.html", full)
+	writeFileAt(t, dir, model.SlideHTMLPath(slideID), full)
 }

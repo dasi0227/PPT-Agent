@@ -219,7 +219,7 @@ func (r *Runner) validateAndFix(ctx context.Context, em harness.Emitter, cp harn
 		if skip[sl.Idx] {
 			continue // Stage 3 已失败并计入 warnings，不重复校验。
 		}
-		rel := fmt.Sprintf("slides/%03d/index.html", sl.Idx)
+		rel := model.SlideHTMLPath(sl.ID)
 		html, err := sandbox.Read(rel)
 		if err != nil {
 			warnings = append(warnings, Warning{PageIndex: sl.Idx, Code: warnFixExceeded, Message: "校验阶段读取页面失败：" + err.Error()})
@@ -246,7 +246,7 @@ func (r *Runner) validateAndFix(ctx context.Context, em harness.Emitter, cp harn
 // fixPage 对单页执行有限次修复子循环：回灌 lint 错误 → 子代理重写 → 重新校验。
 // 返回是否修复成功、是否被取消。
 func (r *Runner) fixPage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, plan harness.PlanPayload, sl model.Slide, spec *DesignSpec, themeName string, issues []string) (bool, bool) {
-	rel := fmt.Sprintf("slides/%03d/index.html", sl.Idx)
+	rel := model.SlideHTMLPath(sl.ID)
 	for round := 0; round < maxFixRounds; round++ {
 		if ctx.Err() != nil {
 			return false, true
@@ -318,7 +318,7 @@ func failedPages(warnings []Warning) map[int]bool {
 // generatePage 为单页派发一个独立 harness 子代理（独立上下文 ARCH-HARNESS-005）。
 // fixErrors 非空时进入修复子循环（slide.fix@v1），只修列出的不合规项。
 func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, sandbox *tools.Sandbox, sj slidejson.SlideJSON, themeName string, brief *prompt.DesignBrief, fixErrors []string) harness.Outcome {
-	writeTool := NewWriteSlideTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, sj.Idx, r.clock, r.newID)
+	writeTool := NewWriteSlideTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, sj.Idx, sj.ID, r.clock, r.newID)
 
 	pp := prompt.SlideParams{
 		Slide:     sj,
@@ -455,12 +455,18 @@ func (r *Runner) readThemeTokens(theme resolvedTheme) ([]byte, error) {
 
 // loadSlideJSON 从磁盘读取该页 slide.json（大纲阶段已落盘）。
 func (r *Runner) loadSlideJSON(sandbox *tools.Sandbox, sl model.Slide) (slidejson.SlideJSON, error) {
-	raw, err := sandbox.Read(fmt.Sprintf("slides/%03d/slide.json", sl.Idx))
+	raw, err := sandbox.Read(model.SlideJSONPath(sl.ID))
 	if err != nil {
 		// 回退：磁盘无 slide.json 时用 store 元数据最小重建（layout/title 足够生成）。
 		return slidejson.SlideJSON{ID: sl.ID, Idx: sl.Idx, Layout: sl.Layout, Title: sl.Title}, nil
 	}
-	return slidejson.Parse(raw)
+	sj, err := slidejson.Parse(raw)
+	if err != nil {
+		return slidejson.SlideJSON{}, err
+	}
+	// 磁盘 slide.json 未必带稳定 id，用 store 元数据回填，保证路径拼接一致。
+	sj.ID = sl.ID
+	return sj, nil
 }
 
 func (r *Runner) errOut(em harness.Emitter, code, msg string) harness.Outcome {

@@ -167,17 +167,18 @@ func setupGen(t *testing.T, pageCount int) (*memStore, string, []model.Slide) {
 		if i < len(layouts) {
 			layout = layouts[i]
 		}
-		sj := slidejson.SlideJSON{ID: itoa(i), Idx: i, Layout: layout, Title: "标题" + itoa(i), Bullets: []string{"点"}}
+		id := itoa(i)
+		sj := slidejson.SlideJSON{ID: id, Idx: i, Layout: layout, Title: "标题" + itoa(i), Bullets: []string{"点"}}
 		raw, _ := json.MarshalIndent(sj, "", "  ")
-		p := filepath.Join(dir, fmt.Sprintf("slides/%03d", i))
+		p := filepath.Join(dir, filepath.FromSlash(model.SlideDir(id)))
 		if err := os.MkdirAll(p, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(p, "slide.json"), raw, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		slides[i] = model.Slide{ID: itoa(i), ProjectID: "p1", Idx: i, Layout: layout, Title: sj.Title,
-			JSONPath: fmt.Sprintf("slides/%03d/slide.json", i), HTMLPath: fmt.Sprintf("slides/%03d/index.html", i)}
+		slides[i] = model.Slide{ID: id, ProjectID: "p1", Idx: i, Order: i * 10, Layout: layout, Title: sj.Title,
+			JSONPath: model.SlideJSONPath(id), HTMLPath: model.SlideHTMLPath(id)}
 	}
 	store := newMemStore()
 	store.slides = slides
@@ -227,7 +228,7 @@ func TestGenerateDeck(t *testing.T) {
 	}
 	// 每页 index.html 落盘。
 	for i := range slides {
-		if _, err := os.Stat(filepath.Join(dir, fmt.Sprintf("slides/%03d/index.html", i))); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(model.SlideHTMLPath(slides[i].ID)))); err != nil {
 			t.Errorf("page %d html missing: %v", i, err)
 		}
 	}
@@ -308,7 +309,7 @@ func TestSinglePageRegenIsolation(t *testing.T) {
 	after := hashTree(t, dir, slides)
 
 	for path, h := range before {
-		isTarget := path == "slides/005/index.html"
+		isTarget := path == model.SlideHTMLPath(slides[5].ID)
 		if isTarget {
 			if after[path] == h {
 				t.Errorf("target page %s hash should change on regen", path)
@@ -327,7 +328,7 @@ func hashTree(t *testing.T, dir string, slides []model.Slide) map[string]string 
 	out := map[string]string{}
 	paths := []string{"common/tokens.css", "common/base.css"}
 	for i := range slides {
-		paths = append(paths, fmt.Sprintf("slides/%03d/index.html", i))
+		paths = append(paths, model.SlideHTMLPath(slides[i].ID))
 	}
 	for _, p := range paths {
 		raw, err := os.ReadFile(filepath.Join(dir, p))

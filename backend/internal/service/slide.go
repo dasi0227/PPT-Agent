@@ -38,7 +38,7 @@ func (svc *SlideService) ListVersions(ctx context.Context, slideID string) ([]mo
 	if err != nil {
 		return nil, err
 	}
-	return svc.store.ListVersions(ctx, "slide", model.SlideVersionTarget(sl.ProjectID, sl.Idx))
+	return svc.store.ListVersions(ctx, "slide", model.SlideVersionTarget(sl.ProjectID, sl.ID))
 }
 
 // RollbackSlide 回滚某页到 versionNo：用历史快照覆盖当前 html + 记一条**新版本**（DATA-VERSION-004）。
@@ -52,7 +52,7 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	if err != nil {
 		return model.Slide{}, err
 	}
-	target := model.SlideVersionTarget(sl.ProjectID, sl.Idx)
+	target := model.SlideVersionTarget(sl.ProjectID, sl.ID)
 
 	// 定位历史版本快照路径。
 	versions, err := svc.store.ListVersions(ctx, "slide", target)
@@ -98,7 +98,7 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 		restoreCurrent()
 		return model.Slide{}, err
 	}
-	snap := fmt.Sprintf("versions/slide-%03d/v%d.html", sl.Idx, newNo)
+	snap := model.SlideVersionSnapshot(sl.ID, newNo)
 	if err := sandbox.Write(snap, historical); err != nil {
 		restoreCurrent()
 		return model.Slide{}, err
@@ -113,7 +113,7 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	}
 
 	// 3) current_version 指向新版本（DATA-VERSION-005）。
-	if err := svc.store.SetSlideVersion(ctx, sl.ProjectID, sl.Idx, newNo); err != nil {
+	if err := svc.store.SetSlideVersion(ctx, sl.ID, newNo); err != nil {
 		restoreCurrent()
 		_ = svc.store.DeleteVersion(ctx, "slide", target, newNo)
 		_ = sandbox.Delete(snap)

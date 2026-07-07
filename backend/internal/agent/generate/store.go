@@ -12,7 +12,7 @@ type Store interface {
 	NextVersionNo(ctx context.Context, targetType, targetID string) (int, error)
 	CreateVersion(ctx context.Context, v model.Version) error
 	DeleteVersion(ctx context.Context, targetType, targetID string, versionNo int) error
-	SetSlideVersion(ctx context.Context, projectID string, idx, versionNo int) error
+	SetSlideVersion(ctx context.Context, slideID string, versionNo int) error
 	SetProjectStatus(ctx context.Context, id, status string) error
 	ListAssets(ctx context.Context, kind string) ([]model.Asset, error)
 }

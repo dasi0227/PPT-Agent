@@ -73,7 +73,7 @@ func (r *RecapRunner) recentChanges(ctx context.Context, slides []model.Slide) [
 	}
 	var all []change
 	for _, s := range slides {
-		vs, err := r.store.ListVersions(ctx, "slide", model.SlideVersionTarget(r.projectID, s.Idx))
+		vs, err := r.store.ListVersions(ctx, "slide", model.SlideVersionTarget(r.projectID, s.ID))
 		if err != nil {
 			continue
 		}

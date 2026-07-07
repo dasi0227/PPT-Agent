@@ -31,11 +31,11 @@ func (s *failingSlideStore) CreateVersion(ctx context.Context, v model.Version) 
 	return s.Store.CreateVersion(ctx, v)
 }
 
-func (s *failingSlideStore) SetSlideVersion(ctx context.Context, projectID string, idx, versionNo int) error {
+func (s *failingSlideStore) SetSlideVersion(ctx context.Context, slideID string, versionNo int) error {
 	if s.failSetSlideVersion {
 		return errSlideInjected
 	}
-	return s.Store.SetSlideVersion(ctx, projectID, idx, versionNo)
+	return s.Store.SetSlideVersion(ctx, slideID, versionNo)
 }
 
 // setupRollback 建库 + project work_dir + 一页两版本快照（v0/v1），当前 v1。
@@ -58,21 +58,21 @@ func setupRollback(t *testing.T) (*service.SlideService, *sqlitestore.Store, str
 	if err := st.CreateProject(ctx, model.Project{ID: "p1", Title: "t", WorkDir: workDir, Theme: "x", Status: "ready", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	// slide 000，current_version=1。
-	slide := model.Slide{ID: "s1", ProjectID: "p1", Idx: 0, Layout: "cover", Title: "T",
-		JSONPath: "slides/000/slide.json", HTMLPath: "slides/000/index.html", CurrentVersion: 1}
+	// slide s1，current_version=1。
+	slide := model.Slide{ID: "s1", ProjectID: "p1", Idx: 0, Order: 0, Layout: "cover", Title: "T",
+		JSONPath: model.SlideJSONPath("s1"), HTMLPath: model.SlideHTMLPath("s1"), CurrentVersion: 1}
 	if err := st.ReplaceSlides(ctx, "p1", []model.Slide{slide}); err != nil {
 		t.Fatal(err)
 	}
 
 	// 落两版本快照 + 当前 html=v1 内容。
-	writeAt(t, workDir, "versions/slide-000/v0.html", "<html>V0</html>")
-	writeAt(t, workDir, "versions/slide-000/v1.html", "<html>V1</html>")
-	writeAt(t, workDir, "slides/000/index.html", "<html>V1</html>")
+	writeAt(t, workDir, model.SlideVersionSnapshot("s1", 0), "<html>V0</html>")
+	writeAt(t, workDir, model.SlideVersionSnapshot("s1", 1), "<html>V1</html>")
+	writeAt(t, workDir, model.SlideHTMLPath("s1"), "<html>V1</html>")
 	for no := 0; no <= 1; no++ {
 		if err := st.CreateVersion(ctx, model.Version{
-			ID: "ver" + itoa(no), TargetType: "slide", TargetID: model.SlideVersionTarget("p1", 0), VersionNo: no,
-			SnapshotPath: "versions/slide-000/v" + itoa(no) + ".html", CreatedAt: now,
+			ID: "ver" + itoa(no), TargetType: "slide", TargetID: model.SlideVersionTarget("p1", "s1"), VersionNo: no,
+			SnapshotPath: model.SlideVersionSnapshot("s1", no), CreatedAt: now,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -91,16 +91,16 @@ func TestRollbackCreatesNewVersion(t *testing.T) {
 	}
 
 	// 文件恢复为 v0 内容。
-	raw, _ := os.ReadFile(filepath.Join(workDir, "slides/000/index.html"))
+	raw, _ := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideHTMLPath("s1"))))
 	if string(raw) != "<html>V0</html>" {
 		t.Errorf("file not restored to v0: %q", raw)
 	}
 	// 新增 v2（不删旧版本），内容=v0。
-	versions, _ := st.ListVersions(ctx, "slide", model.SlideVersionTarget("p1", 0))
+	versions, _ := st.ListVersions(ctx, "slide", model.SlideVersionTarget("p1", "s1"))
 	if len(versions) != 3 {
 		t.Fatalf("expected 3 versions after rollback (v0,v1,v2), got %d", len(versions))
 	}
-	newSnap, _ := os.ReadFile(filepath.Join(workDir, "versions/slide-000/v2.html"))
+	newSnap, _ := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideVersionSnapshot("s1", 2))))
 	if string(newSnap) != "<html>V0</html>" {
 		t.Errorf("new version snapshot content should equal v0, got %q", newSnap)
 	}
@@ -130,7 +130,7 @@ func TestRollbackCreateVersionFailureRestoresCurrentFile(t *testing.T) {
 	if !errors.Is(err, errSlideInjected) {
 		t.Fatalf("expected injected create version error, got %v", err)
 	}
-	raw, _ := os.ReadFile(filepath.Join(workDir, "slides/000/index.html"))
+	raw, _ := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideHTMLPath("s1"))))
 	if string(raw) != "<html>V1</html>" {
 		t.Fatalf("current file must be restored when CreateVersion fails: %s", raw)
 	}
@@ -138,7 +138,7 @@ func TestRollbackCreateVersionFailureRestoresCurrentFile(t *testing.T) {
 	if slides[0].CurrentVersion != 1 {
 		t.Fatalf("current_version must remain unchanged, got %d", slides[0].CurrentVersion)
 	}
-	versions, _ := st.ListVersions(context.Background(), "slide", model.SlideVersionTarget("p1", 0))
+	versions, _ := st.ListVersions(context.Background(), "slide", model.SlideVersionTarget("p1", "s1"))
 	if len(versions) != 2 {
 		t.Fatalf("failed rollback must not append version rows, got %+v", versions)
 	}
@@ -152,7 +152,7 @@ func TestRollbackSetSlideVersionFailureRestoresCurrentFile(t *testing.T) {
 	if !errors.Is(err, errSlideInjected) {
 		t.Fatalf("expected injected set slide version error, got %v", err)
 	}
-	raw, _ := os.ReadFile(filepath.Join(workDir, "slides/000/index.html"))
+	raw, _ := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideHTMLPath("s1"))))
 	if string(raw) != "<html>V1</html>" {
 		t.Fatalf("current file must be restored when SetSlideVersion fails: %s", raw)
 	}
@@ -160,7 +160,7 @@ func TestRollbackSetSlideVersionFailureRestoresCurrentFile(t *testing.T) {
 	if slides[0].CurrentVersion != 1 {
 		t.Fatalf("current_version must remain unchanged, got %d", slides[0].CurrentVersion)
 	}
-	versions, _ := st.ListVersions(context.Background(), "slide", model.SlideVersionTarget("p1", 0))
+	versions, _ := st.ListVersions(context.Background(), "slide", model.SlideVersionTarget("p1", "s1"))
 	if len(versions) != 2 {
 		t.Fatalf("failed SetSlideVersion must remove appended version row, got %+v", versions)
 	}

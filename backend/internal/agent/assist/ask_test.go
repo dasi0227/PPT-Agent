@@ -98,7 +98,11 @@ func (m *askMemStore) DeleteVersion(_ context.Context, tt, tid string, no int) e
 	}
 	return nil
 }
-func (m *askMemStore) SetSlideVersion(context.Context, string, int, int) error { return nil }
+func (m *askMemStore) SetSlideVersion(context.Context, string, int) error { return nil }
+func (m *askMemStore) ListSlides(context.Context, string) ([]model.Slide, error) {
+	return []model.Slide{{ID: "000", ProjectID: "p1", Idx: 0, Order: 0, Layout: "cover", Title: "T",
+		JSONPath: model.SlideJSONPath("000"), HTMLPath: model.SlideHTMLPath("000")}}, nil
+}
 func (m *askMemStore) ListAssets(context.Context, string) ([]model.Asset, error) {
 	return nil, nil
 }

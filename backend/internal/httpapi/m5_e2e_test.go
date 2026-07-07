@@ -82,13 +82,14 @@ func setupM5Server(t *testing.T, pages int) (*httptest.Server, string, string) {
 	}
 	metas := make([]model.Slide, pages)
 	for i := 0; i < pages; i++ {
+		id := fmt.Sprintf("%03d", i)
 		html := fmt.Sprintf(`<!doctype html><html><head>`+
 			`<link rel="stylesheet" href="../../common/tokens.css">`+
 			`<link rel="stylesheet" href="../../common/base.css"></head>`+
 			`<body><div class="slide-scaler"><section class="slide-stage">`+
 			`<h1 class="slide-title">原标题%d</h1></section></div></body></html>`, i)
-		writeAtE(t, workDir, fmt.Sprintf("slides/%03d/index.html", i), html)
-		metas[i] = model.Slide{ID: fmt.Sprintf("s%d", i), ProjectID: "p1", Idx: i, Layout: "content", Title: fmt.Sprintf("第%d页", i), JSONPath: fmt.Sprintf("slides/%03d/slide.json", i), HTMLPath: fmt.Sprintf("slides/%03d/index.html", i)}
+		writeAtE(t, workDir, model.SlideHTMLPath(id), html)
+		metas[i] = model.Slide{ID: id, ProjectID: "p1", Idx: i, Order: i * 10, Layout: "content", Title: fmt.Sprintf("第%d页", i), JSONPath: model.SlideJSONPath(id), HTMLPath: model.SlideHTMLPath(id)}
 	}
 	if err := st.ReplaceSlides(ctx, "p1", metas); err != nil {
 		t.Fatal(err)

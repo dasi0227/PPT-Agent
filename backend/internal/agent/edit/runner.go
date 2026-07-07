@@ -58,12 +58,22 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 
 	idx := r.params.PageIndex
 
+	// 解析页序 → 稳定 slideID（磁盘/版本按 id 定位；页锁定仍按页序对 LLM 呈现）。
+	slides, err := r.store.ListSlides(ctx, r.params.ProjectID)
+	if err != nil {
+		return r.errOut(em, "INTERNAL", err.Error())
+	}
+	if idx < 0 || idx >= len(slides) {
+		return r.errOut(em, "BAD_REQUEST", fmt.Sprintf("页号越界：%d（共 %d 页）", idx, len(slides)))
+	}
+	slideID := slides[idx].ID
+
 	// 上下文隔离（AGENT-CTX-001）：只读目标页 html + slide-json，绝不注入别页。
-	htmlRaw, err := sandbox.Read(fmt.Sprintf("slides/%03d/index.html", idx))
+	htmlRaw, err := sandbox.Read(model.SlideHTMLPath(slideID))
 	if err != nil {
 		return r.errOut(em, "BAD_STATE", fmt.Sprintf("第 %d 页尚无 html，无法编辑：%v", idx, err))
 	}
-	jsonRaw, _ := sandbox.Read(fmt.Sprintf("slides/%03d/slide.json", idx)) // 可空，容错
+	jsonRaw, _ := sandbox.Read(model.SlideJSONPath(slideID)) // 可空，容错
 
 	pp := prompt.EditParams{
 		PageIndex:   idx,
@@ -75,10 +85,10 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 	// 工具集：read_slide/patch_slide(锁定页)/validate_slide/finish。
 	// Gate 按 scope 裁剪（AC-HARNESS-001）：patch/read/validate 的 Scopes()={current,page}，
 	// 越权工具（改别页/公共层）根本不在候选集中，机制级隔离。
-	patch := NewPatchSlideTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, idx, r.clock, r.newID)
+	patch := NewPatchSlideTool(r.store, sandbox, r.params.ProjectID, r.params.RunID, idx, slideID, r.clock, r.newID)
 	toolset := []tools.Tool{
 		assetops.NewSearchAssetsTool(r.store),
-		NewReadSlideTool(sandbox, idx),
+		NewReadSlideTool(sandbox, idx, slideID),
 		assetops.NewMountAssetTool(r.store, r.params.WorkDir, r.params.WorkRoot, r.params.ProjectID, r.params.RunID, &idx, r.clock, r.newID),
 		patch,
 		NewValidateSlideTool(),

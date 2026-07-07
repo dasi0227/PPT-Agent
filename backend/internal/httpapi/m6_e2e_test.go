@@ -77,7 +77,7 @@ func TestE2ERepoSearchAndMountAsset(t *testing.T) {
 	if !strings.Contains(html, `data-fx="particle-burst"`) || !strings.Contains(html, `import { init }`) {
 		t.Fatalf("particle fx not mounted into slide: %s", html)
 	}
-	versions, err := store.ListVersions(context.Background(), "slide", model.SlideVersionTarget("p1", 0))
+	versions, err := store.ListVersions(context.Background(), "slide", model.SlideVersionTarget("p1", "000"))
 	if err != nil {
 		t.Fatalf("list slide versions: %v", err)
 	}
@@ -118,8 +118,8 @@ func setupM6MountServer(t *testing.T, client llm.Client) (*httptest.Server, stri
 	writeAtE(t, workDir, "common/tokens.css", ":root{}")
 	writeAtE(t, workDir, "common/base.css", ".slide-stage{}")
 	if err := st.ReplaceSlides(ctx, "p1", []model.Slide{{
-		ID: "s0", ProjectID: "p1", Idx: 0, Layout: "cover", Title: "封面",
-		JSONPath: "slides/000/slide.json", HTMLPath: "slides/000/index.html",
+		ID: "000", ProjectID: "p1", Idx: 0, Order: 0, Layout: "cover", Title: "封面",
+		JSONPath: model.SlideJSONPath("000"), HTMLPath: model.SlideHTMLPath("000"),
 	}}); err != nil {
 		t.Fatal(err)
 	}

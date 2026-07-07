@@ -19,7 +19,7 @@ type memStore struct {
 	assets      map[string]model.Asset
 	versions    []model.Version
 	nextVerByTg map[string]int
-	slideVer    map[int]int
+	slideVer    map[string]int
 	failCreate  bool
 }
 
@@ -27,8 +27,13 @@ func newMemStore() *memStore {
 	return &memStore{
 		assets:      map[string]model.Asset{},
 		nextVerByTg: map[string]int{},
-		slideVer:    map[int]int{},
+		slideVer:    map[string]int{},
 	}
+}
+
+func (m *memStore) ListSlides(_ context.Context, _ string) ([]model.Slide, error) {
+	return []model.Slide{{ID: "000", ProjectID: "p1", Idx: 0, Order: 0, Layout: "cover", Title: "T",
+		JSONPath: model.SlideJSONPath("000"), HTMLPath: model.SlideHTMLPath("000")}}, nil
 }
 
 func (m *memStore) ListAssets(_ context.Context, kind string) ([]model.Asset, error) {
@@ -72,8 +77,8 @@ func (m *memStore) DeleteVersion(_ context.Context, tt, tid string, no int) erro
 	return nil
 }
 
-func (m *memStore) SetSlideVersion(_ context.Context, _ string, idx, no int) error {
-	m.slideVer[idx] = no
+func (m *memStore) SetSlideVersion(_ context.Context, slideID string, no int) error {
+	m.slideVer[slideID] = no
 	return nil
 }
 
@@ -119,7 +124,7 @@ func TestMountComponentInjectsTokenizedCSSAndVersions(t *testing.T) {
 	if ok, reason := designsystem.LintSlideResult(raw); !ok {
 		t.Fatalf("mounted slide should pass lint: %s", reason)
 	}
-	if len(store.versions) != 1 || store.versions[0].TargetType != "slide" || store.slideVer[0] != 0 {
+	if len(store.versions) != 1 || store.versions[0].TargetType != "slide" || store.slideVer["000"] != 0 {
 		t.Fatalf("mount should create slide version v0, versions=%+v slideVer=%+v", store.versions, store.slideVer)
 	}
 }

@@ -74,13 +74,24 @@ func (t *FanoutPagePatchTool) Execute(ctx context.Context, args map[string]any) 
 		return fail(err.Error()), nil
 	}
 
+	// 页序 → 稳定 slideID 映射（磁盘/版本按 id 定位）。
+	slides, err := t.store.ListSlides(ctx, t.projectID)
+	if err != nil {
+		return fail("读取页列表失败：" + err.Error()), nil
+	}
+
 	var okPages, failPages []int
 	var details []string
 	for _, idx := range pages {
 		if ctx.Err() != nil {
 			return fail("已取消"), nil
 		}
-		if err := t.patchOnePage(ctx, idx, instruction); err != nil {
+		if idx < 0 || idx >= len(slides) {
+			failPages = append(failPages, idx)
+			details = append(details, fmt.Sprintf("第 %d 页越界", idx))
+			continue
+		}
+		if err := t.patchOnePage(ctx, idx, slides[idx].ID, instruction); err != nil {
 			// 单页失败隔离（SPEC-CMD-OVERVIEW-006）：记录并继续下一页，不影响其它页落盘。
 			failPages = append(failPages, idx)
 			details = append(details, fmt.Sprintf("第 %d 页失败：%v", idx, err))
@@ -101,14 +112,14 @@ func (t *FanoutPagePatchTool) Execute(ctx context.Context, args map[string]any) 
 }
 
 // patchOnePage 为单页 spawn 一个独立子代理（harness.Loop，Scope=overview），锁定该页复用 edit 工具。
-func (t *FanoutPagePatchTool) patchOnePage(ctx context.Context, idx int, instruction string) error {
-	htmlRaw, err := t.sandbox.Read(fmt.Sprintf("slides/%03d/index.html", idx))
+func (t *FanoutPagePatchTool) patchOnePage(ctx context.Context, idx int, slideID, instruction string) error {
+	htmlRaw, err := t.sandbox.Read(model.SlideHTMLPath(slideID))
 	if err != nil {
 		return fmt.Errorf("读取页失败：%w", err)
 	}
-	jsonRaw, _ := t.sandbox.Read(fmt.Sprintf("slides/%03d/slide.json", idx))
+	jsonRaw, _ := t.sandbox.Read(model.SlideJSONPath(slideID))
 
-	patch := edit.NewPatchSlideTool(t.store, t.sandbox, t.projectID, t.runID, idx, t.clock, t.newID)
+	patch := edit.NewPatchSlideTool(t.store, t.sandbox, t.projectID, t.runID, idx, slideID, t.clock, t.newID)
 	pp := prompt.EditParams{
 		PageIndex:   idx,
 		Instruction: instruction,
@@ -124,7 +135,7 @@ func (t *FanoutPagePatchTool) patchOnePage(ctx context.Context, idx int, instruc
 		SystemPrompt: prompt.EditSystem(pp),
 		Instruction:  prompt.EditUser(pp),
 		Tools: []tools.Tool{
-			edit.NewReadSlideTool(t.sandbox, idx),
+			edit.NewReadSlideTool(t.sandbox, idx, slideID),
 			patch,
 			edit.NewValidateSlideTool(),
 			tools.NewFinishTool(),

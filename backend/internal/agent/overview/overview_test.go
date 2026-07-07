@@ -18,14 +18,18 @@ import (
 // ── test doubles ──────────────────────────────────────
 
 type memStore struct {
+	slides      []model.Slide
 	versions    []model.Version
-	slideVer    map[int]int
+	slideVer    map[string]int
 	nextVerByTg map[string]int
 	failCreate  bool
 }
 
 func newMemStore() *memStore {
-	return &memStore{slideVer: map[int]int{}, nextVerByTg: map[string]int{}}
+	return &memStore{slideVer: map[string]int{}, nextVerByTg: map[string]int{}}
+}
+func (m *memStore) ListSlides(_ context.Context, _ string) ([]model.Slide, error) {
+	return m.slides, nil
 }
 func (m *memStore) NextVersionNo(_ context.Context, tt, tid string) (int, error) {
 	return m.nextVerByTg[tt+"|"+tid], nil
@@ -47,8 +51,8 @@ func (m *memStore) DeleteVersion(_ context.Context, tt, tid string, no int) erro
 	}
 	return nil
 }
-func (m *memStore) SetSlideVersion(_ context.Context, _ string, idx, no int) error {
-	m.slideVer[idx] = no
+func (m *memStore) SetSlideVersion(_ context.Context, slideID string, no int) error {
+	m.slideVer[slideID] = no
 	return nil
 }
 func (m *memStore) ListAssets(_ context.Context, _ string) ([]model.Asset, error) {
@@ -56,6 +60,17 @@ func (m *memStore) ListAssets(_ context.Context, _ string) ([]model.Asset, error
 }
 func (m *memStore) GetAsset(_ context.Context, _ string) (model.Asset, error) {
 	return model.Asset{}, os.ErrNotExist
+}
+
+// slidesFor 返回 pages 页的元数据，稳定 id 与 pad(i) 目录一致（与磁盘布局对齐）。
+func slidesFor(pages int) []model.Slide {
+	out := make([]model.Slide, pages)
+	for i := 0; i < pages; i++ {
+		id := pad(i)
+		out[i] = model.Slide{ID: id, ProjectID: "p1", Idx: i, Order: i * 10, Layout: "bullets", Title: "T",
+			JSONPath: model.SlideJSONPath(id), HTMLPath: model.SlideHTMLPath(id)}
+	}
+	return out
 }
 
 // scriptClient 按调用序返回预设 tool call；用于驱动主循环/子代理。
@@ -267,6 +282,7 @@ func TestOverviewFanoutSubAgentPerPage(t *testing.T) {
 	dir := setupProject(t, 8)
 	beforeTokens := hashTree(t, dir)["common/tokens.css"]
 	store := newMemStore()
+	store.slides = slidesFor(8)
 
 	// 直接测 fanout 工具（用自适应子 client），精确断言逐页子代理行为。
 	sb := mustSandbox(t, dir)
@@ -309,6 +325,7 @@ func TestOverviewFanoutPerPageFailureIsolation(t *testing.T) {
 	// 第 1 页替换掉「原标题」为无法匹配的内容，使子代理锚点失败。
 	writeAt(t, dir, "slides/001/index.html", strings.Replace(validSlide, "原标题", "特殊标题", 1))
 	store := newMemStore()
+	store.slides = slidesFor(3)
 	sb := mustSandbox(t, dir)
 
 	fan := NewFanoutPagePatchTool(fanoutSubClient{}, store, sb, "p1", "r1", 3, func() int64 { return 1 }, seqID())

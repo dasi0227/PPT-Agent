@@ -77,6 +77,16 @@ func (t *MountAssetTool) Execute(ctx context.Context, args map[string]any) (tool
 		return fail(err.Error()), nil
 	}
 
+	// 页序 → 稳定 slideID（磁盘/版本按 id 定位）。
+	slides, err := t.store.ListSlides(ctx, t.projectID)
+	if err != nil {
+		return tools.Result{}, err
+	}
+	if idx >= len(slides) {
+		return fail(fmt.Sprintf("页号越界：%d（共 %d 页）", idx, len(slides))), nil
+	}
+	slideID := slides[idx].ID
+
 	projectSandbox, err := tools.NewSandbox(t.projectRoot)
 	if err != nil {
 		return tools.Result{}, err
@@ -104,12 +114,12 @@ func (t *MountAssetTool) Execute(ctx context.Context, args map[string]any) (tool
 		return fail("theme 资产请使用 apply_theme，不可 mount 到单页"), nil
 	}
 
-	rel := fmt.Sprintf("slides/%03d/index.html", idx)
+	rel := model.SlideHTMLPath(slideID)
 	currentRaw, err := projectSandbox.Read(rel)
 	if err != nil {
 		return fail(fmt.Sprintf("读取第 %d 页失败：%v", idx, err)), nil
 	}
-	nextHTML, err := t.renderMountedHTML(idx, string(currentRaw), a, m, params, assetSandbox)
+	nextHTML, err := t.renderMountedHTML(slideID, string(currentRaw), a, m, params, assetSandbox)
 	if err != nil {
 		return fail(err.Error()), nil
 	}
@@ -122,7 +132,7 @@ func (t *MountAssetTool) Execute(ctx context.Context, args map[string]any) (tool
 	if err := projectSandbox.Write(rel, []byte(nextHTML)); err != nil {
 		return fail("写入页失败：" + err.Error()), nil
 	}
-	versionNo, err := t.snapshotSlide(ctx, projectSandbox, idx, nextHTML)
+	versionNo, err := t.snapshotSlide(ctx, projectSandbox, slideID, nextHTML)
 	if err != nil {
 		_ = projectSandbox.Write(rel, currentRaw)
 		return tools.Result{}, err
@@ -135,14 +145,14 @@ func (t *MountAssetTool) Execute(ctx context.Context, args map[string]any) (tool
 	}, nil
 }
 
-func (t *MountAssetTool) renderMountedHTML(idx int, current string, a model.Asset, m asset.Manifest, params map[string]any, assetSandbox *tools.Sandbox) (string, error) {
+func (t *MountAssetTool) renderMountedHTML(slideID, current string, a model.Asset, m asset.Manifest, params map[string]any, assetSandbox *tools.Sandbox) (string, error) {
 	switch m.Kind {
 	case asset.KindLayout:
 		return t.renderLayout(a, m, params, assetSandbox)
 	case asset.KindComponent:
 		return t.renderComponent(current, a, m, params, assetSandbox)
 	case asset.KindFx:
-		return t.renderFX(idx, current, a, m)
+		return t.renderFX(slideID, current, a, m)
 	default:
 		return "", fmt.Errorf("不支持 mount kind=%s", m.Kind)
 	}
@@ -200,7 +210,7 @@ func (t *MountAssetTool) renderComponent(current string, a model.Asset, m asset.
 	return renderHTML(doc), nil
 }
 
-func (t *MountAssetTool) renderFX(idx int, current string, a model.Asset, m asset.Manifest) (string, error) {
+func (t *MountAssetTool) renderFX(slideID, current string, a model.Asset, m asset.Manifest) (string, error) {
 	if m.Mount == nil {
 		return "", fmt.Errorf("fx 资产缺少 mount 约定")
 	}
@@ -230,7 +240,7 @@ func (t *MountAssetTool) renderFX(idx int, current string, a model.Asset, m asse
 	// M6 后端只生成产物路径；M7 预览静态服务需同时暴露 project work_dir 与全局 _assets/。
 	// 若 M7 改为统一 /assets/... 路由，这里应替换为稳定服务端 URL。
 	scriptRel, err := filepath.Rel(
-		filepath.Join(t.projectRoot, "slides", fmt.Sprintf("%03d", idx)),
+		filepath.Join(t.projectRoot, filepath.FromSlash(model.SlideDir(slideID))),
 		filepath.Join(t.workRoot, filepath.FromSlash(path.Join(a.Dir, m.Assets.JS))),
 	)
 	if err != nil {
@@ -240,13 +250,13 @@ func (t *MountAssetTool) renderFX(idx int, current string, a model.Asset, m asse
 	return renderHTML(doc), nil
 }
 
-func (t *MountAssetTool) snapshotSlide(ctx context.Context, sandbox *tools.Sandbox, idx int, html string) (int, error) {
-	target := model.SlideVersionTarget(t.projectID, idx)
+func (t *MountAssetTool) snapshotSlide(ctx context.Context, sandbox *tools.Sandbox, slideID, html string) (int, error) {
+	target := model.SlideVersionTarget(t.projectID, slideID)
 	no, err := t.store.NextVersionNo(ctx, "slide", target)
 	if err != nil {
 		return 0, err
 	}
-	snap := fmt.Sprintf("versions/slide-%03d/v%d.html", idx, no)
+	snap := model.SlideVersionSnapshot(slideID, no)
 	if err := sandbox.Write(snap, []byte(html)); err != nil {
 		return 0, err
 	}
@@ -256,7 +266,7 @@ func (t *MountAssetTool) snapshotSlide(ctx context.Context, sandbox *tools.Sandb
 	}); err != nil {
 		return 0, err
 	}
-	if err := t.store.SetSlideVersion(ctx, t.projectID, idx, no); err != nil {
+	if err := t.store.SetSlideVersion(ctx, slideID, no); err != nil {
 		_ = t.store.DeleteVersion(ctx, "slide", target, no)
 		_ = sandbox.Delete(snap)
 		return 0, err

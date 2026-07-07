@@ -120,17 +120,18 @@ func TestE2EGenerateDeck(t *testing.T) {
 	layouts := []string{"cover", "bullets", "bullets", "thanks"}
 	metas := make([]model.Slide, len(layouts))
 	for i, l := range layouts {
-		sj := slidejson.SlideJSON{ID: fmt.Sprint(i), Idx: i, Layout: l, Title: "T" + fmt.Sprint(i), Bullets: []string{"x"}}
+		id := fmt.Sprintf("%03d", i)
+		sj := slidejson.SlideJSON{ID: id, Idx: i, Layout: l, Title: "T" + fmt.Sprint(i), Bullets: []string{"x"}}
 		raw, _ := json.MarshalIndent(sj, "", "  ")
-		dir := filepath.Join(workDir, fmt.Sprintf("slides/%03d", i))
+		dir := filepath.Join(workDir, filepath.FromSlash(model.SlideDir(id)))
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, "slide.json"), raw, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		metas[i] = model.Slide{ID: fmt.Sprint(i), ProjectID: "p1", Idx: i, Layout: l, Title: sj.Title,
-			JSONPath: fmt.Sprintf("slides/%03d/slide.json", i), HTMLPath: fmt.Sprintf("slides/%03d/index.html", i)}
+		metas[i] = model.Slide{ID: id, ProjectID: "p1", Idx: i, Order: i * 10, Layout: l, Title: sj.Title,
+			JSONPath: model.SlideJSONPath(id), HTMLPath: model.SlideHTMLPath(id)}
 	}
 	if err := st.ReplaceSlides(context.Background(), "p1", metas); err != nil {
 		t.Fatalf("replace slides: %v", err)
@@ -169,7 +170,7 @@ func TestE2EGenerateDeck(t *testing.T) {
 
 	// AC-GEN-001：各页 html 落盘且通过 lint-slide；公共层写入。
 	for i := range layouts {
-		p := filepath.Join(workDir, fmt.Sprintf("slides/%03d/index.html", i))
+		p := filepath.Join(workDir, filepath.FromSlash(model.SlideHTMLPath(fmt.Sprintf("%03d", i))))
 		raw, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatalf("page %d html missing: %v", i, err)
