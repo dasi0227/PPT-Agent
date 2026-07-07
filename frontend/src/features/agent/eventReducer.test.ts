@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { reduceSSEEvent, reducePlan, TimelineItem } from './eventReducer';
+import { reduceSSEEvent, reducePlan, TimelineItem, UserTurnItem } from './eventReducer';
 import { SSEEvent, PlanState } from '../../api/types';
+
+describe('UserTurnItem type shape', () => {
+  it('carries id/type/text/timestamp', () => {
+    const item: UserTurnItem = { id: 'u1', type: 'user_turn', text: 'hello **world**', timestamp: 1 };
+    expect(item.type).toBe('user_turn');
+    expect(item.text).toBe('hello **world**');
+  });
+});
 
 describe('eventReducer', () => {
   it('should reduce thought to ThoughtItem', () => {
