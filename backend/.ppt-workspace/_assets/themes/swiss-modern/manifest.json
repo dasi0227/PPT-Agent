@@ -1,9 +1,0 @@
-{
-  "name": "swiss-modern",
-  "version": "1.0.0",
-  "kind": "theme",
-  "source": "preset",
-  "description": "瑞士现代：极简、网格、无衬线，适合商务与通用",
-  "tags": ["light", "minimal", "business"],
-  "assets": { "tokens": "tokens.css" }
-}

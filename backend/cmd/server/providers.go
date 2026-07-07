@@ -18,7 +18,7 @@ import (
 
 func provideHTTPServer(cfg *config.Config, engine *gin.Engine) *http.Server {
 	return &http.Server{
-		Addr:    cfg.ListenAddr,
+		Addr:    cfg.WorkAddr,
 		Handler: engine,
 	}
 }

@@ -41,7 +41,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	}
 	id := svc.newID()
 	now := svc.clock()
-	workDir := filepath.Join(svc.workRoot, id)
+	workDir := filepath.Join(svc.workRoot, "projects", id)
 	proj := model.Project{
 		ID:         id,
 		Title:      title,
@@ -94,7 +94,8 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err != nil {
 		return err
 	}
-	for _, rel := range []string{proj.ID, filepath.Join(proj.ID, "threads"), filepath.Join(proj.ID, "common"), filepath.Join(proj.ID, "slides")} {
+	projectRel := filepath.Join("projects", proj.ID)
+	for _, rel := range []string{projectRel, filepath.Join(projectRel, "threads"), filepath.Join(projectRel, "common"), filepath.Join(projectRel, "slides")} {
 		abs, err := sb.Resolve(rel)
 		if err != nil {
 			return err
@@ -116,5 +117,5 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err != nil {
 		return err
 	}
-	return sb.Write(filepath.Join(proj.ID, "state.json"), raw)
+	return sb.Write(filepath.Join(projectRel, "state.json"), raw)
 }

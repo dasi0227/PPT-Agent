@@ -1,9 +1,0 @@
-{
-  "name": "tokyo-night",
-  "version": "1.0.0",
-  "kind": "theme",
-  "source": "preset",
-  "description": "东京夜：深色冷色霓虹，适合技术分享与开发者",
-  "tags": ["dark", "neon", "developer"],
-  "assets": { "tokens": "tokens.css" }
-}

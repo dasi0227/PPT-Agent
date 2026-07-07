@@ -67,7 +67,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 	}
 	projectID, _ := project["id"].(string)
 	workDir, _ := project["work_dir"].(string)
-	if projectID == "" || !strings.HasPrefix(workDir, root) {
+	if projectID == "" || workDir != filepath.Join(root, "projects", projectID) {
 		t.Fatalf("bad project response: %+v", project)
 	}
 	if _, err := os.Stat(filepath.Join(workDir, "state.json")); err != nil {

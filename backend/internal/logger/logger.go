@@ -8,15 +8,8 @@ import (
 
 // New 返回结构化 zap logger 及其 flush 清理函数。
 func New(cfg *config.Config) (*zap.Logger, func(), error) {
-	var (
-		l   *zap.Logger
-		err error
-	)
-	if cfg.Env == "production" {
-		l, err = zap.NewProduction()
-	} else {
-		l, err = zap.NewDevelopment()
-	}
+	_ = cfg
+	l, err := zap.NewProduction()
 	if err != nil {
 		return nil, nil, err
 	}

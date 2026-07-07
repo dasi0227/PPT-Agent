@@ -12,10 +12,9 @@ import (
 
 // Config 是经 Viper 装配后的强类型配置，集中于本包，禁止散落各处。
 type Config struct {
-	Env         string // development | production：控制 gin 模式与日志形态
-	ListenAddr  string // PPT_LISTEN_ADDR
-	WorkRoot    string // PPT_WORK_ROOT：work_dir 根
-	DBPath      string // SQLite 文件路径；空则落在 WorkRoot 下
+	WorkAddr    string // WORK_ADDR
+	WorkRoot    string // WORK_ROOT：全局工作根
+	DBPath      string // SQLite 文件路径；固定落在 WorkRoot/db/ppt.db
 	DeepSeekKey string // 仅来自环境变量，MUST NOT 落库/落日志（DEV-RULES R13）
 	DeepSeekURL string // DEEPSEEK_BASE_URL；空走默认端点
 	DeepSeekMdl string // DEEPSEEK_MODEL；默认 deepseek-chat
@@ -26,34 +25,34 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	v := viper.New()
-	v.SetDefault("env", "development")
-	v.SetDefault("listen_addr", "127.0.0.1:8787")
-	v.SetDefault("work_root", "./.ppt-workspace")
-	v.SetDefault("db_path", "")
+	v.SetDefault("work_addr", "127.0.0.1:8787")
+	v.SetDefault("work_root", defaultWorkRoot())
 
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
-	_ = v.BindEnv("env", "PPT_ENV")
-	_ = v.BindEnv("listen_addr", "PPT_LISTEN_ADDR")
-	_ = v.BindEnv("work_root", "PPT_WORK_ROOT")
-	_ = v.BindEnv("db_path", "PPT_DB_PATH")
+	_ = v.BindEnv("work_addr", "WORK_ADDR")
+	_ = v.BindEnv("work_root", "WORK_ROOT")
 	_ = v.BindEnv("deepseek_key", "DEEPSEEK_API_KEY")
 	_ = v.BindEnv("deepseek_url", "DEEPSEEK_BASE_URL")
 	_ = v.BindEnv("deepseek_mdl", "DEEPSEEK_MODEL")
 
 	cfg := &Config{
-		Env:         v.GetString("env"),
-		ListenAddr:  v.GetString("listen_addr"),
+		WorkAddr:    v.GetString("work_addr"),
 		WorkRoot:    v.GetString("work_root"),
-		DBPath:      v.GetString("db_path"),
 		DeepSeekKey: v.GetString("deepseek_key"),
 		DeepSeekURL: v.GetString("deepseek_url"),
 		DeepSeekMdl: v.GetString("deepseek_mdl"),
 	}
-	if cfg.DBPath == "" {
-		cfg.DBPath = filepath.Join(cfg.WorkRoot, "ppt.db")
-	}
+	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
 	return cfg, nil
+}
+
+func defaultWorkRoot() string {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return filepath.Join(".dasi", "ppt")
+	}
+	return filepath.Join(home, ".dasi", "ppt")
 }
 
 func loadDotEnv() error {
