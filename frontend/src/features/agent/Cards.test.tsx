@@ -29,6 +29,12 @@ describe('Agent Cards', () => {
     expect(screen.getByText('I am thinking deeply')).toBeInTheDocument();
   });
 
+  it('ThoughtCard renders markdown formatting when expanded', () => {
+    const { container } = render(<ThoughtCard item={{ id: '1', type: 'thought', text: 'plan: `finish`', timestamp: 0 }} />);
+    fireEvent.click(screen.getByText('执行思路'));
+    expect(container.querySelector('code')?.textContent).toBe('finish');
+  });
+
   it('PlanCard renders states', () => {
     const plan = {
       id: 'plan_r1', title: 'My Plan',
@@ -47,6 +53,12 @@ describe('Agent Cards', () => {
     render(<FinalResultCard item={{ id: '1', type: 'final_result', result: { summary: '已更新第 3 页标题' }, timestamp: 0 }} />);
     expect(screen.getByText('最终交付')).toBeInTheDocument();
     expect(screen.getByText('已更新第 3 页标题')).toBeInTheDocument();
+  });
+
+  it('FinalResultCard renders string result via markdown', () => {
+    const { container } = render(<FinalResultCard item={{ id: '1', type: 'final_result', result: '**bold** and `code`', timestamp: 0 }} />);
+    expect(container.querySelector('strong')?.textContent).toBe('bold');
+    expect(container.querySelector('code')?.textContent).toBe('code');
   });
 
   it('FinalResultCard renders structured result (generate)', () => {
@@ -90,5 +102,21 @@ describe('Agent Cards', () => {
     expect(screen.getByText('Select one')).toBeInTheDocument();
     expect(screen.getByText('A')).toBeInTheDocument();
     expect(screen.getByText('B')).toBeInTheDocument();
+  });
+
+  it('NeedsInputCard renders markdown in prompt', () => {
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
+    useRunStore.setState({
+      sessions: {
+        t1: {
+          activeRunId: 'r1', status: 'needs_input', mode: 'ask', scope: 'current',
+          timelineItems: [], progress: null, eventSourceClose: null, plan: null,
+          pendingInput: { id: '2', prompt: 'Confirm `delete`?', choices: [] },
+        },
+      },
+    });
+    const { container } = render(<NeedsInputCard item={{ id: '2', type: 'needs_input', prompt: 'Confirm `delete`?', choices: [], timestamp: 0 }} />);
+    expect(container.querySelector('code')?.textContent).toBe('delete');
   });
 });

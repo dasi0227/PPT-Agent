@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, BrainCircuit } from 'lucide-react';
 import { ThoughtItem } from './eventReducer';
+import { MarkdownMessage } from './MarkdownMessage';
 
 export const ThoughtCard: React.FC<{ item: ThoughtItem }> = ({ item }) => {
   const [expanded, setExpanded] = useState(false);
@@ -16,8 +17,8 @@ export const ThoughtCard: React.FC<{ item: ThoughtItem }> = ({ item }) => {
         <span>执行思路</span>
       </button>
       {expanded && (
-        <div className="px-4 py-3 border-t border-border text-sm text-text-600 whitespace-pre-wrap">
-          {item.text}
+        <div className="px-4 py-3 border-t border-border text-sm text-text-600">
+          <MarkdownMessage content={item.text} />
         </div>
       )}
     </div>

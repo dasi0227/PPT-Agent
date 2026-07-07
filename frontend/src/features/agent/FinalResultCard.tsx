@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { FinalResultItem } from './eventReducer';
+import { MarkdownMessage } from './MarkdownMessage';
 
 interface Warning {
   page_index: number;
@@ -50,9 +51,9 @@ export const FinalResultCard: React.FC<{ item: FinalResultItem }> = ({ item }) =
           {result.design_spec_ref && <Field label="设计规约" value={<code className="text-xs text-text-600">{result.design_spec_ref}</code>} />}
         </div>
       ) : (
-        <div className="text-sm text-text-600 bg-surface p-3 rounded border border-mode-final/20 whitespace-pre-wrap break-words">
+        <div className="text-sm text-text-600 bg-surface p-3 rounded border border-mode-final/20 break-words">
           {summary && summary.trim().length > 0
-            ? summary
+            ? <MarkdownMessage content={summary} />
             : <span className="text-text-400">已完成</span>}
         </div>
       )}
