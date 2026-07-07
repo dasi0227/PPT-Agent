@@ -140,3 +140,47 @@ describe('threadStore soft-create', () => {
     expect(st.activeThreadIdByProjectId['realP']).toBeDefined();
   });
 });
+
+describe('threadStore.nextUntitledName', () => {
+  beforeEach(reset);
+
+  it('empty project returns 未命名 1', () => {
+    expect(useThreadStore.getState().nextUntitledName('p1')).toBe('未命名 1');
+  });
+
+  it('is monotonic across existing untitled threads (real + draft)', () => {
+    useThreadStore.setState({
+      threadsByProjectId: {
+        p1: [
+          { id: 't1', project_id: 'p1', title: '未命名 1', created_at: 0, updated_at: 0 },
+          { id: 't2', project_id: 'p1', title: '未命名 3', created_at: 0, updated_at: 0 },
+        ],
+      },
+      draftThreadsByProjectId: {
+        p1: [
+          { id: 'draft_1', project_id: 'p1', title: '未命名 2', created_at: 0, updated_at: 0, draft: true },
+        ],
+      },
+    });
+    expect(useThreadStore.getState().nextUntitledName('p1')).toBe('未命名 4');
+  });
+
+  it('ignores non-matching titles (e.g. legacy 主线程)', () => {
+    useThreadStore.setState({
+      threadsByProjectId: {
+        p1: [
+          { id: 't1', project_id: 'p1', title: '主线程', created_at: 0, updated_at: 0 },
+          { id: 't2', project_id: 'p1', title: 'foo bar', created_at: 0, updated_at: 0 },
+        ],
+      },
+    });
+    expect(useThreadStore.getState().nextUntitledName('p1')).toBe('未命名 1');
+  });
+
+  it('ensureActiveThread uses 未命名 1 for empty project', async () => {
+    const id = await useThreadStore.getState().ensureActiveThread('p1');
+    expect(isDraftId(id)).toBe(false);
+    const created = calls.find((c) => c.fn === 'create');
+    expect(created?.args[1]).toBe('未命名 1');
+  });
+});

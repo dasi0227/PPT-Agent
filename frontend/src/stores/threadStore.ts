@@ -26,6 +26,7 @@ interface ThreadState {
   displayThreads: (projectId: string) => Thread[];
   rekeyProject: (oldProjectId: string, newProjectId: string) => void;
   dropProject: (projectId: string) => void;
+  nextUntitledName: (projectId: string) => string;
 }
 
 function withOpen(ids: string[], threadId: string): string[] {
@@ -224,7 +225,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       get().setActiveThread(projectId, threads[0].id);
       return threads[0].id;
     }
-    const tmpId = get().createDraftThread(projectId, '主线程');
+    const tmpId = get().createDraftThread(projectId, get().nextUntitledName(projectId));
     return get().flushThread(projectId, tmpId);
   },
 
@@ -254,6 +255,21 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         activeThreadIdByProjectId: move(state.activeThreadIdByProjectId),
       };
     });
+  },
+
+  // 生成下一个「未命名 N」标题：扫真实 + 草稿两侧当前存在的 title，取最大 N +1；
+  // 序号不回收——删除历史 thread 后新建仍走最大 +1，避免复用他人已见过的标题。
+  nextUntitledName: (projectId) => {
+    const all = [
+      ...(get().threadsByProjectId[projectId] || []),
+      ...(get().draftThreadsByProjectId[projectId] || []),
+    ];
+    const re = /^未命名 (\d+)$/;
+    const maxN = all.reduce((m, t) => {
+      const match = (t.title || '').match(re);
+      return match ? Math.max(m, parseInt(match[1], 10)) : m;
+    }, 0);
+    return `未命名 ${maxN + 1}`;
   },
 
   // 删除/丢弃 project：关闭其下所有 thread 的连接并清理全部 project 键（零残留）。

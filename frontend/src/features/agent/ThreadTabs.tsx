@@ -19,7 +19,7 @@ export const ThreadTabs: React.FC = () => {
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const {
     threadsByProjectId, draftThreadsByProjectId, openThreadIdsByProjectId, activeThreadIdByProjectId,
-    openThread, closeThread, createDraftThread, deleteThread, setActiveThread,
+    openThread, closeThread, createDraftThread, deleteThread, setActiveThread, nextUntitledName,
   } = useThreadStore();
   const sessions = useRunStore((s) => s.sessions);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -40,7 +40,7 @@ export const ThreadTabs: React.FC = () => {
   const titleOf = (t: { title?: string }, i: number) => t.title || `对话 ${i + 1}`;
 
   const handleNew = () => {
-    createDraftThread(activeProjectId, `新对话 ${allThreads.length + 1}`);
+    createDraftThread(activeProjectId, nextUntitledName(activeProjectId));
   };
 
   const handleDelete = async (threadId: string, label: string) => {
