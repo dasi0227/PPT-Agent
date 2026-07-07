@@ -24,6 +24,7 @@ type Store interface {
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)
 	SetRunStatus(ctx context.Context, id string, status model.RunStatus) error
+	HasActiveRun(ctx context.Context, projectID string) (bool, error)
 	AppendEvent(ctx context.Context, e model.Event) error
 	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
 

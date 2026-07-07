@@ -110,6 +110,15 @@ func (s *Store) SetRunStatus(ctx context.Context, id string, status model.RunSta
 		Updates(map[string]any{"status": string(status), "updated_at": nowUnix()}).Error
 }
 
+// HasActiveRun 报告某 project 是否有非终态 run（pending/running/waiting），供手动写操作互斥判定。
+func (s *Store) HasActiveRun(ctx context.Context, projectID string) (bool, error) {
+	var n int64
+	err := s.db.WithContext(ctx).Model(&runPO{}).
+		Where("project_id = ? AND status NOT IN ?", projectID, []string{"done", "failed", "canceled"}).
+		Count(&n).Error
+	return n > 0, err
+}
+
 // AppendEvent 持久化一条 run 事件（run_id+seq 主键，seq 单调连续 API-SSE-001）。
 func (s *Store) AppendEvent(ctx context.Context, e model.Event) error {
 	return s.db.WithContext(ctx).Create(eventToPO(e)).Error

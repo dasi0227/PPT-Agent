@@ -49,6 +49,12 @@ func (svc *SlideService) PatchContent(ctx context.Context, slideID string, p Sli
 	if err != nil {
 		return slidejson.SlideJSON{}, err
 	}
+	// 并发护栏：project 有活跃 run 时，手动写与 AI 写互斥（RUN_ACTIVE）。
+	if active, err := svc.store.HasActiveRun(ctx, sl.ProjectID); err != nil {
+		return slidejson.SlideJSON{}, err
+	} else if active {
+		return slidejson.SlideJSON{}, ErrRunActive
+	}
 	proj, err := svc.store.GetProject(ctx, sl.ProjectID)
 	if err != nil {
 		return slidejson.SlideJSON{}, err

@@ -60,6 +60,25 @@ func TestPatchContentUpdatesAndMarksDirty(t *testing.T) {
 	}
 }
 
+// TestPatchContentRejectedWhenRunActive：project 有活跃 run 时手动 PATCH 返回 ErrRunActive。
+func TestPatchContentRejectedWhenRunActive(t *testing.T) {
+	svc, st, workDir := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1", Order: 10, Layout: "bullets", Title: "旧",
+		JSONPath: model.SlideJSONPath("s1"), HTMLPath: model.SlideHTMLPath("s1")}})
+	writeAt(t, workDir, model.SlideJSONPath("s1"), `{"id":"s1","layout":"bullets","title":"旧","bullets":["a"]}`)
+	if err := st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", Kind: model.KindOutline, Scope: model.ScopeCurrent, Mode: model.ModeNormal, Status: model.RunRunning}); err != nil {
+		t.Fatal(err)
+	}
+	newTitle := "X"
+	if _, err := svc.PatchContent(ctx, "s1", service.SlidePatch{Title: &newTitle}); !errors.Is(err, service.ErrRunActive) {
+		t.Fatalf("want ErrRunActive, got %v", err)
+	}
+}
+
 type failingSlideStore struct {
 	*sqlitestore.Store
 	failCreateVersion   bool
