@@ -67,11 +67,14 @@ export function mapModeToPayload(input: MapInput): RunPayload {
           ...outlineFields(outlineOpts),
         };
       }
-      // 有大纲：方案 A —— 退化为 Overview 编辑驱动结构调整
-      if (subMode === 'ask') {
-        return { ...base, kind: 'command', command: 'ask', mode: 'ask', scope: 'overview' };
-      }
-      return { ...base, kind: 'edit', scope: 'overview', mode: 'normal' };
+      // 有大纲：路由到大纲编辑 runner（后端在 kind=outline 且已有大纲时选 EditRunner）。
+      // normal 直接执行结构/内容编辑；ask 先澄清。
+      return {
+        ...base,
+        kind: 'outline',
+        scope: 'current',
+        mode: subMode === 'ask' ? 'ask' : 'normal',
+      };
     }
 
     case 'page': {

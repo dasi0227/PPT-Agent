@@ -33,9 +33,9 @@ describe('mapModeToPayload — matrix rows', () => {
     expect(p.instruction).toBe('do it');
   });
 
-  it('Outline / normal / has outline → kind=edit scope=overview (方案A)', () => {
+  it('Outline / normal / has outline → kind=outline mode=normal (大纲编辑)', () => {
     const p = mapModeToPayload(base({ interactionMode: 'outline', subMode: 'normal', hasOutline: true }));
-    expect(p).toMatchObject({ kind: 'edit', scope: 'overview', mode: 'normal' });
+    expect(p).toMatchObject({ kind: 'outline', scope: 'current', mode: 'normal' });
   });
 
   it('Outline / talk → kind=command command=talk mode=talk scope=current', () => {
@@ -45,6 +45,11 @@ describe('mapModeToPayload — matrix rows', () => {
 
   it('Outline / ask / no outline → kind=outline mode=ask', () => {
     const p = mapModeToPayload(base({ interactionMode: 'outline', subMode: 'ask', hasOutline: false }));
+    expect(p).toMatchObject({ kind: 'outline', scope: 'current', mode: 'ask' });
+  });
+
+  it('Outline / ask / has outline → kind=outline mode=ask (大纲编辑澄清)', () => {
+    const p = mapModeToPayload(base({ interactionMode: 'outline', subMode: 'ask', hasOutline: true }));
     expect(p).toMatchObject({ kind: 'outline', scope: 'current', mode: 'ask' });
   });
 
