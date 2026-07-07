@@ -69,3 +69,56 @@ func OutlineUser(p OutlineParams) string {
 	}
 	return b.String()
 }
+
+// OutlineEditVersion 标记大纲编辑模板版本。
+const OutlineEditVersion = "outline.edit@v1"
+
+// OutlineEditParams 是大纲编辑（已有大纲 → 结构/内容调整）的参数。
+type OutlineEditParams struct {
+	Instruction string   // 用户自然语言指令（意图层）
+	Language    string   // zh | en
+	Layouts     []string // 合法 layout 枚举
+	Slides      string   // 当前大纲摘要（id | idx | layout | title 多行）
+}
+
+// OutlineEditSystem 组装大纲编辑 system 层：说明可用工具与安全约束（不拼用户输入）。
+func OutlineEditSystem(p OutlineEditParams) string {
+	var b strings.Builder
+	b.WriteString(systemBase)
+	b.WriteString("\n\n## 任务：编辑现有大纲（结构与内容调整）\n")
+	b.WriteString("演示文稿已有一份大纲（slide-json）。请根据用户指令调整**内容与结构**，")
+	b.WriteString("**不要**生成任何 HTML/CSS。\n\n")
+
+	b.WriteString("## 可用工具\n")
+	b.WriteString("- `patch_outline_slide(slide_id, ...)`：改某页 title/subtitle/bullets/content_intent/layout\n")
+	b.WriteString("- `add_outline_slide(after_slide_id?, layout?)`：在某页后插入新页\n")
+	b.WriteString("- `delete_outline_slide(slide_id)`：删除某页（不可逆，系统会请用户二次确认）\n")
+	b.WriteString("- `reorder_outline_slides(ordered_ids)`：按完整 id 顺序重排全部页\n")
+	b.WriteString("- 完成后调用 `finish`\n\n")
+
+	b.WriteString("## 约束\n")
+	b.WriteString("- 只能引用下方大纲中真实存在的 slide_id\n")
+	b.WriteString("- 删除操作不可逆，请仅在用户明确要求删页时调用 delete_outline_slide\n")
+	b.WriteString("- reorder 时 ordered_ids 必须覆盖全部现有页\n")
+	b.WriteString("- 可用 layout 枚举：\n  ")
+	b.WriteString(strings.Join(p.Layouts, ", "))
+	b.WriteString("\n")
+
+	lang := p.Language
+	if lang == "" {
+		lang = "zh"
+	}
+	fmt.Fprintf(&b, "- 输出语言：%s\n", lang)
+	return b.String()
+}
+
+// OutlineEditUser 组装 user 层：当前大纲摘要 + 用户指令。
+func OutlineEditUser(p OutlineEditParams) string {
+	var b strings.Builder
+	b.WriteString("## 当前大纲（slide_id | idx | layout | title）\n")
+	b.WriteString(p.Slides)
+	b.WriteString("\n## 编辑指令\n")
+	b.WriteString(p.Instruction)
+	b.WriteString("\n")
+	return b.String()
+}

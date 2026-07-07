@@ -43,6 +43,16 @@ func NewRunService(s store.Store, engine *run.Engine, client llm.Client, workRoo
 			return runner
 		}
 		if r.Kind == model.KindOutline {
+			// 已有大纲 → 大纲编辑 runner（patch/add/delete/reorder）；否则首次生成 runner。
+			if slides, err := s.ListSlides(context.Background(), proj.ID); err == nil && len(slides) > 0 {
+				return outline.NewEditRunner(client, NewOutlineEditor(NewSlideService(s), proj.ID), outline.EditParams{
+					RunID:       r.ID,
+					ProjectID:   proj.ID,
+					Instruction: p.Instruction,
+					Language:    p.Language,
+					Mode:        r.Mode,
+				})
+			}
 			return outline.NewRunner(client, s, outline.Params{
 				RunID:      r.ID,
 				ProjectID:  proj.ID,
