@@ -14,18 +14,20 @@ import (
 // RecapRunner 实现 /recap：只读汇总项目状态（主题/页数/各页标题版式/最近变更），
 // 结构化输出到 info 事件，零产物（SPEC-CMD-RECAP-001/002/004）。满足 run.Runner。
 type RecapRunner struct {
-	store     Store
-	runID     string
-	projectID string
+	store       Store
+	runID       string
+	projectID   string
+	instruction string
 }
 
-func NewRecapRunner(store Store, runID, projectID string) *RecapRunner {
-	return &RecapRunner{store: store, runID: runID, projectID: projectID}
+func NewRecapRunner(store Store, runID, projectID, instruction string) *RecapRunner {
+	return &RecapRunner{store: store, runID: runID, projectID: projectID, instruction: instruction}
 }
 
 func (r *RecapRunner) Run(ctx context.Context, em harness.Emitter, _ harness.Checkpointer, _ run.Prompter) harness.Outcome {
 	em.Emit(model.EventRunStarted, harness.RunStartedPayload{
 		RunID: r.runID, Kind: string(model.KindCommand), Scope: string(model.ScopeCurrent), Mode: string(model.ModeNormal),
+		UserInput: r.instruction,
 	})
 
 	proj, err := r.store.GetProject(ctx, r.projectID)

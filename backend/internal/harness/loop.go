@@ -46,10 +46,11 @@ func (l *Loop) schemas() []llm.ToolSchema {
 // Run 执行 ReAct 循环，经 emitter 投影事件，返回 Outcome（外壳据此发唯一终态事件）。
 func (l *Loop) Run(ctx context.Context, em Emitter, cp Checkpointer) Outcome {
 	em.Emit(model.EventRunStarted, RunStartedPayload{
-		RunID: l.cfg.RunID,
-		Kind:  string(l.cfg.Kind),
-		Scope: string(l.cfg.Scope),
-		Mode:  string(l.cfg.Mode),
+		RunID:     l.cfg.RunID,
+		Kind:      string(l.cfg.Kind),
+		Scope:     string(l.cfg.Scope),
+		Mode:      string(l.cfg.Mode),
+		UserInput: l.cfg.Instruction,
 	})
 
 	msgs := []llm.Message{

@@ -93,7 +93,7 @@ func buildCommandRunner(r model.Run, p model.CreateRunParams, proj model.Project
 	case "prompt":
 		return assist.NewPromptRunner(client, r.ID, p.Instruction)
 	case "recap":
-		return assist.NewRecapRunner(s, r.ID, proj.ID)
+		return assist.NewRecapRunner(s, r.ID, proj.ID, p.Instruction)
 	}
 	// talk/ask 是 mode（Command 也置为 talk/ask，但以 Mode 为准）。
 	switch r.Mode {

@@ -29,6 +29,7 @@ func NewPromptRunner(client llm.Client, runID, instruction string) *PromptRunner
 func (r *PromptRunner) Run(ctx context.Context, em harness.Emitter, _ harness.Checkpointer, _ run.Prompter) harness.Outcome {
 	em.Emit(model.EventRunStarted, harness.RunStartedPayload{
 		RunID: r.runID, Kind: string(model.KindCommand), Scope: string(model.ScopeCurrent), Mode: string(model.ModeNormal),
+		UserInput: r.instruction,
 	})
 
 	// 仅做文本补全（不给任何工具）：改写后的指令文本。MUST NOT 执行改写结果（ARCH-CMD PROMPT-004）。

@@ -144,7 +144,7 @@ func TestRecapReadOnly(t *testing.T) {
 		},
 	}
 	em := &captureEmitter{}
-	r := NewRecapRunner(store, "r1", "p1")
+	r := NewRecapRunner(store, "r1", "p1", "")
 	out := r.Run(context.Background(), em, nil, nil)
 
 	if out.Status != harness.OutcomeFinished {
