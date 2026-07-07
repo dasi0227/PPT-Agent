@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS slides (
     json_path        TEXT    NOT NULL,
     html_path        TEXT    NOT NULL,
     current_version  INTEGER NOT NULL DEFAULT 0,
+    "order"          INTEGER NOT NULL DEFAULT 0,
+    outline_dirty    INTEGER NOT NULL DEFAULT 0,
     last_export_at   INTEGER,                       -- backlog：图片导出预留，可空
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     UNIQUE (project_id, idx)
