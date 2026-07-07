@@ -18,6 +18,23 @@ import (
 
 var errSlideInjected = errors.New("injected slide failure")
 
+// TestReadContentFromDisk：ReadContent 从 slide.json 读全文（含 bullets）。
+func TestReadContentFromDisk(t *testing.T) {
+	svc, st, workDir := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1", Order: 10, Layout: "bullets", Title: "标题",
+		JSONPath: model.SlideJSONPath("s1"), HTMLPath: model.SlideHTMLPath("s1")}})
+	writeAt(t, workDir, model.SlideJSONPath("s1"),
+		`{"id":"s1","layout":"bullets","title":"标题","bullets":["a","b"]}`)
+	got, err := svc.ReadContent(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "标题" || len(got.Bullets) != 2 {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 type failingSlideStore struct {
 	*sqlitestore.Store
 	failCreateVersion   bool
@@ -230,6 +247,29 @@ func writeAt(t *testing.T, dir, rel, content string) {
 	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// newSlideServiceWithProject 建库 + 用 ProjectService 造 project "p1"，返回 svc/store/workDir。
+func newSlideServiceWithProject(t *testing.T) (*service.SlideService, *sqlitestore.Store, string) {
+	t.Helper()
+	work := t.TempDir()
+	cfg := &config.Config{DBPath: filepath.Join(work, "t.db"), WorkRoot: work}
+	db, cleanup, err := sqlitestore.Open(cfg, zap.NewNop())
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(cleanup)
+	st, err := sqlitestore.NewStore(db, zap.NewNop())
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := context.Background()
+	now := time.Now().Unix()
+	workDir := filepath.Join(work, "p1")
+	if err := st.CreateProject(ctx, model.Project{ID: "p1", Title: "t", WorkDir: workDir, Theme: "x", Status: "draft", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	return service.NewSlideService(st), st, workDir
 }
 
 func itoa(n int) string {
