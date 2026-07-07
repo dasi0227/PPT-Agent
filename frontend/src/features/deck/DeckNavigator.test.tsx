@@ -1,11 +1,13 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DeckNavigator } from './DeckNavigator';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
+import { slidesApi } from '../../api/slides';
 
 describe('DeckNavigator', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     useDeckStore.setState({ currentPage: 0 });
     useProjectStore.setState({
       projects: [{ id: 'p1', title: '演示项目', theme: 'swiss', status: 'draft', created_at: 0, updated_at: 0 }],
@@ -31,5 +33,35 @@ describe('DeckNavigator', () => {
     render(<DeckNavigator />);
     const badge = screen.getByTitle('大纲已改，待更新');
     expect(badge).toBeInTheDocument();
+  });
+
+  it('add page button calls slidesApi.add with last slide as anchor', async () => {
+    const addSpy = vi.spyOn(slidesApi, 'add').mockResolvedValue({} as never);
+    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+    render(<DeckNavigator />);
+    fireEvent.click(screen.getByRole('button', { name: /加页/ }));
+    await waitFor(() => {
+      expect(addSpy).toHaveBeenCalledWith('p1', { after_slide_id: 's2' });
+    });
+  });
+
+  it('delete page asks confirm then calls slidesApi.remove', async () => {
+    const removeSpy = vi.spyOn(slidesApi, 'remove').mockResolvedValue(undefined as never);
+    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<DeckNavigator />);
+    fireEvent.click(screen.getAllByRole('button', { name: /删除本页/ })[0]);
+    expect(window.confirm).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(removeSpy).toHaveBeenCalledWith('s1');
+    });
+  });
+
+  it('delete page does nothing when confirm is canceled', () => {
+    const removeSpy = vi.spyOn(slidesApi, 'remove').mockResolvedValue(undefined as never);
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<DeckNavigator />);
+    fireEvent.click(screen.getAllByRole('button', { name: /删除本页/ })[0]);
+    expect(removeSpy).not.toHaveBeenCalled();
   });
 });
