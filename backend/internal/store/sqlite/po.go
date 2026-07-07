@@ -126,6 +126,8 @@ type slidePO struct {
 	JSONPath       string `gorm:"column:json_path"`
 	HTMLPath       string `gorm:"column:html_path"`
 	CurrentVersion int    `gorm:"column:current_version"`
+	Order          int    `gorm:"column:order"`
+	OutlineDirty   bool   `gorm:"column:outline_dirty"`
 	LastExportAt   *int64 `gorm:"column:last_export_at"`
 }
 
@@ -134,14 +136,16 @@ func (slidePO) TableName() string { return "slides" }
 func (s slidePO) toModel() model.Slide {
 	return model.Slide{
 		ID: s.ID, ProjectID: s.ProjectID, Idx: s.Idx, Layout: s.Layout, Title: s.Title,
-		JSONPath: s.JSONPath, HTMLPath: s.HTMLPath, CurrentVersion: s.CurrentVersion, LastExportAt: s.LastExportAt,
+		JSONPath: s.JSONPath, HTMLPath: s.HTMLPath, CurrentVersion: s.CurrentVersion,
+		Order: s.Order, OutlineDirty: s.OutlineDirty, LastExportAt: s.LastExportAt,
 	}
 }
 
 func slideToPO(m model.Slide) slidePO {
 	return slidePO{
 		ID: m.ID, ProjectID: m.ProjectID, Idx: m.Idx, Layout: m.Layout, Title: m.Title,
-		JSONPath: m.JSONPath, HTMLPath: m.HTMLPath, CurrentVersion: m.CurrentVersion, LastExportAt: m.LastExportAt,
+		JSONPath: m.JSONPath, HTMLPath: m.HTMLPath, CurrentVersion: m.CurrentVersion,
+		Order: m.Order, OutlineDirty: m.OutlineDirty, LastExportAt: m.LastExportAt,
 	}
 }
 

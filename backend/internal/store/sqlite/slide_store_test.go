@@ -124,6 +124,26 @@ func TestSetProjectStatus(t *testing.T) {
 	}
 }
 
+func TestSlideOrderAndDirtyRoundTrip(t *testing.T) {
+	s := newTestStore(t)
+	seedProject(t, s)
+	ctx := context.Background()
+	err := s.ReplaceSlides(ctx, "p1", []model.Slide{
+		{ID: "s1", ProjectID: "p1", Order: 10, OutlineDirty: true, Layout: "cover", Title: "A",
+			JSONPath: "slides/s1/slide.json", HTMLPath: "slides/s1/index.html"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetSlide(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Order != 10 || !got.OutlineDirty {
+		t.Fatalf("round trip lost fields: %+v", got)
+	}
+}
+
 func itoaLocal(n int) string {
 	if n == 0 {
 		return "0"

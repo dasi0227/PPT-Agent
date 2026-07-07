@@ -10,6 +10,8 @@ type Slide struct {
 	JSONPath       string
 	HTMLPath       string
 	CurrentVersion int
+	Order          int
+	OutlineDirty   bool
 	LastExportAt   *int64
 }
 
