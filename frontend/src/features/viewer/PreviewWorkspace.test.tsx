@@ -31,7 +31,9 @@ describe('PreviewWorkspace', () => {
 
     useDeckStore.setState({
       currentPage: 0,
-      previewMode: 'main'
+      previewMode: 'main',
+      globalView: 'html',
+      viewByPage: {},
     });
   });
 
@@ -63,7 +65,7 @@ describe('PreviewWorkspace', () => {
   });
 });
 
-describe('PreviewWorkspace dual view', () => {
+describe('PreviewWorkspace dual view (globalView)', () => {
   beforeEach(() => {
     postMessage.mockReset();
     Object.defineProperty(window.HTMLIFrameElement.prototype, 'contentWindow', {
@@ -72,7 +74,7 @@ describe('PreviewWorkspace dual view', () => {
         return { postMessage } as unknown as Window;
       }
     });
-    useDeckStore.setState({ currentPage: 0, previewMode: 'main', viewByPage: {} });
+    useDeckStore.setState({ currentPage: 0, previewMode: 'main', globalView: 'html', viewByPage: {} });
   });
 
   it('renders OutlineCard (not iframe) when current page has no html', () => {
@@ -94,7 +96,7 @@ describe('PreviewWorkspace dual view', () => {
     expect(document.querySelector('iframe')).toBeNull();
   });
 
-  it('disables the HTML segment when current page has no html', () => {
+  it('HTML segment button is NOT disabled even when current page has no html (globalView 全局)', () => {
     useProjectStore.setState({
       projects: [],
       activeProjectId: 'p1',
@@ -108,7 +110,7 @@ describe('PreviewWorkspace dual view', () => {
     });
     render(<PreviewWorkspace />);
     const htmlBtn = screen.getByRole('button', { name: 'HTML' });
-    expect(htmlBtn).toBeDisabled();
+    expect(htmlBtn).not.toBeDisabled();
   });
 
   it('renders iframe by default when current page has html', () => {
@@ -124,5 +126,41 @@ describe('PreviewWorkspace dual view', () => {
     });
     render(<PreviewWorkspace />);
     expect(document.querySelector('iframe')).not.toBeNull();
+  });
+
+  it('globalView=outline forces OutlineCard even when hasHtml=true', async () => {
+    useProjectStore.setState({
+      projects: [],
+      activeProjectId: 'p1',
+      slidesByProjectId: {
+        p1: [
+          { id: 's1', project_id: 'p1', idx: 0, layout: 'title', title: 'S1', html_path: '/slides/p1/s1.html', json_path: '/slides/p1/s1.json', current_version: 1, order: 10, outline_dirty: false,
+            content: { layout: 'title', title: 'S1' } },
+        ]
+      },
+      loadingProjects: false,
+    });
+    useDeckStore.setState({ globalView: 'outline', currentPage: 0, previewMode: 'main', viewByPage: {} });
+    render(<PreviewWorkspace />);
+    // 全局 outline：主区应显示 OutlineCard 而非 iframe。
+    expect(document.querySelector('iframe')).toBeNull();
+  });
+
+  it('grid mode shows amber 暂无 HTML badge for slides without html', async () => {
+    useProjectStore.setState({
+      projects: [],
+      activeProjectId: 'p1',
+      slidesByProjectId: {
+        p1: [
+          { id: 's1', project_id: 'p1', idx: 0, layout: 'title', title: 'S1', html_path: '/slides/p1/s1.html', json_path: '', current_version: 1, order: 10, outline_dirty: false },
+          { id: 's2', project_id: 'p1', idx: 1, layout: 'bullets', title: '', html_path: '', json_path: '', current_version: 0, order: 20, outline_dirty: false },
+        ]
+      },
+      loadingProjects: false,
+    });
+    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentPage: 0, viewByPage: {} });
+    render(<PreviewWorkspace />);
+    // 网格模式下 s2 无 html_path，应有徽标。
+    expect(screen.getByText('暂无 HTML')).toBeInTheDocument();
   });
 });

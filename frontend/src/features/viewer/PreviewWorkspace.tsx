@@ -9,7 +9,7 @@ import { EmptyState } from './EmptyState';
 import { OutlineCard } from './OutlineCard';
 
 export const PreviewWorkspace: React.FC = () => {
-  const { currentPage, previewMode, enterOverview, exitOverview, goNext, goPrev, effectiveView, setPageView } = useDeckStore();
+  const { currentPage, previewMode, enterOverview, exitOverview, goNext, goPrev, effectiveView, globalView, setGlobalView } = useDeckStore();
   const { activeProjectId, slidesByProjectId, loadProjectSlides } = useProjectStore();
   const session = useActiveSession();
   const runActive = session.status === 'running' || session.status === 'needs_input';
@@ -71,26 +71,23 @@ export const PreviewWorkspace: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-4">
-          {/* 大纲 / HTML 段控：值 = effectiveView(currentSlide)，无 html 时 HTML 段禁用 */}
+          {/* 大纲 / HTML 全局段控：切 globalView，effectiveView 内部按 hasHtml 兜底降级 */}
           {previewMode === 'main' && currentSlide && (
             <div className="flex items-center rounded-md border border-border overflow-hidden text-xs">
               <button
-                onClick={() => setPageView(currentSlide.id, 'outline')}
+                onClick={() => setGlobalView('outline')}
                 className={cn(
                   "px-2.5 py-1 transition-colors",
-                  currentView === 'outline' ? "bg-mode-normal/10 text-mode-normal font-medium" : "text-text-600 hover:bg-black/5"
+                  globalView === 'outline' ? "bg-mode-normal/10 text-mode-normal font-medium" : "text-text-600 hover:bg-black/5"
                 )}
               >
                 大纲
               </button>
               <button
-                onClick={() => currentHasHtml && setPageView(currentSlide.id, 'html')}
-                disabled={!currentHasHtml}
-                title={currentHasHtml ? undefined : '该页尚未生成'}
+                onClick={() => setGlobalView('html')}
                 className={cn(
                   "px-2.5 py-1 transition-colors border-l border-border",
-                  currentView === 'html' ? "bg-mode-normal/10 text-mode-normal font-medium" : "text-text-600 hover:bg-black/5",
-                  !currentHasHtml && "opacity-40 cursor-not-allowed hover:bg-transparent"
+                  globalView === 'html' ? "bg-mode-normal/10 text-mode-normal font-medium" : "text-text-600 hover:bg-black/5"
                 )}
               >
                 HTML
@@ -167,6 +164,12 @@ export const PreviewWorkspace: React.FC = () => {
                   ) : (
                     <div className="w-full h-full pointer-events-none">
                       <OutlineCard slide={slide} editable={false} dirty={slide.outline_dirty} onPatch={() => {}} compact />
+                    </div>
+                  )}
+                  {/* 网格空态徽标：左下角 amber，用于一眼分辨该页尚无 HTML 产物（#6 补充） */}
+                  {!slide.html_path && (
+                    <div className="absolute bottom-2 left-2 bg-amber-500/80 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm">
+                      暂无 HTML
                     </div>
                   )}
                   <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded backdrop-blur-sm">
