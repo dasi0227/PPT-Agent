@@ -48,6 +48,31 @@ func (s *Store) GetSlide(ctx context.Context, id string) (model.Slide, error) {
 	return po.toModel(), nil
 }
 
+// InsertSlide 单页插入（不清空其它页，结构操作加页用）。
+func (s *Store) InsertSlide(ctx context.Context, sl model.Slide) error {
+	po := slideToPO(sl)
+	return s.db.WithContext(ctx).Create(&po).Error
+}
+
+// DeleteSlideByID 按 id 删除单页 DB 行（无回收站，结构操作删页用）。
+func (s *Store) DeleteSlideByID(ctx context.Context, slideID string) error {
+	return s.db.WithContext(ctx).Where("id = ?", slideID).Delete(&slidePO{}).Error
+}
+
+// SetSlidesOrder 事务批量更新某 project 内多页的 order（重排用，磁盘零迁移）。
+func (s *Store) SetSlidesOrder(ctx context.Context, projectID string, orderByID map[string]int) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for id, ord := range orderByID {
+			if err := tx.Model(&slidePO{}).
+				Where("id = ? AND project_id = ?", id, projectID).
+				Update("order", ord).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // SetProjectStatus 更新 project 状态游标（draft/generating/ready）。
 func (s *Store) SetProjectStatus(ctx context.Context, id, status string) error {
 	return s.db.WithContext(ctx).Model(&projectPO{}).

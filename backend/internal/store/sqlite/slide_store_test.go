@@ -201,6 +201,41 @@ func TestHasActiveRun(t *testing.T) {
 	}
 }
 
+func TestInsertDeleteReorder(t *testing.T) {
+	s := newTestStore(t)
+	seedProject(t, s)
+	ctx := context.Background()
+	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{
+		{ID: "a", ProjectID: "p1", Idx: 0, Order: 10, Layout: "cover", Title: "A"},
+		{ID: "b", ProjectID: "p1", Idx: 1, Order: 20, Layout: "thanks", Title: "B"}})
+	if err := s.InsertSlide(ctx, model.Slide{ID: "c", ProjectID: "p1", Idx: 2, Order: 15, Layout: "content", Title: "C"}); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	got, _ := s.ListSlides(ctx, "p1")
+	if len(got) != 3 || got[1].ID != "c" {
+		t.Fatalf("insert/order wrong: %+v", got)
+	}
+	if err := s.SetSlidesOrder(ctx, "p1", map[string]int{"a": 30, "b": 20, "c": 10}); err != nil {
+		t.Fatalf("reorder: %v", err)
+	}
+	got, _ = s.ListSlides(ctx, "p1")
+	if got[0].ID != "c" || got[2].ID != "a" {
+		t.Fatalf("reorder wrong: %+v", got)
+	}
+	if err := s.DeleteSlideByID(ctx, "b"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	got, _ = s.ListSlides(ctx, "p1")
+	if len(got) != 2 {
+		t.Fatalf("delete wrong: %+v", got)
+	}
+	for _, sl := range got {
+		if sl.ID == "b" {
+			t.Fatalf("deleted slide still present: %+v", got)
+		}
+	}
+}
+
 func itoaLocal(n int) string {
 	if n == 0 {
 		return "0"
