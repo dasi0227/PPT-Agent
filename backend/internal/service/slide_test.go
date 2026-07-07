@@ -35,6 +35,31 @@ func TestReadContentFromDisk(t *testing.T) {
 	}
 }
 
+// TestPatchContentUpdatesAndMarksDirty：局部更新 slide.json + 有 html 页置脏 + 同步 title 元数据。
+func TestPatchContentUpdatesAndMarksDirty(t *testing.T) {
+	svc, st, workDir := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1", Order: 10, Layout: "bullets", Title: "旧",
+		JSONPath: model.SlideJSONPath("s1"), HTMLPath: model.SlideHTMLPath("s1")}})
+	writeAt(t, workDir, model.SlideJSONPath("s1"), `{"id":"s1","layout":"bullets","title":"旧","bullets":["a"]}`)
+	writeAt(t, workDir, model.SlideHTMLPath("s1"), `<html></html>`) // 有 html → 应置脏
+	newTitle := "新标题"
+	got, err := svc.PatchContent(ctx, "s1", service.SlidePatch{Title: &newTitle})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "新标题" {
+		t.Fatalf("json title not updated: %+v", got)
+	}
+	sl, _ := st.GetSlide(ctx, "s1")
+	if !sl.OutlineDirty {
+		t.Fatal("expected outline_dirty=true when html exists")
+	}
+	if sl.Title != "新标题" {
+		t.Fatal("db meta title not synced")
+	}
+}
+
 type failingSlideStore struct {
 	*sqlitestore.Store
 	failCreateVersion   bool
