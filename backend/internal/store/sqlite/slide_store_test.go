@@ -144,6 +144,20 @@ func TestSlideOrderAndDirtyRoundTrip(t *testing.T) {
 	}
 }
 
+func TestListSlidesOrderedByOrder(t *testing.T) {
+	s := newTestStore(t)
+	seedProject(t, s)
+	ctx := context.Background()
+	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{
+		{ID: "b", ProjectID: "p1", Idx: 0, Order: 20, Layout: "content", Title: "B"},
+		{ID: "a", ProjectID: "p1", Idx: 1, Order: 10, Layout: "cover", Title: "A"},
+	})
+	got, _ := s.ListSlides(ctx, "p1")
+	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "b" {
+		t.Fatalf("expected order a,b got %+v", got)
+	}
+}
+
 func itoaLocal(n int) string {
 	if n == 0 {
 		return "0"

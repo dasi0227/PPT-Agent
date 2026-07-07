@@ -35,7 +35,7 @@ type Store interface {
 	CreateVersion(ctx context.Context, v model.Version) error
 	ListVersions(ctx context.Context, targetType, targetID string) ([]model.Version, error)
 	DeleteVersion(ctx context.Context, targetType, targetID string, versionNo int) error
-	SetSlideVersion(ctx context.Context, projectID string, idx, versionNo int) error
+	SetSlideVersion(ctx context.Context, slideID string, versionNo int) error
 
 	CreateAsset(ctx context.Context, a model.Asset) error
 	UpsertAsset(ctx context.Context, a model.Asset) error

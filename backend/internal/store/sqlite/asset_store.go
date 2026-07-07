@@ -66,9 +66,9 @@ func (s *Store) DeleteAsset(ctx context.Context, id string) error {
 	return s.db.WithContext(ctx).Delete(&assetPO{}, "id = ?", id).Error
 }
 
-// SetSlideVersion 更新某页当前版本号（单页生成/重生成落版本后同步 slides.current_version）。
-func (s *Store) SetSlideVersion(ctx context.Context, projectID string, idx, versionNo int) error {
+// SetSlideVersion 更新某页当前版本号（按 slide id 定位；单页生成/重生成落版本后同步 slides.current_version）。
+func (s *Store) SetSlideVersion(ctx context.Context, slideID string, versionNo int) error {
 	return s.db.WithContext(ctx).Model(&slidePO{}).
-		Where("project_id = ? AND idx = ?", projectID, idx).
+		Where("id = ?", slideID).
 		Update("current_version", versionNo).Error
 }

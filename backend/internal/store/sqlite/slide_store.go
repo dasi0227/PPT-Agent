@@ -24,12 +24,12 @@ func (s *Store) ReplaceSlides(ctx context.Context, projectID string, slides []mo
 	})
 }
 
-// ListSlides 返回某 project 的全部 slides（按 idx 升序）。
+// ListSlides 返回某 project 的全部 slides（按 order 升序）。
 func (s *Store) ListSlides(ctx context.Context, projectID string) ([]model.Slide, error) {
 	var pos []slidePO
 	if err := s.db.WithContext(ctx).
 		Where("project_id = ?", projectID).
-		Order("idx ASC").Find(&pos).Error; err != nil {
+		Order("`order` ASC").Find(&pos).Error; err != nil {
 		return nil, err
 	}
 	out := make([]model.Slide, len(pos))
