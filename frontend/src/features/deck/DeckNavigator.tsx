@@ -2,7 +2,7 @@ import React from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { cn } from '../../lib/utils';
-import { Layers, FileText } from 'lucide-react';
+import { Layers, FileText, AlertTriangle } from 'lucide-react';
 
 export const DeckNavigator: React.FC = () => {
   const { activeProjectId, projects, slidesByProjectId } = useProjectStore();
@@ -41,7 +41,14 @@ export const DeckNavigator: React.FC = () => {
               )}
             >
               <span className="w-6 text-xs text-text-400 group-hover:text-text-600">{index + 1}</span>
-              <span className="truncate">Slide {index + 1}</span>
+              <span className="truncate flex-1">{slide.title || '未命名'}</span>
+              {slide.outline_dirty && (
+                <AlertTriangle
+                  className="w-3.5 h-3.5 ml-1 shrink-0 text-amber-600"
+                  aria-label="待更新"
+                  title="大纲已改，待更新"
+                />
+              )}
             </button>
           ))
         )}
