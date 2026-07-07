@@ -60,6 +60,11 @@ func provideAssetService(s store.Store, workRoot service.WorkRoot) *service.Asse
 	return service.NewAssetService(s, string(workRoot))
 }
 
-func provideEngine(rs run.Store, locks *run.LockManager, log *zap.Logger) *run.Engine {
-	return run.NewEngine(rs, locks, nil, log)
+func provideEngine(rs run.Store, locks *run.LockManager, hw run.HistoryWriter, log *zap.Logger) *run.Engine {
+	return run.NewEngine(rs, locks, hw, log)
+}
+
+// provideHistoryWriter 用底层 store 作为 ThreadLocator：Store 已实现 GetThread/GetProject（隐式接口）。
+func provideHistoryWriter(s store.Store) run.HistoryWriter {
+	return run.NewFSHistoryWriter(s)
 }

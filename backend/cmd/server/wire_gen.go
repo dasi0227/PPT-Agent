@@ -42,7 +42,8 @@ func initApp() (*App, func(), error) {
 	healthService := service.NewHealthService(store)
 	healthHandler := httpapi.NewHealthHandler(healthService)
 	lockManager := provideLockManager()
-	engine := provideEngine(store, lockManager, zapLogger)
+	historyWriter := provideHistoryWriter(store)
+	engine := provideEngine(store, lockManager, historyWriter, zapLogger)
 	client := provideLLMClient(configConfig)
 	workRoot := provideWorkRoot(configConfig)
 	runService := service.NewRunService(store, engine, client, workRoot)
@@ -83,4 +84,5 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideHTTPServer,
 	provideSeed,
 	provideApp,
+	provideHistoryWriter,
 )

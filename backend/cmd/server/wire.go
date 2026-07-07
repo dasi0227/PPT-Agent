@@ -28,6 +28,7 @@ var providerSet = wire.NewSet(
 	provideWorkRoot,
 	provideAssetService,
 	provideEngine,
+	provideHistoryWriter,
 	service.NewHealthService,
 	service.NewProjectService,
 	service.NewThreadService,
