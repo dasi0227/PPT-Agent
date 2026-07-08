@@ -21,6 +21,13 @@ const AGENT_CONTENT_TYPES = new Set([
   'error',
 ]);
 
+// ERROR_CODE_MESSAGES：错误码到中文友好文案的映射。缺省仍回落 item.message，
+// 避免在未覆盖的错误码上出现"空提示"。
+const ERROR_CODE_MESSAGES: Record<string, string> = {
+  LLM_TIMEOUT: 'AI 响应超时，请稍后重试或调低复杂度',
+  LLM_BAD_REQUEST: 'AI 请求失败',
+};
+
 export const Timeline: React.FC = () => {
   const { timelineItems, status, plan } = useActiveSession();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -68,11 +75,15 @@ export const Timeline: React.FC = () => {
           case 'needs_input':
             return <NeedsInputCard key={item.id} item={item} />;
           case 'error':
-            return (
-              <div key={item.id} className="p-3 bg-mode-error/10 border border-mode-error/20 text-mode-error text-sm rounded-md">
-                <strong>Error{item.code ? ` [${item.code}]` : ''}:</strong> {item.message}
-              </div>
-            );
+            {
+              const friendly = item.code ? ERROR_CODE_MESSAGES[item.code] : undefined;
+              return (
+                <div key={item.id} className="p-3 bg-mode-error/10 border border-mode-error/20 text-mode-error text-sm rounded-md">
+                  <strong>Error{item.code ? ` [${item.code}]` : ''}:</strong>{' '}
+                  {friendly ?? item.message}
+                </div>
+              );
+            }
           default:
             return null;
         }

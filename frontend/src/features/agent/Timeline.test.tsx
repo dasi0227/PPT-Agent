@@ -130,3 +130,46 @@ describe('Timeline thinking bubble', () => {
     expect(screen.queryByText('正在思考...')).toBeNull();
   });
 });
+
+describe('Timeline error friendly messages', () => {
+  beforeEach(() => {
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
+  });
+
+  const sessionWithError = (code: string | undefined, message: string) => ({
+    sessions: {
+      t1: {
+        activeRunId: null,
+        status: 'idle' as const,
+        mode: 'normal' as const,
+        scope: 'current' as const,
+        timelineItems: [
+          { id: 'e1', type: 'error', code, message, timestamp: 1 } as any,
+        ],
+        pendingInput: null,
+        progress: null,
+        eventSourceClose: null,
+        plan: null,
+      },
+    },
+  });
+
+  it('renders friendly Chinese text for LLM_TIMEOUT', () => {
+    useRunStore.setState(sessionWithError('LLM_TIMEOUT', 'context deadline exceeded'));
+    render(<Timeline />);
+    expect(screen.getByText(/AI 响应超时，请稍后重试或调低复杂度/)).toBeInTheDocument();
+  });
+
+  it('renders friendly Chinese text for LLM_BAD_REQUEST', () => {
+    useRunStore.setState(sessionWithError('LLM_BAD_REQUEST', 'bad tool call'));
+    render(<Timeline />);
+    expect(screen.getByText(/AI 请求失败/)).toBeInTheDocument();
+  });
+
+  it('falls back to raw message when code is unknown', () => {
+    useRunStore.setState(sessionWithError('SOMETHING_ELSE', 'weird failure'));
+    render(<Timeline />);
+    expect(screen.getByText(/weird failure/)).toBeInTheDocument();
+  });
+});
