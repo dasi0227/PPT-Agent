@@ -48,6 +48,7 @@ func provideLLMClient(cfg *config.Config) llm.Client {
 		APIKey:  cfg.DeepSeekKey,
 		BaseURL: cfg.DeepSeekURL,
 		Model:   cfg.DeepSeekMdl,
+		Timeout: cfg.DeepSeekTimeout,
 	})
 }
 

@@ -37,7 +37,9 @@ func NewDeepSeek(cfg DeepSeekConfig) *DeepSeek {
 		cfg.Model = "deepseek-chat"
 	}
 	if cfg.Timeout == 0 {
-		cfg.Timeout = 60 * time.Second
+		// 覆盖 chat completions 从建连、TLS 到 decode body 的整体耗时。长 prompt +
+		// tools 场景下 60s 常常在 decode 阶段被 kill；180s 与 config 默认值保持一致。
+		cfg.Timeout = 180 * time.Second
 	}
 	return &DeepSeek{
 		cfg:        cfg,

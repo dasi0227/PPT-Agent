@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func clearEnvForTest(t *testing.T, keys ...string) {
@@ -110,5 +111,52 @@ func TestLoadDefaultWorkRootUsesUserDirLayout(t *testing.T) {
 	}
 	if cfg.DBPath != filepath.Join("/Users/tester", ".dasi", "ppt", "db", "ppt.db") {
 		t.Fatalf("want default db path under work_root/db, got %q", cfg.DBPath)
+	}
+}
+
+// DEEPSEEK_TIMEOUT_SECONDS 未设时默认 180s；解决 60s 整体超时导致 decode body 阶段被 kill 的问题。
+func TestLoadDeepSeekTimeoutDefault(t *testing.T) {
+	dir := t.TempDir()
+	clearEnvForTest(t, "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "DEEPSEEK_TIMEOUT_SECONDS")
+	chdirForTest(t, dir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.DeepSeekTimeout != 180*time.Second {
+		t.Fatalf("want default DeepSeekTimeout=180s, got %v", cfg.DeepSeekTimeout)
+	}
+}
+
+// 显式设置 DEEPSEEK_TIMEOUT_SECONDS 会覆盖默认值；单位为秒的整数字符串。
+func TestLoadDeepSeekTimeoutOverride(t *testing.T) {
+	dir := t.TempDir()
+	clearEnvForTest(t, "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "DEEPSEEK_TIMEOUT_SECONDS")
+	chdirForTest(t, dir)
+	t.Setenv("DEEPSEEK_TIMEOUT_SECONDS", "300")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.DeepSeekTimeout != 300*time.Second {
+		t.Fatalf("want DeepSeekTimeout=300s, got %v", cfg.DeepSeekTimeout)
+	}
+}
+
+// 非法或 0 的值走默认 180s，避免误配置把整体超时归零导致立即失败。
+func TestLoadDeepSeekTimeoutFallsBackWhenInvalid(t *testing.T) {
+	dir := t.TempDir()
+	clearEnvForTest(t, "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "DEEPSEEK_TIMEOUT_SECONDS")
+	chdirForTest(t, dir)
+	t.Setenv("DEEPSEEK_TIMEOUT_SECONDS", "0")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.DeepSeekTimeout != 180*time.Second {
+		t.Fatalf("want fallback DeepSeekTimeout=180s when set to 0, got %v", cfg.DeepSeekTimeout)
 	}
 }

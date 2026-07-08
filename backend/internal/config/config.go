@@ -5,19 +5,23 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/subosito/gotenv"
 	"github.com/spf13/viper"
 )
 
+const defaultDeepSeekTimeoutSeconds = 180
+
 // Config 是经 Viper 装配后的强类型配置，集中于本包，禁止散落各处。
 type Config struct {
-	WorkAddr    string // WORK_ADDR
-	WorkRoot    string // WORK_ROOT：全局工作根
-	DBPath      string // SQLite 文件路径；固定落在 WorkRoot/db/ppt.db
-	DeepSeekKey string // 仅来自环境变量，MUST NOT 落库/落日志（DEV-RULES R13）
-	DeepSeekURL string // DEEPSEEK_BASE_URL；空走默认端点
-	DeepSeekMdl string // DEEPSEEK_MODEL；默认 deepseek-chat
+	WorkAddr        string        // WORK_ADDR
+	WorkRoot        string        // WORK_ROOT：全局工作根
+	DBPath          string        // SQLite 文件路径；固定落在 WorkRoot/db/ppt.db
+	DeepSeekKey     string        // 仅来自环境变量，MUST NOT 落库/落日志（DEV-RULES R13）
+	DeepSeekURL     string        // DEEPSEEK_BASE_URL；空走默认端点
+	DeepSeekMdl     string        // DEEPSEEK_MODEL；默认 deepseek-chat
+	DeepSeekTimeout time.Duration // DEEPSEEK_TIMEOUT_SECONDS：http.Client.Timeout（整体超时），默认 180s
 }
 
 func Load() (*Config, error) {
@@ -27,6 +31,7 @@ func Load() (*Config, error) {
 	v := viper.New()
 	v.SetDefault("work_addr", "127.0.0.1:8787")
 	v.SetDefault("work_root", defaultWorkRoot())
+	v.SetDefault("deepseek_timeout", defaultDeepSeekTimeoutSeconds)
 
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
@@ -35,13 +40,21 @@ func Load() (*Config, error) {
 	_ = v.BindEnv("deepseek_key", "DEEPSEEK_API_KEY")
 	_ = v.BindEnv("deepseek_url", "DEEPSEEK_BASE_URL")
 	_ = v.BindEnv("deepseek_mdl", "DEEPSEEK_MODEL")
+	_ = v.BindEnv("deepseek_timeout", "DEEPSEEK_TIMEOUT_SECONDS")
+
+	// 单位=秒的整数；<=0 视为无效并回落到默认，避免整体超时被误设为 0 导致立即失败。
+	timeoutSec := v.GetInt("deepseek_timeout")
+	if timeoutSec <= 0 {
+		timeoutSec = defaultDeepSeekTimeoutSeconds
+	}
 
 	cfg := &Config{
-		WorkAddr:    v.GetString("work_addr"),
-		WorkRoot:    v.GetString("work_root"),
-		DeepSeekKey: v.GetString("deepseek_key"),
-		DeepSeekURL: v.GetString("deepseek_url"),
-		DeepSeekMdl: v.GetString("deepseek_mdl"),
+		WorkAddr:        v.GetString("work_addr"),
+		WorkRoot:        v.GetString("work_root"),
+		DeepSeekKey:     v.GetString("deepseek_key"),
+		DeepSeekURL:     v.GetString("deepseek_url"),
+		DeepSeekMdl:     v.GetString("deepseek_mdl"),
+		DeepSeekTimeout: time.Duration(timeoutSec) * time.Second,
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
 	return cfg, nil
