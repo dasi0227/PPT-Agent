@@ -13,10 +13,11 @@ const (
 
 // 停止条件对应的错误码（映射到 SSE error 事件 code）。
 const (
-	CodeMaxTurns   = "MAX_TURNS_EXCEEDED"
-	CodeCircuit    = "TOOL_FAILURES_EXCEEDED"
-	CodeLLMBadCall = "LLM_BAD_REQUEST"
-	CodeCanceled   = "CANCELED"
+	CodeMaxTurns    = "MAX_TURNS_EXCEEDED"
+	CodeCircuit     = "TOOL_FAILURES_EXCEEDED"
+	CodeLLMBadCall  = "LLM_BAD_REQUEST"
+	CodeLLMTimeout  = "LLM_TIMEOUT" // http.Client.Timeout 或 context.DeadlineExceeded，与 4xx 区分
+	CodeCanceled    = "CANCELED"
 )
 
 // Outcome 是循环结束的结果。

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -73,6 +74,11 @@ func (l *Loop) Run(ctx context.Context, em Emitter, cp Checkpointer) Outcome {
 		if err != nil {
 			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 				return Outcome{Status: OutcomeCanceled, Code: CodeCanceled, Message: "run canceled", Turns: turn - 1}
+			}
+			// LLM 整体超时（Client.Timeout / DeadlineExceeded）单独识别为 LLM_TIMEOUT，
+			// 便于前端展示"可重试/调低复杂度"的友好提示，而非泛化的 LLM_BAD_REQUEST。
+			if isLLMTimeout(err) {
+				return Outcome{Status: OutcomeLLMError, Code: CodeLLMTimeout, Message: err.Error(), Turns: turn}
 			}
 			// function call 无法解析等 → 最小失败退出，不重试死循环（ARCH-LLM-FC-001）。
 			return Outcome{Status: OutcomeLLMError, Code: CodeLLMBadCall, Message: err.Error(), Turns: turn}
@@ -162,4 +168,24 @@ func appendToolCall(msgs []llm.Message, tc llm.ToolCall, thought string) []llm.M
 
 func appendObservation(msgs []llm.Message, callID, obs string) []llm.Message {
 	return append(msgs, llm.Message{Role: llm.RoleTool, Content: obs, ToolCallID: callID})
+}
+
+// isLLMTimeout 识别 LLM 客户端的整体超时错误。net/http 触发 Client.Timeout 时
+// 未必 wrap DeadlineExceeded，字面量兜底以匹配现场（"Client.Timeout" / "deadline exceeded"）。
+// ctx.Canceled 已在调用点提前 return，不会走到这里。
+func isLLMTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "Client.Timeout") {
+		return true
+	}
+	if strings.Contains(msg, "deadline exceeded") {
+		return true
+	}
+	return false
 }
