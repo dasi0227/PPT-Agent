@@ -7,6 +7,19 @@ import { PlanCard } from './PlanCard';
 import { ArtifactCard } from './ArtifactCard';
 import { FinalResultCard } from './FinalResultCard';
 import { NeedsInputCard } from './NeedsInputCard';
+import { ThinkingBubble } from './ThinkingBubble';
+
+// AGENT_CONTENT_TYPES：一旦 timeline 出现任何"agent 类"内容，就撤下 ThinkingBubble；
+// tool_call / artifact 也算已有反馈（用户能看到 agent 在做事），一并进白名单。
+const AGENT_CONTENT_TYPES = new Set([
+  'markdown',
+  'thought',
+  'tool_call',
+  'artifact',
+  'final_result',
+  'needs_input',
+  'error',
+]);
 
 export const Timeline: React.FC = () => {
   const { timelineItems, status, plan } = useActiveSession();
@@ -15,6 +28,11 @@ export const Timeline: React.FC = () => {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [timelineItems, plan]);
+
+  // 思考气泡显示条件：status=running，且用户已发过 user_turn，且尚无任何 agent 内容。
+  const hasUserTurn = timelineItems.some((it) => it.type === 'user_turn');
+  const hasAgentContent = timelineItems.some((it) => AGENT_CONTENT_TYPES.has(it.type));
+  const showThinking = status === 'running' && hasUserTurn && !hasAgentContent;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -59,6 +77,7 @@ export const Timeline: React.FC = () => {
             return null;
         }
       })}
+      {showThinking && <ThinkingBubble />}
       <div ref={bottomRef} />
     </div>
   );

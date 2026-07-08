@@ -65,3 +65,68 @@ describe('Timeline user_turn rendering', () => {
     expect(container.querySelector('code')?.textContent).toBe('code');
   });
 });
+
+describe('Timeline thinking bubble', () => {
+  beforeEach(() => {
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
+  });
+
+  const sessionWith = (items: any[], overrides: Partial<any> = {}) => ({
+    sessions: {
+      t1: {
+        activeRunId: 'r1',
+        status: 'running',
+        mode: 'normal',
+        scope: 'current',
+        timelineItems: items,
+        pendingInput: null,
+        progress: null,
+        eventSourceClose: null,
+        plan: null,
+        ...overrides,
+      },
+    },
+  });
+
+  it('shows ThinkingBubble when running and last item is user_turn (no agent content yet)', () => {
+    useRunStore.setState(sessionWith([
+      { id: 'u1', type: 'user_turn', text: 'go', timestamp: 1 },
+    ]));
+    render(<Timeline />);
+    expect(screen.getByText('正在思考...')).toBeInTheDocument();
+  });
+
+  it('hides ThinkingBubble once any agent content arrives (thought)', () => {
+    useRunStore.setState(sessionWith([
+      { id: 'u1', type: 'user_turn', text: 'go', timestamp: 1 },
+      { id: 'th1', type: 'thought', text: 'reasoning', timestamp: 2 },
+    ]));
+    render(<Timeline />);
+    expect(screen.queryByText('正在思考...')).toBeNull();
+  });
+
+  it('hides ThinkingBubble after markdown / token arrives', () => {
+    useRunStore.setState(sessionWith([
+      { id: 'u1', type: 'user_turn', text: 'go', timestamp: 1 },
+      { id: 'md1', type: 'markdown', text: 'partial', timestamp: 2 },
+    ]));
+    render(<Timeline />);
+    expect(screen.queryByText('正在思考...')).toBeNull();
+  });
+
+  it('does NOT show ThinkingBubble when status=idle', () => {
+    useRunStore.setState(sessionWith(
+      [{ id: 'u1', type: 'user_turn', text: 'go', timestamp: 1 }],
+      { status: 'idle' },
+    ));
+    render(<Timeline />);
+    expect(screen.queryByText('正在思考...')).toBeNull();
+  });
+
+  it('does NOT show ThinkingBubble when running but no user_turn (no context to attach)', () => {
+    useRunStore.setState(sessionWith([]));
+    render(<Timeline />);
+    expect(screen.queryByText('正在思考...')).toBeNull();
+  });
+});
