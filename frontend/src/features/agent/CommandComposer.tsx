@@ -7,9 +7,9 @@ import { useDeckStore } from '../../stores/deckStore';
 import { useComposerStore } from '../../stores/composerStore';
 import { useActiveSession } from './useActiveSession';
 import { RunPayload } from '../../api/types';
-import { isDraftId } from '../../lib/draft';
 import { ModeSwitcher } from './ModeSwitcher';
-import { mapModeToPayload, smartDefault, InteractionMode } from './modeMapping';
+import { mapModeToPayload, InteractionMode } from './modeMapping';
+import { isMac, submitShortcutLabel } from '../../lib/platform';
 
 const PLACEHOLDERS: Record<InteractionMode, { empty: string; filled: string }> = {
   outline: {
@@ -32,138 +32,111 @@ const PLACEHOLDERS: Record<InteractionMode, { empty: string; filled: string }> =
 
 export const CommandComposer: React.FC = () => {
   const [text, setText] = useState('');
+  const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { activeProjectId, slidesByProjectId } = useProjectStore();
-  const flushProject = useProjectStore((s) => s.flushProject);
+  const { activeProjectId, slidesByProjectId, createProject, finalizePendingNewProject } = useProjectStore();
   const { currentPage } = useDeckStore();
-  const createRun = useRunStore((s) => s.createRun);
-  const { status } = useActiveSession();
-  const ensureActiveThread = useThreadStore((s) => s.ensureActiveThread);
-  const {
-    interactionMode, subMode, focusNonce,
-    setInteractionMode, setSubMode, applySmartDefault,
-  } = useComposerStore();
+  const { ensureActiveThread } = useThreadStore();
+  const { createRun } = useRunStore();
+  const { status: runStatus } = useActiveSession();
+  const { interactionMode, subMode, focusNonce } = useComposerStore();
 
-  const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
-  const hasOutline = slides.length > 0;
-  const currentPageHasHtml = !!slides[currentPage]?.html_path;
+  const disabled = !activeProjectId || runStatus === 'running' || runStatus === 'needs_input';
 
-  const disabled = !activeProjectId || status === 'running' || status === 'needs_input';
-
-  // 智能默认：项目状态变化时更新初始高亮（用户手动切过后不再自动跳）
-  useEffect(() => {
-    applySmartDefault(smartDefault(hasOutline));
-  }, [hasOutline, applySmartDefault]);
-
-  // EmptyState 引导：请求聚焦时把光标落到输入框
   useEffect(() => {
     if (focusNonce > 0) textareaRef.current?.focus();
   }, [focusNonce]);
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing || isComposing) return;
+    
+    if (e.key === 'Enter') {
+      if ((isMac() ? e.metaKey : e.ctrlKey)) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    }
+  };
+
   const handleSubmit = async () => {
     if (!text.trim() || disabled || !activeProjectId) return;
 
-    const raw = text.trim();
-
-    let payload: RunPayload;
-    if (raw.startsWith('/')) {
-      // 行首斜杠：语义交后端 command.Parse 权威解析，不本地改写 scope/mode
-      payload = { kind: 'edit', instruction: raw };
-    } else {
-      payload = mapModeToPayload({
-        interactionMode,
-        subMode,
-        hasOutline,
-        currentPageHasHtml,
-        currentPage,
-        targetPageIndex: null,
-        instruction: raw,
-      });
-    }
-
-    // 软创建：草稿 project 在提交首个 run 时才 flush 落库（topic=输入文本，携带 outline 选项）。
     let projectId = activeProjectId;
-    if (isDraftId(projectId)) {
+    const slides = projectId && projectId !== 'new-pending' ? slidesByProjectId[projectId] || [] : [];
+    const hasSlides = slides.length > 0;
+    
+    const raw = text.trim();
+    const payload: RunPayload = mapModeToPayload({
+      interactionMode,
+      subMode,
+      hasOutline: hasSlides,
+      currentPageHasHtml: true, // simplified
+      currentPage,
+      targetPageIndex: null,
+      instruction: raw,
+    });
+
+    if (projectId === 'new-pending') {
       try {
-        projectId = await flushProject(projectId, {
-          topic: raw,
-          brief: payload.brief,
-          slide_count: payload.slide_count,
-          language: payload.language,
-        });
+        const proj = await createProject(raw, payload.brief, payload.slide_count, payload.language);
+        projectId = proj.id;
+        finalizePendingNewProject(proj.id);
       } catch (err) {
-        console.error('Failed to flush draft project', err);
+        console.error('Failed to create project', err);
         return;
       }
     }
 
-    // 再确保有真实 thread（草稿 thread 则 flush），全程只用真实 id。
-    let threadId: string;
-    try {
-      threadId = await ensureActiveThread(projectId);
-    } catch (err) {
-      console.error('Failed to ensure active thread', err);
-      return;
-    }
-
+    const threadId = await ensureActiveThread(projectId);
     await createRun(threadId, payload);
     setText('');
   };
 
-  const placeholderSet = PLACEHOLDERS[interactionMode];
-  const placeholder =
-    status === 'needs_input'
-      ? '等待你在上方回复…'
-      : hasOutline
-        ? placeholderSet.filled
-        : placeholderSet.empty;
+  const slides = activeProjectId && activeProjectId !== 'new-pending' ? slidesByProjectId[activeProjectId] || [] : [];
+  const hasSlides = slides.length > 0;
+  const derivedMode = interactionMode;
+  const placeholder = PLACEHOLDERS[derivedMode]?.[hasSlides ? 'filled' : 'empty'] || '';
 
   return (
     <div className="p-4 border-t border-border bg-background">
-      <ModeSwitcher
-        interactionMode={interactionMode}
-        subMode={subMode}
-        onModeChange={(m) => setInteractionMode(m)}
-        onSubModeChange={setSubMode}
-        disabled={disabled}
-      />
       <div className="relative bg-surface rounded-lg border border-border shadow-sm focus-within:border-mode-normal focus-within:ring-1 focus-within:ring-mode-normal transition-all">
         <textarea
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit();
-            }
-          }}
+          onKeyDown={handleKeyDown}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
           placeholder={placeholder}
           disabled={disabled}
           className="w-full bg-transparent resize-none p-3 max-h-32 min-h-[60px] text-sm text-text-900 placeholder:text-text-400 focus:outline-none disabled:opacity-50"
           rows={2}
         />
         <div className="flex items-center justify-between px-3 pb-2">
-          <div className="flex gap-2">
-            <span className="text-[10px] text-text-400 bg-background px-1.5 py-0.5 rounded uppercase">{interactionMode}</span>
-            {interactionMode === 'page' && (
-              <span className="text-[10px] text-text-400 bg-background px-1.5 py-0.5 rounded uppercase">Page {currentPage + 1}</span>
-            )}
-          </div>
+          <ModeSwitcher 
+            interactionMode={interactionMode} 
+            subMode={subMode} 
+            onModeChange={(m) => useComposerStore.getState().setInteractionMode(m)} 
+            onSubModeChange={(m) => useComposerStore.getState().setSubMode(m)} 
+          />
           <button
             onClick={handleSubmit}
             disabled={!text.trim() || disabled}
-            aria-label="发送"
             className="p-1.5 bg-mode-normal text-white rounded-md disabled:opacity-50 disabled:bg-text-400 hover:opacity-90 transition-opacity"
           >
             <Send className="w-4 h-4" />
           </button>
         </div>
       </div>
-      <div className="mt-2 text-center text-xs text-text-400">
-        行首输入 <kbd className="mx-1 px-1 rounded bg-black/5 font-sans border border-border">/current</kbd>
-        <kbd className="mx-1 px-1 rounded bg-black/5 font-sans border border-border">/page</kbd>
-        <kbd className="mx-1 px-1 rounded bg-black/5 font-sans border border-border">/overview</kbd> 等命令交由后端解析
+      <div className="mt-2 flex items-center justify-between">
+        <div className="text-center text-xs text-text-400">
+          行首输入 <kbd className="mx-1 px-1 rounded bg-black/5 font-sans border border-border">/current</kbd>
+          <kbd className="mx-1 px-1 rounded bg-black/5 font-sans border border-border">/page</kbd>
+          <kbd className="mx-1 px-1 rounded bg-black/5 font-sans border border-border">/overview</kbd> 等命令交由后端解析
+        </div>
+        <div className="text-xs text-text-400">
+          <kbd className="px-1 rounded bg-black/5 font-sans border border-border">{submitShortcutLabel()}</kbd> 发送
+        </div>
       </div>
     </div>
   );

@@ -17,8 +17,8 @@ describe('App Level Interactions', () => {
   beforeEach(() => {
     useProjectStore.setState({
         projects: [
-          { id: 'p1', title: 'Project 1', theme: 'default', status: 'draft', created_at: 0, updated_at: 0 },
-          { id: 'p2', title: 'Project 2', theme: 'default', status: 'draft', created_at: 0, updated_at: 0 }
+          { id: 'p1', title: 'Project 1', work_dir: '', theme: 'default', status: 'draft', design_path: '', created_at: 0, updated_at: 0 },
+          { id: 'p2', title: 'Project 2', work_dir: '', theme: 'default', status: 'draft', design_path: '', created_at: 0, updated_at: 0 }
         ],
         activeProjectId: 'p1',
         slidesByProjectId: {
@@ -31,7 +31,7 @@ describe('App Level Interactions', () => {
     });
 
     useThreadStore.setState({
-      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'Thread', created_at: 0, updated_at: 0 }] },
+      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'Thread', status: 'active', history_path: '', created_at: 0, updated_at: 0 }] },
       openThreadIdsByProjectId: { p1: ['t1'] },
       activeThreadIdByProjectId: { p1: 't1' },
     });
@@ -63,7 +63,7 @@ describe('App Level Interactions', () => {
   it('switches current page', async () => {
     await act(async () => {
       useProjectStore.setState({
-        projects: [{ id: 'p1', title: 'Project 1', theme: 'default', status: 'draft', created_at: 0, updated_at: 0 }],
+        projects: [{ id: 'p1', title: 'Project 1', work_dir: '', theme: 'default', status: 'draft', design_path: '', created_at: 0, updated_at: 0 }],
         activeProjectId: 'p1',
         slidesByProjectId: {
           'p1': [

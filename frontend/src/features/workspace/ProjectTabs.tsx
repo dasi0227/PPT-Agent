@@ -1,30 +1,27 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { cn } from '../../lib/utils';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Loader2, Plus, MoreHorizontal } from 'lucide-react';
+import { PanelToggleButtons } from './PanelToggleButtons';
 
 export const ProjectTabs: React.FC = () => {
-  const { projects, activeProjectId, selectProject, loadingProjects, loadProjects, createDraftProject, deleteProject } = useProjectStore();
+  const { projects, activeProjectId, selectProject, loadingProjects, loadProjects } = useProjectStore();
   const { status: runStatus } = useActiveSession();
 
-  useEffect(() => {
+  React.useEffect(() => {
     loadProjects();
   }, [loadProjects]);
 
-  const handleCreate = () => {
-    createDraftProject();
-  };
-
-  const handleRemove = async (proj: { id: string; title: string; draft?: boolean }) => {
-    // 草稿：静默丢弃；真实：二次确认（删历史不可逆）。
-    if (!proj.draft && !window.confirm(`删除演示文稿「${proj.title || 'Untitled'}」？此操作不可撤销。`)) return;
-    try {
-      await deleteProject(proj.id);
-    } catch (err) {
-      console.error('Failed to delete project', err);
+  const openProjectIds = useProjectStore((s) => s.openProjectIds);
+  
+  // Combine open projects and pending
+  const displayProjects = openProjectIds.map(id => {
+    if (id === 'new-pending') {
+      return { id, title: '新建中…' };
     }
-  };
+    return projects.find(p => p.id === id) || { id, title: 'Loading...' };
+  });
 
   return (
     <div className="flex items-center h-12 bg-background border-b border-border-strong px-2 overflow-x-auto select-none">
@@ -32,12 +29,12 @@ export const ProjectTabs: React.FC = () => {
         <span className="w-5 h-5 bg-mode-normal rounded-sm mr-2 inline-block" />
         M7 Studio
       </div>
-      
-      {loadingProjects && projects.length === 0 ? (
+
+      {loadingProjects && displayProjects.length === 0 ? (
         <Loader2 className="w-4 h-4 animate-spin text-text-400" />
       ) : (
-        <div className="flex items-end h-full gap-1">
-          {projects.map((proj) => {
+        <div className="flex items-end h-full gap-1 flex-1">
+          {displayProjects.map((proj) => {
             const isActive = proj.id === activeProjectId;
             return (
               <div
@@ -51,34 +48,44 @@ export const ProjectTabs: React.FC = () => {
                 )}
               >
                 <span className="truncate max-w-[160px]">{proj.title || 'Untitled Project'}</span>
-                {proj.draft && (
-                  <span className="text-[9px] uppercase text-text-400 border border-border rounded px-1 py-px">草稿</span>
-                )}
+                
                 {isActive && runStatus === 'running' && (
                   <span className="inline-block w-2 h-2 rounded-full bg-mode-normal animate-pulse" />
                 )}
                 {isActive && runStatus === 'needs_input' && (
                   <span className="inline-block w-2 h-2 rounded-full bg-mode-ask animate-pulse" />
                 )}
-                <button
-                  type="button"
-                  aria-label={`删除 ${proj.title || 'Untitled'}`}
-                  onClick={(e) => { e.stopPropagation(); handleRemove(proj); }}
-                  className="p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+                
+                {proj.id !== 'new-pending' && (
+                  <button
+                    type="button"
+                    aria-label={`更多选项`}
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      // M5 ProjectMenu Trigger placeholder
+                      document.dispatchEvent(new CustomEvent('open-project-menu', { detail: proj.id })); 
+                    }}
+                    className="p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <MoreHorizontal className="w-4 h-4 text-text-400" />
+                  </button>
+                )}
               </div>
             );
           })}
-          
-          <button 
-            onClick={handleCreate}
+
+          <button
+            onClick={() => {
+              // trigger ProjectPickerModal (M5)
+              document.dispatchEvent(new CustomEvent('open-project-picker'));
+            }}
             className="h-10 px-3 ml-1 rounded-t-md text-text-600 hover:bg-black/5 hover:text-text-900 transition-colors flex items-center"
-            title="Create new project"
+            title="新建或打开项目"
           >
             <Plus className="w-4 h-4" />
           </button>
+
+          <PanelToggleButtons />
         </div>
       )}
     </div>

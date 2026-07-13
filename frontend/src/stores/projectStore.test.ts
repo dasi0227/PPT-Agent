@@ -8,8 +8,9 @@ vi.mock('../api/projects', () => ({
     create: async (topic: string, brief: string, slide_count: number, language: string) => {
       calls.push({ fn: 'create', args: [topic, brief, slide_count, language] });
       const n = calls.filter((c) => c.fn === 'create').length;
-      return { id: `realP_${n}`, title: topic, theme: 'swiss-modern', status: 'draft', created_at: 0, updated_at: 0 };
+      return { id: `realP_${n}`, title: topic, work_dir: '', theme: 'swiss-modern', status: 'draft', design_path: '', created_at: 0, updated_at: 0 };
     },
+    patch: async (id: string, patch: any) => { calls.push({ fn: 'patch', args: [id, patch] }); },
     get: async (id: string) => ({ id, title: '', theme: '', status: '', created_at: 0, updated_at: 0 }),
     getSlides: async (id: string) => { calls.push({ fn: 'getSlides', args: [id] }); return []; },
     delete: async (id: string) => { calls.push({ fn: 'delete', args: [id] }); },
@@ -19,83 +20,82 @@ vi.mock('../api/projects', () => ({
 import { useProjectStore } from './projectStore';
 import { useThreadStore } from './threadStore';
 import { useRunStore } from './runStore';
-import { isDraftId } from '../lib/draft';
+import { projectsApi } from '../api/projects';
 
 function reset() {
   calls.length = 0;
-  useProjectStore.setState({ projects: [], activeProjectId: null, slidesByProjectId: {}, loadingProjects: false });
-  useThreadStore.setState({ threadsByProjectId: {}, draftThreadsByProjectId: {}, openThreadIdsByProjectId: {}, activeThreadIdByProjectId: {} });
+  useProjectStore.setState({ projects: [], openProjectIds: [], activeProjectId: null, pendingNewProject: false, slidesByProjectId: {}, loadingProjects: false });
+  useThreadStore.setState({ threadsByProjectId: {}, openThreadIdsByProjectId: {}, activeThreadIdByProjectId: {} });
   useRunStore.setState({ sessions: {} });
 }
 
-describe('projectStore soft-create', () => {
+describe('projectStore v6', () => {
   beforeEach(reset);
 
-  it('createDraftProject makes a front-only draft, selected, no POST', () => {
-    const id = useProjectStore.getState().createDraftProject();
-    expect(isDraftId(id)).toBe(true);
+  it('loadProjects keeps openProjectIds valid', async () => {
+    useProjectStore.setState({ openProjectIds: ['p1', 'missing'], activeProjectId: 'missing' });
+    const originalList = projectsApi.list;
+    projectsApi.list = async () => [
+      { id: 'p1', title: 'P1', work_dir: '', theme: '', status: 'draft', design_path: '', created_at: 0, updated_at: 0 } as any
+    ];
+    await useProjectStore.getState().loadProjects();
+    projectsApi.list = originalList;
+    const st = useProjectStore.getState();
+    expect(st.openProjectIds).toEqual(['p1']);
+    expect(st.activeProjectId).toBe('p1');
+  });
+
+  it('startPendingNewProject creates a sentinel id without POSTing', () => {
+    useProjectStore.getState().startPendingNewProject();
     expect(calls.filter((c) => c.fn === 'create')).toHaveLength(0);
-    expect(calls.filter((c) => c.fn === 'getSlides')).toHaveLength(0); // 草稿不拉数据
     const st = useProjectStore.getState();
-    expect(st.projects.find((p) => p.id === id)?.draft).toBe(true);
-    expect(st.activeProjectId).toBe(id);
+    expect(st.pendingNewProject).toBe(true);
+    expect(st.activeProjectId).toBe('new-pending');
+    expect(st.openProjectIds).toContain('new-pending');
   });
 
-  it('switching away from an unused draft discards it (zero residue)', () => {
-    useProjectStore.setState({ projects: [{ id: 'realP', title: 'Real', theme: '', status: '', created_at: 0, updated_at: 0 }] });
-    const draftId = useProjectStore.getState().createDraftProject();
-    useProjectStore.getState().selectProject('realP');
+  it('cancelPendingNewProject cleans up new-pending', () => {
+    useProjectStore.getState().startPendingNewProject();
+    useProjectStore.getState().cancelPendingNewProject();
     const st = useProjectStore.getState();
-    expect(st.projects.find((p) => p.id === draftId)).toBeUndefined();
-    expect(st.activeProjectId).toBe('realP');
-    expect(calls.filter((c) => c.fn === 'create')).toHaveLength(0);
+    expect(st.pendingNewProject).toBe(false);
+    expect(st.openProjectIds).not.toContain('new-pending');
+    expect(st.activeProjectId).toBeNull();
   });
 
-  it('flushProject POSTs once and rebinds draft id → real id', async () => {
-    const store = useProjectStore.getState();
-    const tmp = store.createDraftProject();
-    // 该草稿下先建一个草稿 thread。
-    useThreadStore.getState().createDraftThread(tmp, 'X');
-
-    const realId = await store.flushProject(tmp, { topic: '主题', slide_count: 8, language: 'zh' });
-    expect(isDraftId(realId)).toBe(false);
-    expect(calls.filter((c) => c.fn === 'create')).toHaveLength(1);
-    expect(calls.find((c) => c.fn === 'create')!.args).toEqual(['主题', '', 8, 'zh']);
-
+  it('finalizePendingNewProject replaces new-pending with real id', () => {
+    useProjectStore.getState().startPendingNewProject();
+    useProjectStore.getState().finalizePendingNewProject('realP_1');
     const st = useProjectStore.getState();
-    expect(st.projects.find((p) => p.id === tmp)).toBeUndefined();
-    expect(st.projects.find((p) => p.id === realId)?.draft).toBeFalsy();
-    expect(st.activeProjectId).toBe(realId);
-    // thread 归属键改绑。
-    expect(useThreadStore.getState().draftThreadsByProjectId[realId]).toHaveLength(1);
-    expect(useThreadStore.getState().draftThreadsByProjectId[tmp]).toBeUndefined();
+    expect(st.pendingNewProject).toBe(false);
+    expect(st.openProjectIds).toContain('realP_1');
+    expect(st.openProjectIds).not.toContain('new-pending');
+    expect(st.activeProjectId).toBe('realP_1');
   });
 
-  it('flushProject dedupes concurrent calls', async () => {
-    const store = useProjectStore.getState();
-    const tmp = store.createDraftProject();
-    const [a, b] = await Promise.all([
-      store.flushProject(tmp, { topic: 'T' }),
-      store.flushProject(tmp, { topic: 'T' }),
-    ]);
-    expect(a).toBe(b);
-    expect(calls.filter((c) => c.fn === 'create')).toHaveLength(1);
+  it('renameProject PATCHes and updates in-place', async () => {
+    useProjectStore.setState({
+      projects: [{ id: 'A', title: 'Old', work_dir: '', theme: '', status: 'draft', design_path: '', created_at: 0, updated_at: 0 } as any]
+    });
+    await useProjectStore.getState().renameProject('A', 'New');
+    expect(calls.find(c => c.fn === 'patch')).toBeTruthy();
+    expect(useProjectStore.getState().projects[0].title).toBe('New');
   });
 
-  it('deleteProject on draft discards without DELETE', async () => {
-    const store = useProjectStore.getState();
-    const tmp = store.createDraftProject();
-    await store.deleteProject(tmp);
+  it('deleteProject on new-pending cancels it', async () => {
+    useProjectStore.getState().startPendingNewProject();
+    await useProjectStore.getState().deleteProject('new-pending');
     expect(calls.filter((c) => c.fn === 'delete')).toHaveLength(0);
-    expect(useProjectStore.getState().projects.find((p) => p.id === tmp)).toBeUndefined();
+    expect(useProjectStore.getState().activeProjectId).toBeNull();
   });
 
-  it('deleteProject on real project DELETEs and cleans up, switching neighbor', async () => {
+  it('deleteProject DELETEs and cleans up, switching neighbor', async () => {
     useProjectStore.setState({
       projects: [
-        { id: 'A', title: 'A', theme: '', status: '', created_at: 0, updated_at: 0 },
-        { id: 'B', title: 'B', theme: '', status: '', created_at: 0, updated_at: 0 },
+        { id: 'A', title: 'A', work_dir: '', theme: '', status: 'draft', design_path: '', created_at: 0, updated_at: 0 } as any,
+        { id: 'B', title: 'B', work_dir: '', theme: '', status: 'draft', design_path: '', created_at: 0, updated_at: 0 } as any,
       ],
+      openProjectIds: ['A', 'B'],
       activeProjectId: 'B',
       slidesByProjectId: { B: [] },
     });
@@ -103,6 +103,7 @@ describe('projectStore soft-create', () => {
     expect(calls.filter((c) => c.fn === 'delete')).toHaveLength(1);
     const st = useProjectStore.getState();
     expect(st.projects.map((p) => p.id)).toEqual(['A']);
+    expect(st.openProjectIds).toEqual(['A']);
     expect(st.activeProjectId).toBe('A');
     expect(st.slidesByProjectId['B']).toBeUndefined();
   });

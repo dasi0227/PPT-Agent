@@ -3,14 +3,13 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useRunStore, RunSession, IDLE_SESSION } from '../../stores/runStore';
 import { threadsApi } from '../../api/threads';
-import { isDraftId } from '../../lib/draft';
 import { hydrateFromHistory, HistoryEntry } from './historyHydrator';
 
 // 当前聚焦 project 的活跃 threadId（可能为 null）。
 export function useActiveThreadId(): string | null {
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const activeThreadIdByProjectId = useThreadStore((s) => s.activeThreadIdByProjectId);
-  if (!activeProjectId) return null;
+  if (!activeProjectId || activeProjectId === 'new-pending') return null;
   return activeThreadIdByProjectId[activeProjectId] ?? null;
 }
 
@@ -21,7 +20,7 @@ export function useActiveSession(): RunSession {
   const sessions = useRunStore((s) => s.sessions);
 
   useEffect(() => {
-    if (!threadId || isDraftId(threadId)) return;
+    if (!threadId || threadId === 'new-pending') return;
     // 空态才 replay：运行时 in-memory 优先，防止刷新覆盖已有 SSE 增量。
     const current = useRunStore.getState().sessions[threadId];
     if (current && current.timelineItems.length > 0) return;

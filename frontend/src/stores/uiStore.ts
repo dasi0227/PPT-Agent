@@ -1,23 +1,32 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface UIState {
-  rightPanelOpen: boolean;
-  leftPanelCollapsed: boolean;
+  leftPanelHidden: boolean;
+  rightPanelHidden: boolean;
   themeDensity: 'comfortable' | 'compact';
   activeModeColor: string;
 
-  toggleRightPanel: () => void;
   toggleLeftPanel: () => void;
+  toggleRightPanel: () => void;
   setModeColor: (color: string) => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
-  rightPanelOpen: true,
-  leftPanelCollapsed: false,
-  themeDensity: 'comfortable',
-  activeModeColor: 'normal',
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
+      leftPanelHidden: false,
+      rightPanelHidden: false,
+      themeDensity: 'comfortable',
+      activeModeColor: 'normal',
 
-  toggleRightPanel: () => set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
-  toggleLeftPanel: () => set((state) => ({ leftPanelCollapsed: !state.leftPanelCollapsed })),
-  setModeColor: (color) => set({ activeModeColor: color })
-}));
+      toggleLeftPanel: () => set((state) => ({ leftPanelHidden: !state.leftPanelHidden })),
+      toggleRightPanel: () => set((state) => ({ rightPanelHidden: !state.rightPanelHidden })),
+      setModeColor: (color) => set({ activeModeColor: color })
+    }),
+    {
+      name: 'ppt-agent-ui-v6',
+      partialize: (s) => ({ leftPanelHidden: s.leftPanelHidden, rightPanelHidden: s.rightPanelHidden })
+    }
+  )
+);

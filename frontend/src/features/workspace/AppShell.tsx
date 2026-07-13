@@ -4,40 +4,46 @@ import { DeckNavigator } from '../deck/DeckNavigator';
 import { PreviewWorkspace } from '../viewer/PreviewWorkspace';
 import { AgentPanel } from '../agent/AgentPanel';
 import { useUIStore } from '../../stores/uiStore';
-import { cn } from '../../lib/utils';
+import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
+import { WorkspaceEmptyState } from './WorkspaceEmptyState';
+import { useProjectStore } from '../../stores/projectStore';
 
 export const AppShell: React.FC = () => {
-  const { leftPanelCollapsed, rightPanelOpen } = useUIStore();
+  const { leftPanelHidden, rightPanelHidden } = useUIStore();
+  const { activeProjectId } = useProjectStore();
 
   return (
     <div className="flex flex-col h-screen w-screen bg-background text-text-900 overflow-hidden font-sans">
       <ProjectTabs />
       
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Panel */}
-        <aside 
-          className={cn(
-            "flex-shrink-0 border-r border-border bg-surface transition-all duration-300 flex flex-col",
-            leftPanelCollapsed ? "w-0 opacity-0" : "w-[280px] opacity-100"
-          )}
-        >
-          <DeckNavigator />
-        </aside>
-
-        {/* Center Panel */}
-        <main className="flex-1 min-w-0 bg-background flex flex-col">
-          <PreviewWorkspace />
-        </main>
-
-        {/* Right Panel */}
-        <aside 
-          className={cn(
-            "flex-shrink-0 border-l border-border bg-surface transition-all duration-300 flex flex-col",
-            rightPanelOpen ? "w-[380px] opacity-100" : "w-0 opacity-0"
-          )}
-        >
-          <AgentPanel />
-        </aside>
+        {activeProjectId === null ? (
+          <WorkspaceEmptyState />
+        ) : (
+          <PanelGroup direction="horizontal" autoSaveId="workspace-shell-v6">
+            {!leftPanelHidden && (
+              <>
+                <Panel id="left" defaultSize={22} minSize={16} maxSize={32} collapsible={false} className="bg-surface border-r border-border">
+                  <DeckNavigator />
+                </Panel>
+                <PanelResizeHandle className="w-[3px] bg-border hover:bg-mode-normal transition-colors" />
+              </>
+            )}
+            
+            <Panel id="center" minSize={30} className="bg-background flex flex-col">
+              <PreviewWorkspace />
+            </Panel>
+            
+            {!rightPanelHidden && (
+              <>
+                <PanelResizeHandle className="w-[3px] bg-border hover:bg-mode-normal transition-colors" />
+                <Panel id="right" defaultSize={28} minSize={20} maxSize={40} collapsible={false} className="bg-surface border-l border-border">
+                  <AgentPanel />
+                </Panel>
+              </>
+            )}
+          </PanelGroup>
+        )}
       </div>
     </div>
   );

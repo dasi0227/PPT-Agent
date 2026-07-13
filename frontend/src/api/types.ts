@@ -1,11 +1,12 @@
 export interface Project {
   id: string;
   title: string;
+  work_dir: string;
   theme: string;
-  status: string;
+  status: 'draft' | 'generating' | 'ready';
+  design_path: string;
   created_at: number;
   updated_at: number;
-  draft?: boolean;   // 软创建：仅前端草稿，未 flush 落库（不发 POST /projects）
 }
 
 export interface SlideContent {
@@ -36,12 +37,11 @@ export interface Slide {
 export interface Thread {
   id: string;
   project_id: string;
-  title?: string;
-  history_path?: string;
-  status?: string;
+  title: string;
+  status: string;
+  history_path: string;
   created_at: number;
   updated_at: number;
-  draft?: boolean;   // 软创建：仅前端草稿，未 flush 落库（不发 POST .../threads）
 }
 
 export interface Run {

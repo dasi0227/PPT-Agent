@@ -10,7 +10,7 @@ describe('DeckNavigator', () => {
     vi.restoreAllMocks();
     useDeckStore.setState({ currentPage: 0 });
     useProjectStore.setState({
-      projects: [{ id: 'p1', title: '演示项目', theme: 'swiss', status: 'draft', created_at: 0, updated_at: 0 }],
+      projects: [{ id: 'p1', title: '演示项目', work_dir: '', theme: 'swiss', status: 'draft', design_path: '', created_at: 0, updated_at: 0 }],
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [

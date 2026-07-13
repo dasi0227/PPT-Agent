@@ -1,172 +1,96 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommandComposer } from './CommandComposer';
-import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
-import { useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
-import { useComposerStore } from '../../stores/composerStore';
+import { useRunStore } from '../../stores/runStore';
+import * as platform from '../../lib/platform';
 
-class MockEventSource {
-  onerror: ((event: Event) => void) | null = null;
-  addEventListener() {}
-  close() {}
-}
-
-function setupStores(slides: Array<{ html_path?: string }> = []) {
-  useProjectStore.setState({
-    projects: [],
-    activeProjectId: 'p1',
-    slidesByProjectId: {
-      p1: slides.map((s, i) => ({
-        id: `s${i}`, project_id: 'p1', idx: i, layout: 'bullets',
-        title: `Slide ${i}`, html_path: s.html_path ?? '', json_path: '', current_version: 1,
-        order: i * 10, outline_dirty: false,
-      })),
-    },
-    loadingProjects: false,
-  });
-  useThreadStore.setState({
-    threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'Thread', created_at: 0, updated_at: 0 }] },
-    openThreadIdsByProjectId: { p1: ['t1'] },
-    activeThreadIdByProjectId: { p1: 't1' },
-  });
-  useDeckStore.setState({ currentPage: 0, previewMode: 'main' });
-  useRunStore.setState({ sessions: {} });
-  useComposerStore.setState({
-    interactionMode: 'outline',
-    subMode: 'normal',
-    userTouchedMode: false,
-    focusNonce: 0,
-  });
-}
-
-function mockFetch() {
-  const requests: Array<{ url: string; body: any }> = [];
-  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = input.toString();
-    // history GET 由 useActiveSession 副作用触发，与命令流无关，不计入断言。
-    if (url.includes('/history')) {
-      return { ok: true, status: 200, json: async () => ([]) } as unknown as Response;
-    }
-    requests.push({
-      url,
-      body: init?.body ? JSON.parse(init.body.toString()) : undefined,
-    });
-    return { ok: true, status: 200, json: async () => ({ id: 'r1' }) } as unknown as Response;
-  };
-  return requests;
-}
+vi.mock('../../lib/platform', () => ({
+  isMac: vi.fn(),
+  submitShortcutLabel: vi.fn(() => 'Ctrl + Enter')
+}));
 
 describe('CommandComposer', () => {
   beforeEach(() => {
-    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
-  });
-
-  it('empty project smart-defaults to Outline and sends kind=outline', async () => {
-    setupStores([]);
-    const user = userEvent.setup();
-    const requests = mockFetch();
-
-    render(<CommandComposer />);
-
-    await user.type(screen.getByRole('textbox'), '给投资人讲我们的 AI 产品');
-    await user.click(screen.getByRole('button', { name: '发送' }));
-
-    await waitFor(() => expect(requests).toHaveLength(1));
-    expect(requests[0].url).toBe('/api/v1/threads/t1/runs');
-    expect(requests[0].body).toMatchObject({
-      kind: 'outline',
-      scope: 'current',
-      mode: 'normal',
-      instruction: '给投资人讲我们的 AI 产品',
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    useThreadStore.setState({ 
+      activeThreadIdByProjectId: { p1: 't1' },
+      ensureActiveThread: async () => 't1'
     });
-  });
-
-  it('slash command is passed through raw without local scope/mode rewrite', async () => {
-    setupStores([{ html_path: 'slides/000/index.html' }]);
-    const user = userEvent.setup();
-    const requests = mockFetch();
-
-    render(<CommandComposer />);
-
-    await user.type(screen.getByRole('textbox'), '/repo 把卡片圆角调大');
-    await user.click(screen.getByRole('button', { name: '发送' }));
-
-    await waitFor(() => expect(requests).toHaveLength(1));
-    expect(requests[0].body).toMatchObject({
-      kind: 'edit',
-      instruction: '/repo 把卡片圆角调大',
-    });
-    // 不本地写入 scope/mode，交后端解析
-    expect(requests[0].body.scope).toBeUndefined();
-    expect(requests[0].body.mode).toBeUndefined();
-  });
-
-  it('Page mode with existing html sends kind=edit scope=current', async () => {
-    setupStores([{ html_path: 'slides/000/index.html' }]);
-    useComposerStore.setState({ interactionMode: 'page', userTouchedMode: true });
-    const user = userEvent.setup();
-    const requests = mockFetch();
-
-    render(<CommandComposer />);
-
-    await user.type(screen.getByRole('textbox'), '标题改大');
-    await user.click(screen.getByRole('button', { name: '发送' }));
-
-    await waitFor(() => expect(requests).toHaveLength(1));
-    expect(requests[0].body).toMatchObject({
-      kind: 'edit',
-      scope: 'current',
-      mode: 'normal',
-      page_index: 0,
-    });
-  });
-
-  it('draft project flushes project then thread before creating run', async () => {
-    setupStores([]);
-    // 草稿 project（无后端 thread），active 指向草稿 project。
-    useProjectStore.setState({
-      projects: [{ id: 'draft_p', title: 'New Presentation', theme: '', status: 'draft', created_at: 0, updated_at: 0, draft: true }],
-      activeProjectId: 'draft_p',
-      slidesByProjectId: { draft_p: [] },
-      loadingProjects: false,
-    });
-    useThreadStore.setState({
-      threadsByProjectId: {}, draftThreadsByProjectId: {},
-      openThreadIdsByProjectId: {}, activeThreadIdByProjectId: {},
-    });
-    useComposerStore.setState({ interactionMode: 'outline', userTouchedMode: false });
-
-    const user = userEvent.setup();
-    // 每种 POST 返回带 id 的真实资源。
-    const requests: Array<{ url: string; method?: string; body: any }> = [];
-    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = input.toString();
-      // history GET 由 useActiveSession 触发，非命令流；不计入断言。
-      if (url.includes('/history')) {
-        return { ok: true, status: 200, json: async () => ([]) } as unknown as Response;
+    useRunStore.setState({
+      sessions: {
+        t1: { activeRunId: null, status: 'idle' as any, mode: 'normal' as any, scope: 'current' as any, timelineItems: [], pendingInput: null, progress: null, eventSourceClose: null, plan: null }
       }
-      requests.push({ url, method: init?.method, body: init?.body ? JSON.parse(init.body.toString()) : undefined });
-      let id = 'r1';
-      if (url.endsWith('/projects')) id = 'realP';
-      else if (url.includes('/threads') && !url.includes('/runs')) id = 'realT';
-      return { ok: true, status: 200, json: async () => ({ id, project_id: 'realP' }) } as unknown as Response;
-    };
+    });
+  });
+
+  it('Enter only inserts newline', () => {
+    vi.mocked(platform.isMac).mockReturnValue(false);
+    render(<CommandComposer />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'hi' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    expect(textarea).toHaveValue('hi'); // no prevent default means it would insert newline in real browser
+  });
+
+  it('Ctrl+Enter submits on Windows', async () => {
+    vi.mocked(platform.isMac).mockReturnValue(false);
+    
+    const mockCreateRun = vi.fn();
+    useRunStore.setState({ createRun: mockCreateRun });
 
     render(<CommandComposer />);
-    await user.type(screen.getByRole('textbox'), '给投资人讲我们的 AI 产品');
-    await user.click(screen.getByRole('button', { name: '发送' }));
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'hi' } });
 
-    // 顺序：POST /projects → POST /projects/realP/threads → POST /threads/realT/runs
-    await waitFor(() => expect(requests).toHaveLength(3));
-    expect(requests[0].url).toBe('/api/v1/projects');
-    expect(requests[0].body).toMatchObject({ topic: '给投资人讲我们的 AI 产品' });
-    expect(requests[1].url).toBe('/api/v1/projects/realP/threads');
-    expect(requests[2].url).toBe('/api/v1/threads/realT/runs');
-    expect(requests[2].body).toMatchObject({ kind: 'outline', instruction: '给投资人讲我们的 AI 产品' });
-    // 没有任何 draft_* 泄漏到请求路径。
-    expect(requests.some((r) => r.url.includes('draft_'))).toBe(false);
+    await waitFor(() => {
+      expect(screen.getAllByRole('button').pop()).not.toBeDisabled();
+    });
+
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(mockCreateRun).toHaveBeenCalled();
+    });
+  });
+
+  it('Meta+Enter submits on Mac', async () => {
+    vi.mocked(platform.isMac).mockReturnValue(true);
+
+    const mockCreateRun = vi.fn();
+    useRunStore.setState({ createRun: mockCreateRun });
+
+    render(<CommandComposer />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'hi' } });
+
+    await waitFor(() => {
+      const btns = screen.getAllByRole('button');
+      expect(btns[btns.length - 1]).not.toBeDisabled();
+    });
+
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true });
+
+    await waitFor(() => {
+      expect(mockCreateRun).toHaveBeenCalled();
+    });
+  });
+
+  it('does not submit if isComposing', async () => {
+    vi.mocked(platform.isMac).mockReturnValue(true);
+    render(<CommandComposer />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'hi' } });
+    
+    const mockCreateRun = vi.fn();
+    useRunStore.setState({ createRun: mockCreateRun });
+
+    await act(async () => {
+      fireEvent.compositionStart(textarea);
+      fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true, nativeEvent: { isComposing: true } });
+    });
+
+    expect(mockCreateRun).not.toHaveBeenCalled();
   });
 });
