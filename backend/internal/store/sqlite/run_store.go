@@ -48,6 +48,22 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
 	return nil
 }
 
+func (s *Store) UpdateProjectTitle(ctx context.Context, id, title string, updatedAt int64) error {
+	err := s.db.WithContext(ctx).Model(&projectPO{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"title":      title,
+		"updated_at": updatedAt,
+	}).Error
+	return mapErr(err)
+}
+
+func (s *Store) UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error {
+	err := s.db.WithContext(ctx).Model(&threadPO{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"title":      title,
+		"updated_at": updatedAt,
+	}).Error
+	return mapErr(err)
+}
+
 func (s *Store) CreateThread(ctx context.Context, m model.Thread) error {
 	return s.db.WithContext(ctx).Create(threadToPO(m)).Error
 }

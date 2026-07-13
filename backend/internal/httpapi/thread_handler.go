@@ -1,18 +1,50 @@
 package httpapi
 
 import (
-	"errors"
-	"net/http"
+        "errors"
+        "net/http"
+        "strings"
+        "unicode/utf8"
 
-	"github.com/gin-gonic/gin"
+        "github.com/gin-gonic/gin"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/run"
-	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+        "github.com/dasi0227/PPT-Agent/backend/internal/model"
+        "github.com/dasi0227/PPT-Agent/backend/internal/run"
+        "github.com/dasi0227/PPT-Agent/backend/internal/service"
 )
 
 type ThreadHandler struct {
-	svc *service.ThreadService
+        svc *service.ThreadService
+}
+
+type patchThreadRequest struct {
+        Title *string `json:"title"`
+}
+
+func (h *ThreadHandler) Patch(c *gin.Context) {
+        var req patchThreadRequest
+        if err := c.ShouldBindJSON(&req); err != nil {
+                AbortWithError(c, ErrBadRequest("invalid request body"))
+                return
+        }
+        if req.Title == nil {
+                AbortWithError(c, ErrBadRequest("no fields to update"))
+                return
+        }
+        title := strings.TrimSpace(*req.Title)
+        if title == "" || utf8.RuneCountInString(title) > 60 {
+                AbortWithError(c, ErrBadRequest("title length must be 1..60"))
+                return
+        }
+        t, err := h.svc.RenameThread(c.Request.Context(), c.Param("id"), title)
+        switch {
+        case err == nil:
+                c.JSON(http.StatusOK, toThreadResponse(t))
+        case errors.Is(err, run.ErrRunNotFound):
+                AbortWithError(c, ErrNotFound("thread not found"))
+        default:
+                AbortWithError(c, ErrInternal(err.Error()))
+        }
 }
 
 func NewThreadHandler(svc *service.ThreadService) *ThreadHandler {

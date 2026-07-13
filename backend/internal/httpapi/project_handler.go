@@ -3,6 +3,8 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -14,6 +16,40 @@ import (
 type ProjectHandler struct {
 	svc      *service.ProjectService
 	slideSvc *service.SlideService
+}
+
+type patchProjectRequest struct {
+        Title *string `json:"title"`
+}
+
+func (h *ProjectHandler) Patch(c *gin.Context) {
+        var req patchProjectRequest
+        if err := c.ShouldBindJSON(&req); err != nil {
+                AbortWithError(c, ErrBadRequest("invalid request body"))
+                return
+        }
+        if req.Title == nil {
+                AbortWithError(c, ErrBadRequest("no fields to update"))
+                return
+        }
+        title := strings.TrimSpace(*req.Title)
+        if title == "" || utf8.RuneCountInString(title) > 60 {
+                AbortWithError(c, ErrBadRequest("title length must be 1..60"))
+                return
+        }
+        p, err := h.svc.RenameProject(c.Request.Context(), c.Param("id"), title)
+        switch {
+        case err == nil:
+                c.JSON(http.StatusOK, toProjectResponse(p))
+        // using run.ErrRunNotFound might be wrong for project not found, let's use strings.Contains or just default err handling
+        // Wait, the spec says "case errors.Is(err, run.ErrRunNotFound):" but it's for project? Actually, run_store might return run.ErrRunNotFound.
+        // Let's just return what the spec says or use ErrNotFound directly if err != nil and is not found.
+        // Let's assume the spec code is literal.
+        case errors.Is(err, run.ErrRunNotFound):
+                AbortWithError(c, ErrNotFound("project not found"))
+        default:
+                AbortWithError(c, ErrInternal(err.Error()))
+        }
 }
 
 func NewProjectHandler(svc *service.ProjectService, slideSvc *service.SlideService) *ProjectHandler {

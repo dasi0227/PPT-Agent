@@ -58,6 +58,19 @@ func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p 
 	return th, nil
 }
 
+func (svc *ThreadService) RenameThread(ctx context.Context, id, title string) (model.Thread, error) {
+	t, err := svc.store.GetThread(ctx, id)
+	if err != nil {
+		return model.Thread{}, err
+	}
+	t.Title = title
+	t.UpdatedAt = svc.clock()
+	if err := svc.store.UpdateThreadTitle(ctx, t.ID, t.Title, t.UpdatedAt); err != nil {
+		return model.Thread{}, err
+	}
+	return t, nil
+}
+
 func (svc *ThreadService) ListThreads(ctx context.Context, projectID string) ([]model.Thread, error) {
 	if _, err := svc.store.GetProject(ctx, projectID); err != nil {
 		return nil, err

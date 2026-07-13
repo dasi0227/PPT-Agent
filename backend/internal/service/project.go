@@ -63,6 +63,19 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	return proj, nil
 }
 
+func (svc *ProjectService) RenameProject(ctx context.Context, id, title string) (model.Project, error) {
+	p, err := svc.store.GetProject(ctx, id)
+	if err != nil {
+		return model.Project{}, err
+	}
+	p.Title = title
+        p.UpdatedAt = svc.clock()
+        if err := svc.store.UpdateProjectTitle(ctx, p.ID, p.Title, p.UpdatedAt); err != nil {
+		return model.Project{}, err
+	}
+	return p, nil
+}
+
 func (svc *ProjectService) ListProjects(ctx context.Context) ([]model.Project, error) {
 	return svc.store.ListProjects(ctx)
 }

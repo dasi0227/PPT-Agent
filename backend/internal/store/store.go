@@ -12,14 +12,16 @@ type Store interface {
 	Health(ctx context.Context) error
 
 	CreateProject(ctx context.Context, p model.Project) error
-	GetProject(ctx context.Context, id string) (model.Project, error)
-	ListProjects(ctx context.Context) ([]model.Project, error)
-	DeleteProject(ctx context.Context, id string) error
+        GetProject(ctx context.Context, id string) (model.Project, error)
+        ListProjects(ctx context.Context) ([]model.Project, error)
+        DeleteProject(ctx context.Context, id string) error
+        UpdateProjectTitle(ctx context.Context, id, title string, updatedAt int64) error
 
-	CreateThread(ctx context.Context, t model.Thread) error
-	GetThread(ctx context.Context, id string) (model.Thread, error)
-	ListThreads(ctx context.Context, projectID string) ([]model.Thread, error)
-	DeleteThread(ctx context.Context, id string) error
+        CreateThread(ctx context.Context, t model.Thread) error
+        GetThread(ctx context.Context, id string) (model.Thread, error)
+        ListThreads(ctx context.Context, projectID string) ([]model.Thread, error)
+        DeleteThread(ctx context.Context, id string) error
+        UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error
 
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)

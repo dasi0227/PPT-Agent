@@ -102,9 +102,78 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 	}
 
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"kind":"outline","instruction":"生成大纲"}`)
-	if resp.Code != http.StatusCreated {
-		t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
-	}
+        if resp.Code != http.StatusCreated {
+                t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
+        }
+}
+
+func TestRenameProjectAndThread(t *testing.T) {
+        srv, _ := setupProjectThreadServer(t)
+
+        // Create Project
+        resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Test Project","language":"zh"}`)
+        if resp.Code != http.StatusCreated {
+                t.Fatalf("POST /projects want 201, got %d: %s", resp.Code, resp.Body.String())
+        }
+        var project map[string]any
+        json.Unmarshal(resp.Body.Bytes(), &project)
+        projectID, _ := project["id"].(string)
+
+        // Rename Project Success
+        resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID, `{"title":"New Project Title"}`)
+        if resp.Code != http.StatusOK {
+                t.Fatalf("PATCH /projects/%s want 200, got %d: %s", projectID, resp.Code, resp.Body.String())
+        }
+        var updatedProj map[string]any
+        json.Unmarshal(resp.Body.Bytes(), &updatedProj)
+        if updatedProj["title"] != "New Project Title" {
+                t.Fatalf("want title New Project Title, got %v", updatedProj["title"])
+        }
+
+        // Rename Project Empty Title
+        resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID, `{"title":"   "}`)
+        if resp.Code != http.StatusBadRequest {
+                t.Fatalf("PATCH empty title want 400, got %d", resp.Code)
+        }
+
+        // Rename Project Too Long Title
+        longTitle := strings.Repeat("a", 61)
+        resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID, `{"title":"`+longTitle+`"}`)
+        if resp.Code != http.StatusBadRequest {
+                t.Fatalf("PATCH long title want 400, got %d", resp.Code)
+        }
+
+        // Rename Project Not Found
+        resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/not-found", `{"title":"Title"}`)
+        if resp.Code != http.StatusNotFound {
+                t.Fatalf("PATCH not found want 404, got %d", resp.Code)
+        }
+
+        // Create Thread
+        resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/threads", `{"title":"Old Thread"}`)
+        if resp.Code != http.StatusCreated {
+                t.Fatalf("POST /threads want 201, got %d: %s", resp.Code, resp.Body.String())
+        }
+        var thread map[string]any
+        json.Unmarshal(resp.Body.Bytes(), &thread)
+        threadID, _ := thread["id"].(string)
+
+        // Rename Thread Success
+        resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/threads/"+threadID, `{"title":"New Thread Title"}`)
+        if resp.Code != http.StatusOK {
+                t.Fatalf("PATCH /threads/%s want 200, got %d: %s", threadID, resp.Code, resp.Body.String())
+        }
+        var updatedThread map[string]any
+        json.Unmarshal(resp.Body.Bytes(), &updatedThread)
+        if updatedThread["title"] != "New Thread Title" {
+                t.Fatalf("want title New Thread Title, got %v", updatedThread["title"])
+        }
+
+        // Rename Thread Empty Title
+        resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/threads/"+threadID, `{"title":""}`)
+        if resp.Code != http.StatusBadRequest {
+                t.Fatalf("PATCH empty title want 400, got %d", resp.Code)
+        }
 }
 
 func apiReq(t *testing.T, method, url, body string) *httptest.ResponseRecorder {

@@ -38,6 +38,7 @@ func (r *Router) register() {
 	// Project / Thread：API 契约入口，前端不需要绕过 HTTP 直接造数据。
 	v1.GET("/projects", r.project.List)
 	v1.POST("/projects", r.project.Create)
+	v1.PATCH("/projects/:id", r.project.Patch)
 	v1.GET("/projects/:id", r.project.Get)
 	v1.DELETE("/projects/:id", r.project.Delete)
 	v1.GET("/projects/:id/slides", r.project.ListSlides)
@@ -45,6 +46,7 @@ func (r *Router) register() {
 	v1.POST("/projects/:id/slides/reorder", r.project.ReorderSlides)
 	v1.GET("/projects/:id/threads", r.thread.List)
 	v1.POST("/projects/:id/threads", r.thread.Create)
+	v1.PATCH("/threads/:id", r.thread.Patch)
 	v1.GET("/threads/:id", r.thread.Get)
 	v1.DELETE("/threads/:id", r.thread.Delete)
 	v1.GET("/threads/:id/history", r.thread.History)
