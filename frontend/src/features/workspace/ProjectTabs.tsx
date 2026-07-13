@@ -4,6 +4,7 @@ import { useActiveSession } from '../agent/useActiveSession';
 import { cn } from '../../lib/utils';
 import { Loader2, Plus, MoreHorizontal } from 'lucide-react';
 import { PanelToggleButtons } from './PanelToggleButtons';
+import { ProjectMenu } from './ProjectMenu';
 
 export const ProjectTabs: React.FC = () => {
   const { projects, activeProjectId, selectProject, loadingProjects, loadProjects } = useProjectStore();
@@ -57,18 +58,16 @@ export const ProjectTabs: React.FC = () => {
                 )}
                 
                 {proj.id !== 'new-pending' && (
-                  <button
-                    type="button"
-                    aria-label={`更多选项`}
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      // M5 ProjectMenu Trigger placeholder
-                      document.dispatchEvent(new CustomEvent('open-project-menu', { detail: proj.id })); 
-                    }}
-                    className="p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <MoreHorizontal className="w-4 h-4 text-text-400" />
-                  </button>
+                  <ProjectMenu project={proj}>
+                    <button
+                      type="button"
+                      aria-label={`更多选项`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <MoreHorizontal className="w-4 h-4 text-text-400" />
+                    </button>
+                  </ProjectMenu>
                 )}
               </div>
             );

@@ -16,11 +16,7 @@ export const PreviewWorkspace: React.FC = () => {
   const runActive = session.status === 'running' || session.status === 'needs_input';
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  if (activeProjectId === 'new-pending') {
-    return <NewProjectHint />;
-  }
-
-  const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
+  const slides = useMemo(() => activeProjectId && activeProjectId !== 'new-pending' ? slidesByProjectId[activeProjectId] || [] : [], [activeProjectId, slidesByProjectId]);
   const hasSlides = slides.length > 0;
   const slidePaths = useMemo(() => slides.map((slide) => slide.html_path), [slides]);
   const currentPageRef = useRef(currentPage);
@@ -31,7 +27,7 @@ export const PreviewWorkspace: React.FC = () => {
   const showIframe = previewMode === 'main' && currentView === 'html' && currentHasHtml;
 
   const patchSlide = (slideId: string, patch: SlidePatch) => {
-    if (!activeProjectId) return;
+    if (!activeProjectId || activeProjectId === 'new-pending') return;
     slidesApi.patch(slideId, patch)
       .then(() => loadProjectSlides(activeProjectId))
       .catch((err) => console.error(err));
@@ -57,6 +53,10 @@ export const PreviewWorkspace: React.FC = () => {
       }, '*');
     }
   }, [activeProjectId, showIframe, slidePaths]);
+
+  if (activeProjectId === 'new-pending') {
+    return <NewProjectHint />;
+  }
 
   return (
     <div className="flex flex-col h-full bg-background relative">
