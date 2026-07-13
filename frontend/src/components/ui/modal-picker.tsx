@@ -1,0 +1,111 @@
+import * as React from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "./dialog"
+import { Search } from "lucide-react"
+
+interface PickerModalProps<T> {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  items: T[];
+  keyOf: (item: T) => string;
+  searchOf: (item: T) => string;
+  renderItem: (item: T) => React.ReactNode;
+  onPick: (item: T) => void;
+  emptyState?: React.ReactNode;
+}
+
+export function PickerModal<T>({
+  open,
+  onOpenChange,
+  title,
+  items,
+  keyOf,
+  searchOf,
+  renderItem,
+  onPick,
+  emptyState,
+}: PickerModalProps<T>) {
+  const [search, setSearch] = React.useState("");
+  const [activeIndex, setActiveIndex] = React.useState(0);
+
+  const filteredItems = React.useMemo(() => {
+    if (!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter(item => searchOf(item).toLowerCase().includes(q));
+  }, [items, search, searchOf]);
+
+  React.useEffect(() => {
+    if (open) {
+      setSearch("");
+      setActiveIndex(0);
+    }
+  }, [open]);
+
+  React.useEffect(() => {
+    setActiveIndex(0);
+  }, [search]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (filteredItems.length === 0) return;
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(prev => (prev + 1) % filteredItems.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(prev => (prev - 1 + filteredItems.length) % filteredItems.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      onPick(filteredItems[activeIndex]);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="p-0 gap-0 overflow-hidden flex flex-col max-h-[80vh]">
+        <DialogHeader className="p-4 pb-2 border-b border-border">
+          <DialogTitle>{title}</DialogTitle>
+          <div className="relative mt-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Search..."
+              className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:border-mode-normal focus:ring-1 focus:ring-mode-normal transition-all"
+              autoFocus
+            />
+          </div>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto p-2">
+          {filteredItems.length === 0 ? (
+            emptyState || <div className="p-4 text-center text-sm text-text-400">无结果</div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {filteredItems.map((item, index) => {
+                const isActive = index === activeIndex;
+                return (
+                  <button
+                    key={keyOf(item)}
+                    type="button"
+                    className={`text-left p-3 rounded-md transition-colors ${isActive ? 'bg-black/5 ring-1 ring-border-strong' : 'hover:bg-black/5'}`}
+                    onClick={() => onPick(item)}
+                    onMouseEnter={() => setActiveIndex(index)}
+                  >
+                    {renderItem(item)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

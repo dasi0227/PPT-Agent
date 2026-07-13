@@ -20,9 +20,9 @@ describe('Timeline user_turn rendering', () => {
       sessions: {
         t1: {
           activeRunId: null,
-          status: 'idle',
-          mode: 'normal',
-          scope: 'current',
+          status: 'idle' as const,
+          mode: 'normal' as const,
+          scope: 'current' as const,
           timelineItems: [
             { id: 'u1', type: 'user_turn', text: 'first message', timestamp: 1 },
             { id: 'm1', type: 'markdown', text: 'agent reply', timestamp: 2 },
@@ -47,9 +47,9 @@ describe('Timeline user_turn rendering', () => {
       sessions: {
         t1: {
           activeRunId: null,
-          status: 'idle',
-          mode: 'normal',
-          scope: 'current',
+          status: 'idle' as const,
+          mode: 'normal' as const,
+          scope: 'current' as const,
           timelineItems: [
             { id: 'u2', type: 'user_turn', text: 'echo `code`', timestamp: 1 },
           ],
@@ -85,7 +85,7 @@ describe('Timeline thinking bubble', () => {
         eventSourceClose: null,
         plan: null,
         ...overrides,
-      },
+      } as any,
     },
   });
 
