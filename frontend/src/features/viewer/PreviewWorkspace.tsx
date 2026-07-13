@@ -7,6 +7,7 @@ import { LayoutGrid, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react
 import { cn } from '../../lib/utils';
 import { EmptyState } from './EmptyState';
 import { OutlineCard } from './OutlineCard';
+import { NewProjectHint } from '../workspace/NewProjectHint';
 
 export const PreviewWorkspace: React.FC = () => {
   const { currentPage, previewMode, enterOverview, exitOverview, goNext, goPrev, effectiveView, globalView, setGlobalView } = useDeckStore();
@@ -14,6 +15,10 @@ export const PreviewWorkspace: React.FC = () => {
   const session = useActiveSession();
   const runActive = session.status === 'running' || session.status === 'needs_input';
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  if (activeProjectId === 'new-pending') {
+    return <NewProjectHint />;
+  }
 
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
   const hasSlides = slides.length > 0;

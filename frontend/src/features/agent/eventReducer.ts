@@ -29,6 +29,7 @@ export interface ToolCallItem extends BaseTimelineItem {
   status: 'running' | 'success' | 'failed';
   observation?: any;
   artifacts: ArtifactItem[];
+  hiddenFromTimeline?: boolean;
 }
 
 export interface ArtifactItem extends BaseTimelineItem {
@@ -127,7 +128,8 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         args: event.data.args,
         status: 'running',
         artifacts: [],
-        timestamp
+        timestamp,
+        hiddenFromTimeline: event.data.tool === 'finish'
       }];
 
     case 'tool_result':

@@ -650,3 +650,10 @@
 6:18:15 PM [vite] page reload src/features/agent/CommandComposer.test.tsx
 6:18:15 PM [vite] page reload src/features/agent/CommandComposer.test.tsx
 6:18:33 PM [vite] page reload src/features/agent/CommandComposer.test.tsx
+6:19:17 PM [vite] hmr update /src/index.css, /src/features/workspace/ProjectTabs.tsx, /src/features/agent/AgentPanel.tsx, /src/features/viewer/PreviewWorkspace.tsx, /src/features/deck/DeckNavigator.tsx, /src/features/agent/Timeline.tsx, /src/features/agent/CommandComposer.tsx, /src/features/agent/NeedsInputCard.tsx, /src/features/agent/ThreadTabs.tsx, /src/features/workspace/AppShell.tsx
+6:19:27 PM [vite] hmr update /src/features/viewer/PreviewWorkspace.tsx, /src/index.css
+6:19:45 PM [vite] hmr update /src/index.css, /src/features/workspace/ProjectTabs.tsx, /src/features/agent/AgentPanel.tsx, /src/features/viewer/PreviewWorkspace.tsx, /src/features/deck/DeckNavigator.tsx, /src/features/agent/Timeline.tsx, /src/features/agent/CommandComposer.tsx, /src/features/agent/NeedsInputCard.tsx, /src/features/agent/ThreadTabs.tsx, /src/features/workspace/AppShell.tsx
+6:19:48 PM [vite] hmr update /src/features/agent/Timeline.tsx, /src/index.css
+6:19:51 PM [vite] hmr update /src/features/agent/Timeline.tsx, /src/index.css
+6:20:41 PM [vite] hmr update /src/features/agent/Timeline.tsx, /src/index.css
+6:20:42 PM [vite] hmr update /src/features/agent/Timeline.tsx, /src/index.css

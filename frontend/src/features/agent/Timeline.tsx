@@ -6,6 +6,7 @@ import { ToolCallCard } from './ToolCallCard';
 import { PlanCard } from './PlanCard';
 import { ArtifactCard } from './ArtifactCard';
 import { FinalResultCard } from './FinalResultCard';
+import { FinishBubble } from './FinishBubble';
 import { NeedsInputCard } from './NeedsInputCard';
 import { ThinkingBubble } from './ThinkingBubble';
 
@@ -67,11 +68,15 @@ export const Timeline: React.FC = () => {
           case 'thought':
             return <ThoughtCard key={item.id} item={item} />;
           case 'tool_call':
+            if (item.hiddenFromTimeline) return null;
             return <ToolCallCard key={item.id} item={item} />;
           case 'artifact':
             return <ArtifactCard key={item.id} item={item} />;
           case 'final_result':
-            return <FinalResultCard key={item.id} item={item} />;
+            if (typeof item.result === 'object' && typeof item.result.slide_count === 'number') {
+              return <FinalResultCard key={item.id} item={item} />;
+            }
+            return <FinishBubble key={item.id} item={item} />;
           case 'needs_input':
             return <NeedsInputCard key={item.id} item={item} />;
           case 'error':
