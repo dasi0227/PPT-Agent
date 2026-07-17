@@ -1,14 +1,15 @@
-{"level":"info","ts":1783940753.64504,"caller":"sqlite/migrate.go:30","msg":"migration applied","file":"0001_init.sql"}
-{"level":"info","ts":1783940753.671423,"caller":"server/providers.go:39","msg":"seed assets loaded","work_root":"/Users/bytedance/.dasi/ppt"}
-{"level":"info","ts":1783940753.671503,"caller":"server/main.go:29","msg":"server starting","addr":"127.0.0.1:8787"}
-{"level":"info","ts":1783940754.104661,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"ba642df2-982b-44bf-aead-149a8775c888","method":"GET","path":"/api/v1/healthz","status":200,"latency":0.000522375}
-{"level":"info","ts":1783940757.1551082,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"eea7989d-e076-4ce4-a0f5-f63413f9c3c3","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000305167}
-{"level":"info","ts":1783940757.157114,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"ec69b78b-4e54-48f9-ad2d-0b64835f6a62","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000113417}
-{"level":"info","ts":1783940783.652535,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"e801a727-4997-4044-bfe5-94c83b031306","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000174375}
-{"level":"info","ts":1783940783.654264,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"cebbfe9a-3719-4d38-92ef-b6d310d8731a","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000138}
-{"level":"info","ts":1783943009.0175092,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"8ddd3849-06d1-411d-9ce1-582468baabe4","method":"GET","path":"/api/v1/projects","status":200,"latency":0.00013825}
-{"level":"info","ts":1783943009.019327,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"0b2017fa-7f44-4423-82d3-d667d5c076c0","method":"GET","path":"/api/v1/projects","status":200,"latency":0.00008525}
-{"level":"info","ts":1783943015.8031108,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"85e33452-5dc6-4dee-8bec-e0805a8973fb","method":"GET","path":"/api/v1/projects","status":200,"latency":0.00030325}
-{"level":"info","ts":1783943024.8039732,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"10f9bf72-fc26-4011-9af9-5b7e91e93e08","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000297208}
-{"level":"info","ts":1783943024.988189,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"173c9835-46a1-4052-ac0f-2b28893ecd74","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000121917}
-{"level":"info","ts":1783943024.9892852,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"86c62d6a-a2cd-4e6e-a0f1-77b77f89ff8d","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000112625}
+{"level":"info","ts":1784272290.8742669,"caller":"sqlite/migrate.go:30","msg":"migration applied","file":"0001_init.sql"}
+{"level":"info","ts":1784272290.902791,"caller":"server/providers.go:39","msg":"seed assets loaded","work_root":"/Users/bytedance/.dasi/ppt"}
+{"level":"info","ts":1784272290.9028852,"caller":"server/main.go:29","msg":"server starting","addr":"127.0.0.1:8787"}
+{"level":"info","ts":1784272291.55086,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"93aa92dc-f661-45d1-abf0-3cef1f6d4233","method":"GET","path":"/api/v1/healthz","status":200,"latency":0.000784375}
+{"level":"info","ts":1784272294.208968,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"ff4d07d7-5616-4b40-9e30-c32df59c4c9a","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000487958}
+{"level":"info","ts":1784272294.2121952,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"b95d9aad-6371-4110-9110-cda6abb5d63a","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000136708}
+{"level":"info","ts":1784273026.976052,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"13909356-6c47-4441-929e-df7e7bdbf062","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000154125}
+{"level":"info","ts":1784273039.5715551,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"251b2558-d381-4efe-b489-aab5af6df987","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000108625}
+{"level":"info","ts":1784273052.740606,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"2ac218a0-53a1-4394-a5d5-8f2c19916e7a","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000106875}
+{"level":"info","ts":1784273086.297085,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"586011ab-9f38-45c6-b9a1-95fcfaf426bd","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000099625}
+{"level":"info","ts":1784273086.2986,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"20035a2d-5492-44e3-89a7-50568e12c5bd","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000068667}
+{"level":"info","ts":1784273206.5376298,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"f31398d1-7b0b-4c23-b139-082c5a1ab843","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000205542}
+{"level":"info","ts":1784273206.539829,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"38dc0a2b-4d7e-4942-8ac6-08e86a2f1179","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000173584}
+{"level":"info","ts":1784273211.488426,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"36cdb095-c6df-41ed-824f-41f5b51154ff","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000133209}
+{"level":"info","ts":1784273211.490921,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"ce5220b0-5a41-4291-b58c-0d323bff6e22","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000130208}

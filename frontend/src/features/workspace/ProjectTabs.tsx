@@ -3,7 +3,6 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { cn } from '../../lib/utils';
 import { Loader2, Plus, MoreHorizontal } from 'lucide-react';
-import { PanelToggleButtons } from './PanelToggleButtons';
 import { ProjectMenu } from './ProjectMenu';
 
 export const ProjectTabs: React.FC = () => {
@@ -27,7 +26,7 @@ export const ProjectTabs: React.FC = () => {
   return (
     <div className="flex items-center h-12 bg-background border-b border-border-strong px-2 overflow-x-auto select-none">
       <div className="flex-shrink-0 mr-4 font-bold text-text-900 px-2 flex items-center">
-        <span className="w-5 h-5 bg-mode-normal rounded-sm mr-2 inline-block" />
+        <img src="/logo.jpg" alt="Logo" className="w-5 h-5 rounded-sm mr-2 object-cover" />
         M7 Studio
       </div>
 
@@ -83,8 +82,6 @@ export const ProjectTabs: React.FC = () => {
           >
             <Plus className="w-4 h-4" />
           </button>
-
-          <PanelToggleButtons />
         </div>
       )}
     </div>

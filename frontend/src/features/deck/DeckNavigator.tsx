@@ -2,13 +2,15 @@ import React, { useState } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useActiveSession } from '../agent/useActiveSession';
+import { useUIStore } from '../../stores/uiStore';
 import { slidesApi } from '../../api/slides';
 import { cn } from '../../lib/utils';
-import { Layers, FileText, AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { Layers, FileText, AlertTriangle, Plus, Trash2, FolderTree, PanelLeftClose } from 'lucide-react';
 
 export const DeckNavigator: React.FC = () => {
   const { activeProjectId, projects, slidesByProjectId, loadProjectSlides } = useProjectStore();
   const { currentPage, setCurrentPage } = useDeckStore();
+  const { toggleLeftPanel } = useUIStore();
   const session = useActiveSession();
   const runActive = session.status === 'running' || session.status === 'needs_input';
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -51,7 +53,17 @@ export const DeckNavigator: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-surface">
+      <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0 bg-background/50">
+        <div className="flex items-center">
+          <FolderTree className="w-4 h-4 text-text-600 mr-2" />
+          <span className="font-medium text-text-900 text-sm">Slides</span>
+        </div>
+        <button onClick={toggleLeftPanel} className="p-1 hover:bg-black/5 rounded text-text-400 hover:text-text-600 transition-colors">
+          <PanelLeftClose className="w-4 h-4" />
+        </button>
+      </div>
+
       <div className="p-4 border-b border-border">
         <h2 className="font-semibold text-text-900 truncate" title={project.title}>{project.title || 'Untitled Project'}</h2>
         <div className="flex items-center text-xs text-text-600 mt-1 space-x-3">

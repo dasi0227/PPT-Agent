@@ -8,8 +8,8 @@ import { useComposerStore } from '../../stores/composerStore';
 import { useActiveSession } from './useActiveSession';
 import { RunPayload } from '../../api/types';
 import { ModeSwitcher } from './ModeSwitcher';
-import { mapModeToPayload, InteractionMode } from './modeMapping';
-import { isMac, submitShortcutLabel } from '../../lib/platform';
+import { InteractionMode, mapModeToPayload } from './modeMapping';
+import { isMac } from '../../lib/platform';
 
 const PLACEHOLDERS: Record<InteractionMode, { empty: string; filled: string }> = {
   outline: {
@@ -126,16 +126,6 @@ export const CommandComposer: React.FC = () => {
           >
             <Send className="w-4 h-4" />
           </button>
-        </div>
-      </div>
-      <div className="mt-2 flex items-center justify-between">
-        <div className="text-center text-xs text-text-400">
-          行首输入 <kbd className="mx-1 px-1 rounded bg-black/5 font-sans border border-border">/current</kbd>
-          <kbd className="mx-1 px-1 rounded bg-black/5 font-sans border border-border">/page</kbd>
-          <kbd className="mx-1 px-1 rounded bg-black/5 font-sans border border-border">/overview</kbd> 等命令交由后端解析
-        </div>
-        <div className="text-xs text-text-400">
-          <kbd className="px-1 rounded bg-black/5 font-sans border border-border">{submitShortcutLabel()}</kbd> 发送
         </div>
       </div>
     </div>
