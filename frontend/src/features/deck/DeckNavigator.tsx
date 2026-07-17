@@ -5,7 +5,7 @@ import { useActiveSession } from '../agent/useActiveSession';
 import { useUIStore } from '../../stores/uiStore';
 import { slidesApi } from '../../api/slides';
 import { cn } from '../../lib/utils';
-import { Layers, FileText, AlertTriangle, Plus, Trash2, FolderTree, PanelLeftClose } from 'lucide-react';
+import { Layers, FileText, AlertTriangle, Plus, Trash2, Presentation, PanelLeftClose } from 'lucide-react';
 
 export const DeckNavigator: React.FC = () => {
   const { activeProjectId, projects, slidesByProjectId, loadProjectSlides } = useProjectStore();
@@ -52,7 +52,7 @@ export const DeckNavigator: React.FC = () => {
     <div className="flex flex-col h-full bg-surface">
       <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0 bg-background/50">
         <div className="flex items-center">
-          <FolderTree className="w-4 h-4 text-text-600 mr-2" />
+          <Presentation className="w-4 h-4 text-text-600 mr-2" />
           <span className="font-medium text-text-900 text-sm">Slides</span>
         </div>
         <button onClick={toggleLeftPanel} className="p-1 hover:bg-black/5 rounded text-text-400 hover:text-text-600 transition-colors">
