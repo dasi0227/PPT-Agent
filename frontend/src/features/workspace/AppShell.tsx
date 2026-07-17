@@ -50,7 +50,7 @@ export const AppShell: React.FC = () => {
         {activeProjectId !== null && leftPanelHidden && (
           <button 
             onClick={toggleLeftPanel}
-            className="absolute left-0 top-0 w-12 h-12 bg-background/50 border-b border-r border-border flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 transition-colors backdrop-blur-sm"
+            className="absolute left-3 top-3 p-1.5 rounded-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 transition-colors"
             title="展开左侧目录"
           >
             <PanelLeftOpen className="w-4 h-4" />
@@ -59,7 +59,7 @@ export const AppShell: React.FC = () => {
         {activeProjectId !== null && rightPanelHidden && (
           <button 
             onClick={toggleRightPanel}
-            className="absolute right-0 top-0 w-12 h-12 bg-background/50 border-b border-l border-border flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 transition-colors backdrop-blur-sm"
+            className="absolute right-3 top-3 p-1.5 rounded-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 transition-colors"
             title="展开右侧对话"
           >
             <PanelRightOpen className="w-4 h-4" />
