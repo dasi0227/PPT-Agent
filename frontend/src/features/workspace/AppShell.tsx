@@ -50,17 +50,17 @@ export const AppShell: React.FC = () => {
         {activeProjectId !== null && leftPanelHidden && (
           <button 
             onClick={toggleLeftPanel}
-            className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-12 bg-surface border border-l-0 border-border rounded-r-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-10 shadow-sm"
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-5 h-16 bg-surface border border-l-0 border-border rounded-r-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 shadow-md transition-colors"
           >
-            <ChevronRight className="w-3 h-3" />
+            <ChevronRight className="w-4 h-4" />
           </button>
         )}
         {activeProjectId !== null && rightPanelHidden && (
           <button 
             onClick={toggleRightPanel}
-            className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-12 bg-surface border border-r-0 border-border rounded-l-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-10 shadow-sm"
+            className="absolute right-0 top-1/2 -translate-y-1/2 w-5 h-16 bg-surface border border-r-0 border-border rounded-l-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 shadow-md transition-colors"
           >
-            <ChevronLeft className="w-3 h-3" />
+            <ChevronLeft className="w-4 h-4" />
           </button>
         )}
       </div>
