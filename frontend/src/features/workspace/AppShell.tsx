@@ -7,7 +7,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 import { useProjectStore } from '../../stores/projectStore';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 
 export const AppShell: React.FC = () => {
   const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel } = useUIStore();
@@ -50,17 +50,19 @@ export const AppShell: React.FC = () => {
         {activeProjectId !== null && leftPanelHidden && (
           <button 
             onClick={toggleLeftPanel}
-            className="absolute left-0 top-1/2 -translate-y-1/2 w-5 h-16 bg-surface border border-l-0 border-border rounded-r-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 shadow-md transition-colors"
+            className="absolute left-0 top-0 w-12 h-12 bg-background/50 border-b border-r border-border flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 transition-colors backdrop-blur-sm"
+            title="展开左侧目录"
           >
-            <ChevronRight className="w-4 h-4" />
+            <PanelLeftOpen className="w-4 h-4" />
           </button>
         )}
         {activeProjectId !== null && rightPanelHidden && (
           <button 
             onClick={toggleRightPanel}
-            className="absolute right-0 top-1/2 -translate-y-1/2 w-5 h-16 bg-surface border border-r-0 border-border rounded-l-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 shadow-md transition-colors"
+            className="absolute right-0 top-0 w-12 h-12 bg-background/50 border-b border-l border-border flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 transition-colors backdrop-blur-sm"
+            title="展开右侧对话"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <PanelRightOpen className="w-4 h-4" />
           </button>
         )}
       </div>

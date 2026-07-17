@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icon 备选方案对比</title>
+    <!-- 引入 Tailwind CSS 方便排版 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Lucide 图标库 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f9fafb;
+            color: #111827;
+        }
+        .icon-card {
+            transition: all 0.2s ease;
+        }
+        .icon-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="p-8 max-w-4xl mx-auto">
+    
+    <div class="mb-8">
+        <h1 class="text-2xl font-bold mb-2">左侧目录栏 "Slides" 图标备选</h1>
+        <p class="text-gray-500 text-sm">下面是 4 种最适合代表“幻灯片/页面列表”的现代 Icon，你可以挑一个最顺眼的。我们将用它替换目前的 <code>FolderTree</code> (树状文件夹)。</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- 方案 1: LayoutTemplate -->
+        <div class="icon-card bg-white p-6 rounded-xl border border-gray-200 cursor-pointer">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mr-4 text-blue-600">
+                    <i data-lucide="layout-template" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h2 class="font-semibold text-lg">1. Layout Template</h2>
+                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">布局模板</span>
+                </div>
+            </div>
+            <div class="bg-gray-50 p-3 rounded-md border border-gray-100 flex items-center mb-3">
+                <i data-lucide="layout-template" class="w-4 h-4 text-gray-600 mr-2"></i>
+                <span class="font-medium text-sm text-gray-900">Slides</span>
+            </div>
+            <p class="text-sm text-gray-500">一个带有顶栏和侧边栏的页面结构图形。最能传达“幻灯片排版与结构”的专业设计感。</p>
+        </div>
+
+        <!-- 方案 2: GalleryVerticalEnd -->
+        <div class="icon-card bg-white p-6 rounded-xl border border-gray-200 cursor-pointer">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mr-4 text-blue-600">
+                    <i data-lucide="gallery-vertical-end" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h2 class="font-semibold text-lg">2. Gallery Vertical End</h2>
+                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">垂直画廊</span>
+                </div>
+            </div>
+            <div class="bg-gray-50 p-3 rounded-md border border-gray-100 flex items-center mb-3">
+                <i data-lucide="gallery-vertical-end" class="w-4 h-4 text-gray-600 mr-2"></i>
+                <span class="font-medium text-sm text-gray-900">Slides</span>
+            </div>
+            <p class="text-sm text-gray-500">几个方块垂直排列递进的图形。完美契合我们左侧实际上是“一列幻灯片缩略图（垂直列表）”的物理形态。</p>
+        </div>
+
+        <!-- 方案 3: Presentation -->
+        <div class="icon-card bg-white p-6 rounded-xl border border-gray-200 cursor-pointer">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mr-4 text-blue-600">
+                    <i data-lucide="presentation" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h2 class="font-semibold text-lg">3. Presentation</h2>
+                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">投影幕布</span>
+                </div>
+            </div>
+            <div class="bg-gray-50 p-3 rounded-md border border-gray-100 flex items-center mb-3">
+                <i data-lucide="presentation" class="w-4 h-4 text-gray-600 mr-2"></i>
+                <span class="font-medium text-sm text-gray-900">Slides</span>
+            </div>
+            <p class="text-sm text-gray-500">一个带支架的投影幕布。最传统、最直白代表 PPT 演示的图标，用户认知成本为零。</p>
+        </div>
+
+        <!-- 方案 4: Copy / LibrarySquare -->
+        <div class="icon-card bg-white p-6 rounded-xl border border-gray-200 cursor-pointer">
+            <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mr-4 text-blue-600">
+                    <i data-lucide="library-square" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h2 class="font-semibold text-lg">4. Library Square</h2>
+                    <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">层叠卡片</span>
+                </div>
+            </div>
+            <div class="bg-gray-50 p-3 rounded-md border border-gray-100 flex items-center mb-3">
+                <i data-lucide="library-square" class="w-4 h-4 text-gray-600 mr-2"></i>
+                <span class="font-medium text-sm text-gray-900">Slides</span>
+            </div>
+            <p class="text-sm text-gray-500">两三张卡片重叠在一起。传达“多页层叠”的概念，适合表达 Deck（卡牌/幻灯片组）的隐喻。</p>
+        </div>
+
+    </div>
+
+    <!-- 当前版本参考 -->
+    <div class="mt-8 pt-6 border-t border-gray-200">
+        <h3 class="text-sm font-medium text-gray-500 mb-3">（当前使用的 FolderTree 参考）</h3>
+        <div class="bg-gray-50 p-3 rounded-md border border-gray-100 inline-flex items-center opacity-60 grayscale">
+            <i data-lucide="folder-tree" class="w-4 h-4 text-gray-600 mr-2"></i>
+            <span class="font-medium text-sm text-gray-900">Slides</span>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 Lucide 图标
+        lucide.createIcons();
+    </script>
+</body>
+</html>
