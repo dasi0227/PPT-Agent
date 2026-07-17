@@ -47,7 +47,7 @@ export const AppShell: React.FC = () => {
         )}
 
         {/* Floating Restore Buttons */}
-        {activeProjectId !== null && activeProjectId !== 'new-pending' && leftPanelHidden && (
+        {activeProjectId !== null && leftPanelHidden && (
           <button 
             onClick={toggleLeftPanel}
             className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-12 bg-surface border border-l-0 border-border rounded-r-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-10 shadow-sm"
@@ -55,7 +55,7 @@ export const AppShell: React.FC = () => {
             <ChevronRight className="w-3 h-3" />
           </button>
         )}
-        {activeProjectId !== null && activeProjectId !== 'new-pending' && rightPanelHidden && (
+        {activeProjectId !== null && rightPanelHidden && (
           <button 
             onClick={toggleRightPanel}
             className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-12 bg-surface border border-r-0 border-border rounded-l-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-10 shadow-sm"

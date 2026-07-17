@@ -39,3 +39,7 @@
 {"level":"info","ts":1784273232.008312,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"5f0b6ea2-57c7-43e8-b9c7-3f148f338cee","method":"GET","path":"/api/v1/projects","status":200,"latency":0.0001165}
 {"level":"info","ts":1784273232.37251,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"2e47ceb9-a831-49ae-8102-f11e9ca62b1f","method":"GET","path":"/api/v1/projects","status":200,"latency":0.00013575}
 {"level":"info","ts":1784273232.3735318,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"95d30d66-92cf-4f8e-b5c0-0721c7b1b346","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000093875}
+{"level":"info","ts":1784273347.473727,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"02b0d291-0bc1-4c20-bdb6-9a8bac6e3277","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000232667}
+{"level":"info","ts":1784273347.475876,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"47c88fe1-81d0-4e57-8767-45c933319118","method":"GET","path":"/api/v1/projects","status":200,"latency":0.00047125}
+{"level":"info","ts":1784273348.127261,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"f9524a8e-2fba-4b95-b32c-12c561e8d546","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000141208}
+{"level":"info","ts":1784273348.1295161,"caller":"httpapi/middleware.go:31","msg":"http_request","request_id":"5d482970-c1ec-444b-aa66-a07d00019c48","method":"GET","path":"/api/v1/projects","status":200,"latency":0.000188042}
