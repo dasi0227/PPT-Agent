@@ -24,21 +24,21 @@ export const AppShell: React.FC = () => {
           <PanelGroup direction="horizontal" autoSaveId="workspace-shell-v6">
             {!leftPanelHidden && (
               <>
-                <Panel id="left" order={1} defaultSize={22} minSize={16} maxSize={32} collapsible={false} className="bg-surface border-r border-border">
+                <Panel id="left" defaultSize={22} minSize={16} maxSize={32} collapsible={false} className="bg-surface border-r border-border">
                   <DeckNavigator />
                 </Panel>
                 <PanelResizeHandle className="w-[3px] bg-border hover:bg-mode-normal transition-colors" />
               </>
             )}
             
-            <Panel id="center" order={2} minSize={30} className="bg-background flex flex-col">
+            <Panel id="center" minSize={30} className="bg-background flex flex-col">
               <PreviewWorkspace />
             </Panel>
             
             {!rightPanelHidden && (
               <>
                 <PanelResizeHandle className="w-[3px] bg-border hover:bg-mode-normal transition-colors" />
-                <Panel id="right" order={3} defaultSize={28} minSize={20} maxSize={40} collapsible={false} className="bg-surface border-l border-border">
+                <Panel id="right" defaultSize={28} minSize={20} maxSize={40} collapsible={false} className="bg-surface border-l border-border">
                   <AgentPanel />
                 </Panel>
               </>
