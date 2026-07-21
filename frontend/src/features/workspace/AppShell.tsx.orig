@@ -21,11 +21,7 @@ export const AppShell: React.FC = () => {
         {activeProjectId === null ? (
           <WorkspaceEmptyState />
         ) : (
-          <PanelGroup 
-            key={`group-${leftPanelHidden}-${rightPanelHidden}`} 
-            direction="horizontal" 
-            autoSaveId={`workspace-shell-v8-${leftPanelHidden ? 'noleft' : 'left'}-${rightPanelHidden ? 'noright' : 'right'}`}
-          >
+          <PanelGroup direction="horizontal" autoSaveId="workspace-shell-v7">
             {!leftPanelHidden && (
               <>
                 <Panel id="left" order={1} defaultSize={22} minSize={16} maxSize={32} collapsible={false} className="bg-surface border-r border-border">

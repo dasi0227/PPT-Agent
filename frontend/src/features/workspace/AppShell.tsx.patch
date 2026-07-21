@@ -1,0 +1,10 @@
+--- frontend/src/features/workspace/AppShell.tsx
++++ frontend/src/features/workspace/AppShell.tsx
+@@ -23,7 +23,7 @@
+         {activeProjectId === null ? (
+           <WorkspaceEmptyState />
+         ) : (
+-          <PanelGroup direction="horizontal" autoSaveId="workspace-shell-v7">
++          <PanelGroup key={`group-${leftPanelHidden}-${rightPanelHidden}`} direction="horizontal" autoSaveId="workspace-shell-v8">
+             {!leftPanelHidden && (
+               <>
