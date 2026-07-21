@@ -3,37 +3,7 @@
 > vite
 
 
-  VITE v5.4.21  ready in 985 ms
+  VITE v5.4.21  ready in 457 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
-3:23:46 PM [vite] hmr update /src/features/workspace/ProjectTabs.tsx, /src/index.css
-3:23:59 PM [vite] hmr update /src/features/workspace/ProjectTabs.tsx, /src/index.css
-3:24:12 PM [vite] hmr update /src/features/workspace/ProjectTabs.tsx, /src/index.css
-3:24:46 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:25:07 PM [vite] hmr update /src/features/deck/DeckNavigator.tsx, /src/index.css
-3:25:18 PM [vite] hmr update /src/features/deck/DeckNavigator.tsx, /src/index.css
-3:25:32 PM [vite] hmr update /src/features/agent/AgentPanel.tsx, /src/index.css
-3:25:46 PM [vite] hmr update /src/features/agent/AgentPanel.tsx, /src/index.css
-3:26:06 PM [vite] hmr update /src/features/agent/CommandComposer.tsx, /src/index.css
-3:26:29 PM [vite] hmr update /src/features/agent/CommandComposer.tsx, /src/index.css
-3:28:36 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:36:58 PM [vite] hmr update /src/features/deck/DeckNavigator.tsx, /src/index.css
-3:37:16 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:41:04 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:41:04 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:46:25 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:46:25 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:46:36 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:46:36 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:46:37 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:47:04 PM [vite] page reload public/icon-preview.html
-3:47:04 PM [vite] page reload public/icon-preview.html
-3:47:04 PM [vite] page reload public/icon-preview.html
-3:48:25 PM [vite] page reload public/icon-preview.html
-3:48:25 PM [vite] page reload public/icon-preview.html
-3:49:26 PM [vite] hmr update /src/features/deck/DeckNavigator.tsx, /src/index.css
-3:49:35 PM [vite] hmr update /src/features/deck/DeckNavigator.tsx, /src/index.css
-3:49:52 PM [vite] page reload public/icon-preview.html
-3:52:05 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-3:52:06 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
