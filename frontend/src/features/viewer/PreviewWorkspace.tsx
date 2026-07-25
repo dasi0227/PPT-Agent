@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useUIStore } from '../../stores/uiStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { slidesApi, SlidePatch } from '../../api/slides';
-import { LayoutGrid, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutGrid, MonitorPlay, ChevronLeft, ChevronRight, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { EmptyState } from './EmptyState';
 import { OutlineCard } from './OutlineCard';
@@ -12,6 +13,7 @@ import { NewProjectHint } from '../workspace/NewProjectHint';
 export const PreviewWorkspace: React.FC = () => {
   const { currentPage, previewMode, enterOverview, exitOverview, goNext, goPrev, effectiveView, globalView, setGlobalView } = useDeckStore();
   const { activeProjectId, slidesByProjectId, loadProjectSlides } = useProjectStore();
+  const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel } = useUIStore();
   const session = useActiveSession();
   const runActive = session.status === 'running' || session.status === 'needs_input';
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -63,6 +65,15 @@ export const PreviewWorkspace: React.FC = () => {
       {/* Toolbar */}
       <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0 bg-surface">
         <div className="flex items-center space-x-2">
+          {leftPanelHidden && (
+            <button 
+              onClick={toggleLeftPanel}
+              className="p-1.5 rounded-md hover:bg-black/5 text-text-400 hover:text-text-600 transition-colors mr-2"
+              title="展开左侧目录"
+            >
+              <PanelLeftOpen className="w-4 h-4" />
+            </button>
+          )}
           <button 
             onClick={previewMode === 'overview' ? exitOverview : enterOverview}
             className={cn("p-1.5 rounded-md hover:bg-black/5 text-text-600 transition-colors", previewMode === 'overview' && "bg-mode-overview/10 text-mode-overview")}
@@ -110,6 +121,15 @@ export const PreviewWorkspace: React.FC = () => {
             <button onClick={goNext} disabled={currentPage >= slides.length - 1} className="p-1 text-text-600 hover:bg-black/5 disabled:opacity-50 rounded">
               <ChevronRight className="w-5 h-5" />
             </button>
+            {rightPanelHidden && (
+              <button 
+                onClick={toggleRightPanel}
+                className="p-1.5 ml-2 rounded-md hover:bg-black/5 text-text-400 hover:text-text-600 transition-colors"
+                title="展开右侧对话"
+              >
+                <PanelRightOpen className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>

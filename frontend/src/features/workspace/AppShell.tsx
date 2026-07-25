@@ -7,10 +7,9 @@ import { useUIStore } from '../../stores/uiStore';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 import { useProjectStore } from '../../stores/projectStore';
-import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 
 export const AppShell: React.FC = () => {
-  const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel } = useUIStore();
+  const { leftPanelHidden, rightPanelHidden } = useUIStore();
   const { activeProjectId } = useProjectStore();
 
   return (
@@ -48,26 +47,6 @@ export const AppShell: React.FC = () => {
               </>
             )}
           </PanelGroup>
-        )}
-
-        {/* Floating Restore Buttons */}
-        {activeProjectId !== null && leftPanelHidden && (
-          <button 
-            onClick={toggleLeftPanel}
-            className="absolute left-3 top-3 p-1.5 rounded-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 transition-colors"
-            title="展开左侧目录"
-          >
-            <PanelLeftOpen className="w-4 h-4" />
-          </button>
-        )}
-        {activeProjectId !== null && rightPanelHidden && (
-          <button 
-            onClick={toggleRightPanel}
-            className="absolute right-3 top-3 p-1.5 rounded-md flex items-center justify-center hover:bg-black/5 text-text-400 hover:text-text-600 z-50 transition-colors"
-            title="展开右侧对话"
-          >
-            <PanelRightOpen className="w-4 h-4" />
-          </button>
         )}
       </div>
     </div>
