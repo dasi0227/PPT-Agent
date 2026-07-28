@@ -3,10 +3,9 @@
 > vite
 
 
-  VITE v5.4.21  ready in 3118 ms
+  VITE v5.4.21  ready in 444 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
-6:16:39 PM [vite] hmr update /src/features/workspace/AppShell.tsx, /src/index.css
-6:17:01 PM [vite] hmr update /src/features/viewer/PreviewWorkspace.tsx, /src/index.css
-6:17:17 PM [vite] hmr update /src/features/viewer/PreviewWorkspace.tsx, /src/index.css
+11:37:21 AM [vite] hmr update /src/features/agent/ThreadTabs.tsx, /src/index.css
+11:37:51 AM [vite] hmr update /src/index.css, /src/features/workspace/AppShell.tsx, /src/features/workspace/OpenExistingProjectModal.tsx, /src/features/workspace/ProjectTabs.tsx, /src/features/workspace/ProjectPickerModal.tsx, /src/features/deck/DeckNavigator.tsx, /src/features/viewer/PreviewWorkspace.tsx, /src/features/agent/AgentPanel.tsx, /src/features/agent/Timeline.tsx, /src/features/agent/CommandComposer.tsx, /src/features/agent/NeedsInputCard.tsx, /src/features/workspace/ProjectMenu.tsx, /src/features/agent/ThreadTabs.tsx, /src/features/agent/ThreadMenu.tsx

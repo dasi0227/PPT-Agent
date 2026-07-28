@@ -63,6 +63,12 @@ export const useProjectStore = create<ProjectState>()(
               activeProjectId: newActive
             };
           });
+          // Ensure we load slides and threads for the active project if it was restored from persistence
+          const currentActive = get().activeProjectId;
+          if (currentActive && currentActive !== 'new-pending') {
+            get().loadProjectSlides(currentActive);
+            useThreadStore.getState().loadThreads(currentActive);
+          }
         } catch (err) {
           set({ loadingProjects: false });
           console.error(err);
