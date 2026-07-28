@@ -6,7 +6,7 @@ export interface HistoryEntry {
   ts: number;
   run_id: string;
   turn: 'user' | 'agent';
-  type: 'user_turn' | 'markdown' | 'info' | 'needs_input' | 'final_result' | 'error';
+  type: 'user_turn' | 'markdown' | 'info' | 'needs_input' | 'final_result' | 'error' | 'tool_call' | 'thought' | 'tool_result' | 'artifact';
   data: Record<string, any>;
 }
 
@@ -30,6 +30,21 @@ function toTimelineItem(e: HistoryEntry): TimelineItem | null {
     case 'markdown':
     case 'info':
       return { id: baseId, type: 'markdown', text: String(e.data.text ?? ''), timestamp };
+    case 'tool_call':
+      return {
+        id: baseId,
+        type: 'tool_call',
+        call_id: String(e.data.call_id ?? ''),
+        tool: String(e.data.tool ?? ''),
+        args: e.data.args ?? {},
+        status: e.data.status ?? 'running',
+        observation: e.data.observation,
+        artifacts: Array.isArray(e.data.artifacts) ? e.data.artifacts : [],
+        timestamp,
+        hiddenFromTimeline: e.data.tool === 'finish'
+      };
+    case 'thought':
+      return { id: baseId, type: 'thought', text: String(e.data.text ?? ''), timestamp };
     case 'needs_input':
       return {
         id: String(e.data.id ?? baseId),
