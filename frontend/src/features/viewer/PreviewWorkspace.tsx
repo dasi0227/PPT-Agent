@@ -20,7 +20,7 @@ export const PreviewWorkspace: React.FC = () => {
 
   const slides = useMemo(() => activeProjectId && activeProjectId !== 'new-pending' ? slidesByProjectId[activeProjectId] || [] : [], [activeProjectId, slidesByProjectId]);
   const hasSlides = slides.length > 0;
-  const slidePaths = useMemo(() => slides.map((slide) => slide.html_path), [slides]);
+  const slidePaths = useMemo(() => slides.map((slide) => slide.html_path ? `/api/v1/assets?path=${encodeURIComponent(slide.html_path)}` : ''), [slides]);
   const currentPageRef = useRef(currentPage);
 
   const currentSlide = hasSlides ? slides[Math.min(currentPage, slides.length - 1)] : undefined;
@@ -180,7 +180,7 @@ export const PreviewWorkspace: React.FC = () => {
                 >
                   {slide.html_path ? (
                     <iframe
-                      src={slide.html_path}
+                      src={`/api/v1/assets?path=${encodeURIComponent(slide.html_path)}`}
                       sandbox="allow-scripts"
                       className="w-full h-full border-none pointer-events-none origin-top-left bg-white"
                       style={{ transform: 'scale(0.25)', width: '400%', height: '400%' }}

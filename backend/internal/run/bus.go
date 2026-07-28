@@ -30,10 +30,11 @@ func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
 }
 
 // isWhitelistedForHistory 报告事件是否需要 append 到 <workdir>/history.jsonl（UX §2.2）。
-// thought/tool_call/tool_result/artifact/progress/plan 均为中间产物，不落盘（避免 jsonl 膨胀）。
+// 现调整为：thought/tool_call/tool_result/artifact 均需落盘，以支持前端刷新后的完整回放。
 func isWhitelistedForHistory(evt model.EventType) bool {
 	switch evt {
-	case model.EventRunStarted, model.EventToken, model.EventInfo, model.EventNeedsInput, model.EventDone, model.EventError:
+	case model.EventRunStarted, model.EventToken, model.EventInfo, model.EventNeedsInput, model.EventDone, model.EventError,
+		model.EventThought, model.EventToolCall, model.EventToolResult, model.EventArtifact:
 		return true
 	}
 	return false
@@ -57,6 +58,18 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 	case model.EventToken, model.EventInfo:
 		entry.Turn = "agent"
 		entry.Type = "markdown"
+	case model.EventThought:
+		entry.Turn = "agent"
+		entry.Type = "thought"
+	case model.EventToolCall:
+		entry.Turn = "agent"
+		entry.Type = "tool_call"
+	case model.EventToolResult:
+		entry.Turn = "agent"
+		entry.Type = "tool_result"
+	case model.EventArtifact:
+		entry.Turn = "agent"
+		entry.Type = "artifact"
 	case model.EventNeedsInput:
 		entry.Turn = "agent"
 		entry.Type = "needs_input"
