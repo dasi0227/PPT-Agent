@@ -58,7 +58,7 @@ export const Timeline: React.FC = () => {
           case 'user_turn':
             return (
               <div key={item.id} className="flex justify-end">
-                <div className="max-w-[85%] rounded-lg bg-mode-normal/10 border border-mode-normal/20 px-3 py-2">
+                <div className="max-w-[85%] rounded-lg bg-black/5 border border-border px-3 py-2">
                   <MarkdownMessage content={item.text} />
                 </div>
               </div>

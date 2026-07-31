@@ -6,6 +6,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { slidesApi } from '../../api/slides';
 import { cn } from '../../lib/utils';
 import { Layers, FileText, AlertTriangle, Plus, Trash2, Presentation, PanelLeftClose } from 'lucide-react';
+import { ConfirmModal } from '../../components/ui/modal-confirm';
 
 export const DeckNavigator: React.FC = () => {
   const { activeProjectId, projects, slidesByProjectId, loadProjectSlides } = useProjectStore();
@@ -14,6 +15,8 @@ export const DeckNavigator: React.FC = () => {
   const session = useActiveSession();
   const runActive = session.status === 'running' || session.status === 'needs_input';
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  const [slideToDelete, setSlideToDelete] = useState<{id: string, title: string} | null>(null);
 
   const project = projects.find(p => p.id === activeProjectId);
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
@@ -32,17 +35,39 @@ export const DeckNavigator: React.FC = () => {
 
   const handleDelete = (slideId: string, title: string) => {
     if (runActive) return;
-    if (!window.confirm(`确认删除「${title || '未命名'}」这一页吗？此操作不可撤销。`)) return;
-    slidesApi.remove(slideId).then(refresh).catch((err) => console.error(err));
+    setSlideToDelete({ id: slideId, title: title });
   };
 
-  const handleDrop = (targetIndex: number) => {
-    if (dragIndex === null || dragIndex === targetIndex || !activeProjectId || runActive) {
+  const confirmDelete = async () => {
+    if (!slideToDelete) return;
+    await slidesApi.remove(slideToDelete.id);
+    refresh();
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const sourceIndexStr = e.dataTransfer.getData('text/plain');
+    if (!sourceIndexStr) return;
+
+    const sourceIndex = parseInt(sourceIndexStr, 10);
+    if (sourceIndex === targetIndex || !activeProjectId || runActive) {
       setDragIndex(null);
       return;
     }
+
     const ids = slides.map((s) => s.id);
-    const [moved] = ids.splice(dragIndex, 1);
+    const [moved] = ids.splice(sourceIndex, 1);
     ids.splice(targetIndex, 0, moved);
     setDragIndex(null);
     slidesApi.reorder(activeProjectId, ids).then(refresh).catch((err) => console.error(err));
@@ -88,9 +113,9 @@ export const DeckNavigator: React.FC = () => {
                 <div
                   key={slide.id}
                   draggable={!runActive}
-                  onDragStart={() => setDragIndex(index)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => handleDrop(index)}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e)}
+                  onDrop={(e) => handleDrop(e, index)}
                   className={cn(
                     "w-full px-3 py-2 rounded-md text-sm transition-colors flex items-center group cursor-pointer",
                     currentPage === index
@@ -136,6 +161,16 @@ export const DeckNavigator: React.FC = () => {
               <Plus className="w-4 h-4 mr-1" /> 加页
             </button>
           </div>
+
+          <ConfirmModal
+            open={!!slideToDelete}
+            onOpenChange={(open) => !open && setSlideToDelete(null)}
+            title="删除页面"
+            description={`确认删除「${slideToDelete?.title || '未命名'}」这一页吗？此操作不可撤销。`}
+            variant="danger"
+            confirmLabel="删除"
+            onConfirm={confirmDelete}
+          />
         </>
       )}
     </div>

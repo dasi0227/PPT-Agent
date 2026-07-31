@@ -45,15 +45,22 @@ describe('DeckNavigator', () => {
     });
   });
 
-  it('delete page asks confirm then calls slidesApi.remove', async () => {
+  it('delete page opens confirm modal then calls slidesApi.remove', async () => {
     const removeSpy = vi.spyOn(slidesApi, 'remove').mockResolvedValue(undefined as never);
-    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const loadProjectSlidesSpy = vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+
     render(<DeckNavigator />);
     fireEvent.click(screen.getAllByRole('button', { name: /删除本页/ })[0]);
-    expect(window.confirm).toHaveBeenCalled();
+
+    // modal should be visible
+    expect(screen.getByText('确认删除「市场分析」这一页吗？此操作不可撤销。')).toBeInTheDocument();
+
+    // click confirm
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+
     await waitFor(() => {
       expect(removeSpy).toHaveBeenCalledWith('s1');
+      expect(loadProjectSlidesSpy).toHaveBeenCalledWith('p1');
     });
   });
 

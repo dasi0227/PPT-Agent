@@ -22,6 +22,12 @@ export const OutlineCard: React.FC<OutlineCardProps> = ({ slide, editable, onPat
   const [title, setTitle] = useState(content.title ?? '');
   const [bulletsText, setBulletsText] = useState((content.bullets ?? []).join('\n'));
 
+  // Sync state when slide content changes from outside (e.g. SSE update)
+  React.useEffect(() => {
+    setTitle(content.title ?? '');
+    setBulletsText((content.bullets ?? []).join('\n'));
+  }, [content.title, content.bullets]);
+
   // isEmpty：user 尚未编辑任何有效大纲字段。用于展示占位而非空白页（#6）。
   const isEmpty =
     !content.title

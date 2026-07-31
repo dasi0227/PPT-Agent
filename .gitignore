@@ -9,6 +9,7 @@
 # 运行时工作目录与数据库
 /.ppt-workspace
 /.run
+/.superpowers
 *.db
 *.db-shm
 *.db-wal
