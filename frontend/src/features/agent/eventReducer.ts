@@ -1,4 +1,4 @@
-export type TimelineItemType = 'markdown' | 'thought' | 'tool_call' | 'artifact' | 'final_result' | 'needs_input' | 'error' | 'user_turn';
+export type TimelineItemType = 'markdown' | 'thought' | 'tool_call' | 'artifact' | 'final_result' | 'needs_input' | 'error' | 'user_turn' | 'context_status';
 
 export interface BaseTimelineItem {
   id: string;
@@ -60,6 +60,13 @@ export interface ErrorItem extends BaseTimelineItem {
   message: string;
 }
 
+export interface ContextStatusItem extends BaseTimelineItem {
+  type: 'context_status';
+  profile: string;
+  warnings: string[];
+  readOnly: boolean;
+}
+
 export type TimelineItem =
   | MarkdownMessageItem
   | ThoughtItem
@@ -68,6 +75,7 @@ export type TimelineItem =
   | FinalResultItem
   | NeedsInputItem
   | ErrorItem
+  | ContextStatusItem
   | UserTurnItem;
 
 import { SSEEvent, PlanState, PlanStep } from '../../api/types';
@@ -117,6 +125,16 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     case 'run.started':
       // Clear timeline on new run? Usually handled in store before reducing
       return state;
+
+    case 'context.assembled':
+      return [...state, {
+        id: newId,
+        type: 'context_status',
+        profile: String(event.data.profile ?? ''),
+        warnings: Array.isArray(event.data.warnings) ? event.data.warnings.map(String) : [],
+        readOnly: Boolean(event.data.read_only),
+        timestamp,
+      }];
 
     case 'thought':
       return [...state, { id: newId, type: 'thought', text: event.data.text, timestamp }];

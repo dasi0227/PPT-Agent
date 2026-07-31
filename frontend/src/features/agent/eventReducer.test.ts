@@ -69,6 +69,21 @@ describe('eventReducer', () => {
     expect((state[1] as any).artifact_type).toBe('design_spec');
     expect((state[0] as any).artifacts).toHaveLength(0);
   });
+
+  it('context.assembled becomes concise status without manifest content', () => {
+    const state = reduceSSEEvent([], {
+      event: 'context.assembled',
+      data: { profile: 'presentation/slide', warnings: ['HTML downgraded'], read_only: true, manifest: { secret: 'x' } },
+    });
+    expect(state).toHaveLength(1);
+    expect(state[0]).toMatchObject({
+      type: 'context_status',
+      profile: 'presentation/slide',
+      warnings: ['HTML downgraded'],
+      readOnly: true,
+    });
+    expect((state[0] as any).manifest).toBeUndefined();
+  });
 });
 
 describe('reducePlan', () => {

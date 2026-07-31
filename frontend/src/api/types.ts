@@ -134,7 +134,7 @@ export interface NeedsInputPayload {
 }
 
 export type SSEEventName =
-  | 'run.started' | 'thought' | 'tool_call' | 'tool_result' | 'progress'
+  | 'run.started' | 'context.assembled' | 'thought' | 'tool_call' | 'tool_result' | 'progress'
   | 'token' | 'artifact' | 'needs_input' | 'info' | 'done' | 'error'
   | 'plan' | 'plan.update';
 

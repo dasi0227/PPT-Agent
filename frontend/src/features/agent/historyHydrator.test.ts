@@ -51,4 +51,13 @@ describe('hydrateFromHistory', () => {
   test('empty entries returns empty array', () => {
     expect(hydrateFromHistory([])).toEqual([]);
   });
+
+  test('replays concise context assembled status', () => {
+    const items = hydrateFromHistory([
+      { seq: 1, ts: 2, run_id: 'r', turn: 'agent', type: 'context_assembled', data: {
+        profile: 'blueprint/deck', warnings: [], read_only: false,
+      } },
+    ]);
+    expect(items[0]).toMatchObject({ type: 'context_status', profile: 'blueprint/deck', warnings: [], readOnly: false });
+  });
 });

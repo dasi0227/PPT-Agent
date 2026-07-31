@@ -6,7 +6,7 @@ export interface HistoryEntry {
   ts: number;
   run_id: string;
   turn: 'user' | 'agent';
-  type: 'user_turn' | 'markdown' | 'info' | 'needs_input' | 'final_result' | 'error' | 'tool_call' | 'thought' | 'tool_result' | 'artifact';
+  type: 'user_turn' | 'markdown' | 'info' | 'needs_input' | 'final_result' | 'error' | 'tool_call' | 'thought' | 'tool_result' | 'artifact' | 'context_assembled';
   data: Record<string, any>;
 }
 
@@ -22,6 +22,16 @@ export function hydrateFromHistory(entries: HistoryEntry[] | unknown): TimelineI
     const baseId = `hist_${e.seq}`;
 
     switch (e.type) {
+      case 'context_assembled':
+        items.push({
+          id: baseId,
+          type: 'context_status',
+          profile: String(e.data.profile ?? ''),
+          warnings: Array.isArray(e.data.warnings) ? e.data.warnings.map(String) : [],
+          readOnly: Boolean(e.data.read_only),
+          timestamp,
+        });
+        break;
       case 'user_turn':
         items.push({
           id: baseId, type: 'user_turn', text: String(e.data.text ?? ''), timestamp,

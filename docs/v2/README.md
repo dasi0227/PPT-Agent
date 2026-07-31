@@ -47,6 +47,7 @@ v1 后端 SOP（outline→generate→edit→overview→repo）与命令解析、
 | [20-multi-thread-windows](20-multi-thread-windows.md) | 多 thread 标签页 UX、runStore 隔离重构、SSE 多路复用 | 前端 |
 | [30-agent-pipeline-v2](30-agent-pipeline-v2.md) | 多节点生成流水线、设计总监节点、frontend-design 集成、plan 事件、校验/交付 | Agent / 后端 |
 | [40-api-and-data-contracts](40-api-and-data-contracts.md) | v2 契约变更（新增事件/产物/字段），与 v1 的差异清单 | 前后端 |
+| [45-context-engineering-v1](45-context-engineering-v1.md) | 四 Profile、预算、Manifest、Memory、ContextRef 与 Prompt 编译运行时契约 | Agent / 后端 |
 | [50-frontend-architecture-v2](50-frontend-architecture-v2.md) | 前端目录/store/组件升级、eventReducer v2、类型对齐 | 前端 |
 | [60-prompts-v2](60-prompts-v2.md) | 各节点 prompt 模板（design/plan/generate/validate/deliver） | Agent / 后端 |
 | [70-dev-plan-v2](70-dev-plan-v2.md) | 分里程碑（V2-M1~M5）开发计划、DoD、验收、依赖顺序 | 全体 |

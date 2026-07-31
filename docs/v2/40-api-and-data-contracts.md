@@ -118,6 +118,27 @@ SQLite 保存 deck/design/per-slide blueprint revision，以及 presentation 的
 
 ## 5. 事件与 history
 
+Run 在解析 thread/project 并验证 WorkSpec 后，必须先完成 Context Engineering v1
+组装与 manifest 持久化，再进入 Runner。SSE 与 history replay 增加：
+
+```json
+{
+  "type": "context.assembled",
+  "context_id": "ctx_opaque",
+  "profile": "presentation/slide",
+  "estimated_tokens": 6200,
+  "budget_tokens": 12000,
+  "segments": 9,
+  "refs": 3,
+  "warnings": [],
+  "read_only": false
+}
+```
+
+该事件只公开状态与 warning，不公开 ContextPack、完整 HTML、Thread Memory 或 ref 正文。
+`consult` 使用同一 target profile，但 `read_only=true`。manifest 存入 `run_contexts`；
+大型正文仅能用当前 Run manifest 中的 opaque `ref_id` 通过 `read_context_ref` 展开。
+
 `run.started` 携带 `target`、`interaction` 和 `user_input`。`done.result` 至少携带：
 
 ```json

@@ -1,7 +1,7 @@
 ---
 id: CONTEXT-ENGINEERING-V1
 title: HTML PPT Agent Context Engineering v1
-status: approved-for-planning
+status: implemented
 owner: shared
 date: 2026-08-01
 depends_on:

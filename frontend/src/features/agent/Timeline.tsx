@@ -20,6 +20,7 @@ const AGENT_CONTENT_TYPES = new Set([
   'final_result',
   'needs_input',
   'error',
+  'context_status',
 ]);
 
 // ERROR_CODE_MESSAGES：错误码到中文友好文案的映射。缺省仍回落 item.message，
@@ -94,6 +95,15 @@ export const Timeline: React.FC = () => {
                 </div>
               );
             }
+          case 'context_status':
+            return (
+              <div key={item.id} className="rounded-md border border-border bg-black/[0.02] px-3 py-2 text-xs text-text-400">
+                Context ready · {item.profile}{item.readOnly ? ' · read-only' : ''}
+                {item.warnings.length > 0 && (
+                  <div className="mt-1 text-amber-600">{item.warnings.join(' · ')}</div>
+                )}
+              </div>
+            );
           default:
             return null;
         }

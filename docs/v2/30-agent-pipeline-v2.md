@@ -24,6 +24,18 @@ skill，实现更完整的分步处理与更完善的校验/交付。本文件�
 
 ## 2. 流水线全景
 
+所有四种 Artifact Target 在进入本流水线或单页精简路径前，统一经过 Context Engineering v1：
+
+```text
+resolve thread/project → validate WorkSpec → assemble ContextPack
+→ persist ContextManifest → context.assembled → resolve runner
+```
+
+Runner builder 接收类型化 `ContextPack`；Prompt 由稳定分区的 `PromptCompiler` 生成，Runner
+不得再次从文件系统手工拼装项目上下文。大型 HTML、相邻 Blueprint、历史证据和大工具结果使用
+当前 Run 绑定的 `ContextRef` 渐进披露。Context Engine 只负责读、选、预算与编译，不负责
+PEV 的步骤规划、写 capability 或提交事务。
+
 把 v1 的"逐页单发"升级为 5 阶段流水线。**只作用于 `presentation/deck` 的首次物化**（单页物化走精简路径，见 §7）：
 
 ```text
