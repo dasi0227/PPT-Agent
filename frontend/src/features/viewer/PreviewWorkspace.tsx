@@ -1,24 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useBlueprintStore } from '../../stores/blueprintStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useActiveSession } from '../agent/useActiveSession';
-import { slidesApi, SlidePatch } from '../../api/slides';
+import { slidesApi } from '../../api/slides';
 import { LayoutGrid, MonitorPlay, ChevronLeft, ChevronRight, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { EmptyState } from './EmptyState';
-import { OutlineCard } from './OutlineCard';
+import { SlideBlueprintCard } from './SlideBlueprintCard';
+import { DesignSpecSummary } from './DesignSpecSummary';
 import { NewProjectHint } from '../workspace/NewProjectHint';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import { RuntimeSlide } from './previewProtocol';
 
 export const PreviewWorkspace: React.FC = () => {
   const { currentPage, previewMode, enterOverview, exitOverview, goNext, goPrev, effectiveView, globalView, setGlobalView } = useDeckStore();
-  const { activeProjectId, slidesByProjectId, loadProjectSlides } = useProjectStore();
+  const { activeProjectId, slidesByProjectId } = useProjectStore();
   const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel } = useUIStore();
-  const session = useActiveSession();
-  const runActive = session.status === 'running' || session.status === 'needs_input';
   const [htmlBySlideId, setHtmlBySlideId] = useState<Record<string, string>>({});
+  const blueprintView = useBlueprintStore((state) => activeProjectId ? state.byProjectId[activeProjectId] : undefined);
 
   const slides = useMemo(() => activeProjectId && activeProjectId !== 'new-pending' ? slidesByProjectId[activeProjectId] || [] : [], [activeProjectId, slidesByProjectId]);
   const hasSlides = slides.length > 0;
@@ -40,13 +40,6 @@ export const PreviewWorkspace: React.FC = () => {
     && currentView === 'html'
     && currentHasHtml
     && currentRuntimeIndex >= 0;
-
-  const patchSlide = (slideId: string, patch: SlidePatch) => {
-    if (!activeProjectId || activeProjectId === 'new-pending') return;
-    slidesApi.patch(slideId, patch)
-      .then(() => loadProjectSlides(activeProjectId))
-      .catch((err) => console.error(err));
-  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,7 +103,7 @@ export const PreviewWorkspace: React.FC = () => {
                   globalView === 'outline' ? "bg-mode-normal/10 text-mode-normal font-medium" : "text-text-600 hover:bg-black/5"
                 )}
               >
-                大纲
+                蓝图
               </button>
               <button
                 onClick={() => setGlobalView('html')}
@@ -165,18 +158,19 @@ export const PreviewWorkspace: React.FC = () => {
                 />
               </div>
             ) : (
-              currentSlide && (
-                <OutlineCard
-                  slide={currentSlide}
-                  editable={!runActive}
-                  dirty={currentSlide.outline_dirty}
-                  onPatch={(patch) => patchSlide(currentSlide.id, patch)}
+              currentSlide && blueprintView?.slides?.[currentSlide.id] && (
+                <SlideBlueprintCard
+                  blueprint={blueprintView.slides[currentSlide.id]}
+                  state={blueprintView.materialization?.[currentSlide.id]?.state ?? 'unknown'}
                 />
               )
             )}
           </div>
         ) : (
           <div className="absolute inset-0 overflow-y-auto p-6 bg-background">
+            <div className="mx-auto mb-6 max-w-6xl">
+              {blueprintView?.design_spec && <DesignSpecSummary spec={blueprintView.design_spec} />}
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
               {slides.map((slide, i) => (
                 <div 
@@ -199,9 +193,15 @@ export const PreviewWorkspace: React.FC = () => {
                       title={`Slide ${i + 1}`}
                     />
                   ) : (
-                    <div className="w-full h-full pointer-events-none">
-                      <OutlineCard slide={slide} editable={false} dirty={slide.outline_dirty} onPatch={() => {}} compact />
-                    </div>
+                    blueprintView?.slides?.[slide.id] ? (
+                      <div className="h-full w-full pointer-events-none">
+                        <SlideBlueprintCard
+                          blueprint={blueprintView.slides[slide.id]}
+                          state={blueprintView.materialization?.[slide.id]?.state ?? 'unknown'}
+                          compact
+                        />
+                      </div>
+                    ) : null
                   )}
                   {/* 网格空态徽标：左下角 amber，用于一眼分辨该页尚无 HTML 产物（#6 补充） */}
                   {!slide.html_path && (

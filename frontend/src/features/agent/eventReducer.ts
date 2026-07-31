@@ -14,6 +14,8 @@ export interface MarkdownMessageItem extends BaseTimelineItem {
 export interface UserTurnItem extends BaseTimelineItem {
   type: 'user_turn';
   text: string;
+  target?: { artifact: string; level: string; slide_id?: string };
+  interaction?: { intent: string; clarification: string };
 }
 
 export interface ThoughtItem extends BaseTimelineItem {

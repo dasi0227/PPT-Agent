@@ -1,8 +1,8 @@
 import { fetchClient } from './client';
-import { Run, RunPayload, NeedsInputPayload } from './types';
+import { Run, CreateRunRequest, NeedsInputPayload } from './types';
 
 export const runsApi = {
-  create: (threadId: string, payload: RunPayload) => fetchClient<Run>(`/threads/${threadId}/runs`, {
+  create: (threadId: string, payload: CreateRunRequest) => fetchClient<Run>(`/threads/${threadId}/runs`, {
     method: 'POST',
     body: JSON.stringify(payload)
   }),

@@ -59,6 +59,11 @@ export const Timeline: React.FC = () => {
             return (
               <div key={item.id} className="flex justify-end">
                 <div className="max-w-[85%] rounded-lg bg-black/5 border border-border px-3 py-2">
+                  {item.target && (
+                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-400">
+                      {item.target.artifact} / {item.target.level} · {item.interaction?.intent}
+                    </div>
+                  )}
                   <MarkdownMessage content={item.text} />
                 </div>
               </div>
@@ -73,7 +78,7 @@ export const Timeline: React.FC = () => {
           case 'artifact':
             return <ArtifactCard key={item.id} item={item} />;
           case 'final_result':
-            if (typeof item.result === 'object' && typeof item.result.slide_count === 'number') {
+            if (typeof item.result === 'object' && (typeof item.result.slide_count === 'number' || typeof item.result.artifact === 'string')) {
               return <FinalResultCard key={item.id} item={item} />;
             }
             return <FinishBubble key={item.id} item={item} />;

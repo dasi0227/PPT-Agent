@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppShell } from './AppShell';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useBlueprintStore } from '../../stores/blueprintStore';
 
 // Mock react-resizable-panels components for JSDOM
 vi.mock('react-resizable-panels', () => ({
@@ -15,6 +16,7 @@ describe('AppShell', () => {
   beforeEach(() => {
     useProjectStore.setState({ activeProjectId: null });
     useUIStore.setState({ leftPanelHidden: false, rightPanelHidden: false });
+    useBlueprintStore.setState({ byProjectId: {} });
   });
 
   it('renders WorkspaceEmptyState when no active project', () => {

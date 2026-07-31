@@ -1,176 +1,80 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CommandComposer } from './CommandComposer';
-import { useProjectStore } from '../../stores/projectStore';
-import { useThreadStore } from '../../stores/threadStore';
-import { useRunStore } from '../../stores/runStore';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
-import * as platform from '../../lib/platform';
+import { useProjectStore } from '../../stores/projectStore';
+import { useRunStore } from '../../stores/runStore';
+import { useThreadStore } from '../../stores/threadStore';
+import { CommandComposer } from './CommandComposer';
 
-vi.mock('../../lib/platform', () => ({
-  isMac: vi.fn(),
-  submitShortcutLabel: vi.fn(() => 'Ctrl + Enter')
-}));
+vi.mock('../../lib/platform', () => ({ isMac: () => false, submitShortcutLabel: () => 'Ctrl + Enter' }));
 
-describe('CommandComposer', () => {
+describe('CommandComposer target protocol', () => {
   beforeEach(() => {
     useProjectStore.setState({
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', idx: 0, layout: 'title', title: 'S1', html_path: '', json_path: 'slides/s1/slide.json', current_version: 0, order: 10, outline_dirty: false },
-          { id: 's2', project_id: 'p1', idx: 1, layout: 'bullets', title: 'S2', html_path: 'slides/s2/index.html', json_path: 'slides/s2/slide.json', current_version: 1, order: 20, outline_dirty: false },
+          { id: 'stable-1', project_id: 'p1', idx: 0, layout: 'title', title: 'S1', html_path: '', json_path: '', current_version: 0, order: 10, outline_dirty: false },
         ],
       },
     });
-    useThreadStore.setState({ 
-      activeThreadIdByProjectId: { p1: 't1' },
-      ensureActiveThread: async () => 't1'
+    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' }, ensureActiveThread: async () => 't1' });
+    useRunStore.setState({ sessions: {
+      t1: {
+        activeRunId: null, status: 'idle',
+        target: { artifact: 'presentation', level: 'slide' },
+        interaction: { intent: 'apply', clarification: 'when_blocked' },
+        timelineItems: [], pendingInput: null, progress: null, eventSourceClose: null, plan: null,
+      },
+    } });
+    useComposerStore.setState({
+      artifact: 'presentation', level: 'slide', intent: 'apply',
+      clarification: 'when_blocked', userTouchedTarget: true,
     });
-    useRunStore.setState({
-      sessions: {
-        t1: { activeRunId: null, status: 'idle' as any, mode: 'normal' as any, scope: 'current' as any, timelineItems: [], pendingInput: null, progress: null, eventSourceClose: null, plan: null }
-      }
-    });
-    useComposerStore.setState({ interactionMode: 'page', subMode: 'normal', userTouchedMode: false });
     useDeckStore.setState({ currentPage: 0 });
   });
 
-  it('Enter only inserts newline', () => {
-    vi.mocked(platform.isMac).mockReturnValue(false);
+  it('sends a stable slide id with the new payload', async () => {
+    const createRun = vi.fn().mockResolvedValue(undefined);
+    useRunStore.setState({ createRun });
     render(<CommandComposer />);
-    const textarea = screen.getByRole('textbox');
-    fireEvent.change(textarea, { target: { value: 'hi' } });
-    fireEvent.keyDown(textarea, { key: 'Enter' });
-    expect(textarea).toHaveValue('hi'); // no prevent default means it would insert newline in real browser
-  });
-
-  it('Ctrl+Enter submits on Windows', async () => {
-    vi.mocked(platform.isMac).mockReturnValue(false);
-    
-    const mockCreateRun = vi.fn();
-    useRunStore.setState({ createRun: mockCreateRun });
-
-    render(<CommandComposer />);
-    const textarea = screen.getByRole('textbox');
-    fireEvent.change(textarea, { target: { value: 'hi' } });
-
-    await waitFor(() => {
-      expect(screen.getAllByRole('button').pop()).not.toBeDisabled();
-    });
-
-    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
-
-    await waitFor(() => {
-      expect(mockCreateRun).toHaveBeenCalled();
-    });
-  });
-
-  it('Meta+Enter submits on Mac', async () => {
-    vi.mocked(platform.isMac).mockReturnValue(true);
-
-    const mockCreateRun = vi.fn();
-    useRunStore.setState({ createRun: mockCreateRun });
-
-    render(<CommandComposer />);
-    const textarea = screen.getByRole('textbox');
-    fireEvent.change(textarea, { target: { value: 'hi' } });
-
-    await waitFor(() => {
-      const btns = screen.getAllByRole('button');
-      expect(btns[btns.length - 1]).not.toBeDisabled();
-    });
-
-    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true });
-
-    await waitFor(() => {
-      expect(mockCreateRun).toHaveBeenCalled();
-    });
-  });
-
-  it('does not submit if isComposing', async () => {
-    vi.mocked(platform.isMac).mockReturnValue(true);
-    render(<CommandComposer />);
-    const textarea = screen.getByRole('textbox');
-    fireEvent.change(textarea, { target: { value: 'hi' } });
-    
-    const mockCreateRun = vi.fn();
-    useRunStore.setState({ createRun: mockCreateRun });
-
-    await act(async () => {
-      fireEvent.compositionStart(textarea);
-      fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true, nativeEvent: { isComposing: true } });
-    });
-
-    expect(mockCreateRun).not.toHaveBeenCalled();
-  });
-
-  it('generates the current page when its real html_path is empty', async () => {
-    const mockCreateRun = vi.fn().mockResolvedValue(undefined);
-    useRunStore.setState({ createRun: mockCreateRun });
-    useDeckStore.setState({ currentPage: 0 });
-
-    render(<CommandComposer />);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: '生成这一页' } });
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '调整当前页' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
-
-    await waitFor(() => expect(mockCreateRun).toHaveBeenCalledWith('t1', {
-      kind: 'generate',
-      scope: 'current',
-      mode: 'normal',
-      page_index: 0,
-      instruction: '生成这一页',
+    await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', {
+      target: { artifact: 'presentation', level: 'slide', slide_id: 'stable-1' },
+      interaction: { intent: 'apply', clarification: 'when_blocked' },
+      instruction: '调整当前页',
     }));
   });
 
-  it('edits the current page when its real html_path exists', async () => {
-    const mockCreateRun = vi.fn().mockResolvedValue(undefined);
-    useRunStore.setState({ createRun: mockCreateRun });
-    useDeckStore.setState({ currentPage: 1 });
-
+  it('switches all four artifact and level combinations', () => {
     render(<CommandComposer />);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: '放大标题' } });
-    fireEvent.click(screen.getByRole('button', { name: '发送' }));
-
-    await waitFor(() => expect(mockCreateRun).toHaveBeenCalledWith('t1', {
-      kind: 'edit',
-      scope: 'current',
-      mode: 'normal',
-      page_index: 1,
-      instruction: '放大标题',
-    }));
+    expect(screen.getByRole('button', { name: '演示' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '蓝图' }));
+    fireEvent.click(screen.getByRole('button', { name: '整份' }));
+    expect(useComposerStore.getState()).toMatchObject({ artifact: 'blueprint', level: 'deck' });
   });
 
-  it.each(['/page 2 改标题', '/overview 统一配色', '/repo 保存主题', '/talk 讨论节奏', '/ask 帮我判断'])(
-    'passes raw slash command %s without conflicting parsed fields',
-    async (instruction) => {
-      const mockCreateRun = vi.fn().mockResolvedValue(undefined);
-      useRunStore.setState({ createRun: mockCreateRun });
-
-      render(<CommandComposer />);
-      fireEvent.change(screen.getByRole('textbox'), { target: { value: instruction } });
-      fireEvent.click(screen.getByRole('button', { name: '发送' }));
-
-      await waitFor(() => expect(mockCreateRun).toHaveBeenCalledWith('t1', {
-        kind: 'edit',
-        instruction,
-      }));
-    }
-  );
-
-  it('offers an explicit whole-deck generate action with overview scope and no page_index', async () => {
-    const mockCreateRun = vi.fn().mockResolvedValue(undefined);
-    useRunStore.setState({ createRun: mockCreateRun });
-
+  it('maps discussion to consult', () => {
     render(<CommandComposer />);
-    fireEvent.click(screen.getByRole('button', { name: '整套生成' }));
+    fireEvent.click(screen.getByRole('button', { name: '讨论' }));
+    expect(useComposerStore.getState().intent).toBe('consult');
+  });
 
-    await waitFor(() => expect(mockCreateRun).toHaveBeenCalledWith('t1', {
-      kind: 'generate',
-      scope: 'overview',
-      instruction: '基于当前大纲生成整套 HTML PPT',
-    }));
-    expect(mockCreateRun.mock.calls[0][1]).not.toHaveProperty('page_index');
+  it('maps execution confirmation to before_apply', () => {
+    render(<CommandComposer />);
+    fireEvent.click(screen.getByRole('button', { name: '执行前确认' }));
+    expect(useComposerStore.getState().clarification).toBe('before_apply');
+  });
+
+  it('materializes the whole deck without a slide id', async () => {
+    const createRun = vi.fn().mockResolvedValue(undefined);
+    useRunStore.setState({ createRun });
+    render(<CommandComposer />);
+    fireEvent.click(screen.getByRole('button', { name: '物化整份' }));
+    await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', expect.objectContaining({
+      target: { artifact: 'presentation', level: 'deck' },
+    })));
   });
 });

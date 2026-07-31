@@ -1,89 +1,83 @@
 import React from 'react';
+import type { Artifact, ClarificationPolicy, InteractionIntent, TargetLevel } from '../../api/types';
 import { cn } from '../../lib/utils';
-import { InteractionMode, SubMode } from './modeMapping';
-
-const MODES: Array<{ id: InteractionMode; label: string; dot: string; text: string }> = [
-  { id: 'outline', label: '大纲', dot: 'bg-mode-outline', text: 'text-mode-outline' },
-  { id: 'page', label: '单页', dot: 'bg-mode-page', text: 'text-mode-page' },
-  { id: 'overview', label: '全局', dot: 'bg-mode-overview', text: 'text-mode-overview' },
-  { id: 'repo', label: '仓库', dot: 'bg-mode-repo', text: 'text-mode-repo' },
-];
 
 interface ModeSwitcherProps {
-  interactionMode: InteractionMode;
-  subMode: SubMode;
-  onModeChange: (mode: InteractionMode) => void;
-  onSubModeChange: (subMode: SubMode) => void;
+  artifact: Artifact;
+  level: TargetLevel;
+  intent: InteractionIntent;
+  clarification: ClarificationPolicy;
+  onArtifactChange: (value: Artifact) => void;
+  onLevelChange: (value: TargetLevel) => void;
+  onIntentChange: (value: InteractionIntent) => void;
+  onClarificationChange: (value: ClarificationPolicy) => void;
   disabled?: boolean;
 }
 
-export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({
-  interactionMode,
-  subMode,
-  onModeChange,
-  onSubModeChange,
-  disabled,
-}) => {
-  const toggleSub = (target: 'talk' | 'ask') => {
-    onSubModeChange(subMode === target ? 'normal' : target);
-  };
-
+function Segment<T extends string>({ value, options, onChange, disabled }: {
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+  disabled?: boolean;
+}) {
   return (
-    <div className="flex items-center justify-between gap-2 mb-2">
-      {/* 主切换器：四档互斥单选 */}
-      <div className="flex items-center bg-background rounded-md p-0.5 border border-border">
-        {MODES.map((m) => {
-          const active = interactionMode === m.id;
-          return (
-            <button
-              key={m.id}
-              type="button"
-              disabled={disabled}
-              onClick={() => onModeChange(m.id)}
-              className={cn(
-                'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50',
-                active ? `bg-surface shadow-sm ${m.text}` : 'text-text-400 hover:text-text-600'
-              )}
-              aria-pressed={active}
-            >
-              <span className={cn('w-1.5 h-1.5 rounded-full', active ? m.dot : 'bg-text-400/40')} />
-              {m.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 副模式：Talk / Ask 互斥可取消 */}
-      <div className="flex items-center gap-1">
+    <div className="flex rounded-md border border-border bg-background p-0.5">
+      {options.map((option) => (
         <button
+          key={option.value}
           type="button"
           disabled={disabled}
-          onClick={() => toggleSub('talk')}
+          aria-pressed={option.value === value}
+          onClick={() => onChange(option.value)}
           className={cn(
-            'px-2 py-1 rounded text-xs font-medium border transition-colors disabled:opacity-50',
-            subMode === 'talk'
-              ? 'bg-mode-talk text-white border-mode-talk'
-              : 'text-text-600 border-border hover:bg-black/5'
+            'rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50',
+            option.value === value ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-600',
           )}
-          aria-pressed={subMode === 'talk'}
         >
-          Talk
+          {option.label}
         </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => toggleSub('ask')}
-          className={cn(
-            'px-2 py-1 rounded text-xs font-medium border transition-colors disabled:opacity-50',
-            subMode === 'ask'
-              ? 'bg-mode-ask text-white border-mode-ask'
-              : 'text-text-600 border-border hover:bg-black/5'
-          )}
-          aria-pressed={subMode === 'ask'}
-        >
-          Ask
-        </button>
-      </div>
+      ))}
     </div>
   );
-};
+}
+
+export const ModeSwitcher: React.FC<ModeSwitcherProps> = (props) => (
+  <div className="flex flex-wrap items-center gap-1.5">
+    <Segment
+      value={props.artifact}
+      options={[{ value: 'blueprint', label: '蓝图' }, { value: 'presentation', label: '演示' }]}
+      onChange={props.onArtifactChange}
+      disabled={props.disabled}
+    />
+    <Segment
+      value={props.level}
+      options={[{ value: 'slide', label: '当前页' }, { value: 'deck', label: '整份' }]}
+      onChange={props.onLevelChange}
+      disabled={props.disabled}
+    />
+    <button
+      type="button"
+      disabled={props.disabled}
+      aria-pressed={props.intent === 'consult'}
+      onClick={() => props.onIntentChange(props.intent === 'consult' ? 'apply' : 'consult')}
+      className={cn(
+        'rounded border px-2 py-1 text-xs font-medium',
+        props.intent === 'consult' ? 'border-mode-talk bg-mode-talk text-white' : 'border-border text-text-600',
+      )}
+    >
+      讨论
+    </button>
+    <button
+      type="button"
+      disabled={props.disabled || props.intent === 'consult'}
+      aria-pressed={props.clarification === 'before_apply'}
+      onClick={() => props.onClarificationChange(props.clarification === 'before_apply' ? 'when_blocked' : 'before_apply')}
+      className={cn(
+        'rounded border px-2 py-1 text-xs font-medium disabled:opacity-40',
+        props.clarification === 'before_apply' ? 'border-mode-ask bg-mode-ask text-white' : 'border-border text-text-600',
+      )}
+    >
+      执行前确认
+    </button>
+  </div>
+);

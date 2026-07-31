@@ -92,7 +92,7 @@ describe('Agent Cards', () => {
     useRunStore.setState({
       sessions: {
         t1: {
-          activeRunId: 'r1', status: 'needs_input', mode: 'ask', scope: 'current',
+          activeRunId: 'r1', status: 'needs_input', target: { artifact: 'presentation', level: 'slide' }, interaction: { intent: 'apply', clarification: 'before_apply' },
           timelineItems: [], progress: null, eventSourceClose: null, plan: null,
           pendingInput: { id: '1', prompt: 'Select one', choices: ['A', 'B'] },
         },
@@ -110,7 +110,7 @@ describe('Agent Cards', () => {
     useRunStore.setState({
       sessions: {
         t1: {
-          activeRunId: 'r1', status: 'needs_input', mode: 'ask', scope: 'current',
+          activeRunId: 'r1', status: 'needs_input', target: { artifact: 'presentation', level: 'slide' }, interaction: { intent: 'apply', clarification: 'before_apply' },
           timelineItems: [], progress: null, eventSourceClose: null, plan: null,
           pendingInput: { id: '2', prompt: 'Confirm `delete`?', choices: [] },
         },

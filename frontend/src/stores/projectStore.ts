@@ -4,6 +4,7 @@ import { Project, Slide } from '../api/types';
 import { projectsApi } from '../api/projects';
 import { useThreadStore } from './threadStore';
 import { useRunStore } from './runStore';
+import { useBlueprintStore } from './blueprintStore';
 
 interface ProjectState {
   projects: Project[];
@@ -171,6 +172,7 @@ export const useProjectStore = create<ProjectState>()(
           const openProjectIds = state.openProjectIds.filter(pid => pid !== id);
           const slidesByProjectId = { ...state.slidesByProjectId };
           delete slidesByProjectId[id];
+          useBlueprintStore.getState().clearProject(id);
           
           let activeProjectId = state.activeProjectId;
           if (activeProjectId === id) {
@@ -206,6 +208,7 @@ export const useProjectStore = create<ProjectState>()(
         if (projectId === 'new-pending') return;
         try {
           const slides = await projectsApi.getSlides(projectId);
+          void useBlueprintStore.getState().loadProject(projectId);
           set((state) => ({
             slidesByProjectId: { ...state.slidesByProjectId, [projectId]: slides }
           }));

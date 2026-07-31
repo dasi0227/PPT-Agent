@@ -12,7 +12,7 @@ interface Warning {
 // isStructuredResult 判断 done.result 是否为整套生成的结构化交付（V2 §8.2），
 // 否则回退为 {summary} 文本（edit/outline/command 兼容，V2-CONTRACTS §2.4）。
 function isStructuredResult(r: any): boolean {
-  return r != null && typeof r === 'object' && typeof r.slide_count === 'number';
+  return r != null && typeof r === 'object' && (typeof r.slide_count === 'number' || typeof r.artifact === 'string');
 }
 
 export const FinalResultCard: React.FC<{ item: FinalResultItem }> = ({ item }) => {
@@ -38,7 +38,12 @@ export const FinalResultCard: React.FC<{ item: FinalResultItem }> = ({ item }) =
         </div>
         {structured ? (
           <div className="space-y-2">
-            <p><strong>页数：</strong> {result.slide_count}</p>
+            {result.artifact && <p><strong>目标：</strong> {result.artifact} / {result.level}</p>}
+            {result.operation && <p><strong>操作：</strong> {result.operation}</p>}
+            {Array.isArray(result.affected_slide_ids) && result.affected_slide_ids.length > 0 && (
+              <p><strong>影响页面：</strong> {result.affected_slide_ids.join(', ')}</p>
+            )}
+            {typeof result.slide_count === 'number' && <p><strong>页数：</strong> {result.slide_count}</p>}
             {result.theme && <p><strong>主题：</strong> {result.theme}</p>}
             {result.signature && <p><strong>签名：</strong> {result.signature}</p>}
             {result.design_spec_ref && (

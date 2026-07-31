@@ -97,8 +97,8 @@ describe('App Level Interactions', () => {
           t1: {
             activeRunId: 'r1',
             status: 'running',
-            mode: 'normal',
-            scope: 'current',
+            target: { artifact: 'presentation', level: 'slide' },
+            interaction: { intent: 'apply', clarification: 'when_blocked' },
             timelineItems: [
               { id: '1', type: 'markdown', text: 'Hello from Agent', timestamp: Date.now() }
             ],

@@ -21,8 +21,8 @@ describe('Timeline user_turn rendering', () => {
         t1: {
           activeRunId: null,
           status: 'idle' as const,
-          mode: 'normal' as const,
-          scope: 'current' as const,
+          target: { artifact: 'presentation' as const, level: 'slide' as const },
+          interaction: { intent: 'apply' as const, clarification: 'when_blocked' as const },
           timelineItems: [
             { id: 'u1', type: 'user_turn', text: 'first message', timestamp: 1 },
             { id: 'm1', type: 'markdown', text: 'agent reply', timestamp: 2 },
@@ -48,8 +48,8 @@ describe('Timeline user_turn rendering', () => {
         t1: {
           activeRunId: null,
           status: 'idle' as const,
-          mode: 'normal' as const,
-          scope: 'current' as const,
+          target: { artifact: 'presentation' as const, level: 'slide' as const },
+          interaction: { intent: 'apply' as const, clarification: 'when_blocked' as const },
           timelineItems: [
             { id: 'u2', type: 'user_turn', text: 'echo `code`', timestamp: 1 },
           ],
@@ -77,8 +77,8 @@ describe('Timeline thinking bubble', () => {
       t1: {
         activeRunId: 'r1',
         status: 'running',
-        mode: 'normal',
-        scope: 'current',
+        target: { artifact: 'presentation', level: 'slide' },
+        interaction: { intent: 'apply', clarification: 'when_blocked' },
         timelineItems: items,
         pendingInput: null,
         progress: null,
@@ -142,8 +142,8 @@ describe('Timeline error friendly messages', () => {
       t1: {
         activeRunId: null,
         status: 'idle' as const,
-        mode: 'normal' as const,
-        scope: 'current' as const,
+        target: { artifact: 'presentation' as const, level: 'slide' as const },
+        interaction: { intent: 'apply' as const, clarification: 'when_blocked' as const },
         timelineItems: [
           { id: 'e1', type: 'error', code, message, timestamp: 1 } as any,
         ],

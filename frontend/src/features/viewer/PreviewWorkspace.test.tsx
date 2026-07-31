@@ -3,6 +3,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewWorkspace } from './PreviewWorkspace';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useBlueprintStore } from '../../stores/blueprintStore';
+
+const blueprint = (id: string, title = '封面标题') => ({
+  schema_version: '2.0' as const, revision: 1, slide_id: id, section_id: 'main', role: 'cover',
+  title, key_message: title, content: { summary: title, points: ['要点一'] },
+  visual_intent: { archetype: 'hero', description: '主视觉', asset_queries: [] },
+  speaker_notes: '', created_at: 1, updated_at: 1,
+});
+const setBlueprints = () => useBlueprintStore.setState({ byProjectId: { p1: {
+  deck: { schema_version: '2.0', revision: 1, project_id: 'p1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', core_thesis: '', narrative_arc: '', sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+  slides: { s1: blueprint('s1'), s2: blueprint('s2', '第二页') },
+  design_spec: { schema_version: '2.0', revision: 1, canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {} },
+  materialization: {
+    s1: { state: 'not_materialized', revisions: { presentation: 0, source_deck: 0, source_blueprint: 0, source_design: 0 } },
+    s2: { state: 'not_materialized', revisions: { presentation: 0, source_deck: 0, source_blueprint: 0, source_design: 0 } },
+  },
+} } });
 
 const postMessage = vi.fn();
 
@@ -40,6 +57,7 @@ describe('PreviewWorkspace', () => {
       globalView: 'html',
       viewByPage: {},
     });
+    setBlueprints();
   });
 
   it('fetches stable render endpoints, posts HTML content, and uses goto for page switches', async () => {
@@ -98,9 +116,10 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       }
     });
     useDeckStore.setState({ currentPage: 0, previewMode: 'main', globalView: 'html', viewByPage: {} });
+    setBlueprints();
   });
 
-  it('renders OutlineCard (not iframe) when current page has no html', () => {
+  it('renders SlideBlueprintCard (not iframe) when current page has no html', () => {
     useProjectStore.setState({
       projects: [],
       activeProjectId: 'p1',
@@ -113,9 +132,8 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       loadingProjects: false
     });
     render(<PreviewWorkspace />);
-    // idle session → editable OutlineCard：title 为输入框、bullets 为文本域，均非 iframe。
-    expect(screen.getByDisplayValue('封面标题')).toBeInTheDocument();
-    expect((screen.getByLabelText('slide-bullets') as HTMLTextAreaElement).value).toContain('要点一');
+    expect(screen.getAllByText('封面标题').length).toBeGreaterThan(0);
+    expect(screen.getByText('要点一')).toBeInTheDocument();
     expect(document.querySelector('iframe')).toBeNull();
   });
 

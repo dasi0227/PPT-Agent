@@ -3,7 +3,7 @@ import { Sparkles } from 'lucide-react';
 import { useComposerStore } from '../../stores/composerStore';
 
 export const EmptyState: React.FC = () => {
-  const requestOutlineFocus = useComposerStore((s) => s.requestOutlineFocus);
+  const requestBlueprintFocus = useComposerStore((s) => s.requestBlueprintFocus);
 
   return (
     <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">
@@ -16,7 +16,7 @@ export const EmptyState: React.FC = () => {
       </p>
       <button
         type="button"
-        onClick={requestOutlineFocus}
+        onClick={requestBlueprintFocus}
         className="px-4 py-2 rounded-md bg-mode-normal text-white text-sm font-medium hover:opacity-90 transition-opacity"
       >
         描述主题并生成大纲

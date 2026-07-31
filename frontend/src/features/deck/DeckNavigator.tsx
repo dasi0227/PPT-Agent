@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
+import { useBlueprintStore } from '../../stores/blueprintStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { useUIStore } from '../../stores/uiStore';
 import { slidesApi } from '../../api/slides';
 import { cn } from '../../lib/utils';
-import { Layers, FileText, AlertTriangle, Plus, Trash2, Presentation, PanelLeftClose } from 'lucide-react';
+import { Layers, FileText, Plus, Trash2, Presentation, PanelLeftClose } from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
+import { MaterializationBadge } from '../viewer/MaterializationBadge';
 
 export const DeckNavigator: React.FC = () => {
   const { activeProjectId, projects, slidesByProjectId, loadProjectSlides } = useProjectStore();
@@ -20,6 +22,7 @@ export const DeckNavigator: React.FC = () => {
 
   const project = projects.find(p => p.id === activeProjectId);
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
+  const blueprintView = useBlueprintStore((state) => activeProjectId ? state.byProjectId[activeProjectId] : undefined);
 
   const refresh = () => {
     if (activeProjectId) void loadProjectSlides(activeProjectId);
@@ -103,15 +106,29 @@ export const DeckNavigator: React.FC = () => {
               <span className="flex items-center"><Layers className="w-3 h-3 mr-1"/> {project.theme}</span>
               <span className="flex items-center"><FileText className="w-3 h-3 mr-1"/> {slides.length} pages</span>
             </div>
+            {blueprintView?.deck?.core_thesis && <p className="mt-2 line-clamp-2 text-xs text-text-400">{blueprintView.deck.core_thesis}</p>}
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {slides.length === 0 ? (
               <div className="text-center p-4 text-text-400 text-sm">No slides yet</div>
             ) : (
-              slides.map((slide, index) => (
+              slides.map((slide, index) => {
+                const bp = blueprintView?.slides?.[slide.id];
+                const section = blueprintView?.deck?.sections?.find((item) => item.id === bp?.section_id);
+                const subsection = section?.subsections.find((item) => item.id === bp?.subsection_id);
+                const prev = index > 0 ? blueprintView?.slides?.[slides[index - 1].id] : undefined;
+                return (
+                <React.Fragment key={slide.id}>
+                  {section && prev?.section_id !== bp?.section_id && (
+                    <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-text-400">
+                      {section.number} {section.title}
+                    </div>
+                  )}
+                  {subsection && prev?.subsection_id !== bp?.subsection_id && (
+                    <div className="px-3 py-1 text-[10px] font-medium text-text-400">{subsection.number} {subsection.title}</div>
+                  )}
                 <div
-                  key={slide.id}
                   draggable={!runActive}
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => handleDragOver(e)}
@@ -127,15 +144,7 @@ export const DeckNavigator: React.FC = () => {
                 >
                   <span className="w-6 text-xs text-text-400 group-hover:text-text-600">{index + 1}</span>
                   <span className="truncate flex-1">{slide.title || '未命名'}</span>
-                  {slide.outline_dirty && (
-                    <span
-                      className="ml-1 shrink-0 text-amber-600 inline-flex"
-                      aria-label="待更新"
-                      title="大纲已改，待更新"
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                    </span>
-                  )}
+                  <MaterializationBadge state={blueprintView?.materialization?.[slide.id]?.state ?? 'unknown'} />
                   {!runActive && (
                     <button
                       aria-label="删除本页"
@@ -147,7 +156,8 @@ export const DeckNavigator: React.FC = () => {
                     </button>
                   )}
                 </div>
-              ))
+                </React.Fragment>
+              )})
             )}
           </div>
 

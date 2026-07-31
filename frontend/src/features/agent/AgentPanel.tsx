@@ -8,14 +8,13 @@ import { Bot, Loader2, AlertCircle, PanelRightClose } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export const AgentPanel: React.FC = () => {
-  const { status, mode, progress } = useActiveSession();
+  const { status, target, interaction, progress } = useActiveSession();
   const { toggleRightPanel } = useUIStore();
 
   const getModeColor = () => {
-    switch (mode) {
-      case 'talk': return 'bg-mode-talk text-white';
-      case 'ask': return 'bg-mode-ask text-white';
-      case 'normal': default: return 'bg-mode-normal text-white';
+    switch (interaction.intent) {
+      case 'consult': return 'bg-mode-talk text-white';
+      case 'apply': default: return target.artifact === 'blueprint' ? 'bg-mode-outline text-white' : 'bg-mode-normal text-white';
     }
   };
 
@@ -28,7 +27,7 @@ export const AgentPanel: React.FC = () => {
           Agent
           {status !== 'idle' && (
             <span className={cn("ml-2 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold", getModeColor())}>
-              {mode}
+              {target.artifact}/{target.level}
             </span>
           )}
         </div>

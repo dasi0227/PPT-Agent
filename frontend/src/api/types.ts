@@ -5,19 +5,63 @@ export interface Project {
   theme: string;
   status: 'draft' | 'generating' | 'ready';
   design_path: string;
+  deck_path?: string;
+  deck_revision?: number;
+  design_revision?: number;
   created_at: number;
   updated_at: number;
 }
 
-export interface SlideContent {
-  layout: string;
+export interface SlideBlueprint {
+  schema_version: '2.0';
+  revision: number;
+  slide_id: string;
+  section_id: string;
+  subsection_id?: string;
+  role: string;
   title: string;
-  subtitle?: string;
-  bullets?: string[];
-  content_intent?: string;
-  chart_intent?: { type: string; data_hint?: string };
-  steps?: number;
-  notes?: string;
+  key_message: string;
+  content: { summary: string; points: string[] };
+  visual_intent: { archetype: string; description: string; asset_queries: string[] };
+  speaker_notes: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface DeckBlueprint {
+  schema_version: '2.0';
+  revision: number;
+  project_id: string;
+  title: string;
+  goal: string;
+  audience: string;
+  language: string;
+  core_thesis: string;
+  narrative_arc: string;
+  sections: Array<{ id: string; number: string; title: string; subsections: Array<{ id: string; number: string; title: string }> }>;
+  slide_order: string[];
+  created_at: number;
+  updated_at: number;
+}
+
+export interface DesignSpec {
+  schema_version: '2.0';
+  revision: number;
+  canvas: Record<string, unknown>;
+  palette: string[];
+  typography: Record<string, unknown>;
+  spacing: Record<string, unknown>;
+  radius: Record<string, unknown>;
+  shadows: Record<string, unknown>;
+  layout_system: Record<string, unknown>;
+  signature: string;
+  motion: Record<string, unknown>;
+}
+
+export type MaterializationState = 'not_materialized' | 'fresh' | 'blueprint_stale' | 'design_stale' | 'unknown';
+export interface Materialization {
+  state: MaterializationState;
+  revisions: { presentation: number; source_deck: number; source_blueprint: number; source_design: number };
 }
 
 export interface Slide {
@@ -31,7 +75,15 @@ export interface Slide {
   current_version: number;
   order: number;
   outline_dirty: boolean;
-  content?: SlideContent;
+  blueprint_revision?: number;
+  presentation_revision?: number;
+  source_deck_revision?: number;
+  source_blueprint_revision?: number;
+  source_design_revision?: number;
+  blueprint?: SlideBlueprint;
+  materialization?: Materialization;
+  /** Legacy server projection retained only while old projects migrate. */
+  content?: unknown;
 }
 
 export interface Thread {
@@ -48,30 +100,31 @@ export interface Run {
   id: string;
   thread_id: string;
   status: 'queued' | 'in_progress' | 'requires_action' | 'cancelling' | 'cancelled' | 'failed' | 'completed' | 'expired';
-  mode: 'normal' | 'talk' | 'ask';
-  scope: RunScope;
+  target: RunTarget;
+  interaction: RunInteraction;
   created_at: string;
 }
 
-export type RunScope = 'current' | 'page' | 'overview' | 'repo';
+export type Artifact = 'blueprint' | 'presentation';
+export type TargetLevel = 'slide' | 'deck';
+export type InteractionIntent = 'apply' | 'consult';
+export type ClarificationPolicy = 'when_blocked' | 'before_apply' | 'never';
 
-export type RunKind = 'outline' | 'generate' | 'edit' | 'command';
+export interface RunTarget { artifact: Artifact; level: TargetLevel; slide_id?: string }
+export interface RunInteraction { intent: InteractionIntent; clarification: ClarificationPolicy }
 
-export type RunMode = 'normal' | 'talk' | 'ask';
-
-export type RunCommand = 'talk' | 'ask' | 'prompt' | 'recap';
-
-export interface RunPayload {
-  kind: RunKind;
+export interface CreateRunRequest {
+  target: RunTarget;
+  interaction: RunInteraction;
   instruction: string;
-  scope?: RunScope;                 // outline 首次可省，后端缺省为 current
-  mode?: RunMode;
-  page_index?: number;
-  command?: RunCommand;
-  brief?: string;                   // outline
-  slide_count?: number;             // outline
-  language?: string;                // outline
-  theme?: string;                   // generate
+  options?: { language?: string; theme_id?: string; desired_slide_count?: number };
+}
+
+export interface BlueprintProjectView {
+  deck: DeckBlueprint;
+  slides: Record<string, SlideBlueprint>;
+  design_spec: DesignSpec;
+  materialization: Record<string, Materialization>;
 }
 
 export interface NeedsInputPayload {

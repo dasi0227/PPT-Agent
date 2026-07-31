@@ -1,39 +1,43 @@
 import { create } from 'zustand';
-import { InteractionMode, SubMode } from '../features/agent/modeMapping';
+import type { Artifact, ClarificationPolicy, InteractionIntent, TargetLevel } from '../api/types';
 
 interface ComposerState {
-  interactionMode: InteractionMode;
-  subMode: SubMode;
-  userTouchedMode: boolean;   // 用户是否手动切过（关掉智能默认）
-  focusNonce: number;         // 递增触发输入框聚焦
-
-  setInteractionMode: (mode: InteractionMode, opts?: { userTouched?: boolean }) => void;
-  setSubMode: (subMode: SubMode) => void;
-  applySmartDefault: (mode: InteractionMode) => void;   // 仅当未手动切过时生效
-  resetTouch: () => void;                               // 切换 project 时重置会话记忆
-  requestOutlineFocus: () => void;                      // EmptyState 引导：锁 Outline + 聚焦
+  artifact: Artifact;
+  level: TargetLevel;
+  intent: InteractionIntent;
+  clarification: ClarificationPolicy;
+  userTouchedTarget: boolean;
+  focusNonce: number;
+  setArtifact: (artifact: Artifact) => void;
+  setLevel: (level: TargetLevel) => void;
+  setIntent: (intent: InteractionIntent) => void;
+  setClarification: (clarification: ClarificationPolicy) => void;
+  applyContextDefault: (hasSlides: boolean) => void;
+  resetForProject: () => void;
+  requestBlueprintFocus: () => void;
 }
 
 export const useComposerStore = create<ComposerState>((set) => ({
-  interactionMode: 'outline',
-  subMode: 'normal',
-  userTouchedMode: false,
+  artifact: 'presentation',
+  level: 'slide',
+  intent: 'apply',
+  clarification: 'when_blocked',
+  userTouchedTarget: false,
   focusNonce: 0,
-
-  setInteractionMode: (mode, opts) =>
-    set({ interactionMode: mode, userTouchedMode: opts?.userTouched ?? true }),
-
-  setSubMode: (subMode) => set({ subMode }),
-
-  applySmartDefault: (mode) =>
-    set((state) => (state.userTouchedMode ? {} : { interactionMode: mode })),
-
-  resetTouch: () => set({ userTouchedMode: false, subMode: 'normal' }),
-
-  requestOutlineFocus: () =>
-    set((state) => ({
-      interactionMode: 'outline',
-      userTouchedMode: true,
-      focusNonce: state.focusNonce + 1,
-    })),
+  setArtifact: (artifact) => set({ artifact, userTouchedTarget: true }),
+  setLevel: (level) => set({ level, userTouchedTarget: true }),
+  setIntent: (intent) => set({ intent }),
+  setClarification: (clarification) => set({ clarification }),
+  applyContextDefault: (hasSlides) => set((state) => state.userTouchedTarget ? {} : {
+    artifact: hasSlides ? 'presentation' : 'blueprint',
+    level: hasSlides ? 'slide' : 'deck',
+  }),
+  resetForProject: () => set({ level: 'slide', intent: 'apply', clarification: 'when_blocked', userTouchedTarget: false }),
+  requestBlueprintFocus: () => set((state) => ({
+    artifact: 'blueprint',
+    level: 'deck',
+    intent: 'apply',
+    userTouchedTarget: true,
+    focusNonce: state.focusNonce + 1,
+  })),
 }));

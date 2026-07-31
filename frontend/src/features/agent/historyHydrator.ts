@@ -23,7 +23,10 @@ export function hydrateFromHistory(entries: HistoryEntry[] | unknown): TimelineI
 
     switch (e.type) {
       case 'user_turn':
-        items.push({ id: baseId, type: 'user_turn', text: String(e.data.text ?? ''), timestamp });
+        items.push({
+          id: baseId, type: 'user_turn', text: String(e.data.text ?? ''), timestamp,
+          target: e.data.target, interaction: e.data.interaction,
+        });
         break;
       case 'markdown':
       case 'info': {

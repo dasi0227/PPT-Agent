@@ -1,12 +1,21 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-// 记录 loadProjectSlides 调用，用于验证 done/error 触发自动刷新。
+// 记录精确失效调用，用于验证成功按 target 刷新、失败不伪造提交。
 const slideLoads: string[] = [];
+const blueprintRefreshes: string[] = [];
 vi.mock('./projectStore', () => ({
   useProjectStore: {
     getState: () => ({
       activeProjectId: 'p1',
       loadProjectSlides: async (pid: string) => { slideLoads.push(pid); },
+    }),
+  },
+}));
+vi.mock('./blueprintStore', () => ({
+  useBlueprintStore: {
+    getState: () => ({
+      refreshSlide: async (_pid: string, sid: string) => { blueprintRefreshes.push(sid); },
+      loadProject: async () => {},
     }),
   },
 }));
@@ -39,9 +48,15 @@ vi.mock('../api/runs', () => ({
 
 import { useRunStore } from './runStore';
 import type { TimelineItem } from '../features/agent/eventReducer';
+const request = (instruction: string) => ({
+  target: { artifact: 'presentation' as const, level: 'slide' as const, slide_id: 's1' },
+  interaction: { intent: 'apply' as const, clarification: 'when_blocked' as const },
+  instruction,
+});
 
 function reset() {
   slideLoads.length = 0;
+  blueprintRefreshes.length = 0;
   connections.length = 0;
   pendingResolve = null;
   pendingMode = 'resolve';
@@ -53,7 +68,7 @@ describe('runStore user_turn head insert + reload + hydrate', () => {
 
   test('createRun inserts user_turn synchronously before network resolves', async () => {
     pendingMode = 'pending';
-    const p = useRunStore.getState().createRun('t1', { kind: 'edit', instruction: 'hello world' });
+    const p = useRunStore.getState().createRun('t1', request('hello world'));
 
     // 同步断言：在 await 之前 timeline 已含 user_turn。
     const items = useRunStore.getState().sessions['t1']?.timelineItems ?? [];
@@ -68,23 +83,25 @@ describe('runStore user_turn head insert + reload + hydrate', () => {
 
   test('createRun preserves prior user_turn instead of clearing timelineItems', async () => {
     // 无预置 —— 只跑一次 createRun，断言不再有清空动作即 timelineItems=[user_turn]。
-    await useRunStore.getState().createRun('t1', { kind: 'edit', instruction: 'first' });
+    await useRunStore.getState().createRun('t1', request('first'));
     const items = useRunStore.getState().sessions['t1'].timelineItems;
     expect(items.map((i) => i.type)).toEqual(['user_turn']);
   });
 
-  test('SSE done triggers loadProjectSlides', async () => {
-    await useRunStore.getState().createRun('t1', { kind: 'edit', instruction: 'go' });
+  test('SSE done refreshes only the targeted presentation slide', async () => {
+    await useRunStore.getState().createRun('t1', request('go'));
     const conn = connections[connections.length - 1];
     conn.onMessage({ id: '1', event: 'done', data: { result: { summary: 'ok' } } });
     expect(slideLoads).toContain('p1');
+    expect(blueprintRefreshes).toEqual(['s1']);
   });
 
-  test('SSE error also triggers loadProjectSlides', async () => {
-    await useRunStore.getState().createRun('t1', { kind: 'edit', instruction: 'go' });
+  test('SSE error does not refresh revisions that were not committed', async () => {
+    await useRunStore.getState().createRun('t1', request('go'));
     const conn = connections[connections.length - 1];
     conn.onMessage({ id: '1', event: 'error', data: { code: 'E', message: 'x' } });
-    expect(slideLoads).toContain('p1');
+    expect(slideLoads).toEqual([]);
+    expect(blueprintRefreshes).toEqual([]);
   });
 
   test('hydrateTimeline is idempotent when timelineItems non-empty', () => {
@@ -94,8 +111,8 @@ describe('runStore user_turn head insert + reload + hydrate', () => {
         t1: {
           activeRunId: null,
           status: 'idle',
-          mode: 'normal',
-          scope: 'current',
+          target: request('').target,
+          interaction: request('').interaction,
           timelineItems: [seed],
           pendingInput: null,
           progress: null,

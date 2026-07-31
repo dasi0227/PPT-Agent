@@ -20,6 +20,11 @@ vi.mock('../api/runs', () => ({
 }));
 
 import { useRunStore, IDLE_SESSION } from './runStore';
+const request = (instruction: string, artifact: 'blueprint' | 'presentation' = 'blueprint') => ({
+  target: { artifact, level: 'deck' as const },
+  interaction: { intent: 'apply' as const, clarification: 'when_blocked' as const },
+  instruction,
+});
 
 function lastConn() {
   return connections[connections.length - 1];
@@ -38,8 +43,8 @@ describe('runStore multithread sharding', () => {
 
   it('two threads run in parallel without cross-contamination', async () => {
     const store = useRunStore.getState();
-    await store.createRun('tA', { kind: 'outline', instruction: 'A' });
-    await store.createRun('tB', { kind: 'outline', instruction: 'B' });
+    await store.createRun('tA', request('A'));
+    await store.createRun('tB', request('B'));
 
     // 两条连接分别属于各自 thread
     expect(connections).toHaveLength(2);
@@ -63,8 +68,8 @@ describe('runStore multithread sharding', () => {
 
   it('done closes only its own connection', async () => {
     const store = useRunStore.getState();
-    await store.createRun('tA', { kind: 'outline', instruction: 'A' });
-    await store.createRun('tB', { kind: 'outline', instruction: 'B' });
+    await store.createRun('tA', request('A'));
+    await store.createRun('tB', request('B'));
     const connA = connections[0];
     const connB = connections[1];
 
@@ -75,8 +80,8 @@ describe('runStore multithread sharding', () => {
 
   it('closeSessions closes connections for listed threads only', async () => {
     const store = useRunStore.getState();
-    await store.createRun('tA', { kind: 'outline', instruction: 'A' });
-    await store.createRun('tB', { kind: 'outline', instruction: 'B' });
+    await store.createRun('tA', request('A'));
+    await store.createRun('tB', request('B'));
     const connA = connections[0];
     const connB = connections[1];
 
@@ -87,7 +92,7 @@ describe('runStore multithread sharding', () => {
 
   it('progress updates only the target session', async () => {
     const store = useRunStore.getState();
-    await store.createRun('tA', { kind: 'generate', instruction: 'A' });
+    await store.createRun('tA', request('A', 'presentation'));
     lastConn().onMessage({ id: '1', event: 'progress', data: { stage: 'page', current: 2, total: 8 } });
 
     expect(useRunStore.getState().sessions['tA'].progress).toEqual({ stage: 'page', current: 2, total: 8 });
@@ -96,7 +101,7 @@ describe('runStore multithread sharding', () => {
 
   it('rekeySession migrates full session from draft id to real id', async () => {
     const store = useRunStore.getState();
-    await store.createRun('draft_x', { kind: 'outline', instruction: 'A' });
+    await store.createRun('draft_x', request('A'));
     lastConn().onMessage({ id: '1', event: 'thought', data: { text: 'hi' } });
     lastConn().onMessage({ id: '2', event: 'progress', data: { stage: 'design', current: 1, total: 1 } });
 
@@ -121,8 +126,8 @@ describe('runStore multithread sharding', () => {
 
   it('dropSessions closes and removes listed session keys', async () => {
     const store = useRunStore.getState();
-    await store.createRun('tA', { kind: 'outline', instruction: 'A' });
-    await store.createRun('tB', { kind: 'outline', instruction: 'B' });
+    await store.createRun('tA', request('A'));
+    await store.createRun('tB', request('B'));
     const connA = connections[0];
 
     useRunStore.getState().dropSessions(['tA']);

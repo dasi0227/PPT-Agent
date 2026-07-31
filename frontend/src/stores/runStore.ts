@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { runsApi } from '../api/runs';
 import { subscribeRunEvents } from '../api/sse';
-import { RunPayload, RunScope, PlanState } from '../api/types';
+import { CreateRunRequest, RunInteraction, RunTarget, PlanState } from '../api/types';
 import { TimelineItem, reduceSSEEvent, reducePlan } from '../features/agent/eventReducer';
 import { useProjectStore } from './projectStore';
+import { useBlueprintStore } from './blueprintStore';
 
 export type { PlanState } from '../api/types';
 
@@ -12,8 +13,8 @@ export type RunStatus = 'idle' | 'running' | 'done' | 'error' | 'needs_input';
 export interface RunSession {
   activeRunId: string | null;
   status: RunStatus;
-  mode: string;
-  scope: RunScope;
+  target: RunTarget;
+  interaction: RunInteraction;
   timelineItems: TimelineItem[];
   pendingInput: { id: string; prompt: string; choices?: string[] } | null;
   progress: { stage: string; current: number; total: number } | null;
@@ -22,11 +23,11 @@ export interface RunSession {
 }
 
 // 稳定的 idle 空会话常量：getSession 对缺失 key 返回它，避免组件读到 undefined。
-export const IDLE_SESSION: RunSession = Object.freeze({
+export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   activeRunId: null,
   status: 'idle',
-  mode: 'normal',
-  scope: 'current',
+  target: { artifact: 'presentation', level: 'slide' },
+  interaction: { intent: 'apply', clarification: 'when_blocked' },
   timelineItems: [],
   pendingInput: null,
   progress: null,
@@ -38,8 +39,8 @@ function freshSession(overrides: Partial<RunSession> = {}): RunSession {
   return {
     activeRunId: null,
     status: 'idle',
-    mode: 'normal',
-    scope: 'current',
+    target: { artifact: 'presentation', level: 'slide' },
+    interaction: { intent: 'apply', clarification: 'when_blocked' },
     timelineItems: [],
     pendingInput: null,
     progress: null,
@@ -53,7 +54,7 @@ interface RunStoreV2 {
   sessions: Record<string, RunSession>;   // key = threadId
 
   getSession: (threadId: string) => RunSession;
-  createRun: (threadId: string, payload: RunPayload) => Promise<void>;
+  createRun: (threadId: string, payload: CreateRunRequest) => Promise<void>;
   subscribeRun: (threadId: string, runId: string, lastEventId?: string) => void;
   replyNeedsInput: (threadId: string, runId: string, replyTo: string, content: string) => Promise<void>;
   cancelRun: (threadId: string, runId: string) => Promise<void>;
@@ -95,6 +96,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           type: 'user_turn',
           text: payload.instruction,
+          target: payload.target,
+          interaction: payload.interaction,
           timestamp: Date.now(),
         };
         updateSession(threadId, (prev) => ({
@@ -102,8 +105,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           activeRunId: null,
           status: 'running',
           pendingInput: null,
-          mode: payload.mode ?? 'normal',
-          scope: payload.scope ?? 'current',
+          target: payload.target,
+          interaction: payload.interaction,
           progress: null,
           plan: null,
           eventSourceClose: null,
@@ -154,9 +157,27 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           if (event.event === 'done' || event.event === 'error') {
             get().sessions[threadId]?.eventSourceClose?.();
             patchSession(threadId, { eventSourceClose: null });
-            // #3 done/error 后自动刷新当前 project 的 slides，避免用户手动 F5。
-            const pid = useProjectStore.getState().activeProjectId;
-            if (pid) void useProjectStore.getState().loadProjectSlides(pid);
+            // Successful runs invalidate only the resources named by the
+            // normalized target/result. Failed runs cannot have committed
+            // revisions and therefore do not force a project-wide reload.
+            if (event.event === 'done') {
+              const pid = useProjectStore.getState().activeProjectId;
+              const resultTarget = event.data.result?.target as RunTarget | undefined;
+              const target = resultTarget ?? get().sessions[threadId]?.target;
+              if (pid && target) {
+                if (target.level === 'slide' && target.slide_id) {
+                  if (target.artifact === 'presentation') {
+                    void useProjectStore.getState().loadProjectSlides(pid);
+                  }
+                  void useBlueprintStore.getState().refreshSlide(pid, target.slide_id);
+                } else {
+                  if (target.artifact === 'presentation') {
+                    void useProjectStore.getState().loadProjectSlides(pid);
+                  }
+                  void useBlueprintStore.getState().loadProject(pid);
+                }
+              }
+            }
           }
         },
         onError: (err) => {

@@ -4,6 +4,7 @@ import { DeckNavigator } from './DeckNavigator';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { slidesApi } from '../../api/slides';
+import { useBlueprintStore } from '../../stores/blueprintStore';
 
 describe('DeckNavigator', () => {
   beforeEach(() => {
@@ -20,6 +21,15 @@ describe('DeckNavigator', () => {
       },
       loadingProjects: false
     });
+    useBlueprintStore.setState({ byProjectId: { p1: {
+      deck: { schema_version: '2.0', revision: 1, project_id: 'p1', title: '演示项目', goal: '', audience: '', language: 'zh-CN', core_thesis: '核心命题', narrative_arc: '', sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+      slides: {},
+      design_spec: { schema_version: '2.0', revision: 1, canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {} },
+      materialization: {
+        s1: { state: 'fresh', revisions: { presentation: 1, source_deck: 1, source_blueprint: 1, source_design: 1 } },
+        s2: { state: 'blueprint_stale', revisions: { presentation: 1, source_deck: 1, source_blueprint: 1, source_design: 1 } },
+      },
+    } } });
   });
 
   it('shows real slide titles instead of generic labels', () => {
@@ -29,10 +39,9 @@ describe('DeckNavigator', () => {
     expect(screen.queryByText('Slide 1')).not.toBeInTheDocument();
   });
 
-  it('marks dirty pages with a badge', () => {
+  it('marks stale pages with a materialization badge', () => {
     render(<DeckNavigator />);
-    const badge = screen.getByTitle('大纲已改，待更新');
-    expect(badge).toBeInTheDocument();
+    expect(screen.getByText('蓝图有更新')).toBeInTheDocument();
   });
 
   it('add page button calls slidesApi.add with last slide as anchor', async () => {
