@@ -99,10 +99,11 @@ export interface Thread {
 export interface Run {
   id: string;
   thread_id: string;
-  status: 'queued' | 'in_progress' | 'requires_action' | 'cancelling' | 'cancelled' | 'failed' | 'completed' | 'expired';
+  project_id: string;
+  status: 'pending' | 'running' | 'waiting' | 'done' | 'failed' | 'canceled';
   target: RunTarget;
   interaction: RunInteraction;
-  created_at: string;
+  events_url: string;
 }
 
 export type Artifact = 'blueprint' | 'presentation';

@@ -9,6 +9,8 @@ verifies: [V2-G1, V2-G2, V2-G3, V2-G4]
 
 # 前端架构 v2 升级
 
+> R0 状态（2026-08-01）：Composer 已从旧四模式/action 映射切换为正交的 `artifact/level/interaction`。本文中的旧 modeMapping 设计已由下述 Artifact Target 实现取代。
+
 本文件给出前端为承载 v2（四模式切换、多 thread 窗口、plan 流水线可视化）所需的目录/store/组件/reducer 升级。
 在 v1 三栏工作台之上做**增量改造**，不重写。
 
@@ -16,11 +18,11 @@ verifies: [V2-G1, V2-G2, V2-G3, V2-G4]
 
 | 文件 | v1 现状 | v2 改造 |
 |---|---|---|
-| `api/types.ts` | `RunPayload.kind` 缺 outline/command；SSE 无 plan | 补齐 kind、command、outline 字段、plan 事件与类型 |
+| `api/types.ts` | 旧 RunPayload 混合 action/scope/mode | `RunTarget`、`RunInteraction`、Blueprint 与 revision 类型 |
 | `api/runs.ts` | 只有 create/input/cancel | 不变（已够）；新增 thread history 拉取（api/threads.ts） |
 | `stores/runStore.ts` | 全局单例 | **按 threadId 分片**（见 [20-multi-thread-windows](20-multi-thread-windows.md#32-runstore按-threadid-分片核心重构)） |
 | `stores/projectStore.ts` | threads 仅缓存 | 扩为 thread 打开态/聚焦态管理 |
-| `features/agent/CommandComposer.tsx` | 硬编码 generate/current | **模式切换器 + 映射矩阵**（见 [10-interaction-modes](10-interaction-modes.md)） |
+| `features/agent/CommandComposer.tsx` | 硬编码 generate/current | **蓝图/演示 × 当前页/整份 × 执行/讨论** |
 | `features/agent/eventReducer.ts` | 无 plan 分支 | 新增 plan/plan.update 归并；artifact design_spec |
 | `features/agent/AgentPanel.tsx` | 单一 timeline | 顶部 Thread 标签页 + 按聚焦 thread 派生 |
 | `features/agent/PlanCard.tsx` | 前端 mock | 接真实 plan 状态 |
@@ -31,46 +33,49 @@ verifies: [V2-G1, V2-G2, V2-G3, V2-G4]
 frontend/src/
 ├── api/
 │   ├── threads.ts            # 新增：list/create/history/delete thread
-│   └── types.ts              # 扩：RunKind、plan 类型、design_spec
+│   ├── blueprints.ts         # Blueprint 聚合与 optimistic revision API
+│   └── types.ts              # RunTarget、RunInteraction、Blueprint、materialization
 ├── stores/
 │   ├── runStore.ts           # 重构：sessions: Record<threadId, RunSession>
+│   ├── blueprintStore.ts     # project Blueprint 聚合与精确失效
 │   ├── projectStore.ts       # 扩：委托 thread 管理或拆出 threadStore
 │   └── threadStore.ts        # 新增（可选）：thread 打开态/聚焦态
 ├── features/
 │   ├── agent/
 │   │   ├── ThreadTabs.tsx     # 新增：Agent 面板内多 thread 标签
-│   │   ├── ModeSwitcher.tsx   # 新增：四模式分段切换器 + talk/ask 副开关
-│   │   ├── CommandComposer.tsx# 重构：接 ModeSwitcher + 映射矩阵
+│   │   ├── ModeSwitcher.tsx   # 产物、层级、交互、clarification
+│   │   ├── CommandComposer.tsx# 发送纯新协议并解析 stable slide_id
 │   │   ├── PlanCard.tsx       # 接真实 plan 事件
 │   │   ├── eventReducer.ts    # 扩：plan/plan.update/design_spec
 │   │   └── modeMapping.ts     # 新增：意图→RunPayload 纯函数（可单测）
 │   └── viewer/
-│       └── EmptyState.tsx     # 新增：空项目引导"生成大纲"
+│       ├── SlideBlueprintCard.tsx
+│       ├── DesignSpecSummary.tsx
+│       └── MaterializationBadge.tsx
 ```
 
 ## 3. 关键模块设计
 
-### 3.1 modeMapping.ts（纯函数，映射矩阵的代码化）
+### 3.1 Artifact Target 构造
 
 把 [10-interaction-modes §4 映射矩阵](10-interaction-modes.md#4-意图--run-字段映射矩阵权威) 落成一个纯函数，便于单测：
 
 ```ts
-interface MapInput {
-  interactionMode: 'outline' | 'page' | 'overview' | 'repo';
-  subMode: 'normal' | 'talk' | 'ask';
-  hasOutline: boolean;          // slides.length > 0
-  currentPageHasHtml: boolean;
-  currentPage: number;
-  targetPageIndex: number | null;
+interface TargetInput {
+  artifact: 'blueprint' | 'presentation';
+  level: 'slide' | 'deck';
+  intent: 'apply' | 'consult';
+  clarification: 'when_blocked' | 'before_apply' | 'never';
+  selectedSlideId?: string;
   instruction: string;
-  outlineOpts?: { brief?: string; slide_count?: number; language?: string };
 }
 
-function mapModeToPayload(input: MapInput): RunPayload { /* 按矩阵实现 */ }
+function createTargetedRun(input: TargetInput): CreateRunRequest { /* validate stable ID */ }
 ```
 
-- **单测覆盖矩阵每一行**（含 talk/ask 分支、空项目 Outline、Page 无 html 走 generate）。
-- 斜杠命令在 Composer 层拦截，不进入本函数（语义交后端）。
+- 单测覆盖四个 artifact × level 组合，以及 consult 与 clarification。
+- `current` 只属于 UI，构造请求时必须替换为 store 中的稳定 slide ID。
+- 斜杠快捷方式若保留，只填充 target/interaction，不创建第二套协议。
 
 ### 3.2 ModeSwitcher.tsx
 
@@ -129,9 +134,9 @@ case 'artifact':
 
 ```text
 ModeSwitcher/输入 ──▶ CommandComposer
-   │  (行首'/'? → 语义交后端 : modeMapping)
+   │  current → stable slide_id
    ▼
-runStore.createRun(activeThreadId, payload)
+runStore.createRun(activeThreadId, CreateRunRequest)
    │  POST /threads/{id}/runs → { run.id, events_url }
    ▼
 runStore.subscribeRun(threadId, runId)  ── EventSource ──▶ sessions[threadId]

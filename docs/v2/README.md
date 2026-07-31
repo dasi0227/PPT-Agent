@@ -11,13 +11,14 @@ verifies: []
 
 > v2 的定位：**在 v1 已跑通的后端能力之上，补齐前端交互闭环、多对话窗口、并把 Agent 从"单循环骨架"升级为"多节点前端构建流水线"。**
 
-本目录（`docs/v2/`）是第二版的**增量事实源**。它**不推翻** v1（现已归档至 `docs/v1/`）已锁定的架构与契约，而是：
+本目录（`docs/v2/`）是第二版的增量事实源。R0 已直接覆盖开发期旧 Run 公共协议：
 
-- 复用 v1 的三层结构（Run 外壳 → Harness → Tools）、SSE 协议、SQLite+FS 持久化、四件套 scope/mode 指令系统。
+- 复用 v1 的三层结构（Run 外壳 → Harness → Tools）、SSE 协议、SQLite+FS 持久化。
+- 公共目标统一为 `blueprint|presentation × slide|deck`，交互统一为 `apply|consult` 与 clarification policy。
 - 明确 v1 **实现与设计设想不一致**的地方（主要在前端路由与 Agent 深度），给出可落地的修正方案。
 - 对需要**新增**的契约（`plan`/`plan.update` 事件、`design_spec` 产物、`kind=outline/command` 前端暴露、多 thread 状态）给出精确定义。
 
-**当前阶段：只产出设计文档，不写业务代码。** 文档面向前后端开发人员与 vibecoding，人类可读、Agent 可执行、可验收。
+**当前阶段：R0 已实现。** R1–R7 仍以 Runtime 路线图为边界，未在本轮扩张。
 
 ---
 

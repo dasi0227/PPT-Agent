@@ -39,23 +39,25 @@ export const CommandComposer: React.FC = () => {
   const { createRun } = useRunStore();
   const { status: runStatus } = useActiveSession();
   const composer = useComposerStore();
+  const applyContextDefault = composer.applyContextDefault;
+  const focusNonce = composer.focusNonce;
   const disabled = !activeProjectId || runStatus === 'running' || runStatus === 'needs_input';
 
   const slides = activeProjectId && activeProjectId !== 'new-pending' ? slidesByProjectId[activeProjectId] || [] : [];
   const currentSlide = slides[currentPage];
 
   useEffect(() => {
-    composer.applyContextDefault(slides.length > 0);
-  }, [slides.length]);
+    applyContextDefault(slides.length > 0);
+  }, [applyContextDefault, slides.length]);
   useEffect(() => {
-    if (composer.focusNonce > 0) textareaRef.current?.focus();
-  }, [composer.focusNonce]);
+    if (focusNonce > 0) textareaRef.current?.focus();
+  }, [focusNonce]);
 
   const submit = async (deckMaterialization = false) => {
     const raw = text.trim();
     if (disabled || !activeProjectId || (!deckMaterialization && !raw)) return;
     let projectId = activeProjectId;
-    let target = deckMaterialization
+    const target = deckMaterialization
       ? { artifact: 'presentation' as const, level: 'deck' as const }
       : {
           artifact: composer.artifact,

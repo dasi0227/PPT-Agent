@@ -22,8 +22,11 @@ describe('DeckNavigator', () => {
       loadingProjects: false
     });
     useBlueprintStore.setState({ byProjectId: { p1: {
-      deck: { schema_version: '2.0', revision: 1, project_id: 'p1', title: '演示项目', goal: '', audience: '', language: 'zh-CN', core_thesis: '核心命题', narrative_arc: '', sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
-      slides: {},
+      deck: { schema_version: '2.0', revision: 1, project_id: 'p1', title: '演示项目', goal: '', audience: '', language: 'zh-CN', core_thesis: '核心命题', narrative_arc: '', sections: [{ id: 'sec', number: '01', title: '市场', subsections: [{ id: 'sub', number: '1.1', title: '趋势' }] }], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+      slides: {
+        s1: { schema_version: '2.0', revision: 1, slide_id: 's1', section_id: 'sec', role: 'cover', title: '市场分析', key_message: '市场在扩大', content: { summary: '摘要', points: [] }, visual_intent: { archetype: 'cover', description: '封面', asset_queries: [] }, speaker_notes: '', created_at: 1, updated_at: 1 },
+        s2: { schema_version: '2.0', revision: 2, slide_id: 's2', section_id: 'sec', subsection_id: 'sub', role: 'evidence', title: '增长趋势', key_message: '增长持续', content: { summary: '摘要', points: [] }, visual_intent: { archetype: 'chart', description: '趋势图', asset_queries: [] }, speaker_notes: '', created_at: 1, updated_at: 2 },
+      },
       design_spec: { schema_version: '2.0', revision: 1, canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {} },
       materialization: {
         s1: { state: 'fresh', revisions: { presentation: 1, source_deck: 1, source_blueprint: 1, source_design: 1 } },
@@ -42,6 +45,12 @@ describe('DeckNavigator', () => {
   it('marks stale pages with a materialization badge', () => {
     render(<DeckNavigator />);
     expect(screen.getByText('蓝图有更新')).toBeInTheDocument();
+  });
+
+  it('renders section and subsection directory hierarchy', () => {
+    render(<DeckNavigator />);
+    expect(screen.getByText('01 市场')).toBeInTheDocument();
+    expect(screen.getByText('1.1 趋势')).toBeInTheDocument();
   });
 
   it('add page button calls slidesApi.add with last slide as anchor', async () => {

@@ -9,23 +9,25 @@ verifies: [V2-G4, V2-G5]
 
 # Agent 生成流水线 v2
 
+> R0 状态（2026-08-01）：公共 Run 协议已切换为 Artifact Target。本文后续出现的 `generate/edit` 只描述 presentation Runner 内部的物化/修改实现，不再是 API kind；`overview/page` 只描述既有内部执行器，不再是公共 level。
+
 需求 3：把 Agent 从"单 ReAct 循环骨架"升级为"多节点前端构建流水线"，集成 Claude 官方 `frontend-design`
 skill，实现更完整的分步处理与更完善的校验/交付。本文件是后端 Agent 层的 v2 核心设计。
 
 ## 1. 设计原则（继承 v1，不推翻）
 
-- **三层结构不变**：Run 外壳 → Harness（ReAct + 工具门控）→ Tools。流水线是**在 generate 这一 kind 内部
-  编排多个 harness 子循环 + 确定性 Go 节点**，不引入新的顶层架构。
+- **三层结构不变**：Run 外壳 → Harness（ReAct + capability 门控）→ Tools。流水线由
+  `RunnerResolver` 按 `blueprint|presentation × slide|deck` 选择，再由 presentation Runner 内部推导 materialize/revise。
 - **LLM 只做认知，工具做副作用**（ARCH-HARNESS-002）：新节点同样通过工具落盘。
 - **可观测**：每个阶段/步骤经 SSE 投影（新增 `plan`/`plan.update`，复用 `progress`）。
 - **不做通用 DAG 引擎**（用户确认）：固定阶段序列，用 Go 编排，简单可测。
 
 ## 2. 流水线全景
 
-把 v1 的"逐页单发"升级为 5 阶段流水线。**只作用于 `kind=generate` 的整套生成**（单页重生成走精简路径，见 §7）：
+把 v1 的"逐页单发"升级为 5 阶段流水线。**只作用于 `presentation/deck` 的首次物化**（单页物化走精简路径，见 §7）：
 
 ```text
-Run(kind=generate, scope=overview)
+Run(target=presentation/deck, intent=apply)
   │
   ▼  Stage 1: DESIGN  ── 设计总监节点（LLM 子循环）
   │     产出 design_spec（palette/type/layout/signature）→ 落盘 design/design-spec.json
@@ -166,11 +168,12 @@ data: { "id": "plan_<runId>", "step_id": "s1", "status": "in_progress" | "comple
 
 > 这让 v2 既能"AI 出彩"（无主题时），又尊重"用户已选主题"（不喧宾夺主），与 v1 仓库主题体系兼容。
 
-## 7. 单页重生成 / 编辑的精简路径（不过度设计）
+## 7. 单页物化 / 修改的精简路径（不过度设计）
 
-- **单页重生成**（`generate` + `page_index`）：**不跑完整流水线**。读现有 design_spec（若有）→ 单页子代理生成 → 校验 → done。只发该页的 progress/artifact，可选 `plan`（单步）。
-- **单页编辑**（`kind=edit`）：完全沿用 v1 `edit.Runner`（主循环 patch_slide），不引入流水线。
-- **overview / repo 编辑**：沿用 v1 runner。
+- **单页首次物化**（`presentation/slide` 且无 HTML）：**不跑完整流水线**。读取该页 Blueprint 与 design spec → 单页子代理生成 → 校验 → done。
+- **单页修改**（`presentation/slide` 且已有 HTML）：复用确定性的 HTML patch/validate/version 实现，不引入流水线。
+- **整份修改**（`presentation/deck` 且已有 HTML）：使用 deck runner 处理全局设计或跨页修改。
+- repo 不属于 target；资产仅通过受控 `search_assets/read_assets/mount_assets` capability 提供。
 
 > 原则：流水线只在"整套从大纲到成品"的高价值场景启用；高频小编辑保持低延迟。
 

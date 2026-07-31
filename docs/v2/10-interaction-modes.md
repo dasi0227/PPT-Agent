@@ -1,13 +1,17 @@
 ---
 id: V2-INTERACTION-MODES
 title: 四交互模式：呈现、切换与映射
-status: draft
+status: superseded-by-r0
 owner: frontend
 depends_on: [V2-BACKGROUND, AGENT-CMD-INDEX]
 verifies: [V2-G1, V2-G2]
 ---
 
 # 四交互模式：呈现、切换与映射
+
+> 本文保留为 R0 前的设计历史，不再是实现契约。当前权威协议见
+> [40-api-and-data-contracts](40-api-and-data-contracts.md)：产物为蓝图/演示，层级为当前页/整份，
+> 交互为执行/讨论；repo 是独立资产能力，不是 PPT target。
 
 本文件定义 v2 前端如何把 v1 的 `kind + scope + mode` 折叠为用户可感知的**四档交互模式**，如何切换、
 如何智能默认、如何精确映射到后端 Run 字段。这是修复"新建后动不了"与"四类交互无法切换"的核心设计。
