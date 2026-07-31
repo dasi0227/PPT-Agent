@@ -11,6 +11,17 @@ type RunStartedPayload struct {
 	Interaction *model.RunInteraction `json:"interaction,omitempty"`
 }
 
+type ContextAssembledPayload struct {
+	ContextID       string   `json:"context_id"`
+	Profile         string   `json:"profile"`
+	EstimatedTokens int      `json:"estimated_tokens"`
+	BudgetTokens    int      `json:"budget_tokens"`
+	Segments        int      `json:"segments"`
+	Refs            int      `json:"refs"`
+	Warnings        []string `json:"warnings"`
+	ReadOnly        bool     `json:"read_only"`
+}
+
 type ThoughtPayload struct {
 	Text string `json:"text"`
 }

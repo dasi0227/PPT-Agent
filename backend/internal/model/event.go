@@ -5,6 +5,7 @@ type EventType string
 
 const (
 	EventRunStarted EventType = "run.started"
+	EventContextAssembled EventType = "context.assembled"
 	EventThought    EventType = "thought"
 	EventToolCall   EventType = "tool_call"
 	EventToolResult EventType = "tool_result"

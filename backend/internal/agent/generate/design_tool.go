@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
@@ -70,8 +71,8 @@ func (t *SubmitDesignSpecTool) Parameters() map[string]any {
 			},
 			"palette": map[string]any{"type": "array", "minItems": 3, "items": colorItem},
 			"type": map[string]any{
-				"type":     "object",
-				"required": []any{"display", "body"},
+				"type":       "object",
+				"required":   []any{"display", "body"},
 				"properties": map[string]any{"display": fontObj, "body": fontObj, "utility": fontObj},
 			},
 			"layout": map[string]any{
@@ -96,12 +97,20 @@ func (t *SubmitDesignSpecTool) Execute(ctx context.Context, args map[string]any)
 		return fail("design_spec 校验失败：" + err.Error()), nil
 	}
 
-	raw, err := json.MarshalIndent(spec, "", "  ")
+	const rel = "design/design-spec.json"
+	old, readErr := t.sandbox.Read(rel)
+	revision := 1
+	if readErr == nil {
+		var current blueprint.DesignSpec
+		if json.Unmarshal(old, &current) == nil && current.SchemaVersion == blueprint.SchemaVersion {
+			revision = current.Revision + 1
+		}
+	}
+	persisted := blueprintFromDirector(spec, revision)
+	raw, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return tools.Result{}, err
 	}
-	const rel = "design/design-spec.json"
-	old, readErr := t.sandbox.Read(rel)
 	if err := t.sandbox.Write(rel, raw); err != nil {
 		return fail(fmt.Sprintf("写入失败：%v", err)), nil
 	}
@@ -122,6 +131,33 @@ func (t *SubmitDesignSpecTool) Execute(ctx context.Context, args map[string]any)
 		Observation: fmt.Sprintf("design_spec 已落盘（%d 个色板色，signature=%q），design 版本 v%d", len(spec.Palette), spec.Signature, versionNo),
 		Artifact:    &tools.Artifact{Type: "design_spec", Ref: rel},
 	}, nil
+}
+
+func blueprintFromDirector(spec DesignSpec, revision int) blueprint.DesignSpec {
+	palette := make([]string, 0, len(spec.Palette))
+	for _, color := range spec.Palette {
+		palette = append(palette, color.Hex)
+	}
+	typography := map[string]any{}
+	if raw, err := json.Marshal(spec.Type); err == nil {
+		_ = json.Unmarshal(raw, &typography)
+	}
+	layout := map[string]any{}
+	if raw, err := json.Marshal(spec.Layout); err == nil {
+		_ = json.Unmarshal(raw, &layout)
+	}
+	if len(layout) == 0 {
+		layout["grid"] = "12-col"
+	}
+	motion := map[string]any{}
+	if raw, err := json.Marshal(spec.Motion); err == nil {
+		_ = json.Unmarshal(raw, &motion)
+	}
+	return blueprint.DesignSpec{
+		SchemaVersion: blueprint.SchemaVersion, Revision: revision, Canvas: map[string]any{"ratio": "16:9"},
+		Palette: palette, Typography: typography, Spacing: map[string]any{}, Radius: map[string]any{},
+		Shadows: map[string]any{}, LayoutSystem: layout, Signature: spec.Signature, Motion: motion,
+	}
 }
 
 func (t *SubmitDesignSpecTool) snapshotVersion(ctx context.Context, raw []byte) (int, error) {

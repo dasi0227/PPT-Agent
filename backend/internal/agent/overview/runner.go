@@ -8,6 +8,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/assetops"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -23,6 +24,7 @@ type Params struct {
 	WorkRoot    string // 全局 work_root（_assets 所在）
 	PageCount   int    // 项目页数（fanout 默认全页、越界校验用）
 	Instruction string // 用户自然语言全局调整指令
+	ContextPack *contextengine.ContextPack
 }
 
 // Runner 用 harness ReAct 主循环跑「全局调整」，满足 run.Runner。
@@ -75,14 +77,18 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 		NewFanoutPagePatchTool(r.client, r.store, sandbox, r.params.ProjectID, r.params.RunID, r.params.PageCount, r.clock, r.newID),
 		tools.NewFinishTool(),
 	}
+	if refTool := contextengine.RefTool(r.params.ContextPack); refTool != nil {
+		toolset = append(toolset, refTool)
+	}
 
+	systemPrompt, userPrompt := contextengine.CompileForRunner(r.params.ContextPack, prompt.OverviewSystem(pp), prompt.OverviewUser(pp))
 	loop := harness.New(r.client, harness.Config{
 		RunID:        r.params.RunID,
 		Kind:         model.KindEdit,
 		Scope:        model.ScopeOverview,
 		Mode:         model.ModeNormal,
-		SystemPrompt: prompt.OverviewSystem(pp),
-		Instruction:  prompt.OverviewUser(pp),
+		SystemPrompt: systemPrompt,
+		Instruction:  userPrompt,
 		Tools:        toolset,
 	})
 	return loop.Run(ctx, em, cp)

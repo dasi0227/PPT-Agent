@@ -68,9 +68,6 @@ func (c *genFakeClient) CallTool(_ context.Context, req llm.ToolCallRequest) (ll
 	}
 	idx := 0
 	for i := len(req.Messages) - 1; i >= 0; i-- {
-		if req.Messages[i].Role != llm.RoleUser {
-			continue
-		}
 		s := req.Messages[i].Content
 		if k := strings.Index(s, "slide_idx="); k >= 0 {
 			fmt.Sscanf(s[k+len("slide_idx="):], "%d", &idx)
@@ -136,6 +133,7 @@ func TestE2EGenerateDeck(t *testing.T) {
 	if err := st.ReplaceSlides(context.Background(), "p1", metas); err != nil {
 		t.Fatalf("replace slides: %v", err)
 	}
+	writeV2ContextSources(t, workDir, "p1", metas)
 
 	// 真实工厂（kind=generate → generate.Runner）+ fake LLM。
 	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())

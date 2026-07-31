@@ -94,6 +94,7 @@ func setupM5Server(t *testing.T, pages int) (*httptest.Server, string, string) {
 	if err := st.ReplaceSlides(ctx, "p1", metas); err != nil {
 		t.Fatal(err)
 	}
+	writeV2ContextSources(t, workDir, "p1", metas)
 	writeAtE(t, workDir, "common/tokens.css", ":root{--color-primary:#ff0000;}")
 	writeAtE(t, workDir, "common/base.css", ".slide-stage{}")
 

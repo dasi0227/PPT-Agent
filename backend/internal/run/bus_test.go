@@ -69,7 +69,7 @@ func readHistoryLines(t *testing.T, dir string) []HistoryEntry {
 	return out
 }
 
-// Emit run.started/info/done/thought 四个白名单事件必须落盘；progress/tool_call 不落。
+// thought 不持久化（不保存 chain-of-thought）；可见用户与结果事件必须落盘。
 func TestBusAppendsWhitelistedEventsToHistory(t *testing.T) {
 	hw, dir := newFSWriterForTest(t)
 	b := NewBus("r1", "t1", &memStore2{}, hw)
@@ -78,14 +78,14 @@ func TestBusAppendsWhitelistedEventsToHistory(t *testing.T) {
 	if err := b.Emit(ctx, model.EventRunStarted, harness.RunStartedPayload{RunID: "r1", UserInput: "hi"}); err != nil {
 		t.Fatal(err)
 	}
-	_ = b.Emit(ctx, model.EventThought, harness.ThoughtPayload{Text: "thinking"}) // 落盘
+	_ = b.Emit(ctx, model.EventThought, harness.ThoughtPayload{Text: "thinking"}) // 不落盘
 	_ = b.Emit(ctx, model.EventProgress, harness.ProgressPayload{Stage: "turn"})  // 不落
 	_ = b.Emit(ctx, model.EventInfo, harness.InfoPayload{Text: "info line"})
 	_ = b.Emit(ctx, model.EventDone, harness.DonePayload{Result: map[string]any{"ok": true}})
 
 	entries := readHistoryLines(t, dir)
-	if len(entries) != 4 { // run.started, thought, info, done
-		t.Fatalf("expected 4 lines, got %d: %+v", len(entries), entries)
+	if len(entries) != 3 { // run.started, info, done
+		t.Fatalf("expected 3 lines, got %d: %+v", len(entries), entries)
 	}
 	if entries[0].Turn != "user" || entries[0].Type != "user_turn" || entries[0].Data["text"] != "hi" {
 		t.Fatalf("unexpected first entry: %+v", entries[0])
@@ -93,14 +93,11 @@ func TestBusAppendsWhitelistedEventsToHistory(t *testing.T) {
 	if entries[0].RunID != "r1" || entries[0].Seq != 1 {
 		t.Fatalf("expected run_id=r1 seq=1, got %+v", entries[0])
 	}
-	if entries[1].Type != "thought" {
-		t.Fatalf("expected thought entry, got %+v", entries[1])
+	if entries[1].Turn != "agent" || entries[1].Type != "markdown" {
+		t.Fatalf("expected info->markdown agent turn, got %+v", entries[1])
 	}
-	if entries[2].Turn != "agent" || entries[2].Type != "markdown" {
-		t.Fatalf("expected info->markdown agent turn, got %+v", entries[2])
-	}
-	if entries[3].Type != "final_result" || entries[3].Turn != "agent" {
-		t.Fatalf("unexpected done entry: %+v", entries[3])
+	if entries[2].Type != "final_result" || entries[2].Turn != "agent" {
+		t.Fatalf("unexpected done entry: %+v", entries[2])
 	}
 }
 
@@ -135,5 +132,21 @@ func TestBusAppendsErrorEvent(t *testing.T) {
 	entries := readHistoryLines(t, dir)
 	if len(entries) != 1 || entries[0].Type != "error" || entries[0].Data["code"] != "BOOM" {
 		t.Fatalf("unexpected error entries: %+v", entries)
+	}
+}
+
+func TestBusReplaysContextAssembledWithoutSensitiveContent(t *testing.T) {
+	hw, dir := newFSWriterForTest(t)
+	b := NewBus("r1", "t1", &memStore2{}, hw)
+	_ = b.Emit(context.Background(), model.EventContextAssembled, harness.ContextAssembledPayload{
+		ContextID: "ctx_1", Profile: "presentation/slide", EstimatedTokens: 1200,
+		BudgetTokens: 8000, Segments: 7, Refs: 1, Warnings: []string{"html downgraded"},
+	})
+	entries := readHistoryLines(t, dir)
+	if len(entries) != 1 || entries[0].Type != "context_assembled" {
+		t.Fatalf("unexpected entries: %+v", entries)
+	}
+	if _, leaked := entries[0].Data["content"]; leaked {
+		t.Fatal("context payload leaked full content into history")
 	}
 }

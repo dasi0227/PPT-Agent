@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -143,7 +144,7 @@ func revisionsOf(view blueprint.ProjectView, slideID string) blueprintRevisions 
 	return revisions
 }
 
-type TargetRunnerBuilder func(model.Run, model.CreateRunParams, model.Project) run.Runner
+type TargetRunnerBuilder func(model.Run, model.CreateRunParams, model.Project, contextengine.ContextPack) run.Runner
 
 type RunnerResolver struct {
 	builders map[TargetKey]TargetRunnerBuilder
@@ -157,12 +158,12 @@ func NewRunnerResolver(builders map[TargetKey]TargetRunnerBuilder) *RunnerResolv
 	return &RunnerResolver{builders: copy}
 }
 
-func (r *RunnerResolver) Resolve(runModel model.Run, params model.CreateRunParams, project model.Project) (run.Runner, error) {
+func (r *RunnerResolver) Resolve(runModel model.Run, params model.CreateRunParams, project model.Project, pack contextengine.ContextPack) (run.Runner, error) {
 	builder, ok := r.builders[TargetKey{Artifact: runModel.WorkSpec.Target.Artifact, Level: runModel.WorkSpec.Target.Level}]
 	if !ok {
 		return nil, ErrRunTargetUnsupported
 	}
-	return &workSpecRunner{inner: builder(runModel, params, project), spec: runModel.WorkSpec}, nil
+	return &workSpecRunner{inner: builder(runModel, params, project, pack), spec: runModel.WorkSpec}, nil
 }
 
 type workSpecRunner struct {

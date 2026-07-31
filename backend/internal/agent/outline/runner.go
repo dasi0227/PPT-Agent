@@ -7,6 +7,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -16,13 +17,14 @@ import (
 
 // Params 是构造一次大纲 Run 所需的输入。
 type Params struct {
-	RunID      string
-	ProjectID  string
-	WorkDir    string // project work_dir（sandbox 根）
-	Topic      string
-	Brief      string
-	SlideCount int
-	Language   string
+	RunID       string
+	ProjectID   string
+	WorkDir     string // project work_dir（sandbox 根）
+	Topic       string
+	Brief       string
+	SlideCount  int
+	Language    string
+	ContextPack *contextengine.ContextPack
 }
 
 // Runner 用 harness ReAct 循环跑「主题 → slide-json[]」，满足 run.Runner。
@@ -58,14 +60,19 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 		MaxBody:    defaultMaxBody,
 	}
 
+	systemPrompt, userPrompt := contextengine.CompileForRunner(r.params.ContextPack, prompt.OutlineSystem(pp), prompt.OutlineUser(pp))
+	toolset := []tools.Tool{submit, tools.NewFinishTool()}
+	if refTool := contextengine.RefTool(r.params.ContextPack); refTool != nil {
+		toolset = append(toolset, refTool)
+	}
 	loop := harness.New(r.client, harness.Config{
 		RunID:        r.params.RunID,
 		Kind:         model.KindOutline,
 		Scope:        model.ScopeCurrent,
 		Mode:         model.ModeNormal,
-		SystemPrompt: prompt.OutlineSystem(pp),
-		Instruction:  prompt.OutlineUser(pp),
-		Tools:        []tools.Tool{submit, tools.NewFinishTool()},
+		SystemPrompt: systemPrompt,
+		Instruction:  userPrompt,
+		Tools:        toolset,
 	})
 	return loop.Run(ctx, em, cp)
 }

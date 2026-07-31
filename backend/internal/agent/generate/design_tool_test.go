@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 )
 
@@ -57,11 +58,11 @@ func TestDesignSpecSubmitPersistsAndVersions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("design-spec.json not written: %v", err)
 	}
-	var spec DesignSpec
+	var spec blueprint.DesignSpec
 	if err := json.Unmarshal(raw, &spec); err != nil {
 		t.Fatalf("design-spec.json invalid: %v", err)
 	}
-	if len(spec.Palette) != 3 || spec.Signature == "" {
+	if len(spec.Palette) != 3 || spec.Signature == "" || spec.SchemaVersion != blueprint.SchemaVersion {
 		t.Errorf("persisted spec incomplete: %+v", spec)
 	}
 	// 产 design 版本。
@@ -77,7 +78,7 @@ func TestDesignSpecSubmitPersistsAndVersions(t *testing.T) {
 // design_spec 校验：palette 不足 / 字体缺失 / signature 空 → 可操作错误，不落盘。
 func TestDesignSpecValidationRejects(t *testing.T) {
 	cases := map[string]func(map[string]any){
-		"palette<3": func(a map[string]any) { a["palette"] = []any{a["palette"].([]any)[0]} },
+		"palette<3":    func(a map[string]any) { a["palette"] = []any{a["palette"].([]any)[0]} },
 		"no signature": func(a map[string]any) { a["signature"] = "" },
 		"body font missing family": func(a map[string]any) {
 			a["type"].(map[string]any)["body"] = map[string]any{"weights": []any{400}, "usage": "x"}

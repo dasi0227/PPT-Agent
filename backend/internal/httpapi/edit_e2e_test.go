@@ -42,9 +42,6 @@ func (c *editFakeClient) CallTool(_ context.Context, req llm.ToolCallRequest) (l
 	c.done = true
 	idx := 0
 	for i := len(req.Messages) - 1; i >= 0; i-- {
-		if req.Messages[i].Role != llm.RoleUser {
-			continue
-		}
 		if k := strings.Index(req.Messages[i].Content, "slide_idx="); k >= 0 {
 			fmt.Sscanf(req.Messages[i].Content[k+len("slide_idx="):], "%d", &idx)
 			break
@@ -101,6 +98,7 @@ func setupEditServer(t *testing.T, pages int, client llm.Client) (*httptest.Serv
 	if err := st.ReplaceSlides(ctx, "p1", metas); err != nil {
 		t.Fatal(err)
 	}
+	writeV2ContextSources(t, workDir, "p1", metas)
 	// 写公共层，用于 hash 隔离断言。
 	writeAtE(t, workDir, "common/tokens.css", ":root{--color-bg:#000}")
 	writeAtE(t, workDir, "common/base.css", ".slide-stage{}")

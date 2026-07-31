@@ -39,12 +39,35 @@ func NewEngine(store Store, locks *LockManager, hw HistoryWriter, log *zap.Logge
 // Start 创建 Run（pending）并异步执行 runner。返回创建后的 Run 元数据。
 // 每 project 锁在后台 goroutine 内获取：同 project 串行、跨 project 并行（ARCH-RUN-LOCK）。
 func (e *Engine) Start(ctx context.Context, r model.Run, runner Runner) (model.Run, error) {
+	return e.StartWithContext(ctx, r, runner, nil)
+}
+
+// StartWithContext atomically establishes the Run row and its auditable ContextManifest
+// before any runner code executes.
+func (e *Engine) StartWithContext(ctx context.Context, r model.Run, runner Runner, manifest *model.RunContext) (model.Run, error) {
 	now := time.Now().Unix()
 	r.Status = model.RunPending
 	r.CreatedAt = now
 	r.UpdatedAt = now
 	if err := e.store.CreateRun(ctx, r); err != nil {
 		return model.Run{}, err
+	}
+	if manifest != nil {
+		manifest.RunID = r.ID
+		if manifest.CreatedAt == 0 {
+			manifest.CreatedAt = now
+		}
+		contextStore, ok := e.store.(interface {
+			SaveRunContext(context.Context, model.RunContext) error
+		})
+		if !ok {
+			_ = e.store.SetRunStatus(ctx, r.ID, model.RunFailed)
+			return model.Run{}, ErrContextStoreUnavailable
+		}
+		if err := contextStore.SaveRunContext(ctx, *manifest); err != nil {
+			_ = e.store.SetRunStatus(ctx, r.ID, model.RunFailed)
+			return model.Run{}, err
+		}
 	}
 
 	bus := NewBus(r.ID, r.ThreadID, e.store, e.hw)

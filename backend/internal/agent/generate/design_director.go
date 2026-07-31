@@ -9,6 +9,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
+	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -82,14 +83,35 @@ func readDesignSpec(sandbox *tools.Sandbox) (*DesignSpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	var spec DesignSpec
-	if err := json.Unmarshal(raw, &spec); err != nil {
+	var persisted blueprint.DesignSpec
+	if err := json.Unmarshal(raw, &persisted); err != nil {
 		return nil, err
 	}
+	if err := blueprint.ValidateDesignSpec(persisted); err != nil {
+		return nil, err
+	}
+	spec := directorFromBlueprint(persisted)
 	if err := spec.Validate(); err != nil {
 		return nil, err
 	}
 	return &spec, nil
+}
+
+func directorFromBlueprint(spec blueprint.DesignSpec) DesignSpec {
+	out := DesignSpec{Palette: []DesignColor{}, Signature: spec.Signature}
+	for i, hex := range spec.Palette {
+		out.Palette = append(out.Palette, DesignColor{Name: fmt.Sprintf("color-%d", i+1), Hex: hex, Role: "design token"})
+	}
+	if raw, err := json.Marshal(spec.Typography); err == nil {
+		_ = json.Unmarshal(raw, &out.Type)
+	}
+	if raw, err := json.Marshal(spec.LayoutSystem); err == nil {
+		_ = json.Unmarshal(raw, &out.Layout)
+	}
+	if raw, err := json.Marshal(spec.Motion); err == nil {
+		_ = json.Unmarshal(raw, &out.Motion)
+	}
+	return out
 }
 
 // briefFromSpec 把 design_spec 压缩为逐页注入的摘要（slide.gen@v2）。

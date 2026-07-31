@@ -7,6 +7,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -21,6 +22,7 @@ type EditParams struct {
 	Instruction string
 	Language    string
 	Mode        model.Mode // normal / ask
+	ContextPack *contextengine.ContextPack
 }
 
 // EditRunner 用 harness ReAct 循环执行大纲编辑（patch/add/delete/reorder），满足 run.Runner。
@@ -51,6 +53,9 @@ func (r *EditRunner) Run(ctx context.Context, em harness.Emitter, cp harness.Che
 		&reorderOutlineTool{editor: r.editor, projectID: r.params.ProjectID},
 		tools.NewFinishTool(),
 	}
+	if refTool := contextengine.RefTool(r.params.ContextPack); refTool != nil {
+		toolset = append(toolset, refTool)
+	}
 
 	mode := r.params.Mode
 	if mode == "" {
@@ -63,13 +68,14 @@ func (r *EditRunner) Run(ctx context.Context, em harness.Emitter, cp harness.Che
 		Slides:      outlineDigest(slides),
 	}
 
+	systemPrompt, userPrompt := contextengine.CompileForRunner(r.params.ContextPack, prompt.OutlineEditSystem(pp), prompt.OutlineEditUser(pp))
 	loop := harness.New(r.client, harness.Config{
 		RunID:        r.params.RunID,
 		Kind:         model.KindOutline,
 		Scope:        model.ScopeCurrent,
 		Mode:         mode,
-		SystemPrompt: prompt.OutlineEditSystem(pp),
-		Instruction:  prompt.OutlineEditUser(pp),
+		SystemPrompt: systemPrompt,
+		Instruction:  userPrompt,
 		Tools:        toolset,
 	})
 	return loop.Run(ctx, em, cp)

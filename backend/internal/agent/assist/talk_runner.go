@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -18,22 +19,37 @@ type TalkRunner struct {
 	client      llm.Client
 	runID       string
 	instruction string
+	pack        *contextengine.ContextPack
 }
 
 func NewTalkRunner(client llm.Client, runID, instruction string) *TalkRunner {
 	return &TalkRunner{client: client, runID: runID, instruction: instruction}
 }
 
+func NewContextTalkRunner(client llm.Client, runID, instruction string, pack *contextengine.ContextPack) *TalkRunner {
+	return &TalkRunner{client: client, runID: runID, instruction: instruction, pack: pack}
+}
+
 func (r *TalkRunner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, _ run.Prompter) harness.Outcome {
 	// 即使传入编辑工具，Mode=talk 的 Gate 只保留 ClassControl（finish），机制级保证零产物。
+	systemPrompt, userPrompt := contextengine.CompileForRunner(r.pack, prompt.TalkSystem(), r.instruction)
+	mode := model.ModeTalk
+	if r.pack != nil {
+		// Context consult exposes only finish + controlled read_context_ref; no write tool exists.
+		mode = model.ModeNormal
+	}
+	toolset := []tools.Tool{tools.NewFinishTool()}
+	if refTool := contextengine.RefTool(r.pack); refTool != nil {
+		toolset = append(toolset, refTool)
+	}
 	loop := harness.New(r.client, harness.Config{
 		RunID:        r.runID,
 		Kind:         model.KindCommand,
 		Scope:        model.ScopeCurrent,
-		Mode:         model.ModeTalk,
-		SystemPrompt: prompt.TalkSystem(),
-		Instruction:  r.instruction,
-		Tools:        []tools.Tool{tools.NewFinishTool()},
+		Mode:         mode,
+		SystemPrompt: systemPrompt,
+		Instruction:  userPrompt,
+		Tools:        toolset,
 	})
 	return loop.Run(ctx, em, cp)
 }

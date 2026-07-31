@@ -16,6 +16,8 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
 	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
+	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -25,14 +27,15 @@ import (
 
 // Params 是构造一次生成 Run 所需的输入。
 type Params struct {
-	RunID     string
-	ProjectID string
-	WorkDir   string // project work_dir（sandbox 根）
-	WorkRoot  string // 全局 work_root（_assets 所在）；空时按 WorkDir 父目录兜底
-	Theme     string // 所选主题 id；空则回退 project.Theme→首个 preset
-	PageIndex *int   // 非空=单页重生成，仅动该页（AC-GEN-009）；空=整套生成
-	Brief     string // 设计总监上下文：项目简报（可空）
-	Language  string // 设计总监上下文：语言（zh/en，可空）
+	RunID       string
+	ProjectID   string
+	WorkDir     string // project work_dir（sandbox 根）
+	WorkRoot    string // 全局 work_root（_assets 所在）；空时按 WorkDir 父目录兜底
+	Theme       string // 所选主题 id；空则回退 project.Theme→首个 preset
+	PageIndex   *int   // 非空=单页重生成，仅动该页（AC-GEN-009）；空=整套生成
+	Brief       string // 设计总监上下文：项目简报（可空）
+	Language    string // 设计总监上下文：语言（zh/en，可空）
+	ContextPack *contextengine.ContextPack
 }
 
 type resolvedTheme struct {
@@ -330,14 +333,19 @@ func (r *Runner) generatePage(ctx context.Context, em harness.Emitter, cp harnes
 		FixErrors: fixErrors,
 	}
 
+	systemPrompt, userPrompt := contextengine.CompileForRunner(r.params.ContextPack, prompt.SlideSystem(pp), prompt.SlideUser(pp))
+	toolset := []tools.Tool{writeTool, NewValidateSlideTool(), tools.NewFinishTool()}
+	if refTool := contextengine.RefTool(r.params.ContextPack); refTool != nil {
+		toolset = append(toolset, refTool)
+	}
 	loop := harness.New(r.client, harness.Config{
 		RunID:        r.params.RunID,
 		Kind:         model.KindGenerate,
 		Scope:        model.ScopeCurrent,
 		Mode:         model.ModeNormal,
-		SystemPrompt: prompt.SlideSystem(pp),
-		Instruction:  prompt.SlideUser(pp),
-		Tools:        []tools.Tool{writeTool, NewValidateSlideTool(), tools.NewFinishTool()},
+		SystemPrompt: systemPrompt,
+		Instruction:  userPrompt,
+		Tools:        toolset,
 	})
 	outcome := loop.Run(ctx, em, cp)
 	// 防守：LLM 声称完成但未真正写入该页 → 视为失败（避免空页混过 AC-GEN-001）。
@@ -455,6 +463,29 @@ func (r *Runner) readThemeTokens(theme resolvedTheme) ([]byte, error) {
 
 // loadSlideJSON 从磁盘读取该页 slide.json（大纲阶段已落盘）。
 func (r *Runner) loadSlideJSON(sandbox *tools.Sandbox, sl model.Slide) (slidejson.SlideJSON, error) {
+	if r.params.ContextPack != nil {
+		var bp *blueprint.Slide
+		if target := r.params.ContextPack.Target.Slide; target != nil && target.SlideID == sl.ID {
+			bp = target
+		} else {
+			// Deck packs intentionally keep non-target pages summarized rather than full.
+			for _, summary := range r.params.ContextPack.Deck.Summaries {
+				if summary.ID == sl.ID {
+					return slidejson.SlideJSON{
+						ID: sl.ID, Idx: sl.Idx, Layout: preferContext(summary.Role, sl.Layout),
+						Title: summary.Title, ContentIntent: summary.KeyMessage,
+					}, nil
+				}
+			}
+		}
+		if bp != nil {
+			return slidejson.SlideJSON{
+				ID: sl.ID, Idx: sl.Idx, Layout: preferContext(bp.VisualIntent.Archetype, sl.Layout),
+				Title: bp.Title, Bullets: append([]string{}, bp.Content.Points...),
+				ContentIntent: bp.Content.Summary, Notes: bp.SpeakerNotes,
+			}, nil
+		}
+	}
 	raw, err := sandbox.Read(model.SlideJSONPath(sl.ID))
 	if err != nil {
 		// 回退：磁盘无 slide.json 时用 store 元数据最小重建（layout/title 足够生成）。
@@ -467,6 +498,13 @@ func (r *Runner) loadSlideJSON(sandbox *tools.Sandbox, sl model.Slide) (slidejso
 	// 磁盘 slide.json 未必带稳定 id，用 store 元数据回填，保证路径拼接一致。
 	sj.ID = sl.ID
 	return sj, nil
+}
+
+func preferContext(value, fallback string) string {
+	if strings.TrimSpace(value) != "" {
+		return value
+	}
+	return fallback
 }
 
 func (r *Runner) errOut(em harness.Emitter, code, msg string) harness.Outcome {

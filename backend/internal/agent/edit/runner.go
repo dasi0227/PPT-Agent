@@ -12,6 +12,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/assetops"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/prompt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -28,6 +29,7 @@ type Params struct {
 	Scope       model.Scope // current | page（归一为锁定某页）
 	PageIndex   int         // 锁定编辑的页序（0 基；current 由上报页填充，越界校验在 service）
 	Instruction string      // 用户自然语言编辑指令
+	ContextPack *contextengine.ContextPack
 }
 
 // Runner 用 harness ReAct 主循环跑「自然语言 → 锚定 patch 目标页」，满足 run.Runner。
@@ -94,14 +96,18 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 		NewValidateSlideTool(),
 		tools.NewFinishTool(),
 	}
+	if refTool := contextengine.RefTool(r.params.ContextPack); refTool != nil {
+		toolset = append(toolset, refTool)
+	}
 
+	systemPrompt, userPrompt := contextengine.CompileForRunner(r.params.ContextPack, prompt.EditSystem(pp), prompt.EditUser(pp))
 	loop := harness.New(r.client, harness.Config{
 		RunID:        r.params.RunID,
 		Kind:         model.KindEdit,
 		Scope:        r.params.Scope,
 		Mode:         model.ModeNormal,
-		SystemPrompt: prompt.EditSystem(pp),
-		Instruction:  prompt.EditUser(pp),
+		SystemPrompt: systemPrompt,
+		Instruction:  userPrompt,
 		Tools:        toolset,
 	})
 	return loop.Run(ctx, em, cp)

@@ -33,8 +33,8 @@ func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
 // 现调整为：thought/tool_call/tool_result/artifact 均需落盘，以支持前端刷新后的完整回放。
 func isWhitelistedForHistory(evt model.EventType) bool {
 	switch evt {
-	case model.EventRunStarted, model.EventToken, model.EventInfo, model.EventNeedsInput, model.EventDone, model.EventError,
-		model.EventThought, model.EventToolCall, model.EventToolResult, model.EventArtifact:
+	case model.EventRunStarted, model.EventContextAssembled, model.EventToken, model.EventInfo, model.EventNeedsInput, model.EventDone, model.EventError,
+		model.EventToolCall, model.EventToolResult, model.EventArtifact:
 		return true
 	}
 	return false
@@ -57,6 +57,9 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 		entry.Data = map[string]any{
 			"text": text, "target": data["target"], "interaction": data["interaction"],
 		}
+	case model.EventContextAssembled:
+		entry.Turn = "agent"
+		entry.Type = "context_assembled"
 	case model.EventToken, model.EventInfo:
 		entry.Turn = "agent"
 		entry.Type = "markdown"

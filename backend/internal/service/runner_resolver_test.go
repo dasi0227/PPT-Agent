@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -45,7 +46,7 @@ func TestRunnerResolverFourTargetCombinations(t *testing.T) {
 		{model.ArtifactPresentation, model.TargetSlide},
 	} {
 		key := key
-		builders[key] = func(model.Run, model.CreateRunParams, model.Project) run.Runner {
+		builders[key] = func(model.Run, model.CreateRunParams, model.Project, contextengine.ContextPack) run.Runner {
 			called[key]++
 			return resolvedRunner{}
 		}
@@ -53,7 +54,7 @@ func TestRunnerResolverFourTargetCombinations(t *testing.T) {
 	resolver := NewRunnerResolver(builders)
 	for key := range builders {
 		runModel := model.Run{WorkSpec: model.WorkSpec{Target: model.RunTarget{Artifact: key.Artifact, Level: key.Level}}}
-		if _, err := resolver.Resolve(runModel, model.CreateRunParams{}, model.Project{}); err != nil {
+		if _, err := resolver.Resolve(runModel, model.CreateRunParams{}, model.Project{}, contextengine.ContextPack{}); err != nil {
 			t.Fatalf("resolve %+v: %v", key, err)
 		}
 		if called[key] != 1 {
@@ -106,5 +107,35 @@ func TestRevisionTrackingSkipsFailedAndCanceledRuns(t *testing.T) {
 		if got := runner.Run(context.Background(), discardEmitter{}, nil, &promptRecorder{}); got.Status != status {
 			t.Fatalf("status %s changed to %s", status, got.Status)
 		}
+	}
+}
+
+func TestContextPackRunnerUpdatesMemoryOnlyOnSuccess(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		status       harness.OutcomeStatus
+		wantRevision int
+	}{
+		{"success", harness.OutcomeFinished, 1},
+		{"failed", harness.OutcomeLLMError, 0},
+		{"canceled", harness.OutcomeCanceled, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			pack := contextengine.ContextPack{
+				SchemaVersion: contextengine.SchemaVersion,
+				WorkSpec:      model.WorkSpec{Instruction: "confirmed change"},
+				Manifest:      contextengine.ContextManifest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Profile: contextengine.ProfileBlueprintDeck, Warnings: []string{}},
+			}
+			runner := &contextPackRunner{inner: outcomeRunner{outcome: harness.Outcome{Status: tc.status}}, pack: pack, project: model.Project{ID: "p1", WorkDir: workDir}}
+			runner.Run(context.Background(), discardEmitter{}, nil, &promptRecorder{})
+			memory, _, err := (contextengine.ThreadMemoryStore{}).Load(workDir, "t1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if memory.Revision != tc.wantRevision {
+				t.Fatalf("memory revision=%d want=%d", memory.Revision, tc.wantRevision)
+			}
+		})
 	}
 }

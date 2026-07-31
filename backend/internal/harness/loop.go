@@ -148,8 +148,6 @@ func (l *Loop) Run(ctx context.Context, em Emitter, cp Checkpointer) Outcome {
 			}
 		}
 
-		// 上下文预算：超限时按优先级压缩历史（ARCH-HARNESS-CTX-001/003）。
-		msgs = compress(msgs)
 	}
 
 	return Outcome{Status: OutcomeMaxTurns, Code: CodeMaxTurns, Message: "max turns exceeded", Turns: l.cfg.MaxTurns}
