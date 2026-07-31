@@ -39,12 +39,42 @@
       activeIndex: 0
     };
 
+    function isIndex(value) {
+      return Number.isInteger(value) && value >= 0;
+    }
+
+    function isSlide(value) {
+      return value !== null
+        && typeof value === 'object'
+        && typeof value.id === 'string'
+        && value.id.length > 0
+        && typeof value.html === 'string';
+    }
+
+    function isUpdateDeck(value) {
+      return value !== null
+        && typeof value === 'object'
+        && value.type === 'updateDeck'
+        && Array.isArray(value.slides)
+        && value.slides.every(isSlide)
+        && isIndex(value.index);
+    }
+
+    function isGotoSlide(value) {
+      return value !== null
+        && typeof value === 'object'
+        && value.type === 'gotoSlide'
+        && isIndex(value.index);
+    }
+
     function sameSlides(nextSlides) {
       if (state.slides.length !== nextSlides.length) {
         return false;
       }
 
-      return state.slides.every((slide, index) => slide === nextSlides[index]);
+      return state.slides.every((slide, index) => (
+        slide.id === nextSlides[index].id && slide.html === nextSlides[index].html
+      ));
     }
 
     function setActive(index) {
@@ -69,33 +99,47 @@
       deck.innerHTML = '';
       state.slides = slides.slice();
 
-      slides.forEach((slidePath, index) => {
+      slides.forEach((slide, index) => {
         const frame = document.createElement('iframe');
         frame.className = 'slide-frame';
         frame.dataset.slideFrame = 'true';
         frame.dataset.active = 'false';
         frame.dataset.index = String(index);
-        frame.src = slidePath;
+        frame.srcdoc = slide.html;
         frame.title = `Slide ${index + 1}`;
-        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+        frame.setAttribute('sandbox', 'allow-scripts');
+        frame.addEventListener('error', () => {
+          window.parent.postMessage({
+            type: 'renderError',
+            index,
+            message: `第 ${index + 1} 页渲染失败`
+          }, '*');
+        });
         deck.appendChild(frame);
       });
     }
 
     window.addEventListener('message', (event) => {
-      if (event.origin !== window.location.origin) {
+      if (event.source !== window.parent) {
         return;
       }
 
-      const { type, slides, index } = event.data || {};
-
-      if (type === 'update' && Array.isArray(slides) && slides.length > 0) {
-        loadSlides(slides);
-        setActive(typeof index === 'number' ? index : state.activeIndex);
-      } else if (type === 'goto' && typeof index === 'number') {
-        setActive(index);
+      try {
+        if (isUpdateDeck(event.data)) {
+          loadSlides(event.data.slides);
+          setActive(event.data.index);
+        } else if (isGotoSlide(event.data)) {
+          setActive(event.data.index);
+        }
+      } catch (error) {
+        window.parent.postMessage({
+          type: 'renderError',
+          message: error instanceof Error ? error.message : '未知渲染错误'
+        }, '*');
       }
     });
+
+    window.parent.postMessage({ type: 'runtimeReady' }, '*');
   </script>
 </body>
 </html>

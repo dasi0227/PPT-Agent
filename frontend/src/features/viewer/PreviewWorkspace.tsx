@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -9,6 +9,8 @@ import { cn } from '../../lib/utils';
 import { EmptyState } from './EmptyState';
 import { OutlineCard } from './OutlineCard';
 import { NewProjectHint } from '../workspace/NewProjectHint';
+import { IsolatedSlidePreview } from './IsolatedSlidePreview';
+import { RuntimeSlide } from './previewProtocol';
 
 export const PreviewWorkspace: React.FC = () => {
   const { currentPage, previewMode, enterOverview, exitOverview, goNext, goPrev, effectiveView, globalView, setGlobalView } = useDeckStore();
@@ -16,17 +18,28 @@ export const PreviewWorkspace: React.FC = () => {
   const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel } = useUIStore();
   const session = useActiveSession();
   const runActive = session.status === 'running' || session.status === 'needs_input';
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [htmlBySlideId, setHtmlBySlideId] = useState<Record<string, string>>({});
 
   const slides = useMemo(() => activeProjectId && activeProjectId !== 'new-pending' ? slidesByProjectId[activeProjectId] || [] : [], [activeProjectId, slidesByProjectId]);
   const hasSlides = slides.length > 0;
-  const slidePaths = useMemo(() => slides.map((slide) => slide.html_path ? `/api/v1/slides/${encodeURIComponent(slide.id)}/render` : ''), [slides]);
-  const currentPageRef = useRef(currentPage);
+  const runtimeSlides = useMemo<RuntimeSlide[]>(
+    () => slides.flatMap((slide) => {
+      const html = htmlBySlideId[slide.id];
+      return slide.html_path && html !== undefined ? [{ id: slide.id, html }] : [];
+    }),
+    [htmlBySlideId, slides],
+  );
 
   const currentSlide = hasSlides ? slides[Math.min(currentPage, slides.length - 1)] : undefined;
   const currentHasHtml = !!currentSlide?.html_path;
+  const currentRuntimeIndex = currentSlide
+    ? runtimeSlides.findIndex((slide) => slide.id === currentSlide.id)
+    : -1;
   const currentView = currentSlide ? effectiveView(currentSlide.id, currentHasHtml) : 'html';
-  const showIframe = previewMode === 'main' && currentView === 'html' && currentHasHtml;
+  const showIframe = previewMode === 'main'
+    && currentView === 'html'
+    && currentHasHtml
+    && currentRuntimeIndex >= 0;
 
   const patchSlide = (slideId: string, patch: SlidePatch) => {
     if (!activeProjectId || activeProjectId === 'new-pending') return;
@@ -36,25 +49,25 @@ export const PreviewWorkspace: React.FC = () => {
   };
 
   useEffect(() => {
-    currentPageRef.current = currentPage;
-  }, [currentPage]);
-
-  useEffect(() => {
-    if (iframeRef.current && iframeRef.current.contentWindow && showIframe) {
-      iframeRef.current.contentWindow.postMessage({ type: 'goto', index: currentPage }, '*');
+    const controller = new AbortController();
+    const readySlides = slides.filter((slide) => slide.html_path);
+    setHtmlBySlideId((current) => Object.keys(current).length > 0 ? {} : current);
+    if (readySlides.length === 0) {
+      return () => controller.abort();
     }
-  }, [currentPage, showIframe]);
-
-  // Load the whole deck into the runtime once, then let `goto` switch active pages.
-  useEffect(() => {
-    if (iframeRef.current && iframeRef.current.contentWindow && showIframe && slidePaths.length > 0) {
-      iframeRef.current.contentWindow.postMessage({
-        type: 'update',
-        slides: slidePaths,
-        index: currentPageRef.current
-      }, '*');
-    }
-  }, [activeProjectId, showIframe, slidePaths]);
+    void Promise.all(readySlides.map(async (slide) => {
+      try {
+        return [slide.id, await slidesApi.render(slide.id, controller.signal)] as const;
+      } catch (error) {
+        if (!controller.signal.aborted) console.error(error);
+        return null;
+      }
+    })).then((entries) => {
+      if (controller.signal.aborted) return;
+      setHtmlBySlideId(Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry !== null)));
+    });
+    return () => controller.abort();
+  }, [activeProjectId, slides]);
 
   if (activeProjectId === 'new-pending') {
     return <NewProjectHint />;
@@ -144,10 +157,9 @@ export const PreviewWorkspace: React.FC = () => {
               </div>
             ) : showIframe ? (
               <div className="w-full h-full bg-white shadow-sm ring-1 ring-border rounded-md overflow-hidden flex items-center justify-center">
-                <iframe
-                  ref={iframeRef}
-                  src="/slide-runtime/index.html"
-                  sandbox="allow-scripts allow-same-origin"
+                <IsolatedSlidePreview
+                  slides={runtimeSlides}
+                  index={currentRuntimeIndex}
                   className="w-full h-full border-none"
                   title="Slide Preview"
                 />
@@ -178,10 +190,10 @@ export const PreviewWorkspace: React.FC = () => {
                     exitOverview();
                   }}
                 >
-                  {slide.html_path ? (
-                    <iframe
-                      src={`/api/v1/slides/${encodeURIComponent(slide.id)}/render`}
-                      sandbox="allow-scripts"
+                  {slide.html_path && htmlBySlideId[slide.id] !== undefined ? (
+                    <IsolatedSlidePreview
+                      slides={[{ id: slide.id, html: htmlBySlideId[slide.id] }]}
+                      index={0}
                       className="w-full h-full border-none pointer-events-none origin-top-left bg-white"
                       style={{ transform: 'scale(0.25)', width: '400%', height: '400%' }}
                       title={`Slide ${i + 1}`}

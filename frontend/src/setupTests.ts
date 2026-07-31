@@ -18,6 +18,13 @@ Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 // Mock fetch globally
 globalThis.fetch = async (input: RequestInfo | URL) => {
   const url = input.toString();
+  if (/\/api\/v1\/slides\/[^/]+\/render$/.test(url)) {
+    return {
+      ok: true,
+      status: 200,
+      text: async () => '<!doctype html><html><body>mock slide</body></html>',
+    } as unknown as Response;
+  }
   if (url.includes('/projects')) {
     if (url.includes('/slides')) {
       return { ok: true, status: 200, json: async () => [

@@ -9,6 +9,11 @@ const postMessage = vi.fn();
 describe('PreviewWorkspace', () => {
   beforeEach(() => {
     postMessage.mockReset();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      status: 200,
+      text: async () => input.toString().includes('/s1/') ? '<h1>Slide 1</h1>' : '<h1>Slide 2</h1>',
+    } as Response)));
 
     Object.defineProperty(window.HTMLIFrameElement.prototype, 'contentWindow', {
       configurable: true,
@@ -37,19 +42,24 @@ describe('PreviewWorkspace', () => {
     });
   });
 
-  it('posts the slide deck once and uses goto for later page switches', async () => {
+  it('fetches stable render endpoints, posts HTML content, and uses goto for page switches', async () => {
     render(<PreviewWorkspace />);
 
     await waitFor(() => {
       expect(postMessage).toHaveBeenCalledWith(
         {
-          type: 'update',
-          slides: ['/api/v1/slides/s1/render', '/api/v1/slides/s2/render'],
+          type: 'updateDeck',
+          slides: [
+            { id: 's1', html: '<h1>Slide 1</h1>' },
+            { id: 's2', html: '<h1>Slide 2</h1>' },
+          ],
           index: 0,
         },
         '*'
       );
     });
+    expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s1/render', expect.any(Object));
+    expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s2/render', expect.any(Object));
 
     postMessage.mockClear();
 
@@ -61,13 +71,26 @@ describe('PreviewWorkspace', () => {
       expect(postMessage).toHaveBeenCalledTimes(1);
     });
 
-    expect(postMessage).toHaveBeenCalledWith({ type: 'goto', index: 1 }, '*');
+    expect(postMessage).toHaveBeenCalledWith({ type: 'gotoSlide', index: 1 }, '*');
+  });
+
+  it('keeps the main runtime sandboxed without same-origin privilege', async () => {
+    render(<PreviewWorkspace />);
+    await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
+    const iframe = document.querySelector('iframe');
+    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(iframe?.getAttribute('sandbox')).not.toContain('allow-same-origin');
   });
 });
 
 describe('PreviewWorkspace dual view (globalView)', () => {
   beforeEach(() => {
     postMessage.mockReset();
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '<h1>Rendered slide</h1>',
+    } as Response)));
     Object.defineProperty(window.HTMLIFrameElement.prototype, 'contentWindow', {
       configurable: true,
       get() {
@@ -113,7 +136,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
     expect(htmlBtn).not.toBeDisabled();
   });
 
-  it('renders iframe by default when current page has html', () => {
+  it('renders iframe by default when current page has html', async () => {
     useProjectStore.setState({
       projects: [],
       activeProjectId: 'p1',
@@ -125,7 +148,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       loadingProjects: false
     });
     render(<PreviewWorkspace />);
-    expect(document.querySelector('iframe')).not.toBeNull();
+    await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
   });
 
   it('globalView=outline forces OutlineCard even when hasHtml=true', async () => {
@@ -162,5 +185,46 @@ describe('PreviewWorkspace dual view (globalView)', () => {
     render(<PreviewWorkspace />);
     // 网格模式下 s2 无 html_path，应有徽标。
     expect(screen.getByText('暂无 HTML')).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
+    for (const iframe of Array.from(document.querySelectorAll('iframe'))) {
+      expect(iframe).toHaveAttribute('sandbox', 'allow-scripts');
+      expect(iframe.getAttribute('sandbox')).not.toContain('allow-same-origin');
+    }
+  });
+
+  it('refreshes from outline fallback to isolated preview after whole-deck generation updates slides', async () => {
+    useProjectStore.setState({
+      projects: [],
+      activeProjectId: 'p1',
+      slidesByProjectId: {
+        p1: [
+          { id: 's1', project_id: 'p1', idx: 0, layout: 'title', title: 'S1', html_path: '', json_path: '', current_version: 0, order: 10, outline_dirty: false,
+            content: { layout: 'title', title: 'S1' } },
+        ],
+      },
+      loadingProjects: false,
+    });
+    render(<PreviewWorkspace />);
+    expect(document.querySelector('iframe')).toBeNull();
+
+    await act(async () => {
+      useProjectStore.setState((state) => ({
+        slidesByProjectId: {
+          ...state.slidesByProjectId,
+          p1: [{
+            ...state.slidesByProjectId.p1[0],
+            html_path: 'slides/s1/index.html',
+            current_version: 1,
+          }],
+        },
+      }));
+    });
+
+    await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({
+      type: 'updateDeck',
+      slides: [{ id: 's1', html: '<h1>Rendered slide</h1>' }],
+      index: 0,
+    }, '*'));
   });
 });

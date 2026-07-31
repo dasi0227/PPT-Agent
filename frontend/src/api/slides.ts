@@ -13,6 +13,13 @@ export interface SlidePatch {
 
 export const slidesApi = {
   get: (id: string) => fetchClient<Slide>(`/slides/${id}`),
+  render: async (id: string, signal?: AbortSignal) => {
+    const response = await fetch(`/api/v1/slides/${encodeURIComponent(id)}/render`, { signal });
+    if (!response.ok) {
+      throw new Error(`slide render failed: ${response.status}`);
+    }
+    return response.text();
+  },
   patch: (id: string, patch: SlidePatch) =>
     fetchClient<Slide>(`/slides/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   add: (projectId: string, opts: { after_slide_id?: string; layout?: string } = {}) =>
