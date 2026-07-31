@@ -117,13 +117,13 @@ func toSlideResponse(sl model.Slide) slideResponse {
 // 活跃 run → 409 RUN_ACTIVE；校验失败 → 422；未找到 → 404。
 func (h *SlideHandler) PatchSlide(c *gin.Context) {
 	var body struct {
-		Title         *string                  `json:"title"`
-		Subtitle      *string                  `json:"subtitle"`
-		ContentIntent *string                  `json:"content_intent"`
-		Layout        *string                  `json:"layout"`
-		Bullets       *[]string                `json:"bullets"`
-		ChartIntent   *slidejson.ChartIntent   `json:"chart_intent"`
-		Steps         *int                     `json:"steps"`
+		Title         *string                `json:"title"`
+		Subtitle      *string                `json:"subtitle"`
+		ContentIntent *string                `json:"content_intent"`
+		Layout        *string                `json:"layout"`
+		Bullets       *[]string              `json:"bullets"`
+		ChartIntent   *slidejson.ChartIntent `json:"chart_intent"`
+		Steps         *int                   `json:"steps"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		AbortWithError(c, ErrBadRequest("invalid body"))
@@ -165,6 +165,25 @@ func (h *SlideHandler) DeleteSlide(c *gin.Context) {
 		AbortWithError(c, ErrNotFound("slide not found"))
 	case errors.Is(err, service.ErrRunActive):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	default:
+		AbortWithError(c, ErrInternal(err.Error()))
+	}
+}
+
+// RenderSlide GET /slides/:id/render：返回单页 index.html 原始字节，供预览 iframe 加载。
+// 使用稳定的 slide_id 作为唯一入参，避免暴露任意文件路径。
+// 未找到 → 404；产物未生成 → 404 HTML_NOT_READY。
+func (h *SlideHandler) RenderSlide(c *gin.Context) {
+	raw, err := h.svc.ReadHTML(c.Request.Context(), c.Param("id"))
+	switch {
+	case err == nil:
+		c.Header("Cache-Control", "no-store")
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Data(http.StatusOK, "text/html; charset=utf-8", raw)
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		AbortWithError(c, ErrNotFound("slide not found"))
+	case errors.Is(err, service.ErrSlideHTMLMissing):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusNotFound, Code: "HTML_NOT_READY", Message: "slide html not rendered yet"})
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}

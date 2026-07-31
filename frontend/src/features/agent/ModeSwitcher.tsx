@@ -2,11 +2,11 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 import { InteractionMode, SubMode } from './modeMapping';
 
-const MODES: Array<{ id: InteractionMode; label: string; dot: string }> = [
-  { id: 'outline', label: '大纲', dot: 'bg-mode-normal' },
-  { id: 'page', label: '单页', dot: 'bg-mode-normal' },
-  { id: 'overview', label: '全局', dot: 'bg-mode-overview' },
-  { id: 'repo', label: '仓库', dot: 'bg-mode-repo' },
+const MODES: Array<{ id: InteractionMode; label: string; dot: string; text: string }> = [
+  { id: 'outline', label: '大纲', dot: 'bg-mode-outline', text: 'text-mode-outline' },
+  { id: 'page', label: '单页', dot: 'bg-mode-page', text: 'text-mode-page' },
+  { id: 'overview', label: '全局', dot: 'bg-mode-overview', text: 'text-mode-overview' },
+  { id: 'repo', label: '仓库', dot: 'bg-mode-repo', text: 'text-mode-repo' },
 ];
 
 interface ModeSwitcherProps {
@@ -42,7 +42,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = ({
               onClick={() => onModeChange(m.id)}
               className={cn(
                 'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50',
-                active ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-600'
+                active ? `bg-surface shadow-sm ${m.text}` : 'text-text-400 hover:text-text-600'
               )}
               aria-pressed={active}
             >

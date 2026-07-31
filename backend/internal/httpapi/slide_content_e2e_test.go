@@ -122,6 +122,71 @@ func TestSlideContentReadPatchAndRunActive(t *testing.T) {
 	}
 }
 
+func TestSlideRenderEndpoint(t *testing.T) {
+	srv, st, root := setupSlideContentServer(t)
+	ctx := t.Context()
+	now := time.Now().Unix()
+	workDir := filepath.Join(root, "p1")
+	if err := st.CreateProject(ctx, model.Project{
+		ID: "p1", Title: "t", WorkDir: workDir, Theme: "x", Status: "draft",
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ReplaceSlides(ctx, "p1", []model.Slide{{
+		ID: "s1", ProjectID: "p1", Order: 10, Layout: "title", Title: "标题",
+		JSONPath: model.SlideJSONPath("s1"), HTMLPath: model.SlideHTMLPath("s1"),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("registered route returns HTML_NOT_READY", func(t *testing.T) {
+		resp := apiReq(t, http.MethodGet, srv.URL+"/api/v1/slides/s1/render", "")
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("want 404, got %d: %s", resp.Code, resp.Body.String())
+		}
+		var body struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Error.Code != "HTML_NOT_READY" {
+			t.Fatalf("want HTML_NOT_READY, got %q", body.Error.Code)
+		}
+	})
+
+	t.Run("missing slide returns 404", func(t *testing.T) {
+		resp := apiReq(t, http.MethodGet, srv.URL+"/api/v1/slides/missing/render", "")
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("want 404, got %d: %s", resp.Code, resp.Body.String())
+		}
+	})
+
+	t.Run("returns raw html with defensive headers", func(t *testing.T) {
+		const html = `<!doctype html><html><body>safe route</body></html>`
+		writeAtE(t, workDir, model.SlideHTMLPath("s1"), html)
+		resp := apiReq(t, http.MethodGet, srv.URL+"/api/v1/slides/s1/render", "")
+		if resp.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d: %s", resp.Code, resp.Body.String())
+		}
+		if got := resp.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+			t.Fatalf("unexpected Content-Type %q", got)
+		}
+		if got := resp.Header().Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("unexpected Cache-Control %q", got)
+		}
+		if got := resp.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Fatalf("unexpected X-Content-Type-Options %q", got)
+		}
+		if resp.Body.String() != html {
+			t.Fatalf("unexpected body %q", resp.Body.String())
+		}
+	})
+}
+
 func TestSlideStructuralAddDeleteReorder(t *testing.T) {
 	srv, st, root := setupSlideContentServer(t)
 	ctx := t.Context()

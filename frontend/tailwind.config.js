@@ -17,11 +17,13 @@ export default {
           400: '#a1a1aa', // graphite 400
         },
         mode: {
+          outline: '#fb923c', // light orange
+          page: '#60a5fa', // light blue
           normal: '#84cc16', // sage
           talk: '#6366f1', // indigo
           ask: '#f59e0b', // amber
-          repo: '#14b8a6', // teal
-          overview: '#8b5cf6', // violet
+          repo: '#c084fc', // light purple
+          overview: '#facc15', // light yellow
           error: '#ef4444', // muted red
           final: '#22c55e', // green
         }

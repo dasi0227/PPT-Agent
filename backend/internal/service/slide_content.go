@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -10,6 +11,38 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
+
+// ErrSlideHTMLMissing 表示 slide 记录存在但磁盘上 index.html 尚未产出。
+var ErrSlideHTMLMissing = errors.New("service: slide html not rendered")
+
+// ReadHTML 读某页 index.html 原始字节，供 iframe 预览端点透传。
+// slide 元数据缺失 → gorm.ErrRecordNotFound；产物文件缺失 → ErrSlideHTMLMissing；
+// 越界路径由 sandbox 拦截并返回错误。
+func (svc *SlideService) ReadHTML(ctx context.Context, slideID string) ([]byte, error) {
+	sl, err := svc.store.GetSlide(ctx, slideID)
+	if err != nil {
+		return nil, err
+	}
+	proj, err := svc.store.GetProject(ctx, sl.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	sb, err := tools.NewSandbox(proj.WorkDir)
+	if err != nil {
+		return nil, err
+	}
+	if sl.HTMLPath == "" {
+		return nil, ErrSlideHTMLMissing
+	}
+	raw, err := sb.Read(sl.HTMLPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrSlideHTMLMissing
+		}
+		return nil, err
+	}
+	return raw, nil
+}
 
 // ReadContent 读某页 slide.json 全文；文件缺失时用元数据回退最小结构。
 func (svc *SlideService) ReadContent(ctx context.Context, slideID string) (slidejson.SlideJSON, error) {

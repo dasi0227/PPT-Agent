@@ -35,6 +35,33 @@ func TestReadContentFromDisk(t *testing.T) {
 	}
 }
 
+// TestReadHTMLReturnsBytes：ReadHTML 从磁盘读 index.html 原始字节。
+func TestReadHTMLReturnsBytes(t *testing.T) {
+	svc, st, workDir := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1", Order: 10, Layout: "bullets", Title: "标题",
+		JSONPath: model.SlideJSONPath("s1"), HTMLPath: model.SlideHTMLPath("s1")}})
+	writeAt(t, workDir, model.SlideHTMLPath("s1"), `<!doctype html><html><body>hi</body></html>`)
+	raw, err := svc.ReadHTML(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != `<!doctype html><html><body>hi</body></html>` {
+		t.Fatalf("unexpected html payload: %q", string(raw))
+	}
+}
+
+// TestReadHTMLMissingArtifact：产物未生成时返回 ErrSlideHTMLMissing。
+func TestReadHTMLMissingArtifact(t *testing.T) {
+	svc, st, _ := newSlideServiceWithProject(t)
+	ctx := context.Background()
+	_ = st.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1", Order: 10, Layout: "bullets", Title: "",
+		JSONPath: model.SlideJSONPath("s1"), HTMLPath: model.SlideHTMLPath("s1")}})
+	if _, err := svc.ReadHTML(ctx, "s1"); !errors.Is(err, service.ErrSlideHTMLMissing) {
+		t.Fatalf("want ErrSlideHTMLMissing, got %v", err)
+	}
+}
+
 // TestPatchContentUpdatesAndMarksDirty：局部更新 slide.json + 有 html 页置脏 + 同步 title 元数据。
 func TestPatchContentUpdatesAndMarksDirty(t *testing.T) {
 	svc, st, workDir := newSlideServiceWithProject(t)

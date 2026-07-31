@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send } from 'lucide-react';
+import { Send, WandSparkles } from 'lucide-react';
 import { useRunStore } from '../../stores/runStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
@@ -10,6 +10,7 @@ import { RunPayload } from '../../api/types';
 import { ModeSwitcher } from './ModeSwitcher';
 import { InteractionMode, mapModeToPayload } from './modeMapping';
 import { isMac } from '../../lib/platform';
+import { cn } from '../../lib/utils';
 
 const PLACEHOLDERS: Record<InteractionMode, { empty: string; filled: string }> = {
   outline: {
@@ -58,23 +59,37 @@ export const CommandComposer: React.FC = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!text.trim() || disabled || !activeProjectId) return;
+  const submit = async (generateDeck = false) => {
+    if (disabled || !activeProjectId || (!generateDeck && !text.trim())) return;
 
     let projectId = activeProjectId;
     const slides = projectId && projectId !== 'new-pending' ? slidesByProjectId[projectId] || [] : [];
     const hasSlides = slides.length > 0;
-    
     const raw = text.trim();
-    const payload: RunPayload = mapModeToPayload({
-      interactionMode,
-      subMode,
-      hasOutline: hasSlides,
-      currentPageHasHtml: true, // simplified
-      currentPage,
-      targetPageIndex: null,
-      instruction: raw,
-    });
+    const currentPageHasHtml = !!slides[currentPage]?.html_path;
+    let payload: RunPayload;
+
+    if (generateDeck) {
+      if (!hasSlides) return;
+      payload = {
+        kind: 'generate',
+        scope: 'overview',
+        instruction: raw || '基于当前大纲生成整套 HTML PPT',
+      };
+    } else if (raw.startsWith('/')) {
+      // 斜杠命令的 scope/mode/command/page_index 只由后端 command.Parse 决定。
+      payload = { kind: 'edit', instruction: raw };
+    } else {
+      payload = mapModeToPayload({
+        interactionMode,
+        subMode,
+        hasOutline: hasSlides,
+        currentPageHasHtml,
+        currentPage,
+        targetPageIndex: null,
+        instruction: raw,
+      });
+    }
 
     if (projectId === 'new-pending') {
       try {
@@ -92,14 +107,33 @@ export const CommandComposer: React.FC = () => {
     setText('');
   };
 
+  const handleSubmit = () => void submit(false);
+  const handleGenerateDeck = () => void submit(true);
+
   const slides = activeProjectId && activeProjectId !== 'new-pending' ? slidesByProjectId[activeProjectId] || [] : [];
   const hasSlides = slides.length > 0;
   const derivedMode = interactionMode;
   const placeholder = PLACEHOLDERS[derivedMode]?.[hasSlides ? 'filled' : 'empty'] || '';
 
+  const ringColorMap: Record<InteractionMode, string> = {
+    outline: 'ring-mode-outline border-mode-outline',
+    page: 'ring-mode-page border-mode-page',
+    overview: 'ring-mode-overview border-mode-overview',
+    repo: 'ring-mode-repo border-mode-repo',
+  };
+  const activeRing = ringColorMap[derivedMode] || 'ring-border border-border';
+
+  const btnColorMap: Record<InteractionMode, string> = {
+    outline: 'bg-mode-outline',
+    page: 'bg-mode-page',
+    overview: 'bg-mode-overview',
+    repo: 'bg-mode-repo',
+  };
+  const activeBtn = btnColorMap[derivedMode] || 'bg-mode-outline';
+
   return (
     <div className="p-4 border-t border-border bg-background">
-      <div className="relative bg-surface rounded-lg border border-border shadow-sm focus-within:border-mode-normal focus-within:ring-1 focus-within:ring-mode-normal transition-all">
+      <div className={cn("relative bg-surface rounded-lg border shadow-sm ring-1 transition-all", activeRing)}>
         <textarea
           ref={textareaRef}
           value={text}
@@ -113,16 +147,29 @@ export const CommandComposer: React.FC = () => {
           rows={2}
         />
         <div className="flex items-center justify-between px-3 pb-2">
-          <ModeSwitcher 
-            interactionMode={interactionMode} 
-            subMode={subMode} 
-            onModeChange={(m) => useComposerStore.getState().setInteractionMode(m)} 
-            onSubModeChange={(m) => useComposerStore.getState().setSubMode(m)} 
-          />
+          <div className="flex min-w-0 items-center gap-2">
+            <ModeSwitcher
+              interactionMode={interactionMode}
+              subMode={subMode}
+              onModeChange={(m) => useComposerStore.getState().setInteractionMode(m)}
+              onSubModeChange={(m) => useComposerStore.getState().setSubMode(m)}
+            />
+            <button
+              type="button"
+              onClick={handleGenerateDeck}
+              disabled={!hasSlides || disabled}
+              className="inline-flex shrink-0 items-center gap-1 rounded border border-mode-overview/40 px-2 py-1 text-xs font-medium text-mode-overview transition-colors hover:bg-mode-overview/10 disabled:cursor-not-allowed disabled:opacity-40"
+              title={hasSlides ? '基于当前大纲生成全部页面 HTML' : '请先生成大纲'}
+            >
+              <WandSparkles className="h-3.5 w-3.5" />
+              整套生成
+            </button>
+          </div>
           <button
             onClick={handleSubmit}
             disabled={!text.trim() || disabled}
-            className="p-1.5 bg-mode-normal text-white rounded-md disabled:opacity-50 disabled:bg-text-400 hover:opacity-90 transition-opacity"
+            className={cn("p-1.5 text-white rounded-md disabled:opacity-50 disabled:bg-text-400 hover:opacity-90 transition-opacity", activeBtn)}
+            aria-label="发送"
           >
             <Send className="w-4 h-4" />
           </button>

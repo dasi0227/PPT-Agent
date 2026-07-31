@@ -61,6 +61,7 @@ func (r *Router) register() {
 	v1.GET("/slides/:id", r.slide.GetSlide)
 	v1.PATCH("/slides/:id", r.slide.PatchSlide)
 	v1.DELETE("/slides/:id", r.slide.DeleteSlide)
+	v1.GET("/slides/:id/render", r.slide.RenderSlide)
 	v1.GET("/slides/:id/versions", r.slide.ListVersions)
 	v1.POST("/slides/:id/rollback", r.slide.Rollback)
 

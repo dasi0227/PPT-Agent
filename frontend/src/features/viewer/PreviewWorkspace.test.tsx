@@ -44,7 +44,7 @@ describe('PreviewWorkspace', () => {
       expect(postMessage).toHaveBeenCalledWith(
         {
           type: 'update',
-          slides: ['/api/v1/assets?path=%2Fslides%2Fp1%2Fs1.html', '/api/v1/assets?path=%2Fslides%2Fp1%2Fs2.html'],
+          slides: ['/api/v1/slides/s1/render', '/api/v1/slides/s2/render'],
           index: 0,
         },
         '*'
