@@ -130,6 +130,29 @@ func eventToPO(m model.Event) runEventPO {
 	}
 }
 
+type runContextPO struct {
+	RunID           string `gorm:"column:run_id;primaryKey"`
+	ContextID       string `gorm:"column:context_id;uniqueIndex"`
+	Profile         string `gorm:"column:profile"`
+	PackHash        string `gorm:"column:pack_hash"`
+	EstimatedTokens int    `gorm:"column:estimated_tokens"`
+	BudgetTokens    int    `gorm:"column:budget_tokens"`
+	ManifestJSON    string `gorm:"column:manifest_json"`
+	CreatedAt       int64  `gorm:"column:created_at"`
+}
+
+func (runContextPO) TableName() string { return "run_contexts" }
+
+func contextToPO(m model.RunContext) runContextPO {
+	return runContextPO{RunID: m.RunID, ContextID: m.ContextID, Profile: m.Profile, PackHash: m.PackHash,
+		EstimatedTokens: m.EstimatedTokens, BudgetTokens: m.BudgetTokens, ManifestJSON: m.ManifestJSON, CreatedAt: m.CreatedAt}
+}
+
+func (p runContextPO) toModel() model.RunContext {
+	return model.RunContext{RunID: p.RunID, ContextID: p.ContextID, Profile: p.Profile, PackHash: p.PackHash,
+		EstimatedTokens: p.EstimatedTokens, BudgetTokens: p.BudgetTokens, ManifestJSON: p.ManifestJSON, CreatedAt: p.CreatedAt}
+}
+
 type slidePO struct {
 	ID                      string `gorm:"column:id;primaryKey"`
 	ProjectID               string `gorm:"column:project_id"`

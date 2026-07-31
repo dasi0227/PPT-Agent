@@ -30,6 +30,8 @@ type Store interface {
 	HasActiveRun(ctx context.Context, projectID string) (bool, error)
 	AppendEvent(ctx context.Context, e model.Event) error
 	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
+	SaveRunContext(ctx context.Context, manifest model.RunContext) error
+	GetRunContext(ctx context.Context, runID string) (model.RunContext, error)
 
 	SetProjectStatus(ctx context.Context, id, status string) error
 	ReplaceSlides(ctx context.Context, projectID string, slides []model.Slide) error

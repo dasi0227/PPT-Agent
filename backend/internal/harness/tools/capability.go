@@ -13,6 +13,7 @@ const (
 	CapabilityWriteDesignSpec   Capability = "write_design_spec"
 	CapabilitySearchAssets      Capability = "search_assets"
 	CapabilityReadAssets        Capability = "read_assets"
+	CapabilityReadContext       Capability = "read_context"
 	CapabilityMountAssets       Capability = "mount_assets"
 	CapabilityRenderPreview     Capability = "render_preview"
 	CapabilityControl           Capability = "control"
@@ -25,6 +26,7 @@ type CapabilityTool interface {
 
 func AllowedCapabilities(spec model.WorkSpec) map[Capability]bool {
 	allowed := map[Capability]bool{CapabilityControl: true}
+	allowed[CapabilityReadContext] = true
 	if spec.Target.Artifact == model.ArtifactBlueprint {
 		allowed[CapabilityReadBlueprint] = true
 		allowed[CapabilityReadDesignSpec] = true

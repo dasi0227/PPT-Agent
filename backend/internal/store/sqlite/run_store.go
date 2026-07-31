@@ -163,6 +163,18 @@ func (s *Store) EventsSince(ctx context.Context, runID string, afterSeq int64) (
 	return out, nil
 }
 
+func (s *Store) SaveRunContext(ctx context.Context, m model.RunContext) error {
+	return s.db.WithContext(ctx).Create(contextToPO(m)).Error
+}
+
+func (s *Store) GetRunContext(ctx context.Context, runID string) (model.RunContext, error) {
+	var po runContextPO
+	if err := s.db.WithContext(ctx).First(&po, "run_id = ?", runID).Error; err != nil {
+		return model.RunContext{}, mapErr(err)
+	}
+	return po.toModel(), nil
+}
+
 func mapErr(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return run.ErrRunNotFound

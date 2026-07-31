@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -28,7 +29,7 @@ func newTestStore(t *testing.T) *Store {
 func TestMigrateCreatesTables(t *testing.T) {
 	s := newTestStore(t)
 
-	want := []string{"projects", "slides", "versions", "threads", "runs", "run_events", "assets"}
+	want := []string{"projects", "slides", "versions", "threads", "runs", "run_events", "run_contexts", "assets"}
 	for _, name := range want {
 		var count int64
 		if err := s.db.Raw(
@@ -102,5 +103,34 @@ func TestMigrateIdempotent(t *testing.T) {
 	}
 	if err := Migrate(db, zap.NewNop()); err != nil {
 		t.Fatalf("second migrate (should be idempotent): %v", err)
+	}
+}
+
+func TestRunContextRoundTripStoresManifestOnly(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, model.Project{ID: "p", Title: "p", WorkDir: "/tmp/p", Status: "draft", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p", HistoryPath: "threads/t.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", WorkSpec: model.WorkSpec{
+		Target:      model.RunTarget{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck},
+		Interaction: model.RunInteraction{Intent: model.IntentApply, Clarification: model.ClarifyNever}, Instruction: "x",
+	}, Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1}
+	if err := s.CreateRun(ctx, runModel); err != nil {
+		t.Fatal(err)
+	}
+	want := model.RunContext{RunID: "r", ContextID: "ctx_1", Profile: "blueprint/deck", PackHash: "hash", EstimatedTokens: 10, BudgetTokens: 100, ManifestJSON: `{"segments":[]}`, CreatedAt: 1}
+	if err := s.SaveRunContext(ctx, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetRunContext(ctx, "r")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("got=%+v want=%+v", got, want)
 	}
 }
