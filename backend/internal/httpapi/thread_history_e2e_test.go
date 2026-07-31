@@ -80,16 +80,19 @@ type scriptedTurn struct {
 
 func (r scriptedTurn) Run(ctx context.Context, em harness.Emitter, _ harness.Checkpointer, _ run.Prompter) harness.Outcome {
 	em.Emit(model.EventRunStarted, harness.RunStartedPayload{
-		RunID: r.runID, Kind: string(model.KindCommand), Scope: string(model.ScopeCurrent), Mode: string(model.ModeNormal),
-		UserInput: r.instr,
+		RunID:       r.runID,
+		Target:      &model.RunTarget{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck},
+		Interaction: &model.RunInteraction{Intent: model.IntentConsult, Clarification: model.ClarifyNever},
+		UserInput:   r.instr,
 	})
 	em.Emit(model.EventInfo, harness.InfoPayload{Text: "acknowledged"})
 	return harness.Outcome{Status: harness.OutcomeFinished, Summary: "ok"}
 }
 
 // TestThreadHistoryE2E_UserTurnAndFinalResultLanded：
-//   一次 run 结束后，thread 的 history.jsonl 至少应含 user_turn + final_result；
-//   GET /threads/:id/history 返回同数据（按 seq 升序）。
+//
+//	一次 run 结束后，thread 的 history.jsonl 至少应含 user_turn + final_result；
+//	GET /threads/:id/history 返回同数据（按 seq 升序）。
 func TestThreadHistoryE2E_UserTurnAndFinalResultLanded(t *testing.T) {
 	instr := "帮我写一个开场页"
 	srv, threadID, workDir := setupServerWithHistory(t, scriptedTurn{runID: "auto", instr: instr})
@@ -157,7 +160,11 @@ func TestThreadHistoryE2E_UserTurnAndFinalResultLanded(t *testing.T) {
 
 func createHistoryRun(t *testing.T, srv *httptest.Server, threadID, instr string) string {
 	t.Helper()
-	payload, _ := json.Marshal(map[string]any{"kind": "command", "instruction": instr, "mode": "normal", "scope": "current"})
+	payload, _ := json.Marshal(map[string]any{
+		"target":      map[string]any{"artifact": "blueprint", "level": "deck"},
+		"interaction": map[string]any{"intent": "consult", "clarification": "never"},
+		"instruction": instr,
+	})
 	resp, err := http.Post(srv.URL+"/api/v1/threads/"+threadID+"/runs", "application/json", strings.NewReader(string(payload)))
 	if err != nil {
 		t.Fatalf("create run: %v", err)

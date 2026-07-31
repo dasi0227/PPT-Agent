@@ -106,16 +106,15 @@ func (s *Store) DeleteThread(ctx context.Context, id string) error {
 	return nil
 }
 
-// CreateRun 写入 run 记录。空 thread_id/project_id 落 NULL（schema 允许，repo scope 无归属）。
+// CreateRun writes the normalized WorkSpec without an action/scope projection.
 func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	po := runToPO(r)
 	return s.db.WithContext(ctx).Exec(
-		`INSERT INTO runs (id, thread_id, project_id, kind, scope, page_index, mode, command,
+		`INSERT INTO runs (id, thread_id, project_id,
 		 target_artifact, target_level, target_slide_id, interaction_intent, clarification_policy, work_spec_json,
 		 status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		po.ID, nullIfEmpty(po.ThreadID), nullIfEmpty(po.ProjectID), po.Kind, po.Scope,
-		po.PageIndex, po.Mode, nullIfEmpty(po.Command), po.TargetArtifact, po.TargetLevel,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		po.ID, po.ThreadID, po.ProjectID, po.TargetArtifact, po.TargetLevel,
 		nullIfEmpty(po.TargetSlideID), po.InteractionIntent, po.ClarificationPolicy, po.WorkSpecJSON,
 		po.Status, po.CreatedAt, po.UpdatedAt,
 	).Error

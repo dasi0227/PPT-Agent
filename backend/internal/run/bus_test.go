@@ -28,9 +28,9 @@ func (s *memStore2) AppendEvent(_ context.Context, e model.Event) error {
 func (s *memStore2) EventsSince(_ context.Context, _ string, _ int64) ([]model.Event, error) {
 	return nil, nil
 }
-func (s *memStore2) CreateRun(_ context.Context, _ model.Run) error                     { return nil }
-func (s *memStore2) SetRunStatus(_ context.Context, _ string, _ model.RunStatus) error  { return nil }
-func (s *memStore2) GetRun(_ context.Context, _ string) (model.Run, error)              { return model.Run{}, nil }
+func (s *memStore2) CreateRun(_ context.Context, _ model.Run) error                    { return nil }
+func (s *memStore2) SetRunStatus(_ context.Context, _ string, _ model.RunStatus) error { return nil }
+func (s *memStore2) GetRun(_ context.Context, _ string) (model.Run, error)             { return model.Run{}, nil }
 
 func newFSWriterForTest(t *testing.T) (*FSHistoryWriter, string) {
 	t.Helper()
@@ -75,11 +75,11 @@ func TestBusAppendsWhitelistedEventsToHistory(t *testing.T) {
 	b := NewBus("r1", "t1", &memStore2{}, hw)
 
 	ctx := context.Background()
-	if err := b.Emit(ctx, model.EventRunStarted, harness.RunStartedPayload{RunID: "r1", Kind: "outline", Scope: "current", Mode: "normal", UserInput: "hi"}); err != nil {
+	if err := b.Emit(ctx, model.EventRunStarted, harness.RunStartedPayload{RunID: "r1", UserInput: "hi"}); err != nil {
 		t.Fatal(err)
 	}
-	_ = b.Emit(ctx, model.EventThought, harness.ThoughtPayload{Text: "thinking"})       // 落盘
-	_ = b.Emit(ctx, model.EventProgress, harness.ProgressPayload{Stage: "turn"})        // 不落
+	_ = b.Emit(ctx, model.EventThought, harness.ThoughtPayload{Text: "thinking"}) // 落盘
+	_ = b.Emit(ctx, model.EventProgress, harness.ProgressPayload{Stage: "turn"})  // 不落
 	_ = b.Emit(ctx, model.EventInfo, harness.InfoPayload{Text: "info line"})
 	_ = b.Emit(ctx, model.EventDone, harness.DonePayload{Result: map[string]any{"ok": true}})
 
@@ -108,7 +108,7 @@ func TestBusAppendsWhitelistedEventsToHistory(t *testing.T) {
 func TestBusSkipsRunStartedWithoutUserInput(t *testing.T) {
 	hw, dir := newFSWriterForTest(t)
 	b := NewBus("r1", "t1", &memStore2{}, hw)
-	_ = b.Emit(context.Background(), model.EventRunStarted, harness.RunStartedPayload{RunID: "r1", Kind: "outline", Scope: "current", Mode: "normal"})
+	_ = b.Emit(context.Background(), model.EventRunStarted, harness.RunStartedPayload{RunID: "r1"})
 	entries := readHistoryLines(t, dir)
 	if len(entries) != 0 {
 		t.Fatalf("expected 0 entries for empty user_input, got %+v", entries)

@@ -18,6 +18,14 @@ import (
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
 
+func activeRunSpec() model.WorkSpec {
+	return model.WorkSpec{
+		Target:      model.RunTarget{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck},
+		Interaction: model.RunInteraction{Intent: model.IntentApply, Clarification: model.ClarifyWhenBlocked},
+		Instruction: "test",
+	}
+}
+
 func setupSlideContentServer(t *testing.T) (*httptest.Server, *sqlitestore.Store, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -104,7 +112,7 @@ func TestSlideContentReadPatchAndRunActive(t *testing.T) {
 	if err := st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", Kind: model.KindOutline, Scope: model.ScopeCurrent, Mode: model.ModeNormal, Status: model.RunRunning}); err != nil {
+	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", WorkSpec: activeRunSpec(), Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
 	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/slides/s1", `{"title":"Y"}`)
@@ -242,7 +250,7 @@ func TestSlideStructuralAddDeleteReorder(t *testing.T) {
 	if err := st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", Kind: model.KindOutline, Scope: model.ScopeCurrent, Mode: model.ModeNormal, Status: model.RunRunning}); err != nil {
+	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", WorkSpec: activeRunSpec(), Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/p1/slides", `{"after_slide_id":"a","layout":"bullets"}`)

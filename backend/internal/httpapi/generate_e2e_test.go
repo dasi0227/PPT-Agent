@@ -193,7 +193,7 @@ func newTestServer(t *testing.T, router *httpapi.Router) *httptest.Server {
 
 func createGenerateRun(t *testing.T, srv *httptest.Server, threadID string) string {
 	t.Helper()
-	body := `{"kind":"generate","scope":"current","mode":"normal","theme":"tokyo-night","instruction":"生成"}`
+	body := `{"target":{"artifact":"presentation","level":"deck"},"interaction":{"intent":"apply","clarification":"when_blocked"},"instruction":"生成","options":{"theme_id":"tokyo-night"}}`
 	resp, err := http.Post(srv.URL+"/api/v1/threads/"+threadID+"/runs", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("create run: %v", err)

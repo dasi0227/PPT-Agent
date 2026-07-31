@@ -16,6 +16,14 @@ import (
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
 
+func activeRunSpec() model.WorkSpec {
+	return model.WorkSpec{
+		Target:      model.RunTarget{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck},
+		Interaction: model.RunInteraction{Intent: model.IntentApply, Clarification: model.ClarifyWhenBlocked},
+		Instruction: "test",
+	}
+}
+
 var errSlideInjected = errors.New("injected slide failure")
 
 // TestReadContentFromDisk：ReadContent 从 slide.json 读全文（含 bullets）。
@@ -97,7 +105,7 @@ func TestPatchContentRejectedWhenRunActive(t *testing.T) {
 	if err := st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", Kind: model.KindOutline, Scope: model.ScopeCurrent, Mode: model.ModeNormal, Status: model.RunRunning}); err != nil {
+	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", WorkSpec: activeRunSpec(), Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
 	newTitle := "X"
@@ -113,7 +121,7 @@ func activateRun(t *testing.T, st *sqlitestore.Store) {
 	if err := st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", Kind: model.KindOutline, Scope: model.ScopeCurrent, Mode: model.ModeNormal, Status: model.RunRunning}); err != nil {
+	if err := st.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", WorkSpec: activeRunSpec(), Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
 }

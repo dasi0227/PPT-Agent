@@ -6,9 +6,6 @@ import "github.com/dasi0227/PPT-Agent/backend/internal/model"
 
 type RunStartedPayload struct {
 	RunID       string                `json:"run_id"`
-	Kind        string                `json:"kind"`
-	Scope       string                `json:"scope"`
-	Mode        string                `json:"mode"`
 	UserInput   string                `json:"user_input,omitempty"`
 	Target      *model.RunTarget      `json:"target,omitempty"`
 	Interaction *model.RunInteraction `json:"interaction,omitempty"`

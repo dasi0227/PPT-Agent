@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -33,6 +34,10 @@ type revisionTrackingRunner struct {
 }
 
 func (r *revisionTrackingRunner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, prompter run.Prompter) harness.Outcome {
+	var before blueprintRevisions
+	if r.spec.Interaction.Intent == model.IntentApply && r.store != nil {
+		before = r.currentRevisions(ctx)
+	}
 	outcome := r.inner.Run(ctx, em, cp, prompter)
 	if outcome.Status != harness.OutcomeFinished || r.spec.Interaction.Intent != model.IntentApply {
 		return outcome
@@ -41,7 +46,17 @@ func (r *revisionTrackingRunner) Run(ctx context.Context, em harness.Emitter, cp
 	if err != nil {
 		return harness.Outcome{Status: harness.OutcomeCircuit, Code: "REVISION_COMMIT_FAILED", Message: err.Error()}
 	}
+	if outcome.Result == nil {
+		outcome.Result = map[string]any{}
+	}
+	outcome.Result["revisions"] = map[string]any{
+		"before": before,
+		"after":  revisionsOf(view, r.spec.Target.SlideID),
+	}
 	if r.spec.Target.Artifact != model.ArtifactPresentation {
+		if r.spec.Target.Level == model.TargetSlide {
+			outcome.Result["materialization_status"] = view.States[r.spec.Target.SlideID].State
+		}
 		return outcome
 	}
 	if r.legacyDesignOnly {
@@ -82,12 +97,50 @@ func (r *revisionTrackingRunner) Run(ctx context.Context, em harness.Emitter, cp
 			return harness.Outcome{Status: harness.OutcomeCircuit, Code: "REVISION_COMMIT_FAILED", Message: err.Error()}
 		}
 	}
-	if outcome.Result == nil {
-		outcome.Result = map[string]any{}
+	committed, err := r.blueprint.EnsureProject(ctx, r.project.ID)
+	if err != nil {
+		return harness.Outcome{Status: harness.OutcomeCircuit, Code: "REVISION_COMMIT_FAILED", Message: err.Error()}
 	}
 	outcome.Result["materialization_status"] = "fresh"
-	outcome.Result["revisions"] = map[string]any{"deck": view.Deck.Revision, "design": view.DesignSpec.Revision}
+	outcome.Result["revisions"] = map[string]any{
+		"before": before,
+		"after":  revisionsOf(committed, r.spec.Target.SlideID),
+	}
 	return outcome
+}
+
+func (r *revisionTrackingRunner) currentRevisions(ctx context.Context) blueprintRevisions {
+	revisions := blueprintRevisions{
+		Deck: r.project.DeckRevision, Design: r.project.DesignRevision,
+	}
+	if r.spec.Target.SlideID == "" {
+		return revisions
+	}
+	if slide, err := r.store.GetSlide(ctx, r.spec.Target.SlideID); err == nil {
+		revisions.Slide = slide.BlueprintRevision
+		revisions.Presentation = slide.PresentationRevision
+	}
+	return revisions
+}
+
+type blueprintRevisions struct {
+	Deck         int `json:"deck"`
+	Design       int `json:"design"`
+	Slide        int `json:"slide,omitempty"`
+	Presentation int `json:"presentation,omitempty"`
+}
+
+func revisionsOf(view blueprint.ProjectView, slideID string) blueprintRevisions {
+	revisions := blueprintRevisions{Deck: view.Deck.Revision, Design: view.DesignSpec.Revision}
+	if slide, ok := view.Slides[slideID]; ok {
+		revisions.Slide = slide.Revision
+	}
+	if state, ok := view.States[slideID]; ok {
+		if source, ok := state.Revisions.(model.MaterializationRevisions); ok {
+			revisions.Presentation = source.Presentation
+		}
+	}
+	return revisions
 }
 
 type TargetRunnerBuilder func(model.Run, model.CreateRunParams, model.Project) run.Runner

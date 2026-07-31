@@ -196,7 +196,7 @@ func (r scriptRunnerE2E) Run(ctx context.Context, em harness.Emitter, cp harness
 
 func createRun(t *testing.T, srv *httptest.Server, threadID string) string {
 	t.Helper()
-	body := `{"kind":"generate","scope":"current","mode":"normal","instruction":"生成8页"}`
+	body := `{"target":{"artifact":"presentation","level":"deck"},"interaction":{"intent":"apply","clarification":"when_blocked"},"instruction":"生成8页"}`
 	resp, err := http.Post(srv.URL+"/api/v1/threads/"+threadID+"/runs", "application/json", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("create run: %v", err)

@@ -148,8 +148,7 @@ func postM5Run(t *testing.T, srv *httptest.Server, threadID string, body map[str
 func runIDFrom(t *testing.T, body string) string {
 	t.Helper()
 	var out struct {
-		ID   string `json:"id"`
-		Mode string `json:"mode"`
+		ID string `json:"id"`
 	}
 	json.Unmarshal([]byte(body), &out)
 	if out.ID == "" {
@@ -158,13 +157,15 @@ func runIDFrom(t *testing.T, body string) string {
 	return out.ID
 }
 
-// AC-EDIT-004 / AC-CMD-OVERVIEW-001（端到端）：/overview 改主色 → 仅 tokens.css 变，8 页 html 不变。
+// presentation/deck 全局修改：公共设计层变化，且每页写入新的物化来源元数据。
 func TestE2EOverviewPatchDesign(t *testing.T) {
 	srv, threadID, workDir := setupM5Server(t, 8)
 	before := hashM5Tree(t, workDir, 8)
 
 	code, body := postM5Run(t, srv, threadID, map[string]any{
-		"kind": "edit", "scope": "overview", "mode": "normal", "instruction": "主色改成品牌蓝",
+		"target":      map[string]any{"artifact": "presentation", "level": "deck"},
+		"interaction": map[string]any{"intent": "apply", "clarification": "when_blocked"},
+		"instruction": "主色改成品牌蓝",
 	})
 	if code != http.StatusCreated {
 		t.Fatalf("want 201, got %d (%s)", code, body)
@@ -177,26 +178,27 @@ func TestE2EOverviewPatchDesign(t *testing.T) {
 	}
 	for i := 0; i < 8; i++ {
 		key := fmt.Sprintf("slides/%03d/index.html", i)
-		if before[key] != after[key] {
-			t.Errorf("page %d html must not change (AC-EDIT-004)", i)
+		if before[key] == after[key] {
+			t.Errorf("page %d should record the new deck materialization revision", i)
 		}
 	}
 }
 
-// AC-CMD-TALK-001（端到端）：/talk → 无文件变更；run.mode=talk。
+// consult → 无文件变更，且响应保留标准化 interaction。
 func TestE2ETalkNoFileChange(t *testing.T) {
 	srv, threadID, workDir := setupM5Server(t, 3)
 	before := hashM5Tree(t, workDir, 3)
 
 	code, body := postM5Run(t, srv, threadID, map[string]any{
-		"kind": "command", "scope": "current", "mode": "talk", "command": "talk", "instruction": "聊聊深色方案",
+		"target":      map[string]any{"artifact": "presentation", "level": "deck"},
+		"interaction": map[string]any{"intent": "consult", "clarification": "never"},
+		"instruction": "聊聊深色方案",
 	})
 	if code != http.StatusCreated {
 		t.Fatalf("want 201, got %d (%s)", code, body)
 	}
-	// run.mode 暴露为 talk（AGENT-MODE-004）。
-	if !strings.Contains(body, `"mode":"talk"`) {
-		t.Errorf("run.mode should be talk: %s", body)
+	if !strings.Contains(body, `"intent":"consult"`) {
+		t.Errorf("run interaction should be consult: %s", body)
 	}
 	waitDone(t, srv, runIDFrom(t, body))
 
@@ -208,33 +210,38 @@ func TestE2ETalkNoFileChange(t *testing.T) {
 	}
 }
 
-// AC-MODE-005（端到端）：一次 /talk 后，下一条普通指令为 normal，不继承 talk。
+// 每个 Run 显式携带 interaction，不继承上一条 consult。
 func TestE2EModeNotPersisted(t *testing.T) {
 	srv, threadID, _ := setupM5Server(t, 3)
 
 	_, talkBody := postM5Run(t, srv, threadID, map[string]any{
-		"kind": "command", "scope": "current", "mode": "talk", "command": "talk", "instruction": "聊聊",
+		"target":      map[string]any{"artifact": "presentation", "level": "deck"},
+		"interaction": map[string]any{"intent": "consult", "clarification": "never"},
+		"instruction": "聊聊",
 	})
-	if !strings.Contains(talkBody, `"mode":"talk"`) {
-		t.Fatalf("first run should be talk: %s", talkBody)
+	if !strings.Contains(talkBody, `"intent":"consult"`) {
+		t.Fatalf("first run should be consult: %s", talkBody)
 	}
 
-	// 下一条普通编辑指令（不带 mode）→ normal。
 	_, editBody := postM5Run(t, srv, threadID, map[string]any{
-		"kind": "edit", "scope": "current", "mode": "normal", "page_index": 0, "instruction": "改标题",
+		"target":      map[string]any{"artifact": "presentation", "level": "slide", "slide_id": "000"},
+		"interaction": map[string]any{"intent": "apply", "clarification": "when_blocked"},
+		"instruction": "改标题",
 	})
-	if !strings.Contains(editBody, `"mode":"normal"`) {
-		t.Errorf("second run must be normal, not inherit talk (AC-MODE-005): %s", editBody)
+	if !strings.Contains(editBody, `"intent":"apply"`) {
+		t.Errorf("second run must apply, not inherit consult: %s", editBody)
 	}
 }
 
-// AC-CMD-PROMPT-001（端到端）：/prompt → 无文件变更（改写只发 info）。
+// Blueprint consult 只给建议，不修改文件。
 func TestE2EPromptNoFileChange(t *testing.T) {
 	srv, threadID, workDir := setupM5Server(t, 2)
 	before := hashM5Tree(t, workDir, 2)
 
 	code, body := postM5Run(t, srv, threadID, map[string]any{
-		"kind": "command", "scope": "current", "mode": "normal", "command": "prompt", "instruction": "让这页好看点",
+		"target":      map[string]any{"artifact": "blueprint", "level": "deck"},
+		"interaction": map[string]any{"intent": "consult", "clarification": "never"},
+		"instruction": "让这页好看点",
 	})
 	if code != http.StatusCreated {
 		t.Fatalf("want 201, got %d (%s)", code, body)

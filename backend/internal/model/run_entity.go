@@ -3,13 +3,8 @@ package model
 // Run 是一次 Agent 执行的领域表示（生命周期外壳的元数据）。
 type Run struct {
 	ID        string
-	ThreadID  string // 可空：repo 类快操作无 thread
-	ProjectID string // 冗余便于按项目加锁；repo scope 可空
-	Kind      Kind
-	Scope     Scope
-	PageIndex *int // 针对页时的页序，可空
-	Mode      Mode
-	Command   string // 显式指令名，可空
+	ThreadID  string
+	ProjectID string
 	WorkSpec  WorkSpec
 	Status    RunStatus
 	CreatedAt int64
@@ -20,20 +15,15 @@ type Run struct {
 type CreateRunParams struct {
 	ThreadID    string
 	ProjectID   string
-	Kind        Kind
-	Scope       Scope
 	PageIndex   *int
-	Mode        Mode
-	Command     string
 	Instruction string
-	// 大纲生成入参（kind=outline）：主题在 Instruction，其余可选。
+	// Blueprint/presentation runner implementation options.
 	Brief      string
 	SlideCount int
 	Language   string
-	// slide 生成入参（kind=generate）：所选主题 id；空则回退 project.Theme→首个 preset。
+	// Theme falls back to project.Theme when omitted.
 	Theme string
-	// overview 入参（scope=overview）：项目页数，由 service 就地补齐（fanout 默认全页/越界校验）。
+	// Internal deck runner page count.
 	PageCount int
 	WorkSpec  WorkSpec
-	Legacy    bool
 }

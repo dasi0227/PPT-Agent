@@ -2,15 +2,12 @@ package httpapi
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/agent/command"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
@@ -28,16 +25,7 @@ func NewRunHandler(svc *service.RunService) *RunHandler {
 }
 
 type createRunBody struct {
-	Kind        string               `json:"kind"`
-	Scope       string               `json:"scope"`
-	PageIndex   *int                 `json:"page_index"`
-	Mode        string               `json:"mode"`
-	Command     string               `json:"command"`
 	Instruction string               `json:"instruction"`
-	Brief       string               `json:"brief"`
-	SlideCount  int                  `json:"slide_count"`
-	Language    string               `json:"language"`
-	Theme       string               `json:"theme"`
 	Target      model.RunTarget      `json:"target"`
 	Interaction model.RunInteraction `json:"interaction"`
 	Options     model.RunOptions     `json:"options"`
@@ -47,9 +35,6 @@ type runResponse struct {
 	ID          string               `json:"id"`
 	ThreadID    string               `json:"thread_id"`
 	ProjectID   string               `json:"project_id"`
-	Kind        string               `json:"kind"`
-	Scope       string               `json:"scope"`
-	Mode        string               `json:"mode"`
 	Status      string               `json:"status"`
 	EventsURL   string               `json:"events_url"`
 	Target      model.RunTarget      `json:"target"`
@@ -64,47 +49,16 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
-	params := model.CreateRunParams{
-		Kind:        model.Kind(body.Kind),
-		Scope:       model.Scope(body.Scope),
-		PageIndex:   body.PageIndex,
-		Mode:        model.Mode(body.Mode),
-		Command:     body.Command,
-		Instruction: body.Instruction,
-		Brief:       body.Brief,
-		SlideCount:  body.SlideCount,
-		Language:    body.Language,
-		Theme:       body.Theme,
+	if body.Target.Artifact == "" {
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "INVALID_TARGET", Message: "target is required"})
+		return
 	}
-	if body.Target.Artifact != "" {
-		params.WorkSpec = model.WorkSpec{Target: body.Target, Interaction: body.Interaction, Instruction: body.Instruction, Options: body.Options}
-	} else {
-		if err := applyRawCommand(&body); err != nil {
-			AbortWithError(c, ErrBadRequest(err.Error()))
-			return
-		}
-		if body.Kind == "" {
-			AbortWithError(c, ErrBadRequest("target is required"))
-			return
-		}
-		params.Kind, params.Scope, params.PageIndex = model.Kind(body.Kind), model.Scope(body.Scope), body.PageIndex
-		params.Mode, params.Command, params.Instruction = model.Mode(body.Mode), body.Command, body.Instruction
-		spec, err := h.svc.AdaptLegacy(c.Request.Context(), threadID, service.LegacyRunRequest{
-			Kind: params.Kind, Scope: params.Scope, PageIndex: params.PageIndex, Mode: params.Mode,
-			Command: params.Command, Instruction: params.Instruction, Brief: params.Brief,
-			SlideCount: params.SlideCount, Language: params.Language, Theme: params.Theme,
-		})
-		if err != nil {
-			handleCreateRunError(c, err)
-			return
-		}
-		if params.Scope == "" {
-			params.Scope = model.ScopeCurrent
-		}
-		if params.Mode == "" {
-			params.Mode = model.ModeNormal
-		}
-		params.WorkSpec, params.Legacy = spec, true
+	params := model.CreateRunParams{
+		Instruction: body.Instruction,
+		WorkSpec: model.WorkSpec{
+			Target: body.Target, Interaction: body.Interaction,
+			Instruction: body.Instruction, Options: body.Options,
+		},
 	}
 	r, err := h.svc.CreateRun(c.Request.Context(), threadID, params)
 	if err != nil {
@@ -114,7 +68,6 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, runResponse{
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
-		Kind: string(r.Kind), Scope: string(r.Scope), Mode: string(r.Mode),
 		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
 		Target: r.WorkSpec.Target, Interaction: r.WorkSpec.Interaction,
 	})
@@ -124,55 +77,15 @@ func handleCreateRunError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, run.ErrRunNotFound):
 		AbortWithError(c, ErrNotFound("thread not found"))
-	case errors.Is(err, service.ErrInvalidPageIndex):
+	case errors.Is(err, service.ErrSlideTargetNotFound):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusBadRequest, Code: "SLIDE_NOT_FOUND", Message: "slide_id is invalid or does not belong to the project"})
 	case errors.Is(err, model.ErrInvalidWorkSpec):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "INVALID_TARGET", Message: err.Error()})
-	case errors.Is(err, service.ErrLegacyCommandDeprecated):
-		AbortWithError(c, &APIError{HTTPStatus: http.StatusGone, Code: "LEGACY_COMMAND_DEPRECATED", Message: err.Error()})
 	case errors.Is(err, service.ErrRunTargetUnsupported):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "RUN_TARGET_UNSUPPORTED", Message: err.Error()})
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}
-}
-
-func applyRawCommand(body *createRunBody) error {
-	raw := strings.TrimSpace(body.Instruction)
-	if !strings.HasPrefix(raw, "/") {
-		return nil
-	}
-	parsed, err := command.Parse(raw)
-	if err != nil {
-		return err
-	}
-	if body.Scope != "" && model.Scope(body.Scope) != parsed.Scope {
-		return fmt.Errorf("scope conflicts with raw command: %s vs %s", body.Scope, parsed.Scope)
-	}
-	if body.Mode != "" && model.Mode(body.Mode) != parsed.Mode {
-		return fmt.Errorf("mode conflicts with raw command: %s vs %s", body.Mode, parsed.Mode)
-	}
-	if body.Command != "" && body.Command != parsed.Command {
-		return fmt.Errorf("command conflicts with raw command: %s vs %s", body.Command, parsed.Command)
-	}
-	if body.PageIndex != nil {
-		if parsed.PageIndex != nil && *body.PageIndex != *parsed.PageIndex {
-			return fmt.Errorf("page_index conflicts with raw command")
-		}
-		if parsed.PageIndex == nil && parsed.Scope != model.ScopeCurrent {
-			return fmt.Errorf("page_index conflicts with raw command scope %s", parsed.Scope)
-		}
-	}
-	body.Scope = string(parsed.Scope)
-	body.Mode = string(parsed.Mode)
-	body.Command = parsed.Command
-	body.Instruction = parsed.Instruction
-	if parsed.PageIndex != nil {
-		body.PageIndex = parsed.PageIndex
-	} else if parsed.Scope != model.ScopeCurrent {
-		body.PageIndex = nil
-	}
-	return nil
 }
 
 // Events GET /runs/{id}/events (SSE，支持 Last-Event-ID 续传)

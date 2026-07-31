@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
+	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
@@ -62,6 +63,10 @@ func (svc *SlideService) ReadContent(ctx context.Context, slideID string) (slide
 	if err != nil {
 		return slidejson.SlideJSON{ID: sl.ID, Idx: sl.Idx, Layout: sl.Layout, Title: sl.Title}, nil
 	}
+	var semantic blueprint.Slide
+	if json.Unmarshal(raw, &semantic) == nil && semantic.SchemaVersion == blueprint.SchemaVersion {
+		return blueprintAsLegacySlide(semantic, sl.Idx), nil
+	}
 	return slidejson.Parse(raw)
 }
 
@@ -98,6 +103,38 @@ func (svc *SlideService) PatchContent(ctx context.Context, slideID string, p Sli
 // patchContentCore 是 PatchContent 的无互斥核心（供 AI 大纲编辑 runner 复用；AI run 本身即活跃 run）。
 func (svc *SlideService) patchContentCore(ctx context.Context, sl model.Slide, p SlidePatch) (slidejson.SlideJSON, error) {
 	slideID := sl.ID
+	bpSvc := NewBlueprintService(svc.store)
+	if semantic, _, bpErr := bpSvc.GetSlide(ctx, slideID); bpErr == nil && semantic.SchemaVersion == blueprint.SchemaVersion {
+		if p.Title != nil {
+			semantic.Title = *p.Title
+		}
+		if p.Subtitle != nil {
+			semantic.KeyMessage = *p.Subtitle
+		}
+		if p.ContentIntent != nil {
+			semantic.Content.Summary = *p.ContentIntent
+		}
+		if p.Layout != nil {
+			semantic.VisualIntent.Archetype = *p.Layout
+		}
+		if p.Bullets != nil {
+			semantic.Content.Points = append([]string(nil), (*p.Bullets)...)
+		}
+		updated, updateErr := bpSvc.PatchSlide(ctx, slideID, semantic.Revision, semantic)
+		if updateErr != nil {
+			return slidejson.SlideJSON{}, updateErr
+		}
+		// Keep the old boolean as a read-only compatibility projection while
+		// v1 clients migrate; freshness is derived from revisions in v2.
+		if project, projectErr := svc.store.GetProject(ctx, sl.ProjectID); projectErr == nil {
+			if _, statErr := os.Stat(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(slideID)))); statErr == nil {
+				if dirtyErr := svc.store.SetOutlineDirty(ctx, slideID, true); dirtyErr != nil {
+					return slidejson.SlideJSON{}, dirtyErr
+				}
+			}
+		}
+		return blueprintAsLegacySlide(updated, sl.Idx), nil
+	}
 	proj, err := svc.store.GetProject(ctx, sl.ProjectID)
 	if err != nil {
 		return slidejson.SlideJSON{}, err
@@ -183,6 +220,8 @@ func (svc *SlideService) addSlideCore(ctx context.Context, projectID, afterSlide
 	if err != nil {
 		return model.Slide{}, err
 	}
+	bpSvc := NewBlueprintService(svc.store)
+	view, viewErr := bpSvc.EnsureProject(ctx, projectID)
 	slides, err := svc.store.ListSlides(ctx, projectID)
 	if err != nil {
 		return model.Slide{}, err
@@ -205,6 +244,47 @@ func (svc *SlideService) addSlideCore(ctx context.Context, projectID, afterSlide
 	}
 	if err := svc.store.InsertSlide(ctx, sl); err != nil {
 		return model.Slide{}, err
+	}
+	if viewErr == nil && view.Deck.SchemaVersion == blueprint.SchemaVersion {
+		sectionID := "section-main"
+		nextDeck := view.Deck
+		if len(nextDeck.Sections) == 0 {
+			nextDeck.Sections = []blueprint.Section{{
+				ID: sectionID, Number: "01", Title: "正文", Subsections: []blueprint.Subsection{},
+			}}
+		} else {
+			sectionID = nextDeck.Sections[0].ID
+		}
+		now := svc.clock()
+		semantic := blueprint.Slide{
+			SchemaVersion: blueprint.SchemaVersion, Revision: 1, SlideID: id,
+			SectionID: sectionID, Role: "context", Title: "未命名页面",
+			KeyMessage: "待补充本页核心信息",
+			Content:    blueprint.Content{Summary: "待补充本页内容", Points: []string{}},
+			VisualIntent: blueprint.VisualIntent{
+				Archetype: layout, Description: "使用清晰的信息层级表达本页核心信息", AssetQueries: []string{},
+			},
+			CreatedAt: now, UpdatedAt: now,
+		}
+		if err := atomicWrite(filepath.Join(proj.WorkDir, filepath.FromSlash(model.SlideJSONPath(id))), mustJSON(semantic)); err != nil {
+			_ = svc.store.DeleteSlideByID(ctx, id)
+			return model.Slide{}, err
+		}
+		if err := svc.store.UpdateSlideMeta(ctx, id, semantic.Title, semantic.VisualIntent.Archetype); err != nil {
+			return model.Slide{}, err
+		}
+		if err := svc.store.UpdateSlideRevisions(ctx, id, 1, 0, 0, 0, 0); err != nil {
+			return model.Slide{}, err
+		}
+		ordered, listErr := svc.store.ListSlides(ctx, projectID)
+		if listErr != nil {
+			return model.Slide{}, listErr
+		}
+		nextDeck.SlideOrder = slideIDs(ordered)
+		if _, err := bpSvc.ReplaceDeck(ctx, projectID, view.Deck.Revision, nextDeck); err != nil {
+			return model.Slide{}, err
+		}
+		sl.Title, sl.Layout, sl.BlueprintRevision = semantic.Title, semantic.VisualIntent.Archetype, 1
 	}
 	return sl, nil
 }
@@ -251,6 +331,14 @@ func (svc *SlideService) deleteSlideCore(ctx context.Context, sl model.Slide) er
 	if err != nil {
 		return err
 	}
+	bpSvc := NewBlueprintService(svc.store)
+	if view, viewErr := bpSvc.EnsureProject(ctx, sl.ProjectID); viewErr == nil && view.Deck.SchemaVersion == blueprint.SchemaVersion {
+		next := view.Deck
+		next.SlideOrder = withoutID(next.SlideOrder, sl.ID)
+		if _, err := bpSvc.ReplaceDeck(ctx, sl.ProjectID, view.Deck.Revision, next); err != nil {
+			return err
+		}
+	}
 	if err := svc.store.DeleteSlideByID(ctx, sl.ID); err != nil {
 		return err
 	}
@@ -273,9 +361,43 @@ func (svc *SlideService) ReorderSlides(ctx context.Context, projectID string, or
 
 // reorderSlidesCore 是 ReorderSlides 的无互斥核心（供 AI 大纲编辑 runner 复用）。
 func (svc *SlideService) reorderSlidesCore(ctx context.Context, projectID string, orderedIDs []string) error {
+	bpSvc := NewBlueprintService(svc.store)
+	if view, viewErr := bpSvc.EnsureProject(ctx, projectID); viewErr == nil && view.Deck.SchemaVersion == blueprint.SchemaVersion {
+		next := view.Deck
+		next.SlideOrder = append([]string(nil), orderedIDs...)
+		if _, err := bpSvc.ReplaceDeck(ctx, projectID, view.Deck.Revision, next); err != nil {
+			return err
+		}
+	}
 	orderByID := make(map[string]int, len(orderedIDs))
 	for i, id := range orderedIDs {
 		orderByID[id] = i * 10
 	}
 	return svc.store.SetSlidesOrder(ctx, projectID, orderByID)
+}
+
+func blueprintAsLegacySlide(in blueprint.Slide, idx int) slidejson.SlideJSON {
+	return slidejson.SlideJSON{
+		ID: in.SlideID, Idx: idx, Layout: in.VisualIntent.Archetype, Title: in.Title,
+		Subtitle: in.KeyMessage, Bullets: append([]string(nil), in.Content.Points...),
+		ContentIntent: in.Content.Summary, Notes: in.SpeakerNotes,
+	}
+}
+
+func slideIDs(slides []model.Slide) []string {
+	out := make([]string, len(slides))
+	for i, slide := range slides {
+		out[i] = slide.ID
+	}
+	return out
+}
+
+func withoutID(ids []string, target string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != target {
+			out = append(out, id)
+		}
+	}
+	return out
 }

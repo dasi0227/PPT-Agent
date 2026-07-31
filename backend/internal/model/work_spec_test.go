@@ -18,7 +18,10 @@ func TestWorkSpecValidation(t *testing.T) {
 		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: "current"}, Interaction: valid.Interaction, Instruction: "x"},
 		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetSlide}, Interaction: valid.Interaction, Instruction: "x"},
 		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck, SlideID: "current"}, Interaction: valid.Interaction, Instruction: "x"},
+		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck, SlideID: "stable"}, Interaction: valid.Interaction, Instruction: "x"},
 		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck}, Interaction: RunInteraction{Intent: "talk", Clarification: ClarifyNever}, Instruction: "x"},
+		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck}, Interaction: RunInteraction{Intent: IntentApply, Clarification: "always"}, Instruction: "x"},
+		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck}, Interaction: valid.Interaction, Instruction: "  "},
 	}
 	for i, spec := range cases {
 		if err := spec.Validate(); err == nil {

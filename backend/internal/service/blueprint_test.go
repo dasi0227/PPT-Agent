@@ -80,4 +80,35 @@ func TestBlueprintMigrationIsIdempotentAndKeepsStableIDs(t *testing.T) {
 	if got := afterDesign.States[slide.ID].State; got != string(model.MaterializationDesignStale) {
 		t.Fatalf("design revision should derive design_stale, got %s", got)
 	}
+
+	slideSvc := service.NewSlideService(store)
+	added, err := slideSvc.AddSlide(context.Background(), project.ID, slide.ID, "bullets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := "新增蓝图页"
+	if _, err := slideSvc.PatchContent(context.Background(), added.ID, service.SlidePatch{Title: &title}); err != nil {
+		t.Fatal(err)
+	}
+	withAdded, err := svc.EnsureProject(context.Background(), project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withAdded.Slides[added.ID].Title != title || withAdded.Slides[added.ID].SchemaVersion != "2.0" {
+		t.Fatalf("legacy slide endpoint downgraded blueprint: %+v", withAdded.Slides[added.ID])
+	}
+	if err := slideSvc.ReorderSlides(context.Background(), project.ID, []string{added.ID, slide.ID}); err != nil {
+		t.Fatal(err)
+	}
+	reordered, err := svc.EnsureProject(context.Background(), project.ID)
+	if err != nil || reordered.Deck.SlideOrder[0] != added.ID {
+		t.Fatalf("deck order did not follow stable IDs: %+v, %v", reordered.Deck.SlideOrder, err)
+	}
+	if err := slideSvc.DeleteSlide(context.Background(), added.ID); err != nil {
+		t.Fatal(err)
+	}
+	afterDelete, err := svc.EnsureProject(context.Background(), project.ID)
+	if err != nil || len(afterDelete.Deck.SlideOrder) != 1 || afterDelete.Deck.SlideOrder[0] != slide.ID {
+		t.Fatalf("deck aggregate not updated after delete: %+v, %v", afterDelete.Deck.SlideOrder, err)
+	}
 }

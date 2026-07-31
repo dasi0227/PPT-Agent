@@ -10,6 +10,14 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
+func activeRunSpec() model.WorkSpec {
+	return model.WorkSpec{
+		Target:      model.RunTarget{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck},
+		Interaction: model.RunInteraction{Intent: model.IntentApply, Clarification: model.ClarifyWhenBlocked},
+		Instruction: "test",
+	}
+}
+
 func seedProject(t *testing.T, s *Store) {
 	t.Helper()
 	if err := s.CreateProject(context.Background(), model.Project{
@@ -182,7 +190,7 @@ func TestHasActiveRun(t *testing.T) {
 	if err := s.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", Kind: model.KindOutline, Scope: model.ScopeCurrent, Mode: model.ModeNormal, Status: model.RunRunning}); err != nil {
+	if err := s.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", WorkSpec: activeRunSpec(), Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
 	on, err := s.HasActiveRun(ctx, "p1")

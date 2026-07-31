@@ -48,9 +48,6 @@ func (l *Loop) schemas() []llm.ToolSchema {
 func (l *Loop) Run(ctx context.Context, em Emitter, cp Checkpointer) Outcome {
 	em.Emit(model.EventRunStarted, RunStartedPayload{
 		RunID:     l.cfg.RunID,
-		Kind:      string(l.cfg.Kind),
-		Scope:     string(l.cfg.Scope),
-		Mode:      string(l.cfg.Mode),
 		UserInput: l.cfg.Instruction,
 	})
 

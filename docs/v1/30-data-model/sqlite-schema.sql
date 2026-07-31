@@ -67,17 +67,15 @@ CREATE INDEX IF NOT EXISTS idx_threads_project ON threads(project_id);
 
 -- ───────────────────────── Run ─────────────────────────
 CREATE TABLE IF NOT EXISTS runs (
-    id          TEXT    PRIMARY KEY,
-    thread_id   TEXT,                          -- 挂在某对话线程下（repo 类快操作可 NULL）
-    project_id  TEXT,                          -- 冗余便于按项目查询/加锁；repo scope 可 NULL
-    kind        TEXT    NOT NULL
-                        CHECK (kind IN ('outline','generate','edit','command')),
-    scope       TEXT    NOT NULL DEFAULT 'current'
-                        CHECK (scope IN ('current','page','overview','repo')),
-    page_index  INTEGER,
-    mode        TEXT    NOT NULL DEFAULT 'normal'
-                        CHECK (mode IN ('normal','talk','ask')),
-    command     TEXT,                          -- 显式指令名：prompt/recap/talk/ask 等
+    id                     TEXT PRIMARY KEY,
+    thread_id              TEXT NOT NULL,
+    project_id             TEXT NOT NULL,
+    target_artifact        TEXT NOT NULL CHECK (target_artifact IN ('blueprint','presentation')),
+    target_level           TEXT NOT NULL CHECK (target_level IN ('slide','deck')),
+    target_slide_id        TEXT,
+    interaction_intent     TEXT NOT NULL CHECK (interaction_intent IN ('apply','consult')),
+    clarification_policy   TEXT NOT NULL CHECK (clarification_policy IN ('when_blocked','before_apply','never')),
+    work_spec_json         TEXT NOT NULL,
     status      TEXT    NOT NULL DEFAULT 'pending'
                         CHECK (status IN ('pending','running','waiting','done','failed','canceled')),
     created_at  INTEGER NOT NULL,

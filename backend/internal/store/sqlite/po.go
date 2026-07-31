@@ -72,11 +72,6 @@ type runPO struct {
 	ID                  string `gorm:"column:id;primaryKey"`
 	ThreadID            string `gorm:"column:thread_id"`
 	ProjectID           string `gorm:"column:project_id"`
-	Kind                string `gorm:"column:kind"`
-	Scope               string `gorm:"column:scope"`
-	PageIndex           *int   `gorm:"column:page_index"`
-	Mode                string `gorm:"column:mode"`
-	Command             string `gorm:"column:command"`
 	TargetArtifact      string `gorm:"column:target_artifact"`
 	TargetLevel         string `gorm:"column:target_level"`
 	TargetSlideID       string `gorm:"column:target_slide_id"`
@@ -94,19 +89,17 @@ func (r runPO) toModel() model.Run {
 	var spec model.WorkSpec
 	_ = json.Unmarshal([]byte(r.WorkSpecJSON), &spec)
 	return model.Run{
-		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID, Kind: model.Kind(r.Kind),
-		Scope: model.Scope(r.Scope), PageIndex: r.PageIndex, Mode: model.Mode(r.Mode),
-		Command: r.Command, WorkSpec: spec, Status: model.RunStatus(r.Status), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
+		WorkSpec: spec, Status: model.RunStatus(r.Status), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 }
 
 func runToPO(m model.Run) runPO {
 	raw, _ := json.Marshal(m.WorkSpec)
 	return runPO{
-		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID, Kind: string(m.Kind),
-		Scope: string(m.Scope), PageIndex: m.PageIndex, Mode: string(m.Mode),
-		Command: m.Command, TargetArtifact: string(m.WorkSpec.Target.Artifact),
-		TargetLevel: string(m.WorkSpec.Target.Level), TargetSlideID: m.WorkSpec.Target.SlideID,
+		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID,
+		TargetArtifact: string(m.WorkSpec.Target.Artifact),
+		TargetLevel:    string(m.WorkSpec.Target.Level), TargetSlideID: m.WorkSpec.Target.SlideID,
 		InteractionIntent:   string(m.WorkSpec.Interaction.Intent),
 		ClarificationPolicy: string(m.WorkSpec.Interaction.Clarification), WorkSpecJSON: string(raw),
 		Status: string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,

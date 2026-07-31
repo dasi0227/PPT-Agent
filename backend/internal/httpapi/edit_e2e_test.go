@@ -183,12 +183,12 @@ func TestE2EEditPageOutOfBounds(t *testing.T) {
 	}
 }
 
-// current scope 缺 page_index → 400。
+// slide target 缺 stable slide_id → 422。
 func TestE2EEditCurrentMissingPageIndex(t *testing.T) {
 	srv, threadID, _, _ := setupEditServer(t, 3, &editFakeClient{})
 	code, _ := postEditRun(t, srv, threadID, model.ScopeCurrent, nil, "改")
-	if code != http.StatusBadRequest {
-		t.Fatalf("want 400 for missing page_index, got %d", code)
+	if code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422 for missing slide_id, got %d", code)
 	}
 }
 
@@ -236,9 +236,15 @@ func createEditRun(t *testing.T, srv *httptest.Server, threadID string, scope mo
 
 func postEditRun(t *testing.T, srv *httptest.Server, threadID string, scope model.Scope, pageIdx *int, instr string) (int, string) {
 	t.Helper()
-	payload := map[string]any{"kind": "edit", "scope": string(scope), "mode": "normal", "instruction": instr}
+	_ = scope
+	target := map[string]any{"artifact": "presentation", "level": "slide"}
 	if pageIdx != nil {
-		payload["page_index"] = *pageIdx
+		target["slide_id"] = fmt.Sprintf("%03d", *pageIdx)
+	}
+	payload := map[string]any{
+		"target":      target,
+		"interaction": map[string]any{"intent": "apply", "clarification": "when_blocked"},
+		"instruction": instr,
 	}
 	raw, _ := json.Marshal(payload)
 	resp, err := http.Post(srv.URL+"/api/v1/threads/"+threadID+"/runs", "application/json", strings.NewReader(string(raw)))
@@ -281,7 +287,7 @@ func waitDone(t *testing.T, srv *httptest.Server, runID string) {
 	t.Helper()
 	events := readSSE(t, srv, runID, "", 0)
 	if countEvent(events, "done") != 1 {
-		t.Fatalf("expected done event, got: %v", eventTypes(events))
+		t.Fatalf("expected done event, got: %v, terminal=%s", eventTypes(events), events[len(events)-1].data)
 	}
 }
 

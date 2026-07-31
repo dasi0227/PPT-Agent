@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 )
 
@@ -95,6 +96,8 @@ func blueprintError(err error) *APIError {
 		return &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "BLUEPRINT_REFERENCE_BROKEN", Message: err.Error()}
 	case errors.Is(err, blueprint.ErrInvalid):
 		return &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "BLUEPRINT_INVALID", Message: err.Error()}
+	case errors.Is(err, run.ErrRunNotFound):
+		return ErrNotFound("blueprint resource not found")
 	default:
 		return ErrInternal(err.Error())
 	}

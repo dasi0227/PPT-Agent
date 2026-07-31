@@ -26,8 +26,7 @@ func NewRecapRunner(store Store, runID, projectID, instruction string) *RecapRun
 
 func (r *RecapRunner) Run(ctx context.Context, em harness.Emitter, _ harness.Checkpointer, _ run.Prompter) harness.Outcome {
 	em.Emit(model.EventRunStarted, harness.RunStartedPayload{
-		RunID: r.runID, Kind: string(model.KindCommand), Scope: string(model.ScopeCurrent), Mode: string(model.ModeNormal),
-		UserInput: r.instruction,
+		RunID: r.runID, UserInput: r.instruction,
 	})
 
 	proj, err := r.store.GetProject(ctx, r.projectID)

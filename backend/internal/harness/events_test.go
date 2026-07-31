@@ -6,7 +6,7 @@ import (
 )
 
 func TestRunStartedPayloadCarriesUserInput(t *testing.T) {
-	p := RunStartedPayload{RunID: "r1", Kind: "outline", Scope: "current", Mode: "normal", UserInput: "hello"}
+	p := RunStartedPayload{RunID: "r1", UserInput: "hello"}
 	raw, err := json.Marshal(p)
 	if err != nil {
 		t.Fatal(err)
@@ -19,7 +19,7 @@ func TestRunStartedPayloadCarriesUserInput(t *testing.T) {
 }
 
 func TestRunStartedPayloadOmitEmptyUserInput(t *testing.T) {
-	p := RunStartedPayload{RunID: "r1", Kind: "outline", Scope: "current", Mode: "normal"}
+	p := RunStartedPayload{RunID: "r1"}
 	raw, _ := json.Marshal(p)
 	var got map[string]any
 	_ = json.Unmarshal(raw, &got)

@@ -7,10 +7,3 @@ ALTER TABLE slides ADD COLUMN presentation_revision INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE slides ADD COLUMN source_deck_revision INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE slides ADD COLUMN source_blueprint_revision INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE slides ADD COLUMN source_design_revision INTEGER NOT NULL DEFAULT 0;
-
-ALTER TABLE runs ADD COLUMN target_artifact TEXT NOT NULL DEFAULT '';
-ALTER TABLE runs ADD COLUMN target_level TEXT NOT NULL DEFAULT '';
-ALTER TABLE runs ADD COLUMN target_slide_id TEXT;
-ALTER TABLE runs ADD COLUMN interaction_intent TEXT NOT NULL DEFAULT '';
-ALTER TABLE runs ADD COLUMN clarification_policy TEXT NOT NULL DEFAULT '';
-ALTER TABLE runs ADD COLUMN work_spec_json TEXT NOT NULL DEFAULT '{}';
