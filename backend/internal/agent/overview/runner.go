@@ -2,6 +2,7 @@ package overview
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,9 +56,14 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 		return r.errOut(em, "INTERNAL", err.Error())
 	}
 
-	tokensRaw, err := sandbox.Read(designRel)
-	if err != nil {
-		return r.errOut(em, "BAD_STATE", "公共层 tokens.css 缺失，无法全局调整（请先完成生成）："+err.Error())
+	var tokensRaw []byte
+	if r.params.ContextPack != nil && r.params.ContextPack.Design.Spec != nil {
+		tokensRaw, _ = json.Marshal(r.params.ContextPack.Design.Spec)
+	} else {
+		tokensRaw, err = sandbox.Read(designRel)
+		if err != nil {
+			return r.errOut(em, "BAD_STATE", "公共层 tokens.css 缺失，无法全局调整（请先完成生成）："+err.Error())
+		}
 	}
 
 	pp := prompt.OverviewParams{

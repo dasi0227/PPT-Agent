@@ -5,6 +5,7 @@ package edit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -71,11 +72,21 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 	slideID := slides[idx].ID
 
 	// 上下文隔离（AGENT-CTX-001）：只读目标页 html + slide-json，绝不注入别页。
-	htmlRaw, err := sandbox.Read(model.SlideHTMLPath(slideID))
-	if err != nil {
-		return r.errOut(em, "BAD_STATE", fmt.Sprintf("第 %d 页尚无 html，无法编辑：%v", idx, err))
+	var htmlRaw, jsonRaw []byte
+	if r.params.ContextPack != nil {
+		if r.params.ContextPack.Target.PresentationHTML != "" {
+			htmlRaw = []byte(r.params.ContextPack.Target.PresentationHTML)
+		} else {
+			htmlRaw, _ = json.Marshal(r.params.ContextPack.Target.PresentationSummary)
+		}
+		jsonRaw, _ = json.Marshal(r.params.ContextPack.Target.Slide)
+	} else {
+		htmlRaw, err = sandbox.Read(model.SlideHTMLPath(slideID))
+		if err != nil {
+			return r.errOut(em, "BAD_STATE", fmt.Sprintf("第 %d 页尚无 html，无法编辑：%v", idx, err))
+		}
+		jsonRaw, _ = sandbox.Read(model.SlideJSONPath(slideID))
 	}
-	jsonRaw, _ := sandbox.Read(model.SlideJSONPath(slideID)) // 可空，容错
 
 	pp := prompt.EditParams{
 		PageIndex:   idx,

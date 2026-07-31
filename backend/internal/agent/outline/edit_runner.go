@@ -40,10 +40,19 @@ func NewEditRunner(client llm.Client, editor OutlineEditor, p EditParams) *EditR
 
 func (r *EditRunner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpointer, prompter run.Prompter) harness.Outcome {
 	// 快照当前大纲，注入 prompt 供 LLM 定位页 id。
-	slides, err := r.editor.ListSlides(ctx, r.params.ProjectID)
-	if err != nil {
-		em.Emit(model.EventError, harness.ErrorPayload{Code: "INTERNAL", Message: err.Error()})
-		return harness.Outcome{Status: harness.OutcomeLLMError, Code: "INTERNAL", Message: err.Error()}
+	var slides []model.Slide
+	if r.params.ContextPack != nil {
+		slides = make([]model.Slide, 0, len(r.params.ContextPack.Deck.Summaries))
+		for idx, summary := range r.params.ContextPack.Deck.Summaries {
+			slides = append(slides, model.Slide{ID: summary.ID, Idx: idx, Layout: summary.Role, Title: summary.Title})
+		}
+	} else {
+		var err error
+		slides, err = r.editor.ListSlides(ctx, r.params.ProjectID)
+		if err != nil {
+			em.Emit(model.EventError, harness.ErrorPayload{Code: "INTERNAL", Message: err.Error()})
+			return harness.Outcome{Status: harness.OutcomeLLMError, Code: "INTERNAL", Message: err.Error()}
+		}
 	}
 
 	toolset := []tools.Tool{

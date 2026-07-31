@@ -92,7 +92,12 @@ func (r *Runner) Run(ctx context.Context, em harness.Emitter, cp harness.Checkpo
 			return r.errOut(em, "BAD_REQUEST", fmt.Sprintf("页号越界：%d（共 %d 页）", idx, len(slides)))
 		}
 		// 单页重生成走精简路径：读现有 design_spec（若有），不重跑设计总监（§7）。
-		spec, _ = readDesignSpec(sandbox)
+		if r.params.ContextPack != nil && r.params.ContextPack.Design.Spec != nil {
+			converted := directorFromBlueprint(*r.params.ContextPack.Design.Spec)
+			spec = &converted
+		} else {
+			spec, _ = readDesignSpec(sandbox)
+		}
 	} else {
 		// 整套生成 Stage 1：设计总监节点产出 design_spec（V2-AGENT-PIPELINE §3）。
 		spec, err = r.runDesignDirector(ctx, em, cp, sandbox, slides, theme.Name)
