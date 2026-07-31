@@ -48,10 +48,64 @@ func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
 		httpapi.NewThreadHandler(threadSvc),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
 		httpapi.NewAssetHandler(service.NewAssetService(st, root)),
+		httpapi.NewBlueprintHandler(service.NewBlueprintService(st)),
 	)
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)
 	return srv, root
+}
+
+func TestArtifactTargetRunAndBlueprintAPI(t *testing.T) {
+	srv, _ := setupProjectThreadServer(t)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Artifact R0","language":"zh-CN"}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
+	}
+	var project map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &project)
+	projectID := project["id"].(string)
+
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/blueprint", "")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("get blueprint: %d %s", resp.Code, resp.Body.String())
+	}
+	var view map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &view)
+	if view["deck"].(map[string]any)["schema_version"] != "2.0" {
+		t.Fatalf("unexpected blueprint response: %s", resp.Body.String())
+	}
+
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/threads", `{"title":"R0"}`)
+	var thread map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &thread)
+	threadID := thread["id"].(string)
+
+	body := `{
+		"target":{"artifact":"blueprint","level":"deck"},
+		"interaction":{"intent":"consult","clarification":"never"},
+		"instruction":"评估当前叙事结构"
+	}`
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", body)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("new protocol run: %d %s", resp.Code, resp.Body.String())
+	}
+	var created map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &created)
+	target := created["target"].(map[string]any)
+	interaction := created["interaction"].(map[string]any)
+	if target["artifact"] != "blueprint" || target["level"] != "deck" || interaction["intent"] != "consult" {
+		t.Fatalf("new protocol was not preserved: %s", resp.Body.String())
+	}
+
+	invalid := `{
+		"target":{"artifact":"presentation","level":"slide","slide_id":"current"},
+		"interaction":{"intent":"apply","clarification":"when_blocked"},
+		"instruction":"修改当前页"
+	}`
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", invalid)
+	if resp.Code != http.StatusUnprocessableEntity || !strings.Contains(resp.Body.String(), "INVALID_TARGET") {
+		t.Fatalf("unstable current target must be rejected: %d %s", resp.Code, resp.Body.String())
+	}
 }
 
 func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {

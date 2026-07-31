@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/assist"
-	"github.com/dasi0227/PPT-Agent/backend/internal/agent/demo"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/edit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/generate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/outline"
@@ -32,59 +31,93 @@ type RunService struct {
 	store   store.Store
 	engine  *run.Engine
 	factory RunnerFactory
+	legacy  *LegacyRunAdapter
 }
 
 // NewRunService 用默认工厂装配（生产路径）：按 kind/scope/command 选择真实 agent，其余用 demo。
 func NewRunService(s store.Store, engine *run.Engine, client llm.Client, workRoot WorkRoot) *RunService {
 	assetSvc := NewAssetService(s, string(workRoot))
-	factory := func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
-		// 命令/模式维度优先路由（KindCommand）：prompt/recap/talk/ask。
-		if runner := buildCommandRunner(r, p, proj, client, s, string(workRoot)); runner != nil {
-			return runner
+	buildBlueprintDeck := func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
+		if r.WorkSpec.Interaction.Intent == model.IntentConsult {
+			return assist.NewTalkRunner(client, r.ID, p.Instruction)
 		}
-		if r.Kind == model.KindOutline {
-			// 已有大纲 → 大纲编辑 runner（patch/add/delete/reorder）；否则首次生成 runner。
-			if slides, err := s.ListSlides(context.Background(), proj.ID); err == nil && len(slides) > 0 {
-				return outline.NewEditRunner(client, NewOutlineEditor(NewSlideService(s), proj.ID), outline.EditParams{
-					RunID:       r.ID,
-					ProjectID:   proj.ID,
-					Instruction: p.Instruction,
-					Language:    p.Language,
-					Mode:        r.Mode,
-				})
-			}
-			return outline.NewRunner(client, s, outline.Params{
-				RunID:      r.ID,
-				ProjectID:  proj.ID,
-				WorkDir:    proj.WorkDir,
-				Topic:      p.Instruction,
-				Brief:      p.Brief,
-				SlideCount: p.SlideCount,
-				Language:   p.Language,
-			}, nil, nil)
+		if slides, err := s.ListSlides(context.Background(), proj.ID); err == nil && len(slides) > 0 {
+			return outline.NewEditRunner(client, NewOutlineEditor(NewSlideService(s), proj.ID), outline.EditParams{
+				RunID: r.ID, ProjectID: proj.ID, Instruction: p.Instruction, Language: p.Language, Mode: model.ModeNormal,
+			})
 		}
-		if r.Kind == model.KindGenerate {
-			theme := p.Theme
-			if theme == "" {
-				theme = proj.Theme // 回退 project 主题；仍空则由 generate.Runner 回退首个 preset
-			}
-			return generate.NewRunner(client, s, generate.Params{
-				RunID:     r.ID,
-				ProjectID: proj.ID,
-				WorkDir:   proj.WorkDir,
-				WorkRoot:  string(workRoot),
-				Theme:     theme,
-				PageIndex: p.PageIndex,
-				Brief:     p.Brief,
-				Language:  p.Language,
-			}, nil, nil)
-		}
-		if r.Kind == model.KindEdit {
-			return buildEditRunner(r, p, proj, client, s, repoAssetAdapter{svc: assetSvc}, string(workRoot))
-		}
-		return demo.New(client, r.ID, p.Scope, p.Mode, p.Instruction)
+		return outline.NewRunner(client, s, outline.Params{
+			RunID: r.ID, ProjectID: proj.ID, WorkDir: proj.WorkDir, Topic: p.Instruction,
+			Brief: p.Brief, SlideCount: p.SlideCount, Language: p.Language,
+		}, nil, nil)
 	}
-	return &RunService{store: s, engine: engine, factory: factory}
+	buildBlueprintSlide := func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
+		if r.WorkSpec.Interaction.Intent == model.IntentConsult {
+			return assist.NewTalkRunner(client, r.ID, p.Instruction)
+		}
+		return outline.NewEditRunner(client, NewOutlineEditor(NewSlideService(s), proj.ID), outline.EditParams{
+			RunID: r.ID, ProjectID: proj.ID, Instruction: p.Instruction, Language: p.Language, Mode: model.ModeNormal,
+		})
+	}
+	buildPresentationDeck := func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
+		if r.WorkSpec.Interaction.Intent == model.IntentConsult {
+			return assist.NewTalkRunner(client, r.ID, p.Instruction)
+		}
+		slides, _ := s.ListSlides(context.Background(), proj.ID)
+		hasHTML := false
+		for _, slide := range slides {
+			if slide.CurrentVersion > 0 {
+				hasHTML = true
+				break
+			}
+		}
+		if (p.Legacy && p.Kind == model.KindEdit) || hasHTML {
+			p.PageCount = len(slides)
+			return overview.NewRunner(client, s, overview.Params{
+				RunID: r.ID, ProjectID: proj.ID, WorkDir: proj.WorkDir, WorkRoot: string(workRoot),
+				PageCount: p.PageCount, Instruction: p.Instruction,
+			}, nil, nil)
+		}
+		return generate.NewRunner(client, s, generate.Params{
+			RunID: r.ID, ProjectID: proj.ID, WorkDir: proj.WorkDir, WorkRoot: string(workRoot),
+			Theme: firstNonEmpty(p.Theme, proj.Theme), PageIndex: nil, Brief: p.Brief, Language: p.Language,
+		}, nil, nil)
+	}
+	buildPresentationSlide := func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
+		if r.WorkSpec.Interaction.Intent == model.IntentConsult {
+			return assist.NewTalkRunner(client, r.ID, p.Instruction)
+		}
+		slide, _ := s.GetSlide(context.Background(), r.WorkSpec.Target.SlideID)
+		if !(p.Legacy && p.Kind == model.KindEdit) && slide.CurrentVersion == 0 {
+			return generate.NewRunner(client, s, generate.Params{
+				RunID: r.ID, ProjectID: proj.ID, WorkDir: proj.WorkDir, WorkRoot: string(workRoot),
+				Theme: firstNonEmpty(p.Theme, proj.Theme), PageIndex: p.PageIndex, Brief: p.Brief, Language: p.Language,
+			}, nil, nil)
+		}
+		return edit.NewRunner(client, s, edit.Params{
+			RunID: r.ID, ProjectID: proj.ID, WorkDir: proj.WorkDir, WorkRoot: string(workRoot),
+			Scope: model.ScopePage, PageIndex: *p.PageIndex, Instruction: p.Instruction,
+		}, nil, nil)
+	}
+	resolver := NewRunnerResolver(map[TargetKey]TargetRunnerBuilder{
+		{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck}:     buildBlueprintDeck,
+		{Artifact: model.ArtifactBlueprint, Level: model.TargetSlide}:    buildBlueprintSlide,
+		{Artifact: model.ArtifactPresentation, Level: model.TargetDeck}:  buildPresentationDeck,
+		{Artifact: model.ArtifactPresentation, Level: model.TargetSlide}: buildPresentationSlide,
+	})
+	factory := func(r model.Run, p model.CreateRunParams, proj model.Project) run.Runner {
+		runner, _ := resolver.Resolve(r, p, proj)
+		if runner == nil {
+			return nil
+		}
+		return &revisionTrackingRunner{
+			inner: runner, spec: r.WorkSpec, project: proj, store: s,
+			blueprint: NewBlueprintService(s), runID: r.ID,
+			legacyDesignOnly: p.Legacy && p.Kind == model.KindEdit && p.Scope == model.ScopeOverview,
+		}
+	}
+	_ = assetSvc
+	return &RunService{store: s, engine: engine, factory: factory, legacy: NewLegacyRunAdapter(s)}
 }
 
 // buildCommandRunner 处理 command/mode 维度（/prompt /recap /talk /ask）。返回 nil 表示不属于本类。
@@ -175,7 +208,15 @@ func (a repoAssetAdapter) DeleteAsset(ctx context.Context, id string) error {
 
 // NewRunServiceWithFactory 允许注入自定义 runner 工厂（测试用）。
 func NewRunServiceWithFactory(s store.Store, engine *run.Engine, factory RunnerFactory) *RunService {
-	return &RunService{store: s, engine: engine, factory: factory}
+	return &RunService{store: s, engine: engine, factory: factory, legacy: NewLegacyRunAdapter(s)}
+}
+
+func (svc *RunService) AdaptLegacy(ctx context.Context, threadID string, req LegacyRunRequest) (model.WorkSpec, error) {
+	thread, err := svc.store.GetThread(ctx, threadID)
+	if err != nil {
+		return model.WorkSpec{}, err
+	}
+	return svc.legacy.Adapt(ctx, thread.ProjectID, req)
 }
 
 // CreateRun 发起一次 Run：查 thread 得 project 归属（加锁单元），构造 runner 交给 engine。
@@ -189,37 +230,76 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 
-	// 编辑（单页 scope）：page_index 越界/缺失 MUST 在创建 Run 前拒绝，保证不落 Run、不落文件
-	// （AC-CMD-PAGE-003 / SPEC-CMD-CURRENT-003）。current 与 page 都要求 0 ≤ idx < 页数。
-	// /ask 模式若锁定单页（current/page），同样前置校验页号。
-	needsPageCheck := p.Scope == model.ScopeCurrent || p.Scope == model.ScopePage
-	if (p.Kind == model.KindEdit || p.Mode == model.ModeAsk) && needsPageCheck && p.Command != "prompt" && p.Command != "recap" {
-		if err := svc.validatePageIndex(ctx, proj.ID, p.PageIndex); err != nil {
-			return model.Run{}, err
-		}
+	spec := p.WorkSpec
+	if spec.Interaction.Clarification == "" {
+		spec.Interaction.Clarification = model.ClarifyWhenBlocked
 	}
-
-	// /overview 需要页数（fanout 默认全页 + 越界校验）。就地补齐 PageCount。
-	if p.Kind == model.KindEdit && p.Scope == model.ScopeOverview {
+	if err := spec.Validate(); err != nil {
+		return model.Run{}, err
+	}
+	if spec.Target.Level == model.TargetSlide {
 		slides, err := svc.store.ListSlides(ctx, proj.ID)
 		if err != nil {
 			return model.Run{}, err
 		}
-		p.PageCount = len(slides)
+		found := -1
+		for i, slide := range slides {
+			if slide.ID == spec.Target.SlideID {
+				found = i
+				break
+			}
+		}
+		if found < 0 {
+			return model.Run{}, ErrInvalidPageIndex
+		}
+		p.PageIndex = &found
+	}
+	p.WorkSpec = spec
+	p.Instruction = spec.Instruction
+	p.Language = firstNonEmpty(p.Language, spec.Options.Language)
+	p.Theme = firstNonEmpty(p.Theme, spec.Options.ThemeID)
+	if p.SlideCount == 0 {
+		p.SlideCount = spec.Options.DesiredSlideCount
 	}
 
+	// Only compatibility requests retain the old runner projection. New
+	// callers and the persisted WorkSpec remain exclusively target-based.
+	if p.Legacy {
+		needsPageCheck := p.Scope == model.ScopeCurrent || p.Scope == model.ScopePage
+		if (p.Kind == model.KindEdit || p.Mode == model.ModeAsk) && needsPageCheck && p.Command != "prompt" && p.Command != "recap" {
+			if err := svc.validatePageIndex(ctx, proj.ID, p.PageIndex); err != nil {
+				return model.Run{}, err
+			}
+		}
+		if p.Kind == model.KindEdit && p.Scope == model.ScopeOverview {
+			slides, err := svc.store.ListSlides(ctx, proj.ID)
+			if err != nil {
+				return model.Run{}, err
+			}
+			p.PageCount = len(slides)
+		}
+	}
+
+	persistedKind, persistedScope, persistedMode, persistedPageIndex := legacyPersistenceProjection(spec, p.PageIndex)
+	if p.Legacy {
+		persistedKind, persistedScope, persistedMode = p.Kind, p.Scope, p.Mode
+	}
 	r := model.Run{
 		ID:        uuid.NewString(),
 		ThreadID:  th.ID,
 		ProjectID: th.ProjectID,
-		Kind:      p.Kind,
-		Scope:     p.Scope,
-		PageIndex: p.PageIndex,
-		Mode:      p.Mode,
+		Kind:      persistedKind,
+		Scope:     persistedScope,
+		PageIndex: persistedPageIndex,
+		Mode:      persistedMode,
 		Command:   p.Command,
+		WorkSpec:  spec,
 	}
 
 	runner := svc.factory(r, p, proj)
+	if runner == nil {
+		return model.Run{}, ErrRunTargetUnsupported
+	}
 	return svc.engine.Start(ctx, r, runner)
 }
 

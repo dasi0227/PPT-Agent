@@ -54,7 +54,10 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 		}
 		entry.Turn = "user"
 		entry.Type = "user_turn"
-		entry.Data = map[string]any{"text": text, "mode": data["mode"], "scope": data["scope"]}
+		entry.Data = map[string]any{
+			"text": text, "target": data["target"], "interaction": data["interaction"],
+			"mode": data["mode"], "scope": data["scope"],
+		}
 	case model.EventToken, model.EventInfo:
 		entry.Turn = "agent"
 		entry.Type = "markdown"

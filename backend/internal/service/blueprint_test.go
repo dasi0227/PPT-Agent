@@ -61,4 +61,23 @@ func TestBlueprintMigrationIsIdempotentAndKeepsStableIDs(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(workDir, "slides", "stable-id", "slide.legacy.json")); err != nil {
 		t.Fatalf("legacy source backup missing: %v", err)
 	}
+
+	if err := os.WriteFile(filepath.Join(workDir, filepath.FromSlash(slide.HTMLPath)), []byte("<html></html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateSlideRevisions(context.Background(), slide.ID, 1, 1, 1, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	nextDesign := second.DesignSpec
+	nextDesign.Signature = "editorial contrast"
+	if _, err := svc.ReplaceDesignSpec(context.Background(), project.ID, nextDesign.Revision, nextDesign); err != nil {
+		t.Fatal(err)
+	}
+	afterDesign, err := svc.EnsureProject(context.Background(), project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := afterDesign.States[slide.ID].State; got != string(model.MaterializationDesignStale) {
+		t.Fatalf("design revision should derive design_stale, got %s", got)
+	}
 }
