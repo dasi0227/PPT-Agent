@@ -56,6 +56,11 @@ func (s *Store) UpdateProjectTitle(ctx context.Context, id, title string, update
 	return mapErr(err)
 }
 
+func (s *Store) UpdateProjectRevisions(ctx context.Context, id string, deckRevision, designRevision int) error {
+	return s.db.WithContext(ctx).Model(&projectPO{}).Where("id = ?", id).
+		Updates(map[string]any{"deck_revision": deckRevision, "design_revision": designRevision, "deck_path": "deck.json"}).Error
+}
+
 func (s *Store) UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error {
 	err := s.db.WithContext(ctx).Model(&threadPO{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"title":      title,
@@ -105,10 +110,14 @@ func (s *Store) DeleteThread(ctx context.Context, id string) error {
 func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	po := runToPO(r)
 	return s.db.WithContext(ctx).Exec(
-		`INSERT INTO runs (id, thread_id, project_id, kind, scope, page_index, mode, command, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO runs (id, thread_id, project_id, kind, scope, page_index, mode, command,
+		 target_artifact, target_level, target_slide_id, interaction_intent, clarification_policy, work_spec_json,
+		 status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		po.ID, nullIfEmpty(po.ThreadID), nullIfEmpty(po.ProjectID), po.Kind, po.Scope,
-		po.PageIndex, po.Mode, nullIfEmpty(po.Command), po.Status, po.CreatedAt, po.UpdatedAt,
+		po.PageIndex, po.Mode, nullIfEmpty(po.Command), po.TargetArtifact, po.TargetLevel,
+		nullIfEmpty(po.TargetSlideID), po.InteractionIntent, po.ClarificationPolicy, po.WorkSpecJSON,
+		po.Status, po.CreatedAt, po.UpdatedAt,
 	).Error
 }
 

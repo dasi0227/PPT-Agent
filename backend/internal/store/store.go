@@ -12,16 +12,17 @@ type Store interface {
 	Health(ctx context.Context) error
 
 	CreateProject(ctx context.Context, p model.Project) error
-        GetProject(ctx context.Context, id string) (model.Project, error)
-        ListProjects(ctx context.Context) ([]model.Project, error)
-        DeleteProject(ctx context.Context, id string) error
-        UpdateProjectTitle(ctx context.Context, id, title string, updatedAt int64) error
+	GetProject(ctx context.Context, id string) (model.Project, error)
+	ListProjects(ctx context.Context) ([]model.Project, error)
+	DeleteProject(ctx context.Context, id string) error
+	UpdateProjectTitle(ctx context.Context, id, title string, updatedAt int64) error
+	UpdateProjectRevisions(ctx context.Context, id string, deckRevision, designRevision int) error
 
-        CreateThread(ctx context.Context, t model.Thread) error
-        GetThread(ctx context.Context, id string) (model.Thread, error)
-        ListThreads(ctx context.Context, projectID string) ([]model.Thread, error)
-        DeleteThread(ctx context.Context, id string) error
-        UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error
+	CreateThread(ctx context.Context, t model.Thread) error
+	GetThread(ctx context.Context, id string) (model.Thread, error)
+	ListThreads(ctx context.Context, projectID string) ([]model.Thread, error)
+	DeleteThread(ctx context.Context, id string) error
+	UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error
 
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)
@@ -44,6 +45,7 @@ type Store interface {
 	SetSlideVersion(ctx context.Context, slideID string, versionNo int) error
 	SetOutlineDirty(ctx context.Context, slideID string, dirty bool) error
 	UpdateSlideMeta(ctx context.Context, slideID, title, layout string) error
+	UpdateSlideRevisions(ctx context.Context, slideID string, blueprintRevision, presentationRevision, sourceDeckRevision, sourceBlueprintRevision, sourceDesignRevision int) error
 
 	CreateAsset(ctx context.Context, a model.Asset) error
 	UpsertAsset(ctx context.Context, a model.Asset) error

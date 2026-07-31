@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "revision", "project_id", "title", "goal", "audience", "language", "core_thesis", "narrative_arc", "sections", "slide_order"],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "revision": {"type": "integer", "minimum": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "sections": {"type": "array"},
+    "slide_order": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+  }
+}

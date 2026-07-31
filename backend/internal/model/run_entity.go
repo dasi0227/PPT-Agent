@@ -10,6 +10,7 @@ type Run struct {
 	PageIndex *int // 针对页时的页序，可空
 	Mode      Mode
 	Command   string // 显式指令名，可空
+	WorkSpec  WorkSpec
 	Status    RunStatus
 	CreatedAt int64
 	UpdatedAt int64
@@ -33,4 +34,6 @@ type CreateRunParams struct {
 	Theme string
 	// overview 入参（scope=overview）：项目页数，由 service 就地补齐（fanout 默认全页/越界校验）。
 	PageCount int
+	WorkSpec  WorkSpec
+	Legacy    bool
 }

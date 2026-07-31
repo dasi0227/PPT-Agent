@@ -9,14 +9,17 @@ import (
 // 持久化对象（PO）：GORM tag 仅出现在本包（ARCH-BACKEND-006）。PO↔model 在 store 边界互转。
 
 type projectPO struct {
-	ID         string `gorm:"column:id;primaryKey"`
-	Title      string `gorm:"column:title"`
-	WorkDir    string `gorm:"column:work_dir"`
-	Theme      string `gorm:"column:theme"`
-	Status     string `gorm:"column:status"`
-	DesignPath string `gorm:"column:design_path"`
-	CreatedAt  int64  `gorm:"column:created_at"`
-	UpdatedAt  int64  `gorm:"column:updated_at"`
+	ID             string `gorm:"column:id;primaryKey"`
+	Title          string `gorm:"column:title"`
+	WorkDir        string `gorm:"column:work_dir"`
+	Theme          string `gorm:"column:theme"`
+	Status         string `gorm:"column:status"`
+	DesignPath     string `gorm:"column:design_path"`
+	DeckPath       string `gorm:"column:deck_path"`
+	DeckRevision   int    `gorm:"column:deck_revision"`
+	DesignRevision int    `gorm:"column:design_revision"`
+	CreatedAt      int64  `gorm:"column:created_at"`
+	UpdatedAt      int64  `gorm:"column:updated_at"`
 }
 
 func (projectPO) TableName() string { return "projects" }
@@ -24,14 +27,18 @@ func (projectPO) TableName() string { return "projects" }
 func (p projectPO) toModel() model.Project {
 	return model.Project{
 		ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme,
-		Status: p.Status, DesignPath: p.DesignPath, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		Status: p.Status, DesignPath: p.DesignPath, DeckPath: p.DeckPath,
+		DeckRevision: p.DeckRevision, DesignRevision: p.DesignRevision,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
 
 func projectToPO(m model.Project) projectPO {
 	return projectPO{
 		ID: m.ID, Title: m.Title, WorkDir: m.WorkDir, Theme: m.Theme,
-		Status: m.Status, DesignPath: m.DesignPath, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		Status: m.Status, DesignPath: m.DesignPath, DeckPath: m.DeckPath,
+		DeckRevision: m.DeckRevision, DesignRevision: m.DesignRevision,
+		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 
@@ -62,34 +69,47 @@ func threadToPO(m model.Thread) threadPO {
 }
 
 type runPO struct {
-	ID        string `gorm:"column:id;primaryKey"`
-	ThreadID  string `gorm:"column:thread_id"`
-	ProjectID string `gorm:"column:project_id"`
-	Kind      string `gorm:"column:kind"`
-	Scope     string `gorm:"column:scope"`
-	PageIndex *int   `gorm:"column:page_index"`
-	Mode      string `gorm:"column:mode"`
-	Command   string `gorm:"column:command"`
-	Status    string `gorm:"column:status"`
-	CreatedAt int64  `gorm:"column:created_at"`
-	UpdatedAt int64  `gorm:"column:updated_at"`
+	ID                  string `gorm:"column:id;primaryKey"`
+	ThreadID            string `gorm:"column:thread_id"`
+	ProjectID           string `gorm:"column:project_id"`
+	Kind                string `gorm:"column:kind"`
+	Scope               string `gorm:"column:scope"`
+	PageIndex           *int   `gorm:"column:page_index"`
+	Mode                string `gorm:"column:mode"`
+	Command             string `gorm:"column:command"`
+	TargetArtifact      string `gorm:"column:target_artifact"`
+	TargetLevel         string `gorm:"column:target_level"`
+	TargetSlideID       string `gorm:"column:target_slide_id"`
+	InteractionIntent   string `gorm:"column:interaction_intent"`
+	ClarificationPolicy string `gorm:"column:clarification_policy"`
+	WorkSpecJSON        string `gorm:"column:work_spec_json"`
+	Status              string `gorm:"column:status"`
+	CreatedAt           int64  `gorm:"column:created_at"`
+	UpdatedAt           int64  `gorm:"column:updated_at"`
 }
 
 func (runPO) TableName() string { return "runs" }
 
 func (r runPO) toModel() model.Run {
+	var spec model.WorkSpec
+	_ = json.Unmarshal([]byte(r.WorkSpecJSON), &spec)
 	return model.Run{
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID, Kind: model.Kind(r.Kind),
 		Scope: model.Scope(r.Scope), PageIndex: r.PageIndex, Mode: model.Mode(r.Mode),
-		Command: r.Command, Status: model.RunStatus(r.Status), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+		Command: r.Command, WorkSpec: spec, Status: model.RunStatus(r.Status), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 }
 
 func runToPO(m model.Run) runPO {
+	raw, _ := json.Marshal(m.WorkSpec)
 	return runPO{
 		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID, Kind: string(m.Kind),
 		Scope: string(m.Scope), PageIndex: m.PageIndex, Mode: string(m.Mode),
-		Command: m.Command, Status: string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		Command: m.Command, TargetArtifact: string(m.WorkSpec.Target.Artifact),
+		TargetLevel: string(m.WorkSpec.Target.Level), TargetSlideID: m.WorkSpec.Target.SlideID,
+		InteractionIntent:   string(m.WorkSpec.Interaction.Intent),
+		ClarificationPolicy: string(m.WorkSpec.Interaction.Clarification), WorkSpecJSON: string(raw),
+		Status: string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 
@@ -118,17 +138,22 @@ func eventToPO(m model.Event) runEventPO {
 }
 
 type slidePO struct {
-	ID             string `gorm:"column:id;primaryKey"`
-	ProjectID      string `gorm:"column:project_id"`
-	Idx            int    `gorm:"column:idx"`
-	Layout         string `gorm:"column:layout"`
-	Title          string `gorm:"column:title"`
-	JSONPath       string `gorm:"column:json_path"`
-	HTMLPath       string `gorm:"column:html_path"`
-	CurrentVersion int    `gorm:"column:current_version"`
-	Order          int    `gorm:"column:order"`
-	OutlineDirty   bool   `gorm:"column:outline_dirty"`
-	LastExportAt   *int64 `gorm:"column:last_export_at"`
+	ID                      string `gorm:"column:id;primaryKey"`
+	ProjectID               string `gorm:"column:project_id"`
+	Idx                     int    `gorm:"column:idx"`
+	Layout                  string `gorm:"column:layout"`
+	Title                   string `gorm:"column:title"`
+	JSONPath                string `gorm:"column:json_path"`
+	HTMLPath                string `gorm:"column:html_path"`
+	CurrentVersion          int    `gorm:"column:current_version"`
+	Order                   int    `gorm:"column:order"`
+	OutlineDirty            bool   `gorm:"column:outline_dirty"`
+	BlueprintRevision       int    `gorm:"column:blueprint_revision"`
+	PresentationRevision    int    `gorm:"column:presentation_revision"`
+	SourceDeckRevision      int    `gorm:"column:source_deck_revision"`
+	SourceBlueprintRevision int    `gorm:"column:source_blueprint_revision"`
+	SourceDesignRevision    int    `gorm:"column:source_design_revision"`
+	LastExportAt            *int64 `gorm:"column:last_export_at"`
 }
 
 func (slidePO) TableName() string { return "slides" }
@@ -137,7 +162,10 @@ func (s slidePO) toModel() model.Slide {
 	return model.Slide{
 		ID: s.ID, ProjectID: s.ProjectID, Idx: s.Idx, Layout: s.Layout, Title: s.Title,
 		JSONPath: s.JSONPath, HTMLPath: s.HTMLPath, CurrentVersion: s.CurrentVersion,
-		Order: s.Order, OutlineDirty: s.OutlineDirty, LastExportAt: s.LastExportAt,
+		Order: s.Order, OutlineDirty: s.OutlineDirty,
+		BlueprintRevision: s.BlueprintRevision, PresentationRevision: s.PresentationRevision,
+		SourceDeckRevision: s.SourceDeckRevision, SourceBlueprintRevision: s.SourceBlueprintRevision,
+		SourceDesignRevision: s.SourceDesignRevision, LastExportAt: s.LastExportAt,
 	}
 }
 
@@ -145,7 +173,10 @@ func slideToPO(m model.Slide) slidePO {
 	return slidePO{
 		ID: m.ID, ProjectID: m.ProjectID, Idx: m.Idx, Layout: m.Layout, Title: m.Title,
 		JSONPath: m.JSONPath, HTMLPath: m.HTMLPath, CurrentVersion: m.CurrentVersion,
-		Order: m.Order, OutlineDirty: m.OutlineDirty, LastExportAt: m.LastExportAt,
+		Order: m.Order, OutlineDirty: m.OutlineDirty,
+		BlueprintRevision: m.BlueprintRevision, PresentationRevision: m.PresentationRevision,
+		SourceDeckRevision: m.SourceDeckRevision, SourceBlueprintRevision: m.SourceBlueprintRevision,
+		SourceDesignRevision: m.SourceDesignRevision, LastExportAt: m.LastExportAt,
 	}
 }
 

@@ -93,6 +93,15 @@ func (s *Store) UpdateSlideMeta(ctx context.Context, slideID, title, layout stri
 		Updates(map[string]any{"title": title, "layout": layout}).Error
 }
 
+func (s *Store) UpdateSlideRevisions(ctx context.Context, slideID string, blueprintRevision, presentationRevision, sourceDeckRevision, sourceBlueprintRevision, sourceDesignRevision int) error {
+	return s.db.WithContext(ctx).Model(&slidePO{}).Where("id = ?", slideID).
+		Updates(map[string]any{
+			"blueprint_revision": blueprintRevision, "presentation_revision": presentationRevision,
+			"source_deck_revision": sourceDeckRevision, "source_blueprint_revision": sourceBlueprintRevision,
+			"source_design_revision": sourceDesignRevision,
+		}).Error
+}
+
 // NextVersionNo 返回 (target_type,target_id) 维度下一个版本号（单调递增，不复用 DATA-VERSION-002）。
 func (s *Store) NextVersionNo(ctx context.Context, targetType, targetID string) (int, error) {
 	var maxNo *int

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema_version", "revision", "slide_id", "section_id", "role", "title", "key_message", "content", "visual_intent", "speaker_notes"],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "revision": {"type": "integer", "minimum": 1},
+    "slide_id": {"type": "string", "minLength": 1},
+    "content": {"type": "object", "required": ["summary", "points"]},
+    "visual_intent": {"type": "object", "required": ["archetype", "description", "asset_queries"]}
+  }
+}

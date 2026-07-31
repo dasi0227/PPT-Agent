@@ -50,13 +50,15 @@ func initApp() (*App, func(), error) {
 	runHandler := httpapi.NewRunHandler(runService)
 	projectService := service.NewProjectService(store, workRoot)
 	slideService := service.NewSlideService(store)
+	blueprintService := service.NewBlueprintService(store)
 	projectHandler := httpapi.NewProjectHandler(projectService, slideService)
 	threadService := service.NewThreadService(store)
 	threadHandler := httpapi.NewThreadHandler(threadService)
 	slideHandler := httpapi.NewSlideHandler(slideService)
 	assetService := provideAssetService(store, workRoot)
 	assetHandler := httpapi.NewAssetHandler(assetService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler)
+	blueprintHandler := httpapi.NewBlueprintHandler(blueprintService)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, blueprintHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	mainSeedDone, err := provideSeed(configConfig, store, zapLogger)
@@ -79,8 +81,9 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideLockManager,
 	provideWorkRoot,
 	provideAssetService,
-	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewSlideService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
+	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewSlideService, service.NewBlueprintService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
 	httpapi.NewAssetHandler,
+	httpapi.NewBlueprintHandler,
 	provideHTTPServer,
 	provideSeed,
 	provideApp,

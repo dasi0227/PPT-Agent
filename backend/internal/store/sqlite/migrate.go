@@ -24,6 +24,11 @@ func Migrate(db *gorm.DB, log *zap.Logger) error {
 		}
 		for _, stmt := range splitStatements(string(content)) {
 			if err := db.Exec(stmt).Error; err != nil {
+				// SQLite lacks ADD COLUMN IF NOT EXISTS. Re-running additive migrations
+				// is safe when the column already exists.
+				if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+					continue
+				}
 				return fmt.Errorf("apply %s: %w", name, err)
 			}
 		}

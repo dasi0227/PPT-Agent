@@ -19,37 +19,37 @@ type ProjectHandler struct {
 }
 
 type patchProjectRequest struct {
-        Title *string `json:"title"`
+	Title *string `json:"title"`
 }
 
 func (h *ProjectHandler) Patch(c *gin.Context) {
-        var req patchProjectRequest
-        if err := c.ShouldBindJSON(&req); err != nil {
-                AbortWithError(c, ErrBadRequest("invalid request body"))
-                return
-        }
-        if req.Title == nil {
-                AbortWithError(c, ErrBadRequest("no fields to update"))
-                return
-        }
-        title := strings.TrimSpace(*req.Title)
-        if title == "" || utf8.RuneCountInString(title) > 60 {
-                AbortWithError(c, ErrBadRequest("title length must be 1..60"))
-                return
-        }
-        p, err := h.svc.RenameProject(c.Request.Context(), c.Param("id"), title)
-        switch {
-        case err == nil:
-                c.JSON(http.StatusOK, toProjectResponse(p))
-        // using run.ErrRunNotFound might be wrong for project not found, let's use strings.Contains or just default err handling
-        // Wait, the spec says "case errors.Is(err, run.ErrRunNotFound):" but it's for project? Actually, run_store might return run.ErrRunNotFound.
-        // Let's just return what the spec says or use ErrNotFound directly if err != nil and is not found.
-        // Let's assume the spec code is literal.
-        case errors.Is(err, run.ErrRunNotFound):
-                AbortWithError(c, ErrNotFound("project not found"))
-        default:
-                AbortWithError(c, ErrInternal(err.Error()))
-        }
+	var req patchProjectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		AbortWithError(c, ErrBadRequest("invalid request body"))
+		return
+	}
+	if req.Title == nil {
+		AbortWithError(c, ErrBadRequest("no fields to update"))
+		return
+	}
+	title := strings.TrimSpace(*req.Title)
+	if title == "" || utf8.RuneCountInString(title) > 60 {
+		AbortWithError(c, ErrBadRequest("title length must be 1..60"))
+		return
+	}
+	p, err := h.svc.RenameProject(c.Request.Context(), c.Param("id"), title)
+	switch {
+	case err == nil:
+		c.JSON(http.StatusOK, toProjectResponse(p))
+	// using run.ErrRunNotFound might be wrong for project not found, let's use strings.Contains or just default err handling
+	// Wait, the spec says "case errors.Is(err, run.ErrRunNotFound):" but it's for project? Actually, run_store might return run.ErrRunNotFound.
+	// Let's just return what the spec says or use ErrNotFound directly if err != nil and is not found.
+	// Let's assume the spec code is literal.
+	case errors.Is(err, run.ErrRunNotFound):
+		AbortWithError(c, ErrNotFound("project not found"))
+	default:
+		AbortWithError(c, ErrInternal(err.Error()))
+	}
 }
 
 func NewProjectHandler(svc *service.ProjectService, slideSvc *service.SlideService) *ProjectHandler {
@@ -57,14 +57,17 @@ func NewProjectHandler(svc *service.ProjectService, slideSvc *service.SlideServi
 }
 
 type projectResponse struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	WorkDir    string `json:"work_dir"`
-	Theme      string `json:"theme"`
-	Status     string `json:"status"`
-	DesignPath string `json:"design_path"`
-	CreatedAt  int64  `json:"created_at"`
-	UpdatedAt  int64  `json:"updated_at"`
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	WorkDir        string `json:"work_dir"`
+	Theme          string `json:"theme"`
+	Status         string `json:"status"`
+	DesignPath     string `json:"design_path"`
+	DeckPath       string `json:"deck_path"`
+	DeckRevision   int    `json:"deck_revision"`
+	DesignRevision int    `json:"design_revision"`
+	CreatedAt      int64  `json:"created_at"`
+	UpdatedAt      int64  `json:"updated_at"`
 }
 
 type createProjectRequest struct {
@@ -153,7 +156,8 @@ func (h *ProjectHandler) ListSlides(c *gin.Context) {
 func toProjectResponse(p model.Project) projectResponse {
 	return projectResponse{
 		ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, Status: p.Status,
-		DesignPath: p.DesignPath, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		DesignPath: p.DesignPath, DeckPath: p.DeckPath, DeckRevision: p.DeckRevision,
+		DesignRevision: p.DesignRevision, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
 

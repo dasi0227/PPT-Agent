@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -43,14 +44,17 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	now := svc.clock()
 	workDir := filepath.Join(svc.workRoot, "projects", id)
 	proj := model.Project{
-		ID:         id,
-		Title:      title,
-		WorkDir:    workDir,
-		Theme:      "swiss-modern",
-		Status:     "draft",
-		DesignPath: "common/tokens.css",
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:             id,
+		Title:          title,
+		WorkDir:        workDir,
+		Theme:          "swiss-modern",
+		Status:         "draft",
+		DesignPath:     "common/tokens.css",
+		DeckPath:       "deck.json",
+		DeckRevision:   1,
+		DesignRevision: 1,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	if err := svc.initWorkDir(proj, p); err != nil {
@@ -69,8 +73,8 @@ func (svc *ProjectService) RenameProject(ctx context.Context, id, title string) 
 		return model.Project{}, err
 	}
 	p.Title = title
-        p.UpdatedAt = svc.clock()
-        if err := svc.store.UpdateProjectTitle(ctx, p.ID, p.Title, p.UpdatedAt); err != nil {
+	p.UpdatedAt = svc.clock()
+	if err := svc.store.UpdateProjectTitle(ctx, p.ID, p.Title, p.UpdatedAt); err != nil {
 		return model.Project{}, err
 	}
 	return p, nil
@@ -108,7 +112,7 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 		return err
 	}
 	projectRel := filepath.Join("projects", proj.ID)
-	for _, rel := range []string{projectRel, filepath.Join(projectRel, "threads"), filepath.Join(projectRel, "common"), filepath.Join(projectRel, "slides")} {
+	for _, rel := range []string{projectRel, filepath.Join(projectRel, "threads"), filepath.Join(projectRel, "common"), filepath.Join(projectRel, "slides"), filepath.Join(projectRel, "design")} {
 		abs, err := sb.Resolve(rel)
 		if err != nil {
 			return err
@@ -130,5 +134,18 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err != nil {
 		return err
 	}
-	return sb.Write(filepath.Join(projectRel, "state.json"), raw)
+	if err := sb.Write(filepath.Join(projectRel, "state.json"), raw); err != nil {
+		return err
+	}
+	deck := blueprint.Deck{
+		SchemaVersion: blueprint.SchemaVersion, Revision: 1, ProjectID: proj.ID, Title: proj.Title,
+		Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
+		Language: firstNonEmpty(p.Language, "zh-CN"), CoreThesis: proj.Title,
+		NarrativeArc: "背景 → 核心内容 → 结论", Sections: []blueprint.Section{},
+		SlideOrder: []string{}, CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt,
+	}
+	if err := sb.Write(filepath.Join(projectRel, "deck.json"), mustJSON(deck)); err != nil {
+		return err
+	}
+	return sb.Write(filepath.Join(projectRel, "design", "design-spec.json"), mustJSON(defaultDesign()))
 }

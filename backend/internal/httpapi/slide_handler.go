@@ -22,17 +22,22 @@ func NewSlideHandler(svc *service.SlideService) *SlideHandler {
 }
 
 type slideResponse struct {
-	ID             string `json:"id"`
-	ProjectID      string `json:"project_id"`
-	Idx            int    `json:"idx"`
-	Layout         string `json:"layout"`
-	Title          string `json:"title"`
-	HTMLPath       string `json:"html_path"`
-	JSONPath       string `json:"json_path"`
-	CurrentVersion int    `json:"current_version"`
-	Order          int    `json:"order"`
-	OutlineDirty   bool   `json:"outline_dirty"`
-	Content        any    `json:"content,omitempty"`
+	ID                      string `json:"id"`
+	ProjectID               string `json:"project_id"`
+	Idx                     int    `json:"idx"`
+	Layout                  string `json:"layout"`
+	Title                   string `json:"title"`
+	HTMLPath                string `json:"html_path"`
+	JSONPath                string `json:"json_path"`
+	CurrentVersion          int    `json:"current_version"`
+	Order                   int    `json:"order"`
+	OutlineDirty            bool   `json:"outline_dirty"`
+	BlueprintRevision       int    `json:"blueprint_revision"`
+	PresentationRevision    int    `json:"presentation_revision"`
+	SourceDeckRevision      int    `json:"source_deck_revision"`
+	SourceBlueprintRevision int    `json:"source_blueprint_revision"`
+	SourceDesignRevision    int    `json:"source_design_revision"`
+	Content                 any    `json:"content,omitempty"`
 }
 
 type versionResponse struct {
@@ -110,6 +115,9 @@ func toSlideResponse(sl model.Slide) slideResponse {
 		ID: sl.ID, ProjectID: sl.ProjectID, Idx: sl.Idx, Layout: sl.Layout, Title: sl.Title,
 		HTMLPath: sl.HTMLPath, JSONPath: sl.JSONPath, CurrentVersion: sl.CurrentVersion,
 		Order: sl.Order, OutlineDirty: sl.OutlineDirty,
+		BlueprintRevision: sl.BlueprintRevision, PresentationRevision: sl.PresentationRevision,
+		SourceDeckRevision: sl.SourceDeckRevision, SourceBlueprintRevision: sl.SourceBlueprintRevision,
+		SourceDesignRevision: sl.SourceDesignRevision,
 	}
 }
 

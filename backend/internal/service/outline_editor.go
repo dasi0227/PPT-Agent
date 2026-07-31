@@ -5,6 +5,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/outline"
 	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
+	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
@@ -26,6 +27,40 @@ func (a *outlineEditorAdapter) PatchOutline(ctx context.Context, slideID string,
 	sl, err := a.svc.store.GetSlide(ctx, slideID)
 	if err != nil {
 		return slidejson.SlideJSON{}, err
+	}
+	// R0 projects store a semantic Blueprint v2 in slide.json. Keep the
+	// legacy outline agent as an implementation detail, but translate its
+	// field-level patch onto the v2 aggregate so it can never downgrade the
+	// file back to the legacy slide-json shape.
+	bpSvc := NewBlueprintService(a.svc.store)
+	if current, _, bpErr := bpSvc.GetSlide(ctx, slideID); bpErr == nil && current.SchemaVersion == blueprint.SchemaVersion {
+		if p.Title != nil {
+			current.Title = *p.Title
+		}
+		if p.Subtitle != nil {
+			current.KeyMessage = *p.Subtitle
+		}
+		if p.ContentIntent != nil {
+			current.Content.Summary = *p.ContentIntent
+		}
+		if p.Bullets != nil {
+			current.Content.Points = append([]string(nil), (*p.Bullets)...)
+		}
+		if p.Layout != nil {
+			current.VisualIntent.Archetype = *p.Layout
+		}
+		updated, patchErr := bpSvc.PatchSlide(ctx, slideID, current.Revision, current)
+		if patchErr != nil {
+			return slidejson.SlideJSON{}, patchErr
+		}
+		return slidejson.SlideJSON{
+			Title:         updated.Title,
+			Subtitle:      updated.KeyMessage,
+			ContentIntent: updated.Content.Summary,
+			Bullets:       append([]string(nil), updated.Content.Points...),
+			Layout:        updated.VisualIntent.Archetype,
+			Notes:         updated.SpeakerNotes,
+		}, nil
 	}
 	return a.svc.patchContentCore(ctx, sl, SlidePatch{
 		Title: p.Title, Subtitle: p.Subtitle, ContentIntent: p.ContentIntent,
