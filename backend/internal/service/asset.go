@@ -15,8 +15,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
-	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
@@ -139,7 +139,7 @@ func (svc *AssetService) CreateAsset(ctx context.Context, p CreateAssetParams) (
 		return model.Asset{}, err
 	}
 	relDir := path.Join("_assets", kindDir, m.Name)
-	sandbox, err := tools.NewSandbox(svc.workRoot)
+	sandbox, err := artifactfs.NewSandbox(svc.workRoot)
 	if err != nil {
 		return model.Asset{}, err
 	}
@@ -202,7 +202,7 @@ func (svc *AssetService) PatchAsset(ctx context.Context, id string, p PatchAsset
 	if err != nil {
 		return model.Asset{}, err
 	}
-	sandbox, err := tools.NewSandbox(svc.workRoot)
+	sandbox, err := artifactfs.NewSandbox(svc.workRoot)
 	if err != nil {
 		return model.Asset{}, err
 	}
@@ -294,7 +294,7 @@ func (svc *AssetService) DeleteAsset(ctx context.Context, id string) error {
 	if a.Source == string(asset.SourcePreset) {
 		return ErrPresetAssetDelete
 	}
-	sandbox, err := tools.NewSandbox(svc.workRoot)
+	sandbox, err := artifactfs.NewSandbox(svc.workRoot)
 	if err != nil {
 		return err
 	}
@@ -330,7 +330,7 @@ func (svc *AssetService) RollbackAsset(ctx context.Context, id string, versionNo
 		return model.Asset{}, ErrAssetVersionMiss
 	}
 
-	sandbox, err := tools.NewSandbox(svc.workRoot)
+	sandbox, err := artifactfs.NewSandbox(svc.workRoot)
 	if err != nil {
 		return model.Asset{}, err
 	}
@@ -424,7 +424,7 @@ func (svc *AssetService) assetNameExists(ctx context.Context, kind, name string)
 	return false, nil
 }
 
-func (svc *AssetService) ensureAssetBaseline(ctx context.Context, sandbox *tools.Sandbox, a model.Asset) error {
+func (svc *AssetService) ensureAssetBaseline(ctx context.Context, sandbox *artifactfs.Sandbox, a model.Asset) error {
 	versions, err := svc.store.ListVersions(ctx, "asset", model.AssetVersionTarget(a.ID))
 	if err != nil {
 		return err
@@ -436,7 +436,7 @@ func (svc *AssetService) ensureAssetBaseline(ctx context.Context, sandbox *tools
 	return err
 }
 
-func (svc *AssetService) snapshotAsset(ctx context.Context, sandbox *tools.Sandbox, a model.Asset, runID string) (int, error) {
+func (svc *AssetService) snapshotAsset(ctx context.Context, sandbox *artifactfs.Sandbox, a model.Asset, runID string) (int, error) {
 	target := model.AssetVersionTarget(a.ID)
 	no, err := svc.store.NextVersionNo(ctx, "asset", target)
 	if err != nil {
@@ -540,7 +540,7 @@ func kindDir(k asset.Kind) (string, error) {
 	}
 }
 
-func copyDir(sandbox *tools.Sandbox, srcRel, dstRel string) error {
+func copyDir(sandbox *artifactfs.Sandbox, srcRel, dstRel string) error {
 	src, err := resolveSandboxPath(sandbox, srcRel)
 	if err != nil {
 		return err
@@ -582,7 +582,7 @@ func copyDir(sandbox *tools.Sandbox, srcRel, dstRel string) error {
 	})
 }
 
-func removeDir(sandbox *tools.Sandbox, rel string) error {
+func removeDir(sandbox *artifactfs.Sandbox, rel string) error {
 	abs, err := resolveSandboxPath(sandbox, rel)
 	if err != nil {
 		return err
@@ -590,7 +590,7 @@ func removeDir(sandbox *tools.Sandbox, rel string) error {
 	return os.RemoveAll(abs)
 }
 
-func restoreFiles(sandbox *tools.Sandbox, originals map[string][]byte) {
+func restoreFiles(sandbox *artifactfs.Sandbox, originals map[string][]byte) {
 	for rel, raw := range originals {
 		_ = sandbox.Write(rel, raw)
 	}
@@ -604,7 +604,7 @@ func assetNameLockKey(kind, name string) string {
 	return "asset-name:" + kind + "/" + name
 }
 
-func resolveSandboxPath(sandbox *tools.Sandbox, rel string) (string, error) {
+func resolveSandboxPath(sandbox *artifactfs.Sandbox, rel string) (string, error) {
 	abs, err := sandbox.Resolve(rel)
 	if err != nil {
 		return "", err

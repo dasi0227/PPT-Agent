@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useActiveSession } from './useActiveSession';
 import { MarkdownMessage } from './MarkdownMessage';
-import { ThoughtCard } from './ThoughtCard';
 import { ToolCallCard } from './ToolCallCard';
 import { PlanCard } from './PlanCard';
 import { ArtifactCard } from './ArtifactCard';
@@ -14,13 +13,14 @@ import { ThinkingBubble } from './ThinkingBubble';
 // tool_call / artifact 也算已有反馈（用户能看到 agent 在做事），一并进白名单。
 const AGENT_CONTENT_TYPES = new Set([
   'markdown',
-  'thought',
   'tool_call',
   'artifact',
   'final_result',
   'needs_input',
   'error',
   'context_status',
+  'strategy_status',
+  'verification_status',
 ]);
 
 // ERROR_CODE_MESSAGES：错误码到中文友好文案的映射。缺省仍回落 item.message，
@@ -71,15 +71,12 @@ export const Timeline: React.FC = () => {
             );
           case 'markdown':
             return <MarkdownMessage key={item.id} content={item.text} />;
-          case 'thought':
-            return <ThoughtCard key={item.id} item={item} />;
           case 'tool_call':
-            if (item.hiddenFromTimeline) return null;
             return <ToolCallCard key={item.id} item={item} />;
           case 'artifact':
             return <ArtifactCard key={item.id} item={item} />;
           case 'final_result':
-            if (typeof item.result === 'object' && (typeof item.result.slide_count === 'number' || typeof item.result.artifact === 'string')) {
+            if (typeof item.result === 'object' && item.result !== null) {
               return <FinalResultCard key={item.id} item={item} />;
             }
             return <FinishBubble key={item.id} item={item} />;
@@ -102,6 +99,22 @@ export const Timeline: React.FC = () => {
                 {item.warnings.length > 0 && (
                   <div className="mt-1 text-amber-600">{item.warnings.join(' · ')}</div>
                 )}
+              </div>
+            );
+          case 'strategy_status':
+            return (
+              <div key={item.id} className="rounded-md border border-border bg-black/[0.02] px-3 py-2 text-xs text-text-600">
+                Strategy · <span className="font-medium text-text-900">{item.strategy}</span>
+                <span className="text-text-400"> · {item.risk} risk · {item.complexity} complexity</span>
+                {item.reason && <div className="mt-1 text-text-400">{item.reason}</div>}
+              </div>
+            );
+          case 'verification_status':
+            return (
+              <div key={item.id} className={`rounded-md border px-3 py-2 text-xs ${
+                item.passed ? 'border-mode-final/20 bg-mode-final/5 text-mode-final' : 'border-mode-error/20 bg-mode-error/5 text-mode-error'
+              }`}>
+                {item.verifier} · {item.passed ? 'verified' : `failed · ${item.issueCount} issue(s)`}
               </div>
             );
           default:

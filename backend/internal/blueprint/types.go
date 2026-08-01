@@ -61,15 +61,54 @@ type VisualIntent struct {
 type DesignSpec struct {
 	SchemaVersion string         `json:"schema_version"`
 	Revision      int            `json:"revision"`
-	Canvas        map[string]any `json:"canvas"`
+	Canvas        CanvasSpec     `json:"canvas"`
 	Palette       []string       `json:"palette"`
-	Typography    map[string]any `json:"typography"`
-	Spacing       map[string]any `json:"spacing"`
-	Radius        map[string]any `json:"radius"`
-	Shadows       map[string]any `json:"shadows"`
-	LayoutSystem  map[string]any `json:"layout_system"`
+	Typography    TypographySpec `json:"typography"`
+	Spacing       SpacingSpec    `json:"spacing"`
+	Radius        RadiusSpec     `json:"radius"`
+	Shadows       ShadowSpec     `json:"shadows"`
+	LayoutSystem  LayoutSystem   `json:"layout_system"`
 	Signature     string         `json:"signature"`
-	Motion        map[string]any `json:"motion"`
+	Motion        MotionSpec     `json:"motion"`
+}
+
+type CanvasSpec struct {
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	Ratio  string `json:"ratio"`
+}
+
+type FontSpec struct {
+	Family string `json:"family"`
+	Weight int    `json:"weight,omitempty"`
+}
+
+type TypographySpec struct {
+	Display FontSpec `json:"display"`
+	Body    FontSpec `json:"body"`
+	Utility FontSpec `json:"utility"`
+}
+
+type SpacingSpec struct {
+	Unit int `json:"unit"`
+}
+
+type RadiusSpec struct {
+	Card int `json:"card"`
+}
+
+type ShadowSpec struct {
+	Card string `json:"card"`
+}
+
+type LayoutSystem struct {
+	Grid    string `json:"grid"`
+	Rhythm  string `json:"rhythm"`
+	Density string `json:"density"`
+}
+
+type MotionSpec struct {
+	Policy string `json:"policy"`
 }
 
 type ProjectView struct {

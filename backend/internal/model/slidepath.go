@@ -15,5 +15,17 @@ func SlideHTMLPath(slideID string) string { return SlideDir(slideID) + "/index.h
 
 // SlideVersionSnapshot 返回某页某版本 html 快照相对路径。
 func SlideVersionSnapshot(slideID string, versionNo int) string {
-	return fmt.Sprintf("versions/slide-%s/v%d.html", slideID, versionNo)
+	return fmt.Sprintf("versions/presentation-slide-%s/v%d.html", slideID, versionNo)
+}
+
+func BlueprintSlideVersionSnapshot(slideID string, versionNo int) string {
+	return fmt.Sprintf("versions/blueprint-slide-%s/v%d.json", slideID, versionNo)
+}
+
+func BlueprintDeckVersionSnapshot(versionNo int) string {
+	return fmt.Sprintf("versions/blueprint-deck/v%d.json", versionNo)
+}
+
+func DesignVersionSnapshot(versionNo int) string {
+	return fmt.Sprintf("versions/design/v%d.json", versionNo)
 }

@@ -15,7 +15,7 @@ describe('CommandComposer target protocol', () => {
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 'stable-1', project_id: 'p1', idx: 0, layout: 'title', title: 'S1', html_path: '', json_path: '', current_version: 0, order: 10, outline_dirty: false },
+          { id: 'stable-1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '', json_path: '', current_version: 0 },
         ],
       },
     });

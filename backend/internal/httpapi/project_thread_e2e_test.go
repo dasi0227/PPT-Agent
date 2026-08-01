@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,14 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
+
+type noOpRunner struct{}
+
+func (noOpRunner) Run(context.Context, workflow.EventEmitter, run.Checkpointer, run.Prompter) workflow.StructuredOutcome {
+	return workflow.StructuredOutcome{Status: workflow.StatusCompleted, Strategy: workflow.StrategyRespond}
+}
 
 func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
@@ -34,7 +42,7 @@ func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
 		t.Fatalf("new store: %v", err)
 	}
 	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
-	runSvc := service.NewRunServiceWithFactory(st, engine, func(model.Run, model.CreateRunParams, model.Project) run.Runner {
+	runSvc := service.NewRunServiceWithExecutionFactory(st, engine, func(model.Run, model.CreateRunParams, model.Project) run.Execution {
 		return noOpRunner{}
 	})
 	projectSvc := service.NewProjectService(st, service.WorkRoot(root))

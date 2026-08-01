@@ -156,14 +156,12 @@ func (p runContextPO) toModel() model.RunContext {
 type slidePO struct {
 	ID                      string `gorm:"column:id;primaryKey"`
 	ProjectID               string `gorm:"column:project_id"`
-	Idx                     int    `gorm:"column:idx"`
+	Position                int    `gorm:"column:position"`
 	Layout                  string `gorm:"column:layout"`
 	Title                   string `gorm:"column:title"`
 	JSONPath                string `gorm:"column:json_path"`
 	HTMLPath                string `gorm:"column:html_path"`
 	CurrentVersion          int    `gorm:"column:current_version"`
-	Order                   int    `gorm:"column:order"`
-	OutlineDirty            bool   `gorm:"column:outline_dirty"`
 	BlueprintRevision       int    `gorm:"column:blueprint_revision"`
 	PresentationRevision    int    `gorm:"column:presentation_revision"`
 	SourceDeckRevision      int    `gorm:"column:source_deck_revision"`
@@ -176,9 +174,8 @@ func (slidePO) TableName() string { return "slides" }
 
 func (s slidePO) toModel() model.Slide {
 	return model.Slide{
-		ID: s.ID, ProjectID: s.ProjectID, Idx: s.Idx, Layout: s.Layout, Title: s.Title,
+		ID: s.ID, ProjectID: s.ProjectID, Position: s.Position, Layout: s.Layout, Title: s.Title,
 		JSONPath: s.JSONPath, HTMLPath: s.HTMLPath, CurrentVersion: s.CurrentVersion,
-		Order: s.Order, OutlineDirty: s.OutlineDirty,
 		BlueprintRevision: s.BlueprintRevision, PresentationRevision: s.PresentationRevision,
 		SourceDeckRevision: s.SourceDeckRevision, SourceBlueprintRevision: s.SourceBlueprintRevision,
 		SourceDesignRevision: s.SourceDesignRevision, LastExportAt: s.LastExportAt,
@@ -187,9 +184,8 @@ func (s slidePO) toModel() model.Slide {
 
 func slideToPO(m model.Slide) slidePO {
 	return slidePO{
-		ID: m.ID, ProjectID: m.ProjectID, Idx: m.Idx, Layout: m.Layout, Title: m.Title,
+		ID: m.ID, ProjectID: m.ProjectID, Position: m.Position, Layout: m.Layout, Title: m.Title,
 		JSONPath: m.JSONPath, HTMLPath: m.HTMLPath, CurrentVersion: m.CurrentVersion,
-		Order: m.Order, OutlineDirty: m.OutlineDirty,
 		BlueprintRevision: m.BlueprintRevision, PresentationRevision: m.PresentationRevision,
 		SourceDeckRevision: m.SourceDeckRevision, SourceBlueprintRevision: m.SourceBlueprintRevision,
 		SourceDesignRevision: m.SourceDesignRevision, LastExportAt: m.LastExportAt,

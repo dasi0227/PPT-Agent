@@ -140,8 +140,8 @@ func (h *ProjectHandler) ListSlides(c *gin.Context) {
 		out := make([]slideResponse, len(slides))
 		for i, sl := range slides {
 			resp := toSlideResponse(sl)
-			if content, cerr := h.slideSvc.ReadContent(c.Request.Context(), sl.ID); cerr == nil {
-				resp.Content = content
+			if content, materialization, readErr := h.slideSvc.ReadBlueprint(c.Request.Context(), sl.ID); readErr == nil {
+				resp.Blueprint, resp.Materialization = &content, &materialization
 			}
 			out[i] = resp
 		}
@@ -172,8 +172,8 @@ func (h *ProjectHandler) CreateSlide(c *gin.Context) {
 	switch {
 	case err == nil:
 		resp := toSlideResponse(sl)
-		if content, cerr := h.slideSvc.ReadContent(c.Request.Context(), sl.ID); cerr == nil {
-			resp.Content = content
+		if content, materialization, readErr := h.slideSvc.ReadBlueprint(c.Request.Context(), sl.ID); readErr == nil {
+			resp.Blueprint, resp.Materialization = &content, &materialization
 		}
 		c.JSON(http.StatusCreated, resp)
 	case errors.Is(err, service.ErrRunActive):

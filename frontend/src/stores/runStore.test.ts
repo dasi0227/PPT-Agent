@@ -88,18 +88,20 @@ describe('runStore user_turn head insert + reload + hydrate', () => {
     expect(items.map((i) => i.type)).toEqual(['user_turn']);
   });
 
-  test('SSE done refreshes only the targeted presentation slide', async () => {
+  test('run.completed refreshes only the targeted presentation slide', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     const conn = connections[connections.length - 1];
-    conn.onMessage({ id: '1', event: 'done', data: { result: { summary: 'ok' } } });
+    conn.onMessage({ id: '1', event: 'run.completed', data: { outcome: {
+      summary: 'ok', target: request('').target, strategy: 'direct_action',
+    } } });
     expect(slideLoads).toContain('p1');
     expect(blueprintRefreshes).toEqual(['s1']);
   });
 
-  test('SSE error does not refresh revisions that were not committed', async () => {
+  test('run.failed does not refresh revisions that were not committed', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     const conn = connections[connections.length - 1];
-    conn.onMessage({ id: '1', event: 'error', data: { code: 'E', message: 'x' } });
+    conn.onMessage({ id: '1', event: 'run.failed', data: { outcome: { code: 'E', message: 'x' } } });
     expect(slideLoads).toEqual([]);
     expect(blueprintRefreshes).toEqual([]);
   });

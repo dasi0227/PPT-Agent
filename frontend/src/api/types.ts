@@ -67,14 +67,12 @@ export interface Materialization {
 export interface Slide {
   id: string;
   project_id: string;
-  idx: number;
+  position: number;
   layout: string;
   title: string;
   html_path: string;
   json_path: string;
   current_version: number;
-  order: number;
-  outline_dirty: boolean;
   blueprint_revision?: number;
   presentation_revision?: number;
   source_deck_revision?: number;
@@ -82,8 +80,6 @@ export interface Slide {
   source_design_revision?: number;
   blueprint?: SlideBlueprint;
   materialization?: Materialization;
-  /** Legacy server projection retained only while old projects migrate. */
-  content?: unknown;
 }
 
 export interface Thread {
@@ -110,6 +106,7 @@ export type Artifact = 'blueprint' | 'presentation';
 export type TargetLevel = 'slide' | 'deck';
 export type InteractionIntent = 'apply' | 'consult';
 export type ClarificationPolicy = 'when_blocked' | 'before_apply' | 'never';
+export type ExecutionStrategy = 'respond' | 'direct_action' | 'compact_workflow' | 'full_pev';
 
 export interface RunTarget { artifact: Artifact; level: TargetLevel; slide_id?: string }
 export interface RunInteraction { intent: InteractionIntent; clarification: ClarificationPolicy }
@@ -134,9 +131,27 @@ export interface NeedsInputPayload {
 }
 
 export type SSEEventName =
-  | 'run.started' | 'context.assembled' | 'thought' | 'tool_call' | 'tool_result' | 'progress'
-  | 'token' | 'artifact' | 'needs_input' | 'info' | 'done' | 'error'
-  | 'plan' | 'plan.update';
+  | 'run.started'
+  | 'context.assembled'
+  | 'strategy.selected'
+  | 'plan.created'
+  | 'stage.started'
+  | 'stage.completed'
+  | 'step.started'
+  | 'step.completed'
+  | 'step.failed'
+  | 'tool.called'
+  | 'tool.completed'
+  | 'verification.completed'
+  | 'repair.started'
+  | 'repair.completed'
+  | 'artifact.staged'
+  | 'artifact.committed'
+  | 'status.summary'
+  | 'needs_input'
+  | 'run.completed'
+  | 'run.failed'
+  | 'run.canceled';
 
 export type PlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
 

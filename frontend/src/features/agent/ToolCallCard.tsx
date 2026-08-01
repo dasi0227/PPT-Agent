@@ -39,7 +39,7 @@ export const ToolCallCard: React.FC<{ item: ToolCallItem }> = ({ item }) => {
             <div className="font-semibold text-text-600 mb-1">Arguments:</div>
             <pre className="text-text-900 mb-3">{JSON.stringify(item.args, null, 2)}</pre>
             
-            {item.observation && (
+            {item.observation != null && (
               <>
                 <div className="font-semibold text-text-600 mb-1">Observation:</div>
                 <pre className="text-text-900">{JSON.stringify(item.observation, null, 2)}</pre>

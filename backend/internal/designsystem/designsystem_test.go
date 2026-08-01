@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 )
 
@@ -15,33 +14,19 @@ func docPath(parts ...string) string {
 	return filepath.Join(append(base, parts...)...)
 }
 
-// AC-LAYOUTS-001：layouts.md 版式目录 MUST 与 slide-json schema 的 layout enum 完全一致（无遗漏/多余）。
-func TestLayoutCatalogMatchesSchemaEnum(t *testing.T) {
+// AC-LAYOUTS-001：layouts.md 版式目录 MUST 保持非空且无重复。
+func TestLayoutCatalogIsNonEmptyAndUnique(t *testing.T) {
 	md, err := os.ReadFile(docPath("60-design-system", "layouts.md"))
 	if err != nil {
 		t.Fatalf("read layouts.md: %v", err)
 	}
 	catalog := designsystem.ParseLayoutCatalog(md)
-	enum := slidejson.LayoutEnum()
-
 	if len(catalog) == 0 {
 		t.Fatal("parsed empty layout catalog from layouts.md")
 	}
 	cset := toSet(catalog)
-	eset := toSet(enum)
-
-	for l := range cset {
-		if !eset[l] {
-			t.Errorf("layout %q in layouts.md but NOT in schema enum", l)
-		}
-	}
-	for l := range eset {
-		if !cset[l] {
-			t.Errorf("layout %q in schema enum but NOT in layouts.md", l)
-		}
-	}
-	if len(cset) != len(eset) {
-		t.Errorf("layout count mismatch: catalog=%d enum=%d", len(cset), len(eset))
+	if len(cset) != len(catalog) {
+		t.Errorf("layout catalog contains duplicates: entries=%d unique=%d", len(catalog), len(cset))
 	}
 }
 

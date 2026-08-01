@@ -38,10 +38,18 @@ func writeV2ContextSources(t *testing.T, workDir, projectID string, slides []mod
 	deck.SlideOrder = order
 	writeTestJSON(t, filepath.Join(workDir, "deck.json"), deck)
 	writeTestJSON(t, filepath.Join(workDir, "design", "design-spec.json"), blueprint.DesignSpec{
-		SchemaVersion: blueprint.SchemaVersion, Revision: 1, Canvas: map[string]any{"ratio": "16:9"},
-		Palette: []string{"#000000"}, Typography: map[string]any{"body": "Inter"},
-		Spacing: map[string]any{}, Radius: map[string]any{}, Shadows: map[string]any{},
-		LayoutSystem: map[string]any{"grid": "12-col"}, Signature: "test signature", Motion: map[string]any{},
+		SchemaVersion: blueprint.SchemaVersion, Revision: 1,
+		Canvas:  blueprint.CanvasSpec{Width: 1600, Height: 900, Ratio: "16:9"},
+		Palette: []string{"#000000"},
+		Typography: blueprint.TypographySpec{
+			Display: blueprint.FontSpec{Family: "Inter", Weight: 700},
+			Body:    blueprint.FontSpec{Family: "Inter", Weight: 400},
+			Utility: blueprint.FontSpec{Family: "Inter", Weight: 500},
+		},
+		Spacing: blueprint.SpacingSpec{Unit: 8}, Radius: blueprint.RadiusSpec{Card: 12},
+		Shadows:      blueprint.ShadowSpec{Card: "0 8px 24px rgba(0,0,0,.2)"},
+		LayoutSystem: blueprint.LayoutSystem{Grid: "12-col", Rhythm: "8", Density: "balanced"},
+		Signature:    "test signature", Motion: blueprint.MotionSpec{Policy: "restrained"},
 	})
 }
 

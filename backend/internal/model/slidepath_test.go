@@ -12,7 +12,7 @@ func TestSlidePaths(t *testing.T) {
 	if SlideHTMLPath("abc") != "slides/abc/index.html" {
 		t.Fatal(SlideHTMLPath("abc"))
 	}
-	if SlideVersionSnapshot("abc", 2) != "versions/slide-abc/v2.html" {
+	if SlideVersionSnapshot("abc", 2) != "versions/presentation-slide-abc/v2.html" {
 		t.Fatal(SlideVersionSnapshot("abc", 2))
 	}
 }

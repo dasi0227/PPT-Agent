@@ -97,10 +97,10 @@ describe('Timeline thinking bubble', () => {
     expect(screen.getByText('正在思考...')).toBeInTheDocument();
   });
 
-  it('hides ThinkingBubble once any agent content arrives (thought)', () => {
+  it('hides ThinkingBubble once strategy is selected', () => {
     useRunStore.setState(sessionWith([
       { id: 'u1', type: 'user_turn', text: 'go', timestamp: 1 },
-      { id: 'th1', type: 'thought', text: 'reasoning', timestamp: 2 },
+      { id: 'strategy1', type: 'strategy_status', strategy: 'respond', reason: 'consult', risk: 'low', complexity: 'low', timestamp: 2 },
     ]));
     render(<Timeline />);
     expect(screen.queryByText('正在思考...')).toBeNull();

@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
-	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
@@ -107,7 +107,7 @@ func (svc *ProjectService) ListSlides(ctx context.Context, projectID string) ([]
 }
 
 func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams) error {
-	sb, err := tools.NewSandbox(svc.workRoot)
+	sb, err := artifactfs.NewSandbox(svc.workRoot)
 	if err != nil {
 		return err
 	}

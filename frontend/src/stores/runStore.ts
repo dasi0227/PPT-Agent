@@ -1,14 +1,14 @@
 import { create } from 'zustand';
 import { runsApi } from '../api/runs';
 import { subscribeRunEvents } from '../api/sse';
-import { CreateRunRequest, RunInteraction, RunTarget, PlanState } from '../api/types';
+import { CreateRunRequest, ExecutionStrategy, RunInteraction, RunTarget, PlanState } from '../api/types';
 import { TimelineItem, reduceSSEEvent, reducePlan } from '../features/agent/eventReducer';
 import { useProjectStore } from './projectStore';
 import { useBlueprintStore } from './blueprintStore';
 
 export type { PlanState } from '../api/types';
 
-export type RunStatus = 'idle' | 'running' | 'done' | 'error' | 'needs_input';
+export type RunStatus = 'idle' | 'running' | 'done' | 'error' | 'canceled' | 'needs_input';
 
 export interface RunSession {
   activeRunId: string | null;
@@ -19,7 +19,8 @@ export interface RunSession {
   pendingInput: { id: string; prompt: string; choices?: string[] } | null;
   progress: { stage: string; current: number; total: number } | null;
   eventSourceClose: (() => void) | null;
-  plan: PlanState | null;   // v2 M3 填充
+  plan: PlanState | null;
+  strategy?: ExecutionStrategy | null;
 }
 
 // 稳定的 idle 空会话常量：getSession 对缺失 key 返回它，避免组件读到 undefined。
@@ -33,6 +34,7 @@ export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   progress: null,
   eventSourceClose: null,
   plan: null,
+  strategy: null,
 });
 
 function freshSession(overrides: Partial<RunSession> = {}): RunSession {
@@ -46,6 +48,7 @@ function freshSession(overrides: Partial<RunSession> = {}): RunSession {
     progress: null,
     eventSourceClose: null,
     plan: null,
+    strategy: null,
     ...overrides,
   };
 }
@@ -62,7 +65,7 @@ interface RunStoreV2 {
   closeSessions: (threadIds: string[]) => void;
   rekeySession: (oldId: string, newId: string) => void;
   dropSessions: (threadIds: string[]) => void;
-  hydrateTimeline: (threadId: string, items: TimelineItem[]) => void;
+  hydrateTimeline: (threadId: string, items: TimelineItem[], plan?: PlanState | null, strategy?: ExecutionStrategy | null) => void;
 }
 
 export const useRunStore = create<RunStoreV2>((set, get) => {
@@ -109,6 +112,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           interaction: payload.interaction,
           progress: null,
           plan: null,
+          strategy: null,
           eventSourceClose: null,
         }));
 
@@ -131,18 +135,27 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             let status = prev.status;
             let pendingInput = prev.pendingInput;
             let progress = prev.progress;
+            let strategy = prev.strategy;
 
             if (event.event === 'needs_input') {
               status = 'needs_input';
               pendingInput = { id: event.data.id, prompt: event.data.prompt, choices: event.data.choices };
-            } else if (event.event === 'done') {
+            } else if (event.event === 'strategy.selected') {
+              strategy = event.data.strategy as ExecutionStrategy;
+            } else if (event.event === 'run.completed') {
               status = 'done';
               pendingInput = null;
-            } else if (event.event === 'error') {
+              progress = null;
+            } else if (event.event === 'run.failed') {
               status = 'error';
               pendingInput = null;
-            } else if (event.event === 'progress') {
-              progress = { stage: event.data.stage, current: event.data.current, total: event.data.total };
+              progress = null;
+            } else if (event.event === 'run.canceled') {
+              status = 'canceled';
+              pendingInput = null;
+              progress = null;
+            } else if (event.event === 'stage.started') {
+              progress = { stage: String(event.data.stage ?? ''), current: 0, total: 0 };
             }
 
             return {
@@ -151,18 +164,19 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               status,
               pendingInput,
               progress,
+              strategy,
             };
           });
 
-          if (event.event === 'done' || event.event === 'error') {
+          if (event.event === 'run.completed' || event.event === 'run.failed' || event.event === 'run.canceled') {
             get().sessions[threadId]?.eventSourceClose?.();
             patchSession(threadId, { eventSourceClose: null });
             // Successful runs invalidate only the resources named by the
             // normalized target/result. Failed runs cannot have committed
             // revisions and therefore do not force a project-wide reload.
-            if (event.event === 'done') {
+            if (event.event === 'run.completed') {
               const pid = useProjectStore.getState().activeProjectId;
-              const resultTarget = event.data.result?.target as RunTarget | undefined;
+              const resultTarget = event.data.outcome?.target as RunTarget | undefined;
               const target = resultTarget ?? get().sessions[threadId]?.target;
               if (pid && target) {
                 if (target.level === 'slide' && target.slide_id) {
@@ -218,6 +232,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         pendingInput: null,
         progress: null,
         plan: null,
+        strategy: null,
         eventSourceClose: null,
       });
     },
@@ -263,10 +278,14 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
     // #2 replay：把后端 history.jsonl 还原来的 items 塞进 timeline，仅在空态触发防重。
     // 目的是刷新后能看到历史消息；运行时 in-memory 优先，避免 replay 覆盖已有事件。
-    hydrateTimeline: (threadId, items) => {
+    hydrateTimeline: (threadId, items, plan, strategy) => {
       const existing = get().sessions[threadId]?.timelineItems ?? [];
       if (existing.length > 0) return;
-      patchSession(threadId, { timelineItems: items });
+      patchSession(threadId, {
+        timelineItems: items,
+        plan: plan ?? null,
+        strategy: strategy ?? null,
+      });
     },
   };
 });

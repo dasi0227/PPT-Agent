@@ -1,133 +1,80 @@
-import type { TimelineItem } from './eventReducer';
+import type { ExecutionStrategy, PlanState, SSEEventName } from '../../api/types';
+import { reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
 
-// HistoryEntry 与后端 backend/internal/run/history_writer.go 的 schema 对齐（UX spec §2.3）。
 export interface HistoryEntry {
   seq: number;
   ts: number;
   run_id: string;
   turn: 'user' | 'agent';
-  type: 'user_turn' | 'markdown' | 'info' | 'needs_input' | 'final_result' | 'error' | 'tool_call' | 'thought' | 'tool_result' | 'artifact' | 'context_assembled';
+  type: string;
   data: Record<string, any>;
 }
 
-// 把 <thread>.jsonl 的每行还原成 TimelineItem；未知 type 丢弃，避免 UI 崩溃。
-// 传入非数组（例如后端 500 fallback）时直接返回空数组，防止 replay 抛异常污染日志。
-export function hydrateFromHistory(entries: HistoryEntry[] | unknown): TimelineItem[] {
-  if (!Array.isArray(entries)) return [];
-  const sorted = entries.slice().sort((a, b) => a.seq - b.seq);
-  const items: TimelineItem[] = [];
+export interface HydratedRunView {
+  items: TimelineItem[];
+  plan: PlanState | null;
+  strategy: ExecutionStrategy | null;
+}
 
-  for (const e of sorted) {
-    const timestamp = (e.ts || 0) * 1000;
-    const baseId = `hist_${e.seq}`;
+const runtimeEvents = new Set<SSEEventName>([
+  'run.started', 'context.assembled', 'strategy.selected', 'plan.created',
+  'stage.started', 'stage.completed', 'step.started', 'step.completed', 'step.failed',
+  'tool.called', 'tool.completed', 'verification.completed',
+  'repair.started', 'repair.completed', 'artifact.staged', 'artifact.committed',
+  'status.summary', 'needs_input', 'run.completed', 'run.failed', 'run.canceled',
+]);
 
-    switch (e.type) {
-      case 'context_assembled':
-        items.push({
-          id: baseId,
-          type: 'context_status',
-          profile: String(e.data.profile ?? ''),
-          warnings: Array.isArray(e.data.warnings) ? e.data.warnings.map(String) : [],
-          readOnly: Boolean(e.data.read_only),
-          timestamp,
-        });
-        break;
-      case 'user_turn':
-        items.push({
-          id: baseId, type: 'user_turn', text: String(e.data.text ?? ''), timestamp,
-          target: e.data.target, interaction: e.data.interaction,
-        });
-        break;
-      case 'markdown':
-      case 'info': {
-        const text = String(e.data.text ?? '');
-        const last = items[items.length - 1];
-        if (last && last.type === 'markdown') {
-          last.text += text;
-        } else {
-          items.push({ id: baseId, type: 'markdown', text, timestamp });
-        }
-        break;
-      }
-      case 'tool_call':
-        items.push({
-          id: baseId,
-          type: 'tool_call',
-          call_id: String(e.data.call_id ?? ''),
-          tool: String(e.data.tool ?? ''),
-          args: e.data.args ?? {},
-          status: 'running',
-          observation: undefined,
-          artifacts: [],
-          timestamp,
-          hiddenFromTimeline: e.data.tool === 'finish'
-        });
-        break;
-      case 'tool_result': {
-        const tc = items.find(i => i.type === 'tool_call' && i.call_id === e.data.call_id);
-        if (tc && tc.type === 'tool_call') {
-          tc.status = e.data.ok ? 'success' : 'failed';
-          tc.observation = e.data.observation;
-        }
-        break;
-      }
-      case 'artifact': {
-        if (e.data.artifact_type === 'design_spec') {
-          items.push({
-            id: baseId,
-            type: 'artifact',
-            artifact_type: 'design_spec',
-            ref: e.data.ref,
-            delivery: 'intermediate',
-            timestamp
-          });
-        } else {
-          // Attach to last tool_call
-          const lastTc = [...items].reverse().find(i => i.type === 'tool_call');
-          if (lastTc && lastTc.type === 'tool_call') {
-            lastTc.artifacts.push({
-              id: baseId,
-              type: 'artifact',
-              artifact_type: e.data.artifact_type,
-              ref: e.data.ref,
-              page_index: e.data.page_index,
-              delivery: 'intermediate',
-              timestamp
-            });
-          } else {
-            items.push({
-              id: baseId,
-              type: 'artifact',
-              artifact_type: e.data.artifact_type,
-              ref: e.data.ref,
-              page_index: e.data.page_index,
-              delivery: 'intermediate',
-              timestamp
-            });
-          }
-        }
-        break;
-      }
-      case 'thought':
-        items.push({ id: baseId, type: 'thought', text: String(e.data.text ?? ''), timestamp });
-        break;
-      case 'needs_input':
-        items.push({
-          id: String(e.data.id ?? baseId),
-          type: 'needs_input',
-          prompt: String(e.data.prompt ?? ''),
-          choices: e.data.choices,
-          timestamp,
-        });
-        break;
-      case 'final_result':
-        items.push({ id: baseId, type: 'final_result', result: e.data.result, timestamp });
-        break;
-      case 'error':
-        items.push({ id: baseId, type: 'error', code: e.data.code, message: String(e.data.message ?? ''), timestamp });
-        break;
+export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): HydratedRunView {
+  if (!Array.isArray(entries)) return { items: [], plan: null, strategy: null };
+  const sorted = entries.slice().sort((left, right) => left.seq - right.seq);
+  let items: TimelineItem[] = [];
+  let plan: PlanState | null = null;
+  let strategy: ExecutionStrategy | null = null;
+
+  for (const entry of sorted) {
+    const timestamp = (entry.ts || 0) * 1000;
+    const id = `hist_${entry.seq}`;
+    if (entry.type === 'user_turn') {
+      items.push({
+        id, type: 'user_turn', text: String(entry.data.text ?? ''), timestamp,
+        target: entry.data.target, interaction: entry.data.interaction,
+      });
+      continue;
+    }
+    if (entry.type === 'context_assembled') {
+      items.push({
+        id, type: 'context_status', profile: String(entry.data.profile ?? ''),
+        warnings: Array.isArray(entry.data.warnings) ? entry.data.warnings.map(String) : [],
+        readOnly: Boolean(entry.data.read_only), timestamp,
+      });
+      continue;
+    }
+    if (entry.type === 'markdown') {
+      items.push({ id, type: 'markdown', text: String(entry.data.text ?? ''), timestamp });
+      continue;
+    }
+    if (entry.type === 'final_result') {
+      items.push({ id, type: 'final_result', result: entry.data.result, timestamp });
+      continue;
+    }
+    if (entry.type === 'error') {
+      items.push({
+        id, type: 'error', code: entry.data.code,
+        message: String(entry.data.message ?? entry.data.status ?? 'Run failed'), timestamp,
+      });
+      continue;
+    }
+    if (!runtimeEvents.has(entry.type as SSEEventName)) continue;
+    const event = { id, event: entry.type as SSEEventName, data: entry.data };
+    items = reduceSSEEvent(items, event);
+    plan = reducePlan(plan, event);
+    if (entry.type === 'strategy.selected') {
+      strategy = entry.data.strategy as ExecutionStrategy;
     }
   }
+  return { items, plan, strategy };
+}
 
-  return items;
+export function hydrateFromHistory(entries: HistoryEntry[] | unknown): TimelineItem[] {
+  return hydrateRunFromHistory(entries).items;
 }

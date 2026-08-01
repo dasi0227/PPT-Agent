@@ -45,9 +45,9 @@ type Store interface {
 	ListVersions(ctx context.Context, targetType, targetID string) ([]model.Version, error)
 	DeleteVersion(ctx context.Context, targetType, targetID string, versionNo int) error
 	SetSlideVersion(ctx context.Context, slideID string, versionNo int) error
-	SetOutlineDirty(ctx context.Context, slideID string, dirty bool) error
 	UpdateSlideMeta(ctx context.Context, slideID, title, layout string) error
 	UpdateSlideRevisions(ctx context.Context, slideID string, blueprintRevision, presentationRevision, sourceDeckRevision, sourceBlueprintRevision, sourceDesignRevision int) error
+	CommitWorkflow(ctx context.Context, commit model.ArtifactCommit) error
 
 	CreateAsset(ctx context.Context, a model.Asset) error
 	UpsertAsset(ctx context.Context, a model.Asset) error

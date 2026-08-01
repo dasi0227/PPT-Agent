@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
+	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
@@ -106,7 +106,7 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 	if err != nil {
 		return nil, err
 	}
-	sb, err := tools.NewSandbox(proj.WorkDir)
+	sb, err := artifactfs.NewSandbox(proj.WorkDir)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func historySeq(m map[string]any) float64 {
 }
 
 func writeEmptyHistory(workDir, rel string) error {
-	sb, err := tools.NewSandbox(workDir)
+	sb, err := artifactfs.NewSandbox(workDir)
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func writeEmptyHistory(workDir, rel string) error {
 }
 
 func removeHistory(workDir, rel string) error {
-	sb, err := tools.NewSandbox(workDir)
+	sb, err := artifactfs.NewSandbox(workDir)
 	if err != nil {
 		return err
 	}

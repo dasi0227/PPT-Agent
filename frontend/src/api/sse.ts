@@ -29,7 +29,13 @@ export function subscribeRunEvents(runId: string, options: SSEOptions): () => vo
     }
   };
 
-  const eventTypes = ['run.started', 'thought', 'tool_call', 'tool_result', 'progress', 'token', 'artifact', 'plan', 'plan.update', 'needs_input', 'info', 'done', 'error'];
+  const eventTypes = [
+    'run.started', 'context.assembled', 'strategy.selected', 'plan.created',
+    'stage.started', 'stage.completed', 'step.started', 'step.completed', 'step.failed',
+    'tool.called', 'tool.completed', 'verification.completed',
+    'repair.started', 'repair.completed', 'artifact.staged', 'artifact.committed',
+    'status.summary', 'needs_input', 'run.completed', 'run.failed', 'run.canceled',
+  ];
   
   eventTypes.forEach(type => {
     source.addEventListener(type, handleMessage);

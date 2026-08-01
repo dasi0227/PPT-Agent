@@ -70,9 +70,10 @@ func ValidateSlide(s Slide) error {
 }
 
 func ValidateDesignSpec(d DesignSpec) error {
-	if d.SchemaVersion != SchemaVersion || d.Revision < 1 || len(d.Canvas) == 0 ||
-		len(d.Palette) == 0 || len(d.Typography) == 0 || len(d.LayoutSystem) == 0 ||
-		d.Signature == "" {
+	if d.SchemaVersion != SchemaVersion || d.Revision < 1 ||
+		d.Canvas.Width <= 0 || d.Canvas.Height <= 0 || d.Canvas.Ratio != "16:9" ||
+		len(d.Palette) == 0 || d.Typography.Display.Family == "" || d.Typography.Body.Family == "" ||
+		d.LayoutSystem.Grid == "" || d.LayoutSystem.Rhythm == "" || d.Signature == "" {
 		return fmt.Errorf("%w: invalid design spec", ErrInvalid)
 	}
 	return nil

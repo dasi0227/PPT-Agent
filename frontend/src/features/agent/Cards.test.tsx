@@ -1,7 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { ToolCallCard } from './ToolCallCard';
-import { ThoughtCard } from './ThoughtCard';
 import { PlanCard } from './PlanCard';
 import { FinalResultCard } from './FinalResultCard';
 import { NeedsInputCard } from './NeedsInputCard';
@@ -20,19 +19,6 @@ describe('Agent Cards', () => {
     // Expand to see observation
     fireEvent.click(screen.getByText('my_tool'));
     expect(screen.getByText(/done/)).toBeInTheDocument();
-  });
-
-  it('ThoughtCard is collapsible', () => {
-    render(<ThoughtCard item={{ id: '1', type: 'thought', text: 'I am thinking deeply', timestamp: 0 }} />);
-    expect(screen.queryByText('I am thinking deeply')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('执行思路'));
-    expect(screen.getByText('I am thinking deeply')).toBeInTheDocument();
-  });
-
-  it('ThoughtCard renders markdown formatting when expanded', () => {
-    const { container } = render(<ThoughtCard item={{ id: '1', type: 'thought', text: 'plan: `finish`', timestamp: 0 }} />);
-    fireEvent.click(screen.getByText('执行思路'));
-    expect(container.querySelector('code')?.textContent).toBe('finish');
   });
 
   it('PlanCard renders states', () => {
@@ -61,29 +47,33 @@ describe('Agent Cards', () => {
     expect(container.querySelector('code')?.textContent).toBe('code');
   });
 
-  it('FinalResultCard renders structured result (generate)', () => {
-    render(<FinalResultCard item={{
-      id: '1', type: 'final_result', timestamp: 0,
-      result: { project_id: 'p1', slide_count: 8, theme: 'swiss-modern', signature: '链路脉冲', design_spec_ref: 'design/design-spec.json', warnings: [] },
-    }} />);
-    expect(screen.getByText('最终交付')).toBeInTheDocument();
-    expect(screen.getByText('8')).toBeInTheDocument();
-    expect(screen.getByText('swiss-modern')).toBeInTheDocument();
-    expect(screen.getByText('链路脉冲')).toBeInTheDocument();
-  });
-
-  it('FinalResultCard lists failed pages from warnings', () => {
+  it('FinalResultCard renders structured workflow outcome', () => {
     render(<FinalResultCard item={{
       id: '1', type: 'final_result', timestamp: 0,
       result: {
-        project_id: 'p1', slide_count: 4, theme: 'project-custom', signature: 'sig',
-        warnings: [{ page_index: 1, code: 'FIX_EXCEEDED', message: '经 2 轮修复仍不合规' }],
+        status: 'completed', strategy: 'full_pev', operation: 'rebuild',
+        target: { artifact: 'presentation', level: 'deck' },
+        affected: [{ kind: 'presentation_slide', id: 's1' }], issues: [], summary: '已完成',
       },
     }} />);
-    expect(screen.getByText('1 项告警')).toBeInTheDocument();
-    expect(screen.getByText('第 2 页')).toBeInTheDocument();
-    expect(screen.getByText('[FIX_EXCEEDED]')).toBeInTheDocument();
-    expect(screen.getByText('经 2 轮修复仍不合规')).toBeInTheDocument();
+    expect(screen.getByText('最终交付')).toBeInTheDocument();
+    expect(screen.getByText(/presentation \/ deck/)).toBeInTheDocument();
+    expect(screen.getByText('full_pev')).toBeInTheDocument();
+    expect(screen.getByText(/presentation_slide:s1/)).toBeInTheDocument();
+  });
+
+  it('FinalResultCard lists verifier issues', () => {
+    render(<FinalResultCard item={{
+      id: '1', type: 'final_result', timestamp: 0,
+      result: {
+        status: 'completed', strategy: 'compact_workflow',
+        target: { artifact: 'presentation', level: 'slide' },
+        issues: [{ code: 'OVERFLOW', evidence: '内容溢出' }],
+      },
+    }} />);
+    expect(screen.getByText('1 项问题')).toBeInTheDocument();
+    expect(screen.getByText('[OVERFLOW]')).toBeInTheDocument();
+    expect(screen.getByText('内容溢出')).toBeInTheDocument();
   });
 
   it('NeedsInputCard renders and handles input', () => {

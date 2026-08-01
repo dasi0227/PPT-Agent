@@ -38,9 +38,20 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 		Sections:   []blueprint.Section{{ID: "sec", Number: "1", Title: "Section", Subsections: []blueprint.Subsection{{ID: "sub", Number: "1.1", Title: "Sub"}}}},
 		SlideOrder: []string{"s1", "s2", "s3"}, CreatedAt: 1, UpdatedAt: 2}
 	writeJSON(t, filepath.Join(dir, "deck.json"), deck)
-	design := blueprint.DesignSpec{SchemaVersion: "2.0", Revision: 3, Canvas: map[string]any{"ratio": "16:9"}, Palette: []string{"#000"},
-		Typography: map[string]any{"body": "Inter"}, Spacing: map[string]any{}, Radius: map[string]any{}, Shadows: map[string]any{},
-		LayoutSystem: map[string]any{"grid": "12"}, Signature: "pulse", Motion: map[string]any{}}
+	design := blueprint.DesignSpec{
+		SchemaVersion: "2.0", Revision: 3,
+		Canvas:  blueprint.CanvasSpec{Width: 1600, Height: 900, Ratio: "16:9"},
+		Palette: []string{"#000"},
+		Typography: blueprint.TypographySpec{
+			Display: blueprint.FontSpec{Family: "Inter", Weight: 700},
+			Body:    blueprint.FontSpec{Family: "Inter", Weight: 400},
+			Utility: blueprint.FontSpec{Family: "Inter", Weight: 500},
+		},
+		Spacing: blueprint.SpacingSpec{Unit: 8}, Radius: blueprint.RadiusSpec{Card: 12},
+		Shadows:      blueprint.ShadowSpec{Card: "0 8px 24px rgba(0,0,0,.2)"},
+		LayoutSystem: blueprint.LayoutSystem{Grid: "12", Rhythm: "8", Density: "balanced"},
+		Signature:    "pulse", Motion: blueprint.MotionSpec{Policy: "reduced-safe"},
+	}
 	writeJSON(t, filepath.Join(dir, "design", "design-spec.json"), design)
 	slides := map[string]model.Slide{}
 	for i, id := range deck.SlideOrder {
@@ -293,21 +304,6 @@ func TestOptionalAssetLoaderFailureDoesNotBlock(t *testing.T) {
 	}
 	if len(pack.Manifest.Warnings) == 0 {
 		t.Fatal("missing optional loader warning")
-	}
-}
-
-func TestReadContextRefToolRejectsPathArguments(t *testing.T) {
-	tool := NewReadContextRefTool(ContextRefResolver{Registry: NewRefRegistry()}, ContextManifest{
-		RunID: "r", ThreadID: "t", ProjectID: "p", BudgetTokens: 100,
-	})
-	result, err := tool.Execute(context.Background(), map[string]any{
-		"ref_id": "ctxref_deadbeef", "detail": "full", "path": "../../secret",
-	})
-	if err != nil || result.OK || !strings.Contains(result.Observation, CodeRefForbidden) {
-		t.Fatalf("result=%+v err=%v", result, err)
-	}
-	if _, acceptsPath := tool.Parameters()["path"]; acceptsPath {
-		t.Fatal("tool schema accepts a path")
 	}
 }
 

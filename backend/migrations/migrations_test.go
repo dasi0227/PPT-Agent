@@ -47,8 +47,8 @@ func normalize(sql string) string {
 	return b.String()
 }
 
-// TestSlidesHasOrderAndDirtyColumns 验证 slides 表含 order/outline_dirty 列（页身份重构地基）。
-func TestSlidesHasOrderAndDirtyColumns(t *testing.T) {
+// TestSlidesUsesCanonicalRuntimeColumns verifies the clean-cut schema.
+func TestSlidesUsesCanonicalRuntimeColumns(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open in-memory: %v", err)
@@ -57,9 +57,17 @@ func TestSlidesHasOrderAndDirtyColumns(t *testing.T) {
 		t.Fatalf("apply migrations: %v", err)
 	}
 	cols := tableColumns(t, db, "slides")
-	for _, want := range []string{"order", "outline_dirty"} {
+	for _, want := range []string{
+		"position", "blueprint_revision", "presentation_revision",
+		"source_deck_revision", "source_blueprint_revision", "source_design_revision",
+	} {
 		if !cols[want] {
 			t.Fatalf("slides table missing column %q; got %v", want, cols)
+		}
+	}
+	for _, removed := range []string{"idx", "order", "outline_dirty"} {
+		if cols[removed] {
+			t.Fatalf("legacy slides column %q still exists", removed)
 		}
 	}
 }

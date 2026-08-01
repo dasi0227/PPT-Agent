@@ -8,7 +8,7 @@ import { Bot, Loader2, AlertCircle, PanelRightClose } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export const AgentPanel: React.FC = () => {
-  const { status, target, interaction, progress } = useActiveSession();
+  const { status, target, interaction, progress, strategy } = useActiveSession();
   const { toggleRightPanel } = useUIStore();
 
   const getModeColor = () => {
@@ -30,6 +30,11 @@ export const AgentPanel: React.FC = () => {
               {target.artifact}/{target.level}
             </span>
           )}
+          {strategy && (
+            <span className="ml-1.5 text-[10px] uppercase font-medium text-text-400">
+              {strategy}
+            </span>
+          )}
         </div>
         
         {/* Run Summary / Status */}
@@ -37,7 +42,7 @@ export const AgentPanel: React.FC = () => {
           {status === 'running' && (
             <div className="flex items-center text-mode-normal">
               <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              {progress ? `${progress.stage} (${progress.current}/${progress.total})` : 'Thinking...'}
+              {progress ? progress.stage : 'Thinking...'}
             </div>
           )}
           {status === 'needs_input' && (
@@ -52,6 +57,7 @@ export const AgentPanel: React.FC = () => {
               Failed
             </div>
           )}
+          {status === 'canceled' && <div className="text-text-400">Canceled</div>}
         </div>
 
         <button onClick={toggleRightPanel} className="p-1 hover:bg-black/5 rounded text-text-400 hover:text-text-600 transition-colors">

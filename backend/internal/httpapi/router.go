@@ -69,7 +69,6 @@ func (r *Router) register() {
 
 	// Slide：读取 / 版本列表 / 回滚（40-api openapi /slides/{id}...）。
 	v1.GET("/slides/:id", r.slide.GetSlide)
-	v1.PATCH("/slides/:id", r.slide.PatchSlide)
 	v1.DELETE("/slides/:id", r.slide.DeleteSlide)
 	v1.GET("/slides/:id/render", r.slide.RenderSlide)
 	v1.GET("/slides/:id/versions", r.slide.ListVersions)

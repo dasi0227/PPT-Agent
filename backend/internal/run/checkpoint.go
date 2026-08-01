@@ -3,11 +3,10 @@ package run
 import (
 	"context"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-// Prompter 是 harness/agent 请求用户输入的挂钩（被动应答 HITL）。
+// Prompter 是 Runtime 请求用户输入的挂钩（被动应答 HITL）。
 // 发 needs_input → Run 转 waiting → 阻塞等待匹配应答 → 转回 running（API-RUN-004）。
 type Prompter interface {
 	// NeedsInput 发出 needs_input 事件并阻塞，直到收到匹配 reply 或 ctx 取消。
@@ -44,5 +43,3 @@ func (c *checkpoint) NeedsInput(ctx context.Context, id, prompt string, choices 
 		return "", ctx.Err()
 	}
 }
-
-var _ harness.Emitter = (*harnessEmitter)(nil)

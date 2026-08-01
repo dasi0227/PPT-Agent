@@ -164,7 +164,7 @@ func (d *DeepSeek) CallTool(ctx context.Context, req ToolCallRequest) (ToolCallR
 		return ToolCallResponse{}, fmt.Errorf("%w: empty choices", ErrUnavailable)
 	}
 	msg := resp.Choices[0].Message
-	out := ToolCallResponse{Thought: msg.Content, Text: msg.Content}
+	out := ToolCallResponse{Text: msg.Content}
 	if len(msg.ToolCalls) > 0 {
 		tc := msg.ToolCalls[0]
 		args := map[string]any{}

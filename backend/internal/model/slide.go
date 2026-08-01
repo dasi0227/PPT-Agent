@@ -1,17 +1,15 @@
 package model
 
-// Slide 是一页 slide 的元数据（大文本 slide-json/html 落文件系统，此处仅索引）。
+// Slide 是一页 slide 的元数据（canonical Blueprint/HTML 落文件系统，此处仅索引）。
 type Slide struct {
 	ID                      string
 	ProjectID               string
-	Idx                     int
+	Position                int
 	Layout                  string
 	Title                   string
 	JSONPath                string
 	HTMLPath                string
 	CurrentVersion          int
-	Order                   int
-	OutlineDirty            bool
 	BlueprintRevision       int
 	PresentationRevision    int
 	SourceDeckRevision      int
@@ -23,7 +21,7 @@ type Slide struct {
 // Version 是一次可回滚快照的登记（DATA-VERSION）。
 type Version struct {
 	ID           string
-	TargetType   string // slide | project | design | asset
+	TargetType   string // blueprint_deck | blueprint_slide | presentation_slide | design | asset
 	TargetID     string
 	VersionNo    int
 	SnapshotPath string

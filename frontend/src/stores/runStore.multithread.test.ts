@@ -51,16 +51,15 @@ describe('runStore multithread sharding', () => {
     const connA = connections[0];
     const connB = connections[1];
 
-    // 向 A 派发一个 thought，只应写入 A 的分片（此时 A 已含头插的 user_turn）。
-    connA.onMessage({ id: '1', event: 'thought', data: { text: 'hello A' } });
+    connA.onMessage({ id: '1', event: 'strategy.selected', data: {
+      strategy: 'respond', reason: 'consult', risk: 'low', complexity: 'low',
+    } });
 
     const sessions = useRunStore.getState().sessions;
-    // A: user_turn + thought；B: 仅 user_turn。
-    expect(sessions['tA'].timelineItems.map((i) => i.type)).toEqual(['user_turn', 'thought']);
+    expect(sessions['tA'].timelineItems.map((i) => i.type)).toEqual(['user_turn', 'strategy_status']);
     expect(sessions['tB'].timelineItems.map((i) => i.type)).toEqual(['user_turn']);
 
-    // 向 B 派发 done，A 状态不受影响
-    connB.onMessage({ id: '2', event: 'done', data: { result: { summary: 'B done' } } });
+    connB.onMessage({ id: '2', event: 'run.completed', data: { outcome: { summary: 'B done' } } });
     const after = useRunStore.getState().sessions;
     expect(after['tB'].status).toBe('done');
     expect(after['tA'].status).toBe('running');
@@ -73,7 +72,7 @@ describe('runStore multithread sharding', () => {
     const connA = connections[0];
     const connB = connections[1];
 
-    connA.onMessage({ id: '1', event: 'done', data: { result: {} } });
+    connA.onMessage({ id: '1', event: 'run.completed', data: { outcome: {} } });
     expect(connA.closed).toBe(true);
     expect(connB.closed).toBe(false);
   });
@@ -90,24 +89,25 @@ describe('runStore multithread sharding', () => {
     expect(connB.closed).toBe(false);
   });
 
-  it('progress updates only the target session', async () => {
+  it('stage progress updates only the target session', async () => {
     const store = useRunStore.getState();
     await store.createRun('tA', request('A', 'presentation'));
-    lastConn().onMessage({ id: '1', event: 'progress', data: { stage: 'page', current: 2, total: 8 } });
+    lastConn().onMessage({ id: '1', event: 'stage.started', data: { stage: 'execute' } });
 
-    expect(useRunStore.getState().sessions['tA'].progress).toEqual({ stage: 'page', current: 2, total: 8 });
+    expect(useRunStore.getState().sessions['tA'].progress).toEqual({ stage: 'execute', current: 0, total: 0 });
     expect(useRunStore.getState().getSession('tB').progress).toBeNull();
   });
 
   it('rekeySession migrates full session from draft id to real id', async () => {
     const store = useRunStore.getState();
     await store.createRun('draft_x', request('A'));
-    lastConn().onMessage({ id: '1', event: 'thought', data: { text: 'hi' } });
-    lastConn().onMessage({ id: '2', event: 'progress', data: { stage: 'design', current: 1, total: 1 } });
+    lastConn().onMessage({ id: '1', event: 'strategy.selected', data: {
+      strategy: 'compact_workflow', reason: 'rebuild', risk: 'medium', complexity: 'medium',
+    } });
+    lastConn().onMessage({ id: '2', event: 'stage.started', data: { stage: 'execute' } });
 
     const before = useRunStore.getState().sessions['draft_x'];
-    // user_turn (createRun 头插) + thought
-    expect(before.timelineItems.map((i) => i.type)).toEqual(['user_turn', 'thought']);
+    expect(before.timelineItems.map((i) => i.type)).toEqual(['user_turn', 'strategy_status']);
     expect(before.status).toBe('running');
 
     useRunStore.getState().rekeySession('draft_x', 'real_1');
@@ -115,8 +115,8 @@ describe('runStore multithread sharding', () => {
     const after = useRunStore.getState().sessions;
     expect(after['draft_x']).toBeUndefined();
     expect(after['real_1']).toBe(before); // 同一引用整块搬迁
-    expect(after['real_1'].timelineItems.map((i) => i.type)).toEqual(['user_turn', 'thought']);
-    expect(after['real_1'].progress).toEqual({ stage: 'design', current: 1, total: 1 });
+    expect(after['real_1'].timelineItems.map((i) => i.type)).toEqual(['user_turn', 'strategy_status']);
+    expect(after['real_1'].progress).toEqual({ stage: 'execute', current: 0, total: 0 });
   });
 
   it('rekeySession is a no-op when old id has no session', () => {

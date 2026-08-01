@@ -1,63 +1,71 @@
 import { describe, expect, test } from 'vitest';
-import { hydrateFromHistory, HistoryEntry } from './historyHydrator';
+import { hydrateFromHistory, hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
 
-describe('hydrateFromHistory', () => {
-  test('sorts by seq and maps user_turn / markdown / final_result', () => {
+describe('Adaptive Runtime history replay', () => {
+  test.each([
+    ['respond', false],
+    ['direct_action', false],
+    ['compact_workflow', true],
+    ['full_pev', true],
+  ] as const)('replays %s with the correct optional-plan shape', (strategy, hasPlan) => {
     const entries: HistoryEntry[] = [
-      { seq: 2, ts: 200, run_id: 'r1', turn: 'agent', type: 'markdown', data: { text: 'reply' } },
-      { seq: 1, ts: 100, run_id: 'r1', turn: 'user', type: 'user_turn', data: { text: 'hi' } },
-      { seq: 3, ts: 300, run_id: 'r1', turn: 'agent', type: 'final_result', data: { result: { ok: true } } },
+      { seq: 1, ts: 1, run_id: 'r', turn: 'agent', type: 'strategy.selected', data: {
+        strategy, reason: 'test decision', risk: 'low', complexity: 'low',
+      } },
     ];
-    const items = hydrateFromHistory(entries);
-    expect(items).toHaveLength(3);
-    expect(items[0].type).toBe('user_turn');
-    expect((items[0] as any).text).toBe('hi');
-    expect(items[1].type).toBe('markdown');
-    expect((items[1] as any).text).toBe('reply');
-    expect(items[2].type).toBe('final_result');
-    expect((items[2] as any).result).toEqual({ ok: true });
+    if (hasPlan) {
+      entries.push({ seq: 2, ts: 2, run_id: 'r', turn: 'agent', type: 'plan.created', data: {
+        plan: { id: 'p', goal: 'Execute', steps: [{ id: 's', title: 'Step', status: 'pending' }] },
+      } });
+    }
+    const hydrated = hydrateRunFromHistory(entries);
+    expect(hydrated.strategy).toBe(strategy);
+    expect(Boolean(hydrated.plan)).toBe(hasPlan);
   });
 
-  test('maps info to markdown and needs_input keeps id from data', () => {
+  test('replays a planless DirectAction run', () => {
     const entries: HistoryEntry[] = [
-      { seq: 1, ts: 0, run_id: 'r', turn: 'agent', type: 'info', data: { text: 'note' } },
-      { seq: 2, ts: 0, run_id: 'r', turn: 'agent', type: 'needs_input', data: { id: 'ni_1', prompt: 'go?', choices: ['A'] } },
+      { seq: 1, ts: 1, run_id: 'r', turn: 'user', type: 'user_turn', data: { text: 'change title' } },
+      { seq: 2, ts: 2, run_id: 'r', turn: 'agent', type: 'strategy.selected', data: {
+        strategy: 'direct_action', reason: 'single field', risk: 'low', complexity: 'low',
+      } },
+      { seq: 3, ts: 3, run_id: 'r', turn: 'agent', type: 'verification.completed', data: {
+        verifier: 'blueprint', result: { passed: true, issues: [] },
+      } },
+      { seq: 4, ts: 4, run_id: 'r', turn: 'agent', type: 'final_result', data: {
+        result: { status: 'completed', strategy: 'direct_action' },
+      } },
     ];
-    const items = hydrateFromHistory(entries);
-    expect(items[0].type).toBe('markdown');
-    expect((items[0] as any).text).toBe('note');
-    expect(items[1].type).toBe('needs_input');
-    expect(items[1].id).toBe('ni_1');
-    expect((items[1] as any).prompt).toBe('go?');
-    expect((items[1] as any).choices).toEqual(['A']);
-  });
-
-  test('maps error type', () => {
-    const items = hydrateFromHistory([
-      { seq: 1, ts: 0, run_id: 'r', turn: 'agent', type: 'error', data: { code: 'BAD', message: 'boom' } },
+    const hydrated = hydrateRunFromHistory(entries);
+    expect(hydrated.strategy).toBe('direct_action');
+    expect(hydrated.plan).toBeNull();
+    expect(hydrated.items.map((item) => item.type)).toEqual([
+      'user_turn', 'strategy_status', 'verification_status', 'final_result',
     ]);
-    expect(items[0].type).toBe('error');
-    expect((items[0] as any).code).toBe('BAD');
-    expect((items[0] as any).message).toBe('boom');
   });
 
-  test('drops unknown types', () => {
-    const items = hydrateFromHistory([
-      { seq: 1, ts: 1, run_id: 'r', turn: 'agent', type: 'weird' as any, data: {} },
-    ]);
-    expect(items).toHaveLength(0);
-  });
-
-  test('empty entries returns empty array', () => {
-    expect(hydrateFromHistory([])).toEqual([]);
-  });
-
-  test('replays concise context assembled status', () => {
-    const items = hydrateFromHistory([
-      { seq: 1, ts: 2, run_id: 'r', turn: 'agent', type: 'context_assembled', data: {
-        profile: 'blueprint/deck', warnings: [], read_only: false,
+  test('replays Compact plan and step state', () => {
+    const hydrated = hydrateRunFromHistory([
+      { seq: 1, ts: 1, run_id: 'r', turn: 'agent', type: 'strategy.selected', data: {
+        strategy: 'compact_workflow', reason: 'rebuild', risk: 'medium', complexity: 'medium',
+      } },
+      { seq: 2, ts: 2, run_id: 'r', turn: 'agent', type: 'plan.created', data: {
+        plan: { id: 'p', goal: 'Rebuild', steps: [{ id: 'render', title: 'Render', status: 'pending' }] },
+      } },
+      { seq: 3, ts: 3, run_id: 'r', turn: 'agent', type: 'step.completed', data: {
+        step_id: 'render', summary: 'done',
       } },
     ]);
-    expect(items[0]).toMatchObject({ type: 'context_status', profile: 'blueprint/deck', warnings: [], readOnly: false });
+    expect(hydrated.strategy).toBe('compact_workflow');
+    expect(hydrated.plan?.steps[0]).toMatchObject({ status: 'completed', detail: 'done' });
+  });
+
+  test('sorts semantic history and drops unknown types', () => {
+    const items = hydrateFromHistory([
+      { seq: 2, ts: 2, run_id: 'r', turn: 'agent', type: 'markdown', data: { text: 'reply' } },
+      { seq: 1, ts: 1, run_id: 'r', turn: 'user', type: 'user_turn', data: { text: 'hi' } },
+      { seq: 3, ts: 3, run_id: 'r', turn: 'agent', type: 'unknown', data: {} },
+    ]);
+    expect(items.map((item) => item.type)).toEqual(['user_turn', 'markdown']);
   });
 });

@@ -14,12 +14,12 @@ depends_on:
 ## 1. 决策
 
 在现有 `WorkSpec` 与 Blueprint v2 之上建立独立的 Context Engineering 层。它是所有
-`blueprint/presentation × slide/deck` Runner、Planner、Executor、Verifier 和 consult
+`blueprint/presentation × slide/deck` Strategy、Planner、Executor、Verifier 和 consult
 流程获取业务上下文的唯一入口。
 
 本项目处于 0→1 开发阶段，不为旧 `kind/scope/mode`、旧 `slidejson`、旧项目数据或旧 Prompt
 拼装方式建设兼容层。Context v1 先提供新内核；后续 PEV Runtime 重构完成后删除仍依赖旧模型的
-Runner 实现。
+执行实现。
 
 核心原则：
 
@@ -548,10 +548,12 @@ POST Run
   → Assemble ContextPack
   → persist ContextManifest
   → emit context.assembled
-  → RunnerResolver / Workflow
+  → ExecutionStrategyRouter
+  → Strategy / Workflow
 ```
 
-`RunnerResolver` 构造参数必须接收 `ContextPack`。新 Runner 禁止重复从磁盘装配相同上下文。
+`ExecutionStrategyRouter` 和后续执行策略必须接收 `ContextPack`。执行层禁止重复从磁盘装配
+相同上下文。
 
 事件：
 
@@ -592,7 +594,7 @@ run_contexts
 - 当前 Run 的 Ref Registry 保存在进程内；未来 Durable Run 可从 manifest 重建。
 - 本项目无需兼容旧数据库，直接更新 canonical migration 并要求开发数据库重建。
 
-## 15. 与 PEV Runtime 的边界
+## 15. 与 Adaptive Execution Runtime 的边界
 
 Context Engine 负责：
 
@@ -600,13 +602,14 @@ Context Engine 负责：
 - 管理 Context Budget 与 Thread Memory。
 - 产生 ContextManifest。
 
-PEV Runtime 负责：
+Adaptive Runtime 负责：
 
-- 选择 Playbook。
-- 制定 Plan。
+- 选择 Respond、DirectAction、CompactWorkflow 或 FullPEVWorkflow。
+- 为 Compact/Full 选择 Playbook 并制定 Plan。
 - 决定每个 Step 的 capabilities。
 - 动态披露工具。
-- Execute、Verify、Repair 和 Commit。
+- Execute，并为写策略执行 Verify 和 Commit。
+- 仅为 Compact/Full 执行 Repair。
 
 Context Engine 不决定写工具，不执行项目修改。
 

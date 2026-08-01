@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS projects (
     status      TEXT    NOT NULL DEFAULT 'draft'
                         CHECK (status IN ('draft','generating','ready')),
     design_path TEXT    NOT NULL DEFAULT '',        -- 公共样式层（design tokens）文件相对路径
+    deck_path   TEXT    NOT NULL DEFAULT 'deck.json',
+    deck_revision INTEGER NOT NULL DEFAULT 1,
+    design_revision INTEGER NOT NULL DEFAULT 1,
     created_at  INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL
 );
@@ -22,17 +25,20 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS slides (
     id               TEXT    PRIMARY KEY,
     project_id       TEXT    NOT NULL,
-    idx              INTEGER NOT NULL,
+    position         INTEGER NOT NULL,
     layout           TEXT    NOT NULL,
     title            TEXT    NOT NULL DEFAULT '',
     json_path        TEXT    NOT NULL,
     html_path        TEXT    NOT NULL,
     current_version  INTEGER NOT NULL DEFAULT 0,
-    "order"          INTEGER NOT NULL DEFAULT 0,
-    outline_dirty    INTEGER NOT NULL DEFAULT 0,
+    blueprint_revision       INTEGER NOT NULL DEFAULT 1,
+    presentation_revision    INTEGER NOT NULL DEFAULT 0,
+    source_deck_revision     INTEGER NOT NULL DEFAULT 0,
+    source_blueprint_revision INTEGER NOT NULL DEFAULT 0,
+    source_design_revision   INTEGER NOT NULL DEFAULT 0,
     last_export_at   INTEGER,                       -- backlog：图片导出预留，可空
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    UNIQUE (project_id, idx)
+    UNIQUE (project_id, position)
 );
 CREATE INDEX IF NOT EXISTS idx_slides_project ON slides(project_id);
 
@@ -41,7 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_slides_project ON slides(project_id);
 CREATE TABLE IF NOT EXISTS versions (
     id            TEXT    PRIMARY KEY,
     target_type   TEXT    NOT NULL
-                          CHECK (target_type IN ('slide','project','design','asset')),
+                          CHECK (target_type IN ('blueprint_deck','blueprint_slide','presentation_slide','design','asset')),
     target_id     TEXT    NOT NULL,
     version_no    INTEGER NOT NULL,
     snapshot_path TEXT    NOT NULL,
@@ -88,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 
 -- ───────────────────────── Run 事件（持久化，用于断线重连续传 + harness 可观测） ─────────────────────────
--- type 含 harness 事件：thought / tool_call / tool_result / progress / token / artifact / needs_input / info / done / error
+-- type 使用 workflow v1 协议：run/context/plan/stage/step/tool/verification/repair/artifact/terminal。
 CREATE TABLE IF NOT EXISTS run_events (
     run_id     TEXT    NOT NULL,
     seq        INTEGER NOT NULL,
@@ -98,6 +104,18 @@ CREATE TABLE IF NOT EXISTS run_events (
     PRIMARY KEY (run_id, seq),
     FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS run_contexts (
+  run_id           TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+  context_id       TEXT UNIQUE NOT NULL,
+  profile          TEXT NOT NULL,
+  pack_hash        TEXT NOT NULL,
+  estimated_tokens INTEGER NOT NULL,
+  budget_tokens    INTEGER NOT NULL,
+  manifest_json    TEXT NOT NULL,
+  created_at       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_run_contexts_context_id ON run_contexts(context_id);
 
 -- ───────────────────────── Asset（个人仓库统一资产，全局） ─────────────────────────
 -- 四类资产共享统一信封；预置(preset)与用户新增(user)同表，载荷存文件系统

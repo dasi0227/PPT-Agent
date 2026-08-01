@@ -3,7 +3,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useRunStore, RunSession, IDLE_SESSION } from '../../stores/runStore';
 import { threadsApi } from '../../api/threads';
-import { hydrateFromHistory, HistoryEntry } from './historyHydrator';
+import { hydrateRunFromHistory, HistoryEntry } from './historyHydrator';
 
 // 当前聚焦 project 的活跃 threadId（可能为 null）。
 export function useActiveThreadId(): string | null {
@@ -27,8 +27,8 @@ export function useActiveSession(): RunSession {
     threadsApi.history(threadId)
       .then((entries) => {
         if (!entries || entries.length === 0) return;
-        const items = hydrateFromHistory(entries as unknown as HistoryEntry[]);
-        useRunStore.getState().hydrateTimeline(threadId, items);
+        const hydrated = hydrateRunFromHistory(entries as unknown as HistoryEntry[]);
+        useRunStore.getState().hydrateTimeline(threadId, hydrated.items, hydrated.plan, hydrated.strategy);
       })
       .catch((err) => console.warn('history replay failed', err));
   }, [threadId]);

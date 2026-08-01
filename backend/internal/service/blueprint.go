@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/agent/slidejson"
 	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -34,9 +32,6 @@ func (s *BlueprintService) EnsureProject(ctx context.Context, projectID string) 
 	}
 	slides, err := s.store.ListSlides(ctx, projectID)
 	if err != nil {
-		return blueprint.ProjectView{}, err
-	}
-	if err := s.migrate(project, slides); err != nil {
 		return blueprint.ProjectView{}, err
 	}
 	return s.read(project, slides)
@@ -148,93 +143,6 @@ func (s *BlueprintService) ReplaceDesignSpec(ctx context.Context, projectID stri
 	return next, nil
 }
 
-func (s *BlueprintService) migrate(project model.Project, metas []model.Slide) error {
-	deckPath := filepath.Join(project.WorkDir, "deck.json")
-	if raw, err := os.ReadFile(deckPath); err == nil {
-		var deck blueprint.Deck
-		if json.Unmarshal(raw, &deck) == nil && deck.SchemaVersion == blueprint.SchemaVersion {
-			existing := make(map[string]blueprint.Slide, len(metas))
-			complete := true
-			for _, meta := range metas {
-				var slide blueprint.Slide
-				if err := readJSON(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideJSONPath(meta.ID))), &slide); err != nil || slide.SchemaVersion != blueprint.SchemaVersion {
-					complete = false
-					break
-				}
-				existing[meta.ID] = slide
-			}
-			if complete && blueprint.ValidateDeck(deck, existing) == nil {
-				return nil
-			}
-		}
-	}
-	now := s.clock()
-	section := blueprint.Section{ID: "section-main", Number: "01", Title: "正文", Subsections: []blueprint.Subsection{}}
-	slides := make(map[string]blueprint.Slide, len(metas))
-	order := make([]string, 0, len(metas))
-	for _, meta := range metas {
-		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideJSONPath(meta.ID)))
-		var legacy slidejson.SlideJSON
-		raw, readErr := os.ReadFile(path)
-		if readErr == nil {
-			var already blueprint.Slide
-			if json.Unmarshal(raw, &already) == nil && already.SchemaVersion == blueprint.SchemaVersion {
-				slides[meta.ID] = already
-				order = append(order, meta.ID)
-				continue
-			}
-			_ = atomicWrite(filepath.Join(filepath.Dir(path), "slide.legacy.json"), raw)
-			_ = json.Unmarshal(raw, &legacy)
-		}
-		title := firstNonEmpty(legacy.Title, meta.Title, fmt.Sprintf("第 %d 页", meta.Idx+1))
-		summary := firstNonEmpty(legacy.ContentIntent, legacy.Subtitle, title)
-		description := "使用清晰的信息层级表达本页核心信息"
-		if legacy.ChartIntent != nil {
-			description = strings.TrimSpace(legacy.ChartIntent.Type + " " + legacy.ChartIntent.DataHint)
-		}
-		role := "context"
-		if meta.Idx == 0 {
-			role = "cover"
-		}
-		slide := blueprint.Slide{
-			SchemaVersion: blueprint.SchemaVersion, Revision: 1, SlideID: meta.ID,
-			SectionID: section.ID, Role: role, Title: title, KeyMessage: summary,
-			Content:      blueprint.Content{Summary: summary, Points: nonNil(legacy.Bullets)},
-			VisualIntent: blueprint.VisualIntent{Archetype: firstNonEmpty(legacy.Layout, meta.Layout, "content"), Description: description, AssetQueries: []string{}},
-			SpeakerNotes: legacy.Notes, CreatedAt: now, UpdatedAt: now,
-		}
-		if err := atomicWrite(path, mustJSON(slide)); err != nil {
-			return err
-		}
-		slides[meta.ID] = slide
-		order = append(order, meta.ID)
-		if err := s.store.UpdateSlideRevisions(context.Background(), meta.ID, 1, meta.PresentationRevision, meta.SourceDeckRevision, meta.SourceBlueprintRevision, meta.SourceDesignRevision); err != nil {
-			return err
-		}
-	}
-	deck := blueprint.Deck{
-		SchemaVersion: blueprint.SchemaVersion, Revision: 1, ProjectID: project.ID, Title: project.Title,
-		Goal: project.Title, Audience: "待明确", Language: "zh-CN", CoreThesis: project.Title,
-		NarrativeArc: "背景 → 核心内容 → 结论", Sections: []blueprint.Section{section},
-		SlideOrder: order, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := blueprint.ValidateDeck(deck, slides); err != nil {
-		return err
-	}
-	if err := atomicWrite(deckPath, mustJSON(deck)); err != nil {
-		return err
-	}
-	designPath := filepath.Join(project.WorkDir, "design", "design-spec.json")
-	if raw, err := os.ReadFile(designPath); err == nil {
-		_ = atomicWrite(filepath.Join(project.WorkDir, "design", "design-spec.legacy.json"), raw)
-	}
-	design := defaultDesign()
-	if err := atomicWrite(designPath, mustJSON(design)); err != nil {
-		return err
-	}
-	return s.store.UpdateProjectRevisions(context.Background(), project.ID, 1, 1)
-}
-
 func (s *BlueprintService) read(project model.Project, metas []model.Slide) (blueprint.ProjectView, error) {
 	var deck blueprint.Deck
 	if err := readJSON(filepath.Join(project.WorkDir, "deck.json"), &deck); err != nil {
@@ -270,13 +178,17 @@ func (s *BlueprintService) read(project model.Project, metas []model.Slide) (blu
 func defaultDesign() blueprint.DesignSpec {
 	return blueprint.DesignSpec{
 		SchemaVersion: blueprint.SchemaVersion, Revision: 1,
-		Canvas:     map[string]any{"width": 1280, "height": 720, "ratio": "16:9"},
-		Palette:    []string{"#111827", "#ffffff", "#2563eb"},
-		Typography: map[string]any{"heading": "Inter, sans-serif", "body": "Inter, sans-serif"},
-		Spacing:    map[string]any{"unit": 8}, Radius: map[string]any{"card": 16},
-		Shadows:      map[string]any{"card": "0 12px 36px rgba(15,23,42,.12)"},
-		LayoutSystem: map[string]any{"grid": "12-col", "rhythm": "generous", "density": "medium"},
-		Signature:    "minimal geometric accent", Motion: map[string]any{"policy": "restrained"},
+		Canvas:  blueprint.CanvasSpec{Width: 1280, Height: 720, Ratio: "16:9"},
+		Palette: []string{"#111827", "#ffffff", "#2563eb"},
+		Typography: blueprint.TypographySpec{
+			Display: blueprint.FontSpec{Family: "Inter, sans-serif", Weight: 700},
+			Body:    blueprint.FontSpec{Family: "Inter, sans-serif", Weight: 400},
+			Utility: blueprint.FontSpec{Family: "Inter, sans-serif", Weight: 500},
+		},
+		Spacing: blueprint.SpacingSpec{Unit: 8}, Radius: blueprint.RadiusSpec{Card: 16},
+		Shadows:      blueprint.ShadowSpec{Card: "0 12px 36px rgba(15,23,42,.12)"},
+		LayoutSystem: blueprint.LayoutSystem{Grid: "12-col", Rhythm: "generous", Density: "medium"},
+		Signature:    "minimal geometric accent", Motion: blueprint.MotionSpec{Policy: "restrained"},
 	}
 }
 

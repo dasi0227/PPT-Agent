@@ -15,8 +15,8 @@ describe('DeckNavigator', () => {
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', idx: 0, layout: 'cover', title: '市场分析', html_path: '/a.html', json_path: '/a.json', current_version: 1, order: 10, outline_dirty: false },
-          { id: 's2', project_id: 'p1', idx: 1, layout: 'content', title: '增长趋势', html_path: '/b.html', json_path: '/b.json', current_version: 1, order: 20, outline_dirty: true },
+          { id: 's1', project_id: 'p1', position: 0, layout: 'cover', title: '市场分析', html_path: '/a.html', json_path: '/a.json', current_version: 1 },
+          { id: 's2', project_id: 'p1', position: 1, layout: 'content', title: '增长趋势', html_path: '/b.html', json_path: '/b.json', current_version: 1 },
         ]
       },
       loadingProjects: false

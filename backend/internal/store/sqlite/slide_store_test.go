@@ -33,8 +33,8 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	ctx := context.Background()
 
 	slides := []model.Slide{
-		{ID: "s0", ProjectID: "p1", Idx: 0, Layout: "cover", Title: "封面", JSONPath: "slides/000/slide.json", HTMLPath: "slides/000/index.html"},
-		{ID: "s1", ProjectID: "p1", Idx: 1, Layout: "thanks", Title: "谢谢", JSONPath: "slides/001/slide.json", HTMLPath: "slides/001/index.html"},
+		{ID: "s0", ProjectID: "p1", Position: 0, Layout: "cover", Title: "封面", JSONPath: "slides/s0/slide.json", HTMLPath: "slides/s0/index.html"},
+		{ID: "s1", ProjectID: "p1", Position: 1, Layout: "thanks", Title: "谢谢", JSONPath: "slides/s1/slide.json", HTMLPath: "slides/s1/index.html"},
 	}
 	if err := s.ReplaceSlides(ctx, "p1", slides); err != nil {
 		t.Fatalf("replace: %v", err)
@@ -48,11 +48,10 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	}
 
 	// 幂等替换：再次以 3 页替换，旧的被清掉。
-	three := append(slides, model.Slide{ID: "s2", ProjectID: "p1", Idx: 2, Layout: "cta", Title: "行动", JSONPath: "slides/002/slide.json", HTMLPath: "x"})
-	// idx 需唯一：重排为 0,1,2。
-	three[1].Idx = 2
+	three := append(slides, model.Slide{ID: "s2", ProjectID: "p1", Position: 2, Layout: "cta", Title: "行动", JSONPath: "slides/s2/slide.json", HTMLPath: "x"})
+	three[1].Position = 2
 	three[1].Layout = "cta"
-	three[2].Idx = 1
+	three[2].Position = 1
 	three[2].Layout = "bullets"
 	if err := s.ReplaceSlides(ctx, "p1", three); err != nil {
 		t.Fatalf("replace2: %v", err)
@@ -69,8 +68,8 @@ func TestGetSlideByID(t *testing.T) {
 	ctx := context.Background()
 
 	slides := []model.Slide{
-		{ID: "s0", ProjectID: "p1", Idx: 0, Layout: "cover", Title: "封面", JSONPath: "slides/000/slide.json", HTMLPath: "slides/000/index.html"},
-		{ID: "s1", ProjectID: "p1", Idx: 1, Layout: "thanks", Title: "谢谢", JSONPath: "slides/001/slide.json", HTMLPath: "slides/001/index.html"},
+		{ID: "s0", ProjectID: "p1", Position: 0, Layout: "cover", Title: "封面", JSONPath: "slides/s0/slide.json", HTMLPath: "slides/s0/index.html"},
+		{ID: "s1", ProjectID: "p1", Position: 1, Layout: "thanks", Title: "谢谢", JSONPath: "slides/s1/slide.json", HTMLPath: "slides/s1/index.html"},
 	}
 	if err := s.ReplaceSlides(ctx, "p1", slides); err != nil {
 		t.Fatalf("replace: %v", err)
@@ -80,7 +79,7 @@ func TestGetSlideByID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get slide: %v", err)
 	}
-	if got.Idx != 1 || got.ProjectID != "p1" || got.HTMLPath != "slides/001/index.html" {
+	if got.Position != 1 || got.ProjectID != "p1" || got.HTMLPath != "slides/s1/index.html" {
 		t.Fatalf("unexpected slide: %+v", got)
 	}
 
@@ -96,7 +95,7 @@ func TestVersionNoMonotonic(t *testing.T) {
 	ctx := context.Background()
 
 	for want := 0; want < 3; want++ {
-		no, err := s.NextVersionNo(ctx, "project", "p1")
+		no, err := s.NextVersionNo(ctx, "blueprint_deck", "p1")
 		if err != nil {
 			t.Fatalf("next: %v", err)
 		}
@@ -104,13 +103,13 @@ func TestVersionNoMonotonic(t *testing.T) {
 			t.Fatalf("want version %d, got %d", want, no)
 		}
 		if err := s.CreateVersion(ctx, model.Version{
-			ID: "v" + itoaLocal(no), TargetType: "project", TargetID: "p1", VersionNo: no,
-			SnapshotPath: "versions/project/v" + itoaLocal(no) + ".json", CreatedAt: 1,
+			ID: "v" + itoaLocal(no), TargetType: "blueprint_deck", TargetID: "p1", VersionNo: no,
+			SnapshotPath: "versions/blueprint-deck/v" + itoaLocal(no) + ".json", CreatedAt: 1,
 		}); err != nil {
 			t.Fatalf("create version: %v", err)
 		}
 	}
-	vs, err := s.ListVersions(ctx, "project", "p1")
+	vs, err := s.ListVersions(ctx, "blueprint_deck", "p1")
 	if err != nil {
 		t.Fatalf("list versions: %v", err)
 	}
@@ -132,12 +131,14 @@ func TestSetProjectStatus(t *testing.T) {
 	}
 }
 
-func TestSlideOrderAndDirtyRoundTrip(t *testing.T) {
+func TestSlideRevisionMetadataRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
 	ctx := context.Background()
 	err := s.ReplaceSlides(ctx, "p1", []model.Slide{
-		{ID: "s1", ProjectID: "p1", Order: 10, OutlineDirty: true, Layout: "cover", Title: "A",
+		{ID: "s1", ProjectID: "p1", Position: 10, Layout: "cover", Title: "A",
+			BlueprintRevision: 2, PresentationRevision: 3, SourceDeckRevision: 1,
+			SourceBlueprintRevision: 2, SourceDesignRevision: 1,
 			JSONPath: "slides/s1/slide.json", HTMLPath: "slides/s1/index.html"},
 	})
 	if err != nil {
@@ -147,18 +148,18 @@ func TestSlideOrderAndDirtyRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Order != 10 || !got.OutlineDirty {
+	if got.Position != 10 || got.BlueprintRevision != 2 || got.PresentationRevision != 3 {
 		t.Fatalf("round trip lost fields: %+v", got)
 	}
 }
 
-func TestListSlidesOrderedByOrder(t *testing.T) {
+func TestListSlidesOrderedByPosition(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
 	ctx := context.Background()
 	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{
-		{ID: "b", ProjectID: "p1", Idx: 0, Order: 20, Layout: "content", Title: "B"},
-		{ID: "a", ProjectID: "p1", Idx: 1, Order: 10, Layout: "cover", Title: "A"},
+		{ID: "b", ProjectID: "p1", Position: 20, Layout: "content", Title: "B"},
+		{ID: "a", ProjectID: "p1", Position: 10, Layout: "cover", Title: "A"},
 	})
 	got, _ := s.ListSlides(ctx, "p1")
 	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "b" {
@@ -166,19 +167,19 @@ func TestListSlidesOrderedByOrder(t *testing.T) {
 	}
 }
 
-func TestSetOutlineDirtyAndUpdateMeta(t *testing.T) {
+func TestUpdateMetaAndRevisions(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
 	ctx := context.Background()
-	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1", Order: 10, Layout: "cover", Title: "A"}})
-	if err := s.SetOutlineDirty(ctx, "s1", true); err != nil {
-		t.Fatal(err)
-	}
+	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1", Position: 10, Layout: "cover", Title: "A"}})
 	if err := s.UpdateSlideMeta(ctx, "s1", "B", "content"); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.UpdateSlideRevisions(ctx, "s1", 2, 3, 1, 2, 1); err != nil {
+		t.Fatal(err)
+	}
 	got, _ := s.GetSlide(ctx, "s1")
-	if !got.OutlineDirty || got.Title != "B" || got.Layout != "content" {
+	if got.Title != "B" || got.Layout != "content" || got.BlueprintRevision != 2 || got.PresentationRevision != 3 {
 		t.Fatalf("got %+v", got)
 	}
 }
@@ -214,9 +215,9 @@ func TestInsertDeleteReorder(t *testing.T) {
 	seedProject(t, s)
 	ctx := context.Background()
 	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{
-		{ID: "a", ProjectID: "p1", Idx: 0, Order: 10, Layout: "cover", Title: "A"},
-		{ID: "b", ProjectID: "p1", Idx: 1, Order: 20, Layout: "thanks", Title: "B"}})
-	if err := s.InsertSlide(ctx, model.Slide{ID: "c", ProjectID: "p1", Idx: 2, Order: 15, Layout: "content", Title: "C"}); err != nil {
+		{ID: "a", ProjectID: "p1", Position: 10, Layout: "cover", Title: "A"},
+		{ID: "b", ProjectID: "p1", Position: 20, Layout: "thanks", Title: "B"}})
+	if err := s.InsertSlide(ctx, model.Slide{ID: "c", ProjectID: "p1", Position: 15, Layout: "content", Title: "C"}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	got, _ := s.ListSlides(ctx, "p1")

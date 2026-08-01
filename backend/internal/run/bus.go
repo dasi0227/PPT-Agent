@@ -29,12 +29,17 @@ func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
 	return &Bus{runID: runID, threadID: threadID, store: store, hw: hw, subscribers: map[int]chan model.Event{}}
 }
 
-// isWhitelistedForHistory 报告事件是否需要 append 到 <workdir>/history.jsonl（UX §2.2）。
-// 现调整为：thought/tool_call/tool_result/artifact 均需落盘，以支持前端刷新后的完整回放。
+// isWhitelistedForHistory keeps replayable Adaptive Runtime events while never
+// persisting hidden model reasoning.
 func isWhitelistedForHistory(evt model.EventType) bool {
 	switch evt {
-	case model.EventRunStarted, model.EventContextAssembled, model.EventToken, model.EventInfo, model.EventNeedsInput, model.EventDone, model.EventError,
-		model.EventToolCall, model.EventToolResult, model.EventArtifact:
+	case model.EventRunStarted, model.EventContextAssembled, model.EventStrategySelected,
+		model.EventPlanCreated, model.EventStageStarted, model.EventStageCompleted,
+		model.EventStepStarted, model.EventStepCompleted, model.EventStepFailed,
+		model.EventToolCalled, model.EventToolCompleted, model.EventVerificationCompleted,
+		model.EventRepairStarted, model.EventRepairCompleted, model.EventArtifactStaged,
+		model.EventArtifactCommitted, model.EventStatusSummary, model.EventNeedsInput,
+		model.EventRunCompleted, model.EventRunFailed, model.EventRunCanceled:
 		return true
 	}
 	return false
@@ -60,32 +65,29 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 	case model.EventContextAssembled:
 		entry.Turn = "agent"
 		entry.Type = "context_assembled"
-	case model.EventToken, model.EventInfo:
+	case model.EventStatusSummary:
 		entry.Turn = "agent"
 		entry.Type = "markdown"
-	case model.EventThought:
-		entry.Turn = "agent"
-		entry.Type = "thought"
-	case model.EventToolCall:
-		entry.Turn = "agent"
-		entry.Type = "tool_call"
-	case model.EventToolResult:
-		entry.Turn = "agent"
-		entry.Type = "tool_result"
-	case model.EventArtifact:
-		entry.Turn = "agent"
-		entry.Type = "artifact"
+		entry.Data = map[string]any{"text": data["summary"]}
 	case model.EventNeedsInput:
 		entry.Turn = "agent"
 		entry.Type = "needs_input"
-	case model.EventDone:
+	case model.EventRunCompleted:
 		entry.Turn = "agent"
 		entry.Type = "final_result"
-	case model.EventError:
+		entry.Data = map[string]any{"result": data["outcome"]}
+	case model.EventRunFailed, model.EventRunCanceled:
 		entry.Turn = "agent"
 		entry.Type = "error"
+		if outcome, ok := data["outcome"].(map[string]any); ok {
+			entry.Data = map[string]any{
+				"code": outcome["code"], "message": outcome["message"],
+				"status": outcome["status"],
+			}
+		}
 	default:
-		return HistoryEntry{}, false
+		entry.Turn = "agent"
+		entry.Type = string(e.Type)
 	}
 	return entry, true
 }
@@ -168,4 +170,10 @@ func (b *Bus) Close() {
 		delete(b.subscribers, id)
 		close(ch)
 	}
+}
+
+func (b *Bus) Terminated() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.terminated
 }

@@ -12,9 +12,9 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
-	"github.com/dasi0227/PPT-Agent/backend/internal/harness/tools"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
@@ -336,7 +336,7 @@ func TestAssetServiceRejectsEscapingPayloadPaths(t *testing.T) {
 
 func TestAssetDirectoryHelpersStayInsideSandbox(t *testing.T) {
 	root := t.TempDir()
-	sb, err := tools.NewSandbox(root)
+	sb, err := artifactfs.NewSandbox(root)
 	if err != nil {
 		t.Fatalf("sandbox: %v", err)
 	}

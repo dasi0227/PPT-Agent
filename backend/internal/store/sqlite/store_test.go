@@ -48,7 +48,7 @@ func TestForeignKeyEnforced(t *testing.T) {
 
 	// 插入引用不存在 project 的 slide，外键开启时必须失败。
 	err := s.db.Exec(
-		"INSERT INTO slides (id,project_id,idx,layout,json_path,html_path) VALUES (?,?,?,?,?,?)",
+		"INSERT INTO slides (id,project_id,position,layout,json_path,html_path) VALUES (?,?,?,?,?,?)",
 		"s1", "does-not-exist", 0, "cover", "a", "b",
 	).Error
 	if err == nil {
@@ -66,7 +66,7 @@ func TestCascadeDelete(t *testing.T) {
 		t.Fatalf("insert project: %v", err)
 	}
 	if err := s.db.Exec(
-		"INSERT INTO slides (id,project_id,idx,layout,json_path,html_path) VALUES (?,?,?,?,?,?)",
+		"INSERT INTO slides (id,project_id,position,layout,json_path,html_path) VALUES (?,?,?,?,?,?)",
 		"s1", "p1", 0, "cover", "a", "b",
 	).Error; err != nil {
 		t.Fatalf("insert slide: %v", err)

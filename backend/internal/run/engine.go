@@ -7,8 +7,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/harness"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 const lockTimeout = 30 * time.Second
@@ -36,15 +36,15 @@ func NewEngine(store Store, locks *LockManager, hw HistoryWriter, log *zap.Logge
 	return &Engine{store: store, locks: locks, hw: hw, log: log, actives: map[string]*active{}}
 }
 
-// Start 创建 Run（pending）并异步执行 runner。返回创建后的 Run 元数据。
+// Start 创建 Run（pending）并异步执行 canonical execution。返回创建后的 Run 元数据。
 // 每 project 锁在后台 goroutine 内获取：同 project 串行、跨 project 并行（ARCH-RUN-LOCK）。
-func (e *Engine) Start(ctx context.Context, r model.Run, runner Runner) (model.Run, error) {
-	return e.StartWithContext(ctx, r, runner, nil)
+func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (model.Run, error) {
+	return e.StartWithContext(ctx, r, execution, nil)
 }
 
 // StartWithContext atomically establishes the Run row and its auditable ContextManifest
-// before any runner code executes.
-func (e *Engine) StartWithContext(ctx context.Context, r model.Run, runner Runner, manifest *model.RunContext) (model.Run, error) {
+// before any execution code runs.
+func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Execution, manifest *model.RunContext) (model.Run, error) {
 	now := time.Now().Unix()
 	r.Status = model.RunPending
 	r.CreatedAt = now
@@ -79,11 +79,11 @@ func (e *Engine) StartWithContext(ctx context.Context, r model.Run, runner Runne
 	e.actives[r.ID] = a
 	e.mu.Unlock()
 
-	go e.execute(runCtx, a, runner)
+	go e.execute(runCtx, a, execution)
 	return r, nil
 }
 
-func (e *Engine) execute(ctx context.Context, a *active, runner Runner) {
+func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	defer func() {
 		a.bus.Close()
 		e.mu.Lock()
@@ -95,38 +95,47 @@ func (e *Engine) execute(ctx context.Context, a *active, runner Runner) {
 	release, err := e.locks.Acquire(ctx, a.run.ProjectID, lockTimeout)
 	if err != nil {
 		e.setStatus(ctx, a.run.ID, model.RunFailed)
-		_ = a.bus.Emit(ctx, model.EventError, harness.ErrorPayload{Code: "LOCK_TIMEOUT", Message: err.Error()})
+		_ = a.bus.Emit(ctx, model.EventRunFailed, workflow.TerminalEvent{
+			Outcome: workflow.StructuredOutcome{
+				Status: workflow.StatusFailed,
+				Code:   "LOCK_TIMEOUT", Message: err.Error(),
+			},
+		})
 		return
 	}
 	defer release()
 
 	e.setStatus(ctx, a.run.ID, model.RunRunning)
 
-	em := &harnessEmitter{ctx: ctx, bus: a.bus}
-	cp := &harnessCheckpoint{queue: a.queue}
+	em := &workflowEmitter{ctx: ctx, bus: a.bus}
+	cp := &inputCheckpoint{queue: a.queue}
 	prompter := &checkpoint{engine: e, runID: a.run.ID, bus: a.bus, queue: a.queue}
-	outcome := runner.Run(ctx, em, cp, prompter)
+	outcome := execution.Run(ctx, em, cp, prompter)
 
 	e.finish(ctx, a, outcome)
 }
 
-// finish 依据 harness outcome 发唯一终态事件并落状态（API-SSE-002）。
-func (e *Engine) finish(ctx context.Context, a *active, outcome harness.Outcome) {
+// finish persists the scheduler status. The workflow normally emits its own
+// terminal event; the guarded fallback below covers custom test executions.
+func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.StructuredOutcome) {
 	switch outcome.Status {
-	case harness.OutcomeFinished:
+	case workflow.StatusCompleted:
 		e.setStatus(ctx, a.run.ID, model.RunDone)
-		// 结构化交付优先（V2-M5 Stage 5）；缺省回退 {summary}（兼容 edit/outline/command）。
-		result := outcome.Result
-		if result == nil {
-			result = map[string]any{"summary": outcome.Summary}
+		if !a.bus.Terminated() {
+			_ = a.bus.Emit(ctx, model.EventRunCompleted, workflow.TerminalEvent{
+				Outcome: outcome,
+			})
 		}
-		_ = a.bus.Emit(ctx, model.EventDone, harness.DonePayload{Result: result})
-	case harness.OutcomeCanceled:
+	case workflow.StatusCanceled:
 		e.setStatus(ctx, a.run.ID, model.RunCanceled)
-		_ = a.bus.Emit(ctx, model.EventError, harness.ErrorPayload{Code: harness.CodeCanceled, Message: "run canceled"})
+		if !a.bus.Terminated() {
+			_ = a.bus.Emit(ctx, model.EventRunCanceled, workflow.TerminalEvent{Outcome: outcome})
+		}
 	default:
 		e.setStatus(ctx, a.run.ID, model.RunFailed)
-		_ = a.bus.Emit(ctx, model.EventError, harness.ErrorPayload{Code: outcome.Code, Message: outcome.Message})
+		if !a.bus.Terminated() {
+			_ = a.bus.Emit(ctx, model.EventRunFailed, workflow.TerminalEvent{Outcome: outcome})
+		}
 	}
 }
 

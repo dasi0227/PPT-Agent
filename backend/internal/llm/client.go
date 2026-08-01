@@ -22,7 +22,7 @@ type Message struct {
 	ToolCalls  []ToolCall
 }
 
-// ToolSchema 是注册给 LLM 的 function schema（动态门控后的子集，ARCH-HARNESS-001）。
+// ToolSchema is one Runtime-disclosed function schema.
 type ToolSchema struct {
 	Name        string
 	Description string
@@ -46,7 +46,7 @@ type StreamChunk struct {
 	Err  error
 }
 
-// ToolCallRequest 携带 harness 动态裁剪后的工具集。
+// ToolCallRequest carries the strategy/stage/step-scoped tool subset.
 type ToolCallRequest struct {
 	Messages []Message
 	Tools    []ToolSchema
@@ -59,10 +59,9 @@ type ToolCall struct {
 	Args map[string]any
 }
 
-// ToolCallResponse 是 CallTool 的结果：要么是工具调用，要么是纯文本/finish。
-// Thought 是本轮推理文本（ReAct Reason），投影为 SSE thought 事件。
+// ToolCallResponse contains either a tool call or user-visible text. Hidden
+// reasoning is neither represented nor persisted.
 type ToolCallResponse struct {
-	Thought  string
 	ToolCall *ToolCall
 	Text     string
 }
