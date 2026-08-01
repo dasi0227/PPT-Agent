@@ -24,7 +24,7 @@ import { projectsApi } from '../api/projects';
 
 function reset() {
   calls.length = 0;
-  useProjectStore.setState({ projects: [], openProjectIds: [], activeProjectId: null, pendingNewProject: false, slidesByProjectId: {}, loadingProjects: false });
+  useProjectStore.setState({ projects: [], openProjectIds: [], activeProjectId: null, slidesByProjectId: {}, loadingProjects: false });
   useThreadStore.setState({ threadsByProjectId: {}, openThreadIdsByProjectId: {}, activeThreadIdByProjectId: {} });
   useRunStore.setState({ sessions: {} });
 }
@@ -45,32 +45,13 @@ describe('projectStore v6', () => {
     expect(st.activeProjectId).toBe('p1');
   });
 
-  it('startPendingNewProject creates a sentinel id without POSTing', () => {
-    useProjectStore.getState().startPendingNewProject();
-    expect(calls.filter((c) => c.fn === 'create')).toHaveLength(0);
-    const st = useProjectStore.getState();
-    expect(st.pendingNewProject).toBe(true);
-    expect(st.activeProjectId).toBe('new-pending');
-    expect(st.openProjectIds).toContain('new-pending');
-  });
-
-  it('cancelPendingNewProject cleans up new-pending', () => {
-    useProjectStore.getState().startPendingNewProject();
-    useProjectStore.getState().cancelPendingNewProject();
-    const st = useProjectStore.getState();
-    expect(st.pendingNewProject).toBe(false);
-    expect(st.openProjectIds).not.toContain('new-pending');
-    expect(st.activeProjectId).toBeNull();
-  });
-
-  it('finalizePendingNewProject replaces new-pending with real id', () => {
-    useProjectStore.getState().startPendingNewProject();
-    useProjectStore.getState().finalizePendingNewProject('realP_1');
-    const st = useProjectStore.getState();
-    expect(st.pendingNewProject).toBe(false);
-    expect(st.openProjectIds).toContain('realP_1');
-    expect(st.openProjectIds).not.toContain('new-pending');
-    expect(st.activeProjectId).toBe('realP_1');
+  it('createProject creates only a real project', async () => {
+    const project = await useProjectStore.getState().createProject('发布会方案', '', 10, 'zh-CN');
+    expect(calls.filter((c) => c.fn === 'create')).toEqual([
+      { fn: 'create', args: ['发布会方案', '', 10, 'zh-CN'] },
+    ]);
+    expect(project.id).toBe('realP_1');
+    expect(useProjectStore.getState().projects.map((item) => item.id)).toEqual(['realP_1']);
   });
 
   it('renameProject PATCHes and updates in-place', async () => {
@@ -80,13 +61,6 @@ describe('projectStore v6', () => {
     await useProjectStore.getState().renameProject('A', 'New');
     expect(calls.find(c => c.fn === 'patch')).toBeTruthy();
     expect(useProjectStore.getState().projects[0].title).toBe('New');
-  });
-
-  it('deleteProject on new-pending cancels it', async () => {
-    useProjectStore.getState().startPendingNewProject();
-    await useProjectStore.getState().deleteProject('new-pending');
-    expect(calls.filter((c) => c.fn === 'delete')).toHaveLength(0);
-    expect(useProjectStore.getState().activeProjectId).toBeNull();
   });
 
   it('deleteProject DELETEs and cleans up, switching neighbor', async () => {

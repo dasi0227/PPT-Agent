@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PPT Agent · Architecture Learning Guide</title>
+  <style>
+    :root { --ink:#172033; --muted:#60708b; --paper:#f5f7fb; --panel:#fff; --line:#dce4f0; --nav:#111a2b; --blue:#3b70e6; --teal:#0c9e91; --violet:#7657d8; --amber:#d78217; --red:#ce4b63; --shadow:0 12px 35px rgba(27,43,75,.08); }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:Inter,"PingFang SC","Microsoft YaHei",system-ui,sans-serif; line-height:1.65; }
+    .shell { display:grid; grid-template-columns:270px minmax(0,1fr); min-height:100vh; }
+    aside { position:sticky; top:0; height:100vh; overflow:auto; padding:25px 17px; background:var(--nav); color:#d9e4fa; }
+    .brand { padding:0 10px 18px; border-bottom:1px solid #2c3a55; margin-bottom:16px; }
+    .eyebrow { margin:0 0 4px; font-size:11px; font-weight:800; letter-spacing:.14em; color:#81a7ff; }
+    .brand h1 { font-size:19px; line-height:1.3; margin:0; color:white; }
+    .brand p { margin:8px 0 0; color:#9dadca; font-size:12px; line-height:1.55; }
+    nav a { display:block; color:#b9c7df; text-decoration:none; border-radius:8px; padding:8px 10px; margin:2px 0; font-size:13px; }
+    nav a:hover { background:#24324b; color:white; }
+    nav .number { display:inline-block; width:27px; color:#7c9ef0; font-size:11px; font-weight:800; }
+    .side-note { margin:18px 8px 0; padding:12px; border:1px solid #304260; border-radius:9px; font-size:11px; color:#9badc8; }
+    main { max-width:1230px; width:100%; padding:42px clamp(25px,5vw,72px) 80px; }
+    .hero { background:linear-gradient(135deg,#14213d,#264e91 68%,#137d85); color:white; padding:clamp(28px,5vw,54px); border-radius:20px; box-shadow:var(--shadow); }
+    .hero h2 { font-size:clamp(28px,4vw,46px); line-height:1.15; letter-spacing:-.04em; margin:4px 0 14px; max-width:800px; }
+    .hero p { max-width:760px; color:#d9e8ff; margin:0; font-size:16px; }
+    .tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:21px; }
+    .tag { padding:5px 10px; background:rgba(255,255,255,.13); border:1px solid rgba(255,255,255,.24); border-radius:99px; font-size:12px; }
+    section { margin-top:56px; scroll-margin-top:24px; }
+    h2.section-title { font-size:26px; letter-spacing:-.03em; margin:0 0 8px; }
+    .lead { margin:0 0 22px; color:var(--muted); max-width:860px; }
+    .callout { background:#eaf1ff; border-left:4px solid var(--blue); border-radius:7px; padding:14px 17px; color:#30425f; margin:20px 0; }
+    .grid { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:16px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:0 3px 12px rgba(31,48,79,.03); }
+    .card h3 { font-size:17px; margin:0 0 8px; letter-spacing:-.02em; }
+    .card p:last-child { margin-bottom:0; }
+    .span-3 { grid-column:span 3; } .span-4 { grid-column:span 4; } .span-5 { grid-column:span 5; } .span-6 { grid-column:span 6; } .span-7 { grid-column:span 7; } .span-8 { grid-column:span 8; } .span-12 { grid-column:span 12; }
+    .label { display:block; color:var(--blue); font-size:11px; font-weight:800; letter-spacing:.09em; margin-bottom:6px; text-transform:uppercase; }
+    code { font-family:"SFMono-Regular",Consolas,monospace; font-size:.86em; background:#edf1f7; color:#3b4d6e; padding:2px 5px; border-radius:4px; overflow-wrap:anywhere; }
+    .flow { display:flex; align-items:stretch; gap:10px; overflow-x:auto; padding:9px 2px 15px; }
+    .node { min-width:142px; flex:1; border:1px solid var(--line); border-top:4px solid var(--blue); background:white; border-radius:10px; padding:12px; font-size:12px; box-shadow:0 3px 8px rgba(24,42,72,.04); }
+    .node.teal { border-top-color:var(--teal); } .node.violet { border-top-color:var(--violet); } .node.amber { border-top-color:var(--amber); } .node.red { border-top-color:var(--red); }
+    .node strong { display:block; color:#1d2b45; margin-bottom:3px; font-size:13px; }
+    .arrow { flex:0 0 auto; align-self:center; color:#91a2be; font-size:21px; }
+    .branch { display:grid; grid-template-columns:1.25fr 30px 1fr; gap:10px; align-items:center; padding:10px 0; }
+    .decision { background:#fff8e8; border:1px solid #eccb80; border-radius:10px; text-align:center; padding:15px 9px; font-weight:700; color:#6a4a11; font-size:13px; }
+    .routes { display:grid; gap:8px; }
+    .route { border-left:4px solid var(--blue); background:white; border:1px solid var(--line); border-left-width:4px; border-radius:8px; padding:9px 12px; font-size:12px; }
+    .route b { display:block; font-size:13px; }
+    .route:nth-child(2){border-left-color:var(--teal)} .route:nth-child(3){border-left-color:var(--violet)} .route:nth-child(4){border-left-color:var(--red)}
+    .module { border:1px solid var(--line); border-radius:14px; background:#fff; overflow:hidden; margin:16px 0; }
+    .module summary { cursor:pointer; list-style:none; padding:18px 20px; display:flex; align-items:center; gap:12px; }
+    .module summary::-webkit-details-marker { display:none; }
+    .module[open] summary { border-bottom:1px solid var(--line); background:#fbfcff; }
+    .module .index { background:#eaf1ff; color:#315dbb; border-radius:7px; padding:4px 7px; font-size:11px; font-weight:800; }
+    .module summary b { flex:1; font-size:16px; }
+    .module summary span:last-child { color:var(--muted); font-size:12px; }
+    .module-body { padding:20px; }
+    .facts { display:grid; grid-template-columns:110px 1fr; gap:8px 16px; margin:0 0 18px; font-size:13px; }
+    .facts dt { color:var(--muted); font-weight:700; } .facts dd { margin:0; }
+    .table-wrap { overflow:auto; background:white; border:1px solid var(--line); border-radius:11px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; min-width:700px; }
+    th,td { padding:11px 13px; vertical-align:top; text-align:left; border-bottom:1px solid var(--line); }
+    th { color:#52627d; background:#f7f9fd; font-size:11px; letter-spacing:.04em; text-transform:uppercase; } tr:last-child td { border-bottom:0; }
+    .steps { counter-reset:item; display:grid; gap:9px; padding:0; margin:0; }
+    .steps li { list-style:none; padding:11px 12px 11px 43px; position:relative; background:#fff; border:1px solid var(--line); border-radius:9px; font-size:13px; }
+    .steps li::before { counter-increment:item; content:counter(item); position:absolute; left:11px; top:10px; width:22px; height:22px; border-radius:50%; background:#eaf1ff; color:#315dbb; display:grid; place-items:center; font-weight:800; font-size:11px; }
+    .reading { display:grid; grid-template-columns:42px 1fr; gap:13px; margin-top:15px; }
+    .reading .n { width:30px; height:30px; border-radius:50%; background:var(--nav); color:white; display:grid; place-items:center; font-size:12px; font-weight:800; }
+    .reading p { margin:1px 0 0; color:var(--muted); font-size:13px; }
+    footer { margin-top:60px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); padding-top:18px; }
+    @media (max-width:900px) { .shell{display:block} aside{position:static;height:auto;padding:15px}.brand{padding-bottom:10px;margin-bottom:8px}nav{display:flex;overflow:auto;gap:4px}nav a{white-space:nowrap}.side-note{display:none} main{padding:26px 17px 55px}.span-3,.span-4,.span-5,.span-6,.span-7,.span-8{grid-column:span 12}.branch{grid-template-columns:1fr}.branch .arrow{display:none} }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <p class="eyebrow">CODEBASE LEARNING GUIDE</p>
+        <h1>PPT Agent<br>Architecture Map</h1>
+        <p>聚焦 Go 后端的 Agent Harness / Adaptive Workflow Runtime。</p>
+      </div>
+      <nav>
+        <a href="#overview"><span class="number">01</span>项目全景</a>
+        <a href="#concepts"><span class="number">02</span>先记住的概念</a>
+        <a href="#end-to-end"><span class="number">03</span>一次请求的旅程</a>
+        <a href="#module-map"><span class="number">04</span>模块职责地图</a>
+        <a href="#runtime"><span class="number">05</span>Adaptive Runtime</a>
+        <a href="#context"><span class="number">06</span>Context Engine</a>
+        <a href="#workflow"><span class="number">07</span>PEV 主循环</a>
+        <a href="#tools"><span class="number">08</span>Tools 与事务</a>
+        <a href="#run"><span class="number">09</span>Run 与事件流</a>
+        <a href="#storage"><span class="number">10</span>存储与产物</a>
+        <a href="#reading-order"><span class="number">11</span>阅读顺序</a>
+      </nav>
+      <div class="side-note">阅读方法：每一层先看“为什么存在”，再看输入/输出，最后沿着给出的源码入口验证。</div>
+    </aside>
+    <main>
+      <header class="hero">
+        <p class="eyebrow">THE CENTRAL IDEA</p>
+        <h2>这不是“让 LLM 直接写 PPT HTML”，而是让 LLM 在受控工作流里完成可验证的产物变更。</h2>
+        <p>系统把一次用户指令收敛为明确目标与约束，组装上下文，选择执行强度；对复杂变更采用 Plan → Execute → Verify → Repair → Commit 的闭环，并把整个过程持久化、可续传地投影给前端。</p>
+        <div class="tags"><span class="tag">Go + Gin</span><span class="tag">SQLite + Filesystem</span><span class="tag">LLM Tool Calling</span><span class="tag">SSE</span><span class="tag">Staging Transaction</span></div>
+      </header>
+
+      <section id="overview">
+        <h2 class="section-title">01 · 项目全景</h2>
+        <p class="lead">项目有两条主线：前端是工作台与事件消费者；后端负责把项目资料、模型推理和文件产物组织成一个可靠的运行时。学习时优先沿后端主线理解。</p>
+        <div class="flow">
+          <div class="node"><strong>React 前端</strong>创建项目 / Thread / Run；订阅 SSE；预览 HTML 幻灯片。</div><div class="arrow">→</div>
+          <div class="node teal"><strong>HTTP API</strong>把 REST 请求转换为 Service 调用；提供 SSE / HITL / Cancel。</div><div class="arrow">→</div>
+          <div class="node violet"><strong>Run + Context</strong>建立 Run，装配本次任务可见的 ContextPack。</div><div class="arrow">→</div>
+          <div class="node amber"><strong>Adaptive Runtime</strong>选择轻量回答、局部变更或完整 PEV Workflow。</div><div class="arrow">→</div>
+          <div class="node red"><strong>产物与状态</strong>Blueprint / Design / HTML、SQLite 元数据与事件历史。</div>
+        </div>
+        <div class="callout"><b>后端的边界：</b>模型并不直接操作任意文件。它只能看到当前 step 获准的工具；写入先进入 <code>.staging/&lt;runID&gt;</code>，验证和冲突检查通过后才提交到项目工作目录。</div>
+      </section>
+
+      <section id="concepts">
+        <h2 class="section-title">02 · 先记住的六个概念</h2>
+        <div class="grid">
+          <div class="card span-4"><span class="label">Task Contract</span><h3>WorkSpec</h3><p>一次 Run 的权威任务描述：用户指令、目标产物/层级、交互意图与选项。它先被校验，后续各层都以它为依据。</p></div>
+          <div class="card span-4"><span class="label">Bounded Context</span><h3>ContextPack</h3><p>不是“把仓库全塞给模型”。它按任务 profile 和 token 预算挑选 deck、目标页、设计、相关页、HTML 摘要、资产与记忆。</p></div>
+          <div class="card span-4"><span class="label">Routing Decision</span><h3>Strategy</h3><p>根据只读/修改、范围、关键词、物化状态等信号，在 respond、direct action、compact workflow、full PEV 之间选择。</p></div>
+          <div class="card span-4"><span class="label">Executable Contract</span><h3>WorkflowPlan</h3><p>将任务变成带目标、依赖、能力、验证器和预算的步骤集合；有确定性 fallback，LLM 规划失败不致使系统失控。</p></div>
+          <div class="card span-4"><span class="label">Controlled Agency</span><h3>Tool Selection</h3><p>每个步骤只暴露“这个 stage + strategy + capability + target scope”共同允许的工具，工具结果再反馈给模型。</p></div>
+          <div class="card span-4"><span class="label">Safe Write Boundary</span><h3>Transaction</h3><p>一组产物在 staging 区写入、校验和记录 hash；commit 前再次检查源文件没有变化，失败会恢复已写入文件。</p></div>
+        </div>
+      </section>
+
+      <section id="end-to-end">
+        <h2 class="section-title">03 · 一次用户请求的端到端旅程</h2>
+        <p class="lead">以“修改某一页 PPT HTML”为例。这里是理解全项目最重要的一张流程图。</p>
+        <ol class="steps">
+          <li><b>前端创建 Run：</b><code>POST /threads/{id}/runs</code> 传入 instruction、target、interaction。</li>
+          <li><b>RunService 规范任务：</b>加载 Thread 和 Project，补默认交互策略，校验 WorkSpec 与 slide 归属。</li>
+          <li><b>ContextAssembler 生成 ContextPack：</b>读取 Blueprint、Design、目标 HTML 摘要、资产和 Thread memory；记录 manifest 与预算。</li>
+          <li><b>run.Engine 建立外壳：</b>先持久化 Run 和 ContextManifest，再异步执行；同一 project 的 Run 通过锁串行。</li>
+          <li><b>AdaptiveRuntime 路由：</b>只读任务直接答复；简单局部变更走 direct action；更复杂的任务进入 Workflow Engine。</li>
+          <li><b>Workflow 执行：</b>计划、逐 step 受限 ReAct tool loop、校验、必要时 repair，最终提交 staging 中的变更。</li>
+          <li><b>事件驱动 UI：</b>每个阶段、工具调用、验证和产物提交都会进入 Bus → SQLite → SSE；断线时用 Last-Event-ID 补发。</li>
+        </ol>
+      </section>
+
+      <section id="module-map">
+        <h2 class="section-title">04 · 模块职责地图</h2>
+        <p class="lead">先用这张表建立目录感。下面的可展开卡片会给核心模块配独立流程图。</p>
+        <div class="table-wrap"><table><thead><tr><th>模块</th><th>职责</th><th>依赖 / 产出</th><th>优先源码入口</th></tr></thead><tbody>
+          <tr><td><code>cmd/server</code></td><td>Composition Root：配置、依赖注入、seed、HTTP Server 装配。</td><td>把所有后端模块连起来。</td><td><code>main.go</code>、<code>wire.go</code>、<code>providers.go</code></td></tr>
+          <tr><td><code>httpapi</code></td><td>Gin Router、请求/响应、SSE 协议、API 错误映射。</td><td>调用 service；把 event 写给浏览器。</td><td><code>router.go</code>、<code>run_handler.go</code></td></tr>
+          <tr><td><code>service</code></td><td>应用层编排；把 API 意图转换为领域操作。</td><td>创建 Run、装配 Context、提交 workflow 元数据。</td><td><code>run.go</code>、<code>workflow_commit.go</code></td></tr>
+          <tr><td><code>model</code></td><td>跨层共享的领域契约。</td><td>WorkSpec、Run、Event、版本和物化状态。</td><td><code>work_spec.go</code>、<code>run.go</code>、<code>event.go</code></td></tr>
+          <tr><td><code>contextengine</code></td><td>基于任务与预算组装模型上下文，维护引用和 Thread memory。</td><td>输出 <code>ContextPack</code> / Manifest。</td><td><code>assembler.go</code>、<code>compiler.go</code></td></tr>
+          <tr><td><code>workflow</code></td><td>Agent Harness：策略路由、PEV 状态机、工具授权、LLM tool loop、验证、事务。</td><td>输出 StructuredOutcome 与领域事件。</td><td><code>adaptive.go</code>、<code>engine.go</code>、<code>executor.go</code></td></tr>
+          <tr><td><code>run</code></td><td>Runtime 外壳：异步 Run、项目锁、输入队列、取消、事件持久化与扇出。</td><td>连接 workflow 与 SSE。</td><td><code>engine.go</code>、<code>bus.go</code></td></tr>
+          <tr><td><code>store/sqlite</code></td><td>SQLite 基础设施实现。</td><td>项目、线程、Run、事件、slides、assets 的持久化。</td><td><code>store.go</code>、<code>run_store.go</code></td></tr>
+          <tr><td><code>blueprint</code> / <code>designsystem</code></td><td>PPT 结构和设计约束的校验层。</td><td>保证 deck/slide/design spec 合法。</td><td><code>validate.go</code>、<code>lint.go</code></td></tr>
+          <tr><td><code>asset</code> / <code>artifactfs</code> / <code>llm</code></td><td>资产 seed/校验、文件 sandbox、LLM client 适配器。</td><td>提供受控外部能力。</td><td><code>seeder.go</code>、<code>sandbox.go</code>、<code>client.go</code></td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section id="runtime">
+        <h2 class="section-title">05 · Adaptive Runtime：先决定要不要启动完整 Harness</h2>
+        <p class="lead"><code>workflow.AdaptiveRuntime</code> 是总入口。它不是无条件执行长链路，而是先通过 <code>ExecutionStrategyRouter</code> 做成本/风险/复杂度权衡。</p>
+        <div class="branch">
+          <div class="decision">ContextPack + WorkSpec<br>目标、意图、范围、关键词、物化状态</div><div class="arrow">→</div>
+          <div class="routes">
+            <div class="route"><b>respond</b>咨询 / 只读：给模型只读上下文和分析 step，不生成正式 WorkflowPlan。</div>
+            <div class="route"><b>direct_action</b>明确、低风险的单页局部修改：单 step + staging + 必要校验。若发现范围扩大或未产生变更，会升级。</div>
+            <div class="route"><b>compact_workflow</b>单页结构、资产或需要重建的中等复杂任务：使用轻量计划与完整 PEV 安全闭环。</div>
+            <div class="route"><b>full_pev</b>整套、多页、全局、重排等高影响任务：跨产物计划、执行和验证。</div>
+          </div>
+        </div>
+        <div class="module" open><summary><span class="index">05A</span><b>策略选择流程</b><span><code>workflow/strategy.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Intent</strong>consult？</div><div class="arrow">→</div><div class="node teal"><strong>只读</strong>respond</div><div class="arrow">或</div><div class="node"><strong>修改任务</strong>检查范围和 target</div><div class="arrow">→</div><div class="node violet"><strong>高影响</strong>deck / 多页 / 重排<br>full PEV</div><div class="arrow">→</div><div class="node amber"><strong>局部</strong>短且明确？<br>direct action</div><div class="arrow">否则</div><div class="node red"><strong>不确定 / 结构变更</strong>compact workflow</div>
+        </div><div class="callout"><b>重要细节：</b>direct action 并非“绕开安全机制”。它仍创建 Transaction 并校验；若工具报告 <code>SCOPE_EXPANSION_REQUIRED</code>，或 ChangeSet 为零，它会放弃 staging 并升级为 compact workflow。</div></div></div>
+      </section>
+
+      <section id="context">
+        <h2 class="section-title">06 · Context Engine：模型看到的是“任务相关的受预算上下文”</h2>
+        <p class="lead"><code>ContextAssembler.Assemble</code> 是运行前的准备阶段。它把文件、数据库和历史记录整理为可追溯的 ContextPack，并生成 ContextManifest 作为审计凭据。</p>
+        <div class="module" open><summary><span class="index">06A</span><b>上下文装配流程</b><span><code>contextengine/assembler.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Validate</strong>WorkSpec、Project ID、budget</div><div class="arrow">→</div><div class="node teal"><strong>Resolve Profile</strong>按 blueprint / presentation、deck / slide 决定装配策略</div><div class="arrow">→</div><div class="node violet"><strong>Load Canonical Data</strong>Deck、all slides、DesignSpec；先验证蓝图一致性</div><div class="arrow">→</div><div class="node amber"><strong>Add Relevant Data</strong>目标页、相邻页、HTML summary/ref、assets、memory、recent turns</div><div class="arrow">→</div><div class="node red"><strong>Budget + Manifest</strong>按优先级丢弃可选段，计算 token / hash / refs</div>
+        </div>
+        <div class="grid"><div class="card span-6"><h3>为什么需要 ContextManifest？</h3><p>它记录每段上下文来自哪里、版本、hash、token 估算、选择理由、是否被丢弃。这使一次模型执行可以复盘：模型“当时到底看到了什么”。</p></div><div class="card span-6"><h3>为什么有 ContextRef？</h3><p>大 HTML 不一定直接进入 prompt。它可被降级为摘要和不透明引用，模型需要细节时才通过 <code>read_context_ref</code> 在剩余预算内读取。</p></div></div></div></div>
+      </section>
+
+      <section id="workflow">
+        <h2 class="section-title">07 · PEV 主循环：真正的 Agent Harness</h2>
+        <p class="lead">完整 Runtime 的可靠性来自一个显式状态机，而不是依赖模型“记得下一步应该做什么”。核心在 <code>workflow.Engine.Run</code>。</p>
+        <div class="module" open><summary><span class="index">07A</span><b>Workflow 状态机与反馈回路</b><span><code>workflow/engine.go</code> + <code>domain.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Normalize</strong>校验 WorkSpec</div><div class="arrow">→</div><div class="node teal"><strong>Context</strong>确认 Manifest 已存在</div><div class="arrow">→</div><div class="node violet"><strong>Plan</strong>Playbook fallback<br>+ optional planner</div><div class="arrow">→</div><div class="node amber"><strong>Execute</strong>逐 step 执行<br>依赖 / budget 检查</div><div class="arrow">→</div><div class="node"><strong>Verify</strong>聚合验证器结果</div><div class="arrow">→</div><div class="node red"><strong>Repair?</strong>阻塞 issue 且尚有轮次</div><div class="arrow">↺</div><div class="node teal"><strong>Commit → Deliver</strong>提交、输出 outcome</div>
+        </div>
+        <div class="grid"><div class="card span-4"><h3>Plan</h3><p><code>PlaybookFor</code> 根据 WorkSpec 选择 playbook，生成 fallback plan；可选 LLM planner 的产物必须通过 <code>ValidatePlan</code>，否则回退。</p></div><div class="card span-4"><h3>Execute</h3><p>按依赖顺序运行 steps。每一步带 targets、capabilities、verifiers、budget；每一步都发 started/completed/failed 事件。</p></div><div class="card span-4"><h3>Verify / Repair</h3><p>Issue 的 <code>error</code> 与 <code>fatal</code> 会阻止提交。系统最多修复两轮，并且要求阻塞问题数确实下降，否则停止而不是盲目循环。</p></div></div></div></div>
+        <div class="module"><summary><span class="index">07B</span><b>一个 Step 内部的 ReAct Tool Loop</b><span><code>workflow/executor.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Compile Prompt</strong>ContextPack + 当前 step system prompt</div><div class="arrow">→</div><div class="node teal"><strong>Expose Schemas</strong>仅选中的工具 schema</div><div class="arrow">→</div><div class="node violet"><strong>LLM Tool Call</strong>模型提出一个工具调用</div><div class="arrow">→</div><div class="node amber"><strong>Execute Tool</strong>参数、scope、transaction 受控</div><div class="arrow">→</div><div class="node red"><strong>Observation</strong>工具结果回灌为 tool message；直到 finish / 上限</div>
+        </div><div class="callout"><b>Harness 的关键约束：</b>单个 step 的模型循环有 <code>MaxStepTurns</code>（默认 12）和 <code>MaxToolFailures</code>（默认 3）。工具失败、上下文取消和预算超限都有明确退出路径。</div></div></div>
+      </section>
+
+      <section id="tools">
+        <h2 class="section-title">08 · Tools 与 Transaction：把模型的“能做什么”变成可检查的边界</h2>
+        <p class="lead">工具不是全局常驻菜单。<code>ToolSelector.Select</code> 会对 ToolRegistry 做多重筛选，只有满足所有条件的工具才会连同 schema 一起交给模型。</p>
+        <div class="module" open><summary><span class="index">08A</span><b>工具授权流程</b><span><code>workflow/tools.go</code> + <code>builtin_tools.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Registry</strong>注册 read / write / asset / finish 工具</div><div class="arrow">→</div><div class="node teal"><strong>Strategy Gate</strong>该策略能否使用？</div><div class="arrow">→</div><div class="node violet"><strong>Stage Gate</strong>execute / repair 阶段允许？</div><div class="arrow">→</div><div class="node amber"><strong>Capability + Risk</strong>step 声明的能力和风险政策允许？</div><div class="arrow">→</div><div class="node red"><strong>Scope Gate</strong>写入 artifact 必须是该 step 声明的 target</div>
+        </div>
+        <div class="grid"><div class="card span-6"><h3>典型读取能力</h3><p><code>read_context_ref</code> 按预算延迟读取上下文；<code>read_staged_artifact</code> 优先读取本次 staging 中的版本。</p></div><div class="card span-6"><h3>典型写入能力</h3><p><code>write_staged_slide_blueprint</code>、<code>write_staged_presentation</code>、<code>patch_staged_presentation</code> 等都只能写入 staging，而且对 blueprint 会做 schema 校验。</p></div></div></div></div>
+        <div class="module"><summary><span class="index">08B</span><b>事务提交流程</b><span><code>workflow/transaction.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>NewTransaction</strong>创建 <code>.staging/runID</code></div><div class="arrow">→</div><div class="node teal"><strong>Stage</strong>写临时文件，记录 before / after hash 和 StepID</div><div class="arrow">→</div><div class="node violet"><strong>Verify</strong>验证器对 staging 版本工作</div><div class="arrow">→</div><div class="node amber"><strong>Commit Check</strong>再次确认正式文件 hash 未漂移</div><div class="arrow">→</div><div class="node red"><strong>Atomic Write + Metadata</strong>写正式文件、提交 DB 元数据；失败 restore</div>
+        </div><div class="callout"><b>这层解决的不是“数据库事务”，而是文件产物的一致性问题：</b>避免模型写到一半破坏正式 HTML，也避免在运行期间别人修改了源文件却被静默覆盖。</div></div></div>
+      </section>
+
+      <section id="run">
+        <h2 class="section-title">09 · Run Engine 与事件流：让一次 Agent 执行可控、可看、可恢复</h2>
+        <p class="lead"><code>run.Engine</code> 是 workflow 的运行时外壳；它不承载业务推理，而是处理并发、生命周期、HITL、取消与广播。</p>
+        <div class="module" open><summary><span class="index">09A</span><b>Run 生命周期</b><span><code>run/engine.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>StartWithContext</strong>创建 pending Run + 保存 ContextManifest</div><div class="arrow">→</div><div class="node teal"><strong>Async Execute</strong>后台 goroutine 取得 project lock</div><div class="arrow">→</div><div class="node violet"><strong>Running</strong>调用 workflow.Execution；可取消、可 NeedsInput</div><div class="arrow">→</div><div class="node amber"><strong>Finish</strong>按 outcome 写 done / failed / canceled</div><div class="arrow">→</div><div class="node red"><strong>Close</strong>关闭 Bus、移除 active handle</div>
+        </div><div class="grid"><div class="card span-6"><h3>为什么按 Project 加锁？</h3><p>文件产物属于 project 工作目录。同一 project 并行 Run 可能抢写同一 HTML；因此同项目串行、跨项目并行。</p></div><div class="card span-6"><h3>HITL 在哪里？</h3><p><code>NeedsInput</code> 会把 Run 置于等待语义，前端通过 <code>POST /runs/{id}/input</code> 回答；适用于 before-apply 或运行中阻塞。</p></div></div></div></div>
+        <div class="module"><summary><span class="index">09B</span><b>事件持久化与 SSE 续传</b><span><code>run/bus.go</code> + <code>httpapi/run_handler.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Workflow Emit</strong>stage / step / tool / artifact / terminal</div><div class="arrow">→</div><div class="node teal"><strong>Bus</strong>分配连续 seq；终态只能出现一次</div><div class="arrow">→</div><div class="node violet"><strong>Persist First</strong>写 SQLite events；白名单写 history.jsonl</div><div class="arrow">→</div><div class="node amber"><strong>Fan Out</strong>实时订阅者收到 Event</div><div class="arrow">→</div><div class="node red"><strong>SSE</strong>Last-Event-ID 先回放历史，再接实时流</div>
+        </div><div class="callout"><b>观察性设计：</b>history 只保存白名单事件，明确避免持久化隐藏的模型推理。前端仍可回放用户目标、策略、计划、工具、产物和最终结果。</div></div></div>
+      </section>
+
+      <section id="storage">
+        <h2 class="section-title">10 · 存储与产物：SQLite 管“索引和运行态”，文件系统管“PPT 内容”</h2>
+        <div class="grid"><div class="card span-6"><span class="label">Canonical Project Files</span><h3>文件系统工作目录</h3><p>保存 deck / slide blueprints、design spec、物化后的 HTML slide、thread memory 和 staging。Blueprint 是结构化的规范层；HTML 是可预览的 presentation 层。</p></div><div class="card span-6"><span class="label">Operational Metadata</span><h3>SQLite</h3><p>保存 project、thread、run、event、slide metadata、asset index 和 workflow commit 元数据。它使列表、状态查询、SSE 回放和版本追踪可用。</p></div></div>
+        <div class="module" open><summary><span class="index">10A</span><b>从 Blueprint 到 HTML 的关系</b><span><code>blueprint</code> + <code>service/workflow_commit.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Deck Blueprint</strong>页序、主题、全局结构</div><div class="arrow">→</div><div class="node teal"><strong>Slide Blueprint</strong>每页内容语义与结构</div><div class="arrow">→</div><div class="node violet"><strong>Design Spec</strong>设计 token / layout 约束</div><div class="arrow">→</div><div class="node amber"><strong>Materialize / Revise</strong>生成或修改 HTML</div><div class="arrow">→</div><div class="node red"><strong>Materialization State</strong>根据各 revision 判断 fresh / stale / unknown</div>
+        </div><div class="callout"><b>理解方式：</b>Blueprint / Design 是更接近“源代码”的 canonical inputs；HTML 是由它们物化而来的可交付表现层。上下文装配与策略路由会利用 materialization state 决定能否局部 patch 或必须 rebuild。</div></div></div>
+      </section>
+
+      <section id="reading-order">
+        <h2 class="section-title">11 · 建议的源码阅读顺序</h2>
+        <p class="lead">不要一上来读所有工具实现。先追一条真实调用链，建立“谁调用谁、谁拥有状态、谁能写文件”的心智模型。</p>
+        <div class="card"><div class="reading"><div class="n">1</div><div><b>从 HTTP 到 Run：</b><code>backend/internal/httpapi/run_handler.go</code> → <code>backend/internal/service/run.go</code>。先确认一个 Run 是怎样被创建的。</div></div><div class="reading"><div class="n">2</div><div><b>理解输入和上下文：</b><code>backend/internal/model/work_spec.go</code> → <code>backend/internal/contextengine/assembler.go</code>。重点问：哪些信息会进入模型上下文，哪些不会？</div></div><div class="reading"><div class="n">3</div><div><b>理解策略路由：</b><code>backend/internal/workflow/strategy.go</code> → <code>adaptive.go</code>。用不同用户指令手动模拟它会选哪一条路径。</div></div><div class="reading"><div class="n">4</div><div><b>读完整 PEV：</b><code>backend/internal/workflow/engine.go</code> → <code>plan.go</code> → <code>playbooks.go</code> → <code>verifiers.go</code>。重点追 Stage 和 fail/repair 分支。</div></div><div class="reading"><div class="n">5</div><div><b>读模型执行边界：</b><code>executor.go</code> → <code>tools.go</code> → <code>builtin_tools.go</code> → <code>transaction.go</code>。重点确认每个写操作如何被 scoped 与 staged。</div></div><div class="reading"><div class="n">6</div><div><b>最后读运行与前端投影：</b><code>backend/internal/run/engine.go</code> → <code>bus.go</code> → <code>frontend/src/features/agent/eventReducer.ts</code>。把后端 event 与 UI 时间线一一对照。</div></div></div>
+      </section>
+      <footer>基于当前代码库结构整理 · 重点路径：<code>backend/internal/workflow</code>、<code>backend/internal/contextengine</code>、<code>backend/internal/run</code>。打开此文件即可离线阅读。</footer>
+    </main>
+  </div>
+</body>
+</html>

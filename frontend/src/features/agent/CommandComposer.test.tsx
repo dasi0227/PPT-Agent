@@ -9,79 +9,124 @@ import { CommandComposer } from './CommandComposer';
 
 vi.mock('../../lib/platform', () => ({ isMac: () => false, submitShortcutLabel: () => 'Ctrl + Enter' }));
 
-describe('CommandComposer target protocol', () => {
+describe('CommandComposer', () => {
+  const createRun = vi.fn();
+
   beforeEach(() => {
-    useProjectStore.setState({
-      activeProjectId: 'p1',
-      slidesByProjectId: {
-        p1: [
-          { id: 'stable-1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '', json_path: '', current_version: 0 },
-        ],
-      },
+    createRun.mockReset();
+    createRun.mockResolvedValue(true);
+    act(() => {
+      useProjectStore.setState({
+        activeProjectId: 'p1',
+        slidesByProjectId: {
+          p1: [
+            { id: 'stable-1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '', json_path: '', current_version: 0 },
+          ],
+        },
+      });
+      useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' }, ensureActiveThread: async () => 't1' });
+      useRunStore.setState({
+        createRun,
+        sessions: {
+          t1: {
+            activeRunId: null, status: 'idle',
+            target: { artifact: 'presentation', level: 'slide' },
+            interaction: { intent: 'apply', clarification: 'when_blocked' },
+            timelineItems: [], pendingInput: null, progress: null, eventSourceClose: null, plan: null,
+          },
+        },
+      });
+      useComposerStore.setState({
+        artifact: 'presentation', level: 'slide', intent: 'apply', clarification: 'when_blocked', userTouchedTarget: false,
+      });
+      useDeckStore.setState({ currentPage: 0 });
     });
-    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' }, ensureActiveThread: async () => 't1' });
-    useRunStore.setState({ sessions: {
-      t1: {
-        activeRunId: null, status: 'idle',
-        target: { artifact: 'presentation', level: 'slide' },
-        interaction: { intent: 'apply', clarification: 'when_blocked' },
-        timelineItems: [], pendingInput: null, progress: null, eventSourceClose: null, plan: null,
-      },
-    } });
-    useComposerStore.setState({
-      artifact: 'presentation', level: 'slide', intent: 'apply',
-      clarification: 'when_blocked', userTouchedTarget: true,
-    });
-    useDeckStore.setState({ currentPage: 0 });
   });
 
-  it('sends a stable slide id with the new payload', async () => {
-    const createRun = vi.fn().mockResolvedValue(true);
-    useRunStore.setState({ createRun });
+  it('uses default execution and sends the current slide with a stable slide id', async () => {
     render(<CommandComposer />);
+    expect(screen.getByRole('button', { name: '讨论' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: '询问' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: '目标：单页 幻灯片' })).toBeInTheDocument();
+
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '调整当前页' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
     await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', {
       target: { artifact: 'presentation', level: 'slide', slide_id: 'stable-1' },
       interaction: { intent: 'apply', clarification: 'when_blocked' },
       instruction: '调整当前页',
     }, 'p1'));
-    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue(''));
   });
 
-  it('switches all four artifact and level combinations', async () => {
+  it('maps talk and ask buttons mutually exclusively and restores default execution', async () => {
     render(<CommandComposer />);
-    expect(screen.getByRole('button', { name: 'HTML' })).toHaveAttribute('aria-pressed', 'true');
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '蓝图' }));
-      fireEvent.click(screen.getByRole('button', { name: '整份' }));
-    });
-    expect(useComposerStore.getState()).toMatchObject({ artifact: 'blueprint', level: 'deck' });
+    const talk = screen.getByRole('button', { name: '讨论' });
+    const ask = screen.getByRole('button', { name: '询问' });
+
+    await act(async () => fireEvent.click(talk));
+    expect(useComposerStore.getState()).toMatchObject({ intent: 'consult', clarification: 'when_blocked' });
+    expect(talk).toHaveAttribute('aria-pressed', 'true');
+    expect(ask).toHaveAttribute('aria-pressed', 'false');
+
+    await act(async () => fireEvent.click(ask));
+    expect(useComposerStore.getState()).toMatchObject({ intent: 'apply', clarification: 'before_apply' });
+    expect(talk).toHaveAttribute('aria-pressed', 'false');
+    expect(ask).toHaveAttribute('aria-pressed', 'true');
+
+    await act(async () => fireEvent.click(ask));
+    expect(useComposerStore.getState()).toMatchObject({ intent: 'apply', clarification: 'when_blocked' });
+    expect(ask).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('maps discussion to consult', async () => {
+  it('keeps /talk and /ask shortcuts mapped to their existing interaction protocols', async () => {
     render(<CommandComposer />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '讨论' }));
-    });
-    expect(useComposerStore.getState().intent).toBe('consult');
-  });
+    const textarea = screen.getByRole('textbox');
 
-  it('maps execution confirmation to before_apply', async () => {
-    render(<CommandComposer />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '执行前确认' }));
-    });
-    expect(useComposerStore.getState().clarification).toBe('before_apply');
-  });
-
-  it('materializes the whole deck without a slide id', async () => {
-    const createRun = vi.fn().mockResolvedValue(true);
-    useRunStore.setState({ createRun });
-    render(<CommandComposer />);
-    fireEvent.click(screen.getByRole('button', { name: '物化整份' }));
-    await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', expect.objectContaining({
-      target: { artifact: 'presentation', level: 'deck' },
+    fireEvent.change(textarea, { target: { value: '/talk 给我建议' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
+      interaction: { intent: 'consult', clarification: 'when_blocked' },
+      instruction: '给我建议',
     }), 'p1'));
+
+    fireEvent.change(textarea, { target: { value: '/ask 先分析方案' } });
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
+      interaction: { intent: 'apply', clarification: 'before_apply' },
+      instruction: '先分析方案',
+    }), 'p1'));
+  });
+
+  it('does not render the removed materialization control or duplicate status line', async () => {
+    const { container } = render(<CommandComposer />);
+    await act(async () => {});
+    expect(screen.queryByRole('button', { name: '物化整份' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/本次作用于/)).not.toBeInTheDocument();
+    expect(container.querySelector('.ring-accent')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toHaveClass('focus-visible:ring-0', 'focus-visible:ring-offset-0');
+  });
+
+  it('keeps typed content when run creation fails', async () => {
+    createRun.mockResolvedValue(false);
+    render(<CommandComposer />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: '保留这段内容' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('运行创建失败'));
+    expect(textarea).toHaveValue('保留这段内容');
+  });
+
+  it('keeps the single-page choice available even when the project has no pages', async () => {
+    useProjectStore.setState({ activeProjectId: 'empty', slidesByProjectId: { empty: [] } });
+    useThreadStore.setState({ activeThreadIdByProjectId: { empty: 't-empty' }, ensureActiveThread: async () => 't-empty' });
+    render(<CommandComposer />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '目标：整份 蓝图' })).toBeInTheDocument());
+    const targetTrigger = screen.getByRole('button', { name: '目标：整份 蓝图' });
+    fireEvent.pointerDown(targetTrigger, { button: 0, ctrlKey: false });
+    fireEvent.click(targetTrigger);
+    expect(screen.getByRole('menuitem', { name: '范围：单页' })).not.toHaveAttribute('data-disabled');
   });
 });

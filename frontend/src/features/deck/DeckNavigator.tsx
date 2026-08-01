@@ -145,7 +145,7 @@ export const DeckNavigator: React.FC = () => {
           {(operationError || projectError) && <InlineNotice tone="danger" className="m-2 text-xs">{operationError || `${projectError}。请重试。`}</InlineNotice>}
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {slides.length === 0 ? (
-              <div className="text-center p-4 text-text-400 text-sm">暂无页面，可从下方新增</div>
+              <div className="text-center p-4 text-text-400 text-sm">暂无页面</div>
             ) : (
               slides.map((slide, index) => {
                 const bp = blueprintView?.slides?.[slide.id];

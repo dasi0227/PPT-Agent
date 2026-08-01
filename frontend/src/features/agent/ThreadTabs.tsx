@@ -9,7 +9,7 @@ export const ThreadTabs: React.FC = () => {
   const { activeProjectId } = useProjectStore();
   const { displayThreads, activeThreadIdByProjectId, setActiveThread, errorByProjectId } = useThreadStore();
 
-  if (!activeProjectId || activeProjectId === 'new-pending') return null;
+  if (!activeProjectId) return null;
 
   const threads = displayThreads(activeProjectId);
   const activeId = activeThreadIdByProjectId[activeProjectId];

@@ -9,7 +9,7 @@ import { hydrateRunFromHistory, HistoryEntry } from './historyHydrator';
 export function useActiveThreadId(): string | null {
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const activeThreadIdByProjectId = useThreadStore((s) => s.activeThreadIdByProjectId);
-  if (!activeProjectId || activeProjectId === 'new-pending') return null;
+  if (!activeProjectId) return null;
   return activeThreadIdByProjectId[activeProjectId] ?? null;
 }
 
@@ -20,7 +20,7 @@ export function useActiveSession(): RunSession {
   const sessions = useRunStore((s) => s.sessions);
 
   useEffect(() => {
-    if (!threadId || threadId === 'new-pending') return;
+    if (!threadId) return;
     // 空态才 replay：运行时 in-memory 优先，防止刷新覆盖已有 SSE 增量。
     const current = useRunStore.getState().sessions[threadId];
     if (current && (current.activeRunId || current.status !== 'idle' || current.timelineItems.length > 0)) return;

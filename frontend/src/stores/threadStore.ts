@@ -36,7 +36,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   displayThreads: (projectId) => get().threadsByProjectId[projectId] || [],
 
   loadThreads: async (projectId) => {
-    if (projectId === 'new-pending') return;
     try {
       const threads = await threadsApi.list(projectId);
       set((state) => {

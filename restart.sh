@@ -55,7 +55,7 @@ mkdir -p "$WORK_ROOT/db" "$WORK_ROOT/projects" "$WORK_ROOT/_assets"
 echo "==> 3/5 启动后端 (go run, $BACKEND_ADDR)"
 (
   cd "$BACKEND_DIR"
-  nohup go run -ldflags=-linkmode=external ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
+  nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
   echo $! >"$LOG_DIR/backend.pid"
 )
 echo "    backend pid=$(cat "$LOG_DIR/backend.pid")，日志：$LOG_DIR/backend.log"

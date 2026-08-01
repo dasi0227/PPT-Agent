@@ -15,25 +15,20 @@ export const ProjectTabs: React.FC = () => {
 
   const openProjectIds = useProjectStore((s) => s.openProjectIds);
   
-  // Combine open projects and pending
-  const displayProjects = openProjectIds.map(id => {
-    if (id === 'new-pending') {
-      return { id, title: '新建中…' };
-    }
-    return projects.find(p => p.id === id) || { id, title: '加载中…' };
-  });
+  const displayProjects = openProjectIds.map((id) => projects.find((project) => project.id === id) || { id, title: '加载中…' });
 
   return (
-    <div className="flex items-center h-12 bg-panel border-b border-border-strong px-2 overflow-x-auto select-none">
-      <div className="flex-shrink-0 mr-4 font-bold text-text-900 px-2 flex items-center">
+    <div className="flex h-12 items-center overflow-hidden border-b border-border-strong bg-panel px-2 select-none">
+      <div className="mr-4 flex shrink-0 items-center px-2 font-bold text-text-900">
         <img src="/logo.jpg" alt="Logo" className="w-5 h-5 rounded-sm mr-2 object-cover" />
         M7 Studio
       </div>
 
-      {loadingProjects && displayProjects.length === 0 ? (
-        <Loader2 className="w-4 h-4 animate-spin text-text-400" />
-      ) : (
-        <div className="flex items-end h-full gap-1 flex-1">
+      <div className="flex min-w-0 flex-1 items-center">
+        {loadingProjects && displayProjects.length === 0 ? (
+          <Loader2 className="h-4 w-4 animate-spin text-text-400" />
+        ) : (
+          <div className="flex h-full min-w-0 flex-1 items-end gap-1 overflow-x-auto">
           {displayProjects.map((proj) => {
             const isActive = proj.id === activeProjectId;
             return (
@@ -65,18 +60,16 @@ export const ProjectTabs: React.FC = () => {
                   <span aria-label="等待输入" className="inline-block w-2 h-2 rounded-full bg-warning animate-pulse" />
                 )}
                 
-                {proj.id !== 'new-pending' && (
-                  <ProjectMenu project={proj}>
-                    <button
-                      type="button"
-                      aria-label={`更多选项`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
-                    >
-                      <MoreHorizontal className="w-4 h-4 text-text-400" />
-                    </button>
-                  </ProjectMenu>
-                )}
+                <ProjectMenu project={proj}>
+                  <button
+                    type="button"
+                    aria-label="更多选项"
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded p-0.5 opacity-0 transition-opacity hover:bg-black/10 group-hover:opacity-100 group-focus-within:opacity-100"
+                  >
+                    <MoreHorizontal className="h-4 w-4 text-text-400" />
+                  </button>
+                </ProjectMenu>
               </div>
             );
           })}
@@ -92,8 +85,9 @@ export const ProjectTabs: React.FC = () => {
           >
             <Plus className="w-4 h-4" />
           </button>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -292,7 +292,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       loadingProjects: false
     });
     render(<PreviewWorkspace />);
-    const htmlBtn = screen.getByRole('button', { name: 'HTML' });
+    const htmlBtn = screen.getByRole('button', { name: '页面' });
     expect(htmlBtn).not.toBeDisabled();
   });
 

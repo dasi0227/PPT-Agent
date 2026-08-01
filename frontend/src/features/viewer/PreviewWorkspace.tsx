@@ -14,7 +14,6 @@ import { useBlueprintStore } from '../../stores/blueprintStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
-import { NewProjectHint } from '../workspace/NewProjectHint';
 import { DesignSpecSummary } from './DesignSpecSummary';
 import { EmptyState } from './EmptyState';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
@@ -187,7 +186,7 @@ export const PreviewWorkspace: React.FC = () => {
   const blueprintLoading = useBlueprintStore((state) => activeProjectId ? state.loading[activeProjectId] : false);
   const blueprintError = useBlueprintStore((state) => activeProjectId ? state.error[activeProjectId] : undefined);
   const loadBlueprint = useBlueprintStore((state) => state.loadProject);
-  const projectId = activeProjectId && activeProjectId !== 'new-pending' ? activeProjectId : null;
+  const projectId = activeProjectId;
   const slides = useMemo(
     () => projectId ? slidesByProjectId[projectId] || [] : [],
     [projectId, slidesByProjectId],
@@ -245,8 +244,6 @@ export const PreviewWorkspace: React.FC = () => {
     void canvasRef.current.requestFullscreen();
   }, []);
 
-  if (activeProjectId === 'new-pending') return <NewProjectHint />;
-
   return (
     <div className="relative flex h-full flex-col bg-canvas">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3">
@@ -278,7 +275,7 @@ export const PreviewWorkspace: React.FC = () => {
               <button
                 onClick={() => setGlobalView('html')}
                 className={cn('border-l border-border px-3', globalView === 'html' ? 'bg-accent-soft font-medium text-accent' : 'text-text-600 hover:bg-panel-muted')}
-              >HTML</button>
+              >页面</button>
             </div>
           )}
 
@@ -287,7 +284,7 @@ export const PreviewWorkspace: React.FC = () => {
               <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
             <span className="min-w-14 text-center text-sm tabular-nums text-text-600">
-              {hasSlides ? `${safePage + 1} / ${slides.length}` : '暂无页面'}
+              {hasSlides ? `${safePage + 1} / ${slides.length}` : '0 / 0'}
             </span>
             <IconButton label="下一页" onClick={goNext} disabled={!hasSlides || safePage >= slides.length - 1}>
               <ChevronRight className="h-4 w-4" strokeWidth={1.75} />

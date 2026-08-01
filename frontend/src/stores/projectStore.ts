@@ -9,7 +9,6 @@ interface ProjectState {
   projects: Project[];
   openProjectIds: string[];
   activeProjectId: string | null;
-  pendingNewProject: boolean;
   slidesByProjectId: Record<string, Slide[]>;
   loadingProjects: boolean;
   projectError: string | null;
@@ -17,9 +16,6 @@ interface ProjectState {
   loadProjects: () => Promise<void>;
   openProject: (id: string) => void;
   createProject: (topic: string, brief?: string, slide_count?: number, language?: string) => Promise<Project>;
-  startPendingNewProject: () => void;
-  finalizePendingNewProject: (realId: string) => void;
-  cancelPendingNewProject: () => void;
   closeProject: (id: string) => void;
   renameProject: (id: string, title: string) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
@@ -33,7 +29,6 @@ export const useProjectStore = create<ProjectState>()(
       projects: [],
       openProjectIds: [],
       activeProjectId: null,
-      pendingNewProject: false,
       slidesByProjectId: {},
       loadingProjects: false,
       projectError: null,
@@ -47,7 +42,7 @@ export const useProjectStore = create<ProjectState>()(
             const validIds = new Set(projects.map(p => p.id));
             const newOpenIds = state.openProjectIds.filter(id => validIds.has(id));
             let newActive = state.activeProjectId;
-            if (newActive && newActive !== 'new-pending' && !validIds.has(newActive)) {
+            if (newActive && !validIds.has(newActive)) {
               newActive = newOpenIds.length > 0 ? newOpenIds[newOpenIds.length - 1] : null;
             }
             return { 
@@ -59,7 +54,7 @@ export const useProjectStore = create<ProjectState>()(
           });
           // Ensure we load slides and threads for the active project if it was restored from persistence
           const currentActive = get().activeProjectId;
-          if (currentActive && currentActive !== 'new-pending') {
+          if (currentActive) {
             get().loadProjectSlides(currentActive);
             useThreadStore.getState().loadThreads(currentActive);
           }
@@ -90,51 +85,8 @@ export const useProjectStore = create<ProjectState>()(
         return project;
       },
 
-      startPendingNewProject: () => {
-        set((state) => {
-          const newOpenIds = state.openProjectIds.includes('new-pending') 
-            ? state.openProjectIds 
-            : [...state.openProjectIds, 'new-pending'];
-          return {
-            pendingNewProject: true,
-            openProjectIds: newOpenIds
-          };
-        });
-        get().selectProject('new-pending');
-      },
-
-      finalizePendingNewProject: (realId: string) => {
-        set((state) => {
-          const newOpenIds = state.openProjectIds.map(id => id === 'new-pending' ? realId : id);
-          return {
-            pendingNewProject: false,
-            openProjectIds: newOpenIds
-          };
-        });
-        get().selectProject(realId);
-      },
-
-      cancelPendingNewProject: () => {
-        set((state) => {
-          const newOpenIds = state.openProjectIds.filter(id => id !== 'new-pending');
-          let newActive = state.activeProjectId;
-          if (newActive === 'new-pending') {
-            newActive = newOpenIds.length > 0 ? newOpenIds[newOpenIds.length - 1] : null;
-          }
-          return {
-            pendingNewProject: false,
-            openProjectIds: newOpenIds,
-            activeProjectId: newActive
-          };
-        });
-      },
-
       closeProject: (id: string) => {
         set((state) => {
-          if (id === 'new-pending') {
-            get().cancelPendingNewProject();
-            return state;
-          }
           const newOpenIds = state.openProjectIds.filter(pid => pid !== id);
           let newActive = state.activeProjectId;
           if (newActive === id) {
@@ -143,7 +95,7 @@ export const useProjectStore = create<ProjectState>()(
           return { openProjectIds: newOpenIds, activeProjectId: newActive };
         });
         const newActive = get().activeProjectId;
-        if (newActive && newActive !== 'new-pending') {
+        if (newActive) {
           get().selectProject(newActive);
         }
       },
@@ -156,10 +108,6 @@ export const useProjectStore = create<ProjectState>()(
       },
 
       deleteProject: async (id: string) => {
-        if (id === 'new-pending') {
-          get().cancelPendingNewProject();
-          return;
-        }
         await projectsApi.delete(id);
         useThreadStore.getState().dropProject(id);
         set((state) => {
@@ -177,7 +125,7 @@ export const useProjectStore = create<ProjectState>()(
         });
         
         const nextActive = get().activeProjectId;
-        if (nextActive && nextActive !== 'new-pending') {
+        if (nextActive) {
           get().loadProjectSlides(nextActive);
           useThreadStore.getState().loadThreads(nextActive);
         }
@@ -188,14 +136,13 @@ export const useProjectStore = create<ProjectState>()(
         
         set({ activeProjectId: projectId });
         
-        if (projectId && projectId !== 'new-pending') {
+        if (projectId) {
           get().loadProjectSlides(projectId);
           useThreadStore.getState().loadThreads(projectId);
         }
       },
 
       loadProjectSlides: async (projectId: string) => {
-        if (projectId === 'new-pending') return;
         try {
           const slides = await projectsApi.getSlides(projectId);
           void useBlueprintStore.getState().loadProject(projectId);
@@ -211,10 +158,7 @@ export const useProjectStore = create<ProjectState>()(
     { 
       name: 'ppt-agent-project-v6', 
       partialize: (s) => {
-        // filter out new-pending from persistence
-        const openProjectIds = s.openProjectIds.filter(id => id !== 'new-pending');
-        const activeProjectId = s.activeProjectId === 'new-pending' ? (openProjectIds.length > 0 ? openProjectIds[openProjectIds.length - 1] : null) : s.activeProjectId;
-        return { openProjectIds, activeProjectId };
+        return { openProjectIds: s.openProjectIds, activeProjectId: s.activeProjectId };
       }
     }
   )
