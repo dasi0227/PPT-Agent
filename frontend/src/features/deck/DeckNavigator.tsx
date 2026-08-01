@@ -139,7 +139,6 @@ export const DeckNavigator: React.FC = () => {
               <span className="flex items-center"><Layers className="w-3 h-3 mr-1"/> {project.theme}</span>
               <span className="flex items-center"><FileText className="w-3 h-3 mr-1"/> {slides.length} 页</span>
             </div>
-            {blueprintView?.deck?.core_thesis && <p className="mt-2 line-clamp-2 text-xs text-text-400">{blueprintView.deck.core_thesis}</p>}
           </div>
 
           {(operationError || projectError) && <InlineNotice tone="danger" className="m-2 text-xs">{operationError || `${projectError}。请重试。`}</InlineNotice>}

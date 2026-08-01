@@ -21,7 +21,7 @@ export const ProjectTabs: React.FC = () => {
     <div className="flex h-12 items-center overflow-hidden border-b border-border-strong bg-panel px-2 select-none">
       <div className="mr-4 flex shrink-0 items-center px-2 font-bold text-text-900">
         <img src="/logo.jpg" alt="Logo" className="w-5 h-5 rounded-sm mr-2 object-cover" />
-        M7 Studio
+        Dasi Studio
       </div>
 
       <div className="flex min-w-0 flex-1 items-center">

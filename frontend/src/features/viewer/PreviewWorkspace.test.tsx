@@ -172,6 +172,45 @@ describe('PreviewWorkspace', () => {
     expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s1/render', expect.any(Object));
   });
 
+  it('shows only an empty state in overview when the project has no pages', () => {
+    useProjectStore.setState({ slidesByProjectId: { p1: [] } });
+    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentPage: 0 });
+    render(<PreviewWorkspace />);
+
+    expect(screen.getByText('暂无页面')).toBeInTheDocument();
+    expect(screen.queryByText('全局视觉规范')).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId(/overview-slide-/)).toHaveLength(0);
+  });
+
+  it('aligns the main preview empty project state with overview', () => {
+    useProjectStore.setState({ slidesByProjectId: { p1: [] } });
+    useDeckStore.setState({ previewMode: 'main', globalView: 'html', currentPage: 0 });
+    render(<PreviewWorkspace />);
+
+    expect(screen.getByText('暂无页面')).toBeInTheDocument();
+    expect(screen.queryByText('暂无内容')).not.toBeInTheDocument();
+  });
+
+  it('uses the no-content state only when a page exists without rendered content', () => {
+    useProjectStore.setState((state) => ({
+      slidesByProjectId: {
+        ...state.slidesByProjectId,
+        p1: [{ ...state.slidesByProjectId.p1[0], html_path: '' }],
+      },
+    }));
+    useBlueprintStore.setState((state) => ({
+      byProjectId: {
+        ...state.byProjectId,
+        p1: { ...state.byProjectId.p1, slides: {} },
+      },
+    }));
+    useDeckStore.setState({ previewMode: 'main', globalView: 'html', currentPage: 0 });
+    render(<PreviewWorkspace />);
+
+    expect(screen.getByText('暂无内容')).toBeInTheDocument();
+    expect(screen.queryByText('暂无页面')).not.toBeInTheDocument();
+  });
+
   it('shows an actionable HTML error and retries without side effects', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline'); }));
     render(<PreviewWorkspace />);

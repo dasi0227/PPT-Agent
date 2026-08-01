@@ -94,20 +94,20 @@ export const CommandComposer: React.FC = () => {
   };
 
   return (
-    <div className="border-t border-border bg-background p-3">
+    <div className="bg-panel px-3 pb-3 pt-1">
       {submitError && (
         <div role="alert" className="mb-2 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">
           {submitError}
         </div>
       )}
-      <div className="relative rounded-lg border border-border bg-surface shadow-sm">
+      <div className="relative rounded-[22px] border border-border/80 bg-panel shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
         <textarea
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={handleKeyDown}
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => setIsComposing(false)}
-          placeholder={composer.intent === 'consult' ? '询问关于当前目标的建议，不会修改项目' : '描述你想修改的内容'}
+          placeholder="输入你的想法与目标"
           disabled={disabled}
           aria-describedby={disabled ? 'composer-disabled-reason' : undefined}
           className="max-h-32 min-h-[60px] w-full resize-none bg-transparent p-3 text-sm text-text-900 placeholder:text-text-400 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"

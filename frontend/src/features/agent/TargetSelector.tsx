@@ -39,7 +39,7 @@ function objectLabel(artifact: Artifact): string {
 }
 
 function targetLabel(target: ComposerTarget): string {
-  return `${scopeLabel(target.level)} ${objectLabel(target.artifact)}`;
+  return `${scopeLabel(target.level)}${objectLabel(target.artifact)}`;
 }
 
 interface TargetSelectorProps extends ComposerTarget {
@@ -72,10 +72,10 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
           <ChevronDown className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="end" className="w-[188px] space-y-1 p-1.5">
-        <div role="none" className="flex h-9 items-center px-1">
+      <DropdownMenuContent side="top" align="end" className="w-[224px] space-y-1 p-1.5">
+        <div role="none" className="flex h-9 items-center gap-2 px-1">
           <span className="shrink-0 text-sm font-semibold text-text-900">范围</span>
-          <div role="group" aria-label="范围" className="flex w-[132px] rounded-full bg-panel-muted p-0.5">
+          <div role="group" aria-label="范围" className="ml-auto flex w-[132px] rounded-full bg-panel-muted p-0.5">
             {scopeOptions.map((option) => (
               <DropdownMenuItem
                 key={option.level}
@@ -91,9 +91,9 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
             ))}
           </div>
         </div>
-        <div role="none" className="flex h-9 items-center px-1">
+        <div role="none" className="flex h-9 items-center gap-2 px-1">
           <span className="shrink-0 text-sm font-semibold text-text-900">对象</span>
-          <div role="group" aria-label="对象" className="flex w-[132px] rounded-full bg-panel-muted p-0.5">
+          <div role="group" aria-label="对象" className="ml-auto flex w-[132px] rounded-full bg-panel-muted p-0.5">
             {objectOptions.map((option) => (
               <DropdownMenuItem
                 key={option.artifact}

@@ -84,6 +84,12 @@ function VerificationSummary({ item }: { item: VerificationStatusItem }) {
   );
 }
 
+function EmptyTimelineTitle() {
+  return (
+    <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>
+  );
+}
+
 export const Timeline: React.FC = () => {
   const { timelineItems, status, plan } = useActiveSession();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -105,19 +111,22 @@ export const Timeline: React.FC = () => {
   const hasAgentContent = timelineItems.some((item) => AGENT_CONTENT_TYPES.has(item.type));
   const showThinking = (status === 'creating' || status === 'running') && hasUserTurn && !hasAgentContent;
   const runActive = status === 'creating' || status === 'running' || status === 'needs_input';
+  const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle';
 
   return (
-    <div className="flex-1 space-y-3 overflow-y-auto bg-panel p-3">
-      {timelineItems.length === 0 && !plan && status === 'idle' && (
-        <div className="mx-auto mt-10 max-w-56 text-center text-sm leading-6 text-text-400">
-          说明你想制作或修改的内容，我会在这里展示执行过程。
+    <div className={showEmptyWordmark
+      ? 'min-h-0 flex-1 overflow-hidden bg-panel p-3'
+      : 'min-h-0 flex-1 space-y-3 overflow-y-auto bg-panel p-3'}>
+      {showEmptyWordmark ? (
+        <div className="flex h-full items-center justify-center overflow-hidden">
+          <EmptyTimelineTitle />
         </div>
-      )}
+      ) : (
+        <>
+          <ExecutionMetaRow context={context} strategy={strategy} />
+          {plan && <PlanCard plan={plan} running={runActive} />}
 
-      <ExecutionMetaRow context={context} strategy={strategy} />
-      {plan && <PlanCard plan={plan} running={runActive} />}
-
-      {visibleItems.map((item) => {
+          {visibleItems.map((item) => {
         switch (item.type) {
           case 'user_turn':
             return (
@@ -175,12 +184,14 @@ export const Timeline: React.FC = () => {
           default:
             return null;
         }
-      })}
-      {showThinking && <ThinkingBubble />}
-      {status === 'done' && visibleItems.length === 0 && (
-        <div className="flex items-center gap-2 text-xs text-success">
-          <CheckCircle2 className="h-4 w-4" /> 运行已完成
-        </div>
+          })}
+          {showThinking && <ThinkingBubble />}
+          {status === 'done' && visibleItems.length === 0 && (
+            <div className="flex items-center gap-2 text-xs text-success">
+              <CheckCircle2 className="h-4 w-4" /> 运行已完成
+            </div>
+          )}
+        </>
       )}
       <div ref={bottomRef} />
     </div>

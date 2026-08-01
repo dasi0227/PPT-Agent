@@ -47,7 +47,8 @@ describe('CommandComposer', () => {
     render(<CommandComposer />);
     expect(screen.getByRole('button', { name: '讨论' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '询问' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: '目标：单页 幻灯片' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '目标：单页幻灯片' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '输入你的想法与目标');
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '调整当前页' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -68,6 +69,7 @@ describe('CommandComposer', () => {
     expect(useComposerStore.getState()).toMatchObject({ intent: 'consult', clarification: 'when_blocked' });
     expect(talk).toHaveAttribute('aria-pressed', 'true');
     expect(ask).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '输入你的想法与目标');
 
     await act(async () => fireEvent.click(ask));
     expect(useComposerStore.getState()).toMatchObject({ intent: 'apply', clarification: 'before_apply' });
@@ -123,8 +125,8 @@ describe('CommandComposer', () => {
     useThreadStore.setState({ activeThreadIdByProjectId: { empty: 't-empty' }, ensureActiveThread: async () => 't-empty' });
     render(<CommandComposer />);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: '目标：整份 蓝图' })).toBeInTheDocument());
-    const targetTrigger = screen.getByRole('button', { name: '目标：整份 蓝图' });
+    await waitFor(() => expect(screen.getByRole('button', { name: '目标：整份蓝图' })).toBeInTheDocument());
+    const targetTrigger = screen.getByRole('button', { name: '目标：整份蓝图' });
     fireEvent.pointerDown(targetTrigger, { button: 0, ctrlKey: false });
     fireEvent.click(targetTrigger);
     expect(screen.getByRole('menuitem', { name: '范围：单页' })).not.toHaveAttribute('data-disabled');

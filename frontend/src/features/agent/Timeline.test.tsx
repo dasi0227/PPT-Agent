@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Timeline } from './Timeline';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useRunStore } from '../../stores/runStore';
+import { threadsApi } from '../../api/threads';
 
 // Mock ResizeObserver（scrollIntoView 触发需要）
 globalThis.ResizeObserver = class {
@@ -63,6 +64,36 @@ describe('Timeline user_turn rendering', () => {
     const { container } = render(<Timeline />);
     // 内联 code 应渲染为 <code>
     expect(container.querySelector('code')?.textContent).toBe('code');
+  });
+});
+
+describe('Timeline empty state', () => {
+  beforeEach(() => {
+    vi.spyOn(threadsApi, 'history').mockResolvedValue([]);
+    act(() => {
+      useProjectStore.setState({ activeProjectId: 'p1' });
+      useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
+      useRunStore.setState({
+        sessions: {
+          t1: {
+            activeRunId: null,
+            status: 'idle',
+            target: { artifact: 'presentation', level: 'slide' },
+            interaction: { intent: 'apply', clarification: 'when_blocked' },
+            timelineItems: [], pendingInput: null, progress: null, eventSourceClose: null, plan: null,
+          },
+        },
+      });
+    });
+  });
+
+  it('shows a simple Dasi title instead of an instructional empty-state message', async () => {
+    await act(async () => {
+      render(<Timeline />);
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Dasi PPT Agent')).toBeInTheDocument();
+    expect(screen.queryByText(/说明你想制作或修改的内容/)).not.toBeInTheDocument();
   });
 });
 

@@ -13,7 +13,7 @@ describe('TargetSelector', () => {
       />,
     );
 
-    const trigger = screen.getByRole('button', { name: '目标：单页 幻灯片' });
+    const trigger = screen.getByRole('button', { name: '目标：单页幻灯片' });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
     expect(screen.getByRole('group', { name: '范围' })).toBeInTheDocument();
@@ -33,7 +33,7 @@ describe('TargetSelector', () => {
       />,
     );
 
-    const trigger = screen.getByRole('button', { name: '目标：单页 幻灯片' });
+    const trigger = screen.getByRole('button', { name: '目标：单页幻灯片' });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
     fireEvent.click(screen.getByRole('menuitem', { name: '对象：蓝图' }));

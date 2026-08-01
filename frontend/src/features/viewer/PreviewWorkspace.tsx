@@ -308,9 +308,7 @@ export const PreviewWorkspace: React.FC = () => {
             {!projectId ? (
               <InlineNotice tone="info">请先从顶部项目 Tab 打开或新建项目。</InlineNotice>
             ) : !hasSlides ? (
-              <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
-                <EmptyState />
-              </div>
+              <p className="text-sm text-text-400">暂无页面</p>
             ) : currentView === 'html' && currentHasHTML ? (
               <PreviewFrame
                 slide={currentSlide}
@@ -320,9 +318,7 @@ export const PreviewWorkspace: React.FC = () => {
               />
             ) : currentView === 'html' ? (
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
-                <InlineNotice tone="warning" className="max-w-md">
-                  当前页面尚未生成 HTML。可切换到“蓝图”查看内容，或在右侧让 Agent 生成当前页。
-                </InlineNotice>
+                <EmptyState />
               </div>
             ) : blueprintView?.slides?.[currentSlide.id] ? (
               <SlideBlueprintCard
@@ -349,13 +345,14 @@ export const PreviewWorkspace: React.FC = () => {
                 </div>
               </InlineNotice>
             ) : (
-              <InlineNotice tone="warning" className="max-w-md">
-                <div className="flex items-center justify-between gap-3">
-                  <span>当前页面还没有可用蓝图。</span>
-                  <Button variant="secondary" onClick={() => projectId && void loadBlueprint(projectId)}>重新加载</Button>
-                </div>
-              </InlineNotice>
+              <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
+                <EmptyState />
+              </div>
             )}
+          </div>
+        ) : !hasSlides ? (
+          <div className="flex flex-1 items-center justify-center">
+            <p className="text-sm text-text-400">暂无页面</p>
           </div>
         ) : (
           <div className="absolute inset-0 overflow-y-auto p-6">

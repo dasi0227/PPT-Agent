@@ -40,6 +40,7 @@ describe('DeckNavigator', () => {
     expect(screen.getByText('市场分析')).toBeInTheDocument();
     expect(screen.getByText('增长趋势')).toBeInTheDocument();
     expect(screen.queryByText('Slide 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('核心命题')).not.toBeInTheDocument();
   });
 
   it('marks stale pages with a materialization badge', () => {
