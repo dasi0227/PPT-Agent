@@ -1,4 +1,12 @@
-import type { ExecutionStrategy, PlanState, SSEEventName } from '../../api/types';
+import type {
+  ExecutionStrategy,
+  PlanState,
+  RunInteraction,
+  RunTarget,
+  SSEEvent,
+  SSEEventName,
+  StructuredOutcome,
+} from '../../api/types';
 import { reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
 
 export interface HistoryEntry {
@@ -7,7 +15,7 @@ export interface HistoryEntry {
   run_id: string;
   turn: 'user' | 'agent';
   type: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
 }
 
 export interface HydratedRunView {
@@ -37,7 +45,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     if (entry.type === 'user_turn') {
       items.push({
         id, type: 'user_turn', text: String(entry.data.text ?? ''), timestamp,
-        target: entry.data.target, interaction: entry.data.interaction,
+        target: entry.data.target as RunTarget | undefined,
+        interaction: entry.data.interaction as RunInteraction | undefined,
       });
       continue;
     }
@@ -54,7 +63,17 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       continue;
     }
     if (entry.type === 'final_result') {
-      items.push({ id, type: 'final_result', result: entry.data.result, timestamp });
+      const result = entry.data.result;
+      items.push({
+        id,
+        type: 'final_result',
+        result: typeof result === 'string' || result === null
+          ? result
+          : typeof result === 'object'
+            ? result as StructuredOutcome
+            : null,
+        timestamp,
+      });
       continue;
     }
     if (entry.type === 'error') {
@@ -65,7 +84,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       continue;
     }
     if (!runtimeEvents.has(entry.type as SSEEventName)) continue;
-    const event = { id, event: entry.type as SSEEventName, data: entry.data };
+    const event = { id, event: entry.type as SSEEventName, data: entry.data } as SSEEvent;
     items = reduceSSEEvent(items, event);
     plan = reducePlan(plan, event);
     if (entry.type === 'strategy.selected') {

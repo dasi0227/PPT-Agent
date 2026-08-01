@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Timeline } from './Timeline';
 import { useProjectStore } from '../../stores/projectStore';
@@ -94,7 +94,7 @@ describe('Timeline thinking bubble', () => {
       { id: 'u1', type: 'user_turn', text: 'go', timestamp: 1 },
     ]));
     render(<Timeline />);
-    expect(screen.getByText('正在思考...')).toBeInTheDocument();
+    expect(screen.getByText('正在思考…')).toBeInTheDocument();
   });
 
   it('hides ThinkingBubble once strategy is selected', () => {
@@ -103,7 +103,7 @@ describe('Timeline thinking bubble', () => {
       { id: 'strategy1', type: 'strategy_status', strategy: 'respond', reason: 'consult', risk: 'low', complexity: 'low', timestamp: 2 },
     ]));
     render(<Timeline />);
-    expect(screen.queryByText('正在思考...')).toBeNull();
+    expect(screen.queryByText('正在思考…')).toBeNull();
   });
 
   it('hides ThinkingBubble after markdown / token arrives', () => {
@@ -112,7 +112,7 @@ describe('Timeline thinking bubble', () => {
       { id: 'md1', type: 'markdown', text: 'partial', timestamp: 2 },
     ]));
     render(<Timeline />);
-    expect(screen.queryByText('正在思考...')).toBeNull();
+    expect(screen.queryByText('正在思考…')).toBeNull();
   });
 
   it('does NOT show ThinkingBubble when status=idle', () => {
@@ -121,13 +121,13 @@ describe('Timeline thinking bubble', () => {
       { status: 'idle' },
     ));
     render(<Timeline />);
-    expect(screen.queryByText('正在思考...')).toBeNull();
+    expect(screen.queryByText('正在思考…')).toBeNull();
   });
 
   it('does NOT show ThinkingBubble when running but no user_turn (no context to attach)', () => {
     useRunStore.setState(sessionWith([]));
     render(<Timeline />);
-    expect(screen.queryByText('正在思考...')).toBeNull();
+    expect(screen.queryByText('正在思考…')).toBeNull();
   });
 });
 
@@ -158,18 +158,20 @@ describe('Timeline error friendly messages', () => {
   it('renders friendly Chinese text for LLM_TIMEOUT', () => {
     useRunStore.setState(sessionWithError('LLM_TIMEOUT', 'context deadline exceeded'));
     render(<Timeline />);
-    expect(screen.getByText(/AI 响应超时，请稍后重试或调低复杂度/)).toBeInTheDocument();
+    expect(screen.getByText(/AI 响应超时，请稍后重试或降低任务复杂度/)).toBeInTheDocument();
   });
 
   it('renders friendly Chinese text for LLM_BAD_REQUEST', () => {
     useRunStore.setState(sessionWithError('LLM_BAD_REQUEST', 'bad tool call'));
     render(<Timeline />);
-    expect(screen.getByText(/AI 请求失败/)).toBeInTheDocument();
+    expect(screen.getByText(/AI 请求未能处理/)).toBeInTheDocument();
   });
 
   it('falls back to raw message when code is unknown', () => {
     useRunStore.setState(sessionWithError('SOMETHING_ELSE', 'weird failure'));
     render(<Timeline />);
+    expect(screen.getByText(/运行未能完成/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('错误详情'));
     expect(screen.getByText(/weird failure/)).toBeInTheDocument();
   });
 });

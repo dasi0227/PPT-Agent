@@ -13,9 +13,18 @@ vi.mock('../api/sse', () => ({
 
 vi.mock('../api/runs', () => ({
   runsApi: {
-    create: async (_threadId: string, _payload: any) => ({ id: `run_${connections.length + 1}` }),
+    create: async (threadId: string, payload: any) => ({
+      id: `run_${connections.length + 1}`,
+      thread_id: threadId,
+      project_id: 'p1',
+      status: 'running',
+      target: payload.target,
+      interaction: payload.interaction,
+      events_url: '',
+    }),
     submitInput: async () => ({}),
     cancel: async () => ({}),
+    get: async () => { throw new Error('not used'); },
   },
 }));
 

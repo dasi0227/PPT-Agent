@@ -1,4 +1,13 @@
-import { SSEEvent, PlanState, PlanStep, PlanStepStatus } from '../../api/types';
+import {
+  ArtifactRef,
+  JsonRecord,
+  SSEEvent,
+  PlanState,
+  PlanStep,
+  PlanStepStatus,
+  StructuredOutcome,
+  WorkflowIssue,
+} from '../../api/types';
 
 export type TimelineItemType =
   | 'markdown'
@@ -50,7 +59,7 @@ export interface ArtifactItem extends BaseTimelineItem {
 
 export interface FinalResultItem extends BaseTimelineItem {
   type: 'final_result';
-  result: any;
+  result: StructuredOutcome | string | null;
 }
 
 export interface NeedsInputItem extends BaseTimelineItem {
@@ -63,6 +72,9 @@ export interface ErrorItem extends BaseTimelineItem {
   type: 'error';
   code?: string;
   message: string;
+  technicalMessage?: string;
+  requestId?: string;
+  retryable?: boolean;
 }
 
 export interface ContextStatusItem extends BaseTimelineItem {
@@ -85,6 +97,9 @@ export interface VerificationStatusItem extends BaseTimelineItem {
   verifier: string;
   passed: boolean;
   issueCount: number;
+  passedCount: number;
+  failedCount: number;
+  issues: WorkflowIssue[];
 }
 
 export type TimelineItem =
@@ -111,7 +126,7 @@ export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState |
   if (event.event === 'plan.created') {
     const plan = event.data.plan ?? {};
     const steps: PlanStep[] = Array.isArray(plan.steps)
-      ? plan.steps.map((step: any) => ({
+      ? plan.steps.map((step) => ({
           id: String(step.id ?? ''),
           title: String(step.title ?? step.kind ?? ''),
           status: normalizeStepStatus(step.status),
@@ -143,8 +158,13 @@ export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState |
   return { ...prev, steps };
 }
 
-function artifactFromEvent(id: string, data: any, timestamp: number, delivery: 'intermediate' | 'final'): ArtifactItem {
-  const artifact = data.artifact ?? {};
+function artifactFromEvent(
+  id: string,
+  data: JsonRecord & { artifact: ArtifactRef },
+  timestamp: number,
+  delivery: 'intermediate' | 'final',
+): ArtifactItem {
+  const artifact = data.artifact;
   return {
     id,
     type: 'artifact',
@@ -159,6 +179,7 @@ function artifactFromEvent(id: string, data: any, timestamp: number, delivery: '
 export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): TimelineItem[] {
   const timestamp = Date.now();
   const newId = event.id || `evt_${timestamp}_${Math.random().toString(36).slice(2, 9)}`;
+  if (event.id && state.some((item) => item.id === event.id)) return state;
 
   switch (event.event) {
     case 'run.started':
@@ -231,14 +252,32 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
 
     case 'verification.completed': {
       const issues = Array.isArray(event.data.result?.issues) ? event.data.result.issues : [];
-      return [...state, {
+      const passed = Boolean(event.data.result?.passed);
+      const next: VerificationStatusItem = {
         id: newId,
         type: 'verification_status',
         verifier: String(event.data.verifier ?? 'verifier'),
-        passed: Boolean(event.data.result?.passed),
+        passed,
         issueCount: issues.length,
+        passedCount: passed ? 1 : 0,
+        failedCount: passed ? 0 : 1,
+        issues,
         timestamp,
-      }];
+      };
+      const previous = state[state.length - 1];
+      if (previous?.type !== 'verification_status') return [...state, next];
+      return [
+        ...state.slice(0, -1),
+        {
+          ...previous,
+          passed: previous.passed && next.passed,
+          issueCount: previous.issueCount + next.issueCount,
+          passedCount: previous.passedCount + next.passedCount,
+          failedCount: previous.failedCount + next.failedCount,
+          issues: [...previous.issues, ...next.issues],
+          timestamp,
+        },
+      ];
     }
 
     case 'status.summary':
@@ -262,7 +301,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       return [...state, {
         id: newId,
         type: 'final_result',
-        result: event.data.outcome,
+        result: event.data.outcome ?? null,
         timestamp,
       }];
 
@@ -272,7 +311,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         id: newId,
         type: 'error',
         code: event.data.outcome?.code,
-        message: String(event.data.outcome?.message ?? (event.event === 'run.canceled' ? 'Run canceled' : 'Run failed')),
+        message: String(event.data.outcome?.message ?? (event.event === 'run.canceled' ? '运行已取消' : '运行失败')),
         timestamp,
       }];
 

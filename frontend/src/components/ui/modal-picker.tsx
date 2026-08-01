@@ -77,8 +77,8 @@ export function PickerModal<T>({
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search..."
-              className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:border-mode-normal focus:ring-1 focus:ring-mode-normal transition-all"
+              placeholder="搜索项目"
+              className="w-full pl-9 pr-4 py-2 bg-panel border border-border rounded-md text-sm focus:border-accent transition-colors"
               autoFocus
             />
           </div>

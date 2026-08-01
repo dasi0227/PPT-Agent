@@ -21,7 +21,7 @@ function Segment<T extends string>({ value, options, onChange, disabled }: {
   disabled?: boolean;
 }) {
   return (
-    <div className="flex rounded-md border border-border bg-background p-0.5">
+    <div className="flex rounded-md border border-border bg-panel-muted p-0.5">
       {options.map((option) => (
         <button
           key={option.value}
@@ -31,7 +31,7 @@ function Segment<T extends string>({ value, options, onChange, disabled }: {
           onClick={() => onChange(option.value)}
           className={cn(
             'rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50',
-            option.value === value ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-600',
+            option.value === value ? 'bg-surface text-accent' : 'text-text-400 hover:text-text-600',
           )}
         >
           {option.label}
@@ -45,7 +45,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = (props) => (
   <div className="flex flex-wrap items-center gap-1.5">
     <Segment
       value={props.artifact}
-      options={[{ value: 'blueprint', label: '蓝图' }, { value: 'presentation', label: '演示' }]}
+      options={[{ value: 'blueprint', label: '蓝图' }, { value: 'presentation', label: 'HTML' }]}
       onChange={props.onArtifactChange}
       disabled={props.disabled}
     />
@@ -62,7 +62,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = (props) => (
       onClick={() => props.onIntentChange(props.intent === 'consult' ? 'apply' : 'consult')}
       className={cn(
         'rounded border px-2 py-1 text-xs font-medium',
-        props.intent === 'consult' ? 'border-mode-talk bg-mode-talk text-white' : 'border-border text-text-600',
+        props.intent === 'consult' ? 'border-accent bg-accent text-white' : 'border-border text-text-600',
       )}
     >
       讨论
@@ -74,7 +74,7 @@ export const ModeSwitcher: React.FC<ModeSwitcherProps> = (props) => (
       onClick={() => props.onClarificationChange(props.clarification === 'before_apply' ? 'when_blocked' : 'before_apply')}
       className={cn(
         'rounded border px-2 py-1 text-xs font-medium disabled:opacity-40',
-        props.clarification === 'before_apply' ? 'border-mode-ask bg-mode-ask text-white' : 'border-border text-text-600',
+        props.clarification === 'before_apply' ? 'border-warning bg-warning text-white' : 'border-border text-text-600',
       )}
     >
       执行前确认

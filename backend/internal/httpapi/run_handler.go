@@ -41,6 +41,14 @@ type runResponse struct {
 	Interaction model.RunInteraction `json:"interaction"`
 }
 
+func toRunResponse(r model.Run) runResponse {
+	return runResponse{
+		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
+		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
+		Target: r.WorkSpec.Target, Interaction: r.WorkSpec.Interaction,
+	}
+}
+
 // CreateRun POST /threads/{id}/runs
 func (h *RunHandler) CreateRun(c *gin.Context) {
 	threadID := c.Param("id")
@@ -66,11 +74,21 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, runResponse{
-		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
-		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
-		Target: r.WorkSpec.Target, Interaction: r.WorkSpec.Interaction,
-	})
+	c.JSON(http.StatusCreated, toRunResponse(r))
+}
+
+// GetRun GET /runs/{id}
+func (h *RunHandler) GetRun(c *gin.Context) {
+	r, err := h.svc.GetRun(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		if errors.Is(err, run.ErrRunNotFound) {
+			AbortWithError(c, ErrNotFound("run not found"))
+			return
+		}
+		AbortWithError(c, ErrInternal(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, toRunResponse(r))
 }
 
 func handleCreateRunError(c *gin.Context, err error) {

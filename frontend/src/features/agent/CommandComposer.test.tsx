@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
@@ -36,7 +36,7 @@ describe('CommandComposer target protocol', () => {
   });
 
   it('sends a stable slide id with the new payload', async () => {
-    const createRun = vi.fn().mockResolvedValue(undefined);
+    const createRun = vi.fn().mockResolvedValue(true);
     useRunStore.setState({ createRun });
     render(<CommandComposer />);
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '调整当前页' } });
@@ -45,36 +45,43 @@ describe('CommandComposer target protocol', () => {
       target: { artifact: 'presentation', level: 'slide', slide_id: 'stable-1' },
       interaction: { intent: 'apply', clarification: 'when_blocked' },
       instruction: '调整当前页',
-    }));
+    }, 'p1'));
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue(''));
   });
 
-  it('switches all four artifact and level combinations', () => {
+  it('switches all four artifact and level combinations', async () => {
     render(<CommandComposer />);
-    expect(screen.getByRole('button', { name: '演示' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: '蓝图' }));
-    fireEvent.click(screen.getByRole('button', { name: '整份' }));
+    expect(screen.getByRole('button', { name: 'HTML' })).toHaveAttribute('aria-pressed', 'true');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '蓝图' }));
+      fireEvent.click(screen.getByRole('button', { name: '整份' }));
+    });
     expect(useComposerStore.getState()).toMatchObject({ artifact: 'blueprint', level: 'deck' });
   });
 
-  it('maps discussion to consult', () => {
+  it('maps discussion to consult', async () => {
     render(<CommandComposer />);
-    fireEvent.click(screen.getByRole('button', { name: '讨论' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '讨论' }));
+    });
     expect(useComposerStore.getState().intent).toBe('consult');
   });
 
-  it('maps execution confirmation to before_apply', () => {
+  it('maps execution confirmation to before_apply', async () => {
     render(<CommandComposer />);
-    fireEvent.click(screen.getByRole('button', { name: '执行前确认' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '执行前确认' }));
+    });
     expect(useComposerStore.getState().clarification).toBe('before_apply');
   });
 
   it('materializes the whole deck without a slide id', async () => {
-    const createRun = vi.fn().mockResolvedValue(undefined);
+    const createRun = vi.fn().mockResolvedValue(true);
     useRunStore.setState({ createRun });
     render(<CommandComposer />);
     fireEvent.click(screen.getByRole('button', { name: '物化整份' }));
     await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', expect.objectContaining({
       target: { artifact: 'presentation', level: 'deck' },
-    })));
+    }), 'p1'));
   });
 });

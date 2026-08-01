@@ -23,14 +23,16 @@ export function useActiveSession(): RunSession {
     if (!threadId || threadId === 'new-pending') return;
     // 空态才 replay：运行时 in-memory 优先，防止刷新覆盖已有 SSE 增量。
     const current = useRunStore.getState().sessions[threadId];
-    if (current && current.timelineItems.length > 0) return;
+    if (current && (current.activeRunId || current.status !== 'idle' || current.timelineItems.length > 0)) return;
     threadsApi.history(threadId)
       .then((entries) => {
         if (!entries || entries.length === 0) return;
         const hydrated = hydrateRunFromHistory(entries as unknown as HistoryEntry[]);
         useRunStore.getState().hydrateTimeline(threadId, hydrated.items, hydrated.plan, hydrated.strategy);
       })
-      .catch((err) => console.warn('history replay failed', err));
+      .catch(() => {
+        // 历史记录失败不覆盖当前内存会话；用户仍可继续发送新指令。
+      });
   }, [threadId]);
 
   if (!threadId) return IDLE_SESSION;

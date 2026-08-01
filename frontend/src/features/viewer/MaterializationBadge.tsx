@@ -13,10 +13,10 @@ export function MaterializationBadge({ state }: { state: MaterializationState })
   return (
     <span className={cn(
       'rounded-full border px-2 py-0.5 text-[10px] font-medium',
-      state === 'fresh' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
-        state === 'not_materialized' ? 'border-slate-200 bg-slate-50 text-slate-600' :
-          state === 'unknown' ? 'border-slate-200 bg-white text-slate-500' :
-            'border-amber-200 bg-amber-50 text-amber-700',
+      state === 'fresh' ? 'border-success/20 bg-success-soft text-success' :
+        state === 'not_materialized' ? 'border-border bg-panel-muted text-text-600' :
+          state === 'unknown' ? 'border-border bg-surface text-text-400' :
+            'border-warning/20 bg-warning-soft text-warning',
     )}>
       {labels[state]}
     </span>

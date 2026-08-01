@@ -27,10 +27,10 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <button
             onClick={handleNewProject}
-            className="flex flex-col items-start p-6 text-left border border-border rounded-lg hover:border-mode-normal hover:bg-mode-normal/5 transition-all group"
+            className="flex flex-col items-start p-6 text-left border border-border rounded-lg hover:border-accent hover:bg-accent-soft transition-colors group"
           >
-            <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center mb-4 group-hover:border-mode-normal/30 group-hover:text-mode-normal transition-colors">
-              <FilePlus className="w-5 h-5 text-text-600 group-hover:text-mode-normal" />
+            <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center mb-4 group-hover:border-accent/30 group-hover:text-accent transition-colors">
+              <FilePlus className="w-5 h-5 text-text-600 group-hover:text-accent" />
             </div>
             <h3 className="text-base font-medium text-text-900 mb-1">新建项目</h3>
             <p className="text-sm text-text-400">从零开始一个新的演示文稿</p>
@@ -38,10 +38,10 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
 
           <button
             onClick={onOpenExisting}
-            className="flex flex-col items-start p-6 text-left border border-border rounded-lg hover:border-mode-normal hover:bg-mode-normal/5 transition-all group"
+            className="flex flex-col items-start p-6 text-left border border-border rounded-lg hover:border-accent hover:bg-accent-soft transition-colors group"
           >
-            <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center mb-4 group-hover:border-mode-normal/30 group-hover:text-mode-normal transition-colors">
-              <FolderOpen className="w-5 h-5 text-text-600 group-hover:text-mode-normal" />
+            <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center mb-4 group-hover:border-accent/30 group-hover:text-accent transition-colors">
+              <FolderOpen className="w-5 h-5 text-text-600 group-hover:text-accent" />
             </div>
             <h3 className="text-base font-medium text-text-900 mb-1">打开已有项目</h3>
             <p className="text-sm text-text-400">从最近的项目里继续</p>

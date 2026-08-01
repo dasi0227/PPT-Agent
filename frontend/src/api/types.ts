@@ -130,6 +130,8 @@ export interface NeedsInputPayload {
   reply_to: string;
 }
 
+export type JsonRecord = Record<string, unknown>;
+
 export type SSEEventName =
   | 'run.started'
   | 'context.assembled'
@@ -168,8 +170,52 @@ export interface PlanState {
   steps: PlanStep[];
 }
 
-export interface SSEEvent {
-  id?: string;
-  event: SSEEventName;
-  data: any;
+export interface WorkflowIssue {
+  code?: string;
+  message?: string;
+  evidence?: string;
+  [key: string]: unknown;
 }
+
+export interface ArtifactRef {
+  kind?: string;
+  id?: string;
+  path?: string;
+  [key: string]: unknown;
+}
+
+export interface StructuredOutcome {
+  status?: string;
+  strategy?: ExecutionStrategy;
+  summary?: string;
+  code?: string;
+  message?: string;
+  target?: RunTarget;
+  operation?: string;
+  affected?: ArtifactRef[];
+  issues?: WorkflowIssue[];
+  repair_rounds?: number;
+  [key: string]: unknown;
+}
+
+interface SSEEventBase<Name extends SSEEventName, Data> {
+  id?: string;
+  event: Name;
+  data: Data;
+}
+
+export type SSEEvent =
+  | SSEEventBase<'run.started', JsonRecord>
+  | SSEEventBase<'context.assembled', JsonRecord & { profile?: string; warnings?: string[]; read_only?: boolean }>
+  | SSEEventBase<'strategy.selected', JsonRecord & { strategy: ExecutionStrategy; reason?: string; risk?: string; complexity?: string }>
+  | SSEEventBase<'plan.created', JsonRecord & { plan: JsonRecord & { id?: string; goal?: string; steps?: JsonRecord[] } }>
+  | SSEEventBase<'stage.started' | 'stage.completed', JsonRecord & { stage?: string; duration_ms?: number }>
+  | SSEEventBase<'step.started' | 'step.completed' | 'step.failed', JsonRecord & { step_id: string; summary?: string }>
+  | SSEEventBase<'tool.called', JsonRecord & { call_id: string; tool: string; args?: JsonRecord }>
+  | SSEEventBase<'tool.completed', JsonRecord & { call_id: string; ok?: boolean; summary?: string; issues?: WorkflowIssue[] }>
+  | SSEEventBase<'verification.completed', JsonRecord & { verifier?: string; result?: JsonRecord & { passed?: boolean; issues?: WorkflowIssue[] } }>
+  | SSEEventBase<'repair.started' | 'repair.completed', JsonRecord & { round?: number; artifact?: ArtifactRef; improved?: boolean; summary?: string }>
+  | SSEEventBase<'artifact.staged' | 'artifact.committed', JsonRecord & { artifact: ArtifactRef; change?: string }>
+  | SSEEventBase<'status.summary', JsonRecord & { summary?: string }>
+  | SSEEventBase<'needs_input', JsonRecord & { id: string; prompt: string; choices?: string[] }>
+  | SSEEventBase<'run.completed' | 'run.failed' | 'run.canceled', JsonRecord & { outcome?: StructuredOutcome }>;

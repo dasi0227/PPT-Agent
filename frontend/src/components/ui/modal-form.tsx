@@ -69,7 +69,7 @@ export function FormModal<T>({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="mt-4">
           {renderField(value, setValue, validationError)}
-          {submitError && <div className="text-sm text-mode-error mt-2">{submitError}</div>}
+          {submitError && <div className="text-sm text-danger mt-2">{submitError}</div>}
           <DialogFooter className="mt-6">
             <button
               type="button"
@@ -82,7 +82,7 @@ export function FormModal<T>({
             <button
               type="submit"
               disabled={!canSubmit}
-              className="px-4 py-2 text-sm font-medium rounded-md bg-mode-normal text-white hover:bg-mode-normal/90 transition-colors disabled:opacity-50 flex items-center justify-center min-w-[80px]"
+              className="px-4 py-2 text-sm font-medium rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-50 flex items-center justify-center min-w-[80px]"
             >
               {loading ? "..." : confirmLabel}
             </button>

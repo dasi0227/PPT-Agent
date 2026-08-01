@@ -1,9 +1,10 @@
-import { render, waitFor, act, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, waitFor, act, screen, fireEvent } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewWorkspace } from './PreviewWorkspace';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useBlueprintStore } from '../../stores/blueprintStore';
+import { clearSlideRenderCache } from './useSlideRenderCache';
 
 const blueprint = (id: string, title = '封面标题') => ({
   schema_version: '2.0' as const, revision: 1, slide_id: id, section_id: 'main', role: 'cover',
@@ -11,20 +12,29 @@ const blueprint = (id: string, title = '封面标题') => ({
   visual_intent: { archetype: 'hero', description: '主视觉', asset_queries: [] },
   speaker_notes: '', created_at: 1, updated_at: 1,
 });
-const setBlueprints = () => useBlueprintStore.setState({ byProjectId: { p1: {
-  deck: { schema_version: '2.0', revision: 1, project_id: 'p1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', core_thesis: '', narrative_arc: '', sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
-  slides: { s1: blueprint('s1'), s2: blueprint('s2', '第二页') },
-  design_spec: { schema_version: '2.0', revision: 1, canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {} },
-  materialization: {
-    s1: { state: 'not_materialized', revisions: { presentation: 0, source_deck: 0, source_blueprint: 0, source_design: 0 } },
-    s2: { state: 'not_materialized', revisions: { presentation: 0, source_deck: 0, source_blueprint: 0, source_design: 0 } },
-  },
-} } });
+const setBlueprints = () => useBlueprintStore.setState({
+  byProjectId: { p1: {
+    deck: { schema_version: '2.0', revision: 1, project_id: 'p1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', core_thesis: '', narrative_arc: '', sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+    slides: { s1: blueprint('s1'), s2: blueprint('s2', '第二页') },
+    design_spec: { schema_version: '2.0', revision: 1, canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {} },
+    materialization: {
+      s1: { state: 'not_materialized', revisions: { presentation: 0, source_deck: 0, source_blueprint: 0, source_design: 0 } },
+      s2: { state: 'not_materialized', revisions: { presentation: 0, source_deck: 0, source_blueprint: 0, source_design: 0 } },
+    },
+  } },
+  loading: {},
+  error: {},
+});
 
 const postMessage = vi.fn();
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('PreviewWorkspace', () => {
   beforeEach(() => {
+    clearSlideRenderCache();
     postMessage.mockReset();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
       ok: true,
@@ -55,41 +65,42 @@ describe('PreviewWorkspace', () => {
       currentPage: 0,
       previewMode: 'main',
       globalView: 'html',
-      viewByPage: {},
     });
     setBlueprints();
   });
 
-  it('fetches stable render endpoints, posts HTML content, and uses goto for page switches', async () => {
+  it('loads the current slide first, then prefetches an adjacent slide', async () => {
     render(<PreviewWorkspace />);
 
     await waitFor(() => {
       expect(postMessage).toHaveBeenCalledWith(
         {
           type: 'updateDeck',
-          slides: [
-            { id: 's1', html: '<h1>Slide 1</h1>' },
-            { id: 's2', html: '<h1>Slide 2</h1>' },
-          ],
+          slides: [{ id: 's1', html: '<h1>Slide 1</h1>' }],
           index: 0,
         },
         '*'
       );
     });
-    expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s1/render', expect.any(Object));
-    expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s2/render', expect.any(Object));
-
-    postMessage.mockClear();
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe('/api/v1/slides/s1/render');
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s2/render', expect.any(Object));
+    });
 
     await act(async () => {
       useDeckStore.getState().setCurrentPage(1);
     });
 
     await waitFor(() => {
-      expect(postMessage).toHaveBeenCalledTimes(1);
+      expect(postMessage).toHaveBeenCalledWith(
+        {
+          type: 'updateDeck',
+          slides: [{ id: 's2', html: '<h1>Slide 2</h1>' }],
+          index: 0,
+        },
+        '*'
+      );
     });
-
-    expect(postMessage).toHaveBeenCalledWith({ type: 'gotoSlide', index: 1 }, '*');
   });
 
   it('keeps the main runtime sandboxed without same-origin privilege', async () => {
@@ -99,10 +110,143 @@ describe('PreviewWorkspace', () => {
     expect(iframe).toHaveAttribute('sandbox', 'allow-scripts');
     expect(iframe?.getAttribute('sandbox')).not.toContain('allow-same-origin');
   });
+
+  it('uses a new cache key when the presentation revision changes', async () => {
+    useProjectStore.setState({
+      slidesByProjectId: {
+        p1: [
+          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'Slide 1', html_path: '/slides/p1/s1.html', json_path: '', current_version: 1 },
+        ],
+      },
+    });
+    let renderedRevision = 1;
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => `<h1>Revision ${renderedRevision}</h1>`,
+    } as Response)));
+    render(<PreviewWorkspace />);
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({
+      type: 'updateDeck',
+      slides: [{ id: 's1', html: '<h1>Revision 1</h1>' }],
+      index: 0,
+    }, '*'));
+
+    renderedRevision = 2;
+    await act(async () => {
+      useProjectStore.setState((state) => ({
+        slidesByProjectId: {
+          ...state.slidesByProjectId,
+          p1: [{ ...state.slidesByProjectId.p1[0], current_version: 2 }],
+        },
+      }));
+    });
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({
+      type: 'updateDeck',
+      slides: [{ id: 's1', html: '<h1>Revision 2</h1>' }],
+      index: 0,
+    }, '*'));
+  });
+
+  it('loads only overview slides that enter the visible region', async () => {
+    const observers: Array<(entries: IntersectionObserverEntry[]) => void> = [];
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: (entries: IntersectionObserverEntry[]) => void) {
+        observers.push(callback);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentPage: 0 });
+    render(<PreviewWorkspace />);
+
+    expect(observers).toHaveLength(2);
+    expect(fetch).not.toHaveBeenCalled();
+    await act(async () => {
+      observers[0]([{ isIntersecting: true } as IntersectionObserverEntry]);
+    });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s1/render', expect.any(Object));
+  });
+
+  it('shows an actionable HTML error and retries without side effects', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline'); }));
+    render(<PreviewWorkspace />);
+    expect(await screen.findByText(/HTML 加载失败/)).toBeInTheDocument();
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '<h1>Recovered</h1>',
+    } as Response)));
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({
+      type: 'updateDeck',
+      slides: [{ id: 's1', html: '<h1>Recovered</h1>' }],
+      index: 0,
+    }, '*'));
+  });
+
+  it('supports keyboard paging and overview without hijacking text input', async () => {
+    vi.stubGlobal('IntersectionObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    render(<PreviewWorkspace />);
+    await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+    });
+    expect(useDeckStore.getState().currentPage).toBe(1);
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    fireEvent.keyDown(input, { key: 'ArrowLeft' });
+    expect(useDeckStore.getState().currentPage).toBe(1);
+    input.remove();
+
+    fireEvent.keyDown(screen.getByRole('button', { name: '上一页' }), { key: 'ArrowLeft' });
+    expect(useDeckStore.getState().currentPage).toBe(1);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'o' });
+    });
+    expect(useDeckStore.getState().previewMode).toBe('overview');
+  });
+
+  it('connects presentation mode to fullscreen and Escape exits it', async () => {
+    const fullscreenDescriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+    const requestDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'requestFullscreen');
+    const exitDescriptor = Object.getOwnPropertyDescriptor(document, 'exitFullscreen');
+    const requestFullscreen = vi.fn(async () => {});
+    const exitFullscreen = vi.fn(async () => {});
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', { configurable: true, value: requestFullscreen });
+    Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exitFullscreen });
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: document.body });
+
+    render(<PreviewWorkspace />);
+    await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: '全屏放映' }));
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+
+    if (requestDescriptor) Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', requestDescriptor);
+    else Reflect.deleteProperty(HTMLElement.prototype, 'requestFullscreen');
+    if (exitDescriptor) Object.defineProperty(document, 'exitFullscreen', exitDescriptor);
+    else Reflect.deleteProperty(document, 'exitFullscreen');
+    if (fullscreenDescriptor) Object.defineProperty(document, 'fullscreenElement', fullscreenDescriptor);
+    else Reflect.deleteProperty(document, 'fullscreenElement');
+  });
 });
 
 describe('PreviewWorkspace dual view (globalView)', () => {
   beforeEach(() => {
+    clearSlideRenderCache();
     postMessage.mockReset();
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
@@ -115,7 +259,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
         return { postMessage } as unknown as Window;
       }
     });
-    useDeckStore.setState({ currentPage: 0, previewMode: 'main', globalView: 'html', viewByPage: {} });
+    useDeckStore.setState({ currentPage: 0, previewMode: 'main', globalView: 'html' });
     setBlueprints();
   });
 
@@ -178,13 +322,13 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       },
       loadingProjects: false,
     });
-    useDeckStore.setState({ globalView: 'outline', currentPage: 0, previewMode: 'main', viewByPage: {} });
+    useDeckStore.setState({ globalView: 'outline', currentPage: 0, previewMode: 'main' });
     render(<PreviewWorkspace />);
     // 全局 outline：主区应显示 OutlineCard 而非 iframe。
     expect(document.querySelector('iframe')).toBeNull();
   });
 
-  it('grid mode shows amber 暂无 HTML badge for slides without html', async () => {
+  it('grid mode marks slides without generated HTML', async () => {
     useProjectStore.setState({
       projects: [],
       activeProjectId: 'p1',
@@ -196,10 +340,10 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       },
       loadingProjects: false,
     });
-    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentPage: 0, viewByPage: {} });
+    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentPage: 0 });
     render(<PreviewWorkspace />);
     // 网格模式下 s2 无 html_path，应有徽标。
-    expect(screen.getByText('暂无 HTML')).toBeInTheDocument();
+    expect(screen.getByText('未生成 HTML')).toBeInTheDocument();
     await waitFor(() => expect(document.querySelector('iframe')).not.toBeNull());
     for (const iframe of Array.from(document.querySelectorAll('iframe'))) {
       expect(iframe).toHaveAttribute('sandbox', 'allow-scripts');

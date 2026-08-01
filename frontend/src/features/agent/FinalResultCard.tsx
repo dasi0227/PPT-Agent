@@ -1,69 +1,62 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import type { StructuredOutcome } from '../../api/types';
+import { Disclosure } from '../../components/ui/primitives';
 import { FinalResultItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
-
-function isStructuredResult(r: any): boolean {
-  return r != null && typeof r === 'object' && typeof r.status === 'string' && r.target != null;
-}
+import { artifactLabels, strategyLabels, targetLabel } from './runtimeLabels';
 
 export const FinalResultCard: React.FC<{ item: FinalResultItem }> = ({ item }) => {
-  const result = item.result;
-  const structured = isStructuredResult(result);
-  const issues: any[] = structured && Array.isArray(result.issues) ? result.issues : [];
-  const summary: string | undefined = !structured
-    ? (typeof result === 'string' ? result : result?.summary)
-    : undefined;
+  const result = item.result && typeof item.result === 'object' ? item.result as StructuredOutcome : null;
+  const plainSummary = typeof item.result === 'string' ? item.result : null;
+  const issues = result?.issues ?? [];
+  const affected = result?.affected ?? [];
 
   return (
-    <div className="flex justify-start my-4">
-      <div className="max-w-[85%] bg-surface border border-border rounded-lg p-3 shadow-sm text-sm text-text-900">
-        <div className="mb-3 flex items-center">
-          <CheckCircle2 className="mr-2 h-5 w-5 shrink-0 text-mode-final" />
-          <span className="font-semibold">最终交付</span>
-          {structured && issues.length > 0 && (
-            <span className="ml-auto flex items-center text-xs font-medium text-mode-ask">
-              <AlertTriangle className="mr-1 h-3.5 w-3.5" />
-              {issues.length} 项问题
-            </span>
-          )}
-        </div>
-        {structured ? (
-          <div className="space-y-2">
-            {result.target && <p><strong>目标：</strong> {result.target.artifact} / {result.target.level}</p>}
-            {result.strategy && <p><strong>策略：</strong> {result.strategy}</p>}
-            {result.operation && <p><strong>操作：</strong> {result.operation}</p>}
-            {Array.isArray(result.affected) && result.affected.length > 0 && (
-              <p><strong>影响产物：</strong> {result.affected.map((item: any) => `${item.kind}:${item.id}`).join(', ')}</p>
-            )}
-            {typeof result.repair_rounds === 'number' && result.repair_rounds > 0 && (
-              <p><strong>修复轮次：</strong> {result.repair_rounds}</p>
-            )}
-            {result.summary && <MarkdownMessage content={String(result.summary)} />}
-            {issues.length > 0 && (
-              <div className="mt-2 text-mode-ask">
-                <div className="flex items-center font-medium mb-1">
-                  <AlertTriangle className="w-4 h-4 mr-1" />
-                  验证问题
-                </div>
-                <ul className="list-disc list-inside space-y-1 ml-1 text-xs">
-                  {issues.map((issue, i) => (
-                    <li key={i}>
-                      <span>[{issue.code}]</span>{' '}
-                      <span>{issue.evidence || issue.message}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="break-words">
-            {summary && summary.trim().length > 0
-              ? <MarkdownMessage content={summary} />
-              : <span className="text-text-400">已完成</span>}
-          </div>
+    <div className="my-4 border-l-2 border-success pl-3 text-sm text-text-900">
+      <div className="mb-2 flex items-center">
+        <CheckCircle2 className="mr-2 h-5 w-5 shrink-0 text-success" strokeWidth={1.75} />
+        <span className="font-semibold">执行结果</span>
+        {issues.length > 0 && (
+          <span className="ml-auto flex items-center text-xs font-medium text-warning">
+            <AlertTriangle className="mr-1 h-3.5 w-3.5" />
+            {issues.length} 项需要注意
+          </span>
         )}
+      </div>
+      <div className="space-y-2">
+        {plainSummary && <MarkdownMessage content={plainSummary} />}
+        {result?.summary && (
+          <section>
+            <h3 className="mb-1 text-xs font-medium text-text-600">完成内容</h3>
+            <MarkdownMessage content={result.summary} />
+          </section>
+        )}
+        {result?.target && (
+          <p><span className="text-text-600">影响范围：</span>{targetLabel(result.target.artifact, result.target.level)}</p>
+        )}
+        {affected.length > 0 && (
+          <p>
+            <span className="text-text-600">产物：</span>
+            {affected.map((artifact) => artifactLabels[String(artifact.kind)] ?? String(artifact.kind ?? artifact.id ?? '产物')).join('、')}
+          </p>
+        )}
+        {result?.strategy && (
+          <p><span className="text-text-600">执行策略：</span>{strategyLabels[result.strategy]}</p>
+        )}
+        <p><span className="text-text-600">验证结果：</span>{issues.length === 0 ? '已通过' : `${issues.length} 项待处理`}</p>
+        {issues.length > 0 && (
+          <Disclosure label="查看验证问题">
+            <ul className="space-y-1 text-xs text-warning">
+              {issues.map((issue, index) => (
+                <li key={`${issue.code ?? 'issue'}-${index}`}>
+                  {issue.code ? `[${issue.code}] ` : ''}{issue.evidence ?? issue.message ?? '验证问题'}
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
+        )}
+        <p className="text-xs text-text-600">你可以继续说明需要调整的内容。</p>
       </div>
     </div>
   );

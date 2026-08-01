@@ -7,6 +7,7 @@ interface ThreadState {
   threadsByProjectId: Record<string, Thread[]>;
   openThreadIdsByProjectId: Record<string, string[]>;
   activeThreadIdByProjectId: Record<string, string | null>;
+  errorByProjectId: Record<string, string | null>;
 
   loadThreads: (projectId: string) => Promise<void>;
   openThread: (projectId: string, threadId: string) => void;
@@ -30,6 +31,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   threadsByProjectId: {},
   openThreadIdsByProjectId: {},
   activeThreadIdByProjectId: {},
+  errorByProjectId: {},
 
   displayThreads: (projectId) => get().threadsByProjectId[projectId] || [],
 
@@ -50,10 +52,16 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
           threadsByProjectId: nextThreads,
           openThreadIdsByProjectId: nextOpen,
           activeThreadIdByProjectId: nextActive,
+          errorByProjectId: { ...state.errorByProjectId, [projectId]: null },
         };
       });
     } catch (err) {
-      console.error('Failed to load threads', err);
+      set((state) => ({
+        errorByProjectId: {
+          ...state.errorByProjectId,
+          [projectId]: err instanceof Error ? err.message : '会话加载失败，请重试',
+        },
+      }));
     }
   },
 
@@ -81,6 +89,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         activeThreadIdByProjectId: { ...state.activeThreadIdByProjectId, [projectId]: active },
       };
     });
+    useRunStore.getState().dropSessions([threadId]);
   },
 
   createThread: async (projectId, title) => {

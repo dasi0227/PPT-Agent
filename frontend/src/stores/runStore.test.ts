@@ -21,10 +21,24 @@ vi.mock('./blueprintStore', () => ({
 }));
 
 // mock SSE：暴露 onMessage 供手动派发。
-const connections: Array<{ runId: string; onMessage: (e: any) => void; closed: boolean }> = [];
+const connections: Array<{
+  runId: string;
+  onMessage: (e: any) => void;
+  onError?: (e: Event) => void;
+  onStatus?: (status: string) => void;
+  lastEventId?: string;
+  closed: boolean;
+}> = [];
 vi.mock('../api/sse', () => ({
   subscribeRunEvents: (runId: string, opts: any) => {
-    const conn = { runId, onMessage: opts.onMessage, closed: false };
+    const conn = {
+      runId,
+      onMessage: opts.onMessage,
+      onError: opts.onError,
+      onStatus: opts.onStatus,
+      lastEventId: opts.lastEventId,
+      closed: false,
+    };
     connections.push(conn);
     return () => { conn.closed = true; };
   },
@@ -32,17 +46,32 @@ vi.mock('../api/sse', () => ({
 
 // mock runs API：createRun 需要 await 一个 Promise，其中一个 case 需要挂起来观察同步插入。
 let pendingResolve: ((v: any) => void) | null = null;
-let pendingMode: 'resolve' | 'pending' = 'resolve';
+let pendingMode: 'resolve' | 'pending' | 'reject' = 'resolve';
+let recoveredRun: any = null;
 vi.mock('../api/runs', () => ({
   runsApi: {
     create: (_threadId: string, _payload: any) => {
       if (pendingMode === 'pending') {
         return new Promise((r) => { pendingResolve = r; });
       }
-      return Promise.resolve({ id: `run_${connections.length + 1}` });
+      if (pendingMode === 'reject') return Promise.reject(new Error('offline'));
+      return Promise.resolve({
+        id: `run_${connections.length + 1}`,
+        thread_id: 't1',
+        project_id: 'p1',
+        status: 'running',
+        target: request('').target,
+        interaction: request('').interaction,
+        events_url: '',
+      });
     },
     submitInput: async () => ({}),
     cancel: async () => ({}),
+    get: async () => {
+      if (recoveredRun instanceof Error) throw recoveredRun;
+      if (recoveredRun) return recoveredRun;
+      throw new Error('not used');
+    },
   },
 }));
 
@@ -60,6 +89,8 @@ function reset() {
   connections.length = 0;
   pendingResolve = null;
   pendingMode = 'resolve';
+  recoveredRun = null;
+  sessionStorage.clear();
   useRunStore.setState({ sessions: {} });
 }
 
@@ -88,6 +119,14 @@ describe('runStore user_turn head insert + reload + hydrate', () => {
     expect(items.map((i) => i.type)).toEqual(['user_turn']);
   });
 
+  test('createRun failure preserves the user instruction and adds an actionable error', async () => {
+    pendingMode = 'reject';
+    const created = await useRunStore.getState().createRun('t1', request('keep me'), 'p1');
+    expect(created).toBe(false);
+    expect(useRunStore.getState().sessions.t1.timelineItems.map((item) => item.type)).toEqual(['user_turn', 'error']);
+    expect(useRunStore.getState().sessions.t1.status).toBe('error');
+  });
+
   test('run.completed refreshes only the targeted presentation slide', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     const conn = connections[connections.length - 1];
@@ -104,6 +143,73 @@ describe('runStore user_turn head insert + reload + hydrate', () => {
     conn.onMessage({ id: '1', event: 'run.failed', data: { outcome: { code: 'E', message: 'x' } } });
     expect(slideLoads).toEqual([]);
     expect(blueprintRefreshes).toEqual([]);
+  });
+
+  test('temporary stream errors reconnect without failing the run', async () => {
+    await useRunStore.getState().createRun('t1', request('go'));
+    const conn = connections[connections.length - 1];
+    conn.onStatus?.('reconnecting');
+    conn.onError?.(new Event('error'));
+    expect(useRunStore.getState().sessions.t1.status).toBe('running');
+    expect(useRunStore.getState().sessions.t1.streamStatus).toBe('reconnecting');
+  });
+
+  test('persists lastEventId and ignores duplicate events', async () => {
+    await useRunStore.getState().createRun('t1', request('go'));
+    const conn = connections[connections.length - 1];
+    const event = { id: '42', event: 'status.summary', data: { summary: '执行中' } };
+    conn.onMessage(event);
+    conn.onMessage(event);
+    expect(useRunStore.getState().sessions.t1.timelineItems.filter((item) => item.id === '42')).toHaveLength(1);
+    expect(sessionStorage.getItem('ppt-agent-active-runs-v1')).toContain('"lastEventId":"42"');
+  });
+
+  test('recovers an active run with its saved last event ID', async () => {
+    sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
+      t1: { runId: 'run_saved', threadId: 't1', projectId: 'p1', lastEventId: '17' },
+    }));
+    recoveredRun = {
+      id: 'run_saved',
+      thread_id: 't1',
+      project_id: 'p1',
+      status: 'running',
+      target: request('').target,
+      interaction: request('').interaction,
+      events_url: '/api/v1/runs/run_saved/events',
+    };
+
+    await useRunStore.getState().recoverPersistedRuns();
+
+    expect(useRunStore.getState().sessions.t1).toMatchObject({
+      activeRunId: 'run_saved',
+      projectId: 'p1',
+      status: 'running',
+      lastEventId: '17',
+    });
+    expect(connections).toHaveLength(1);
+    expect(connections[0]).toMatchObject({ runId: 'run_saved', lastEventId: '17' });
+  });
+
+  test('cleans a missing persisted run and leaves a non-blocking timeline notice', async () => {
+    sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
+      t1: { runId: 'missing', threadId: 't1', projectId: 'p1' },
+    }));
+    recoveredRun = new Error('not found');
+
+    await useRunStore.getState().recoverPersistedRuns();
+
+    expect(sessionStorage.getItem('ppt-agent-active-runs-v1')).toBeNull();
+    expect(useRunStore.getState().sessions.t1.status).toBe('idle');
+    expect(useRunStore.getState().sessions.t1.timelineItems[0]).toMatchObject({
+      type: 'error',
+      retryable: false,
+    });
+  });
+
+  test('cancel marks the run as canceled', async () => {
+    await useRunStore.getState().createRun('t1', request('go'));
+    await useRunStore.getState().cancelRun('t1', useRunStore.getState().sessions.t1.activeRunId!);
+    expect(useRunStore.getState().sessions.t1.status).toBe('canceled');
   });
 
   test('hydrateTimeline is idempotent when timelineItems non-empty', () => {

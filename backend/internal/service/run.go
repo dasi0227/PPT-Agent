@@ -140,6 +140,10 @@ func (svc *RunService) Cancel(ctx context.Context, runID string) error {
 	return svc.engine.Cancel(ctx, runID)
 }
 
+func (svc *RunService) GetRun(ctx context.Context, runID string) (model.Run, error) {
+	return svc.store.GetRun(ctx, runID)
+}
+
 func (svc *RunService) Subscribe(ctx context.Context, runID string, afterSeq int64) (<-chan model.Event, func(), error) {
 	return svc.engine.Subscribe(ctx, runID, afterSeq)
 }

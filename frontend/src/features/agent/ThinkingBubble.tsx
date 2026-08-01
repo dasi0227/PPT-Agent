@@ -6,13 +6,13 @@ import React from 'react';
 export const ThinkingBubble: React.FC = () => {
   return (
     <div className="flex justify-start" aria-live="polite">
-      <div className="max-w-[85%] rounded-lg bg-mode-normal/10 border border-mode-normal/20 px-3 py-2 flex items-center gap-2 text-sm text-mode-normal">
+      <div className="max-w-[85%] rounded-lg bg-accent-soft border border-accent/20 px-3 py-2 flex items-center gap-2 text-sm text-accent">
         <span className="flex items-center gap-0.5" aria-hidden>
-          <span className="w-1.5 h-1.5 rounded-full bg-mode-normal animate-bounce [animation-delay:-0.2s]" />
-          <span className="w-1.5 h-1.5 rounded-full bg-mode-normal animate-bounce [animation-delay:-0.1s]" />
-          <span className="w-1.5 h-1.5 rounded-full bg-mode-normal animate-bounce" />
+          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:-0.2s]" />
+          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce [animation-delay:-0.1s]" />
+          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" />
         </span>
-        <span>正在思考...</span>
+        <span>正在思考…</span>
       </div>
     </div>
   );

@@ -1,16 +1,22 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Disclosure, InlineNotice } from '../../components/ui/primitives';
 import { useActiveSession } from './useActiveSession';
-import { MarkdownMessage } from './MarkdownMessage';
-import { ToolCallCard } from './ToolCallCard';
-import { PlanCard } from './PlanCard';
 import { ArtifactCard } from './ArtifactCard';
 import { FinalResultCard } from './FinalResultCard';
 import { FinishBubble } from './FinishBubble';
+import { MarkdownMessage } from './MarkdownMessage';
 import { NeedsInputCard } from './NeedsInputCard';
+import { PlanCard } from './PlanCard';
 import { ThinkingBubble } from './ThinkingBubble';
+import { ToolCallCard } from './ToolCallCard';
+import type {
+  ContextStatusItem,
+  StrategyStatusItem,
+  VerificationStatusItem,
+} from './eventReducer';
+import { strategyLabels, targetLabel } from './runtimeLabels';
 
-// AGENT_CONTENT_TYPES：一旦 timeline 出现任何"agent 类"内容，就撤下 ThinkingBubble；
-// tool_call / artifact 也算已有反馈（用户能看到 agent 在做事），一并进白名单。
 const AGENT_CONTENT_TYPES = new Set([
   'markdown',
   'tool_call',
@@ -23,12 +29,60 @@ const AGENT_CONTENT_TYPES = new Set([
   'verification_status',
 ]);
 
-// ERROR_CODE_MESSAGES：错误码到中文友好文案的映射。缺省仍回落 item.message，
-// 避免在未覆盖的错误码上出现"空提示"。
 const ERROR_CODE_MESSAGES: Record<string, string> = {
-  LLM_TIMEOUT: 'AI 响应超时，请稍后重试或调低复杂度',
-  LLM_BAD_REQUEST: 'AI 请求失败',
+  LLM_TIMEOUT: 'AI 响应超时，请稍后重试或降低任务复杂度。',
+  LLM_BAD_REQUEST: 'AI 请求未能处理，请调整指令后重试。',
 };
+
+function primaryErrorMessage(message: string): string {
+  return /[\u3400-\u9fff]/u.test(message)
+    ? message
+    : '运行未能完成，请查看错误详情后重试。';
+}
+
+function ExecutionMetaRow({
+  context,
+  strategy,
+}: {
+  context?: ContextStatusItem;
+  strategy?: StrategyStatusItem;
+}) {
+  if (!context && !strategy) return null;
+  return (
+    <Disclosure label={[
+      context ? '上下文已准备' : '',
+      strategy ? strategyLabels[strategy.strategy] : '',
+    ].filter(Boolean).join(' | ')}>
+      <div className="space-y-1 text-xs text-text-600">
+        {context && <p>上下文配置：{context.profile || '默认'}{context.readOnly ? '，只读' : ''}</p>}
+        {strategy?.reason && <p>策略说明：{strategy.reason}</p>}
+        {strategy && <p>风险：{strategy.risk || '未标注'}，复杂度：{strategy.complexity || '未标注'}</p>}
+        {context?.warnings.map((warning) => <p key={warning} className="text-warning">{warning}</p>)}
+      </div>
+    </Disclosure>
+  );
+}
+
+function VerificationSummary({ item }: { item: VerificationStatusItem }) {
+  return (
+    <div className="flex items-start gap-2 border-l-2 border-success px-3 py-1.5 text-xs text-text-600">
+      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
+      <div>
+        <p className="font-medium text-text-900">验证完成</p>
+        <p>{item.passedCount} 项通过{item.failedCount > 0 ? `，${item.failedCount} 项未通过` : ''}</p>
+        {item.issues.length > 0 && (
+          <Disclosure label={`查看 ${item.issues.length} 项问题`}>
+            <ul className="space-y-1 text-danger">
+              {item.issues.map((issue, index) => (
+                <li key={`${issue.code ?? 'issue'}-${index}`}>{issue.message ?? issue.evidence ?? issue.code ?? '验证问题'}</li>
+              ))}
+            </ul>
+          </Disclosure>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export const Timeline: React.FC = () => {
   const { timelineItems, status, plan } = useActiveSession();
@@ -38,31 +92,40 @@ export const Timeline: React.FC = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [timelineItems, plan]);
 
-  // 思考气泡显示条件：status=running，且用户已发过 user_turn，且尚无任何 agent 内容。
-  const hasUserTurn = timelineItems.some((it) => it.type === 'user_turn');
-  const hasAgentContent = timelineItems.some((it) => AGENT_CONTENT_TYPES.has(it.type));
-  const showThinking = status === 'running' && hasUserTurn && !hasAgentContent;
+  const context = useMemo(
+    () => [...timelineItems].reverse().find((item): item is ContextStatusItem => item.type === 'context_status'),
+    [timelineItems],
+  );
+  const strategy = useMemo(
+    () => [...timelineItems].reverse().find((item): item is StrategyStatusItem => item.type === 'strategy_status'),
+    [timelineItems],
+  );
+  const visibleItems = timelineItems.filter((item) => item.type !== 'context_status' && item.type !== 'strategy_status');
+  const hasUserTurn = timelineItems.some((item) => item.type === 'user_turn');
+  const hasAgentContent = timelineItems.some((item) => AGENT_CONTENT_TYPES.has(item.type));
+  const showThinking = (status === 'creating' || status === 'running') && hasUserTurn && !hasAgentContent;
+  const runActive = status === 'creating' || status === 'running' || status === 'needs_input';
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
-      {timelineItems.length === 0 && !plan && status === 'idle' ? (
-        <div className="text-center text-text-400 text-sm mt-10">
-          How can I help you with this presentation?
+    <div className="flex-1 space-y-3 overflow-y-auto bg-panel p-3">
+      {timelineItems.length === 0 && !plan && status === 'idle' && (
+        <div className="mx-auto mt-10 max-w-56 text-center text-sm leading-6 text-text-400">
+          说明你想制作或修改的内容，我会在这里展示执行过程。
         </div>
-      ) : null}
+      )}
 
-      {/* plan 与 progress 正交：plan 是步骤清单，常驻 timeline 顶部；progress 在面板头部 */}
-      {plan && <PlanCard plan={plan} />}
+      <ExecutionMetaRow context={context} strategy={strategy} />
+      {plan && <PlanCard plan={plan} running={runActive} />}
 
-      {timelineItems.map((item) => {
+      {visibleItems.map((item) => {
         switch (item.type) {
           case 'user_turn':
             return (
               <div key={item.id} className="flex justify-end">
-                <div className="max-w-[85%] rounded-lg bg-black/5 border border-border px-3 py-2">
+                <div className="max-w-[88%] rounded-lg border border-border bg-panel-muted px-3 py-2">
                   {item.target && (
-                    <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-400">
-                      {item.target.artifact} / {item.target.level} · {item.interaction?.intent}
+                    <div className="mb-1 text-[10px] font-medium text-text-400">
+                      {targetLabel(item.target.artifact as 'blueprint' | 'presentation', item.target.level as 'slide' | 'deck')}
                     </div>
                   )}
                   <MarkdownMessage content={item.text} />
@@ -76,52 +139,49 @@ export const Timeline: React.FC = () => {
           case 'artifact':
             return <ArtifactCard key={item.id} item={item} />;
           case 'final_result':
-            if (typeof item.result === 'object' && item.result !== null) {
-              return <FinalResultCard key={item.id} item={item} />;
-            }
-            return <FinishBubble key={item.id} item={item} />;
+            return typeof item.result === 'object' && item.result !== null
+              ? <FinalResultCard key={item.id} item={item} />
+              : <FinishBubble key={item.id} item={item} />;
           case 'needs_input':
             return <NeedsInputCard key={item.id} item={item} />;
-          case 'error':
-            {
-              const friendly = item.code ? ERROR_CODE_MESSAGES[item.code] : undefined;
-              return (
-                <div key={item.id} className="p-3 bg-mode-error/10 border border-mode-error/20 text-mode-error text-sm rounded-md">
-                  <strong>Error{item.code ? ` [${item.code}]` : ''}:</strong>{' '}
-                  {friendly ?? item.message}
+          case 'error': {
+            const friendly = item.code ? ERROR_CODE_MESSAGES[item.code] : undefined;
+            const primaryMessage = friendly ?? primaryErrorMessage(item.message);
+            return (
+              <InlineNotice key={item.id} tone="danger">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="min-w-0">
+                    <p>{primaryMessage}</p>
+                    {item.retryable !== false && <p className="mt-1 text-xs">请检查输入或网络后重试。</p>}
+                    {(item.code || item.requestId || item.technicalMessage || primaryMessage !== item.message) && (
+                      <Disclosure label="错误详情">
+                        <div className="space-y-1 font-mono text-[11px]">
+                          {item.code && <p>错误码：{item.code}</p>}
+                          {item.requestId && <p>请求 ID：{item.requestId}</p>}
+                          {(item.technicalMessage || primaryMessage !== item.message) && (
+                            <p>原始信息：{item.technicalMessage ?? item.message}</p>
+                          )}
+                        </div>
+                      </Disclosure>
+                    )}
+                  </div>
                 </div>
-              );
-            }
-          case 'context_status':
-            return (
-              <div key={item.id} className="rounded-md border border-border bg-black/[0.02] px-3 py-2 text-xs text-text-400">
-                Context ready · {item.profile}{item.readOnly ? ' · read-only' : ''}
-                {item.warnings.length > 0 && (
-                  <div className="mt-1 text-amber-600">{item.warnings.join(' · ')}</div>
-                )}
-              </div>
+              </InlineNotice>
             );
-          case 'strategy_status':
-            return (
-              <div key={item.id} className="rounded-md border border-border bg-black/[0.02] px-3 py-2 text-xs text-text-600">
-                Strategy · <span className="font-medium text-text-900">{item.strategy}</span>
-                <span className="text-text-400"> · {item.risk} risk · {item.complexity} complexity</span>
-                {item.reason && <div className="mt-1 text-text-400">{item.reason}</div>}
-              </div>
-            );
+          }
           case 'verification_status':
-            return (
-              <div key={item.id} className={`rounded-md border px-3 py-2 text-xs ${
-                item.passed ? 'border-mode-final/20 bg-mode-final/5 text-mode-final' : 'border-mode-error/20 bg-mode-error/5 text-mode-error'
-              }`}>
-                {item.verifier} · {item.passed ? 'verified' : `failed · ${item.issueCount} issue(s)`}
-              </div>
-            );
+            return <VerificationSummary key={item.id} item={item} />;
           default:
             return null;
         }
       })}
       {showThinking && <ThinkingBubble />}
+      {status === 'done' && visibleItems.length === 0 && (
+        <div className="flex items-center gap-2 text-xs text-success">
+          <CheckCircle2 className="h-4 w-4" /> 运行已完成
+        </div>
+      )}
       <div ref={bottomRef} />
     </div>
   );

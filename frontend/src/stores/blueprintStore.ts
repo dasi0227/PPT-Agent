@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { blueprintsApi } from '../api/blueprints';
 import type { BlueprintProjectView, SlideBlueprint } from '../api/types';
+import { APIError } from '../api/client';
 
 interface BlueprintState {
   byProjectId: Record<string, BlueprintProjectView>;
@@ -28,7 +29,12 @@ export const useBlueprintStore = create<BlueprintState>((set) => ({
     } catch (error) {
       set((state) => ({
         loading: { ...state.loading, [projectId]: false },
-        error: { ...state.error, [projectId]: error instanceof Error ? error.message : String(error) },
+        error: {
+          ...state.error,
+          [projectId]: error instanceof APIError && error.status === 404
+            ? undefined
+            : error instanceof Error ? error.message : String(error),
+        },
       }));
     }
   },

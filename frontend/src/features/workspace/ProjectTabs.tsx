@@ -20,11 +20,11 @@ export const ProjectTabs: React.FC = () => {
     if (id === 'new-pending') {
       return { id, title: '新建中…' };
     }
-    return projects.find(p => p.id === id) || { id, title: 'Loading...' };
+    return projects.find(p => p.id === id) || { id, title: '加载中…' };
   });
 
   return (
-    <div className="flex items-center h-12 bg-background border-b border-border-strong px-2 overflow-x-auto select-none">
+    <div className="flex items-center h-12 bg-panel border-b border-border-strong px-2 overflow-x-auto select-none">
       <div className="flex-shrink-0 mr-4 font-bold text-text-900 px-2 flex items-center">
         <img src="/logo.jpg" alt="Logo" className="w-5 h-5 rounded-sm mr-2 object-cover" />
         M7 Studio
@@ -39,21 +39,30 @@ export const ProjectTabs: React.FC = () => {
             return (
               <div
                 key={proj.id}
+                role="tab"
+                aria-selected={isActive}
+                tabIndex={0}
                 onClick={() => selectProject(proj.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectProject(proj.id);
+                  }
+                }}
                 className={cn(
-                  "group h-10 px-3 pl-4 rounded-t-md text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer",
+                  "group h-10 px-3 pl-4 rounded-t-md text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer focus-visible:ring-inset",
                   isActive
-                    ? "bg-surface text-text-900 border-border-strong border-b-transparent shadow-sm relative top-[1px]"
-                    : "bg-background text-text-600 border-transparent hover:bg-black/5"
+                    ? "bg-panel text-text-900 border-border-strong border-b-panel relative top-[1px]"
+                    : "bg-transparent text-text-600 border-transparent hover:bg-panel-muted"
                 )}
               >
-                <span className="truncate max-w-[160px]">{proj.title || 'Untitled Project'}</span>
+                <span className="truncate max-w-[160px]">{proj.title || '未命名项目'}</span>
                 
                 {isActive && runStatus === 'running' && (
-                  <span className="inline-block w-2 h-2 rounded-full bg-mode-normal animate-pulse" />
+                  <span aria-label="运行中" className="inline-block w-2 h-2 rounded-full bg-accent animate-pulse" />
                 )}
                 {isActive && runStatus === 'needs_input' && (
-                  <span className="inline-block w-2 h-2 rounded-full bg-mode-ask animate-pulse" />
+                  <span aria-label="等待输入" className="inline-block w-2 h-2 rounded-full bg-warning animate-pulse" />
                 )}
                 
                 {proj.id !== 'new-pending' && (
@@ -62,7 +71,7 @@ export const ProjectTabs: React.FC = () => {
                       type="button"
                       aria-label={`更多选项`}
                       onClick={(e) => e.stopPropagation()}
-                      className="p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
                     >
                       <MoreHorizontal className="w-4 h-4 text-text-400" />
                     </button>
@@ -79,6 +88,7 @@ export const ProjectTabs: React.FC = () => {
             }}
             className="h-10 px-3 ml-1 rounded-t-md text-text-600 hover:bg-black/5 hover:text-text-900 transition-colors flex items-center"
             title="新建或打开项目"
+            aria-label="新建或打开项目"
           >
             <Plus className="w-4 h-4" />
           </button>

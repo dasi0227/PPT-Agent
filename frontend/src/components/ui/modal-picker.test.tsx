@@ -27,7 +27,7 @@ describe('PickerModal', () => {
     expect(screen.getByText('Item 1')).toBeInTheDocument();
     expect(screen.getByText('Item 2')).toBeInTheDocument();
 
-    const input = screen.getByPlaceholderText('Search...');
+    const input = screen.getByPlaceholderText('搜索项目');
     fireEvent.change(input, { target: { value: 'Item 2' } });
 
     expect(screen.queryByText('Item 1')).not.toBeInTheDocument();

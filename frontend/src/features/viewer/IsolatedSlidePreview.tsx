@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RuntimeSlide, runtimeEventFromFrame } from './previewProtocol';
+import { Button } from '../../components/ui/primitives';
 
 interface IsolatedSlidePreviewProps {
   slides: RuntimeSlide[];
@@ -19,6 +20,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const indexRef = useRef(index);
   const [renderError, setRenderError] = useState('');
+  const [runtimeVersion, setRuntimeVersion] = useState(0);
   indexRef.current = index;
 
   const sendDeck = useCallback(() => {
@@ -55,6 +57,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   return (
     <div className="relative h-full w-full">
       <iframe
+        key={runtimeVersion}
         ref={iframeRef}
         src="/slide-runtime/index.html"
         sandbox="allow-scripts"
@@ -66,9 +69,17 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
       {renderError && (
         <div
           role="alert"
-          className="absolute inset-x-3 bottom-3 rounded bg-mode-error/90 px-3 py-2 text-xs text-white"
+          className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded bg-danger/95 px-3 py-2 text-xs text-white"
         >
-          预览加载失败：{renderError}
+          <span>iframe 运行异常：{renderError}</span>
+          <Button
+            variant="secondary"
+            className="h-7 bg-white px-2 text-xs text-danger"
+            onClick={() => {
+              setRenderError('');
+              setRuntimeVersion((value) => value + 1);
+            }}
+          >重试</Button>
         </div>
       )}
     </div>

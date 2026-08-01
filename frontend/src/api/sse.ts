@@ -1,10 +1,49 @@
-import { SSEEvent } from './types';
+import { SSEEvent, SSEEventName } from './types';
 
 export interface SSEOptions {
   onMessage?: (event: SSEEvent) => void;
   onError?: (err: Event) => void;
+  onStatus?: (status: 'connecting' | 'open' | 'reconnecting' | 'closed') => void;
+  onUnknown?: (eventName: string, data: unknown) => void;
   onClose?: () => void;
   lastEventId?: string;
+}
+
+export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
+  'run.started', 'context.assembled', 'strategy.selected', 'plan.created',
+  'stage.started', 'stage.completed', 'step.started', 'step.completed', 'step.failed',
+  'tool.called', 'tool.completed', 'verification.completed',
+  'repair.started', 'repair.completed', 'artifact.staged', 'artifact.committed',
+  'status.summary', 'needs_input', 'run.completed', 'run.failed', 'run.canceled',
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasString(data: Record<string, unknown>, key: string): boolean {
+  return typeof data[key] === 'string' && data[key] !== '';
+}
+
+export function parseSSEEvent(eventName: string, raw: string, id?: string): SSEEvent | null {
+  if (!SSE_EVENT_NAMES.includes(eventName as SSEEventName)) return null;
+  let data: unknown;
+  try {
+    data = JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+  if (!isRecord(data)) return null;
+  const valid =
+    (eventName === 'strategy.selected' && hasString(data, 'strategy')) ||
+    (eventName === 'plan.created' && isRecord(data.plan)) ||
+    (eventName === 'tool.called' && hasString(data, 'call_id') && hasString(data, 'tool')) ||
+    (eventName === 'tool.completed' && hasString(data, 'call_id')) ||
+    ((eventName === 'artifact.staged' || eventName === 'artifact.committed') && isRecord(data.artifact)) ||
+    (eventName === 'needs_input' && hasString(data, 'id') && hasString(data, 'prompt')) ||
+    !['strategy.selected', 'plan.created', 'tool.called', 'tool.completed', 'artifact.staged', 'artifact.committed', 'needs_input'].includes(eventName);
+  if (!valid) return null;
+  return { id, event: eventName as SSEEventName, data } as SSEEvent;
 }
 
 export function subscribeRunEvents(runId: string, options: SSEOptions): () => void {
@@ -16,38 +55,36 @@ export function subscribeRunEvents(runId: string, options: SSEOptions): () => vo
     url.searchParams.set('last_event_id', options.lastEventId);
   }
   
+  options.onStatus?.('connecting');
   const source = new EventSource(url.toString());
+  let closed = false;
 
   const handleMessage = (e: MessageEvent) => {
-    try {
-      const data = JSON.parse(e.data);
-      if (options.onMessage) {
-        options.onMessage({ id: e.lastEventId, event: e.type as any, data });
-      }
-    } catch (err) {
-      console.error('Failed to parse SSE data:', err);
+    const event = parseSSEEvent(e.type, String(e.data), e.lastEventId || undefined);
+    if (event) {
+      options.onMessage?.(event);
+    } else {
+      options.onUnknown?.(e.type, e.data);
     }
   };
 
-  const eventTypes = [
-    'run.started', 'context.assembled', 'strategy.selected', 'plan.created',
-    'stage.started', 'stage.completed', 'step.started', 'step.completed', 'step.failed',
-    'tool.called', 'tool.completed', 'verification.completed',
-    'repair.started', 'repair.completed', 'artifact.staged', 'artifact.committed',
-    'status.summary', 'needs_input', 'run.completed', 'run.failed', 'run.canceled',
-  ];
-  
-  eventTypes.forEach(type => {
+  SSE_EVENT_NAMES.forEach(type => {
     source.addEventListener(type, handleMessage);
   });
+  source.onopen = () => options.onStatus?.('open');
+  source.onmessage = (event) => options.onUnknown?.(event.type, event.data);
 
   source.onerror = (err) => {
-    if (options.onError) options.onError(err);
-    // If done or error, we might want to close
+    if (closed) return;
+    options.onStatus?.('reconnecting');
+    options.onError?.(err);
   };
 
   return () => {
+    if (closed) return;
+    closed = true;
     source.close();
+    options.onStatus?.('closed');
     if (options.onClose) options.onClose();
   };
 }

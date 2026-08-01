@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import { ToolCallCard } from './ToolCallCard';
 import { PlanCard } from './PlanCard';
 import { FinalResultCard } from './FinalResultCard';
@@ -13,12 +13,12 @@ describe('Agent Cards', () => {
     const baseItem = { id: '1', type: 'tool_call' as const, call_id: 'c1', tool: 'my_tool', args: { a: 1 }, timestamp: 0, artifacts: [] };
     
     const { rerender } = render(<ToolCallCard item={{ ...baseItem, status: 'running' }} />);
-    expect(screen.getByText('my_tool')).toBeInTheDocument();
+    expect(screen.getByText('执行项目操作')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('技术详情'));
+    expect(screen.getByText(/工具：my_tool/)).toBeInTheDocument();
     
     rerender(<ToolCallCard item={{ ...baseItem, status: 'success', observation: 'done' }} />);
-    // Expand to see observation
-    fireEvent.click(screen.getByText('my_tool'));
-    expect(screen.getByText(/done/)).toBeInTheDocument();
+    expect(screen.getAllByText(/done/)).toHaveLength(2);
   });
 
   it('PlanCard renders states', () => {
@@ -37,7 +37,7 @@ describe('Agent Cards', () => {
 
   it('FinalResultCard renders summary fallback (edit/outline/command)', () => {
     render(<FinalResultCard item={{ id: '1', type: 'final_result', result: { summary: '已更新第 3 页标题' }, timestamp: 0 }} />);
-    expect(screen.getByText('最终交付')).toBeInTheDocument();
+    expect(screen.getByText('执行结果')).toBeInTheDocument();
     expect(screen.getByText('已更新第 3 页标题')).toBeInTheDocument();
   });
 
@@ -56,10 +56,10 @@ describe('Agent Cards', () => {
         affected: [{ kind: 'presentation_slide', id: 's1' }], issues: [], summary: '已完成',
       },
     }} />);
-    expect(screen.getByText('最终交付')).toBeInTheDocument();
-    expect(screen.getByText(/presentation \/ deck/)).toBeInTheDocument();
-    expect(screen.getByText('full_pev')).toBeInTheDocument();
-    expect(screen.getByText(/presentation_slide:s1/)).toBeInTheDocument();
+    expect(screen.getByText('执行结果')).toBeInTheDocument();
+    expect(screen.getByText(/整份HTML/)).toBeInTheDocument();
+    expect(screen.getByText(/完整工作流/)).toBeInTheDocument();
+    expect(screen.getByText(/页面 HTML/)).toBeInTheDocument();
   });
 
   it('FinalResultCard lists verifier issues', () => {
@@ -71,15 +71,16 @@ describe('Agent Cards', () => {
         issues: [{ code: 'OVERFLOW', evidence: '内容溢出' }],
       },
     }} />);
-    expect(screen.getByText('1 项问题')).toBeInTheDocument();
-    expect(screen.getByText('[OVERFLOW]')).toBeInTheDocument();
-    expect(screen.getByText('内容溢出')).toBeInTheDocument();
+    expect(screen.getByText('1 项需要注意')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('查看验证问题'));
+    expect(screen.getByText(/\[OVERFLOW\] 内容溢出/)).toBeInTheDocument();
   });
 
-  it('NeedsInputCard renders and handles input', () => {
+  it('NeedsInputCard renders and enters an answered state after submission', async () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
     useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
     useRunStore.setState({
+      replyNeedsInput: vi.fn().mockResolvedValue(true),
       sessions: {
         t1: {
           activeRunId: 'r1', status: 'needs_input', target: { artifact: 'presentation', level: 'slide' }, interaction: { intent: 'apply', clarification: 'before_apply' },
@@ -92,6 +93,9 @@ describe('Agent Cards', () => {
     expect(screen.getByText('Select one')).toBeInTheDocument();
     expect(screen.getByText('A')).toBeInTheDocument();
     expect(screen.getByText('B')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'A' }));
+    await waitFor(() => expect(screen.getByText('已回答')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'A' })).toBeNull();
   });
 
   it('NeedsInputCard renders markdown in prompt', () => {

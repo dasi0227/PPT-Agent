@@ -1,51 +1,97 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AppShell } from './AppShell';
+import { act, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useBlueprintStore } from '../../stores/blueprintStore';
+import { AppShell } from './AppShell';
 
-// Mock react-resizable-panels components for JSDOM
 vi.mock('react-resizable-panels', () => ({
-  PanelGroup: ({ children }: any) => <div data-testid="panel-group">{children}</div>,
-  Panel: ({ children, id }: any) => <div data-testid={`panel-${id}`}>{children}</div>,
-  PanelResizeHandle: () => <div data-testid="panel-handle" />
+  PanelGroup: ({ children, autoSaveId }: { children: React.ReactNode; autoSaveId: string }) => (
+    <div data-testid="panel-group" data-autosave-id={autoSaveId}>{children}</div>
+  ),
+  Panel: ({
+    children,
+    id,
+    defaultSize,
+    minSize,
+    maxSize,
+  }: {
+    children: React.ReactNode;
+    id: string;
+    defaultSize: number;
+    minSize: number;
+    maxSize?: number;
+  }) => (
+    <div
+      data-testid={`panel-${id}`}
+      data-default-size={defaultSize}
+      data-min-size={minSize}
+      data-max-size={maxSize}
+    >{children}</div>
+  ),
+  PanelResizeHandle: ({ 'aria-label': label }: { 'aria-label': string }) => <div role="separator" aria-label={label} />,
 }));
 
-describe('AppShell', () => {
+vi.mock('./ProjectTabs', () => ({ ProjectTabs: () => <nav data-testid="project-tabs">项目标签</nav> }));
+vi.mock('../deck/DeckNavigator', () => ({ DeckNavigator: () => <aside>幻灯片导航</aside> }));
+vi.mock('../viewer/PreviewWorkspace', () => ({ PreviewWorkspace: () => <main>预览区</main> }));
+vi.mock('../agent/AgentPanel', () => ({ AgentPanel: () => <aside>Agent 对话</aside> }));
+
+describe('AppShell layout contract', () => {
   beforeEach(() => {
     useProjectStore.setState({ activeProjectId: null });
     useUIStore.setState({ leftPanelHidden: false, rightPanelHidden: false });
-    useBlueprintStore.setState({ byProjectId: {} });
   });
 
-  it('renders WorkspaceEmptyState when no active project', () => {
+  it('always keeps the top project tabs', () => {
     render(<AppShell />);
-    expect(screen.getByText('Welcome back')).toBeInTheDocument();
+    expect(screen.getByTestId('project-tabs')).toBeInTheDocument();
+    expect(screen.getByText('开始制作演示文稿')).toBeInTheDocument();
   });
 
-  it('renders PanelGroup when active project exists', () => {
+  it('keeps the left, center, and right columns with protected size bounds', () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
     render(<AppShell />);
-    expect(screen.getByTestId('panel-group')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-left')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-center')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-right')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-left')).toHaveAttribute('data-default-size', '22');
+    expect(screen.getByTestId('panel-left')).toHaveAttribute('data-min-size', '16');
+    expect(screen.getByTestId('panel-left')).toHaveAttribute('data-max-size', '32');
+    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-min-size', '30');
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-default-size', '28');
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-min-size', '20');
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-max-size', '40');
+    expect(screen.getAllByRole('separator')).toHaveLength(2);
   });
 
-  it('hides left panel when leftPanelHidden is true', () => {
+  it('hides and restores each sidebar independently with a stable persistence key', () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
-    useUIStore.setState({ leftPanelHidden: true });
     render(<AppShell />);
+    const expandedKey = screen.getByTestId('panel-group').getAttribute('data-autosave-id');
+
+    act(() => useUIStore.getState().toggleLeftPanel());
     expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
-    expect(screen.getByTestId('panel-center')).toBeInTheDocument();
-  });
+    expect(screen.getByTestId('panel-right')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '72');
 
-  it('hides right panel when rightPanelHidden is true', () => {
-    useProjectStore.setState({ activeProjectId: 'p1' });
-    useUIStore.setState({ rightPanelHidden: true });
-    render(<AppShell />);
+    act(() => useUIStore.getState().toggleRightPanel());
     expect(screen.queryByTestId('panel-right')).not.toBeInTheDocument();
     expect(screen.getByTestId('panel-center')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '100');
+
+    act(() => {
+      useUIStore.getState().toggleLeftPanel();
+      useUIStore.getState().toggleRightPanel();
+    });
+    expect(screen.getByTestId('panel-left')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-right')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '50');
+    expect(screen.getByTestId('panel-group')).toHaveAttribute('data-autosave-id', expandedKey);
+  });
+
+  it('does not mix panel visibility when switching projects', () => {
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    useUIStore.setState({ leftPanelHidden: true, rightPanelHidden: false });
+    render(<AppShell />);
+    act(() => useProjectStore.setState({ activeProjectId: 'p2' }));
+    expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-right')).toBeInTheDocument();
   });
 });

@@ -3,7 +3,7 @@ import { useDeckStore } from './deckStore';
 
 describe('deckStore globalView', () => {
   beforeEach(() => {
-    useDeckStore.setState({ globalView: 'html', viewByPage: {} });
+    useDeckStore.setState({ globalView: 'html' });
   });
 
   test('default is html; effectiveView falls back to outline when hasHtml=false', () => {
@@ -28,10 +28,4 @@ describe('deckStore globalView', () => {
     expect(useDeckStore.getState().effectiveView('s2', false)).toBe('outline');
   });
 
-  test('setPageView writes viewByPage but does NOT influence effectiveView (API compat)', () => {
-    useDeckStore.getState().setPageView('s1', 'outline');
-    // 即便页级偏好设为 outline，effectiveView 仍由 globalView 决策：默认 html + 有 html → html。
-    expect(useDeckStore.getState().viewByPage['s1']).toBe('outline');
-    expect(useDeckStore.getState().effectiveView('s1', true)).toBe('html');
-  });
 });

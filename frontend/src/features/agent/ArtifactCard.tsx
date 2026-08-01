@@ -15,7 +15,7 @@ export const ArtifactCard: React.FC<{ item: ArtifactItem }> = ({ item }) => {
     <div className="flex items-center p-2 rounded border border-border bg-surface text-sm">
       <div className="w-8 h-8 rounded bg-background flex items-center justify-center mr-3 text-text-600">
         {item.artifact_type === 'presentation_slide' ? <Code className="w-4 h-4" /> :
-         item.artifact_type === 'design_spec' ? <Palette className="w-4 h-4 text-mode-overview" /> :
+         item.artifact_type === 'design_spec' ? <Palette className="w-4 h-4 text-accent" /> :
          item.artifact_type === 'design' ? <ImageIcon className="w-4 h-4" /> :
          <FileDown className="w-4 h-4" />}
       </div>

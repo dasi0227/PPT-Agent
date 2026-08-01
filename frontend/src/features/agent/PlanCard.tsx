@@ -1,22 +1,26 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, ListTodo, CheckCircle2, Circle, Loader2, XCircle, MinusCircle } from 'lucide-react';
 import { PlanState, PlanStepStatus } from '../../api/types';
 import { cn } from '../../lib/utils';
 
 function StepIcon({ status }: { status: PlanStepStatus }) {
   switch (status) {
-    case 'completed': return <CheckCircle2 className="w-4 h-4 text-mode-final" />;
-    case 'in_progress': return <Loader2 className="w-4 h-4 animate-spin text-mode-ask" />;
-    case 'failed': return <XCircle className="w-4 h-4 text-mode-error" />;
+    case 'completed': return <CheckCircle2 className="w-4 h-4 text-success" />;
+    case 'in_progress': return <Loader2 className="w-4 h-4 animate-spin text-accent" />;
+    case 'failed': return <XCircle className="w-4 h-4 text-danger" />;
     case 'skipped': return <MinusCircle className="w-4 h-4 text-text-400" />;
     case 'pending':
     default: return <Circle className="w-4 h-4 text-text-400" />;
   }
 }
 
-export const PlanCard: React.FC<{ plan: PlanState }> = ({ plan }) => {
-  const [expanded, setExpanded] = useState(true);
+export const PlanCard: React.FC<{ plan: PlanState; running?: boolean }> = ({ plan, running = true }) => {
+  const [expanded, setExpanded] = useState(running);
   const done = plan.steps.filter((s) => s.status === 'completed').length;
+
+  useEffect(() => {
+    setExpanded(running);
+  }, [running]);
 
   return (
     <div className="border border-border rounded-md bg-surface overflow-hidden shadow-sm">
@@ -37,7 +41,7 @@ export const PlanCard: React.FC<{ plan: PlanState }> = ({ plan }) => {
               key={step.id}
               className={cn(
                 'flex items-start text-sm rounded px-1.5 py-1 -mx-1.5',
-                step.status === 'in_progress' && 'bg-mode-ask/10'
+                step.status === 'in_progress' && 'bg-accent-soft'
               )}
             >
               <div className="mr-2 mt-0.5 shrink-0">
@@ -47,7 +51,7 @@ export const PlanCard: React.FC<{ plan: PlanState }> = ({ plan }) => {
                 <div className={cn(
                   'font-medium',
                   step.status === 'completed' ? 'text-text-600 line-through' :
-                  step.status === 'failed' ? 'text-mode-error' :
+                  step.status === 'failed' ? 'text-danger' :
                   step.status === 'in_progress' ? 'text-text-900' : 'text-text-900'
                 )}>
                   {step.title}

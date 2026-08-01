@@ -73,7 +73,7 @@ const DropdownMenuItem = React.forwardRef<
     ref={ref}
     className={cn(
       "w-full px-3 py-1.5 text-xs cursor-pointer outline-none transition-colors",
-      destructive ? "text-mode-error hover:bg-mode-error/10 data-[highlighted]:bg-mode-error/10" : "text-text-600 hover:bg-black/5 data-[highlighted]:bg-black/5",
+      destructive ? "text-danger hover:bg-danger-soft data-[highlighted]:bg-danger-soft" : "text-text-600 hover:bg-black/5 data-[highlighted]:bg-black/5",
       inset && "pl-8",
       className
     )}

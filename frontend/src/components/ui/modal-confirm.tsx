@@ -55,7 +55,7 @@ export function ConfirmModal({
             <div className="mt-2 text-text-600">{description}</div>
           </DialogDescription>
         </DialogHeader>
-        {error && <div className="text-sm text-mode-error mt-2">{error}</div>}
+        {error && <div className="text-sm text-danger mt-2">{error}</div>}
         <DialogFooter className="mt-4">
           <button
             type="button"
@@ -72,8 +72,8 @@ export function ConfirmModal({
             className={cn(
               "px-4 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 flex items-center justify-center min-w-[80px]",
               variant === 'danger' 
-                ? "bg-mode-error text-white hover:bg-mode-error/90" 
-                : "bg-mode-normal text-white hover:bg-mode-normal/90"
+                ? "bg-danger text-white hover:bg-danger/90"
+                : "bg-accent text-white hover:bg-accent/90"
             )}
           >
             {loading ? "..." : confirmLabel}

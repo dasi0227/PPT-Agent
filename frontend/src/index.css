@@ -3,7 +3,49 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply bg-background text-text-900;
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply bg-workspace;
+  }
+
+body {
+    @apply m-0 bg-workspace text-ink antialiased;
+    min-width: 1024px;
+  }
+
+  button,
+  [role="button"],
+  input,
+  textarea,
+  select,
+  summary {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-panel;
+  }
+
+  button,
+  [role="button"] {
+    @apply transition-[background-color,color,border-color,opacity,transform] duration-150 active:translate-y-px;
+  }
+
+  ::selection {
+    @apply bg-accent-soft text-ink;
+  }
+}
+
+.lucide {
+  stroke-width: 1.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

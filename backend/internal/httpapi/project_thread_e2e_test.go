@@ -104,6 +104,21 @@ func TestArtifactTargetRunAndBlueprintAPI(t *testing.T) {
 	if target["artifact"] != "blueprint" || target["level"] != "deck" || interaction["intent"] != "consult" {
 		t.Fatalf("new protocol was not preserved: %s", resp.Body.String())
 	}
+	runID := created["id"].(string)
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/"+runID, "")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET run: %d %s", resp.Code, resp.Body.String())
+	}
+	var queried map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &queried)
+	if queried["id"] != runID || queried["thread_id"] != threadID || queried["project_id"] != projectID ||
+		queried["events_url"] != "/api/v1/runs/"+runID+"/events" {
+		t.Fatalf("unexpected run response: %s", resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/missing", "")
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("GET missing run want 404, got %d: %s", resp.Code, resp.Body.String())
+	}
 
 	invalid := `{
 		"target":{"artifact":"presentation","level":"slide","slide_id":"current"},

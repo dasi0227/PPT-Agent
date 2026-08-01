@@ -3,7 +3,6 @@ import { persist } from 'zustand/middleware';
 import { Project, Slide } from '../api/types';
 import { projectsApi } from '../api/projects';
 import { useThreadStore } from './threadStore';
-import { useRunStore } from './runStore';
 import { useBlueprintStore } from './blueprintStore';
 
 interface ProjectState {
@@ -13,6 +12,7 @@ interface ProjectState {
   pendingNewProject: boolean;
   slidesByProjectId: Record<string, Slide[]>;
   loadingProjects: boolean;
+  projectError: string | null;
 
   loadProjects: () => Promise<void>;
   openProject: (id: string) => void;
@@ -27,14 +27,6 @@ interface ProjectState {
   loadProjectSlides: (projectId: string) => Promise<void>;
 }
 
-function closePreviousProjectSessions(prevProjectId: string | null) {
-  if (!prevProjectId) return;
-  const openIds = useThreadStore.getState().openThreadIdsByProjectId[prevProjectId] || [];
-  if (openIds.length > 0) {
-    useRunStore.getState().dropSessions(openIds);
-  }
-}
-
 export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
@@ -44,9 +36,10 @@ export const useProjectStore = create<ProjectState>()(
       pendingNewProject: false,
       slidesByProjectId: {},
       loadingProjects: false,
+      projectError: null,
 
       loadProjects: async () => {
-        set({ loadingProjects: true });
+        set({ loadingProjects: true, projectError: null });
         try {
           const projects = await projectsApi.list();
           set((state) => {
@@ -71,8 +64,10 @@ export const useProjectStore = create<ProjectState>()(
             useThreadStore.getState().loadThreads(currentActive);
           }
         } catch (err) {
-          set({ loadingProjects: false });
-          console.error(err);
+          set({
+            loadingProjects: false,
+            projectError: err instanceof Error ? err.message : '项目加载失败，请重试',
+          });
         }
       },
 
@@ -189,12 +184,7 @@ export const useProjectStore = create<ProjectState>()(
       },
 
       selectProject: (projectId: string) => {
-        const prev = get().activeProjectId;
-        if (prev === projectId) return;
-        
-        if (prev && prev !== 'new-pending') {
-          closePreviousProjectSessions(prev);
-        }
+        if (get().activeProjectId === projectId) return;
         
         set({ activeProjectId: projectId });
         
@@ -210,10 +200,11 @@ export const useProjectStore = create<ProjectState>()(
           const slides = await projectsApi.getSlides(projectId);
           void useBlueprintStore.getState().loadProject(projectId);
           set((state) => ({
-            slidesByProjectId: { ...state.slidesByProjectId, [projectId]: slides }
+            slidesByProjectId: { ...state.slidesByProjectId, [projectId]: slides },
+            projectError: null,
           }));
         } catch (err) {
-          console.error(err);
+          set({ projectError: err instanceof Error ? err.message : '页面加载失败，请重试' });
         }
       },
     }),

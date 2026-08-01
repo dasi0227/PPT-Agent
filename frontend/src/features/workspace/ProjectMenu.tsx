@@ -57,7 +57,7 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
               type="text"
               value={val}
               onChange={(e) => setVal(e.target.value)}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:border-mode-normal focus:ring-1 focus:ring-mode-normal transition-all"
+              className="w-full px-3 py-2 bg-panel border border-border rounded-md text-sm focus:border-accent transition-colors"
               placeholder="请输入项目名称"
             />
           </div>

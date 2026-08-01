@@ -55,7 +55,7 @@ export const ThreadMenu: React.FC<ThreadMenuProps> = ({ projectId, thread, child
               type="text"
               value={val}
               onChange={(e) => setVal(e.target.value)}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:border-mode-normal focus:ring-1 focus:ring-mode-normal transition-all"
+              className="w-full px-3 py-2 bg-panel border border-border rounded-md text-sm focus:border-accent transition-colors"
               placeholder="请输入会话名称"
             />
           </div>
