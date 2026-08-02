@@ -305,8 +305,10 @@ Loop 只在以下条件之一满足时退出：
 - 外部终止；
 - Runtime 自身发生致命错误。
 
-模型输出一段没有 tool call 的文本，不自动代表写任务已经成功完成。Runtime 根据当前策略决定将其
-视为普通对话文本、要求继续，还是转化为 finish candidate。
+所有策略都必须通过显式 `finish` 才能以成功状态退出。模型输出一段没有 tool call 的文本不自动
+代表任务完成，Chat 也不例外；Runtime 将文本保留在上下文中，并要求 Agent 调用 `finish(message=...)`
+交付最终回答，或调用已披露工具继续。这样“没有 `finish` 就继续，`finish` 被 Completion Gate 接受才
+成功退出”在 chat、simple 与 complex 中完全一致。
 
 ## 9. Chat Strategy
 
@@ -346,6 +348,7 @@ ask_user
 - 不创建 staging transaction。
 - 不披露 `write_ppt/edit_ppt/update_plan`。
 - `render_slide` 只产生读取型视觉证据。
+- 普通文本不是隐式退出信号；最终分析必须作为 `finish.message` 提交。
 - talk 不因 Agent 判断“最好顺手改一下”而升级为 simple。
 - ask_user 的回答继续进入同一个 Chat ReAct Loop。
 

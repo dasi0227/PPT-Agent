@@ -177,6 +177,74 @@ func TestRouterSelectsComplexForEmptyWholeDeck(t *testing.T) {
 	}
 }
 
+func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
+	events := &eventRecorder{}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		{Text: "这是尚未通过 finish 提交的分析。", ProviderReasoning: "provider state"},
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "chat-explicit-finish", ProjectDir: t.TempDir(),
+		Context: testPack(model.IntentTalk, model.ArtifactBlueprint, model.TargetSlide, false, "分析当前页"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlide},
+	})
+	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyChat {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if len(agent.requests) != 2 {
+		t.Fatalf("plain text ended the run instead of starting another turn: requests=%d", len(agent.requests))
+	}
+	messages := agent.requests[1].Messages
+	if len(messages) != 2 {
+		t.Fatalf("next-turn context=%+v", messages)
+	}
+	if messages[0].Role != llm.RoleAssistant ||
+		messages[0].Content != "这是尚未通过 finish 提交的分析。" ||
+		messages[0].ReasoningContent != "provider state" {
+		t.Fatalf("assistant text or provider reasoning was not retained: %+v", messages[0])
+	}
+	if messages[1].Role != llm.RoleUser || messages[1].Content != noToolCallGuidance {
+		t.Fatalf("explicit finish guidance missing: %+v", messages[1])
+	}
+	if events.count(model.EventMessageFinal) != 1 || events.count(model.EventRunFinished) != 1 {
+		t.Fatalf("terminal events=%+v", events.events)
+	}
+	final := ""
+	for _, event := range events.events {
+		if event.kind == model.EventMessageFinal {
+			final = event.payload.(model.MessageFinalPayload).Text
+		}
+	}
+	if final != "done" {
+		t.Fatalf("final text must come from finish.message, got %q", final)
+	}
+}
+
+func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryStrategy(t *testing.T) {
+	for _, strategy := range []ExecutionStrategy{StrategyChat, StrategySimple, StrategyComplex} {
+		prompt := runtimeSystemPrompt(PhaseExecuting, strategy, "{}")
+		if !strings.Contains(prompt, "所有策略的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。") {
+			t.Fatalf("%s prompt does not require explicit finish: %q", strategy, prompt)
+		}
+	}
+	schemas := controlSchemas(StrategyChat, PhaseChat, model.IntentTalk)
+	var finishDescription string
+	var finishParameters map[string]any
+	for _, schema := range schemas {
+		if schema.Name == "finish" {
+			finishDescription = schema.Description
+			finishParameters = schema.Parameters
+		}
+	}
+	if !strings.Contains(finishDescription, "所有策略的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。") {
+		t.Fatalf("finish schema description=%q", finishDescription)
+	}
+	properties, _ := finishParameters["properties"].(map[string]any)
+	if len(properties) != 1 || properties["message"] == nil {
+		t.Fatalf("finish schema must expose only message: %+v", finishParameters)
+	}
+}
+
 func TestComplexPlanningDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T) {
 	dir := testProject(t, ArtifactSlide)
 	agent := &scriptedAgent{responses: []AgentResponse{
@@ -266,7 +334,15 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 	dir := testProject(t, ArtifactSlide)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		finishCall("first"), toolCall("write", "write_ppt", map[string]any{"content": "next"}), finishCall("second"),
+		{
+			Text:              "我先尝试提交当前结果。",
+			ProviderReasoning: "finish provider state",
+			ToolCall: &llm.ToolCall{
+				ID: "first", Name: "finish", Args: map[string]any{"message": "not ready"},
+			},
+		},
+		toolCall("write", "write_ppt", map[string]any{"content": "next"}),
+		finishCall("second"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "gate-continue", ProjectDir: dir,
@@ -280,6 +356,20 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 		if request.LoopID != outcome.LoopID {
 			t.Fatal("gate rejection replaced the loop")
 		}
+	}
+	if len(agent.requests) < 2 || len(agent.requests[1].Messages) != 2 {
+		t.Fatalf("completion rejection did not return to the same context: %+v", agent.requests)
+	}
+	rejectedCall := agent.requests[1].Messages[0]
+	rejectionObservation := agent.requests[1].Messages[1]
+	if rejectedCall.Role != llm.RoleAssistant || len(rejectedCall.ToolCalls) != 1 ||
+		rejectedCall.ToolCalls[0].ID != "first" || rejectedCall.ToolCalls[0].Name != "finish" ||
+		rejectedCall.Content != "我先尝试提交当前结果。" ||
+		rejectedCall.ReasoningContent != "finish provider state" ||
+		rejectionObservation.Role != llm.RoleTool ||
+		rejectionObservation.ToolCallID != "first" ||
+		!strings.Contains(rejectionObservation.Content, CodeCompletionGateBlocked) {
+		t.Fatalf("completion rejection context=%+v", agent.requests[1].Messages)
 	}
 }
 
@@ -520,7 +610,9 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 	}
 	retained := agent.requests[1].Messages[0]
 	if retained.Content != "我会先确认当前页面结构，再进行局部更新。" ||
-		retained.ReasoningContent != "hidden provider chain of thought" {
+		retained.ReasoningContent != "hidden provider chain of thought" ||
+		len(retained.ToolCalls) != 1 || retained.ToolCalls[0].ID != "write" ||
+		retained.ToolCalls[0].Name != "write_ppt" {
 		t.Fatalf("assistant context=%+v", retained)
 	}
 	finalIndex, finishedIndex := -1, -1

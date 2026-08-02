@@ -77,16 +77,16 @@
       <div class="brand">
         <p class="eyebrow">CODEBASE LEARNING GUIDE</p>
         <h1>PPT Agent<br>Architecture Map</h1>
-        <p>聚焦 Go 后端的 Agent Harness / Adaptive Workflow Runtime。</p>
+        <p>聚焦 Go 后端的 Agent Harness / Adaptive ReAct Runtime。</p>
       </div>
       <nav>
         <a href="#overview"><span class="number">01</span>项目全景</a>
         <a href="#concepts"><span class="number">02</span>先记住的概念</a>
         <a href="#end-to-end"><span class="number">03</span>一次请求的旅程</a>
         <a href="#module-map"><span class="number">04</span>模块职责地图</a>
-        <a href="#runtime"><span class="number">05</span>Adaptive Runtime</a>
+        <a href="#runtime"><span class="number">05</span>Adaptive ReAct Runtime</a>
         <a href="#context"><span class="number">06</span>Context Engine</a>
-        <a href="#workflow"><span class="number">07</span>PEV 主循环</a>
+        <a href="#workflow"><span class="number">07</span>ReAct 主循环</a>
         <a href="#tools"><span class="number">08</span>Tools 与事务</a>
         <a href="#run"><span class="number">09</span>Run 与事件流</a>
         <a href="#storage"><span class="number">10</span>存储与产物</a>
@@ -97,22 +97,22 @@
     <main>
       <header class="hero">
         <p class="eyebrow">THE CENTRAL IDEA</p>
-        <h2>这不是“让 LLM 直接写 PPT HTML”，而是让 LLM 在受控工作流里完成可验证的产物变更。</h2>
-        <p>系统把一次用户指令收敛为明确目标与约束，组装上下文，选择执行强度；对复杂变更采用 Plan → Execute → Verify → Repair → Commit 的闭环，并把整个过程持久化、可续传地投影给前端。</p>
-        <div class="tags"><span class="tag">Go + Gin</span><span class="tag">SQLite + Filesystem</span><span class="tag">LLM Tool Calling</span><span class="tag">SSE</span><span class="tag">Staging Transaction</span></div>
+        <h2>这不是“让 LLM 直接写 PPT HTML”，而是单一 ReAct Agent 在受控工具面、证据账本和完成闸门内完成 PPT 变更。</h2>
+        <p>最新 Runtime 将旧的多节点 PEV 编排收敛为一个策略路由的 ReAct loop：复杂任务由模型维护计划；写入均暂存；模型提交 <code>finish</code> 后，系统用证据、范围、计划和版本基线决定能否真正 commit。</p>
+        <div class="tags"><span class="tag">Go + Gin</span><span class="tag">SQLite + Filesystem</span><span class="tag">Adaptive ReAct</span><span class="tag">Typed Public Events</span><span class="tag">Chromium Render Worker</span></div>
       </header>
 
       <section id="overview">
         <h2 class="section-title">01 · 项目全景</h2>
-        <p class="lead">项目有两条主线：前端是工作台与事件消费者；后端负责把项目资料、模型推理和文件产物组织成一个可靠的运行时。学习时优先沿后端主线理解。</p>
+        <p class="lead">项目有两条主线：前端是运行时间线与 PPT 预览消费者；后端把项目资料、模型工具调用、浏览器渲染和文件产物组织成一个可恢复、可验证的执行循环。学习时优先沿后端主线理解。</p>
         <div class="flow">
           <div class="node"><strong>React 前端</strong>创建项目 / Thread / Run；订阅 SSE；预览 HTML 幻灯片。</div><div class="arrow">→</div>
           <div class="node teal"><strong>HTTP API</strong>把 REST 请求转换为 Service 调用；提供 SSE / HITL / Cancel。</div><div class="arrow">→</div>
           <div class="node violet"><strong>Run + Context</strong>建立 Run，装配本次任务可见的 ContextPack。</div><div class="arrow">→</div>
-          <div class="node amber"><strong>Adaptive Runtime</strong>选择轻量回答、局部变更或完整 PEV Workflow。</div><div class="arrow">→</div>
-          <div class="node red"><strong>产物与状态</strong>Blueprint / Design / HTML、SQLite 元数据与事件历史。</div>
+          <div class="node amber"><strong>Adaptive ReAct Runtime</strong>选择 chat / simple / complex，并驱动单一 agent loop。</div><div class="arrow">→</div>
+          <div class="node red"><strong>产物、证据与事件</strong>Blueprint / Design / HTML、render evidence、SQLite 事件与公开 SSE。</div>
         </div>
-        <div class="callout"><b>后端的边界：</b>模型并不直接操作任意文件。它只能看到当前 step 获准的工具；写入先进入 <code>.staging/&lt;runID&gt;</code>，验证和冲突检查通过后才提交到项目工作目录。</div>
+        <div class="callout"><b>后端的边界：</b>模型并不直接操作任意文件。它每一轮只能看到当前 phase 公开的工具；写入先进入 <code>.staging/&lt;runID&gt;</code>。系统不仅校验文件和版本冲突，还要求“修改后的最新内容”拥有对应的 schema / static / render / reference 证据，才允许提交。</div>
       </section>
 
       <section id="concepts">
@@ -120,10 +120,10 @@
         <div class="grid">
           <div class="card span-4"><span class="label">Task Contract</span><h3>WorkSpec</h3><p>一次 Run 的权威任务描述：用户指令、目标产物/层级、交互意图与选项。它先被校验，后续各层都以它为依据。</p></div>
           <div class="card span-4"><span class="label">Bounded Context</span><h3>ContextPack</h3><p>不是“把仓库全塞给模型”。它按任务 profile 和 token 预算挑选 deck、目标页、设计、相关页、HTML 摘要、资产与记忆。</p></div>
-          <div class="card span-4"><span class="label">Routing Decision</span><h3>Strategy</h3><p>根据只读/修改、范围、关键词、物化状态等信号，在 respond、direct action、compact workflow、full PEV 之间选择。</p></div>
-          <div class="card span-4"><span class="label">Executable Contract</span><h3>WorkflowPlan</h3><p>将任务变成带目标、依赖、能力、验证器和预算的步骤集合；有确定性 fallback，LLM 规划失败不致使系统失控。</p></div>
-          <div class="card span-4"><span class="label">Controlled Agency</span><h3>Tool Selection</h3><p>每个步骤只暴露“这个 stage + strategy + capability + target scope”共同允许的工具，工具结果再反馈给模型。</p></div>
-          <div class="card span-4"><span class="label">Safe Write Boundary</span><h3>Transaction</h3><p>一组产物在 staging 区写入、校验和记录 hash；commit 前再次检查源文件没有变化，失败会恢复已写入文件。</p></div>
+          <div class="card span-4"><span class="label">Routing Decision</span><h3>Strategy</h3><p>根据 interaction、目标范围、结构性关键词、影响页数和歧义度，选择 <code>chat</code>、<code>simple</code> 或 <code>complex</code>。</p></div>
+          <div class="card span-4"><span class="label">Agent-Controlled Plan</span><h3>Plan</h3><p>仅 complex strategy 可调用 <code>update_plan</code>。计划有版本、不可回退的 completed step 和最多一个 in-progress step；它是 UI 与完成闸门共同使用的状态。</p></div>
+          <div class="card span-4"><span class="label">Controlled Agency</span><h3>Tool Disclosure</h3><p>工具按 strategy、phase、interaction、风险与 target scope 动态公开。业务表面被收敛为 5 个 PPT 工具，另有 3 个 runtime control 工具。</p></div>
+          <div class="card span-4"><span class="label">Evidence-Gated Finish</span><h3>Evidence Ledger + Completion Gate</h3><p>工具产出带 source hash 的证据；后续写入会让证据失效。<code>finish</code> 是候选提交，只有证据新鲜、计划完成、范围合法才会被接受。</p></div>
         </div>
       </section>
 
@@ -132,12 +132,13 @@
         <p class="lead">以“修改某一页 PPT HTML”为例。这里是理解全项目最重要的一张流程图。</p>
         <ol class="steps">
           <li><b>前端创建 Run：</b><code>POST /threads/{id}/runs</code> 传入 instruction、target、interaction。</li>
-          <li><b>RunService 规范任务：</b>加载 Thread 和 Project，补默认交互策略，校验 WorkSpec 与 slide 归属。</li>
+          <li><b>RunService 规范任务：</b>加载 Thread 和 Project，校验 WorkSpec 与 slide 归属，并创建当前 Run。</li>
           <li><b>ContextAssembler 生成 ContextPack：</b>读取 Blueprint、Design、目标 HTML 摘要、资产和 Thread memory；记录 manifest 与预算。</li>
           <li><b>run.Engine 建立外壳：</b>先持久化 Run 和 ContextManifest，再异步执行；同一 project 的 Run 通过锁串行。</li>
-          <li><b>AdaptiveRuntime 路由：</b>只读任务直接答复；简单局部变更走 direct action；更复杂的任务进入 Workflow Engine。</li>
-          <li><b>Workflow 执行：</b>计划、逐 step 受限 ReAct tool loop、校验、必要时 repair，最终提交 staging 中的变更。</li>
-          <li><b>事件驱动 UI：</b>每个阶段、工具调用、验证和产物提交都会进入 Bus → SQLite → SSE；断线时用 Last-Event-ID 补发。</li>
+          <li><b>Runtime 路由：</b>只读协作走 <code>chat</code>；明确的单目标执行走 <code>simple</code>；多目标/结构性/不明确任务走 <code>complex</code>。</li>
+          <li><b>单一 ReAct loop：</b>模型每轮获得当前上下文、计划、变更与证据，再调用一个已公开的业务或控制工具。simple 运行时发现范围扩大可升级为 complex。</li>
+          <li><b>finish 不是直接成功：</b>Completion Gate 检查 staged changes、scope、plan、版本基线与新鲜证据；通过才 commit，否则把可行动问题作为 observation 交还模型。</li>
+          <li><b>事件驱动 UI：</b>runtime 只投影经过清洗的公共事件；Bus 做 schema、时序和因果校验，再持久化到 SQLite 并经 SSE 续传给前端。</li>
         </ol>
       </section>
 
@@ -150,29 +151,29 @@
           <tr><td><code>service</code></td><td>应用层编排；把 API 意图转换为领域操作。</td><td>创建 Run、装配 Context、提交 workflow 元数据。</td><td><code>run.go</code>、<code>workflow_commit.go</code></td></tr>
           <tr><td><code>model</code></td><td>跨层共享的领域契约。</td><td>WorkSpec、Run、Event、版本和物化状态。</td><td><code>work_spec.go</code>、<code>run.go</code>、<code>event.go</code></td></tr>
           <tr><td><code>contextengine</code></td><td>基于任务与预算组装模型上下文，维护引用和 Thread memory。</td><td>输出 <code>ContextPack</code> / Manifest。</td><td><code>assembler.go</code>、<code>compiler.go</code></td></tr>
-          <tr><td><code>workflow</code></td><td>Agent Harness：策略路由、PEV 状态机、工具授权、LLM tool loop、验证、事务。</td><td>输出 StructuredOutcome 与领域事件。</td><td><code>adaptive.go</code>、<code>engine.go</code>、<code>executor.go</code></td></tr>
-          <tr><td><code>run</code></td><td>Runtime 外壳：异步 Run、项目锁、输入队列、取消、事件持久化与扇出。</td><td>连接 workflow 与 SSE。</td><td><code>engine.go</code>、<code>bus.go</code></td></tr>
+          <tr><td><code>workflow</code></td><td>Agent Harness：策略路由、单一 ReAct loop、计划控制、PPT 工具面、证据账本、完成闸门、事务和 trace。</td><td>输出 StructuredOutcome；只产生安全的 public payload。</td><td><code>runtime.go</code>、<code>completion.go</code>、<code>ppt_tools.go</code></td></tr>
+          <tr><td><code>run</code></td><td>Runtime 外壳：异步 Run、项目锁、结构化问答、取消、公共事件时序校验、持久化与扇出。</td><td>连接 workflow 与 SSE。</td><td><code>engine.go</code>、<code>bus.go</code>、<code>checkpoint.go</code></td></tr>
           <tr><td><code>store/sqlite</code></td><td>SQLite 基础设施实现。</td><td>项目、线程、Run、事件、slides、assets 的持久化。</td><td><code>store.go</code>、<code>run_store.go</code></td></tr>
           <tr><td><code>blueprint</code> / <code>designsystem</code></td><td>PPT 结构和设计约束的校验层。</td><td>保证 deck/slide/design spec 合法。</td><td><code>validate.go</code>、<code>lint.go</code></td></tr>
           <tr><td><code>asset</code> / <code>artifactfs</code> / <code>llm</code></td><td>资产 seed/校验、文件 sandbox、LLM client 适配器。</td><td>提供受控外部能力。</td><td><code>seeder.go</code>、<code>sandbox.go</code>、<code>client.go</code></td></tr>
+          <tr><td><code>render-worker</code></td><td>Node + Playwright Core 独立 Chromium 渲染器。</td><td>渲染 staging HTML，截图并返回 overflow / clipping / console / resource 诊断。</td><td><code>worker.mjs</code>、<code>workflow/render_tool.go</code></td></tr>
         </tbody></table></div>
       </section>
 
       <section id="runtime">
-        <h2 class="section-title">05 · Adaptive Runtime：先决定要不要启动完整 Harness</h2>
-        <p class="lead"><code>workflow.AdaptiveRuntime</code> 是总入口。它不是无条件执行长链路，而是先通过 <code>ExecutionStrategyRouter</code> 做成本/风险/复杂度权衡。</p>
+        <h2 class="section-title">05 · Adaptive ReAct Runtime：一个 Loop，三种执行强度</h2>
+        <p class="lead"><code>workflow.Runtime.Run</code> 是新总入口。它不再把“计划、执行、验证、修复”拆成 Go 编排节点，而是在一条 ReAct loop 内维护 phase、plan、staging changes、evidence、messages 和预算。</p>
         <div class="branch">
-          <div class="decision">ContextPack + WorkSpec<br>目标、意图、范围、关键词、物化状态</div><div class="arrow">→</div>
+          <div class="decision">ContextPack + WorkSpec<br>interaction、目标范围、结构性、影响面、歧义度</div><div class="arrow">→</div>
           <div class="routes">
-            <div class="route"><b>respond</b>咨询 / 只读：给模型只读上下文和分析 step，不生成正式 WorkflowPlan。</div>
-            <div class="route"><b>direct_action</b>明确、低风险的单页局部修改：单 step + staging + 必要校验。若发现范围扩大或未产生变更，会升级。</div>
-            <div class="route"><b>compact_workflow</b>单页结构、资产或需要重建的中等复杂任务：使用轻量计划与完整 PEV 安全闭环。</div>
-            <div class="route"><b>full_pev</b>整套、多页、全局、重排等高影响任务：跨产物计划、执行和验证。</div>
+            <div class="route"><b>chat</b><code>talk</code> / <code>ask</code> 交互：只公开读取工具；无 staging、无计划。</div>
+            <div class="route"><b>simple</b>明确的单目标执行：直接进入 executing phase；如果范围扩大、变更多目标，或连续 6 次工具往返仍未完成，会运行时升级。</div>
+            <div class="route"><b>complex</b>空项目、结构变更、多目标、全局设计协同或极短歧义指令：先在 planning phase 通过 <code>update_plan</code> 建立计划。</div>
           </div>
         </div>
         <div class="module" open><summary><span class="index">05A</span><b>策略选择流程</b><span><code>workflow/strategy.go</code></span></summary><div class="module-body"><div class="flow">
-          <div class="node"><strong>Intent</strong>consult？</div><div class="arrow">→</div><div class="node teal"><strong>只读</strong>respond</div><div class="arrow">或</div><div class="node"><strong>修改任务</strong>检查范围和 target</div><div class="arrow">→</div><div class="node violet"><strong>高影响</strong>deck / 多页 / 重排<br>full PEV</div><div class="arrow">→</div><div class="node amber"><strong>局部</strong>短且明确？<br>direct action</div><div class="arrow">否则</div><div class="node red"><strong>不确定 / 结构变更</strong>compact workflow</div>
-        </div><div class="callout"><b>重要细节：</b>direct action 并非“绕开安全机制”。它仍创建 Transaction 并校验；若工具报告 <code>SCOPE_EXPANSION_REQUIRED</code>，或 ChangeSet 为零，它会放弃 staging 并升级为 compact workflow。</div></div></div>
+          <div class="node"><strong>Interaction</strong>talk / ask？</div><div class="arrow">→</div><div class="node teal"><strong>只读</strong>chat</div><div class="arrow">否则</div><div class="node"><strong>执行任务</strong>计算 impact 与指令特征</div><div class="arrow">→</div><div class="node violet"><strong>高影响 / 模糊</strong>空 deck、多页、重排、全局协同<br>complex</div><div class="arrow">→</div><div class="node amber"><strong>明确局部</strong>一个 declared target<br>simple</div><div class="arrow">升级</div><div class="node red"><strong>运行时发现协同需求</strong>MarkTentative → complex + planning</div>
+        </div><div class="callout"><b>重要细节：</b>策略可以升级但不降级。simple 在写入后发现跨目标协调、<code>SCOPE_EXPANSION_REQUIRED</code>、或超过 six tool round trips 时，会保留暂存变更并标记为 tentative，转入 complex planning，而不是重新开一个 Run。</div></div></div>
       </section>
 
       <section id="context">
@@ -181,58 +182,58 @@
         <div class="module" open><summary><span class="index">06A</span><b>上下文装配流程</b><span><code>contextengine/assembler.go</code></span></summary><div class="module-body"><div class="flow">
           <div class="node"><strong>Validate</strong>WorkSpec、Project ID、budget</div><div class="arrow">→</div><div class="node teal"><strong>Resolve Profile</strong>按 blueprint / presentation、deck / slide 决定装配策略</div><div class="arrow">→</div><div class="node violet"><strong>Load Canonical Data</strong>Deck、all slides、DesignSpec；先验证蓝图一致性</div><div class="arrow">→</div><div class="node amber"><strong>Add Relevant Data</strong>目标页、相邻页、HTML summary/ref、assets、memory、recent turns</div><div class="arrow">→</div><div class="node red"><strong>Budget + Manifest</strong>按优先级丢弃可选段，计算 token / hash / refs</div>
         </div>
-        <div class="grid"><div class="card span-6"><h3>为什么需要 ContextManifest？</h3><p>它记录每段上下文来自哪里、版本、hash、token 估算、选择理由、是否被丢弃。这使一次模型执行可以复盘：模型“当时到底看到了什么”。</p></div><div class="card span-6"><h3>为什么有 ContextRef？</h3><p>大 HTML 不一定直接进入 prompt。它可被降级为摘要和不透明引用，模型需要细节时才通过 <code>read_context_ref</code> 在剩余预算内读取。</p></div></div></div></div>
+        <div class="grid"><div class="card span-6"><h3>为什么需要 ContextManifest？</h3><p>它记录每段上下文来自哪里、版本、hash、token 估算、选择理由、是否被丢弃。这使一次模型执行可以复盘：模型“当时到底看到了什么”。</p></div><div class="card span-6"><h3>为什么有 ContextRef？</h3><p>大 HTML 不一定直接进入 prompt。PPT 工具 <code>read_ppt</code> 会按剩余预算返回完整 HTML，或退化为摘要与 manifest reference；<code>search_refs</code> 只在已授权的 context / memory / history / project 内检索。</p></div></div></div></div>
       </section>
 
       <section id="workflow">
-        <h2 class="section-title">07 · PEV 主循环：真正的 Agent Harness</h2>
-        <p class="lead">完整 Runtime 的可靠性来自一个显式状态机，而不是依赖模型“记得下一步应该做什么”。核心在 <code>workflow.Engine.Run</code>。</p>
-        <div class="module" open><summary><span class="index">07A</span><b>Workflow 状态机与反馈回路</b><span><code>workflow/engine.go</code> + <code>domain.go</code></span></summary><div class="module-body"><div class="flow">
-          <div class="node"><strong>Normalize</strong>校验 WorkSpec</div><div class="arrow">→</div><div class="node teal"><strong>Context</strong>确认 Manifest 已存在</div><div class="arrow">→</div><div class="node violet"><strong>Plan</strong>Playbook fallback<br>+ optional planner</div><div class="arrow">→</div><div class="node amber"><strong>Execute</strong>逐 step 执行<br>依赖 / budget 检查</div><div class="arrow">→</div><div class="node"><strong>Verify</strong>聚合验证器结果</div><div class="arrow">→</div><div class="node red"><strong>Repair?</strong>阻塞 issue 且尚有轮次</div><div class="arrow">↺</div><div class="node teal"><strong>Commit → Deliver</strong>提交、输出 outcome</div>
+        <h2 class="section-title">07 · ReAct 主循环：真正的 Agent Harness</h2>
+        <p class="lead">新 Runtime 的可靠性来自“模型可自主选择下一步，但系统拥有状态、工具面、预算与完成权”。核心只有一个循环：<code>workflow.Runtime.Run</code>。</p>
+        <div class="module" open><summary><span class="index">07A</span><b>Runtime phase 与状态拥有者</b><span><code>workflow/runtime.go</code> + <code>domain.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Initialize</strong>Router 选择 strategy；建立 loop ID、scope、ledger、budget</div><div class="arrow">→</div><div class="node teal"><strong>Planning?</strong>complex 才进入 planning；模型通过 update_plan 建立计划</div><div class="arrow">→</div><div class="node violet"><strong>Executing</strong>每轮：补入 steering、可选 compact、公开 schemas、调用 agent</div><div class="arrow">→</div><div class="node amber"><strong>Control / Domain</strong>处理 update_plan、ask_user、finish，或执行一个 PPT domain tool</div><div class="arrow">→</div><div class="node red"><strong>Completion Check</strong>finish 被 gate 接受则 commit → terminal；否则 observation 回灌并继续</div>
         </div>
-        <div class="grid"><div class="card span-4"><h3>Plan</h3><p><code>PlaybookFor</code> 根据 WorkSpec 选择 playbook，生成 fallback plan；可选 LLM planner 的产物必须通过 <code>ValidatePlan</code>，否则回退。</p></div><div class="card span-4"><h3>Execute</h3><p>按依赖顺序运行 steps。每一步带 targets、capabilities、verifiers、budget；每一步都发 started/completed/failed 事件。</p></div><div class="card span-4"><h3>Verify / Repair</h3><p>Issue 的 <code>error</code> 与 <code>fatal</code> 会阻止提交。系统最多修复两轮，并且要求阻塞问题数确实下降，否则停止而不是盲目循环。</p></div></div></div></div>
-        <div class="module"><summary><span class="index">07B</span><b>一个 Step 内部的 ReAct Tool Loop</b><span><code>workflow/executor.go</code></span></summary><div class="module-body"><div class="flow">
-          <div class="node"><strong>Compile Prompt</strong>ContextPack + 当前 step system prompt</div><div class="arrow">→</div><div class="node teal"><strong>Expose Schemas</strong>仅选中的工具 schema</div><div class="arrow">→</div><div class="node violet"><strong>LLM Tool Call</strong>模型提出一个工具调用</div><div class="arrow">→</div><div class="node amber"><strong>Execute Tool</strong>参数、scope、transaction 受控</div><div class="arrow">→</div><div class="node red"><strong>Observation</strong>工具结果回灌为 tool message；直到 finish / 上限</div>
-        </div><div class="callout"><b>Harness 的关键约束：</b>单个 step 的模型循环有 <code>MaxStepTurns</code>（默认 12）和 <code>MaxToolFailures</code>（默认 3）。工具失败、上下文取消和预算超限都有明确退出路径。</div></div></div>
+        <div class="grid"><div class="card span-4"><h3>Runtime 持有什么？</h3><p>loop ID、strategy / phase、scope、plan、Transaction、EvidenceLedger、issues、messages、turn / tool / token 计数和 progress 去重状态。</p></div><div class="card span-4"><h3>模型拥有什么？</h3><p>每轮只拿 ContextPack、当前计划、ChangeSet、Evidence 快照、对话 observation 与当轮公开工具 schema；它不能访问 runtime 内部路径或数据库。</p></div><div class="card span-4"><h3>预算与退出</h3><p>默认上限为 48 turns、64 tools、64k tokens、15 分钟、4 次连续失败、3 次同状态 gate rejection；任何一个上限都会以结构化 outcome 结束。</p></div></div></div></div>
+        <div class="module"><summary><span class="index">07B</span><b>每一轮 ReAct 的精确流程</b><span><code>workflow/runtime.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Checkpoint</strong>检查 cancel / turn / tool / token / duration budget；合并用户 steering</div><div class="arrow">→</div><div class="node teal"><strong>Disclose</strong>按 strategy + phase + interaction 计算本轮工具 schema</div><div class="arrow">→</div><div class="node violet"><strong>Agent.Next</strong>编译 system prompt + ContextPack + runtime snapshot，拿到文本或一个 tool call</div><div class="arrow">→</div><div class="node amber"><strong>Execute</strong>control call 由 Runtime 处理；domain call 交 ToolRegistry 执行</div><div class="arrow">→</div><div class="node red"><strong>Observe</strong>记录 trace / evidence / invalidation / issues；将 tool result 作为 assistant + tool messages 回灌下一轮</div>
+        </div><div class="callout"><b>关键变化：</b>不再有旧的 Go <code>Engine → StepExecutor → Verifier → Repair</code> 线性流水线。验证被拆进 domain tool 产生的证据，以及 <code>CompletionGate.Check</code> 的最终一致性判断；模型被拒绝后可以据 issue 自行继续修复。</div></div></div>
       </section>
 
       <section id="tools">
-        <h2 class="section-title">08 · Tools 与 Transaction：把模型的“能做什么”变成可检查的边界</h2>
-        <p class="lead">工具不是全局常驻菜单。<code>ToolSelector.Select</code> 会对 ToolRegistry 做多重筛选，只有满足所有条件的工具才会连同 schema 一起交给模型。</p>
-        <div class="module" open><summary><span class="index">08A</span><b>工具授权流程</b><span><code>workflow/tools.go</code> + <code>builtin_tools.go</code></span></summary><div class="module-body"><div class="flow">
-          <div class="node"><strong>Registry</strong>注册 read / write / asset / finish 工具</div><div class="arrow">→</div><div class="node teal"><strong>Strategy Gate</strong>该策略能否使用？</div><div class="arrow">→</div><div class="node violet"><strong>Stage Gate</strong>execute / repair 阶段允许？</div><div class="arrow">→</div><div class="node amber"><strong>Capability + Risk</strong>step 声明的能力和风险政策允许？</div><div class="arrow">→</div><div class="node red"><strong>Scope Gate</strong>写入 artifact 必须是该 step 声明的 target</div>
+        <h2 class="section-title">08 · PPT Tool Surface 与 Transaction：把模型的能力压缩为稳定协议</h2>
+        <p class="lead">最新重构移除了 artifact-oriented 的旧工具集合，模型只认识统一的 PPT 领域表面。<code>ToolRegistry.Disclose</code> 决定本轮哪些 schema 可以看见，<code>ToolRegistry.Execute</code> 逐项重复执行授权检查。</p>
+        <div class="module" open><summary><span class="index">08A</span><b>工具公开与执行流程</b><span><code>workflow/default_tools.go</code> + <code>tools.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Register</strong>5 个 domain tools + runtime control schemas</div><div class="arrow">→</div><div class="node teal"><strong>Disclose</strong>phase / strategy / interaction 过滤；chat 和 planning 只有 read-only</div><div class="arrow">→</div><div class="node violet"><strong>Agent Call</strong>模型只能调用已公开 name</div><div class="arrow">→</div><div class="node amber"><strong>Execute Guard</strong>再次检查 disclosure、phase、intent、risk、staging 和 declared target</div><div class="arrow">→</div><div class="node red"><strong>Domain Result</strong>返回 domain-shaped data、changed targets、issues、evidence 与 invalidations</div>
         </div>
-        <div class="grid"><div class="card span-6"><h3>典型读取能力</h3><p><code>read_context_ref</code> 按预算延迟读取上下文；<code>read_staged_artifact</code> 优先读取本次 staging 中的版本。</p></div><div class="card span-6"><h3>典型写入能力</h3><p><code>write_staged_slide_blueprint</code>、<code>write_staged_presentation</code>、<code>patch_staged_presentation</code> 等都只能写入 staging，而且对 blueprint 会做 schema 校验。</p></div></div></div></div>
+        <div class="grid"><div class="card span-6"><h3>五个模型可见的业务工具</h3><p><code>read_ppt</code> 读取授权的全局模型或稳定 slide；<code>write_ppt</code> 完整创建/替换；<code>edit_ppt</code> 锚定编辑；<code>search_refs</code> 仅检索授权上下文；<code>render_slide</code> 以隔离 Chromium 进行视觉诊断。</p></div><div class="card span-6"><h3>三个 Runtime 控制工具</h3><p><code>update_plan</code> 仅 complex 的 planning/executing 可用；<code>ask_user</code> 发起结构化问题并 checkpoint 等待；<code>finish</code> 只提交“完成候选”，不会绕过 gate。</p></div></div></div></div>
         <div class="module"><summary><span class="index">08B</span><b>事务提交流程</b><span><code>workflow/transaction.go</code></span></summary><div class="module-body"><div class="flow">
-          <div class="node"><strong>NewTransaction</strong>创建 <code>.staging/runID</code></div><div class="arrow">→</div><div class="node teal"><strong>Stage</strong>写临时文件，记录 before / after hash 和 StepID</div><div class="arrow">→</div><div class="node violet"><strong>Verify</strong>验证器对 staging 版本工作</div><div class="arrow">→</div><div class="node amber"><strong>Commit Check</strong>再次确认正式文件 hash 未漂移</div><div class="arrow">→</div><div class="node red"><strong>Atomic Write + Metadata</strong>写正式文件、提交 DB 元数据；失败 restore</div>
-        </div><div class="callout"><b>这层解决的不是“数据库事务”，而是文件产物的一致性问题：</b>避免模型写到一半破坏正式 HTML，也避免在运行期间别人修改了源文件却被静默覆盖。</div></div></div>
+          <div class="node"><strong>NewTransaction</strong>execute strategy 创建 <code>.staging/runID</code></div><div class="arrow">→</div><div class="node teal"><strong>Stage</strong>写临时文件，记录 before / after hash 与 tool source；可 MarkTentative</div><div class="arrow">→</div><div class="node violet"><strong>Evidence</strong>写入使旧证据失效；schema / static / render / reference 工具为当前 hash 写入新证据</div><div class="arrow">→</div><div class="node amber"><strong>Completion Gate</strong>检查 baseline、scope、plan、changes 和 evidence freshness</div><div class="arrow">→</div><div class="node red"><strong>Atomic Commit + Metadata</strong>hash 未漂移才写正式文件并提交 DB 元数据；失败 restore</div>
+        </div><div class="callout"><b>这层现在多了一层语义安全：</b>Transaction 负责文件原子性；Evidence Ledger + Completion Gate 负责确认“这份暂存内容已经按其最新版本被检查”。例如 HTML/CSS 变更后，必须重新 render 每个受影响 slide 才能完成。</div></div></div>
       </section>
 
       <section id="run">
         <h2 class="section-title">09 · Run Engine 与事件流：让一次 Agent 执行可控、可看、可恢复</h2>
         <p class="lead"><code>run.Engine</code> 是 workflow 的运行时外壳；它不承载业务推理，而是处理并发、生命周期、HITL、取消与广播。</p>
         <div class="module" open><summary><span class="index">09A</span><b>Run 生命周期</b><span><code>run/engine.go</code></span></summary><div class="module-body"><div class="flow">
-          <div class="node"><strong>StartWithContext</strong>创建 pending Run + 保存 ContextManifest</div><div class="arrow">→</div><div class="node teal"><strong>Async Execute</strong>后台 goroutine 取得 project lock</div><div class="arrow">→</div><div class="node violet"><strong>Running</strong>调用 workflow.Execution；可取消、可 NeedsInput</div><div class="arrow">→</div><div class="node amber"><strong>Finish</strong>按 outcome 写 done / failed / canceled</div><div class="arrow">→</div><div class="node red"><strong>Close</strong>关闭 Bus、移除 active handle</div>
-        </div><div class="grid"><div class="card span-6"><h3>为什么按 Project 加锁？</h3><p>文件产物属于 project 工作目录。同一 project 并行 Run 可能抢写同一 HTML；因此同项目串行、跨项目并行。</p></div><div class="card span-6"><h3>HITL 在哪里？</h3><p><code>NeedsInput</code> 会把 Run 置于等待语义，前端通过 <code>POST /runs/{id}/input</code> 回答；适用于 before-apply 或运行中阻塞。</p></div></div></div></div>
+          <div class="node"><strong>StartWithContext</strong>创建 pending Run + 保存 ContextManifest</div><div class="arrow">→</div><div class="node teal"><strong>Public Start</strong>Bus 先发并校验 <code>run.started</code>，再启动后台 goroutine</div><div class="arrow">→</div><div class="node violet"><strong>Project Lock + Runtime</strong>同项目串行；调用 workflow.Execution；可 cancel、steering、ask_user</div><div class="arrow">→</div><div class="node amber"><strong>Finish Fallback</strong>Runtime 正常投影 <code>run.finished</code>；外壳仅兜底补齐终态</div><div class="arrow">→</div><div class="node red"><strong>Close</strong>关闭 Bus、移除 active handle</div>
+        </div><div class="grid"><div class="card span-6"><h3>为什么按 Project 加锁？</h3><p>文件产物属于 project 工作目录。同一 project 并行 Run 可能抢写同一 HTML；因此同项目串行、跨项目并行。</p></div><div class="card span-6"><h3>新的 HITL 在哪里？</h3><p><code>ask_user</code> 生成带 option schema 的 <code>question.asked</code>；<code>InputQueue</code> 只接受匹配 <code>reply_to</code> 且结构正确的 JSON answer，恢复时发 <code>question.answered</code>。</p></div></div></div></div>
         <div class="module"><summary><span class="index">09B</span><b>事件持久化与 SSE 续传</b><span><code>run/bus.go</code> + <code>httpapi/run_handler.go</code></span></summary><div class="module-body"><div class="flow">
-          <div class="node"><strong>Workflow Emit</strong>stage / step / tool / artifact / terminal</div><div class="arrow">→</div><div class="node teal"><strong>Bus</strong>分配连续 seq；终态只能出现一次</div><div class="arrow">→</div><div class="node violet"><strong>Persist First</strong>写 SQLite events；白名单写 history.jsonl</div><div class="arrow">→</div><div class="node amber"><strong>Fan Out</strong>实时订阅者收到 Event</div><div class="arrow">→</div><div class="node red"><strong>SSE</strong>Last-Event-ID 先回放历史，再接实时流</div>
-        </div><div class="callout"><b>观察性设计：</b>history 只保存白名单事件，明确避免持久化隐藏的模型推理。前端仍可回放用户目标、策略、计划、工具、产物和最终结果。</div></div></div>
+          <div class="node"><strong>Runtime Project</strong>reasoning / plan / milestone / tool / question / final 被转换为 public payload</div><div class="arrow">→</div><div class="node teal"><strong>Validate Schema</strong><code>ValidatePublicEvent</code> 拒绝路径、HTML、raw reasoning 等敏感字段</div><div class="arrow">→</div><div class="node violet"><strong>Validate Sequence</strong>run.started first；plan revision 单调；tool start/complete 配对；question 单 pending；completed 必有 final</div><div class="arrow">→</div><div class="node amber"><strong>Persist First</strong>SQLite event store；产品事件写 history.jsonl</div><div class="arrow">→</div><div class="node red"><strong>SSE</strong>连续 seq + Last-Event-ID 先回放后实时扇出</div>
+        </div><div class="callout"><b>观察性设计：</b>这次重构的关键是将“内部 trace”和“用户可见 timeline”分开。<code>trace.go</code> 可记录内部诊断；SSE 只能承载版本化 public event contract，且会清洗 HTML、文件路径、系统提示词和推理链泄露。</div></div></div>
       </section>
 
       <section id="storage">
         <h2 class="section-title">10 · 存储与产物：SQLite 管“索引和运行态”，文件系统管“PPT 内容”</h2>
         <div class="grid"><div class="card span-6"><span class="label">Canonical Project Files</span><h3>文件系统工作目录</h3><p>保存 deck / slide blueprints、design spec、物化后的 HTML slide、thread memory 和 staging。Blueprint 是结构化的规范层；HTML 是可预览的 presentation 层。</p></div><div class="card span-6"><span class="label">Operational Metadata</span><h3>SQLite</h3><p>保存 project、thread、run、event、slide metadata、asset index 和 workflow commit 元数据。它使列表、状态查询、SSE 回放和版本追踪可用。</p></div></div>
-        <div class="module" open><summary><span class="index">10A</span><b>从 Blueprint 到 HTML 的关系</b><span><code>blueprint</code> + <code>service/workflow_commit.go</code></span></summary><div class="module-body"><div class="flow">
-          <div class="node"><strong>Deck Blueprint</strong>页序、主题、全局结构</div><div class="arrow">→</div><div class="node teal"><strong>Slide Blueprint</strong>每页内容语义与结构</div><div class="arrow">→</div><div class="node violet"><strong>Design Spec</strong>设计 token / layout 约束</div><div class="arrow">→</div><div class="node amber"><strong>Materialize / Revise</strong>生成或修改 HTML</div><div class="arrow">→</div><div class="node red"><strong>Materialization State</strong>根据各 revision 判断 fresh / stale / unknown</div>
-        </div><div class="callout"><b>理解方式：</b>Blueprint / Design 是更接近“源代码”的 canonical inputs；HTML 是由它们物化而来的可交付表现层。上下文装配与策略路由会利用 materialization state 决定能否局部 patch 或必须 rebuild。</div></div></div>
+        <div class="module" open><summary><span class="index">10A</span><b>从 Blueprint 到 HTML，再到视觉证据</b><span><code>blueprint</code> + <code>render_tool.go</code></span></summary><div class="module-body"><div class="flow">
+          <div class="node"><strong>Deck Blueprint</strong>页序、主题、全局结构</div><div class="arrow">→</div><div class="node teal"><strong>Slide Blueprint</strong>每页内容语义与结构</div><div class="arrow">→</div><div class="node violet"><strong>Design Spec</strong>设计 token / layout 约束</div><div class="arrow">→</div><div class="node amber"><strong>Presentation HTML</strong>写入或锚定编辑；所有变更先落 staging</div><div class="arrow">→</div><div class="node red"><strong>Isolated Chromium</strong>截图 + overflow / clipping / console / resource 诊断 → render evidence</div>
+        </div><div class="callout"><b>理解方式：</b>Blueprint / Design 是更接近“源代码”的 canonical inputs；HTML 是可交付表现层。最新架构没有把“视觉验证”当作一句口号：<code>render-worker/worker.mjs</code> 会在隔离本地 server 和 Chromium 中加载 staged HTML，限制外部资源，并把截图经 <code>/runs/{id}/screenshots/{screenshot_id}</code> 暴露给前端。</div></div></div>
       </section>
 
       <section id="reading-order">
         <h2 class="section-title">11 · 建议的源码阅读顺序</h2>
         <p class="lead">不要一上来读所有工具实现。先追一条真实调用链，建立“谁调用谁、谁拥有状态、谁能写文件”的心智模型。</p>
-        <div class="card"><div class="reading"><div class="n">1</div><div><b>从 HTTP 到 Run：</b><code>backend/internal/httpapi/run_handler.go</code> → <code>backend/internal/service/run.go</code>。先确认一个 Run 是怎样被创建的。</div></div><div class="reading"><div class="n">2</div><div><b>理解输入和上下文：</b><code>backend/internal/model/work_spec.go</code> → <code>backend/internal/contextengine/assembler.go</code>。重点问：哪些信息会进入模型上下文，哪些不会？</div></div><div class="reading"><div class="n">3</div><div><b>理解策略路由：</b><code>backend/internal/workflow/strategy.go</code> → <code>adaptive.go</code>。用不同用户指令手动模拟它会选哪一条路径。</div></div><div class="reading"><div class="n">4</div><div><b>读完整 PEV：</b><code>backend/internal/workflow/engine.go</code> → <code>plan.go</code> → <code>playbooks.go</code> → <code>verifiers.go</code>。重点追 Stage 和 fail/repair 分支。</div></div><div class="reading"><div class="n">5</div><div><b>读模型执行边界：</b><code>executor.go</code> → <code>tools.go</code> → <code>builtin_tools.go</code> → <code>transaction.go</code>。重点确认每个写操作如何被 scoped 与 staged。</div></div><div class="reading"><div class="n">6</div><div><b>最后读运行与前端投影：</b><code>backend/internal/run/engine.go</code> → <code>bus.go</code> → <code>frontend/src/features/agent/eventReducer.ts</code>。把后端 event 与 UI 时间线一一对照。</div></div></div>
+        <div class="card"><div class="reading"><div class="n">1</div><div><b>从 HTTP 到 Run：</b><code>backend/internal/httpapi/run_handler.go</code> → <code>backend/internal/service/run.go</code> → <code>backend/internal/run/engine.go</code>。确认一个 Run 怎样获得 ContextManifest、后台执行和项目锁。</div></div><div class="reading"><div class="n">2</div><div><b>理解输入和上下文：</b><code>backend/internal/model/work_spec.go</code> → <code>backend/internal/contextengine/assembler.go</code>。重点问：哪些信息会进入模型上下文，哪些仅以 ref 或 summary 形式存在？</div></div><div class="reading"><div class="n">3</div><div><b>从策略进入 loop：</b><code>backend/internal/workflow/strategy.go</code> → <code>runtime.go</code>。用同一页明确编辑、整套重排、只读提问三种指令，手动模拟 chat / simple / complex 分支。</div></div><div class="reading"><div class="n">4</div><div><b>读 ReAct loop 的两类工具：</b><code>runtime.go</code> 的 <code>executeControl</code> → <code>tools.go</code>。重点区分 agent 可调用的 control（计划/问人/结束）和 domain（读写编辑渲染）。</div></div><div class="reading"><div class="n">5</div><div><b>读完成条件：</b><code>completion.go</code> → <code>evidence.go</code> → <code>transaction.go</code>。重点验证“先写后 render”为什么会产生新鲜证据，而改写后为什么旧证据必须失效。</div></div><div class="reading"><div class="n">6</div><div><b>读 PPT 与浏览器边界：</b><code>ppt_tools.go</code> → <code>render_tool.go</code> → <code>backend/render-worker/worker.mjs</code>。确认 HTML 如何进入 staging、如何隔离渲染、如何回传截图与诊断。</div></div><div class="reading"><div class="n">7</div><div><b>最后读公共 timeline：</b><code>model/public_event.go</code> → <code>workflow/public_events.go</code> → <code>run/bus.go</code> → <code>frontend/src/features/agent/eventReducer.ts</code>。把后端公共事件与 UI 时间线逐项对照。</div></div></div>
       </section>
-      <footer>基于当前代码库结构整理 · 重点路径：<code>backend/internal/workflow</code>、<code>backend/internal/contextengine</code>、<code>backend/internal/run</code>。打开此文件即可离线阅读。</footer>
+      <footer>基于当前 HEAD（2026-08-02 的 Adaptive ReAct 重构）整理 · 重点路径：<code>backend/internal/workflow/runtime.go</code>、<code>completion.go</code>、<code>ppt_tools.go</code>、<code>backend/internal/run/bus.go</code> 与 <code>backend/render-worker/worker.mjs</code>。打开此文件即可离线阅读。</footer>
     </main>
   </div>
 </body>

@@ -44,6 +44,7 @@ Question
 - `run.progress` 是可替换的实时状态，不进入长期对话时间线。
 - `message.final` 是用户可读的最终回答，`run.finished` 是机器可判定的唯一终态。
 - `update_plan`、`ask_user`、`finish` 是 Runtime 控制动作，不显示为普通工具卡片。
+- chat、simple、complex 都只能由显式 `finish` 经 Completion Gate 接受后成功退出；普通文本不是隐式 finish。
 - 本次直接替换旧协议，不保留旧事件名称、旧前端分支或双写逻辑。
 
 ## 2. 当前代码设计读取结论
@@ -640,6 +641,7 @@ canceled
 - Chat 成功结束时恰好一条。
 - Simple/Complex 成功通过 Completion Gate 并完成 Commit 后恰好一条。
 - 内容来自 `finish.message`，为空时 Runtime 生成安全兜底文本。
+- Chat 的普通 assistant 文本没有 tool call 时，Runtime 必须要求 Agent 继续调用 `finish(message=...)`，不能把该文本自动转换为 finish candidate。
 - 必须在成功的 `run.finished` 之前发送。
 - 前端将它作为最终回答，不再同时渲染一份 `run.finished.outcome` 卡片。
 - 支持受控 Markdown，不允许原始 HTML。
@@ -1570,4 +1572,3 @@ Provider 注意事项：
 - 前端组件已经按新层级展示，不再暴露内部 Runtime 节点。
 - 现有页面组织和交互框架未被重构。
 - 后端、前端、集成与视觉验收测试全部通过。
-

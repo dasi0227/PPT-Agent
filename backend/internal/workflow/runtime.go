@@ -79,10 +79,7 @@ type CognitiveAgent struct {
 
 func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentResponse, error) {
 	if a.Client == nil {
-		if req.Strategy == StrategyChat {
-			return AgentResponse{Text: "已根据当前项目上下文完成只读分析。"}, nil
-		}
-		return AgentResponse{}, errors.New("LLM client is required for write execution")
+		return AgentResponse{}, errors.New("LLM client is required for ReAct execution")
 	}
 	runtimeState, _ := json.Marshal(map[string]any{
 		"strategy": req.Strategy, "phase": req.Phase, "plan": req.Plan,
@@ -116,10 +113,13 @@ func runtimeSystemPrompt(phase RuntimePhase, strategy ExecutionStrategy, state s
 			"After the latest HTML/CSS-affecting change, render every affected slide before finish. "+
 			"Never expose chain-of-thought; provide concise action summaries only. "+
 			"Planning may only read and update the checklist. Writes always go to staging. "+
+			"所有策略的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。 "+
 			"finish submits a completion candidate and may be rejected with actionable issues. Runtime state: %s",
 		strategy, phase, state,
 	)
 }
+
+const noToolCallGuidance = "Ordinary assistant text is not a completion signal. If the task is complete, call finish(message=...) with the final response. If the task is not complete, call one of the currently disclosed tools to continue."
 
 type RuntimeInput struct {
 	RunID          string
@@ -263,18 +263,15 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.tokens += approximateTokens(response.Text)
 		if response.ToolCall == nil {
-			if state.strategy == StrategyChat && strings.TrimSpace(response.Text) != "" {
-				result, done := r.finishCandidate(ctx, input, state, response.Text)
-				if done {
-					return result
-				}
-				continue
-			}
+			recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{
+				"turn": state.turns, "has_tool_call": false,
+				"provider_reasoning_content": response.ProviderReasoning,
+			})
 			state.messages = append(state.messages, llm.Message{
 				Role: llm.RoleAssistant, Content: response.Text,
 				ReasoningContent: response.ProviderReasoning,
 			})
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: "Use finish when the task is complete, or call a disclosed tool to continue."})
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: noToolCallGuidance})
 			continue
 		}
 		call := *response.ToolCall
@@ -453,17 +450,22 @@ func (r *Runtime) executeControl(
 		return StructuredOutcome{}, false
 	case "finish":
 		message := stringValue(call.Args["message"])
-		if message == "" {
-			message = stringValue(call.Args["summary"])
-		}
-		return r.finishCandidate(ctx, input, state, message)
+		return r.finishCandidate(ctx, input, state, call, assistantText, providerReasoning, message)
 	default:
 		r.appendControlObservation(state, call, assistantText, providerReasoning, failedToolResult(CodeInvalidControlCall, "unknown runtime control tool", false))
 		return StructuredOutcome{}, false
 	}
 }
 
-func (r *Runtime) finishCandidate(ctx context.Context, input RuntimeInput, state *runtimeState, message string) (StructuredOutcome, bool) {
+func (r *Runtime) finishCandidate(
+	ctx context.Context,
+	input RuntimeInput,
+	state *runtimeState,
+	call llm.ToolCall,
+	assistantText string,
+	providerReasoning string,
+	message string,
+) (StructuredOutcome, bool) {
 	finishPhase := state.phase
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
 	r.emitProgress(input.Emitter, state, "finalizing", "正在完成最终检查", nil)
@@ -499,8 +501,7 @@ func (r *Runtime) finishCandidate(ctx context.Context, input RuntimeInput, state
 		}
 		state.messages = appendToolObservation(
 			state.messages,
-			llm.ToolCall{ID: fmt.Sprintf("completion-%d", state.turns), Name: "finish"},
-			"", "", observation,
+			call, assistantText, providerReasoning, observation,
 		)
 		return StructuredOutcome{}, false
 	}
@@ -839,10 +840,9 @@ func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction 
 	}
 	if phase == PhaseChat || phase == PhaseExecuting {
 		out = append(out, ToolSchema{
-			Name: "finish", Description: "Submit a completion candidate to the runtime Completion Gate.",
+			Name: "finish", Description: "所有策略的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。The message is checked by the Completion Gate before the run may complete.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{
-				"status": map[string]any{"type": "string"}, "message": map[string]any{"type": "string"},
-				"summary": map[string]any{"type": "string"},
+				"message": map[string]any{"type": "string"},
 			}),
 		})
 	}
