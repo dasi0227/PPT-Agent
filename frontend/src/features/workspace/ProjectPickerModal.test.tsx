@@ -21,7 +21,12 @@ describe('ProjectPickerModal', () => {
     createProject.mockResolvedValue({ id: 'project-1' });
     render(<ProjectPickerModal open onOpenChange={onOpenChange} onOpenExisting={onOpenExisting} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /^新建项目/ }));
+    expect(screen.queryByText('选择操作')).not.toBeInTheDocument();
+    expect(screen.queryByText('新建一个演示文稿，或继续已有项目。')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '创建全新项目' }));
+    expect(screen.getByRole('heading', { name: '创建全新项目' })).toBeInTheDocument();
+    expect(screen.queryByText('为这个演示文稿输入一个便于识别的名称。')).not.toBeInTheDocument();
+    expect(screen.queryByText('创建后可随时在项目菜单中重命名。')).not.toBeInTheDocument();
     expect(createProject).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: '产品发布会' } });

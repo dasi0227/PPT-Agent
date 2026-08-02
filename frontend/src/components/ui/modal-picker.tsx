@@ -68,9 +68,9 @@ export function PickerModal<T>({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="p-0 gap-0 overflow-hidden flex flex-col max-h-[80vh]">
-        <DialogHeader className="p-4 pb-2 border-b border-border">
+        <DialogHeader className="border-b border-border px-5 pb-5 pt-5">
           <DialogTitle>{title}</DialogTitle>
-          <div className="relative mt-3">
+          <div className="relative mt-7">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-400" />
             <input
               type="text"
@@ -78,7 +78,7 @@ export function PickerModal<T>({
               onChange={e => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="搜索项目"
-              className="w-full pl-9 pr-4 py-2 bg-panel border border-border rounded-md text-sm focus:border-accent transition-colors"
+              className="h-11 w-full rounded-lg border border-border bg-panel pl-10 pr-4 text-sm text-text-900 placeholder:text-text-400 transition-colors focus:border-border-strong focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               autoFocus
             />
           </div>

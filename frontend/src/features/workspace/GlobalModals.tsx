@@ -31,6 +31,10 @@ export const GlobalModals: React.FC = () => {
       <OpenExistingProjectModal 
         open={openExistingOpen} 
         onOpenChange={setOpenExistingOpen} 
+        onBack={() => {
+          setOpenExistingOpen(false);
+          setPickerOpen(true);
+        }}
       />
     </>
   );

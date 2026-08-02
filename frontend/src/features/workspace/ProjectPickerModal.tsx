@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { useProjectStore } from '../../stores/projectStore';
 import { ArrowLeft, FilePlus, FolderOpen, Loader2 } from 'lucide-react';
 
@@ -49,24 +49,24 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>{mode === 'choose' ? '选择操作' : '新建项目'}</DialogTitle>
-          <DialogDescription>
-            {mode === 'choose' ? '新建一个演示文稿，或继续已有项目。' : '为这个演示文稿输入一个便于识别的名称。'}
-          </DialogDescription>
-        </DialogHeader>
         {mode === 'choose' ? (
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <DialogTitle className="sr-only">项目操作</DialogTitle>
+        ) : (
+          <DialogHeader>
+            <DialogTitle>创建全新项目</DialogTitle>
+          </DialogHeader>
+        )}
+        {mode === 'choose' ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <button
               type="button"
               onClick={() => setMode('create')}
-              className="group flex flex-col items-start rounded-lg border border-border p-5 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md border border-border bg-surface transition-colors group-hover:border-accent/30 group-hover:text-accent">
-                <FilePlus className="h-5 w-5 text-text-600 group-hover:text-accent" strokeWidth={1.75} />
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-surface transition-colors group-hover:border-accent/30 group-hover:text-accent">
+                <FilePlus className="h-7 w-7 text-text-600 group-hover:text-accent" strokeWidth={1.75} />
               </div>
-              <h3 className="mb-1 text-base font-medium text-text-900">新建项目</h3>
-              <p className="text-sm text-text-400">命名后创建一个新的演示文稿。</p>
+              <h3 className="text-lg font-semibold text-text-900">创建全新项目</h3>
             </button>
 
             <button
@@ -75,13 +75,12 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
                 reset();
                 onOpenExisting();
               }}
-              className="group flex flex-col items-start rounded-lg border border-border p-5 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md border border-border bg-surface transition-colors group-hover:border-accent/30 group-hover:text-accent">
-                <FolderOpen className="h-5 w-5 text-text-600 group-hover:text-accent" strokeWidth={1.75} />
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-surface transition-colors group-hover:border-accent/30 group-hover:text-accent">
+                <FolderOpen className="h-7 w-7 text-text-600 group-hover:text-accent" strokeWidth={1.75} />
               </div>
-              <h3 className="mb-1 text-base font-medium text-text-900">打开已有项目</h3>
-              <p className="text-sm text-text-400">从最近的项目中继续工作。</p>
+              <h3 className="text-lg font-semibold text-text-900">打开已有项目</h3>
             </button>
           </div>
         ) : (
@@ -97,7 +96,6 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
                 placeholder="例如：2026 品牌发布会"
                 className="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text-900 placeholder:text-text-400 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
               />
-              <p className="text-xs text-text-600">创建后可随时在项目菜单中重命名。</p>
               {createError && <p role="alert" className="text-xs text-danger">{createError}</p>}
             </div>
             <DialogFooter>

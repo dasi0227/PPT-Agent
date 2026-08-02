@@ -2,13 +2,15 @@ import React, { useEffect } from 'react';
 import { PickerModal } from '../../components/ui/modal-picker';
 import { useProjectStore } from '../../stores/projectStore';
 import { Project } from '../../api/types';
+import { ArrowLeft } from 'lucide-react';
 
 interface OpenExistingProjectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onBack: () => void;
 }
 
-export const OpenExistingProjectModal: React.FC<OpenExistingProjectModalProps> = ({ open, onOpenChange }) => {
+export const OpenExistingProjectModal: React.FC<OpenExistingProjectModalProps> = ({ open, onOpenChange, onBack }) => {
   const { projects, openProject, loadProjects } = useProjectStore();
 
   useEffect(() => {
@@ -44,10 +46,10 @@ export const OpenExistingProjectModal: React.FC<OpenExistingProjectModalProps> =
         <div className="p-8 text-center flex flex-col items-center justify-center text-text-400">
           <p className="mb-4">还没有历史项目，去新建一个</p>
           <button
-            onClick={() => onOpenChange(false)}
-            className="px-4 py-2 text-sm font-medium rounded-md border border-border hover:bg-black/5 transition-colors"
+            onClick={onBack}
+            className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-border px-3 text-sm font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900"
           >
-            返回
+            <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> 返回
           </button>
         </div>
       }

@@ -1,17 +1,17 @@
-import { Layers } from 'lucide-react';
-
 export const WorkspaceEmptyState = () => {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center bg-background text-text-900 h-full w-full">
-      <Layers className="w-14 h-14 text-accent mb-5 opacity-90" />
-      <h1 className="text-xl font-semibold mb-2">开始制作演示文稿</h1>
-      <p className="text-text-400 mb-6">点击顶栏「+」新建或打开项目</p>
-      
-      {/* 按钮会被提取到外部，这里直接展示占位 */}
+    <div className="flex h-full w-full flex-1 flex-col items-center justify-center bg-background text-text-900">
+      <h1 className="mb-4 max-w-[94vw] text-center text-[clamp(3rem,8vw,8rem)] font-black italic leading-none tracking-[-0.07em] text-text-900">
+        Dasi PPT Agent
+      </h1>
+      <div className="mb-10 flex items-center gap-4 text-text-400">
+        <span aria-hidden="true" className="h-px w-16 bg-border sm:w-28" />
+        <p className="whitespace-nowrap text-base font-medium">AI 时代下的 PPT 交给 Agent 就好了</p>
+        <span aria-hidden="true" className="h-px w-16 bg-border sm:w-28" />
+      </div>
       <button 
-        className="h-8 px-4 bg-accent text-white rounded-md hover:bg-accent/90 font-medium"
+        className="h-10 rounded-md bg-accent px-5 text-base font-semibold text-white hover:bg-accent/90"
         onClick={() => {
-          // Trigger ProjectPickerModal, will implement in M5
           document.dispatchEvent(new CustomEvent('open-project-picker'));
         }}
       >

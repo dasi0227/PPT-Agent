@@ -45,7 +45,9 @@ describe('AppShell layout contract', () => {
   it('always keeps the top project tabs', () => {
     render(<AppShell />);
     expect(screen.getByTestId('project-tabs')).toBeInTheDocument();
-    expect(screen.getByText('开始制作演示文稿')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Dasi PPT Agent' })).toBeInTheDocument();
+    expect(screen.getByText('AI 时代下的 PPT 交给 Agent 就好了')).toBeInTheDocument();
+    expect(screen.queryByTestId('lucide-layers')).not.toBeInTheDocument();
   });
 
   it('keeps the left, center, and right columns with protected size bounds', () => {
