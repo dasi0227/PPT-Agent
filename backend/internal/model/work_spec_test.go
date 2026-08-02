@@ -7,7 +7,7 @@ import (
 func TestWorkSpecValidation(t *testing.T) {
 	valid := WorkSpec{
 		Target:      RunTarget{Artifact: ArtifactPresentation, Level: TargetSlide, SlideID: "stable"},
-		Interaction: RunInteraction{Intent: IntentApply, Clarification: ClarifyWhenBlocked},
+		Interaction: RunInteraction{Intent: IntentExecute},
 		Instruction: "revise",
 	}
 	if err := valid.Validate(); err != nil {
@@ -19,8 +19,7 @@ func TestWorkSpecValidation(t *testing.T) {
 		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetSlide}, Interaction: valid.Interaction, Instruction: "x"},
 		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck, SlideID: "current"}, Interaction: valid.Interaction, Instruction: "x"},
 		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck, SlideID: "stable"}, Interaction: valid.Interaction, Instruction: "x"},
-		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck}, Interaction: RunInteraction{Intent: "talk", Clarification: ClarifyNever}, Instruction: "x"},
-		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck}, Interaction: RunInteraction{Intent: IntentApply, Clarification: "always"}, Instruction: "x"},
+		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck}, Interaction: RunInteraction{Intent: "consult"}, Instruction: "x"},
 		{Target: RunTarget{Artifact: ArtifactBlueprint, Level: TargetDeck}, Interaction: valid.Interaction, Instruction: "  "},
 	}
 	for i, spec := range cases {

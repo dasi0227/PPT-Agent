@@ -16,7 +16,7 @@ type HistoryEntry struct {
 	TS    int64          `json:"ts"`
 	RunID string         `json:"run_id"`
 	Turn  string         `json:"turn"` // "user" | "agent"
-	Type  string         `json:"type"` // user_turn | markdown | info | needs_input | final_result | error
+	Type  string         `json:"type"` // user_turn or one of the persistent public event names
 	Data  map[string]any `json:"data"`
 }
 

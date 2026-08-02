@@ -16,10 +16,11 @@ const (
 // Message 是一条对话消息。
 // ToolCalls 在 role=assistant 时记录 LLM 发起的工具调用；ToolCallID 在 role=tool 时关联对应的工具调用。
 type Message struct {
-	Role       Role
-	Content    string
-	ToolCallID string
-	ToolCalls  []ToolCall
+	Role             Role
+	Content          string
+	ReasoningContent string
+	ToolCallID       string
+	ToolCalls        []ToolCall
 }
 
 // ToolSchema is one Runtime-disclosed function schema.
@@ -59,11 +60,13 @@ type ToolCall struct {
 	Args map[string]any
 }
 
-// ToolCallResponse contains either a tool call or user-visible text. Hidden
-// reasoning is neither represented nor persisted.
+// ToolCallResponse keeps provider reasoning separate from ordinary assistant
+// content. ReasoningContent is provider protocol state only and must never be
+// projected to a public event or thread history.
 type ToolCallResponse struct {
-	ToolCall *ToolCall
-	Text     string
+	ToolCall         *ToolCall
+	Text             string
+	ReasoningContent string
 }
 
 // Client 抽象 LLM 调用；所有方法接受 context.Context 以支持取消（ARCH-LLM-002）。

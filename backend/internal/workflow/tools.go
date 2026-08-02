@@ -6,57 +6,92 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 var (
 	ErrToolNotDisclosed = errors.New("TOOL_NOT_DISCLOSED")
 	ErrCapabilityDenied = errors.New("CAPABILITY_DENIED")
+	ErrTargetOutOfScope = errors.New("TARGET_OUT_OF_SCOPE")
 )
-
-type Risk string
 
 const (
-	RiskRead        Risk = "read"
-	RiskWrite       Risk = "write"
-	RiskDestructive Risk = "destructive"
-	RiskControl     Risk = "control"
+	CodeTargetNotFound      = "TARGET_NOT_FOUND"
+	CodeTargetAlreadyExists = "TARGET_ALREADY_EXISTS"
+	CodeEditAnchorNotFound  = "EDIT_ANCHOR_NOT_FOUND"
+	CodeEditAnchorAmbiguous = "EDIT_ANCHOR_AMBIGUOUS"
+	CodeModelInvalid        = "MODEL_INVALID"
+	CodeContextBudget       = "CONTEXT_BUDGET_EXCEEDED"
+	CodeRenderFailed        = "RENDER_FAILED"
+	CodeStagingRequired     = "STAGING_REQUIRED"
 )
 
-type Tool interface {
-	Name() string
-	Description() string
-	Parameters() map[string]any
-	Execute(context.Context, ToolInput) ToolResult
+type ToolSchema struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
 }
 
-type ToolInput struct {
+type DomainTool interface {
+	Schema() ToolSchema
+	Execute(context.Context, DomainToolInput) ToolResult
+}
+
+type DomainToolInput struct {
 	Args        map[string]any
-	State       WorkflowState
-	Step        WorkflowStep
+	Context     contextengine.ContextPack
+	ProjectDir  string
+	RunID       string
 	Transaction *Transaction
+	Scope       Scope
+	Strategy    ExecutionStrategy
+	Phase       RuntimePhase
+	Interaction model.InteractionIntent
+	Risk        RiskLevel
+}
+
+// ChangedTarget is deliberately domain-shaped. Model-visible results never
+// expose artifact paths, staging paths, database keys, or transaction details.
+type ChangedTarget struct {
+	Type     string   `json:"type"`
+	SlideID  string   `json:"slide_id,omitempty"`
+	Revision int      `json:"revision,omitempty"`
+	Hash     string   `json:"hash"`
+	Fields   []string `json:"fields,omitempty"`
+}
+
+func (c ChangedTarget) Target() TargetRef {
+	return TargetRef{Type: c.Type, SlideID: c.SlideID}
 }
 
 type ToolResult struct {
-	OK        bool          `json:"ok"`
-	Summary   string        `json:"summary"`
-	Artifacts []ArtifactRef `json:"artifacts"`
-	Issues    []Issue       `json:"issues"`
-	Retryable bool          `json:"retryable"`
+	OK             bool            `json:"ok"`
+	Summary        string          `json:"summary"`
+	Data           map[string]any  `json:"data,omitempty"`
+	ChangedTargets []ChangedTarget `json:"changed_targets"`
+	Issues         []Issue         `json:"issues"`
+	Retryable      bool            `json:"retryable"`
+	Code           string          `json:"code,omitempty"`
+	// Evidence and invalidation are runtime-internal. They are recorded in the
+	// Evidence Ledger and SSE but are not duplicated in model observations.
+	Evidence           []Evidence  `json:"-"`
+	InvalidatedTargets []TargetRef `json:"-"`
 }
 
-func SuccessfulToolResult(summary string, artifacts ...ArtifactRef) ToolResult {
-	return ToolResult{OK: true, Summary: summary, Artifacts: artifacts, Issues: []Issue{}}
+func SuccessfulToolResult(summary string) ToolResult {
+	return ToolResult{
+		OK: true, Summary: summary, Data: map[string]any{}, ChangedTargets: []ChangedTarget{},
+		Evidence: []Evidence{}, InvalidatedTargets: []TargetRef{}, Issues: []Issue{},
+	}
 }
 
 type ToolDescriptor struct {
-	Name         string              `json:"name"`
-	Capabilities []Capability        `json:"capabilities"`
-	Risk         Risk                `json:"risk"`
-	Stages       []Stage             `json:"stages"`
-	Strategies   []ExecutionStrategy `json:"strategies,omitempty"`
-	Mutates      []ArtifactKind      `json:"mutates"`
-	Tool         Tool                `json:"-"`
+	Tool       DomainTool
+	ReadOnly   bool
+	Capability string
+	Risk       RiskLevel
+	Phases     []RuntimePhase
 }
 
 type ToolRegistry struct {
@@ -68,19 +103,31 @@ func NewToolRegistry() *ToolRegistry {
 	return &ToolRegistry{tools: map[string]ToolDescriptor{}, order: []string{}}
 }
 
-func (r *ToolRegistry) Register(desc ToolDescriptor) error {
-	if desc.Tool == nil || desc.Name == "" || desc.Tool.Name() != desc.Name {
-		return fmt.Errorf("invalid tool descriptor")
+func (r *ToolRegistry) RegisterDomainTool(tool DomainTool, readOnly bool, phases ...RuntimePhase) error {
+	capability := "read"
+	risk := RiskLow
+	if !readOnly {
+		capability, risk = "write", RiskMedium
 	}
-	if _, exists := r.tools[desc.Name]; exists {
-		return fmt.Errorf("duplicate tool %s", desc.Name)
+	return r.Register(tool, readOnly, capability, risk, phases...)
+}
+
+func (r *ToolRegistry) Register(tool DomainTool, readOnly bool, capability string, risk RiskLevel, phases ...RuntimePhase) error {
+	if tool == nil || tool.Schema().Name == "" {
+		return errors.New("invalid domain tool")
 	}
-	desc.Capabilities = append([]Capability{}, desc.Capabilities...)
-	desc.Stages = append([]Stage{}, desc.Stages...)
-	desc.Strategies = append([]ExecutionStrategy{}, desc.Strategies...)
-	desc.Mutates = append([]ArtifactKind{}, desc.Mutates...)
-	r.tools[desc.Name] = desc
-	r.order = append(r.order, desc.Name)
+	name := tool.Schema().Name
+	if _, ok := r.tools[name]; ok {
+		return fmt.Errorf("duplicate tool %s", name)
+	}
+	if len(phases) == 0 {
+		phases = []RuntimePhase{PhaseChat, PhasePlanning, PhaseExecuting}
+	}
+	r.tools[name] = ToolDescriptor{
+		Tool: tool, ReadOnly: readOnly, Capability: capability, Risk: risk,
+		Phases: append([]RuntimePhase{}, phases...),
+	}
+	r.order = append(r.order, name)
 	return nil
 }
 
@@ -89,189 +136,156 @@ func (r *ToolRegistry) Descriptor(name string) (ToolDescriptor, bool) {
 	return desc, ok
 }
 
-type RiskPolicy struct {
-	AllowDestructive bool
+type DomainToolProvider interface {
+	RegisterDomainTools(*ToolRegistry) error
 }
 
-type ToolSelection struct {
-	Descriptors []ToolDescriptor
-	byName      map[string]ToolDescriptor
-	Step        WorkflowStep
-	State       WorkflowState
+type Scope struct {
+	Target model.RunTarget
 }
 
-func (s ToolSelection) Schemas() []ToolSchema {
-	out := make([]ToolSchema, 0, len(s.Descriptors))
-	for _, desc := range s.Descriptors {
-		out = append(out, ToolSchema{
-			Name: desc.Name, Description: desc.Tool.Description(), Parameters: desc.Tool.Parameters(),
-		})
+func ScopeFromSpec(spec model.WorkSpec) Scope {
+	return Scope{Target: spec.Target}
+}
+
+func (s Scope) Allows(target TargetRef) bool {
+	if s.Target.Level == model.TargetDeck {
+		return true
 	}
+	return target.Type == "slide" && target.SlideID == s.Target.SlideID
+}
+
+func (s Scope) AllowsRead(target TargetRef) bool {
+	if target.Type == "global" {
+		return true
+	}
+	return s.Allows(target)
+}
+
+func (s Scope) AllowsArtifact(ref ArtifactRef) bool {
+	return s.Allows(targetForArtifact(ref))
+}
+
+func (r *ToolRegistry) Disclose(strategy ExecutionStrategy, phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
+	out := []ToolSchema{}
+	for _, name := range r.order {
+		desc := r.tools[name]
+		if !containsPhase(desc.Phases, phase) {
+			continue
+		}
+		if interaction != model.IntentExecute && !desc.ReadOnly {
+			continue
+		}
+		if strategy == StrategyChat && !desc.ReadOnly {
+			continue
+		}
+		if phase == PhasePlanning && !desc.ReadOnly {
+			continue
+		}
+		out = append(out, desc.Tool.Schema())
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
-type ToolSchema struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
-}
-
-func (s ToolSelection) Execute(ctx context.Context, name string, args map[string]any, tx *Transaction) ToolResult {
-	desc, ok := s.byName[name]
+func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {
+	if err := input.Context.WorkSpec.Validate(); err != nil {
+		return failedToolResult(ErrCapabilityDenied.Error(), "run WorkSpec is invalid: "+err.Error(), false)
+	}
+	if !disclosed[name] {
+		return failedToolResult(ErrToolNotDisclosed.Error(), "tool was not disclosed in this turn", false)
+	}
+	desc, ok := r.tools[name]
 	if !ok {
-		return deniedToolResult(ErrToolNotDisclosed, s.Step)
+		return failedToolResult(ErrToolNotDisclosed.Error(), "tool is not registered", false)
 	}
-	if err := validateDescriptor(desc, s.State, s.Step); err != nil {
-		return deniedToolResult(err, s.Step)
+	if !containsPhase(desc.Phases, input.Phase) {
+		return failedToolResult(ErrCapabilityDenied.Error(), "tool is not allowed in the current runtime phase", false)
 	}
-	return desc.Tool.Execute(ctx, ToolInput{Args: args, State: s.State, Step: s.Step, Transaction: tx})
-}
-
-func deniedToolResult(err error, step WorkflowStep) ToolResult {
-	target := ArtifactRef{}
-	if len(step.Targets) > 0 {
-		target = step.Targets[0]
+	if input.Interaction != model.IntentExecute && !desc.ReadOnly {
+		return failedToolResult(ErrCapabilityDenied.Error(), "read-only interaction cannot use write capabilities", false)
 	}
-	return ToolResult{
-		OK: false, Summary: err.Error(), Artifacts: []ArtifactRef{}, Retryable: false,
-		Issues: []Issue{{
-			Code: err.Error(), Severity: SeverityFatal, Artifact: target,
-			Evidence: "execution-time tool policy rejected the call", Verifier: "tool_policy",
-		}},
+	if input.Strategy == StrategyChat && !desc.ReadOnly {
+		return failedToolResult(ErrCapabilityDenied.Error(), "chat strategy cannot use write capabilities", false)
 	}
-}
-
-type ToolSelector struct {
-	Registry *ToolRegistry
-}
-
-func (s ToolSelector) Select(state WorkflowState, step WorkflowStep, policy RiskPolicy) ToolSelection {
-	base := BaseCapabilities(state.WorkSpec)
-	strategy := StrategyCapabilities(state.Strategy)
-	stepCaps := make(map[Capability]bool, len(step.Capabilities))
-	for _, cap := range step.Capabilities {
-		stepCaps[cap] = true
+	if input.Phase == PhasePlanning && !desc.ReadOnly {
+		return failedToolResult(ErrCapabilityDenied.Error(), "planning phase cannot use write capabilities", false)
 	}
-	out := ToolSelection{
-		Descriptors: []ToolDescriptor{}, byName: map[string]ToolDescriptor{},
-		Step: step, State: state,
+	if !executionCapabilityAllowed(desc, input) {
+		return failedToolResult(ErrCapabilityDenied.Error(), "tool capability or risk is denied by the current run policy", false)
 	}
-	if s.Registry == nil {
-		return out
+	if !desc.ReadOnly && input.Transaction == nil {
+		return failedToolResult(CodeStagingRequired, "write tool requires a staging transaction", false)
 	}
-	for _, name := range s.Registry.order {
-		desc := s.Registry.tools[name]
-		if !containsStage(desc.Stages, state.Stage) {
-			continue
-		}
-		if !containsStrategy(desc.Strategies, state.Strategy) {
-			continue
-		}
-		if desc.Risk == RiskDestructive && !policy.AllowDestructive {
-			continue
-		}
-		if !capabilitiesAllowed(desc.Capabilities, base, strategy, stepCaps) {
-			continue
-		}
-		if !mutationsInScope(desc, step) {
-			continue
-		}
-		out.Descriptors = append(out.Descriptors, desc)
-		out.byName[name] = desc
-	}
-	sort.SliceStable(out.Descriptors, func(i, j int) bool { return out.Descriptors[i].Name < out.Descriptors[j].Name })
-	return out
-}
-
-func BaseCapabilities(spec model.WorkSpec) map[Capability]bool {
-	allowed := map[Capability]bool{
-		CapabilityReadContext: true, CapabilityReadBlueprint: true,
-		CapabilityReadDesignSpec: true, CapabilityControl: true,
-	}
-	if spec.Target.Artifact == model.ArtifactPresentation {
-		allowed[CapabilityReadPresentation] = true
-		allowed[CapabilitySearchAssets] = true
-		allowed[CapabilityReadAssets] = true
-		allowed[CapabilityRenderPreview] = true
-	}
-	if spec.Interaction.Intent == model.IntentConsult {
-		return allowed
-	}
-	if spec.Target.Artifact == model.ArtifactBlueprint {
-		allowed[CapabilityWriteBlueprint] = true
-	} else {
-		allowed[CapabilityWritePresentation] = true
-		allowed[CapabilityWriteDesignSpec] = true
-		allowed[CapabilityMountAssets] = true
-	}
-	allowed[CapabilityValidateBlueprint] = true
-	allowed[CapabilityValidatePresentation] = true
-	return allowed
-}
-
-func validateDescriptor(desc ToolDescriptor, state WorkflowState, step WorkflowStep) error {
-	if !containsStage(desc.Stages, state.Stage) || !containsStrategy(desc.Strategies, state.Strategy) || !mutationsInScope(desc, step) {
-		return ErrCapabilityDenied
-	}
-	base := BaseCapabilities(state.WorkSpec)
-	strategy := StrategyCapabilities(state.Strategy)
-	stepCaps := map[Capability]bool{}
-	for _, cap := range step.Capabilities {
-		stepCaps[cap] = true
-	}
-	if !capabilitiesAllowed(desc.Capabilities, base, strategy, stepCaps) {
-		return ErrCapabilityDenied
-	}
-	return nil
-}
-
-func capabilitiesAllowed(required []Capability, sets ...map[Capability]bool) bool {
-	for _, cap := range required {
-		for _, set := range sets {
-			if !set[cap] {
-				return false
-			}
+	if !desc.ReadOnly {
+		if target, ok := declaredTarget(args); ok && !input.Scope.Allows(target) {
+			return failedToolResult(ErrTargetOutOfScope.Error(), "requested write target is outside the current run scope", false)
 		}
 	}
-	return true
-}
-
-func containsStage(stages []Stage, stage Stage) bool {
-	for _, candidate := range stages {
-		if candidate == stage {
-			return true
+	result := desc.Tool.Execute(ctx, input)
+	for _, target := range result.ChangedTargets {
+		if !input.Scope.Allows(target.Target()) {
+			return failedToolResult(ErrTargetOutOfScope.Error(), "tool attempted to stage a target outside the current run scope", false)
 		}
 	}
-	return false
+	return result
 }
 
-func containsStrategy(strategies []ExecutionStrategy, strategy ExecutionStrategy) bool {
-	if len(strategies) == 0 {
-		return true
-	}
-	for _, candidate := range strategies {
-		if candidate == strategy {
-			return true
-		}
-	}
-	return false
-}
-
-func mutationsInScope(desc ToolDescriptor, step WorkflowStep) bool {
-	if len(desc.Mutates) == 0 {
-		return true
-	}
-	for _, mutation := range desc.Mutates {
-		found := false
-		for _, target := range step.Targets {
-			if target.Kind == mutation {
-				found = true
-				break
-			}
-		}
-		if !found {
+func executionCapabilityAllowed(desc ToolDescriptor, input DomainToolInput) bool {
+	switch desc.Risk {
+	case RiskLow:
+	case RiskMedium:
+		if desc.ReadOnly || input.Interaction != model.IntentExecute || input.Phase != PhaseExecuting {
 			return false
 		}
+	default:
+		return false
 	}
-	return true
+	switch desc.Capability {
+	case "read", "ppt.read", "ppt.render", "context.search":
+		return desc.ReadOnly
+	case "write", "ppt.write", "ppt.edit":
+		return !desc.ReadOnly &&
+			(input.Context.WorkSpec.Target.Artifact == model.ArtifactBlueprint ||
+				input.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation)
+	default:
+		return false
+	}
+}
+
+func declaredTarget(args map[string]any) (TargetRef, bool) {
+	value, ok := args["target"].(map[string]any)
+	if !ok {
+		return TargetRef{}, false
+	}
+	target := TargetRef{}
+	target.Type, _ = value["type"].(string)
+	target.SlideID, _ = value["slide_id"].(string)
+	return target, target.Type != ""
+}
+
+func failedToolResult(code, summary string, retryable bool) ToolResult {
+	return ToolResult{
+		OK: false, Summary: summary, Data: map[string]any{}, ChangedTargets: []ChangedTarget{},
+		Evidence: []Evidence{}, InvalidatedTargets: []TargetRef{},
+		Issues:    []Issue{{Code: code, Severity: SeverityError, Summary: summary}},
+		Retryable: retryable, Code: code,
+	}
+}
+
+func containsPhase(phases []RuntimePhase, phase RuntimePhase) bool {
+	for _, value := range phases {
+		if value == phase {
+			return true
+		}
+	}
+	return false
+}
+
+func schemasByName(schemas []ToolSchema) map[string]bool {
+	out := make(map[string]bool, len(schemas))
+	for _, schema := range schemas {
+		out[schema.Name] = true
+	}
+	return out
 }

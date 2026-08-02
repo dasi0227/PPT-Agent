@@ -69,18 +69,17 @@ func threadToPO(m model.Thread) threadPO {
 }
 
 type runPO struct {
-	ID                  string `gorm:"column:id;primaryKey"`
-	ThreadID            string `gorm:"column:thread_id"`
-	ProjectID           string `gorm:"column:project_id"`
-	TargetArtifact      string `gorm:"column:target_artifact"`
-	TargetLevel         string `gorm:"column:target_level"`
-	TargetSlideID       string `gorm:"column:target_slide_id"`
-	InteractionIntent   string `gorm:"column:interaction_intent"`
-	ClarificationPolicy string `gorm:"column:clarification_policy"`
-	WorkSpecJSON        string `gorm:"column:work_spec_json"`
-	Status              string `gorm:"column:status"`
-	CreatedAt           int64  `gorm:"column:created_at"`
-	UpdatedAt           int64  `gorm:"column:updated_at"`
+	ID                string `gorm:"column:id;primaryKey"`
+	ThreadID          string `gorm:"column:thread_id"`
+	ProjectID         string `gorm:"column:project_id"`
+	TargetArtifact    string `gorm:"column:target_artifact"`
+	TargetLevel       string `gorm:"column:target_level"`
+	TargetSlideID     string `gorm:"column:target_slide_id"`
+	InteractionIntent string `gorm:"column:interaction_intent"`
+	WorkSpecJSON      string `gorm:"column:work_spec_json"`
+	Status            string `gorm:"column:status"`
+	CreatedAt         int64  `gorm:"column:created_at"`
+	UpdatedAt         int64  `gorm:"column:updated_at"`
 }
 
 func (runPO) TableName() string { return "runs" }
@@ -100,9 +99,9 @@ func runToPO(m model.Run) runPO {
 		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID,
 		TargetArtifact: string(m.WorkSpec.Target.Artifact),
 		TargetLevel:    string(m.WorkSpec.Target.Level), TargetSlideID: m.WorkSpec.Target.SlideID,
-		InteractionIntent:   string(m.WorkSpec.Interaction.Intent),
-		ClarificationPolicy: string(m.WorkSpec.Interaction.Clarification), WorkSpecJSON: string(raw),
-		Status: string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		InteractionIntent: string(m.WorkSpec.Interaction.Intent),
+		WorkSpecJSON:      string(raw),
+		Status:            string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 

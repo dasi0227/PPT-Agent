@@ -125,7 +125,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	manifest := ContextManifest{
 		ContextID: opaqueID("ctx", req.RunID, project.ID, string(profile.ID), string(stableJSON(req.WorkSpec))),
 		RunID:     req.RunID, ThreadID: req.ThreadID, ProjectID: req.ProjectID, Profile: profile.ID,
-		ReadOnly: req.WorkSpec.Interaction.Intent == model.IntentConsult, BudgetTokens: limit, OutputReserve: budget.OutputReserve,
+		ReadOnly: req.WorkSpec.Interaction.Intent != model.IntentExecute, BudgetTokens: limit, OutputReserve: budget.OutputReserve,
 		Segments: []ContextSegment{}, Refs: []ContextRef{}, Dropped: []DroppedSegment{}, Warnings: memoryWarnings,
 	}
 	addSegment := func(kind SegmentKind, source string, revision, priority int, reason string, required bool, detail DetailLevel, value any) {

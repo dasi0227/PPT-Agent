@@ -1,116 +1,118 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import { ToolCallCard } from './ToolCallCard';
-import { PlanCard } from './PlanCard';
-import { FinalResultCard } from './FinalResultCard';
-import { NeedsInputCard } from './NeedsInputCard';
-import { useRunStore } from '../../stores/runStore';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { ToolActivityRow } from './ActivityRows';
+import { PlanPanel } from './PlanPanel';
+import { FinalMessage } from './FinalMessage';
+import { QuestionPanel } from './QuestionPanel';
+import { LiveProgressRow } from './LiveProgressRow';
 import { useProjectStore } from '../../stores/projectStore';
+import { useDeckStore } from '../../stores/deckStore';
 import { useThreadStore } from '../../stores/threadStore';
+import { useRunStore } from '../../stores/runStore';
+import type { QuestionItem } from './eventReducer';
 
-describe('Agent Cards', () => {
-  it('ToolCallCard renders running/success/failed states', () => {
-    const baseItem = { id: '1', type: 'tool_call' as const, call_id: 'c1', tool: 'my_tool', args: { a: 1 }, timestamp: 0, artifacts: [] };
-    
-    const { rerender } = render(<ToolCallCard item={{ ...baseItem, status: 'running' }} />);
-    expect(screen.getByText('执行项目操作')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('技术详情'));
-    expect(screen.getByText(/工具：my_tool/)).toBeInTheDocument();
-    
-    rerender(<ToolCallCard item={{ ...baseItem, status: 'success', observation: 'done' }} />);
-    expect(screen.getAllByText(/done/)).toHaveLength(2);
+describe('public timeline components', () => {
+  it('renders a compact tool row without raw args or observations', () => {
+    render(<ToolActivityRow item={{
+      id: 'r:tool:c1', type: 'tool', runId: 'r', callId: 'c1',
+      tool: 'write_ppt', label: '已生成第 3 页', detail: '内容已写入安全暂存区',
+      status: 'completed', timestamp: 0,
+    }} />);
+    expect(screen.getByText('已生成第 3 页')).toBeInTheDocument();
+    expect(screen.queryByText(/args|observation|技术详情/)).toBeNull();
   });
 
-  it('PlanCard renders states', () => {
-    const plan = {
-      id: 'plan_r1', title: 'My Plan',
-      steps: [
-        { id: 's1', title: 'Step 1', status: 'completed' as const },
-        { id: 's2', title: 'Step 2', status: 'in_progress' as const },
-      ],
+  it('renders only controlled render preview URLs and warnings', () => {
+    useProjectStore.setState({
+      activeProjectId: 'p1',
+      slidesByProjectId: {
+        p1: [
+          { id: 'slide-01', title: '一', position: 0 } as any,
+          { id: 'slide-03', title: '三', position: 1 } as any,
+        ],
+      },
+    });
+    render(<ToolActivityRow item={{
+      id: 'r:tool:c1', type: 'tool', runId: 'r', callId: 'c1',
+      tool: 'render_slide', label: '第 3 页渲染通过', status: 'completed', timestamp: 0,
+      preview: { slide_id: 'slide-03', image_url: '/api/v1/runs/r/screenshots/shot-1', warnings: ['标题拥挤'] },
+    }} />);
+    expect(screen.getByAltText('slide-03 渲染预览')).toHaveAttribute(
+      'src',
+      '/api/v1/runs/r/screenshots/shot-1',
+    );
+    expect(screen.getByText('1 项布局提示')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '在工作区查看 slide-03' }));
+    expect(useDeckStore.getState().currentPage).toBe(1);
+  });
+
+  it('renders a flat plan panel and collapses completed plans', () => {
+    render(<PlanPanel running={false} plan={{
+      id: 'p1', title: '生成演示文稿', revision: 2,
+      steps: [{ id: 's1', title: '完成页面', status: 'completed' }],
+    }} />);
+    expect(screen.getByText('生成演示文稿')).toBeInTheDocument();
+    expect(screen.queryByText('完成页面')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /生成演示文稿/ }));
+    expect(screen.getByText('完成页面')).toBeInTheDocument();
+  });
+
+  it('renders final as an ordinary agent message with affected target footer', () => {
+    render(<FinalMessage item={{
+      id: 'f1', type: 'final', messageId: 'm1', text: '**整份演示文稿已完成**',
+      affectedTargets: [{ type: 'global' }, { type: 'slide', slide_id: 's1' }],
+      timestamp: 0,
+    }} />);
+    expect(screen.getByText('整份演示文稿已完成')).toBeInTheDocument();
+    expect(screen.getByText('已更新全局设计和1 张页面')).toBeInTheDocument();
+    expect(screen.queryByText('执行结果')).toBeNull();
+  });
+
+  it('waits for question.answered before showing an answered state', async () => {
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
+    const answerQuestion = vi.fn().mockResolvedValue(true);
+    useRunStore.setState({
+      answerQuestion,
+      sessions: {
+        t1: {
+          activeRunId: 'r1', status: 'waiting',
+          target: { artifact: 'presentation', level: 'deck' },
+          interaction: { intent: 'ask' }, timelineItems: [],
+          pendingQuestion: { id: 'q1', prompt: '选择风格' },
+          progress: null, eventSourceClose: null, plan: null,
+        },
+      },
+    });
+    const item: QuestionItem = {
+      id: 'r1:question:q1', type: 'question', runId: 'r1', questionId: 'q1',
+      prompt: '选择风格', selection: 'single',
+      options: [{ id: 'tech', label: '克制科技', description: '深色背景' }],
+      allowCustom: false, timestamp: 0,
     };
-    render(<PlanCard plan={plan} />);
-    expect(screen.getByText('My Plan')).toBeInTheDocument();
-    expect(screen.getByText('Step 1')).toBeInTheDocument();
-    expect(screen.getByText('Step 2')).toBeInTheDocument();
-  });
+    const { rerender } = render(<QuestionPanel item={item} />);
+    fireEvent.click(screen.getByLabelText(/克制科技/));
+    fireEvent.click(screen.getByRole('button', { name: /提交/ }));
+    await waitFor(() => expect(answerQuestion).toHaveBeenCalledWith(
+      't1', 'r1', 'q1',
+      JSON.stringify({ selected_option_ids: ['tech'], custom_text: '' }),
+    ));
+    expect(screen.queryByText(/你选择了/)).toBeNull();
 
-  it('FinalResultCard renders summary fallback (edit/outline/command)', () => {
-    render(<FinalResultCard item={{ id: '1', type: 'final_result', result: { summary: '已更新第 3 页标题' }, timestamp: 0 }} />);
-    expect(screen.getByText('执行结果')).toBeInTheDocument();
-    expect(screen.getByText('已更新第 3 页标题')).toBeInTheDocument();
-  });
-
-  it('FinalResultCard renders string result via markdown', () => {
-    const { container } = render(<FinalResultCard item={{ id: '1', type: 'final_result', result: '**bold** and `code`', timestamp: 0 }} />);
-    expect(container.querySelector('strong')?.textContent).toBe('bold');
-    expect(container.querySelector('code')?.textContent).toBe('code');
-  });
-
-  it('FinalResultCard renders structured workflow outcome', () => {
-    render(<FinalResultCard item={{
-      id: '1', type: 'final_result', timestamp: 0,
-      result: {
-        status: 'completed', strategy: 'full_pev', operation: 'rebuild',
-        target: { artifact: 'presentation', level: 'deck' },
-        affected: [{ kind: 'presentation_slide', id: 's1' }], issues: [], summary: '已完成',
-      },
+    rerender(<QuestionPanel item={{
+      ...item,
+      answer: { selected_option_ids: ['tech'], custom_text: '' },
+      displayText: '克制科技',
     }} />);
-    expect(screen.getByText('执行结果')).toBeInTheDocument();
-    expect(screen.getByText(/整份HTML/)).toBeInTheDocument();
-    expect(screen.getByText(/完整工作流/)).toBeInTheDocument();
-    expect(screen.getByText(/页面 HTML/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('你选择了：克制科技')).toBeInTheDocument());
   });
 
-  it('FinalResultCard lists verifier issues', () => {
-    render(<FinalResultCard item={{
-      id: '1', type: 'final_result', timestamp: 0,
-      result: {
-        status: 'completed', strategy: 'compact_workflow',
-        target: { artifact: 'presentation', level: 'slide' },
-        issues: [{ code: 'OVERFLOW', evidence: '内容溢出' }],
-      },
+  it('renders progress as an aria-live row', () => {
+    render(<LiveProgressRow progress={{
+      stage: 'rendering', text: '正在检查第 6 页的布局', current: 6, total: 12,
     }} />);
-    expect(screen.getByText('1 项需要注意')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('查看验证问题'));
-    expect(screen.getByText(/\[OVERFLOW\] 内容溢出/)).toBeInTheDocument();
-  });
-
-  it('NeedsInputCard renders and enters an answered state after submission', async () => {
-    useProjectStore.setState({ activeProjectId: 'p1' });
-    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
-    useRunStore.setState({
-      replyNeedsInput: vi.fn().mockResolvedValue(true),
-      sessions: {
-        t1: {
-          activeRunId: 'r1', status: 'needs_input', target: { artifact: 'presentation', level: 'slide' }, interaction: { intent: 'apply', clarification: 'before_apply' },
-          timelineItems: [], progress: null, eventSourceClose: null, plan: null,
-          pendingInput: { id: '1', prompt: 'Select one', choices: ['A', 'B'] },
-        },
-      },
-    });
-    render(<NeedsInputCard item={{ id: '1', type: 'needs_input', prompt: 'Select one', choices: ['A', 'B'], timestamp: 0 }} />);
-    expect(screen.getByText('Select one')).toBeInTheDocument();
-    expect(screen.getByText('A')).toBeInTheDocument();
-    expect(screen.getByText('B')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'A' }));
-    await waitFor(() => expect(screen.getByText('已回答')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'A' })).toBeNull();
-  });
-
-  it('NeedsInputCard renders markdown in prompt', () => {
-    useProjectStore.setState({ activeProjectId: 'p1' });
-    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
-    useRunStore.setState({
-      sessions: {
-        t1: {
-          activeRunId: 'r1', status: 'needs_input', target: { artifact: 'presentation', level: 'slide' }, interaction: { intent: 'apply', clarification: 'before_apply' },
-          timelineItems: [], progress: null, eventSourceClose: null, plan: null,
-          pendingInput: { id: '2', prompt: 'Confirm `delete`?', choices: [] },
-        },
-      },
-    });
-    const { container } = render(<NeedsInputCard item={{ id: '2', type: 'needs_input', prompt: 'Confirm `delete`?', choices: [], timestamp: 0 }} />);
-    expect(container.querySelector('code')?.textContent).toBe('delete');
+    expect(screen.getByText('正在检查第 6 页的布局').closest('[aria-live="polite"]')).toBeInTheDocument();
+    expect(screen.getByText('6 / 12')).toBeInTheDocument();
+    expect(document.querySelector('.motion-reduce\\:animate-none')).toBeInTheDocument();
   });
 });

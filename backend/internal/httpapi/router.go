@@ -65,6 +65,7 @@ func (r *Router) register() {
 	v1.POST("/threads/:id/runs", r.run.CreateRun)
 	v1.GET("/runs/:id", r.run.GetRun)
 	v1.GET("/runs/:id/events", r.run.Events)
+	v1.GET("/runs/:id/screenshots/:screenshot_id", r.run.Screenshot)
 	v1.POST("/runs/:id/input", r.run.Input)
 	v1.DELETE("/runs/:id", r.run.Cancel)
 

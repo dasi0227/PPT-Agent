@@ -19,12 +19,18 @@ var (
 
 type stagedArtifact struct {
 	Ref        ArtifactRef
-	StepID     string
+	Source     string
 	Relative   string
 	BeforeHash string
 	AfterHash  string
 	Existed    bool
 	Delete     bool
+}
+
+type StageItem struct {
+	Ref     ArtifactRef
+	Source  string
+	Content []byte
 }
 
 type Transaction struct {
@@ -52,7 +58,16 @@ func NewTransaction(projectDir, runID string) (*Transaction, error) {
 
 func (t *Transaction) Root() string { return t.root }
 
-func (t *Transaction) Stage(ref ArtifactRef, stepID string, content []byte) (ArtifactChange, error) {
+func (t *Transaction) IsStaged(ref ArtifactRef) bool {
+	relative, err := t.resolveRelative(ref)
+	if err != nil {
+		return false
+	}
+	_, ok := t.artifacts[relative]
+	return ok
+}
+
+func (t *Transaction) Stage(ref ArtifactRef, source string, content []byte) (ArtifactChange, error) {
 	relative, err := t.resolveRelative(ref)
 	if err != nil {
 		return ArtifactChange{}, err
@@ -66,19 +81,88 @@ func (t *Transaction) Stage(ref ArtifactRef, stepID string, content []byte) (Art
 	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
 		return ArtifactChange{}, readErr
 	}
+	if previous, ok := t.artifacts[relative]; ok {
+		if hashBytes(before) != previous.BeforeHash {
+			return ArtifactChange{}, fmt.Errorf("%w: %s source changed", ErrStagedHashMismatch, relative)
+		}
+		before = nil
+		existed = previous.Existed
+	}
 	stagedPath := filepath.Join(t.root, relative)
 	if err := atomicWrite(stagedPath, content); err != nil {
 		return ArtifactChange{}, err
 	}
+	beforeHash := hashBytes(before)
+	if previous, ok := t.artifacts[relative]; ok {
+		beforeHash = previous.BeforeHash
+	}
 	entry := stagedArtifact{
-		Ref: ref, StepID: stepID, Relative: relative, BeforeHash: hashBytes(before),
+		Ref: ref, Source: source, Relative: relative, BeforeHash: beforeHash,
 		AfterHash: hashBytes(content), Existed: existed,
 	}
 	t.artifacts[relative] = entry
-	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, StepID: stepID}, nil
+	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, Source: source}, nil
 }
 
-func (t *Transaction) StageDelete(ref ArtifactRef, stepID string) (ArtifactChange, error) {
+// StageBatch applies a logical domain-target update atomically. If any file
+// cannot be staged, both the staged bytes and transaction ledger are restored.
+func (t *Transaction) StageBatch(items []StageItem) ([]ArtifactChange, error) {
+	if len(items) == 0 {
+		return nil, errors.New("stage batch is empty")
+	}
+	type snapshot struct {
+		relative string
+		entry    stagedArtifact
+		hadEntry bool
+		content  []byte
+		hadFile  bool
+	}
+	snapshots := make([]snapshot, 0, len(items))
+	seen := map[string]bool{}
+	for _, item := range items {
+		relative, err := t.resolveRelative(item.Ref)
+		if err != nil {
+			return nil, err
+		}
+		if seen[relative] {
+			return nil, fmt.Errorf("duplicate staged artifact %s", relative)
+		}
+		seen[relative] = true
+		entry, hadEntry := t.artifacts[relative]
+		raw, readErr := os.ReadFile(filepath.Join(t.root, relative))
+		snapshots = append(snapshots, snapshot{
+			relative: relative, entry: entry, hadEntry: hadEntry,
+			content: raw, hadFile: readErr == nil,
+		})
+	}
+	restore := func() {
+		for _, previous := range snapshots {
+			path := filepath.Join(t.root, previous.relative)
+			if previous.hadEntry {
+				t.artifacts[previous.relative] = previous.entry
+			} else {
+				delete(t.artifacts, previous.relative)
+			}
+			if previous.hadFile {
+				_ = atomicWrite(path, previous.content)
+			} else {
+				_ = os.Remove(path)
+			}
+		}
+	}
+	changes := make([]ArtifactChange, 0, len(items))
+	for _, item := range items {
+		change, err := t.Stage(item.Ref, item.Source, item.Content)
+		if err != nil {
+			restore()
+			return nil, err
+		}
+		changes = append(changes, change)
+	}
+	return changes, nil
+}
+
+func (t *Transaction) StageDelete(ref ArtifactRef, source string) (ArtifactChange, error) {
 	relative, err := t.resolveRelative(ref)
 	if err != nil {
 		return ArtifactChange{}, err
@@ -88,11 +172,11 @@ func (t *Transaction) StageDelete(ref ArtifactRef, stepID string) (ArtifactChang
 		return ArtifactChange{}, readErr
 	}
 	entry := stagedArtifact{
-		Ref: ref, StepID: stepID, Relative: relative, BeforeHash: hashBytes(before),
+		Ref: ref, Source: source, Relative: relative, BeforeHash: hashBytes(before),
 		AfterHash: hashBytes(nil), Existed: true, Delete: true,
 	}
 	t.artifacts[relative] = entry
-	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, StepID: stepID}, nil
+	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, Source: source}, nil
 }
 
 func (t *Transaction) Read(ref ArtifactRef) ([]byte, error) {
@@ -120,6 +204,8 @@ func (t *Transaction) StagedPath(ref ArtifactRef) (string, error) {
 	return filepath.Join(t.projectDir, relative), nil
 }
 
+func (t *Transaction) ProjectDir() string { return t.projectDir }
+
 func (t *Transaction) ChangeSet() ChangeSet {
 	out := EmptyChangeSet()
 	keys := make([]string, 0, len(t.artifacts))
@@ -131,7 +217,8 @@ func (t *Transaction) ChangeSet() ChangeSet {
 		entry := t.artifacts[key]
 		change := ArtifactChange{
 			Artifact: entry.Ref, BeforeHash: entry.BeforeHash,
-			AfterHash: entry.AfterHash, StepID: entry.StepID,
+			AfterHash: entry.AfterHash, Source: entry.Source,
+			Tentative: strings.HasPrefix(entry.Source, "tentative:"),
 		}
 		switch {
 		case entry.Delete:
@@ -145,7 +232,25 @@ func (t *Transaction) ChangeSet() ChangeSet {
 	return out
 }
 
-type CommitMetadata func(context.Context, ChangeSet) error
+func (t *Transaction) ValidateBaselines() error {
+	for key, entry := range t.artifacts {
+		raw, err := os.ReadFile(filepath.Join(t.projectDir, key))
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		if hashBytes(raw) != entry.BeforeHash {
+			return fmt.Errorf("%w: %s source changed", ErrStagedHashMismatch, key)
+		}
+	}
+	return nil
+}
+
+func (t *Transaction) MarkTentative() {
+	for key, entry := range t.artifacts {
+		entry.Source = "tentative:" + strings.TrimPrefix(entry.Source, "tentative:")
+		t.artifacts[key] = entry
+	}
+}
 
 func (t *Transaction) Commit(ctx context.Context, metadata CommitMetadata) error {
 	if t.closed {
@@ -245,7 +350,7 @@ func atomicWrite(path string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".pev-*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".runtime-*")
 	if err != nil {
 		return err
 	}

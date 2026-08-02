@@ -17,7 +17,7 @@ export const DeckNavigator: React.FC = () => {
   const { currentPage, setCurrentPage } = useDeckStore();
   const { toggleLeftPanel } = useUIStore();
   const session = useActiveSession();
-  const runActive = session.status === 'running' || session.status === 'needs_input';
+  const runActive = session.status === 'running' || session.status === 'waiting';
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [operationError, setOperationError] = useState('');
 

@@ -111,11 +111,11 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	po := runToPO(r)
 	return s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
-		 target_artifact, target_level, target_slide_id, interaction_intent, clarification_policy, work_spec_json,
+		 target_artifact, target_level, target_slide_id, interaction_intent, work_spec_json,
 		 status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		po.ID, po.ThreadID, po.ProjectID, po.TargetArtifact, po.TargetLevel,
-		nullIfEmpty(po.TargetSlideID), po.InteractionIntent, po.ClarificationPolicy, po.WorkSpecJSON,
+		nullIfEmpty(po.TargetSlideID), po.InteractionIntent, po.WorkSpecJSON,
 		po.Status, po.CreatedAt, po.UpdatedAt,
 	).Error
 }

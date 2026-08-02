@@ -9,7 +9,7 @@ var (
 	ErrRunNotFound = errors.New("run: not found")
 	// ErrRunNotRunning：run 非可注入状态（映射 409 RUN_NOT_RUNNING，API-RUN-001）。
 	ErrRunNotRunning = errors.New("run: not running")
-	// ErrReplyMismatch：reply_to 未匹配任何未应答的 needs_input（映射 409 CONFLICT，API-RUN-003）。
-	ErrReplyMismatch           = errors.New("run: reply_to does not match a pending needs_input")
+	// ErrReplyMismatch：reply_to 或结构化答案未匹配当前 pending question。
+	ErrReplyMismatch           = errors.New("run: reply does not match the pending question")
 	ErrContextStoreUnavailable = errors.New("run: context manifest store unavailable")
 )

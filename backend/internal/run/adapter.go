@@ -18,17 +18,24 @@ func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
 
 type Checkpointer interface {
 	DrainInputs() []string
+	workflow.CheckpointSink
 }
 
 type inputCheckpoint struct {
 	queue *InputQueue
+	state workflow.RuntimeCheckpoint
 }
 
 func (c *inputCheckpoint) DrainInputs() []string {
 	return c.queue.Drain()
 }
 
-// Execution is the outer scheduler contract for one canonical Adaptive Runtime execution.
+func (c *inputCheckpoint) SaveCheckpoint(_ context.Context, state workflow.RuntimeCheckpoint) error {
+	c.state = state
+	return nil
+}
+
+// Execution is the outer scheduler contract for one canonical ReAct Runtime execution.
 type Execution interface {
 	Run(ctx context.Context, em workflow.EventEmitter, cp Checkpointer, prompter Prompter) workflow.StructuredOutcome
 }

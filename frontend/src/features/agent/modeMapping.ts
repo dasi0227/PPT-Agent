@@ -1,10 +1,9 @@
-import type { Artifact, ClarificationPolicy, CreateRunRequest, InteractionIntent, Slide, TargetLevel } from '../../api/types';
+import type { Artifact, CreateRunRequest, InteractionIntent, Slide, TargetLevel } from '../../api/types';
 
 export function createTargetedRun(input: {
   artifact: Artifact;
   level: TargetLevel;
   intent: InteractionIntent;
-  clarification?: ClarificationPolicy;
   instruction: string;
   slides: Slide[];
   currentPage: number;
@@ -19,7 +18,6 @@ export function createTargetedRun(input: {
     },
     interaction: {
       intent: input.intent,
-      clarification: input.clarification ?? 'when_blocked',
     },
     instruction: input.instruction,
   };

@@ -1,321 +1,283 @@
 import {
-  ArtifactRef,
-  JsonRecord,
-  SSEEvent,
   PlanState,
   PlanStep,
   PlanStepStatus,
-  StructuredOutcome,
-  WorkflowIssue,
+  PublicError,
+  PublicTarget,
+  QuestionAnswer,
+  QuestionOption,
+  SSEEvent,
+  ToolPreview,
 } from '../../api/types';
 
 export type TimelineItemType =
-  | 'markdown'
-  | 'tool_call'
-  | 'artifact'
-  | 'final_result'
-  | 'needs_input'
-  | 'error'
   | 'user_turn'
-  | 'context_status'
-  | 'strategy_status'
-  | 'verification_status';
+  | 'reasoning'
+  | 'milestone'
+  | 'final'
+  | 'tool'
+  | 'question'
+  | 'terminal_notice';
 
 export interface BaseTimelineItem {
   id: string;
   type: TimelineItemType;
   timestamp: number;
-}
-
-export interface MarkdownMessageItem extends BaseTimelineItem {
-  type: 'markdown';
-  text: string;
+  runId?: string;
 }
 
 export interface UserTurnItem extends BaseTimelineItem {
   type: 'user_turn';
   text: string;
   target?: { artifact: string; level: string; slide_id?: string };
-  interaction?: { intent: string; clarification: string };
+  interaction?: { intent: string };
 }
 
-export interface ToolCallItem extends BaseTimelineItem {
-  type: 'tool_call';
-  call_id: string;
+export interface ReasoningItem extends BaseTimelineItem {
+  type: 'reasoning';
+  messageId: string;
+  text: string;
+}
+
+export interface MilestoneItem extends BaseTimelineItem {
+  type: 'milestone';
+  messageId: string;
+  text: string;
+  completedStepIds: string[];
+}
+
+export interface FinalMessageItem extends BaseTimelineItem {
+  type: 'final';
+  messageId: string;
+  text: string;
+  affectedTargets: PublicTarget[];
+}
+
+export interface ToolActivityItem extends BaseTimelineItem {
+  type: 'tool';
+  callId: string;
   tool: string;
-  args: unknown;
-  status: 'running' | 'success' | 'failed';
-  observation?: unknown;
-  artifacts: ArtifactItem[];
+  planStepId?: string;
+  target?: PublicTarget;
+  label: string;
+  detail?: string;
+  status: 'running' | 'completed' | 'failed';
+  preview?: ToolPreview;
+  error?: PublicError;
 }
 
-export interface ArtifactItem extends BaseTimelineItem {
-  type: 'artifact';
-  artifact_type: string;
-  ref: string;
-  artifact_id?: string;
-  delivery: 'intermediate' | 'final';
-}
-
-export interface FinalResultItem extends BaseTimelineItem {
-  type: 'final_result';
-  result: StructuredOutcome | string | null;
-}
-
-export interface NeedsInputItem extends BaseTimelineItem {
-  type: 'needs_input';
+export interface QuestionItem extends BaseTimelineItem {
+  type: 'question';
+  questionId: string;
+  header?: string;
   prompt: string;
-  choices?: string[];
+  selection: 'single' | 'multiple';
+  options: QuestionOption[];
+  allowCustom: boolean;
+  answer?: QuestionAnswer;
+  displayText?: string;
 }
 
-export interface ErrorItem extends BaseTimelineItem {
-  type: 'error';
-  code?: string;
+export interface TerminalNoticeItem extends BaseTimelineItem {
+  type: 'terminal_notice';
+  status: 'failed' | 'canceled';
+  error?: PublicError;
   message: string;
   technicalMessage?: string;
   requestId?: string;
-  retryable?: boolean;
-}
-
-export interface ContextStatusItem extends BaseTimelineItem {
-  type: 'context_status';
-  profile: string;
-  warnings: string[];
-  readOnly: boolean;
-}
-
-export interface StrategyStatusItem extends BaseTimelineItem {
-  type: 'strategy_status';
-  strategy: 'respond' | 'direct_action' | 'compact_workflow' | 'full_pev';
-  reason: string;
-  risk: string;
-  complexity: string;
-}
-
-export interface VerificationStatusItem extends BaseTimelineItem {
-  type: 'verification_status';
-  verifier: string;
-  passed: boolean;
-  issueCount: number;
-  passedCount: number;
-  failedCount: number;
-  issues: WorkflowIssue[];
 }
 
 export type TimelineItem =
-  | MarkdownMessageItem
-  | ToolCallItem
-  | ArtifactItem
-  | FinalResultItem
-  | NeedsInputItem
-  | ErrorItem
-  | ContextStatusItem
-  | StrategyStatusItem
-  | VerificationStatusItem
-  | UserTurnItem;
+  | UserTurnItem
+  | ReasoningItem
+  | MilestoneItem
+  | FinalMessageItem
+  | ToolActivityItem
+  | QuestionItem
+  | TerminalNoticeItem;
 
 function normalizeStepStatus(status: unknown): PlanStepStatus {
-  if (status === 'running') return 'in_progress';
-  if (status === 'completed' || status === 'failed' || status === 'skipped') return status;
+  if (status === 'completed' || status === 'failed' || status === 'in_progress') return status;
   return 'pending';
 }
 
-// A plan exists only after plan.created. Respond and DirectAction therefore
-// complete normally with a permanently null plan.
 export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState | null {
-  if (event.event === 'plan.created') {
-    const plan = event.data.plan ?? {};
-    const steps: PlanStep[] = Array.isArray(plan.steps)
-      ? plan.steps.map((step) => ({
-          id: String(step.id ?? ''),
-          title: String(step.title ?? step.kind ?? ''),
-          status: normalizeStepStatus(step.status),
-          detail: step.instruction ? String(step.instruction) : undefined,
-        }))
-      : [];
-    return {
-      id: String(plan.id ?? ''),
-      title: String(plan.goal ?? '执行计划'),
-      steps,
-    };
-  }
-  if (!prev || !['step.started', 'step.completed', 'step.failed'].includes(event.event)) {
-    return prev;
-  }
-  const stepID = String(event.data.step_id ?? '');
-  const index = prev.steps.findIndex((step) => step.id === stepID);
-  if (index < 0) return prev;
-  const steps = prev.steps.slice();
-  steps[index] = {
-    ...steps[index],
-    status: event.event === 'step.started'
-      ? 'in_progress'
-      : event.event === 'step.completed'
-        ? 'completed'
-        : 'failed',
-    detail: event.data.summary ? String(event.data.summary) : steps[index].detail,
+  if (event.event !== 'plan.updated') return prev;
+  const plan = event.data.plan;
+  const revision = Number(plan.revision);
+  if (prev && revision <= prev.revision) return prev;
+  const steps: PlanStep[] = plan.steps.map((step) => ({
+    id: String(step.id ?? ''),
+    title: String(step.title ?? ''),
+    status: normalizeStepStatus(step.status),
+  }));
+  return {
+    id: String(plan.plan_id),
+    title: String(plan.explanation ?? '执行计划'),
+    revision,
+    steps,
   };
-  return { ...prev, steps };
 }
 
-function artifactFromEvent(
-  id: string,
-  data: JsonRecord & { artifact: ArtifactRef },
-  timestamp: number,
-  delivery: 'intermediate' | 'final',
-): ArtifactItem {
-  const artifact = data.artifact;
-  return {
-    id,
-    type: 'artifact',
-    artifact_type: String(artifact.kind ?? 'artifact'),
-    artifact_id: artifact.id ? String(artifact.id) : undefined,
-    ref: String(artifact.path ?? artifact.id ?? ''),
-    delivery,
-    timestamp,
-  };
+function timestampOf(event: SSEEvent): number {
+  const timestamp = Date.parse(event.data.occurred_at);
+  return Number.isNaN(timestamp) ? Date.now() : timestamp;
+}
+
+function eventItemId(event: SSEEvent, fallback: string): string {
+  return event.id ? `${event.data.run_id}:${event.id}` : `${event.data.run_id}:${fallback}`;
+}
+
+function upsertById(state: TimelineItem[], item: TimelineItem): TimelineItem[] {
+  const index = state.findIndex((candidate) => candidate.id === item.id);
+  if (index < 0) return [...state, item];
+  const copy = state.slice();
+  copy[index] = item;
+  return copy;
 }
 
 export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): TimelineItem[] {
-  const timestamp = Date.now();
-  const newId = event.id || `evt_${timestamp}_${Math.random().toString(36).slice(2, 9)}`;
-  if (event.id && state.some((item) => item.id === event.id)) return state;
+  const timestamp = timestampOf(event);
+  const runId = event.data.run_id;
 
   switch (event.event) {
     case 'run.started':
-    case 'plan.created':
-    case 'stage.started':
-    case 'stage.completed':
-    case 'step.started':
-    case 'step.completed':
-    case 'step.failed':
-    case 'repair.started':
-    case 'repair.completed':
+    case 'run.progress':
+    case 'plan.updated':
       return state;
 
-    case 'context.assembled':
-      return [...state, {
-        id: newId,
-        type: 'context_status',
-        profile: String(event.data.profile ?? ''),
-        warnings: Array.isArray(event.data.warnings) ? event.data.warnings.map(String) : [],
-        readOnly: Boolean(event.data.read_only),
-        timestamp,
-      }];
-
-    case 'strategy.selected':
-      return [...state, {
-        id: newId,
-        type: 'strategy_status',
-        strategy: event.data.strategy,
-        reason: String(event.data.reason ?? ''),
-        risk: String(event.data.risk ?? ''),
-        complexity: String(event.data.complexity ?? ''),
-        timestamp,
-      }];
-
-    case 'tool.called':
-      return [...state, {
-        id: newId,
-        type: 'tool_call',
-        call_id: String(event.data.call_id ?? ''),
-        tool: String(event.data.tool ?? ''),
-        args: event.data.args ?? {},
-        status: 'running',
-        artifacts: [],
-        timestamp,
-      }];
-
-    case 'tool.completed':
-      return state.map((item) => item.type === 'tool_call' && item.call_id === event.data.call_id
-        ? {
-            ...item,
-            status: event.data.ok ? 'success' : 'failed',
-            observation: event.data.summary ?? event.data.issues,
-          }
-        : item);
-
-    case 'artifact.staged':
-      return [...state, artifactFromEvent(newId, event.data, timestamp, 'intermediate')];
-
-    case 'artifact.committed': {
-      const next = artifactFromEvent(newId, event.data, timestamp, 'final');
-      const existing = state.findIndex((item) =>
-        item.type === 'artifact' &&
-        item.artifact_type === next.artifact_type &&
-        item.artifact_id === next.artifact_id);
-      if (existing < 0) return [...state, next];
-      const copy = state.slice();
-      copy[existing] = { ...next, id: copy[existing].id };
-      return copy;
-    }
-
-    case 'verification.completed': {
-      const issues = Array.isArray(event.data.result?.issues) ? event.data.result.issues : [];
-      const passed = Boolean(event.data.result?.passed);
-      const next: VerificationStatusItem = {
-        id: newId,
-        type: 'verification_status',
-        verifier: String(event.data.verifier ?? 'verifier'),
-        passed,
-        issueCount: issues.length,
-        passedCount: passed ? 1 : 0,
-        failedCount: passed ? 0 : 1,
-        issues,
+    case 'message.reasoning': {
+      const item: ReasoningItem = {
+        id: eventItemId(event, `reasoning:${event.data.message_id}`),
+        type: 'reasoning',
+        runId,
+        messageId: event.data.message_id,
+        text: event.data.text,
         timestamp,
       };
-      const previous = state[state.length - 1];
-      if (previous?.type !== 'verification_status') return [...state, next];
-      return [
-        ...state.slice(0, -1),
-        {
-          ...previous,
-          passed: previous.passed && next.passed,
-          issueCount: previous.issueCount + next.issueCount,
-          passedCount: previous.passedCount + next.passedCount,
-          failedCount: previous.failedCount + next.failedCount,
-          issues: [...previous.issues, ...next.issues],
-          timestamp,
-        },
-      ];
+      return upsertById(state, item);
     }
 
-    case 'status.summary':
-      return [...state, {
-        id: newId,
-        type: 'markdown',
-        text: String(event.data.summary ?? ''),
+    case 'message.milestone': {
+      const item: MilestoneItem = {
+        id: eventItemId(event, `milestone:${event.data.message_id}`),
+        type: 'milestone',
+        runId,
+        messageId: event.data.message_id,
+        text: event.data.text,
+        completedStepIds: event.data.completed_step_ids,
         timestamp,
-      }];
+      };
+      return upsertById(state, item);
+    }
 
-    case 'needs_input':
-      return [...state, {
-        id: String(event.data.id ?? newId),
-        type: 'needs_input',
-        prompt: String(event.data.prompt ?? ''),
-        choices: event.data.choices,
+    case 'message.final': {
+      const existing = state.find((item) =>
+        item.type === 'final' && item.runId === runId && item.messageId === event.data.message_id);
+      const item: FinalMessageItem = {
+        id: existing?.id ?? eventItemId(event, `final:${event.data.message_id}`),
+        type: 'final',
+        runId,
+        messageId: event.data.message_id,
+        text: event.data.text,
+        affectedTargets: event.data.affected_targets ?? [],
         timestamp,
-      }];
+      };
+      return upsertById(state, item);
+    }
 
-    case 'run.completed':
-      return [...state, {
-        id: newId,
-        type: 'final_result',
-        result: event.data.outcome ?? null,
+    case 'tool.started': {
+      const id = `${runId}:tool:${event.data.call_id}`;
+      const existing = state.find((item): item is ToolActivityItem =>
+        item.type === 'tool' && item.id === id);
+      const item: ToolActivityItem = {
+        id,
+        type: 'tool',
+        runId,
+        callId: event.data.call_id,
+        tool: event.data.tool,
+        planStepId: event.data.plan_step_id,
+        target: event.data.target,
+        label: event.data.display.label,
+        detail: event.data.display.detail,
+        status: existing?.status ?? 'running',
+        preview: existing?.preview,
+        error: existing?.error,
+        timestamp: existing?.timestamp ?? timestamp,
+      };
+      return upsertById(state, item);
+    }
+
+    case 'tool.completed': {
+      const id = `${runId}:tool:${event.data.call_id}`;
+      const existing = state.find((item): item is ToolActivityItem =>
+        item.type === 'tool' && item.id === id);
+      const item: ToolActivityItem = {
+        id,
+        type: 'tool',
+        runId,
+        callId: event.data.call_id,
+        tool: event.data.tool,
+        planStepId: existing?.planStepId,
+        target: existing?.target,
+        label: event.data.display.label,
+        detail: event.data.display.detail,
+        status: event.data.status,
+        preview: event.data.preview,
+        error: event.data.error,
+        timestamp: existing?.timestamp ?? timestamp,
+      };
+      return upsertById(state, item);
+    }
+
+    case 'question.asked': {
+      const id = `${runId}:question:${event.data.question_id}`;
+      const existing = state.find((item): item is QuestionItem =>
+        item.type === 'question' && item.id === id);
+      const item: QuestionItem = {
+        id,
+        type: 'question',
+        runId,
+        questionId: event.data.question_id,
+        header: event.data.header,
+        prompt: event.data.prompt,
+        selection: event.data.selection,
+        options: event.data.options,
+        allowCustom: event.data.allow_custom,
+        answer: existing?.answer,
+        displayText: existing?.displayText,
+        timestamp: existing?.timestamp ?? timestamp,
+      };
+      return upsertById(state, item);
+    }
+
+    case 'question.answered': {
+      const id = `${runId}:question:${event.data.question_id}`;
+      const existing = state.find((item): item is QuestionItem =>
+        item.type === 'question' && item.id === id);
+      if (!existing) return state;
+      return upsertById(state, {
+        ...existing,
+        answer: event.data.answer,
+        displayText: event.data.display_text,
+      });
+    }
+
+    case 'run.finished': {
+      if (event.data.status === 'completed') return state;
+      const error = event.data.error;
+      const item: TerminalNoticeItem = {
+        id: `${runId}:terminal`,
+        type: 'terminal_notice',
+        runId,
+        status: event.data.status,
+        error,
+        message: event.data.status === 'canceled'
+          ? '运行已取消'
+          : (error?.message ?? '运行未能完成，请稍后重试。'),
         timestamp,
-      }];
-
-    case 'run.failed':
-    case 'run.canceled':
-      return [...state, {
-        id: newId,
-        type: 'error',
-        code: event.data.outcome?.code,
-        message: String(event.data.outcome?.message ?? (event.event === 'run.canceled' ? '运行已取消' : '运行失败')),
-        timestamp,
-      }];
-
-    default:
-      return state;
+      };
+      return upsertById(state, item);
+    }
   }
 }

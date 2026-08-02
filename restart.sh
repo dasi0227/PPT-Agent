@@ -8,6 +8,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
+RENDERER_DIR="$BACKEND_DIR/render-worker"
 WORK_ROOT="$HOME/.dasi/ppt"
 BACKEND_ADDR="127.0.0.1:8787"
 FRONTEND_URL="http://localhost:5173"
@@ -23,7 +24,7 @@ for arg in "$@"; do
   esac
 done
 
-echo "==> 1/5 关闭可能在运行的前后端进程"
+echo "==> 1/6 关闭可能在运行的前后端进程"
 # 后端：cmd/server 进程
 pkill -f "cmd/server" 2>/dev/null || true
 pkill -f "PPT-Agent.*server" 2>/dev/null || true
@@ -39,7 +40,7 @@ if command -v lsof >/dev/null 2>&1; then
 fi
 sleep 1
 
-echo "==> 2/5 初始化数据目录与数据库 (WORK_ROOT=$WORK_ROOT)"
+echo "==> 2/6 初始化数据目录与数据库 (WORK_ROOT=$WORK_ROOT)"
 if [ "$RESET_MODE" = "ask" ]; then
   read -r -p "清空 ${WORK_ROOT} （所有项目/线程/DB 将被删除）？[y/N] " ans
   case "$ans" in [yY]*) RESET_MODE="yes" ;; *) RESET_MODE="no" ;; esac
@@ -52,7 +53,15 @@ else
 fi
 mkdir -p "$WORK_ROOT/db" "$WORK_ROOT/projects" "$WORK_ROOT/_assets"
 
-echo "==> 3/5 启动后端 (go run, $BACKEND_ADDR)"
+echo "==> 3/6 准备隔离 Chromium 渲染 worker"
+(
+  cd "$RENDERER_DIR"
+  [ -d node_modules ] || pnpm install --frozen-lockfile --ignore-scripts
+  pnpm health >/dev/null
+)
+echo "    render worker 健康检查通过"
+
+echo "==> 4/6 启动后端 (go run, $BACKEND_ADDR)"
 (
   cd "$BACKEND_DIR"
   nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
@@ -72,7 +81,7 @@ for i in $(seq 1 60); do
   sleep 1
 done
 
-echo "==> 4/5 启动前端 (pnpm dev, $FRONTEND_URL)"
+echo "==> 5/6 启动前端 (pnpm dev, $FRONTEND_URL)"
 (
   cd "$FRONTEND_DIR"
   [ -d node_modules ] || pnpm install
@@ -93,7 +102,7 @@ for i in $(seq 1 60); do
   sleep 1
 done
 
-echo "==> 5/5 打开浏览器 $FRONTEND_URL"
+echo "==> 6/6 打开浏览器 $FRONTEND_URL"
 if command -v open >/dev/null 2>&1; then
   open "$FRONTEND_URL"
 fi

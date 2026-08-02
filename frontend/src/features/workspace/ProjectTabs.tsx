@@ -56,7 +56,7 @@ export const ProjectTabs: React.FC = () => {
                 {isActive && runStatus === 'running' && (
                   <span aria-label="运行中" className="inline-block w-2 h-2 rounded-full bg-accent animate-pulse" />
                 )}
-                {isActive && runStatus === 'needs_input' && (
+                {isActive && runStatus === 'waiting' && (
                   <span aria-label="等待输入" className="inline-block w-2 h-2 rounded-full bg-warning animate-pulse" />
                 )}
                 

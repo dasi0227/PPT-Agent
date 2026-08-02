@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"time"
 
@@ -17,29 +18,39 @@ type Bus struct {
 	store    Store
 	hw       HistoryWriter
 
-	mu          sync.Mutex
-	seq         int64
-	subscribers map[int]chan model.Event
-	nextSubID   int
-	closed      bool
-	terminated  bool // 已发过终态事件，防止重复终态
+	mu            sync.Mutex
+	seq           int64
+	subscribers   map[int]chan model.Event
+	nextSubID     int
+	closed        bool
+	terminated    bool // 已发过终态事件，防止重复终态
+	started       bool
+	finalCount    int
+	planID        string
+	planRevision  int
+	planCompleted map[string]bool
+	toolCalls     map[string]bool
+	toolNames     map[string]string
+	questions     map[string]bool
 }
 
 func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
-	return &Bus{runID: runID, threadID: threadID, store: store, hw: hw, subscribers: map[int]chan model.Event{}}
+	return &Bus{
+		runID: runID, threadID: threadID, store: store, hw: hw,
+		subscribers:   map[int]chan model.Event{},
+		planCompleted: map[string]bool{}, toolCalls: map[string]bool{},
+		toolNames: map[string]string{}, questions: map[string]bool{},
+	}
 }
 
-// isWhitelistedForHistory keeps replayable Adaptive Runtime events while never
-// persisting hidden model reasoning.
+// isWhitelistedForHistory persists only product history. Progress remains in the
+// run event store for Last-Event-ID replay but is intentionally transient here.
 func isWhitelistedForHistory(evt model.EventType) bool {
 	switch evt {
-	case model.EventRunStarted, model.EventContextAssembled, model.EventStrategySelected,
-		model.EventPlanCreated, model.EventStageStarted, model.EventStageCompleted,
-		model.EventStepStarted, model.EventStepCompleted, model.EventStepFailed,
-		model.EventToolCalled, model.EventToolCompleted, model.EventVerificationCompleted,
-		model.EventRepairStarted, model.EventRepairCompleted, model.EventArtifactStaged,
-		model.EventArtifactCommitted, model.EventStatusSummary, model.EventNeedsInput,
-		model.EventRunCompleted, model.EventRunFailed, model.EventRunCanceled:
+	case model.EventRunStarted, model.EventPlanUpdated,
+		model.EventMessageReasoning, model.EventMessageMilestone, model.EventMessageFinal,
+		model.EventToolStarted, model.EventToolCompleted,
+		model.EventQuestionAsked, model.EventQuestionAnswered, model.EventRunFinished:
 		return true
 	}
 	return false
@@ -62,29 +73,6 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 		entry.Data = map[string]any{
 			"text": text, "target": data["target"], "interaction": data["interaction"],
 		}
-	case model.EventContextAssembled:
-		entry.Turn = "agent"
-		entry.Type = "context_assembled"
-	case model.EventStatusSummary:
-		entry.Turn = "agent"
-		entry.Type = "markdown"
-		entry.Data = map[string]any{"text": data["summary"]}
-	case model.EventNeedsInput:
-		entry.Turn = "agent"
-		entry.Type = "needs_input"
-	case model.EventRunCompleted:
-		entry.Turn = "agent"
-		entry.Type = "final_result"
-		entry.Data = map[string]any{"result": data["outcome"]}
-	case model.EventRunFailed, model.EventRunCanceled:
-		entry.Turn = "agent"
-		entry.Type = "error"
-		if outcome, ok := data["outcome"].(map[string]any); ok {
-			entry.Data = map[string]any{
-				"code": outcome["code"], "message": outcome["message"],
-				"status": outcome["status"],
-			}
-		}
 	default:
 		entry.Turn = "agent"
 		entry.Type = string(e.Type)
@@ -94,22 +82,42 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 
 // Emit 分配下一个 seq，持久化后扇出。终态事件（done/error）只允许发一次。
 func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error {
+	if err := model.ValidatePublicEvent(evt, payload); err != nil {
+		return err
+	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		raw = []byte("{}")
+		return err
 	}
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return err
+	}
+	if data["run_id"] != b.runID {
+		return errors.New("public event run_id does not match bus")
+	}
+
 	b.mu.Lock()
 	if b.terminated {
 		b.mu.Unlock()
 		return nil
 	}
-	if evt.Terminal() {
-		b.terminated = true
+	if !b.started && evt != model.EventRunStarted {
+		b.mu.Unlock()
+		return errors.New("run.started must be the first public event")
 	}
-	b.seq++
+	if b.started && evt == model.EventRunStarted {
+		b.mu.Unlock()
+		return errors.New("run.started may only be emitted once")
+	}
+	if err := b.validateSequence(evt, data); err != nil {
+		b.mu.Unlock()
+		return err
+	}
+	nextSeq := b.seq + 1
 	e := model.Event{
 		RunID:     b.runID,
-		Seq:       b.seq,
+		Seq:       nextSeq,
 		Type:      evt,
 		Payload:   string(raw),
 		CreatedAt: time.Now().Unix(),
@@ -118,18 +126,21 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error 
 	for _, ch := range b.subscribers {
 		subs = append(subs, ch)
 	}
-	b.mu.Unlock()
 
 	// 先持久化再扇出：保证断线重连能从 store 补齐（ARCH-RUN-005）。
 	if err := b.store.AppendEvent(ctx, e); err != nil {
+		b.mu.Unlock()
 		return err
 	}
+	b.seq = nextSeq
+	b.recordSequence(evt, data)
 	// history.jsonl 副作用：仅白名单事件，失败吞掉不阻塞 SSE 主流程。
 	if b.hw != nil && isWhitelistedForHistory(evt) && b.threadID != "" {
 		if entry, ok := buildHistoryEntry(e); ok {
 			_ = b.hw.Append(ctx, b.threadID, entry)
 		}
 	}
+	b.mu.Unlock()
 	for _, ch := range subs {
 		select {
 		case ch <- e:
@@ -138,6 +149,107 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error 
 		}
 	}
 	return nil
+}
+
+func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
+	switch evt {
+	case model.EventPlanUpdated:
+		plan, _ := data["plan"].(map[string]any)
+		revision, _ := plan["revision"].(float64)
+		planID, _ := plan["plan_id"].(string)
+		if b.planID != "" && planID != b.planID {
+			return errors.New("plan_id cannot change")
+		}
+		if int(revision) <= b.planRevision {
+			return errors.New("plan revision must increase monotonically")
+		}
+		nextCompleted := map[string]bool{}
+		steps, _ := plan["steps"].([]any)
+		for _, raw := range steps {
+			step, _ := raw.(map[string]any)
+			id, _ := step["id"].(string)
+			completed := step["status"] == "completed"
+			nextCompleted[id] = completed
+		}
+		for id := range b.planCompleted {
+			if !nextCompleted[id] {
+				return errors.New("completed plan steps cannot regress or disappear")
+			}
+		}
+	case model.EventToolStarted:
+		callID, _ := data["call_id"].(string)
+		if _, exists := b.toolCalls[callID]; exists {
+			return errors.New("tool call_id must be unique")
+		}
+	case model.EventToolCompleted:
+		callID, _ := data["call_id"].(string)
+		completed, exists := b.toolCalls[callID]
+		if !exists || completed {
+			return errors.New("tool.completed must match tool.started")
+		}
+		if b.toolNames[callID] != data["tool"] {
+			return errors.New("tool.completed tool must match tool.started")
+		}
+	case model.EventQuestionAsked:
+		for _, answered := range b.questions {
+			if !answered {
+				return errors.New("only one question may be pending")
+			}
+		}
+	case model.EventQuestionAnswered:
+		questionID, _ := data["question_id"].(string)
+		answered, exists := b.questions[questionID]
+		if !exists || answered {
+			return errors.New("question.answered must match a pending question")
+		}
+	case model.EventMessageFinal:
+		if b.finalCount != 0 {
+			return errors.New("message.final may only be emitted once")
+		}
+	case model.EventRunFinished:
+		status, _ := data["status"].(string)
+		if status == "completed" && b.finalCount != 1 {
+			return errors.New("completed run requires exactly one prior message.final")
+		}
+	}
+	return nil
+}
+
+func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
+	switch evt {
+	case model.EventRunStarted:
+		b.started = true
+	case model.EventPlanUpdated:
+		plan, _ := data["plan"].(map[string]any)
+		revision, _ := plan["revision"].(float64)
+		b.planID, _ = plan["plan_id"].(string)
+		b.planRevision = int(revision)
+		steps, _ := plan["steps"].([]any)
+		for _, raw := range steps {
+			step, _ := raw.(map[string]any)
+			if step["status"] == "completed" {
+				id, _ := step["id"].(string)
+				b.planCompleted[id] = true
+			}
+		}
+	case model.EventToolStarted:
+		callID, _ := data["call_id"].(string)
+		b.toolCalls[callID] = false
+		b.toolNames[callID], _ = data["tool"].(string)
+	case model.EventToolCompleted:
+		callID, _ := data["call_id"].(string)
+		b.toolCalls[callID] = true
+	case model.EventQuestionAsked:
+		questionID, _ := data["question_id"].(string)
+		b.questions[questionID] = false
+	case model.EventQuestionAnswered:
+		questionID, _ := data["question_id"].(string)
+		b.questions[questionID] = true
+	case model.EventMessageFinal:
+		b.finalCount++
+	case model.EventRunFinished:
+		b.terminated = true
+	}
 }
 
 // Subscribe 注册一个实时订阅者，返回事件 channel 与取消函数。

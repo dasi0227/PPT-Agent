@@ -4,134 +4,120 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
+
+type PlanStepStatus string
+
+const (
+	PlanStepPending    PlanStepStatus = "pending"
+	PlanStepInProgress PlanStepStatus = "in_progress"
+	PlanStepCompleted  PlanStepStatus = "completed"
+	PlanStepFailed     PlanStepStatus = "failed"
+)
+
+type PlanStep struct {
+	ID     string         `json:"id"`
+	Title  string         `json:"title"`
+	Status PlanStepStatus `json:"status"`
+}
+
+type PlanRevision struct {
+	Revision    int        `json:"revision"`
+	Explanation string     `json:"explanation,omitempty"`
+	Steps       []PlanStep `json:"steps"`
+	UpdatedAt   int64      `json:"updated_at"`
+}
+
+type Plan struct {
+	ID           string         `json:"plan_id"`
+	Revision     int            `json:"revision"`
+	Explanation  string         `json:"explanation,omitempty"`
+	Steps        []PlanStep     `json:"steps"`
+	CreatedAt    int64          `json:"created_at"`
+	UpdatedAt    int64          `json:"updated_at"`
+	CreatedByRun string         `json:"created_by_run"`
+	History      []PlanRevision `json:"history"`
+}
+
+type PlanUpdate struct {
+	Explanation string     `json:"explanation,omitempty"`
+	Steps       []PlanStep `json:"steps"`
+}
 
 var ErrPlanInvalid = errors.New("PLAN_INVALID")
 
-type Playbook interface {
-	Key() string
-	AllowedKinds() map[StepKind]bool
-	AllowedCapabilities() map[Capability]bool
-	Fallback(contextengine.ContextPack, Operation) WorkflowPlan
-	Verifiers() []string
-}
-
-type PlanModel interface {
-	Plan(contextengine.ContextPack, WorkflowPlan) (WorkflowPlan, error)
-}
-
-type Planner struct {
-	Model PlanModel
-}
-
-func (p Planner) Create(pack contextengine.ContextPack, book Playbook, operation Operation) (WorkflowPlan, error) {
-	fallback := book.Fallback(pack, operation)
-	plan := fallback
-	if p.Model != nil {
-		if proposed, err := p.Model.Plan(pack, fallback); err == nil {
-			plan = proposed
+func ApplyPlanUpdate(current *Plan, update PlanUpdate, runID string, now time.Time) (Plan, bool, error) {
+	if len(update.Steps) == 0 {
+		return Plan{}, false, fmt.Errorf("%w: at least one step is required", ErrPlanInvalid)
+	}
+	seen := map[string]bool{}
+	inProgress := 0
+	for _, step := range update.Steps {
+		if strings.TrimSpace(step.ID) == "" || strings.TrimSpace(step.Title) == "" || seen[step.ID] {
+			return Plan{}, false, fmt.Errorf("%w: step ids and titles must be non-empty and unique", ErrPlanInvalid)
+		}
+		seen[step.ID] = true
+		switch step.Status {
+		case PlanStepPending, PlanStepInProgress, PlanStepCompleted, PlanStepFailed:
+		default:
+			return Plan{}, false, fmt.Errorf("%w: invalid status %q", ErrPlanInvalid, step.Status)
+		}
+		if step.Status == PlanStepInProgress {
+			inProgress++
 		}
 	}
-	if plan.ID == "" {
-		plan.ID = "plan_" + uuid.NewString()
+	if inProgress > 1 {
+		return Plan{}, false, fmt.Errorf("%w: at most one step may be in_progress", ErrPlanInvalid)
 	}
-	if plan.Version == 0 {
-		plan.Version = 1
-	}
-	if plan.Budget.MaxPlanAttempts == 0 {
-		plan.Budget = DefaultBudget()
-	}
-	if err := ValidatePlan(plan, pack.WorkSpec, book); err != nil {
-		if err := ValidatePlan(fallback, pack.WorkSpec, book); err != nil {
-			return WorkflowPlan{}, err
+	created := current == nil || current.ID == ""
+	if !created {
+		nextByID := map[string]PlanStep{}
+		for _, step := range update.Steps {
+			nextByID[step.ID] = step
 		}
-		return fallback, nil
-	}
-	return plan, nil
-}
-
-func ValidatePlan(plan WorkflowPlan, spec model.WorkSpec, book Playbook) error {
-	if plan.Target != spec.Target {
-		return fmt.Errorf("%w: plan target differs from work spec", ErrPlanInvalid)
-	}
-	if strings.TrimSpace(plan.Goal) == "" || len(plan.Steps) == 0 {
-		return fmt.Errorf("%w: goal and steps are required", ErrPlanInvalid)
-	}
-	seen := map[string]WorkflowStep{}
-	allowedKinds := book.AllowedKinds()
-	allowedCaps := book.AllowedCapabilities()
-	for _, step := range plan.Steps {
-		if step.ID == "" || seen[step.ID].ID != "" {
-			return fmt.Errorf("%w: duplicate or empty step id %q", ErrPlanInvalid, step.ID)
-		}
-		if !allowedKinds[step.Kind] {
-			return fmt.Errorf("%w: step kind %s is not in playbook", ErrPlanInvalid, step.Kind)
-		}
-		for _, cap := range step.Capabilities {
-			if !allowedCaps[cap] {
-				return fmt.Errorf("%w: capability %s is not in playbook", ErrPlanInvalid, cap)
+		for _, old := range current.Steps {
+			if old.Status != PlanStepCompleted {
+				continue
 			}
-		}
-		for _, target := range step.Targets {
-			if spec.Target.Level == model.TargetSlide && target.ID != "" && target.ID != spec.Target.SlideID && target.Kind != ArtifactDesign {
-				return fmt.Errorf("%w: slide plan targets unrelated artifact %s", ErrPlanInvalid, target.Key())
-			}
-		}
-		seen[step.ID] = step
-	}
-	for _, step := range plan.Steps {
-		for _, dep := range step.DependsOn {
-			if _, ok := seen[dep]; !ok {
-				return fmt.Errorf("%w: unknown dependency %s", ErrPlanInvalid, dep)
+			next, ok := nextByID[old.ID]
+			if !ok || next.Status != PlanStepCompleted {
+				return Plan{}, false, fmt.Errorf("%w: completed step %q cannot be deleted or regressed", ErrPlanInvalid, old.ID)
 			}
 		}
 	}
-	visiting, visited := map[string]bool{}, map[string]bool{}
-	var visit func(string) error
-	visit = func(id string) error {
-		if visiting[id] {
-			return fmt.Errorf("%w: dependency cycle at %s", ErrPlanInvalid, id)
-		}
-		if visited[id] {
-			return nil
-		}
-		visiting[id] = true
-		for _, dep := range seen[id].DependsOn {
-			if err := visit(dep); err != nil {
-				return err
-			}
-		}
-		visiting[id], visited[id] = false, true
-		return nil
+	ts := now.Unix()
+	next := Plan{
+		ID: "plan_" + uuid.NewString(), Revision: 1, Explanation: update.Explanation,
+		Steps: clonePlanSteps(update.Steps), CreatedAt: ts, UpdatedAt: ts, CreatedByRun: runID,
+		History: []PlanRevision{},
 	}
-	for id := range seen {
-		if err := visit(id); err != nil {
-			return err
-		}
+	if !created {
+		next = *current
+		next.Revision++
+		next.Explanation = update.Explanation
+		next.Steps = clonePlanSteps(update.Steps)
+		next.UpdatedAt = ts
+		next.History = append([]PlanRevision{}, current.History...)
 	}
-	if plan.Operation == OperationConsult {
-		for _, step := range plan.Steps {
-			for _, cap := range step.Capabilities {
-				if IsWriteCapability(cap) {
-					return fmt.Errorf("%w: consult step %s requests write capability", ErrPlanInvalid, step.ID)
-				}
-			}
-		}
-	}
-	return nil
+	next.History = append(next.History, PlanRevision{
+		Revision: next.Revision, Explanation: next.Explanation,
+		Steps: clonePlanSteps(next.Steps), UpdatedAt: ts,
+	})
+	return next, created, nil
 }
 
-func IsWriteCapability(cap Capability) bool {
-	switch cap {
-	case CapabilityWriteBlueprint, CapabilityWriteDesignSpec,
-		CapabilityWritePresentation, CapabilityMountAssets:
-		return true
-	default:
-		return false
+func clonePlanSteps(in []PlanStep) []PlanStep {
+	return append([]PlanStep{}, in...)
+}
+
+func (p Plan) HasBlockingSteps() bool {
+	for _, step := range p.Steps {
+		if step.Status != PlanStepCompleted {
+			return true
+		}
 	}
+	return false
 }

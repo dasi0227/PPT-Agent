@@ -23,16 +23,9 @@ const (
 type InteractionIntent string
 
 const (
-	IntentApply   InteractionIntent = "apply"
-	IntentConsult InteractionIntent = "consult"
-)
-
-type ClarificationPolicy string
-
-const (
-	ClarifyWhenBlocked ClarificationPolicy = "when_blocked"
-	ClarifyBeforeApply ClarificationPolicy = "before_apply"
-	ClarifyNever       ClarificationPolicy = "never"
+	IntentTalk    InteractionIntent = "talk"
+	IntentAsk     InteractionIntent = "ask"
+	IntentExecute InteractionIntent = "execute"
 )
 
 type RunTarget struct {
@@ -42,8 +35,7 @@ type RunTarget struct {
 }
 
 type RunInteraction struct {
-	Intent        InteractionIntent   `json:"intent"`
-	Clarification ClarificationPolicy `json:"clarification"`
+	Intent InteractionIntent `json:"intent"`
 }
 
 type RunOptions struct {
@@ -77,16 +69,10 @@ func (s WorkSpec) Validate() error {
 	if s.Target.SlideID == "current" {
 		return fmt.Errorf("%w: current must be resolved to a stable slide_id", ErrInvalidWorkSpec)
 	}
-	if s.Interaction.Intent != IntentApply && s.Interaction.Intent != IntentConsult {
-		return fmt.Errorf("%w: unsupported intent %q", ErrInvalidWorkSpec, s.Interaction.Intent)
-	}
-	if s.Interaction.Clarification == "" {
-		s.Interaction.Clarification = ClarifyWhenBlocked
-	}
-	switch s.Interaction.Clarification {
-	case ClarifyWhenBlocked, ClarifyBeforeApply, ClarifyNever:
+	switch s.Interaction.Intent {
+	case IntentTalk, IntentAsk, IntentExecute:
 	default:
-		return fmt.Errorf("%w: unsupported clarification %q", ErrInvalidWorkSpec, s.Interaction.Clarification)
+		return fmt.Errorf("%w: unsupported intent %q", ErrInvalidWorkSpec, s.Interaction.Intent)
 	}
 	if strings.TrimSpace(s.Instruction) == "" {
 		return fmt.Errorf("%w: instruction is required", ErrInvalidWorkSpec)

@@ -117,7 +117,7 @@ func TestRunContextRoundTripStoresManifestOnly(t *testing.T) {
 	}
 	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", WorkSpec: model.WorkSpec{
 		Target:      model.RunTarget{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck},
-		Interaction: model.RunInteraction{Intent: model.IntentApply, Clarification: model.ClarifyNever}, Instruction: "x",
+		Interaction: model.RunInteraction{Intent: model.IntentExecute}, Instruction: "x",
 	}, Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1}
 	if err := s.CreateRun(ctx, runModel); err != nil {
 		t.Fatal(err)

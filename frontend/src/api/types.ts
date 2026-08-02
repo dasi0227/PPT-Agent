@@ -104,12 +104,11 @@ export interface Run {
 
 export type Artifact = 'blueprint' | 'presentation';
 export type TargetLevel = 'slide' | 'deck';
-export type InteractionIntent = 'apply' | 'consult';
-export type ClarificationPolicy = 'when_blocked' | 'before_apply' | 'never';
-export type ExecutionStrategy = 'respond' | 'direct_action' | 'compact_workflow' | 'full_pev';
+export type InteractionIntent = 'talk' | 'ask' | 'execute';
+export type ExecutionStrategy = 'chat' | 'simple' | 'complex';
 
 export interface RunTarget { artifact: Artifact; level: TargetLevel; slide_id?: string }
-export interface RunInteraction { intent: InteractionIntent; clarification: ClarificationPolicy }
+export interface RunInteraction { intent: InteractionIntent }
 
 export interface CreateRunRequest {
   target: RunTarget;
@@ -125,7 +124,7 @@ export interface BlueprintProjectView {
   materialization: Record<string, Materialization>;
 }
 
-export interface NeedsInputPayload {
+export interface RunInputPayload {
   content: string;
   reply_to: string;
 }
@@ -134,28 +133,18 @@ export type JsonRecord = Record<string, unknown>;
 
 export type SSEEventName =
   | 'run.started'
-  | 'context.assembled'
-  | 'strategy.selected'
-  | 'plan.created'
-  | 'stage.started'
-  | 'stage.completed'
-  | 'step.started'
-  | 'step.completed'
-  | 'step.failed'
-  | 'tool.called'
+  | 'run.progress'
+  | 'run.finished'
+  | 'plan.updated'
+  | 'message.reasoning'
+  | 'message.milestone'
+  | 'message.final'
+  | 'tool.started'
   | 'tool.completed'
-  | 'verification.completed'
-  | 'repair.started'
-  | 'repair.completed'
-  | 'artifact.staged'
-  | 'artifact.committed'
-  | 'status.summary'
-  | 'needs_input'
-  | 'run.completed'
-  | 'run.failed'
-  | 'run.canceled';
+  | 'question.asked'
+  | 'question.answered';
 
-export type PlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+export type PlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 
 export interface PlanStep {
   id: string;
@@ -167,36 +156,56 @@ export interface PlanStep {
 export interface PlanState {
   id: string;
   title: string;
+  revision: number;
   steps: PlanStep[];
 }
 
-export interface WorkflowIssue {
-  code?: string;
-  message?: string;
-  evidence?: string;
-  [key: string]: unknown;
+export interface PublicEventBase {
+  schema_version: 1;
+  run_id: string;
+  occurred_at: string;
 }
 
-export interface ArtifactRef {
-  kind?: string;
-  id?: string;
-  path?: string;
-  [key: string]: unknown;
+export interface PublicTarget {
+  type: 'global' | 'slide';
+  slide_id?: string;
 }
 
-export interface StructuredOutcome {
-  status?: string;
-  strategy?: ExecutionStrategy;
-  summary?: string;
-  code?: string;
-  message?: string;
-  target?: RunTarget;
-  operation?: string;
-  affected?: ArtifactRef[];
-  issues?: WorkflowIssue[];
-  repair_rounds?: number;
-  [key: string]: unknown;
+export interface PublicDisplay {
+  label: string;
+  detail?: string;
 }
+
+export interface PublicError {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+export interface ToolPreview {
+  slide_id: string;
+  image_url: string;
+  warnings: string[];
+}
+
+export interface QuestionOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+export interface QuestionAnswer {
+  selected_option_ids: string[];
+  custom_text: string;
+}
+
+export type RunProgressStage =
+  | 'thinking'
+  | 'planning'
+  | 'reading'
+  | 'writing'
+  | 'rendering'
+  | 'finalizing';
 
 interface SSEEventBase<Name extends SSEEventName, Data> {
   id?: string;
@@ -205,17 +214,62 @@ interface SSEEventBase<Name extends SSEEventName, Data> {
 }
 
 export type SSEEvent =
-  | SSEEventBase<'run.started', JsonRecord>
-  | SSEEventBase<'context.assembled', JsonRecord & { profile?: string; warnings?: string[]; read_only?: boolean }>
-  | SSEEventBase<'strategy.selected', JsonRecord & { strategy: ExecutionStrategy; reason?: string; risk?: string; complexity?: string }>
-  | SSEEventBase<'plan.created', JsonRecord & { plan: JsonRecord & { id?: string; goal?: string; steps?: JsonRecord[] } }>
-  | SSEEventBase<'stage.started' | 'stage.completed', JsonRecord & { stage?: string; duration_ms?: number }>
-  | SSEEventBase<'step.started' | 'step.completed' | 'step.failed', JsonRecord & { step_id: string; summary?: string }>
-  | SSEEventBase<'tool.called', JsonRecord & { call_id: string; tool: string; args?: JsonRecord }>
-  | SSEEventBase<'tool.completed', JsonRecord & { call_id: string; ok?: boolean; summary?: string; issues?: WorkflowIssue[] }>
-  | SSEEventBase<'verification.completed', JsonRecord & { verifier?: string; result?: JsonRecord & { passed?: boolean; issues?: WorkflowIssue[] } }>
-  | SSEEventBase<'repair.started' | 'repair.completed', JsonRecord & { round?: number; artifact?: ArtifactRef; improved?: boolean; summary?: string }>
-  | SSEEventBase<'artifact.staged' | 'artifact.committed', JsonRecord & { artifact: ArtifactRef; change?: string }>
-  | SSEEventBase<'status.summary', JsonRecord & { summary?: string }>
-  | SSEEventBase<'needs_input', JsonRecord & { id: string; prompt: string; choices?: string[] }>
-  | SSEEventBase<'run.completed' | 'run.failed' | 'run.canceled', JsonRecord & { outcome?: StructuredOutcome }>;
+  | SSEEventBase<'run.started', PublicEventBase & {
+      target: RunTarget;
+      interaction: RunInteraction;
+      user_input: string;
+    }>
+  | SSEEventBase<'run.progress', PublicEventBase & {
+      stage: RunProgressStage;
+      text: string;
+      target?: PublicTarget;
+      progress?: { current: number; total: number; unit: string };
+    }>
+  | SSEEventBase<'run.finished', PublicEventBase & {
+      status: 'completed' | 'failed' | 'canceled';
+      affected_targets?: PublicTarget[];
+      duration_ms: number;
+      error?: PublicError;
+    }>
+  | SSEEventBase<'plan.updated', PublicEventBase & {
+      plan: JsonRecord & { plan_id: string; revision: number; explanation?: string; steps: JsonRecord[] };
+    }>
+  | SSEEventBase<'message.reasoning', PublicEventBase & { message_id: string; text: string }>
+  | SSEEventBase<'message.milestone', PublicEventBase & {
+      message_id: string;
+      text: string;
+      completed_step_ids: string[];
+    }>
+  | SSEEventBase<'message.final', PublicEventBase & {
+      message_id: string;
+      text: string;
+      affected_targets?: PublicTarget[];
+    }>
+  | SSEEventBase<'tool.started', PublicEventBase & {
+      call_id: string;
+      tool: string;
+      plan_step_id?: string;
+      target?: PublicTarget;
+      display: PublicDisplay;
+    }>
+  | SSEEventBase<'tool.completed', PublicEventBase & {
+      call_id: string;
+      tool: string;
+      status: 'completed' | 'failed';
+      display: PublicDisplay;
+      preview?: ToolPreview;
+      error?: PublicError;
+    }>
+  | SSEEventBase<'question.asked', PublicEventBase & {
+      question_id: string;
+      header?: string;
+      prompt: string;
+      selection: 'single' | 'multiple';
+      options: QuestionOption[];
+      allow_custom: boolean;
+    }>
+  | SSEEventBase<'question.answered', PublicEventBase & {
+      question_id: string;
+      answer: QuestionAnswer;
+      display_text: string;
+    }>;

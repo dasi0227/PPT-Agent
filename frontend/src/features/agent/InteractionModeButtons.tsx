@@ -1,34 +1,28 @@
 import { CircleHelp, MessageCircle } from 'lucide-react';
 import type React from 'react';
-import type { ClarificationPolicy, InteractionIntent } from '../../api/types';
+import type { InteractionIntent } from '../../api/types';
 import { cn } from '../../lib/utils';
 
 interface InteractionModeButtonsProps {
   intent: InteractionIntent;
-  clarification: ClarificationPolicy;
   onIntentChange: (intent: InteractionIntent) => void;
-  onClarificationChange: (clarification: ClarificationPolicy) => void;
   disabled?: boolean;
 }
 
 export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
   intent,
-  clarification,
   onIntentChange,
-  onClarificationChange,
   disabled,
 }) => {
-  const isTalk = intent === 'consult';
-  const isAsk = intent === 'apply' && clarification === 'before_apply';
+  const isTalk = intent === 'talk';
+  const isAsk = intent === 'ask';
 
   const toggleTalk = () => {
-    onIntentChange(isTalk ? 'apply' : 'consult');
-    onClarificationChange('when_blocked');
+    onIntentChange(isTalk ? 'execute' : 'talk');
   };
 
   const toggleAsk = () => {
-    onIntentChange('apply');
-    onClarificationChange(isAsk ? 'when_blocked' : 'before_apply');
+    onIntentChange(isAsk ? 'execute' : 'ask');
   };
 
   const buttonClass = (selected: boolean) => cn(
@@ -56,7 +50,7 @@ export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
         type="button"
         aria-label="询问"
         aria-pressed={isAsk}
-        title="先澄清需求并形成方案，确认后再执行修改"
+        title="只读探索，并允许 Agent 在需要时向你提问"
         disabled={disabled}
         onClick={toggleAsk}
         className={buttonClass(isAsk)}

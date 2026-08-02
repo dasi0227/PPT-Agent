@@ -25,7 +25,7 @@ import (
 type noOpRunner struct{}
 
 func (noOpRunner) Run(context.Context, workflow.EventEmitter, run.Checkpointer, run.Prompter) workflow.StructuredOutcome {
-	return workflow.StructuredOutcome{Status: workflow.StatusCompleted, Strategy: workflow.StrategyRespond}
+	return workflow.StructuredOutcome{Status: workflow.StatusCompleted, Strategy: workflow.StrategyChat}
 }
 
 func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
@@ -90,7 +90,7 @@ func TestArtifactTargetRunAndBlueprintAPI(t *testing.T) {
 
 	body := `{
 		"target":{"artifact":"blueprint","level":"deck"},
-		"interaction":{"intent":"consult","clarification":"never"},
+		"interaction":{"intent":"talk"},
 		"instruction":"评估当前叙事结构"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", body)
@@ -101,7 +101,7 @@ func TestArtifactTargetRunAndBlueprintAPI(t *testing.T) {
 	_ = json.Unmarshal(resp.Body.Bytes(), &created)
 	target := created["target"].(map[string]any)
 	interaction := created["interaction"].(map[string]any)
-	if target["artifact"] != "blueprint" || target["level"] != "deck" || interaction["intent"] != "consult" {
+	if target["artifact"] != "blueprint" || target["level"] != "deck" || interaction["intent"] != "talk" {
 		t.Fatalf("new protocol was not preserved: %s", resp.Body.String())
 	}
 	runID := created["id"].(string)
@@ -122,12 +122,55 @@ func TestArtifactTargetRunAndBlueprintAPI(t *testing.T) {
 
 	invalid := `{
 		"target":{"artifact":"presentation","level":"slide","slide_id":"current"},
-		"interaction":{"intent":"apply","clarification":"when_blocked"},
+		"interaction":{"intent":"execute"},
 		"instruction":"修改当前页"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", invalid)
 	if resp.Code != http.StatusUnprocessableEntity || !strings.Contains(resp.Body.String(), "INVALID_TARGET") {
 		t.Fatalf("unstable current target must be rejected: %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
+	srv, root := setupProjectThreadServer(t)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Screenshots","language":"zh-CN"}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
+	}
+	var project map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &project)
+	projectID := project["id"].(string)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/threads", `{"title":"Render"}`)
+	var thread map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &thread)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+thread["id"].(string)+"/runs", `{
+		"target":{"artifact":"presentation","level":"deck"},
+		"interaction":{"intent":"talk"},
+		"instruction":"查看当前演示"
+	}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create run: %d %s", resp.Code, resp.Body.String())
+	}
+	var runModel map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &runModel)
+	runID := runModel["id"].(string)
+	screenshotID := "shot_123e4567-e89b-12d3-a456-426614174000"
+	path := filepath.Join(root, "projects", projectID, ".runtime", "renders", runID, screenshotID+".png")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	png := []byte("\x89PNG\r\n\x1a\n")
+	if err := os.WriteFile(path, png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/"+runID+"/screenshots/"+screenshotID, "")
+	if resp.Code != http.StatusOK || resp.Header().Get("Content-Type") != "image/png" ||
+		!bytes.Equal(resp.Body.Bytes(), png) {
+		t.Fatalf("screenshot: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/"+runID+"/screenshots/deck.json", "")
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("path-like screenshot id was not rejected: %d", resp.Code)
 	}
 }
 
@@ -178,7 +221,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 		t.Fatalf("new thread history should be empty array, got %d: %s", resp.Code, resp.Body.String())
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"target":{"artifact":"blueprint","level":"deck"},"interaction":{"intent":"apply","clarification":"when_blocked"},"instruction":"生成蓝图"}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"target":{"artifact":"blueprint","level":"deck"},"interaction":{"intent":"execute"},"instruction":"生成蓝图"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
 	}

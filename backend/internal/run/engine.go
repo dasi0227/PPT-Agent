@@ -91,14 +91,26 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		e.mu.Unlock()
 	}()
 
+	if err := a.bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
+		PublicEventBase: model.NewPublicEventBase(a.run.ID),
+		Target:          a.run.WorkSpec.Target, Interaction: a.run.WorkSpec.Interaction,
+		UserInput: a.run.WorkSpec.Instruction,
+	}); err != nil {
+		e.setStatus(context.Background(), a.run.ID, model.RunFailed)
+		return
+	}
+
 	// 获取 project 锁（同 project 串行）。锁超时 → Run 转 failed（ARCH-RUN-LOCK-005）。
 	release, err := e.locks.Acquire(ctx, a.run.ProjectID, lockTimeout)
 	if err != nil {
-		e.setStatus(ctx, a.run.ID, model.RunFailed)
-		_ = a.bus.Emit(ctx, model.EventRunFailed, workflow.TerminalEvent{
-			Outcome: workflow.StructuredOutcome{
-				Status: workflow.StatusFailed,
-				Code:   "LOCK_TIMEOUT", Message: err.Error(),
+		terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		e.setStatus(terminalCtx, a.run.ID, model.RunFailed)
+		_ = a.bus.Emit(terminalCtx, model.EventRunFinished, model.RunFinishedPayload{
+			PublicEventBase: model.NewPublicEventBase(a.run.ID),
+			Status:          "failed", DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+			Error: &model.PublicError{
+				Code: "LOCK_TIMEOUT", Message: "等待项目执行资源超时，请稍后重试。", Retryable: true,
 			},
 		})
 		return
@@ -112,7 +124,9 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	prompter := &checkpoint{engine: e, runID: a.run.ID, bus: a.bus, queue: a.queue}
 	outcome := execution.Run(ctx, em, cp, prompter)
 
-	e.finish(ctx, a, outcome)
+	terminalCtx, cancelTerminal := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelTerminal()
+	e.finish(terminalCtx, a, outcome)
 }
 
 // finish persists the scheduler status. The workflow normally emits its own
@@ -122,19 +136,35 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 	case workflow.StatusCompleted:
 		e.setStatus(ctx, a.run.ID, model.RunDone)
 		if !a.bus.Terminated() {
-			_ = a.bus.Emit(ctx, model.EventRunCompleted, workflow.TerminalEvent{
-				Outcome: outcome,
+			_ = a.bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{
+				PublicEventBase: model.NewPublicEventBase(a.run.ID),
+				MessageID:       "msg_fallback_" + a.run.ID, Text: "已完成本次任务。",
+			})
+			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
+				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "completed",
+				DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
 			})
 		}
 	case workflow.StatusCanceled:
 		e.setStatus(ctx, a.run.ID, model.RunCanceled)
 		if !a.bus.Terminated() {
-			_ = a.bus.Emit(ctx, model.EventRunCanceled, workflow.TerminalEvent{Outcome: outcome})
+			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
+				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "canceled",
+				DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+			})
 		}
 	default:
 		e.setStatus(ctx, a.run.ID, model.RunFailed)
 		if !a.bus.Terminated() {
-			_ = a.bus.Emit(ctx, model.EventRunFailed, workflow.TerminalEvent{Outcome: outcome})
+			code := outcome.Code
+			if code == "" {
+				code = "RUN_FAILED"
+			}
+			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
+				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "failed",
+				DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+				Error:      &model.PublicError{Code: code, Message: "运行未能完成，请稍后重试。", Retryable: true},
+			})
 		}
 	}
 }
@@ -153,7 +183,7 @@ func (e *Engine) lookup(id string) (*active, bool) {
 }
 
 // InjectInput 注入控制输入（HITL）。仅 running/waiting 接受，否则 ErrRunNotRunning（API-RUN-001）。
-// 带 replyTo 时必须匹配未应答 needs_input，否则 ErrReplyMismatch（API-RUN-003）。
+// 带 replyTo 时必须匹配未应答 question 且通过结构化答案校验。
 func (e *Engine) InjectInput(ctx context.Context, id, content, replyTo string) error {
 	a, ok := e.lookup(id)
 	if !ok {

@@ -98,11 +98,11 @@ describe('App Level Interactions', () => {
             activeRunId: 'r1',
             status: 'running',
             target: { artifact: 'presentation', level: 'slide' },
-            interaction: { intent: 'apply', clarification: 'when_blocked' },
+            interaction: { intent: 'execute' },
             timelineItems: [
-              { id: '1', type: 'markdown', text: 'Hello from Agent', timestamp: Date.now() }
+              { id: '1', type: 'reasoning', messageId: 'm1', text: 'Hello from Agent', timestamp: Date.now() }
             ],
-            pendingInput: null,
+            pendingQuestion: null,
             progress: null,
             eventSourceClose: null,
             plan: null,

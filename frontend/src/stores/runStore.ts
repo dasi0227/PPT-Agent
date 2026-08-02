@@ -2,22 +2,29 @@ import { create } from 'zustand';
 import { APIError } from '../api/client';
 import { runsApi } from '../api/runs';
 import { subscribeRunEvents } from '../api/sse';
+import { threadsApi } from '../api/threads';
 import {
   CreateRunRequest,
-  ExecutionStrategy,
   PlanState,
+  PublicTarget,
   Run,
   RunInteraction,
+  RunProgressStage,
   RunTarget,
   SSEEvent,
 } from '../api/types';
 import { TimelineItem, reducePlan, reduceSSEEvent } from '../features/agent/eventReducer';
+import {
+  hydrateRunFromHistory,
+  type HistoryEntry,
+  type HistorySessionState,
+} from '../features/agent/historyHydrator';
 import { useBlueprintStore } from './blueprintStore';
 import { useProjectStore } from './projectStore';
 
 export type { PlanState } from '../api/types';
 
-export type RunStatus = 'idle' | 'creating' | 'running' | 'done' | 'error' | 'canceled' | 'needs_input';
+export type RunStatus = 'idle' | 'creating' | 'running' | 'waiting' | 'done' | 'error' | 'canceled';
 export type StreamStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
 export interface RunSession {
@@ -28,11 +35,17 @@ export interface RunSession {
   target: RunTarget;
   interaction: RunInteraction;
   timelineItems: TimelineItem[];
-  pendingInput: { id: string; prompt: string; choices?: string[] } | null;
-  progress: { stage: string; current?: number; total?: number } | null;
+  pendingQuestion: { id: string; prompt: string } | null;
+  progress: {
+    stage: RunProgressStage;
+    text: string;
+    target?: PublicTarget;
+    current?: number;
+    total?: number;
+    unit?: string;
+  } | null;
   eventSourceClose: (() => void) | null;
   plan: PlanState | null;
-  strategy?: ExecutionStrategy | null;
   lastEventId?: string;
   processedEventIds?: string[];
 }
@@ -43,13 +56,12 @@ export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   status: 'idle',
   streamStatus: 'idle',
   target: { artifact: 'presentation', level: 'slide' },
-  interaction: { intent: 'apply', clarification: 'when_blocked' },
+  interaction: { intent: 'execute' },
   timelineItems: [],
-  pendingInput: null,
+  pendingQuestion: null,
   progress: null,
   eventSourceClose: null,
   plan: null,
-  strategy: null,
   processedEventIds: [],
 });
 
@@ -118,7 +130,7 @@ function terminalStatus(status: Run['status']): RunStatus {
   if (status === 'done') return 'done';
   if (status === 'failed') return 'error';
   if (status === 'canceled') return 'canceled';
-  if (status === 'waiting') return 'needs_input';
+  if (status === 'waiting') return 'waiting';
   return 'running';
 }
 
@@ -128,13 +140,19 @@ interface RunStoreV2 {
   createRun: (threadId: string, payload: CreateRunRequest, projectId?: string) => Promise<boolean>;
   subscribeRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => void;
   recoverPersistedRuns: () => Promise<void>;
-  replyNeedsInput: (threadId: string, runId: string, replyTo: string, content: string) => Promise<boolean>;
+  answerQuestion: (threadId: string, runId: string, replyTo: string, content: string) => Promise<boolean>;
   cancelRun: (threadId: string, runId: string) => Promise<void>;
   clearRun: (threadId: string) => void;
   closeSessions: (threadIds: string[]) => void;
   rekeySession: (oldId: string, newId: string) => void;
   dropSessions: (threadIds: string[]) => void;
-  hydrateTimeline: (threadId: string, items: TimelineItem[], plan?: PlanState | null, strategy?: ExecutionStrategy | null) => void;
+  hydrateTimeline: (
+    threadId: string,
+    items: TimelineItem[],
+    plan?: PlanState | null,
+    session?: HistorySessionState,
+    lastEventId?: string,
+  ) => void;
 }
 
 export const useRunStore = create<RunStoreV2>((set, get) => {
@@ -153,8 +171,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
   };
 
   const refreshTarget = (session: RunSession, event: SSEEvent) => {
-    if (event.event !== 'run.completed' || !session.projectId) return;
-    const target = event.data.outcome?.target ?? session.target;
+    if (event.event !== 'run.finished' || event.data.status !== 'completed' || !session.projectId) return;
+    const target = session.target;
     if (target.level === 'slide' && target.slide_id) {
       if (target.artifact === 'presentation') {
         void useProjectStore.getState().loadProjectSlides(session.projectId);
@@ -189,12 +207,11 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         projectId: projectId ?? prev.projectId ?? null,
         status: 'creating',
         streamStatus: 'idle',
-        pendingInput: null,
+        pendingQuestion: null,
         target: payload.target,
         interaction: payload.interaction,
         progress: null,
         plan: null,
-        strategy: null,
         eventSourceClose: null,
         processedEventIds: [],
         lastEventId: undefined,
@@ -205,7 +222,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         patchSession(threadId, {
           activeRunId: run.id,
           projectId: run.project_id,
-          status: run.status === 'waiting' ? 'needs_input' : 'running',
+          status: run.status === 'waiting' ? 'waiting' : 'running',
         });
         writePersistedRun({ runId: run.id, threadId, projectId: run.project_id });
         get().subscribeRun(threadId, run.id, undefined, run.project_id);
@@ -217,7 +234,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           streamStatus: 'closed',
           timelineItems: [...prev.timelineItems, {
             id: `create_error_${Date.now()}`,
-            type: 'error',
+            type: 'terminal_notice',
+            status: 'failed',
             message: `${localizedErrorMessage(detail.message, '运行创建失败')}。请检查后重试，输入内容已保留。`,
             technicalMessage: detail.message,
             code: detail.code,
@@ -249,47 +267,42 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           if (event.id && current.processedEventIds?.includes(event.id)) return;
           updateSession(threadId, (prev) => {
             let status = prev.status === 'creating' ? 'running' : prev.status;
-            let pendingInput = prev.pendingInput;
-            let strategy = prev.strategy;
+            let pendingQuestion = prev.pendingQuestion;
             let progress = prev.progress;
             const nextPlan = reducePlan(prev.plan, event);
 
-            if (event.event === 'needs_input') {
-              status = 'needs_input';
-              pendingInput = { id: event.data.id, prompt: event.data.prompt, choices: event.data.choices };
-            } else if (event.event === 'strategy.selected') {
-              strategy = event.data.strategy;
-            } else if (event.event === 'run.completed') {
-              status = 'done';
-              pendingInput = null;
+            if (event.event === 'question.asked') {
+              status = 'waiting';
+              pendingQuestion = { id: event.data.question_id, prompt: event.data.prompt };
               progress = null;
-            } else if (event.event === 'run.failed') {
-              status = 'error';
-              pendingInput = null;
-              progress = null;
-            } else if (event.event === 'run.canceled') {
-              status = 'canceled';
-              pendingInput = null;
-              progress = null;
-            } else if (event.event === 'stage.started') {
-              progress = { stage: String(event.data.stage ?? ''), current: 0, total: 0 };
-            }
-
-            if (nextPlan && progress) {
+            } else if (event.event === 'question.answered') {
+              status = 'running';
+              pendingQuestion = null;
+            } else if (event.event === 'run.progress') {
               progress = {
-                ...progress,
-                current: nextPlan.steps.filter((step) => step.status === 'completed').length,
-                total: nextPlan.steps.length,
+                stage: event.data.stage,
+                text: event.data.text,
+                target: event.data.target,
+                current: event.data.progress?.current,
+                total: event.data.progress?.total,
+                unit: event.data.progress?.unit,
               };
+            } else if (event.event === 'run.finished') {
+              status = event.data.status === 'completed'
+                ? 'done'
+                : event.data.status === 'canceled'
+                  ? 'canceled'
+                  : 'error';
+              pendingQuestion = null;
+              progress = null;
             }
 
             return {
               timelineItems: reduceSSEEvent(prev.timelineItems, event),
               plan: nextPlan,
               status,
-              pendingInput,
+              pendingQuestion,
               progress,
-              strategy,
               lastEventId: event.id || prev.lastEventId,
               processedEventIds: event.id
                 ? [...(prev.processedEventIds ?? []), event.id].slice(-500)
@@ -301,7 +314,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           if (event.id && updated.projectId) {
             writePersistedRun({ runId, threadId, projectId: updated.projectId, lastEventId: event.id });
           }
-          if (event.event === 'run.completed' || event.event === 'run.failed' || event.event === 'run.canceled') {
+          if (event.event === 'run.finished') {
             updated.eventSourceClose?.();
             removePersistedRun(threadId);
             patchSession(threadId, { eventSourceClose: null, streamStatus: 'closed' });
@@ -322,15 +335,32 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         try {
           const run = await runsApi.get(record.runId);
           const status = terminalStatus(run.status);
-          patchSession(record.threadId, {
+          let hydratedItems: TimelineItem[] = [];
+          let hydratedPlan: PlanState | null = null;
+          try {
+            const history = await threadsApi.history(record.threadId);
+            const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
+            hydratedItems = hydrated.items;
+            hydratedPlan = hydrated.plan;
+          } catch {
+            // SSE replay still recovers the active suffix when history is temporarily unavailable.
+          }
+          const pending = [...hydratedItems].reverse().find((item) =>
+            item.type === 'question' && !item.answer);
+          updateSession(record.threadId, (prev) => ({
             activeRunId: run.id,
             projectId: run.project_id,
             status,
-            streamStatus: status === 'running' || status === 'needs_input' ? 'connecting' : 'closed',
+            streamStatus: status === 'running' || status === 'waiting' ? 'connecting' : 'closed',
             target: run.target,
             interaction: run.interaction,
             lastEventId: record.lastEventId,
-          });
+            timelineItems: prev.timelineItems.length > 0 ? prev.timelineItems : hydratedItems,
+            plan: prev.plan ?? hydratedPlan,
+            pendingQuestion: status === 'waiting' && pending?.type === 'question'
+              ? { id: pending.questionId, prompt: pending.prompt }
+              : null,
+          }));
           if (run.status === 'pending' || run.status === 'running' || run.status === 'waiting') {
             get().subscribeRun(record.threadId, run.id, record.lastEventId, run.project_id);
           } else {
@@ -343,9 +373,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             streamStatus: 'closed',
             timelineItems: [...prev.timelineItems, {
               id: `restore_notice_${Date.now()}`,
-              type: 'error',
+              type: 'terminal_notice',
+              status: 'failed',
               message: '未找到刷新前的运行记录，已清理。你可以重新发送指令。',
-              retryable: false,
               timestamp: Date.now(),
             }],
           }));
@@ -353,18 +383,18 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       }));
     },
 
-    replyNeedsInput: async (threadId, runId, replyTo, content) => {
+    answerQuestion: async (threadId, runId, replyTo, content) => {
       try {
         await runsApi.submitInput(runId, { reply_to: replyTo, content });
-        patchSession(threadId, { status: 'running', pendingInput: null });
         return true;
       } catch (error) {
         const detail = errorMessage(error);
         updateSession(threadId, (prev) => ({
-          status: 'needs_input',
+          status: 'waiting',
           timelineItems: [...prev.timelineItems, {
             id: `input_error_${Date.now()}`,
-            type: 'error',
+            type: 'terminal_notice',
+            status: 'failed',
             message: `${localizedErrorMessage(detail.message, '回答提交失败')}。回答尚未提交，请重试。`,
             technicalMessage: detail.message,
             code: detail.code,
@@ -380,20 +410,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     cancelRun: async (threadId, runId) => {
       try {
         await runsApi.cancel(runId);
-        get().sessions[threadId]?.eventSourceClose?.();
-        removePersistedRun(threadId);
-        patchSession(threadId, {
-          status: 'canceled',
-          streamStatus: 'closed',
-          pendingInput: null,
-          eventSourceClose: null,
-        });
       } catch (error) {
         const detail = errorMessage(error);
         updateSession(threadId, (prev) => ({
           timelineItems: [...prev.timelineItems, {
             id: `cancel_error_${Date.now()}`,
-            type: 'error',
+            type: 'terminal_notice',
+            status: 'failed',
             message: `${localizedErrorMessage(detail.message, '停止运行失败')}。运行仍在继续，请再次停止。`,
             technicalMessage: detail.message,
             code: detail.code,
@@ -448,13 +471,18 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       });
     },
 
-    hydrateTimeline: (threadId, items, plan, strategy) => {
+    hydrateTimeline: (threadId, items, plan, session, lastEventId) => {
       const existing = get().sessions[threadId]?.timelineItems ?? [];
       if (existing.length > 0) return;
       patchSession(threadId, {
         timelineItems: items,
         plan: plan ?? null,
-        strategy: strategy ?? null,
+        activeRunId: session?.activeRunId ?? null,
+        status: session?.status ?? 'idle',
+        target: session?.target ?? IDLE_SESSION.target,
+        interaction: session?.interaction ?? IDLE_SESSION.interaction,
+        pendingQuestion: session?.pendingQuestion ?? null,
+        lastEventId,
       });
     },
   };

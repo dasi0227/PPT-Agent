@@ -51,10 +51,11 @@ func NewDeepSeek(cfg DeepSeekConfig) *DeepSeek {
 // ── 线路层类型（OpenAI 兼容） ─────────────────────────────
 
 type wireMessage struct {
-	Role       string         `json:"role"`
-	Content    string         `json:"content"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
-	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
+	Role             string         `json:"role"`
+	Content          string         `json:"content"`
+	ReasoningContent string         `json:"reasoning_content,omitempty"`
+	ToolCallID       string         `json:"tool_call_id,omitempty"`
+	ToolCalls        []wireToolCall `json:"tool_calls,omitempty"`
 }
 
 type wireToolCall struct {
@@ -94,7 +95,10 @@ type wireResponse struct {
 func toWireMessages(msgs []Message) []wireMessage {
 	out := make([]wireMessage, len(msgs))
 	for i, m := range msgs {
-		out[i] = wireMessage{Role: string(m.Role), Content: m.Content, ToolCallID: m.ToolCallID}
+		out[i] = wireMessage{
+			Role: string(m.Role), Content: m.Content,
+			ReasoningContent: m.ReasoningContent, ToolCallID: m.ToolCallID,
+		}
 		if len(m.ToolCalls) > 0 {
 			out[i].ToolCalls = make([]wireToolCall, 0, len(m.ToolCalls))
 			for _, tc := range m.ToolCalls {
@@ -164,7 +168,7 @@ func (d *DeepSeek) CallTool(ctx context.Context, req ToolCallRequest) (ToolCallR
 		return ToolCallResponse{}, fmt.Errorf("%w: empty choices", ErrUnavailable)
 	}
 	msg := resp.Choices[0].Message
-	out := ToolCallResponse{Text: msg.Content}
+	out := ToolCallResponse{Text: msg.Content, ReasoningContent: msg.ReasoningContent}
 	if len(msg.ToolCalls) > 0 {
 		tc := msg.ToolCalls[0]
 		args := map[string]any{}

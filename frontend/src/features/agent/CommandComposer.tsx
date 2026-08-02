@@ -17,9 +17,9 @@ function applyShortcut(raw: string, request: CreateRunRequest): CreateRunRequest
   const instruction = rest.join(' ').trim() || raw;
   switch (command) {
     case '/talk':
-      return { ...request, instruction, interaction: { ...request.interaction, intent: 'consult' } };
+      return { ...request, instruction, interaction: { intent: 'talk' } };
     case '/ask':
-      return { ...request, instruction, interaction: { intent: 'apply', clarification: 'before_apply' } };
+      return { ...request, instruction, interaction: { intent: 'ask' } };
     case '/overview':
       return { ...request, instruction, target: { artifact: 'presentation', level: 'deck' } };
     case '/current':
@@ -42,7 +42,7 @@ export const CommandComposer: React.FC = () => {
   const applyContextDefault = composer.applyContextDefault;
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef(activeProjectId);
-  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'running' || runStatus === 'needs_input';
+  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting';
 
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
   const currentSlide = slides[currentPage];
@@ -67,7 +67,7 @@ export const CommandComposer: React.FC = () => {
     };
     let request: CreateRunRequest = {
       target,
-      interaction: { intent: composer.intent, clarification: composer.clarification },
+      interaction: { intent: composer.intent },
       instruction: raw,
     };
     request = applyShortcut(raw, request);
@@ -115,15 +115,13 @@ export const CommandComposer: React.FC = () => {
         />
         {disabled && activeProjectId && (
           <div id="composer-disabled-reason" className="px-3 pb-1 text-xs text-text-600">
-            {runStatus === 'needs_input' ? '请先回答上方问题，或停止当前运行' : '当前运行结束后可继续输入'}
+            {runStatus === 'waiting' ? '请先回答上方问题' : '当前运行结束后可继续输入'}
           </div>
         )}
         <div className="flex min-w-0 items-center justify-between gap-1 px-3 pb-2">
           <InteractionModeButtons
             intent={composer.intent}
-            clarification={composer.clarification}
             onIntentChange={composer.setIntent}
-            onClarificationChange={composer.setClarification}
             disabled={disabled}
           />
           <div className="flex min-w-0 shrink-0 items-center gap-0.5">

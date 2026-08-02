@@ -79,8 +79,7 @@ CREATE TABLE IF NOT EXISTS runs (
     target_artifact        TEXT NOT NULL CHECK (target_artifact IN ('blueprint','presentation')),
     target_level           TEXT NOT NULL CHECK (target_level IN ('slide','deck')),
     target_slide_id        TEXT,
-    interaction_intent     TEXT NOT NULL CHECK (interaction_intent IN ('apply','consult')),
-    clarification_policy   TEXT NOT NULL CHECK (clarification_policy IN ('when_blocked','before_apply','never')),
+    interaction_intent     TEXT NOT NULL CHECK (interaction_intent IN ('talk','ask','execute')),
     work_spec_json         TEXT NOT NULL,
     status      TEXT    NOT NULL DEFAULT 'pending'
                         CHECK (status IN ('pending','running','waiting','done','failed','canceled')),

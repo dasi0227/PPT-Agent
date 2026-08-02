@@ -3,8 +3,13 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -13,6 +18,8 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
+
+var screenshotIDPattern = regexp.MustCompile(`^shot_[A-Za-z0-9-]{1,128}$`)
 
 type WorkRoot string
 
@@ -23,7 +30,7 @@ type RunService struct {
 	engine    *run.Engine
 	factory   ExecutionFactory
 	assembler *contextengine.ContextAssembler
-	runtime   *workflow.AdaptiveRuntime
+	runtime   *workflow.Runtime
 }
 
 func NewRunService(s store.Store, engine *run.Engine, client llm.Client, _ WorkRoot) *RunService {
@@ -31,7 +38,7 @@ func NewRunService(s store.Store, engine *run.Engine, client llm.Client, _ WorkR
 	return &RunService{
 		store: s, engine: engine,
 		assembler: contextengine.NewContextAssembler(s, registry),
-		runtime:   workflow.NewAdaptiveRuntime(workflow.CognitiveExecutor{Client: client}),
+		runtime:   workflow.NewRuntime(workflow.CognitiveAgent{Client: client}),
 	}
 }
 
@@ -40,21 +47,23 @@ func NewRunServiceWithExecutionFactory(s store.Store, engine *run.Engine, factor
 }
 
 type workflowExecution struct {
-	runtime *workflow.AdaptiveRuntime
+	runtime *workflow.Runtime
 	pack    contextengine.ContextPack
 	project model.Project
 	store   store.Store
 	runID   string
 }
 
-func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitter, _ run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
+func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
 	if r.pack.RefResolver != nil {
 		defer r.pack.RefResolver.CloseRun(r.runID)
 	}
 	committer := workflowCommitter{store: r.store, project: r.project, runID: r.runID}
 	outcome := r.runtime.Run(ctx, workflow.RuntimeInput{
 		RunID: r.runID, ProjectDir: r.project.WorkDir, Context: r.pack,
-		Emitter: emitter, Prompter: prompter, CommitMetadata: committer.Commit,
+		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
+		CommitMetadata: committer.Commit,
+		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
 	})
 	if outcome.Status == workflow.StatusCompleted {
 		memoryStore := contextengine.ThreadMemoryStore{}
@@ -77,9 +86,6 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 	spec := p.WorkSpec
-	if spec.Interaction.Clarification == "" {
-		spec.Interaction.Clarification = model.ClarifyWhenBlocked
-	}
 	if err := spec.Validate(); err != nil {
 		return model.Run{}, err
 	}
@@ -142,6 +148,26 @@ func (svc *RunService) Cancel(ctx context.Context, runID string) error {
 
 func (svc *RunService) GetRun(ctx context.Context, runID string) (model.Run, error) {
 	return svc.store.GetRun(ctx, runID)
+}
+
+func (svc *RunService) GetRenderScreenshot(ctx context.Context, runID, screenshotID string) ([]byte, error) {
+	if !screenshotIDPattern.MatchString(screenshotID) {
+		return nil, ErrScreenshotNotFound
+	}
+	runModel, err := svc.store.GetRun(ctx, runID)
+	if err != nil {
+		return nil, ErrScreenshotNotFound
+	}
+	project, err := svc.store.GetProject(ctx, runModel.ProjectID)
+	if err != nil {
+		return nil, ErrScreenshotNotFound
+	}
+	path := filepath.Join(project.WorkDir, ".runtime", "renders", runID, screenshotID+".png")
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrScreenshotNotFound
+	}
+	return raw, err
 }
 
 func (svc *RunService) Subscribe(ctx context.Context, runID string, afterSeq int64) (<-chan model.Event, func(), error) {

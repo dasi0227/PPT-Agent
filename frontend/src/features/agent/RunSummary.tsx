@@ -3,13 +3,13 @@ import { Loader2, Square } from 'lucide-react';
 import { Button, Badge } from '../../components/ui/primitives';
 import { useRunStore } from '../../stores/runStore';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
-import { runStatusLabels, stageLabels, strategyLabels, targetLabel } from './runtimeLabels';
+import { runStatusLabels, targetLabel } from './runtimeLabels';
 
 export const RunSummary: React.FC = () => {
   const threadId = useActiveThreadId();
   const session = useActiveSession();
   const cancelRun = useRunStore((state) => state.cancelRun);
-  const active = session.status === 'creating' || session.status === 'running' || session.status === 'needs_input';
+  const active = session.status === 'creating' || session.status === 'running' || session.status === 'waiting';
   const show = active || ['done', 'error', 'canceled'].includes(session.status);
   if (!show) return null;
 
@@ -18,8 +18,8 @@ export const RunSummary: React.FC = () => {
   const credibleProgress = total && total > 0 ? `${completed} / ${total}` : null;
   const tone = session.status === 'error'
     ? 'danger'
-    : session.status === 'needs_input'
-      ? 'warning'
+    : session.status === 'waiting'
+      ? 'accent'
       : session.status === 'done'
         ? 'success'
         : session.status === 'canceled'
@@ -45,18 +45,8 @@ export const RunSummary: React.FC = () => {
         )}
       </div>
       <div className="mt-1.5 flex min-w-0 items-center gap-2 text-[11px] text-text-600">
-        {session.strategy && <span>{strategyLabels[session.strategy]}</span>}
-        {session.progress?.stage && (
-          <>
-            <span className="h-3 w-px bg-border-strong" />
-            <span>{stageLabels[session.progress.stage] ?? session.progress.stage}</span>
-          </>
-        )}
         {credibleProgress && (
-          <>
-            <span className="h-3 w-px bg-border-strong" />
-            <span className="font-mono tabular-nums">{credibleProgress}</span>
-          </>
+          <span className="font-mono tabular-nums">{credibleProgress}</span>
         )}
         {session.streamStatus === 'reconnecting' && (
           <span className="ml-auto text-warning">正在恢复连接</span>

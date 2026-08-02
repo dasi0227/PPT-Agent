@@ -1,86 +1,83 @@
 import { describe, expect, it } from 'vitest';
-import { reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
 import type { SSEEvent } from '../../api/types';
+import { reducePlan, reduceSSEEvent } from './eventReducer';
 
-describe('Adaptive Runtime event reducer', () => {
-  it('renders strategy.selected without creating a plan', () => {
-    const event: SSEEvent = {
-      event: 'strategy.selected',
-      data: { strategy: 'direct_action', reason: 'single field', risk: 'low', complexity: 'low' },
-    };
-    const items = reduceSSEEvent([], event);
-    expect(items[0]).toMatchObject({ type: 'strategy_status', strategy: 'direct_action' });
-    expect(reducePlan(null, event)).toBeNull();
-  });
+const base = { schema_version: 1 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
+const event = (name: SSEEvent['event'], data: Record<string, unknown>, id = '1') =>
+  ({ id, event: name, data: { ...base, ...data } } as SSEEvent);
 
-  it('merges tool.called and tool.completed', () => {
-    let items: TimelineItem[] = reduceSSEEvent([], {
-      event: 'tool.called', data: { call_id: 'c1', tool: 'write_staged_slide_blueprint', args: { slide_id: 's1' } },
+describe('public event reducer', () => {
+  it('upserts tool completion into the started row without raw payloads', () => {
+    let state = reduceSSEEvent([], event('tool.started', {
+      call_id: 'c1', tool: 'write_ppt', plan_step_id: 'build',
+      target: { type: 'slide', slide_id: 's1' },
+      display: { label: '生成页面 s1' },
+    }));
+    state = reduceSSEEvent(state, event('tool.completed', {
+      call_id: 'c1', tool: 'write_ppt', status: 'completed',
+      display: { label: '已生成页面 s1', detail: '已写入暂存区' },
+    }, '2'));
+    expect(state).toHaveLength(1);
+    expect(state[0]).toMatchObject({
+      type: 'tool', callId: 'c1', status: 'completed', label: '已生成页面 s1',
     });
-    items = reduceSSEEvent(items, {
-      event: 'tool.completed', data: { call_id: 'c1', ok: true, summary: 'staged' },
+    expect(JSON.stringify(state[0])).not.toContain('args');
+    expect(JSON.stringify(state[0])).not.toContain('observation');
+  });
+
+  it('upserts authoritative question answer and survives replay', () => {
+    let state = reduceSSEEvent([], event('question.asked', {
+      question_id: 'q1', prompt: '选择风格', selection: 'single',
+      options: [{ id: 'tech', label: '克制科技' }], allow_custom: true,
+    }));
+    state = reduceSSEEvent(state, event('question.answered', {
+      question_id: 'q1',
+      answer: { selected_option_ids: ['tech'], custom_text: '' },
+      display_text: '克制科技',
+    }, '2'));
+    expect(state).toHaveLength(1);
+    expect(state[0]).toMatchObject({ type: 'question', displayText: '克制科技' });
+  });
+
+  it('keeps progress and plan outside timeline items', () => {
+    const progress = reduceSSEEvent([], event('run.progress', { stage: 'writing', text: '正在生成页面' }));
+    expect(progress).toEqual([]);
+    const planEvent = event('plan.updated', {
+      plan: { plan_id: 'p1', revision: 1, explanation: '执行', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] },
     });
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ type: 'tool_call', status: 'success', observation: 'staged' });
+    expect(reduceSSEEvent([], planEvent)).toEqual([]);
+    expect(reducePlan(null, planEvent)).toMatchObject({ id: 'p1', revision: 1 });
   });
 
-  it('promotes staged artifact to committed without duplicating it', () => {
-    const artifact = { kind: 'presentation_slide', id: 's1', path: 'slides/s1/index.html' };
-    let items = reduceSSEEvent([], { event: 'artifact.staged', data: { artifact } });
-    items = reduceSSEEvent(items, { event: 'artifact.committed', data: { artifact } });
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ type: 'artifact', delivery: 'final', artifact_id: 's1' });
-  });
-
-  it('renders verification and terminal outcomes', () => {
-    let items = reduceSSEEvent([], {
-      event: 'verification.completed',
-      data: { verifier: 'blueprint', result: { passed: true, issues: [] } },
+  it('ignores stale plan revisions', () => {
+    const revision2 = event('plan.updated', {
+      plan: { plan_id: 'p1', revision: 2, explanation: '新', steps: [{ id: 's1', title: '生成', status: 'completed' }] },
     });
-    items = reduceSSEEvent(items, {
-      event: 'run.completed',
-      data: { outcome: { status: 'completed', strategy: 'direct_action', summary: 'done' } },
+    const revision1 = event('plan.updated', {
+      plan: { plan_id: 'p1', revision: 1, explanation: '旧', steps: [{ id: 's1', title: '生成', status: 'pending' }] },
     });
-    expect(items.map((item) => item.type)).toEqual(['verification_status', 'final_result']);
+    const latest = reducePlan(reducePlan(null, revision2), revision1);
+    expect(latest).toMatchObject({ revision: 2, title: '新' });
   });
 
-  it('does not expose any chain-of-thought event type', () => {
-    const itemTypes: TimelineItem['type'][] = [
-      'markdown', 'tool_call', 'artifact', 'final_result', 'needs_input', 'error',
-      'user_turn', 'context_status', 'strategy_status', 'verification_status',
-    ];
-    expect(itemTypes).not.toContain('thought');
-  });
-});
-
-describe('Adaptive Runtime plan reducer', () => {
-  const planCreated: SSEEvent = {
-    event: 'plan.created',
-    data: {
-      plan: {
-        id: 'plan-1', goal: 'Rebuild slide',
-        steps: [
-          { id: 'analyze', title: 'Analyze', status: 'pending' },
-          { id: 'render', title: 'Render', status: 'pending' },
-        ],
-      },
-    },
-  };
-
-  it('keeps Respond and DirectAction planless', () => {
-    expect(reducePlan(null, { event: 'run.completed', data: { outcome: { strategy: 'respond' } } })).toBeNull();
-    expect(reducePlan(null, { event: 'step.completed', data: { step_id: 'direct-action' } })).toBeNull();
+  it('shows one final message and no completed terminal card', () => {
+    let state = reduceSSEEvent([], event('message.final', {
+      message_id: 'm1', text: '已完成', affected_targets: [{ type: 'slide', slide_id: 's1' }],
+    }));
+    state = reduceSSEEvent(state, event('run.finished', { status: 'completed', duration_ms: 20 }, '2'));
+    expect(state.map((item) => item.type)).toEqual(['final']);
   });
 
-  it('creates and updates Compact/Full plans from canonical events', () => {
-    const plan = reducePlan(null, planCreated);
-    expect(plan?.id).toBe('plan-1');
-    expect(plan?.steps).toHaveLength(2);
-    const running = reducePlan(plan, { event: 'step.started', data: { step_id: 'render' } });
-    expect(running?.steps[1].status).toBe('in_progress');
-    const completed = reducePlan(running, {
-      event: 'step.completed', data: { step_id: 'render', summary: 'rendered' },
-    });
-    expect(completed?.steps[1]).toMatchObject({ status: 'completed', detail: 'rendered' });
+  it('creates one compact notice for failed or canceled terminals', () => {
+    let state = reduceSSEEvent([], event('run.finished', {
+      status: 'failed', duration_ms: 20,
+      error: { code: 'RENDER_FAILED', message: '页面渲染未通过', retryable: true },
+    }));
+    state = reduceSSEEvent(state, event('run.finished', {
+      status: 'failed', duration_ms: 20,
+      error: { code: 'RENDER_FAILED', message: '页面渲染未通过', retryable: true },
+    }, '2'));
+    expect(state).toHaveLength(1);
+    expect(state[0]).toMatchObject({ type: 'terminal_notice', status: 'failed' });
   });
 });

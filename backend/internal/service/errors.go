@@ -13,3 +13,5 @@ var ErrInvalidProject = errors.New("service: invalid project")
 var ErrRunActive = errors.New("service: project has an active run")
 
 var ErrRunTargetUnsupported = errors.New("service: run target unsupported")
+
+var ErrScreenshotNotFound = errors.New("service: render screenshot not found")

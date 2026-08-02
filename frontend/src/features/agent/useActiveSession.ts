@@ -17,6 +17,7 @@ export function useActiveThreadId(): string | null {
 // 副作用：在 threadId 变化时按需 replay 后端 history（仅当前端 timelineItems 为空且非草稿）。
 export function useActiveSession(): RunSession {
   const threadId = useActiveThreadId();
+  const activeProjectId = useProjectStore((s) => s.activeProjectId);
   const sessions = useRunStore((s) => s.sessions);
 
   useEffect(() => {
@@ -28,12 +29,28 @@ export function useActiveSession(): RunSession {
       .then((entries) => {
         if (!entries || entries.length === 0) return;
         const hydrated = hydrateRunFromHistory(entries as unknown as HistoryEntry[]);
-        useRunStore.getState().hydrateTimeline(threadId, hydrated.items, hydrated.plan, hydrated.strategy);
+        const runStore = useRunStore.getState();
+        runStore.hydrateTimeline(
+          threadId,
+          hydrated.items,
+          hydrated.plan,
+          hydrated.session,
+          hydrated.lastEventId,
+        );
+        if ((hydrated.session.status === 'running' || hydrated.session.status === 'waiting')
+          && hydrated.session.activeRunId) {
+          runStore.subscribeRun(
+            threadId,
+            hydrated.session.activeRunId,
+            hydrated.lastEventId,
+            activeProjectId ?? undefined,
+          );
+        }
       })
       .catch(() => {
         // 历史记录失败不覆盖当前内存会话；用户仍可继续发送新指令。
       });
-  }, [threadId]);
+  }, [activeProjectId, threadId]);
 
   if (!threadId) return IDLE_SESSION;
   return sessions[threadId] ?? IDLE_SESSION;

@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -86,13 +87,19 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	store := newMemStore()
 	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
 	execution := scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
-		emitter.Emit(model.EventRunStarted, map[string]any{"user_input": "explain"})
-		emitter.Emit(model.EventStrategySelected, map[string]any{"strategy": workflow.StrategyRespond})
-		outcome := workflow.StructuredOutcome{Status: workflow.StatusCompleted, Strategy: workflow.StrategyRespond}
-		emitter.Emit(model.EventRunCompleted, workflow.TerminalEvent{Outcome: outcome})
+		emitter.Emit(model.EventMessageReasoning, model.MessageReasoningPayload{
+			PublicEventBase: model.NewPublicEventBase("r1"), MessageID: "m1", Text: "先读取当前内容。",
+		})
+		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
+			PublicEventBase: model.NewPublicEventBase("r1"), MessageID: "m2", Text: "分析完成。",
+		})
+		emitter.Emit(model.EventRunFinished, model.RunFinishedPayload{
+			PublicEventBase: model.NewPublicEventBase("r1"), Status: "completed", DurationMS: 10,
+		})
+		outcome := workflow.StructuredOutcome{Status: workflow.StatusCompleted, Strategy: workflow.StrategyChat}
 		return outcome
 	})
-	run, err := engine.Start(context.Background(), model.Run{ID: "r1", ThreadID: "t1", ProjectID: "p1"}, execution)
+	run, err := engine.Start(context.Background(), testRun("r1"), execution)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +108,7 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 3 {
+	if len(events) != 4 {
 		t.Fatalf("events=%+v", events)
 	}
 	for index, event := range events {
@@ -127,7 +134,10 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	for event := range replayed {
 		got = append(got, event)
 	}
-	if len(got) != 2 || got[0].Type != model.EventStrategySelected || got[1].Type != model.EventRunCompleted {
+	if len(got) != 3 ||
+		got[0].Type != model.EventMessageReasoning ||
+		got[1].Type != model.EventMessageFinal ||
+		got[2].Type != model.EventRunFinished {
 		t.Fatalf("replay=%+v", got)
 	}
 }
@@ -139,9 +149,9 @@ func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
 	execution := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
 		close(started)
 		<-ctx.Done()
-		return workflow.StructuredOutcome{Status: workflow.StatusCanceled, Code: workflow.CodeWorkflowCanceled}
+		return workflow.StructuredOutcome{Status: workflow.StatusCanceled, Code: workflow.CodeCanceled}
 	})
-	if _, err := engine.Start(context.Background(), model.Run{ID: "cancel", ProjectID: "p1"}, execution); err != nil {
+	if _, err := engine.Start(context.Background(), testRun("cancel"), execution); err != nil {
 		t.Fatal(err)
 	}
 	<-started
@@ -150,8 +160,77 @@ func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
 	}
 	waitRunStatus(t, store, "cancel", model.RunCanceled)
 	events, _ := store.EventsSince(context.Background(), "cancel", 0)
-	if len(events) != 1 || events[0].Type != model.EventRunCanceled {
+	if len(events) != 2 ||
+		events[0].Type != model.EventRunStarted ||
+		events[1].Type != model.EventRunFinished {
 		t.Fatalf("events=%+v", events)
+	}
+}
+
+func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
+	store := newMemStore()
+	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	asking := make(chan struct{})
+	execution := scriptRunner(func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
+		close(asking)
+		answer, display, err := prompter.Ask(ctx, model.QuestionAskedPayload{
+			PublicEventBase: model.NewPublicEventBase("question"),
+			QuestionID:      "q1", Prompt: "选择方向", Selection: "single",
+			Options:     []model.QuestionOption{{ID: "tech", Label: "克制科技"}},
+			AllowCustom: true,
+		})
+		if err != nil || len(answer.SelectedOptionIDs) != 1 || display != "克制科技" {
+			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_ANSWER", Message: "answer failed"}
+		}
+		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
+			PublicEventBase: model.NewPublicEventBase("question"), MessageID: "m1", Text: "已继续完成。",
+		})
+		emitter.Emit(model.EventRunFinished, model.RunFinishedPayload{
+			PublicEventBase: model.NewPublicEventBase("question"), Status: "completed", DurationMS: 10,
+		})
+		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
+	})
+	if _, err := engine.Start(context.Background(), testRun("question"), execution); err != nil {
+		t.Fatal(err)
+	}
+	<-asking
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if store.status("question") == model.RunWaiting {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := engine.InjectInput(context.Background(), "question", `{"selected_option_ids":["missing"],"custom_text":""}`, "q1"); !errors.Is(err, ErrReplyMismatch) {
+		t.Fatalf("invalid answer err=%v", err)
+	}
+	if err := engine.InjectInput(context.Background(), "question", `{"selected_option_ids":["tech"],"custom_text":""}`, "q1"); err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, store, "question", model.RunDone)
+	events, _ := store.EventsSince(context.Background(), "question", 0)
+	var asked, answered int
+	for _, event := range events {
+		if event.Type == model.EventQuestionAsked {
+			asked++
+		}
+		if event.Type == model.EventQuestionAnswered {
+			answered++
+		}
+	}
+	if asked != 1 || answered != 1 {
+		t.Fatalf("events=%+v", events)
+	}
+}
+
+func testRun(id string) model.Run {
+	return model.Run{
+		ID: id, ThreadID: "t1", ProjectID: "p1",
+		WorkSpec: model.WorkSpec{
+			Instruction: "test",
+			Target:      model.RunTarget{Artifact: model.ArtifactPresentation, Level: model.TargetDeck},
+			Interaction: model.RunInteraction{Intent: model.IntentExecute},
+		},
 	}
 }
 

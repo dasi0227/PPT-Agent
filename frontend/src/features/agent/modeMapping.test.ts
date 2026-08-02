@@ -7,18 +7,18 @@ const slide = { id: 'stable-slide', project_id: 'p1', position: 0, layout: 'cont
 describe('createTargetedRun', () => {
   it('resolves the current page to a stable slide id', () => {
     expect(createTargetedRun({
-      artifact: 'presentation', level: 'slide', intent: 'apply', instruction: 'revise',
+      artifact: 'presentation', level: 'slide', intent: 'execute', instruction: 'revise',
       slides: [slide], currentPage: 0,
     })).toEqual({
       target: { artifact: 'presentation', level: 'slide', slide_id: 'stable-slide' },
-      interaction: { intent: 'apply', clarification: 'when_blocked' },
+      interaction: { intent: 'execute' },
       instruction: 'revise',
     });
   });
 
   it('falls back to deck when no page exists', () => {
     expect(createTargetedRun({
-      artifact: 'blueprint', level: 'slide', intent: 'consult', instruction: 'advise',
+      artifact: 'blueprint', level: 'slide', intent: 'talk', instruction: 'advise',
       slides: [], currentPage: 0,
     }).target).toEqual({ artifact: 'blueprint', level: 'deck' });
   });
@@ -26,6 +26,6 @@ describe('createTargetedRun', () => {
   it.each([
     ['blueprint', 'deck'], ['blueprint', 'slide'], ['presentation', 'deck'], ['presentation', 'slide'],
   ] as const)('supports %s/%s', (artifact, level) => {
-    expect(createTargetedRun({ artifact, level, intent: 'apply', instruction: 'go', slides: [slide], currentPage: 0 }).target.artifact).toBe(artifact);
+    expect(createTargetedRun({ artifact, level, intent: 'execute', instruction: 'go', slides: [slide], currentPage: 0 }).target.artifact).toBe(artifact);
   });
 });

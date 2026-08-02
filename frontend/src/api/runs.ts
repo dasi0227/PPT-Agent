@@ -1,5 +1,5 @@
 import { fetchClient } from './client';
-import { Run, CreateRunRequest, NeedsInputPayload } from './types';
+import { Run, CreateRunRequest, RunInputPayload } from './types';
 
 export const runsApi = {
   get: (runId: string) => fetchClient<Run>(`/runs/${runId}`),
@@ -7,7 +7,7 @@ export const runsApi = {
     method: 'POST',
     body: JSON.stringify(payload)
   }),
-  submitInput: (runId: string, payload: NeedsInputPayload) => fetchClient<void>(`/runs/${runId}/input`, {
+  submitInput: (runId: string, payload: RunInputPayload) => fetchClient<void>(`/runs/${runId}/input`, {
     method: 'POST',
     body: JSON.stringify(payload)
   }),

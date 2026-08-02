@@ -31,13 +31,13 @@ describe('CommandComposer', () => {
           t1: {
             activeRunId: null, status: 'idle',
             target: { artifact: 'presentation', level: 'slide' },
-            interaction: { intent: 'apply', clarification: 'when_blocked' },
-            timelineItems: [], pendingInput: null, progress: null, eventSourceClose: null, plan: null,
+            interaction: { intent: 'execute' },
+            timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null,
           },
         },
       });
       useComposerStore.setState({
-        artifact: 'presentation', level: 'slide', intent: 'apply', clarification: 'when_blocked', userTouchedTarget: false,
+        artifact: 'presentation', level: 'slide', intent: 'execute', userTouchedTarget: false,
       });
       useDeckStore.setState({ currentPage: 0 });
     });
@@ -55,7 +55,7 @@ describe('CommandComposer', () => {
 
     await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', {
       target: { artifact: 'presentation', level: 'slide', slide_id: 'stable-1' },
-      interaction: { intent: 'apply', clarification: 'when_blocked' },
+      interaction: { intent: 'execute' },
       instruction: '调整当前页',
     }, 'p1'));
   });
@@ -66,18 +66,18 @@ describe('CommandComposer', () => {
     const ask = screen.getByRole('button', { name: '询问' });
 
     await act(async () => fireEvent.click(talk));
-    expect(useComposerStore.getState()).toMatchObject({ intent: 'consult', clarification: 'when_blocked' });
+    expect(useComposerStore.getState()).toMatchObject({ intent: 'talk' });
     expect(talk).toHaveAttribute('aria-pressed', 'true');
     expect(ask).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '输入你的想法与目标');
 
     await act(async () => fireEvent.click(ask));
-    expect(useComposerStore.getState()).toMatchObject({ intent: 'apply', clarification: 'before_apply' });
+    expect(useComposerStore.getState()).toMatchObject({ intent: 'ask' });
     expect(talk).toHaveAttribute('aria-pressed', 'false');
     expect(ask).toHaveAttribute('aria-pressed', 'true');
 
     await act(async () => fireEvent.click(ask));
-    expect(useComposerStore.getState()).toMatchObject({ intent: 'apply', clarification: 'when_blocked' });
+    expect(useComposerStore.getState()).toMatchObject({ intent: 'execute' });
     expect(ask).toHaveAttribute('aria-pressed', 'false');
   });
 
@@ -88,14 +88,14 @@ describe('CommandComposer', () => {
     fireEvent.change(textarea, { target: { value: '/talk 给我建议' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
-      interaction: { intent: 'consult', clarification: 'when_blocked' },
+      interaction: { intent: 'talk' },
       instruction: '给我建议',
     }), 'p1'));
 
     fireEvent.change(textarea, { target: { value: '/ask 先分析方案' } });
     fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
     await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
-      interaction: { intent: 'apply', clarification: 'before_apply' },
+      interaction: { intent: 'ask' },
       instruction: '先分析方案',
     }), 'p1'));
   });

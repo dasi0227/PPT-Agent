@@ -91,6 +91,20 @@ func (h *RunHandler) GetRun(c *gin.Context) {
 	c.JSON(http.StatusOK, toRunResponse(r))
 }
 
+func (h *RunHandler) Screenshot(c *gin.Context) {
+	raw, err := h.svc.GetRenderScreenshot(c.Request.Context(), c.Param("id"), c.Param("screenshot_id"))
+	if err != nil {
+		if errors.Is(err, service.ErrScreenshotNotFound) {
+			AbortWithError(c, ErrNotFound("render screenshot not found"))
+			return
+		}
+		AbortWithError(c, ErrInternal(err.Error()))
+		return
+	}
+	c.Header("Cache-Control", "private, max-age=31536000, immutable")
+	c.Data(http.StatusOK, "image/png", raw)
+}
+
 func handleCreateRunError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, run.ErrRunNotFound):
@@ -169,7 +183,7 @@ func (h *RunHandler) Input(c *gin.Context) {
 	case errors.Is(err, run.ErrRunNotRunning):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_NOT_RUNNING", Message: "run is not running"})
 	case errors.Is(err, run.ErrReplyMismatch):
-		AbortWithError(c, ErrConflict("reply_to does not match a pending needs_input"))
+		AbortWithError(c, ErrConflict("reply_to or answer does not match the pending question"))
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}

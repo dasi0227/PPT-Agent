@@ -13,7 +13,7 @@ import (
 func activeRunSpec() model.WorkSpec {
 	return model.WorkSpec{
 		Target:      model.RunTarget{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck},
-		Interaction: model.RunInteraction{Intent: model.IntentApply, Clarification: model.ClarifyWhenBlocked},
+		Interaction: model.RunInteraction{Intent: model.IntentExecute},
 		Instruction: "test",
 	}
 }

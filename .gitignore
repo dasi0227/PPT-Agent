@@ -1,6 +1,8 @@
 # 构建产物与本地状态
 /dist
 /node_modules
+**/node_modules/
+**/dist/
 
 # Go
 /server
@@ -9,6 +11,7 @@
 # 运行时工作目录与数据库
 /.ppt-workspace
 /.run
+**/.runtime/
 /.superpowers
 *.db
 *.db-shm
