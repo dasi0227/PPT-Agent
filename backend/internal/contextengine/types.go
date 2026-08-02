@@ -3,8 +3,8 @@ package contextengine
 import (
 	"encoding/json"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 const SchemaVersion = "1.0"
@@ -12,8 +12,8 @@ const SchemaVersion = "1.0"
 type ProfileID string
 
 const (
-	ProfileBlueprintDeck     ProfileID = "blueprint/deck"
-	ProfileBlueprintSlide    ProfileID = "blueprint/slide"
+	ProfileSpecDeck          ProfileID = "spec/deck"
+	ProfileSpecSlide         ProfileID = "spec/slide"
 	ProfilePresentationDeck  ProfileID = "presentation/deck"
 	ProfilePresentationSlide ProfileID = "presentation/slide"
 )
@@ -21,16 +21,16 @@ const (
 type SegmentKind string
 
 const (
-	SegmentPolicy       SegmentKind = "policy"
-	SegmentWorkSpec     SegmentKind = "work_spec"
-	SegmentDeck         SegmentKind = "deck"
-	SegmentTarget       SegmentKind = "target_artifact"
-	SegmentRelated      SegmentKind = "related_slides"
-	SegmentDesign       SegmentKind = "design"
-	SegmentPresentation SegmentKind = "presentation"
-	SegmentAssets       SegmentKind = "assets"
-	SegmentMemory       SegmentKind = "thread_memory"
-	SegmentRecentTurns  SegmentKind = "recent_turns"
+	SegmentPolicy      SegmentKind = "policy"
+	SegmentWorkSpec    SegmentKind = "work_spec"
+	SegmentOutline     SegmentKind = "outline"
+	SegmentTarget      SegmentKind = "target_artifact"
+	SegmentRelated     SegmentKind = "related_slides"
+	SegmentDesign      SegmentKind = "design"
+	SegmentSlideHTML   SegmentKind = "slide_html"
+	SegmentAssets      SegmentKind = "assets"
+	SegmentMemory      SegmentKind = "thread_memory"
+	SegmentRecentTurns SegmentKind = "recent_turns"
 )
 
 type DetailLevel string
@@ -50,8 +50,8 @@ type TokenBudget struct {
 
 func DefaultBudget() TokenBudget {
 	return TokenBudget{ContextWindow: 32768, InputLimit: 20000, OutputReserve: 8000, SegmentCaps: map[SegmentKind]int{
-		SegmentPolicy: 3000, SegmentWorkSpec: 1200, SegmentDeck: 3000, SegmentTarget: 6000,
-		SegmentRelated: 2400, SegmentDesign: 3000, SegmentPresentation: 6000,
+		SegmentPolicy: 3000, SegmentWorkSpec: 1200, SegmentOutline: 3000, SegmentTarget: 6000,
+		SegmentRelated: 2400, SegmentDesign: 3000, SegmentSlideHTML: 6000,
 		SegmentAssets: 1800, SegmentMemory: 2000, SegmentRecentTurns: 1200,
 	}}
 }
@@ -69,9 +69,9 @@ type ProjectContext struct {
 	Title string `json:"title"`
 }
 
-type DeckContext struct {
-	Deck      blueprint.Deck `json:"deck"`
-	Summaries []SlideSummary `json:"slide_summaries"`
+type OutlineContext struct {
+	Outline   pptspec.Outline `json:"outline"`
+	Summaries []SlideSummary  `json:"slide_summaries"`
 }
 
 type SlideSummary struct {
@@ -85,20 +85,20 @@ type SlideSummary struct {
 }
 
 type TargetContext struct {
-	Artifact            model.Artifact             `json:"artifact"`
-	Level               model.TargetLevel          `json:"level"`
-	Slide               *blueprint.Slide           `json:"slide,omitempty"`
-	Materialization     *blueprint.Materialization `json:"materialization,omitempty"`
-	PresentationSummary *HTMLSummary               `json:"presentation_summary,omitempty"`
-	PresentationHTML    string                     `json:"presentation_html,omitempty"`
-	PresentationRef     *ContextRef                `json:"presentation_ref,omitempty"`
+	Artifact         model.Artifact           `json:"artifact"`
+	Level            model.TargetLevel        `json:"level"`
+	SlideSpec        *pptspec.SlideSpec       `json:"slide_spec,omitempty"`
+	Materialization  *pptspec.Materialization `json:"materialization,omitempty"`
+	SlideHTMLSummary *HTMLSummary             `json:"slide_html_summary,omitempty"`
+	SlideHTML        string                   `json:"slide_html,omitempty"`
+	SlideHTMLRef     *ContextRef              `json:"slide_html_ref,omitempty"`
 }
 
 type DesignContext struct {
-	Spec *blueprint.DesignSpec `json:"spec,omitempty"`
+	Design *pptspec.Design `json:"design,omitempty"`
 }
 
-type PresentationContext struct {
+type SlideHTMLContext struct {
 	Summaries map[string]HTMLSummary `json:"summaries"`
 }
 
@@ -118,11 +118,11 @@ type RecentTurn struct {
 }
 
 type RevisionRefs struct {
-	Deck          int            `json:"deck"`
-	Design        int            `json:"design"`
-	Slides        map[string]int `json:"slides"`
-	Presentations map[string]int `json:"presentations"`
-	ThreadMemory  int            `json:"thread_memory"`
+	Outline      int            `json:"outline"`
+	Design       int            `json:"design"`
+	SlideSpecs   map[string]int `json:"slide_specs"`
+	SlideHTML    map[string]int `json:"slide_html"`
+	ThreadMemory int            `json:"thread_memory"`
 }
 
 type ContextPack struct {
@@ -130,11 +130,11 @@ type ContextPack struct {
 	Profile       ProfileID           `json:"profile"`
 	WorkSpec      model.WorkSpec      `json:"work_spec"`
 	Project       ProjectContext      `json:"project"`
-	Deck          DeckContext         `json:"deck"`
+	Outline       OutlineContext      `json:"outline"`
 	Target        TargetContext       `json:"target"`
 	RelatedSlides []SlideSummary      `json:"related_slides"`
 	Design        DesignContext       `json:"design"`
-	Presentation  PresentationContext `json:"presentation"`
+	SlideHTML     SlideHTMLContext    `json:"slide_html"`
 	Assets        []AssetCandidate    `json:"assets"`
 	Memory        ThreadMemory        `json:"memory"`
 	RecentTurns   []RecentTurn        `json:"recent_turns"`

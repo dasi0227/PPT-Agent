@@ -6,13 +6,13 @@ func TestSlidePaths(t *testing.T) {
 	if SlideDir("abc") != "slides/abc" {
 		t.Fatal(SlideDir("abc"))
 	}
-	if SlideJSONPath("abc") != "slides/abc/slide.json" {
-		t.Fatal(SlideJSONPath("abc"))
+	if SlideSpecPath("abc") != "slides/abc/spec.json" {
+		t.Fatal(SlideSpecPath("abc"))
 	}
 	if SlideHTMLPath("abc") != "slides/abc/index.html" {
 		t.Fatal(SlideHTMLPath("abc"))
 	}
-	if SlideVersionSnapshot("abc", 2) != "versions/presentation-slide-abc/v2.html" {
-		t.Fatal(SlideVersionSnapshot("abc", 2))
+	if SlideHTMLVersionSnapshot("abc", 2) != "versions/slide-html-abc/v2.html" {
+		t.Fatal(SlideHTMLVersionSnapshot("abc", 2))
 	}
 }

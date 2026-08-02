@@ -19,7 +19,7 @@ import {
   type HistoryEntry,
   type HistorySessionState,
 } from '../features/agent/historyHydrator';
-import { useBlueprintStore } from './blueprintStore';
+import { useSpecStore } from './specStore';
 import { useProjectStore } from './projectStore';
 
 export type { PlanState } from '../api/types';
@@ -177,13 +177,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       if (target.artifact === 'presentation') {
         void useProjectStore.getState().loadProjectSlides(session.projectId);
       }
-      void useBlueprintStore.getState().refreshSlide(session.projectId, target.slide_id);
+      void useSpecStore.getState().refreshSlide(session.projectId, target.slide_id);
       return;
     }
     if (target.artifact === 'presentation') {
       void useProjectStore.getState().loadProjectSlides(session.projectId);
     }
-    void useBlueprintStore.getState().loadProject(session.projectId);
+    void useSpecStore.getState().loadProject(session.projectId);
   };
 
   return {

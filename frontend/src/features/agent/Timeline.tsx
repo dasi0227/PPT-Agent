@@ -83,7 +83,7 @@ export const Timeline: React.FC = () => {
             <div className="max-w-[88%] rounded-[10px] border border-border bg-panel-muted px-3 py-2">
               {item.target && (
                 <div className="mb-1 text-[10px] font-medium text-text-400">
-                  {targetLabel(item.target.artifact as 'blueprint' | 'presentation', item.target.level as 'slide' | 'deck')}
+                  {targetLabel(item.target.artifact as 'spec' | 'presentation', item.target.level as 'slide' | 'deck')}
                 </div>
               )}
               <MarkdownMessage content={item.text} />

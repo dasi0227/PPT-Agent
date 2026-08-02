@@ -45,7 +45,7 @@ func (StrategyRouter) Decide(pack contextengine.ContextPack) StrategyDecision {
 		}
 	}
 
-	slideCount := len(pack.Deck.Deck.SlideOrder)
+	slideCount := len(pack.Outline.Outline.SlideOrder)
 	empty := slideCount == 0
 	impact := 1
 	if spec.Target.Level == model.TargetDeck {

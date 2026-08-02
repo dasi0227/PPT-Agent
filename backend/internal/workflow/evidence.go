@@ -7,13 +7,25 @@ import (
 )
 
 type Evidence struct {
-	ID         string         `json:"id"`
-	Kind       string         `json:"kind"`
-	Target     TargetRef      `json:"target"`
-	SourceHash string         `json:"source_hash"`
-	ProducedAt int64          `json:"produced_at"`
-	Fresh      bool           `json:"fresh"`
-	Data       map[string]any `json:"data,omitempty"`
+	ID              string                `json:"id"`
+	Kind            string                `json:"kind"`
+	Target          Resource              `json:"target"`
+	SourceHash      string                `json:"source_hash"`
+	ProducedAt      int64                 `json:"produced_at"`
+	Fresh           bool                  `json:"fresh"`
+	Data            map[string]any        `json:"data,omitempty"`
+	Materialization *MaterializationProof `json:"-"`
+}
+
+// MaterializationProof is runtime-only evidence that a successful render used
+// exactly these persisted inputs. It is never projected into public events.
+type MaterializationProof struct {
+	SlideID               string
+	HTMLRevision          int
+	SourceOutlineRevision int
+	SourceSpecRevision    int
+	SourceDesignRevision  int
+	SourceHash            string
 }
 
 type EvidenceLedger struct {
@@ -38,7 +50,7 @@ func (l *EvidenceLedger) Record(entry Evidence) Evidence {
 	return entry
 }
 
-func (l *EvidenceLedger) Invalidate(target TargetRef) {
+func (l *EvidenceLedger) Invalidate(target Resource) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	changed := false
@@ -63,7 +75,7 @@ func (l *EvidenceLedger) Entries(_ ChangeSet) []Evidence {
 	return out
 }
 
-func (l *EvidenceLedger) HasFresh(target TargetRef, sourceHash, kind string) bool {
+func (l *EvidenceLedger) HasFresh(target Resource, sourceHash, kind string) bool {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	for index := len(l.entries) - 1; index >= 0; index-- {
@@ -73,6 +85,23 @@ func (l *EvidenceLedger) HasFresh(target TargetRef, sourceHash, kind string) boo
 		}
 	}
 	return false
+}
+
+func (l *EvidenceLedger) FreshMaterializationProof(target Resource, sourceHash string) (MaterializationProof, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	for index := len(l.entries) - 1; index >= 0; index-- {
+		entry := l.entries[index]
+		if !entry.Fresh || entry.Kind != "render" || entry.Target.Key() != target.Key() ||
+			entry.SourceHash != sourceHash || entry.Materialization == nil {
+			continue
+		}
+		proof := *entry.Materialization
+		if proof.SlideID == target.SlideID && proof.SourceHash == sourceHash {
+			return proof, true
+		}
+	}
+	return MaterializationProof{}, false
 }
 
 func (l *EvidenceLedger) Version() int64 {

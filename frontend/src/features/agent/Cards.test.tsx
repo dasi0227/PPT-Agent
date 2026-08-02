@@ -22,6 +22,15 @@ describe('public timeline components', () => {
     expect(screen.queryByText(/args|observation|技术详情/)).toBeNull();
   });
 
+  it('uses the product term 设计稿 for tool labels supplied by the service', () => {
+    render(<ToolActivityRow item={{
+      id: 'r:tool:c2', type: 'tool', runId: 'r', callId: 'c2',
+      tool: 'read_ppt', label: '已读取全局蓝图', status: 'completed', timestamp: 0,
+    }} />);
+    expect(screen.getByText('已读取全局设计稿')).toBeInTheDocument();
+    expect(screen.queryByText('已读取全局蓝图')).toBeNull();
+  });
+
   it('renders only controlled render preview URLs and warnings', () => {
     useProjectStore.setState({
       activeProjectId: 'p1',
@@ -34,15 +43,18 @@ describe('public timeline components', () => {
     });
     render(<ToolActivityRow item={{
       id: 'r:tool:c1', type: 'tool', runId: 'r', callId: 'c1',
-      tool: 'render_slide', label: '第 3 页渲染通过', status: 'completed', timestamp: 0,
+      tool: 'render_slide', label: '已检查页面 slide-03布局', status: 'completed', timestamp: 0,
+      target: { type: 'slide', slide_id: 'slide-03', part: 'html' },
       preview: { slide_id: 'slide-03', image_url: '/api/v1/runs/r/screenshots/shot-1', warnings: ['标题拥挤'] },
     }} />);
-    expect(screen.getByAltText('slide-03 渲染预览')).toHaveAttribute(
+    expect(screen.getByText('已检查第 2 页布局')).toBeInTheDocument();
+    expect(screen.getByAltText('第 2 页渲染预览')).toHaveAttribute(
       'src',
       '/api/v1/runs/r/screenshots/shot-1',
     );
+    expect(screen.getByText('第 2 页')).toBeInTheDocument();
     expect(screen.getByText('1 项布局提示')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '在工作区查看 slide-03' }));
+    fireEvent.click(screen.getByRole('button', { name: '在工作区查看 第 2 页' }));
     expect(useDeckStore.getState().currentPage).toBe(1);
   });
 
@@ -60,7 +72,11 @@ describe('public timeline components', () => {
   it('renders final as an ordinary agent message with affected target footer', () => {
     render(<FinalMessage item={{
       id: 'f1', type: 'final', messageId: 'm1', text: '**整份演示文稿已完成**',
-      affectedTargets: [{ type: 'global' }, { type: 'slide', slide_id: 's1' }],
+      affectedTargets: [
+        { type: 'deck', part: 'design' },
+        { type: 'slide', slide_id: 's1', part: 'spec' },
+        { type: 'slide', slide_id: 's1', part: 'html' },
+      ],
       timestamp: 0,
     }} />);
     expect(screen.getByText('整份演示文稿已完成')).toBeInTheDocument();

@@ -1,8 +1,8 @@
-package blueprint
+package spec
 
-const SchemaVersion = "2.0"
+const SchemaVersion = "3.0"
 
-type Deck struct {
+type Outline struct {
 	SchemaVersion string    `json:"schema_version"`
 	Revision      int       `json:"revision"`
 	ProjectID     string    `json:"project_id"`
@@ -31,20 +31,22 @@ type Subsection struct {
 	Title  string `json:"title"`
 }
 
-type Slide struct {
-	SchemaVersion string       `json:"schema_version"`
-	Revision      int          `json:"revision"`
-	SlideID       string       `json:"slide_id"`
-	SectionID     string       `json:"section_id"`
-	SubsectionID  string       `json:"subsection_id,omitempty"`
-	Role          string       `json:"role"`
-	Title         string       `json:"title"`
-	KeyMessage    string       `json:"key_message"`
-	Content       Content      `json:"content"`
-	VisualIntent  VisualIntent `json:"visual_intent"`
-	SpeakerNotes  string       `json:"speaker_notes"`
-	CreatedAt     int64        `json:"created_at"`
-	UpdatedAt     int64        `json:"updated_at"`
+type SlideSpec struct {
+	SchemaVersion         string       `json:"schema_version"`
+	Revision              int          `json:"revision"`
+	ProjectID             string       `json:"project_id"`
+	SlideID               string       `json:"slide_id"`
+	SourceOutlineRevision int          `json:"source_outline_revision"`
+	SectionID             string       `json:"section_id"`
+	SubsectionID          string       `json:"subsection_id,omitempty"`
+	Role                  string       `json:"role"`
+	Title                 string       `json:"title"`
+	KeyMessage            string       `json:"key_message"`
+	Content               Content      `json:"content"`
+	VisualIntent          VisualIntent `json:"visual_intent"`
+	SpeakerNotes          string       `json:"speaker_notes"`
+	CreatedAt             int64        `json:"created_at"`
+	UpdatedAt             int64        `json:"updated_at"`
 }
 
 type Content struct {
@@ -58,9 +60,10 @@ type VisualIntent struct {
 	AssetQueries []string `json:"asset_queries"`
 }
 
-type DesignSpec struct {
+type Design struct {
 	SchemaVersion string         `json:"schema_version"`
 	Revision      int            `json:"revision"`
+	ProjectID     string         `json:"project_id"`
 	Canvas        CanvasSpec     `json:"canvas"`
 	Palette       []string       `json:"palette"`
 	Typography    TypographySpec `json:"typography"`
@@ -70,6 +73,8 @@ type DesignSpec struct {
 	LayoutSystem  LayoutSystem   `json:"layout_system"`
 	Signature     string         `json:"signature"`
 	Motion        MotionSpec     `json:"motion"`
+	CreatedAt     int64          `json:"created_at"`
+	UpdatedAt     int64          `json:"updated_at"`
 }
 
 type CanvasSpec struct {
@@ -112,9 +117,9 @@ type MotionSpec struct {
 }
 
 type ProjectView struct {
-	Deck       Deck                       `json:"deck"`
-	Slides     map[string]Slide           `json:"slides"`
-	DesignSpec DesignSpec                 `json:"design_spec"`
+	Outline    Outline                    `json:"outline"`
+	SlideSpecs map[string]SlideSpec       `json:"slide_specs"`
+	Design     Design                     `json:"design"`
 	States     map[string]Materialization `json:"materialization"`
 }
 

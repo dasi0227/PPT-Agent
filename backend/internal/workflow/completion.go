@@ -1,11 +1,15 @@
 package workflow
 
 import (
+	"encoding/json"
 	"errors"
+	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 type CompletionIssue struct {
@@ -15,13 +19,14 @@ type CompletionIssue struct {
 }
 
 type RequiredAction struct {
-	Tool   string    `json:"tool,omitempty"`
-	Target TargetRef `json:"target,omitempty"`
+	Tool   string   `json:"tool,omitempty"`
+	Target Resource `json:"target,omitempty"`
 }
 
 type CompletionResult struct {
-	Accepted bool              `json:"accepted"`
-	Issues   []CompletionIssue `json:"issues"`
+	Accepted              bool                   `json:"accepted"`
+	Issues                []CompletionIssue      `json:"issues"`
+	MaterializationProofs []MaterializationProof `json:"-"`
 }
 
 func (r CompletionResult) RejectionKey() string {
@@ -64,7 +69,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 		referenceHash, _ = validateReferences(ctx.Context, ctx.Transaction)
 	}
 	for _, change := range ctx.Changes.All() {
-		target := targetForArtifact(change.Artifact)
+		target := resourceForArtifact(change.Artifact)
 		require := func(kind, hash, code string, action RequiredAction) {
 			if hash == "" || ctx.Evidence == nil || !ctx.Evidence.HasFresh(target, hash, kind) {
 				issues = append(issues, CompletionIssue{
@@ -76,7 +81,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 		}
 		if !isPPTDomainChange(change) {
 			switch change.Artifact.Kind {
-			case ArtifactPresentation:
+			case ArtifactSlideHTML:
 				require("static", change.AfterHash, "STATIC_EVIDENCE_REQUIRED", RequiredAction{Tool: "edit_ppt", Target: target})
 				require("render", change.AfterHash, "VISUAL_EVIDENCE_REQUIRED", RequiredAction{Tool: "render_slide", Target: target})
 			default:
@@ -85,26 +90,55 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			continue
 		}
 		switch change.Artifact.Kind {
-		case ArtifactDeck:
+		case ArtifactOutline:
 			require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
 			require("reference", referenceHash, "REFERENCE_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
-		case ArtifactSlide:
+		case ArtifactSlideSpec:
 			require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
-			global := TargetRef{Type: "global"}
-			if referenceHash == "" || ctx.Evidence == nil || !ctx.Evidence.HasFresh(global, referenceHash, "reference") {
+			outline := Resource{Type: "deck", Part: "outline"}
+			if referenceHash == "" || ctx.Evidence == nil || !ctx.Evidence.HasFresh(outline, referenceHash, "reference") {
 				issues = append(issues, CompletionIssue{
-					Code: "REFERENCE_EVIDENCE_REQUIRED", Summary: "global reference integrity is missing or stale",
-					RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: global}},
+					Code: "REFERENCE_EVIDENCE_REQUIRED", Summary: "outline reference integrity is missing or stale",
+					RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: outline}},
 				})
+			}
+			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Transaction != nil {
+				htmlTarget := Resource{Type: "slide", SlideID: change.Artifact.ID, Part: "html"}
+				hash, hashErr := renderSourceHash(ctx.Context, ctx.Transaction, change.Artifact.ID)
+				if specChangeAffectsHTML(ctx.Transaction, change.Artifact) {
+					if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, change.Artifact.ID) {
+						issues = append(issues, CompletionIssue{
+							Code:    "SLIDE_HTML_SYNC_REQUIRED",
+							Summary: "Slide Spec changes affect Presentation HTML for " + htmlTarget.Key(),
+							RequiredActions: []RequiredAction{
+								{Tool: "edit_ppt", Target: htmlTarget},
+								{Tool: "render_slide", Target: htmlTarget},
+							},
+						})
+						continue
+					}
+					if hashErr != nil || ctx.Evidence == nil || !ctx.Evidence.HasFresh(htmlTarget, hash, "static") {
+						issues = append(issues, CompletionIssue{
+							Code: "STATIC_EVIDENCE_REQUIRED", Summary: "static evidence is missing or stale for " + htmlTarget.Key(),
+							RequiredActions: []RequiredAction{{Tool: "edit_ppt", Target: htmlTarget}},
+						})
+					}
+				}
+				if hashErr != nil || !hasFreshMaterialization(ctx, htmlTarget, hash) {
+					issues = append(issues, CompletionIssue{
+						Code: "VISUAL_EVIDENCE_REQUIRED", Summary: "render evidence is missing or stale for " + htmlTarget.Key(),
+						RequiredActions: []RequiredAction{{Tool: "render_slide", Target: htmlTarget}},
+					})
+				}
 			}
 		case ArtifactDesign:
 			require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
-			if ctx.Transaction != nil {
-				if deck, err := currentDeck(ctx.Context, ctx.Transaction); err == nil {
+			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Transaction != nil {
+				if deck, err := currentOutline(ctx.Context, ctx.Transaction); err == nil {
 					for _, slideID := range deck.SlideOrder {
-						slideTarget := TargetRef{Type: "slide", SlideID: slideID}
+						slideTarget := Resource{Type: "slide", SlideID: slideID, Part: "html"}
 						hash, hashErr := renderSourceHash(ctx.Context, ctx.Transaction, slideID)
-						if hashErr != nil || ctx.Evidence == nil || !ctx.Evidence.HasFresh(slideTarget, hash, "render") {
+						if hashErr != nil || !hasFreshMaterialization(ctx, slideTarget, hash) {
 							issues = append(issues, CompletionIssue{
 								Code:            "VISUAL_EVIDENCE_REQUIRED",
 								Summary:         "render evidence is missing or stale for " + slideTarget.Key(),
@@ -114,16 +148,78 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 					}
 				}
 			}
-		case ArtifactPresentation:
+		case ArtifactSlideHTML:
 			hash := ""
 			if ctx.Transaction != nil {
 				hash, _ = renderSourceHash(ctx.Context, ctx.Transaction, change.Artifact.ID)
 			}
 			require("static", hash, "STATIC_EVIDENCE_REQUIRED", RequiredAction{Tool: "edit_ppt", Target: target})
-			require("render", hash, "VISUAL_EVIDENCE_REQUIRED", RequiredAction{Tool: "render_slide", Target: target})
+			if !hasFreshMaterialization(ctx, target, hash) {
+				issues = append(issues, CompletionIssue{
+					Code: "VISUAL_EVIDENCE_REQUIRED", Summary: "render evidence is missing or stale for " + target.Key(),
+					RequiredActions: []RequiredAction{{Tool: "render_slide", Target: target}},
+				})
+			}
 		}
 	}
 	return dedupeCompletionIssues(issues)
+}
+
+func hasFreshMaterialization(ctx CompletionContext, target Resource, hash string) bool {
+	if ctx.Evidence == nil || ctx.Transaction == nil || hash == "" {
+		return false
+	}
+	proof, ok := ctx.Evidence.FreshMaterializationProof(target, hash)
+	if !ok {
+		return false
+	}
+	expected, err := currentMaterializationProof(
+		ctx.Context, ctx.Transaction.ProjectDir(), ctx.Transaction, target.SlideID, hash,
+	)
+	return err == nil && proof == expected
+}
+
+func hasArtifactChange(changes ChangeSet, kind ArtifactKind, id string) bool {
+	for _, change := range changes.All() {
+		if change.Artifact.Kind == kind && change.Artifact.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// specChangeAffectsHTML is intentionally conservative. Only a change isolated
+// to speaker_notes is known not to affect rendered HTML.
+func specChangeAffectsHTML(tx *Transaction, ref ArtifactRef) bool {
+	if tx == nil {
+		return true
+	}
+	beforeRaw, err := tx.ReadBaseline(ref)
+	if err != nil {
+		return true
+	}
+	afterRaw, err := tx.Read(ref)
+	if err != nil {
+		return true
+	}
+	var before spec.SlideSpec
+	var after spec.SlideSpec
+	if json.Unmarshal(beforeRaw, &before) != nil || json.Unmarshal(afterRaw, &after) != nil {
+		return true
+	}
+	clearRuntimeAndNotes := func(value *spec.SlideSpec) {
+		value.SchemaVersion = ""
+		value.Revision = 0
+		value.ProjectID = ""
+		value.SlideID = ""
+		value.SourceOutlineRevision = 0
+		value.SpeakerNotes = ""
+		value.CreatedAt = 0
+		value.UpdatedAt = 0
+	}
+	clearRuntimeAndNotes(&before)
+	clearRuntimeAndNotes(&after)
+	return !reflect.DeepEqual(before, after)
 }
 
 func isPPTDomainChange(change ArtifactChange) bool {
@@ -187,7 +283,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		}
 		for _, change := range ctx.Changes.All() {
 			if !ctx.WorkScope.AllowsArtifact(change.Artifact) {
-				issues = append(issues, CompletionIssue{Code: "TARGET_OUT_OF_SCOPE", Summary: targetForArtifact(change.Artifact).Key() + " is outside the run scope"})
+				issues = append(issues, CompletionIssue{Code: "TARGET_OUT_OF_SCOPE", Summary: resourceForArtifact(change.Artifact).Key() + " is outside the run scope"})
 			}
 		}
 	}
@@ -197,5 +293,50 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	for _, policy := range g.Policies {
 		issues = append(issues, policy.Check(ctx)...)
 	}
-	return CompletionResult{Accepted: len(issues) == 0, Issues: issues}
+	result := CompletionResult{Accepted: len(issues) == 0, Issues: issues}
+	if result.Accepted {
+		result.MaterializationProofs = acceptedMaterializationProofs(ctx)
+	}
+	return result
+}
+
+func acceptedMaterializationProofs(ctx CompletionContext) []MaterializationProof {
+	if ctx.Transaction == nil || ctx.Evidence == nil {
+		return nil
+	}
+	outline, err := currentOutline(ctx.Context, ctx.Transaction)
+	if err != nil {
+		return nil
+	}
+	proofs := make([]MaterializationProof, 0, len(outline.SlideOrder))
+	for _, slideID := range outline.SlideOrder {
+		if specChangeRequiresHTMLSync(ctx, slideID) &&
+			!hasArtifactChange(ctx.Changes, ArtifactSlideHTML, slideID) {
+			continue
+		}
+		hash, err := renderSourceHash(ctx.Context, ctx.Transaction, slideID)
+		if err != nil {
+			continue
+		}
+		target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
+		if proof, ok := ctx.Evidence.FreshMaterializationProof(target, hash); ok {
+			expected, expectedErr := currentMaterializationProof(
+				ctx.Context, ctx.Transaction.ProjectDir(), ctx.Transaction, slideID, hash,
+			)
+			if expectedErr != nil || proof != expected {
+				continue
+			}
+			proofs = append(proofs, proof)
+		}
+	}
+	return proofs
+}
+
+func specChangeRequiresHTMLSync(ctx CompletionContext, slideID string) bool {
+	for _, change := range ctx.Changes.All() {
+		if change.Artifact.Kind == ArtifactSlideSpec && change.Artifact.ID == slideID {
+			return specChangeAffectsHTML(ctx.Transaction, change.Artifact)
+		}
+	}
+	return false
 }

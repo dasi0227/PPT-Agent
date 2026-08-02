@@ -10,10 +10,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 type scriptedAgent struct {
@@ -21,6 +22,15 @@ type scriptedAgent struct {
 	responses []AgentResponse
 	requests  []AgentRequest
 	err       error
+}
+
+type cancelingAgent struct {
+	cancel context.CancelFunc
+}
+
+func (a cancelingAgent) Next(_ context.Context, _ AgentRequest) (AgentResponse, error) {
+	a.cancel()
+	return AgentResponse{}, errors.New("provider request interrupted")
 }
 
 func (a *scriptedAgent) Next(_ context.Context, req AgentRequest) (AgentResponse, error) {
@@ -82,8 +92,8 @@ func (fakeWriteTool) Schema() ToolSchema {
 }
 
 func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
-	ref := ArtifactRef{Kind: t.kind, ID: "s1", Path: model.SlideJSONPath("s1")}
-	if t.kind == ArtifactPresentation {
+	ref := ArtifactRef{Kind: t.kind, ID: "s1", Path: model.SlideSpecPath("s1")}
+	if t.kind == ArtifactSlideHTML {
 		ref.Path = model.SlideHTMLPath("s1")
 	}
 	content := []byte(stringValue(input.Args["content"]))
@@ -95,15 +105,19 @@ func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		return failedToolResult("STAGING_FAILED", err.Error(), false)
 	}
 	result := SuccessfulToolResult("staged")
+	part := "spec"
+	if t.kind == ArtifactSlideHTML {
+		part = "html"
+	}
 	result.ChangedTargets = []ChangedTarget{{
-		Type: "slide", SlideID: "s1", Hash: change.AfterHash, Fields: []string{"model"},
+		Type: "slide", SlideID: "s1", Part: part, Hash: change.AfterHash, Fields: []string{part},
 	}}
 	if input.Args["evidence"] != false {
 		kind := "schema"
-		if t.kind == ArtifactPresentation {
+		if t.kind == ArtifactSlideHTML {
 			kind = "static"
 		}
-		result.Evidence = []Evidence{newEvidence(kind, TargetRef{Type: "slide", SlideID: "s1"}, change.AfterHash)}
+		result.Evidence = []Evidence{newEvidence(kind, Resource{Type: "slide", SlideID: "s1", Part: part}, change.AfterHash)}
 	}
 	return result
 }
@@ -115,13 +129,13 @@ func (fakeRenderTool) Schema() ToolSchema {
 }
 
 func (fakeRenderTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
-	ref := ArtifactRef{Kind: ArtifactPresentation, ID: "s1", Path: model.SlideHTMLPath("s1")}
+	ref := ArtifactRef{Kind: ArtifactSlideHTML, ID: "s1", Path: model.SlideHTMLPath("s1")}
 	raw, err := input.Transaction.Read(ref)
 	if err != nil {
 		return failedToolResult("RENDER_FAILED", err.Error(), false)
 	}
 	result := SuccessfulToolResult("rendered")
-	result.Evidence = []Evidence{newEvidence("render", TargetRef{Type: "slide", SlideID: "s1"}, hashBytes(raw))}
+	result.Evidence = []Evidence{newEvidence("render", Resource{Type: "slide", SlideID: "s1", Part: "html"}, hashBytes(raw))}
 	return result
 }
 
@@ -136,7 +150,7 @@ func (fakeExpansionTool) Execute(_ context.Context, _ DomainToolInput) ToolResul
 }
 
 func toolCall(id, name string, args map[string]any) AgentResponse {
-	return AgentResponse{ToolCall: &llm.ToolCall{ID: id, Name: name, Args: args}}
+	return AgentResponse{ToolCalls: []llm.ToolCall{{ID: id, Name: name, Args: args}}}
 }
 
 func planCall(id string, completed bool) AgentResponse {
@@ -164,14 +178,14 @@ func TestRouterMapsTalkAndAskToChat(t *testing.T) {
 }
 
 func TestRouterSelectsSimpleForExplicitSingleTarget(t *testing.T) {
-	pack := testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "修改当前页标题")
+	pack := testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题")
 	if got := (StrategyRouter{}).Decide(pack).Strategy; got != StrategySimple {
 		t.Fatalf("strategy=%s", got)
 	}
 }
 
 func TestRouterSelectsComplexForEmptyWholeDeck(t *testing.T) {
-	pack := testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetDeck, true, "生成产品发布演示")
+	pack := testPack(model.IntentExecute, model.ArtifactSpec, model.TargetDeck, true, "生成产品发布演示")
 	if got := (StrategyRouter{}).Decide(pack).Strategy; got != StrategyComplex {
 		t.Fatalf("strategy=%s", got)
 	}
@@ -185,8 +199,8 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "chat-explicit-finish", ProjectDir: t.TempDir(),
-		Context: testPack(model.IntentTalk, model.ArtifactBlueprint, model.TargetSlide, false, "分析当前页"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context: testPack(model.IntentTalk, model.ArtifactSpec, model.TargetSlide, false, "分析当前页"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyChat {
 		t.Fatalf("outcome=%+v", outcome)
@@ -223,7 +237,7 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryStrategy(t *testing.T) {
 	for _, strategy := range []ExecutionStrategy{StrategyChat, StrategySimple, StrategyComplex} {
 		prompt := runtimeSystemPrompt(PhaseExecuting, strategy, "{}")
-		if !strings.Contains(prompt, "所有策略的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。") {
+		if !strings.Contains(prompt, "All normal successful exits require finish(message=...). Ordinary assistant text never completes a run.") {
 			t.Fatalf("%s prompt does not require explicit finish: %q", strategy, prompt)
 		}
 	}
@@ -245,16 +259,60 @@ func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryStrategy(t *te
 	}
 }
 
+func TestRuntimePromptAgentContractsDoNotRequireManagedFields(t *testing.T) {
+	prompt := runtimeSystemPrompt(PhaseExecuting, StrategySimple, "{}")
+	prefix := "authoritative schemas: "
+	start := strings.Index(prompt, prefix)
+	if start < 0 {
+		t.Fatal("compiled contracts are missing from the system prompt")
+	}
+	start += len(prefix)
+	end := strings.Index(prompt[start:], "\n</current_resource_contracts>")
+	if end < 0 {
+		t.Fatal("compiled contract boundary is missing")
+	}
+	var contracts map[string]struct {
+		Fields      []string       `json:"agent_fields"`
+		Required    []string       `json:"required"`
+		FieldSchema map[string]any `json:"field_schema"`
+		Example     map[string]any `json:"example"`
+	}
+	if err := json.Unmarshal([]byte(prompt[start:start+end]), &contracts); err != nil {
+		t.Fatalf("compiled contracts are not JSON: %v", err)
+	}
+	for name, contract := range contracts {
+		managed, err := pptschema.RuntimeManagedFields(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for field := range managed {
+			if contains(contract.Fields, field) || contains(contract.Required, field) ||
+				contract.FieldSchema[field] != nil || contract.Example[field] != nil {
+				t.Errorf("%s prompt contract leaks runtime-managed field %q: %+v", name, field, contract)
+			}
+		}
+	}
+}
+
+func contains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestComplexPlanningDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		planCall("plan", true), toolCall("write", "write_ppt", map[string]any{"content": "next"}), finishCall("finish"),
 	}}
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "complex", ProjectDir: dir,
-		Context: testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "重建当前页结构"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "重建当前页结构"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
@@ -273,7 +331,7 @@ func TestComplexPlanningDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T
 }
 
 func TestPlanStepsNeverCreateAnotherLoop(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		planCall("plan", false),
 		planCall("progress", true),
@@ -282,8 +340,8 @@ func TestPlanStepsNeverCreateAnotherLoop(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "one-loop", ProjectDir: dir,
-		Context:     testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "重建当前页结构"),
-		DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context:     testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "重建当前页结构"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	for _, request := range agent.requests {
 		if request.LoopID != outcome.LoopID {
@@ -293,15 +351,15 @@ func TestPlanStepsNeverCreateAnotherLoop(t *testing.T) {
 }
 
 func TestSimpleProducesNoPlan(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("write", "write_ppt", map[string]any{"content": "next"}), finishCall("finish"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "simple", ProjectDir: dir,
-		Context: testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "修改当前页标题"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Strategy != StrategySimple || events.count(model.EventPlanUpdated) != 0 {
 		t.Fatalf("outcome=%+v events=%+v", outcome, events.events)
@@ -309,7 +367,7 @@ func TestSimpleProducesNoPlan(t *testing.T) {
 }
 
 func TestSimpleScopeExpansionUpgradesSameRunToComplex(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("expand", "edit_ppt", nil), planCall("plan", true),
@@ -317,8 +375,8 @@ func TestSimpleScopeExpansionUpgradesSameRunToComplex(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "upgrade", ProjectDir: dir,
-		Context: testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "修改当前页标题"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Strategy != StrategyComplex {
 		t.Fatalf("outcome=%+v events=%+v", outcome, events.events)
@@ -331,23 +389,23 @@ func TestSimpleScopeExpansionUpgradesSameRunToComplex(t *testing.T) {
 }
 
 func TestGateRejectionContinuesSameLoop(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		{
 			Text:              "我先尝试提交当前结果。",
 			ProviderReasoning: "finish provider state",
-			ToolCall: &llm.ToolCall{
+			ToolCalls: []llm.ToolCall{{
 				ID: "first", Name: "finish", Args: map[string]any{"message": "not ready"},
-			},
+			}},
 		},
 		toolCall("write", "write_ppt", map[string]any{"content": "next"}),
 		finishCall("second"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "gate-continue", ProjectDir: dir,
-		Context: testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "修改当前页标题"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v events=%+v", outcome, events.events)
@@ -374,7 +432,7 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 }
 
 func TestStaleEvidenceDoesNotSatisfyGate(t *testing.T) {
-	dir := testProject(t, ArtifactPresentation)
+	dir := testProject(t, ArtifactSlideHTML)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("write-1", "write_ppt", map[string]any{"content": "one"}),
 		toolCall("render", "render_slide", nil),
@@ -384,7 +442,7 @@ func TestStaleEvidenceDoesNotSatisfyGate(t *testing.T) {
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "stale", ProjectDir: dir,
 		Context:     testPack(model.IntentExecute, model.ArtifactPresentation, model.TargetSlide, false, "修改当前页文案"),
-		DomainTools: fakeProvider{kind: ArtifactPresentation},
+		DomainTools: fakeProvider{kind: ArtifactSlideHTML},
 	})
 	if outcome.Status != StatusFailed || outcome.Code != CodeGateRejectedRepeated {
 		t.Fatalf("outcome=%+v", outcome)
@@ -392,12 +450,12 @@ func TestStaleEvidenceDoesNotSatisfyGate(t *testing.T) {
 }
 
 func TestIdenticalGateRejectionThreeTimesBlowsFuse(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("1"), finishCall("2"), finishCall("3")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "fuse", ProjectDir: dir,
-		Context:     testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "修改当前页标题"),
-		DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context:     testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Code != CodeGateRejectedRepeated || outcome.Status != StatusFailed {
 		t.Fatalf("outcome=%+v", outcome)
@@ -426,15 +484,15 @@ func (r *checkpointRecorder) SaveCheckpoint(_ context.Context, checkpoint Runtim
 }
 
 func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("question", "ask_user", map[string]any{"question": "选择方向？"}), finishCall("finish"),
 	}}
 	prompter, checkpoints := &fakePrompter{}, &checkpointRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "ask", ProjectDir: dir,
-		Context:  testPack(model.IntentAsk, model.ArtifactBlueprint, model.TargetSlide, false, "讨论当前页"),
-		Prompter: prompter, Checkpoint: checkpoints, DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context:  testPack(model.IntentAsk, model.ArtifactSpec, model.TargetSlide, false, "讨论当前页"),
+		Prompter: prompter, Checkpoint: checkpoints, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || prompter.calls != 1 || len(checkpoints.checkpoints) != 1 {
 		t.Fatalf("outcome=%+v calls=%d checkpoints=%d", outcome, prompter.calls, len(checkpoints.checkpoints))
@@ -445,23 +503,53 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 }
 
 func TestCommitOnlyAfterGateAcceptance(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	commits := 0
 	agent := &scriptedAgent{responses: []AgentResponse{
 		finishCall("reject"), toolCall("write", "write_ppt", map[string]any{"content": "committed"}), finishCall("accept"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "commit", ProjectDir: dir,
-		Context:        testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "修改当前页标题"),
-		DomainTools:    fakeProvider{kind: ArtifactSlide},
-		CommitMetadata: func(context.Context, ChangeSet) error { commits++; return nil },
+		Context:        testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
+		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
+		CommitMetadata: func(context.Context, CommitContext) error { commits++; return nil },
 	})
 	if outcome.Status != StatusCompleted || commits != 1 {
 		t.Fatalf("outcome=%+v commits=%d", outcome, commits)
 	}
-	raw, _ := os.ReadFile(filepath.Join(dir, model.SlideJSONPath("s1")))
+	raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("s1")))
 	if string(raw) != "committed" {
 		t.Fatalf("formal content=%q", raw)
+	}
+}
+
+func TestAcceptedRenderProofFlowsThroughRuntimeCommitContext(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	next := slideModel("slide-01", "Original")
+	next.SpeakerNotes = "updated notes"
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("spec", "write_ppt", map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
+			"content":  string(mustJSONValue(next)),
+		}),
+		toolCall("render", "render_slide", map[string]any{"slide_id": "slide-01"}),
+		finishCall("done"),
+	}}
+	var committed CommitContext
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "proof-commit", ProjectDir: dir, Context: pack,
+		DomainTools: DefaultDomainToolProvider{Pack: pack, Renderer: &recordingRenderer{}},
+		CommitMetadata: func(_ context.Context, value CommitContext) error {
+			committed = value
+			return nil
+		},
+	})
+	if outcome.Status != StatusCompleted || len(committed.MaterializationProofs) != 1 {
+		t.Fatalf("outcome=%+v commit=%+v", outcome, committed)
+	}
+	proof := committed.MaterializationProofs[0]
+	if proof.SlideID != "slide-01" || proof.HTMLRevision != 1 || proof.SourceSpecRevision != 2 {
+		t.Fatalf("unexpected proof=%+v", proof)
 	}
 }
 
@@ -473,7 +561,7 @@ func TestFailedAndCanceledRunsDoNotModifyFormalFiles(t *testing.T) {
 		{name: "failed"}, {name: "canceled", cancel: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			dir := testProject(t, ArtifactSlide)
+			dir := testProject(t, ArtifactSlideSpec)
 			ctx, cancel := context.WithCancel(context.Background())
 			agent := &scriptedAgent{responses: []AgentResponse{toolCall("write", "write_ppt", map[string]any{"content": "dirty"})}, err: errors.New("agent stopped")}
 			if test.cancel {
@@ -481,11 +569,11 @@ func TestFailedAndCanceledRunsDoNotModifyFormalFiles(t *testing.T) {
 			}
 			outcome := NewRuntime(agent).Run(ctx, RuntimeInput{
 				RunID: test.name, ProjectDir: dir,
-				Context:     testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "修改当前页标题"),
-				DomainTools: fakeProvider{kind: ArtifactSlide},
+				Context:     testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
+				DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 			})
 			cancel()
-			raw, _ := os.ReadFile(filepath.Join(dir, model.SlideJSONPath("s1")))
+			raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("s1")))
 			if string(raw) != "formal" || (test.cancel && outcome.Status != StatusCanceled) || (!test.cancel && outcome.Status != StatusFailed) {
 				t.Fatalf("outcome=%+v formal=%q", outcome, raw)
 			}
@@ -493,44 +581,63 @@ func TestFailedAndCanceledRunsDoNotModifyFormalFiles(t *testing.T) {
 	}
 }
 
+func TestProviderErrorAfterContextCancellationFinishesCanceled(t *testing.T) {
+	dir := testProject(t, ArtifactSlideSpec)
+	ctx, cancel := context.WithCancel(context.Background())
+	outcome := NewRuntime(cancelingAgent{cancel: cancel}).Run(ctx, RuntimeInput{
+		RunID: "provider-canceled", ProjectDir: dir,
+		Context:     testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+	})
+	if outcome.Status != StatusCanceled || outcome.Code != CodeCanceled {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+}
+
 func TestEmptyProjectComplexPresentationGenerationUsesUnifiedPPTTargets(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
 	emptyDeck := deckModel("p1", []string{})
-	if err := os.WriteFile(filepath.Join(dir, "deck.json"), mustJSONValue(emptyDeck), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "outline.json"), mustJSONValue(emptyDeck), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.RemoveAll(filepath.Join(dir, "slides")); err != nil {
 		t.Fatal(err)
 	}
-	pack.Deck.Deck = emptyDeck
-	pack.Deck.Summaries = []contextengine.SlideSummary{}
-	pack.Target.Slide = nil
-	pack.Revisions.Slides = map[string]int{}
-	pack.Revisions.Presentations = map[string]int{}
+	pack.Outline.Outline = emptyDeck
+	pack.Outline.Summaries = []contextengine.SlideSummary{}
+	pack.Target.SlideSpec = nil
+	pack.Revisions.SlideSpecs = map[string]int{}
+	pack.Revisions.SlideHTML = map[string]int{}
 	pack.WorkSpec.Options.DesiredSlideCount = 2
 	targetDeck := deckModel("p1", []string{"slide-01", "slide-02"})
 	slideOne := slideModel("slide-01", "One")
 	slideTwo := slideModel("slide-02", "Two")
 	agent := &scriptedAgent{responses: []AgentResponse{
 		planCall("plan", false),
-		toolCall("global", "write_ppt", map[string]any{
-			"target": map[string]any{"type": "global"},
-			"content": map[string]any{"model": map[string]any{
-				"deck": targetDeck, "design": designModel(),
-			}},
+		toolCall("outline", "write_ppt", map[string]any{
+			"resource": resourceArgs(Resource{Type: "deck", Part: "outline"}),
+			"content":  string(mustJSONValue(targetDeck)),
 		}),
-		toolCall("slide-1", "write_ppt", map[string]any{
-			"target": map[string]any{"type": "slide", "slide_id": "slide-01"},
-			"content": map[string]any{
-				"model": slideOne, "html": strings.Replace(validToolHTML, "Original", "One", 1),
-			},
+		toolCall("design", "write_ppt", map[string]any{
+			"resource": resourceArgs(Resource{Type: "deck", Part: "design"}),
+			"content":  string(mustJSONValue(designModel())),
+		}),
+		toolCall("spec-1", "write_ppt", map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
+			"content":  string(mustJSONValue(slideOne)),
+		}),
+		toolCall("html-1", "write_ppt", map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "html"}),
+			"content":  strings.Replace(validToolHTML, "Original", "One", 1),
 		}),
 		toolCall("render-1", "render_slide", map[string]any{"slide_id": "slide-01"}),
-		toolCall("slide-2", "write_ppt", map[string]any{
-			"target": map[string]any{"type": "slide", "slide_id": "slide-02"},
-			"content": map[string]any{
-				"model": slideTwo, "html": strings.Replace(validToolHTML, "Original", "Two", 1),
-			},
+		toolCall("spec-2", "write_ppt", map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-02", Part: "spec"}),
+			"content":  string(mustJSONValue(slideTwo)),
+		}),
+		toolCall("html-2", "write_ppt", map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-02", Part: "html"}),
+			"content":  strings.Replace(validToolHTML, "Original", "Two", 1),
 		}),
 		toolCall("render-2", "render_slide", map[string]any{"slide_id": "slide-02"}),
 		planCall("complete-plan", true),
@@ -545,7 +652,7 @@ func TestEmptyProjectComplexPresentationGenerationUsesUnifiedPPTTargets(t *testi
 		t.Fatalf("outcome=%+v", outcome)
 	}
 	for _, slideID := range []string{"slide-01", "slide-02"} {
-		if _, err := os.Stat(filepath.Join(dir, model.SlideJSONPath(slideID))); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, model.SlideSpecPath(slideID))); err != nil {
 			t.Fatalf("%s model missing: %v", slideID, err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, model.SlideHTMLPath(slideID))); err != nil {
@@ -563,27 +670,27 @@ func (r *traceRecorder) Record(event TraceEvent) {
 }
 
 func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	traces := &traceRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		{
 			Text:              "我会先确认当前页面结构，再进行局部更新。",
 			ProviderReasoning: "hidden provider chain of thought",
-			ToolCall: &llm.ToolCall{
+			ToolCalls: []llm.ToolCall{{
 				ID: "write", Name: "write_ppt",
 				Args: map[string]any{
 					"target":  map[string]any{"type": "slide", "slide_id": "s1"},
 					"content": "<section>private html</section>",
 				},
-			},
+			}},
 		},
 		finishCall("finish"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "public", ProjectDir: dir,
-		Context: testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "修改当前页标题"),
-		Emitter: events, Trace: traces, DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
+		Emitter: events, Trace: traces, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
@@ -640,7 +747,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 }
 
 func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
-	dir := testProject(t, ArtifactSlide)
+	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		planCall("plan-1", false),
@@ -651,8 +758,8 @@ func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "milestone", ProjectDir: dir,
-		Context: testPack(model.IntentExecute, model.ArtifactBlueprint, model.TargetSlide, false, "重建当前页结构"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlide},
+		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "重建当前页结构"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
@@ -680,7 +787,7 @@ func testPack(intent model.InteractionIntent, artifact model.Artifact, level mod
 	if level == model.TargetSlide {
 		target.SlideID = "s1"
 	}
-	slide := &blueprint.Slide{SchemaVersion: blueprint.SchemaVersion, Revision: 1, SlideID: "s1"}
+	slide := &spec.SlideSpec{SchemaVersion: spec.SchemaVersion, Revision: 1, SlideID: "s1"}
 	if empty || level == model.TargetDeck {
 		slide = nil
 	}
@@ -690,18 +797,18 @@ func testPack(intent model.InteractionIntent, artifact model.Artifact, level mod
 			Target: target, Interaction: model.RunInteraction{Intent: intent}, Instruction: instruction,
 		},
 		Project: contextengine.ProjectContext{ID: "p1", Title: "Deck"},
-		Deck: contextengine.DeckContext{Deck: blueprint.Deck{
-			SchemaVersion: blueprint.SchemaVersion, ProjectID: "p1", SlideOrder: order,
+		Outline: contextengine.OutlineContext{Outline: spec.Outline{
+			SchemaVersion: spec.SchemaVersion, ProjectID: "p1", SlideOrder: order,
 		}, Summaries: summaries},
 		Target: contextengine.TargetContext{
-			Artifact: artifact, Level: level, Slide: slide,
-			Materialization: &blueprint.Materialization{State: string(model.MaterializationFresh)},
+			Artifact: artifact, Level: level, SlideSpec: slide,
+			Materialization: &spec.Materialization{State: string(model.MaterializationFresh)},
 		},
-		Presentation: contextengine.PresentationContext{Summaries: map[string]contextengine.HTMLSummary{}},
-		Assets:       []contextengine.AssetCandidate{}, RelatedSlides: []contextengine.SlideSummary{},
+		SlideHTML: contextengine.SlideHTMLContext{Summaries: map[string]contextengine.HTMLSummary{}},
+		Assets:    []contextengine.AssetCandidate{}, RelatedSlides: []contextengine.SlideSummary{},
 		RecentTurns: []contextengine.RecentTurn{},
 		Revisions: contextengine.RevisionRefs{
-			Slides: map[string]int{"s1": 1}, Presentations: map[string]int{"s1": 1},
+			SlideSpecs: map[string]int{"s1": 1}, SlideHTML: map[string]int{"s1": 1},
 		},
 		Manifest: contextengine.ContextManifest{
 			ContextID: "ctx", RunID: "run", ThreadID: "thread", ProjectID: "p1",
@@ -715,8 +822,8 @@ func testPack(intent model.InteractionIntent, artifact model.Artifact, level mod
 func testProject(t *testing.T, kind ArtifactKind) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := model.SlideJSONPath("s1")
-	if kind == ArtifactPresentation {
+	path := model.SlideSpecPath("s1")
+	if kind == ArtifactSlideHTML {
 		path = model.SlideHTMLPath("s1")
 	}
 	full := filepath.Join(dir, filepath.FromSlash(path))

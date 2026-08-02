@@ -47,11 +47,27 @@ func TestCallToolParsesToolCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("calltool: %v", err)
 	}
-	if resp.ToolCall == nil || resp.ToolCall.Name != "finish" {
-		t.Fatalf("expected finish tool call, got %+v", resp.ToolCall)
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "finish" {
+		t.Fatalf("expected finish tool call, got %+v", resp.ToolCalls)
 	}
-	if resp.ToolCall.Args["summary"] != "done" {
-		t.Errorf("bad args: %+v", resp.ToolCall.Args)
+	if resp.ToolCalls[0].Args["summary"] != "done" {
+		t.Errorf("bad args: %+v", resp.ToolCalls[0].Args)
+	}
+}
+
+func TestCallToolPreservesEveryProviderToolCallInOrder(t *testing.T) {
+	d := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"choices":[{"message":{"role":"assistant","tool_calls":[
+			{"id":"c1","type":"function","function":{"name":"read_ppt","arguments":"{\"resource\":{\"type\":\"deck\",\"part\":\"outline\"}}"}},
+			{"id":"c2","type":"function","function":{"name":"search_refs","arguments":"{\"query\":\"market\"}"}}
+		]}}]}`))
+	})
+	resp, err := d.CallTool(context.Background(), ToolCallRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.ToolCalls) != 2 || resp.ToolCalls[0].ID != "c1" || resp.ToolCalls[1].ID != "c2" {
+		t.Fatalf("provider tool calls were lost or reordered: %+v", resp.ToolCalls)
 	}
 }
 
@@ -118,8 +134,8 @@ func TestCallToolRepairsTrailingCloseBraceArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("calltool: %v", err)
 	}
-	if resp.ToolCall == nil || resp.ToolCall.Args["summary"] != "done" {
-		t.Fatalf("bad repaired args: %+v", resp.ToolCall)
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Args["summary"] != "done" {
+		t.Fatalf("bad repaired args: %+v", resp.ToolCalls)
 	}
 }
 

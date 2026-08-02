@@ -28,8 +28,9 @@ func (s *Store) ReplaceSlides(ctx context.Context, projectID string, slides []mo
 func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&projectPO{}).Where("id = ?", commit.ProjectID).Updates(map[string]any{
-			"deck_revision": commit.DeckRevision, "design_revision": commit.DesignRevision,
-			"deck_path": "deck.json", "updated_at": nowUnix(),
+			"outline_revision": commit.OutlineRevision, "design_revision": commit.DesignRevision,
+			"outline_path": "outline.json", "design_path": "design.json",
+			"layout_version": 2, "updated_at": nowUnix(),
 		}).Error; err != nil {
 			return err
 		}
@@ -44,9 +45,9 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 			if err := tx.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
-					"project_id", "position", "layout", "title", "json_path", "html_path",
-					"current_version", "blueprint_revision", "presentation_revision",
-					"source_deck_revision", "source_blueprint_revision", "source_design_revision",
+					"project_id", "position", "layout", "title", "spec_path", "html_path",
+					"current_version", "spec_revision", "html_revision",
+					"source_outline_revision", "source_spec_revision", "source_design_revision",
 				}),
 			}).Create(&po).Error; err != nil {
 				return err
@@ -128,18 +129,18 @@ func (s *Store) SetProjectStatus(ctx context.Context, id, status string) error {
 		Updates(map[string]any{"status": status, "updated_at": nowUnix()}).Error
 }
 
-// UpdateSlideMeta 同步某页元数据 title/layout（手动 PATCH 改这两项时保持 DB 与 slide.json 一致）。
+// UpdateSlideMeta 同步某页元数据 title/layout（手动 PATCH 改这两项时保持 DB 与 spec.json 一致）。
 func (s *Store) UpdateSlideMeta(ctx context.Context, slideID, title, layout string) error {
 	return s.db.WithContext(ctx).Model(&slidePO{}).
 		Where("id = ?", slideID).
 		Updates(map[string]any{"title": title, "layout": layout}).Error
 }
 
-func (s *Store) UpdateSlideRevisions(ctx context.Context, slideID string, blueprintRevision, presentationRevision, sourceDeckRevision, sourceBlueprintRevision, sourceDesignRevision int) error {
+func (s *Store) UpdateSlideRevisions(ctx context.Context, slideID string, specRevision, htmlRevision, sourceOutlineRevision, sourceSpecRevision, sourceDesignRevision int) error {
 	return s.db.WithContext(ctx).Model(&slidePO{}).Where("id = ?", slideID).
 		Updates(map[string]any{
-			"blueprint_revision": blueprintRevision, "presentation_revision": presentationRevision,
-			"source_deck_revision": sourceDeckRevision, "source_blueprint_revision": sourceBlueprintRevision,
+			"spec_revision": specRevision, "html_revision": htmlRevision,
+			"source_outline_revision": sourceOutlineRevision, "source_spec_revision": sourceSpecRevision,
 			"source_design_revision": sourceDesignRevision,
 		}).Error
 }

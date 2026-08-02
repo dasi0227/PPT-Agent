@@ -10,10 +10,11 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
 
-func TestCanonicalBlueprintLifecycleUsesStableSlideIDs(t *testing.T) {
+func TestCanonicalSpecLifecycleUsesStableSlideIDs(t *testing.T) {
 	root := t.TempDir()
 	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "canonical.db")}, zap.NewNop())
 	if err != nil {
@@ -42,15 +43,15 @@ func TestCanonicalBlueprintLifecycleUsesStableSlideIDs(t *testing.T) {
 	if err := slides.ReorderSlides(context.Background(), project.ID, []string{second.ID, first.ID}); err != nil {
 		t.Fatal(err)
 	}
-	view, err := service.NewBlueprintService(store).EnsureProject(context.Background(), project.ID)
+	view, err := service.NewSpecService(store).EnsureProject(context.Background(), project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(view.Deck.SlideOrder) != 2 || view.Deck.SlideOrder[0] != second.ID {
-		t.Fatalf("deck order=%v", view.Deck.SlideOrder)
+	if len(view.Outline.SlideOrder) != 2 || view.Outline.SlideOrder[0] != second.ID {
+		t.Fatalf("deck order=%v", view.Outline.SlideOrder)
 	}
-	if view.Slides[first.ID].SchemaVersion != "2.0" || view.Slides[second.ID].SlideID != second.ID {
-		t.Fatalf("canonical slides=%+v", view.Slides)
+	if view.SlideSpecs[first.ID].SchemaVersion != spec.SchemaVersion || view.SlideSpecs[second.ID].SlideID != second.ID {
+		t.Fatalf("canonical slides=%+v", view.SlideSpecs)
 	}
 	if got := view.States[first.ID].State; got != string(model.MaterializationNotMaterialized) {
 		t.Fatalf("state=%s", got)
@@ -58,11 +59,11 @@ func TestCanonicalBlueprintLifecycleUsesStableSlideIDs(t *testing.T) {
 	if err := slides.DeleteSlide(context.Background(), first.ID); err != nil {
 		t.Fatal(err)
 	}
-	after, err := service.NewBlueprintService(store).EnsureProject(context.Background(), project.ID)
+	after, err := service.NewSpecService(store).EnsureProject(context.Background(), project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(after.Deck.SlideOrder) != 1 || after.Deck.SlideOrder[0] != second.ID {
-		t.Fatalf("after delete=%v", after.Deck.SlideOrder)
+	if len(after.Outline.SlideOrder) != 1 || after.Outline.SlideOrder[0] != second.ID {
+		t.Fatalf("after delete=%v", after.Outline.SlideOrder)
 	}
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SSEEvent } from '../../api/types';
 import { reducePlan, reduceSSEEvent } from './eventReducer';
 
-const base = { schema_version: 1 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 2 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const event = (name: SSEEvent['event'], data: Record<string, unknown>, id = '1') =>
   ({ id, event: name, data: { ...base, ...data } } as SSEEvent);
 
@@ -10,7 +10,7 @@ describe('public event reducer', () => {
   it('upserts tool completion into the started row without raw payloads', () => {
     let state = reduceSSEEvent([], event('tool.started', {
       call_id: 'c1', tool: 'write_ppt', plan_step_id: 'build',
-      target: { type: 'slide', slide_id: 's1' },
+      target: { type: 'slide', slide_id: 's1', part: 'html' },
       display: { label: '生成页面 s1' },
     }));
     state = reduceSSEEvent(state, event('tool.completed', {
@@ -62,7 +62,7 @@ describe('public event reducer', () => {
 
   it('shows one final message and no completed terminal card', () => {
     let state = reduceSSEEvent([], event('message.final', {
-      message_id: 'm1', text: '已完成', affected_targets: [{ type: 'slide', slide_id: 's1' }],
+      message_id: 'm1', text: '已完成', affected_targets: [{ type: 'slide', slide_id: 's1', part: 'html' }],
     }));
     state = reduceSSEEvent(state, event('run.finished', { status: 'completed', duration_ms: 20 }, '2'));
     expect(state.map((item) => item.type)).toEqual(['final']);

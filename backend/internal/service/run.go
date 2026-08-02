@@ -31,14 +31,16 @@ type RunService struct {
 	factory   ExecutionFactory
 	assembler *contextengine.ContextAssembler
 	runtime   *workflow.Runtime
+	renderer  workflow.SlideRenderer
 }
 
-func NewRunService(s store.Store, engine *run.Engine, client llm.Client, _ WorkRoot) *RunService {
+func NewRunService(s store.Store, engine *run.Engine, client llm.Client, _ WorkRoot, renderer *workflow.NodeSlideRenderer) *RunService {
 	registry := contextengine.NewRefRegistry()
 	return &RunService{
 		store: s, engine: engine,
 		assembler: contextengine.NewContextAssembler(s, registry),
 		runtime:   workflow.NewRuntime(workflow.CognitiveAgent{Client: client}),
+		renderer:  renderer,
 	}
 }
 
@@ -47,11 +49,12 @@ func NewRunServiceWithExecutionFactory(s store.Store, engine *run.Engine, factor
 }
 
 type workflowExecution struct {
-	runtime *workflow.Runtime
-	pack    contextengine.ContextPack
-	project model.Project
-	store   store.Store
-	runID   string
+	runtime  *workflow.Runtime
+	pack     contextengine.ContextPack
+	project  model.Project
+	store    store.Store
+	runID    string
+	renderer workflow.SlideRenderer
 }
 
 func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
@@ -64,6 +67,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
 		CommitMetadata: committer.Commit,
 		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
+		DomainTools:    workflow.DefaultDomainToolProvider{Pack: r.pack, Renderer: r.renderer},
 	})
 	if outcome.Status == workflow.StatusCompleted {
 		memoryStore := contextengine.ThreadMemoryStore{}
@@ -134,6 +138,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	execution := &workflowExecution{
 		runtime: svc.runtime, pack: pack, project: project, store: svc.store, runID: runModel.ID,
+		renderer: svc.renderer,
 	}
 	return svc.engine.StartWithContext(ctx, runModel, execution, runContext)
 }

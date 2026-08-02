@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { Project, Slide } from '../api/types';
 import { projectsApi } from '../api/projects';
 import { useThreadStore } from './threadStore';
-import { useBlueprintStore } from './blueprintStore';
+import { useSpecStore } from './specStore';
 
 interface ProjectState {
   projects: Project[];
@@ -115,7 +115,7 @@ export const useProjectStore = create<ProjectState>()(
           const openProjectIds = state.openProjectIds.filter(pid => pid !== id);
           const slidesByProjectId = { ...state.slidesByProjectId };
           delete slidesByProjectId[id];
-          useBlueprintStore.getState().clearProject(id);
+          useSpecStore.getState().clearProject(id);
           
           let activeProjectId = state.activeProjectId;
           if (activeProjectId === id) {
@@ -145,7 +145,7 @@ export const useProjectStore = create<ProjectState>()(
       loadProjectSlides: async (projectId: string) => {
         try {
           const slides = await projectsApi.getSlides(projectId);
-          void useBlueprintStore.getState().loadProject(projectId);
+          void useSpecStore.getState().loadProject(projectId);
           set((state) => ({
             slidesByProjectId: { ...state.slidesByProjectId, [projectId]: slides },
             projectError: null,

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseSSEEvent, SSE_EVENT_NAMES } from './sse';
 
 const base = {
-  schema_version: 1,
+  schema_version: 2,
   run_id: 'r1',
   occurred_at: '2026-08-02T10:30:00.000Z',
 };
@@ -16,7 +16,7 @@ const payloads: Record<string, unknown> = {
   'message.milestone': { ...base, message_id: 'm2', text: '全局设计已完成。', completed_step_ids: ['s1'] },
   'message.final': { ...base, message_id: 'm3', text: '已完成。' },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_ppt', display: { label: '读取全局蓝图' } },
-  'tool.completed': { ...base, call_id: 'c1', tool: 'read_ppt', status: 'completed', display: { label: '已读取全局蓝图' } },
+  'tool.completed': { ...base, call_id: 'c1', tool: 'read_ppt', status: 'completed', display: { label: '已读取全局设计' } },
   'question.asked': { ...base, question_id: 'q1', prompt: '选择风格', selection: 'single', options: [], allow_custom: true },
   'question.answered': { ...base, question_id: 'q1', answer: { selected_option_ids: [], custom_text: '克制' }, display_text: '克制' },
 };

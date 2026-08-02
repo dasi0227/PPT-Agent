@@ -11,8 +11,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
-	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
+	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
@@ -44,17 +45,18 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	now := svc.clock()
 	workDir := filepath.Join(svc.workRoot, "projects", id)
 	proj := model.Project{
-		ID:             id,
-		Title:          title,
-		WorkDir:        workDir,
-		Theme:          "swiss-modern",
-		Status:         "draft",
-		DesignPath:     "common/tokens.css",
-		DeckPath:       "deck.json",
-		DeckRevision:   1,
-		DesignRevision: 1,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:              id,
+		Title:           title,
+		WorkDir:         workDir,
+		Theme:           "swiss-modern",
+		Status:          "draft",
+		DesignPath:      "design.json",
+		OutlinePath:     "outline.json",
+		OutlineRevision: 1,
+		DesignRevision:  1,
+		LayoutVersion:   2,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 
 	if err := svc.initWorkDir(proj, p); err != nil {
@@ -112,7 +114,7 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 		return err
 	}
 	projectRel := filepath.Join("projects", proj.ID)
-	for _, rel := range []string{projectRel, filepath.Join(projectRel, "threads"), filepath.Join(projectRel, "common"), filepath.Join(projectRel, "slides"), filepath.Join(projectRel, "design")} {
+	for _, rel := range []string{projectRel, filepath.Join(projectRel, "threads"), filepath.Join(projectRel, "common"), filepath.Join(projectRel, "slides")} {
 		abs, err := sb.Resolve(rel)
 		if err != nil {
 			return err
@@ -137,15 +139,26 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err := sb.Write(filepath.Join(projectRel, "state.json"), raw); err != nil {
 		return err
 	}
-	deck := blueprint.Deck{
-		SchemaVersion: blueprint.SchemaVersion, Revision: 1, ProjectID: proj.ID, Title: proj.Title,
+	outline := spec.Outline{
+		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID, Title: proj.Title,
 		Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
 		Language: firstNonEmpty(p.Language, "zh-CN"), CoreThesis: proj.Title,
-		NarrativeArc: "背景 → 核心内容 → 结论", Sections: []blueprint.Section{},
+		NarrativeArc: "背景 → 核心内容 → 结论", Sections: []spec.Section{},
 		SlideOrder: []string{}, CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt,
 	}
-	if err := sb.Write(filepath.Join(projectRel, "deck.json"), mustJSON(deck)); err != nil {
+	if err := sb.Write(filepath.Join(projectRel, "outline.json"), mustJSON(outline)); err != nil {
 		return err
 	}
-	return sb.Write(filepath.Join(projectRel, "design", "design-spec.json"), mustJSON(defaultDesign()))
+	design := defaultDesign(proj.ID, proj.CreatedAt)
+	if err := sb.Write(filepath.Join(projectRel, "design.json"), mustJSON(design)); err != nil {
+		return err
+	}
+	baseCSS, err := asset.ReadSeedFile("common/base.css")
+	if err != nil {
+		return err
+	}
+	if err := sb.Write(filepath.Join(projectRel, "common", "base.css"), baseCSS); err != nil {
+		return err
+	}
+	return sb.Write(filepath.Join(projectRel, "common", "tokens.css"), spec.DesignTokensCSS(design))
 }

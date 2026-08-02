@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/subosito/gotenv"
 	"github.com/spf13/viper"
+	"github.com/subosito/gotenv"
 )
 
 const defaultDeepSeekTimeoutSeconds = 180

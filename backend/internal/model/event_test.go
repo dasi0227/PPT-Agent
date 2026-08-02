@@ -35,12 +35,12 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 	for _, payload := range []map[string]any{
 		{
-			"schema_version": 1, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 2, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"call_id": "c1", "tool": "write_ppt", "display": map[string]any{"label": "生成"},
 			"args": map[string]any{"html": "<section />"},
 		},
 		{
-			"schema_version": 1, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 2, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"message_id": "m1", "text": "安全摘要", "reasoning_content": "hidden",
 		},
 	} {

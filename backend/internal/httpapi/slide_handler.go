@@ -7,9 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 // SlideHandler 暴露单页读取、版本列表与回滚端点。
@@ -22,21 +22,21 @@ func NewSlideHandler(svc *service.SlideService) *SlideHandler {
 }
 
 type slideResponse struct {
-	ID                      string                     `json:"id"`
-	ProjectID               string                     `json:"project_id"`
-	Position                int                        `json:"position"`
-	Layout                  string                     `json:"layout"`
-	Title                   string                     `json:"title"`
-	HTMLPath                string                     `json:"html_path"`
-	JSONPath                string                     `json:"json_path"`
-	CurrentVersion          int                        `json:"current_version"`
-	BlueprintRevision       int                        `json:"blueprint_revision"`
-	PresentationRevision    int                        `json:"presentation_revision"`
-	SourceDeckRevision      int                        `json:"source_deck_revision"`
-	SourceBlueprintRevision int                        `json:"source_blueprint_revision"`
-	SourceDesignRevision    int                        `json:"source_design_revision"`
-	Blueprint               *blueprint.Slide           `json:"blueprint,omitempty"`
-	Materialization         *blueprint.Materialization `json:"materialization,omitempty"`
+	ID                    string                `json:"id"`
+	ProjectID             string                `json:"project_id"`
+	Position              int                   `json:"position"`
+	Layout                string                `json:"layout"`
+	Title                 string                `json:"title"`
+	HTMLPath              string                `json:"html_path"`
+	SpecPath              string                `json:"spec_path"`
+	CurrentVersion        int                   `json:"current_version"`
+	SpecRevision          int                   `json:"spec_revision"`
+	HTMLRevision          int                   `json:"html_revision"`
+	SourceOutlineRevision int                   `json:"source_outline_revision"`
+	SourceSpecRevision    int                   `json:"source_spec_revision"`
+	SourceDesignRevision  int                   `json:"source_design_revision"`
+	Spec                  *spec.SlideSpec       `json:"spec,omitempty"`
+	Materialization       *spec.Materialization `json:"materialization,omitempty"`
 }
 
 type versionResponse struct {
@@ -60,8 +60,8 @@ func (h *SlideHandler) GetSlide(c *gin.Context) {
 		return
 	}
 	resp := toSlideResponse(sl)
-	if content, materialization, readErr := h.svc.ReadBlueprint(c.Request.Context(), sl.ID); readErr == nil {
-		resp.Blueprint, resp.Materialization = &content, &materialization
+	if content, materialization, readErr := h.svc.ReadSpec(c.Request.Context(), sl.ID); readErr == nil {
+		resp.Spec, resp.Materialization = &content, &materialization
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -112,9 +112,9 @@ func (h *SlideHandler) Rollback(c *gin.Context) {
 func toSlideResponse(sl model.Slide) slideResponse {
 	return slideResponse{
 		ID: sl.ID, ProjectID: sl.ProjectID, Position: sl.Position, Layout: sl.Layout, Title: sl.Title,
-		HTMLPath: sl.HTMLPath, JSONPath: sl.JSONPath, CurrentVersion: sl.CurrentVersion,
-		BlueprintRevision: sl.BlueprintRevision, PresentationRevision: sl.PresentationRevision,
-		SourceDeckRevision: sl.SourceDeckRevision, SourceBlueprintRevision: sl.SourceBlueprintRevision,
+		HTMLPath: sl.HTMLPath, SpecPath: sl.SpecPath, CurrentVersion: sl.CurrentVersion,
+		SpecRevision: sl.SpecRevision, HTMLRevision: sl.HTMLRevision,
+		SourceOutlineRevision: sl.SourceOutlineRevision, SourceSpecRevision: sl.SourceSpecRevision,
 		SourceDesignRevision: sl.SourceDesignRevision,
 	}
 }

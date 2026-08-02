@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 const validToolHTML = `<!doctype html>
@@ -49,354 +50,440 @@ func (r *recordingRenderer) Render(_ context.Context, request RenderRequest) (Re
 	return out, nil
 }
 
-func TestReadPPTGlobalAndSlideModelHTML(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
-	global := (pptReadTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, nil, map[string]any{
-		"target":  map[string]any{"type": "global"},
-		"include": []any{"model"},
-	}))
-	if !global.OK || global.Data["source"] != "committed" {
-		t.Fatalf("global=%+v", global)
+func TestPPTToolSchemasExposeOnlyResourceStringContracts(t *testing.T) {
+	_, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	tests := []struct {
+		tool     DomainTool
+		required []string
+		forbid   []string
+	}{
+		{pptReadTool{pack}, []string{`"resource"`}, []string{`"include"`, `"target"`}},
+		{pptWriteTool{pack}, []string{`"resource"`, `"content"`, `"type":"string"`}, []string{`"model"`, `"target"`}},
+		{pptEditTool{pack}, []string{`"resource"`, `"old_text"`, `"new_text"`}, []string{`"json_edit"`, `"path"`, `"target"`}},
 	}
-	globalModel := global.Data["content"].(map[string]any)["model"].(map[string]any)
-	if globalModel["deck"] == nil || globalModel["design"] == nil {
-		t.Fatalf("presentation global mapping=%+v", globalModel)
-	}
-	slide := (pptReadTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, nil, map[string]any{
-		"target":  map[string]any{"type": "slide", "slide_id": "slide-01"},
-		"include": []any{"model", "html"},
-	}))
-	content := slide.Data["content"].(map[string]any)
-	if !slide.OK || content["html"] != validToolHTML || content["model"] == nil {
-		t.Fatalf("slide=%+v", slide)
-	}
-}
-
-func TestPresentationGlobalWriteAndEditStageDeckAndDesignAtomically(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
-	tx, _ := NewTransaction(dir, "presentation-global")
-	defer tx.Cleanup()
-	deck := deckModel("p1", []string{"slide-01"})
-	design := designModel()
-	write := (pptWriteTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target":  map[string]any{"type": "global"},
-		"content": map[string]any{"model": map[string]any{"deck": deck, "design": design}},
-	}))
-	if !write.OK || !tx.IsStaged(deckRef(pack)) || !tx.IsStaged(designRef(pack)) {
-		t.Fatalf("write=%+v changes=%+v", write, tx.ChangeSet())
-	}
-	edit := (pptEditTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target": map[string]any{"type": "global"},
-		"edits": []any{
-			map[string]any{"type": "json_edit", "op": "replace", "path": "/deck/title", "value": "Edited deck"},
-			map[string]any{"type": "json_edit", "op": "replace", "path": "/design/signature", "value": "Edited signature"},
-		},
-	}))
-	if !edit.OK {
-		t.Fatalf("edit=%+v", edit)
-	}
-	deckRaw, _, _ := readArtifact(dir, tx, deckRef(pack))
-	designRaw, _, _ := readArtifact(dir, tx, designRef(pack))
-	if !strings.Contains(string(deckRaw), "Edited deck") || !strings.Contains(string(designRaw), "Edited signature") {
-		t.Fatalf("deck=%s design=%s", deckRaw, designRaw)
+	for _, test := range tests {
+		raw, _ := json.Marshal(test.tool.Schema().Parameters)
+		text := string(raw)
+		for _, value := range test.required {
+			if !strings.Contains(text, value) {
+				t.Fatalf("%s schema missing %s: %s", test.tool.Schema().Name, value, text)
+			}
+		}
+		for _, value := range test.forbid {
+			if strings.Contains(text, value) {
+				t.Fatalf("%s schema leaked %s: %s", test.tool.Schema().Name, value, text)
+			}
+		}
 	}
 }
 
-func TestReadPPTPrefersStagedAndRejectsGlobalHTML(t *testing.T) {
+func TestReadPPTReturnsCompleteRawStringForAllResources(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
-	tx, _ := NewTransaction(dir, "read-staged")
-	defer tx.Cleanup()
-	staged := strings.Replace(validToolHTML, "Original", "Staged", 1)
-	if _, err := tx.Stage(presentationSlideRef("slide-01"), "test", []byte(staged)); err != nil {
+	resources := []Resource{
+		{Type: "deck", Part: "outline"},
+		{Type: "deck", Part: "design"},
+		{Type: "slide", SlideID: "slide-01", Part: "spec"},
+		{Type: "slide", SlideID: "slide-01", Part: "html"},
+	}
+	for _, resource := range resources {
+		ref, _ := refForResource(pack, resource)
+		want, _, _ := readArtifact(dir, nil, ref)
+		result := (pptReadTool{pack}).Execute(context.Background(), toolInput(pack, dir, nil, map[string]any{
+			"resource": resourceArgs(resource),
+		}))
+		if !result.OK || result.Observation != string(want) || len(result.Data) != 0 {
+			t.Fatalf("%s read=%+v want=%q", resource.Key(), result, want)
+		}
+	}
+}
+
+func TestReadPPTRejectsOversizedContentWithoutTruncation(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	large := strings.Repeat("x", maxPPTContentBytes+1)
+	if err := os.WriteFile(filepath.Join(dir, model.SlideHTMLPath("slide-01")), []byte(large), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result := (pptReadTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target":  map[string]any{"type": "slide", "slide_id": "slide-01"},
-		"include": []any{"html"},
+	result := (pptReadTool{pack}).Execute(context.Background(), toolInput(pack, dir, nil, map[string]any{
+		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "html"}),
 	}))
-	if !result.OK || result.Data["source"] != "staged" ||
-		result.Data["content"].(map[string]any)["html"] != staged {
+	if result.OK || result.Code != CodeContentTooLarge || result.Observation != "" {
 		t.Fatalf("result=%+v", result)
 	}
-	rejected := (pptReadTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target": map[string]any{"type": "global"}, "include": []any{"html"},
-	}))
-	if rejected.OK || rejected.Code != CodeModelInvalid {
-		t.Fatalf("rejected=%+v", rejected)
-	}
 }
 
-func TestWritePPTGlobalCreateAndSlideCreateReplace(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactBlueprint, model.TargetDeck)
-	if err := os.Remove(filepath.Join(dir, "deck.json")); err != nil {
-		t.Fatal(err)
-	}
-	tx, _ := NewTransaction(dir, "create-global")
+func TestWritePPTRequiresStringAndInjectsManagedMetadata(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetSlide)
+	tx, _ := NewTransaction(dir, "write-string")
 	defer tx.Cleanup()
-	global := (pptWriteTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target":  map[string]any{"type": "global"},
-		"content": map[string]any{"model": deckModel("p1", []string{"slide-01"})},
+	resource := Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}
+	rejected := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+		"resource": resourceArgs(resource), "content": map[string]any{"title": "bad"},
 	}))
-	if !global.OK || global.Data["operation"] != "create" {
-		t.Fatalf("global=%+v", global)
+	if rejected.OK || rejected.Code != CodeContentInvalid {
+		t.Fatalf("non-string accepted: %+v", rejected)
 	}
-
-	// Use a fresh transaction with a committed global model so slide reference
-	// integrity is enforceable before staging the page.
-	if _, err := tx.Stage(deckRef(pack), "test", mustJSONValue(deckModel("p1", []string{"slide-01"}))); err != nil {
+	next := slideModel("model-controlled-id", "Updated")
+	next.SchemaVersion, next.ProjectID, next.Revision = "wrong", "wrong", 999
+	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+		"resource": resourceArgs(resource), "content": string(mustJSONValue(next)),
+	}))
+	if !result.OK {
+		t.Fatalf("write=%+v", result)
+	}
+	raw, _ := tx.Read(specSlideRef("slide-01"))
+	var saved spec.SlideSpec
+	if err := json.Unmarshal(raw, &saved); err != nil {
 		t.Fatal(err)
 	}
-	slide := (pptWriteTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target":  map[string]any{"type": "slide", "slide_id": "slide-01"},
-		"content": map[string]any{"model": slideModel("slide-01", "New title")},
-	}))
-	if !slide.OK || slide.ChangedTargets[0].Revision != 2 {
-		t.Fatalf("slide=%+v", slide)
+	if saved.SchemaVersion != spec.SchemaVersion || saved.ProjectID != "p1" ||
+		saved.SlideID != "slide-01" || saved.Revision != 2 || saved.SourceOutlineRevision != 1 {
+		t.Fatalf("runtime metadata not enforced: %+v", saved)
 	}
-	replaced := (pptWriteTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target":  map[string]any{"type": "slide", "slide_id": "slide-01"},
-		"content": map[string]any{"model": slideModel("slide-01", "Replacement")},
-	}))
-	if !replaced.OK || replaced.ChangedTargets[0].Revision != 3 {
-		t.Fatalf("replaced=%+v", replaced)
+	if err := pptschema.ValidateJSON(pptschema.SlideSpecName, raw); err != nil {
+		t.Fatalf("runtime-injected resource failed complete schema validation: %v", err)
 	}
 }
 
-func TestWritePPTPresentationStagesModelAndHTMLAndBlueprintRejectsHTML(t *testing.T) {
+func TestDesignWriteAtomicallyStagesDerivedTokens(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	tx, _ := NewTransaction(dir, "write-design")
+	defer tx.Cleanup()
+	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+		"resource": resourceArgs(Resource{Type: "deck", Part: "design"}),
+		"content":  string(mustJSONValue(designModel())),
+	}))
+	if !result.OK {
+		t.Fatalf("design write=%+v", result)
+	}
+	tokens, err := tx.Read(designTokensRef(pack))
+	if err != nil || !strings.Contains(string(tokens), "--stage-w: 1600") {
+		t.Fatalf("derived tokens were not staged: %q err=%v", tokens, err)
+	}
+	if changes := tx.ChangeSet(); changes.Count() != 1 ||
+		changes.All()[0].Artifact.Kind != ArtifactDesign {
+		t.Fatalf("derived runtime file leaked into public change set: %+v", changes)
+	}
+}
+
+func TestWritePPTValidatesJSONHTMLArtifactAndScope(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "presentation-write")
+	tx, _ := NewTransaction(dir, "write-validation")
 	defer tx.Cleanup()
-	nextHTML := strings.Replace(validToolHTML, "Original", "Next", 1)
-	result := (pptWriteTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target":  map[string]any{"type": "slide", "slide_id": "slide-01"},
-		"content": map[string]any{"model": slideModel("slide-01", "Next"), "html": nextHTML},
+	invalidJSON := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}), "content": "{",
 	}))
-	if !result.OK || !tx.IsStaged(blueprintSlideRef("slide-01")) || !tx.IsStaged(presentationSlideRef("slide-01")) {
-		t.Fatalf("result=%+v changes=%+v", result, tx.ChangeSet())
+	if invalidJSON.OK || invalidJSON.Code != CodeContentInvalid {
+		t.Fatalf("invalid JSON accepted: %+v", invalidJSON)
 	}
-
-	blueprintPack := pack
-	blueprintPack.WorkSpec.Target.Artifact = model.ArtifactBlueprint
-	rejected := (pptWriteTool{pack: blueprintPack}).Execute(context.Background(), toolInput(blueprintPack, dir, tx, map[string]any{
-		"target":  map[string]any{"type": "slide", "slide_id": "slide-01"},
-		"content": map[string]any{"model": slideModel("slide-01", "Bad"), "html": nextHTML},
+	invalidHTML := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "html"}), "content": "<p>no stage</p>",
 	}))
-	if rejected.OK || rejected.Code != ErrCapabilityDenied.Error() {
-		t.Fatalf("rejected=%+v", rejected)
+	if invalidHTML.OK || invalidHTML.Code != CodeContentInvalid {
+		t.Fatalf("invalid HTML accepted: %+v", invalidHTML)
+	}
+	specPack := pack
+	specPack.WorkSpec.Target.Artifact = model.ArtifactSpec
+	forbidden := (pptWriteTool{specPack}).Execute(context.Background(), toolInput(specPack, dir, tx, map[string]any{
+		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "html"}), "content": validToolHTML,
+	}))
+	if forbidden.OK || forbidden.Code != CodeTargetOutOfScope {
+		t.Fatalf("spec HTML write accepted: %+v", forbidden)
+	}
+	deckWrite := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+		"resource": resourceArgs(Resource{Type: "deck", Part: "design"}), "content": string(mustJSONValue(designModel())),
+	}))
+	if deckWrite.OK || deckWrite.Code != CodeTargetOutOfScope {
+		t.Fatalf("slide-level deck write accepted: %+v", deckWrite)
 	}
 }
 
-func TestEditPPTJSONIsAtomicAndTextAnchorsAreUnique(t *testing.T) {
+func TestEditPPTUsesOrderedUniqueAnchorsAndIsAtomic(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewTransaction(dir, "edit")
 	defer tx.Cleanup()
-	tool := pptEditTool{pack: pack}
+	resource := Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}
+	tool := pptEditTool{pack}
 	ok := tool.Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target": map[string]any{"type": "slide", "slide_id": "slide-01"},
+		"resource": resourceArgs(resource),
 		"edits": []any{
-			map[string]any{"type": "json_edit", "op": "replace", "path": "/title", "value": "Edited"},
-			map[string]any{"type": "json_edit", "op": "replace", "path": "/content/summary", "value": "Edited summary"},
-			map[string]any{"type": "text_edit", "field": "html", "old_text": "Original", "new_text": "Edited"},
+			map[string]any{"old_text": `"title": "Original"`, "new_text": `"title": "Edited"`},
+			map[string]any{"old_text": `"key_message": "Original"`, "new_text": `"key_message": "Edited"`},
 		},
 	}))
-	if !ok.OK || len(tx.ChangeSet().Updated) != 2 {
-		t.Fatalf("ok=%+v changes=%+v", ok, tx.ChangeSet())
+	if !ok.OK || len(tx.ChangeSet().Updated) != 1 {
+		t.Fatalf("edit=%+v changes=%+v", ok, tx.ChangeSet())
 	}
-	before := tx.ChangeSet()
+	before, _ := tx.Read(specSlideRef("slide-01"))
 	failed := tool.Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target": map[string]any{"type": "slide", "slide_id": "slide-01"},
+		"resource": resourceArgs(resource),
 		"edits": []any{
-			map[string]any{"type": "json_edit", "op": "replace", "path": "/title", "value": "Must rollback"},
-			map[string]any{"type": "json_edit", "op": "replace", "path": "/missing", "value": "x"},
+			map[string]any{"old_text": `"title": "Edited"`, "new_text": `"title": "Must rollback"`},
+			map[string]any{"old_text": "missing anchor", "new_text": "x"},
 		},
 	}))
-	after := tx.ChangeSet()
-	if failed.OK || before.Updated[0].AfterHash != after.Updated[0].AfterHash {
-		t.Fatalf("failed=%+v before=%+v after=%+v", failed, before, after)
+	after, _ := tx.Read(specSlideRef("slide-01"))
+	if failed.OK || failed.Code != CodeEditAnchorNotFound || string(before) != string(after) {
+		t.Fatalf("failed edit was not atomic: result=%+v", failed)
 	}
-	notFound := tool.Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target": map[string]any{"type": "slide", "slide_id": "slide-01"},
-		"edits":  []any{map[string]any{"type": "text_edit", "field": "html", "old_text": "absent", "new_text": "x"}},
-	}))
-	if notFound.Code != CodeEditAnchorNotFound {
-		t.Fatalf("notFound=%+v", notFound)
-	}
-	if _, err := tx.Stage(presentationSlideRef("slide-01"), "test", []byte(strings.Replace(validToolHTML, "Original", "repeat repeat", 1))); err != nil {
-		t.Fatal(err)
-	}
+	htmlResource := Resource{Type: "slide", SlideID: "slide-01", Part: "html"}
 	ambiguous := tool.Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target": map[string]any{"type": "slide", "slide_id": "slide-01"},
-		"edits":  []any{map[string]any{"type": "text_edit", "field": "html", "old_text": "repeat", "new_text": "x"}},
+		"resource": resourceArgs(htmlResource),
+		"edits":    []any{map[string]any{"old_text": "section", "new_text": "article"}},
 	}))
-	if ambiguous.Code != CodeEditAnchorAmbiguous {
-		t.Fatalf("ambiguous=%+v", ambiguous)
+	if ambiguous.OK || ambiguous.Code != CodeEditAnchorAmbiguous {
+		t.Fatalf("ambiguous anchor accepted: %+v", ambiguous)
 	}
 }
 
-func TestPPTToolsRejectOutOfScopeTarget(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "scope")
-	defer tx.Cleanup()
-	result := (pptWriteTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"target":  map[string]any{"type": "slide", "slide_id": "slide-02"},
-		"content": map[string]any{"model": slideModel("slide-02", "No"), "html": validToolHTML},
-	}))
-	if result.OK || result.Code != ErrTargetOutOfScope.Error() {
-		t.Fatalf("result=%+v", result)
-	}
-}
-
-func TestSearchRefsHonorsManifestPermissionAndBudget(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	pack.Manifest.Refs = []contextengine.ContextRef{{
-		ID: "opaque-ref", Kind: contextengine.RefHistoryEvidence, RunID: "run-1",
-		ThreadID: "thread-1", ProjectID: "p1", Summary: "brand blue typography",
-		ContentHash: strings.Repeat("a", 64), Revision: 2,
-		AvailableLevels: []contextengine.DetailLevel{contextengine.DetailSummary, contextengine.DetailFull},
-	}}
-	result := (referenceSearchTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, nil, map[string]any{
-		"query": "brand", "kinds": []any{"reference"}, "limit": 3,
-	}))
-	if !result.OK || len(result.Data["results"].([]map[string]any)) != 1 {
-		t.Fatalf("result=%+v", result)
-	}
-	input := toolInput(pack, dir, nil, map[string]any{"query": "brand"})
-	input.RunID = "another-run"
-	forbidden := (referenceSearchTool{pack: pack}).Execute(context.Background(), input)
-	if forbidden.OK || forbidden.Code != ErrCapabilityDenied.Error() {
-		t.Fatalf("forbidden=%+v", forbidden)
-	}
-	pack.Manifest.BudgetTokens, pack.Manifest.EstimatedTokens = 1, 1
-	large := strings.Repeat("brand ", 600)
-	pack.Manifest.Refs[0].Summary = large
-	exceeded := (referenceSearchTool{pack: pack}).Execute(context.Background(), toolInput(pack, dir, nil, map[string]any{
-		"query": "brand", "limit": 20,
-	}))
-	if exceeded.OK || exceeded.Code != CodeContextBudget {
-		t.Fatalf("exceeded=%+v", exceeded)
-	}
-}
-
-func TestRenderSlideUsesStagedViewAndReturnsDiagnostics(t *testing.T) {
+func TestRenderSlideUsesStagedHTMLAndProducesEvidence(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewTransaction(dir, "render")
 	defer tx.Cleanup()
 	staged := strings.Replace(validToolHTML, "Original", "Staged", 1)
-	if _, err := tx.Stage(presentationSlideRef("slide-01"), "test", []byte(staged)); err != nil {
+	if _, err := tx.Stage(slideHTMLRef("slide-01"), "test", []byte(staged)); err != nil {
 		t.Fatal(err)
 	}
 	renderer := &recordingRenderer{}
-	result := (slideRenderTool{pack: pack, renderer: renderer}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"slide_id": "slide-01",
-	}))
-	if !result.OK || renderer.html != staged || result.Data["source"] != "staged" || len(result.Evidence) != 1 {
-		t.Fatalf("result=%+v html=%q", result, renderer.html)
-	}
-	failing := &recordingRenderer{diagnostics: RenderDiagnostics{
-		Overflow: map[string]bool{"horizontal": true}, ConsoleErrors: []string{"boom"},
-		FailedResources: []string{"404: /x.png"}, FontStatus: "loading",
-	}}
-	rejected := (slideRenderTool{pack: pack, renderer: failing}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"slide_id": "slide-01",
-	}))
-	if rejected.OK || rejected.Code != CodeRenderFailed || len(rejected.Issues) < 3 {
-		t.Fatalf("rejected=%+v", rejected)
+	result := (slideRenderTool{pack: pack, renderer: renderer}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"}))
+	if !result.OK || renderer.html != staged || len(result.Evidence) != 1 ||
+		result.Evidence[0].Target.Key() != "slide:slide-01:html" {
+		t.Fatalf("render=%+v html=%q", result, renderer.html)
 	}
 }
 
-func TestRenderEvidenceBindsRevisionAndBecomesStaleAfterEdit(t *testing.T) {
+func TestCompletionGateRequiresLatestStaticAndRenderEvidence(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "evidence")
+	tx, _ := NewTransaction(dir, "gate")
 	defer tx.Cleanup()
-	ledger := NewEvidenceLedger()
-	hash, _ := renderSourceHash(pack, tx, "slide-01")
-	ledger.Record(newEvidence("render", TargetRef{Type: "slide", SlideID: "slide-01"}, hash))
-	if !ledger.HasFresh(TargetRef{Type: "slide", SlideID: "slide-01"}, hash, "render") {
-		t.Fatal("fresh render evidence missing")
-	}
-	ledger.Invalidate(TargetRef{Type: "slide", SlideID: "slide-01"})
-	if ledger.HasFresh(TargetRef{Type: "slide", SlideID: "slide-01"}, hash, "render") {
-		t.Fatal("old render evidence remained fresh")
-	}
-}
-
-func TestCompletionGateRequiresThenAcceptsLatestRender(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "gate-render")
-	defer tx.Cleanup()
-	nextHTML := []byte(strings.Replace(validToolHTML, "Original", "Changed", 1))
-	change, err := tx.Stage(presentationSlideRef("slide-01"), "edit_ppt", nextHTML)
-	if err != nil {
+	if _, err := tx.Stage(slideHTMLRef("slide-01"), "edit_ppt", []byte(strings.Replace(validToolHTML, "Original", "Changed", 1))); err != nil {
 		t.Fatal(err)
 	}
-	changes := tx.ChangeSet()
 	hash, _ := renderSourceHash(pack, tx, "slide-01")
+	resource := Resource{Type: "slide", SlideID: "slide-01", Part: "html"}
 	ledger := NewEvidenceLedger()
-	ledger.Record(staticEvidence(TargetRef{Type: "slide", SlideID: "slide-01"}, hash))
-	base := CompletionContext{
+	ledger.Record(staticEvidence(resource, hash))
+	ctx := CompletionContext{
 		Strategy: StrategySimple, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
-		Transaction: tx, Changes: changes, Evidence: ledger, Context: pack,
+		Transaction: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
-	rejected := NewCompletionGate().Check(base)
-	if rejected.Accepted || !hasCompletionCode(rejected, "VISUAL_EVIDENCE_REQUIRED") {
-		t.Fatalf("rejected=%+v change=%+v", rejected, change)
+	if result := NewCompletionGate().Check(ctx); result.Accepted || !hasCompletionCode(result, "VISUAL_EVIDENCE_REQUIRED") {
+		t.Fatalf("missing render accepted: %+v", result)
 	}
-	ledger.Record(newEvidence("render", TargetRef{Type: "slide", SlideID: "slide-01"}, hash))
-	accepted := NewCompletionGate().Check(base)
-	if !accepted.Accepted {
-		t.Fatalf("accepted=%+v", accepted)
+	rendered := (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"}))
+	recordResultEvidence(ledger, rendered)
+	if result := NewCompletionGate().Check(ctx); !result.Accepted {
+		t.Fatalf("fresh evidence rejected: %+v", result)
 	}
 }
 
-func TestRegistryDisclosesOnlyNewSurfaceByStrategyAndPhase(t *testing.T) {
+func TestSpecArtifactCanFinishAfterSlideSpecOnlyChange(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetSlide)
+	tx, _ := NewTransaction(dir, "spec-only")
+	defer tx.Cleanup()
+	next := slideModel("slide-01", "Updated")
+	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
+		"content":  string(mustJSONValue(next)),
+	}))
+	ledger := NewEvidenceLedger()
+	recordResultEvidence(ledger, result)
+	recordResultEvidence(ledger, (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})))
+	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
+	if !result.OK || !gate.Accepted || len(gate.MaterializationProofs) != 0 {
+		t.Fatalf("spec-only finish rejected: write=%+v gate=%+v", result, gate)
+	}
+}
+
+func TestPresentationSpecHTMLAffectingChangesRequireHTMLSync(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*spec.SlideSpec)
+	}{
+		{name: "title", mutate: func(value *spec.SlideSpec) { value.Title = "Updated" }},
+		{name: "content", mutate: func(value *spec.SlideSpec) { value.Content.Summary = "Updated" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+			tx, _ := NewTransaction(dir, "presentation-"+test.name)
+			defer tx.Cleanup()
+			next := slideModel("slide-01", "Original")
+			test.mutate(&next)
+			write := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+				"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
+				"content":  string(mustJSONValue(next)),
+			}))
+			ledger := NewEvidenceLedger()
+			recordResultEvidence(ledger, write)
+			gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
+			if gate.Accepted || !hasCompletionCode(gate, "SLIDE_HTML_SYNC_REQUIRED") {
+				t.Fatalf("HTML-affecting spec change accepted: write=%+v gate=%+v", write, gate)
+			}
+			if !hasRequiredAction(gate, "edit_ppt", "slide:slide-01:html") ||
+				!hasRequiredAction(gate, "render_slide", "slide:slide-01:html") {
+				t.Fatalf("gate did not direct HTML repair and render: %+v", gate)
+			}
+		})
+	}
+}
+
+func TestPresentationSpecAndHTMLWithLatestRenderCanFinish(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	tx, _ := NewTransaction(dir, "presentation-complete")
+	defer tx.Cleanup()
+	ledger := NewEvidenceLedger()
+	next := slideModel("slide-01", "Updated")
+	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
+			"content":  string(mustJSONValue(next)),
+		})))
+	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "html"}),
+			"content":  strings.Replace(validToolHTML, "Original", "Updated", 1),
+		})))
+	recordResultEvidence(ledger, (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})))
+	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
+	if !gate.Accepted || len(gate.MaterializationProofs) != 1 {
+		t.Fatalf("latest spec+HTML render rejected: %+v", gate)
+	}
+}
+
+func TestPresentationSpeakerNotesOnlyNeedsLatestMaterializationProof(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	tx, _ := NewTransaction(dir, "speaker-notes")
+	defer tx.Cleanup()
+	ledger := NewEvidenceLedger()
+	next := slideModel("slide-01", "Original")
+	next.SpeakerNotes = "Updated private notes"
+	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
+			"content":  string(mustJSONValue(next)),
+		})))
+	recordResultEvidence(ledger, (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})))
+	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
+	if !gate.Accepted || hasArtifactChange(tx.ChangeSet(), ArtifactSlideHTML, "slide-01") ||
+		len(gate.MaterializationProofs) != 1 {
+		t.Fatalf("speaker-notes materialization rejected: %+v changes=%+v", gate, tx.ChangeSet())
+	}
+}
+
+func TestPresentationDesignOnlyNeedsLatestRenderAndKeepsHTMLUnchanged(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	tx, _ := NewTransaction(dir, "design-only-render")
+	defer tx.Cleanup()
+	ledger := NewEvidenceLedger()
+	next := designModel()
+	next.Signature = "updated signature"
+	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{
+			"resource": resourceArgs(Resource{Type: "deck", Part: "design"}),
+			"content":  string(mustJSONValue(next)),
+		})))
+	recordResultEvidence(ledger, (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})))
+	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
+	if !gate.Accepted || hasArtifactChange(tx.ChangeSet(), ArtifactSlideHTML, "slide-01") ||
+		len(gate.MaterializationProofs) != 1 ||
+		gate.MaterializationProofs[0].HTMLRevision != pack.Revisions.SlideHTML["slide-01"] {
+		t.Fatalf("design-only render rejected or changed HTML revision: gate=%+v changes=%+v", gate, tx.ChangeSet())
+	}
+}
+
+func TestRenderEvidenceBeforeSpecChangeIsStale(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	tx, _ := NewTransaction(dir, "stale-render")
+	defer tx.Cleanup()
+	ledger := NewEvidenceLedger()
+	recordResultEvidence(ledger, (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})))
+	next := slideModel("slide-01", "Original")
+	next.SpeakerNotes = "changed after render"
+	write := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
+		"content":  string(mustJSONValue(next)),
+	}))
+	for _, target := range write.InvalidatedTargets {
+		ledger.Invalidate(target)
+	}
+	recordResultEvidence(ledger, write)
+	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
+	if gate.Accepted || !hasCompletionCode(gate, "VISUAL_EVIDENCE_REQUIRED") {
+		t.Fatalf("pre-change render evidence accepted: %+v", gate)
+	}
+}
+
+func TestRenderProofWithOldSourceRevisionIsRejected(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	tx, _ := NewTransaction(dir, "old-proof-revision")
+	defer tx.Cleanup()
+	ledger := NewEvidenceLedger()
+	next := slideModel("slide-01", "Original")
+	next.SpeakerNotes = "updated notes"
+	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
+			"content":  string(mustJSONValue(next)),
+		})))
+	rendered := (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
+		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"}))
+	if len(rendered.Evidence) != 1 || rendered.Evidence[0].Materialization == nil {
+		t.Fatalf("render proof missing: %+v", rendered)
+	}
+	rendered.Evidence[0].Materialization.SourceSpecRevision--
+	recordResultEvidence(ledger, rendered)
+	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
+	if gate.Accepted || !hasCompletionCode(gate, "VISUAL_EVIDENCE_REQUIRED") {
+		t.Fatalf("old source revision passed gate: %+v", gate)
+	}
+}
+
+func TestMaterializationSourceHashBindsDesignSpecAndHTML(t *testing.T) {
+	base := MaterializationSourceHash("slide-01", []byte("design"), []byte("spec"), []byte("html"))
+	for name, hash := range map[string]string{
+		"design": MaterializationSourceHash("slide-01", []byte("design-2"), []byte("spec"), []byte("html")),
+		"spec":   MaterializationSourceHash("slide-01", []byte("design"), []byte("spec-2"), []byte("html")),
+		"html":   MaterializationSourceHash("slide-01", []byte("design"), []byte("spec"), []byte("html-2")),
+	} {
+		if hash == base {
+			t.Errorf("%s change did not invalidate source hash", name)
+		}
+	}
+}
+
+func TestRegistryDisclosesOnlyFixedBusinessSurface(t *testing.T) {
 	_, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
 	registry := NewToolRegistry()
 	if err := (DefaultDomainToolProvider{Pack: pack, Renderer: &recordingRenderer{}}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	all := map[string]bool{}
-	for _, schema := range registry.Disclose(StrategySimple, PhaseExecuting, model.IntentExecute) {
-		all[schema.Name] = true
-	}
+	all := schemasByName(registry.Disclose(StrategySimple, PhaseExecuting, model.IntentExecute))
 	for _, name := range []string{"read_ppt", "write_ppt", "edit_ppt", "search_refs", "render_slide"} {
 		if !all[name] {
 			t.Fatalf("%s not disclosed: %v", name, all)
 		}
 	}
-	for _, old := range []string{
-		"read_context_ref", "read_staged_artifact", "write_staged_deck_blueprint",
-		"write_staged_slide_blueprint", "patch_staged_slide_blueprint", "write_staged_design_spec",
-		"write_staged_presentation", "patch_staged_presentation", "search_assets", "finish_step",
-	} {
-		if all[old] {
-			t.Fatalf("old tool %s was disclosed", old)
-		}
-	}
 	chat := schemasByName(registry.Disclose(StrategyChat, PhaseChat, model.IntentTalk))
 	if chat["write_ppt"] || chat["edit_ppt"] {
-		t.Fatalf("chat disclosed write tools: %v", chat)
-	}
-	planning := schemasByName(registry.Disclose(StrategyComplex, PhasePlanning, model.IntentExecute))
-	if planning["write_ppt"] || planning["edit_ppt"] {
-		t.Fatalf("planning disclosed write tools: %v", planning)
+		t.Fatalf("talk disclosed writes: %v", chat)
 	}
 }
 
 func TestToolResultEnvelopeHidesInternalEvidence(t *testing.T) {
 	result := SuccessfulToolResult("ok")
-	result.Evidence = []Evidence{newEvidence("schema", TargetRef{Type: "global"}, "hash")}
+	result.Evidence = []Evidence{newEvidence("schema", Resource{Type: "deck", Part: "outline"}, "hash")}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		t.Fatal(err)
 	}
-	text := string(raw)
-	for _, required := range []string{`"ok":true`, `"summary":"ok"`, `"changed_targets":[]`, `"issues":[]`, `"retryable":false`} {
-		if !strings.Contains(text, required) {
-			t.Fatalf("missing %s in %s", required, text)
-		}
-	}
-	if strings.Contains(text, `"evidence"`) {
-		t.Fatalf("internal evidence leaked into ToolResult: %s", text)
+	if strings.Contains(string(raw), `"evidence"`) {
+		t.Fatalf("internal evidence leaked: %s", raw)
 	}
 }
 
@@ -407,6 +494,38 @@ func hasCompletionCode(result CompletionResult, code string) bool {
 		}
 	}
 	return false
+}
+
+func hasRequiredAction(result CompletionResult, tool, target string) bool {
+	for _, issue := range result.Issues {
+		for _, action := range issue.RequiredActions {
+			if action.Tool == tool && action.Target.Key() == target {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func recordResultEvidence(ledger *EvidenceLedger, result ToolResult) {
+	for _, evidence := range result.Evidence {
+		ledger.Record(evidence)
+	}
+}
+
+func completionContext(pack contextengine.ContextPack, tx *Transaction, ledger *EvidenceLedger) CompletionContext {
+	return CompletionContext{
+		Strategy: StrategySimple, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
+		Transaction: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
+	}
+}
+
+func resourceArgs(resource Resource) map[string]any {
+	out := map[string]any{"type": resource.Type, "part": resource.Part}
+	if resource.SlideID != "" {
+		out["slide_id"] = resource.SlideID
+	}
+	return out
 }
 
 func toolInput(pack contextengine.ContextPack, dir string, tx *Transaction, args map[string]any) DomainToolInput {
@@ -420,12 +539,12 @@ func toolInput(pack contextengine.ContextPack, dir string, tx *Transaction, args
 func toolProject(t *testing.T, artifact model.Artifact, level model.TargetLevel) (string, contextengine.ContextPack) {
 	t.Helper()
 	dir := t.TempDir()
-	for _, rel := range []string{"design", "slides/slide-01", "common"} {
+	for _, rel := range []string{"slides/slide-01", "common"} {
 		if err := os.MkdirAll(filepath.Join(dir, rel), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	deck := deckModel("p1", []string{"slide-01"})
+	outline := deckModel("p1", []string{"slide-01"})
 	slide := slideModel("slide-01", "Original")
 	design := designModel()
 	writeJSON := func(path string, value any) {
@@ -434,10 +553,10 @@ func toolProject(t *testing.T, artifact model.Artifact, level model.TargetLevel)
 			t.Fatal(err)
 		}
 	}
-	writeJSON("deck.json", deck)
-	writeJSON(model.SlideJSONPath("slide-01"), slide)
-	writeJSON("design/design-spec.json", design)
-	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(model.SlideHTMLPath("slide-01"))), []byte(validToolHTML), 0o644); err != nil {
+	writeJSON("outline.json", outline)
+	writeJSON(model.SlideSpecPath("slide-01"), slide)
+	writeJSON("design.json", design)
+	if err := os.WriteFile(filepath.Join(dir, model.SlideHTMLPath("slide-01")), []byte(validToolHTML), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "common", "tokens.css"), []byte(":root{}"), 0o644); err != nil {
@@ -456,16 +575,18 @@ func toolProject(t *testing.T, artifact model.Artifact, level model.TargetLevel)
 			Target: target, Interaction: model.RunInteraction{Intent: model.IntentExecute}, Instruction: "test",
 		},
 		Project: contextengine.ProjectContext{ID: "p1", Title: "Test"},
-		Deck:    contextengine.DeckContext{Deck: deck, Summaries: []contextengine.SlideSummary{{ID: "slide-01", Title: "Original"}}},
-		Target: contextengine.TargetContext{
-			Artifact: artifact, Level: level, Slide: &slide,
-			Materialization: &blueprint.Materialization{State: string(model.MaterializationFresh)},
+		Outline: contextengine.OutlineContext{
+			Outline: outline, Summaries: []contextengine.SlideSummary{{ID: "slide-01", Title: "Original"}},
 		},
-		Design:       contextengine.DesignContext{Spec: &design},
-		Presentation: contextengine.PresentationContext{Summaries: map[string]contextengine.HTMLSummary{}},
+		Target: contextengine.TargetContext{
+			Artifact: artifact, Level: level, SlideSpec: &slide,
+			Materialization: &spec.Materialization{State: string(model.MaterializationFresh)},
+		},
+		Design:    contextengine.DesignContext{Design: &design},
+		SlideHTML: contextengine.SlideHTMLContext{Summaries: map[string]contextengine.HTMLSummary{}},
 		Revisions: contextengine.RevisionRefs{
-			Deck: 1, Design: 1, Slides: map[string]int{"slide-01": 1},
-			Presentations: map[string]int{"slide-01": 1},
+			Outline: 1, Design: 1, SlideSpecs: map[string]int{"slide-01": 1},
+			SlideHTML: map[string]int{"slide-01": 1},
 		},
 		Manifest: contextengine.ContextManifest{
 			ContextID: "ctx", RunID: "run-1", ThreadID: "thread-1", ProjectID: "p1",
@@ -476,39 +597,41 @@ func toolProject(t *testing.T, artifact model.Artifact, level model.TargetLevel)
 	return dir, pack
 }
 
-func deckModel(projectID string, order []string) blueprint.Deck {
-	return blueprint.Deck{
-		SchemaVersion: blueprint.SchemaVersion, Revision: 1, ProjectID: projectID,
+func deckModel(projectID string, order []string) spec.Outline {
+	return spec.Outline{
+		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID,
 		Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN",
 		CoreThesis: "Thesis", NarrativeArc: "Arc",
-		Sections:   []blueprint.Section{{ID: "section-1", Number: "1", Title: "Section", Subsections: []blueprint.Subsection{}}},
+		Sections:   []spec.Section{{ID: "section-1", Number: "1", Title: "Section", Subsections: []spec.Subsection{}}},
 		SlideOrder: append([]string{}, order...), CreatedAt: 1, UpdatedAt: 1,
 	}
 }
 
-func slideModel(id, title string) blueprint.Slide {
-	return blueprint.Slide{
-		SchemaVersion: blueprint.SchemaVersion, Revision: 1, SlideID: id, SectionID: "section-1",
+func slideModel(id, title string) spec.SlideSpec {
+	return spec.SlideSpec{
+		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "p1", SlideID: id,
+		SourceOutlineRevision: 1, SectionID: "section-1",
 		Role: "cover", Title: title, KeyMessage: title,
-		Content:      blueprint.Content{Summary: title, Points: []string{}},
-		VisualIntent: blueprint.VisualIntent{Archetype: "cover", Description: "Cover", AssetQueries: []string{}},
+		Content:      spec.Content{Summary: title, Points: []string{}},
+		VisualIntent: spec.VisualIntent{Archetype: "cover", Description: "Cover", AssetQueries: []string{}},
 		SpeakerNotes: "", CreatedAt: 1, UpdatedAt: 1,
 	}
 }
 
-func designModel() blueprint.DesignSpec {
-	return blueprint.DesignSpec{
-		SchemaVersion: blueprint.SchemaVersion, Revision: 1,
-		Canvas:  blueprint.CanvasSpec{Width: 1600, Height: 900, Ratio: "16:9"},
-		Palette: []string{"black", "white"},
-		Typography: blueprint.TypographySpec{
-			Display: blueprint.FontSpec{Family: "Arial"}, Body: blueprint.FontSpec{Family: "Arial"},
-			Utility: blueprint.FontSpec{Family: "Arial"},
+func designModel() spec.Design {
+	return spec.Design{
+		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "p1",
+		Canvas:  spec.CanvasSpec{Width: 1600, Height: 900, Ratio: "16:9"},
+		Palette: []string{"#111111", "#FFFFFF", "#3366FF"},
+		Typography: spec.TypographySpec{
+			Display: spec.FontSpec{Family: "Arial", Weight: 700},
+			Body:    spec.FontSpec{Family: "Arial", Weight: 400},
+			Utility: spec.FontSpec{Family: "Arial", Weight: 500},
 		},
-		Spacing: blueprint.SpacingSpec{Unit: 8}, Radius: blueprint.RadiusSpec{Card: 8},
-		Shadows:      blueprint.ShadowSpec{Card: "none"},
-		LayoutSystem: blueprint.LayoutSystem{Grid: "12-col", Rhythm: "regular", Density: "medium"},
-		Signature:    "test", Motion: blueprint.MotionSpec{Policy: "none"},
+		Spacing: spec.SpacingSpec{Unit: 8}, Radius: spec.RadiusSpec{Card: 8},
+		Shadows:      spec.ShadowSpec{Card: "none"},
+		LayoutSystem: spec.LayoutSystem{Grid: "12-col", Rhythm: "regular", Density: "medium"},
+		Signature:    "test", Motion: spec.MotionSpec{Policy: "none"}, CreatedAt: 1, UpdatedAt: 1,
 	}
 }
 

@@ -12,7 +12,7 @@ import (
 
 func activeRunSpec() model.WorkSpec {
 	return model.WorkSpec{
-		Target:      model.RunTarget{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck},
+		Target:      model.RunTarget{Artifact: model.ArtifactSpec, Level: model.TargetDeck},
 		Interaction: model.RunInteraction{Intent: model.IntentExecute},
 		Instruction: "test",
 	}
@@ -33,8 +33,8 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	ctx := context.Background()
 
 	slides := []model.Slide{
-		{ID: "s0", ProjectID: "p1", Position: 0, Layout: "cover", Title: "封面", JSONPath: "slides/s0/slide.json", HTMLPath: "slides/s0/index.html"},
-		{ID: "s1", ProjectID: "p1", Position: 1, Layout: "thanks", Title: "谢谢", JSONPath: "slides/s1/slide.json", HTMLPath: "slides/s1/index.html"},
+		{ID: "s0", ProjectID: "p1", Position: 0, Layout: "cover", Title: "封面", SpecPath: "slides/s0/spec.json", HTMLPath: "slides/s0/index.html"},
+		{ID: "s1", ProjectID: "p1", Position: 1, Layout: "thanks", Title: "谢谢", SpecPath: "slides/s1/spec.json", HTMLPath: "slides/s1/index.html"},
 	}
 	if err := s.ReplaceSlides(ctx, "p1", slides); err != nil {
 		t.Fatalf("replace: %v", err)
@@ -48,7 +48,7 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	}
 
 	// 幂等替换：再次以 3 页替换，旧的被清掉。
-	three := append(slides, model.Slide{ID: "s2", ProjectID: "p1", Position: 2, Layout: "cta", Title: "行动", JSONPath: "slides/s2/slide.json", HTMLPath: "x"})
+	three := append(slides, model.Slide{ID: "s2", ProjectID: "p1", Position: 2, Layout: "cta", Title: "行动", SpecPath: "slides/s2/spec.json", HTMLPath: "x"})
 	three[1].Position = 2
 	three[1].Layout = "cta"
 	three[2].Position = 1
@@ -68,8 +68,8 @@ func TestGetSlideByID(t *testing.T) {
 	ctx := context.Background()
 
 	slides := []model.Slide{
-		{ID: "s0", ProjectID: "p1", Position: 0, Layout: "cover", Title: "封面", JSONPath: "slides/s0/slide.json", HTMLPath: "slides/s0/index.html"},
-		{ID: "s1", ProjectID: "p1", Position: 1, Layout: "thanks", Title: "谢谢", JSONPath: "slides/s1/slide.json", HTMLPath: "slides/s1/index.html"},
+		{ID: "s0", ProjectID: "p1", Position: 0, Layout: "cover", Title: "封面", SpecPath: "slides/s0/spec.json", HTMLPath: "slides/s0/index.html"},
+		{ID: "s1", ProjectID: "p1", Position: 1, Layout: "thanks", Title: "谢谢", SpecPath: "slides/s1/spec.json", HTMLPath: "slides/s1/index.html"},
 	}
 	if err := s.ReplaceSlides(ctx, "p1", slides); err != nil {
 		t.Fatalf("replace: %v", err)
@@ -95,7 +95,7 @@ func TestVersionNoMonotonic(t *testing.T) {
 	ctx := context.Background()
 
 	for want := 0; want < 3; want++ {
-		no, err := s.NextVersionNo(ctx, "blueprint_deck", "p1")
+		no, err := s.NextVersionNo(ctx, "outline", "p1")
 		if err != nil {
 			t.Fatalf("next: %v", err)
 		}
@@ -103,13 +103,13 @@ func TestVersionNoMonotonic(t *testing.T) {
 			t.Fatalf("want version %d, got %d", want, no)
 		}
 		if err := s.CreateVersion(ctx, model.Version{
-			ID: "v" + itoaLocal(no), TargetType: "blueprint_deck", TargetID: "p1", VersionNo: no,
-			SnapshotPath: "versions/blueprint-deck/v" + itoaLocal(no) + ".json", CreatedAt: 1,
+			ID: "v" + itoaLocal(no), TargetType: "outline", TargetID: "p1", VersionNo: no,
+			SnapshotPath: "versions/spec-deck/v" + itoaLocal(no) + ".json", CreatedAt: 1,
 		}); err != nil {
 			t.Fatalf("create version: %v", err)
 		}
 	}
-	vs, err := s.ListVersions(ctx, "blueprint_deck", "p1")
+	vs, err := s.ListVersions(ctx, "outline", "p1")
 	if err != nil {
 		t.Fatalf("list versions: %v", err)
 	}
@@ -137,9 +137,9 @@ func TestSlideRevisionMetadataRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	err := s.ReplaceSlides(ctx, "p1", []model.Slide{
 		{ID: "s1", ProjectID: "p1", Position: 10, Layout: "cover", Title: "A",
-			BlueprintRevision: 2, PresentationRevision: 3, SourceDeckRevision: 1,
-			SourceBlueprintRevision: 2, SourceDesignRevision: 1,
-			JSONPath: "slides/s1/slide.json", HTMLPath: "slides/s1/index.html"},
+			SpecRevision: 2, HTMLRevision: 3, SourceOutlineRevision: 1,
+			SourceSpecRevision: 2, SourceDesignRevision: 1,
+			SpecPath: "slides/s1/spec.json", HTMLPath: "slides/s1/index.html"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +148,7 @@ func TestSlideRevisionMetadataRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Position != 10 || got.BlueprintRevision != 2 || got.PresentationRevision != 3 {
+	if got.Position != 10 || got.SpecRevision != 2 || got.HTMLRevision != 3 {
 		t.Fatalf("round trip lost fields: %+v", got)
 	}
 }
@@ -179,7 +179,7 @@ func TestUpdateMetaAndRevisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := s.GetSlide(ctx, "s1")
-	if got.Title != "B" || got.Layout != "content" || got.BlueprintRevision != 2 || got.PresentationRevision != 3 {
+	if got.Title != "B" || got.Layout != "content" || got.SpecRevision != 2 || got.HTMLRevision != 3 {
 		t.Fatalf("got %+v", got)
 	}
 }

@@ -26,7 +26,7 @@ const scopeOptions: ScopeOption[] = [
 ];
 
 const objectOptions: ObjectOption[] = [
-  { artifact: 'blueprint', label: '蓝图' },
+  { artifact: 'spec', label: '设计稿' },
   { artifact: 'presentation', label: '幻灯片' },
 ];
 
@@ -35,7 +35,7 @@ function scopeLabel(level: TargetLevel): string {
 }
 
 function objectLabel(artifact: Artifact): string {
-  return objectOptions.find((option) => option.artifact === artifact)?.label ?? '蓝图';
+  return objectOptions.find((option) => option.artifact === artifact)?.label ?? '设计稿';
 }
 
 function targetLabel(target: ComposerTarget): string {

@@ -12,7 +12,7 @@ export type ResourceState<T> =
 const htmlCache = new Map<string, string>();
 
 function revisionOf(slide: Slide): number {
-  return slide.presentation_revision ?? slide.current_version ?? 0;
+  return slide.html_revision ?? slide.current_version ?? 0;
 }
 
 export function hasRenderedHTML(slide: Slide): boolean {

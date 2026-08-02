@@ -2,7 +2,7 @@ import type { Artifact, TargetLevel } from '../../api/types';
 import type { RunStatus } from '../../stores/runStore';
 
 export const artifactTargetLabels: Record<Artifact, string> = {
-  blueprint: '蓝图',
+  spec: '设计稿',
   presentation: 'HTML',
 };
 
@@ -23,4 +23,8 @@ export const runStatusLabels: Record<RunStatus, string> = {
 
 export function targetLabel(artifact: Artifact, level: TargetLevel): string {
   return `${levelLabels[level]}${artifactTargetLabels[artifact]}`;
+}
+
+export function presentUserText(text: string): string {
+  return text.replace(/蓝图/g, '设计稿');
 }

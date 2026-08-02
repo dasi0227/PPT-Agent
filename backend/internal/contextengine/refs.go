@@ -11,11 +11,11 @@ import (
 type RefKind string
 
 const (
-	RefPresentationHTML RefKind = "presentation_html"
-	RefHistoryEvidence  RefKind = "history_evidence"
-	RefAssetDetail      RefKind = "asset_detail"
-	RefBlueprint        RefKind = "blueprint"
-	RefToolResult       RefKind = "tool_result"
+	RefSlideHTML       RefKind = "slide_html"
+	RefHistoryEvidence RefKind = "history_evidence"
+	RefAssetDetail     RefKind = "asset_detail"
+	RefSpec            RefKind = "spec"
+	RefToolResult      RefKind = "tool_result"
 )
 
 type ContextRef struct {

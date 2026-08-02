@@ -17,7 +17,7 @@ type CreateRunParams struct {
 	ProjectID   string
 	PageIndex   *int
 	Instruction string
-	// Blueprint/presentation runner implementation options.
+	// Spec/presentation runner implementation options.
 	Brief      string
 	SlideCount int
 	Language   string

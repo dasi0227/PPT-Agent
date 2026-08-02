@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
 
-const base = { schema_version: 1, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 2, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const entry = (seq: number, type: string, data: Record<string, unknown>, runId = 'r1'): HistoryEntry => ({
   seq, ts: 1_754_130_600, run_id: runId, turn: type === 'user_turn' ? 'user' : 'agent', type, data,
 });

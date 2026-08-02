@@ -57,17 +57,17 @@ func NewProjectHandler(svc *service.ProjectService, slideSvc *service.SlideServi
 }
 
 type projectResponse struct {
-	ID             string `json:"id"`
-	Title          string `json:"title"`
-	WorkDir        string `json:"work_dir"`
-	Theme          string `json:"theme"`
-	Status         string `json:"status"`
-	DesignPath     string `json:"design_path"`
-	DeckPath       string `json:"deck_path"`
-	DeckRevision   int    `json:"deck_revision"`
-	DesignRevision int    `json:"design_revision"`
-	CreatedAt      int64  `json:"created_at"`
-	UpdatedAt      int64  `json:"updated_at"`
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	WorkDir         string `json:"work_dir"`
+	Theme           string `json:"theme"`
+	Status          string `json:"status"`
+	DesignPath      string `json:"design_path"`
+	OutlinePath     string `json:"outline_path"`
+	OutlineRevision int    `json:"outline_revision"`
+	DesignRevision  int    `json:"design_revision"`
+	CreatedAt       int64  `json:"created_at"`
+	UpdatedAt       int64  `json:"updated_at"`
 }
 
 type createProjectRequest struct {
@@ -140,8 +140,8 @@ func (h *ProjectHandler) ListSlides(c *gin.Context) {
 		out := make([]slideResponse, len(slides))
 		for i, sl := range slides {
 			resp := toSlideResponse(sl)
-			if content, materialization, readErr := h.slideSvc.ReadBlueprint(c.Request.Context(), sl.ID); readErr == nil {
-				resp.Blueprint, resp.Materialization = &content, &materialization
+			if content, materialization, readErr := h.slideSvc.ReadSpec(c.Request.Context(), sl.ID); readErr == nil {
+				resp.Spec, resp.Materialization = &content, &materialization
 			}
 			out[i] = resp
 		}
@@ -156,7 +156,7 @@ func (h *ProjectHandler) ListSlides(c *gin.Context) {
 func toProjectResponse(p model.Project) projectResponse {
 	return projectResponse{
 		ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, Status: p.Status,
-		DesignPath: p.DesignPath, DeckPath: p.DeckPath, DeckRevision: p.DeckRevision,
+		DesignPath: p.DesignPath, OutlinePath: p.OutlinePath, OutlineRevision: p.OutlineRevision,
 		DesignRevision: p.DesignRevision, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -172,8 +172,8 @@ func (h *ProjectHandler) CreateSlide(c *gin.Context) {
 	switch {
 	case err == nil:
 		resp := toSlideResponse(sl)
-		if content, materialization, readErr := h.slideSvc.ReadBlueprint(c.Request.Context(), sl.ID); readErr == nil {
-			resp.Blueprint, resp.Materialization = &content, &materialization
+		if content, materialization, readErr := h.slideSvc.ReadSpec(c.Request.Context(), sl.ID); readErr == nil {
+			resp.Spec, resp.Materialization = &content, &materialization
 		}
 		c.JSON(http.StatusCreated, resp)
 	case errors.Is(err, service.ErrRunActive):

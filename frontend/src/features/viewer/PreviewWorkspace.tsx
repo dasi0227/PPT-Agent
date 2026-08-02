@@ -10,14 +10,14 @@ import {
 import type { Slide } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
-import { useBlueprintStore } from '../../stores/blueprintStore';
+import { useSpecStore } from '../../stores/specStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
-import { DesignSpecSummary } from './DesignSpecSummary';
+import { DesignSummary } from './DesignSummary';
 import { EmptyState } from './EmptyState';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
-import { SlideBlueprintCard } from './SlideBlueprintCard';
+import { SlideSpecCard } from './SlideSpecCard';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
 
 function PreviewFrame({
@@ -82,7 +82,7 @@ function OverviewSlide({
   state,
   load,
   select,
-  blueprint,
+  spec,
 }: {
   slide: Slide;
   index: number;
@@ -90,7 +90,7 @@ function OverviewSlide({
   state: ResourceState<string>;
   load: () => void;
   select: () => void;
-  blueprint?: React.ReactNode;
+  spec?: React.ReactNode;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const loadRef = useRef(load);
@@ -137,7 +137,7 @@ function OverviewSlide({
           <span>HTML 加载失败</span>
           <span className="text-text-600">打开页面后可重试</span>
         </div>
-      ) : blueprint ?? (
+      ) : spec ?? (
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-5 text-center">
           <span className="text-[10px] font-medium uppercase tracking-wide text-text-400">
             {slide.layout || '页面'}
@@ -182,10 +182,10 @@ export const PreviewWorkspace: React.FC = () => {
   } = useDeckStore();
   const { activeProjectId, slidesByProjectId } = useProjectStore();
   const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel } = useUIStore();
-  const blueprintView = useBlueprintStore((state) => activeProjectId ? state.byProjectId[activeProjectId] : undefined);
-  const blueprintLoading = useBlueprintStore((state) => activeProjectId ? state.loading[activeProjectId] : false);
-  const blueprintError = useBlueprintStore((state) => activeProjectId ? state.error[activeProjectId] : undefined);
-  const loadBlueprint = useBlueprintStore((state) => state.loadProject);
+  const specView = useSpecStore((state) => activeProjectId ? state.byProjectId[activeProjectId] : undefined);
+  const specLoading = useSpecStore((state) => activeProjectId ? state.loading[activeProjectId] : false);
+  const specError = useSpecStore((state) => activeProjectId ? state.error[activeProjectId] : undefined);
+  const loadSpec = useSpecStore((state) => state.loadProject);
   const projectId = activeProjectId;
   const slides = useMemo(
     () => projectId ? slidesByProjectId[projectId] || [] : [],
@@ -266,16 +266,26 @@ export const PreviewWorkspace: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {previewMode === 'main' && currentSlide && (
-            <div className="flex h-8 overflow-hidden rounded-md border border-border bg-surface text-xs">
+          {previewMode === 'main' && (
+            <div className="flex items-center rounded-full bg-panel-muted p-0.5 text-xs">
               <button
+                type="button"
                 onClick={() => setGlobalView('outline')}
-                className={cn('px-3', globalView === 'outline' ? 'bg-accent-soft font-medium text-accent' : 'text-text-600 hover:bg-panel-muted')}
-              >蓝图</button>
+                aria-pressed={globalView === 'outline'}
+                className={cn(
+                  'h-7 rounded-full px-3 font-medium transition-colors',
+                  globalView === 'outline' ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-700',
+                )}
+              >设计稿</button>
               <button
+                type="button"
                 onClick={() => setGlobalView('html')}
-                className={cn('border-l border-border px-3', globalView === 'html' ? 'bg-accent-soft font-medium text-accent' : 'text-text-600 hover:bg-panel-muted')}
-              >页面</button>
+                aria-pressed={globalView === 'html'}
+                className={cn(
+                  'h-7 rounded-full px-3 font-medium transition-colors',
+                  globalView === 'html' ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-700',
+                )}
+              >幻灯片</button>
             </div>
           )}
 
@@ -320,28 +330,28 @@ export const PreviewWorkspace: React.FC = () => {
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
                 <EmptyState />
               </div>
-            ) : blueprintView?.slides?.[currentSlide.id] ? (
-              <SlideBlueprintCard
-                blueprint={blueprintView.slides[currentSlide.id]}
-                state={blueprintView.materialization?.[currentSlide.id]?.state ?? 'unknown'}
+            ) : specView?.slide_specs?.[currentSlide.id] ? (
+              <SlideSpecCard
+                spec={specView.slide_specs[currentSlide.id]}
+                state={specView.materialization?.[currentSlide.id]?.state ?? 'unknown'}
               />
-            ) : blueprintLoading ? (
+            ) : specLoading ? (
               <div className="flex h-full w-full flex-col gap-3 rounded bg-surface p-8 shadow-canvas ring-1 ring-border">
                 <Skeleton className="h-8 w-2/3" />
                 <Skeleton className="h-5 w-1/2" />
                 <Skeleton className="mt-4 h-40 w-full" />
-                <span className="sr-only">蓝图正在加载</span>
+                <span className="sr-only">设计稿正在加载</span>
               </div>
-            ) : blueprintError ? (
+            ) : specError ? (
               <InlineNotice tone="danger" className="max-w-md">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <span>蓝图加载失败，请重试。</span>
+                    <span>设计稿加载失败，请重试。</span>
                     <Disclosure label="错误详情">
-                      <p className="break-all font-mono text-[11px]">{blueprintError}</p>
+                      <p className="break-all font-mono text-[11px]">{specError}</p>
                     </Disclosure>
                   </div>
-                  <Button variant="secondary" onClick={() => projectId && void loadBlueprint(projectId)}>重试</Button>
+                  <Button variant="secondary" onClick={() => projectId && void loadSpec(projectId)}>重试</Button>
                 </div>
               </InlineNotice>
             ) : (
@@ -357,7 +367,7 @@ export const PreviewWorkspace: React.FC = () => {
         ) : (
           <div className="absolute inset-0 overflow-y-auto p-6">
             <div className="mx-auto mb-6 max-w-6xl">
-              {blueprintView?.design_spec && <DesignSpecSummary spec={blueprintView.design_spec} />}
+              {specView?.design && <DesignSummary design={specView.design} />}
             </div>
             <div className="mx-auto grid max-w-6xl grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
               {slides.map((slide, index) => (
@@ -372,11 +382,11 @@ export const PreviewWorkspace: React.FC = () => {
                     setCurrentPage(index);
                     exitOverview();
                   }}
-                  blueprint={blueprintView?.slides?.[slide.id] ? (
+                  spec={specView?.slide_specs?.[slide.id] ? (
                     <div className="pointer-events-none h-full w-full">
-                      <SlideBlueprintCard
-                        blueprint={blueprintView.slides[slide.id]}
-                        state={blueprintView.materialization?.[slide.id]?.state ?? 'unknown'}
+                      <SlideSpecCard
+                        spec={specView.slide_specs[slide.id]}
+                        state={specView.materialization?.[slide.id]?.state ?? 'unknown'}
                         compact
                       />
                     </div>

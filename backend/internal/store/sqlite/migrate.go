@@ -13,24 +13,52 @@ import (
 // Migrate 按序执行 migrations/ 中的 SQL（schema 权威源，对应 sqlite-schema.sql）。
 // 语句均为幂等 CREATE ... IF NOT EXISTS，可重复执行。
 func Migrate(db *gorm.DB, log *zap.Logger) error {
+	if err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+		name TEXT PRIMARY KEY,
+		applied_at INTEGER NOT NULL
+	)`).Error; err != nil {
+		return fmt.Errorf("create schema_migrations: %w", err)
+	}
 	files, err := migrations.Files()
 	if err != nil {
 		return err
 	}
 	for _, name := range files {
+		var applied int64
+		if err := db.Raw("SELECT COUNT(*) FROM schema_migrations WHERE name = ?", name).Scan(&applied).Error; err != nil {
+			return err
+		}
+		if applied > 0 {
+			continue
+		}
 		content, err := migrations.FS.ReadFile(name)
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
-		for _, stmt := range splitStatements(string(content)) {
-			if err := db.Exec(stmt).Error; err != nil {
-				// SQLite lacks ADD COLUMN IF NOT EXISTS. Re-running additive migrations
-				// is safe when the column already exists.
-				if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+		foreignKeysDisabled := strings.Contains(string(content), "PRAGMA foreign_keys = OFF")
+		if foreignKeysDisabled {
+			if err := db.Exec("PRAGMA foreign_keys = OFF").Error; err != nil {
+				return err
+			}
+		}
+		applyErr := db.Transaction(func(tx *gorm.DB) error {
+			for _, stmt := range splitStatements(string(content)) {
+				if strings.HasPrefix(strings.ToUpper(stmt), "PRAGMA FOREIGN_KEYS") {
 					continue
 				}
-				return fmt.Errorf("apply %s: %w", name, err)
+				if err := tx.Exec(stmt).Error; err != nil {
+					return fmt.Errorf("apply %s: %w", name, err)
+				}
 			}
+			return tx.Exec("INSERT INTO schema_migrations(name, applied_at) VALUES (?, ?)", name, nowUnix()).Error
+		})
+		if foreignKeysDisabled {
+			if err := db.Exec("PRAGMA foreign_keys = ON").Error; applyErr == nil && err != nil {
+				applyErr = err
+			}
+		}
+		if applyErr != nil {
+			return applyErr
 		}
 		log.Info("migration applied", zap.String("file", name))
 	}

@@ -64,7 +64,7 @@ type ToolCall struct {
 // content. ReasoningContent is provider protocol state only and must never be
 // projected to a public event or thread history.
 type ToolCallResponse struct {
-	ToolCall         *ToolCall
+	ToolCalls        []ToolCall
 	Text             string
 	ReasoningContent string
 }

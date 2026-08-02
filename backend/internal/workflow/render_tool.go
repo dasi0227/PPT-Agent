@@ -1,15 +1,18 @@
 package workflow
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -25,8 +28,10 @@ const (
 )
 
 type RenderRequest struct {
+	RequestID      string `json:"request_id,omitempty"`
 	RunID          string `json:"run_id"`
 	ProjectDir     string `json:"project_dir"`
+	StagingDir     string `json:"staging_dir,omitempty"`
 	SlideID        string `json:"slide_id"`
 	HTML           string `json:"html"`
 	ScreenshotPath string `json:"screenshot_path"`
@@ -57,7 +62,23 @@ type NodeRendererConfig struct {
 }
 
 type NodeSlideRenderer struct {
-	config NodeRendererConfig
+	config  NodeRendererConfig
+	mu      sync.Mutex
+	writeMu sync.Mutex
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	pending map[string]chan workerRenderResponse
+	ready   chan error
+	closed  bool
+	slots   chan struct{}
+}
+
+type workerRenderResponse struct {
+	RequestID   string            `json:"request_id"`
+	Type        string            `json:"type"`
+	OK          bool              `json:"ok"`
+	Error       string            `json:"error"`
+	Diagnostics RenderDiagnostics `json:"diagnostics"`
 }
 
 func NewNodeSlideRenderer(config NodeRendererConfig) *NodeSlideRenderer {
@@ -70,7 +91,10 @@ func NewNodeSlideRenderer(config NodeRendererConfig) *NodeSlideRenderer {
 	if config.Timeout == 0 {
 		config.Timeout = 25 * time.Second
 	}
-	return &NodeSlideRenderer{config: config}
+	return &NodeSlideRenderer{
+		config: config, pending: map[string]chan workerRenderResponse{},
+		slots: make(chan struct{}, 3),
+	}
 }
 
 func resolveWorkerPath() string {
@@ -86,67 +110,166 @@ func resolveWorkerPath() string {
 }
 
 func (r *NodeSlideRenderer) Health(ctx context.Context) error {
-	commandCtx, cancel := context.WithTimeout(ctx, minDuration(r.config.Timeout, 10*time.Second))
-	defer cancel()
-	cmd := exec.CommandContext(commandCtx, r.config.NodePath, r.config.WorkerPath, "--health")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Env = os.Environ()
-	var output bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &output, &output
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("render worker health check failed: %w: %s", err, compactSnippet(output.String(), 500))
-	}
-	if !strings.Contains(output.String(), `"ok":true`) {
-		return fmt.Errorf("render worker health check returned an invalid response")
-	}
-	return nil
+	return r.ensureWorker(ctx)
 }
 
 func (r *NodeSlideRenderer) Render(ctx context.Context, request RenderRequest) (RenderDiagnostics, error) {
+	select {
+	case r.slots <- struct{}{}:
+		defer func() { <-r.slots }()
+	case <-ctx.Done():
+		return RenderDiagnostics{}, ctx.Err()
+	}
 	commandCtx, cancel := context.WithTimeout(ctx, r.config.Timeout)
 	defer cancel()
+	if err := r.ensureWorker(commandCtx); err != nil {
+		return RenderDiagnostics{}, err
+	}
+	request.RequestID = "render_" + uuid.NewString()
 	raw, err := json.Marshal(request)
 	if err != nil {
 		return RenderDiagnostics{}, err
 	}
-	cmd := exec.CommandContext(commandCtx, r.config.NodePath, r.config.WorkerPath)
+	response := make(chan workerRenderResponse, 1)
+	r.mu.Lock()
+	if r.closed || r.stdin == nil {
+		r.mu.Unlock()
+		return RenderDiagnostics{}, errors.New("render worker is unavailable")
+	}
+	r.pending[request.RequestID] = response
+	stdin := r.stdin
+	r.mu.Unlock()
+	r.writeMu.Lock()
+	_, writeErr := stdin.Write(append(raw, '\n'))
+	r.writeMu.Unlock()
+	if writeErr != nil {
+		r.removePending(request.RequestID)
+		return RenderDiagnostics{}, fmt.Errorf("render worker write failed: %w", writeErr)
+	}
+	select {
+	case result := <-response:
+		if !result.OK {
+			return RenderDiagnostics{}, errors.New(result.Error)
+		}
+		return result.Diagnostics, nil
+	case <-commandCtx.Done():
+		r.removePending(request.RequestID)
+		return RenderDiagnostics{}, fmt.Errorf("render worker timed out: %w", commandCtx.Err())
+	}
+}
+
+func (r *NodeSlideRenderer) ensureWorker(ctx context.Context) error {
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return errors.New("render worker is closed")
+	}
+	if r.cmd != nil {
+		r.mu.Unlock()
+		return nil
+	}
+	cmd := exec.Command(r.config.NodePath, r.config.WorkerPath, "--serve")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Env = os.Environ()
-	cmd.Stdin = bytes.NewReader(raw)
-	var stdout, stderr limitedBuffer
-	stdout.limit, stderr.limit = maxRenderOutputBytes, 64*1024
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		if commandCtx.Err() != nil {
-			if cmd.Process != nil {
-				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		r.mu.Unlock()
+		return err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		r.mu.Unlock()
+		return err
+	}
+	cmd.Stderr = os.Stderr
+	ready := make(chan error, 1)
+	r.cmd, r.stdin, r.ready = cmd, stdin, ready
+	if err := cmd.Start(); err != nil {
+		r.cmd, r.stdin, r.ready = nil, nil, nil
+		r.mu.Unlock()
+		return err
+	}
+	r.mu.Unlock()
+	go r.readWorker(cmd, stdout, ready)
+	select {
+	case err := <-ready:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(minDuration(r.config.Timeout, 10*time.Second)):
+		return errors.New("render worker startup timed out")
+	}
+}
+
+func (r *NodeSlideRenderer) readWorker(cmd *exec.Cmd, stdout io.Reader, ready chan<- error) {
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 64*1024), maxRenderOutputBytes)
+	readySent := false
+	for scanner.Scan() {
+		var response workerRenderResponse
+		if err := json.Unmarshal(scanner.Bytes(), &response); err != nil {
+			continue
+		}
+		if response.Type == "ready" {
+			if !readySent {
+				ready <- nil
+				readySent = true
 			}
-			return RenderDiagnostics{}, fmt.Errorf("render worker timed out: %w", commandCtx.Err())
+			continue
 		}
-		var failure struct {
-			Error string `json:"error"`
+		r.mu.Lock()
+		pending := r.pending[response.RequestID]
+		delete(r.pending, response.RequestID)
+		r.mu.Unlock()
+		if pending != nil {
+			pending <- response
 		}
-		if json.Unmarshal(stdout.Bytes(), &failure) == nil && strings.TrimSpace(failure.Error) != "" {
-			return RenderDiagnostics{}, errors.New(failure.Error)
-		}
-		details := strings.TrimSpace(stdout.String() + "\n" + stderr.String())
-		return RenderDiagnostics{}, fmt.Errorf("render worker failed: %w: %s", err, compactSnippet(details, 1000))
 	}
-	if stdout.exceeded {
-		return RenderDiagnostics{}, errors.New("render worker output exceeded the configured limit")
+	waitErr := cmd.Wait()
+	if !readySent {
+		ready <- fmt.Errorf("render worker failed to start: %w", waitErr)
 	}
-	var result struct {
-		OK          bool              `json:"ok"`
-		Error       string            `json:"error"`
-		Diagnostics RenderDiagnostics `json:"diagnostics"`
+	r.workerExited(cmd, waitErr)
+}
+
+func (r *NodeSlideRenderer) workerExited(cmd *exec.Cmd, err error) {
+	r.mu.Lock()
+	if r.cmd != cmd {
+		r.mu.Unlock()
+		return
 	}
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		return RenderDiagnostics{}, fmt.Errorf("invalid render worker response: %w", err)
+	r.cmd, r.stdin, r.ready = nil, nil, nil
+	pending := r.pending
+	r.pending = map[string]chan workerRenderResponse{}
+	r.mu.Unlock()
+	for requestID, channel := range pending {
+		channel <- workerRenderResponse{RequestID: requestID, Error: fmt.Sprintf("render worker crashed: %v", err)}
 	}
-	if !result.OK {
-		return RenderDiagnostics{}, errors.New(result.Error)
+}
+
+func (r *NodeSlideRenderer) removePending(requestID string) {
+	r.mu.Lock()
+	delete(r.pending, requestID)
+	r.mu.Unlock()
+}
+
+func (r *NodeSlideRenderer) Close() error {
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return nil
 	}
-	return result.Diagnostics, nil
+	r.closed = true
+	cmd := r.cmd
+	stdin := r.stdin
+	r.mu.Unlock()
+	if stdin != nil {
+		_ = stdin.Close()
+	}
+	if cmd != nil && cmd.Process != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	}
+	return nil
 }
 
 type limitedBuffer struct {
@@ -199,14 +322,14 @@ func (slideRenderTool) Schema() ToolSchema {
 
 func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	slideID := stringValue(input.Args["slide_id"])
-	target := TargetRef{Type: "slide", SlideID: slideID}
+	target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
 	if !stableSlideID.MatchString(slideID) || slideID == "current" {
 		return failedToolResult(CodeModelInvalid, "slide_id must be a stable slide identifier", false)
 	}
 	if !input.Scope.AllowsRead(target) {
 		return failedToolResult(ErrTargetOutOfScope.Error(), "requested render target is outside the current run scope", false)
 	}
-	html, source, err := readArtifact(input.ProjectDir, input.Transaction, presentationSlideRef(slideID))
+	html, source, err := readArtifact(input.ProjectDir, input.Transaction, slideHTMLRef(slideID))
 	if err != nil {
 		if errorsIsNotExist(err) {
 			return failedToolResult(CodeTargetNotFound, "slide HTML was not found", false)
@@ -233,6 +356,9 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		RunID: runID, ProjectDir: input.ProjectDir, SlideID: slideID, HTML: string(html),
 		ScreenshotPath: screenshotPath, ViewportWidth: renderViewportWidth,
 		ViewportHeight: renderViewportHeight, TimeoutMS: 15000,
+	}
+	if input.Transaction != nil {
+		request.StagingDir = input.Transaction.Root()
 	}
 	started := time.Now()
 	diagnostics, err := t.renderer.Render(ctx, request)
@@ -278,7 +404,14 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		result.OK, result.Code, result.Retryable = false, CodeRenderFailed, true
 		return result
 	}
-	result.Evidence = []Evidence{newEvidence("render", target, sourceHash, data)}
+	proof, err := currentMaterializationProof(t.pack, input.ProjectDir, input.Transaction, slideID, sourceHash)
+	if err != nil {
+		_ = os.Remove(screenshotPath)
+		return failedToolResult(CodeRenderFailed, err.Error(), true)
+	}
+	evidence := newEvidence("render", target, sourceHash, data)
+	evidence.Materialization = &proof
+	result.Evidence = []Evidence{evidence}
 	return result
 }
 
@@ -286,57 +419,58 @@ func renderHashWithoutTransaction(pack contextengine.ContextPack, input DomainTo
 	if input.Transaction != nil {
 		return renderSourceHash(pack, input.Transaction, slideID)
 	}
-	parts := []byte{}
-	for _, ref := range []ArtifactRef{designRef(pack), blueprintSlideRef(slideID), presentationSlideRef(slideID)} {
-		raw, _, err := readArtifact(input.ProjectDir, nil, ref)
-		if err != nil {
-			return "", err
-		}
-		parts = append(parts, []byte(ref.Key())...)
-		parts = append(parts, 0)
-		parts = append(parts, raw...)
-		parts = append(parts, 0)
+	designRaw, _, err := readArtifact(input.ProjectDir, nil, designRef(pack))
+	if err != nil {
+		return "", err
 	}
-	return hashBytes(parts), nil
+	specRaw, _, err := readArtifact(input.ProjectDir, nil, specSlideRef(slideID))
+	if err != nil {
+		return "", err
+	}
+	htmlRaw, _, err := readArtifact(input.ProjectDir, nil, slideHTMLRef(slideID))
+	if err != nil {
+		return "", err
+	}
+	return MaterializationSourceHash(slideID, designRaw, specRaw, htmlRaw), nil
 }
 
 func presentationRevision(pack contextengine.ContextPack, input DomainToolInput, slideID string) int {
-	if input.Transaction != nil && input.Transaction.IsStaged(presentationSlideRef(slideID)) {
-		return pack.Revisions.Presentations[slideID] + 1
+	if input.Transaction != nil && input.Transaction.IsStaged(slideHTMLRef(slideID)) {
+		return pack.Revisions.SlideHTML[slideID] + 1
 	}
-	return pack.Revisions.Presentations[slideID]
+	return pack.Revisions.SlideHTML[slideID]
 }
 
-func renderIssues(target TargetRef, diagnostics RenderDiagnostics) ([]Issue, []Issue) {
+func renderIssues(target Resource, diagnostics RenderDiagnostics) ([]Issue, []Issue) {
 	blocking, warnings := []Issue{}, []Issue{}
 	if diagnostics.Overflow["horizontal"] || diagnostics.Overflow["vertical"] {
 		blocking = append(blocking, Issue{
-			Code: "RENDER_OVERFLOW", Severity: SeverityError, Target: target,
+			Code: "RENDER_OVERFLOW", Severity: SeverityError, Resource: target,
 			Summary: "slide content overflows the fixed PPT viewport", Action: "edit the layout and render again",
 		})
 	}
 	if len(diagnostics.Clipping) > 0 {
 		blocking = append(blocking, Issue{
-			Code: "RENDER_CLIPPING", Severity: SeverityError, Target: target,
+			Code: "RENDER_CLIPPING", Severity: SeverityError, Resource: target,
 			Summary: fmt.Sprintf("%d elements are clipped or outside the slide stage", len(diagnostics.Clipping)),
 			Action:  "edit the out-of-bounds elements and render again",
 		})
 	}
 	if len(diagnostics.ConsoleErrors) > 0 {
 		blocking = append(blocking, Issue{
-			Code: "RENDER_CONSOLE_ERROR", Severity: SeverityError, Target: target,
+			Code: "RENDER_CONSOLE_ERROR", Severity: SeverityError, Resource: target,
 			Summary: strings.Join(diagnostics.ConsoleErrors, "; "), Action: "fix page runtime errors and render again",
 		})
 	}
 	if len(diagnostics.FailedResources) > 0 {
 		blocking = append(blocking, Issue{
-			Code: "RENDER_RESOURCE_FAILED", Severity: SeverityError, Target: target,
+			Code: "RENDER_RESOURCE_FAILED", Severity: SeverityError, Resource: target,
 			Summary: strings.Join(diagnostics.FailedResources, "; "), Action: "use controlled project resources and render again",
 		})
 	}
 	if diagnostics.FontStatus != "loaded" {
 		warnings = append(warnings, Issue{
-			Code: "RENDER_FONT_STATUS", Severity: SeverityWarning, Target: target,
+			Code: "RENDER_FONT_STATUS", Severity: SeverityWarning, Resource: target,
 			Summary: "font readiness: " + diagnostics.FontStatus,
 		})
 	}

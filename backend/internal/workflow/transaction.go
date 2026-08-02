@@ -34,11 +34,12 @@ type StageItem struct {
 }
 
 type Transaction struct {
-	projectDir string
-	runID      string
-	root       string
-	artifacts  map[string]stagedArtifact
-	closed     bool
+	projectDir            string
+	runID                 string
+	root                  string
+	artifacts             map[string]stagedArtifact
+	materializationProofs []MaterializationProof
+	closed                bool
 }
 
 func NewTransaction(projectDir, runID string) (*Transaction, error) {
@@ -193,6 +194,15 @@ func (t *Transaction) Read(ref ArtifactRef) ([]byte, error) {
 	return os.ReadFile(filepath.Join(t.projectDir, relative))
 }
 
+// ReadBaseline returns the committed bytes that existed before this run.
+func (t *Transaction) ReadBaseline(ref ArtifactRef) ([]byte, error) {
+	relative, err := t.resolveRelative(ref)
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(filepath.Join(t.projectDir, relative))
+}
+
 func (t *Transaction) StagedPath(ref ArtifactRef) (string, error) {
 	relative, err := t.resolveRelative(ref)
 	if err != nil {
@@ -215,6 +225,9 @@ func (t *Transaction) ChangeSet() ChangeSet {
 	sort.Strings(keys)
 	for _, key := range keys {
 		entry := t.artifacts[key]
+		if entry.Ref.Kind == ArtifactDerived {
+			continue
+		}
 		change := ArtifactChange{
 			Artifact: entry.Ref, BeforeHash: entry.BeforeHash,
 			AfterHash: entry.AfterHash, Source: entry.Source,
@@ -250,6 +263,10 @@ func (t *Transaction) MarkTentative() {
 		entry.Source = "tentative:" + strings.TrimPrefix(entry.Source, "tentative:")
 		t.artifacts[key] = entry
 	}
+}
+
+func (t *Transaction) AcceptMaterializationProofs(proofs []MaterializationProof) {
+	t.materializationProofs = append([]MaterializationProof(nil), proofs...)
 }
 
 func (t *Transaction) Commit(ctx context.Context, metadata CommitMetadata) error {
@@ -316,7 +333,11 @@ func (t *Transaction) Commit(ctx context.Context, metadata CommitMetadata) error
 		}
 	}
 	if metadata != nil {
-		if err := metadata(ctx, t.ChangeSet()); err != nil {
+		commitContext := CommitContext{
+			Changes:               t.ChangeSet(),
+			MaterializationProofs: append([]MaterializationProof(nil), t.materializationProofs...),
+		}
+		if err := metadata(ctx, commitContext); err != nil {
 			restore()
 			return err
 		}

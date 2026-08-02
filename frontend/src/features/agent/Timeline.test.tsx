@@ -34,7 +34,7 @@ function tool(id: string, overrides: Partial<ToolActivityItem> = {}): ToolActivi
   return {
     id, type: 'tool', runId: 'r1', callId: id, tool: 'write_ppt',
     planStepId: 'build', label: `已生成 ${id}`, status: 'completed', timestamp: 1,
-    target: { type: 'slide', slide_id: id },
+    target: { type: 'slide', slide_id: id, part: 'html' },
     ...overrides,
   };
 }

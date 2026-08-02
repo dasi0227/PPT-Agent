@@ -56,14 +56,14 @@ func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
 		httpapi.NewThreadHandler(threadSvc),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
 		httpapi.NewAssetHandler(service.NewAssetService(st, root)),
-		httpapi.NewBlueprintHandler(service.NewBlueprintService(st)),
+		httpapi.NewSpecHandler(service.NewSpecService(st)),
 	)
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)
 	return srv, root
 }
 
-func TestArtifactTargetRunAndBlueprintAPI(t *testing.T) {
+func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 	srv, _ := setupProjectThreadServer(t)
 	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Artifact R0","language":"zh-CN"}`)
 	if resp.Code != http.StatusCreated {
@@ -73,14 +73,14 @@ func TestArtifactTargetRunAndBlueprintAPI(t *testing.T) {
 	_ = json.Unmarshal(resp.Body.Bytes(), &project)
 	projectID := project["id"].(string)
 
-	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/blueprint", "")
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/spec", "")
 	if resp.Code != http.StatusOK {
-		t.Fatalf("get blueprint: %d %s", resp.Code, resp.Body.String())
+		t.Fatalf("get spec: %d %s", resp.Code, resp.Body.String())
 	}
 	var view map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &view)
-	if view["deck"].(map[string]any)["schema_version"] != "2.0" {
-		t.Fatalf("unexpected blueprint response: %s", resp.Body.String())
+	if view["outline"].(map[string]any)["schema_version"] != "3.0" {
+		t.Fatalf("unexpected spec response: %s", resp.Body.String())
 	}
 
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/threads", `{"title":"R0"}`)
@@ -89,7 +89,7 @@ func TestArtifactTargetRunAndBlueprintAPI(t *testing.T) {
 	threadID := thread["id"].(string)
 
 	body := `{
-		"target":{"artifact":"blueprint","level":"deck"},
+		"target":{"artifact":"spec","level":"deck"},
 		"interaction":{"intent":"talk"},
 		"instruction":"评估当前叙事结构"
 	}`
@@ -101,7 +101,7 @@ func TestArtifactTargetRunAndBlueprintAPI(t *testing.T) {
 	_ = json.Unmarshal(resp.Body.Bytes(), &created)
 	target := created["target"].(map[string]any)
 	interaction := created["interaction"].(map[string]any)
-	if target["artifact"] != "blueprint" || target["level"] != "deck" || interaction["intent"] != "talk" {
+	if target["artifact"] != "spec" || target["level"] != "deck" || interaction["intent"] != "talk" {
 		t.Fatalf("new protocol was not preserved: %s", resp.Body.String())
 	}
 	runID := created["id"].(string)
@@ -168,7 +168,7 @@ func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
 		!bytes.Equal(resp.Body.Bytes(), png) {
 		t.Fatalf("screenshot: %d %s", resp.Code, resp.Body.String())
 	}
-	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/"+runID+"/screenshots/deck.json", "")
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/"+runID+"/screenshots/outline.json", "")
 	if resp.Code != http.StatusNotFound {
 		t.Fatalf("path-like screenshot id was not rejected: %d", resp.Code)
 	}
@@ -221,7 +221,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 		t.Fatalf("new thread history should be empty array, got %d: %s", resp.Code, resp.Body.String())
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"target":{"artifact":"blueprint","level":"deck"},"interaction":{"intent":"execute"},"instruction":"生成蓝图"}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"target":{"artifact":"spec","level":"deck"},"interaction":{"intent":"execute"},"instruction":"生成设计稿"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
 	}

@@ -5,10 +5,16 @@ import { MarkdownMessage } from './MarkdownMessage';
 
 function affectedText(item: FinalMessageItem): string {
   if (item.affectedTargets.length === 0) return '';
-  const globals = item.affectedTargets.filter((target) => target.type === 'global').length;
-  const slides = item.affectedTargets.filter((target) => target.type === 'slide').length;
+  const hasOutline = item.affectedTargets.some((target) => target.type === 'deck' && target.part === 'outline');
+  const hasDesign = item.affectedTargets.some((target) => target.type === 'deck' && target.part === 'design');
+  const slides = new Set(
+    item.affectedTargets
+      .filter((target) => target.type === 'slide')
+      .map((target) => target.slide_id),
+  ).size;
   return [
-    globals > 0 ? '全局设计' : '',
+    hasOutline ? '整份结构' : '',
+    hasDesign ? '全局设计' : '',
     slides > 0 ? `${slides} 张页面` : '',
   ].filter(Boolean).join('和');
 }

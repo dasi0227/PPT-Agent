@@ -22,15 +22,15 @@ func publicBase(runID string) model.PublicEventBase {
 	return model.NewPublicEventBase(runID)
 }
 
-func publicTarget(target TargetRef) model.PublicTarget {
-	return model.PublicTarget{Type: target.Type, SlideID: target.SlideID}
+func publicTarget(target Resource) model.PublicTarget {
+	return model.PublicTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part}
 }
 
 func publicAffectedTargets(changes ChangeSet) []model.PublicTarget {
 	seen := map[string]model.PublicTarget{}
 	for _, change := range changes.All() {
-		target := publicTarget(targetForArtifact(change.Artifact))
-		seen[target.Type+":"+target.SlideID] = target
+		target := publicTarget(resourceForArtifact(change.Artifact))
+		seen[target.Type+":"+target.SlideID+":"+target.Part] = target
 	}
 	keys := make([]string, 0, len(seen))
 	for key := range seen {
@@ -147,6 +147,7 @@ func (ToolPublicProjector) Completed(runID, callID, tool string, args map[string
 	payload := model.ToolCompletedPayload{
 		PublicEventBase: publicBase(runID),
 		CallID:          callID, Tool: tool, Status: status,
+		Target:  publicToolTarget(tool, args),
 		Display: model.PublicDisplay{Label: label, Detail: detail},
 	}
 	if !result.OK {
@@ -165,16 +166,18 @@ func publicToolTarget(tool string, args map[string]any) *model.PublicTarget {
 	if tool == "render_slide" {
 		slideID := stringValue(args["slide_id"])
 		if slideID != "" {
-			return &model.PublicTarget{Type: "slide", SlideID: slideID}
+			return &model.PublicTarget{Type: "slide", SlideID: slideID, Part: "html"}
 		}
 	}
-	target, _ := args["target"].(map[string]any)
+	target, _ := args["resource"].(map[string]any)
 	targetType := stringValue(target["type"])
-	if targetType == "global" {
-		return &model.PublicTarget{Type: "global"}
+	if targetType == "deck" {
+		return &model.PublicTarget{Type: "deck", Part: stringValue(target["part"])}
 	}
 	if targetType == "slide" {
-		return &model.PublicTarget{Type: "slide", SlideID: stringValue(target["slide_id"])}
+		return &model.PublicTarget{
+			Type: "slide", SlideID: stringValue(target["slide_id"]), Part: stringValue(target["part"]),
+		}
 	}
 	return nil
 }
@@ -182,10 +185,16 @@ func publicToolTarget(tool string, args map[string]any) *model.PublicTarget {
 func toolDisplay(tool string, args map[string]any, started bool, result ToolResult) (string, string, bool) {
 	target := publicToolTarget(tool, args)
 	targetName := "PPT"
-	if target != nil && target.Type == "global" {
-		targetName = "全局蓝图"
+	if target != nil && target.Type == "deck" && target.Part == "outline" {
+		targetName = "整份结构"
+	} else if target != nil && target.Type == "deck" && target.Part == "design" {
+		targetName = "全局设计"
 	} else if target != nil && target.Type == "slide" {
-		targetName = slideDisplayName(target.SlideID)
+		if target.Part == "spec" {
+			targetName = slideDisplayName(target.SlideID) + "设计稿"
+		} else {
+			targetName = slideDisplayName(target.SlideID) + " HTML"
+		}
 	}
 	switch tool {
 	case "read_ppt":

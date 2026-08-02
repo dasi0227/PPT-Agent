@@ -29,6 +29,11 @@ func TestPresentationRollbackCreatesNewCanonicalVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, relative := range []string{"common/base.css", "common/tokens.css"} {
+		if _, err := os.Stat(filepath.Join(project.WorkDir, filepath.FromSlash(relative))); err != nil {
+			t.Fatalf("project runtime CSS missing %s: %v", relative, err)
+		}
+	}
 	svc := service.NewSlideService(store)
 	slide, err := svc.AddSlide(context.Background(), project.ID, "", "content")
 	if err != nil {
@@ -41,8 +46,8 @@ func TestPresentationRollbackCreatesNewCanonicalVersion(t *testing.T) {
 	if err := os.WriteFile(currentPath, []byte("<html>current</html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	target := model.PresentationSlideVersionTarget(project.ID, slide.ID)
-	snapshot := model.SlideVersionSnapshot(slide.ID, 0)
+	target := model.SlideHTMLVersionTarget(project.ID, slide.ID)
+	snapshot := model.SlideHTMLVersionSnapshot(slide.ID, 0)
 	snapshotPath := filepath.Join(project.WorkDir, filepath.FromSlash(snapshot))
 	if err := os.MkdirAll(filepath.Dir(snapshotPath), 0o755); err != nil {
 		t.Fatal(err)
@@ -51,7 +56,7 @@ func TestPresentationRollbackCreatesNewCanonicalVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.CreateVersion(context.Background(), model.Version{
-		ID: "v0", TargetType: "presentation_slide", TargetID: target,
+		ID: "v0", TargetType: "slide_html", TargetID: target,
 		VersionNo: 0, SnapshotPath: snapshot, CreatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)

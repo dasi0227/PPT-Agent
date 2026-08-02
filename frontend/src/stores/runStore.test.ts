@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const slideLoads: string[] = [];
-const blueprintRefreshes: string[] = [];
+const specRefreshes: string[] = [];
 vi.mock('./projectStore', () => ({
   useProjectStore: {
     getState: () => ({
@@ -10,10 +10,10 @@ vi.mock('./projectStore', () => ({
     }),
   },
 }));
-vi.mock('./blueprintStore', () => ({
-  useBlueprintStore: {
+vi.mock('./specStore', () => ({
+  useSpecStore: {
     getState: () => ({
-      refreshSlide: async (_projectId: string, slideId: string) => { blueprintRefreshes.push(slideId); },
+      refreshSlide: async (_projectId: string, slideId: string) => { specRefreshes.push(slideId); },
       loadProject: async () => {},
     }),
   },
@@ -81,11 +81,11 @@ const request = (instruction: string) => ({
   interaction: { intent: 'execute' as const },
   instruction,
 });
-const base = { schema_version: 1, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 2, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
 
 function reset() {
   slideLoads.length = 0;
-  blueprintRefreshes.length = 0;
+  specRefreshes.length = 0;
   connections.length = 0;
   createMode = 'resolve';
   resolveCreate = null;
@@ -158,7 +158,7 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1.status).toBe('done');
     expect(connection.closed).toBe(true);
     expect(slideLoads).toContain('p1');
-    expect(blueprintRefreshes).toEqual(['s1']);
+    expect(specRefreshes).toEqual(['s1']);
     expect(useRunStore.getState().sessions.t1.timelineItems.filter((item) => item.type === 'final')).toHaveLength(1);
   });
 
@@ -169,7 +169,7 @@ describe('runStore public event sessions', () => {
       data: { ...base, status: 'failed', duration_ms: 10, error: { code: 'E', message: '失败', retryable: true } },
     });
     expect(slideLoads).toEqual([]);
-    expect(blueprintRefreshes).toEqual([]);
+    expect(specRefreshes).toEqual([]);
   });
 
   test('deduplicates replayed event IDs and persists Last-Event-ID', async () => {

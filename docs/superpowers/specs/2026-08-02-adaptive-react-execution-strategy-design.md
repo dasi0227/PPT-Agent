@@ -71,7 +71,7 @@ Workflow 节点。
 ## 4. 非目标
 
 - 不建立 BPMN、DAG Workflow 或可视化流程编排器。
-- 不为 Blueprint/Presentation、Global/Slide 分别维护固定 Playbook。
+- 不为 Spec/Presentation、Deck/Slide 分别维护固定 Playbook。
 - 不为每个 Plan Step 启动新的 ReAct Loop。
 - 不引入独立 Reviewer Agent 或 Verifier Agent。
 - 不要求所有任务先生成 Plan。
@@ -167,7 +167,7 @@ Router 基于已经装配完成的 ContextPack 进行判断，至少使用：
 - 用户指令；
 - target type 与 target level；
 - 当前 PPT 是否为空；
-- Global/Slide 的存在与 materialization 状态；
+- Deck/Slide Resource 的存在与 materialization 状态；
 - 预估受影响目标数量；
 - 是否涉及整份、全局、多页、章节或页面顺序；
 - 是否需要从零建立整体设计语言；
@@ -205,7 +205,7 @@ Strategy Decision 必须可追踪，但不暴露模型 chain-of-thought。
 
 - 用户授权执行；
 - 目标明确；
-- 操作范围是一个 Global 或一个 Slide；
+- 操作范围是一个 Deck Resource 或一个 Slide Resource；
 - 不涉及页面增删、重排、章节重组或整份设计语言；
 - 不需要多个相互依赖的业务决定；
 - 可以在一次连续 ReAct 中通过少量工具调用完成；
@@ -227,7 +227,7 @@ Strategy Decision 必须可追踪，但不暴露模型 chain-of-thought。
 - 多页生成或多页修改；
 - 页面增删、重排或章节结构变化；
 - 需要先确定全局设计语言再逐页生成；
-- Global 与多个 Slide 必须协调修改；
+- Deck Resource 与多个 Slide Resource 必须协调修改；
 - 指令包含多个相互依赖的目标；
 - 需要在执行中持续追踪长任务进度；
 - 初始目标不明确到足以直接安全写入；
@@ -395,7 +395,7 @@ Simple 创建一个 Run 级 staging transaction，并限定初始 Target Scope�
 发生以下情况时，Runtime 放弃继续按 Simple 完成，切换为 Complex Planning：
 
 - Agent 尝试写入初始 scope 之外的第二个业务目标；
-- 一个局部编辑被证明需要 Global 与 Slide 协同修改；
+- 一个局部编辑被证明需要 Deck Resource 与 Slide Resource 协同修改；
 - 需要页面增删、重排或章节结构变化；
 - 同一目标连续六个工具 round trip 后仍无法形成可完成路径；
 - Completion Gate 连续拒绝且原因显示需要多步骤协调；
@@ -507,7 +507,7 @@ Runtime 不读取 Step 标题并调用某个预定义 handler，也不逐 Step �
   "explanation": "根据现有品牌规范，先统一全局设计，再逐页生成",
   "steps": [
     {
-      "id": "global-design",
+      "id": "deck-design",
       "title": "建立全局设计语言",
       "status": "completed"
     },
@@ -605,7 +605,7 @@ System Prompt 可以要求 Agent 在适当时验证，但 Runtime 仍必须处�
 - intent/strategy/phase/capability 校验；
 - Target Scope 校验；
 - JSON 领域 schema 校验；
-- Global 与 Slide 引用完整性校验；
+- Outline 与 Slide Spec 引用完整性校验；
 - HTML 基础解析；
 - text edit 唯一锚点校验；
 - staging 写入完整性；
@@ -687,7 +687,7 @@ Gate 拒绝不进入 Repair Stage，而是返回：
 | 实际变化 | 最低证据 |
 |---|---|
 | Chat，无写入 | 无 |
-| Slide/Global JSON 文本字段 | 最新 revision 的 schema 校验 |
+| Slide/Deck JSON Resource | 最新 revision 的领域 Schema 校验 |
 | 章节、顺序或引用关系 | schema + 全局引用完整性 |
 | 新建或修改 Slide HTML/CSS | 静态解析 + 最新 revision 的 `render_slide` |
 | 新建 Slide | 页面模型、HTML、静态检查和最新渲染 |

@@ -23,7 +23,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   setIntent: (intent) => set({ intent }),
   applyContextDefault: (hasSlides) => set((state) => {
     if (state.userTouchedTarget) return state;
-    const artifact = hasSlides ? 'presentation' : 'blueprint';
+    const artifact = hasSlides ? 'presentation' : 'spec';
     const level = hasSlides ? 'slide' : 'deck';
     return state.artifact === artifact && state.level === level ? state : { artifact, level };
   }),

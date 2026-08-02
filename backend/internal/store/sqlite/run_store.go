@@ -56,9 +56,12 @@ func (s *Store) UpdateProjectTitle(ctx context.Context, id, title string, update
 	return mapErr(err)
 }
 
-func (s *Store) UpdateProjectRevisions(ctx context.Context, id string, deckRevision, designRevision int) error {
+func (s *Store) UpdateProjectRevisions(ctx context.Context, id string, outlineRevision, designRevision int) error {
 	return s.db.WithContext(ctx).Model(&projectPO{}).Where("id = ?", id).
-		Updates(map[string]any{"deck_revision": deckRevision, "design_revision": designRevision, "deck_path": "deck.json"}).Error
+		Updates(map[string]any{
+			"outline_revision": outlineRevision, "design_revision": designRevision,
+			"outline_path": "outline.json", "design_path": "design.json", "layout_version": 2,
+		}).Error
 }
 
 func (s *Store) UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error {

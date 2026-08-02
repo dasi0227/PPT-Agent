@@ -22,6 +22,9 @@ func NewStore(db *gorm.DB, log *zap.Logger) (*Store, error) {
 	if err := Migrate(db, log); err != nil {
 		return nil, err
 	}
+	if err := MigrateProjectLayouts(db, log); err != nil {
+		return nil, err
+	}
 	return &Store{db: db, log: log}, nil
 }
 

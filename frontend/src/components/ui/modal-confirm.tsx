@@ -20,6 +20,25 @@ interface ConfirmModalProps {
   onConfirm: () => void | Promise<void>;
 }
 
+function emphasizeDescription(description: React.ReactNode): React.ReactNode {
+  if (typeof description !== 'string') return description;
+
+  return description.split(/(「[^」]+」|不可撤销)/g).map((part, index) => {
+    if (!part) return null;
+    if (part === '不可撤销') {
+      return <strong key={index} className="font-semibold text-danger">不可撤销</strong>;
+    }
+    if (/^「[^」]+」$/.test(part)) {
+      return (
+        <span key={index} className="font-semibold text-text-900 underline decoration-accent/70 decoration-2 underline-offset-4">
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
 export function ConfirmModal({
   open,
   onOpenChange,
@@ -48,20 +67,20 @@ export function ConfirmModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="!gap-0 sm:max-w-[440px] sm:min-w-0">
+        <DialogHeader className="!space-y-0">
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription asChild>
-            <div className="mt-2 text-text-600">{description}</div>
-          </DialogDescription>
         </DialogHeader>
+        <DialogDescription asChild>
+          <div className="mt-4 text-[15px] leading-6 text-text-600">{emphasizeDescription(description)}</div>
+        </DialogDescription>
         {error && <div className="text-sm text-danger mt-2">{error}</div>}
-        <DialogFooter className="mt-4">
+        <DialogFooter className="mt-8">
           <button
             type="button"
             onClick={() => onOpenChange(false)}
             disabled={loading}
-            className="px-4 py-2 text-sm font-medium rounded-md text-text-600 hover:bg-black/5 transition-colors disabled:opacity-50"
+            className="inline-flex h-9 min-w-[72px] items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 disabled:opacity-50"
           >
             {cancelLabel}
           </button>
@@ -70,7 +89,7 @@ export function ConfirmModal({
             onClick={handleConfirm}
             disabled={loading}
             className={cn(
-              "px-4 py-2 text-sm font-medium rounded-md transition-colors disabled:opacity-50 flex items-center justify-center min-w-[80px]",
+              "inline-flex h-9 min-w-[72px] items-center justify-center rounded-md px-3 text-sm font-medium transition-colors disabled:opacity-50",
               variant === 'danger' 
                 ? "bg-danger text-white hover:bg-danger/90"
                 : "bg-accent text-white hover:bg-accent/90"

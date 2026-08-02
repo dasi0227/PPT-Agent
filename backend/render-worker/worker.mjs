@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { promises as fs } from 'node:fs';
 import { extname, normalize, relative, resolve, sep } from 'node:path';
 import process from 'node:process';
+import readline from 'node:readline';
 import { chromium } from 'playwright-core';
 
 const MAX_INPUT_BYTES = 3 * 1024 * 1024;
@@ -71,7 +72,23 @@ function safeProjectPath(projectDir, urlPath) {
   return absolute;
 }
 
-async function render(input) {
+async function launchBrowser() {
+  return chromium.launch({
+    executablePath: await executablePath(),
+    headless: true,
+    args: [
+      '--disable-background-networking',
+      '--disable-component-update',
+      '--disable-default-apps',
+      '--disable-domain-reliability',
+      '--disable-sync',
+      '--metrics-recording-only',
+      '--no-first-run',
+    ],
+  });
+}
+
+async function render(input, browser) {
   const started = Date.now();
   if (!input || typeof input.html !== 'string' || typeof input.project_dir !== 'string' ||
       typeof input.slide_id !== 'string' || typeof input.screenshot_path !== 'string') {
@@ -94,8 +111,20 @@ async function render(input) {
         response.end(input.html);
         return;
       }
-      const absolute = safeProjectPath(input.project_dir, path);
-      const data = await fs.readFile(absolute);
+      let absolute;
+      let data;
+      if (typeof input.staging_dir === 'string' && input.staging_dir.length > 0) {
+        try {
+          absolute = safeProjectPath(input.staging_dir, path);
+          data = await fs.readFile(absolute);
+        } catch {
+          absolute = undefined;
+        }
+      }
+      if (!data) {
+        absolute = safeProjectPath(input.project_dir, path);
+        data = await fs.readFile(absolute);
+      }
       response.writeHead(200, { 'content-type': mime(absolute), 'cache-control': 'no-store' });
       response.end(data);
     } catch {
@@ -109,22 +138,9 @@ async function render(input) {
   });
   const address = server.address();
   const origin = `http://127.0.0.1:${address.port}`;
-  let browser;
+  let context;
   try {
-    browser = await chromium.launch({
-      executablePath: await executablePath(),
-      headless: true,
-      args: [
-        '--disable-background-networking',
-        '--disable-component-update',
-        '--disable-default-apps',
-        '--disable-domain-reliability',
-        '--disable-sync',
-        '--metrics-recording-only',
-        '--no-first-run',
-      ],
-    });
-    const context = await browser.newContext({
+    context = await browser.newContext({
       viewport: { width, height },
       deviceScaleFactor: 1,
       javaScriptEnabled: true,
@@ -209,7 +225,6 @@ async function render(input) {
       animations: 'disabled',
       caret: 'hide',
     });
-    await context.close();
     return {
       screenshot_bytes: screenshot.length,
       content_size: metrics.content_size,
@@ -221,7 +236,7 @@ async function render(input) {
       duration_ms: Date.now() - started,
     };
   } finally {
-    if (browser) await browser.close().catch(() => {});
+    if (context) await context.close().catch(() => {});
     await new Promise(resolveClose => server.close(resolveClose));
   }
 }
@@ -237,12 +252,52 @@ async function readInput() {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
+async function serve() {
+  const browser = await launchBrowser();
+  process.stdout.write(`${JSON.stringify({ type: 'ready', ok: true })}\n`);
+  const active = new Set();
+  const close = async () => {
+    await Promise.allSettled([...active]);
+    await browser.close().catch(() => {});
+  };
+  process.once('SIGTERM', () => close().finally(() => process.exit(0)));
+  process.once('SIGINT', () => close().finally(() => process.exit(0)));
+  const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+  for await (const line of lines) {
+    if (Buffer.byteLength(line) > MAX_INPUT_BYTES) {
+      process.stdout.write(`${JSON.stringify({ ok: false, error: 'render input exceeds limit' })}\n`);
+      continue;
+    }
+    let request;
+    try {
+      request = JSON.parse(line);
+    } catch {
+      process.stdout.write(`${JSON.stringify({ ok: false, error: 'invalid render request JSON' })}\n`);
+      continue;
+    }
+    const task = render(request, browser)
+      .then(diagnostics => ({ request_id: request.request_id, ok: true, diagnostics }))
+      .catch(error => ({ request_id: request.request_id, ok: false, error: String(error?.message ?? error) }))
+      .then(response => process.stdout.write(`${JSON.stringify(response)}\n`));
+    active.add(task);
+    task.finally(() => active.delete(task));
+  }
+  await close();
+}
+
 try {
   if (process.argv.includes('--health')) {
     process.stdout.write(JSON.stringify(await health()));
+  } else if (process.argv.includes('--serve')) {
+    await serve();
   } else {
-    const diagnostics = await render(await readInput());
-    process.stdout.write(JSON.stringify({ ok: true, diagnostics }));
+    const browser = await launchBrowser();
+    try {
+      const diagnostics = await render(await readInput(), browser);
+      process.stdout.write(JSON.stringify({ ok: true, diagnostics }));
+    } finally {
+      await browser.close();
+    }
   }
 } catch (error) {
   process.stdout.write(JSON.stringify({ ok: false, error: String(error?.message ?? error) }));

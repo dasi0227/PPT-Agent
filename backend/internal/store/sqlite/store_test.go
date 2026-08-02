@@ -48,7 +48,7 @@ func TestForeignKeyEnforced(t *testing.T) {
 
 	// 插入引用不存在 project 的 slide，外键开启时必须失败。
 	err := s.db.Exec(
-		"INSERT INTO slides (id,project_id,position,layout,json_path,html_path) VALUES (?,?,?,?,?,?)",
+		"INSERT INTO slides (id,project_id,position,layout,spec_path,html_path) VALUES (?,?,?,?,?,?)",
 		"s1", "does-not-exist", 0, "cover", "a", "b",
 	).Error
 	if err == nil {
@@ -66,7 +66,7 @@ func TestCascadeDelete(t *testing.T) {
 		t.Fatalf("insert project: %v", err)
 	}
 	if err := s.db.Exec(
-		"INSERT INTO slides (id,project_id,position,layout,json_path,html_path) VALUES (?,?,?,?,?,?)",
+		"INSERT INTO slides (id,project_id,position,layout,spec_path,html_path) VALUES (?,?,?,?,?,?)",
 		"s1", "p1", 0, "cover", "a", "b",
 	).Error; err != nil {
 		t.Fatalf("insert slide: %v", err)
@@ -116,13 +116,13 @@ func TestRunContextRoundTripStoresManifestOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", WorkSpec: model.WorkSpec{
-		Target:      model.RunTarget{Artifact: model.ArtifactBlueprint, Level: model.TargetDeck},
+		Target:      model.RunTarget{Artifact: model.ArtifactSpec, Level: model.TargetDeck},
 		Interaction: model.RunInteraction{Intent: model.IntentExecute}, Instruction: "x",
 	}, Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1}
 	if err := s.CreateRun(ctx, runModel); err != nil {
 		t.Fatal(err)
 	}
-	want := model.RunContext{RunID: "r", ContextID: "ctx_1", Profile: "blueprint/deck", PackHash: "hash", EstimatedTokens: 10, BudgetTokens: 100, ManifestJSON: `{"segments":[]}`, CreatedAt: 1}
+	want := model.RunContext{RunID: "r", ContextID: "ctx_1", Profile: "spec/deck", PackHash: "hash", EstimatedTokens: 10, BudgetTokens: 100, ManifestJSON: `{"segments":[]}`, CreatedAt: 1}
 	if err := s.SaveRunContext(ctx, want); err != nil {
 		t.Fatal(err)
 	}

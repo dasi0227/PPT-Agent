@@ -10,7 +10,7 @@ import (
 
 func TestTransactionMetadataFailureRestoresFormalArtifact(t *testing.T) {
 	dir := t.TempDir()
-	ref := ArtifactRef{Kind: ArtifactPresentation, ID: "s1", Path: "slides/s1/index.html"}
+	ref := ArtifactRef{Kind: ArtifactSlideHTML, ID: "s1", Path: "slides/s1/index.html"}
 	formal := filepath.Join(dir, ref.Path)
 	if err := os.MkdirAll(filepath.Dir(formal), 0o755); err != nil {
 		t.Fatal(err)
@@ -27,7 +27,7 @@ func TestTransactionMetadataFailureRestoresFormalArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	metadataErr := errors.New("metadata commit failed")
-	if err := tx.Commit(context.Background(), func(context.Context, ChangeSet) error {
+	if err := tx.Commit(context.Background(), func(context.Context, CommitContext) error {
 		return metadataErr
 	}); !errors.Is(err, metadataErr) {
 		t.Fatalf("commit error=%v", err)
@@ -43,7 +43,7 @@ func TestTransactionMetadataFailureRestoresFormalArtifact(t *testing.T) {
 
 func TestTransactionRejectsSourceRevisionConflict(t *testing.T) {
 	dir := t.TempDir()
-	ref := ArtifactRef{Kind: ArtifactSlide, ID: "s1", Path: "slides/s1/slide.json"}
+	ref := ArtifactRef{Kind: ArtifactSlideSpec, ID: "s1", Path: "slides/s1/spec.json"}
 	formal := filepath.Join(dir, ref.Path)
 	if err := os.MkdirAll(filepath.Dir(formal), 0o755); err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestTransactionRejectsSourceRevisionConflict(t *testing.T) {
 
 func TestTransactionRejectsConflictBeforeRestagingSameArtifact(t *testing.T) {
 	dir := t.TempDir()
-	ref := ArtifactRef{Kind: ArtifactSlide, ID: "s1", Path: "slides/s1/slide.json"}
+	ref := ArtifactRef{Kind: ArtifactSlideSpec, ID: "s1", Path: "slides/s1/spec.json"}
 	formal := filepath.Join(dir, ref.Path)
 	if err := os.MkdirAll(filepath.Dir(formal), 0o755); err != nil {
 		t.Fatal(err)

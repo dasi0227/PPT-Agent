@@ -10,28 +10,28 @@ import (
 
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
-	engine    *gin.Engine
-	cfg       *config.Config
-	log       *zap.Logger
-	health    *HealthHandler
-	run       *RunHandler
-	project   *ProjectHandler
-	thread    *ThreadHandler
-	slide     *SlideHandler
-	asset     *AssetHandler
-	blueprint *BlueprintHandler
+	engine  *gin.Engine
+	cfg     *config.Config
+	log     *zap.Logger
+	health  *HealthHandler
+	run     *RunHandler
+	project *ProjectHandler
+	thread  *ThreadHandler
+	slide   *SlideHandler
+	asset   *AssetHandler
+	spec    *SpecHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, blueprintHandlers ...*BlueprintHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, specHandlers ...*SpecHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	var blueprintH *BlueprintHandler
-	if len(blueprintHandlers) > 0 {
-		blueprintH = blueprintHandlers[0]
+	var specH *SpecHandler
+	if len(specHandlers) > 0 {
+		specH = specHandlers[0]
 	}
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, blueprint: blueprintH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, spec: specH}
 	r.register()
 	return r
 }
@@ -49,10 +49,10 @@ func (r *Router) register() {
 	v1.GET("/projects/:id/slides", r.project.ListSlides)
 	v1.POST("/projects/:id/slides", r.project.CreateSlide)
 	v1.POST("/projects/:id/slides/reorder", r.project.ReorderSlides)
-	if r.blueprint != nil {
-		v1.GET("/projects/:id/blueprint", r.blueprint.GetProject)
-		v1.PATCH("/projects/:id/blueprint", r.blueprint.PatchProject)
-		v1.PATCH("/projects/:id/blueprint/design", r.blueprint.PatchDesignSpec)
+	if r.spec != nil {
+		v1.GET("/projects/:id/spec", r.spec.GetProject)
+		v1.PATCH("/projects/:id/spec", r.spec.PatchProject)
+		v1.PATCH("/projects/:id/spec/design", r.spec.PatchDesign)
 	}
 	v1.GET("/projects/:id/threads", r.thread.List)
 	v1.POST("/projects/:id/threads", r.thread.Create)
@@ -75,9 +75,9 @@ func (r *Router) register() {
 	v1.GET("/slides/:id/render", r.slide.RenderSlide)
 	v1.GET("/slides/:id/versions", r.slide.ListVersions)
 	v1.POST("/slides/:id/rollback", r.slide.Rollback)
-	if r.blueprint != nil {
-		v1.GET("/slides/:id/blueprint", r.blueprint.GetSlide)
-		v1.PATCH("/slides/:id/blueprint", r.blueprint.PatchSlide)
+	if r.spec != nil {
+		v1.GET("/slides/:id/spec", r.spec.GetSlide)
+		v1.PATCH("/slides/:id/spec", r.spec.PatchSlide)
 	}
 
 	v1.GET("/assets", r.asset.List)

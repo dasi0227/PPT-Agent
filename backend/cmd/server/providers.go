@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -14,6 +15,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 func provideHTTPServer(cfg *config.Config, engine *gin.Engine) *http.Server {
@@ -68,4 +70,15 @@ func provideEngine(rs run.Store, locks *run.LockManager, hw run.HistoryWriter, l
 // provideHistoryWriter 用底层 store 作为 ThreadLocator：Store 已实现 GetThread/GetProject（隐式接口）。
 func provideHistoryWriter(s store.Store) run.HistoryWriter {
 	return run.NewFSHistoryWriter(s)
+}
+
+func provideRenderWorker() (*workflow.NodeSlideRenderer, func(), error) {
+	renderer := workflow.NewNodeSlideRenderer(workflow.NodeRendererConfig{})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := renderer.Health(ctx); err != nil {
+		_ = renderer.Close()
+		return nil, nil, err
+	}
+	return renderer, func() { _ = renderer.Close() }, nil
 }

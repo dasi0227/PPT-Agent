@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils';
 const labels: Record<MaterializationState, string> = {
   not_materialized: '未生成',
   fresh: '已同步',
-  blueprint_stale: '蓝图有更新',
+  spec_stale: '设计稿有更新',
   design_stale: '风格有更新',
   unknown: '状态未知',
 };

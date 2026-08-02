@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 type EventEmitter interface {
@@ -64,7 +66,7 @@ type AgentRequest struct {
 }
 
 type AgentResponse struct {
-	ToolCall          *llm.ToolCall
+	ToolCalls         []llm.ToolCall
 	Text              string
 	ProviderReasoning string
 }
@@ -98,25 +100,53 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		return AgentResponse{}, err
 	}
 	return AgentResponse{
-		ToolCall: response.ToolCall, Text: response.Text,
+		ToolCalls: response.ToolCalls, Text: response.Text,
 		ProviderReasoning: response.ReasoningContent,
 	}, nil
 }
 
 func runtimeSystemPrompt(phase RuntimePhase, strategy ExecutionStrategy, state string) string {
-	return fmt.Sprintf(
-		"You are the single ReAct agent for this run. Strategy=%s Phase=%s. "+
-			"Use only disclosed tools. Runtime control calls update_plan, ask_user, and finish are not business actions. "+
-			"The PPT business surface is read_ppt, write_ppt, edit_ppt, search_refs, and render_slide. "+
-			"Use strict global or stable slide_id targets; global is one global JSON model and never a container for all slide HTML. "+
-			"For a complete Presentation slide write both model and HTML together, and write multiple slides through separate explicit calls. "+
-			"After the latest HTML/CSS-affecting change, render every affected slide before finish. "+
-			"Never expose chain-of-thought; provide concise action summaries only. "+
-			"Planning may only read and update the checklist. Writes always go to staging. "+
-			"所有策略的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。 "+
-			"finish submits a completion candidate and may be rejected with actionable issues. Runtime state: %s",
-		strategy, phase, state,
-	)
+	contracts := map[string]any{}
+	for _, name := range []string{pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName} {
+		if contract, err := pptschema.AgentContract(name); err == nil {
+			contracts[name] = contract
+		}
+	}
+	contractJSON, _ := json.Marshal(contracts)
+	return fmt.Sprintf(`<runtime_policy>
+You are the single continuous ReAct agent for this HTML PPT run. Strategy=%s Phase=%s.
+Use only disclosed tools. talk and ask are read-only; execute writes only to run staging.
+Re-check resource disclosure, interaction, target scope, strategy and phase on every call.
+The only business tools are read_ppt, write_ppt, edit_ppt, search_refs and render_slide.
+The only control actions are update_plan, ask_user and finish. ask_user and finish must each be the sole action in a response.
+Complex strategy may maintain a dynamic checklist, but it is not a workflow DAG or a separate verification stage.
+All normal successful exits require finish(message=...). Ordinary assistant text never completes a run.
+</runtime_policy>
+
+<ppt_business_policy>
+Outline owns deck goal, audience, narrative sections and stable slide order.
+Design owns the deck-wide 16:9 visual system: 1600x900 canvas, palette, typography, spacing, grid, density and motion.
+Each Slide Spec owns one page's semantic role, title, key message, content hierarchy, visual intent and speaker notes.
+Each Slide HTML is the final page implementation. It must use a 1600x900 .slide-stage, accessible semantic HTML, useful alt text, CJK-safe fonts and project-local/data/blob resources only.
+Every Slide HTML must link ../../common/tokens.css and ../../common/base.css. Runtime derives tokens.css from Design. Available shared tokens are --color-bg, --color-fg, --color-primary, --color-accent, --color-muted, --font-sans, --font-serif, --font-mono, --text-title, --text-h1, --text-body, --text-caption, --space-1, --space-2, --space-3, --space-4, --space-6, --space-8, --radius-sm, --radius-md, --radius-lg, --shadow-card, --shadow-pop, --stage-w and --stage-h.
+For an empty complete Presentation, establish Outline, then Design, then every Slide Spec in outline order, then every Slide HTML. Maintain a coherent cross-slide narrative, controlled information density, strong hierarchy and visual consistency.
+Use read_ppt when exact saved text is needed. Use edit_ppt only for small uniquely anchored replacements. Use write_ppt for full creation or broad reconstruction.
+After every latest HTML or design-affecting change, render affected pages, observe diagnostics, repair failures in the same ReAct loop, and render again.
+Independent reads/searches and renders for different pages may be returned together. Writes must respect resource dependency order.
+</ppt_business_policy>
+
+<current_resource_contracts>
+Resources are exactly deck:outline, deck:design, slide:&lt;slide_id&gt;:spec and slide:&lt;slide_id&gt;:html.
+Never pass disk paths, project paths, staging paths, database IDs or storage artifact kinds.
+read_ppt(resource) returns the complete saved JSON or HTML string.
+write_ppt(resource, content) always receives content as a string. Runtime owns schema_version, revision, project_id, slide_id, source revisions and timestamps.
+edit_ppt(resource, edits) uses ordered objects with old_text and new_text. Each old_text must match exactly once.
+Domain contracts generated from the authoritative schemas: %s
+</current_resource_contracts>
+
+<current_runtime_state>
+%s
+</current_runtime_state>`, strategy, phase, contractJSON, state)
 }
 
 const noToolCallGuidance = "Ordinary assistant text is not a completion signal. If the task is complete, call finish(message=...) with the final response. If the task is not complete, call one of the currently disclosed tools to continue."
@@ -259,10 +289,13 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			Tools: schemas,
 		})
 		if err != nil {
+			if ctx.Err() != nil {
+				return r.fail(input, state, CodeCanceled, ctx.Err())
+			}
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
 		state.tokens += approximateTokens(response.Text)
-		if response.ToolCall == nil {
+		if len(response.ToolCalls) == 0 {
 			recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{
 				"turn": state.turns, "has_tool_call": false,
 				"provider_reasoning_content": response.ProviderReasoning,
@@ -274,16 +307,30 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: noToolCallGuidance})
 			continue
 		}
-		call := *response.ToolCall
-		if call.ID == "" {
-			call.ID = fmt.Sprintf("%s-%d", state.loopID, state.turns)
+		calls := append([]llm.ToolCall{}, response.ToolCalls...)
+		for index := range calls {
+			if calls[index].ID == "" {
+				calls[index].ID = fmt.Sprintf("%s-%d-%d", state.loopID, state.turns, index+1)
+			}
 		}
 		r.emitReasoning(input.Emitter, state, response.Text)
 		recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{
 			"turn": state.turns, "has_tool_call": true,
 			"provider_reasoning_content": response.ProviderReasoning,
 		})
-		if isControlTool(call.Name) {
+		controlCount := 0
+		for _, call := range calls {
+			if isControlTool(call.Name) {
+				controlCount++
+			}
+		}
+		if controlCount > 0 {
+			if len(calls) != 1 {
+				result := failedToolResult(CodeInvalidControlCall, "control actions must be the only call in a model response", false)
+				state.messages = appendBatchObservations(state.messages, calls, response.Text, response.ProviderReasoning, []ToolResult{result})
+				continue
+			}
+			call := calls[0]
 			if !schemasByName(schemas)[call.Name] {
 				r.appendControlObservation(
 					state, call, response.Text, response.ProviderReasoning,
@@ -297,11 +344,63 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			}
 			continue
 		}
-		state.toolCalls++
-		disclosed := schemasByName(schemas)
+		results := r.executeToolBatch(ctx, input, state, registry, schemasByName(schemas), calls)
+		state.messages = appendBatchObservations(state.messages, calls, response.Text, response.ProviderReasoning, results)
+		upgrade := false
+		recordToolFailures(state, results)
+		for _, result := range results {
+			upgrade = upgrade || result.Code == CodeScopeExpansion
+		}
+		if state.strategy == StrategySimple && (upgrade || requiresComplexCoordination(state.changeSet())) {
+			r.upgradeToComplex(input.Emitter, state, "runtime scope expansion requires coordinated planning")
+			continue
+		}
+		if state.strategy == StrategySimple && state.toolCalls >= state.budget.SimpleUpgradeToolRoundTrips {
+			r.upgradeToComplex(input.Emitter, state, "simple execution exceeded six tool round trips")
+			continue
+		}
+		if state.toolFailures >= state.budget.MaxConsecutiveToolFailures {
+			return r.fail(input, state, CodeConsecutiveErrors, errors.New("consecutive tool failures exhausted the runtime budget"))
+		}
+	}
+}
+
+func recordToolFailures(state *runtimeState, results []ToolResult) {
+	anySuccess := false
+	anyFailure := false
+	for _, result := range results {
+		if result.OK {
+			anySuccess = true
+		} else if result.Code != CodeDependencyFailed {
+			anyFailure = true
+			state.issues = append(state.issues, result.Issues...)
+		}
+	}
+	switch {
+	case anySuccess:
+		state.toolFailures = 0
+	case anyFailure:
+		// One model response is one repair round. A multi-render response may
+		// legitimately report several failed pages, while fail-fast may add
+		// synthetic DEPENDENCY_FAILED observations. Neither should exhaust the
+		// consecutive-round budget faster merely because ToolCalls[] is used.
+		state.toolFailures++
+	}
+}
+
+func (r *Runtime) executeToolBatch(
+	ctx context.Context,
+	input RuntimeInput,
+	state *runtimeState,
+	registry *ToolRegistry,
+	disclosed map[string]bool,
+	calls []llm.ToolCall,
+) []ToolResult {
+	results := make([]ToolResult, len(calls))
+	projector := ToolPublicProjector{}
+	planStepID := currentPlanStepID(state.plan)
+	for _, call := range calls {
 		r.emitToolProgress(input.Emitter, state, call)
-		planStepID := currentPlanStepID(state.plan)
-		projector := ToolPublicProjector{}
 		if input.Emitter != nil {
 			if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID); ok {
 				input.Emitter.Emit(model.EventToolStarted, event)
@@ -310,13 +409,39 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		recordTrace(input.Trace, state.runID, "tool.called", map[string]any{
 			"loop_id": state.loopID, "call_id": call.ID, "tool": call.Name, "args": call.Args,
 		})
-		state.activeTools++
-		result := registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
+	}
+	state.toolCalls += len(calls)
+	state.activeTools += len(calls)
+	execute := func(index int) {
+		call := calls[index]
+		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
 			Args: call.Args, Context: input.Context, ProjectDir: input.ProjectDir, RunID: input.RunID,
 			Transaction: state.tx, Scope: state.scope, Strategy: state.strategy, Phase: state.phase,
 			Interaction: input.Context.WorkSpec.Interaction.Intent, Risk: state.decision.Risk,
 		})
-		state.activeTools--
+	}
+	switch {
+	case batchIsIndependentReads(calls):
+		runConcurrentBatch(ctx, len(calls), 4, execute)
+	case batchIsIndependentRenders(calls):
+		runConcurrentBatch(ctx, len(calls), 3, execute)
+	default:
+		writeFailed := false
+		for index, call := range calls {
+			desc, _ := registry.Descriptor(call.Name)
+			if writeFailed {
+				results[index] = failedToolResult(CodeDependencyFailed, "call skipped after an earlier write failure", false)
+				continue
+			}
+			execute(index)
+			if !desc.ReadOnly && !results[index].OK {
+				writeFailed = true
+			}
+		}
+	}
+	state.activeTools -= len(calls)
+	for index, call := range calls {
+		result := results[index]
 		if input.Emitter != nil {
 			if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result); ok {
 				input.Emitter.Emit(model.EventToolCompleted, event)
@@ -328,7 +453,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			"issues": result.Issues, "changed_targets": result.ChangedTargets,
 			"retryable": result.Retryable, "code": result.Code,
 		})
-		for _, target := range uniqueTargets(append(result.InvalidatedTargets, changedTargetRefs(result.ChangedTargets)...)) {
+		for _, target := range uniqueTargets(append(result.InvalidatedTargets, changedResources(result.ChangedTargets)...)) {
 			state.ledger.Invalidate(target)
 		}
 		for _, evidence := range result.Evidence {
@@ -341,27 +466,56 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				"fields": target.Fields, "tentative": false,
 			})
 		}
-		state.messages = appendToolObservation(
-			state.messages, call, response.Text, response.ProviderReasoning, result,
-		)
-		if result.OK {
-			state.toolFailures = 0
-		} else {
-			state.toolFailures++
-			state.issues = append(state.issues, result.Issues...)
-		}
-		if state.strategy == StrategySimple && (result.Code == CodeScopeExpansion || requiresComplexCoordination(state.changeSet())) {
-			r.upgradeToComplex(input.Emitter, state, "runtime scope expansion requires coordinated planning")
-			continue
-		}
-		if state.strategy == StrategySimple && state.toolCalls >= state.budget.SimpleUpgradeToolRoundTrips {
-			r.upgradeToComplex(input.Emitter, state, "simple execution exceeded six tool round trips")
-			continue
-		}
-		if state.toolFailures >= state.budget.MaxConsecutiveToolFailures {
-			return r.fail(input, state, CodeConsecutiveErrors, errors.New("consecutive tool failures exhausted the runtime budget"))
+	}
+	return results
+}
+
+func batchIsIndependentReads(calls []llm.ToolCall) bool {
+	if len(calls) < 2 {
+		return false
+	}
+	for _, call := range calls {
+		if call.Name != "read_ppt" && call.Name != "search_refs" {
+			return false
 		}
 	}
+	return true
+}
+
+func batchIsIndependentRenders(calls []llm.ToolCall) bool {
+	if len(calls) < 2 {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, call := range calls {
+		if call.Name != "render_slide" {
+			return false
+		}
+		slideID, _ := call.Args["slide_id"].(string)
+		if slideID == "" || seen[slideID] {
+			return false
+		}
+		seen[slideID] = true
+	}
+	return true
+}
+
+func runConcurrentBatch(ctx context.Context, count, limit int, execute func(int)) {
+	sem := make(chan struct{}, limit)
+	var wg sync.WaitGroup
+	for index := 0; index < count; index++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+				execute(i)
+			case <-ctx.Done():
+			}
+		}(index)
+	}
+	wg.Wait()
 }
 
 func (r *Runtime) executeControl(
@@ -511,13 +665,14 @@ func (r *Runtime) finishCandidate(
 	}
 	if state.strategy != StrategyChat {
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted")
+		state.tx.AcceptMaterializationProofs(result.MaterializationProofs)
 		if err := state.tx.Commit(ctx, input.CommitMetadata); err != nil {
 			return r.fail(input, state, CodeCommitFailed, err), true
 		}
 		state.committed = true
 		for _, change := range changes.All() {
 			recordTrace(input.Trace, state.runID, "target.committed", map[string]any{
-				"target": targetForArtifact(change.Artifact), "artifact": change.Artifact,
+				"target": resourceForArtifact(change.Artifact), "artifact": change.Artifact,
 			})
 		}
 	}
@@ -538,8 +693,8 @@ func (r *Runtime) finishCandidate(
 	return outcome, true
 }
 
-func changedTargetRefs(values []ChangedTarget) []TargetRef {
-	out := make([]TargetRef, 0, len(values))
+func changedResources(values []ChangedTarget) []Resource {
+	out := make([]Resource, 0, len(values))
 	for _, value := range values {
 		out = append(out, value.Target())
 	}
@@ -559,7 +714,7 @@ func (r *Runtime) upgradeToComplex(emitter EventEmitter, state *runtimeState, re
 		state.tx.MarkTentative()
 		for _, change := range state.tx.ChangeSet().All() {
 			recordTrace(state.trace, state.runID, "target.staged", map[string]any{
-				"target": targetForArtifact(change.Artifact), "artifact": change.Artifact, "tentative": true,
+				"target": resourceForArtifact(change.Artifact), "artifact": change.Artifact, "tentative": true,
 			})
 		}
 	}
@@ -686,7 +841,7 @@ func (r *Runtime) emitProgress(
 	}
 	key := stage + "|" + text
 	if target != nil {
-		key += "|" + target.Type + "|" + target.SlideID
+		key += "|" + target.Type + "|" + target.SlideID + "|" + target.Part
 	}
 	if key == state.lastProgress {
 		return
@@ -758,14 +913,44 @@ func appendToolObservation(
 	providerReasoning string,
 	result ToolResult,
 ) []llm.Message {
-	raw, _ := json.Marshal(result)
+	content := result.Observation
+	if content == "" {
+		raw, _ := json.Marshal(result)
+		content = string(raw)
+	}
 	return append(messages,
 		llm.Message{
 			Role: llm.RoleAssistant, Content: assistantText,
 			ReasoningContent: providerReasoning, ToolCalls: []llm.ToolCall{call},
 		},
-		llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: string(raw)},
+		llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: content},
 	)
+}
+
+func appendBatchObservations(
+	messages []llm.Message,
+	calls []llm.ToolCall,
+	assistantText string,
+	providerReasoning string,
+	results []ToolResult,
+) []llm.Message {
+	messages = append(messages, llm.Message{
+		Role: llm.RoleAssistant, Content: assistantText,
+		ReasoningContent: providerReasoning, ToolCalls: calls,
+	})
+	for index, call := range calls {
+		result := failedToolResult(CodeInvalidControlCall, "tool call was not executed", false)
+		if index < len(results) {
+			result = results[index]
+		}
+		content := result.Observation
+		if content == "" {
+			raw, _ := json.Marshal(result)
+			content = string(raw)
+		}
+		messages = append(messages, llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: content})
+	}
+	return messages
 }
 
 func approximateTokens(value string) int {
@@ -784,15 +969,21 @@ func approximateMessageTokens(messages []llm.Message) int {
 }
 
 func requiresComplexCoordination(changes ChangeSet) bool {
-	targets := map[string]bool{}
-	hasGlobal, hasSlide := false, false
+	owners := map[string]bool{}
 	for _, change := range changes.All() {
-		target := targetForArtifact(change.Artifact)
-		targets[target.Key()] = true
-		hasGlobal = hasGlobal || target.Type == "global"
-		hasSlide = hasSlide || target.Type == "slide"
+		target := resourceForArtifact(change.Artifact)
+		owner := target.Type
+		if target.Type == "slide" {
+			// Slide Spec and Slide HTML are two representations of the same
+			// page target. Updating both is the normal single-slide path and
+			// must not force a mid-run Complex upgrade.
+			owner += ":" + target.SlideID
+		} else {
+			owner += ":" + target.Part
+		}
+		owners[owner] = true
 	}
-	return len(targets) > 1 || (hasGlobal && hasSlide)
+	return len(owners) > 1
 }
 
 func gateNeedsCoordination(result CompletionResult) bool {

@@ -58,8 +58,8 @@ func TestSlidesUsesCanonicalRuntimeColumns(t *testing.T) {
 	}
 	cols := tableColumns(t, db, "slides")
 	for _, want := range []string{
-		"position", "blueprint_revision", "presentation_revision",
-		"source_deck_revision", "source_blueprint_revision", "source_design_revision",
+		"position", "spec_revision", "html_revision",
+		"source_outline_revision", "source_spec_revision", "source_design_revision",
 	} {
 		if !cols[want] {
 			t.Fatalf("slides table missing column %q; got %v", want, cols)

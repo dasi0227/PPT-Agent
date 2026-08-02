@@ -1,26 +1,26 @@
 import { create } from 'zustand';
-import { blueprintsApi } from '../api/blueprints';
-import type { BlueprintProjectView, SlideBlueprint } from '../api/types';
+import { specsApi } from '../api/specs';
+import type { SlideSpec, SpecProjectView } from '../api/types';
 import { APIError } from '../api/client';
 
-interface BlueprintState {
-  byProjectId: Record<string, BlueprintProjectView>;
+interface SpecState {
+  byProjectId: Record<string, SpecProjectView>;
   loading: Record<string, boolean>;
   error: Record<string, string | undefined>;
   loadProject: (projectId: string) => Promise<void>;
   refreshSlide: (projectId: string, slideId: string) => Promise<void>;
-  patchSlide: (projectId: string, slide: SlideBlueprint) => Promise<void>;
+  patchSlide: (projectId: string, slide: SlideSpec) => Promise<void>;
   clearProject: (projectId: string) => void;
 }
 
-export const useBlueprintStore = create<BlueprintState>((set) => ({
+export const useSpecStore = create<SpecState>((set) => ({
   byProjectId: {},
   loading: {},
   error: {},
   loadProject: async (projectId) => {
     set((state) => ({ loading: { ...state.loading, [projectId]: true } }));
     try {
-      const view = await blueprintsApi.getProject(projectId);
+      const view = await specsApi.getProject(projectId);
       set((state) => ({
         byProjectId: { ...state.byProjectId, [projectId]: view },
         loading: { ...state.loading, [projectId]: false },
@@ -39,7 +39,7 @@ export const useBlueprintStore = create<BlueprintState>((set) => ({
     }
   },
   refreshSlide: async (projectId, slideId) => {
-    const updated = await blueprintsApi.getSlide(slideId);
+    const updated = await specsApi.getSlide(slideId);
     set((state) => {
       const view = state.byProjectId[projectId];
       if (!view) return state;
@@ -48,7 +48,7 @@ export const useBlueprintStore = create<BlueprintState>((set) => ({
           ...state.byProjectId,
           [projectId]: {
             ...view,
-            slides: { ...view.slides, [slideId]: updated.blueprint },
+            slide_specs: { ...view.slide_specs, [slideId]: updated.spec },
             materialization: { ...view.materialization, [slideId]: updated.materialization },
           },
         },
@@ -56,16 +56,16 @@ export const useBlueprintStore = create<BlueprintState>((set) => ({
     });
   },
   patchSlide: async (projectId, slide) => {
-    const updated = await blueprintsApi.patchSlide(slide.slide_id, slide.revision, slide);
+    const updated = await specsApi.patchSlide(slide.slide_id, slide.revision, slide);
     set((state) => {
       const view = state.byProjectId[projectId];
       if (!view) return state;
       return { byProjectId: { ...state.byProjectId, [projectId]: {
         ...view,
-        slides: { ...view.slides, [updated.slide_id]: updated },
+        slide_specs: { ...view.slide_specs, [updated.slide_id]: updated },
         materialization: {
           ...view.materialization,
-          [updated.slide_id]: { ...view.materialization[updated.slide_id], state: 'blueprint_stale' },
+          [updated.slide_id]: { ...view.materialization[updated.slide_id], state: 'spec_stale' },
         },
       } } };
     });

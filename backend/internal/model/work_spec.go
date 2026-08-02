@@ -9,7 +9,7 @@ import (
 type Artifact string
 
 const (
-	ArtifactBlueprint    Artifact = "blueprint"
+	ArtifactSpec         Artifact = "spec"
 	ArtifactPresentation Artifact = "presentation"
 )
 
@@ -54,7 +54,7 @@ type WorkSpec struct {
 var ErrInvalidWorkSpec = errors.New("invalid work spec")
 
 func (s WorkSpec) Validate() error {
-	if s.Target.Artifact != ArtifactBlueprint && s.Target.Artifact != ArtifactPresentation {
+	if s.Target.Artifact != ArtifactSpec && s.Target.Artifact != ArtifactPresentation {
 		return fmt.Errorf("%w: unsupported artifact %q", ErrInvalidWorkSpec, s.Target.Artifact)
 	}
 	if s.Target.Level != TargetSlide && s.Target.Level != TargetDeck {
@@ -85,27 +85,27 @@ type MaterializationState string
 const (
 	MaterializationNotMaterialized MaterializationState = "not_materialized"
 	MaterializationFresh           MaterializationState = "fresh"
-	MaterializationBlueprintStale  MaterializationState = "blueprint_stale"
+	MaterializationSpecStale       MaterializationState = "spec_stale"
 	MaterializationDesignStale     MaterializationState = "design_stale"
 	MaterializationUnknown         MaterializationState = "unknown"
 )
 
 type MaterializationRevisions struct {
-	Presentation   int `json:"presentation"`
-	Deck           int `json:"source_deck"`
-	SlideBlueprint int `json:"source_blueprint"`
-	Design         int `json:"source_design"`
+	SlideHTML int `json:"slide_html"`
+	Outline   int `json:"source_outline"`
+	SlideSpec int `json:"source_spec"`
+	Design    int `json:"source_design"`
 }
 
-func DeriveMaterializationState(hasHTML bool, currentDeck, currentBlueprint, currentDesign int, source MaterializationRevisions) MaterializationState {
+func DeriveMaterializationState(hasHTML bool, currentOutline, currentSpec, currentDesign int, source MaterializationRevisions) MaterializationState {
 	if !hasHTML {
 		return MaterializationNotMaterialized
 	}
-	if source.Presentation == 0 || source.SlideBlueprint == 0 || source.Design == 0 {
+	if source.SlideHTML == 0 || source.SlideSpec == 0 || source.Design == 0 {
 		return MaterializationUnknown
 	}
-	if source.Deck < currentDeck || source.SlideBlueprint < currentBlueprint {
-		return MaterializationBlueprintStale
+	if source.Outline < currentOutline || source.SlideSpec < currentSpec {
+		return MaterializationSpecStale
 	}
 	if source.Design < currentDesign {
 		return MaterializationDesignStale

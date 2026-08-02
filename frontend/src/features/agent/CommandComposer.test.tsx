@@ -20,7 +20,7 @@ describe('CommandComposer', () => {
         activeProjectId: 'p1',
         slidesByProjectId: {
           p1: [
-            { id: 'stable-1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '', json_path: '', current_version: 0 },
+            { id: 'stable-1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '', spec_path: '', current_version: 0 },
           ],
         },
       });
@@ -125,8 +125,8 @@ describe('CommandComposer', () => {
     useThreadStore.setState({ activeThreadIdByProjectId: { empty: 't-empty' }, ensureActiveThread: async () => 't-empty' });
     render(<CommandComposer />);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: '目标：整份蓝图' })).toBeInTheDocument());
-    const targetTrigger = screen.getByRole('button', { name: '目标：整份蓝图' });
+    await waitFor(() => expect(screen.getByRole('button', { name: '目标：整份设计稿' })).toBeInTheDocument());
+    const targetTrigger = screen.getByRole('button', { name: '目标：整份设计稿' });
     fireEvent.pointerDown(targetTrigger, { button: 0, ctrlKey: false });
     fireEvent.click(targetTrigger);
     expect(screen.getByRole('menuitem', { name: '范围：单页' })).not.toHaveAttribute('data-disabled');

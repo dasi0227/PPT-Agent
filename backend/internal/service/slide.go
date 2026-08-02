@@ -38,7 +38,7 @@ func (svc *SlideService) ListVersions(ctx context.Context, slideID string) ([]mo
 	if err != nil {
 		return nil, err
 	}
-	return svc.store.ListVersions(ctx, "presentation_slide", model.PresentationSlideVersionTarget(sl.ProjectID, sl.ID))
+	return svc.store.ListVersions(ctx, "slide_html", model.SlideHTMLVersionTarget(sl.ProjectID, sl.ID))
 }
 
 // RollbackSlide 回滚某页到 versionNo：用历史快照覆盖当前 html + 记一条**新版本**（DATA-VERSION-004）。
@@ -52,10 +52,10 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	if err != nil {
 		return model.Slide{}, err
 	}
-	target := model.PresentationSlideVersionTarget(sl.ProjectID, sl.ID)
+	target := model.SlideHTMLVersionTarget(sl.ProjectID, sl.ID)
 
 	// 定位历史版本快照路径。
-	versions, err := svc.store.ListVersions(ctx, "presentation_slide", target)
+	versions, err := svc.store.ListVersions(ctx, "slide_html", target)
 	if err != nil {
 		return model.Slide{}, err
 	}
@@ -93,18 +93,18 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	}
 
 	// 2) 记一条新版本（内容=历史，version_no 递增），关联无 run。
-	newNo, err := svc.store.NextVersionNo(ctx, "presentation_slide", target)
+	newNo, err := svc.store.NextVersionNo(ctx, "slide_html", target)
 	if err != nil {
 		restoreCurrent()
 		return model.Slide{}, err
 	}
-	snap := model.SlideVersionSnapshot(sl.ID, newNo)
+	snap := model.SlideHTMLVersionSnapshot(sl.ID, newNo)
 	if err := sandbox.Write(snap, historical); err != nil {
 		restoreCurrent()
 		return model.Slide{}, err
 	}
 	if err := svc.store.CreateVersion(ctx, model.Version{
-		ID: svc.newID(), TargetType: "presentation_slide", TargetID: target, VersionNo: newNo,
+		ID: svc.newID(), TargetType: "slide_html", TargetID: target, VersionNo: newNo,
 		SnapshotPath: snap, CreatedAt: svc.clock(),
 	}); err != nil {
 		restoreCurrent()
@@ -115,7 +115,7 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	// 3) current_version 指向新版本（DATA-VERSION-005）。
 	if err := svc.store.SetSlideVersion(ctx, sl.ID, newNo); err != nil {
 		restoreCurrent()
-		_ = svc.store.DeleteVersion(ctx, "presentation_slide", target, newNo)
+		_ = svc.store.DeleteVersion(ctx, "slide_html", target, newNo)
 		_ = sandbox.Delete(snap)
 		return model.Slide{}, err
 	}

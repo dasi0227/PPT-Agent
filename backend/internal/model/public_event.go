@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const PublicEventSchemaVersion = 1
+const PublicEventSchemaVersion = 2
 
 var PublicEventTypes = [...]EventType{
 	EventRunStarted,
@@ -46,6 +46,7 @@ func NewPublicEventBase(runID string) PublicEventBase {
 type PublicTarget struct {
 	Type    string `json:"type"`
 	SlideID string `json:"slide_id,omitempty"`
+	Part    string `json:"part"`
 }
 
 type PublicDisplay struct {
@@ -146,6 +147,7 @@ type ToolCompletedPayload struct {
 	CallID  string        `json:"call_id"`
 	Tool    string        `json:"tool"`
 	Status  string        `json:"status"`
+	Target  *PublicTarget `json:"target,omitempty"`
 	Display PublicDisplay `json:"display"`
 	Preview *ToolPreview  `json:"preview,omitempty"`
 	Error   *PublicError  `json:"error,omitempty"`
@@ -192,7 +194,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		return err
 	}
 	if intValue(data["schema_version"]) != PublicEventSchemaVersion {
-		return errors.New("schema_version must be 1")
+		return errors.New("schema_version must be 2")
 	}
 	if strings.TrimSpace(stringValue(data["run_id"])) == "" {
 		return errors.New("run_id is required")
@@ -308,6 +310,9 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return errors.New("failed tool requires error")
 		}
 		if err := validateOptionalError(data["error"]); err != nil {
+			return err
+		}
+		if err := validateOptionalTarget(data["target"]); err != nil {
 			return err
 		}
 		if err := validateDisplay(data["display"]); err != nil {
@@ -535,14 +540,21 @@ func validatePublicTarget(value any) error {
 	if !ok {
 		return errors.New("target must be an object")
 	}
+	part := stringValue(target["part"])
 	switch stringValue(target["type"]) {
-	case "global":
+	case "deck":
 		if strings.TrimSpace(stringValue(target["slide_id"])) != "" {
-			return errors.New("global target must not contain slide_id")
+			return errors.New("deck target must not contain slide_id")
+		}
+		if !oneOf(part, "outline", "design") {
+			return errors.New("deck target part must be outline or design")
 		}
 	case "slide":
 		if strings.TrimSpace(stringValue(target["slide_id"])) == "" {
 			return errors.New("slide target requires slide_id")
+		}
+		if !oneOf(part, "spec", "html") {
+			return errors.New("slide target part must be spec or html")
 		}
 	default:
 		return errors.New("invalid public target type")

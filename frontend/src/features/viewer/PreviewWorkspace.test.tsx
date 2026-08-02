@@ -3,23 +3,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewWorkspace } from './PreviewWorkspace';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
-import { useBlueprintStore } from '../../stores/blueprintStore';
+import { useSpecStore } from '../../stores/specStore';
 import { clearSlideRenderCache } from './useSlideRenderCache';
 
-const blueprint = (id: string, title = '封面标题') => ({
-  schema_version: '2.0' as const, revision: 1, slide_id: id, section_id: 'main', role: 'cover',
+const slideSpec = (id: string, title = '封面标题') => ({
+  schema_version: '3.0' as const, revision: 1, project_id: 'p1', slide_id: id,
+  source_outline_revision: 1, section_id: 'main', role: 'cover',
   title, key_message: title, content: { summary: title, points: ['要点一'] },
   visual_intent: { archetype: 'hero', description: '主视觉', asset_queries: [] },
   speaker_notes: '', created_at: 1, updated_at: 1,
 });
-const setBlueprints = () => useBlueprintStore.setState({
+const setSpecs = () => useSpecStore.setState({
   byProjectId: { p1: {
-    deck: { schema_version: '2.0', revision: 1, project_id: 'p1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', core_thesis: '', narrative_arc: '', sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
-    slides: { s1: blueprint('s1'), s2: blueprint('s2', '第二页') },
-    design_spec: { schema_version: '2.0', revision: 1, canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {} },
+    outline: { schema_version: '3.0', revision: 1, project_id: 'p1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', core_thesis: '', narrative_arc: '', sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+    slide_specs: { s1: slideSpec('s1'), s2: slideSpec('s2', '第二页') },
+    design: { schema_version: '3.0', revision: 1, project_id: 'p1', canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {}, created_at: 1, updated_at: 1 },
     materialization: {
-      s1: { state: 'not_materialized', revisions: { presentation: 0, source_deck: 0, source_blueprint: 0, source_design: 0 } },
-      s2: { state: 'not_materialized', revisions: { presentation: 0, source_deck: 0, source_blueprint: 0, source_design: 0 } },
+      s1: { state: 'not_materialized', revisions: { slide_html: 0, source_outline: 0, source_spec: 0, source_design: 0 } },
+      s2: { state: 'not_materialized', revisions: { slide_html: 0, source_outline: 0, source_spec: 0, source_design: 0 } },
     },
   } },
   loading: {},
@@ -54,8 +55,8 @@ describe('PreviewWorkspace', () => {
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'Slide 1', html_path: '/slides/p1/s1.html', json_path: '/slides/p1/s1.json', current_version: 1 },
-          { id: 's2', project_id: 'p1', position: 1, layout: 'content', title: 'Slide 2', html_path: '/slides/p1/s2.html', json_path: '/slides/p1/s2.json', current_version: 1 }
+          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'Slide 1', html_path: '/slides/p1/s1.html', spec_path: '/slides/p1/s1.json', current_version: 1 },
+          { id: 's2', project_id: 'p1', position: 1, layout: 'content', title: 'Slide 2', html_path: '/slides/p1/s2.html', spec_path: '/slides/p1/s2.json', current_version: 1 }
         ]
       },
       loadingProjects: false
@@ -66,7 +67,7 @@ describe('PreviewWorkspace', () => {
       previewMode: 'main',
       globalView: 'html',
     });
-    setBlueprints();
+    setSpecs();
   });
 
   it('loads the current slide first, then prefetches an adjacent slide', async () => {
@@ -115,7 +116,7 @@ describe('PreviewWorkspace', () => {
     useProjectStore.setState({
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'Slide 1', html_path: '/slides/p1/s1.html', json_path: '', current_version: 1 },
+          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'Slide 1', html_path: '/slides/p1/s1.html', spec_path: '', current_version: 1 },
         ],
       },
     });
@@ -189,6 +190,8 @@ describe('PreviewWorkspace', () => {
 
     expect(screen.getByText('暂无页面')).toBeInTheDocument();
     expect(screen.queryByText('暂无内容')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '设计稿' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '幻灯片' })).toBeInTheDocument();
   });
 
   it('uses the no-content state only when a page exists without rendered content', () => {
@@ -198,10 +201,10 @@ describe('PreviewWorkspace', () => {
         p1: [{ ...state.slidesByProjectId.p1[0], html_path: '' }],
       },
     }));
-    useBlueprintStore.setState((state) => ({
+    useSpecStore.setState((state) => ({
       byProjectId: {
         ...state.byProjectId,
-        p1: { ...state.byProjectId.p1, slides: {} },
+        p1: { ...state.byProjectId.p1, slide_specs: {} },
       },
     }));
     useDeckStore.setState({ previewMode: 'main', globalView: 'html', currentPage: 0 });
@@ -299,16 +302,16 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       }
     });
     useDeckStore.setState({ currentPage: 0, previewMode: 'main', globalView: 'html' });
-    setBlueprints();
+    setSpecs();
   });
 
-  it('renders SlideBlueprintCard (not iframe) when current page has no html', () => {
+  it('renders SlideSpecCard (not iframe) when current page has no html', () => {
     useProjectStore.setState({
       projects: [],
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', position: 0, layout: 'bullets', title: '封面标题', html_path: '', json_path: '/slides/p1/s1.json', current_version: 0 },
+          { id: 's1', project_id: 'p1', position: 0, layout: 'bullets', title: '封面标题', html_path: '', spec_path: '/slides/p1/s1.json', current_version: 0 },
         ]
       },
       loadingProjects: false
@@ -319,20 +322,20 @@ describe('PreviewWorkspace dual view (globalView)', () => {
     expect(document.querySelector('iframe')).toBeNull();
   });
 
-  it('HTML segment button is NOT disabled even when current page has no html (globalView 全局)', () => {
+  it('幻灯片 segment button is NOT disabled even when current page has no html (globalView 全局)', () => {
     useProjectStore.setState({
       projects: [],
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', position: 0, layout: 'bullets', title: '封面标题', html_path: '', json_path: '/slides/p1/s1.json', current_version: 0 },
+          { id: 's1', project_id: 'p1', position: 0, layout: 'bullets', title: '封面标题', html_path: '', spec_path: '/slides/p1/s1.json', current_version: 0 },
         ]
       },
       loadingProjects: false
     });
     render(<PreviewWorkspace />);
-    const htmlBtn = screen.getByRole('button', { name: '页面' });
-    expect(htmlBtn).not.toBeDisabled();
+    const presentationButton = screen.getByRole('button', { name: '幻灯片' });
+    expect(presentationButton).not.toBeDisabled();
   });
 
   it('renders iframe by default when current page has html', async () => {
@@ -341,7 +344,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'Slide 1', html_path: '/slides/p1/s1.html', json_path: '/slides/p1/s1.json', current_version: 1 },
+          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'Slide 1', html_path: '/slides/p1/s1.html', spec_path: '/slides/p1/s1.json', current_version: 1 },
         ]
       },
       loadingProjects: false
@@ -356,7 +359,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '/slides/p1/s1.html', json_path: '/slides/p1/s1.json', current_version: 1 },
+          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '/slides/p1/s1.html', spec_path: '/slides/p1/s1.json', current_version: 1 },
         ]
       },
       loadingProjects: false,
@@ -373,8 +376,8 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '/slides/p1/s1.html', json_path: '', current_version: 1 },
-          { id: 's2', project_id: 'p1', position: 1, layout: 'bullets', title: '', html_path: '', json_path: '', current_version: 0 },
+          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '/slides/p1/s1.html', spec_path: '', current_version: 1 },
+          { id: 's2', project_id: 'p1', position: 1, layout: 'bullets', title: '', html_path: '', spec_path: '', current_version: 0 },
         ]
       },
       loadingProjects: false,
@@ -396,7 +399,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '', json_path: '', current_version: 0 },
+          { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'S1', html_path: '', spec_path: '', current_version: 0 },
         ],
       },
       loadingProjects: false,

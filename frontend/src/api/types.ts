@@ -5,17 +5,19 @@ export interface Project {
   theme: string;
   status: 'draft' | 'generating' | 'ready';
   design_path: string;
-  deck_path?: string;
-  deck_revision?: number;
+  outline_path?: string;
+  outline_revision?: number;
   design_revision?: number;
   created_at: number;
   updated_at: number;
 }
 
-export interface SlideBlueprint {
-  schema_version: '2.0';
+export interface SlideSpec {
+  schema_version: '3.0';
   revision: number;
+  project_id: string;
   slide_id: string;
+  source_outline_revision: number;
   section_id: string;
   subsection_id?: string;
   role: string;
@@ -28,8 +30,8 @@ export interface SlideBlueprint {
   updated_at: number;
 }
 
-export interface DeckBlueprint {
-  schema_version: '2.0';
+export interface Outline {
+  schema_version: '3.0';
   revision: number;
   project_id: string;
   title: string;
@@ -44,9 +46,10 @@ export interface DeckBlueprint {
   updated_at: number;
 }
 
-export interface DesignSpec {
-  schema_version: '2.0';
+export interface Design {
+  schema_version: '3.0';
   revision: number;
+  project_id: string;
   canvas: Record<string, unknown>;
   palette: string[];
   typography: Record<string, unknown>;
@@ -56,12 +59,14 @@ export interface DesignSpec {
   layout_system: Record<string, unknown>;
   signature: string;
   motion: Record<string, unknown>;
+  created_at: number;
+  updated_at: number;
 }
 
-export type MaterializationState = 'not_materialized' | 'fresh' | 'blueprint_stale' | 'design_stale' | 'unknown';
+export type MaterializationState = 'not_materialized' | 'fresh' | 'spec_stale' | 'design_stale' | 'unknown';
 export interface Materialization {
   state: MaterializationState;
-  revisions: { presentation: number; source_deck: number; source_blueprint: number; source_design: number };
+  revisions: { slide_html: number; source_outline: number; source_spec: number; source_design: number };
 }
 
 export interface Slide {
@@ -71,14 +76,14 @@ export interface Slide {
   layout: string;
   title: string;
   html_path: string;
-  json_path: string;
+  spec_path: string;
   current_version: number;
-  blueprint_revision?: number;
-  presentation_revision?: number;
-  source_deck_revision?: number;
-  source_blueprint_revision?: number;
+  spec_revision?: number;
+  html_revision?: number;
+  source_outline_revision?: number;
+  source_spec_revision?: number;
   source_design_revision?: number;
-  blueprint?: SlideBlueprint;
+  spec?: SlideSpec;
   materialization?: Materialization;
 }
 
@@ -102,7 +107,7 @@ export interface Run {
   events_url: string;
 }
 
-export type Artifact = 'blueprint' | 'presentation';
+export type Artifact = 'spec' | 'presentation';
 export type TargetLevel = 'slide' | 'deck';
 export type InteractionIntent = 'talk' | 'ask' | 'execute';
 export type ExecutionStrategy = 'chat' | 'simple' | 'complex';
@@ -117,10 +122,10 @@ export interface CreateRunRequest {
   options?: { language?: string; theme_id?: string; desired_slide_count?: number };
 }
 
-export interface BlueprintProjectView {
-  deck: DeckBlueprint;
-  slides: Record<string, SlideBlueprint>;
-  design_spec: DesignSpec;
+export interface SpecProjectView {
+  outline: Outline;
+  slide_specs: Record<string, SlideSpec>;
+  design: Design;
   materialization: Record<string, Materialization>;
 }
 
@@ -161,14 +166,15 @@ export interface PlanState {
 }
 
 export interface PublicEventBase {
-  schema_version: 1;
+  schema_version: 2;
   run_id: string;
   occurred_at: string;
 }
 
 export interface PublicTarget {
-  type: 'global' | 'slide';
+  type: 'deck' | 'slide';
   slide_id?: string;
+  part: 'outline' | 'design' | 'spec' | 'html';
 }
 
 export interface PublicDisplay {
@@ -256,6 +262,7 @@ export type SSEEvent =
       call_id: string;
       tool: string;
       status: 'completed' | 'failed';
+      target?: PublicTarget;
       display: PublicDisplay;
       preview?: ToolPreview;
       error?: PublicError;

@@ -15,7 +15,7 @@ export const AgentPanel: React.FC = () => {
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3">
         <div className="flex items-center text-sm font-semibold text-text-900">
           <Bot className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} />
-          Agent
+          智能体
         </div>
         <IconButton label="隐藏右侧对话" onClick={toggleRightPanel}>
           <PanelRightClose className="h-4 w-4" strokeWidth={1.75} />

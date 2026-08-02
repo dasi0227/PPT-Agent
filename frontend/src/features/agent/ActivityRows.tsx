@@ -12,13 +12,26 @@ import type {
   ReasoningItem,
   ToolActivityItem,
 } from './eventReducer';
+import type { PublicTarget, Slide } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { MarkdownMessage } from './MarkdownMessage';
+import { presentUserText } from './runtimeLabels';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 
 function safeReasoningMarkdown(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').trim();
+}
+
+function pageName(slideId: string, slides: Slide[]): string {
+  const index = slides.findIndex((slide) => slide.id === slideId);
+  return index >= 0 ? `第 ${index + 1} 页` : `页面 ${slideId}`;
+}
+
+function presentActivityText(text: string, target: PublicTarget | undefined, slides: Slide[]): string {
+  const presented = presentUserText(text);
+  if (!target || target.type !== 'slide' || !target.slide_id) return presented;
+  return presented.split(`页面 ${target.slide_id}`).join(pageName(target.slide_id, slides));
 }
 
 export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
@@ -58,6 +71,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const slides = useProjectStore((state) => activeProjectId ? state.slidesByProjectId[activeProjectId] ?? [] : []);
   const setCurrentPage = useDeckStore((state) => state.setCurrentPage);
   const hasDetails = Boolean(item.detail || item.error || item.preview);
+  const detailText = item.error?.message ?? item.detail;
   const icon = item.status === 'running'
     ? <Loader2 className="h-4 w-4 animate-spin text-accent motion-reduce:animate-none" strokeWidth={1.75} />
     : item.status === 'failed'
@@ -85,7 +99,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
           'min-w-0 flex-1 truncate text-[13px]',
           item.status === 'failed' ? 'text-danger' : 'text-text-900',
         )}>
-          {item.label}
+          {presentActivityText(item.label, item.target, slides)}
         </span>
         {hasDetails && (expanded
           ? <ChevronDown className="h-3.5 w-3.5 text-text-400" />
@@ -93,7 +107,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       </button>
       {expanded && hasDetails && (
         <div className="ml-6 space-y-2 px-1.5 pb-2 text-xs leading-5 text-text-600">
-          {(item.error?.message || item.detail) && <p>{item.error?.message ?? item.detail}</p>}
+          {detailText && <p>{presentActivityText(detailText, item.target, slides)}</p>}
           {item.error?.retryable && <p>Agent 可以调整后继续尝试。</p>}
           {item.preview && (
             <div className="overflow-hidden rounded-lg border border-border bg-surface">
@@ -101,17 +115,17 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
                 type="button"
                 onClick={focusPreview}
                 disabled={!slides.some((slide) => slide.id === item.preview?.slide_id)}
-                aria-label={`在工作区查看 ${item.preview.slide_id}`}
+                aria-label={`在工作区查看 ${pageName(item.preview.slide_id, slides)}`}
                 className="block w-full disabled:cursor-default"
               >
                 <img
                   src={item.preview.image_url}
-                  alt={`${item.preview.slide_id} 渲染预览`}
+                  alt={`${pageName(item.preview.slide_id, slides)}渲染预览`}
                   className="aspect-video w-full object-cover"
                 />
               </button>
               <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-                <span>{item.preview.slide_id}</span>
+                <span>{pageName(item.preview.slide_id, slides)}</span>
                 <span>{item.preview.warnings.length > 0 ? `${item.preview.warnings.length} 项布局提示` : '布局正常'}</span>
               </div>
             </div>
@@ -124,6 +138,8 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
 
 export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items }) => {
   const [expanded, setExpanded] = useState(false);
+  const activeProjectId = useProjectStore((state) => state.activeProjectId);
+  const slides = useProjectStore((state) => activeProjectId ? state.slidesByProjectId[activeProjectId] ?? [] : []);
   return (
     <div>
       <button
@@ -133,7 +149,9 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
         className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-900"
       >
         <CheckCircle2 className="h-4 w-4 text-text-400" strokeWidth={1.75} />
-        <span className="min-w-0 flex-1">已完成 {items.length} 项{items[0].label.replace(/^已/, '')}</span>
+        <span className="min-w-0 flex-1">
+          已完成 {items.length} 项{presentActivityText(items[0].label.replace(/^已/, ''), items[0].target, slides)}
+        </span>
         <span className="text-xs text-text-400">{expanded ? '收起' : '展开'}</span>
       </button>
       {expanded && (

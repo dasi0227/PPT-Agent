@@ -56,33 +56,35 @@ func (s Severity) BlocksCompletion() bool {
 	return s == SeverityError || s == SeverityFatal
 }
 
-type TargetRef struct {
+type Resource struct {
 	Type    string `json:"type"`
 	SlideID string `json:"slide_id,omitempty"`
+	Part    string `json:"part"`
 }
 
-func (t TargetRef) Key() string {
-	if t.Type == "slide" {
-		return "slide:" + t.SlideID
+func (r Resource) Key() string {
+	if r.Type == "slide" {
+		return "slide:" + r.SlideID + ":" + r.Part
 	}
-	return t.Type
+	return "deck:" + r.Part
 }
 
 type Issue struct {
-	Code     string    `json:"code"`
-	Severity Severity  `json:"severity"`
-	Target   TargetRef `json:"target,omitempty"`
-	Summary  string    `json:"summary"`
-	Action   string    `json:"action,omitempty"`
+	Code     string   `json:"code"`
+	Severity Severity `json:"severity"`
+	Resource Resource `json:"resource,omitempty"`
+	Summary  string   `json:"summary"`
+	Action   string   `json:"action,omitempty"`
 }
 
 type ArtifactKind string
 
 const (
-	ArtifactDeck         ArtifactKind = "blueprint_deck"
-	ArtifactSlide        ArtifactKind = "blueprint_slide"
-	ArtifactDesign       ArtifactKind = "design_spec"
-	ArtifactPresentation ArtifactKind = "presentation_slide"
+	ArtifactOutline   ArtifactKind = "outline"
+	ArtifactDesign    ArtifactKind = "design"
+	ArtifactSlideSpec ArtifactKind = "slide_spec"
+	ArtifactSlideHTML ArtifactKind = "slide_html"
+	ArtifactDerived   ArtifactKind = "derived"
 )
 
 type ArtifactRef struct {
@@ -92,14 +94,22 @@ type ArtifactRef struct {
 	Project string       `json:"project_id,omitempty"`
 }
 
-func (a ArtifactRef) Key() string { return string(a.Kind) + ":" + a.ID }
+func (a ArtifactRef) Key() string { return a.Resource().Key() }
 
-func targetForArtifact(ref ArtifactRef) TargetRef {
+func (a ArtifactRef) Resource() Resource {
+	return resourceForArtifact(a)
+}
+
+func resourceForArtifact(ref ArtifactRef) Resource {
 	switch ref.Kind {
-	case ArtifactSlide, ArtifactPresentation:
-		return TargetRef{Type: "slide", SlideID: ref.ID}
+	case ArtifactSlideSpec:
+		return Resource{Type: "slide", SlideID: ref.ID, Part: "spec"}
+	case ArtifactSlideHTML:
+		return Resource{Type: "slide", SlideID: ref.ID, Part: "html"}
+	case ArtifactDesign:
+		return Resource{Type: "deck", Part: "design"}
 	default:
-		return TargetRef{Type: "global"}
+		return Resource{Type: "deck", Part: "outline"}
 	}
 }
 
@@ -169,12 +179,18 @@ type StructuredOutcome struct {
 	Message  string            `json:"message,omitempty"`
 }
 
-type CommitMetadata func(context.Context, ChangeSet) error
+type CommitContext struct {
+	Changes               ChangeSet
+	MaterializationProofs []MaterializationProof
+}
+
+type CommitMetadata func(context.Context, CommitContext) error
 
 const (
 	CodeCanceled              = "RUN_CANCELED"
 	CodeBudgetExceeded        = "RUNTIME_BUDGET_EXCEEDED"
 	CodeConsecutiveErrors     = "CONSECUTIVE_TOOL_ERRORS"
+	CodeDependencyFailed      = "DEPENDENCY_FAILED"
 	CodeGateRejectedRepeated  = "COMPLETION_REJECTED_REPEATEDLY"
 	CodeCommitFailed          = "COMMIT_FAILED"
 	CodeAgentFailed           = "AGENT_FAILED"

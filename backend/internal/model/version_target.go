@@ -2,17 +2,17 @@ package model
 
 import "fmt"
 
-// SlideVersionTarget returns the project-scoped version target for one slide (keyed by stable slide_id).
-func PresentationSlideVersionTarget(projectID, slideID string) string {
-	return fmt.Sprintf("project/%s/slide-%s", projectID, slideID)
+// SlideHTMLVersionTarget returns the project-scoped HTML version target for one slide.
+func SlideHTMLVersionTarget(projectID, slideID string) string {
+	return fmt.Sprintf("project/%s/slide-html-%s", projectID, slideID)
 }
 
-func BlueprintSlideVersionTarget(projectID, slideID string) string {
-	return fmt.Sprintf("project/%s/blueprint-slide-%s", projectID, slideID)
+func SlideSpecVersionTarget(projectID, slideID string) string {
+	return fmt.Sprintf("project/%s/slide-spec-%s", projectID, slideID)
 }
 
-func BlueprintDeckVersionTarget(projectID string) string {
-	return fmt.Sprintf("project/%s/blueprint-deck", projectID)
+func OutlineVersionTarget(projectID string) string {
+	return fmt.Sprintf("project/%s/outline", projectID)
 }
 
 // DesignVersionTarget returns the project-scoped version target for common/tokens.css.

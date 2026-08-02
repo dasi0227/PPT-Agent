@@ -29,8 +29,8 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
   if (url.includes('/projects')) {
     if (url.includes('/slides')) {
       return { ok: true, status: 200, json: async () => [
-        { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'Slide 1', html_path: '/slides/p1/s1.html', json_path: '/slides/p1/s1.json', current_version: 1 },
-        { id: 's2', project_id: 'p1', position: 1, layout: 'content', title: 'Slide 2', html_path: '/slides/p1/s2.html', json_path: '/slides/p1/s2.json', current_version: 1 }
+        { id: 's1', project_id: 'p1', position: 0, layout: 'title', title: 'Slide 1', html_path: '/slides/p1/s1.html', spec_path: '/slides/p1/s1.json', current_version: 1 },
+        { id: 's2', project_id: 'p1', position: 1, layout: 'content', title: 'Slide 2', html_path: '/slides/p1/s2.html', spec_path: '/slides/p1/s2.json', current_version: 1 }
       ] } as unknown as Response;
     }
     if (url.includes('/threads')) return { ok: true, status: 200, json: async () => [] } as unknown as Response;

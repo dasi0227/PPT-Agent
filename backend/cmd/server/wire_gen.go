@@ -46,29 +46,37 @@ func initApp() (*App, func(), error) {
 	engine := provideEngine(store, lockManager, historyWriter, zapLogger)
 	client := provideLLMClient(configConfig)
 	workRoot := provideWorkRoot(configConfig)
-	runService := service.NewRunService(store, engine, client, workRoot)
+	nodeSlideRenderer, cleanup3, err := provideRenderWorker()
+	if err != nil {
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	runService := service.NewRunService(store, engine, client, workRoot, nodeSlideRenderer)
 	runHandler := httpapi.NewRunHandler(runService)
 	projectService := service.NewProjectService(store, workRoot)
 	slideService := service.NewSlideService(store)
-	blueprintService := service.NewBlueprintService(store)
+	specService := service.NewSpecService(store)
 	projectHandler := httpapi.NewProjectHandler(projectService, slideService)
 	threadService := service.NewThreadService(store)
 	threadHandler := httpapi.NewThreadHandler(threadService)
 	slideHandler := httpapi.NewSlideHandler(slideService)
 	assetService := provideAssetService(store, workRoot)
 	assetHandler := httpapi.NewAssetHandler(assetService)
-	blueprintHandler := httpapi.NewBlueprintHandler(blueprintService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, blueprintHandler)
+	specHandler := httpapi.NewSpecHandler(specService)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, specHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	mainSeedDone, err := provideSeed(configConfig, store, zapLogger)
 	if err != nil {
+		cleanup3()
 		cleanup2()
 		cleanup()
 		return nil, nil, err
 	}
 	app := provideApp(server, zapLogger, mainSeedDone)
 	return app, func() {
+		cleanup3()
 		cleanup2()
 		cleanup()
 	}, nil
@@ -79,11 +87,12 @@ func initApp() (*App, func(), error) {
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
 var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMClient,
 	provideLockManager,
+	provideRenderWorker,
 	provideWorkRoot,
 	provideAssetService,
-	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewSlideService, service.NewBlueprintService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
+	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewSlideService, service.NewSpecService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
 	httpapi.NewAssetHandler,
-	httpapi.NewBlueprintHandler,
+	httpapi.NewSpecHandler,
 	provideHTTPServer,
 	provideSeed,
 	provideApp,

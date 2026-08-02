@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 type ProjectLoader struct{}
@@ -16,20 +16,20 @@ func (ProjectLoader) Load(project model.Project) ProjectContext {
 	return ProjectContext{ID: project.ID, Title: project.Title}
 }
 
-type DeckLoader struct{}
+type OutlineLoader struct{}
 
-func (DeckLoader) Load(workDir string) (blueprint.Deck, error) {
-	var deck blueprint.Deck
-	return deck, readSourceJSON(filepath.Join(workDir, "deck.json"), &deck)
+func (OutlineLoader) Load(workDir string) (pptspec.Outline, error) {
+	var outline pptspec.Outline
+	return outline, readSourceJSON(filepath.Join(workDir, "outline.json"), &outline)
 }
 
-type SlideBlueprintLoader struct{}
+type SlideSpecLoader struct{}
 
-func (SlideBlueprintLoader) LoadAll(workDir string, ids []string) (map[string]blueprint.Slide, error) {
-	out := make(map[string]blueprint.Slide, len(ids))
+func (SlideSpecLoader) LoadAll(workDir string, ids []string) (map[string]pptspec.SlideSpec, error) {
+	out := make(map[string]pptspec.SlideSpec, len(ids))
 	for _, id := range ids {
-		var slide blueprint.Slide
-		if err := readSourceJSON(filepath.Join(workDir, "slides", id, "slide.json"), &slide); err != nil {
+		var slide pptspec.SlideSpec
+		if err := readSourceJSON(filepath.Join(workDir, filepath.FromSlash(model.SlideSpecPath(id))), &slide); err != nil {
 			return nil, fmt.Errorf("slide %s: %w", id, err)
 		}
 		out[id] = slide
@@ -39,20 +39,20 @@ func (SlideBlueprintLoader) LoadAll(workDir string, ids []string) (map[string]bl
 
 type RelatedSlideLoader struct{}
 
-func (RelatedSlideLoader) Load(deck blueprint.Deck, slides map[string]blueprint.Slide, target blueprint.Slide) []SlideSummary {
+func (RelatedSlideLoader) Load(deck pptspec.Outline, slides map[string]pptspec.SlideSpec, target pptspec.SlideSpec) []SlideSummary {
 	return relatedSummaries(deck, slides, target)
 }
 
-type DesignSpecLoader struct{}
+type DesignLoader struct{}
 
-func (DesignSpecLoader) Load(workDir string) (blueprint.DesignSpec, error) {
-	var spec blueprint.DesignSpec
-	return spec, readSourceJSON(filepath.Join(workDir, "design", "design-spec.json"), &spec)
+func (DesignLoader) Load(workDir string) (pptspec.Design, error) {
+	var design pptspec.Design
+	return design, readSourceJSON(filepath.Join(workDir, "design.json"), &design)
 }
 
-type PresentationSummaryLoader struct{}
+type SlideHTMLSummaryLoader struct{}
 
-func (PresentationSummaryLoader) Load(path string) (HTMLSummary, []byte, error) {
+func (SlideHTMLSummaryLoader) Load(path string) (HTMLSummary, []byte, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return HTMLSummary{}, nil, err
@@ -63,7 +63,7 @@ func (PresentationSummaryLoader) Load(path string) (HTMLSummary, []byte, error) 
 
 type AssetCandidateLoader struct{}
 
-func (AssetCandidateLoader) Select(assets []model.Asset, target *blueprint.Slide) []AssetCandidate {
+func (AssetCandidateLoader) Select(assets []model.Asset, target *pptspec.SlideSpec) []AssetCandidate {
 	return selectAssets(assets, target)
 }
 
@@ -75,10 +75,13 @@ func (l ThreadMemoryLoader) Load(workDir, threadID string) (ThreadMemory, []stri
 
 type RevisionLoader struct{}
 
-func (RevisionLoader) From(deck blueprint.Deck, design blueprint.DesignSpec, slides map[string]blueprint.Slide, memory ThreadMemory) RevisionRefs {
-	r := RevisionRefs{Deck: deck.Revision, Design: design.Revision, Slides: map[string]int{}, Presentations: map[string]int{}, ThreadMemory: memory.Revision}
+func (RevisionLoader) From(outline pptspec.Outline, design pptspec.Design, slides map[string]pptspec.SlideSpec, memory ThreadMemory) RevisionRefs {
+	r := RevisionRefs{
+		Outline: outline.Revision, Design: design.Revision,
+		SlideSpecs: map[string]int{}, SlideHTML: map[string]int{}, ThreadMemory: memory.Revision,
+	}
 	for id, slide := range slides {
-		r.Slides[id] = slide.Revision
+		r.SlideSpecs[id] = slide.Revision
 	}
 	return r
 }

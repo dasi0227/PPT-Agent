@@ -42,7 +42,7 @@ const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
 function validBase(data: Record<string, unknown>): boolean {
-  return data.schema_version === 1
+  return data.schema_version === 2
     && hasString(data, 'run_id')
     && hasString(data, 'occurred_at')
     && String(data.occurred_at).endsWith('Z')
@@ -88,6 +88,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
       return hasString(data, 'call_id')
         && businessTools.has(String(data.tool))
         && ['completed', 'failed'].includes(String(data.status))
+        && validOptionalPublicTarget(data.target)
         && validDisplay(data.display)
         && validOptionalError(data.error)
         && (data.status !== 'failed' || isRecord(data.error))
@@ -118,7 +119,7 @@ function hasSafeString(data: Record<string, unknown>, key: string): boolean {
 
 function validRunTarget(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  if (!['blueprint', 'presentation'].includes(String(value.artifact))) return false;
+  if (!['spec', 'presentation'].includes(String(value.artifact))) return false;
   if (value.level === 'slide') return hasString(value, 'slide_id') && value.slide_id !== 'current';
   return value.level === 'deck' && (value.slide_id === undefined || value.slide_id === '');
 }
@@ -129,8 +130,13 @@ function validOptionalPublicTarget(value: unknown): boolean {
 
 function validPublicTarget(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  if (value.type === 'global') return value.slide_id === undefined || value.slide_id === '';
-  return value.type === 'slide' && hasString(value, 'slide_id');
+  if (value.type === 'deck') {
+    return (value.slide_id === undefined || value.slide_id === '')
+      && ['outline', 'design'].includes(String(value.part));
+  }
+  return value.type === 'slide'
+    && hasString(value, 'slide_id')
+    && ['spec', 'html'].includes(String(value.part));
 }
 
 function validTargets(value: unknown): boolean {

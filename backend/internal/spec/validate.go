@@ -1,13 +1,16 @@
-package blueprint
+package spec
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+
+	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 var (
-	ErrInvalid         = errors.New("blueprint invalid")
-	ErrReferenceBroken = errors.New("blueprint reference broken")
+	ErrInvalid         = errors.New("spec invalid")
+	ErrReferenceBroken = errors.New("spec reference broken")
 )
 
 var validRoles = map[string]bool{
@@ -17,9 +20,9 @@ var validRoles = map[string]bool{
 	"cta": true, "closing": true,
 }
 
-func ValidateDeck(d Deck, slides map[string]Slide) error {
-	if d.SchemaVersion != SchemaVersion || d.Revision < 1 || d.ProjectID == "" || d.Title == "" {
-		return fmt.Errorf("%w: invalid deck header", ErrInvalid)
+func ValidateOutline(d Outline, slides map[string]SlideSpec) error {
+	if err := validateSchema(pptschema.OutlineName, d); err != nil {
+		return err
 	}
 	sections, subsections := map[string]bool{}, map[string]bool{}
 	for _, section := range d.Sections {
@@ -44,8 +47,14 @@ func ValidateDeck(d Deck, slides map[string]Slide) error {
 		if !ok {
 			return fmt.Errorf("%w: missing slide %s", ErrReferenceBroken, id)
 		}
-		if err := ValidateSlide(s); err != nil {
+		if err := ValidateSlideSpec(s); err != nil {
 			return err
+		}
+		if s.ProjectID != d.ProjectID {
+			return fmt.Errorf("%w: slide %s belongs to another project", ErrReferenceBroken, id)
+		}
+		if s.SlideID != id {
+			return fmt.Errorf("%w: slide key %s does not match slide_id %s", ErrReferenceBroken, id, s.SlideID)
 		}
 		if !sections[s.SectionID] || (s.SubsectionID != "" && !subsections[s.SubsectionID]) {
 			return fmt.Errorf("%w: slide %s references an unknown section", ErrReferenceBroken, id)
@@ -54,27 +63,28 @@ func ValidateDeck(d Deck, slides map[string]Slide) error {
 	return nil
 }
 
-func ValidateSlide(s Slide) error {
-	if s.SchemaVersion != SchemaVersion || s.Revision < 1 || s.SlideID == "" ||
-		s.SectionID == "" || s.Title == "" || s.KeyMessage == "" ||
-		s.Content.Summary == "" || s.VisualIntent.Archetype == "" || s.VisualIntent.Description == "" {
-		return fmt.Errorf("%w: invalid slide %s", ErrInvalid, s.SlideID)
-	}
+func ValidateSlideSpec(s SlideSpec) error {
 	if !validRoles[s.Role] {
 		return fmt.Errorf("%w: unsupported role %q", ErrInvalid, s.Role)
 	}
-	if len(s.Content.Points) > 6 {
-		return fmt.Errorf("%w: at most 6 content points", ErrInvalid)
-	}
-	return nil
+	return validateSchema(pptschema.SlideSpecName, s)
 }
 
-func ValidateDesignSpec(d DesignSpec) error {
-	if d.SchemaVersion != SchemaVersion || d.Revision < 1 ||
-		d.Canvas.Width <= 0 || d.Canvas.Height <= 0 || d.Canvas.Ratio != "16:9" ||
-		len(d.Palette) == 0 || d.Typography.Display.Family == "" || d.Typography.Body.Family == "" ||
-		d.LayoutSystem.Grid == "" || d.LayoutSystem.Rhythm == "" || d.Signature == "" {
-		return fmt.Errorf("%w: invalid design spec", ErrInvalid)
+func ValidateDesign(d Design) error {
+	return validateSchema(pptschema.DesignName, d)
+}
+
+func validateSchema(name string, value any) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	if err := pptschema.Validate(name, decoded); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	return nil
 }

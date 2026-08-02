@@ -11,20 +11,26 @@ import (
 )
 
 var (
-	ErrToolNotDisclosed = errors.New("TOOL_NOT_DISCLOSED")
+	ErrToolNotDisclosed = errors.New("RESOURCE_NOT_DISCLOSED")
 	ErrCapabilityDenied = errors.New("CAPABILITY_DENIED")
 	ErrTargetOutOfScope = errors.New("TARGET_OUT_OF_SCOPE")
 )
 
 const (
-	CodeTargetNotFound      = "TARGET_NOT_FOUND"
-	CodeTargetAlreadyExists = "TARGET_ALREADY_EXISTS"
-	CodeEditAnchorNotFound  = "EDIT_ANCHOR_NOT_FOUND"
-	CodeEditAnchorAmbiguous = "EDIT_ANCHOR_AMBIGUOUS"
-	CodeModelInvalid        = "MODEL_INVALID"
-	CodeContextBudget       = "CONTEXT_BUDGET_EXCEEDED"
-	CodeRenderFailed        = "RENDER_FAILED"
-	CodeStagingRequired     = "STAGING_REQUIRED"
+	CodeResourceInvalid      = "RESOURCE_INVALID"
+	CodeResourceNotFound     = "RESOURCE_NOT_FOUND"
+	CodeResourceNotDisclosed = "RESOURCE_NOT_DISCLOSED"
+	CodeTargetOutOfScope     = "TARGET_OUT_OF_SCOPE"
+	CodeContentTooLarge      = "CONTENT_TOO_LARGE"
+	CodeContentInvalid       = "CONTENT_INVALID"
+	CodeTargetNotFound       = CodeResourceNotFound
+	CodeTargetAlreadyExists  = "TARGET_ALREADY_EXISTS"
+	CodeEditAnchorNotFound   = "EDIT_ANCHOR_NOT_FOUND"
+	CodeEditAnchorAmbiguous  = "EDIT_ANCHOR_AMBIGUOUS"
+	CodeModelInvalid         = CodeContentInvalid
+	CodeContextBudget        = "CONTEXT_BUDGET_EXCEEDED"
+	CodeRenderFailed         = "RENDER_FAILED"
+	CodeStagingRequired      = "STAGING_REQUIRED"
 )
 
 type ToolSchema struct {
@@ -56,13 +62,14 @@ type DomainToolInput struct {
 type ChangedTarget struct {
 	Type     string   `json:"type"`
 	SlideID  string   `json:"slide_id,omitempty"`
+	Part     string   `json:"part"`
 	Revision int      `json:"revision,omitempty"`
 	Hash     string   `json:"hash"`
 	Fields   []string `json:"fields,omitempty"`
 }
 
-func (c ChangedTarget) Target() TargetRef {
-	return TargetRef{Type: c.Type, SlideID: c.SlideID}
+func (c ChangedTarget) Target() Resource {
+	return Resource{Type: c.Type, SlideID: c.SlideID, Part: c.Part}
 }
 
 type ToolResult struct {
@@ -73,16 +80,17 @@ type ToolResult struct {
 	Issues         []Issue         `json:"issues"`
 	Retryable      bool            `json:"retryable"`
 	Code           string          `json:"code,omitempty"`
+	Observation    string          `json:"-"`
 	// Evidence and invalidation are runtime-internal. They are recorded in the
 	// Evidence Ledger and SSE but are not duplicated in model observations.
-	Evidence           []Evidence  `json:"-"`
-	InvalidatedTargets []TargetRef `json:"-"`
+	Evidence           []Evidence `json:"-"`
+	InvalidatedTargets []Resource `json:"-"`
 }
 
 func SuccessfulToolResult(summary string) ToolResult {
 	return ToolResult{
 		OK: true, Summary: summary, Data: map[string]any{}, ChangedTargets: []ChangedTarget{},
-		Evidence: []Evidence{}, InvalidatedTargets: []TargetRef{}, Issues: []Issue{},
+		Evidence: []Evidence{}, InvalidatedTargets: []Resource{}, Issues: []Issue{},
 	}
 }
 
@@ -148,22 +156,29 @@ func ScopeFromSpec(spec model.WorkSpec) Scope {
 	return Scope{Target: spec.Target}
 }
 
-func (s Scope) Allows(target TargetRef) bool {
+func (s Scope) Allows(target Resource) bool {
+	if s.Target.Artifact == model.ArtifactSpec && target.Type == "slide" && target.Part == "html" {
+		return false
+	}
 	if s.Target.Level == model.TargetDeck {
 		return true
 	}
 	return target.Type == "slide" && target.SlideID == s.Target.SlideID
 }
 
-func (s Scope) AllowsRead(target TargetRef) bool {
-	if target.Type == "global" {
+func (s Scope) AllowsRead(target Resource) bool {
+	if target.Type == "deck" {
 		return true
 	}
-	return s.Allows(target)
+	if s.Target.Level == model.TargetDeck {
+		return true
+	}
+	return target.SlideID == s.Target.SlideID &&
+		(s.Target.Artifact == model.ArtifactPresentation || target.Part != "html")
 }
 
 func (s Scope) AllowsArtifact(ref ArtifactRef) bool {
-	return s.Allows(targetForArtifact(ref))
+	return s.Allows(resourceForArtifact(ref))
 }
 
 func (r *ToolRegistry) Disclose(strategy ExecutionStrategy, phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
@@ -246,28 +261,29 @@ func executionCapabilityAllowed(desc ToolDescriptor, input DomainToolInput) bool
 		return desc.ReadOnly
 	case "write", "ppt.write", "ppt.edit":
 		return !desc.ReadOnly &&
-			(input.Context.WorkSpec.Target.Artifact == model.ArtifactBlueprint ||
+			(input.Context.WorkSpec.Target.Artifact == model.ArtifactSpec ||
 				input.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation)
 	default:
 		return false
 	}
 }
 
-func declaredTarget(args map[string]any) (TargetRef, bool) {
-	value, ok := args["target"].(map[string]any)
+func declaredTarget(args map[string]any) (Resource, bool) {
+	value, ok := args["resource"].(map[string]any)
 	if !ok {
-		return TargetRef{}, false
+		return Resource{}, false
 	}
-	target := TargetRef{}
+	target := Resource{}
 	target.Type, _ = value["type"].(string)
 	target.SlideID, _ = value["slide_id"].(string)
+	target.Part, _ = value["part"].(string)
 	return target, target.Type != ""
 }
 
 func failedToolResult(code, summary string, retryable bool) ToolResult {
 	return ToolResult{
 		OK: false, Summary: summary, Data: map[string]any{}, ChangedTargets: []ChangedTarget{},
-		Evidence: []Evidence{}, InvalidatedTargets: []TargetRef{},
+		Evidence: []Evidence{}, InvalidatedTargets: []Resource{},
 		Issues:    []Issue{{Code: code, Severity: SeverityError, Summary: summary}},
 		Retryable: retryable, Code: code,
 	}

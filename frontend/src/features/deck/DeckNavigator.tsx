@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
-import { useBlueprintStore } from '../../stores/blueprintStore';
+import { useSpecStore } from '../../stores/specStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { useUIStore } from '../../stores/uiStore';
 import { slidesApi } from '../../api/slides';
@@ -25,7 +25,7 @@ export const DeckNavigator: React.FC = () => {
 
   const project = projects.find(p => p.id === activeProjectId);
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
-  const blueprintView = useBlueprintStore((state) => activeProjectId ? state.byProjectId[activeProjectId] : undefined);
+  const specView = useSpecStore((state) => activeProjectId ? state.byProjectId[activeProjectId] : undefined);
 
   const refresh = () => {
     if (activeProjectId) void loadProjectSlides(activeProjectId);
@@ -113,8 +113,8 @@ export const DeckNavigator: React.FC = () => {
     <div className="flex flex-col h-full bg-panel">
       <div className="h-12 border-b border-border flex items-center justify-between px-3 shrink-0 bg-panel">
         <div className="flex items-center">
-          <Presentation className="w-4 h-4 text-text-600 mr-2" />
-          <span className="font-medium text-text-900 text-sm">幻灯片</span>
+          <Presentation className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} />
+          <span className="text-sm font-semibold text-text-900">目录</span>
         </div>
         <IconButton label="隐藏左侧目录" onClick={toggleLeftPanel}>
           <PanelLeftClose className="w-4 h-4" strokeWidth={1.75} />
@@ -147,18 +147,18 @@ export const DeckNavigator: React.FC = () => {
               <div className="text-center p-4 text-text-400 text-sm">暂无页面</div>
             ) : (
               slides.map((slide, index) => {
-                const bp = blueprintView?.slides?.[slide.id];
-                const section = blueprintView?.deck?.sections?.find((item) => item.id === bp?.section_id);
-                const subsection = section?.subsections.find((item) => item.id === bp?.subsection_id);
-                const prev = index > 0 ? blueprintView?.slides?.[slides[index - 1].id] : undefined;
+                const spec = specView?.slide_specs?.[slide.id];
+                const section = specView?.outline?.sections?.find((item) => item.id === spec?.section_id);
+                const subsection = section?.subsections.find((item) => item.id === spec?.subsection_id);
+                const prev = index > 0 ? specView?.slide_specs?.[slides[index - 1].id] : undefined;
                 return (
                 <React.Fragment key={slide.id}>
-                  {section && prev?.section_id !== bp?.section_id && (
+                  {section && prev?.section_id !== spec?.section_id && (
                     <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-text-400">
                       {section.number} {section.title}
                     </div>
                   )}
-                  {subsection && prev?.subsection_id !== bp?.subsection_id && (
+                  {subsection && prev?.subsection_id !== spec?.subsection_id && (
                     <div className="px-3 py-1 text-[10px] font-medium text-text-400">{subsection.number} {subsection.title}</div>
                   )}
                 <div
@@ -181,7 +181,7 @@ export const DeckNavigator: React.FC = () => {
                   <span className="w-6 text-xs tabular-nums text-text-400 group-hover:text-text-600">{index + 1}</span>
                   <span className="truncate flex-1" title={slide.title || '未命名'}>{slide.title || '未命名'}</span>
                   <MaterializationBadge state={
-                    blueprintView?.materialization?.[slide.id]?.state
+                    specView?.materialization?.[slide.id]?.state
                       ?? (hasRenderedHTML(slide) ? 'unknown' : 'not_materialized')
                   } />
                   {!runActive && (

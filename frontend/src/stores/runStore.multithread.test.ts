@@ -28,7 +28,7 @@ const request = (instruction: string) => ({
   instruction,
 });
 const base = (runId: string) => ({
-  schema_version: 1, run_id: runId, occurred_at: '2026-08-02T10:30:00Z',
+  schema_version: 2, run_id: runId, occurred_at: '2026-08-02T10:30:00Z',
 });
 
 describe('runStore multithread isolation', () => {

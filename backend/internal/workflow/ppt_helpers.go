@@ -12,72 +12,79 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/blueprint"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	nethtml "golang.org/x/net/html"
 )
 
 var stableSlideID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 
-func deckRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactDeck, ID: pack.Project.ID, Path: "deck.json", Project: pack.Project.ID}
+func outlineRef(pack contextengine.ContextPack) ArtifactRef {
+	return ArtifactRef{Kind: ArtifactOutline, ID: pack.Project.ID, Path: "outline.json", Project: pack.Project.ID}
 }
 
 func designRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactDesign, ID: pack.Project.ID, Path: "design/design-spec.json", Project: pack.Project.ID}
+	return ArtifactRef{Kind: ArtifactDesign, ID: pack.Project.ID, Path: "design.json", Project: pack.Project.ID}
 }
 
-func blueprintSlideRef(id string) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactSlide, ID: id, Path: model.SlideJSONPath(id)}
-}
-
-func presentationSlideRef(id string) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactPresentation, ID: id, Path: model.SlideHTMLPath(id)}
-}
-
-func refsForTarget(pack contextengine.ContextPack, target TargetRef) ([]ArtifactRef, error) {
-	switch target.Type {
-	case "global":
-		if pack.WorkSpec.Target.Artifact == model.ArtifactBlueprint {
-			return []ArtifactRef{deckRef(pack)}, nil
-		}
-		return []ArtifactRef{deckRef(pack), designRef(pack)}, nil
-	case "slide":
-		if !stableSlideID.MatchString(target.SlideID) || target.SlideID == "current" {
-			return nil, fmt.Errorf("slide_id must be a stable opaque slide identifier")
-		}
-		if pack.WorkSpec.Target.Artifact == model.ArtifactBlueprint {
-			return []ArtifactRef{blueprintSlideRef(target.SlideID)}, nil
-		}
-		return []ArtifactRef{blueprintSlideRef(target.SlideID), presentationSlideRef(target.SlideID)}, nil
-	default:
-		return nil, fmt.Errorf("target type must be global or slide")
+func designTokensRef(pack contextengine.ContextPack) ArtifactRef {
+	return ArtifactRef{
+		Kind: ArtifactDerived, ID: pack.Project.ID + ":design-tokens",
+		Path: "common/tokens.css", Project: pack.Project.ID,
 	}
 }
 
-func parseTarget(args map[string]any) (TargetRef, error) {
-	value, ok := args["target"].(map[string]any)
+func specSlideRef(id string) ArtifactRef {
+	return ArtifactRef{Kind: ArtifactSlideSpec, ID: id, Path: model.SlideSpecPath(id)}
+}
+
+func slideHTMLRef(id string) ArtifactRef {
+	return ArtifactRef{Kind: ArtifactSlideHTML, ID: id, Path: model.SlideHTMLPath(id)}
+}
+
+func refForResource(pack contextengine.ContextPack, resource Resource) (ArtifactRef, error) {
+	switch resource.Key() {
+	case "deck:outline":
+		return outlineRef(pack), nil
+	case "deck:design":
+		return designRef(pack), nil
+	}
+	if resource.Type == "slide" && resource.Part == "spec" {
+		return specSlideRef(resource.SlideID), nil
+	}
+	if resource.Type == "slide" && resource.Part == "html" {
+		return slideHTMLRef(resource.SlideID), nil
+	}
+	return ArtifactRef{}, fmt.Errorf("unsupported PPT resource")
+}
+
+func parseResource(args map[string]any) (Resource, error) {
+	value, ok := args["resource"].(map[string]any)
 	if !ok {
-		return TargetRef{}, fmt.Errorf("target must be an object")
+		return Resource{}, fmt.Errorf("resource must be an object")
 	}
-	target := TargetRef{Type: stringValue(value["type"]), SlideID: stringValue(value["slide_id"])}
-	if target.Type == "global" && target.SlideID != "" {
-		return TargetRef{}, fmt.Errorf("global target forbids slide_id")
+	resource := Resource{
+		Type: stringValue(value["type"]), SlideID: stringValue(value["slide_id"]),
+		Part: stringValue(value["part"]),
 	}
-	if target.Type == "slide" {
-		if target.SlideID == "" {
-			return TargetRef{}, fmt.Errorf("slide target requires slide_id")
+	if resource.Type == "deck" {
+		if resource.SlideID != "" || (resource.Part != "outline" && resource.Part != "design") {
+			return Resource{}, fmt.Errorf("deck resource requires part outline or design and forbids slide_id")
 		}
-		if !stableSlideID.MatchString(target.SlideID) || target.SlideID == "current" {
-			return TargetRef{}, fmt.Errorf("slide_id must be stable and must not contain a path")
+		return resource, nil
+	}
+	if resource.Type == "slide" {
+		if !stableSlideID.MatchString(resource.SlideID) || resource.SlideID == "current" {
+			return Resource{}, fmt.Errorf("slide_id must be stable and must not contain a path")
 		}
+		if resource.Part != "spec" && resource.Part != "html" {
+			return Resource{}, fmt.Errorf("slide resource requires part spec or html")
+		}
+		return resource, nil
 	}
-	if target.Type != "global" && target.Type != "slide" {
-		return TargetRef{}, fmt.Errorf("target type must be global or slide")
-	}
-	return target, nil
+	return Resource{}, fmt.Errorf("resource type must be deck or slide")
 }
 
 func readArtifact(projectDir string, tx *Transaction, ref ArtifactRef) ([]byte, string, error) {
@@ -100,6 +107,13 @@ func errorsIsNotExist(err error) bool {
 	return errors.Is(err, fs.ErrNotExist)
 }
 
+func readFailure(err error) ToolResult {
+	if errorsIsNotExist(err) {
+		return failedToolResult(CodeResourceNotFound, "PPT resource was not found", false)
+	}
+	return failedToolResult("READ_FAILED", err.Error(), true)
+}
+
 func stagingFailure(err error) ToolResult {
 	if errors.Is(err, ErrStagedHashMismatch) {
 		return failedToolResult(CodeRevisionConflict, err.Error(), true)
@@ -107,17 +121,19 @@ func stagingFailure(err error) ToolResult {
 	return failedToolResult("STAGING_FAILED", err.Error(), true)
 }
 
-func targetSchema() map[string]any {
+func resourceSchema() map[string]any {
 	return map[string]any{
 		"oneOf": []any{
-			objectSchema([]string{"type"}, map[string]any{
-				"type": map[string]any{"const": "global"},
+			objectSchema([]string{"type", "part"}, map[string]any{
+				"type": map[string]any{"const": "deck"},
+				"part": map[string]any{"type": "string", "enum": []string{"outline", "design"}},
 			}),
-			objectSchema([]string{"type", "slide_id"}, map[string]any{
+			objectSchema([]string{"type", "slide_id", "part"}, map[string]any{
 				"type": map[string]any{"const": "slide"},
 				"slide_id": map[string]any{
 					"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`,
 				},
+				"part": map[string]any{"type": "string", "enum": []string{"spec", "html"}},
 			}),
 		},
 	}
@@ -148,14 +164,6 @@ func intValue(value any, fallback int) int {
 	return fallback
 }
 
-func contentMap(args map[string]any) (map[string]any, error) {
-	content, ok := args["content"].(map[string]any)
-	if !ok {
-		return nil, errors.New("content must be an object")
-	}
-	return content, nil
-}
-
 func normalizeModel(pack contextengine.ContextPack, tx *Transaction, ref ArtifactRef, value any) ([]byte, int, error) {
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -163,17 +171,17 @@ func normalizeModel(pack contextengine.ContextPack, tx *Transaction, ref Artifac
 	}
 	now := time.Now().Unix()
 	switch ref.Kind {
-	case ArtifactDeck:
-		var next blueprint.Deck
+	case ArtifactOutline:
+		var next spec.Outline
 		if err := json.Unmarshal(raw, &next); err != nil {
 			return nil, 0, err
 		}
-		var current blueprint.Deck
+		var current spec.Outline
 		currentRaw, _, readErr := readArtifact(tx.ProjectDir(), tx, ref)
 		if readErr == nil {
 			_ = json.Unmarshal(currentRaw, &current)
 		}
-		next.SchemaVersion = blueprint.SchemaVersion
+		next.SchemaVersion = spec.SchemaVersion
 		next.ProjectID = pack.Project.ID
 		next.Revision = maxInt(current.Revision+1, 1)
 		if current.CreatedAt != 0 {
@@ -182,23 +190,27 @@ func normalizeModel(pack contextengine.ContextPack, tx *Transaction, ref Artifac
 			next.CreatedAt = now
 		}
 		next.UpdatedAt = now
-		if err := validateDeckStructure(next); err != nil {
+		if err := validateOutlineStructure(next); err != nil {
 			return nil, 0, err
 		}
 		raw, _ = json.MarshalIndent(next, "", "  ")
 		return raw, next.Revision, nil
-	case ArtifactSlide:
-		var next blueprint.Slide
+	case ArtifactSlideSpec:
+		var next spec.SlideSpec
 		if err := json.Unmarshal(raw, &next); err != nil {
 			return nil, 0, err
 		}
-		var current blueprint.Slide
+		var current spec.SlideSpec
 		currentRaw, _, readErr := readArtifact(tx.ProjectDir(), tx, ref)
 		if readErr == nil {
 			_ = json.Unmarshal(currentRaw, &current)
 		}
-		next.SchemaVersion = blueprint.SchemaVersion
+		next.SchemaVersion = spec.SchemaVersion
+		next.ProjectID = pack.Project.ID
 		next.SlideID = ref.ID
+		if outline, outlineErr := currentOutline(pack, tx); outlineErr == nil {
+			next.SourceOutlineRevision = outline.Revision
+		}
 		next.Revision = maxInt(current.Revision+1, 1)
 		if current.CreatedAt != 0 {
 			next.CreatedAt = current.CreatedAt
@@ -206,29 +218,36 @@ func normalizeModel(pack contextengine.ContextPack, tx *Transaction, ref Artifac
 			next.CreatedAt = now
 		}
 		next.UpdatedAt = now
-		if err := blueprint.ValidateSlide(next); err != nil {
+		if err := spec.ValidateSlideSpec(next); err != nil {
 			return nil, 0, err
 		}
 		raw, _ = json.MarshalIndent(next, "", "  ")
 		return raw, next.Revision, nil
 	case ArtifactDesign:
-		var next blueprint.DesignSpec
+		var next spec.Design
 		if err := json.Unmarshal(raw, &next); err != nil {
 			return nil, 0, err
 		}
-		var current blueprint.DesignSpec
+		var current spec.Design
 		currentRaw, _, readErr := readArtifact(tx.ProjectDir(), tx, ref)
 		if readErr == nil {
 			_ = json.Unmarshal(currentRaw, &current)
 		}
-		next.SchemaVersion = blueprint.SchemaVersion
+		next.SchemaVersion = spec.SchemaVersion
+		next.ProjectID = pack.Project.ID
 		next.Revision = maxInt(current.Revision+1, 1)
-		if err := blueprint.ValidateDesignSpec(next); err != nil {
+		if current.CreatedAt != 0 {
+			next.CreatedAt = current.CreatedAt
+		} else {
+			next.CreatedAt = now
+		}
+		next.UpdatedAt = now
+		if err := spec.ValidateDesign(next); err != nil {
 			return nil, 0, err
 		}
 		if next.Typography.Utility.Family == "" || next.Spacing.Unit <= 0 ||
 			next.Shadows.Card == "" || next.LayoutSystem.Density == "" || next.Motion.Policy == "" {
-			return nil, 0, fmt.Errorf("%w: incomplete design spec", blueprint.ErrInvalid)
+			return nil, 0, fmt.Errorf("%w: incomplete design spec", spec.ErrInvalid)
 		}
 		raw, _ = json.MarshalIndent(next, "", "  ")
 		return raw, next.Revision, nil
@@ -237,23 +256,23 @@ func normalizeModel(pack contextengine.ContextPack, tx *Transaction, ref Artifac
 	}
 }
 
-func validateDeckStructure(deck blueprint.Deck) error {
-	if deck.SchemaVersion != blueprint.SchemaVersion || deck.Revision < 1 ||
+func validateOutlineStructure(deck spec.Outline) error {
+	if deck.SchemaVersion != spec.SchemaVersion || deck.Revision < 1 ||
 		deck.ProjectID == "" || strings.TrimSpace(deck.Title) == "" ||
 		strings.TrimSpace(deck.Goal) == "" || strings.TrimSpace(deck.Audience) == "" ||
 		strings.TrimSpace(deck.Language) == "" || strings.TrimSpace(deck.CoreThesis) == "" ||
 		strings.TrimSpace(deck.NarrativeArc) == "" || deck.Sections == nil || deck.SlideOrder == nil {
-		return fmt.Errorf("%w: invalid deck header", blueprint.ErrInvalid)
+		return fmt.Errorf("%w: invalid deck header", spec.ErrInvalid)
 	}
 	sections, subsections := map[string]bool{}, map[string]bool{}
 	for _, section := range deck.Sections {
 		if section.ID == "" || section.Number == "" || section.Title == "" || sections[section.ID] {
-			return fmt.Errorf("%w: invalid or duplicate section", blueprint.ErrInvalid)
+			return fmt.Errorf("%w: invalid or duplicate section", spec.ErrInvalid)
 		}
 		sections[section.ID] = true
 		for _, subsection := range section.Subsections {
 			if subsection.ID == "" || subsection.Number == "" || subsection.Title == "" || subsections[subsection.ID] {
-				return fmt.Errorf("%w: invalid or duplicate subsection", blueprint.ErrInvalid)
+				return fmt.Errorf("%w: invalid or duplicate subsection", spec.ErrInvalid)
 			}
 			subsections[subsection.ID] = true
 		}
@@ -261,7 +280,7 @@ func validateDeckStructure(deck blueprint.Deck) error {
 	seen := map[string]bool{}
 	for _, id := range deck.SlideOrder {
 		if !stableSlideID.MatchString(id) || seen[id] {
-			return fmt.Errorf("%w: invalid or duplicate slide_id %s", blueprint.ErrInvalid, id)
+			return fmt.Errorf("%w: invalid or duplicate slide_id %s", spec.ErrInvalid, id)
 		}
 		seen[id] = true
 	}
@@ -293,46 +312,46 @@ func validateHTML(raw []byte) ([]Issue, error) {
 }
 
 func validateReferences(pack contextengine.ContextPack, tx *Transaction) (string, error) {
-	deckRaw, _, err := readArtifact(tx.ProjectDir(), tx, deckRef(pack))
+	deckRaw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
 	if err != nil {
 		return "", err
 	}
-	var deck blueprint.Deck
+	var deck spec.Outline
 	if err := json.Unmarshal(deckRaw, &deck); err != nil {
 		return "", err
 	}
-	slides := make(map[string]blueprint.Slide, len(deck.SlideOrder))
+	slides := make(map[string]spec.SlideSpec, len(deck.SlideOrder))
 	for _, id := range deck.SlideOrder {
-		raw, _, err := readArtifact(tx.ProjectDir(), tx, blueprintSlideRef(id))
+		raw, _, err := readArtifact(tx.ProjectDir(), tx, specSlideRef(id))
 		if err != nil {
-			return "", fmt.Errorf("%w: missing slide %s", blueprint.ErrReferenceBroken, id)
+			return "", fmt.Errorf("%w: missing slide %s", spec.ErrReferenceBroken, id)
 		}
-		var slide blueprint.Slide
+		var slide spec.SlideSpec
 		if err := json.Unmarshal(raw, &slide); err != nil {
 			return "", err
 		}
 		slides[id] = slide
 	}
-	if err := blueprint.ValidateDeck(deck, slides); err != nil {
+	if err := spec.ValidateOutline(deck, slides); err != nil {
 		return "", err
 	}
 	return hashBytes(deckRaw), nil
 }
 
-func currentDeck(pack contextengine.ContextPack, tx *Transaction) (blueprint.Deck, error) {
-	raw, _, err := readArtifact(tx.ProjectDir(), tx, deckRef(pack))
+func currentOutline(pack contextengine.ContextPack, tx *Transaction) (spec.Outline, error) {
+	raw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
 	if err != nil {
-		return blueprint.Deck{}, err
+		return spec.Outline{}, err
 	}
-	var deck blueprint.Deck
+	var deck spec.Outline
 	if err := json.Unmarshal(raw, &deck); err != nil {
-		return blueprint.Deck{}, err
+		return spec.Outline{}, err
 	}
 	return deck, nil
 }
 
-func validateSlideReference(pack contextengine.ContextPack, tx *Transaction, slide blueprint.Slide) error {
-	deck, err := currentDeck(pack, tx)
+func validateSlideReference(pack contextengine.ContextPack, tx *Transaction, slide spec.SlideSpec) error {
+	deck, err := currentOutline(pack, tx)
 	if err != nil {
 		return err
 	}
@@ -347,70 +366,128 @@ func validateSlideReference(pack contextengine.ContextPack, tx *Transaction, sli
 		ordered = ordered || id == slide.SlideID
 	}
 	if !ordered || !sections[slide.SectionID] || (slide.SubsectionID != "" && !subsections[slide.SubsectionID]) {
-		return fmt.Errorf("%w: slide %s is not declared by the staged global model", blueprint.ErrReferenceBroken, slide.SlideID)
+		return fmt.Errorf("%w: slide %s is not declared by the staged global model", spec.ErrReferenceBroken, slide.SlideID)
 	}
 	return nil
 }
 
-func readSlideModel(pack contextengine.ContextPack, tx *Transaction, slideID string) (blueprint.Slide, []byte, string, error) {
-	raw, source, err := readArtifact(tx.ProjectDir(), tx, blueprintSlideRef(slideID))
+func readSlideModel(pack contextengine.ContextPack, tx *Transaction, slideID string) (spec.SlideSpec, []byte, string, error) {
+	raw, source, err := readArtifact(tx.ProjectDir(), tx, specSlideRef(slideID))
 	if err != nil {
-		return blueprint.Slide{}, nil, "", err
+		return spec.SlideSpec{}, nil, "", err
 	}
-	var slide blueprint.Slide
+	var slide spec.SlideSpec
 	if err := json.Unmarshal(raw, &slide); err != nil {
-		return blueprint.Slide{}, nil, "", err
+		return spec.SlideSpec{}, nil, "", err
 	}
 	return slide, raw, source, nil
 }
 
-func targetHash(pack contextengine.ContextPack, tx *Transaction, target TargetRef) (string, error) {
-	refs, err := refsForTarget(pack, target)
+func targetHash(pack contextengine.ContextPack, tx *Transaction, target Resource) (string, error) {
+	ref, err := refForResource(pack, target)
 	if err != nil {
 		return "", err
 	}
-	parts := make([]byte, 0)
-	for _, ref := range refs {
-		raw, _, readErr := readArtifact(tx.ProjectDir(), tx, ref)
-		if readErr != nil {
-			return "", readErr
-		}
-		parts = append(parts, []byte(ref.Key())...)
-		parts = append(parts, 0)
-		parts = append(parts, raw...)
-		parts = append(parts, 0)
+	raw, _, err := readArtifact(tx.ProjectDir(), tx, ref)
+	if err != nil {
+		return "", err
 	}
-	return hashBytes(parts), nil
+	return hashBytes(raw), nil
 }
 
 func renderSourceHash(pack contextengine.ContextPack, tx *Transaction, slideID string) (string, error) {
-	parts := make([]byte, 0)
-	for _, ref := range []ArtifactRef{designRef(pack), blueprintSlideRef(slideID), presentationSlideRef(slideID)} {
-		raw, _, err := readArtifact(tx.ProjectDir(), tx, ref)
-		if err != nil {
-			return "", err
-		}
-		parts = append(parts, []byte(ref.Key())...)
-		parts = append(parts, 0)
-		parts = append(parts, raw...)
-		parts = append(parts, 0)
+	designRaw, _, err := readArtifact(tx.ProjectDir(), tx, designRef(pack))
+	if err != nil {
+		return "", err
 	}
-	return hashBytes(parts), nil
+	specRaw, _, err := readArtifact(tx.ProjectDir(), tx, specSlideRef(slideID))
+	if err != nil {
+		return "", err
+	}
+	htmlRaw, _, err := readArtifact(tx.ProjectDir(), tx, slideHTMLRef(slideID))
+	if err != nil {
+		return "", err
+	}
+	return MaterializationSourceHash(slideID, designRaw, specRaw, htmlRaw), nil
 }
 
-func schemaEvidence(target TargetRef, hash string) Evidence {
+// MaterializationSourceHash binds the exact Design, Slide Spec and Slide HTML
+// bytes used by render and commit.
+func MaterializationSourceHash(slideID string, designRaw, specRaw, htmlRaw []byte) string {
+	parts := make([]byte, 0, len(designRaw)+len(specRaw)+len(htmlRaw)+128)
+	for _, item := range []struct {
+		key string
+		raw []byte
+	}{
+		{key: (Resource{Type: "deck", Part: "design"}).Key(), raw: designRaw},
+		{key: (Resource{Type: "slide", SlideID: slideID, Part: "spec"}).Key(), raw: specRaw},
+		{key: (Resource{Type: "slide", SlideID: slideID, Part: "html"}).Key(), raw: htmlRaw},
+	} {
+		parts = append(parts, []byte(item.key)...)
+		parts = append(parts, 0)
+		parts = append(parts, item.raw...)
+		parts = append(parts, 0)
+	}
+	return hashBytes(parts)
+}
+
+func currentMaterializationProof(
+	pack contextengine.ContextPack,
+	projectDir string,
+	tx *Transaction,
+	slideID string,
+	sourceHash string,
+) (MaterializationProof, error) {
+	outlineRaw, _, err := readArtifact(projectDir, tx, outlineRef(pack))
+	if err != nil {
+		return MaterializationProof{}, err
+	}
+	designRaw, _, err := readArtifact(projectDir, tx, designRef(pack))
+	if err != nil {
+		return MaterializationProof{}, err
+	}
+	specRaw, _, err := readArtifact(projectDir, tx, specSlideRef(slideID))
+	if err != nil {
+		return MaterializationProof{}, err
+	}
+	var outline spec.Outline
+	var design spec.Design
+	var slide spec.SlideSpec
+	if err := json.Unmarshal(outlineRaw, &outline); err != nil {
+		return MaterializationProof{}, err
+	}
+	if err := json.Unmarshal(designRaw, &design); err != nil {
+		return MaterializationProof{}, err
+	}
+	if err := json.Unmarshal(specRaw, &slide); err != nil {
+		return MaterializationProof{}, err
+	}
+	htmlRevision := pack.Revisions.SlideHTML[slideID]
+	if tx != nil && tx.IsStaged(slideHTMLRef(slideID)) {
+		htmlRevision++
+	}
+	return MaterializationProof{
+		SlideID: slideID, HTMLRevision: htmlRevision,
+		SourceOutlineRevision: outline.Revision,
+		SourceSpecRevision:    slide.Revision,
+		SourceDesignRevision:  design.Revision,
+		SourceHash:            sourceHash,
+	}, nil
+}
+
+func schemaEvidence(target Resource, hash string) Evidence {
 	return newEvidence("schema", target, hash, map[string]any{"valid": true})
 }
 
-func staticEvidence(target TargetRef, hash string) Evidence {
+func staticEvidence(target Resource, hash string) Evidence {
 	return newEvidence("static", target, hash, map[string]any{"valid": true})
 }
 
 func referenceEvidence(hash string) Evidence {
-	return newEvidence("reference", TargetRef{Type: "global"}, hash, map[string]any{"valid": true})
+	return newEvidence("reference", Resource{Type: "deck", Part: "outline"}, hash, map[string]any{"valid": true})
 }
 
-func newEvidence(kind string, target TargetRef, sourceHash string, values ...map[string]any) Evidence {
+func newEvidence(kind string, target Resource, sourceHash string, values ...map[string]any) Evidence {
 	data := map[string]any{}
 	if len(values) > 0 && values[0] != nil {
 		data = values[0]
@@ -436,8 +513,8 @@ func revisionFromModel(raw []byte) int {
 	return header.Revision
 }
 
-func uniqueTargets(values []TargetRef) []TargetRef {
-	out := []TargetRef{}
+func uniqueTargets(values []Resource) []Resource {
+	out := []Resource{}
 	seen := map[string]bool{}
 	for _, value := range values {
 		if value.Type == "" || seen[value.Key()] {

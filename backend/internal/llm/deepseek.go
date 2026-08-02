@@ -169,8 +169,7 @@ func (d *DeepSeek) CallTool(ctx context.Context, req ToolCallRequest) (ToolCallR
 	}
 	msg := resp.Choices[0].Message
 	out := ToolCallResponse{Text: msg.Content, ReasoningContent: msg.ReasoningContent}
-	if len(msg.ToolCalls) > 0 {
-		tc := msg.ToolCalls[0]
+	for _, tc := range msg.ToolCalls {
 		args := map[string]any{}
 		// function call 参数无法解析 → 最小失败退出（ARCH-LLM-FC-001）。
 		if strings.TrimSpace(tc.Function.Arguments) != "" {
@@ -181,7 +180,7 @@ func (d *DeepSeek) CallTool(ctx context.Context, req ToolCallRequest) (ToolCallR
 		if tc.Function.Name == "" {
 			return ToolCallResponse{}, fmt.Errorf("%w: missing tool name", ErrBadToolCall)
 		}
-		out.ToolCall = &ToolCall{ID: tc.ID, Name: tc.Function.Name, Args: args}
+		out.ToolCalls = append(out.ToolCalls, ToolCall{ID: tc.ID, Name: tc.Function.Name, Args: args})
 	}
 	return out, nil
 }

@@ -9,17 +9,18 @@ import (
 // 持久化对象（PO）：GORM tag 仅出现在本包（ARCH-BACKEND-006）。PO↔model 在 store 边界互转。
 
 type projectPO struct {
-	ID             string `gorm:"column:id;primaryKey"`
-	Title          string `gorm:"column:title"`
-	WorkDir        string `gorm:"column:work_dir"`
-	Theme          string `gorm:"column:theme"`
-	Status         string `gorm:"column:status"`
-	DesignPath     string `gorm:"column:design_path"`
-	DeckPath       string `gorm:"column:deck_path"`
-	DeckRevision   int    `gorm:"column:deck_revision"`
-	DesignRevision int    `gorm:"column:design_revision"`
-	CreatedAt      int64  `gorm:"column:created_at"`
-	UpdatedAt      int64  `gorm:"column:updated_at"`
+	ID              string `gorm:"column:id;primaryKey"`
+	Title           string `gorm:"column:title"`
+	WorkDir         string `gorm:"column:work_dir"`
+	Theme           string `gorm:"column:theme"`
+	Status          string `gorm:"column:status"`
+	DesignPath      string `gorm:"column:design_path"`
+	OutlinePath     string `gorm:"column:outline_path"`
+	OutlineRevision int    `gorm:"column:outline_revision"`
+	DesignRevision  int    `gorm:"column:design_revision"`
+	LayoutVersion   int    `gorm:"column:layout_version"`
+	CreatedAt       int64  `gorm:"column:created_at"`
+	UpdatedAt       int64  `gorm:"column:updated_at"`
 }
 
 func (projectPO) TableName() string { return "projects" }
@@ -27,18 +28,23 @@ func (projectPO) TableName() string { return "projects" }
 func (p projectPO) toModel() model.Project {
 	return model.Project{
 		ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme,
-		Status: p.Status, DesignPath: p.DesignPath, DeckPath: p.DeckPath,
-		DeckRevision: p.DeckRevision, DesignRevision: p.DesignRevision,
-		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		Status: p.Status, DesignPath: p.DesignPath, OutlinePath: p.OutlinePath,
+		OutlineRevision: p.OutlineRevision, DesignRevision: p.DesignRevision,
+		LayoutVersion: p.LayoutVersion,
+		CreatedAt:     p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
 
 func projectToPO(m model.Project) projectPO {
+	if m.LayoutVersion == 0 {
+		m.LayoutVersion = currentProjectLayoutVersion
+	}
 	return projectPO{
 		ID: m.ID, Title: m.Title, WorkDir: m.WorkDir, Theme: m.Theme,
-		Status: m.Status, DesignPath: m.DesignPath, DeckPath: m.DeckPath,
-		DeckRevision: m.DeckRevision, DesignRevision: m.DesignRevision,
-		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		Status: m.Status, DesignPath: m.DesignPath, OutlinePath: m.OutlinePath,
+		OutlineRevision: m.OutlineRevision, DesignRevision: m.DesignRevision,
+		LayoutVersion: m.LayoutVersion,
+		CreatedAt:     m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 
@@ -153,20 +159,20 @@ func (p runContextPO) toModel() model.RunContext {
 }
 
 type slidePO struct {
-	ID                      string `gorm:"column:id;primaryKey"`
-	ProjectID               string `gorm:"column:project_id"`
-	Position                int    `gorm:"column:position"`
-	Layout                  string `gorm:"column:layout"`
-	Title                   string `gorm:"column:title"`
-	JSONPath                string `gorm:"column:json_path"`
-	HTMLPath                string `gorm:"column:html_path"`
-	CurrentVersion          int    `gorm:"column:current_version"`
-	BlueprintRevision       int    `gorm:"column:blueprint_revision"`
-	PresentationRevision    int    `gorm:"column:presentation_revision"`
-	SourceDeckRevision      int    `gorm:"column:source_deck_revision"`
-	SourceBlueprintRevision int    `gorm:"column:source_blueprint_revision"`
-	SourceDesignRevision    int    `gorm:"column:source_design_revision"`
-	LastExportAt            *int64 `gorm:"column:last_export_at"`
+	ID                    string `gorm:"column:id;primaryKey"`
+	ProjectID             string `gorm:"column:project_id"`
+	Position              int    `gorm:"column:position"`
+	Layout                string `gorm:"column:layout"`
+	Title                 string `gorm:"column:title"`
+	SpecPath              string `gorm:"column:spec_path"`
+	HTMLPath              string `gorm:"column:html_path"`
+	CurrentVersion        int    `gorm:"column:current_version"`
+	SpecRevision          int    `gorm:"column:spec_revision"`
+	HTMLRevision          int    `gorm:"column:html_revision"`
+	SourceOutlineRevision int    `gorm:"column:source_outline_revision"`
+	SourceSpecRevision    int    `gorm:"column:source_spec_revision"`
+	SourceDesignRevision  int    `gorm:"column:source_design_revision"`
+	LastExportAt          *int64 `gorm:"column:last_export_at"`
 }
 
 func (slidePO) TableName() string { return "slides" }
@@ -174,9 +180,9 @@ func (slidePO) TableName() string { return "slides" }
 func (s slidePO) toModel() model.Slide {
 	return model.Slide{
 		ID: s.ID, ProjectID: s.ProjectID, Position: s.Position, Layout: s.Layout, Title: s.Title,
-		JSONPath: s.JSONPath, HTMLPath: s.HTMLPath, CurrentVersion: s.CurrentVersion,
-		BlueprintRevision: s.BlueprintRevision, PresentationRevision: s.PresentationRevision,
-		SourceDeckRevision: s.SourceDeckRevision, SourceBlueprintRevision: s.SourceBlueprintRevision,
+		SpecPath: s.SpecPath, HTMLPath: s.HTMLPath, CurrentVersion: s.CurrentVersion,
+		SpecRevision: s.SpecRevision, HTMLRevision: s.HTMLRevision,
+		SourceOutlineRevision: s.SourceOutlineRevision, SourceSpecRevision: s.SourceSpecRevision,
 		SourceDesignRevision: s.SourceDesignRevision, LastExportAt: s.LastExportAt,
 	}
 }
@@ -184,9 +190,9 @@ func (s slidePO) toModel() model.Slide {
 func slideToPO(m model.Slide) slidePO {
 	return slidePO{
 		ID: m.ID, ProjectID: m.ProjectID, Position: m.Position, Layout: m.Layout, Title: m.Title,
-		JSONPath: m.JSONPath, HTMLPath: m.HTMLPath, CurrentVersion: m.CurrentVersion,
-		BlueprintRevision: m.BlueprintRevision, PresentationRevision: m.PresentationRevision,
-		SourceDeckRevision: m.SourceDeckRevision, SourceBlueprintRevision: m.SourceBlueprintRevision,
+		SpecPath: m.SpecPath, HTMLPath: m.HTMLPath, CurrentVersion: m.CurrentVersion,
+		SpecRevision: m.SpecRevision, HTMLRevision: m.HTMLRevision,
+		SourceOutlineRevision: m.SourceOutlineRevision, SourceSpecRevision: m.SourceSpecRevision,
 		SourceDesignRevision: m.SourceDesignRevision, LastExportAt: m.LastExportAt,
 	}
 }
