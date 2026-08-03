@@ -83,6 +83,8 @@ type runPO struct {
 	TargetSlideID     string `gorm:"column:target_slide_id"`
 	InteractionIntent string `gorm:"column:interaction_intent"`
 	WorkSpecJSON      string `gorm:"column:work_spec_json"`
+	ClientRequestID   string `gorm:"column:client_request_id"`
+	CancelRequestedAt *int64 `gorm:"column:cancel_requested_at"`
 	Status            string `gorm:"column:status"`
 	CreatedAt         int64  `gorm:"column:created_at"`
 	UpdatedAt         int64  `gorm:"column:updated_at"`
@@ -95,7 +97,9 @@ func (r runPO) toModel() model.Run {
 	_ = json.Unmarshal([]byte(r.WorkSpecJSON), &spec)
 	return model.Run{
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
-		WorkSpec: spec, Status: model.RunStatus(r.Status), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+		ClientRequestID: r.ClientRequestID, WorkSpec: spec, Status: model.RunStatus(r.Status),
+		CancelRequestedAt: valueOrZero(r.CancelRequestedAt),
+		CreatedAt:         r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 }
 
@@ -107,7 +111,65 @@ func runToPO(m model.Run) runPO {
 		TargetLevel:    string(m.WorkSpec.Target.Level), TargetSlideID: m.WorkSpec.Target.SlideID,
 		InteractionIntent: string(m.WorkSpec.Interaction.Intent),
 		WorkSpecJSON:      string(raw),
+		ClientRequestID:   m.ClientRequestID,
+		CancelRequestedAt: int64PtrOrNil(m.CancelRequestedAt),
 		Status:            string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+	}
+}
+
+func int64PtrOrNil(value int64) *int64 {
+	if value == 0 {
+		return nil
+	}
+	return &value
+}
+
+func valueOrZero(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+type idempotencyPO struct {
+	Scope       string `gorm:"column:scope;primaryKey"`
+	OwnerID     string `gorm:"column:owner_id;primaryKey"`
+	Key         string `gorm:"column:key;primaryKey"`
+	RequestHash string `gorm:"column:request_hash"`
+	Status      string `gorm:"column:status"`
+	ResultJSON  string `gorm:"column:result_json"`
+	CreatedAt   int64  `gorm:"column:created_at"`
+	UpdatedAt   int64  `gorm:"column:updated_at"`
+}
+
+func (idempotencyPO) TableName() string { return "idempotency_records" }
+
+func (p idempotencyPO) toModel() model.IdempotencyRecord {
+	return model.IdempotencyRecord{
+		Scope: p.Scope, OwnerID: p.OwnerID, Key: p.Key, RequestHash: p.RequestHash,
+		Status: p.Status, ResultJSON: p.ResultJSON, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+	}
+}
+
+type steeringPO struct {
+	RunID           string `gorm:"column:run_id"`
+	ThreadID        string `gorm:"column:thread_id;primaryKey"`
+	ClientMessageID string `gorm:"column:client_message_id;primaryKey"`
+	RequestHash     string `gorm:"column:request_hash"`
+	Content         string `gorm:"column:content"`
+	Status          string `gorm:"column:status"`
+	AcceptedAt      int64  `gorm:"column:accepted_at"`
+	InjectedAt      *int64 `gorm:"column:injected_at"`
+	RejectionCode   string `gorm:"column:rejection_code"`
+}
+
+func (steeringPO) TableName() string { return "steering_inbox" }
+
+func (p steeringPO) toModel() model.SteeringMessage {
+	return model.SteeringMessage{
+		RunID: p.RunID, ThreadID: p.ThreadID, ClientMessageID: p.ClientMessageID,
+		RequestHash: p.RequestHash, Content: p.Content, Status: model.SteeringStatus(p.Status),
+		AcceptedAt: p.AcceptedAt, InjectedAt: valueOrZero(p.InjectedAt), RejectionCode: p.RejectionCode,
 	}
 }
 

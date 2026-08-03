@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -135,8 +136,51 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-	// 按 seq 升序显式排序：防止 append 顺序被外部工具破坏后前端时间线错乱。
+	steering, steeringErr := svc.store.ListThreadSteering(ctx, id)
+	if steeringErr == nil {
+		existing := map[string]int{}
+		nextSyntheticSeq := float64(1)
+		for index, entry := range out {
+			if seq, ok := entry["seq"].(float64); ok && seq >= nextSyntheticSeq {
+				nextSyntheticSeq = seq + 1
+			}
+			if entry["type"] == "steering" {
+				if data, ok := entry["data"].(map[string]any); ok {
+					existing[fmt.Sprint(data["client_message_id"])] = index
+				}
+			}
+		}
+		for _, message := range steering {
+			if index, ok := existing[message.ClientMessageID]; ok {
+				if data, ok := out[index]["data"].(map[string]any); ok {
+					data["status"] = message.Status
+					data["rejection_code"] = message.RejectionCode
+				}
+				continue
+			}
+			out = append(out, map[string]any{
+				"seq": nextSyntheticSeq, "ts": message.AcceptedAt / int64(time.Second),
+				"run_id": message.RunID, "turn": "user", "type": "steering",
+				"data": map[string]any{
+					"client_message_id": message.ClientMessageID, "text": message.Content,
+					"status": message.Status, "rejection_code": message.RejectionCode,
+				},
+			})
+			nextSyntheticSeq++
+		}
+	}
+	runOrder := map[string]int{}
+	for _, entry := range out {
+		runID := fmt.Sprint(entry["run_id"])
+		if _, exists := runOrder[runID]; !exists {
+			runOrder[runID] = len(runOrder)
+		}
+	}
 	sort.SliceStable(out, func(i, j int) bool {
+		leftRun, rightRun := fmt.Sprint(out[i]["run_id"]), fmt.Sprint(out[j]["run_id"])
+		if runOrder[leftRun] != runOrder[rightRun] {
+			return runOrder[leftRun] < runOrder[rightRun]
+		}
 		return historySeq(out[i]) < historySeq(out[j])
 	})
 	if out == nil {
@@ -145,9 +189,9 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 	return out, nil
 }
 
-func historySeq(m map[string]any) float64 {
-	if v, ok := m["seq"].(float64); ok {
-		return v
+func historySeq(entry map[string]any) float64 {
+	if value, ok := entry["seq"].(float64); ok {
+		return value
 	}
 	return 0
 }

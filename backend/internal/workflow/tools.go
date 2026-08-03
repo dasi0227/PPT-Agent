@@ -2,11 +2,13 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
@@ -17,20 +19,21 @@ var (
 )
 
 const (
-	CodeResourceInvalid      = "RESOURCE_INVALID"
-	CodeResourceNotFound     = "RESOURCE_NOT_FOUND"
-	CodeResourceNotDisclosed = "RESOURCE_NOT_DISCLOSED"
-	CodeTargetOutOfScope     = "TARGET_OUT_OF_SCOPE"
-	CodeContentTooLarge      = "CONTENT_TOO_LARGE"
-	CodeContentInvalid       = "CONTENT_INVALID"
-	CodeTargetNotFound       = CodeResourceNotFound
-	CodeTargetAlreadyExists  = "TARGET_ALREADY_EXISTS"
-	CodeEditAnchorNotFound   = "EDIT_ANCHOR_NOT_FOUND"
-	CodeEditAnchorAmbiguous  = "EDIT_ANCHOR_AMBIGUOUS"
-	CodeModelInvalid         = CodeContentInvalid
-	CodeContextBudget        = "CONTEXT_BUDGET_EXCEEDED"
-	CodeRenderFailed         = "RENDER_FAILED"
-	CodeStagingRequired      = "STAGING_REQUIRED"
+	CodeResourceInvalid         = "RESOURCE_INVALID"
+	CodeResourceNotFound        = "RESOURCE_NOT_FOUND"
+	CodeResourceNotDisclosed    = "RESOURCE_NOT_DISCLOSED"
+	CodeTargetOutOfScope        = "TARGET_OUT_OF_SCOPE"
+	CodeContentTooLarge         = "CONTENT_TOO_LARGE"
+	CodeContentInvalid          = "CONTENT_INVALID"
+	CodeTargetNotFound          = CodeResourceNotFound
+	CodeTargetAlreadyExists     = "TARGET_ALREADY_EXISTS"
+	CodeEditAnchorNotFound      = "EDIT_ANCHOR_NOT_FOUND"
+	CodeEditAnchorAmbiguous     = "EDIT_ANCHOR_AMBIGUOUS"
+	CodeModelInvalid            = CodeContentInvalid
+	CodeContextBudget           = "CONTEXT_BUDGET_EXCEEDED"
+	CodeRenderFailed            = "RENDER_FAILED"
+	CodeRenderWorkerUnavailable = "RENDER_WORKER_UNAVAILABLE"
+	CodeStagingRequired         = "STAGING_REQUIRED"
 )
 
 type ToolSchema struct {
@@ -46,6 +49,7 @@ type DomainTool interface {
 
 type DomainToolInput struct {
 	Args        map[string]any
+	CallID      string
 	Context     contextengine.ContextPack
 	ProjectDir  string
 	RunID       string
@@ -73,14 +77,15 @@ func (c ChangedTarget) Target() Resource {
 }
 
 type ToolResult struct {
-	OK             bool            `json:"ok"`
-	Summary        string          `json:"summary"`
-	Data           map[string]any  `json:"data,omitempty"`
-	ChangedTargets []ChangedTarget `json:"changed_targets"`
-	Issues         []Issue         `json:"issues"`
-	Retryable      bool            `json:"retryable"`
-	Code           string          `json:"code,omitempty"`
-	Observation    string          `json:"-"`
+	OK               bool              `json:"ok"`
+	Summary          string            `json:"summary"`
+	Data             map[string]any    `json:"data,omitempty"`
+	ChangedTargets   []ChangedTarget   `json:"changed_targets"`
+	Issues           []Issue           `json:"issues"`
+	Retryable        bool              `json:"retryable"`
+	Code             string            `json:"code,omitempty"`
+	Observation      string            `json:"-"`
+	ObservationParts []llm.ContentPart `json:"-"`
 	// Evidence and invalidation are runtime-internal. They are recorded in the
 	// Evidence Ledger and SSE but are not duplicated in model observations.
 	Evidence           []Evidence `json:"-"`
@@ -281,11 +286,18 @@ func declaredTarget(args map[string]any) (Resource, bool) {
 }
 
 func failedToolResult(code, summary string, retryable bool) ToolResult {
+	_ = retryable
+	agentErr := model.NewAgentError(code, "tool_call", errors.New(summary))
+	agentErr.Details["reason"] = summary
+	if agentErr.ModelMessage != "" {
+		agentErr.Details["next_action"] = agentErr.ModelMessage
+	}
+	observation, _ := json.Marshal(agentErr.ModelObservation())
 	return ToolResult{
 		OK: false, Summary: summary, Data: map[string]any{}, ChangedTargets: []ChangedTarget{},
 		Evidence: []Evidence{}, InvalidatedTargets: []Resource{},
 		Issues:    []Issue{{Code: code, Severity: SeverityError, Summary: summary}},
-		Retryable: retryable, Code: code,
+		Retryable: agentErr.Retryable, Code: code, Observation: string(observation),
 	}
 }
 

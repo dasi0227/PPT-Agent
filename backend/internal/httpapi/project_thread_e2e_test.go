@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -29,6 +30,12 @@ func (noOpRunner) Run(context.Context, workflow.EventEmitter, run.Checkpointer, 
 }
 
 func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
+	return setupProjectThreadServerWithFactory(t, func(model.Run, model.CreateRunParams, model.Project) run.Execution {
+		return noOpRunner{}
+	})
+}
+
+func setupProjectThreadServerWithFactory(t *testing.T, factory service.ExecutionFactory) (*httptest.Server, string) {
 	t.Helper()
 	root := t.TempDir()
 	cfg := &config.Config{DBPath: filepath.Join(root, "api.db"), WorkRoot: root}
@@ -42,9 +49,7 @@ func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
 		t.Fatalf("new store: %v", err)
 	}
 	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
-	runSvc := service.NewRunServiceWithExecutionFactory(st, engine, func(model.Run, model.CreateRunParams, model.Project) run.Execution {
-		return noOpRunner{}
-	})
+	runSvc := service.NewRunServiceWithExecutionFactory(st, engine, factory)
 	projectSvc := service.NewProjectService(st, service.WorkRoot(root))
 	threadSvc := service.NewThreadService(st)
 	router := httpapi.NewRouter(
@@ -61,6 +66,96 @@ func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)
 	return srv, root
+}
+
+type blockingRunner struct {
+	started chan<- struct{}
+}
+
+func (r blockingRunner) Run(ctx context.Context, _ workflow.EventEmitter, _ run.Checkpointer, _ run.Prompter) workflow.StructuredOutcome {
+	select {
+	case r.started <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	return workflow.StructuredOutcome{Status: workflow.StatusCanceled, Code: workflow.CodeCanceled}
+}
+
+func TestSteerAndCancelHTTPAuthority(t *testing.T) {
+	started := make(chan struct{}, 1)
+	srv, _ := setupProjectThreadServerWithFactory(t, func(model.Run, model.CreateRunParams, model.Project) run.Execution {
+		return blockingRunner{started: started}
+	})
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Authority","language":"zh-CN"}`)
+	var project map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &project)
+	projectID := project["id"].(string)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/threads", `{"title":"Authority"}`)
+	var thread map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &thread)
+	threadID := thread["id"].(string)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{
+		"client_request_id":"req-authority-1",
+		"target":{"artifact":"spec","level":"deck"},
+		"interaction":{"intent":"execute"},
+		"instruction":"生成内容"
+	}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create run: %d %s", resp.Code, resp.Body.String())
+	}
+	var runModel map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &runModel)
+	runID := runModel["id"].(string)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("run did not start")
+	}
+
+	steerBody := `{"expected_run_id":"` + runID + `","client_message_id":"msg-authority-1","content":"后续页面统一改成深色"}`
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/steer", steerBody)
+	if resp.Code != http.StatusAccepted || !strings.Contains(resp.Body.String(), `"status":"accepted"`) {
+		t.Fatalf("steer: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/steer", steerBody)
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("same steering should replay: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/steer",
+		strings.Replace(steerBody, "统一改成深色", "统一改成浅色", 1))
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "IDEMPOTENCY_KEY_REUSED") {
+		t.Fatalf("steering hash conflict: %d %s", resp.Code, resp.Body.String())
+	}
+
+	resp = apiReq(t, http.MethodDelete, srv.URL+"/api/v1/runs/"+runID, "")
+	if resp.Code != http.StatusAccepted || !strings.Contains(resp.Body.String(), "cancel_requested") {
+		t.Fatalf("first cancel: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodDelete, srv.URL+"/api/v1/runs/"+runID, "")
+	if resp.Code != http.StatusAccepted && resp.Code != http.StatusOK {
+		t.Fatalf("repeated cancel: %d %s", resp.Code, resp.Body.String())
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/"+runID, "")
+		if strings.Contains(resp.Body.String(), `"status":"canceled"`) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !strings.Contains(resp.Body.String(), `"status":"canceled"`) {
+		t.Fatalf("cancel did not reach authoritative terminal: %s", resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/steer",
+		`{"expected_run_id":"`+runID+`","client_message_id":"msg-late","content":"too late"}`)
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "RUN_NOT_STEERABLE") {
+		t.Fatalf("terminal steering was accepted: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/threads/"+threadID+"/history", "")
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "后续页面统一改成深色") ||
+		!strings.Contains(resp.Body.String(), `"type":"steering"`) {
+		t.Fatalf("steering was not recoverable from history: %d %s", resp.Code, resp.Body.String())
+	}
 }
 
 func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
@@ -89,6 +184,7 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 	threadID := thread["id"].(string)
 
 	body := `{
+		"client_request_id":"req-artifact-1",
 		"target":{"artifact":"spec","level":"deck"},
 		"interaction":{"intent":"talk"},
 		"instruction":"评估当前叙事结构"
@@ -105,6 +201,20 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 		t.Fatalf("new protocol was not preserved: %s", resp.Body.String())
 	}
 	runID := created["id"].(string)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", body)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("same create request should replay: %d %s", resp.Code, resp.Body.String())
+	}
+	var replayed map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &replayed)
+	if replayed["id"] != runID {
+		t.Fatalf("create idempotency produced another run: first=%s replay=%s", runID, resp.Body.String())
+	}
+	conflictingBody := strings.Replace(body, "评估当前叙事结构", "生成全新内容", 1)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", conflictingBody)
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "IDEMPOTENCY_KEY_REUSED") {
+		t.Fatalf("create request hash conflict was not rejected: %d %s", resp.Code, resp.Body.String())
+	}
 	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/"+runID, "")
 	if resp.Code != http.StatusOK {
 		t.Fatalf("GET run: %d %s", resp.Code, resp.Body.String())
@@ -121,6 +231,7 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 	}
 
 	invalid := `{
+		"client_request_id":"req-artifact-invalid",
 		"target":{"artifact":"presentation","level":"slide","slide_id":"current"},
 		"interaction":{"intent":"execute"},
 		"instruction":"修改当前页"
@@ -144,6 +255,7 @@ func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
 	var thread map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &thread)
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+thread["id"].(string)+"/runs", `{
+		"client_request_id":"req-screenshot-1",
 		"target":{"artifact":"presentation","level":"deck"},
 		"interaction":{"intent":"talk"},
 		"instruction":"查看当前演示"
@@ -221,7 +333,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 		t.Fatalf("new thread history should be empty array, got %d: %s", resp.Code, resp.Body.String())
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"target":{"artifact":"spec","level":"deck"},"interaction":{"intent":"execute"},"instruction":"生成设计稿"}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","target":{"artifact":"spec","level":"deck"},"interaction":{"intent":"execute"},"instruction":"生成设计稿"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
 	}

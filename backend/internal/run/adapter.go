@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
@@ -17,17 +18,39 @@ func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
 }
 
 type Checkpointer interface {
-	DrainInputs() []string
+	workflow.SteeringSource
+	workflow.LifecycleObserver
 	workflow.CheckpointSink
 }
 
 type inputCheckpoint struct {
-	queue *InputQueue
-	state workflow.RuntimeCheckpoint
+	queue  *InputQueue
+	store  Store
+	runID  string
+	active *active
+	state  workflow.RuntimeCheckpoint
 }
 
-func (c *inputCheckpoint) DrainInputs() []string {
-	return c.queue.Drain()
+func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringInput, error) {
+	messages, err := c.store.ListPendingSteering(ctx, c.runID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]workflow.SteeringInput, 0, len(messages))
+	for _, message := range messages {
+		out = append(out, workflow.SteeringInput{ID: message.ClientMessageID, Content: message.Content})
+	}
+	return out, nil
+}
+
+func (c *inputCheckpoint) MarkInputsInjected(ctx context.Context, ids []string) error {
+	return c.store.MarkSteering(ctx, c.runID, ids, model.SteeringInjected, time.Now().UnixNano(), "")
+}
+
+func (c *inputCheckpoint) PhaseChanged(phase workflow.RuntimePhase) {
+	c.active.mu.Lock()
+	c.active.phase = phase
+	c.active.mu.Unlock()
 }
 
 func (c *inputCheckpoint) SaveCheckpoint(_ context.Context, state workflow.RuntimeCheckpoint) error {

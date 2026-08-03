@@ -39,7 +39,7 @@ export const Timeline: React.FC = () => {
     (latest, item, index) => item.type === 'user_turn' ? index : latest,
     -1,
   );
-  const runActive = status === 'creating' || status === 'running' || status === 'waiting';
+  const runActive = status === 'creating' || status === 'running' || status === 'waiting' || status === 'canceling';
   const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle';
 
   const scrollToLatest = useCallback((smooth: boolean) => {
@@ -87,6 +87,17 @@ export const Timeline: React.FC = () => {
                 </div>
               )}
               <MarkdownMessage content={item.text} />
+              {item.deliveryStatus && (
+                <div className={`mt-1 text-[10px] ${
+                  item.deliveryStatus === 'rejected' ? 'text-danger' : 'text-text-400'
+                }`}>
+                  {item.deliveryStatus === 'sending'
+                    ? '发送中'
+                    : item.deliveryStatus === 'accepted'
+                      ? '已接收'
+                      : '未能加入当前任务'}
+                </div>
+              )}
             </div>
           </div>
         )}

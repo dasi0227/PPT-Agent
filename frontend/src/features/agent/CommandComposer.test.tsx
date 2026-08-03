@@ -53,11 +53,12 @@ describe('CommandComposer', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '调整当前页' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
-    await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', {
+    await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', expect.objectContaining({
+      client_request_id: expect.stringMatching(/^req_/),
       target: { artifact: 'presentation', level: 'slide', slide_id: 'stable-1' },
       interaction: { intent: 'execute' },
       instruction: '调整当前页',
-    }, 'p1'));
+    }), 'p1'));
   });
 
   it('maps talk and ask buttons mutually exclusively and restores default execution', async () => {

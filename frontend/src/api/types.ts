@@ -116,10 +116,28 @@ export interface RunTarget { artifact: Artifact; level: TargetLevel; slide_id?: 
 export interface RunInteraction { intent: InteractionIntent }
 
 export interface CreateRunRequest {
+  client_request_id?: string;
   target: RunTarget;
   interaction: RunInteraction;
   instruction: string;
   options?: { language?: string; theme_id?: string; desired_slide_count?: number };
+}
+
+export interface SteerRunRequest {
+  expected_run_id: string;
+  client_message_id: string;
+  content: string;
+}
+
+export interface SteerRunResponse {
+  status: 'accepted';
+  run_id: string;
+  client_message_id: string;
+}
+
+export interface CancelRunResponse {
+  status: 'cancel_requested' | 'pending' | 'running' | 'waiting' | 'done' | 'failed' | 'canceled';
+  run_id: string;
 }
 
 export interface SpecProjectView {

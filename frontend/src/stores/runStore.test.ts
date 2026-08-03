@@ -45,9 +45,16 @@ vi.mock('../api/sse', () => ({
 let createMode: 'resolve' | 'pending' | 'reject' = 'resolve';
 let resolveCreate: ((value: any) => void) | null = null;
 let recoveredRun: any = null;
+let steeringMode: 'resolve' | 'reject' = 'resolve';
+let cancelResponse: any = { status: 'cancel_requested', run_id: 'run_1' };
+const reconciledRuns: any[] = [];
+const getRequests: string[] = [];
+const createRequests: any[] = [];
+const steeringRequests: any[] = [];
 vi.mock('../api/runs', () => ({
   runsApi: {
     create: (threadId: string, payload: any) => {
+      createRequests.push(payload);
       const run = {
         id: `run_${connections.length + 1}`,
         thread_id: threadId,
@@ -62,8 +69,15 @@ vi.mock('../api/runs', () => ({
       return Promise.resolve(run);
     },
     submitInput: async () => ({}),
-    cancel: async () => ({}),
-    get: async () => {
+    cancel: async () => cancelResponse,
+    steer: async (runId: string, payload: any) => {
+      steeringRequests.push({ runId, payload });
+      if (steeringMode === 'reject') throw new Error('not steerable');
+      return { status: 'accepted', run_id: runId, client_message_id: payload.client_message_id };
+    },
+    get: async (runId: string) => {
+      getRequests.push(runId);
+      if (reconciledRuns.length > 0) return reconciledRuns.shift();
       if (recoveredRun instanceof Error) throw recoveredRun;
       return recoveredRun;
     },
@@ -84,14 +98,34 @@ const request = (instruction: string) => ({
 const base = { schema_version: 2, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
 
 function reset() {
+  useRunStore.getState().dropSessions(Object.keys(useRunStore.getState().sessions));
+  vi.useRealTimers();
   slideLoads.length = 0;
   specRefreshes.length = 0;
   connections.length = 0;
   createMode = 'resolve';
   resolveCreate = null;
   recoveredRun = null;
+  steeringMode = 'resolve';
+  cancelResponse = { status: 'cancel_requested', run_id: 'run_1' };
+  reconciledRuns.length = 0;
+  getRequests.length = 0;
+  createRequests.length = 0;
+  steeringRequests.length = 0;
   sessionStorage.clear();
   useRunStore.setState({ sessions: {} });
+}
+
+function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'done' | 'failed' | 'canceled') {
+  return {
+    id: 'run_1',
+    thread_id: 't1',
+    project_id: 'p1',
+    status,
+    target: request('').target,
+    interaction: request('').interaction,
+    events_url: '',
+  };
 }
 
 describe('runStore public event sessions', () => {
@@ -148,6 +182,177 @@ describe('runStore public event sessions', () => {
     });
     expect(useRunStore.getState().sessions.t1.status).toBe('running');
     expect(useRunStore.getState().sessions.t1.pendingQuestion).toBeNull();
+  });
+
+  test('tracks active-run steering delivery without creating a second run', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    expect(await useRunStore.getState().steerRun('t1', 'run_1', '后续页面改成深色', 'msg-stable')).toBe(true);
+    expect(steeringRequests).toEqual([{
+      runId: 'run_1',
+      payload: {
+        expected_run_id: 'run_1',
+        client_message_id: 'msg-stable',
+        content: '后续页面改成深色',
+      },
+    }]);
+    expect(createRequests).toHaveLength(1);
+    const acceptedItems = useRunStore.getState().sessions.t1.timelineItems;
+    expect(acceptedItems[acceptedItems.length - 1]).toMatchObject({
+      type: 'user_turn',
+      text: '后续页面改成深色',
+      clientMessageId: 'msg-stable',
+      deliveryStatus: 'accepted',
+    });
+  });
+
+  test('keeps rejected steering text and retry creates a new request identity', async () => {
+    await useRunStore.getState().createRun('t1', request('original'), 'p1');
+    const firstRequestId = createRequests[0].client_request_id;
+    steeringMode = 'reject';
+    expect(await useRunStore.getState().steerRun('t1', 'run_1', 'too late', 'msg-late')).toBe(false);
+    const rejectedItems = useRunStore.getState().sessions.t1.timelineItems;
+    expect(rejectedItems[rejectedItems.length - 1]).toMatchObject({
+      type: 'user_turn',
+      text: 'too late',
+      deliveryStatus: 'rejected',
+    });
+    expect(await useRunStore.getState().retryRun('t1')).toBe(true);
+    expect(createRequests).toHaveLength(2);
+    expect(createRequests[1]).toMatchObject({
+      instruction: 'original',
+      target: request('').target,
+      interaction: request('').interaction,
+    });
+    expect(createRequests[1].client_request_id).not.toBe(firstRequestId);
+  });
+
+  test('enters cancel-requested state until authoritative terminal event arrives', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    await useRunStore.getState().cancelRun('t1', 'run_1');
+    expect(useRunStore.getState().sessions.t1.status).toBe('canceling');
+    connections[0].onMessage({
+      id: '1', event: 'run.finished',
+      data: { ...base, status: 'canceled', duration_ms: 5 },
+    });
+    expect(useRunStore.getState().sessions.t1.status).toBe('canceled');
+  });
+
+  test.each([
+    ['canceled', 'canceled'],
+    ['done', 'done'],
+    ['failed', 'error'],
+  ] as const)('adopts direct DELETE terminal status %s', async (serverStatus, expectedStatus) => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    cancelResponse = { status: serverStatus, run_id: 'run_1' };
+    await useRunStore.getState().cancelRun('t1', 'run_1');
+
+    expect(useRunStore.getState().sessions.t1.status).toBe(expectedStatus);
+    expect(connections).toHaveLength(2);
+    expect(useRunStore.getState().sessions.t1.timelineItems)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice' })]));
+  });
+
+  test('reconciles cancellation after 3s, then 5s, then 10s and resumes SSE from the cursor', async () => {
+    vi.useFakeTimers();
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    connections[0].onMessage({
+      id: '7', event: 'run.progress',
+      data: { ...base, stage: 'thinking', text: '处理中' },
+    });
+    reconciledRuns.push(
+      authoritativeRun('running'),
+      authoritativeRun('waiting'),
+      authoritativeRun('canceled'),
+    );
+    await useRunStore.getState().cancelRun('t1', 'run_1');
+
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(getRequests).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getRequests).toHaveLength(1);
+    expect(useRunStore.getState().sessions.t1.status).toBe('canceling');
+
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(getRequests).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getRequests).toHaveLength(2);
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(getRequests).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(getRequests).toHaveLength(3);
+    expect(useRunStore.getState().sessions.t1.status).toBe('canceled');
+    expect(connections[1]).toMatchObject({ runId: 'run_1', lastEventId: '7' });
+    expect(useRunStore.getState().sessions.t1.timelineItems)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice' })]));
+
+    connections[1].onMessage({
+      id: '8', event: 'run.finished',
+      data: { ...base, status: 'canceled', duration_ms: 5 },
+    });
+    expect(useRunStore.getState().sessions.t1.timelineItems)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice', status: 'canceled' })]));
+  });
+
+  test('stops cancellation reconciliation after terminal SSE, run replacement, or session cleanup', async () => {
+    vi.useFakeTimers();
+
+    await useRunStore.getState().createRun('t1', request('terminal'), 'p1');
+    await useRunStore.getState().cancelRun('t1', 'run_1');
+    connections[0].onMessage({
+      id: '1', event: 'run.finished',
+      data: { ...base, status: 'canceled', duration_ms: 5 },
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(getRequests).toHaveLength(0);
+
+    await useRunStore.getState().createRun('t1', request('replace me'), 'p1');
+    const replacedRunId = useRunStore.getState().sessions.t1.activeRunId!;
+    cancelResponse = { status: 'cancel_requested', run_id: replacedRunId };
+    await useRunStore.getState().cancelRun('t1', replacedRunId);
+    await useRunStore.getState().createRun('t1', request('replacement'), 'p1');
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(getRequests).toHaveLength(0);
+
+    const activeRunId = useRunStore.getState().sessions.t1.activeRunId!;
+    cancelResponse = { status: 'cancel_requested', run_id: activeRunId };
+    await useRunStore.getState().cancelRun('t1', activeRunId);
+    useRunStore.getState().clearRun('t1');
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(getRequests).toHaveLength(0);
+  });
+
+  test('keeps canceling after the final non-terminal reconciliation without polling forever', async () => {
+    vi.useFakeTimers();
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    reconciledRuns.push(
+      authoritativeRun('running'),
+      authoritativeRun('running'),
+      authoritativeRun('running'),
+    );
+    await useRunStore.getState().cancelRun('t1', 'run_1');
+    await vi.advanceTimersByTimeAsync(18_000);
+
+    expect(getRequests).toHaveLength(3);
+    expect(useRunStore.getState().sessions.t1.status).toBe('canceling');
+    expect(vi.getTimerCount()).toBe(0);
+    expect(useRunStore.getState().sessions.t1.timelineItems)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice' })]));
+  });
+
+  test('recovers a persisted canceling run and resumes bounded reconciliation', async () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
+      t1: { runId: 'run_1', threadId: 't1', projectId: 'p1', lastEventId: '17', canceling: true },
+    }));
+    recoveredRun = authoritativeRun('running');
+    await useRunStore.getState().recoverPersistedRuns();
+
+    expect(useRunStore.getState().sessions.t1).toMatchObject({
+      activeRunId: 'run_1', status: 'canceling', lastEventId: '17',
+    });
+    expect(connections[0]).toMatchObject({ runId: 'run_1', lastEventId: '17' });
+    useRunStore.getState().clearRun('t1');
   });
 
   test('completed run closes its stream and refreshes only committed target scope', async () => {

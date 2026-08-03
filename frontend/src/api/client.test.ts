@@ -33,13 +33,25 @@ describe('fetchClient', () => {
     });
   });
 
-  it('preserves a non-JSON error body', async () => {
+  it('uses the API retryable field as the HTTP retry authority', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务暂时不可用', retryable: true },
+    }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    const error = await fetchClient('/broken').catch((caught: unknown) => caught) as APIError;
+    expect(error).toMatchObject({ code: 'PROVIDER_UNAVAILABLE', retryable: true });
+  });
+
+  it('does not infer retryability from an HTTP status without an authoritative field', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('gateway unavailable', { status: 502 })));
     const error = await fetchClient('/broken').catch((caught: unknown) => caught) as APIError;
     expect(error).toBeInstanceOf(APIError);
     expect(error.message).toBe('gateway unavailable');
     expect(error.details).toBe('gateway unavailable');
-    expect(error.retryable).toBe(true);
+    expect(error.retryable).toBe(false);
   });
 
   it('distinguishes a user abort', async () => {

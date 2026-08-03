@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,80 @@ type scriptedAgent struct {
 
 type cancelingAgent struct {
 	cancel context.CancelFunc
+}
+
+type scriptedSteering struct {
+	mu       sync.Mutex
+	batches  [][]SteeringInput
+	injected []string
+}
+
+type memoryIdempotencyStore struct {
+	mu      sync.Mutex
+	records map[string]model.IdempotencyRecord
+}
+
+func newMemoryIdempotencyStore() *memoryIdempotencyStore {
+	return &memoryIdempotencyStore{records: map[string]model.IdempotencyRecord{}}
+}
+
+func idempotencyRecordKey(scope, ownerID, key string) string {
+	return scope + "|" + ownerID + "|" + key
+}
+
+func (s *memoryIdempotencyStore) AcquireIdempotency(_ context.Context, record model.IdempotencyRecord) (model.IdempotencyRecord, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := idempotencyRecordKey(record.Scope, record.OwnerID, record.Key)
+	if existing, ok := s.records[key]; ok {
+		return existing, false, nil
+	}
+	if record.Status == "" {
+		record.Status = "in_progress"
+	}
+	s.records[key] = record
+	return record, true, nil
+}
+
+func (s *memoryIdempotencyStore) CompleteIdempotency(_ context.Context, scope, ownerID, key, status, resultJSON string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	recordKey := idempotencyRecordKey(scope, ownerID, key)
+	record, ok := s.records[recordKey]
+	if !ok {
+		return errors.New("idempotency record not found")
+	}
+	record.Status, record.ResultJSON = status, resultJSON
+	s.records[recordKey] = record
+	return nil
+}
+
+func (s *memoryIdempotencyStore) GetIdempotency(_ context.Context, scope, ownerID, key string) (model.IdempotencyRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	record, ok := s.records[idempotencyRecordKey(scope, ownerID, key)]
+	if !ok {
+		return model.IdempotencyRecord{}, errors.New("idempotency record not found")
+	}
+	return record, nil
+}
+
+func (s *scriptedSteering) DrainInputs(context.Context) ([]SteeringInput, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.batches) == 0 {
+		return nil, nil
+	}
+	next := append([]SteeringInput(nil), s.batches[0]...)
+	s.batches = s.batches[1:]
+	return next, nil
+}
+
+func (s *scriptedSteering) MarkInputsInjected(_ context.Context, ids []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.injected = append(s.injected, ids...)
+	return nil
 }
 
 func (a cancelingAgent) Next(_ context.Context, _ AgentRequest) (AgentResponse, error) {
@@ -69,6 +144,38 @@ func (r *eventRecorder) count(kind model.EventType) int {
 		}
 	}
 	return count
+}
+
+type cancelOnToolStartedEmitter struct {
+	mu     sync.Mutex
+	cancel context.CancelFunc
+	events []recordedEvent
+}
+
+func (e *cancelOnToolStartedEmitter) Emit(kind model.EventType, payload any) {
+	e.mu.Lock()
+	e.events = append(e.events, recordedEvent{kind: kind, payload: payload})
+	e.mu.Unlock()
+	if kind == model.EventToolStarted {
+		e.cancel()
+	}
+}
+
+type blockingReadProvider struct{}
+
+func (blockingReadProvider) RegisterDomainTools(registry *ToolRegistry) error {
+	return registry.RegisterDomainTool(blockingReadTool{}, true, PhaseChat, PhasePlanning, PhaseExecuting)
+}
+
+type blockingReadTool struct{}
+
+func (blockingReadTool) Schema() ToolSchema {
+	return ToolSchema{Name: "search_refs", Description: "blocking cancellation test", Parameters: objectSchema(nil, map[string]any{})}
+}
+
+func (blockingReadTool) Execute(ctx context.Context, _ DomainToolInput) ToolResult {
+	<-ctx.Done()
+	return failedToolResult(CodeCanceled, "run canceled", false)
 }
 
 type fakeProvider struct {
@@ -213,11 +320,11 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 		t.Fatalf("next-turn context=%+v", messages)
 	}
 	if messages[0].Role != llm.RoleAssistant ||
-		messages[0].Content != "这是尚未通过 finish 提交的分析。" ||
+		messages[0].Text() != "这是尚未通过 finish 提交的分析。" ||
 		messages[0].ReasoningContent != "provider state" {
 		t.Fatalf("assistant text or provider reasoning was not retained: %+v", messages[0])
 	}
-	if messages[1].Role != llm.RoleUser || messages[1].Content != noToolCallGuidance {
+	if messages[1].Role != llm.RoleUser || messages[1].Text() != noToolCallGuidance {
 		t.Fatalf("explicit finish guidance missing: %+v", messages[1])
 	}
 	if events.count(model.EventMessageFinal) != 1 || events.count(model.EventRunFinished) != 1 {
@@ -231,6 +338,117 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	}
 	if final != "done" {
 		t.Fatalf("final text must come from finish.message, got %q", final)
+	}
+}
+
+func TestSteeringInjectsIndependentUserMessagesInAcceptanceOrderBeforeFirstNext(t *testing.T) {
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	steering := &scriptedSteering{batches: [][]SteeringInput{{
+		{ID: "msg-1", Content: "use dark colors"},
+		{ID: "msg-2", Content: "keep the typography compact"},
+	}}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "steer-initial", ProjectDir: t.TempDir(),
+		Context:     testPack(model.IntentTalk, model.ArtifactSpec, model.TargetSlide, false, "review"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Steering: steering,
+	})
+	if outcome.Status != StatusCompleted || len(agent.requests) != 1 {
+		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
+	}
+	messages := agent.requests[0].Messages
+	if len(messages) != 2 ||
+		messages[0].Role != llm.RoleUser || messages[0].Text() != "User steering: use dark colors" ||
+		messages[1].Role != llm.RoleUser || messages[1].Text() != "User steering: keep the typography compact" {
+		t.Fatalf("steering messages were merged or reordered: %+v", messages)
+	}
+	if strings.Join(steering.injected, ",") != "msg-1,msg-2" {
+		t.Fatalf("injected status was not acknowledged: %+v", steering.injected)
+	}
+}
+
+func TestSteeringWaitsUntilCompleteToolBatchObservation(t *testing.T) {
+	dir := testProject(t, ArtifactSlideSpec)
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("write", "write_ppt", map[string]any{"content": "next"}),
+		finishCall("finish"),
+	}}
+	steering := &scriptedSteering{batches: [][]SteeringInput{
+		nil,
+		{{ID: "msg-after-batch", Content: "apply this after the current batch"}},
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "steer-boundary", ProjectDir: dir,
+		Context:     testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "modify"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Steering: steering,
+	})
+	if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
+		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
+	}
+	messages := agent.requests[1].Messages
+	if len(messages) < 3 ||
+		messages[len(messages)-2].Role != llm.RoleTool ||
+		messages[len(messages)-2].ToolCallID != "write" ||
+		messages[len(messages)-1].Role != llm.RoleUser ||
+		messages[len(messages)-1].Text() != "User steering: apply this after the current batch" {
+		t.Fatalf("steering was not injected after the complete batch observation: %+v", messages)
+	}
+}
+
+func TestToolCallIdempotencyReplaysEvidenceWithoutDuplicateSideEffects(t *testing.T) {
+	dir := testProject(t, ArtifactSlideSpec)
+	events := &eventRecorder{}
+	idempotencyStore := newMemoryIdempotencyStore()
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("stable-call", "write_ppt", map[string]any{"content": "idempotent"}),
+		toolCall("stable-call", "write_ppt", map[string]any{"content": "idempotent"}),
+		finishCall("finish"),
+	}}
+	commits := 0
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "idempotent-tool", ProjectDir: dir,
+		Context:        testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "modify"),
+		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
+		Emitter:        events,
+		Idempotency:    idempotencyStore,
+		CommitMetadata: func(context.Context, CommitContext) error { commits++; return nil },
+	})
+	if outcome.Status != StatusCompleted || commits != 1 {
+		t.Fatalf("outcome=%+v commits=%d", outcome, commits)
+	}
+	if events.count(model.EventToolStarted) != 1 || events.count(model.EventToolCompleted) != 1 {
+		t.Fatalf("tool replay emitted duplicate business lifecycle: %+v", events.events)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("s1")))
+	if err != nil || string(raw) != "idempotent" {
+		t.Fatalf("formal content=%q err=%v", raw, err)
+	}
+	record, err := idempotencyStore.GetIdempotency(context.Background(), "tool_call", "idempotent-tool", "stable-call")
+	if err != nil || record.Status != "completed" || !strings.Contains(record.ResultJSON, `"evidence"`) {
+		t.Fatalf("tool result did not persist replay evidence: %+v err=%v", record, err)
+	}
+}
+
+func TestContextCompactionDropsOnlySupersededSlideImages(t *testing.T) {
+	messages := []llm.Message{
+		{Role: llm.RoleTool, ToolCallID: "old", Content: []llm.ContentPart{
+			{Type: "text", Text: `{"slide_id":"slide-1","source_hash":"old"}`},
+			{Type: "image", ImageRef: "run:r/screenshot:old"},
+		}},
+		{Role: llm.RoleTool, ToolCallID: "other", Content: []llm.ContentPart{
+			{Type: "text", Text: `{"slide_id":"slide-2","source_hash":"other"}`},
+			{Type: "image", ImageRef: "run:r/screenshot:other"},
+		}},
+		{Role: llm.RoleTool, ToolCallID: "new", Content: []llm.ContentPart{
+			{Type: "text", Text: `{"slide_id":"slide-1","source_hash":"new"}`},
+			{Type: "image", ImageRef: "run:r/screenshot:new"},
+		}},
+	}
+	got := pruneSupersededRenderImages(messages)
+	if len(got[0].Content) != 1 || len(got[1].Content) != 2 || len(got[2].Content) != 2 {
+		t.Fatalf("superseded image pruning mismatch: %+v", got)
+	}
+	if got[0].Content[0].Type != "text" || got[2].Content[1].ImageRef != "run:r/screenshot:new" {
+		t.Fatalf("latest screenshot/source binding was not preserved: %+v", got)
 	}
 }
 
@@ -422,11 +640,11 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 	rejectionObservation := agent.requests[1].Messages[1]
 	if rejectedCall.Role != llm.RoleAssistant || len(rejectedCall.ToolCalls) != 1 ||
 		rejectedCall.ToolCalls[0].ID != "first" || rejectedCall.ToolCalls[0].Name != "finish" ||
-		rejectedCall.Content != "我先尝试提交当前结果。" ||
+		rejectedCall.Text() != "我先尝试提交当前结果。" ||
 		rejectedCall.ReasoningContent != "finish provider state" ||
 		rejectionObservation.Role != llm.RoleTool ||
 		rejectionObservation.ToolCallID != "first" ||
-		!strings.Contains(rejectionObservation.Content, CodeCompletionGateBlocked) {
+		!strings.Contains(rejectionObservation.Text(), CodeCompletionGateBlocked) {
 		t.Fatalf("completion rejection context=%+v", agent.requests[1].Messages)
 	}
 }
@@ -577,6 +795,9 @@ func TestFailedAndCanceledRunsDoNotModifyFormalFiles(t *testing.T) {
 			if string(raw) != "formal" || (test.cancel && outcome.Status != StatusCanceled) || (!test.cancel && outcome.Status != StatusFailed) {
 				t.Fatalf("outcome=%+v formal=%q", outcome, raw)
 			}
+			if _, err := os.Stat(filepath.Join(dir, ".staging", test.name)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("uncommitted staging was not cleaned up: %v", err)
+			}
 		})
 	}
 }
@@ -584,13 +805,98 @@ func TestFailedAndCanceledRunsDoNotModifyFormalFiles(t *testing.T) {
 func TestProviderErrorAfterContextCancellationFinishesCanceled(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	ctx, cancel := context.WithCancel(context.Background())
+	events := &eventRecorder{}
 	outcome := NewRuntime(cancelingAgent{cancel: cancel}).Run(ctx, RuntimeInput{
 		RunID: "provider-canceled", ProjectDir: dir,
 		Context:     testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
-		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Emitter: events,
 	})
 	if outcome.Status != StatusCanceled || outcome.Code != CodeCanceled {
 		t.Fatalf("outcome=%+v", outcome)
+	}
+	for _, event := range events.events {
+		if event.kind != model.EventRunFinished {
+			continue
+		}
+		finished := event.payload.(model.RunFinishedPayload)
+		if finished.Status != "canceled" || finished.Error != nil {
+			t.Fatalf("canceled projection=%+v", finished)
+		}
+		return
+	}
+	t.Fatal("canceled run.finished was not emitted")
+}
+
+func TestProviderUnavailableUsesAuthoritativeTransientProjection(t *testing.T) {
+	events := &eventRecorder{}
+	cause := "POST https://provider.example/v1/chat body=secret api_key=sk-secret"
+	agent := &scriptedAgent{err: fmt.Errorf("%w: %s", llm.ErrUnavailable, cause)}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "provider-unavailable", ProjectDir: t.TempDir(),
+		Context:     testPack(model.IntentTalk, model.ArtifactSpec, model.TargetSlide, false, "review"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Emitter: events,
+	})
+	if outcome.Status != StatusFailed || outcome.Code != "PROVIDER_UNAVAILABLE" {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	var finished model.RunFinishedPayload
+	for _, event := range events.events {
+		if event.kind == model.EventRunFinished {
+			finished = event.payload.(model.RunFinishedPayload)
+		}
+	}
+	if finished.Error == nil || finished.Error.Code != "PROVIDER_UNAVAILABLE" || !finished.Error.Retryable ||
+		finished.Error.Message != model.ErrorDefinitionFor("PROVIDER_UNAVAILABLE").SafeMessage {
+		t.Fatalf("run.finished projection=%+v", finished)
+	}
+	publicRaw, err := json.Marshal(finished)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"provider.example", "body=secret", "sk-secret", "POST "} {
+		if strings.Contains(string(publicRaw), forbidden) {
+			t.Fatalf("public terminal error leaked %q: %s", forbidden, publicRaw)
+		}
+	}
+}
+
+func TestCancellationPairsEveryStartedToolBeforeCanceledTerminal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	emitter := &cancelOnToolStartedEmitter{cancel: cancel}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("blocking-call", "search_refs", map[string]any{"query": "x"}),
+	}}
+	outcome := NewRuntime(agent).Run(ctx, RuntimeInput{
+		RunID: "cancel-tool", ProjectDir: t.TempDir(),
+		Context: testPack(model.IntentTalk, model.ArtifactSpec, model.TargetSlide, false, "search"),
+		Emitter: emitter, DomainTools: blockingReadProvider{},
+	})
+	if outcome.Status != StatusCanceled || outcome.Code != CodeCanceled {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	emitter.mu.Lock()
+	events := append([]recordedEvent(nil), emitter.events...)
+	emitter.mu.Unlock()
+	startedIndex, completedIndex, terminalIndex := -1, -1, -1
+	for index, event := range events {
+		switch event.kind {
+		case model.EventToolStarted:
+			startedIndex = index
+		case model.EventToolCompleted:
+			payload := event.payload.(model.ToolCompletedPayload)
+			if payload.CallID == "blocking-call" && payload.Error != nil && payload.Error.Code == CodeCanceled {
+				completedIndex = index
+			}
+		case model.EventMessageFinal:
+			t.Fatal("canceled run emitted a successful message.final")
+		case model.EventRunFinished:
+			if event.payload.(model.RunFinishedPayload).Status == "canceled" {
+				terminalIndex = index
+			}
+		}
+	}
+	if startedIndex < 0 || completedIndex <= startedIndex || terminalIndex <= completedIndex {
+		t.Fatalf("canceled lifecycle is not paired and ordered: %+v", events)
 	}
 }
 
@@ -716,7 +1022,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 		t.Fatalf("assistant tool turn was not retained: %+v", agent.requests)
 	}
 	retained := agent.requests[1].Messages[0]
-	if retained.Content != "我会先确认当前页面结构，再进行局部更新。" ||
+	if retained.Text() != "我会先确认当前页面结构，再进行局部更新。" ||
 		retained.ReasoningContent != "hidden provider chain of thought" ||
 		len(retained.ToolCalls) != 1 || retained.ToolCalls[0].ID != "write" ||
 		retained.ToolCalls[0].Name != "write_ppt" {

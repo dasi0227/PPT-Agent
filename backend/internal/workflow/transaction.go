@@ -281,6 +281,9 @@ func (t *Transaction) Commit(ctx context.Context, metadata CommitMetadata) error
 	before := make(map[string][]byte, len(keys))
 	existed := make(map[string]bool, len(keys))
 	for _, key := range keys {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		entry := t.artifacts[key]
 		finalPath := filepath.Join(t.projectDir, key)
 		raw, err := os.ReadFile(finalPath)
@@ -313,6 +316,10 @@ func (t *Transaction) Commit(ctx context.Context, metadata CommitMetadata) error
 		}
 	}
 	for _, key := range keys {
+		if err := ctx.Err(); err != nil {
+			restore()
+			return err
+		}
 		entry := t.artifacts[key]
 		finalPath := filepath.Join(t.projectDir, key)
 		if entry.Delete {
@@ -333,6 +340,10 @@ func (t *Transaction) Commit(ctx context.Context, metadata CommitMetadata) error
 		}
 	}
 	if metadata != nil {
+		if err := ctx.Err(); err != nil {
+			restore()
+			return err
+		}
 		commitContext := CommitContext{
 			Changes:               t.ChangeSet(),
 			MaterializationProofs: append([]MaterializationProof(nil), t.materializationProofs...),

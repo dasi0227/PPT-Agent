@@ -27,6 +27,14 @@ type Store interface {
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)
 	SetRunStatus(ctx context.Context, id string, status model.RunStatus) error
+	RequestRunCancel(ctx context.Context, id string, requestedAt int64) (model.Run, error)
+	AcquireIdempotency(ctx context.Context, record model.IdempotencyRecord) (model.IdempotencyRecord, bool, error)
+	CompleteIdempotency(ctx context.Context, scope, ownerID, key, status, resultJSON string) error
+	GetIdempotency(ctx context.Context, scope, ownerID, key string) (model.IdempotencyRecord, error)
+	CreateSteering(ctx context.Context, message model.SteeringMessage) (model.SteeringMessage, bool, error)
+	ListPendingSteering(ctx context.Context, runID string) ([]model.SteeringMessage, error)
+	ListThreadSteering(ctx context.Context, threadID string) ([]model.SteeringMessage, error)
+	MarkSteering(ctx context.Context, runID string, ids []string, status model.SteeringStatus, at int64, rejectionCode string) error
 	HasActiveRun(ctx context.Context, projectID string) (bool, error)
 	AppendEvent(ctx context.Context, e model.Event) error
 	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)

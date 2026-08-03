@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
@@ -26,7 +27,23 @@ type Prompter interface {
 }
 
 type SteeringSource interface {
-	DrainInputs() []string
+	DrainInputs(context.Context) ([]SteeringInput, error)
+	MarkInputsInjected(context.Context, []string) error
+}
+
+type SteeringInput struct {
+	ID      string
+	Content string
+}
+
+type LifecycleObserver interface {
+	PhaseChanged(RuntimePhase)
+}
+
+type IdempotencyStore interface {
+	AcquireIdempotency(context.Context, model.IdempotencyRecord) (model.IdempotencyRecord, bool, error)
+	CompleteIdempotency(context.Context, string, string, string, string, string) error
+	GetIdempotency(context.Context, string, string, string) (model.IdempotencyRecord, error)
 }
 
 type ContextCompactor interface {
@@ -53,16 +70,18 @@ type RuntimeCheckpoint struct {
 }
 
 type AgentRequest struct {
-	RunID    string
-	LoopID   string
-	Strategy ExecutionStrategy
-	Phase    RuntimePhase
-	Context  contextengine.ContextPack
-	Plan     *Plan
-	Changes  ChangeSet
-	Evidence []Evidence
-	Messages []llm.Message
-	Tools    []ToolSchema
+	RunID           string
+	LoopID          string
+	Strategy        ExecutionStrategy
+	Phase           RuntimePhase
+	Context         contextengine.ContextPack
+	Plan            *Plan
+	Changes         ChangeSet
+	Evidence        []Evidence
+	Messages        []llm.Message
+	Tools           []ToolSchema
+	ImageResolver   llm.ImageRefResolver
+	OnProviderRetry func(int)
 }
 
 type AgentResponse struct {
@@ -90,12 +109,17 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	system, user := contextengine.CompileForRunner(&req.Context,
 		runtimeSystemPrompt(req.Phase, req.Strategy, string(runtimeState)),
 		req.Context.WorkSpec.Instruction)
-	messages := append([]llm.Message{{Role: llm.RoleSystem, Content: system}, {Role: llm.RoleUser, Content: user}}, req.Messages...)
+	messages := append([]llm.Message{
+		{Role: llm.RoleSystem, Content: llm.TextContent(system)},
+		{Role: llm.RoleUser, Content: llm.TextContent(user)},
+	}, req.Messages...)
 	tools := make([]llm.ToolSchema, 0, len(req.Tools))
 	for _, schema := range req.Tools {
 		tools = append(tools, llm.ToolSchema{Name: schema.Name, Description: schema.Description, Parameters: schema.Parameters})
 	}
-	response, err := a.Client.CallTool(ctx, llm.ToolCallRequest{Messages: messages, Tools: tools})
+	response, err := a.Client.CallTool(ctx, llm.ToolCallRequest{
+		Messages: messages, Tools: tools, ImageResolver: req.ImageResolver, OnRetry: req.OnProviderRetry,
+	})
 	if err != nil {
 		return AgentResponse{}, err
 	}
@@ -163,6 +187,9 @@ type RuntimeInput struct {
 	DomainTools    DomainToolProvider
 	Budget         RuntimeBudget
 	Trace          TraceRecorder
+	ImageResolver  llm.ImageRefResolver
+	Lifecycle      LifecycleObserver
+	Idempotency    IdempotencyStore
 }
 
 type Runtime struct {
@@ -205,6 +232,7 @@ type runtimeState struct {
 	lastReasoning         string
 	lastMilestoneRevision int
 	trace                 TraceRecorder
+	lifecycle             LifecycleObserver
 }
 
 func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome {
@@ -216,7 +244,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		runID: input.RunID, loopID: "loop_" + uuid.NewString(), strategy: decision.Strategy,
 		decision: decision, scope: ScopeFromSpec(input.Context.WorkSpec), ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, started: time.Now(), budget: input.Budget,
-		trace: input.Trace,
+		trace: input.Trace, lifecycle: input.Lifecycle,
 	}
 	if r.Agent == nil {
 		return r.fail(input, state, CodeAgentFailed, errors.New("ReAct agent is required"))
@@ -275,7 +303,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			}
 			return r.fail(input, state, code, err)
 		}
-		r.appendSteering(state, input.Steering)
+		if err := r.appendSteering(ctx, state, input.Steering); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err)
+		}
 		if err := r.compactIfNeeded(ctx, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
@@ -286,13 +316,14 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, Phase: state.phase,
 			Context: input.Context, Plan: state.plan, Changes: state.changeSet(),
 			Evidence: state.ledger.Entries(state.changeSet()), Messages: append([]llm.Message{}, state.messages...),
-			Tools: schemas,
+			Tools:         schemas,
+			ImageResolver: input.ImageResolver,
+			OnProviderRetry: func(attempt int) {
+				r.emitProgress(input.Emitter, state, "thinking", fmt.Sprintf("模型服务暂时不可用，正在自动重试（%d）", attempt), nil)
+			},
 		})
 		if err != nil {
-			if ctx.Err() != nil {
-				return r.fail(input, state, CodeCanceled, ctx.Err())
-			}
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.failAgentError(input, state, classifyProviderError(ctx, err))
 		}
 		state.tokens += approximateTokens(response.Text)
 		if len(response.ToolCalls) == 0 {
@@ -301,10 +332,10 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				"provider_reasoning_content": response.ProviderReasoning,
 			})
 			state.messages = append(state.messages, llm.Message{
-				Role: llm.RoleAssistant, Content: response.Text,
+				Role: llm.RoleAssistant, Content: llm.TextContent(response.Text),
 				ReasoningContent: response.ProviderReasoning,
 			})
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: noToolCallGuidance})
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(noToolCallGuidance)})
 			continue
 		}
 		calls := append([]llm.ToolCall{}, response.ToolCalls...)
@@ -397,9 +428,23 @@ func (r *Runtime) executeToolBatch(
 	calls []llm.ToolCall,
 ) []ToolResult {
 	results := make([]ToolResult, len(calls))
+	started := make([]bool, len(calls))
+	replayed := make([]bool, len(calls))
 	projector := ToolPublicProjector{}
 	planStepID := currentPlanStepID(state.plan)
-	for _, call := range calls {
+	var lifecycleMu sync.Mutex
+	state.toolCalls += len(calls)
+	state.activeTools = len(calls)
+	execute := func(index int) {
+		call := calls[index]
+		replay, shouldExecute := r.acquireToolCall(ctx, input, state, call)
+		if !shouldExecute {
+			results[index] = replay
+			replayed[index] = replay.Code != CodeCanceled
+			return
+		}
+		started[index] = true
+		lifecycleMu.Lock()
 		r.emitToolProgress(input.Emitter, state, call)
 		if input.Emitter != nil {
 			if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID); ok {
@@ -409,16 +454,15 @@ func (r *Runtime) executeToolBatch(
 		recordTrace(input.Trace, state.runID, "tool.called", map[string]any{
 			"loop_id": state.loopID, "call_id": call.ID, "tool": call.Name, "args": call.Args,
 		})
-	}
-	state.toolCalls += len(calls)
-	state.activeTools += len(calls)
-	execute := func(index int) {
-		call := calls[index]
+		lifecycleMu.Unlock()
 		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
-			Args: call.Args, Context: input.Context, ProjectDir: input.ProjectDir, RunID: input.RunID,
+			Args: call.Args, CallID: call.ID, Context: input.Context, ProjectDir: input.ProjectDir, RunID: input.RunID,
 			Transaction: state.tx, Scope: state.scope, Strategy: state.strategy, Phase: state.phase,
 			Interaction: input.Context.WorkSpec.Interaction.Intent, Risk: state.decision.Risk,
 		})
+		if ctx.Err() != nil {
+			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
+		}
 	}
 	switch {
 	case batchIsIndependentReads(calls):
@@ -430,7 +474,17 @@ func (r *Runtime) executeToolBatch(
 		for index, call := range calls {
 			desc, _ := registry.Descriptor(call.Name)
 			if writeFailed {
+				started[index] = true
+				if input.Emitter != nil {
+					if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID); ok {
+						input.Emitter.Emit(model.EventToolStarted, event)
+					}
+				}
 				results[index] = failedToolResult(CodeDependencyFailed, "call skipped after an earlier write failure", false)
+				continue
+			}
+			if ctx.Err() != nil {
+				results[index] = failedToolResult(CodeCanceled, "run canceled before tool start", false)
 				continue
 			}
 			execute(index)
@@ -439,13 +493,24 @@ func (r *Runtime) executeToolBatch(
 			}
 		}
 	}
-	state.activeTools -= len(calls)
+	state.activeTools = 0
 	for index, call := range calls {
 		result := results[index]
-		if input.Emitter != nil {
+		if result.Code == "" && !result.OK {
+			result = failedToolResult(CodeCanceled, "run canceled before tool start", false)
+		}
+		result = bindToolErrorObservation(result, call, input.Context)
+		results[index] = result
+		if started[index] {
+			r.persistToolCall(context.Background(), input, state, call, result)
+		}
+		if started[index] && input.Emitter != nil {
 			if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result); ok {
 				input.Emitter.Emit(model.EventToolCompleted, event)
 			}
+		}
+		if replayed[index] {
+			recordTrace(input.Trace, state.runID, "tool.replayed", map[string]any{"call_id": call.ID, "tool": call.Name})
 		}
 		recordTrace(input.Trace, state.runID, "tool.completed", map[string]any{
 			"loop_id": state.loopID, "call_id": call.ID, "tool": call.Name,
@@ -468,6 +533,113 @@ func (r *Runtime) executeToolBatch(
 		}
 	}
 	return results
+}
+
+func bindToolErrorObservation(result ToolResult, call llm.ToolCall, pack contextengine.ContextPack) ToolResult {
+	if result.OK || len(result.ObservationParts) > 0 {
+		return result
+	}
+	agentErr := model.NewAgentError(result.Code, "tool_call", errors.New(result.Summary))
+	agentErr.CallID = call.ID
+	target, ok := declaredTarget(call.Args)
+	if call.Name == "render_slide" {
+		if slideID := stringValue(call.Args["slide_id"]); slideID != "" {
+			target, ok = Resource{Type: "slide", SlideID: slideID, Part: "html"}, true
+		}
+	}
+	if ok {
+		agentErr.Resource = &model.ErrorResource{Type: target.Type, SlideID: target.SlideID, Part: target.Part}
+		switch {
+		case target.Type == "deck" && target.Part == "outline":
+			agentErr.Details["current_revision"] = pack.Revisions.Outline
+		case target.Type == "deck" && target.Part == "design":
+			agentErr.Details["current_revision"] = pack.Revisions.Design
+		case target.Type == "slide" && target.Part == "spec":
+			agentErr.Details["current_revision"] = pack.Revisions.SlideSpecs[target.SlideID]
+		case target.Type == "slide" && target.Part == "html":
+			agentErr.Details["current_revision"] = pack.Revisions.SlideHTML[target.SlideID]
+		}
+	}
+	agentErr.Details["reason"] = result.Summary
+	agentErr.Details["next_action"] = agentErr.ModelMessage
+	if ok && target.Part == "html" && len(result.Issues) > 0 {
+		checks := make([]string, 0, len(result.Issues))
+		for _, issue := range result.Issues {
+			if issue.Action != "" {
+				checks = append(checks, issue.Action)
+			} else if issue.Summary != "" {
+				checks = append(checks, issue.Summary)
+			}
+		}
+		agentErr.Details["html_checks"] = checks
+	}
+	raw, _ := json.Marshal(agentErr.ModelObservation())
+	result.Observation = string(raw)
+	return result
+}
+
+type persistedToolResult struct {
+	Result             ToolResult        `json:"result"`
+	Evidence           []Evidence        `json:"evidence"`
+	InvalidatedTargets []Resource        `json:"invalidated_targets"`
+	ObservationParts   []llm.ContentPart `json:"observation_parts"`
+}
+
+func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state *runtimeState, call llm.ToolCall) (ToolResult, bool) {
+	if input.Idempotency == nil {
+		return ToolResult{}, true
+	}
+	requestHash, err := idempotency.CanonicalHash(map[string]any{
+		"tool": call.Name, "args": call.Args, "scope": state.scope.Target,
+	})
+	if err != nil {
+		return failedToolResult("INTERNAL", "cannot hash tool request", false), false
+	}
+	record, created, err := input.Idempotency.AcquireIdempotency(ctx, model.IdempotencyRecord{
+		Scope: "tool_call", OwnerID: state.runID, Key: call.ID,
+		RequestHash: requestHash, Status: "in_progress",
+	})
+	if err != nil {
+		return failedToolResult("INTERNAL", "cannot acquire tool call", false), false
+	}
+	if record.RequestHash != requestHash {
+		return failedToolResult("IDEMPOTENCY_KEY_REUSED", "call_id was reused with different tool arguments", false), false
+	}
+	if created {
+		return ToolResult{}, true
+	}
+	for record.Status == "in_progress" {
+		select {
+		case <-ctx.Done():
+			return failedToolResult(CodeCanceled, "run canceled before tool start", false), false
+		case <-time.After(10 * time.Millisecond):
+		}
+		record, err = input.Idempotency.GetIdempotency(ctx, "tool_call", state.runID, call.ID)
+		if err != nil {
+			return failedToolResult("INTERNAL", "cannot replay tool call", false), false
+		}
+	}
+	var persisted persistedToolResult
+	if json.Unmarshal([]byte(record.ResultJSON), &persisted) != nil {
+		return failedToolResult("INTERNAL", "stored tool result is invalid", false), false
+	}
+	persisted.Result.Evidence = persisted.Evidence
+	persisted.Result.InvalidatedTargets = persisted.InvalidatedTargets
+	persisted.Result.ObservationParts = persisted.ObservationParts
+	return persisted.Result, false
+}
+
+func (r *Runtime) persistToolCall(ctx context.Context, input RuntimeInput, state *runtimeState, call llm.ToolCall, result ToolResult) {
+	if input.Idempotency == nil {
+		return
+	}
+	raw, err := json.Marshal(persistedToolResult{
+		Result: result, Evidence: result.Evidence,
+		InvalidatedTargets: result.InvalidatedTargets, ObservationParts: result.ObservationParts,
+	})
+	if err == nil {
+		_ = input.Idempotency.CompleteIdempotency(ctx, "tool_call", state.runID, call.ID, "completed", string(raw))
+	}
 }
 
 func batchIsIndependentReads(calls []llm.ToolCall) bool {
@@ -651,7 +823,7 @@ func (r *Runtime) finishCandidate(
 		observation := ToolResult{
 			OK: false, Summary: "completion rejected", Data: map[string]any{"issues": result.Issues},
 			ChangedTargets: []ChangedTarget{}, Evidence: []Evidence{}, Issues: []Issue{},
-			Retryable: true, Code: CodeCompletionGateBlocked,
+			Retryable: false, Code: CodeCompletionGateBlocked,
 		}
 		state.messages = appendToolObservation(
 			state.messages,
@@ -666,8 +838,55 @@ func (r *Runtime) finishCandidate(
 	if state.strategy != StrategyChat {
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted")
 		state.tx.AcceptMaterializationProofs(result.MaterializationProofs)
-		if err := state.tx.Commit(ctx, input.CommitMetadata); err != nil {
-			return r.fail(input, state, CodeCommitFailed, err), true
+		commitHash, hashErr := idempotency.CanonicalHash(map[string]any{
+			"changes": changes, "proofs": result.MaterializationProofs,
+		})
+		if hashErr != nil {
+			return r.fail(input, state, CodeCommitFailed, hashErr), true
+		}
+		shouldCommit := true
+		if input.Idempotency != nil {
+			record, created, acquireErr := input.Idempotency.AcquireIdempotency(ctx, model.IdempotencyRecord{
+				Scope: "commit", OwnerID: state.runID, Key: "commit",
+				RequestHash: commitHash, Status: "in_progress",
+			})
+			if acquireErr != nil {
+				return r.fail(input, state, CodeCommitFailed, acquireErr), true
+			}
+			if record.RequestHash != commitHash {
+				return r.fail(input, state, "IDEMPOTENCY_KEY_REUSED", errors.New("commit key reused with different changes")), true
+			}
+			if !created {
+				for record.Status == "in_progress" {
+					select {
+					case <-ctx.Done():
+						return r.fail(input, state, CodeCanceled, ctx.Err()), true
+					case <-time.After(10 * time.Millisecond):
+					}
+					record, acquireErr = input.Idempotency.GetIdempotency(ctx, "commit", state.runID, "commit")
+					if acquireErr != nil {
+						return r.fail(input, state, CodeCommitFailed, acquireErr), true
+					}
+				}
+				if record.Status != "completed" {
+					return r.fail(input, state, CodeCommitFailed, errors.New("previous commit result was not confirmed")), true
+				}
+				shouldCommit = false
+			}
+		}
+		if shouldCommit {
+			if err := state.tx.Commit(ctx, input.CommitMetadata); err != nil {
+				if input.Idempotency != nil {
+					_ = input.Idempotency.CompleteIdempotency(context.Background(), "commit", state.runID, "commit", "failed", `{"code":"COMMIT_FAILED"}`)
+				}
+				if ctx.Err() != nil {
+					return r.fail(input, state, CodeCanceled, ctx.Err()), true
+				}
+				return r.fail(input, state, CodeCommitFailed, err), true
+			}
+			if input.Idempotency != nil {
+				_ = input.Idempotency.CompleteIdempotency(context.Background(), "commit", state.runID, "commit", "completed", `{"status":"completed"}`)
+			}
 		}
 		state.committed = true
 		for _, change := range changes.All() {
@@ -726,6 +945,9 @@ func (r *Runtime) upgradeToComplex(emitter EventEmitter, state *runtimeState, re
 func (r *Runtime) changePhase(emitter EventEmitter, state *runtimeState, next RuntimePhase, reason string) {
 	previous := state.phase
 	state.phase = next
+	if state.lifecycle != nil {
+		state.lifecycle.PhaseChanged(next)
+	}
 	recordTrace(state.trace, state.runID, "phase.changed", map[string]any{
 		"loop_id": state.loopID, "from": previous, "phase": next, "reason": reason,
 	})
@@ -741,21 +963,27 @@ func (r *Runtime) emitStrategy(state *runtimeState, upgraded bool) {
 }
 
 func (r *Runtime) fail(input RuntimeInput, state *runtimeState, code string, err error) StructuredOutcome {
+	return r.failAgentError(input, state, model.NewAgentError(code, "run", err))
+}
+
+func (r *Runtime) failAgentError(input RuntimeInput, state *runtimeState, agentErr *model.AgentError) StructuredOutcome {
+	if agentErr == nil {
+		agentErr = model.NewAgentError("INTERNAL", "run", errors.New("unknown runtime error"))
+	}
 	status, publicStatus := StatusFailed, "failed"
-	if errors.Is(err, context.Canceled) || code == CodeCanceled {
+	if errors.Is(agentErr, context.Canceled) || agentErr.Code == CodeCanceled {
 		status, publicStatus = StatusCanceled, "canceled"
 	}
-	r.changePhase(input.Emitter, state, PhaseTerminal, code)
-	outcome := state.outcome(status, code, err.Error())
+	recordTrace(input.Trace, state.runID, "error.projected", agentErr.TraceProjection())
+	r.changePhase(input.Emitter, state, PhaseTerminal, agentErr.Code)
+	outcome := state.outcome(status, agentErr.Code, agentErr.Error())
 	if input.Emitter != nil {
 		payload := model.RunFinishedPayload{
 			PublicEventBase: publicBase(state.runID), Status: publicStatus,
 			DurationMS: time.Since(state.started).Milliseconds(),
 		}
 		if publicStatus == "failed" {
-			payload.Error = &model.PublicError{
-				Code: code, Message: safeRunError(code, err), Retryable: retryableRunError(code),
-			}
+			payload.Error = agentErr.Public()
 		}
 		input.Emitter.Emit(model.EventRunFinished, payload)
 	}
@@ -803,16 +1031,23 @@ func (r *Runtime) budgetExhausted(state *runtimeState) bool {
 		time.Since(state.started) >= state.budget.MaxDuration
 }
 
-func (r *Runtime) appendSteering(state *runtimeState, steering SteeringSource) {
+func (r *Runtime) appendSteering(ctx context.Context, state *runtimeState, steering SteeringSource) error {
 	if steering == nil {
-		return
+		return nil
 	}
-	for _, message := range steering.DrainInputs() {
-		if strings.TrimSpace(message) != "" {
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: "User steering: " + message})
-			state.tokens += approximateTokens(message)
+	messages, err := steering.DrainInputs(ctx)
+	if err != nil {
+		return err
+	}
+	ids := make([]string, 0, len(messages))
+	for _, message := range messages {
+		if strings.TrimSpace(message.Content) != "" {
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("User steering: " + message.Content)})
+			state.tokens += approximateTokens(message.Content)
+			ids = append(ids, message.ID)
 		}
 	}
+	return steering.MarkInputsInjected(ctx, ids)
 }
 
 func (r *Runtime) emitReasoning(emitter EventEmitter, state *runtimeState, raw string) {
@@ -887,13 +1122,44 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, state *runtimeState) erro
 	if r.Compactor == nil || state.tokens < state.budget.ContextCompactionThreshold {
 		return nil
 	}
-	messages, err := r.Compactor.Compact(ctx, append([]llm.Message{}, state.messages...))
+	compactionInput := pruneSupersededRenderImages(append([]llm.Message{}, state.messages...))
+	messages, err := r.Compactor.Compact(ctx, compactionInput)
 	if err != nil {
 		return err
 	}
 	state.messages = messages
 	state.tokens = approximateMessageTokens(messages)
 	return nil
+}
+
+func pruneSupersededRenderImages(messages []llm.Message) []llm.Message {
+	seenSlides := map[string]bool{}
+	for index := len(messages) - 1; index >= 0; index-- {
+		message := &messages[index]
+		slideID := ""
+		for _, part := range message.Content {
+			if part.Type != "text" {
+				continue
+			}
+			var payload map[string]any
+			if json.Unmarshal([]byte(part.Text), &payload) == nil {
+				slideID = stringValue(payload["slide_id"])
+			}
+		}
+		if slideID == "" {
+			continue
+		}
+		keepImage := !seenSlides[slideID]
+		seenSlides[slideID] = true
+		parts := make([]llm.ContentPart, 0, len(message.Content))
+		for _, part := range message.Content {
+			if part.Type != "image" || keepImage {
+				parts = append(parts, part)
+			}
+		}
+		message.Content = parts
+	}
+	return messages
 }
 
 func (r *Runtime) appendControlObservation(
@@ -913,17 +1179,21 @@ func appendToolObservation(
 	providerReasoning string,
 	result ToolResult,
 ) []llm.Message {
+	parts := append([]llm.ContentPart(nil), result.ObservationParts...)
 	content := result.Observation
-	if content == "" {
+	if len(parts) == 0 && content == "" {
 		raw, _ := json.Marshal(result)
 		content = string(raw)
 	}
+	if len(parts) == 0 {
+		parts = llm.TextContent(content)
+	}
 	return append(messages,
 		llm.Message{
-			Role: llm.RoleAssistant, Content: assistantText,
+			Role: llm.RoleAssistant, Content: llm.TextContent(assistantText),
 			ReasoningContent: providerReasoning, ToolCalls: []llm.ToolCall{call},
 		},
-		llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: content},
+		llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: parts},
 	)
 }
 
@@ -935,7 +1205,7 @@ func appendBatchObservations(
 	results []ToolResult,
 ) []llm.Message {
 	messages = append(messages, llm.Message{
-		Role: llm.RoleAssistant, Content: assistantText,
+		Role: llm.RoleAssistant, Content: llm.TextContent(assistantText),
 		ReasoningContent: providerReasoning, ToolCalls: calls,
 	})
 	for index, call := range calls {
@@ -943,12 +1213,16 @@ func appendBatchObservations(
 		if index < len(results) {
 			result = results[index]
 		}
+		parts := append([]llm.ContentPart(nil), result.ObservationParts...)
 		content := result.Observation
-		if content == "" {
+		if len(parts) == 0 && content == "" {
 			raw, _ := json.Marshal(result)
 			content = string(raw)
 		}
-		messages = append(messages, llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: content})
+		if len(parts) == 0 {
+			parts = llm.TextContent(content)
+		}
+		messages = append(messages, llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: parts})
 	}
 	return messages
 }
@@ -963,7 +1237,11 @@ func approximateTokens(value string) int {
 func approximateMessageTokens(messages []llm.Message) int {
 	total := 0
 	for _, message := range messages {
-		total += approximateTokens(message.Content)
+		for _, part := range message.Content {
+			if part.Type == "text" {
+				total += approximateTokens(part.Text)
+			}
+		}
 	}
 	return total
 }

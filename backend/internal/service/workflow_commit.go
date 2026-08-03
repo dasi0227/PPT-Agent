@@ -74,7 +74,8 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		}
 		snapshotPaths = append(snapshotPaths, path)
 		versions = append(versions, model.Version{
-			ID: uuid.NewString(), TargetType: targetType, TargetID: targetID,
+			ID:         uuid.NewSHA1(uuid.NameSpaceOID, []byte(c.runID+"|"+targetType+"|"+targetID)).String(),
+			TargetType: targetType, TargetID: targetID,
 			VersionNo: number, SnapshotPath: path, RunID: c.runID, CreatedAt: time.Now().Unix(),
 		})
 		return number, nil
@@ -167,7 +168,8 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			}
 			snapshotPaths = append(snapshotPaths, path)
 			versions = append(versions, model.Version{
-				ID: uuid.NewString(), TargetType: "slide_html", TargetID: target,
+				ID:         uuid.NewSHA1(uuid.NameSpaceOID, []byte(c.runID+"|slide_html|"+target)).String(),
+				TargetType: "slide_html", TargetID: target,
 				VersionNo: number, SnapshotPath: path, RunID: c.runID, CreatedAt: time.Now().Unix(),
 			})
 			meta.CurrentVersion = number

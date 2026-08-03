@@ -1,5 +1,5 @@
 import { fetchClient } from './client';
-import { Run, CreateRunRequest, RunInputPayload } from './types';
+import { CancelRunResponse, Run, CreateRunRequest, RunInputPayload, SteerRunRequest, SteerRunResponse } from './types';
 
 export const runsApi = {
   get: (runId: string) => fetchClient<Run>(`/runs/${runId}`),
@@ -11,7 +11,11 @@ export const runsApi = {
     method: 'POST',
     body: JSON.stringify(payload)
   }),
-  cancel: (runId: string) => fetchClient<void>(`/runs/${runId}`, {
+  steer: (runId: string, payload: SteerRunRequest) => fetchClient<SteerRunResponse>(`/runs/${runId}/steer`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
+  cancel: (runId: string) => fetchClient<CancelRunResponse>(`/runs/${runId}`, {
     method: 'DELETE'
   }),
 };

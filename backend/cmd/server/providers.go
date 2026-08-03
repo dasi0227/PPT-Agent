@@ -47,10 +47,12 @@ func engineFromRouter(r *httpapi.Router) *gin.Engine { return r.Engine() }
 // provideLLMClient 从配置装配 DeepSeek 客户端（Key 仅来自 env，不落日志 ARCH-LLM-003）。
 func provideLLMClient(cfg *config.Config) llm.Client {
 	return llm.NewDeepSeek(llm.DeepSeekConfig{
-		APIKey:  cfg.DeepSeekKey,
-		BaseURL: cfg.DeepSeekURL,
-		Model:   cfg.DeepSeekMdl,
-		Timeout: cfg.DeepSeekTimeout,
+		APIKey:        cfg.DeepSeekKey,
+		BaseURL:       cfg.DeepSeekURL,
+		Model:         cfg.DeepSeekMdl,
+		Timeout:       cfg.DeepSeekTimeout,
+		Vision:        cfg.LLMVision,
+		MaxImageBytes: cfg.LLMMaxImageBytes,
 	})
 }
 

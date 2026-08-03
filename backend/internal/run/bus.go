@@ -18,20 +18,22 @@ type Bus struct {
 	store    Store
 	hw       HistoryWriter
 
-	mu            sync.Mutex
-	seq           int64
-	subscribers   map[int]chan model.Event
-	nextSubID     int
-	closed        bool
-	terminated    bool // 已发过终态事件，防止重复终态
-	started       bool
-	finalCount    int
-	planID        string
-	planRevision  int
-	planCompleted map[string]bool
-	toolCalls     map[string]bool
-	toolNames     map[string]string
-	questions     map[string]bool
+	mu              sync.Mutex
+	seq             int64
+	subscribers     map[int]chan model.Event
+	nextSubID       int
+	closed          bool
+	terminated      bool // 已发过终态事件，防止重复终态
+	terminalStatus  string
+	cancelRequested bool
+	started         bool
+	finalCount      int
+	planID          string
+	planRevision    int
+	planCompleted   map[string]bool
+	toolCalls       map[string]bool
+	toolNames       map[string]string
+	questions       map[string]bool
 }
 
 func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
@@ -203,13 +205,24 @@ func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 			return errors.New("question.answered must match a pending question")
 		}
 	case model.EventMessageFinal:
+		if b.cancelRequested {
+			return errors.New("canceled run cannot emit message.final")
+		}
 		if b.finalCount != 0 {
 			return errors.New("message.final may only be emitted once")
 		}
 	case model.EventRunFinished:
 		status, _ := data["status"].(string)
+		if b.cancelRequested && status == "completed" {
+			return errors.New("cancel-requested run cannot complete")
+		}
 		if status == "completed" && b.finalCount != 1 {
 			return errors.New("completed run requires exactly one prior message.final")
+		}
+		for _, completed := range b.toolCalls {
+			if !completed {
+				return errors.New("run.finished requires every started tool to complete")
+			}
 		}
 	}
 	return nil
@@ -249,6 +262,7 @@ func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
 		b.finalCount++
 	case model.EventRunFinished:
 		b.terminated = true
+		b.terminalStatus, _ = data["status"].(string)
 	}
 }
 
@@ -288,4 +302,32 @@ func (b *Bus) Terminated() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.terminated
+}
+
+// RequestCancelAuthority serializes cancel against the terminal event. When it
+// returns false, the terminal event won the race and its status is authoritative.
+func (b *Bus) RequestCancelAuthority() (bool, string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.terminated {
+		return false, b.terminalStatus
+	}
+	b.cancelRequested = true
+	return true, ""
+}
+
+func (b *Bus) AppendSteeringHistory(ctx context.Context, message model.SteeringMessage) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.hw == nil || b.threadID == "" {
+		return nil
+	}
+	return b.hw.Append(ctx, b.threadID, HistoryEntry{
+		Seq: b.seq + 1, TS: message.AcceptedAt / int64(time.Second), RunID: message.RunID,
+		Turn: "user", Type: "steering",
+		Data: map[string]any{
+			"client_message_id": message.ClientMessageID, "text": message.Content,
+			"status": message.Status, "rejection_code": message.RejectionCode,
+		},
+	})
 }

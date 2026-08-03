@@ -88,7 +88,7 @@ async function launchBrowser() {
   });
 }
 
-async function render(input, browser) {
+async function render(input, browser, handles = new Map()) {
   const started = Date.now();
   if (!input || typeof input.html !== 'string' || typeof input.project_dir !== 'string' ||
       typeof input.slide_id !== 'string' || typeof input.screenshot_path !== 'string') {
@@ -99,6 +99,17 @@ async function render(input, browser) {
   const timeout = Math.min(Math.max(Number(input.timeout_ms) || 15000, 1000), 20000);
   const slidePath = `/slides/${encodeURIComponent(input.slide_id)}/index.html`;
   const failedResources = [];
+  const handle = {
+    canceled: false,
+    context: undefined,
+    server: undefined,
+    async cancel() {
+      this.canceled = true;
+      if (this.context) await this.context.close().catch(() => {});
+      if (this.server) await new Promise(resolveClose => this.server.close(resolveClose)).catch(() => {});
+    },
+  };
+  handles.set(input.request_id, handle);
   const server = createServer(async (request, response) => {
     try {
       const path = request.url?.split('?')[0] ?? '/';
@@ -132,6 +143,7 @@ async function render(input, browser) {
       response.end('not found');
     }
   });
+  handle.server = server;
   await new Promise((accept, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', accept);
@@ -146,6 +158,8 @@ async function render(input, browser) {
       javaScriptEnabled: true,
       serviceWorkers: 'block',
     });
+    handle.context = context;
+    if (handle.canceled) throw new Error('RUN_CANCELED');
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.origin === origin || url.protocol === 'data:' || url.protocol === 'blob:') {
@@ -156,6 +170,7 @@ async function render(input, browser) {
       }
     });
     const page = await context.newPage();
+    if (handle.canceled) throw new Error('RUN_CANCELED');
     const consoleErrors = [];
     page.on('console', message => {
       if (message.type() === 'error' && consoleErrors.length < 50) {
@@ -236,8 +251,9 @@ async function render(input, browser) {
       duration_ms: Date.now() - started,
     };
   } finally {
+    handles.delete(input.request_id);
     if (context) await context.close().catch(() => {});
-    await new Promise(resolveClose => server.close(resolveClose));
+    await new Promise(resolveClose => server.close(resolveClose)).catch(() => {});
   }
 }
 
@@ -256,6 +272,7 @@ async function serve() {
   const browser = await launchBrowser();
   process.stdout.write(`${JSON.stringify({ type: 'ready', ok: true })}\n`);
   const active = new Set();
+  const handles = new Map();
   const close = async () => {
     await Promise.allSettled([...active]);
     await browser.close().catch(() => {});
@@ -275,7 +292,19 @@ async function serve() {
       process.stdout.write(`${JSON.stringify({ ok: false, error: 'invalid render request JSON' })}\n`);
       continue;
     }
-    const task = render(request, browser)
+    if (request.type === 'cancel') {
+      const handle = handles.get(request.request_id);
+      if (handle) await handle.cancel();
+      process.stdout.write(`${JSON.stringify({
+        type: 'canceled', request_id: request.request_id, ok: false, error: 'RUN_CANCELED',
+      })}\n`);
+      continue;
+    }
+    if (request.type !== 'render') {
+      process.stdout.write(`${JSON.stringify({ request_id: request.request_id, ok: false, error: 'invalid worker command' })}\n`);
+      continue;
+    }
+    const task = render(request, browser, handles)
       .then(diagnostics => ({ request_id: request.request_id, ok: true, diagnostics }))
       .catch(error => ({ request_id: request.request_id, ok: false, error: String(error?.message ?? error) }))
       .then(response => process.stdout.write(`${JSON.stringify(response)}\n`));

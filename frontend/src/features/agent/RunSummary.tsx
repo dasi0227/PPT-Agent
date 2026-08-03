@@ -9,7 +9,7 @@ export const RunSummary: React.FC = () => {
   const threadId = useActiveThreadId();
   const session = useActiveSession();
   const cancelRun = useRunStore((state) => state.cancelRun);
-  const active = session.status === 'creating' || session.status === 'running' || session.status === 'waiting';
+  const active = session.status === 'creating' || session.status === 'running' || session.status === 'waiting' || session.status === 'canceling';
   const show = active || ['done', 'error', 'canceled'].includes(session.status);
   if (!show) return null;
 
@@ -39,6 +39,7 @@ export const RunSummary: React.FC = () => {
             variant="ghost"
             className="h-7 px-2 text-xs text-danger hover:bg-danger-soft hover:text-danger"
             onClick={() => void cancelRun(threadId, session.activeRunId!)}
+            disabled={session.status === 'canceling'}
           >
             <Square className="h-3 w-3" fill="currentColor" /> 停止
           </Button>

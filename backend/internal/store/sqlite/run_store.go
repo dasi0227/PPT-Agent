@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -115,11 +116,11 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	return s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
 		 target_artifact, target_level, target_slide_id, interaction_intent, work_spec_json,
-		 status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 client_request_id, cancel_requested_at, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		po.ID, po.ThreadID, po.ProjectID, po.TargetArtifact, po.TargetLevel,
 		nullIfEmpty(po.TargetSlideID), po.InteractionIntent, po.WorkSpecJSON,
-		po.Status, po.CreatedAt, po.UpdatedAt,
+		nullIfEmpty(po.ClientRequestID), po.CancelRequestedAt, po.Status, po.CreatedAt, po.UpdatedAt,
 	).Error
 }
 
@@ -135,6 +136,143 @@ func (s *Store) SetRunStatus(ctx context.Context, id string, status model.RunSta
 	return s.db.WithContext(ctx).Model(&runPO{}).
 		Where("id = ?", id).
 		Updates(map[string]any{"status": string(status), "updated_at": nowUnix()}).Error
+}
+
+func (s *Store) RequestRunCancel(ctx context.Context, id string, requestedAt int64) (model.Run, error) {
+	var out model.Run
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var po runPO
+		if err := tx.First(&po, "id = ?", id).Error; err != nil {
+			return mapErr(err)
+		}
+		if model.RunStatus(po.Status).Terminal() || po.CancelRequestedAt != nil {
+			out = po.toModel()
+			return nil
+		}
+		if err := tx.Model(&runPO{}).Where("id = ? AND cancel_requested_at IS NULL", id).
+			Updates(map[string]any{"cancel_requested_at": requestedAt, "updated_at": requestedAt}).Error; err != nil {
+			return err
+		}
+		po.CancelRequestedAt = &requestedAt
+		po.UpdatedAt = requestedAt
+		out = po.toModel()
+		return nil
+	})
+	return out, err
+}
+
+func (s *Store) AcquireIdempotency(ctx context.Context, record model.IdempotencyRecord) (model.IdempotencyRecord, bool, error) {
+	var out model.IdempotencyRecord
+	created := false
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		now := time.Now().UnixNano()
+		if record.CreatedAt == 0 {
+			record.CreatedAt = now
+		}
+		record.UpdatedAt = now
+		if record.Status == "" {
+			record.Status = "in_progress"
+		}
+		res := tx.Exec(`INSERT INTO idempotency_records
+			(scope,owner_id,key,request_hash,status,result_json,created_at,updated_at)
+			VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(scope,owner_id,key) DO NOTHING`,
+			record.Scope, record.OwnerID, record.Key, record.RequestHash, record.Status,
+			record.ResultJSON, record.CreatedAt, record.UpdatedAt)
+		if res.Error != nil {
+			return res.Error
+		}
+		created = res.RowsAffected == 1
+		var po idempotencyPO
+		if err := tx.First(&po, "scope = ? AND owner_id = ? AND key = ?", record.Scope, record.OwnerID, record.Key).Error; err != nil {
+			return err
+		}
+		out = po.toModel()
+		return nil
+	})
+	return out, created, err
+}
+
+func (s *Store) CompleteIdempotency(ctx context.Context, scope, ownerID, key, status, resultJSON string) error {
+	res := s.db.WithContext(ctx).Model(&idempotencyPO{}).
+		Where("scope = ? AND owner_id = ? AND key = ?", scope, ownerID, key).
+		Updates(map[string]any{"status": status, "result_json": resultJSON, "updated_at": time.Now().UnixNano()})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return run.ErrRunNotFound
+	}
+	return nil
+}
+
+func (s *Store) GetIdempotency(ctx context.Context, scope, ownerID, key string) (model.IdempotencyRecord, error) {
+	var po idempotencyPO
+	if err := s.db.WithContext(ctx).First(&po, "scope = ? AND owner_id = ? AND key = ?", scope, ownerID, key).Error; err != nil {
+		return model.IdempotencyRecord{}, mapErr(err)
+	}
+	return po.toModel(), nil
+}
+
+func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessage) (model.SteeringMessage, bool, error) {
+	var out model.SteeringMessage
+	created := false
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Exec(`INSERT INTO steering_inbox
+			(run_id,thread_id,client_message_id,request_hash,content,status,accepted_at,injected_at,rejection_code)
+			VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(thread_id,client_message_id) DO NOTHING`,
+			message.RunID, message.ThreadID, message.ClientMessageID, message.RequestHash,
+			message.Content, message.Status, message.AcceptedAt, nil, message.RejectionCode)
+		if res.Error != nil {
+			return res.Error
+		}
+		created = res.RowsAffected == 1
+		var po steeringPO
+		if err := tx.First(&po, "thread_id = ? AND client_message_id = ?", message.ThreadID, message.ClientMessageID).Error; err != nil {
+			return err
+		}
+		out = po.toModel()
+		return nil
+	})
+	return out, created, err
+}
+
+func (s *Store) ListPendingSteering(ctx context.Context, runID string) ([]model.SteeringMessage, error) {
+	var rows []steeringPO
+	if err := s.db.WithContext(ctx).Where("run_id = ? AND status = ?", runID, string(model.SteeringAccepted)).
+		Order("accepted_at ASC, client_message_id ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]model.SteeringMessage, len(rows))
+	for i := range rows {
+		out[i] = rows[i].toModel()
+	}
+	return out, nil
+}
+
+func (s *Store) ListThreadSteering(ctx context.Context, threadID string) ([]model.SteeringMessage, error) {
+	var rows []steeringPO
+	if err := s.db.WithContext(ctx).Where("thread_id = ?", threadID).
+		Order("accepted_at ASC, client_message_id ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]model.SteeringMessage, len(rows))
+	for i := range rows {
+		out[i] = rows[i].toModel()
+	}
+	return out, nil
+}
+
+func (s *Store) MarkSteering(ctx context.Context, runID string, ids []string, status model.SteeringStatus, at int64, rejectionCode string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	updates := map[string]any{"status": string(status), "rejection_code": rejectionCode}
+	if status == model.SteeringInjected {
+		updates["injected_at"] = at
+	}
+	return s.db.WithContext(ctx).Model(&steeringPO{}).
+		Where("run_id = ? AND client_message_id IN ? AND status = ?", runID, ids, string(model.SteeringAccepted)).
+		Updates(updates).Error
 }
 
 // HasActiveRun 报告某 project 是否有非终态 run（pending/running/waiting），供手动写操作互斥判定。

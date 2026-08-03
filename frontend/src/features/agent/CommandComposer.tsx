@@ -7,6 +7,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { isMac } from '../../lib/platform';
+import { newClientIdentity } from '../../lib/clientIdentity';
 import { InteractionModeButtons } from './InteractionModeButtons';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
@@ -36,13 +37,14 @@ export const CommandComposer: React.FC = () => {
   const { activeProjectId, slidesByProjectId } = useProjectStore();
   const { currentPage } = useDeckStore();
   const { ensureActiveThread } = useThreadStore();
-  const { createRun } = useRunStore();
-  const { status: runStatus } = useActiveSession();
+  const { createRun, steerRun } = useRunStore();
+  const { status: runStatus, activeRunId } = useActiveSession();
   const composer = useComposerStore();
   const applyContextDefault = composer.applyContextDefault;
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef(activeProjectId);
-  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting';
+  const steering = runStatus === 'running' && Boolean(activeRunId);
+  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'canceling';
 
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
   const currentSlide = slides[currentPage];
@@ -60,12 +62,26 @@ export const CommandComposer: React.FC = () => {
     if (disabled || !activeProjectId || !raw) return;
     setSubmitError('');
     const projectId = activeProjectId;
+    let threadId: string;
+    try {
+      threadId = await ensureActiveThread(projectId);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+      return;
+    }
+    if (steering && activeRunId) {
+      const accepted = await steerRun(threadId, activeRunId, raw, newClientIdentity('msg'));
+      if (accepted) setText('');
+      else setSubmitError('追加要求未能加入当前任务；文本已保留，可在任务结束后作为新请求发送');
+      return;
+    }
     const target = {
       artifact: composer.artifact,
       level: composer.level === 'slide' && !currentSlide ? 'deck' as const : composer.level,
       ...(composer.level === 'slide' && currentSlide ? { slide_id: currentSlide.id } : {}),
     };
     let request: CreateRunRequest = {
+      client_request_id: newClientIdentity('req'),
       target,
       interaction: { intent: composer.intent },
       instruction: raw,
@@ -76,7 +92,6 @@ export const CommandComposer: React.FC = () => {
     }
 
     try {
-      const threadId = await ensureActiveThread(projectId);
       const created = await createRun(threadId, request, projectId);
       if (created) setText('');
       else setSubmitError('运行创建失败，请检查时间线中的错误后重试');
@@ -107,7 +122,7 @@ export const CommandComposer: React.FC = () => {
           onKeyDown={handleKeyDown}
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => setIsComposing(false)}
-          placeholder="输入你的想法与目标"
+          placeholder={steering ? '追加对当前任务的要求' : '输入你的想法与目标'}
           disabled={disabled}
           aria-describedby={disabled ? 'composer-disabled-reason' : undefined}
           className="max-h-32 min-h-[60px] w-full resize-none bg-transparent p-3 text-sm text-text-900 placeholder:text-text-400 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
@@ -115,14 +130,14 @@ export const CommandComposer: React.FC = () => {
         />
         {disabled && activeProjectId && (
           <div id="composer-disabled-reason" className="px-3 pb-1 text-xs text-text-600">
-            {runStatus === 'waiting' ? '请先回答上方问题' : '当前运行结束后可继续输入'}
+            {runStatus === 'waiting' ? '请先回答上方问题' : runStatus === 'canceling' ? '正在取消当前任务' : '正在创建任务'}
           </div>
         )}
         <div className="flex min-w-0 items-center justify-between gap-1 px-3 pb-2">
           <InteractionModeButtons
             intent={composer.intent}
             onIntentChange={composer.setIntent}
-            disabled={disabled}
+            disabled={disabled || steering}
           />
           <div className="flex min-w-0 shrink-0 items-center gap-0.5">
             <TargetSelector
@@ -132,7 +147,7 @@ export const CommandComposer: React.FC = () => {
                 composer.setArtifact(target.artifact);
                 composer.setLevel(target.level);
               }}
-              disabled={disabled}
+              disabled={disabled || steering}
             />
             <button
               onClick={() => void submit()}

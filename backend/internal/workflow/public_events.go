@@ -151,10 +151,8 @@ func (ToolPublicProjector) Completed(runID, callID, tool string, args map[string
 		Display: model.PublicDisplay{Label: label, Detail: detail},
 	}
 	if !result.OK {
-		payload.Error = &model.PublicError{
-			Code: publicErrorCode(result.Code), Message: publicToolError(result),
-			Retryable: result.Retryable,
-		}
+		agentErr := model.NewAgentError(publicErrorCode(result.Code), "tool_call", nil)
+		payload.Error = agentErr.Public()
 	}
 	if tool == "render_slide" {
 		payload.Preview = publicRenderPreview(runID, args, result)
@@ -252,13 +250,8 @@ func safeToolDetail(result ToolResult, fallback string) string {
 }
 
 func publicToolError(result ToolResult) string {
-	for _, issue := range result.Issues {
-		if text := sanitizePublicText(issue.Summary, 120); text != "" {
-			return text
-		}
-	}
-	if text := sanitizePublicText(result.Summary, 120); text != "" &&
-		!localPathPattern.MatchString(text) && !htmlTagPattern.MatchString(text) {
+	agentErr := model.NewAgentError(publicErrorCode(result.Code), "tool_call", nil)
+	if text := sanitizePublicText(agentErr.SafeMessage, 120); text != "" {
 		return text
 	}
 	return "工具未能完成，请调整后重试。"
@@ -382,31 +375,6 @@ func safeFinalMessage(message string, strategy ExecutionStrategy, affected int) 
 		return fmt.Sprintf("已完成本次修改并检查了 %d 个受影响目标。", affected)
 	}
 	return "已完成本次任务。"
-}
-
-func safeRunError(code string, err error) string {
-	switch code {
-	case CodeBudgetExceeded:
-		return "运行达到资源上限，未完成的修改不会提交。"
-	case CodeCommitFailed:
-		return "修改已完成检查，但保存时发生冲突，请重试。"
-	case CodeConsecutiveErrors:
-		return "连续操作未能成功，运行已安全停止。"
-	case CodeGateRejectedRepeated:
-		return "最终检查仍有未解决问题，运行已安全停止。"
-	case CodeAgentFailed:
-		return "Agent 暂时无法继续，请稍后重试。"
-	default:
-		text := sanitizePublicText(err.Error(), 180)
-		if text == "" || localPathPattern.MatchString(text) || htmlTagPattern.MatchString(text) {
-			return "运行未能完成，请稍后重试。"
-		}
-		return text
-	}
-}
-
-func retryableRunError(code string) bool {
-	return code != CodeCanceled && code != CodeBudgetExceeded
 }
 
 func reasoningDuplicate(previous, next string) bool {

@@ -4,8 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"strings"
@@ -14,10 +19,13 @@ import (
 
 // DeepSeekConfig 来自环境变量装配（config 包），Key 不落日志（ARCH-LLM-003）。
 type DeepSeekConfig struct {
-	APIKey  string
-	BaseURL string // 默认 https://api.deepseek.com
-	Model   string // 默认 deepseek-chat
-	Timeout time.Duration
+	APIKey          string
+	BaseURL         string // 默认 https://api.deepseek.com
+	Model           string // 默认 deepseek-chat
+	Timeout         time.Duration
+	Vision          bool
+	ImageInputMIMEs []string
+	MaxImageBytes   int
 }
 
 // DeepSeek 实现 Client，对接 OpenAI 兼容的 Chat Completions + tools 端点。
@@ -41,6 +49,12 @@ func NewDeepSeek(cfg DeepSeekConfig) *DeepSeek {
 		// tools 场景下 60s 常常在 decode 阶段被 kill；180s 与 config 默认值保持一致。
 		cfg.Timeout = 180 * time.Second
 	}
+	if len(cfg.ImageInputMIMEs) == 0 {
+		cfg.ImageInputMIMEs = []string{"image/png", "image/jpeg"}
+	}
+	if cfg.MaxImageBytes <= 0 {
+		cfg.MaxImageBytes = 4 * 1024 * 1024
+	}
 	return &DeepSeek{
 		cfg:        cfg,
 		httpClient: &http.Client{Timeout: cfg.Timeout},
@@ -48,14 +62,33 @@ func NewDeepSeek(cfg DeepSeekConfig) *DeepSeek {
 	}
 }
 
+func (d *DeepSeek) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Vision: d.cfg.Vision, MultipleToolCalls: true,
+		ImageInputMIMEs: append([]string(nil), d.cfg.ImageInputMIMEs...),
+		MaxImageBytes:   d.cfg.MaxImageBytes,
+	}
+}
+
 // ── 线路层类型（OpenAI 兼容） ─────────────────────────────
 
 type wireMessage struct {
 	Role             string         `json:"role"`
-	Content          string         `json:"content"`
+	Content          any            `json:"content"`
 	ReasoningContent string         `json:"reasoning_content,omitempty"`
 	ToolCallID       string         `json:"tool_call_id,omitempty"`
 	ToolCalls        []wireToolCall `json:"tool_calls,omitempty"`
+}
+
+type wireContentPart struct {
+	Type     string        `json:"type"`
+	Text     string        `json:"text,omitempty"`
+	ImageURL *wireImageURL `json:"image_url,omitempty"`
+}
+
+type wireImageURL struct {
+	URL    string `json:"url"`
+	Detail string `json:"detail,omitempty"`
 }
 
 type wireToolCall struct {
@@ -92,12 +125,49 @@ type wireResponse struct {
 	Choices []wireChoice `json:"choices"`
 }
 
-func toWireMessages(msgs []Message) []wireMessage {
+func (d *DeepSeek) toWireMessages(ctx context.Context, msgs []Message, resolver ImageRefResolver) ([]wireMessage, error) {
 	out := make([]wireMessage, len(msgs))
 	for i, m := range msgs {
 		out[i] = wireMessage{
-			Role: string(m.Role), Content: m.Content,
+			Role:             string(m.Role),
 			ReasoningContent: m.ReasoningContent, ToolCallID: m.ToolCallID,
+		}
+		parts := make([]wireContentPart, 0, len(m.Content))
+		hasImage := false
+		for _, part := range m.Content {
+			switch part.Type {
+			case "text":
+				parts = append(parts, wireContentPart{Type: "text", Text: part.Text})
+			case "image":
+				hasImage = true
+				if !d.cfg.Vision {
+					return nil, fmt.Errorf("%w: VISION_CAPABILITY_REQUIRED", ErrBadRequest)
+				}
+				if resolver == nil {
+					return nil, fmt.Errorf("%w: image resolver is required", ErrBadRequest)
+				}
+				imageData, err := resolver.ResolveImage(ctx, part.ImageRef)
+				if err != nil {
+					return nil, fmt.Errorf("%w: resolve image: %v", ErrBadRequest, err)
+				}
+				raw, mimeType, err := prepareProviderImage(imageData, d.Capabilities())
+				if err != nil {
+					return nil, fmt.Errorf("%w: %v", ErrBadRequest, err)
+				}
+				detail := part.Detail
+				if detail != "low" && detail != "high" {
+					detail = "high"
+				}
+				parts = append(parts, wireContentPart{
+					Type:     "image_url",
+					ImageURL: &wireImageURL{URL: "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(raw), Detail: detail},
+				})
+			}
+		}
+		if hasImage {
+			out[i].Content = parts
+		} else {
+			out[i].Content = m.Text()
 		}
 		if len(m.ToolCalls) > 0 {
 			out[i].ToolCalls = make([]wireToolCall, 0, len(m.ToolCalls))
@@ -106,7 +176,65 @@ func toWireMessages(msgs []Message) []wireMessage {
 			}
 		}
 	}
-	return out
+	return out, nil
+}
+
+func prepareProviderImage(data ImageData, capabilities ProviderCapabilities) ([]byte, string, error) {
+	if len(data.Bytes) == 0 {
+		return nil, "", fmt.Errorf("image is empty")
+	}
+	supports := func(mimeType string) bool {
+		for _, candidate := range capabilities.ImageInputMIMEs {
+			if candidate == mimeType {
+				return true
+			}
+		}
+		return false
+	}
+	supported := supports(data.MIMEType)
+	if supported && len(data.Bytes) <= capabilities.MaxImageBytes {
+		return data.Bytes, data.MIMEType, nil
+	}
+	source, _, err := image.Decode(bytes.NewReader(data.Bytes))
+	if err != nil {
+		return nil, "", fmt.Errorf("decode image: %w", err)
+	}
+	bounds := source.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	for scale := 1.0; scale >= 0.2; scale -= 0.15 {
+		w, h := int(float64(width)*scale), int(float64(height)*scale)
+		if w < 1 || h < 1 {
+			break
+		}
+		target := image.NewRGBA(image.Rect(0, 0, w, h))
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				c := color.RGBAModel.Convert(source.At(bounds.Min.X+x*width/w, bounds.Min.Y+y*height/h))
+				target.Set(x, y, c)
+			}
+		}
+		if supports("image/jpeg") {
+			for quality := 85; quality >= 45; quality -= 10 {
+				var encoded bytes.Buffer
+				if err := jpeg.Encode(&encoded, target, &jpeg.Options{Quality: quality}); err != nil {
+					return nil, "", err
+				}
+				if encoded.Len() <= capabilities.MaxImageBytes {
+					return encoded.Bytes(), "image/jpeg", nil
+				}
+			}
+		}
+		if supports("image/png") {
+			var encoded bytes.Buffer
+			if err := png.Encode(&encoded, target); err != nil {
+				return nil, "", err
+			}
+			if encoded.Len() <= capabilities.MaxImageBytes {
+				return encoded.Bytes(), "image/png", nil
+			}
+		}
+	}
+	return nil, "", fmt.Errorf("image exceeds provider byte limit")
 }
 
 func toWireToolCall(tc ToolCall) wireToolCall {
@@ -143,24 +271,32 @@ func toWireTools(tools []ToolSchema) []wireTool {
 // ── Client 实现 ──────────────────────────────────────────
 
 func (d *DeepSeek) Chat(ctx context.Context, req ChatRequest) (ChatResponse, error) {
-	body := wireRequest{Model: d.cfg.Model, Messages: toWireMessages(req.Messages)}
-	resp, err := d.doJSON(ctx, body)
+	messages, err := d.toWireMessages(ctx, req.Messages, nil)
+	if err != nil {
+		return ChatResponse{}, err
+	}
+	body := wireRequest{Model: d.cfg.Model, Messages: messages}
+	resp, err := d.doJSON(ctx, body, nil)
 	if err != nil {
 		return ChatResponse{}, err
 	}
 	if len(resp.Choices) == 0 {
 		return ChatResponse{}, fmt.Errorf("%w: empty choices", ErrUnavailable)
 	}
-	return ChatResponse{Content: resp.Choices[0].Message.Content}, nil
+	return ChatResponse{Content: wireText(resp.Choices[0].Message.Content)}, nil
 }
 
 func (d *DeepSeek) CallTool(ctx context.Context, req ToolCallRequest) (ToolCallResponse, error) {
+	messages, err := d.toWireMessages(ctx, req.Messages, req.ImageResolver)
+	if err != nil {
+		return ToolCallResponse{}, err
+	}
 	body := wireRequest{
 		Model:    d.cfg.Model,
-		Messages: toWireMessages(req.Messages),
+		Messages: messages,
 		Tools:    toWireTools(req.Tools),
 	}
-	resp, err := d.doJSON(ctx, body)
+	resp, err := d.doJSON(ctx, body, req.OnRetry)
 	if err != nil {
 		return ToolCallResponse{}, err
 	}
@@ -168,7 +304,7 @@ func (d *DeepSeek) CallTool(ctx context.Context, req ToolCallRequest) (ToolCallR
 		return ToolCallResponse{}, fmt.Errorf("%w: empty choices", ErrUnavailable)
 	}
 	msg := resp.Choices[0].Message
-	out := ToolCallResponse{Text: msg.Content, ReasoningContent: msg.ReasoningContent}
+	out := ToolCallResponse{Text: wireText(msg.Content), ReasoningContent: msg.ReasoningContent}
 	for _, tc := range msg.ToolCalls {
 		args := map[string]any{}
 		// function call 参数无法解析 → 最小失败退出（ARCH-LLM-FC-001）。
@@ -205,8 +341,12 @@ func decodeToolArguments(s string, out *map[string]any) error {
 
 // Stream 流式补全；返回的 channel 在 ctx 取消或流结束时关闭，goroutine 及时退出（ARCH-LLM-002）。
 func (d *DeepSeek) Stream(ctx context.Context, req ChatRequest) (<-chan StreamChunk, error) {
-	body := wireRequest{Model: d.cfg.Model, Messages: toWireMessages(req.Messages), Stream: true}
-	httpResp, err := d.doRaw(ctx, body)
+	messages, err := d.toWireMessages(ctx, req.Messages, nil)
+	if err != nil {
+		return nil, err
+	}
+	body := wireRequest{Model: d.cfg.Model, Messages: messages, Stream: true}
+	httpResp, err := d.doRaw(ctx, body, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -239,8 +379,8 @@ func (d *DeepSeek) Stream(ctx context.Context, req ChatRequest) (<-chan StreamCh
 			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 				continue
 			}
-			if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-				if !trySend(ctx, out, StreamChunk{Text: chunk.Choices[0].Delta.Content}) {
+			if len(chunk.Choices) > 0 && wireText(chunk.Choices[0].Delta.Content) != "" {
+				if !trySend(ctx, out, StreamChunk{Text: wireText(chunk.Choices[0].Delta.Content)}) {
 					return
 				}
 			}
@@ -252,6 +392,11 @@ func (d *DeepSeek) Stream(ctx context.Context, req ChatRequest) (<-chan StreamCh
 		trySend(ctx, out, StreamChunk{Done: true})
 	}()
 	return out, nil
+}
+
+func wireText(value any) string {
+	text, _ := value.(string)
+	return text
 }
 
 // trySend 在 ctx 未取消时投递；取消则返回 false，让发送方立即退出（防泄漏）。
@@ -266,8 +411,8 @@ func trySend(ctx context.Context, out chan<- StreamChunk, c StreamChunk) bool {
 
 // ── HTTP 与重试 ──────────────────────────────────────────
 
-func (d *DeepSeek) doJSON(ctx context.Context, body wireRequest) (wireResponse, error) {
-	httpResp, err := d.doRaw(ctx, body)
+func (d *DeepSeek) doJSON(ctx context.Context, body wireRequest, onRetry func(int)) (wireResponse, error) {
+	httpResp, err := d.doRaw(ctx, body, onRetry)
 	if err != nil {
 		return wireResponse{}, err
 	}
@@ -280,7 +425,7 @@ func (d *DeepSeek) doJSON(ctx context.Context, body wireRequest) (wireResponse, 
 }
 
 // doRaw 执行请求，含重试：429/5xx 退避重试(≤3)，4xx 不重试映射 ErrBadRequest（ARCH-LLM 重试表）。
-func (d *DeepSeek) doRaw(ctx context.Context, body wireRequest) (*http.Response, error) {
+func (d *DeepSeek) doRaw(ctx context.Context, body wireRequest, onRetry func(int)) (*http.Response, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
@@ -290,6 +435,9 @@ func (d *DeepSeek) doRaw(ctx context.Context, body wireRequest) (*http.Response,
 	var lastErr error
 	for attempt := 0; attempt <= d.maxRetries; attempt++ {
 		if attempt > 0 {
+			if onRetry != nil {
+				onRetry(attempt)
+			}
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()

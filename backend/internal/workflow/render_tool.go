@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 )
 
 const (
@@ -27,7 +28,40 @@ const (
 	maxRenderOutputBytes = 1024 * 1024
 )
 
+var ErrRenderWorkerUnavailable = errors.New("render worker unavailable")
+
+type RenderWorkerError struct {
+	Operation string
+	Cause     error
+}
+
+func (e *RenderWorkerError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Cause == nil {
+		return e.Operation + ": " + ErrRenderWorkerUnavailable.Error()
+	}
+	return e.Operation + ": " + e.Cause.Error()
+}
+
+func (e *RenderWorkerError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+func (e *RenderWorkerError) Is(target error) bool {
+	return target == ErrRenderWorkerUnavailable
+}
+
+func renderWorkerError(operation string, cause error) error {
+	return &RenderWorkerError{Operation: operation, Cause: cause}
+}
+
 type RenderRequest struct {
+	Type           string `json:"type,omitempty"`
 	RequestID      string `json:"request_id,omitempty"`
 	RunID          string `json:"run_id"`
 	ProjectDir     string `json:"project_dir"`
@@ -74,11 +108,12 @@ type NodeSlideRenderer struct {
 }
 
 type workerRenderResponse struct {
-	RequestID   string            `json:"request_id"`
-	Type        string            `json:"type"`
-	OK          bool              `json:"ok"`
-	Error       string            `json:"error"`
-	Diagnostics RenderDiagnostics `json:"diagnostics"`
+	RequestID             string            `json:"request_id"`
+	Type                  string            `json:"type"`
+	OK                    bool              `json:"ok"`
+	Error                 string            `json:"error"`
+	Diagnostics           RenderDiagnostics `json:"diagnostics"`
+	InfrastructureFailure bool              `json:"-"`
 }
 
 func NewNodeSlideRenderer(config NodeRendererConfig) *NodeSlideRenderer {
@@ -126,6 +161,7 @@ func (r *NodeSlideRenderer) Render(ctx context.Context, request RenderRequest) (
 		return RenderDiagnostics{}, err
 	}
 	request.RequestID = "render_" + uuid.NewString()
+	request.Type = "render"
 	raw, err := json.Marshal(request)
 	if err != nil {
 		return RenderDiagnostics{}, err
@@ -134,7 +170,7 @@ func (r *NodeSlideRenderer) Render(ctx context.Context, request RenderRequest) (
 	r.mu.Lock()
 	if r.closed || r.stdin == nil {
 		r.mu.Unlock()
-		return RenderDiagnostics{}, errors.New("render worker is unavailable")
+		return RenderDiagnostics{}, renderWorkerError("worker_state", ErrRenderWorkerUnavailable)
 	}
 	r.pending[request.RequestID] = response
 	stdin := r.stdin
@@ -144,17 +180,27 @@ func (r *NodeSlideRenderer) Render(ctx context.Context, request RenderRequest) (
 	r.writeMu.Unlock()
 	if writeErr != nil {
 		r.removePending(request.RequestID)
-		return RenderDiagnostics{}, fmt.Errorf("render worker write failed: %w", writeErr)
+		return RenderDiagnostics{}, renderWorkerError("worker_stdin_write", writeErr)
 	}
 	select {
 	case result := <-response:
 		if !result.OK {
+			if result.InfrastructureFailure {
+				return RenderDiagnostics{}, renderWorkerError("worker_process", errors.New(result.Error))
+			}
 			return RenderDiagnostics{}, errors.New(result.Error)
 		}
 		return result.Diagnostics, nil
 	case <-commandCtx.Done():
+		cancelRaw, _ := json.Marshal(map[string]any{"type": "cancel", "request_id": request.RequestID})
+		r.writeMu.Lock()
+		_, _ = stdin.Write(append(cancelRaw, '\n'))
+		r.writeMu.Unlock()
 		r.removePending(request.RequestID)
-		return RenderDiagnostics{}, fmt.Errorf("render worker timed out: %w", commandCtx.Err())
+		if ctx.Err() != nil {
+			return RenderDiagnostics{}, ctx.Err()
+		}
+		return RenderDiagnostics{}, renderWorkerError("worker_response_timeout", commandCtx.Err())
 	}
 }
 
@@ -162,7 +208,7 @@ func (r *NodeSlideRenderer) ensureWorker(ctx context.Context) error {
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
-		return errors.New("render worker is closed")
+		return renderWorkerError("worker_closed", ErrRenderWorkerUnavailable)
 	}
 	if r.cmd != nil {
 		r.mu.Unlock()
@@ -174,12 +220,12 @@ func (r *NodeSlideRenderer) ensureWorker(ctx context.Context) error {
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		r.mu.Unlock()
-		return err
+		return renderWorkerError("worker_stdin", err)
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		r.mu.Unlock()
-		return err
+		return renderWorkerError("worker_stdout", err)
 	}
 	cmd.Stderr = os.Stderr
 	ready := make(chan error, 1)
@@ -187,7 +233,7 @@ func (r *NodeSlideRenderer) ensureWorker(ctx context.Context) error {
 	if err := cmd.Start(); err != nil {
 		r.cmd, r.stdin, r.ready = nil, nil, nil
 		r.mu.Unlock()
-		return err
+		return renderWorkerError("worker_start", err)
 	}
 	r.mu.Unlock()
 	go r.readWorker(cmd, stdout, ready)
@@ -197,7 +243,7 @@ func (r *NodeSlideRenderer) ensureWorker(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(minDuration(r.config.Timeout, 10*time.Second)):
-		return errors.New("render worker startup timed out")
+		return renderWorkerError("worker_start_timeout", context.DeadlineExceeded)
 	}
 }
 
@@ -227,7 +273,7 @@ func (r *NodeSlideRenderer) readWorker(cmd *exec.Cmd, stdout io.Reader, ready ch
 	}
 	waitErr := cmd.Wait()
 	if !readySent {
-		ready <- fmt.Errorf("render worker failed to start: %w", waitErr)
+		ready <- renderWorkerError("worker_start", waitErr)
 	}
 	r.workerExited(cmd, waitErr)
 }
@@ -243,7 +289,10 @@ func (r *NodeSlideRenderer) workerExited(cmd *exec.Cmd, err error) {
 	r.pending = map[string]chan workerRenderResponse{}
 	r.mu.Unlock()
 	for requestID, channel := range pending {
-		channel <- workerRenderResponse{RequestID: requestID, Error: fmt.Sprintf("render worker crashed: %v", err)}
+		channel <- workerRenderResponse{
+			RequestID: requestID, Error: fmt.Sprintf("render worker crashed: %v", err),
+			InfrastructureFailure: true,
+		}
 	}
 }
 
@@ -340,7 +389,8 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		return failedToolResult(CodeRenderFailed, htmlErr.Error(), true)
 	}
 	if t.renderer == nil {
-		return failedToolResult(CodeRenderFailed, "browser renderer is unavailable", true)
+		agentErr := classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable))
+		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
 	screenshotID := "shot_" + uuid.NewString()
 	runID := input.RunID
@@ -349,7 +399,8 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	screenshotDir := filepath.Join(input.ProjectDir, ".runtime", "renders", runID)
 	if err := os.MkdirAll(screenshotDir, 0o700); err != nil {
-		return failedToolResult(CodeRenderFailed, err.Error(), true)
+		agentErr := classifyRenderError(renderWorkerError("screenshot_directory", err))
+		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
 	screenshotPath := filepath.Join(screenshotDir, screenshotID+".png")
 	request := RenderRequest{
@@ -364,7 +415,8 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	diagnostics, err := t.renderer.Render(ctx, request)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, err.Error(), true)
+		agentErr := classifyRenderError(err)
+		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
 	if diagnostics.DurationMS == 0 {
 		diagnostics.DurationMS = time.Since(started).Milliseconds()
@@ -376,7 +428,10 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	if diagnostics.ScreenshotBytes <= 0 || diagnostics.ScreenshotBytes > 10*1024*1024 {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, "browser screenshot is missing or exceeds the output limit", true)
+		agentErr := classifyRenderError(renderWorkerError(
+			"screenshot_output", errors.New("browser screenshot is missing or exceeds the output limit"),
+		))
+		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
 	sourceHash, err := renderHashWithoutTransaction(t.pack, input, slideID)
 	if err != nil {
@@ -399,9 +454,27 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	result := SuccessfulToolResult("slide rendered in isolated Chromium")
 	result.Data = data
 	result.Issues = append(blocking, warnings...)
+	observationData := map[string]any{
+		"ok": len(blocking) == 0, "code": CodeRenderFailed,
+		"tool_call_id": input.CallID,
+		"resource":     target, "slide_id": slideID, "diagnostics": map[string]any{
+			"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
+			"clipping": diagnostics.Clipping, "console_errors": diagnostics.ConsoleErrors,
+			"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
+		},
+		"source_hash": sourceHash,
+	}
+	if len(blocking) == 0 {
+		delete(observationData, "code")
+	}
+	observationRaw, _ := json.Marshal(observationData)
+	result.ObservationParts = []llm.ContentPart{
+		{Type: "text", Text: string(observationRaw)},
+		{Type: "image", ImageRef: screenshotRef, MIMEType: "image/png", Detail: "high"},
+	}
 	if len(blocking) > 0 {
 		result.Evidence = []Evidence{newEvidence("render_diagnostic", target, sourceHash, data)}
-		result.OK, result.Code, result.Retryable = false, CodeRenderFailed, true
+		result.OK, result.Code, result.Retryable = false, CodeRenderFailed, false
 		return result
 	}
 	proof, err := currentMaterializationProof(t.pack, input.ProjectDir, input.Transaction, slideID, sourceHash)

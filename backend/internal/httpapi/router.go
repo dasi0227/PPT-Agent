@@ -67,6 +67,7 @@ func (r *Router) register() {
 	v1.GET("/runs/:id/events", r.run.Events)
 	v1.GET("/runs/:id/screenshots/:screenshot_id", r.run.Screenshot)
 	v1.POST("/runs/:id/input", r.run.Input)
+	v1.POST("/runs/:id/steer", r.run.Steer)
 	v1.DELETE("/runs/:id", r.run.Cancel)
 
 	// Slide：读取 / 版本列表 / 回滚（40-api openapi /slides/{id}...）。

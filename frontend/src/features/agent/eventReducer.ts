@@ -31,6 +31,9 @@ export interface UserTurnItem extends BaseTimelineItem {
   text: string;
   target?: { artifact: string; level: string; slide_id?: string };
   interaction?: { intent: string };
+  deliveryStatus?: 'sending' | 'accepted' | 'rejected';
+  clientMessageId?: string;
+  rejectionCode?: string;
 }
 
 export interface ReasoningItem extends BaseTimelineItem {
@@ -85,6 +88,7 @@ export interface TerminalNoticeItem extends BaseTimelineItem {
   message: string;
   technicalMessage?: string;
   requestId?: string;
+  retryable?: boolean;
 }
 
 export type TimelineItem =

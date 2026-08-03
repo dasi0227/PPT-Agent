@@ -33,6 +33,30 @@ describe('history hydrator', () => {
     expect(hydrated.items).toEqual([]);
   });
 
+  it('restores accepted and rejected steering messages from thread history', () => {
+    const hydrated = hydrateRunFromHistory([
+      entry(1, 'user_turn', {
+        text: '开始',
+        target: { artifact: 'presentation', level: 'deck' },
+        interaction: { intent: 'execute' },
+      }),
+      entry(2, 'steering', {
+        client_message_id: 'msg-1', text: '改成深色', status: 'injected',
+      }),
+      entry(3, 'steering', {
+        client_message_id: 'msg-2', text: '再加一页', status: 'rejected',
+        rejection_code: 'RUN_NOT_STEERABLE',
+      }),
+    ]);
+    expect(hydrated.items.slice(1)).toMatchObject([
+      { type: 'user_turn', text: '改成深色', clientMessageId: 'msg-1', deliveryStatus: 'accepted' },
+      {
+        type: 'user_turn', text: '再加一页', clientMessageId: 'msg-2',
+        deliveryStatus: 'rejected', rejectionCode: 'RUN_NOT_STEERABLE',
+      },
+    ]);
+  });
+
   it('preserves append order across runs and restores the latest pending question', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {

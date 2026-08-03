@@ -78,6 +78,20 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       });
       continue;
     }
+    if (entry.type === 'steering') {
+      const clientMessageId = String(entry.data.client_message_id ?? '');
+      items.push({
+        id: `steering_${clientMessageId}`,
+        type: 'user_turn',
+        runId: entry.run_id,
+        text: String(entry.data.text ?? ''),
+        clientMessageId,
+        deliveryStatus: entry.data.status === 'rejected' ? 'rejected' : 'accepted',
+        rejectionCode: String(entry.data.rejection_code ?? ''),
+        timestamp: (entry.ts || 0) * 1000,
+      });
+      continue;
+    }
     if (!publicHistoryEvents.has(entry.type as SSEEventName)) continue;
     const event = {
       id: String(entry.seq),
@@ -113,7 +127,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     items,
     plan,
     session,
-    lastEventId: ordered.length > 0 ? String(ordered[ordered.length - 1].seq) : undefined,
+    lastEventId: [...ordered].reverse().find((entry) =>
+      entry.run_id === session.activeRunId && entry.type !== 'steering')?.seq.toString(),
   };
 }
 

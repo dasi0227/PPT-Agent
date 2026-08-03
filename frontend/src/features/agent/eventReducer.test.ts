@@ -71,13 +71,17 @@ describe('public event reducer', () => {
   it('creates one compact notice for failed or canceled terminals', () => {
     let state = reduceSSEEvent([], event('run.finished', {
       status: 'failed', duration_ms: 20,
-      error: { code: 'RENDER_FAILED', message: '页面渲染未通过', retryable: true },
+      error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务暂时不可用', retryable: true },
     }));
     state = reduceSSEEvent(state, event('run.finished', {
       status: 'failed', duration_ms: 20,
-      error: { code: 'RENDER_FAILED', message: '页面渲染未通过', retryable: true },
+      error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务暂时不可用', retryable: true },
     }, '2'));
     expect(state).toHaveLength(1);
-    expect(state[0]).toMatchObject({ type: 'terminal_notice', status: 'failed' });
+    expect(state[0]).toMatchObject({
+      type: 'terminal_notice',
+      status: 'failed',
+      error: { code: 'PROVIDER_UNAVAILABLE', retryable: true },
+    });
   });
 });

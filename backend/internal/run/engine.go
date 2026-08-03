@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -15,10 +16,13 @@ const lockTimeout = 30 * time.Second
 
 // active 是一个正在执行的 Run 的运行时句柄。
 type active struct {
-	run    model.Run
-	bus    *Bus
-	queue  *InputQueue
-	cancel context.CancelFunc
+	run             model.Run
+	bus             *Bus
+	queue           *InputQueue
+	cancel          context.CancelFunc
+	mu              sync.Mutex
+	phase           workflow.RuntimePhase
+	cancelRequested bool
 }
 
 // Engine 管理 Run 生命周期：状态机、事件扇出、HITL、取消、每 project 锁。
@@ -109,9 +113,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		_ = a.bus.Emit(terminalCtx, model.EventRunFinished, model.RunFinishedPayload{
 			PublicEventBase: model.NewPublicEventBase(a.run.ID),
 			Status:          "failed", DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
-			Error: &model.PublicError{
-				Code: "LOCK_TIMEOUT", Message: "等待项目执行资源超时，请稍后重试。", Retryable: true,
-			},
+			Error: model.NewAgentError("LOCK_TIMEOUT", "project_lock", err).Public(),
 		})
 		return
 	}
@@ -120,7 +122,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	e.setStatus(ctx, a.run.ID, model.RunRunning)
 
 	em := &workflowEmitter{ctx: ctx, bus: a.bus}
-	cp := &inputCheckpoint{queue: a.queue}
+	cp := &inputCheckpoint{queue: a.queue, store: e.store, runID: a.run.ID, active: a}
 	prompter := &checkpoint{engine: e, runID: a.run.ID, bus: a.bus, queue: a.queue}
 	outcome := execution.Run(ctx, em, cp, prompter)
 
@@ -132,6 +134,24 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 // finish persists the scheduler status. The workflow normally emits its own
 // terminal event; the guarded fallback below covers custom test executions.
 func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.StructuredOutcome) {
+	a.mu.Lock()
+	cancelRequested := a.cancelRequested
+	a.mu.Unlock()
+	if cancelRequested {
+		outcome.Status = workflow.StatusCanceled
+		outcome.Code = workflow.CodeCanceled
+	}
+	if pending, err := e.store.ListPendingSteering(ctx, a.run.ID); err == nil && len(pending) > 0 {
+		ids := make([]string, 0, len(pending))
+		for _, message := range pending {
+			ids = append(ids, message.ClientMessageID)
+		}
+		code := "RUN_NOT_STEERABLE"
+		if outcome.Status == workflow.StatusCanceled {
+			code = "RUN_CANCELING"
+		}
+		_ = e.store.MarkSteering(ctx, a.run.ID, ids, model.SteeringRejected, time.Now().UnixNano(), code)
+	}
 	switch outcome.Status {
 	case workflow.StatusCompleted:
 		e.setStatus(ctx, a.run.ID, model.RunDone)
@@ -163,7 +183,7 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
 				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "failed",
 				DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
-				Error:      &model.PublicError{Code: code, Message: "运行未能完成，请稍后重试。", Retryable: true},
+				Error:      model.NewAgentError(code, "run", errors.New(outcome.Message)).Public(),
 			})
 		}
 	}
@@ -203,21 +223,92 @@ func (e *Engine) InjectInput(ctx context.Context, id, content, replyTo string) e
 		}
 		return nil
 	}
-	a.queue.Enqueue(content)
-	return nil
+	return ErrReplyMismatch
 }
 
 // Cancel 取消 Run：停止后续 LLM 调用，保留已落盘产物（ARCH-RUN-004 / API-RUN-005）。
 func (e *Engine) Cancel(ctx context.Context, id string) error {
+	_, err := e.RequestCancel(ctx, id)
+	return err
+}
+
+func (e *Engine) RequestCancel(ctx context.Context, id string) (model.Run, error) {
+	requestedAt := time.Now().UnixNano()
+	current, err := e.store.RequestRunCancel(ctx, id, requestedAt)
+	if err != nil {
+		return model.Run{}, ErrRunNotFound
+	}
+	if current.Status.Terminal() {
+		return current, nil
+	}
+	if current.CancelRequestedAt != 0 && current.CancelRequestedAt != requestedAt {
+		return current, nil
+	}
 	a, ok := e.lookup(id)
 	if !ok {
-		if _, err := e.store.GetRun(ctx, id); err != nil {
-			return ErrRunNotFound
-		}
-		return nil // 已终止，幂等
+		return current, nil
 	}
+	cancelWon, terminalStatus := a.bus.RequestCancelAuthority()
+	if !cancelWon {
+		switch terminalStatus {
+		case "completed":
+			current.Status = model.RunDone
+		case "failed":
+			current.Status = model.RunFailed
+		case "canceled":
+			current.Status = model.RunCanceled
+		}
+		return current, nil
+	}
+	a.mu.Lock()
+	a.cancelRequested = true
+	a.mu.Unlock()
+	_ = a.bus.Emit(context.Background(), model.EventRunProgress, model.RunProgressPayload{
+		PublicEventBase: model.NewPublicEventBase(id), Stage: "finalizing", Text: "正在取消",
+	})
 	a.cancel()
-	return nil
+	current.CancelRequestedAt = requestedAt
+	return current, nil
+}
+
+func (e *Engine) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, requestHash, content string) (model.SteeringMessage, error) {
+	if runID != expectedRunID {
+		return model.SteeringMessage{}, model.NewAgentError("RUN_NOT_STEERABLE", "steer_run", nil)
+	}
+	a, ok := e.lookup(runID)
+	if !ok {
+		if _, err := e.store.GetRun(ctx, runID); err != nil {
+			return model.SteeringMessage{}, model.NewAgentError("RUN_NOT_FOUND", "steer_run", err)
+		}
+		return model.SteeringMessage{}, model.NewAgentError("RUN_NOT_STEERABLE", "steer_run", nil)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cancelRequested {
+		return model.SteeringMessage{}, model.NewAgentError("RUN_CANCELING", "steer_run", nil)
+	}
+	if a.queue.HasAwaiting() || a.phase == workflow.PhaseWaitingInput {
+		return model.SteeringMessage{}, model.NewAgentError("RUN_WAITING_FOR_ANSWER", "steer_run", nil)
+	}
+	if a.phase == workflow.PhaseCompletionCheck || a.phase == workflow.PhaseCommitting || a.phase == workflow.PhaseTerminal {
+		return model.SteeringMessage{}, model.NewAgentError("RUN_NOT_STEERABLE", "steer_run", nil)
+	}
+	message := model.SteeringMessage{
+		RunID: runID, ThreadID: a.run.ThreadID, ClientMessageID: clientMessageID,
+		RequestHash: requestHash, Content: content, Status: model.SteeringAccepted,
+		AcceptedAt: time.Now().UnixNano(),
+	}
+	existing, created, err := e.store.CreateSteering(ctx, message)
+	if err != nil {
+		return model.SteeringMessage{}, err
+	}
+	if !created && existing.RequestHash != requestHash {
+		return model.SteeringMessage{}, model.NewAgentError("IDEMPOTENCY_KEY_REUSED", "steer_run", nil)
+	}
+	if created && e.hw != nil {
+		_ = a.bus.AppendSteeringHistory(ctx, message)
+	}
+	return existing, nil
 }
 
 // Subscribe 订阅 Run 事件流，支持 Last-Event-ID 续传（afterSeq）。

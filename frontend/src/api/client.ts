@@ -10,10 +10,11 @@ export class APIError extends Error {
     message: string,
     public readonly details?: unknown,
     public readonly requestId?: string,
+    retryable?: boolean,
   ) {
     super(message);
     this.name = 'APIError';
-    this.retryable = status === 408 || status === 429 || status >= 500;
+    this.retryable = retryable === true;
   }
 }
 
@@ -72,7 +73,7 @@ async function readErrorBody(response: Response): Promise<unknown> {
   }
 }
 
-function errorFields(body: unknown): { code?: string; message?: string; details?: unknown } {
+function errorFields(body: unknown): { code?: string; message?: string; details?: unknown; retryable?: boolean } {
   if (!body || typeof body !== 'object') {
     return typeof body === 'string' ? { message: body } : {};
   }
@@ -83,6 +84,7 @@ function errorFields(body: unknown): { code?: string; message?: string; details?
     code: typeof raw.code === 'string' ? raw.code : undefined,
     message: typeof raw.message === 'string' ? raw.message : undefined,
     details: raw.details,
+    retryable: typeof raw.retryable === 'boolean' ? raw.retryable : undefined,
   };
 }
 
@@ -114,6 +116,7 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
         parsed.message || `请求失败（HTTP ${response.status}）`,
         parsed.details ?? body,
         response.headers.get('X-Request-ID') ?? undefined,
+        parsed.retryable,
       );
     }
 

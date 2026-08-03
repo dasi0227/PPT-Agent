@@ -31,6 +31,18 @@ func (s *memStore2) SetRunStatus(context.Context, string, model.RunStatus) error
 	return nil
 }
 func (s *memStore2) GetRun(context.Context, string) (model.Run, error) { return model.Run{}, nil }
+func (s *memStore2) RequestRunCancel(context.Context, string, int64) (model.Run, error) {
+	return model.Run{}, nil
+}
+func (s *memStore2) CreateSteering(context.Context, model.SteeringMessage) (model.SteeringMessage, bool, error) {
+	return model.SteeringMessage{}, true, nil
+}
+func (s *memStore2) ListPendingSteering(context.Context, string) ([]model.SteeringMessage, error) {
+	return nil, nil
+}
+func (s *memStore2) MarkSteering(context.Context, string, []string, model.SteeringStatus, int64, string) error {
+	return nil
+}
 
 func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 	writer, dir := newFSWriterForTest(t)
@@ -142,6 +154,12 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}); err == nil {
 		t.Fatal("accepted a tool.completed with a different tool name")
 	}
+	if err := bus.Emit(ctx, model.EventToolCompleted, model.ToolCompletedPayload{
+		PublicEventBase: base(), CallID: "mismatch", Tool: "read_ppt", Status: "completed",
+		Display: model.PublicDisplay{Label: "完成"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := bus.Emit(ctx, model.EventQuestionAnswered, model.QuestionAnsweredPayload{
 		PublicEventBase: base(), QuestionID: "missing",
 		Answer: model.QuestionAnswer{CustomText: "x"}, DisplayText: "x",
@@ -166,7 +184,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	_ = bus.Emit(ctx, model.EventMessageReasoning, model.MessageReasoningPayload{
 		PublicEventBase: base(), MessageID: "late", Text: "late",
 	})
-	if len(store.ev) != 5 {
+	if len(store.ev) != 6 {
 		t.Fatalf("terminal guard events=%+v", store.ev)
 	}
 }

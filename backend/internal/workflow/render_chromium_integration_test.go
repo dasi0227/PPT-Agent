@@ -94,6 +94,19 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	if timeoutErr == nil {
 		t.Fatal("render timeout was not enforced")
 	}
+	postCancelScreenshot := filepath.Join(dir, "post-cancel.png")
+	if _, err := renderer.Render(context.Background(), RenderRequest{
+		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: validToolHTML,
+		ScreenshotPath: postCancelScreenshot, ViewportWidth: 1600, ViewportHeight: 900, TimeoutMS: 15000,
+	}); err != nil {
+		t.Fatalf("shared browser worker was not usable after canceling one render request: %v", err)
+	}
+	renderer.mu.Lock()
+	postCancelPID := renderer.cmd.Process.Pid
+	renderer.mu.Unlock()
+	if postCancelPID != initialPID {
+		t.Fatalf("canceling one render closed the shared worker: first=%d after_cancel=%d", initialPID, postCancelPID)
+	}
 
 	renderer.mu.Lock()
 	process := renderer.cmd.Process

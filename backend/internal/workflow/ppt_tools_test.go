@@ -3,10 +3,12 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -106,7 +108,7 @@ func TestReadPPTRejectsOversizedContentWithoutTruncation(t *testing.T) {
 	result := (pptReadTool{pack}).Execute(context.Background(), toolInput(pack, dir, nil, map[string]any{
 		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "html"}),
 	}))
-	if result.OK || result.Code != CodeContentTooLarge || result.Observation != "" {
+	if result.OK || result.Code != CodeContentTooLarge || result.Observation == "" || result.Retryable {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -244,11 +246,95 @@ func TestRenderSlideUsesStagedHTMLAndProducesEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	renderer := &recordingRenderer{}
-	result := (slideRenderTool{pack: pack, renderer: renderer}).Execute(
-		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"}))
+	input := toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})
+	input.CallID = "render-call-1"
+	result := (slideRenderTool{pack: pack, renderer: renderer}).Execute(context.Background(), input)
 	if !result.OK || renderer.html != staged || len(result.Evidence) != 1 ||
-		result.Evidence[0].Target.Key() != "slide:slide-01:html" {
+		result.Evidence[0].Target.Key() != "slide:slide-01:html" ||
+		len(result.ObservationParts) != 2 || result.ObservationParts[1].Type != "image" {
 		t.Fatalf("render=%+v html=%q", result, renderer.html)
+	}
+	var observation map[string]any
+	if err := json.Unmarshal([]byte(result.ObservationParts[0].Text), &observation); err != nil ||
+		observation["tool_call_id"] != "render-call-1" || observation["slide_id"] != "slide-01" ||
+		observation["source_hash"] == "" {
+		t.Fatalf("render observation lost call/slide/source binding: %+v err=%v", observation, err)
+	}
+	public, ok := (ToolPublicProjector{}).Completed(
+		"run-1", "render-call-1", "render_slide", map[string]any{"slide_id": "slide-01"}, result,
+	)
+	publicRaw, err := json.Marshal(public)
+	if !ok || err != nil || public.Preview == nil ||
+		public.Preview.ImageURL != stringValue(result.Data["screenshot_url"]) {
+		t.Fatalf("public render preview missing: payload=%+v err=%v", public, err)
+	}
+	for _, forbidden := range []string{"screenshot_ref", "run:run-1/screenshot:", "base64", dir} {
+		if strings.Contains(string(publicRaw), forbidden) {
+			t.Fatalf("public render event leaked %q: %s", forbidden, publicRaw)
+		}
+	}
+}
+
+func TestRenderSlideClassifiesWorkerInfrastructureFailureAsTransient(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	renderer := &recordingRenderer{err: renderWorkerError(
+		"worker_stdin_write", errors.New("broken pipe /Users/private/worker.mjs"),
+	)}
+	result := (slideRenderTool{pack: pack, renderer: renderer}).Execute(
+		context.Background(), toolInput(pack, dir, nil, map[string]any{"slide_id": "slide-01"}),
+	)
+	if result.OK || result.Code != CodeRenderWorkerUnavailable || !result.Retryable {
+		t.Fatalf("worker infrastructure error classification=%+v", result)
+	}
+	public, ok := (ToolPublicProjector{}).Completed(
+		"run-1", "render-call", "render_slide", map[string]any{"slide_id": "slide-01"}, result,
+	)
+	publicRaw, err := json.Marshal(public)
+	if !ok || err != nil || public.Error == nil || public.Error.Code != CodeRenderWorkerUnavailable ||
+		!public.Error.Retryable {
+		t.Fatalf("worker public projection=%+v err=%v", public, err)
+	}
+	if strings.Contains(string(publicRaw), "/Users/") || strings.Contains(string(publicRaw), "broken pipe") {
+		t.Fatalf("worker cause leaked to public event: %s", publicRaw)
+	}
+}
+
+func TestNodeRendererStartupFailureUsesWorkerUnavailableSentinel(t *testing.T) {
+	renderer := NewNodeSlideRenderer(NodeRendererConfig{
+		NodePath: filepath.Join(t.TempDir(), "missing-node"),
+		Timeout:  time.Second,
+	})
+	defer renderer.Close()
+	_, err := renderer.Render(context.Background(), RenderRequest{})
+	if !errors.Is(err, ErrRenderWorkerUnavailable) || errors.Is(err, context.Canceled) {
+		t.Fatalf("worker startup error=%v", err)
+	}
+}
+
+func TestRenderSlideKeepsPageDiagnosticsAgentRepairableAndNonRetryable(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	renderer := &recordingRenderer{diagnostics: RenderDiagnostics{
+		Overflow: map[string]bool{"horizontal": true, "vertical": false},
+	}}
+	result := (slideRenderTool{pack: pack, renderer: renderer}).Execute(
+		context.Background(), toolInput(pack, dir, nil, map[string]any{"slide_id": "slide-01"}),
+	)
+	if result.OK || result.Code != CodeRenderFailed || result.Retryable {
+		t.Fatalf("page diagnostic classification=%+v", result)
+	}
+	definition := model.ErrorDefinitionFor(result.Code)
+	if definition.Category != model.ErrorAgentRepairable {
+		t.Fatalf("page diagnostics category=%s", definition.Category)
+	}
+}
+
+func TestRenderSlideDoesNotClassifyContextCancellationAsTransient(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	result := (slideRenderTool{pack: pack, renderer: &recordingRenderer{err: context.Canceled}}).Execute(
+		context.Background(), toolInput(pack, dir, nil, map[string]any{"slide_id": "slide-01"}),
+	)
+	if result.OK || result.Code != CodeCanceled || result.Retryable {
+		t.Fatalf("render cancellation classification=%+v", result)
 	}
 }
 

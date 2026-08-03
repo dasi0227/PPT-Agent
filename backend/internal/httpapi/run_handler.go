@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,10 +26,11 @@ func NewRunHandler(svc *service.RunService) *RunHandler {
 }
 
 type createRunBody struct {
-	Instruction string               `json:"instruction"`
-	Target      model.RunTarget      `json:"target"`
-	Interaction model.RunInteraction `json:"interaction"`
-	Options     model.RunOptions     `json:"options"`
+	ClientRequestID string               `json:"client_request_id"`
+	Instruction     string               `json:"instruction"`
+	Target          model.RunTarget      `json:"target"`
+	Interaction     model.RunInteraction `json:"interaction"`
+	Options         model.RunOptions     `json:"options"`
 }
 
 type runResponse struct {
@@ -61,8 +63,13 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "INVALID_TARGET", Message: "target is required"})
 		return
 	}
+	if strings.TrimSpace(body.ClientRequestID) == "" {
+		AbortWithError(c, ProjectAgentError(model.NewAgentError("BAD_REQUEST", "create_run", nil), "BAD_REQUEST", "create_run"))
+		return
+	}
 	params := model.CreateRunParams{
-		Instruction: body.Instruction,
+		ClientRequestID: body.ClientRequestID,
+		Instruction:     body.Instruction,
 		WorkSpec: model.WorkSpec{
 			Target: body.Target, Interaction: body.Interaction,
 			Instruction: body.Instruction, Options: body.Options,
@@ -106,18 +113,44 @@ func (h *RunHandler) Screenshot(c *gin.Context) {
 }
 
 func handleCreateRunError(c *gin.Context, err error) {
+	var agentErr *model.AgentError
+	if errors.As(err, &agentErr) {
+		AbortWithError(c, ProjectAgentError(agentErr, "INTERNAL", "create_run"))
+		return
+	}
 	switch {
 	case errors.Is(err, run.ErrRunNotFound):
 		AbortWithError(c, ErrNotFound("thread not found"))
 	case errors.Is(err, service.ErrSlideTargetNotFound):
-		AbortWithError(c, &APIError{HTTPStatus: http.StatusBadRequest, Code: "SLIDE_NOT_FOUND", Message: "slide_id is invalid or does not belong to the project"})
+		AbortWithError(c, ProjectAgentError(model.NewAgentError("SLIDE_NOT_FOUND", "create_run", err), "SLIDE_NOT_FOUND", "create_run"))
 	case errors.Is(err, model.ErrInvalidWorkSpec):
-		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "INVALID_TARGET", Message: err.Error()})
+		AbortWithError(c, ProjectAgentError(model.NewAgentError("INVALID_TARGET", "create_run", err), "INVALID_TARGET", "create_run"))
 	case errors.Is(err, service.ErrRunTargetUnsupported):
-		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "RUN_TARGET_UNSUPPORTED", Message: err.Error()})
+		AbortWithError(c, ProjectAgentError(model.NewAgentError("RUN_TARGET_UNSUPPORTED", "create_run", err), "RUN_TARGET_UNSUPPORTED", "create_run"))
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}
+}
+
+func (h *RunHandler) Steer(c *gin.Context) {
+	runID := c.Param("id")
+	var body struct {
+		ExpectedRunID   string `json:"expected_run_id"`
+		ClientMessageID string `json:"client_message_id"`
+		Content         string `json:"content"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		AbortWithError(c, ProjectAgentError(model.NewAgentError("BAD_REQUEST", "steer_run", err), "BAD_REQUEST", "steer_run"))
+		return
+	}
+	message, err := h.svc.Steer(c.Request.Context(), runID, body.ExpectedRunID, body.ClientMessageID, body.Content)
+	if err != nil {
+		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "steer_run"))
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{
+		"status": "accepted", "run_id": message.RunID, "client_message_id": message.ClientMessageID,
+	})
 }
 
 // Events GET /runs/{id}/events (SSE，支持 Last-Event-ID 续传)
@@ -192,15 +225,20 @@ func (h *RunHandler) Input(c *gin.Context) {
 // Cancel DELETE /runs/{id}
 func (h *RunHandler) Cancel(c *gin.Context) {
 	runID := c.Param("id")
-	if err := h.svc.Cancel(c.Request.Context(), runID); err != nil {
+	current, err := h.svc.RequestCancel(c.Request.Context(), runID)
+	if err != nil {
 		if errors.Is(err, run.ErrRunNotFound) {
-			AbortWithError(c, ErrNotFound("run not found"))
+			AbortWithError(c, ProjectAgentError(model.NewAgentError("RUN_NOT_FOUND", "cancel_run", err), "RUN_NOT_FOUND", "cancel_run"))
 			return
 		}
-		AbortWithError(c, ErrInternal(err.Error()))
+		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "cancel_run"))
 		return
 	}
-	c.Status(http.StatusNoContent)
+	if current.Status.Terminal() {
+		c.JSON(http.StatusOK, gin.H{"status": string(current.Status), "run_id": runID})
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"status": "cancel_requested", "run_id": runID})
 }
 
 func parseLastEventID(c *gin.Context) int64 {

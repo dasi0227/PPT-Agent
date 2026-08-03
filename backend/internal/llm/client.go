@@ -17,10 +17,54 @@ const (
 // ToolCalls 在 role=assistant 时记录 LLM 发起的工具调用；ToolCallID 在 role=tool 时关联对应的工具调用。
 type Message struct {
 	Role             Role
-	Content          string
+	Content          []ContentPart
 	ReasoningContent string
 	ToolCallID       string
 	ToolCalls        []ToolCall
+}
+
+type ContentPart struct {
+	Type     string
+	Text     string
+	ImageRef string
+	MIMEType string
+	Detail   string
+}
+
+func TextContent(text string) []ContentPart {
+	if text == "" {
+		return []ContentPart{}
+	}
+	return []ContentPart{{Type: "text", Text: text}}
+}
+
+func (m Message) Text() string {
+	for _, part := range m.Content {
+		if part.Type == "text" {
+			return part.Text
+		}
+	}
+	return ""
+}
+
+type ProviderCapabilities struct {
+	Vision            bool
+	MultipleToolCalls bool
+	ImageInputMIMEs   []string
+	MaxImageBytes     int
+}
+
+type ImageData struct {
+	Bytes    []byte
+	MIMEType string
+}
+
+type ImageRefResolver interface {
+	ResolveImage(context.Context, string) (ImageData, error)
+}
+
+type CapabilityProvider interface {
+	Capabilities() ProviderCapabilities
 }
 
 // ToolSchema is one Runtime-disclosed function schema.
@@ -49,8 +93,10 @@ type StreamChunk struct {
 
 // ToolCallRequest carries the strategy/stage/step-scoped tool subset.
 type ToolCallRequest struct {
-	Messages []Message
-	Tools    []ToolSchema
+	Messages      []Message
+	Tools         []ToolSchema
+	ImageResolver ImageRefResolver
+	OnRetry       func(attempt int)
 }
 
 // ToolCall 是 LLM 选择的一次工具调用。

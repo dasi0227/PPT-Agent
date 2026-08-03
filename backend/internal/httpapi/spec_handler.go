@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -91,11 +92,11 @@ func (h *SpecHandler) PatchSlide(c *gin.Context) {
 func specError(err error) *APIError {
 	switch {
 	case errors.Is(err, service.ErrSpecRevisionConflict):
-		return &APIError{HTTPStatus: http.StatusConflict, Code: "SPEC_REVISION_CONFLICT", Message: err.Error()}
+		return ProjectAgentError(model.NewAgentError("SPEC_REVISION_CONFLICT", "patch_spec", err), "SPEC_REVISION_CONFLICT", "patch_spec")
 	case errors.Is(err, spec.ErrReferenceBroken):
-		return &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "SPEC_REFERENCE_BROKEN", Message: err.Error()}
+		return ProjectAgentError(model.NewAgentError("SPEC_REFERENCE_BROKEN", "patch_spec", err), "SPEC_REFERENCE_BROKEN", "patch_spec")
 	case errors.Is(err, spec.ErrInvalid):
-		return &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "SPEC_INVALID", Message: err.Error()}
+		return ProjectAgentError(model.NewAgentError("SPEC_INVALID", "patch_spec", err), "SPEC_INVALID", "patch_spec")
 	case errors.Is(err, run.ErrRunNotFound):
 		return ErrNotFound("spec resource not found")
 	default:

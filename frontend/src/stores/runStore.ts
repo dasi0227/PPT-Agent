@@ -21,10 +21,11 @@ import {
 } from '../features/agent/historyHydrator';
 import { useSpecStore } from './specStore';
 import { useProjectStore } from './projectStore';
+import { newClientIdentity } from '../lib/clientIdentity';
 
 export type { PlanState } from '../api/types';
 
-export type RunStatus = 'idle' | 'creating' | 'running' | 'waiting' | 'done' | 'error' | 'canceled';
+export type RunStatus = 'idle' | 'creating' | 'running' | 'waiting' | 'canceling' | 'done' | 'error' | 'canceled';
 export type StreamStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
 export interface RunSession {
@@ -48,6 +49,7 @@ export interface RunSession {
   plan: PlanState | null;
   lastEventId?: string;
   processedEventIds?: string[];
+  originalRequest?: CreateRunRequest;
 }
 
 export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
@@ -70,9 +72,16 @@ interface PersistedActiveRun {
   threadId: string;
   projectId: string;
   lastEventId?: string;
+  canceling?: boolean;
 }
 
 const ACTIVE_RUNS_KEY = 'ppt-agent-active-runs-v1';
+const CANCEL_RECONCILIATION_DELAYS_MS = [3_000, 5_000, 10_000] as const;
+
+interface CancelReconciliation {
+  runId: string;
+  timer?: ReturnType<typeof setTimeout>;
+}
 
 function freshSession(overrides: Partial<RunSession> = {}): RunSession {
   return {
@@ -118,7 +127,9 @@ function errorMessage(error: unknown): { message: string; code?: string; request
   }
   return {
     message: error instanceof Error ? error.message : '请求失败，请重试',
-    retryable: true,
+    retryable: typeof error === 'object' && error !== null && 'retryable' in error
+      ? (error as { retryable?: unknown }).retryable === true
+      : false,
   };
 }
 
@@ -134,6 +145,25 @@ function terminalStatus(status: Run['status']): RunStatus {
   return 'running';
 }
 
+function isTerminalRunStatus(status: string): status is 'done' | 'failed' | 'canceled' {
+  return status === 'done' || status === 'failed' || status === 'canceled';
+}
+
+function requestFromTimeline(items: TimelineItem[], runId?: string | null): CreateRunRequest | undefined {
+  const original = [...items].reverse().find((item) =>
+    item.type === 'user_turn' &&
+    Boolean(item.target) &&
+    Boolean(item.interaction) &&
+    (!runId || item.runId === runId));
+  if (!original || original.type !== 'user_turn' || !original.target || !original.interaction) return undefined;
+  return {
+    client_request_id: newClientIdentity('req'),
+    target: original.target as RunTarget,
+    interaction: original.interaction as RunInteraction,
+    instruction: original.text,
+  };
+}
+
 interface RunStoreV2 {
   sessions: Record<string, RunSession>;
   getSession: (threadId: string) => RunSession;
@@ -142,6 +172,8 @@ interface RunStoreV2 {
   recoverPersistedRuns: () => Promise<void>;
   answerQuestion: (threadId: string, runId: string, replyTo: string, content: string) => Promise<boolean>;
   cancelRun: (threadId: string, runId: string) => Promise<void>;
+  steerRun: (threadId: string, runId: string, content: string, clientMessageId: string) => Promise<boolean>;
+  retryRun: (threadId: string) => Promise<boolean>;
   clearRun: (threadId: string) => void;
   closeSessions: (threadIds: string[]) => void;
   rekeySession: (oldId: string, newId: string) => void;
@@ -156,6 +188,8 @@ interface RunStoreV2 {
 }
 
 export const useRunStore = create<RunStoreV2>((set, get) => {
+  const cancelReconciliations = new Map<string, CancelReconciliation>();
+
   const patchSession = (threadId: string, patch: Partial<RunSession>) => {
     set((state) => {
       const prev = state.sessions[threadId] ?? freshSession();
@@ -168,6 +202,74 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       const prev = state.sessions[threadId] ?? freshSession();
       return { sessions: { ...state.sessions, [threadId]: { ...prev, ...updater(prev) } } };
     });
+  };
+
+  const stopCancelReconciliation = (threadId: string, runId?: string) => {
+    const reconciliation = cancelReconciliations.get(threadId);
+    if (!reconciliation || (runId && reconciliation.runId !== runId)) return;
+    if (reconciliation.timer !== undefined) clearTimeout(reconciliation.timer);
+    cancelReconciliations.delete(threadId);
+  };
+
+  const replayAuthoritativeTerminal = (
+    threadId: string,
+    runId: string,
+    status: 'done' | 'failed' | 'canceled',
+    projectId?: string,
+  ) => {
+    const session = get().sessions[threadId];
+    if (!session || session.activeRunId !== runId) {
+      stopCancelReconciliation(threadId, runId);
+      return;
+    }
+    stopCancelReconciliation(threadId, runId);
+    patchSession(threadId, { status: terminalStatus(status), progress: null, pendingQuestion: null });
+    get().subscribeRun(
+      threadId,
+      runId,
+      session.lastEventId,
+      projectId ?? session.projectId ?? undefined,
+    );
+  };
+
+  const startCancelReconciliation = (threadId: string, runId: string) => {
+    stopCancelReconciliation(threadId);
+    const reconciliation: CancelReconciliation = { runId };
+    cancelReconciliations.set(threadId, reconciliation);
+
+    const schedule = (attempt: number) => {
+      reconciliation.timer = setTimeout(async () => {
+        if (cancelReconciliations.get(threadId) !== reconciliation) return;
+        const before = get().sessions[threadId];
+        if (!before || before.activeRunId !== runId || before.status !== 'canceling') {
+          stopCancelReconciliation(threadId, runId);
+          return;
+        }
+        try {
+          const run = await runsApi.get(runId);
+          if (cancelReconciliations.get(threadId) !== reconciliation) return;
+          const current = get().sessions[threadId];
+          if (!current || current.activeRunId !== runId || current.status !== 'canceling') {
+            stopCancelReconciliation(threadId, runId);
+            return;
+          }
+          if (isTerminalRunStatus(run.status)) {
+            replayAuthoritativeTerminal(threadId, runId, run.status, run.project_id);
+            return;
+          }
+          patchSession(threadId, { status: 'canceling' });
+        } catch {
+          // SSE remains authoritative; a failed reconciliation consumes this bounded attempt.
+        }
+        if (attempt + 1 < CANCEL_RECONCILIATION_DELAYS_MS.length) {
+          schedule(attempt + 1);
+        } else if (cancelReconciliations.get(threadId) === reconciliation) {
+          cancelReconciliations.delete(threadId);
+        }
+      }, CANCEL_RECONCILIATION_DELAYS_MS[attempt]);
+    };
+
+    schedule(0);
   };
 
   const refreshTarget = (session: RunSession, event: SSEEvent) => {
@@ -192,6 +294,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     getSession: (threadId) => get().sessions[threadId] ?? IDLE_SESSION,
 
     createRun: async (threadId, payload, projectId) => {
+      stopCancelReconciliation(threadId);
+      payload = { ...payload, client_request_id: payload.client_request_id ?? newClientIdentity('req') };
       get().sessions[threadId]?.eventSourceClose?.();
       const userItem: TimelineItem = {
         id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -215,6 +319,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         eventSourceClose: null,
         processedEventIds: [],
         lastEventId: undefined,
+        originalRequest: payload,
       }));
 
       try {
@@ -249,6 +354,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     },
 
     subscribeRun: (threadId, runId, lastEventId, projectId) => {
+      const reconciliation = cancelReconciliations.get(threadId);
+      if (reconciliation && reconciliation.runId !== runId) {
+        stopCancelReconciliation(threadId);
+      }
       get().sessions[threadId]?.eventSourceClose?.();
       patchSession(threadId, {
         activeRunId: runId,
@@ -272,11 +381,11 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             const nextPlan = reducePlan(prev.plan, event);
 
             if (event.event === 'question.asked') {
-              status = 'waiting';
+              status = prev.status === 'canceling' ? 'canceling' : 'waiting';
               pendingQuestion = { id: event.data.question_id, prompt: event.data.prompt };
               progress = null;
             } else if (event.event === 'question.answered') {
-              status = 'running';
+              status = prev.status === 'canceling' ? 'canceling' : 'running';
               pendingQuestion = null;
             } else if (event.event === 'run.progress') {
               progress = {
@@ -312,9 +421,16 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
           const updated = get().sessions[threadId] ?? freshSession();
           if (event.id && updated.projectId) {
-            writePersistedRun({ runId, threadId, projectId: updated.projectId, lastEventId: event.id });
+            writePersistedRun({
+              runId,
+              threadId,
+              projectId: updated.projectId,
+              lastEventId: event.id,
+              canceling: updated.status === 'canceling',
+            });
           }
           if (event.event === 'run.finished') {
+            stopCancelReconciliation(threadId, runId);
             updated.eventSourceClose?.();
             removePersistedRun(threadId);
             patchSession(threadId, { eventSourceClose: null, streamStatus: 'closed' });
@@ -334,7 +450,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       await Promise.all(records.map(async (record) => {
         try {
           const run = await runsApi.get(record.runId);
-          const status = terminalStatus(run.status);
+          const status = record.canceling && !isTerminalRunStatus(run.status)
+            ? 'canceling'
+            : terminalStatus(run.status);
           let hydratedItems: TimelineItem[] = [];
           let hydratedPlan: PlanState | null = null;
           try {
@@ -351,7 +469,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             activeRunId: run.id,
             projectId: run.project_id,
             status,
-            streamStatus: status === 'running' || status === 'waiting' ? 'connecting' : 'closed',
+            streamStatus: status === 'running' || status === 'waiting' || status === 'canceling'
+              ? 'connecting'
+              : 'closed',
             target: run.target,
             interaction: run.interaction,
             lastEventId: record.lastEventId,
@@ -360,9 +480,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             pendingQuestion: status === 'waiting' && pending?.type === 'question'
               ? { id: pending.questionId, prompt: pending.prompt }
               : null,
+            originalRequest: prev.originalRequest ?? requestFromTimeline(hydratedItems, run.id),
           }));
           if (run.status === 'pending' || run.status === 'running' || run.status === 'waiting') {
             get().subscribeRun(record.threadId, run.id, record.lastEventId, run.project_id);
+            if (status === 'canceling') {
+              startCancelReconciliation(record.threadId, run.id);
+            }
           } else {
             removePersistedRun(record.threadId);
           }
@@ -409,7 +533,24 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
     cancelRun: async (threadId, runId) => {
       try {
-        await runsApi.cancel(runId);
+        const response = await runsApi.cancel(runId);
+        if (isTerminalRunStatus(response.status)) {
+          replayAuthoritativeTerminal(threadId, runId, response.status);
+          return;
+        }
+        const session = get().sessions[threadId];
+        if (!session || session.activeRunId !== runId) return;
+        patchSession(threadId, { status: 'canceling' });
+        if (session.projectId) {
+          writePersistedRun({
+            runId,
+            threadId,
+            projectId: session.projectId,
+            lastEventId: session.lastEventId,
+            canceling: true,
+          });
+        }
+        startCancelReconciliation(threadId, runId);
       } catch (error) {
         const detail = errorMessage(error);
         updateSession(threadId, (prev) => ({
@@ -428,7 +569,59 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       }
     },
 
+    steerRun: async (threadId, runId, content, clientMessageId) => {
+      const itemId = `steering_${clientMessageId}`;
+      updateSession(threadId, (prev) => ({
+        timelineItems: [...prev.timelineItems, {
+          id: itemId,
+          type: 'user_turn',
+          runId,
+          text: content,
+          deliveryStatus: 'sending',
+          clientMessageId,
+          timestamp: Date.now(),
+        }],
+      }));
+      try {
+        await runsApi.steer(runId, {
+          expected_run_id: runId,
+          client_message_id: clientMessageId,
+          content,
+        });
+        updateSession(threadId, (prev) => ({
+          timelineItems: prev.timelineItems.map((item) =>
+            item.id === itemId && item.type === 'user_turn'
+              ? { ...item, deliveryStatus: 'accepted' }
+              : item),
+        }));
+        return true;
+      } catch (error) {
+        const detail = errorMessage(error);
+        updateSession(threadId, (prev) => ({
+          timelineItems: prev.timelineItems.map((item) =>
+            item.id === itemId && item.type === 'user_turn'
+              ? {
+                ...item,
+                deliveryStatus: 'rejected',
+                rejectionCode: detail.code,
+              }
+              : item),
+        }));
+        return false;
+      }
+    },
+
+    retryRun: async (threadId) => {
+      const session = get().sessions[threadId];
+      if (!session?.originalRequest || !session.projectId) return false;
+      return get().createRun(threadId, {
+        ...session.originalRequest,
+        client_request_id: newClientIdentity('req'),
+      }, session.projectId);
+    },
+
     clearRun: (threadId) => {
+      stopCancelReconciliation(threadId);
       get().sessions[threadId]?.eventSourceClose?.();
       removePersistedRun(threadId);
       patchSession(threadId, freshSession());
@@ -436,7 +629,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
     closeSessions: (threadIds) => {
       const { sessions } = get();
-      threadIds.forEach((id) => sessions[id]?.eventSourceClose?.());
+      threadIds.forEach((id) => {
+        stopCancelReconciliation(id);
+        sessions[id]?.eventSourceClose?.();
+      });
       set((state) => {
         const next = { ...state.sessions };
         threadIds.forEach((id) => {
@@ -448,6 +644,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
     rekeySession: (oldId, newId) => {
       if (oldId === newId) return;
+      stopCancelReconciliation(oldId);
+      stopCancelReconciliation(newId);
       set((state) => {
         const existing = state.sessions[oldId];
         if (!existing) return {};
@@ -461,6 +659,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     dropSessions: (threadIds) => {
       const { sessions } = get();
       threadIds.forEach((id) => {
+        stopCancelReconciliation(id);
         sessions[id]?.eventSourceClose?.();
         removePersistedRun(id);
       });
@@ -474,6 +673,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     hydrateTimeline: (threadId, items, plan, session, lastEventId) => {
       const existing = get().sessions[threadId]?.timelineItems ?? [];
       if (existing.length > 0) return;
+      if (session?.activeRunId !== get().sessions[threadId]?.activeRunId) {
+        stopCancelReconciliation(threadId);
+      }
       patchSession(threadId, {
         timelineItems: items,
         plan: plan ?? null,
@@ -483,6 +685,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         interaction: session?.interaction ?? IDLE_SESSION.interaction,
         pendingQuestion: session?.pendingQuestion ?? null,
         lastEventId,
+        originalRequest: requestFromTimeline(items, session?.activeRunId),
       });
     },
   };

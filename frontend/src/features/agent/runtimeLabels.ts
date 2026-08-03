@@ -16,6 +16,7 @@ export const runStatusLabels: Record<RunStatus, string> = {
   creating: '正在创建',
   running: '运行中',
   waiting: '等待回答',
+  canceling: '正在取消',
   done: '已完成',
   error: '运行失败',
   canceled: '已取消',
