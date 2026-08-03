@@ -301,7 +301,7 @@ func TestRouterSelectsComplexForEmptyWholeDeck(t *testing.T) {
 func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		{Text: "这是尚未通过 finish 提交的分析。", ProviderReasoning: "provider state"},
+		{Text: "这是尚未通过 finish 提交的分析。"},
 		finishCall("finish"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
@@ -320,9 +320,8 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 		t.Fatalf("next-turn context=%+v", messages)
 	}
 	if messages[0].Role != llm.RoleAssistant ||
-		messages[0].Text() != "这是尚未通过 finish 提交的分析。" ||
-		messages[0].ReasoningContent != "provider state" {
-		t.Fatalf("assistant text or provider reasoning was not retained: %+v", messages[0])
+		messages[0].Text() != "这是尚未通过 finish 提交的分析。" {
+		t.Fatalf("assistant text was not retained: %+v", messages[0])
 	}
 	if messages[1].Role != llm.RoleUser || messages[1].Text() != noToolCallGuidance {
 		t.Fatalf("explicit finish guidance missing: %+v", messages[1])
@@ -338,6 +337,34 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	}
 	if final != "done" {
 		t.Fatalf("final text must come from finish.message, got %q", final)
+	}
+}
+
+func TestRuntimePassesOpaqueProviderContinuationWithoutParsingIt(t *testing.T) {
+	continuation := &llm.ProviderContinuation{
+		Provider: "deepseek", Model: "deepseek-v4-pro",
+		Opaque: json.RawMessage(`{"private_reasoning_state":"opaque"}`),
+	}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		{Text: "continue", Continuation: continuation},
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "opaque-continuation", ProjectDir: t.TempDir(),
+		Context:     testPack(model.IntentTalk, model.ArtifactSpec, model.TargetSlide, false, "inspect"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+	})
+	if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
+		t.Fatalf("continuation run failed: outcome=%+v requests=%d", outcome, len(agent.requests))
+	}
+	got := agent.requests[1].Continuation
+	if got != continuation || got.Provider != "deepseek" ||
+		string(got.Opaque) != `{"private_reasoning_state":"opaque"}` {
+		t.Fatalf("Runtime changed provider continuation: %+v", got)
+	}
+	raw, _ := json.Marshal(agent.requests[1].Messages)
+	if strings.Contains(string(raw), "private_reasoning_state") {
+		t.Fatalf("provider continuation entered ordinary message history: %s", raw)
 	}
 }
 
@@ -611,8 +638,7 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		{
-			Text:              "我先尝试提交当前结果。",
-			ProviderReasoning: "finish provider state",
+			Text: "我先尝试提交当前结果。",
 			ToolCalls: []llm.ToolCall{{
 				ID: "first", Name: "finish", Args: map[string]any{"message": "not ready"},
 			}},
@@ -641,7 +667,6 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 	if rejectedCall.Role != llm.RoleAssistant || len(rejectedCall.ToolCalls) != 1 ||
 		rejectedCall.ToolCalls[0].ID != "first" || rejectedCall.ToolCalls[0].Name != "finish" ||
 		rejectedCall.Text() != "我先尝试提交当前结果。" ||
-		rejectedCall.ReasoningContent != "finish provider state" ||
 		rejectionObservation.Role != llm.RoleTool ||
 		rejectionObservation.ToolCallID != "first" ||
 		!strings.Contains(rejectionObservation.Text(), CodeCompletionGateBlocked) {
@@ -981,8 +1006,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 	traces := &traceRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		{
-			Text:              "我会先确认当前页面结构，再进行局部更新。",
-			ProviderReasoning: "hidden provider chain of thought",
+			Text: "我会先确认当前页面结构，再进行局部更新。",
 			ToolCalls: []llm.ToolCall{{
 				ID: "write", Name: "write_ppt",
 				Args: map[string]any{
@@ -1011,7 +1035,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 	raw, _ := json.Marshal(events.events)
 	publicText := string(raw)
 	for _, forbidden := range []string{
-		"hidden provider chain of thought", "<section>", `"args"`, `"content"`,
+		"<section>", `"args"`, `"content"`,
 		"screenshot_path", `"hash"`, `"data"`,
 	} {
 		if strings.Contains(publicText, forbidden) {
@@ -1023,7 +1047,6 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 	}
 	retained := agent.requests[1].Messages[0]
 	if retained.Text() != "我会先确认当前页面结构，再进行局部更新。" ||
-		retained.ReasoningContent != "hidden provider chain of thought" ||
 		len(retained.ToolCalls) != 1 || retained.ToolCalls[0].ID != "write" ||
 		retained.ToolCalls[0].Name != "write_ppt" {
 		t.Fatalf("assistant context=%+v", retained)

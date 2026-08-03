@@ -6,6 +6,7 @@ type Run struct {
 	ThreadID          string
 	ProjectID         string
 	ClientRequestID   string
+	Model             ModelSelection
 	WorkSpec          WorkSpec
 	Status            RunStatus
 	CancelRequestedAt int64
@@ -13,9 +14,19 @@ type Run struct {
 	UpdatedAt         int64
 }
 
+// ModelSelection is the non-sensitive profile snapshot pinned at Run creation.
+// Historical runs have the zero value and are projected as model: null.
+type ModelSelection struct {
+	ProfileName string
+	Provider    string
+	Model       string
+	URL         string
+}
+
 // CreateRunParams 是发起一次 Run 的入参（来自 API 层，已解析）。
 type CreateRunParams struct {
 	ClientRequestID string
+	Model           string
 	ThreadID        string
 	ProjectID       string
 	PageIndex       *int

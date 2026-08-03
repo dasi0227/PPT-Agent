@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -44,7 +45,9 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"SPEC_INVALID":                   {Code: "SPEC_INVALID", Category: ErrorAgentRepairable, SafeMessage: "设计稿未通过格式检查。", ModelMessage: "Correct the reported spec validation issue.", HTTPStatus: 422},
 	"INVALID_TARGET":                 {Code: "INVALID_TARGET", Category: ErrorUserActionRequired, SafeMessage: "任务目标不合法。", ModelMessage: "Correct target.artifact, target.level, and slide_id.", HTTPStatus: 422},
 	"RUN_TARGET_UNSUPPORTED":         {Code: "RUN_TARGET_UNSUPPORTED", Category: ErrorUserActionRequired, SafeMessage: "当前任务类型暂不支持。", ModelMessage: "Choose a supported PPT target.", HTTPStatus: 422},
-	"VISION_CAPABILITY_REQUIRED":     {Code: "VISION_CAPABILITY_REQUIRED", Category: ErrorUserActionRequired, SafeMessage: "当前模型不支持页面视觉检查，请配置支持图片输入的模型。", ModelMessage: "Use a provider configuration with vision image input support.", HTTPStatus: 422},
+	"MODEL_PROFILE_NOT_FOUND":        {Code: "MODEL_PROFILE_NOT_FOUND", Category: ErrorUserActionRequired, SafeMessage: "所选模型已不可用，请重新选择。", ModelMessage: "Choose an exact model profile returned by the server.", HTTPStatus: 422},
+	"MODEL_CAPABILITY_MISMATCH":      {Code: "MODEL_CAPABILITY_MISMATCH", Category: ErrorUserActionRequired, SafeMessage: "所选模型不具备当前任务所需能力，请重新选择。", ModelMessage: "Choose a model profile that satisfies the required capability.", HTTPStatus: 422},
+	"MODEL_PROVIDER_UNSUPPORTED":     {Code: "MODEL_PROVIDER_UNSUPPORTED", Category: ErrorTerminal, SafeMessage: "模型服务配置不受当前版本支持。", ModelMessage: "An administrator must correct the configured provider.", HTTPStatus: 500},
 	"IDEMPOTENCY_KEY_REUSED":         {Code: "IDEMPOTENCY_KEY_REUSED", Category: ErrorConflict, SafeMessage: "该请求标识已用于其他内容，请重新发送。", ModelMessage: "Generate a new client request identifier for the changed request.", HTTPStatus: 409},
 	"RUN_WAITING_FOR_ANSWER":         {Code: "RUN_WAITING_FOR_ANSWER", Category: ErrorConflict, SafeMessage: "当前任务正在等待问题回答，请先回答问题。", ModelMessage: "Answer the pending ask_user question instead of steering.", HTTPStatus: 409},
 	"RUN_CANCELING":                  {Code: "RUN_CANCELING", Category: ErrorCanceled, SafeMessage: "当前任务正在取消，无法再追加要求。", ModelMessage: "Wait for the canceled terminal state.", HTTPStatus: 409},
@@ -77,6 +80,13 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"RUNTIME_BUDGET_EXCEEDED":        {Code: "RUNTIME_BUDGET_EXCEEDED", Category: ErrorTerminal, SafeMessage: "运行达到资源上限，未完成的修改不会提交。", ModelMessage: "Stop the run without committing staging.", HTTPStatus: 500},
 	"AGENT_FAILED":                   {Code: "AGENT_FAILED", Category: ErrorTerminal, SafeMessage: "Agent 暂时无法继续，请稍后重试。", ModelMessage: "Stop the run and preserve the internal cause in trace only.", HTTPStatus: 500},
 	"INTERNAL":                       {Code: "INTERNAL", Category: ErrorTerminal, SafeMessage: "服务暂时无法完成请求。", ModelMessage: "Stop and inspect the internal trace.", HTTPStatus: 500},
+}
+
+var traceSensitivePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\b(?:provider[_ ]?body|response[_ ]?body|body)\s*[:=].*$`),
+	regexp.MustCompile(`(?i)\bauthorization["']?\s*[:=]\s*["']?(?:bearer\s+)?[^"'\s,;}]+["']?`),
+	regexp.MustCompile(`(?i)\b(?:api[_-]?key|key|token|secret)["']?\s*[:=]\s*["']?[^"'\s,;}]+["']?`),
+	regexp.MustCompile(`(?i)\bsk-[a-z0-9._-]+\b`),
 }
 
 type AgentError struct {
@@ -190,9 +200,16 @@ func (e *AgentError) TraceProjection() map[string]any {
 	out := e.ModelObservation()
 	out["safe_message"] = e.SafeMessage
 	if e.Cause != nil {
-		out["cause"] = e.Cause.Error()
+		out["cause"] = sanitizeTraceCause(e.Cause.Error())
 	}
 	return out
+}
+
+func sanitizeTraceCause(value string) string {
+	for _, pattern := range traceSensitivePatterns {
+		value = pattern.ReplaceAllString(value, "[REDACTED]")
+	}
+	return value
 }
 
 func (e *AgentError) HTTPStatus() int {

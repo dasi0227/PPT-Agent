@@ -37,7 +37,8 @@ describe('CommandComposer', () => {
         },
       });
       useComposerStore.setState({
-        artifact: 'presentation', level: 'slide', intent: 'execute', userTouchedTarget: false,
+        artifact: 'presentation', level: 'slide', intent: 'execute',
+        modelProfileName: null, userTouchedTarget: false,
       });
       useDeckStore.setState({ currentPage: 0 });
     });
@@ -45,6 +46,7 @@ describe('CommandComposer', () => {
 
   it('uses default execution and sends the current slide with a stable slide id', async () => {
     render(<CommandComposer />);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '模型' })).toHaveValue('Kimi K3'));
     expect(screen.getByRole('button', { name: '讨论' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '询问' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '目标：单页幻灯片' })).toBeInTheDocument();
@@ -55,6 +57,7 @@ describe('CommandComposer', () => {
 
     await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', expect.objectContaining({
       client_request_id: expect.stringMatching(/^req_/),
+      model: 'Kimi K3',
       target: { artifact: 'presentation', level: 'slide', slide_id: 'stable-1' },
       interaction: { intent: 'execute' },
       instruction: '调整当前页',
@@ -84,6 +87,7 @@ describe('CommandComposer', () => {
 
   it('keeps /talk and /ask shortcuts mapped to their existing interaction protocols', async () => {
     render(<CommandComposer />);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '模型' })).toHaveValue('Kimi K3'));
     const textarea = screen.getByRole('textbox');
 
     fireEvent.change(textarea, { target: { value: '/talk 给我建议' } });
@@ -113,12 +117,32 @@ describe('CommandComposer', () => {
   it('keeps typed content when run creation fails', async () => {
     createRun.mockResolvedValue(false);
     render(<CommandComposer />);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '模型' })).toHaveValue('Kimi K3'));
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: '保留这段内容' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('运行创建失败'));
     expect(textarea).toHaveValue('保留这段内容');
+  });
+
+  it('disables text-only profiles for presentation execute but allows them for talk', async () => {
+    render(<CommandComposer />);
+    const selector = await screen.findByRole('combobox', { name: '模型' });
+    expect(selector).toHaveValue('Kimi K3');
+    const textOption = screen.getByRole('option', { name: /DeepSeek V4 Pro/ });
+    expect(textOption).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '讨论' }));
+    expect(textOption).not.toBeDisabled();
+    fireEvent.change(selector, { target: { value: 'DeepSeek V4 Pro' } });
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '只读分析当前页' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', expect.objectContaining({
+      model: 'DeepSeek V4 Pro',
+      interaction: { intent: 'talk' },
+    }), 'p1'));
   });
 
   it('keeps the single-page choice available even when the project has no pages', async () => {

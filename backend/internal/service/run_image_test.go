@@ -20,6 +20,11 @@ func TestRunImageResolverRejectsCrossRunAndCrossProjectReferences(t *testing.T) 
 		t.Fatal(err)
 	}
 	resolver := runImageResolver{runID: "run-current", projectID: "project-current", projectDir: currentProject}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := resolver.ResolveImage(canceled, ref); err != context.Canceled {
+		t.Fatalf("image resolver ignored context cancellation: %v", err)
+	}
 	if _, err := resolver.ResolveImage(context.Background(), "run:run-other/screenshot:shot_abc"); err == nil {
 		t.Fatal("cross-run image reference was accepted")
 	}

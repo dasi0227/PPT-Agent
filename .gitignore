@@ -21,5 +21,8 @@
 .env
 .env.*
 
+# 本地 LLM Profile（可能包含明文 Key）
+config.yaml
+
 # 编辑器/系统
 .DS_Store

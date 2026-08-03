@@ -84,6 +84,10 @@ type runPO struct {
 	InteractionIntent string `gorm:"column:interaction_intent"`
 	WorkSpecJSON      string `gorm:"column:work_spec_json"`
 	ClientRequestID   string `gorm:"column:client_request_id"`
+	ModelProfileName  string `gorm:"column:model_profile_name"`
+	ModelProvider     string `gorm:"column:model_provider"`
+	ModelName         string `gorm:"column:model_name"`
+	ModelURL          string `gorm:"column:model_url"`
 	CancelRequestedAt *int64 `gorm:"column:cancel_requested_at"`
 	Status            string `gorm:"column:status"`
 	CreatedAt         int64  `gorm:"column:created_at"`
@@ -98,6 +102,10 @@ func (r runPO) toModel() model.Run {
 	return model.Run{
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		ClientRequestID: r.ClientRequestID, WorkSpec: spec, Status: model.RunStatus(r.Status),
+		Model: model.ModelSelection{
+			ProfileName: r.ModelProfileName, Provider: r.ModelProvider,
+			Model: r.ModelName, URL: r.ModelURL,
+		},
 		CancelRequestedAt: valueOrZero(r.CancelRequestedAt),
 		CreatedAt:         r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
@@ -112,6 +120,10 @@ func runToPO(m model.Run) runPO {
 		InteractionIntent: string(m.WorkSpec.Interaction.Intent),
 		WorkSpecJSON:      string(raw),
 		ClientRequestID:   m.ClientRequestID,
+		ModelProfileName:  m.Model.ProfileName,
+		ModelProvider:     m.Model.Provider,
+		ModelName:         m.Model.Model,
+		ModelURL:          m.Model.URL,
 		CancelRequestedAt: int64PtrOrNil(m.CancelRequestedAt),
 		Status:            string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}

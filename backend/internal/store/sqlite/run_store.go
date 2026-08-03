@@ -116,11 +116,14 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	return s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
 		 target_artifact, target_level, target_slide_id, interaction_intent, work_spec_json,
-		 client_request_id, cancel_requested_at, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 client_request_id, model_profile_name, model_provider, model_name, model_url,
+		 cancel_requested_at, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		po.ID, po.ThreadID, po.ProjectID, po.TargetArtifact, po.TargetLevel,
 		nullIfEmpty(po.TargetSlideID), po.InteractionIntent, po.WorkSpecJSON,
-		nullIfEmpty(po.ClientRequestID), po.CancelRequestedAt, po.Status, po.CreatedAt, po.UpdatedAt,
+		nullIfEmpty(po.ClientRequestID), nullIfEmpty(po.ModelProfileName),
+		nullIfEmpty(po.ModelProvider), nullIfEmpty(po.ModelName), nullIfEmpty(po.ModelURL),
+		po.CancelRequestedAt, po.Status, po.CreatedAt, po.UpdatedAt,
 	).Error
 }
 

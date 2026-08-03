@@ -27,6 +27,7 @@ func NewRunHandler(svc *service.RunService) *RunHandler {
 
 type createRunBody struct {
 	ClientRequestID string               `json:"client_request_id"`
+	Model           string               `json:"model"`
 	Instruction     string               `json:"instruction"`
 	Target          model.RunTarget      `json:"target"`
 	Interaction     model.RunInteraction `json:"interaction"`
@@ -41,13 +42,20 @@ type runResponse struct {
 	EventsURL   string               `json:"events_url"`
 	Target      model.RunTarget      `json:"target"`
 	Interaction model.RunInteraction `json:"interaction"`
+	Model       *string              `json:"model"`
 }
 
 func toRunResponse(r model.Run) runResponse {
+	var profileName *string
+	if r.Model.ProfileName != "" {
+		value := r.Model.ProfileName
+		profileName = &value
+	}
 	return runResponse{
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
 		Target: r.WorkSpec.Target, Interaction: r.WorkSpec.Interaction,
+		Model: profileName,
 	}
 }
 
@@ -69,6 +77,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 	}
 	params := model.CreateRunParams{
 		ClientRequestID: body.ClientRequestID,
+		Model:           body.Model,
 		Instruction:     body.Instruction,
 		WorkSpec: model.WorkSpec{
 			Target: body.Target, Interaction: body.Interaction,

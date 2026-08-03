@@ -19,6 +19,23 @@ Object.defineProperty(window, 'sessionStorage', { value: localStorageMock });
 // Mock fetch globally
 globalThis.fetch = async (input: RequestInfo | URL) => {
   const url = input.toString();
+  if (url.includes('/api/v1/llm/profiles')) {
+    return { ok: true, status: 200, json: async () => ({
+      default: 'Kimi K3',
+      profiles: [
+        {
+          name: 'Kimi K3',
+          model: 'kimi-k3',
+          capabilities: { vision: true, tool_calls: true, multiple_tool_calls: true },
+        },
+        {
+          name: 'DeepSeek V4 Pro',
+          model: 'deepseek-v4-pro',
+          capabilities: { vision: false, tool_calls: true, multiple_tool_calls: true },
+        },
+      ],
+    }) } as unknown as Response;
+  }
   if (/\/api\/v1\/slides\/[^/]+\/render$/.test(url)) {
     return {
       ok: true,

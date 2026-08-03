@@ -1,0 +1,21 @@
+llm:
+  default: Kimi K3
+
+  profiles:
+    - name: DeepSeek V4 Pro
+      provider: deepseek
+      url: https://api.deepseek.com
+      model: deepseek-v4-pro
+      key: sk-your-deepseek-key
+
+    - name: Kimi K3
+      provider: kimi
+      url: https://api.moonshot.cn/v1
+      model: kimi-k3
+      key: sk-your-kimi-key
+
+    - name: GPT-5
+      provider: openai
+      url: https://api.openai.com/v1
+      model: gpt-5
+      key: sk-your-openai-key

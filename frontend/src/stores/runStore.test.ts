@@ -63,6 +63,7 @@ vi.mock('../api/runs', () => ({
         target: payload.target,
         interaction: payload.interaction,
         events_url: '',
+        model: payload.model ?? 'Kimi K3',
       };
       if (createMode === 'pending') return new Promise((resolve) => { resolveCreate = resolve; });
       if (createMode === 'reject') return Promise.reject(new Error('offline'));
@@ -88,6 +89,7 @@ vi.mock('../api/threads', () => ({
 }));
 
 import { useRunStore } from './runStore';
+import { useComposerStore } from './composerStore';
 import type { TimelineItem } from '../features/agent/eventReducer';
 
 const request = (instruction: string) => ({
@@ -113,6 +115,7 @@ function reset() {
   createRequests.length = 0;
   steeringRequests.length = 0;
   sessionStorage.clear();
+  useComposerStore.setState({ modelProfileName: null });
   useRunStore.setState({ sessions: {} });
 }
 
@@ -125,6 +128,7 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'done' | '
     target: request('').target,
     interaction: request('').interaction,
     events_url: '',
+    model: 'Kimi K3',
   };
 }
 
@@ -206,7 +210,7 @@ describe('runStore public event sessions', () => {
   });
 
   test('keeps rejected steering text and retry creates a new request identity', async () => {
-    await useRunStore.getState().createRun('t1', request('original'), 'p1');
+    await useRunStore.getState().createRun('t1', { ...request('original'), model: 'Kimi K3' }, 'p1');
     const firstRequestId = createRequests[0].client_request_id;
     steeringMode = 'reject';
     expect(await useRunStore.getState().steerRun('t1', 'run_1', 'too late', 'msg-late')).toBe(false);
@@ -220,10 +224,20 @@ describe('runStore public event sessions', () => {
     expect(createRequests).toHaveLength(2);
     expect(createRequests[1]).toMatchObject({
       instruction: 'original',
+      model: 'Kimi K3',
       target: request('').target,
       interaction: request('').interaction,
     });
     expect(createRequests[1].client_request_id).not.toBe(firstRequestId);
+  });
+
+  test('retry defaults to the original model but honors a new composer selection', async () => {
+    await useRunStore.getState().createRun('t1', { ...request('original'), model: 'Kimi K3' }, 'p1');
+    expect(useComposerStore.getState().modelProfileName).toBe('Kimi K3');
+    useComposerStore.getState().setModelProfileName('GPT-5');
+
+    expect(await useRunStore.getState().retryRun('t1')).toBe(true);
+    expect(createRequests[1]).toMatchObject({ instruction: 'original', model: 'GPT-5' });
   });
 
   test('enters cancel-requested state until authoritative terminal event arrives', async () => {
@@ -393,6 +407,7 @@ describe('runStore public event sessions', () => {
     recoveredRun = {
       id: 'saved', thread_id: 't1', project_id: 'p1', status: 'running',
       target: request('').target, interaction: request('').interaction, events_url: '',
+      model: 'Kimi K3',
     };
     await useRunStore.getState().recoverPersistedRuns();
     expect(useRunStore.getState().sessions.t1).toMatchObject({

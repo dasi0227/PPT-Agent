@@ -81,13 +81,15 @@ type AgentRequest struct {
 	Messages        []llm.Message
 	Tools           []ToolSchema
 	ImageResolver   llm.ImageRefResolver
+	Continuation    *llm.ProviderContinuation
 	OnProviderRetry func(int)
 }
 
 type AgentResponse struct {
-	ToolCalls         []llm.ToolCall
-	Text              string
-	ProviderReasoning string
+	ToolCalls    []llm.ToolCall
+	Text         string
+	Continuation *llm.ProviderContinuation
+	Usage        llm.Usage
 }
 
 type ReActAgent interface {
@@ -95,12 +97,12 @@ type ReActAgent interface {
 }
 
 type CognitiveAgent struct {
-	Client llm.Client
+	Provider llm.Provider
 }
 
 func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentResponse, error) {
-	if a.Client == nil {
-		return AgentResponse{}, errors.New("LLM client is required for ReAct execution")
+	if a.Provider == nil {
+		return AgentResponse{}, errors.New("LLM provider is required for ReAct execution")
 	}
 	runtimeState, _ := json.Marshal(map[string]any{
 		"strategy": req.Strategy, "phase": req.Phase, "plan": req.Plan,
@@ -117,15 +119,16 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	for _, schema := range req.Tools {
 		tools = append(tools, llm.ToolSchema{Name: schema.Name, Description: schema.Description, Parameters: schema.Parameters})
 	}
-	response, err := a.Client.CallTool(ctx, llm.ToolCallRequest{
-		Messages: messages, Tools: tools, ImageResolver: req.ImageResolver, OnRetry: req.OnProviderRetry,
+	response, err := a.Provider.Generate(ctx, llm.GenerateRequest{
+		Messages: messages, Tools: tools, ImageResolver: req.ImageResolver,
+		Continuation: req.Continuation, OnRetry: req.OnProviderRetry,
 	})
 	if err != nil {
 		return AgentResponse{}, err
 	}
 	return AgentResponse{
-		ToolCalls: response.ToolCalls, Text: response.Text,
-		ProviderReasoning: response.ReasoningContent,
+		ToolCalls: response.ToolCalls, Text: response.Text(),
+		Continuation: response.Continuation, Usage: response.Usage,
 	}, nil
 }
 
@@ -216,6 +219,7 @@ type runtimeState struct {
 	ledger                *EvidenceLedger
 	issues                []Issue
 	messages              []llm.Message
+	continuation          *llm.ProviderContinuation
 	turns                 int
 	toolCalls             int
 	tokens                int
@@ -318,6 +322,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			Evidence: state.ledger.Entries(state.changeSet()), Messages: append([]llm.Message{}, state.messages...),
 			Tools:         schemas,
 			ImageResolver: input.ImageResolver,
+			Continuation:  state.continuation,
 			OnProviderRetry: func(attempt int) {
 				r.emitProgress(input.Emitter, state, "thinking", fmt.Sprintf("模型服务暂时不可用，正在自动重试（%d）", attempt), nil)
 			},
@@ -325,15 +330,18 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err != nil {
 			return r.failAgentError(input, state, classifyProviderError(ctx, err))
 		}
-		state.tokens += approximateTokens(response.Text)
+		state.continuation = response.Continuation
+		if response.Usage.TotalTokens > 0 {
+			state.tokens += response.Usage.TotalTokens
+		} else {
+			state.tokens += approximateTokens(response.Text)
+		}
 		if len(response.ToolCalls) == 0 {
 			recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{
 				"turn": state.turns, "has_tool_call": false,
-				"provider_reasoning_content": response.ProviderReasoning,
 			})
 			state.messages = append(state.messages, llm.Message{
 				Role: llm.RoleAssistant, Content: llm.TextContent(response.Text),
-				ReasoningContent: response.ProviderReasoning,
 			})
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(noToolCallGuidance)})
 			continue
@@ -347,7 +355,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		r.emitReasoning(input.Emitter, state, response.Text)
 		recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{
 			"turn": state.turns, "has_tool_call": true,
-			"provider_reasoning_content": response.ProviderReasoning,
 		})
 		controlCount := 0
 		for _, call := range calls {
@@ -358,25 +365,25 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if controlCount > 0 {
 			if len(calls) != 1 {
 				result := failedToolResult(CodeInvalidControlCall, "control actions must be the only call in a model response", false)
-				state.messages = appendBatchObservations(state.messages, calls, response.Text, response.ProviderReasoning, []ToolResult{result})
+				state.messages = appendBatchObservations(state.messages, calls, response.Text, []ToolResult{result})
 				continue
 			}
 			call := calls[0]
 			if !schemasByName(schemas)[call.Name] {
 				r.appendControlObservation(
-					state, call, response.Text, response.ProviderReasoning,
+					state, call, response.Text,
 					failedToolResult(ErrToolNotDisclosed.Error(), "runtime control was not disclosed in this turn", false),
 				)
 				continue
 			}
-			outcome, done := r.executeControl(ctx, input, state, call, response.Text, response.ProviderReasoning)
+			outcome, done := r.executeControl(ctx, input, state, call, response.Text)
 			if done {
 				return outcome
 			}
 			continue
 		}
 		results := r.executeToolBatch(ctx, input, state, registry, schemasByName(schemas), calls)
-		state.messages = appendBatchObservations(state.messages, calls, response.Text, response.ProviderReasoning, results)
+		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
 		upgrade := false
 		recordToolFailures(state, results)
 		for _, result := range results {
@@ -696,23 +703,22 @@ func (r *Runtime) executeControl(
 	state *runtimeState,
 	call llm.ToolCall,
 	assistantText string,
-	providerReasoning string,
 ) (StructuredOutcome, bool) {
 	switch call.Name {
 	case "update_plan":
 		if state.strategy != StrategyComplex || (state.phase != PhasePlanning && state.phase != PhaseExecuting) {
-			r.appendControlObservation(state, call, assistantText, providerReasoning, failedToolResult(CodeInvalidControlCall, "update_plan is not allowed now", false))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "update_plan is not allowed now", false))
 			return StructuredOutcome{}, false
 		}
 		raw, _ := json.Marshal(call.Args)
 		var update PlanUpdate
 		if err := json.Unmarshal(raw, &update); err != nil {
-			r.appendControlObservation(state, call, assistantText, providerReasoning, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
 			return StructuredOutcome{}, false
 		}
 		next, created, err := ApplyPlanUpdate(state.plan, update, state.runID, time.Now())
 		if err != nil {
-			r.appendControlObservation(state, call, assistantText, providerReasoning, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
 			return StructuredOutcome{}, false
 		}
 		previous := state.plan
@@ -734,19 +740,19 @@ func (r *Runtime) executeControl(
 				state.lastMilestoneRevision = next.Revision
 			}
 		}
-		r.appendControlObservation(state, call, assistantText, providerReasoning, SuccessfulToolResult("plan revision accepted"))
+		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan revision accepted"))
 		if created && state.phase == PhasePlanning {
 			r.changePhase(input.Emitter, state, PhaseExecuting, "first valid plan created")
 		}
 		return StructuredOutcome{}, false
 	case "ask_user":
 		if input.Prompter == nil {
-			r.appendControlObservation(state, call, assistantText, providerReasoning, failedToolResult(CodeInvalidControlCall, "ask_user requires an interactive prompter", false))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "ask_user requires an interactive prompter", false))
 			return StructuredOutcome{}, false
 		}
 		question := stringValue(call.Args["question"])
 		if question == "" {
-			r.appendControlObservation(state, call, assistantText, providerReasoning, failedToolResult(CodeInvalidControlCall, "question is required", true))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "question is required", true))
 			return StructuredOutcome{}, false
 		}
 		questionID := call.ID
@@ -772,13 +778,13 @@ func (r *Runtime) executeControl(
 			"selected_option_ids": answer.SelectedOptionIDs,
 			"custom_text":         answer.CustomText, "display_text": displayText,
 		}
-		r.appendControlObservation(state, call, assistantText, providerReasoning, result)
+		r.appendControlObservation(state, call, assistantText, result)
 		return StructuredOutcome{}, false
 	case "finish":
 		message := stringValue(call.Args["message"])
-		return r.finishCandidate(ctx, input, state, call, assistantText, providerReasoning, message)
+		return r.finishCandidate(ctx, input, state, call, assistantText, message)
 	default:
-		r.appendControlObservation(state, call, assistantText, providerReasoning, failedToolResult(CodeInvalidControlCall, "unknown runtime control tool", false))
+		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "unknown runtime control tool", false))
 		return StructuredOutcome{}, false
 	}
 }
@@ -789,7 +795,6 @@ func (r *Runtime) finishCandidate(
 	state *runtimeState,
 	call llm.ToolCall,
 	assistantText string,
-	providerReasoning string,
 	message string,
 ) (StructuredOutcome, bool) {
 	finishPhase := state.phase
@@ -827,7 +832,7 @@ func (r *Runtime) finishCandidate(
 		}
 		state.messages = appendToolObservation(
 			state.messages,
-			call, assistantText, providerReasoning, observation,
+			call, assistantText, observation,
 		)
 		return StructuredOutcome{}, false
 	}
@@ -1166,17 +1171,15 @@ func (r *Runtime) appendControlObservation(
 	state *runtimeState,
 	call llm.ToolCall,
 	assistantText string,
-	providerReasoning string,
 	result ToolResult,
 ) {
-	state.messages = appendToolObservation(state.messages, call, assistantText, providerReasoning, result)
+	state.messages = appendToolObservation(state.messages, call, assistantText, result)
 }
 
 func appendToolObservation(
 	messages []llm.Message,
 	call llm.ToolCall,
 	assistantText string,
-	providerReasoning string,
 	result ToolResult,
 ) []llm.Message {
 	parts := append([]llm.ContentPart(nil), result.ObservationParts...)
@@ -1191,7 +1194,7 @@ func appendToolObservation(
 	return append(messages,
 		llm.Message{
 			Role: llm.RoleAssistant, Content: llm.TextContent(assistantText),
-			ReasoningContent: providerReasoning, ToolCalls: []llm.ToolCall{call},
+			ToolCalls: []llm.ToolCall{call},
 		},
 		llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: parts},
 	)
@@ -1201,12 +1204,11 @@ func appendBatchObservations(
 	messages []llm.Message,
 	calls []llm.ToolCall,
 	assistantText string,
-	providerReasoning string,
 	results []ToolResult,
 ) []llm.Message {
 	messages = append(messages, llm.Message{
 		Role: llm.RoleAssistant, Content: llm.TextContent(assistantText),
-		ReasoningContent: providerReasoning, ToolCalls: calls,
+		ToolCalls: calls,
 	})
 	for index, call := range calls {
 		result := failedToolResult(CodeInvalidControlCall, "tool call was not executed", false)

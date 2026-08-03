@@ -31,6 +31,66 @@ func TestRuntimeAuthorityMigrationCreatesTablesAndIndexes(t *testing.T) {
 	}
 }
 
+func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, model.Project{
+		ID: "model-project", Title: "project", WorkDir: t.TempDir(),
+		Status: "draft", CreatedAt: 1, UpdatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateThread(ctx, model.Thread{
+		ID: "model-thread", ProjectID: "model-project", HistoryPath: "thread.jsonl",
+		Status: "active", CreatedAt: 1, UpdatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runModel := model.Run{
+		ID: "model-run", ThreadID: "model-thread", ProjectID: "model-project",
+		Model: model.ModelSelection{
+			ProfileName: "Kimi Stable", Provider: "kimi",
+			Model: "kimi-k3", URL: "https://gateway.example/v1",
+		},
+		WorkSpec: model.WorkSpec{
+			Target:      model.RunTarget{Artifact: model.ArtifactSpec, Level: model.TargetDeck},
+			Interaction: model.RunInteraction{Intent: model.IntentTalk}, Instruction: "inspect",
+		},
+		Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1,
+	}
+	if err := s.CreateRun(ctx, runModel); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetRun(ctx, runModel.ID)
+	if err != nil || got.Model != runModel.Model {
+		t.Fatalf("model snapshot changed: got=%+v err=%v", got.Model, err)
+	}
+	columns := tableColumnsForStoreTest(t, s, "runs")
+	for _, column := range []string{"model_profile_name", "model_provider", "model_name", "model_url"} {
+		if !columns[column] {
+			t.Fatalf("runs table missing %s", column)
+		}
+	}
+	if columns["model_key"] || columns["key"] || columns["api_key"] {
+		t.Fatalf("runs table must never store provider keys: %v", columns)
+	}
+}
+
+func tableColumnsForStoreTest(t *testing.T, s *Store, table string) map[string]bool {
+	t.Helper()
+	var rows []struct {
+		Name string `gorm:"column:name"`
+	}
+	if err := s.db.Raw("PRAGMA table_info(" + table + ")").Scan(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]bool{}
+	for _, row := range rows {
+		out[row.Name] = true
+	}
+	return out
+}
+
 func TestAcquireIdempotencyConcurrentDuplicateHasOneAuthority(t *testing.T) {
 	s := newTestStore(t)
 	const workers = 24

@@ -3,31 +3,27 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-	"time"
 )
 
 func clearEnvForTest(t *testing.T, keys ...string) {
 	t.Helper()
 	old := make(map[string]*string, len(keys))
 	for _, key := range keys {
-		if v, ok := os.LookupEnv(key); ok {
-			vv := v
-			old[key] = &vv
-		} else {
-			old[key] = nil
+		if value, ok := os.LookupEnv(key); ok {
+			copy := value
+			old[key] = &copy
 		}
-		if err := os.Unsetenv(key); err != nil {
-			t.Fatalf("unset %s: %v", key, err)
-		}
+		_ = os.Unsetenv(key)
 	}
 	t.Cleanup(func() {
 		for _, key := range keys {
 			if old[key] == nil {
 				_ = os.Unsetenv(key)
-				continue
+			} else {
+				_ = os.Setenv(key, *old[key])
 			}
-			_ = os.Setenv(key, *old[key])
 		}
 	})
 }
@@ -36,127 +32,165 @@ func chdirForTest(t *testing.T, dir string) {
 	t.Helper()
 	old, err := os.Getwd()
 	if err != nil {
-		t.Fatalf("getwd: %v", err)
+		t.Fatal(err)
 	}
 	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("chdir %s: %v", dir, err)
+		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		if err := os.Chdir(old); err != nil {
-			t.Fatalf("restore cwd: %v", err)
-		}
-	})
+	t.Cleanup(func() { _ = os.Chdir(old) })
 }
 
-func writeEnvFile(t *testing.T, dir, content string) {
+func writeFile(t *testing.T, path, content string) {
 	t.Helper()
-	path := filepath.Join(dir, ".env")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("write %s: %v", path, err)
+		t.Fatal(err)
 	}
 }
 
-func TestLoadReadsDotEnvFromWorkingDirectory(t *testing.T) {
+func validConfig(secret string) string {
+	return `llm:
+  default: Kimi Vision
+  profiles:
+    - name: Kimi Vision
+      provider: kimi
+      url: https://api.moonshot.cn/v1
+      model: kimi-k3
+      key: ` + secret + `
+    - name: Kimi Text
+      provider: kimi
+      url: https://api.moonshot.cn/v1
+      model: kimi-k2
+      key: another-secret
+`
+}
+
+func TestLoadReadsDefaultConfigAndKeepsAppEnvSeparate(t *testing.T) {
 	dir := t.TempDir()
-	clearEnvForTest(t, "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL")
-	writeEnvFile(t, dir, "WORK_ADDR=127.0.0.1:9999\nWORK_ROOT=./runtime-data\nDEEPSEEK_API_KEY=test-key\nDEEPSEEK_BASE_URL=https://api.deepseek.com\nDEEPSEEK_MODEL=deepseek-chat\n")
+	clearEnvForTest(t, "LLM_CONFIG_PATH", "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY")
 	chdirForTest(t, dir)
+	writeFile(t, filepath.Join(dir, "config.yaml"), validConfig("sk-test-secret"))
+	writeFile(t, filepath.Join(dir, ".env"), "WORK_ADDR=127.0.0.1:9999\nWORK_ROOT=./runtime-data\nDEEPSEEK_API_KEY=must-not-be-an-llm-source\n")
+	t.Setenv("LLM_CONFIG_PATH", "")
 
 	cfg, err := Load()
 	if err != nil {
-		t.Fatalf("load config: %v", err)
+		t.Fatal(err)
 	}
-	if cfg.WorkAddr != "127.0.0.1:9999" {
-		t.Fatalf("want work addr from .env, got %q", cfg.WorkAddr)
+	if cfg.WorkAddr != "127.0.0.1:9999" || cfg.WorkRoot != "./runtime-data" ||
+		cfg.DBPath != filepath.Join("./runtime-data", "db", "ppt.db") {
+		t.Fatal("application environment was not preserved")
 	}
-	if cfg.WorkRoot != "./runtime-data" {
-		t.Fatalf("want work_root from .env, got %q", cfg.WorkRoot)
-	}
-	if cfg.DBPath != filepath.Join("./runtime-data", "db", "ppt.db") {
-		t.Fatalf("want db path derived from .env work_root, got %q", cfg.DBPath)
-	}
-	if cfg.DeepSeekKey != "test-key" {
-		t.Fatalf("want deepseek key from .env, got %q", cfg.DeepSeekKey)
+	if cfg.LLM.Default != "Kimi Vision" || len(cfg.LLM.Profiles) != 2 ||
+		cfg.LLM.Profiles[0].Key != "sk-test-secret" {
+		t.Fatal("profile YAML was not loaded")
 	}
 }
 
-func TestLoadProcessEnvOverridesDotEnv(t *testing.T) {
+func TestLoadUsesExplicitLLMConfigPath(t *testing.T) {
 	dir := t.TempDir()
-	clearEnvForTest(t, "WORK_ADDR")
-	writeEnvFile(t, dir, "WORK_ADDR=127.0.0.1:9999\n")
+	clearEnvForTest(t, "LLM_CONFIG_PATH", "WORK_ADDR", "WORK_ROOT")
 	chdirForTest(t, dir)
+	path := filepath.Join(dir, "profiles.yaml")
+	writeFile(t, path, validConfig("secret"))
+	t.Setenv("LLM_CONFIG_PATH", path)
 	t.Setenv("WORK_ADDR", "127.0.0.1:8788")
 
 	cfg, err := Load()
 	if err != nil {
-		t.Fatalf("load config: %v", err)
+		t.Fatal(err)
 	}
-	if cfg.WorkAddr != "127.0.0.1:8788" {
-		t.Fatalf("want process env to override .env, got %q", cfg.WorkAddr)
-	}
-}
-
-func TestLoadDefaultWorkRootUsesUserDirLayout(t *testing.T) {
-	dir := t.TempDir()
-	clearEnvForTest(t, "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL")
-	chdirForTest(t, dir)
-	t.Setenv("HOME", "/Users/tester")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if cfg.WorkRoot != filepath.Join("/Users/tester", ".dasi", "ppt") {
-		t.Fatalf("want default work_root in home dir, got %q", cfg.WorkRoot)
-	}
-	if cfg.DBPath != filepath.Join("/Users/tester", ".dasi", "ppt", "db", "ppt.db") {
-		t.Fatalf("want default db path under work_root/db, got %q", cfg.DBPath)
+	if cfg.WorkAddr != "127.0.0.1:8788" || cfg.LLM.Default != "Kimi Vision" {
+		t.Fatal("explicit configuration was not used")
 	}
 }
 
-// DEEPSEEK_TIMEOUT_SECONDS 未设时默认 180s；解决 60s 整体超时导致 decode body 阶段被 kill 的问题。
-func TestLoadDeepSeekTimeoutDefault(t *testing.T) {
+func TestLoadRejectsMissingProfilesInsteadOfFallingBack(t *testing.T) {
 	dir := t.TempDir()
-	clearEnvForTest(t, "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "DEEPSEEK_TIMEOUT_SECONDS")
+	clearEnvForTest(t, "LLM_CONFIG_PATH", "DEEPSEEK_API_KEY")
 	chdirForTest(t, dir)
+	writeFile(t, filepath.Join(dir, "config.yaml"), "llm:\n  default: anything\n  profiles: []\n")
+	t.Setenv("LLM_CONFIG_PATH", "")
+	t.Setenv("DEEPSEEK_API_KEY", "legacy-key-must-not-enable-fallback")
 
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if cfg.DeepSeekTimeout != 180*time.Second {
-		t.Fatalf("want default DeepSeekTimeout=180s, got %v", cfg.DeepSeekTimeout)
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "at least one") {
+		t.Fatalf("missing profiles did not fail startup: %v", err)
 	}
 }
 
-// 显式设置 DEEPSEEK_TIMEOUT_SECONDS 会覆盖默认值；单位为秒的整数字符串。
-func TestLoadDeepSeekTimeoutOverride(t *testing.T) {
-	dir := t.TempDir()
-	clearEnvForTest(t, "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "DEEPSEEK_TIMEOUT_SECONDS")
-	chdirForTest(t, dir)
-	t.Setenv("DEEPSEEK_TIMEOUT_SECONDS", "300")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
+func TestLLMConfigValidationAndSecretRedaction(t *testing.T) {
+	const secret = "sk-never-leak-config-secret"
+	cases := []struct {
+		name   string
+		config string
+	}{
+		{"duplicate name", `llm:
+  default: Same
+  profiles:
+    - {name: Same, provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: ` + secret + `}
+    - {name: Same, provider: openai, url: https://api.openai.com/v1, model: gpt-5, key: other}
+`},
+		{"blank name", `llm:
+  default: " "
+  profiles:
+    - {name: " ", provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: ` + secret + `}
+`},
+		{"control name", "llm:\n  default: \"bad\\u0001name\"\n  profiles:\n    - {name: \"bad\\u0001name\", provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: " + secret + "}\n"},
+		{"long name", "llm:\n  default: " + strings.Repeat("名", 81) + "\n  profiles:\n    - {name: " + strings.Repeat("名", 81) + ", provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: " + secret + "}\n"},
+		{"unknown provider", `llm:
+  default: Bad
+  profiles:
+    - {name: Bad, provider: unknown, url: https://example.com, model: x, key: ` + secret + `}
+`},
+		{"missing default", `llm:
+  default: Missing
+  profiles:
+    - {name: Present, provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: ` + secret + `}
+`},
+		{"empty model", `llm:
+  default: Bad
+  profiles:
+    - {name: Bad, provider: kimi, url: https://api.moonshot.cn/v1, model: "", key: ` + secret + `}
+`},
+		{"empty key", `llm:
+  default: Bad
+  profiles:
+    - {name: Bad, provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: ""}
+`},
+		{"invalid url", `llm:
+  default: Bad
+  profiles:
+    - {name: Bad, provider: kimi, url: http://provider.example.com, model: kimi-k3, key: ` + secret + `}
+`},
 	}
-	if cfg.DeepSeekTimeout != 300*time.Second {
-		t.Fatalf("want DeepSeekTimeout=300s, got %v", cfg.DeepSeekTimeout)
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "profiles.yaml")
+			writeFile(t, path, test.config)
+			t.Setenv("LLM_CONFIG_PATH", path)
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected startup validation error")
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Fatalf("configuration error leaked a key: %v", err)
+			}
+		})
 	}
 }
 
-// 非法或 0 的值走默认 180s，避免误配置把整体超时归零导致立即失败。
-func TestLoadDeepSeekTimeoutFallsBackWhenInvalid(t *testing.T) {
+func TestLocalHTTPProfileURLIsAllowedForDevelopment(t *testing.T) {
 	dir := t.TempDir()
-	clearEnvForTest(t, "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DEEPSEEK_MODEL", "DEEPSEEK_TIMEOUT_SECONDS")
-	chdirForTest(t, dir)
-	t.Setenv("DEEPSEEK_TIMEOUT_SECONDS", "0")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	if cfg.DeepSeekTimeout != 180*time.Second {
-		t.Fatalf("want fallback DeepSeekTimeout=180s when set to 0, got %v", cfg.DeepSeekTimeout)
+	path := filepath.Join(dir, "profiles.yaml")
+	writeFile(t, path, `llm:
+  default: Local
+  profiles:
+    - {name: Local, provider: openai, url: http://127.0.0.1:8080/v1, model: gpt-5, key: secret}
+`)
+	t.Setenv("LLM_CONFIG_PATH", path)
+	if _, err := Load(); err != nil {
+		t.Fatalf("local development URL was rejected: %v", err)
 	}
 }

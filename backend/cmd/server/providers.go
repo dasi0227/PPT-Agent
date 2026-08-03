@@ -44,16 +44,15 @@ func provideSeed(cfg *config.Config, s store.Store, log *zap.Logger) (seedDone, 
 
 func engineFromRouter(r *httpapi.Router) *gin.Engine { return r.Engine() }
 
-// provideLLMClient 从配置装配 DeepSeek 客户端（Key 仅来自 env，不落日志 ARCH-LLM-003）。
-func provideLLMClient(cfg *config.Config) llm.Client {
-	return llm.NewDeepSeek(llm.DeepSeekConfig{
-		APIKey:        cfg.DeepSeekKey,
-		BaseURL:       cfg.DeepSeekURL,
-		Model:         cfg.DeepSeekMdl,
-		Timeout:       cfg.DeepSeekTimeout,
-		Vision:        cfg.LLMVision,
-		MaxImageBytes: cfg.LLMMaxImageBytes,
-	})
+func provideLLMRegistry(cfg *config.Config) (*llm.Registry, error) {
+	profiles := make([]llm.ProfileConfig, 0, len(cfg.LLM.Profiles))
+	for _, profile := range cfg.LLM.Profiles {
+		profiles = append(profiles, llm.ProfileConfig{
+			Name: profile.Name, Provider: profile.Provider,
+			URL: profile.URL, Model: profile.Model, Key: profile.Key,
+		})
+	}
+	return llm.NewRegistry(cfg.LLM.Default, profiles)
 }
 
 func provideLockManager() *run.LockManager { return run.NewLockManager() }

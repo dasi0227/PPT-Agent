@@ -20,9 +20,10 @@ type Router struct {
 	slide   *SlideHandler
 	asset   *AssetHandler
 	spec    *SpecHandler
+	llm     *LLMHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, specHandlers ...*SpecHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, llmH *LLMHandler, specHandlers ...*SpecHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
@@ -31,7 +32,7 @@ func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH 
 	if len(specHandlers) > 0 {
 		specH = specHandlers[0]
 	}
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, spec: specH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, spec: specH, llm: llmH}
 	r.register()
 	return r
 }
@@ -39,6 +40,9 @@ func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH 
 func (r *Router) register() {
 	v1 := r.engine.Group("/api/v1")
 	v1.GET("/healthz", r.health.Healthz)
+	if r.llm != nil {
+		v1.GET("/llm/profiles", r.llm.Profiles)
+	}
 
 	// Project / Thread：API 契约入口，前端不需要绕过 HTTP 直接造数据。
 	v1.GET("/projects", r.project.List)

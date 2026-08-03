@@ -24,6 +24,7 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 	for _, code := range []string{
 		"CONTENT_INVALID", "EDIT_ANCHOR_NOT_FOUND", "REVISION_CONFLICT",
 		"IDEMPOTENCY_KEY_REUSED", "RUN_CANCELED", "COMMIT_FAILED",
+		"MODEL_PROFILE_NOT_FOUND", "MODEL_CAPABILITY_MISMATCH", "MODEL_PROVIDER_UNSUPPORTED",
 	} {
 		if NewAgentError(code, "test", nil).ShouldAutoRetry() {
 			t.Fatalf("%s must not be automatically retried", code)
@@ -35,7 +36,7 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 }
 
 func TestAgentErrorProjectionsKeepPublicPayloadSafe(t *testing.T) {
-	secret := "/Users/private/project/slide.html api_key=sk-secret raw=<html> stack trace database error provider reasoning"
+	secret := "/Users/private/project/slide.html api_key=sk-secret raw=<html> stack trace database error provider reasoning Authorization=Bearer auth-secret provider_body=provider-raw"
 	agentErr := NewAgentError("CONTENT_INVALID", "write_ppt", errors.New(secret))
 	agentErr.CallID = "call-7"
 	agentErr.Resource = &ErrorResource{Type: "slide", SlideID: "slide-2", Part: "html"}
@@ -53,13 +54,19 @@ func TestAgentErrorProjectionsKeepPublicPayloadSafe(t *testing.T) {
 	}
 	publicView := agentErr.Public()
 	publicText := publicView.Code + " " + publicView.Message
-	for _, forbidden := range []string{"/Users/", "sk-secret", "<html>", "stack trace", "database error", "provider reasoning"} {
+	for _, forbidden := range []string{"/Users/", "sk-secret", "auth-secret", "provider-raw", "<html>", "stack trace", "database error", "provider reasoning"} {
 		if strings.Contains(publicText, forbidden) {
 			t.Fatalf("public error leaked %q: %+v", forbidden, publicView)
 		}
 	}
 	trace := agentErr.TraceProjection()
-	if trace["cause"] != secret || agentErr.HTTPStatus() != 422 {
+	traceCause, _ := trace["cause"].(string)
+	for _, forbidden := range []string{"sk-secret", "api_key", "auth-secret", "Authorization", "provider-raw", "provider_body"} {
+		if strings.Contains(traceCause, forbidden) {
+			t.Fatalf("trace cause leaked %q: %s", forbidden, traceCause)
+		}
+	}
+	if !strings.Contains(traceCause, "/Users/private/project/slide.html") || agentErr.HTTPStatus() != 422 {
 		t.Fatalf("trace/http projection mismatch: trace=%+v status=%d", trace, agentErr.HTTPStatus())
 	}
 }

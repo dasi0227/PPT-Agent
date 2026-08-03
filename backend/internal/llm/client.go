@@ -1,9 +1,12 @@
-// Package llm 定义 LLM 客户端契约（interface），DeepSeek 为其一实现（ARCH-LLM-001）。
+// Package llm defines the provider-neutral protocol used by the PPT runtime.
 package llm
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
-// Role 是消息角色；system 承载系统级约束，user 承载用户内容，二者不混淆（ARCH-LLM-005）。
+// Role is the normalized message role used by every provider adapter.
 type Role string
 
 const (
@@ -13,14 +16,13 @@ const (
 	RoleTool      Role = "tool"
 )
 
-// Message 是一条对话消息。
-// ToolCalls 在 role=assistant 时记录 LLM 发起的工具调用；ToolCallID 在 role=tool 时关联对应的工具调用。
+// Message is provider-neutral conversation state. Provider-private reasoning
+// never belongs here; it is carried only by ProviderContinuation.
 type Message struct {
-	Role             Role
-	Content          []ContentPart
-	ReasoningContent string
-	ToolCallID       string
-	ToolCalls        []ToolCall
+	Role       Role
+	Content    []ContentPart
+	ToolCallID string
+	ToolCalls  []ToolCall
 }
 
 type ContentPart struct {
@@ -47,11 +49,16 @@ func (m Message) Text() string {
 	return ""
 }
 
-type ProviderCapabilities struct {
-	Vision            bool
-	MultipleToolCalls bool
-	ImageInputMIMEs   []string
-	MaxImageBytes     int
+// Capabilities are code-owned facts for one provider/model combination.
+// Configuration cannot override them.
+type Capabilities struct {
+	Vision                  bool
+	ToolCalls               bool
+	MultipleToolCalls       bool
+	Reasoning               bool
+	RequiresReasoningReplay bool
+	ImageInputMIMEs         []string
+	MaxImageBytes           int
 }
 
 type ImageData struct {
@@ -63,61 +70,62 @@ type ImageRefResolver interface {
 	ResolveImage(context.Context, string) (ImageData, error)
 }
 
-type CapabilityProvider interface {
-	Capabilities() ProviderCapabilities
-}
-
 // ToolSchema is one Runtime-disclosed function schema.
 type ToolSchema struct {
 	Name        string
 	Description string
-	Parameters  map[string]any // JSON Schema
+	Parameters  map[string]any
 }
 
-// ChatRequest 是一次补全请求。
-type ChatRequest struct {
-	Messages []Message
-}
-
-// ChatResponse 是一次性补全结果。
-type ChatResponse struct {
-	Content string
-}
-
-// StreamChunk 是流式增量。Done 为 true 时表示流结束（Err 携带非正常终止原因）。
-type StreamChunk struct {
-	Text string
-	Done bool
-	Err  error
-}
-
-// ToolCallRequest carries the strategy/stage/step-scoped tool subset.
-type ToolCallRequest struct {
-	Messages      []Message
-	Tools         []ToolSchema
-	ImageResolver ImageRefResolver
-	OnRetry       func(attempt int)
-}
-
-// ToolCall 是 LLM 选择的一次工具调用。
+// ToolCall is one normalized function call selected by a provider.
 type ToolCall struct {
 	ID   string
 	Name string
 	Args map[string]any
 }
 
-// ToolCallResponse keeps provider reasoning separate from ordinary assistant
-// content. ReasoningContent is provider protocol state only and must never be
-// projected to a public event or thread history.
-type ToolCallResponse struct {
-	ToolCalls        []ToolCall
-	Text             string
-	ReasoningContent string
+// ProviderContinuation is deliberately opaque to Runtime. Adapters use it for
+// protocol state such as DeepSeek reasoning replay and OpenAI response state.
+type ProviderContinuation struct {
+	Provider string          `json:"provider"`
+	Model    string          `json:"model"`
+	Opaque   json.RawMessage `json:"opaque"`
 }
 
-// Client 抽象 LLM 调用；所有方法接受 context.Context 以支持取消（ARCH-LLM-002）。
-type Client interface {
-	Chat(ctx context.Context, req ChatRequest) (ChatResponse, error)
-	Stream(ctx context.Context, req ChatRequest) (<-chan StreamChunk, error)
-	CallTool(ctx context.Context, req ToolCallRequest) (ToolCallResponse, error)
+type Usage struct {
+	InputTokens  int
+	OutputTokens int
+	TotalTokens  int
+}
+
+type GenerateRequest struct {
+	Messages      []Message
+	Tools         []ToolSchema
+	ImageResolver ImageRefResolver
+	Continuation  *ProviderContinuation
+	OnRetry       func(attempt int)
+}
+
+type GenerateResponse struct {
+	Content      []ContentPart
+	ToolCalls    []ToolCall
+	Continuation *ProviderContinuation
+	Usage        Usage
+}
+
+func (r GenerateResponse) Text() string {
+	for _, part := range r.Content {
+		if part.Type == "text" {
+			return part.Text
+		}
+	}
+	return ""
+}
+
+// Provider is the only model protocol used by the core ReAct Runtime.
+type Provider interface {
+	Name() string
+	Model() string
+	Capabilities() Capabilities
+	Generate(context.Context, GenerateRequest) (GenerateResponse, error)
 }

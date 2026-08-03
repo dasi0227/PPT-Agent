@@ -16,6 +16,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
@@ -36,6 +37,14 @@ func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {
 }
 
 func setupProjectThreadServerWithFactory(t *testing.T, factory service.ExecutionFactory) (*httptest.Server, string) {
+	return setupProjectThreadServerWithFactoryAndRegistry(t, factory, nil)
+}
+
+func setupProjectThreadServerWithFactoryAndRegistry(
+	t *testing.T,
+	factory service.ExecutionFactory,
+	registry *llm.Registry,
+) (*httptest.Server, string) {
 	t.Helper()
 	root := t.TempDir()
 	cfg := &config.Config{DBPath: filepath.Join(root, "api.db"), WorkRoot: root}
@@ -49,7 +58,7 @@ func setupProjectThreadServerWithFactory(t *testing.T, factory service.Execution
 		t.Fatalf("new store: %v", err)
 	}
 	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
-	runSvc := service.NewRunServiceWithExecutionFactory(st, engine, factory)
+	runSvc := service.NewRunServiceWithExecutionFactoryAndRegistry(st, engine, factory, registry)
 	projectSvc := service.NewProjectService(st, service.WorkRoot(root))
 	threadSvc := service.NewThreadService(st)
 	router := httpapi.NewRouter(
@@ -61,6 +70,12 @@ func setupProjectThreadServerWithFactory(t *testing.T, factory service.Execution
 		httpapi.NewThreadHandler(threadSvc),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
 		httpapi.NewAssetHandler(service.NewAssetService(st, root)),
+		func() *httpapi.LLMHandler {
+			if registry == nil {
+				return nil
+			}
+			return httpapi.NewLLMHandler(registry)
+		}(),
 		httpapi.NewSpecHandler(service.NewSpecService(st)),
 	)
 	srv := httptest.NewServer(router.Engine())

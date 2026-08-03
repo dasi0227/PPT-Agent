@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send } from 'lucide-react';
-import type { CreateRunRequest } from '../../api/types';
+import { llmApi } from '../../api/llm';
+import type { CreateRunRequest, LLMProfile } from '../../api/types';
 import { useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -9,6 +10,7 @@ import { useThreadStore } from '../../stores/threadStore';
 import { isMac } from '../../lib/platform';
 import { newClientIdentity } from '../../lib/clientIdentity';
 import { InteractionModeButtons } from './InteractionModeButtons';
+import { ModelSelector } from './ModelSelector';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
 
@@ -34,6 +36,9 @@ export const CommandComposer: React.FC = () => {
   const [text, setText] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isComposing, setIsComposing] = useState(false);
+  const [profiles, setProfiles] = useState<LLMProfile[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [profilesError, setProfilesError] = useState('');
   const { activeProjectId, slidesByProjectId } = useProjectStore();
   const { currentPage } = useDeckStore();
   const { ensureActiveThread } = useThreadStore();
@@ -57,6 +62,30 @@ export const CommandComposer: React.FC = () => {
   useEffect(() => {
     applyContextDefault(slides.length > 0);
   }, [activeProjectId, applyContextDefault, slides.length]);
+  useEffect(() => {
+    let current = true;
+    setProfilesLoading(true);
+    setProfilesError('');
+    void llmApi.profiles()
+      .then((response) => {
+        if (!current) return;
+        setProfiles(response.profiles);
+        const remembered = useComposerStore.getState().modelProfileName;
+        const selected = response.profiles.some((profile) => profile.name === remembered)
+          ? remembered
+          : response.default;
+        if (selected) useComposerStore.getState().setModelProfileName(selected);
+      })
+      .catch(() => {
+        if (!current) return;
+        setProfiles([]);
+        setProfilesError('模型列表加载失败，请刷新后重试');
+      })
+      .finally(() => {
+        if (current) setProfilesLoading(false);
+      });
+    return () => { current = false; };
+  }, []);
   const submit = async () => {
     const raw = text.trim();
     if (disabled || !activeProjectId || !raw) return;
@@ -75,6 +104,10 @@ export const CommandComposer: React.FC = () => {
       else setSubmitError('追加要求未能加入当前任务；文本已保留，可在任务结束后作为新请求发送');
       return;
     }
+    if (profilesError || profilesLoading || !composer.modelProfileName) {
+      setSubmitError(profilesError || '模型列表仍在加载，请稍候');
+      return;
+    }
     const target = {
       artifact: composer.artifact,
       level: composer.level === 'slide' && !currentSlide ? 'deck' as const : composer.level,
@@ -82,6 +115,7 @@ export const CommandComposer: React.FC = () => {
     };
     let request: CreateRunRequest = {
       client_request_id: newClientIdentity('req'),
+      model: composer.modelProfileName,
       target,
       interaction: { intent: composer.intent },
       instruction: raw,
@@ -89,6 +123,17 @@ export const CommandComposer: React.FC = () => {
     request = applyShortcut(raw, request);
     if (request.target.level === 'slide' && !request.target.slide_id) {
       request.target = { artifact: request.target.artifact, level: 'deck' };
+    }
+    const selectedProfile = profiles.find((profile) => profile.name === request.model);
+    const requiresVision = request.interaction.intent === 'execute' &&
+      request.target.artifact === 'presentation';
+    if (!selectedProfile) {
+      setSubmitError('所选模型已不可用，请重新选择');
+      return;
+    }
+    if (requiresVision && !selectedProfile.capabilities.vision) {
+      setSubmitError('当前任务需要页面图片观察，请选择支持页面观察的模型');
+      return;
     }
 
     try {
@@ -99,6 +144,8 @@ export const CommandComposer: React.FC = () => {
       setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
     }
   };
+
+  const requiresVision = composer.intent === 'execute' && composer.artifact === 'presentation';
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.nativeEvent.isComposing || isComposing) return;
@@ -113,6 +160,11 @@ export const CommandComposer: React.FC = () => {
       {submitError && (
         <div role="alert" className="mb-2 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">
           {submitError}
+        </div>
+      )}
+      {!submitError && profilesError && (
+        <div role="alert" className="mb-2 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">
+          {profilesError}
         </div>
       )}
       <div className="relative rounded-[22px] border border-border/80 bg-panel shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
@@ -140,6 +192,14 @@ export const CommandComposer: React.FC = () => {
             disabled={disabled || steering}
           />
           <div className="flex min-w-0 shrink-0 items-center gap-0.5">
+            <ModelSelector
+              profiles={profiles}
+              value={composer.modelProfileName}
+              requiresVision={requiresVision}
+              loading={profilesLoading}
+              disabled={disabled || steering}
+              onChange={composer.setModelProfileName}
+            />
             <TargetSelector
               artifact={composer.artifact}
               level={composer.level}
@@ -151,7 +211,7 @@ export const CommandComposer: React.FC = () => {
             />
             <button
               onClick={() => void submit()}
-              disabled={!text.trim() || disabled}
+              disabled={!text.trim() || disabled || (!steering && (profilesLoading || Boolean(profilesError)))}
               className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:bg-text-400 disabled:opacity-50"
               aria-label="发送"
             >

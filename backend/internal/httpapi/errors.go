@@ -49,7 +49,7 @@ func safeAPIDetails(details map[string]any) map[string]any {
 	out := map[string]any{}
 	for key, value := range details {
 		switch key {
-		case "current_revision", "json_pointer", "rejection_code", "next_action":
+		case "current_revision", "json_pointer", "rejection_code", "next_action", "required_capability":
 			out[key] = value
 		}
 	}

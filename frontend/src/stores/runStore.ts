@@ -21,6 +21,7 @@ import {
 } from '../features/agent/historyHydrator';
 import { useSpecStore } from './specStore';
 import { useProjectStore } from './projectStore';
+import { useComposerStore } from './composerStore';
 import { newClientIdentity } from '../lib/clientIdentity';
 
 export type { PlanState } from '../api/types';
@@ -149,7 +150,11 @@ function isTerminalRunStatus(status: string): status is 'done' | 'failed' | 'can
   return status === 'done' || status === 'failed' || status === 'canceled';
 }
 
-function requestFromTimeline(items: TimelineItem[], runId?: string | null): CreateRunRequest | undefined {
+function requestFromTimeline(
+  items: TimelineItem[],
+  runId?: string | null,
+  model?: string | null,
+): CreateRunRequest | undefined {
   const original = [...items].reverse().find((item) =>
     item.type === 'user_turn' &&
     Boolean(item.target) &&
@@ -158,6 +163,7 @@ function requestFromTimeline(items: TimelineItem[], runId?: string | null): Crea
   if (!original || original.type !== 'user_turn' || !original.target || !original.interaction) return undefined;
   return {
     client_request_id: newClientIdentity('req'),
+    ...(model ? { model } : {}),
     target: original.target as RunTarget,
     interaction: original.interaction as RunInteraction,
     instruction: original.text,
@@ -328,7 +334,12 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           activeRunId: run.id,
           projectId: run.project_id,
           status: run.status === 'waiting' ? 'waiting' : 'running',
+          originalRequest: {
+            ...payload,
+            ...(payload.model || !run.model ? {} : { model: run.model }),
+          },
         });
+        if (run.model) useComposerStore.getState().setModelProfileName(run.model);
         writePersistedRun({ runId: run.id, threadId, projectId: run.project_id });
         get().subscribeRun(threadId, run.id, undefined, run.project_id);
         return true;
@@ -480,7 +491,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             pendingQuestion: status === 'waiting' && pending?.type === 'question'
               ? { id: pending.questionId, prompt: pending.prompt }
               : null,
-            originalRequest: prev.originalRequest ?? requestFromTimeline(hydratedItems, run.id),
+            originalRequest: prev.originalRequest ?? requestFromTimeline(hydratedItems, run.id, run.model),
           }));
           if (run.status === 'pending' || run.status === 'running' || run.status === 'waiting') {
             get().subscribeRun(record.threadId, run.id, record.lastEventId, run.project_id);
@@ -614,8 +625,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     retryRun: async (threadId) => {
       const session = get().sessions[threadId];
       if (!session?.originalRequest || !session.projectId) return false;
+      const selectedModel = useComposerStore.getState().modelProfileName;
       return get().createRun(threadId, {
         ...session.originalRequest,
+        ...(selectedModel ? { model: selectedModel } : {}),
         client_request_id: newClientIdentity('req'),
       }, session.projectId);
     },

@@ -2,28 +2,40 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/spf13/viper"
 	"github.com/subosito/gotenv"
+	"gopkg.in/yaml.v3"
 )
 
-const defaultDeepSeekTimeoutSeconds = 180
+type LLMProfile struct {
+	Name     string `yaml:"name"`
+	Provider string `yaml:"provider"`
+	URL      string `yaml:"url"`
+	Model    string `yaml:"model"`
+	Key      string `yaml:"key"`
+}
 
-// Config 是经 Viper 装配后的强类型配置，集中于本包，禁止散落各处。
+type LLMConfig struct {
+	Default  string       `yaml:"default"`
+	Profiles []LLMProfile `yaml:"profiles"`
+}
+
+// Config combines non-LLM application environment with the explicit profile
+// YAML. Provider credentials are never sourced implicitly from .env.
 type Config struct {
-	WorkAddr         string        // WORK_ADDR
-	WorkRoot         string        // WORK_ROOT：全局工作根
-	DBPath           string        // SQLite 文件路径；固定落在 WorkRoot/db/ppt.db
-	DeepSeekKey      string        // 仅来自环境变量，MUST NOT 落库/落日志（DEV-RULES R13）
-	DeepSeekURL      string        // DEEPSEEK_BASE_URL；空走默认端点
-	DeepSeekMdl      string        // DEEPSEEK_MODEL；默认 deepseek-chat
-	DeepSeekTimeout  time.Duration // DEEPSEEK_TIMEOUT_SECONDS：http.Client.Timeout（整体超时），默认 180s
-	LLMVision        bool          // LLM_VISION：当前 OpenAI-compatible provider 是否支持图片输入
-	LLMMaxImageBytes int           // LLM_MAX_IMAGE_BYTES
+	WorkAddr string
+	WorkRoot string
+	DBPath   string
+	LLM      LLMConfig
 }
 
 func Load() (*Config, error) {
@@ -33,38 +45,109 @@ func Load() (*Config, error) {
 	v := viper.New()
 	v.SetDefault("work_addr", "127.0.0.1:8787")
 	v.SetDefault("work_root", defaultWorkRoot())
-	v.SetDefault("deepseek_timeout", defaultDeepSeekTimeoutSeconds)
-	v.SetDefault("llm_max_image_bytes", 4*1024*1024)
-
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 	_ = v.BindEnv("work_addr", "WORK_ADDR")
 	_ = v.BindEnv("work_root", "WORK_ROOT")
-	_ = v.BindEnv("deepseek_key", "DEEPSEEK_API_KEY")
-	_ = v.BindEnv("deepseek_url", "DEEPSEEK_BASE_URL")
-	_ = v.BindEnv("deepseek_mdl", "DEEPSEEK_MODEL")
-	_ = v.BindEnv("deepseek_timeout", "DEEPSEEK_TIMEOUT_SECONDS")
-	_ = v.BindEnv("llm_vision", "LLM_VISION")
-	_ = v.BindEnv("llm_max_image_bytes", "LLM_MAX_IMAGE_BYTES")
 
-	// 单位=秒的整数；<=0 视为无效并回落到默认，避免整体超时被误设为 0 导致立即失败。
-	timeoutSec := v.GetInt("deepseek_timeout")
-	if timeoutSec <= 0 {
-		timeoutSec = defaultDeepSeekTimeoutSeconds
+	llmConfig, err := loadLLMConfig()
+	if err != nil {
+		return nil, err
 	}
-
 	cfg := &Config{
-		WorkAddr:         v.GetString("work_addr"),
-		WorkRoot:         v.GetString("work_root"),
-		DeepSeekKey:      v.GetString("deepseek_key"),
-		DeepSeekURL:      v.GetString("deepseek_url"),
-		DeepSeekMdl:      v.GetString("deepseek_mdl"),
-		DeepSeekTimeout:  time.Duration(timeoutSec) * time.Second,
-		LLMVision:        v.GetBool("llm_vision"),
-		LLMMaxImageBytes: v.GetInt("llm_max_image_bytes"),
+		WorkAddr: v.GetString("work_addr"),
+		WorkRoot: v.GetString("work_root"),
+		LLM:      llmConfig,
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
 	return cfg, nil
+}
+
+func loadLLMConfig() (LLMConfig, error) {
+	path := strings.TrimSpace(os.Getenv("LLM_CONFIG_PATH"))
+	if path == "" {
+		path = "config.yaml"
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return LLMConfig{}, fmt.Errorf("LLM profile config %q was not found", path)
+		}
+		return LLMConfig{}, fmt.Errorf("read LLM profile config: %w", err)
+	}
+	var document struct {
+		LLM LLMConfig `yaml:"llm"`
+	}
+	if err := yaml.Unmarshal(raw, &document); err != nil {
+		// Do not include parser excerpts: a malformed line may contain a key.
+		return LLMConfig{}, errors.New("LLM profile config contains invalid YAML")
+	}
+	if err := validateLLMConfig(document.LLM); err != nil {
+		return LLMConfig{}, err
+	}
+	return document.LLM, nil
+}
+
+func validateLLMConfig(cfg LLMConfig) error {
+	if len(cfg.Profiles) == 0 {
+		return errors.New("llm.profiles must contain at least one profile")
+	}
+	seen := make(map[string]struct{}, len(cfg.Profiles))
+	for index, profile := range cfg.Profiles {
+		label := fmt.Sprintf("llm.profiles[%d]", index)
+		trimmedName := strings.TrimSpace(profile.Name)
+		if trimmedName == "" {
+			return fmt.Errorf("%s.name must not be empty", label)
+		}
+		if utf8.RuneCountInString(trimmedName) > 80 {
+			return fmt.Errorf("%s.name must contain 1 to 80 characters", label)
+		}
+		for _, char := range profile.Name {
+			if unicode.IsControl(char) {
+				return fmt.Errorf("%s.name must not contain control characters", label)
+			}
+		}
+		if _, exists := seen[profile.Name]; exists {
+			return fmt.Errorf("llm profile names must be unique: %q", profile.Name)
+		}
+		seen[profile.Name] = struct{}{}
+		switch profile.Provider {
+		case "deepseek", "kimi", "openai":
+		default:
+			return fmt.Errorf("MODEL_PROVIDER_UNSUPPORTED: %s.provider is unsupported", label)
+		}
+		if err := validateProfileURL(profile.URL); err != nil {
+			return fmt.Errorf("%s.url is invalid", label)
+		}
+		if strings.TrimSpace(profile.Model) == "" {
+			return fmt.Errorf("%s.model must not be empty", label)
+		}
+		if strings.TrimSpace(profile.Key) == "" {
+			return fmt.Errorf("%s.key must not be empty", label)
+		}
+	}
+	if _, ok := seen[cfg.Default]; !ok {
+		return errors.New("llm.default must exactly match one configured profile name")
+	}
+	return nil
+}
+
+func validateProfileURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.IsAbs() == false || parsed.Host == "" || parsed.User != nil {
+		return errors.New("invalid URL")
+	}
+	switch parsed.Scheme {
+	case "https":
+		return nil
+	case "http":
+		host := parsed.Hostname()
+		ip := net.ParseIP(host)
+		if host == "localhost" || (ip != nil && ip.IsLoopback()) {
+			return nil
+		}
+	}
+	return errors.New("URL must use https or local development http")
 }
 
 func defaultWorkRoot() string {

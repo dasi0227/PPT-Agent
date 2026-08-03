@@ -105,6 +105,7 @@ export interface Run {
   target: RunTarget;
   interaction: RunInteraction;
   events_url: string;
+  model: string | null;
 }
 
 export type Artifact = 'spec' | 'presentation';
@@ -117,10 +118,28 @@ export interface RunInteraction { intent: InteractionIntent }
 
 export interface CreateRunRequest {
   client_request_id?: string;
+  model?: string;
   target: RunTarget;
   interaction: RunInteraction;
   instruction: string;
   options?: { language?: string; theme_id?: string; desired_slide_count?: number };
+}
+
+export interface LLMProfileCapabilities {
+  vision: boolean;
+  tool_calls: boolean;
+  multiple_tool_calls: boolean;
+}
+
+export interface LLMProfile {
+  name: string;
+  model: string;
+  capabilities: LLMProfileCapabilities;
+}
+
+export interface LLMProfilesResponse {
+  default: string;
+  profiles: LLMProfile[];
 }
 
 export interface SteerRunRequest {

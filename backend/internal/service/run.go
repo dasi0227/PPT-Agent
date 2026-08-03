@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -34,24 +35,31 @@ type RunService struct {
 	engine    *run.Engine
 	factory   ExecutionFactory
 	assembler *contextengine.ContextAssembler
-	runtime   *workflow.Runtime
 	renderer  workflow.SlideRenderer
-	client    llm.Client
+	registry  *llm.Registry
 }
 
-func NewRunService(s store.Store, engine *run.Engine, client llm.Client, _ WorkRoot, renderer *workflow.NodeSlideRenderer) *RunService {
-	registry := contextengine.NewRefRegistry()
+func NewRunService(s store.Store, engine *run.Engine, registry *llm.Registry, _ WorkRoot, renderer *workflow.NodeSlideRenderer) *RunService {
+	refRegistry := contextengine.NewRefRegistry()
 	return &RunService{
 		store: s, engine: engine,
-		assembler: contextengine.NewContextAssembler(s, registry),
-		runtime:   workflow.NewRuntime(workflow.CognitiveAgent{Client: client}),
+		assembler: contextengine.NewContextAssembler(s, refRegistry),
 		renderer:  renderer,
-		client:    client,
+		registry:  registry,
 	}
 }
 
 func NewRunServiceWithExecutionFactory(s store.Store, engine *run.Engine, factory ExecutionFactory) *RunService {
 	return &RunService{store: s, engine: engine, factory: factory}
+}
+
+func NewRunServiceWithExecutionFactoryAndRegistry(
+	s store.Store,
+	engine *run.Engine,
+	factory ExecutionFactory,
+	registry *llm.Registry,
+) *RunService {
+	return &RunService{store: s, engine: engine, factory: factory, registry: registry}
 }
 
 type workflowExecution struct {
@@ -103,11 +111,27 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	if err := spec.Validate(); err != nil {
 		return model.Run{}, err
 	}
-	if svc.runtime != nil && spec.Interaction.Intent == model.IntentExecute &&
-		spec.Target.Artifact == model.ArtifactPresentation {
-		capabilityProvider, ok := svc.client.(llm.CapabilityProvider)
-		if !ok || !capabilityProvider.Capabilities().Vision {
-			return model.Run{}, model.NewAgentError("VISION_CAPABILITY_REQUIRED", "create_run", nil)
+	var selectedProfile llm.Profile
+	if svc.registry != nil {
+		selectedProfile, err = svc.registry.Resolve(p.Model)
+		if err != nil {
+			return model.Run{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "create_run", nil)
+		}
+		p.Model = selectedProfile.Name()
+		capabilities := selectedProfile.Capabilities()
+		if !capabilities.ToolCalls {
+			agentErr := model.NewAgentError("MODEL_CAPABILITY_MISMATCH", "create_run", nil)
+			agentErr.Details["required_capability"] = "tool_calls"
+			agentErr.Details["next_action"] = "请选择支持工具调用的模型。"
+			return model.Run{}, agentErr
+		}
+		if spec.Interaction.Intent == model.IntentExecute &&
+			spec.Target.Artifact == model.ArtifactPresentation &&
+			!capabilities.Vision {
+			agentErr := model.NewAgentError("MODEL_CAPABILITY_MISMATCH", "create_run", nil)
+			agentErr.Details["required_capability"] = "vision"
+			agentErr.Details["next_action"] = "请选择标记为支持页面观察的模型。"
+			return model.Run{}, agentErr
 		}
 	}
 	if spec.Target.Level == model.TargetSlide {
@@ -135,7 +159,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
 		"instruction": spec.Instruction, "target": spec.Target,
-		"interaction": spec.Interaction, "options": spec.Options,
+		"interaction": spec.Interaction, "options": spec.Options, "model": p.Model,
 	})
 	if err != nil {
 		return model.Run{}, err
@@ -157,7 +181,17 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		ID: uuid.NewString(), ThreadID: thread.ID, ProjectID: project.ID,
 		ClientRequestID: p.ClientRequestID, WorkSpec: spec,
 	}
-	if svc.assembler == nil || svc.runtime == nil {
+	if selectedProfile.Adapter() != nil {
+		runModel.Model = model.ModelSelection{
+			ProfileName: selectedProfile.Name(), Provider: selectedProfile.ProviderName(),
+			Model: selectedProfile.Model(), URL: selectedProfile.URL(),
+		}
+	}
+	if svc.assembler == nil || selectedProfile.Adapter() == nil {
+		if svc.factory == nil {
+			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_TARGET_UNSUPPORTED")
+			return model.Run{}, ErrRunTargetUnsupported
+		}
 		execution := svc.factory(runModel, p, project)
 		if execution == nil {
 			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_TARGET_UNSUPPORTED")
@@ -190,7 +224,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		BudgetTokens: pack.Manifest.BudgetTokens, ManifestJSON: string(raw),
 	}
 	execution := &workflowExecution{
-		runtime: svc.runtime, pack: pack, project: project, store: svc.store, runID: runModel.ID,
+		runtime: workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()}),
+		pack:    pack, project: project, store: svc.store, runID: runModel.ID,
 		renderer:      svc.renderer,
 		imageResolver: runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
 	}
@@ -244,7 +279,10 @@ type runImageResolver struct {
 	projectDir string
 }
 
-func (r runImageResolver) ResolveImage(_ context.Context, ref string) (llm.ImageData, error) {
+func (r runImageResolver) ResolveImage(ctx context.Context, ref string) (llm.ImageData, error) {
+	if err := ctx.Err(); err != nil {
+		return llm.ImageData{}, err
+	}
 	prefix := "run:" + r.runID + "/screenshot:"
 	if !strings.HasPrefix(ref, prefix) {
 		return llm.ImageData{}, errors.New("image reference does not belong to the current run")
@@ -254,14 +292,46 @@ func (r runImageResolver) ResolveImage(_ context.Context, ref string) (llm.Image
 		return llm.ImageData{}, errors.New("invalid runtime screenshot reference")
 	}
 	path := filepath.Join(r.projectDir, ".runtime", "renders", r.runID, screenshotID+".png")
-	raw, err := os.ReadFile(path)
+	raw, err := readImageWithContext(ctx, path, 10*1024*1024)
 	if err != nil {
 		return llm.ImageData{}, err
 	}
-	if len(raw) < 8 || string(raw[:8]) != "\x89PNG\r\n\x1a\n" || len(raw) > 10*1024*1024 {
+	if len(raw) < 8 || string(raw[:8]) != "\x89PNG\r\n\x1a\n" {
 		return llm.ImageData{}, errors.New("runtime screenshot MIME or size is invalid")
 	}
 	return llm.ImageData{Bytes: raw, MIMEType: "image/png"}, nil
+}
+
+func readImageWithContext(ctx context.Context, path string, maxBytes int) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	raw := make([]byte, 0, min(maxBytes, 64*1024))
+	buffer := make([]byte, 64*1024)
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		count, readErr := file.Read(buffer)
+		if count > 0 {
+			if len(raw)+count > maxBytes {
+				return nil, errors.New("runtime screenshot MIME or size is invalid")
+			}
+			raw = append(raw, buffer[:count]...)
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			return nil, readErr
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
 
 func (svc *RunService) InjectInput(ctx context.Context, runID, content, replyTo string) error {
