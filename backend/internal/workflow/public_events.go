@@ -182,7 +182,7 @@ func publicToolTarget(tool string, args map[string]any) *model.PublicTarget {
 
 func toolDisplay(tool string, args map[string]any, started bool, result ToolResult) (string, string, bool) {
 	target := publicToolTarget(tool, args)
-	targetName := "PPT"
+	targetName := "内容"
 	if target != nil && target.Type == "deck" && target.Part == "outline" {
 		targetName = "整份结构"
 	} else if target != nil && target.Type == "deck" && target.Part == "design" {
@@ -191,7 +191,7 @@ func toolDisplay(tool string, args map[string]any, started bool, result ToolResu
 		if target.Part == "spec" {
 			targetName = slideDisplayName(target.SlideID) + "设计稿"
 		} else {
-			targetName = slideDisplayName(target.SlideID) + " HTML"
+			targetName = slideDisplayName(target.SlideID) + "幻灯片"
 		}
 	}
 	switch tool {
@@ -199,23 +199,26 @@ func toolDisplay(tool string, args map[string]any, started bool, result ToolResu
 		if started {
 			return "读取" + targetName, "确认内容与设计约束", true
 		}
-		return "已读取" + targetName, safeToolDetail(result, "已获得所需内容"), true
+		if result.OK {
+			return "已读取" + targetName, safeToolDetail(result, "已获得所需内容"), true
+		}
+		return "读取" + targetName + "失败", publicToolError(result), true
 	case "write_ppt":
 		if started {
-			return "生成" + targetName, "", true
+			return "创建" + targetName, "", true
 		}
 		if result.OK {
-			return "已生成" + targetName, safeToolDetail(result, "内容已写入安全暂存区"), true
+			return "已创建" + targetName, safeToolDetail(result, "内容已写入安全暂存区"), true
 		}
-		return targetName + "生成失败", publicToolError(result), true
+		return "创建" + targetName + "失败", publicToolError(result), true
 	case "edit_ppt":
 		if started {
-			return "编辑" + targetName, "", true
+			return "更新" + targetName, "", true
 		}
 		if result.OK {
 			return "已更新" + targetName, safeToolDetail(result, "修改已写入安全暂存区"), true
 		}
-		return targetName + "更新失败", publicToolError(result), true
+		return "更新" + targetName + "失败", publicToolError(result), true
 	case "search_refs":
 		query := sanitizePublicText(stringValue(args["query"]), 48)
 		if query == "" {

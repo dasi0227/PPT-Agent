@@ -50,7 +50,7 @@ describe('Timeline', () => {
     useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
   });
 
-  it('renders distinct reasoning, milestone, final, and a plan after the user turn', () => {
+  it('renders distinct reasoning, milestone, and final rows without leaking the plan into the stream', () => {
     setSession([
       { id: 'u1', type: 'user_turn', text: '生成 PPT', timestamp: 1 },
       { id: 'r1', type: 'reasoning', messageId: 'm1', text: '我先确认全局设计。', timestamp: 2 },
@@ -68,7 +68,8 @@ describe('Timeline', () => {
     expect(screen.getByText('我先确认全局设计。')).toBeInTheDocument();
     expect(screen.getByText('全局设计已经完成。')).toBeInTheDocument();
     expect(screen.getByText('整份演示文稿已经完成。')).toBeInTheDocument();
-    expect(screen.getByText('执行计划')).toBeInTheDocument();
+    // 计划已迁出消息流，改由 composer 上的 PlanIndicator 承载，不应出现在时间线中。
+    expect(screen.queryByText('执行计划')).toBeNull();
     expect(screen.queryByText(/Context|Strategy|Completion Gate/)).toBeNull();
   });
 

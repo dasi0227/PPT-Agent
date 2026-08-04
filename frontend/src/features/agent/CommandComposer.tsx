@@ -11,6 +11,7 @@ import { isMac } from '../../lib/platform';
 import { newClientIdentity } from '../../lib/clientIdentity';
 import { InteractionModeButtons } from './InteractionModeButtons';
 import { ModelSelector } from './ModelSelector';
+import { PlanIndicator } from './PlanIndicator';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
 
@@ -43,13 +44,14 @@ export const CommandComposer: React.FC = () => {
   const { currentPage } = useDeckStore();
   const { ensureActiveThread } = useThreadStore();
   const { createRun, steerRun } = useRunStore();
-  const { status: runStatus, activeRunId } = useActiveSession();
+  const { status: runStatus, activeRunId, plan } = useActiveSession();
   const composer = useComposerStore();
   const applyContextDefault = composer.applyContextDefault;
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef(activeProjectId);
   const steering = runStatus === 'running' && Boolean(activeRunId);
   const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'canceling';
+  const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'canceling';
 
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
   const currentSlide = slides[currentPage];
@@ -187,11 +189,16 @@ export const CommandComposer: React.FC = () => {
           </div>
         )}
         <div className="flex min-w-0 items-center justify-between gap-1 px-3 pb-2">
-          <InteractionModeButtons
-            intent={composer.intent}
-            onIntentChange={composer.setIntent}
-            disabled={disabled || steering}
-          />
+          <div className="flex min-w-0 items-center gap-0.5">
+            <InteractionModeButtons
+              intent={composer.intent}
+              onIntentChange={composer.setIntent}
+              disabled={disabled || steering}
+            />
+            {plan && plan.steps.length > 0 && (
+              <PlanIndicator plan={plan} running={runActive} />
+            )}
+          </div>
           <div className="flex min-w-0 shrink-0 items-center gap-0.5">
             <TargetSelector
               artifact={composer.artifact}

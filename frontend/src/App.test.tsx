@@ -112,6 +112,5 @@ describe('App Level Interactions', () => {
     });
     
     expect(screen.getByText('Hello from Agent')).toBeInTheDocument();
-    expect(screen.getByText('运行中')).toBeInTheDocument();
   });
 });

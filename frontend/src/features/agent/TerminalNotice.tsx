@@ -11,8 +11,8 @@ export const TerminalNotice: React.FC<{ item: TerminalNoticeItem }> = ({ item })
   const canCreateRetry = item.status === 'failed'
     && (item.retryable ?? item.error?.retryable) === true;
   return <div className={item.status === 'failed'
-    ? 'flex items-start gap-2 py-1.5 text-[13px] text-danger'
-    : 'flex items-start gap-2 py-1.5 text-[13px] text-text-600'}>
+    ? 'flex items-start gap-2 px-1.5 py-1.5 text-[13px] text-danger'
+    : 'flex items-start gap-2 px-1.5 py-1.5 text-[13px] text-text-600'}>
     {item.status === 'failed'
       ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
       : <StopCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />}

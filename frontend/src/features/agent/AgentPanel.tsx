@@ -3,7 +3,6 @@ import { Bot, PanelRightClose } from 'lucide-react';
 import { IconButton } from '../../components/ui/primitives';
 import { useUIStore } from '../../stores/uiStore';
 import { CommandComposer } from './CommandComposer';
-import { RunSummary } from './RunSummary';
 import { ThreadTabs } from './ThreadTabs';
 import { Timeline } from './Timeline';
 
@@ -22,7 +21,6 @@ export const AgentPanel: React.FC = () => {
         </IconButton>
       </header>
       <ThreadTabs />
-      <RunSummary />
       <Timeline />
       <CommandComposer />
     </div>

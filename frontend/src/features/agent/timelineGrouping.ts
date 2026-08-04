@@ -8,7 +8,8 @@ function canGroupTool(item: ToolActivityItem, currentSlideId?: string): boolean 
   return item.status === 'completed'
     && !item.error
     && (item.preview?.warnings.length ?? 0) === 0
-    && item.target?.slide_id !== currentSlideId;
+    // 仅当条目确有 slide_id 且正是当前查看页时才排除；deck 级（无 slide_id）始终可汇聚。
+    && !(item.target?.slide_id !== undefined && item.target.slide_id === currentSlideId);
 }
 
 export function groupTimelineItems(items: TimelineItem[], currentSlideId?: string): DisplayEntry[] {
@@ -31,7 +32,8 @@ export function groupTimelineItems(items: TimelineItem[], currentSlideId?: strin
       continue;
     }
     const first = pending[0];
-    if (first && (first.tool !== item.tool || first.planStepId !== item.planStepId)) {
+    // 纯按工具汇聚：同一 tool 的连续成功条目即可合并，跨产物（设计稿/幻灯片/deck）也归为一组。
+    if (first && first.tool !== item.tool) {
       flush();
     }
     pending.push(item);

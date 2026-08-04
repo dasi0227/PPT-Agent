@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ToolActivityRow } from './ActivityRows';
-import { PlanPanel } from './PlanPanel';
+import { PlanIndicator } from './PlanIndicator';
 import { FinalMessage } from './FinalMessage';
 import { QuestionPanel } from './QuestionPanel';
 import { LiveProgressRow } from './LiveProgressRow';
@@ -58,15 +58,21 @@ describe('public timeline components', () => {
     expect(useDeckStore.getState().currentPage).toBe(1);
   });
 
-  it('renders a flat plan panel and collapses completed plans', () => {
-    render(<PlanPanel running={false} plan={{
+  it('shows a compact plan indicator and reveals steps in a popover', () => {
+    render(<PlanIndicator running={false} plan={{
       id: 'p1', title: '生成演示文稿', revision: 2,
-      steps: [{ id: 's1', title: '完成页面', status: 'completed' }],
+      steps: [
+        { id: 's1', title: '完成页面', status: 'completed' },
+        { id: 's2', title: '收尾检查', status: 'pending' },
+      ],
     }} />);
-    expect(screen.getByText('生成演示文稿')).toBeInTheDocument();
+    const trigger = screen.getByRole('button', { name: '执行计划 1 / 2' });
     expect(screen.queryByText('完成页面')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /生成演示文稿/ }));
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+    expect(screen.getByText('生成演示文稿')).toBeInTheDocument();
     expect(screen.getByText('完成页面')).toBeInTheDocument();
+    expect(screen.getByText('收尾检查')).toBeInTheDocument();
   });
 
   it('renders final as an ordinary agent message with affected target footer', () => {

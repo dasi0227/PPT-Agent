@@ -7,7 +7,6 @@ import { useActiveSession } from './useActiveSession';
 import { FinalMessage } from './FinalMessage';
 import { LiveProgressRow } from './LiveProgressRow';
 import { MarkdownMessage } from './MarkdownMessage';
-import { PlanPanel } from './PlanPanel';
 import { QuestionPanel } from './QuestionPanel';
 import { ReasoningRow, MilestoneRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 import { TerminalNotice } from './TerminalNotice';
@@ -35,11 +34,6 @@ export const Timeline: React.FC = () => {
     () => groupTimelineItems(timelineItems, currentSlideId),
     [currentSlideId, timelineItems],
   );
-  const lastUserIndex = timelineItems.reduce(
-    (latest, item, index) => item.type === 'user_turn' ? index : latest,
-    -1,
-  );
-  const runActive = status === 'creating' || status === 'running' || status === 'waiting' || status === 'canceling';
   const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle';
 
   const scrollToLatest = useCallback((smooth: boolean) => {
@@ -74,8 +68,7 @@ export const Timeline: React.FC = () => {
     setShowReturn(!nearBottom);
   };
 
-  const renderItem = (item: TimelineItem, sourceIndex?: number) => {
-    const planAfter = plan && sourceIndex === lastUserIndex;
+  const renderItem = (item: TimelineItem) => {
     return (
       <React.Fragment key={item.id}>
         {item.type === 'user_turn' && (
@@ -107,7 +100,6 @@ export const Timeline: React.FC = () => {
         {item.type === 'question' && <QuestionPanel item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
-        {planAfter && <PlanPanel plan={plan} running={runActive} />}
       </React.Fragment>
     );
   };
@@ -125,13 +117,11 @@ export const Timeline: React.FC = () => {
           </div>
         ) : (
           <>
-            {plan && lastUserIndex < 0 && <PlanPanel plan={plan} running={runActive} />}
             {displayEntries.map((entry) => {
               if (entry.kind === 'tool_group') {
                 return <ToolGroupRow key={entry.id} items={entry.items} />;
               }
-              const sourceIndex = timelineItems.findIndex((item) => item.id === entry.item.id);
-              return renderItem(entry.item, sourceIndex);
+              return renderItem(entry.item);
             })}
             {status !== 'waiting' && (progress || status === 'creating') && (
               <LiveProgressRow progress={progress ?? {
