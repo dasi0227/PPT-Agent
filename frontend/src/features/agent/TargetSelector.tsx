@@ -45,19 +45,50 @@ function targetLabel(target: ComposerTarget): string {
 interface TargetSelectorProps extends ComposerTarget {
   onTargetChange: (target: ComposerTarget) => void;
   disabled?: boolean;
+  locked?: boolean;
 }
+
+const EMPTY_PROJECT_HINT = '当前为空项目，请先确定整体的设计稿';
+const LOCKED_TARGET_LABEL = '整份设计稿';
 
 export const TargetSelector: React.FC<TargetSelectorProps> = ({
   artifact,
   level,
   onTargetChange,
   disabled,
+  locked = false,
 }) => {
   const selected = { artifact, level };
   const segmentClass = (active: boolean) => [
     'flex h-6 min-w-0 flex-1 items-center justify-center rounded-full px-2 text-[11px] font-medium transition-colors',
     active ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-700',
   ].join(' ');
+
+  if (locked) {
+    const hintId = 'target-selector-locked-hint';
+    return (
+      <div className="group relative min-w-0">
+        <button
+          type="button"
+          aria-label={`目标：${LOCKED_TARGET_LABEL}`}
+          aria-describedby={hintId}
+          className={[
+            'inline-flex h-7 min-w-0 max-w-[112px] shrink cursor-default items-center rounded-md border border-border bg-transparent px-1 text-[11px] font-medium text-text-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            disabled ? 'opacity-45' : '',
+          ].join(' ')}
+        >
+          <span className="min-w-0 truncate">{LOCKED_TARGET_LABEL}</span>
+        </button>
+        <span
+          role="tooltip"
+          id={hintId}
+          className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-max max-w-[176px] rounded-md border border-border bg-surface px-2 py-1 text-[11px] leading-4 text-text-600 opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        >
+          {EMPTY_PROJECT_HINT}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <DropdownMenu>

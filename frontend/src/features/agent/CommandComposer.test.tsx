@@ -46,7 +46,7 @@ describe('CommandComposer', () => {
 
   it('uses default execution and sends the current slide with a stable slide id', async () => {
     render(<CommandComposer />);
-    await waitFor(() => expect(screen.getByRole('combobox', { name: '模型' })).toHaveValue('Kimi K3'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
     expect(screen.getByRole('button', { name: '讨论' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '询问' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '目标：单页幻灯片' })).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe('CommandComposer', () => {
 
   it('keeps /talk and /ask shortcuts mapped to their existing interaction protocols', async () => {
     render(<CommandComposer />);
-    await waitFor(() => expect(screen.getByRole('combobox', { name: '模型' })).toHaveValue('Kimi K3'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
     const textarea = screen.getByRole('textbox');
 
     fireEvent.change(textarea, { target: { value: '/talk 给我建议' } });
@@ -117,7 +117,7 @@ describe('CommandComposer', () => {
   it('keeps typed content when run creation fails', async () => {
     createRun.mockResolvedValue(false);
     render(<CommandComposer />);
-    await waitFor(() => expect(screen.getByRole('combobox', { name: '模型' })).toHaveValue('Kimi K3'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: '保留这段内容' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -128,14 +128,23 @@ describe('CommandComposer', () => {
 
   it('disables text-only profiles for presentation execute but allows them for talk', async () => {
     render(<CommandComposer />);
-    const selector = await screen.findByRole('combobox', { name: '模型' });
-    expect(selector).toHaveValue('Kimi K3');
-    const textOption = screen.getByRole('option', { name: /DeepSeek V4 Pro/ });
-    expect(textOption).toBeDisabled();
+    const selector = await screen.findByRole('button', { name: '模型' });
+    expect(selector).toHaveTextContent('Kimi K3');
+
+    const openMenu = () => {
+      fireEvent.pointerDown(selector, { button: 0, ctrlKey: false });
+      fireEvent.click(selector);
+    };
+
+    openMenu();
+    expect(screen.getByRole('menuitem', { name: '模型：DeepSeek V4 Pro' })).toHaveAttribute('data-disabled');
+    fireEvent.keyDown(selector, { key: 'Escape' });
 
     fireEvent.click(screen.getByRole('button', { name: '讨论' }));
-    expect(textOption).not.toBeDisabled();
-    fireEvent.change(selector, { target: { value: 'DeepSeek V4 Pro' } });
+    openMenu();
+    const textOption = screen.getByRole('menuitem', { name: '模型：DeepSeek V4 Pro' });
+    expect(textOption).not.toHaveAttribute('data-disabled');
+    fireEvent.click(textOption);
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '只读分析当前页' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
@@ -145,15 +154,23 @@ describe('CommandComposer', () => {
     }), 'p1'));
   });
 
-  it('keeps the single-page choice available even when the project has no pages', async () => {
+  it('locks the target to 整份设计稿 and surfaces guidance when the project has no pages', async () => {
     useProjectStore.setState({ activeProjectId: 'empty', slidesByProjectId: { empty: [] } });
     useThreadStore.setState({ activeThreadIdByProjectId: { empty: 't-empty' }, ensureActiveThread: async () => 't-empty' });
     render(<CommandComposer />);
 
     await waitFor(() => expect(screen.getByRole('button', { name: '目标：整份设计稿' })).toBeInTheDocument());
     const targetTrigger = screen.getByRole('button', { name: '目标：整份设计稿' });
+
+    // Locked: clicking must not open the scope/object menu.
     fireEvent.pointerDown(targetTrigger, { button: 0, ctrlKey: false });
     fireEvent.click(targetTrigger);
-    expect(screen.getByRole('menuitem', { name: '范围：单页' })).not.toHaveAttribute('data-disabled');
+    expect(screen.queryByRole('group', { name: '范围' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '范围：单页' })).not.toBeInTheDocument();
+
+    // Guidance is wired for hover and keyboard focus via aria-describedby.
+    const hint = screen.getByRole('tooltip');
+    expect(hint).toHaveTextContent('当前为空项目，请先确定整体的设计稿');
+    expect(targetTrigger).toHaveAttribute('aria-describedby', hint.id);
   });
 });

@@ -53,6 +53,7 @@ export const CommandComposer: React.FC = () => {
 
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
   const currentSlide = slides[currentPage];
+  const isEmptyProject = Boolean(activeProjectId) && slides.length === 0;
 
   useEffect(() => {
     if (previousProjectId.current === activeProjectId) return;
@@ -192,14 +193,6 @@ export const CommandComposer: React.FC = () => {
             disabled={disabled || steering}
           />
           <div className="flex min-w-0 shrink-0 items-center gap-0.5">
-            <ModelSelector
-              profiles={profiles}
-              value={composer.modelProfileName}
-              requiresVision={requiresVision}
-              loading={profilesLoading}
-              disabled={disabled || steering}
-              onChange={composer.setModelProfileName}
-            />
             <TargetSelector
               artifact={composer.artifact}
               level={composer.level}
@@ -208,6 +201,15 @@ export const CommandComposer: React.FC = () => {
                 composer.setLevel(target.level);
               }}
               disabled={disabled || steering}
+              locked={isEmptyProject}
+            />
+            <ModelSelector
+              profiles={profiles}
+              value={composer.modelProfileName}
+              requiresVision={requiresVision}
+              loading={profilesLoading}
+              disabled={disabled || steering}
+              onChange={composer.setModelProfileName}
             />
             <button
               onClick={() => void submit()}

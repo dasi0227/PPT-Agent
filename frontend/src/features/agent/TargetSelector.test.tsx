@@ -39,4 +39,27 @@ describe('TargetSelector', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '对象：设计稿' }));
     expect(onTargetChange).toHaveBeenCalledWith({ artifact: 'spec', level: 'slide' });
   });
+
+  it('locks to 整份设计稿 with guidance and no menu when locked', () => {
+    const onTargetChange = vi.fn();
+    render(
+      <TargetSelector
+        artifact="spec"
+        level="deck"
+        onTargetChange={onTargetChange}
+        locked
+      />,
+    );
+
+    const trigger = screen.getByRole('button', { name: '目标：整份设计稿' });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+
+    expect(screen.queryByRole('group', { name: '范围' })).not.toBeInTheDocument();
+    expect(onTargetChange).not.toHaveBeenCalled();
+
+    const hint = screen.getByRole('tooltip');
+    expect(hint).toHaveTextContent('当前为空项目，请先确定整体的设计稿');
+    expect(trigger).toHaveAttribute('aria-describedby', hint.id);
+  });
 });

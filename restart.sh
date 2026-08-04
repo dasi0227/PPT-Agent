@@ -64,7 +64,7 @@ echo "    render worker 健康检查通过"
 echo "==> 4/6 启动后端 (go run, $BACKEND_ADDR)"
 (
   cd "$BACKEND_DIR"
-  nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
+  LLM_CONFIG_PATH="$ROOT_DIR/config.yaml" nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
   echo $! >"$LOG_DIR/backend.pid"
 )
 echo "    backend pid=$(cat "$LOG_DIR/backend.pid")，日志：$LOG_DIR/backend.log"
