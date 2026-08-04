@@ -149,8 +149,6 @@ func (c ChangeSet) All() []ArtifactChange {
 
 type RuntimeBudget struct {
 	MaxTurns                    int
-	MaxToolCalls                int
-	MaxTokens                   int
 	MaxDuration                 time.Duration
 	MaxConsecutiveToolFailures  int
 	MaxIdenticalGateRejections  int
@@ -160,8 +158,8 @@ type RuntimeBudget struct {
 
 func DefaultRuntimeBudget() RuntimeBudget {
 	return RuntimeBudget{
-		MaxTurns: 48, MaxToolCalls: 64, MaxTokens: 64000, MaxDuration: 15 * time.Minute,
-		MaxConsecutiveToolFailures: 4, MaxIdenticalGateRejections: 3,
+		MaxTurns: 128, MaxDuration: time.Hour,
+		MaxConsecutiveToolFailures: 5, MaxIdenticalGateRejections: 3,
 		ContextCompactionThreshold: 24000, SimpleUpgradeToolRoundTrips: 6,
 	}
 }

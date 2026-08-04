@@ -805,7 +805,6 @@ func (r *Runtime) finishCandidate(
 		Strategy: state.strategy, FinishPhase: finishPhase, ActiveTools: state.activeTools,
 		Issues: state.issues, WorkScope: state.scope, Transaction: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: input.Context, Plan: state.plan, Canceled: ctx.Err() != nil,
-		BudgetExhausted: r.budgetExhausted(state),
 	})
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{
 		"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,
@@ -1031,8 +1030,6 @@ func (r *Runtime) checkBudget(ctx context.Context, state *runtimeState) error {
 
 func (r *Runtime) budgetExhausted(state *runtimeState) bool {
 	return state.turns >= state.budget.MaxTurns ||
-		state.toolCalls >= state.budget.MaxToolCalls ||
-		state.tokens >= state.budget.MaxTokens ||
 		time.Since(state.started) >= state.budget.MaxDuration
 }
 

@@ -251,7 +251,7 @@ func TestRenderSlideUsesStagedHTMLAndProducesEvidence(t *testing.T) {
 	result := (slideRenderTool{pack: pack, renderer: renderer}).Execute(context.Background(), input)
 	if !result.OK || renderer.html != staged || len(result.Evidence) != 1 ||
 		result.Evidence[0].Target.Key() != "slide:slide-01:html" ||
-		len(result.ObservationParts) != 2 || result.ObservationParts[1].Type != "image" {
+		len(result.ObservationParts) != 1 || result.ObservationParts[0].Type != "text" {
 		t.Fatalf("render=%+v html=%q", result, renderer.html)
 	}
 	var observation map[string]any
@@ -272,6 +272,24 @@ func TestRenderSlideUsesStagedHTMLAndProducesEvidence(t *testing.T) {
 		if strings.Contains(string(publicRaw), forbidden) {
 			t.Fatalf("public render event leaked %q: %s", forbidden, publicRaw)
 		}
+	}
+}
+
+func TestRenderSlideAttachesScreenshotOnVisualReview(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	tx, _ := NewTransaction(dir, "render")
+	defer tx.Cleanup()
+	staged := strings.Replace(validToolHTML, "Original", "Staged", 1)
+	if _, err := tx.Stage(slideHTMLRef("slide-01"), "test", []byte(staged)); err != nil {
+		t.Fatal(err)
+	}
+	renderer := &recordingRenderer{}
+	input := toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01", "visual_review": true})
+	input.CallID = "render-call-1"
+	result := (slideRenderTool{pack: pack, renderer: renderer}).Execute(context.Background(), input)
+	if !result.OK || len(result.ObservationParts) != 2 ||
+		result.ObservationParts[0].Type != "text" || result.ObservationParts[1].Type != "image" {
+		t.Fatalf("visual_review render=%+v", result)
 	}
 }
 

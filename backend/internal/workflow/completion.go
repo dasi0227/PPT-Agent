@@ -50,7 +50,6 @@ type CompletionContext struct {
 	Context         contextengine.ContextPack
 	Plan            *Plan
 	Canceled        bool
-	BudgetExhausted bool
 }
 
 type CompletionPolicy interface {
@@ -265,9 +264,6 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	if ctx.Canceled {
 		issues = append(issues, CompletionIssue{Code: CodeCanceled, Summary: "run was canceled"})
 	}
-	if ctx.BudgetExhausted {
-		issues = append(issues, CompletionIssue{Code: CodeBudgetExceeded, Summary: "runtime budget is exhausted"})
-	}
 	if ctx.Strategy != StrategyChat {
 		if ctx.Transaction == nil {
 			issues = append(issues, CompletionIssue{Code: "STAGING_REQUIRED", Summary: "write run has no staging transaction"})
@@ -277,14 +273,6 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 				code = "STAGING_INVALID"
 			}
 			issues = append(issues, CompletionIssue{Code: code, Summary: err.Error()})
-		}
-		if ctx.Changes.Count() == 0 {
-			issues = append(issues, CompletionIssue{Code: "CHANGESET_REQUIRED", Summary: "write run has no staged changes"})
-		}
-		for _, change := range ctx.Changes.All() {
-			if !ctx.WorkScope.AllowsArtifact(change.Artifact) {
-				issues = append(issues, CompletionIssue{Code: "TARGET_OUT_OF_SCOPE", Summary: resourceForArtifact(change.Artifact).Key() + " is outside the run scope"})
-			}
 		}
 	}
 	if ctx.Strategy == StrategyComplex && (ctx.Plan == nil || ctx.Plan.HasBlockingSteps()) {

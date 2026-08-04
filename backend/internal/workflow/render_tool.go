@@ -365,6 +365,10 @@ func (slideRenderTool) Schema() ToolSchema {
 			"slide_id": map[string]any{
 				"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`,
 			},
+			"visual_review": map[string]any{
+				"type":        "boolean",
+				"description": "Request the high-detail screenshot back for visual judgement. Omit for a lightweight diagnostics-only render.",
+			},
 		}),
 	}
 }
@@ -468,10 +472,12 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		delete(observationData, "code")
 	}
 	observationRaw, _ := json.Marshal(observationData)
-	result.ObservationParts = []llm.ContentPart{
-		{Type: "text", Text: string(observationRaw)},
-		{Type: "image", ImageRef: screenshotRef, MIMEType: "image/png", Detail: "high"},
+	parts := []llm.ContentPart{{Type: "text", Text: string(observationRaw)}}
+	visualReview, _ := input.Args["visual_review"].(bool)
+	if len(blocking) > 0 || visualReview {
+		parts = append(parts, llm.ContentPart{Type: "image", ImageRef: screenshotRef, MIMEType: "image/png", Detail: "high"})
 	}
+	result.ObservationParts = parts
 	if len(blocking) > 0 {
 		result.Evidence = []Evidence{newEvidence("render_diagnostic", target, sourceHash, data)}
 		result.OK, result.Code, result.Retryable = false, CodeRenderFailed, false

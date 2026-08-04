@@ -77,7 +77,7 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"PROVIDER_UNAVAILABLE":           {Code: "PROVIDER_UNAVAILABLE", Category: ErrorTransient, SafeMessage: "模型服务暂时不可用，正在尝试恢复。", ModelMessage: "Retry the provider request with bounded backoff.", Retryable: true, HTTPStatus: 503},
 	"RENDER_WORKER_UNAVAILABLE":      {Code: "RENDER_WORKER_UNAVAILABLE", Category: ErrorTransient, SafeMessage: "页面渲染服务暂时不可用。", ModelMessage: "Restart the render worker and retry once.", Retryable: true, HTTPStatus: 503},
 	"COMMIT_FAILED":                  {Code: "COMMIT_FAILED", Category: ErrorTerminal, SafeMessage: "修改未能安全保存，请重新发起任务。", ModelMessage: "Do not retry an unconfirmed commit without querying its idempotency record.", HTTPStatus: 500},
-	"RUNTIME_BUDGET_EXCEEDED":        {Code: "RUNTIME_BUDGET_EXCEEDED", Category: ErrorTerminal, SafeMessage: "运行达到资源上限，未完成的修改不会提交。", ModelMessage: "Stop the run without committing staging.", HTTPStatus: 500},
+	"RUNTIME_BUDGET_EXCEEDED":        {Code: "RUNTIME_BUDGET_EXCEEDED", Category: ErrorTerminal, SafeMessage: "运行达到轮次或时长上限，未完成的修改不会提交。", ModelMessage: "Stop the run without committing staging.", HTTPStatus: 500},
 	"AGENT_FAILED":                   {Code: "AGENT_FAILED", Category: ErrorTerminal, SafeMessage: "Agent 暂时无法继续，请稍后重试。", ModelMessage: "Stop the run and preserve the internal cause in trace only.", HTTPStatus: 500},
 	"INTERNAL":                       {Code: "INTERNAL", Category: ErrorTerminal, SafeMessage: "服务暂时无法完成请求。", ModelMessage: "Stop and inspect the internal trace.", HTTPStatus: 500},
 }

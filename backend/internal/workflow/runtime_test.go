@@ -637,6 +637,7 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("stage", "write_ppt", map[string]any{"content": "draft", "evidence": false}),
 		{
 			Text: "我先尝试提交当前结果。",
 			ToolCalls: []llm.ToolCall{{
@@ -659,18 +660,18 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 			t.Fatal("gate rejection replaced the loop")
 		}
 	}
-	if len(agent.requests) < 2 || len(agent.requests[1].Messages) != 2 {
+	if len(agent.requests) < 3 || len(agent.requests[2].Messages) < 4 {
 		t.Fatalf("completion rejection did not return to the same context: %+v", agent.requests)
 	}
-	rejectedCall := agent.requests[1].Messages[0]
-	rejectionObservation := agent.requests[1].Messages[1]
+	rejectedCall := agent.requests[2].Messages[2]
+	rejectionObservation := agent.requests[2].Messages[3]
 	if rejectedCall.Role != llm.RoleAssistant || len(rejectedCall.ToolCalls) != 1 ||
 		rejectedCall.ToolCalls[0].ID != "first" || rejectedCall.ToolCalls[0].Name != "finish" ||
 		rejectedCall.Text() != "我先尝试提交当前结果。" ||
 		rejectionObservation.Role != llm.RoleTool ||
 		rejectionObservation.ToolCallID != "first" ||
 		!strings.Contains(rejectionObservation.Text(), CodeCompletionGateBlocked) {
-		t.Fatalf("completion rejection context=%+v", agent.requests[1].Messages)
+		t.Fatalf("completion rejection context=%+v", agent.requests[2].Messages)
 	}
 }
 
@@ -694,7 +695,10 @@ func TestStaleEvidenceDoesNotSatisfyGate(t *testing.T) {
 
 func TestIdenticalGateRejectionThreeTimesBlowsFuse(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("1"), finishCall("2"), finishCall("3")}}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("stage", "write_ppt", map[string]any{"content": "draft", "evidence": false}),
+		finishCall("1"), finishCall("2"), finishCall("3"),
+	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "fuse", ProjectDir: dir,
 		Context:     testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
@@ -749,6 +753,7 @@ func TestCommitOnlyAfterGateAcceptance(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	commits := 0
 	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("stage", "write_ppt", map[string]any{"content": "committed", "evidence": false}),
 		finishCall("reject"), toolCall("write", "write_ppt", map[string]any{"content": "committed"}), finishCall("accept"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
