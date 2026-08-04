@@ -1,4 +1,4 @@
-import { CircleHelp, MessageCircle } from 'lucide-react';
+import { MessageCircleQuestion, MessagesSquare } from 'lucide-react';
 import type React from 'react';
 import type { InteractionIntent } from '../../api/types';
 import { cn } from '../../lib/utils';
@@ -43,20 +43,20 @@ export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
         onClick={toggleTalk}
         className={buttonClass(isTalk)}
       >
-        <MessageCircle className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <MessagesSquare className="h-3.5 w-3.5" strokeWidth={1.75} />
         讨论
       </button>
       <button
         type="button"
-        aria-label="询问"
+        aria-label="盘问"
         aria-pressed={isAsk}
         title="只读探索，并允许 Agent 在需要时向你提问"
         disabled={disabled}
         onClick={toggleAsk}
         className={buttonClass(isAsk)}
       >
-        <CircleHelp className="h-3.5 w-3.5" strokeWidth={1.75} />
-        询问
+        <MessageCircleQuestion className="h-3.5 w-3.5" strokeWidth={1.75} />
+        盘问
       </button>
     </div>
   );

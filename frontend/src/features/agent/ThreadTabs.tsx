@@ -2,7 +2,7 @@ import React from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { cn } from '../../lib/utils';
-import { Loader2, MessageSquare, MoreHorizontal, Plus } from 'lucide-react';
+import { Loader2, MoreHorizontal, Plus } from 'lucide-react';
 import { ThreadMenu } from './ThreadMenu';
 
 export const ThreadTabs: React.FC = () => {
@@ -56,7 +56,6 @@ export const ThreadTabs: React.FC = () => {
                     isActive ? "bg-black/5 text-text-900" : "text-text-600 hover:bg-black/5"
                   )}
                 >
-                  <MessageSquare className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate flex-1">{th.title || '新会话'}</span>
 
                   <ThreadMenu projectId={activeProjectId} thread={th}>

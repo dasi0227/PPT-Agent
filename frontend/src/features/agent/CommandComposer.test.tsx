@@ -48,7 +48,7 @@ describe('CommandComposer', () => {
     render(<CommandComposer />);
     await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
     expect(screen.getByRole('button', { name: '讨论' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: '询问' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: '盘问' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '目标：单页幻灯片' })).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '输入你的想法与目标');
 
@@ -67,7 +67,7 @@ describe('CommandComposer', () => {
   it('maps talk and ask buttons mutually exclusively and restores default execution', async () => {
     render(<CommandComposer />);
     const talk = screen.getByRole('button', { name: '讨论' });
-    const ask = screen.getByRole('button', { name: '询问' });
+    const ask = screen.getByRole('button', { name: '盘问' });
 
     await act(async () => fireEvent.click(talk));
     expect(useComposerStore.getState()).toMatchObject({ intent: 'talk' });

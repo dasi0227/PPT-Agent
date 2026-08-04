@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Circle, ListTodo, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, Circle, ListChecks, Loader2, XCircle } from 'lucide-react';
 import type { PlanState, PlanStepStatus } from '../../api/types';
 import { cn } from '../../lib/utils';
 import {
@@ -44,7 +44,7 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`执行计划 ${completed} / ${total}`}
+          aria-label={`计划 ${completed} / ${total}`}
           className="inline-flex h-7 min-w-0 shrink items-center gap-1 rounded-md border border-border bg-transparent px-1.5 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           {inFlight ? (
@@ -53,9 +53,9 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
               <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
             </span>
           ) : (
-            <ListTodo className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            <ListChecks className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
           )}
-          <span className="shrink-0 whitespace-nowrap">执行计划</span>
+          <span className="shrink-0 whitespace-nowrap">计划</span>
           <span className="shrink-0 tabular-nums">{completed} / {total}</span>
         </button>
       </DropdownMenuTrigger>

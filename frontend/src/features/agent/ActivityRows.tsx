@@ -1,14 +1,15 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   BrainCircuit,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Eye,
+  Flag,
   Loader2,
   Pencil,
   Sparkles,
-  XCircle,
 } from 'lucide-react';
 import type {
   MilestoneItem,
@@ -58,43 +59,64 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
   }, [expanded, item.text]);
 
   const showToggle = overflowing || expanded;
+  const toggle = () => setExpanded((value) => !value);
+  // 整行可点击伸缩（与工具行一致）；仅当内容可切换时才附带交互，避免不可展开时误导。
+  const interactive = showToggle
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        'aria-expanded': expanded,
+        'aria-label': expanded ? '收起思路' : '展开思路',
+        onClick: toggle,
+        onKeyDown: (event: React.KeyboardEvent) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggle();
+          }
+        },
+      }
+    : {};
+
   return (
-    <div className="flex items-start gap-2 px-1.5 py-1 text-[13px] leading-[1.55] text-text-600">
-      <BrainCircuit className="mt-0.5 h-4 w-4 shrink-0 text-text-400" strokeWidth={1.75} />
+    <div
+      {...interactive}
+      className={cn(
+        'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-[1.55] text-text-600',
+        showToggle && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+      )}
+    >
+      <BrainCircuit className="mt-0.5 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
       <div ref={textRef} className={cn('min-w-0 flex-1', !expanded && 'line-clamp-1')}>
         <MarkdownMessage content={safeReasoningMarkdown(item.text)} />
       </div>
       {showToggle && (
-        <button
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-          aria-expanded={expanded}
-          aria-label={expanded ? '收起思路' : '展开思路'}
-          className="mt-0.5 shrink-0 text-text-400 transition-colors hover:text-text-600"
-        >
+        <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
           {expanded
             ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
             : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
-        </button>
+        </span>
       )}
     </div>
   );
 };
 
 export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => (
-  <div className="mt-3 flex items-start gap-2 border-t border-border px-1.5 pt-3 text-[13px] font-medium leading-5 text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]">
-    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
+  <div className="mb-3 flex items-start gap-2 border-b border-border px-1.5 pb-3 text-[13px] font-medium leading-5 text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]">
+    <Flag className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
     <span>{item.text}</span>
   </div>
 );
 
-// 成功态按工具区分字形（颜色统一为 success 绿）：读取=eye，创建=sparkles，编辑=pencil。
-function toolSuccessIcon(tool: string) {
-  const className = 'h-4 w-4 text-success';
+// 图标字形按工具区分（读取=eye，创建=sparkles，编辑=pencil），颜色由状态决定：
+// 成功=success 绿、失败=danger 红。兜底工具（search/render）成功用勾、失败用三角。
+function toolStatusIcon(tool: string, failed: boolean) {
+  const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
   if (tool === 'read_ppt') return <Eye className={className} strokeWidth={1.75} />;
   if (tool === 'edit_ppt') return <Pencil className={className} strokeWidth={1.75} />;
   if (tool === 'write_ppt') return <Sparkles className={className} strokeWidth={1.75} />;
-  return <CheckCircle2 className={className} strokeWidth={1.75} />;
+  return failed
+    ? <AlertTriangle className={className} strokeWidth={1.75} />
+    : <CheckCircle2 className={className} strokeWidth={1.75} />;
 }
 
 export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
@@ -106,9 +128,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const detailText = item.error?.message ?? item.detail;
   const icon = item.status === 'running'
     ? <Loader2 className="h-4 w-4 animate-spin text-warning motion-reduce:animate-none" strokeWidth={1.75} />
-    : item.status === 'failed'
-      ? <XCircle className="h-4 w-4 text-danger" strokeWidth={1.75} />
-      : toolSuccessIcon(item.tool);
+    : toolStatusIcon(item.tool, item.status === 'failed');
   const focusPreview = () => {
     if (!item.preview) return;
     const index = slides.findIndex((slide) => slide.id === item.preview?.slide_id);
@@ -186,11 +206,13 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
         onClick={() => setExpanded((value) => !value)}
         className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-900"
       >
-        {toolSuccessIcon(items[0].tool)}
+        {toolStatusIcon(items[0].tool, false)}
         <span className="min-w-0 flex-1">
           {verb} {items.length} 项
         </span>
-        <span className="text-xs text-text-400">{expanded ? '收起' : '展开'}</span>
+        {expanded
+          ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />
+          : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />}
       </button>
       {expanded && (
         <div className="ml-4 border-l border-border pl-2">

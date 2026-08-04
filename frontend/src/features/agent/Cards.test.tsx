@@ -66,7 +66,7 @@ describe('public timeline components', () => {
         { id: 's2', title: '收尾检查', status: 'pending' },
       ],
     }} />);
-    const trigger = screen.getByRole('button', { name: '执行计划 1 / 2' });
+    const trigger = screen.getByRole('button', { name: '计划 1 / 2' });
     expect(screen.queryByText('完成页面')).toBeNull();
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
