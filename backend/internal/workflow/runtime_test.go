@@ -207,11 +207,11 @@ func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	if len(content) == 0 {
 		content = []byte("changed")
 	}
-	change, err := input.Transaction.Stage(ref, "write_fake", content)
+	change, err := input.Session.Write(ref, "write_fake", content)
 	if err != nil {
-		return failedToolResult("STAGING_FAILED", err.Error(), false)
+		return failedToolResult("WRITE_FAILED", err.Error(), false)
 	}
-	result := SuccessfulToolResult("staged")
+	result := SuccessfulToolResult("written")
 	part := "spec"
 	if t.kind == ArtifactSlideHTML {
 		part = "html"
@@ -237,7 +237,7 @@ func (fakeRenderTool) Schema() ToolSchema {
 
 func (fakeRenderTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	ref := ArtifactRef{Kind: ArtifactSlideHTML, ID: "s1", Path: model.SlideHTMLPath("s1")}
-	raw, err := input.Transaction.Read(ref)
+	raw, err := input.Session.Read(ref)
 	if err != nil {
 		return failedToolResult("RENDER_FAILED", err.Error(), false)
 	}
@@ -828,7 +828,7 @@ func TestFailedAndCanceledRunsKeepDirectWrittenProducts(t *testing.T) {
 				t.Fatalf("outcome=%+v formal=%q", outcome, raw)
 			}
 			if _, err := os.Stat(filepath.Join(dir, ".staging", test.name)); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("direct-write must not create a staging directory: %v", err)
+				t.Fatalf("direct-write must not create a private write directory: %v", err)
 			}
 		})
 	}

@@ -33,7 +33,7 @@ const (
 	CodeContextBudget           = "CONTEXT_BUDGET_EXCEEDED"
 	CodeRenderFailed            = "RENDER_FAILED"
 	CodeRenderWorkerUnavailable = "RENDER_WORKER_UNAVAILABLE"
-	CodeStagingRequired         = "STAGING_REQUIRED"
+	CodeRunSessionRequired      = "RUN_SESSION_REQUIRED"
 )
 
 type ToolSchema struct {
@@ -53,7 +53,7 @@ type DomainToolInput struct {
 	Context     contextengine.ContextPack
 	ProjectDir  string
 	RunID       string
-	Transaction *RunSession
+	Session     *RunSession
 	Scope       Scope
 	Strategy    ExecutionStrategy
 	Phase       RuntimePhase
@@ -62,7 +62,7 @@ type DomainToolInput struct {
 }
 
 // ChangedTarget is deliberately domain-shaped. Model-visible results never
-// expose artifact paths, staging paths, database keys, or transaction details.
+// expose artifact paths, runtime paths, database keys, or session details.
 type ChangedTarget struct {
 	Type     string   `json:"type"`
 	SlideID  string   `json:"slide_id,omitempty"`
@@ -234,8 +234,8 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	if !executionCapabilityAllowed(desc, input) {
 		return failedToolResult(ErrCapabilityDenied.Error(), "tool capability or risk is denied by the current run policy", false)
 	}
-	if !desc.ReadOnly && input.Transaction == nil {
-		return failedToolResult(CodeStagingRequired, "write tool requires a staging transaction", false)
+	if !desc.ReadOnly && input.Session == nil {
+		return failedToolResult(CodeRunSessionRequired, "write tool requires an active run session", false)
 	}
 	if !desc.ReadOnly {
 		if target, ok := declaredTarget(args); ok && !input.Scope.Allows(target) {
@@ -245,7 +245,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	result := desc.Tool.Execute(ctx, input)
 	for _, target := range result.ChangedTargets {
 		if !input.Scope.Allows(target.Target()) {
-			return failedToolResult(ErrTargetOutOfScope.Error(), "tool attempted to stage a target outside the current run scope", false)
+			return failedToolResult(ErrTargetOutOfScope.Error(), "tool attempted to write a target outside the current run scope", false)
 		}
 	}
 	return result

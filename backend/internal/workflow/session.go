@@ -13,14 +13,14 @@ import (
 )
 
 var (
-	ErrInvalidArtifactPath = errors.New("invalid artifact path")
-	ErrStagedHashMismatch  = errors.New("staged artifact hash mismatch")
+	ErrInvalidArtifactPath  = errors.New("invalid artifact path")
+	ErrArtifactHashMismatch = errors.New("artifact hash mismatch")
 )
 
 // sessionArtifact records one artifact touched during a run. Content is written
 // straight to the project directory (file is the single source of truth); the
 // baseline bytes captured on first touch let the completion gate compare the
-// run's net change without a staging sandbox.
+// run's net change without a private write sandbox.
 type sessionArtifact struct {
 	Ref           ArtifactRef
 	Source        string
@@ -32,17 +32,16 @@ type sessionArtifact struct {
 	Delete        bool
 }
 
-type StageItem struct {
+type WriteItem struct {
 	Ref     ArtifactRef
 	Source  string
 	Content []byte
 }
 
-// RunSession is the run's direct-write handle. It replaces the former staging
-// transaction: typed tools write artifacts directly onto disk and the session
-// only tracks what changed so the completion gate and finalize step can observe
-// the run. A failed or canceled run therefore leaves its partial products on
-// disk instead of discarding them.
+// RunSession is the run's direct-write handle. Typed tools write artifacts
+// directly onto disk and the session tracks what changed so the completion gate
+// and finalize step can observe the run. A failed or canceled run therefore
+// leaves its partial products on disk instead of discarding them.
 type RunSession struct {
 	projectDir            string
 	runID                 string
@@ -63,7 +62,7 @@ func NewRunSession(projectDir, runID string) (*RunSession, error) {
 	}, nil
 }
 
-func (s *RunSession) IsStaged(ref ArtifactRef) bool {
+func (s *RunSession) HasChange(ref ArtifactRef) bool {
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
 		return false
@@ -72,10 +71,10 @@ func (s *RunSession) IsStaged(ref ArtifactRef) bool {
 	return ok && !entry.Delete
 }
 
-// Stage writes content directly to the project directory and records the change.
+// Write writes content directly to the project directory and records the change.
 // Repeated writes of the same artifact in one run keep the run's baseline (the
 // bytes present before the run touched it) and only advance the after hash.
-func (s *RunSession) Stage(ref ArtifactRef, source string, content []byte) (ArtifactChange, error) {
+func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (ArtifactChange, error) {
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
 		return ArtifactChange{}, err
@@ -109,11 +108,11 @@ func (s *RunSession) Stage(ref ArtifactRef, source string, content []byte) (Arti
 	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, Source: source}, nil
 }
 
-// StageBatch applies a logical domain-target update by writing every item to
+// WriteBatch applies a logical domain-target update by writing every item to
 // disk in order and recording each change.
-func (s *RunSession) StageBatch(items []StageItem) ([]ArtifactChange, error) {
+func (s *RunSession) WriteBatch(items []WriteItem) ([]ArtifactChange, error) {
 	if len(items) == 0 {
-		return nil, errors.New("stage batch is empty")
+		return nil, errors.New("write batch is empty")
 	}
 	seen := map[string]bool{}
 	for _, item := range items {
@@ -122,13 +121,13 @@ func (s *RunSession) StageBatch(items []StageItem) ([]ArtifactChange, error) {
 			return nil, err
 		}
 		if seen[relative] {
-			return nil, fmt.Errorf("duplicate staged artifact %s", relative)
+			return nil, fmt.Errorf("duplicate written artifact %s", relative)
 		}
 		seen[relative] = true
 	}
 	changes := make([]ArtifactChange, 0, len(items))
 	for _, item := range items {
-		change, err := s.Stage(item.Ref, item.Source, item.Content)
+		change, err := s.Write(item.Ref, item.Source, item.Content)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +196,7 @@ func (s *RunSession) ChangeSet() ChangeSet {
 
 // ValidateBaselines is retained for the completion gate. Direct writes own the
 // project files and runs are serialized per project (RUN_ACTIVE), so there is
-// no separate staged-vs-committed baseline to reconcile.
+// no separate private baseline to reconcile.
 func (s *RunSession) ValidateBaselines() error { return nil }
 
 func (s *RunSession) MarkTentative() {

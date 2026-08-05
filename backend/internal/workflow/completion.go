@@ -39,17 +39,17 @@ func (r CompletionResult) RejectionKey() string {
 }
 
 type CompletionContext struct {
-	Strategy        ExecutionStrategy
-	FinishPhase     RuntimePhase
-	ActiveTools     int
-	Issues          []Issue
-	WorkScope       Scope
-	Transaction     *RunSession
-	Changes         ChangeSet
-	Evidence        *EvidenceLedger
-	Context         contextengine.ContextPack
-	Plan            *Plan
-	Canceled        bool
+	Strategy    ExecutionStrategy
+	FinishPhase RuntimePhase
+	ActiveTools int
+	Issues      []Issue
+	WorkScope   Scope
+	Session     *RunSession
+	Changes     ChangeSet
+	Evidence    *EvidenceLedger
+	Context     contextengine.ContextPack
+	Plan        *Plan
+	Canceled    bool
 }
 
 type CompletionPolicy interface {
@@ -64,8 +64,8 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 	}
 	issues := []CompletionIssue{}
 	referenceHash := ""
-	if ctx.Transaction != nil {
-		referenceHash, _ = validateReferences(ctx.Context, ctx.Transaction)
+	if ctx.Session != nil {
+		referenceHash, _ = validateReferences(ctx.Context, ctx.Session)
 	}
 	for _, change := range ctx.Changes.All() {
 		target := resourceForArtifact(change.Artifact)
@@ -101,10 +101,10 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 					RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: outline}},
 				})
 			}
-			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Transaction != nil {
+			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Session != nil {
 				htmlTarget := Resource{Type: "slide", SlideID: change.Artifact.ID, Part: "html"}
-				hash, hashErr := renderSourceHash(ctx.Context, ctx.Transaction, change.Artifact.ID)
-				if specChangeAffectsHTML(ctx.Transaction, change.Artifact) {
+				hash, hashErr := renderSourceHash(ctx.Context, ctx.Session, change.Artifact.ID)
+				if specChangeAffectsHTML(ctx.Session, change.Artifact) {
 					if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, change.Artifact.ID) {
 						issues = append(issues, CompletionIssue{
 							Code:    "SLIDE_HTML_SYNC_REQUIRED",
@@ -132,11 +132,11 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			}
 		case ArtifactDesign:
 			require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
-			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Transaction != nil {
-				if deck, err := currentOutline(ctx.Context, ctx.Transaction); err == nil {
+			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Session != nil {
+				if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
 					for _, slideID := range deck.SlideOrder {
 						slideTarget := Resource{Type: "slide", SlideID: slideID, Part: "html"}
-						hash, hashErr := renderSourceHash(ctx.Context, ctx.Transaction, slideID)
+						hash, hashErr := renderSourceHash(ctx.Context, ctx.Session, slideID)
 						if hashErr != nil || !hasFreshMaterialization(ctx, slideTarget, hash) {
 							issues = append(issues, CompletionIssue{
 								Code:            "VISUAL_EVIDENCE_REQUIRED",
@@ -149,8 +149,8 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			}
 		case ArtifactSlideHTML:
 			hash := ""
-			if ctx.Transaction != nil {
-				hash, _ = renderSourceHash(ctx.Context, ctx.Transaction, change.Artifact.ID)
+			if ctx.Session != nil {
+				hash, _ = renderSourceHash(ctx.Context, ctx.Session, change.Artifact.ID)
 			}
 			require("static", hash, "STATIC_EVIDENCE_REQUIRED", RequiredAction{Tool: "edit_ppt", Target: target})
 			if !hasFreshMaterialization(ctx, target, hash) {
@@ -165,7 +165,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 }
 
 func hasFreshMaterialization(ctx CompletionContext, target Resource, hash string) bool {
-	if ctx.Evidence == nil || ctx.Transaction == nil || hash == "" {
+	if ctx.Evidence == nil || ctx.Session == nil || hash == "" {
 		return false
 	}
 	proof, ok := ctx.Evidence.FreshMaterializationProof(target, hash)
@@ -173,7 +173,7 @@ func hasFreshMaterialization(ctx CompletionContext, target Resource, hash string
 		return false
 	}
 	expected, err := currentMaterializationProof(
-		ctx.Context, ctx.Transaction.ProjectDir(), ctx.Transaction, target.SlideID, hash,
+		ctx.Context, ctx.Session.ProjectDir(), ctx.Session, target.SlideID, hash,
 	)
 	return err == nil && proof == expected
 }
@@ -265,12 +265,12 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		issues = append(issues, CompletionIssue{Code: CodeCanceled, Summary: "run was canceled"})
 	}
 	if ctx.Strategy != StrategyChat {
-		if ctx.Transaction == nil {
-			issues = append(issues, CompletionIssue{Code: "STAGING_REQUIRED", Summary: "write run has no staging transaction"})
-		} else if err := ctx.Transaction.ValidateBaselines(); err != nil {
+		if ctx.Session == nil {
+			issues = append(issues, CompletionIssue{Code: CodeRunSessionRequired, Summary: "write run has no active run session"})
+		} else if err := ctx.Session.ValidateBaselines(); err != nil {
 			code := CodeRevisionConflict
-			if !errors.Is(err, ErrStagedHashMismatch) {
-				code = "STAGING_INVALID"
+			if !errors.Is(err, ErrArtifactHashMismatch) {
+				code = "RUN_SESSION_INVALID"
 			}
 			issues = append(issues, CompletionIssue{Code: code, Summary: err.Error()})
 		}
@@ -289,10 +289,10 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 }
 
 func acceptedMaterializationProofs(ctx CompletionContext) []MaterializationProof {
-	if ctx.Transaction == nil || ctx.Evidence == nil {
+	if ctx.Session == nil || ctx.Evidence == nil {
 		return nil
 	}
-	outline, err := currentOutline(ctx.Context, ctx.Transaction)
+	outline, err := currentOutline(ctx.Context, ctx.Session)
 	if err != nil {
 		return nil
 	}
@@ -302,14 +302,14 @@ func acceptedMaterializationProofs(ctx CompletionContext) []MaterializationProof
 			!hasArtifactChange(ctx.Changes, ArtifactSlideHTML, slideID) {
 			continue
 		}
-		hash, err := renderSourceHash(ctx.Context, ctx.Transaction, slideID)
+		hash, err := renderSourceHash(ctx.Context, ctx.Session, slideID)
 		if err != nil {
 			continue
 		}
 		target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
 		if proof, ok := ctx.Evidence.FreshMaterializationProof(target, hash); ok {
 			expected, expectedErr := currentMaterializationProof(
-				ctx.Context, ctx.Transaction.ProjectDir(), ctx.Transaction, slideID, hash,
+				ctx.Context, ctx.Session.ProjectDir(), ctx.Session, slideID, hash,
 			)
 			if expectedErr != nil || proof != expected {
 				continue
@@ -323,7 +323,7 @@ func acceptedMaterializationProofs(ctx CompletionContext) []MaterializationProof
 func specChangeRequiresHTMLSync(ctx CompletionContext, slideID string) bool {
 	for _, change := range ctx.Changes.All() {
 		if change.Artifact.Kind == ArtifactSlideSpec && change.Artifact.ID == slideID {
-			return specChangeAffectsHTML(ctx.Transaction, change.Artifact)
+			return specChangeAffectsHTML(ctx.Session, change.Artifact)
 		}
 	}
 	return false

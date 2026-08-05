@@ -124,18 +124,8 @@ async function render(input, browser, handles = new Map()) {
       }
       let absolute;
       let data;
-      if (typeof input.staging_dir === 'string' && input.staging_dir.length > 0) {
-        try {
-          absolute = safeProjectPath(input.staging_dir, path);
-          data = await fs.readFile(absolute);
-        } catch {
-          absolute = undefined;
-        }
-      }
-      if (!data) {
-        absolute = safeProjectPath(input.project_dir, path);
-        data = await fs.readFile(absolute);
-      }
+      absolute = safeProjectPath(input.project_dir, path);
+      data = await fs.readFile(absolute);
       response.writeHead(200, { 'content-type': mime(absolute), 'cache-control': 'no-store' });
       response.end(data);
     } catch {

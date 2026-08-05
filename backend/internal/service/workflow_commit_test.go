@@ -150,7 +150,7 @@ func TestWorkflowCommitFailureKeepsDirectWrittenFileButLeavesDatabase(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Stage(
+	if _, err := tx.Write(
 		workflow.ArtifactRef{Kind: workflow.ArtifactDesign, ID: fixture.project.ID, Path: "design.json"},
 		"write_ppt", mustJSON(next),
 	); err != nil {
@@ -165,7 +165,7 @@ func TestWorkflowCommitFailureKeepsDirectWrittenFileButLeavesDatabase(t *testing
 	if err := tx.Commit(context.Background(), committer.Commit); err == nil {
 		t.Fatal("commit with stale proof succeeded")
 	}
-	// Direct-write: the artifact was written to disk when staged, so a finalize
+	// Direct-write: the artifact was written to disk before finalize, so a
 	// failure keeps it on disk. Only the database must stay untouched because the
 	// stale proof is rejected before CommitWorkflow runs.
 	written, _ := os.ReadFile(filepath.Join(fixture.project.WorkDir, "design.json"))

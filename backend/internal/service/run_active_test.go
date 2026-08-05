@@ -14,8 +14,8 @@ import (
 )
 
 // TestCreateRunRejectsWhenProjectHasActiveRun verifies Phase B point 6: with the
-// staging sandbox gone, runs are serialized per project. A create attempt while
-// another run is active is rejected with ErrRunActive (mapped to 409 RUN_ACTIVE).
+// Direct writes are serialized per project. A create attempt while another run
+// is active is rejected with ErrRunActive (mapped to 409 RUN_ACTIVE).
 func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	root := t.TempDir()
 	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "run.db")}, zap.NewNop())

@@ -142,7 +142,7 @@ func runtimeSystemPrompt(phase RuntimePhase, strategy ExecutionStrategy, state s
 	contractJSON, _ := json.Marshal(contracts)
 	return fmt.Sprintf(`<runtime_policy>
 You are the single continuous ReAct agent for this HTML PPT run. Strategy=%s Phase=%s.
-Use only disclosed tools. talk and ask are read-only; execute writes only to run staging.
+Use only disclosed tools. talk and ask are read-only; execute writes through the active run session.
 Re-check resource disclosure, interaction, target scope, strategy and phase on every call.
 The only business tools are read_ppt, write_ppt, edit_ppt, search_refs and render_slide.
 The only control actions are update_plan, ask_user and finish. ask_user and finish must each be the sole action in a response.
@@ -164,7 +164,7 @@ Independent reads/searches and renders for different pages may be returned toget
 
 <current_resource_contracts>
 Resources are exactly deck:outline, deck:design, slide:&lt;slide_id&gt;:spec and slide:&lt;slide_id&gt;:html.
-Never pass disk paths, project paths, staging paths, database IDs or storage artifact kinds.
+Never pass disk paths, project paths, runtime paths, database IDs or storage artifact kinds.
 read_ppt(resource) returns the complete saved JSON or HTML string.
 write_ppt(resource, content) always receives content as a string. Runtime owns schema_version, revision, project_id, slide_id, source revisions and timestamps.
 edit_ppt(resource, edits) uses ordered objects with old_text and new_text. Each old_text must match exactly once.
@@ -280,7 +280,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	if state.strategy != StrategyChat {
 		// Direct-write session: typed tools write artifacts straight to the
 		// project directory. A failed or canceled run keeps its partial
-		// products on disk instead of discarding a staging sandbox.
+		// products on disk instead of discarding a private write sandbox.
 		session, err := NewRunSession(input.ProjectDir, input.RunID)
 		if err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
@@ -462,7 +462,7 @@ func (r *Runtime) executeToolBatch(
 		lifecycleMu.Unlock()
 		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
 			Args: call.Args, CallID: call.ID, Context: input.Context, ProjectDir: input.ProjectDir, RunID: input.RunID,
-			Transaction: state.tx, Scope: state.scope, Strategy: state.strategy, Phase: state.phase,
+			Session: state.tx, Scope: state.scope, Strategy: state.strategy, Phase: state.phase,
 			Interaction: input.Context.WorkSpec.Interaction.Intent, Risk: state.decision.Risk,
 		})
 		if ctx.Err() != nil {
@@ -531,7 +531,7 @@ func (r *Runtime) executeToolBatch(
 			recordTrace(input.Trace, state.runID, "evidence.recorded", map[string]any{"evidence": recorded})
 		}
 		for _, target := range result.ChangedTargets {
-			recordTrace(input.Trace, state.runID, "target.staged", map[string]any{
+			recordTrace(input.Trace, state.runID, "target.written", map[string]any{
 				"target": target.Target(), "revision": target.Revision, "hash": target.Hash,
 				"fields": target.Fields, "tentative": false,
 			})
@@ -801,7 +801,7 @@ func (r *Runtime) finishCandidate(
 	changes := state.changeSet()
 	result := r.Gate.Check(CompletionContext{
 		Strategy: state.strategy, FinishPhase: finishPhase, ActiveTools: state.activeTools,
-		Issues: state.issues, WorkScope: state.scope, Transaction: state.tx, Changes: changes,
+		Issues: state.issues, WorkScope: state.scope, Session: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: input.Context, Plan: state.plan, Canceled: ctx.Err() != nil,
 	})
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{
@@ -934,7 +934,7 @@ func (r *Runtime) upgradeToComplex(emitter EventEmitter, state *runtimeState, re
 	if state.tx != nil {
 		state.tx.MarkTentative()
 		for _, change := range state.tx.ChangeSet().All() {
-			recordTrace(state.trace, state.runID, "target.staged", map[string]any{
+			recordTrace(state.trace, state.runID, "target.written", map[string]any{
 				"target": resourceForArtifact(change.Artifact), "artifact": change.Artifact, "tentative": true,
 			})
 		}

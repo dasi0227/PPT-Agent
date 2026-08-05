@@ -65,7 +65,6 @@ type RenderRequest struct {
 	RequestID      string `json:"request_id,omitempty"`
 	RunID          string `json:"run_id"`
 	ProjectDir     string `json:"project_dir"`
-	StagingDir     string `json:"staging_dir,omitempty"`
 	SlideID        string `json:"slide_id"`
 	HTML           string `json:"html"`
 	ScreenshotPath string `json:"screenshot_path"`
@@ -382,7 +381,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if !input.Scope.AllowsRead(target) {
 		return failedToolResult(ErrTargetOutOfScope.Error(), "requested render target is outside the current run scope", false)
 	}
-	html, source, err := readArtifact(input.ProjectDir, input.Transaction, slideHTMLRef(slideID))
+	html, source, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
 	if err != nil {
 		if errorsIsNotExist(err) {
 			return failedToolResult(CodeTargetNotFound, "slide HTML was not found", false)
@@ -434,7 +433,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		))
 		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
-	sourceHash, err := renderHashWithoutTransaction(t.pack, input, slideID)
+	sourceHash, err := renderHashWithoutSession(t.pack, input, slideID)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, err.Error(), true)
@@ -480,7 +479,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		result.OK, result.Code, result.Retryable = false, CodeRenderFailed, false
 		return result
 	}
-	proof, err := currentMaterializationProof(t.pack, input.ProjectDir, input.Transaction, slideID, sourceHash)
+	proof, err := currentMaterializationProof(t.pack, input.ProjectDir, input.Session, slideID, sourceHash)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, err.Error(), true)
@@ -491,9 +490,9 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	return result
 }
 
-func renderHashWithoutTransaction(pack contextengine.ContextPack, input DomainToolInput, slideID string) (string, error) {
-	if input.Transaction != nil {
-		return renderSourceHash(pack, input.Transaction, slideID)
+func renderHashWithoutSession(pack contextengine.ContextPack, input DomainToolInput, slideID string) (string, error) {
+	if input.Session != nil {
+		return renderSourceHash(pack, input.Session, slideID)
 	}
 	designRaw, _, err := readArtifact(input.ProjectDir, nil, designRef(pack))
 	if err != nil {
@@ -511,7 +510,7 @@ func renderHashWithoutTransaction(pack contextengine.ContextPack, input DomainTo
 }
 
 func presentationRevision(pack contextengine.ContextPack, input DomainToolInput, slideID string) int {
-	if input.Transaction != nil && input.Transaction.IsStaged(slideHTMLRef(slideID)) {
+	if input.Session != nil && input.Session.HasChange(slideHTMLRef(slideID)) {
 		return pack.Revisions.SlideHTML[slideID] + 1
 	}
 	return pack.Revisions.SlideHTML[slideID]

@@ -92,8 +92,8 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 		raw, err := tx.Read(ref)
 		if err == nil {
 			source := "committed"
-			if tx.IsStaged(ref) {
-				source = "staged"
+			if tx.HasChange(ref) {
+				source = "direct_write"
 			}
 			return raw, source, nil
 		}
@@ -114,11 +114,11 @@ func readFailure(err error) ToolResult {
 	return failedToolResult("READ_FAILED", err.Error(), true)
 }
 
-func stagingFailure(err error) ToolResult {
-	if errors.Is(err, ErrStagedHashMismatch) {
+func writeFailure(err error) ToolResult {
+	if errors.Is(err, ErrArtifactHashMismatch) {
 		return failedToolResult(CodeRevisionConflict, err.Error(), true)
 	}
-	return failedToolResult("STAGING_FAILED", err.Error(), true)
+	return failedToolResult("WRITE_FAILED", err.Error(), true)
 }
 
 func resourceSchema() map[string]any {
@@ -366,7 +366,7 @@ func validateSlideReference(pack contextengine.ContextPack, tx *RunSession, slid
 		ordered = ordered || id == slide.SlideID
 	}
 	if !ordered || !sections[slide.SectionID] || (slide.SubsectionID != "" && !subsections[slide.SubsectionID]) {
-		return fmt.Errorf("%w: slide %s is not declared by the staged global model", spec.ErrReferenceBroken, slide.SlideID)
+		return fmt.Errorf("%w: slide %s is not declared by the current outline", spec.ErrReferenceBroken, slide.SlideID)
 	}
 	return nil
 }
@@ -463,7 +463,7 @@ func currentMaterializationProof(
 		return MaterializationProof{}, err
 	}
 	htmlRevision := pack.Revisions.SlideHTML[slideID]
-	if tx != nil && tx.IsStaged(slideHTMLRef(slideID)) {
+	if tx != nil && tx.HasChange(slideHTMLRef(slideID)) {
 		htmlRevision++
 	}
 	return MaterializationProof{

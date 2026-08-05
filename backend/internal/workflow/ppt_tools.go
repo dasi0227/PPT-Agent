@@ -36,7 +36,7 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if err != nil {
 		return failedToolResult(CodeResourceInvalid, err.Error(), false)
 	}
-	raw, _, err := readArtifact(input.ProjectDir, input.Transaction, ref)
+	raw, _, err := readArtifact(input.ProjectDir, input.Session, ref)
 	if err != nil {
 		return readFailure(err)
 	}
@@ -53,7 +53,7 @@ type pptWriteTool struct{ pack contextengine.ContextPack }
 func (pptWriteTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name:        "write_ppt",
-		Description: "Create or fully replace one disclosed PPT resource in run staging. content is always a string.",
+		Description: "Create or fully replace one disclosed PPT resource through the active run session. content is always a string.",
 		Parameters: objectSchema([]string{"resource", "content"}, map[string]any{
 			"resource": resourceSchema(),
 			"content":  map[string]any{"type": "string", "maxLength": maxPPTContentBytes},
@@ -69,8 +69,8 @@ func (t pptWriteTool) Execute(_ context.Context, input DomainToolInput) ToolResu
 	if !input.Scope.Allows(resource) {
 		return failedToolResult(CodeTargetOutOfScope, "requested resource is outside the current run scope", false)
 	}
-	if input.Transaction == nil {
-		return failedToolResult(CodeStagingRequired, "write_ppt requires run staging", false)
+	if input.Session == nil {
+		return failedToolResult(CodeRunSessionRequired, "write_ppt requires an active run session", false)
 	}
 	content, ok := input.Args["content"].(string)
 	if !ok {
@@ -83,7 +83,7 @@ func (t pptWriteTool) Execute(_ context.Context, input DomainToolInput) ToolResu
 	if err != nil {
 		return failedToolResult(CodeResourceInvalid, err.Error(), false)
 	}
-	raw, revision, issues, err := normalizeResource(t.pack, input.Transaction, ref, []byte(content))
+	raw, revision, issues, err := normalizeResource(t.pack, input.Session, ref, []byte(content))
 	if err != nil {
 		result := failedToolResult(CodeContentInvalid, err.Error(), true)
 		if len(issues) > 0 {
@@ -94,15 +94,15 @@ func (t pptWriteTool) Execute(_ context.Context, input DomainToolInput) ToolResu
 	if ref.Kind == ArtifactSlideSpec {
 		var slide spec.SlideSpec
 		_ = json.Unmarshal(raw, &slide)
-		if err := validateSlideReference(t.pack, input.Transaction, slide); err != nil {
+		if err := validateSlideReference(t.pack, input.Session, slide); err != nil {
 			return failedToolResult(CodeContentInvalid, err.Error(), true)
 		}
 	}
-	change, err := stagePPTMutation(t.pack, input.Transaction, ref, "write_ppt", raw)
+	change, err := writePPTMutation(t.pack, input.Session, ref, "write_ppt", raw)
 	if err != nil {
-		return stagingFailure(err)
+		return writeFailure(err)
 	}
-	return mutationResult(t.pack, input, resource, ref, change, raw, revision, "resource staged")
+	return mutationResult(t.pack, input, resource, ref, change, raw, revision, "resource written")
 }
 
 type pptEditTool struct{ pack contextengine.ContextPack }
@@ -130,8 +130,8 @@ func (t pptEditTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if !input.Scope.Allows(resource) {
 		return failedToolResult(CodeTargetOutOfScope, "requested resource is outside the current run scope", false)
 	}
-	if input.Transaction == nil {
-		return failedToolResult(CodeStagingRequired, "edit_ppt requires run staging", false)
+	if input.Session == nil {
+		return failedToolResult(CodeRunSessionRequired, "edit_ppt requires an active run session", false)
 	}
 	values, ok := input.Args["edits"].([]any)
 	if !ok || len(values) == 0 || len(values) > 32 {
@@ -141,7 +141,7 @@ func (t pptEditTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if err != nil {
 		return failedToolResult(CodeResourceInvalid, err.Error(), false)
 	}
-	original, _, err := readArtifact(input.ProjectDir, input.Transaction, ref)
+	original, _, err := readArtifact(input.ProjectDir, input.Session, ref)
 	if err != nil {
 		return readFailure(err)
 	}
@@ -171,7 +171,7 @@ func (t pptEditTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if len(candidate) > maxPPTContentBytes {
 		return failedToolResult(CodeContentTooLarge, "edited content exceeds the limit", false)
 	}
-	raw, revision, issues, err := normalizeResource(t.pack, input.Transaction, ref, []byte(candidate))
+	raw, revision, issues, err := normalizeResource(t.pack, input.Session, ref, []byte(candidate))
 	if err != nil {
 		result := failedToolResult(CodeContentInvalid, err.Error(), true)
 		if len(issues) > 0 {
@@ -182,18 +182,18 @@ func (t pptEditTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if ref.Kind == ArtifactSlideSpec {
 		var slide spec.SlideSpec
 		_ = json.Unmarshal(raw, &slide)
-		if err := validateSlideReference(t.pack, input.Transaction, slide); err != nil {
+		if err := validateSlideReference(t.pack, input.Session, slide); err != nil {
 			return failedToolResult(CodeContentInvalid, err.Error(), true)
 		}
 	}
-	change, err := stagePPTMutation(t.pack, input.Transaction, ref, "edit_ppt", raw)
+	change, err := writePPTMutation(t.pack, input.Session, ref, "edit_ppt", raw)
 	if err != nil {
-		return stagingFailure(err)
+		return writeFailure(err)
 	}
 	return mutationResult(t.pack, input, resource, ref, change, raw, revision, "resource edited atomically")
 }
 
-func stagePPTMutation(
+func writePPTMutation(
 	pack contextengine.ContextPack,
 	tx *RunSession,
 	ref ArtifactRef,
@@ -201,13 +201,13 @@ func stagePPTMutation(
 	raw []byte,
 ) (ArtifactChange, error) {
 	if ref.Kind != ArtifactDesign {
-		return tx.Stage(ref, source, raw)
+		return tx.Write(ref, source, raw)
 	}
 	var design spec.Design
 	if err := json.Unmarshal(raw, &design); err != nil {
 		return ArtifactChange{}, err
 	}
-	changes, err := tx.StageBatch([]StageItem{
+	changes, err := tx.WriteBatch([]WriteItem{
 		{Ref: ref, Source: source, Content: raw},
 		{Ref: designTokensRef(pack), Source: "runtime:design-tokens", Content: spec.DesignTokensCSS(design)},
 	})
@@ -250,16 +250,16 @@ func mutationResult(
 		Type: resource.Type, SlideID: resource.SlideID, Part: resource.Part,
 		Revision: revision, Hash: hashBytes(raw),
 	}}
-	result.InvalidatedTargets = invalidatedByMutation(pack, input.Transaction, resource)
+	result.InvalidatedTargets = invalidatedByMutation(pack, input.Session, resource)
 	switch ref.Kind {
 	case ArtifactOutline, ArtifactDesign, ArtifactSlideSpec:
 		result.Evidence = append(result.Evidence, schemaEvidence(resource, hashBytes(raw)))
 	case ArtifactSlideHTML:
-		if renderHash, err := renderSourceHash(pack, input.Transaction, resource.SlideID); err == nil {
+		if renderHash, err := renderSourceHash(pack, input.Session, resource.SlideID); err == nil {
 			result.Evidence = append(result.Evidence, staticEvidence(resource, renderHash))
 		}
 	}
-	if referenceHash, err := validateReferences(pack, input.Transaction); err == nil {
+	if referenceHash, err := validateReferences(pack, input.Session); err == nil {
 		result.Evidence = append(result.Evidence, referenceEvidence(referenceHash))
 	}
 	result.Data = map[string]any{

@@ -145,7 +145,7 @@ func TestWritePPTRequiresStringAndInjectsManagedMetadata(t *testing.T) {
 	}
 }
 
-func TestDesignWriteAtomicallyStagesDerivedTokens(t *testing.T) {
+func TestDesignWriteAtomicallyWritesDerivedTokens(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
 	tx, _ := NewRunSession(dir, "write-design")
 	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
@@ -157,7 +157,7 @@ func TestDesignWriteAtomicallyStagesDerivedTokens(t *testing.T) {
 	}
 	tokens, err := tx.Read(designTokensRef(pack))
 	if err != nil || !strings.Contains(string(tokens), "--stage-w: 1600") {
-		t.Fatalf("derived tokens were not staged: %q err=%v", tokens, err)
+		t.Fatalf("derived tokens were not written: %q err=%v", tokens, err)
 	}
 	if changes := tx.ChangeSet(); changes.Count() != 1 ||
 		changes.All()[0].Artifact.Kind != ArtifactDesign {
@@ -233,18 +233,18 @@ func TestEditPPTUsesOrderedUniqueAnchorsAndIsAtomic(t *testing.T) {
 	}
 }
 
-func TestRenderSlideUsesStagedHTMLAndProducesEvidence(t *testing.T) {
+func TestRenderSlideUsesDirectWrittenHTMLAndProducesEvidence(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewRunSession(dir, "render")
-	staged := strings.Replace(validToolHTML, "Original", "Staged", 1)
-	if _, err := tx.Stage(slideHTMLRef("slide-01"), "test", []byte(staged)); err != nil {
+	written := strings.Replace(validToolHTML, "Original", "Written", 1)
+	if _, err := tx.Write(slideHTMLRef("slide-01"), "test", []byte(written)); err != nil {
 		t.Fatal(err)
 	}
 	renderer := &recordingRenderer{}
 	input := toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})
 	input.CallID = "render-call-1"
 	result := (slideRenderTool{pack: pack, renderer: renderer}).Execute(context.Background(), input)
-	if !result.OK || renderer.html != staged || len(result.Evidence) != 1 ||
+	if !result.OK || renderer.html != written || len(result.Evidence) != 1 ||
 		result.Evidence[0].Target.Key() != "slide:slide-01:html" ||
 		len(result.ObservationParts) != 1 || result.ObservationParts[0].Type != "text" {
 		t.Fatalf("render=%+v html=%q", result, renderer.html)
@@ -273,8 +273,8 @@ func TestRenderSlideUsesStagedHTMLAndProducesEvidence(t *testing.T) {
 func TestRenderSlideAttachesScreenshotOnVisualReview(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewRunSession(dir, "render")
-	staged := strings.Replace(validToolHTML, "Original", "Staged", 1)
-	if _, err := tx.Stage(slideHTMLRef("slide-01"), "test", []byte(staged)); err != nil {
+	written := strings.Replace(validToolHTML, "Original", "Written", 1)
+	if _, err := tx.Write(slideHTMLRef("slide-01"), "test", []byte(written)); err != nil {
 		t.Fatal(err)
 	}
 	renderer := &recordingRenderer{}
@@ -353,7 +353,7 @@ func TestRenderSlideDoesNotClassifyContextCancellationAsTransient(t *testing.T) 
 func TestCompletionGateRequiresLatestStaticAndRenderEvidence(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewRunSession(dir, "gate")
-	if _, err := tx.Stage(slideHTMLRef("slide-01"), "edit_ppt", []byte(strings.Replace(validToolHTML, "Original", "Changed", 1))); err != nil {
+	if _, err := tx.Write(slideHTMLRef("slide-01"), "edit_ppt", []byte(strings.Replace(validToolHTML, "Original", "Changed", 1))); err != nil {
 		t.Fatal(err)
 	}
 	hash, _ := renderSourceHash(pack, tx, "slide-01")
@@ -362,7 +362,7 @@ func TestCompletionGateRequiresLatestStaticAndRenderEvidence(t *testing.T) {
 	ledger.Record(staticEvidence(resource, hash))
 	ctx := CompletionContext{
 		Strategy: StrategySimple, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
-		Transaction: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
+		Session: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
 	if result := NewCompletionGate().Check(ctx); result.Accepted || !hasCompletionCode(result, "VISUAL_EVIDENCE_REQUIRED") {
 		t.Fatalf("missing render accepted: %+v", result)
@@ -606,7 +606,7 @@ func recordResultEvidence(ledger *EvidenceLedger, result ToolResult) {
 func completionContext(pack contextengine.ContextPack, tx *RunSession, ledger *EvidenceLedger) CompletionContext {
 	return CompletionContext{
 		Strategy: StrategySimple, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
-		Transaction: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
+		Session: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
 }
 
@@ -620,7 +620,7 @@ func resourceArgs(resource Resource) map[string]any {
 
 func toolInput(pack contextengine.ContextPack, dir string, tx *RunSession, args map[string]any) DomainToolInput {
 	return DomainToolInput{
-		Args: args, Context: pack, ProjectDir: dir, RunID: "run-1", Transaction: tx,
+		Args: args, Context: pack, ProjectDir: dir, RunID: "run-1", Session: tx,
 		Scope: ScopeFromSpec(pack.WorkSpec), Strategy: StrategySimple, Phase: PhaseExecuting,
 		Interaction: pack.WorkSpec.Interaction.Intent, Risk: RiskLow,
 	}

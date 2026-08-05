@@ -68,20 +68,16 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	if reusedPID != initialPID {
 		t.Fatalf("browser worker was not reused: first=%d second=%d", initialPID, reusedPID)
 	}
-	stagingDir := filepath.Join(dir, ".staging", "integration")
-	if err := os.MkdirAll(filepath.Join(stagingDir, "common"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "common", "tokens.css"), []byte(":root{--project-proof: 37px}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(stagingDir, "common", "tokens.css"), []byte(":root{--overlay-proof: 37px}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	overlayHTML := `<!doctype html><html><head><link rel="stylesheet" href="../../common/tokens.css"></head><body><section class="slide-stage"><div id="proof" style="width:var(--overlay-proof)">Overlay</div></section><script>if(getComputedStyle(document.querySelector('#proof')).width!=='37px')console.error('staging overlay missing')</script></body></html>`
-	overlayDiagnostics, overlayErr := renderer.Render(context.Background(), RenderRequest{
-		RunID: "integration", ProjectDir: dir, StagingDir: stagingDir, SlideID: "slide-01", HTML: overlayHTML,
+	projectAssetHTML := `<!doctype html><html><head><link rel="stylesheet" href="../../common/tokens.css"></head><body><section class="slide-stage"><div id="proof" style="width:var(--project-proof)">Project asset</div></section><script>if(getComputedStyle(document.querySelector('#proof')).width!=='37px')console.error('project asset missing')</script></body></html>`
+	projectAssetDiagnostics, projectAssetErr := renderer.Render(context.Background(), RenderRequest{
+		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: projectAssetHTML,
 		ScreenshotPath: filepath.Join(dir, "overlay.png"), ViewportWidth: 1600, ViewportHeight: 900, TimeoutMS: 15000,
 	})
-	if overlayErr != nil || len(overlayDiagnostics.ConsoleErrors) != 0 {
-		t.Fatalf("staging overlay was not served: diagnostics=%+v err=%v", overlayDiagnostics, overlayErr)
+	if projectAssetErr != nil || len(projectAssetDiagnostics.ConsoleErrors) != 0 {
+		t.Fatalf("project asset was not served: diagnostics=%+v err=%v", projectAssetDiagnostics, projectAssetErr)
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
