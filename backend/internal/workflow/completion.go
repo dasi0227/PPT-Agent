@@ -40,6 +40,7 @@ func (r CompletionResult) RejectionKey() string {
 
 type CompletionContext struct {
 	Strategy    ExecutionStrategy
+	ExecuteMode ExecuteMode
 	FinishPhase RuntimePhase
 	ActiveTools int
 	Issues      []Issue
@@ -59,7 +60,7 @@ type CompletionPolicy interface {
 type EvidenceCompletionPolicy struct{}
 
 func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	if ctx.Strategy == StrategyChat {
+	if ctx.Strategy != StrategyExecute {
 		return nil
 	}
 	issues := []CompletionIssue{}
@@ -250,7 +251,7 @@ func NewCompletionGate() CompletionGate {
 
 func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	issues := []CompletionIssue{}
-	if ctx.FinishPhase != PhaseChat && ctx.FinishPhase != PhaseExecuting {
+	if !finishAllowed(ctx.Strategy, ctx.FinishPhase) {
 		issues = append(issues, CompletionIssue{Code: "FINISH_NOT_ALLOWED", Summary: "finish is not allowed in the current phase"})
 	}
 	if ctx.ActiveTools != 0 {
@@ -264,7 +265,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	if ctx.Canceled {
 		issues = append(issues, CompletionIssue{Code: CodeCanceled, Summary: "run was canceled"})
 	}
-	if ctx.Strategy != StrategyChat {
+	if ctx.Strategy == StrategyExecute {
 		if ctx.Session == nil {
 			issues = append(issues, CompletionIssue{Code: CodeRunSessionRequired, Summary: "write run has no active run session"})
 		} else if err := ctx.Session.ValidateBaselines(); err != nil {
@@ -275,8 +276,11 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 			issues = append(issues, CompletionIssue{Code: code, Summary: err.Error()})
 		}
 	}
-	if ctx.Strategy == StrategyComplex && (ctx.Plan == nil || ctx.Plan.HasBlockingSteps()) {
-		issues = append(issues, CompletionIssue{Code: "PLAN_INCOMPLETE", Summary: "complex plan still has pending, in-progress, or failed steps"})
+	if ctx.Strategy == StrategyPlan && ctx.Plan == nil {
+		issues = append(issues, CompletionIssue{Code: "PLAN_REQUIRED", Summary: "plan mode requires a valid plan before finish"})
+	}
+	if ctx.Strategy == StrategyExecute && ctx.ExecuteMode == ExecuteModePlanned && (ctx.Plan == nil || ctx.Plan.HasBlockingSteps()) {
+		issues = append(issues, CompletionIssue{Code: "PLAN_INCOMPLETE", Summary: "planned execution still has pending, in-progress, or failed steps"})
 	}
 	for _, policy := range g.Policies {
 		issues = append(issues, policy.Check(ctx)...)
@@ -286,6 +290,19 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		result.MaterializationProofs = acceptedMaterializationProofs(ctx)
 	}
 	return result
+}
+
+func finishAllowed(strategy ExecutionStrategy, phase RuntimePhase) bool {
+	switch strategy {
+	case StrategyTalk, StrategyAsk:
+		return phase == PhaseChat
+	case StrategyPlan:
+		return phase == PhasePlanning
+	case StrategyExecute:
+		return phase == PhaseExecuting
+	default:
+		return false
+	}
 }
 
 func acceptedMaterializationProofs(ctx CompletionContext) []MaterializationProof {

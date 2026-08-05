@@ -371,8 +371,11 @@ func safeFinalMessage(message string, strategy ExecutionStrategy, affected int) 
 		!htmlTagPattern.MatchString(text) && !localPathPattern.MatchString(text) {
 		return text
 	}
-	if strategy == StrategyChat {
+	if strategy == StrategyTalk || strategy == StrategyAsk {
 		return "已完成本次分析。"
+	}
+	if strategy == StrategyPlan {
+		return "已完成本次计划。"
 	}
 	if affected > 0 {
 		return fmt.Sprintf("已完成本次修改并检查了 %d 个受影响目标。", affected)

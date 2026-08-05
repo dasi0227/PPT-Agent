@@ -22,11 +22,12 @@ type DecisionSignal struct {
 }
 
 type StrategyDecision struct {
-	Strategy   ExecutionStrategy `json:"strategy"`
-	Reason     string            `json:"reason"`
-	Confidence float64           `json:"confidence"`
-	Risk       RiskLevel         `json:"risk"`
-	Signals    []DecisionSignal  `json:"signals"`
+	Strategy    ExecutionStrategy `json:"strategy"`
+	ExecuteMode ExecuteMode       `json:"execute_mode,omitempty"`
+	Reason      string            `json:"reason"`
+	Confidence  float64           `json:"confidence"`
+	Risk        RiskLevel         `json:"risk"`
+	Signals     []DecisionSignal  `json:"signals"`
 }
 
 type StrategyRouter struct{}
@@ -37,10 +38,24 @@ func (StrategyRouter) Decide(pack contextengine.ContextPack) StrategyDecision {
 		{Name: "interaction", Value: string(spec.Interaction.Intent)},
 		{Name: "target", Value: string(spec.Target.Artifact) + "/" + string(spec.Target.Level)},
 	}
-	if spec.Interaction.Intent == model.IntentTalk || spec.Interaction.Intent == model.IntentAsk {
+	if spec.Interaction.Intent == model.IntentTalk {
 		signals = append(signals, DecisionSignal{Name: "read_only_authorization", Value: "true"})
 		return StrategyDecision{
-			Strategy: StrategyChat, Reason: "interaction explicitly authorizes read-only collaboration",
+			Strategy: StrategyTalk, Reason: "talk interaction explicitly authorizes read-only collaboration",
+			Confidence: 1, Risk: RiskLow, Signals: signals,
+		}
+	}
+	if spec.Interaction.Intent == model.IntentAsk {
+		signals = append(signals, DecisionSignal{Name: "read_only_authorization", Value: "true"})
+		return StrategyDecision{
+			Strategy: StrategyAsk, Reason: "ask interaction authorizes read-only collaboration with user questions",
+			Confidence: 1, Risk: RiskLow, Signals: signals,
+		}
+	}
+	if spec.Interaction.Intent == model.IntentPlan {
+		signals = append(signals, DecisionSignal{Name: "read_only_authorization", Value: "true"})
+		return StrategyDecision{
+			Strategy: StrategyPlan, Reason: "plan interaction requires a read-only plan before final explanation",
 			Confidence: 1, Risk: RiskLow, Signals: signals,
 		}
 	}
@@ -90,14 +105,18 @@ func (StrategyRouter) Decide(pack contextengine.ContextPack) StrategyDecision {
 		return complexDecision("instruction is not explicit enough for a safe direct write", RiskMedium, .78, signals)
 	default:
 		return StrategyDecision{
-			Strategy: StrategySimple, Reason: "explicit local instruction affects one declared target",
+			Strategy: StrategyExecute, ExecuteMode: ExecuteModeDirect,
+			Reason:     "explicit local instruction affects one declared target",
 			Confidence: .92, Risk: RiskLow, Signals: signals,
 		}
 	}
 }
 
 func complexDecision(reason string, risk RiskLevel, confidence float64, signals []DecisionSignal) StrategyDecision {
-	return StrategyDecision{Strategy: StrategyComplex, Reason: reason, Confidence: confidence, Risk: risk, Signals: signals}
+	return StrategyDecision{
+		Strategy: StrategyExecute, ExecuteMode: ExecuteModePlanned,
+		Reason: reason, Confidence: confidence, Risk: risk, Signals: signals,
+	}
 }
 
 func containsAny(value string, terms ...string) bool {

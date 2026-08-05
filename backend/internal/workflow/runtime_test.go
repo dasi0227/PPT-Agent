@@ -275,26 +275,36 @@ func finishCall(id string) AgentResponse {
 	return toolCall(id, "finish", map[string]any{"message": "done"})
 }
 
-func TestRouterMapsTalkAndAskToChat(t *testing.T) {
-	for _, intent := range []model.InteractionIntent{model.IntentTalk, model.IntentAsk} {
-		pack := testPack(intent, model.ArtifactPresentation, model.TargetDeck, false, "生成整份演示")
-		if got := (StrategyRouter{}).Decide(pack).Strategy; got != StrategyChat {
-			t.Fatalf("%s routed to %s", intent, got)
+func TestRouterMapsReadOnlyInteractionsToNamedStrategies(t *testing.T) {
+	cases := []struct {
+		intent model.InteractionIntent
+		want   ExecutionStrategy
+	}{
+		{model.IntentTalk, StrategyTalk},
+		{model.IntentAsk, StrategyAsk},
+		{model.IntentPlan, StrategyPlan},
+	}
+	for _, tc := range cases {
+		pack := testPack(tc.intent, model.ArtifactPresentation, model.TargetDeck, false, "生成整份演示")
+		if got := (StrategyRouter{}).Decide(pack).Strategy; got != tc.want {
+			t.Fatalf("%s routed to %s", tc.intent, got)
 		}
 	}
 }
 
-func TestRouterSelectsSimpleForExplicitSingleTarget(t *testing.T) {
+func TestRouterSelectsDirectExecuteForExplicitSingleTarget(t *testing.T) {
 	pack := testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题")
-	if got := (StrategyRouter{}).Decide(pack).Strategy; got != StrategySimple {
-		t.Fatalf("strategy=%s", got)
+	decision := (StrategyRouter{}).Decide(pack)
+	if decision.Strategy != StrategyExecute || decision.ExecuteMode != ExecuteModeDirect {
+		t.Fatalf("decision=%+v", decision)
 	}
 }
 
-func TestRouterSelectsComplexForEmptyWholeDeck(t *testing.T) {
+func TestRouterSelectsPlannedExecuteForEmptyWholeDeck(t *testing.T) {
 	pack := testPack(model.IntentExecute, model.ArtifactSpec, model.TargetDeck, true, "生成产品发布演示")
-	if got := (StrategyRouter{}).Decide(pack).Strategy; got != StrategyComplex {
-		t.Fatalf("strategy=%s", got)
+	decision := (StrategyRouter{}).Decide(pack)
+	if decision.Strategy != StrategyExecute || decision.ExecuteMode != ExecuteModePlanned {
+		t.Fatalf("decision=%+v", decision)
 	}
 }
 
@@ -309,7 +319,7 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 		Context: testPack(model.IntentTalk, model.ArtifactSpec, model.TargetSlide, false, "分析当前页"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
-	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyChat {
+	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyTalk {
 		t.Fatalf("outcome=%+v", outcome)
 	}
 	if len(agent.requests) != 2 {
@@ -480,13 +490,13 @@ func TestContextCompactionDropsOnlySupersededSlideImages(t *testing.T) {
 }
 
 func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryStrategy(t *testing.T) {
-	for _, strategy := range []ExecutionStrategy{StrategyChat, StrategySimple, StrategyComplex} {
+	for _, strategy := range []ExecutionStrategy{StrategyTalk, StrategyAsk, StrategyPlan, StrategyExecute} {
 		prompt := runtimeSystemPrompt(PhaseExecuting, strategy, "{}")
 		if !strings.Contains(prompt, "All normal successful exits require finish(message=...). Ordinary assistant text never completes a run.") {
 			t.Fatalf("%s prompt does not require explicit finish: %q", strategy, prompt)
 		}
 	}
-	schemas := controlSchemas(StrategyChat, PhaseChat, model.IntentTalk)
+	schemas := controlSchemas(StrategyTalk, PhaseChat, model.IntentTalk)
 	var finishDescription string
 	var finishParameters map[string]any
 	for _, schema := range schemas {
@@ -502,10 +512,15 @@ func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryStrategy(t *te
 	if len(properties) != 1 || properties["message"] == nil {
 		t.Fatalf("finish schema must expose only message: %+v", finishParameters)
 	}
+	planPrompt := runtimeSystemPrompt(PhasePlanning, StrategyPlan, "{}")
+	if !strings.Contains(planPrompt, "StrategyPlan must create a concise checklist with update_plan before finish") ||
+		!strings.Contains(planPrompt, "Put full rationale and detailed execution notes in finish(message)") {
+		t.Fatalf("plan prompt missing plan-mode guidance: %q", planPrompt)
+	}
 }
 
 func TestRuntimePromptAgentContractsDoNotRequireManagedFields(t *testing.T) {
-	prompt := runtimeSystemPrompt(PhaseExecuting, StrategySimple, "{}")
+	prompt := runtimeSystemPrompt(PhaseExecuting, StrategyExecute, "{}")
 	prefix := "authoritative schemas: "
 	start := strings.Index(prompt, prefix)
 	if start < 0 {
@@ -548,7 +563,7 @@ func contains(values []string, target string) bool {
 	return false
 }
 
-func TestComplexPlanningDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T) {
+func TestPlannedExecuteDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		planCall("plan", true), toolCall("write", "write_ppt", map[string]any{"content": "next"}), finishCall("finish"),
@@ -567,11 +582,41 @@ func TestComplexPlanningDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T
 			t.Fatal("planning disclosed a write tool")
 		}
 	}
-	if agent.requests[1].Phase != PhaseExecuting || events.count(model.EventPlanUpdated) != 1 {
+	if agent.requests[0].ExecuteMode != ExecuteModePlanned ||
+		agent.requests[1].Phase != PhaseExecuting ||
+		agent.requests[1].ExecuteMode != ExecuteModePlanned ||
+		events.count(model.EventPlanUpdated) != 1 {
 		t.Fatalf("requests=%+v events=%+v", agent.requests, events.events)
 	}
 	if events.count(model.EventToolStarted) != 1 {
 		t.Fatalf("runtime control tools leaked into business tool events: %+v", events.events)
+	}
+}
+
+func TestPlanInteractionCreatesPlanAndFinishesWithoutWriteSession(t *testing.T) {
+	dir := testProject(t, ArtifactSlideSpec)
+	agent := &scriptedAgent{responses: []AgentResponse{
+		planCall("plan", false), finishCall("finish"),
+	}}
+	events := &eventRecorder{}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "plan-only", ProjectDir: dir,
+		Context: testPack(model.IntentPlan, model.ArtifactSpec, model.TargetSlide, false, "规划当前页优化"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+	})
+	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyPlan || len(outcome.Changes.All()) != 0 {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if agent.requests[0].Phase != PhasePlanning || agent.requests[0].ExecuteMode != ExecuteModeNone {
+		t.Fatalf("plan request=%+v", agent.requests[0])
+	}
+	for _, schema := range agent.requests[0].Tools {
+		if schema.Name == "write_ppt" || schema.Name == "edit_ppt" {
+			t.Fatalf("plan mode disclosed write tool: %+v", agent.requests[0].Tools)
+		}
+	}
+	if events.count(model.EventPlanUpdated) != 1 || events.count(model.EventMessageFinal) != 1 {
+		t.Fatalf("events=%+v", events.events)
 	}
 }
 
@@ -595,7 +640,7 @@ func TestPlanStepsNeverCreateAnotherLoop(t *testing.T) {
 	}
 }
 
-func TestSimpleProducesNoPlan(t *testing.T) {
+func TestDirectExecuteProducesNoPlan(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
@@ -606,12 +651,13 @@ func TestSimpleProducesNoPlan(t *testing.T) {
 		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
-	if outcome.Strategy != StrategySimple || events.count(model.EventPlanUpdated) != 0 {
+	if outcome.Strategy != StrategyExecute || agent.requests[0].ExecuteMode != ExecuteModeDirect ||
+		events.count(model.EventPlanUpdated) != 0 {
 		t.Fatalf("outcome=%+v events=%+v", outcome, events.events)
 	}
 }
 
-func TestSimpleScopeExpansionUpgradesSameRunToComplex(t *testing.T) {
+func TestDirectExecuteScopeExpansionUpgradesSameRunToPlanned(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
@@ -623,8 +669,11 @@ func TestSimpleScopeExpansionUpgradesSameRunToComplex(t *testing.T) {
 		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
-	if outcome.Strategy != StrategyComplex {
+	if outcome.Strategy != StrategyExecute {
 		t.Fatalf("outcome=%+v events=%+v", outcome, events.events)
+	}
+	if agent.requests[0].ExecuteMode != ExecuteModeDirect || agent.requests[1].ExecuteMode != ExecuteModePlanned {
+		t.Fatalf("execute mode did not upgrade: %+v", agent.requests)
 	}
 	for _, request := range agent.requests {
 		if request.LoopID != outcome.LoopID {
@@ -932,7 +981,7 @@ func TestCancellationPairsEveryStartedToolBeforeCanceledTerminal(t *testing.T) {
 	}
 }
 
-func TestEmptyProjectComplexPresentationGenerationUsesUnifiedPPTTargets(t *testing.T) {
+func TestEmptyProjectPlannedPresentationGenerationUsesUnifiedPPTTargets(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
 	emptyDeck := deckModel("p1", []string{})
 	if err := os.WriteFile(filepath.Join(dir, "outline.json"), mustJSONValue(emptyDeck), 0o644); err != nil {
@@ -986,8 +1035,11 @@ func TestEmptyProjectComplexPresentationGenerationUsesUnifiedPPTTargets(t *testi
 		RunID: "empty-complex", ProjectDir: dir, Context: pack,
 		DomainTools: DefaultDomainToolProvider{Pack: pack, Renderer: renderer},
 	})
-	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyComplex {
+	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyExecute {
 		t.Fatalf("outcome=%+v", outcome)
+	}
+	if agent.requests[0].ExecuteMode != ExecuteModePlanned {
+		t.Fatalf("empty deck generation should start planned: %+v", agent.requests[0])
 	}
 	for _, slideID := range []string{"slide-01", "slide-02"} {
 		if _, err := os.Stat(filepath.Join(dir, model.SlideSpecPath(slideID))); err != nil {

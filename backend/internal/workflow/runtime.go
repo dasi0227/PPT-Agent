@@ -58,6 +58,7 @@ type RuntimeCheckpoint struct {
 	RunID              string            `json:"run_id"`
 	LoopID             string            `json:"loop_id"`
 	Strategy           ExecutionStrategy `json:"strategy"`
+	ExecuteMode        ExecuteMode       `json:"execute_mode,omitempty"`
 	Phase              RuntimePhase      `json:"phase"`
 	ResumePhase        RuntimePhase      `json:"resume_phase,omitempty"`
 	Plan               *Plan             `json:"plan,omitempty"`
@@ -73,6 +74,7 @@ type AgentRequest struct {
 	RunID           string
 	LoopID          string
 	Strategy        ExecutionStrategy
+	ExecuteMode     ExecuteMode
 	Phase           RuntimePhase
 	Context         contextengine.ContextPack
 	Plan            *Plan
@@ -105,7 +107,7 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		return AgentResponse{}, errors.New("LLM provider is required for ReAct execution")
 	}
 	runtimeState, _ := json.Marshal(map[string]any{
-		"strategy": req.Strategy, "phase": req.Phase, "plan": req.Plan,
+		"strategy": req.Strategy, "execute_mode": req.ExecuteMode, "phase": req.Phase, "plan": req.Plan,
 		"changes": req.Changes, "evidence": req.Evidence,
 	})
 	system, user := contextengine.CompileForRunner(&req.Context,
@@ -142,11 +144,14 @@ func runtimeSystemPrompt(phase RuntimePhase, strategy ExecutionStrategy, state s
 	contractJSON, _ := json.Marshal(contracts)
 	return fmt.Sprintf(`<runtime_policy>
 You are the single continuous ReAct agent for this HTML PPT run. Strategy=%s Phase=%s.
-Use only disclosed tools. talk and ask are read-only; execute writes through the active run session.
+Use only disclosed tools. talk, ask and plan are read-only; execute writes through the active run session.
 Re-check resource disclosure, interaction, target scope, strategy and phase on every call.
 The only business tools are read_ppt, write_ppt, edit_ppt, search_refs and render_slide.
 The only control actions are update_plan, ask_user and finish. ask_user and finish must each be the sole action in a response.
-Complex strategy may maintain a dynamic checklist, but it is not a workflow DAG or a separate verification stage.
+StrategyPlan must create a concise checklist with update_plan before finish, then explain the complete plan in finish(message).
+StrategyExecute may run direct or planned. If coordination is needed, call update_plan first; Runtime then treats execution as planned.
+Plan steps in update_plan must be short UI checklist items. Put full rationale and detailed execution notes in finish(message).
+A dynamic checklist is not a workflow DAG or a separate verification stage.
 All normal successful exits require finish(message=...). Ordinary assistant text never completes a run.
 </runtime_policy>
 
@@ -210,6 +215,7 @@ type runtimeState struct {
 	runID                 string
 	loopID                string
 	strategy              ExecutionStrategy
+	executeMode           ExecuteMode
 	phase                 RuntimePhase
 	resumePhase           RuntimePhase
 	decision              StrategyDecision
@@ -244,9 +250,15 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		input.Budget = DefaultRuntimeBudget()
 	}
 	decision := r.Router.Decide(input.Context)
+	executeMode := decision.ExecuteMode
+	if decision.Strategy == StrategyExecute && executeMode == ExecuteModeNone {
+		executeMode = ExecuteModeDirect
+	}
+	decision.ExecuteMode = executeMode
 	state := &runtimeState{
 		runID: input.RunID, loopID: "loop_" + uuid.NewString(), strategy: decision.Strategy,
-		decision: decision, scope: ScopeFromSpec(input.Context.WorkSpec), ledger: NewEvidenceLedger(),
+		executeMode: executeMode,
+		decision:    decision, scope: ScopeFromSpec(input.Context.WorkSpec), ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, started: time.Now(), budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle,
 	}
@@ -255,12 +267,16 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	initialPhase := PhaseChat
 	switch state.strategy {
-	case StrategyChat:
+	case StrategyTalk, StrategyAsk:
 		initialPhase = PhaseChat
-	case StrategySimple:
-		initialPhase = PhaseExecuting
-	case StrategyComplex:
+	case StrategyPlan:
 		initialPhase = PhasePlanning
+	case StrategyExecute:
+		if state.executeMode == ExecuteModePlanned {
+			initialPhase = PhasePlanning
+		} else {
+			initialPhase = PhaseExecuting
+		}
 	}
 	manifest := input.Context.Manifest
 	recordTrace(input.Trace, input.RunID, "context.assembled", map[string]any{
@@ -277,7 +293,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		r.emitProgress(input.Emitter, state, "thinking", "正在分析任务与当前内容", nil)
 	}
 
-	if state.strategy != StrategyChat {
+	if state.strategy == StrategyExecute {
 		// Direct-write session: typed tools write artifacts straight to the
 		// project directory. A failed or canceled run keeps its partial
 		// products on disk instead of discarding a private write sandbox.
@@ -315,7 +331,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		schemas = append(schemas, controlSchemas(state.strategy, state.phase, input.Context.WorkSpec.Interaction.Intent)...)
 		state.turns++
 		response, err := r.Agent.Next(ctx, AgentRequest{
-			RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, Phase: state.phase,
+			RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, ExecuteMode: state.executeMode, Phase: state.phase,
 			Context: input.Context, Plan: state.plan, Changes: state.changeSet(),
 			Evidence: state.ledger.Entries(state.changeSet()), Messages: append([]llm.Message{}, state.messages...),
 			Tools:         schemas,
@@ -387,12 +403,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		for _, result := range results {
 			upgrade = upgrade || result.Code == CodeScopeExpansion
 		}
-		if state.strategy == StrategySimple && (upgrade || requiresComplexCoordination(state.changeSet())) {
-			r.upgradeToComplex(input.Emitter, state, "runtime scope expansion requires coordinated planning")
+		if state.strategy == StrategyExecute && state.executeMode == ExecuteModeDirect && (upgrade || requiresComplexCoordination(state.changeSet())) {
+			r.upgradeToPlanned(input.Emitter, state, "runtime scope expansion requires coordinated planning")
 			continue
 		}
-		if state.strategy == StrategySimple && state.toolCalls >= state.budget.SimpleUpgradeToolRoundTrips {
-			r.upgradeToComplex(input.Emitter, state, "simple execution exceeded six tool round trips")
+		if state.strategy == StrategyExecute && state.executeMode == ExecuteModeDirect && state.toolCalls >= state.budget.SimpleUpgradeToolRoundTrips {
+			r.upgradeToPlanned(input.Emitter, state, "direct execution exceeded six tool round trips")
 			continue
 		}
 		if state.toolFailures >= state.budget.MaxConsecutiveToolFailures {
@@ -704,7 +720,8 @@ func (r *Runtime) executeControl(
 ) (StructuredOutcome, bool) {
 	switch call.Name {
 	case "update_plan":
-		if state.strategy != StrategyComplex || (state.phase != PhasePlanning && state.phase != PhaseExecuting) {
+		if (state.strategy != StrategyPlan && state.strategy != StrategyExecute) ||
+			(state.phase != PhasePlanning && state.phase != PhaseExecuting) {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "update_plan is not allowed now", false))
 			return StructuredOutcome{}, false
 		}
@@ -739,7 +756,11 @@ func (r *Runtime) executeControl(
 			}
 		}
 		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan revision accepted"))
-		if created && state.phase == PhasePlanning {
+		if state.strategy == StrategyExecute {
+			state.executeMode = ExecuteModePlanned
+			state.decision.ExecuteMode = ExecuteModePlanned
+		}
+		if state.strategy == StrategyExecute && created && state.phase == PhasePlanning {
 			r.changePhase(input.Emitter, state, PhaseExecuting, "first valid plan created")
 		}
 		return StructuredOutcome{}, false
@@ -800,7 +821,7 @@ func (r *Runtime) finishCandidate(
 	r.emitProgress(input.Emitter, state, "finalizing", "正在完成最终检查", nil)
 	changes := state.changeSet()
 	result := r.Gate.Check(CompletionContext{
-		Strategy: state.strategy, FinishPhase: finishPhase, ActiveTools: state.activeTools,
+		Strategy: state.strategy, ExecuteMode: state.executeMode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
 		Issues: state.issues, WorkScope: state.scope, Session: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: input.Context, Plan: state.plan, Canceled: ctx.Err() != nil,
 	})
@@ -817,8 +838,8 @@ func (r *Runtime) finishCandidate(
 		if state.gateCount >= state.budget.MaxIdenticalGateRejections {
 			return r.fail(input, state, CodeGateRejectedRepeated, errors.New("completion gate rejected the same unchanged state three times")), true
 		}
-		if state.strategy == StrategySimple && state.gateCount >= 2 && gateNeedsCoordination(result) {
-			r.upgradeToComplex(input.Emitter, state, "completion issues require multi-step coordination")
+		if state.strategy == StrategyExecute && state.executeMode == ExecuteModeDirect && state.gateCount >= 2 && gateNeedsCoordination(result) {
+			r.upgradeToPlanned(input.Emitter, state, "completion issues require multi-step coordination")
 		} else {
 			r.changePhase(input.Emitter, state, finishPhase, "completion rejected; continuing the same loop")
 		}
@@ -837,7 +858,7 @@ func (r *Runtime) finishCandidate(
 	if state.lastSummary == "" {
 		state.lastSummary = "Run completed"
 	}
-	if state.strategy != StrategyChat {
+	if state.strategy == StrategyExecute {
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted")
 		state.tx.AcceptMaterializationProofs(result.MaterializationProofs)
 		commitHash, hashErr := idempotency.CanonicalHash(map[string]any{
@@ -922,13 +943,13 @@ func changedResources(values []ChangedTarget) []Resource {
 	return out
 }
 
-func (r *Runtime) upgradeToComplex(emitter EventEmitter, state *runtimeState, reason string) {
-	if state.strategy != StrategySimple {
+func (r *Runtime) upgradeToPlanned(emitter EventEmitter, state *runtimeState, reason string) {
+	if state.strategy != StrategyExecute || state.executeMode == ExecuteModePlanned {
 		return
 	}
-	state.strategy = StrategyComplex
+	state.executeMode = ExecuteModePlanned
 	state.decision = StrategyDecision{
-		Strategy: StrategyComplex, Reason: reason, Confidence: 1, Risk: RiskMedium,
+		Strategy: StrategyExecute, ExecuteMode: ExecuteModePlanned, Reason: reason, Confidence: 1, Risk: RiskMedium,
 		Signals: append(state.decision.Signals, DecisionSignal{Name: "runtime_upgrade", Value: "true"}),
 	}
 	if state.tx != nil {
@@ -958,7 +979,7 @@ func (r *Runtime) changePhase(emitter EventEmitter, state *runtimeState, next Ru
 func (r *Runtime) emitStrategy(state *runtimeState, upgraded bool) {
 	recordTrace(state.trace, state.runID, "strategy.selected", map[string]any{
 		"loop_id":  state.loopID,
-		"strategy": state.decision.Strategy, "reason": state.decision.Reason,
+		"strategy": state.decision.Strategy, "execute_mode": state.decision.ExecuteMode, "reason": state.decision.Reason,
 		"confidence": state.decision.Confidence, "risk": state.decision.Risk,
 		"signals": state.decision.Signals, "upgraded": upgraded,
 	})
@@ -1010,7 +1031,7 @@ func (state *runtimeState) changeSet() ChangeSet {
 func (state *runtimeState) checkpoint(questionID string) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
 		RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, Phase: state.phase,
-		ResumePhase: state.resumePhase, Plan: state.plan, Changes: state.changeSet(),
+		ExecuteMode: state.executeMode, ResumePhase: state.resumePhase, Plan: state.plan, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
 		WaitingQuestionID: questionID, CompletionFailures: state.gateCount,
 	}
@@ -1279,7 +1300,7 @@ func isControlTool(name string) bool {
 
 func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
 	out := []ToolSchema{}
-	if strategy == StrategyComplex && (phase == PhasePlanning || phase == PhaseExecuting) {
+	if (strategy == StrategyPlan || strategy == StrategyExecute) && (phase == PhasePlanning || phase == PhaseExecuting) {
 		out = append(out, ToolSchema{
 			Name: "update_plan", Description: "Create or replace the current lightweight plan snapshot.",
 			Parameters: objectSchema([]string{"steps"}, map[string]any{
@@ -1293,7 +1314,7 @@ func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction 
 			}),
 		})
 	}
-	allowAsk := interaction == model.IntentAsk || (interaction == model.IntentExecute && phase != PhaseCompletionCheck)
+	allowAsk := interaction == model.IntentAsk || interaction == model.IntentPlan || (interaction == model.IntentExecute && phase != PhaseCompletionCheck)
 	if allowAsk && phase != PhaseWaitingInput && phase != PhaseCommitting && phase != PhaseTerminal {
 		out = append(out, ToolSchema{
 			Name: "ask_user", Description: "Ask one blocking question and pause this same loop until the user answers.",
@@ -1304,7 +1325,7 @@ func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction 
 			}),
 		})
 	}
-	if phase == PhaseChat || phase == PhaseExecuting {
+	if phase == PhaseChat || phase == PhaseExecuting || (strategy == StrategyPlan && phase == PhasePlanning) {
 		out = append(out, ToolSchema{
 			Name: "finish", Description: "所有策略的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。The message is checked by the Completion Gate before the run may complete.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{

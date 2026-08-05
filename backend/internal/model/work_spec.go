@@ -25,6 +25,7 @@ type InteractionIntent string
 const (
 	IntentTalk    InteractionIntent = "talk"
 	IntentAsk     InteractionIntent = "ask"
+	IntentPlan    InteractionIntent = "plan"
 	IntentExecute InteractionIntent = "execute"
 )
 
@@ -70,7 +71,7 @@ func (s WorkSpec) Validate() error {
 		return fmt.Errorf("%w: current must be resolved to a stable slide_id", ErrInvalidWorkSpec)
 	}
 	switch s.Interaction.Intent {
-	case IntentTalk, IntentAsk, IntentExecute:
+	case IntentTalk, IntentAsk, IntentPlan, IntentExecute:
 	default:
 		return fmt.Errorf("%w: unsupported intent %q", ErrInvalidWorkSpec, s.Interaction.Intent)
 	}

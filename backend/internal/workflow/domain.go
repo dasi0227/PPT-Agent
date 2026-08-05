@@ -11,9 +11,18 @@ import (
 type ExecutionStrategy string
 
 const (
-	StrategyChat    ExecutionStrategy = "chat"
-	StrategySimple  ExecutionStrategy = "simple"
-	StrategyComplex ExecutionStrategy = "complex"
+	StrategyTalk    ExecutionStrategy = "talk"
+	StrategyAsk     ExecutionStrategy = "ask"
+	StrategyPlan    ExecutionStrategy = "plan"
+	StrategyExecute ExecutionStrategy = "execute"
+)
+
+type ExecuteMode string
+
+const (
+	ExecuteModeNone    ExecuteMode = ""
+	ExecuteModeDirect  ExecuteMode = "direct"
+	ExecuteModePlanned ExecuteMode = "planned"
 )
 
 type RuntimePhase string

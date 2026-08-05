@@ -174,7 +174,7 @@ func TestSpecAndHTMLChangesForOneSlideRemainSimple(t *testing.T) {
 
 func batchState(pack contextengine.ContextPack) *runtimeState {
 	return &runtimeState{
-		runID: "batch", loopID: "loop-batch", strategy: StrategySimple,
+		runID: "batch", loopID: "loop-batch", strategy: StrategyExecute,
 		phase: PhaseExecuting, scope: ScopeFromSpec(pack.WorkSpec),
 		ledger: NewEvidenceLedger(), decision: StrategyDecision{Risk: RiskLow},
 	}

@@ -23,8 +23,11 @@ function StepIcon({ status }: { status: PlanStepStatus }) {
 }
 
 interface PlanIndicatorProps {
-  plan: PlanState;
+  plan?: PlanState | null;
   running: boolean;
+  selected?: boolean;
+  disabled?: boolean;
+  onSelectPlan?: () => void;
 }
 
 function PlanText({
@@ -95,10 +98,44 @@ function PlanText({
   );
 }
 
-export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) => {
-  const total = plan.steps.length;
-  const completed = plan.steps.filter((step) => step.status === 'completed').length;
+const planButtonClass = (selected: boolean) => cn(
+  'inline-flex h-7 min-w-0 shrink items-center gap-0.5 rounded-md border px-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45',
+  selected
+    ? 'border-accent/30 bg-accent-soft text-accent'
+    : 'border-border bg-transparent text-text-600 hover:bg-panel-muted hover:text-text-900',
+);
+
+export const PlanIndicator: React.FC<PlanIndicatorProps> = ({
+  plan,
+  running,
+  selected = false,
+  disabled = false,
+  onSelectPlan,
+}) => {
+  const hasPlan = Boolean(plan && plan.steps.length > 0);
+  const total = plan?.steps.length ?? 0;
+  const completed = plan?.steps.filter((step) => step.status === 'completed').length ?? 0;
   const inFlight = running && completed < total;
+
+  if (!hasPlan) {
+    const togglePlan = () => {
+      onSelectPlan?.();
+    };
+    return (
+      <button
+        type="button"
+        aria-label="计划"
+        aria-pressed={selected}
+        title="只写计划并回显，不修改项目内容"
+        disabled={disabled}
+        onClick={togglePlan}
+        className={planButtonClass(selected)}
+      >
+        <ListChecks className="h-3.5 w-3.5" strokeWidth={1.75} />
+        计划
+      </button>
+    );
+  }
 
   return (
     <DropdownMenu>
@@ -106,16 +143,10 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
         <button
           type="button"
           aria-label={`计划 ${completed} / ${total}`}
-          className="inline-flex h-7 min-w-0 shrink items-center gap-1 rounded-md border border-border bg-transparent px-1.5 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          disabled={disabled}
+          className={planButtonClass(false)}
         >
-          {inFlight ? (
-            <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60 motion-reduce:animate-none" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-            </span>
-          ) : (
-            <ListChecks className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-          )}
+          <ListChecks className={cn('h-3.5 w-3.5 shrink-0', inFlight && 'animate-pulse motion-reduce:animate-none')} strokeWidth={1.75} />
           <span className="shrink-0 whitespace-nowrap">计划</span>
           <span className="shrink-0 tabular-nums">{completed} / {total}</span>
         </button>
@@ -123,12 +154,12 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
       <DropdownMenuContent side="top" align="start" className="w-[320px] overflow-visible p-2">
         <div className="mb-1.5 flex items-center gap-2 px-1">
           <PlanText className="max-w-[248px] text-sm font-semibold text-text-900">
-            {plan.title || '执行计划'}
+            {plan?.title || '执行计划'}
           </PlanText>
           <span className="shrink-0 text-xs tabular-nums text-text-400">{completed}/{total}</span>
         </div>
         <div className="max-h-[280px] space-y-0.5 overflow-y-auto pr-1">
-          {plan.steps.map((step) => (
+          {plan?.steps.map((step) => (
             <div
               key={step.id}
               className={cn(

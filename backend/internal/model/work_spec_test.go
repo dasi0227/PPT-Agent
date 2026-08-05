@@ -29,6 +29,17 @@ func TestWorkSpecValidation(t *testing.T) {
 	}
 }
 
+func TestWorkSpecValidationAcceptsPlanIntent(t *testing.T) {
+	spec := WorkSpec{
+		Target:      RunTarget{Artifact: ArtifactSpec, Level: TargetDeck},
+		Interaction: RunInteraction{Intent: IntentPlan},
+		Instruction: "plan the work",
+	}
+	if err := spec.Validate(); err != nil {
+		t.Fatalf("plan intent rejected: %v", err)
+	}
+}
+
 func TestDeriveMaterializationState(t *testing.T) {
 	if got := DeriveMaterializationState(false, 2, 2, 2, MaterializationRevisions{}); got != MaterializationNotMaterialized {
 		t.Fatalf("not materialized: %s", got)

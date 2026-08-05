@@ -110,8 +110,8 @@ export interface Run {
 
 export type Artifact = 'spec' | 'presentation';
 export type TargetLevel = 'slide' | 'deck';
-export type InteractionIntent = 'talk' | 'ask' | 'execute';
-export type ExecutionStrategy = 'chat' | 'simple' | 'complex';
+export type InteractionIntent = 'talk' | 'ask' | 'plan' | 'execute';
+export type ExecutionStrategy = 'talk' | 'ask' | 'plan' | 'execute';
 
 export interface RunTarget { artifact: Artifact; level: TargetLevel; slide_id?: string }
 export interface RunInteraction { intent: InteractionIntent }

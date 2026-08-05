@@ -150,7 +150,7 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 		emitter.Emit(model.EventRunFinished, model.RunFinishedPayload{
 			PublicEventBase: model.NewPublicEventBase("r1"), Status: "completed", DurationMS: 10,
 		})
-		outcome := workflow.StructuredOutcome{Status: workflow.StatusCompleted, Strategy: workflow.StrategyChat}
+		outcome := workflow.StructuredOutcome{Status: workflow.StatusCompleted, Strategy: workflow.StrategyTalk}
 		return outcome
 	})
 	run, err := engine.Start(context.Background(), testRun("r1"), execution)

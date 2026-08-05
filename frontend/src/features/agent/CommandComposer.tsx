@@ -24,6 +24,8 @@ function applyShortcut(raw: string, request: CreateRunRequest): CreateRunRequest
       return { ...request, instruction, interaction: { intent: 'talk' } };
     case '/ask':
       return { ...request, instruction, interaction: { intent: 'ask' } };
+    case '/plan':
+      return { ...request, instruction, interaction: { intent: 'plan' } };
     case '/overview':
       return { ...request, instruction, target: { artifact: 'presentation', level: 'deck' } };
     case '/current':
@@ -149,6 +151,9 @@ export const CommandComposer: React.FC = () => {
   };
 
   const requiresVision = composer.intent === 'execute' && composer.artifact === 'presentation';
+  const togglePlanIntent = () => {
+    composer.setIntent(composer.intent === 'plan' ? 'execute' : 'plan');
+  };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.nativeEvent.isComposing || isComposing) return;
@@ -195,9 +200,13 @@ export const CommandComposer: React.FC = () => {
               onIntentChange={composer.setIntent}
               disabled={disabled || steering}
             />
-            {plan && plan.steps.length > 0 && (
-              <PlanIndicator plan={plan} running={runActive} />
-            )}
+            <PlanIndicator
+              plan={plan}
+              running={runActive}
+              selected={composer.intent === 'plan'}
+              disabled={plan && plan.steps.length > 0 ? false : disabled || steering}
+              onSelectPlan={togglePlanIntent}
+            />
           </div>
           <div className="flex min-w-0 shrink-0 items-center gap-0.5">
             <TargetSelector

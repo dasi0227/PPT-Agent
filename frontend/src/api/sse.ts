@@ -54,7 +54,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
     case 'run.started':
       return validRunTarget(data.target)
         && isRecord(data.interaction)
-        && ['talk', 'ask', 'execute'].includes(String(data.interaction.intent))
+        && ['talk', 'ask', 'plan', 'execute'].includes(String(data.interaction.intent))
         && hasString(data, 'user_input');
     case 'run.progress':
       return progressStages.has(String(data.stage))

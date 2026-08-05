@@ -49,6 +49,7 @@ describe('CommandComposer', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
     expect(screen.getByRole('button', { name: '讨论' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '盘问' })).toHaveAttribute('aria-pressed', 'false');
+	    expect(screen.getByRole('button', { name: '计划' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '目标：单页幻灯片' })).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '输入你的想法与目标');
 
@@ -64,10 +65,11 @@ describe('CommandComposer', () => {
     }), 'p1'));
   });
 
-  it('maps talk and ask buttons mutually exclusively and restores default execution', async () => {
+	  it('maps talk, ask and plan buttons mutually exclusively and restores default execution', async () => {
     render(<CommandComposer />);
     const talk = screen.getByRole('button', { name: '讨论' });
     const ask = screen.getByRole('button', { name: '盘问' });
+	    const plan = screen.getByRole('button', { name: '计划' });
 
     await act(async () => fireEvent.click(talk));
     expect(useComposerStore.getState()).toMatchObject({ intent: 'talk' });
@@ -80,12 +82,18 @@ describe('CommandComposer', () => {
     expect(talk).toHaveAttribute('aria-pressed', 'false');
     expect(ask).toHaveAttribute('aria-pressed', 'true');
 
-    await act(async () => fireEvent.click(ask));
+	    await act(async () => fireEvent.click(plan));
+	    expect(useComposerStore.getState()).toMatchObject({ intent: 'plan' });
+	    expect(talk).toHaveAttribute('aria-pressed', 'false');
+	    expect(ask).toHaveAttribute('aria-pressed', 'false');
+	    expect(plan).toHaveAttribute('aria-pressed', 'true');
+
+	    await act(async () => fireEvent.click(plan));
     expect(useComposerStore.getState()).toMatchObject({ intent: 'execute' });
-    expect(ask).toHaveAttribute('aria-pressed', 'false');
+	    expect(plan).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('keeps /talk and /ask shortcuts mapped to their existing interaction protocols', async () => {
+	  it('keeps /talk, /ask and /plan shortcuts mapped to their interaction protocols', async () => {
     render(<CommandComposer />);
     await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
     const textarea = screen.getByRole('textbox');
@@ -103,6 +111,46 @@ describe('CommandComposer', () => {
       interaction: { intent: 'ask' },
       instruction: '先分析方案',
     }), 'p1'));
+
+	    fireEvent.change(textarea, { target: { value: '/plan 拆解执行步骤' } });
+	    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+	    await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
+	      interaction: { intent: 'plan' },
+	      instruction: '拆解执行步骤',
+	    }), 'p1'));
+  });
+
+  it('uses the plan button as progress popover when a plan exists', async () => {
+    useRunStore.setState({
+      createRun,
+      sessions: {
+        t1: {
+          activeRunId: 'r-plan', status: 'running',
+          target: { artifact: 'presentation', level: 'slide' },
+          interaction: { intent: 'execute' },
+          timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null,
+          plan: {
+            id: 'p1',
+            title: '执行计划',
+            revision: 1,
+            steps: [
+              { id: 's1', title: '完成结构梳理', status: 'completed' },
+              { id: 's2', title: '检查视觉结果', status: 'pending' },
+            ],
+          },
+        },
+      },
+    });
+    render(<CommandComposer />);
+    const plan = screen.getByRole('button', { name: '计划 1 / 2' });
+
+    await act(async () => {
+      fireEvent.pointerDown(plan, { button: 0, ctrlKey: false });
+      fireEvent.click(plan);
+    });
+    expect(useComposerStore.getState()).toMatchObject({ intent: 'execute' });
+    expect(screen.getByText('完成结构梳理')).toBeInTheDocument();
+    expect(screen.getByText('检查视觉结果')).toBeInTheDocument();
   });
 
   it('does not render the removed materialization control or duplicate status line', async () => {
