@@ -101,8 +101,8 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
 };
 
 export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => (
-  <div className="mb-3 flex items-start gap-2 border-b border-border px-1.5 pb-3 text-[13px] font-medium leading-5 text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]">
-    <Flag className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
+  <div className="mb-3 flex items-start gap-2 border-b border-border px-1.5 pb-3 pt-1 text-[13px] font-medium leading-5 text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]">
+    <Flag className="mt-0.5 h-4 w-4 shrink-0 text-purple-600" strokeWidth={1.75} />
     <span>{item.text}</span>
   </div>
 );
@@ -147,10 +147,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
         className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left disabled:cursor-default"
       >
         {icon}
-        <span className={cn(
-          'min-w-0 flex-1 truncate text-[13px]',
-          item.status === 'failed' ? 'text-danger' : 'text-text-900',
-        )}>
+        <span className="min-w-0 flex-1 truncate text-[13px] text-text-900">
           {presentActivityText(item.label, item.target, slides)}
         </span>
         {hasDetails && (expanded

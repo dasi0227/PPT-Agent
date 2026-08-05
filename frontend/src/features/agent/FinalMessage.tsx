@@ -25,8 +25,8 @@ export const FinalMessage: React.FC<{ item: FinalMessageItem }> = ({ item }) => 
     <article className="pb-4 pt-2 text-sm leading-[1.65] text-text-900">
       <MarkdownMessage content={item.text} />
       {affected && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-success">
-          <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-text-900">
+          <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={1.75} />
           已更新{affected}
         </p>
       )}

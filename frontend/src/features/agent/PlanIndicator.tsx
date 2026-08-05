@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Circle, ListChecks, Loader2, XCircle } from 'lucide-react';
+import { Check, Circle, ListChecks, Loader2, XCircle } from 'lucide-react';
 import type { PlanState, PlanStepStatus } from '../../api/types';
 import { cn } from '../../lib/utils';
 import {
@@ -12,7 +12,7 @@ function StepIcon({ status }: { status: PlanStepStatus }) {
   const classes = 'h-4 w-4 shrink-0';
   switch (status) {
     case 'completed':
-      return <CheckCircle2 className={cn(classes, 'text-success')} strokeWidth={1.75} />;
+      return <Check className={cn(classes, 'text-success')} strokeWidth={1.75} />;
     case 'in_progress':
       return <Loader2 className={cn(classes, 'animate-spin text-accent motion-reduce:animate-none')} strokeWidth={1.75} />;
     case 'failed':
@@ -22,16 +22,77 @@ function StepIcon({ status }: { status: PlanStepStatus }) {
   }
 }
 
-const stepTitleClass = (status: PlanStepStatus) =>
-  status === 'failed'
-    ? 'text-danger'
-    : status === 'completed'
-      ? 'text-text-600'
-      : 'text-text-900';
-
 interface PlanIndicatorProps {
   plan: PlanState;
   running: boolean;
+}
+
+function PlanText({
+  children,
+  className,
+  tooltipClassName,
+}: {
+  children: string;
+  className?: string;
+  tooltipClassName?: string;
+}) {
+  const textRef = React.useRef<HTMLSpanElement>(null);
+  const timerRef = React.useRef<number | null>(null);
+  const [tooltip, setTooltip] = React.useState<{ top: number; left: number; width: number } | null>(null);
+
+  React.useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+  }, []);
+
+  const hide = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setTooltip(null);
+  };
+
+  const showLater = () => {
+    hide();
+    timerRef.current = window.setTimeout(() => {
+      const el = textRef.current;
+      if (!el || el.scrollWidth <= el.clientWidth) return;
+      const rect = el.getBoundingClientRect();
+      setTooltip({
+        top: rect.bottom + 6,
+        left: rect.left,
+        width: Math.min(Math.max(rect.width, 220), 360),
+      });
+    }, 500);
+  };
+
+  return (
+    <>
+      <span
+        ref={textRef}
+        className={cn('block min-w-0 truncate', className)}
+        onMouseEnter={showLater}
+        onMouseLeave={hide}
+        onFocus={showLater}
+        onBlur={hide}
+        title={children}
+      >
+        {children}
+      </span>
+      {tooltip && (
+        <span
+          role="tooltip"
+          className={cn(
+            'fixed z-50 rounded-md border border-border bg-surface px-2 py-1 text-xs leading-5 text-text-900 shadow-overlay',
+            tooltipClassName,
+          )}
+          style={{ top: tooltip.top, left: tooltip.left, maxWidth: tooltip.width }}
+        >
+          {children}
+        </span>
+      )}
+    </>
+  );
 }
 
 export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) => {
@@ -59,29 +120,31 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
           <span className="shrink-0 tabular-nums">{completed} / {total}</span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="max-h-[320px] w-[288px] overflow-y-auto p-2">
+      <DropdownMenuContent side="top" align="start" className="w-[320px] overflow-visible p-2">
         <div className="mb-1.5 flex items-center gap-2 px-1">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-900">
+          <PlanText className="max-w-[248px] text-sm font-semibold text-text-900">
             {plan.title || '执行计划'}
-          </span>
+          </PlanText>
           <span className="shrink-0 text-xs tabular-nums text-text-400">{completed}/{total}</span>
         </div>
-        <div className="space-y-0.5">
+        <div className="max-h-[280px] space-y-0.5 overflow-y-auto pr-1">
           {plan.steps.map((step) => (
             <div
               key={step.id}
               className={cn(
-                'flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm',
+                'flex min-h-8 items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
                 step.status === 'in_progress' && 'bg-accent-soft',
               )}
             >
               <StepIcon status={step.status} />
               <div className="min-w-0 flex-1">
-                <div className={cn('leading-5', stepTitleClass(step.status))}>
+                <PlanText className="max-w-[238px] leading-5 text-text-900">
                   {step.title}
-                </div>
+                </PlanText>
                 {step.detail && (
-                  <div className="mt-0.5 text-xs leading-4 text-text-400">{step.detail}</div>
+                  <PlanText className="mt-0.5 max-w-[238px] text-xs leading-4 text-text-400">
+                    {step.detail}
+                  </PlanText>
                 )}
               </div>
             </div>

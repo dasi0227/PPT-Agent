@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, StopCircle } from 'lucide-react';
+import { StopCircle, XCircle } from 'lucide-react';
 import { Disclosure } from '../../components/ui/primitives';
 import type { TerminalNoticeItem } from './eventReducer';
 import { useRunStore } from '../../stores/runStore';
@@ -11,10 +11,10 @@ export const TerminalNotice: React.FC<{ item: TerminalNoticeItem }> = ({ item })
   const canCreateRetry = item.status === 'failed'
     && (item.retryable ?? item.error?.retryable) === true;
   return <div className={item.status === 'failed'
-    ? 'flex items-start gap-2 px-1.5 py-1.5 text-[13px] text-danger'
+    ? 'flex items-start gap-2 px-1.5 py-1.5 text-[13px] text-text-900'
     : 'flex items-start gap-2 px-1.5 py-1.5 text-[13px] text-text-600'}>
     {item.status === 'failed'
-      ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
+      ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />
       : <StopCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />}
     <div className="min-w-0">
       <p>{item.message}</p>

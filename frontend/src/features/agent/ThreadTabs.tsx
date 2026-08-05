@@ -30,7 +30,7 @@ export const ThreadTabs: React.FC = () => {
     <div className="flex flex-col border-b border-border bg-surface">
       {error && <div role="alert" className="border-b border-danger/20 bg-danger-soft px-3 py-1.5 text-xs text-danger">{error}。请重新打开项目。</div>}
       <div className="flex items-center px-2 py-1 select-none min-h-[36px]">
-        <div className="flex min-w-0 flex-1 items-center overflow-x-auto">
+        <div className="flex min-w-0 items-center overflow-x-auto">
           {threads.length === 0 ? (
             <div className="px-1 py-1.5 text-xs text-text-400">
               暂无会话

@@ -58,7 +58,7 @@ describe('AppShell layout contract', () => {
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-max-size', '32');
     expect(screen.getByTestId('panel-center')).toHaveAttribute('data-min-size', '30');
     expect(screen.getByTestId('panel-right')).toHaveAttribute('data-default-size', '28');
-    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-min-size', '20');
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-min-size', '40');
     expect(screen.getByTestId('panel-right')).toHaveAttribute('data-max-size', '40');
     expect(screen.getAllByRole('separator')).toHaveLength(2);
   });
