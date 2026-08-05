@@ -2,20 +2,12 @@ package workflow
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-)
-
-var (
-	htmlTagPattern   = regexp.MustCompile(`(?is)<(?:html|body|section|script|style|iframe|svg)\b`)
-	rawHTMLPattern   = regexp.MustCompile(`(?i)<\s*/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?/?\s*>`)
-	localPathPattern = regexp.MustCompile(`(?:^|\s)(?:/Users/|/home/|/tmp/|[A-Za-z]:\\)`)
 )
 
 func publicBase(runID string) model.PublicEventBase {
@@ -89,35 +81,21 @@ func milestoneText(explanation string, completed []PlanStep) string {
 }
 
 func sanitizePublicReasoning(text string) string {
-	text = sanitizePublicText(text, 160)
-	lower := strings.ToLower(text)
-	if text == "" ||
-		htmlTagPattern.MatchString(text) ||
-		localPathPattern.MatchString(text) ||
-		strings.Contains(lower, "reasoning_content") ||
-		strings.Contains(lower, "chain of thought") ||
-		strings.Contains(text, "思维链") ||
-		strings.Contains(text, "系统提示词") ||
-		strings.Contains(text, "密钥") {
-		return ""
-	}
-	return text
+	return normalizePublicText(text)
 }
 
-func sanitizePublicText(text string, maxRunes int) string {
-	text = rawHTMLPattern.ReplaceAllString(text, "")
-	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
-	if text == "" {
-		return ""
-	}
-	runes := []rune(text)
-	if len(runes) > maxRunes {
-		text = string(runes[:maxRunes])
-		if utf8.RuneCountInString(text) > 0 {
-			text += "…"
-		}
-	}
-	return text
+func sanitizePublicText(text string, _ int) string {
+	return normalizePublicText(text)
+}
+
+func sanitizePublicMarkdown(text string, _ int) string {
+	return normalizePublicText(text)
+}
+
+func normalizePublicText(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	return strings.TrimSpace(text)
 }
 
 type ToolPublicProjector struct{}
@@ -247,7 +225,7 @@ func safeToolDetail(result ToolResult, fallback string) string {
 	}
 	text := sanitizePublicText(result.Summary, 100)
 	normalized := strings.ToLower(strings.TrimSpace(text))
-	if text == "" || normalized == "resource staged" || localPathPattern.MatchString(text) || htmlTagPattern.MatchString(text) {
+	if text == "" || normalized == "resource staged" {
 		return fallback
 	}
 	return text
@@ -419,8 +397,7 @@ func currentPlanStepID(plan *Plan) string {
 }
 
 func safeFinalMessage(message string, strategy ExecutionStrategy, affected int) string {
-	if text := sanitizePublicText(message, 1200); text != "" &&
-		!htmlTagPattern.MatchString(text) && !localPathPattern.MatchString(text) {
+	if text := sanitizePublicMarkdown(message, 0); text != "" {
 		return text
 	}
 	if strategy == StrategyTalk || strategy == StrategyAsk {

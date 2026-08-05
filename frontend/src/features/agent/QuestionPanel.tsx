@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MessageCircleQuestion, Send } from 'lucide-react';
+import { ChevronDown, ChevronRight, MessageCircleQuestion, Send } from 'lucide-react';
 import { useRunStore } from '../../stores/runStore';
 import { cn } from '../../lib/utils';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
@@ -42,19 +42,38 @@ function answerText(question: QuestionField, answer: QuestionFieldAnswer | undef
 }
 
 function SubmittedQuestionRow({ question, value }: { question: QuestionField; value: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const toggle = () => setExpanded((current) => !current);
   return (
-    <div className="flex items-start gap-2 px-1.5 py-1 text-[13px] leading-5 text-text-900">
+    <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      onClick={toggle}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggle();
+        }
+      }}
+      className="flex cursor-pointer items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
       <MessageCircleQuestion className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
       <div className="min-w-0 flex-1">
         <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-1">
           <span className="font-medium text-text-400">Q：</span>
-          <span>{question.title}</span>
+          <span className="truncate">{question.title}</span>
         </div>
-        <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-1 text-text-600">
+        {expanded && <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-1">
           <span className="font-medium text-text-400">A：</span>
           <span>{value}</span>
-        </div>
+        </div>}
       </div>
+      <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
+        {expanded
+          ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
+          : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
+      </span>
     </div>
   );
 }
@@ -77,6 +96,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   const currentQuestion = questions[Math.min(currentIndex, questions.length - 1)];
   const currentDraft = drafts[currentQuestion.id] ?? { customText: '' };
   const complete = questions.every((question) => hasAnswer(question, drafts[question.id]));
+  const stableQuestionHeight = questions.length > 1 || currentQuestion.options.length > 0;
 
   useEffect(() => {
     setCurrentIndex(0);
@@ -150,7 +170,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
       className="rounded-[10px] border border-border-strong bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
     >
       <legend className="sr-only">{currentQuestion.title}</legend>
-      <div className="min-h-[330px] px-3 py-3">
+      <div className={cn('px-3 py-3', stableQuestionHeight && 'min-h-[330px]')}>
         <div className="flex items-start gap-2">
           <MessageCircleQuestion
             className={cn('mt-0.5 h-4 w-4 shrink-0 text-success', pending && 'animate-pulse motion-reduce:animate-none')}
@@ -241,7 +261,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
             disabled={!pending || submitting}
             onChange={(event) => setDraft(currentQuestion.id, { customText: event.target.value })}
             placeholder="输入你的回答"
-            className="mt-3 h-36 w-[calc(100%-1.5rem)] resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="mt-3 h-28 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           />
         )}
       </div>

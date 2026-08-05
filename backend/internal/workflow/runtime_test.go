@@ -513,8 +513,8 @@ func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryStrategy(t *te
 		t.Fatalf("finish schema must expose only message: %+v", finishParameters)
 	}
 	planPrompt := runtimeSystemPrompt(PhasePlanning, StrategyPlan, "{}")
-	if !strings.Contains(planPrompt, "StrategyPlan must create a concise checklist with update_plan before finish") ||
-		!strings.Contains(planPrompt, "Put full rationale and detailed execution notes in finish(message)") {
+	if !strings.Contains(planPrompt, "StrategyPlan is read-only planning") ||
+		!strings.Contains(planPrompt, "use finish(message) to deliver the complete user-facing plan") {
 		t.Fatalf("plan prompt missing plan-mode guidance: %q", planPrompt)
 	}
 }
@@ -593,10 +593,10 @@ func TestPlannedExecuteDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T)
 	}
 }
 
-func TestPlanInteractionCreatesPlanAndFinishesWithoutWriteSession(t *testing.T) {
+func TestPlanInteractionFinishesWithoutPlanSnapshotOrWriteSession(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
-		planCall("plan", false), finishCall("finish"),
+		finishCall("finish"),
 	}}
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
@@ -611,11 +611,11 @@ func TestPlanInteractionCreatesPlanAndFinishesWithoutWriteSession(t *testing.T) 
 		t.Fatalf("plan request=%+v", agent.requests[0])
 	}
 	for _, schema := range agent.requests[0].Tools {
-		if schema.Name == "write_ppt" || schema.Name == "edit_ppt" {
-			t.Fatalf("plan mode disclosed write tool: %+v", agent.requests[0].Tools)
+		if schema.Name == "write_ppt" || schema.Name == "edit_ppt" || schema.Name == "update_plan" {
+			t.Fatalf("plan mode disclosed write/progress tool: %+v", agent.requests[0].Tools)
 		}
 	}
-	if events.count(model.EventPlanUpdated) != 1 || events.count(model.EventMessageFinal) != 1 {
+	if events.count(model.EventPlanUpdated) != 0 || events.count(model.EventMessageFinal) != 1 {
 		t.Fatalf("events=%+v", events.events)
 	}
 }

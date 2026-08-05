@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -26,8 +25,6 @@ var PublicEventTypes = [...]EventType{
 	EventQuestionAsked,
 	EventQuestionAnswered,
 }
-
-var rawHTMLPattern = regexp.MustCompile(`(?i)<\s*/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?/?\s*>`)
 
 type PublicEventBase struct {
 	SchemaVersion int    `json:"schema_version"`
@@ -287,9 +284,6 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := requireString(data, "message_id", "text"); err != nil {
 			return err
 		}
-		if rawHTMLPattern.MatchString(stringValue(data["text"])) {
-			return errors.New("message text must not contain raw HTML")
-		}
 		if event == EventMessageMilestone {
 			ids, ok := data["completed_step_ids"].([]any)
 			if !ok || len(ids) == 0 {
@@ -358,10 +352,6 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := requireString(data, "question_id"); err != nil {
 			return err
 		}
-		if rawHTMLPattern.MatchString(stringValue(data["prompt"])) ||
-			rawHTMLPattern.MatchString(stringValue(data["header"])) {
-			return errors.New("question text must not contain raw HTML")
-		}
 		if questions, ok := data["questions"].([]any); ok && len(questions) > 0 {
 			if err := validateQuestionFields(questions); err != nil {
 				return err
@@ -423,10 +413,6 @@ func validateQuestionOptions(data map[string]any) error {
 		if err := requireString(option, "id", "label"); err != nil {
 			return err
 		}
-		if rawHTMLPattern.MatchString(stringValue(option["label"])) ||
-			rawHTMLPattern.MatchString(stringValue(option["description"])) {
-			return errors.New("question options must not contain raw HTML")
-		}
 		id := stringValue(option["id"])
 		if seen[id] {
 			return errors.New("question option ids must be unique")
@@ -445,10 +431,6 @@ func validateQuestionFields(questions []any) error {
 		}
 		if err := requireString(question, "id", "title"); err != nil {
 			return err
-		}
-		if rawHTMLPattern.MatchString(stringValue(question["title"])) ||
-			rawHTMLPattern.MatchString(stringValue(question["description"])) {
-			return errors.New("question text must not contain raw HTML")
 		}
 		id := stringValue(question["id"])
 		if seenQuestions[id] {
@@ -477,10 +459,6 @@ func validateQuestionFields(questions []any) error {
 			}
 			if err := requireString(option, "id", "label"); err != nil {
 				return err
-			}
-			if rawHTMLPattern.MatchString(stringValue(option["label"])) ||
-				rawHTMLPattern.MatchString(stringValue(option["description"])) {
-				return errors.New("question options must not contain raw HTML")
 			}
 			optionID := stringValue(option["id"])
 			if seenOptions[optionID] {
@@ -539,9 +517,6 @@ func validatePlan(value any) error {
 	if intValue(plan["revision"]) < 1 {
 		return errors.New("plan revision must be positive")
 	}
-	if rawHTMLPattern.MatchString(stringValue(plan["explanation"])) {
-		return errors.New("plan explanation must not contain raw HTML")
-	}
 	if !isInteger(plan["revision"]) {
 		return errors.New("plan revision must be an integer")
 	}
@@ -558,9 +533,6 @@ func validatePlan(value any) error {
 		}
 		if err := requireString(step, "id", "title", "status"); err != nil {
 			return err
-		}
-		if rawHTMLPattern.MatchString(stringValue(step["title"])) {
-			return errors.New("plan step title must not contain raw HTML")
 		}
 		id, status := stringValue(step["id"]), stringValue(step["status"])
 		if seen[id] || !oneOf(status, "pending", "in_progress", "completed", "failed") {
@@ -587,9 +559,8 @@ func validateDisplay(value any) error {
 	}
 	for _, key := range []string{"label", "detail"} {
 		if text, exists := display[key]; exists {
-			value, ok := text.(string)
-			if !ok || rawHTMLPattern.MatchString(value) {
-				return errors.New("display text must be a plain string without raw HTML")
+			if _, ok := text.(string); !ok {
+				return errors.New("display text must be a string")
 			}
 		}
 	}
@@ -660,9 +631,6 @@ func validateOptionalError(value any) error {
 	if _, ok := publicError["retryable"].(bool); !ok {
 		return errors.New("error.retryable must be a boolean")
 	}
-	if rawHTMLPattern.MatchString(stringValue(publicError["message"])) {
-		return errors.New("error message must not contain raw HTML")
-	}
 	return nil
 }
 
@@ -681,9 +649,9 @@ func validateStringIDs(values []any, field string) error {
 
 func validateStringList(values []any, field string) error {
 	for _, value := range values {
-		text, ok := value.(string)
-		if !ok || rawHTMLPattern.MatchString(text) {
-			return fmt.Errorf("%s must contain safe strings", field)
+		_, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("%s must contain strings", field)
 		}
 	}
 	return nil

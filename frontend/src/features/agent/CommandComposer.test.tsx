@@ -11,10 +11,13 @@ vi.mock('../../lib/platform', () => ({ isMac: () => false, submitShortcutLabel: 
 
 describe('CommandComposer', () => {
   const createRun = vi.fn();
+  const cancelRun = vi.fn();
 
   beforeEach(() => {
     createRun.mockReset();
     createRun.mockResolvedValue(true);
+    cancelRun.mockReset();
+    cancelRun.mockResolvedValue(undefined);
     act(() => {
       useProjectStore.setState({
         activeProjectId: 'p1',
@@ -26,6 +29,7 @@ describe('CommandComposer', () => {
       });
       useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' }, ensureActiveThread: async () => 't1' });
       useRunStore.setState({
+        cancelRun,
         createRun,
         sessions: {
           t1: {
@@ -151,6 +155,48 @@ describe('CommandComposer', () => {
     expect(useComposerStore.getState()).toMatchObject({ intent: 'execute' });
     expect(screen.getByText('完成结构梳理')).toBeInTheDocument();
     expect(screen.getByText('检查视觉结果')).toBeInTheDocument();
+  });
+
+  it('uses the pending question guidance as textarea placeholder', async () => {
+    useRunStore.setState({
+      cancelRun,
+      createRun,
+      sessions: {
+        t1: {
+          activeRunId: 'r1', status: 'waiting',
+          target: { artifact: 'presentation', level: 'slide' },
+          interaction: { intent: 'ask' },
+          timelineItems: [], pendingQuestion: { id: 'q1', prompt: '选择' },
+          progress: null, eventSourceClose: null, plan: null,
+        },
+      },
+    });
+    render(<CommandComposer />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
+    expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '请先回答上方问题');
+    expect(screen.queryByText('请先回答上方问题')).toBeNull();
+  });
+
+  it('shows a stop button for an active run until the user types steering text', async () => {
+    useRunStore.setState({
+      cancelRun,
+      createRun,
+      sessions: {
+        t1: {
+          activeRunId: 'r1', status: 'running',
+          target: { artifact: 'presentation', level: 'slide' },
+          interaction: { intent: 'execute' },
+          timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null,
+        },
+      },
+    });
+    render(<CommandComposer />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
+    fireEvent.click(screen.getByRole('button', { name: '终止运行' }));
+    await waitFor(() => expect(cancelRun).toHaveBeenCalledWith('t1', 'r1'));
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '补充要求' } });
+    expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument();
   });
 
   it('does not render the removed materialization control or duplicate status line', async () => {

@@ -74,10 +74,9 @@ Agent 不能直接修改 `ExecuteMode` 字段，只能通过 `update_plan` 间�
 ### StrategyPlan
 
 - phase: `planning`
-- 工具：只读业务工具 + `update_plan` + `ask_user` + `finish`
+- 工具：只读业务工具 + `ask_user` + `finish`
 - 不创建 `RunSession`
-- `finish` 前必须已经有有效 Plan
-- 不要求 Plan step 全部 completed
+- 不创建 UI 执行 checklist；完整计划只通过 `finish(message)` 交付
 - `finish(message)` 必须输出完整计划解释，不能只输出“已完成”
 
 ### StrategyExecute
@@ -131,7 +130,7 @@ Runtime system prompt 需要新增以下约束：
 
 - `talk`、`ask`、`plan` 都是只读。
 - 只有 `execute` 通过 active run session 写入。
-- `StrategyPlan` 必须先调用 `update_plan` 建立精简计划，再通过 `finish(message)` 输出完整解释。
+- `StrategyPlan` 不调用 `update_plan`；通过 `finish(message)` 输出完整计划。
 - `StrategyExecute` 可以 direct 执行，也可以在需要协调时调用 `update_plan` 进入 planned mode。
 - `update_plan` 的步骤必须简短；详细解释放入 `finish(message)`。
 

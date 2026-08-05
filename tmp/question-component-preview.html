@@ -390,11 +390,38 @@
   }
 
   .answer-row {
+    border: 0;
+    background: transparent;
     color: var(--ink);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    width: 100%;
   }
 
   .answer-row .text {
     min-width: 0;
+    flex: 1;
+  }
+
+  .answer-row .chevron {
+    color: var(--subtle);
+    height: 15px;
+    margin-top: 3px;
+    transition: transform 140ms ease;
+    width: 15px;
+  }
+
+  .answer-row[data-open="true"] .chevron {
+    transform: rotate(90deg);
+  }
+
+  .answer-row .answer-line {
+    display: none;
+  }
+
+  .answer-row[data-open="true"] .answer-line {
+    display: grid;
   }
 
   .qa-line {
@@ -409,7 +436,7 @@
   }
 
   .answer-value {
-    color: var(--muted);
+    color: var(--ink);
   }
 
   .side {
@@ -573,29 +600,32 @@
           </div>
 
           <div class="answer-group">
-            <div class="answer-row">
+            <button class="answer-row" type="button" data-open="false">
               <svg class="question-green" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4"/><path d="M12 17h.01"/></svg>
               <div class="text">
                 <div class="qa-line"><span class="qa-mark">Q：</span><span>有明确选项时，题型如何处理？</span></div>
-                <div class="qa-line"><span class="qa-mark">A：</span><span class="answer-value">有选项 = 单选题。</span></div>
+                <div class="qa-line answer-line"><span class="qa-mark">A：</span><span class="answer-value">有选项 = 单选题。</span></div>
               </div>
-            </div>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
 
-            <div class="answer-row">
+            <button class="answer-row" type="button" data-open="false">
               <svg class="question-green" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4"/><path d="M12 17h.01"/></svg>
               <div class="text">
                 <div class="qa-line"><span class="qa-mark">Q：</span><span>如果选项可能不完整，如何允许用户补充？</span></div>
-                <div class="qa-line"><span class="qa-mark">A：</span><span class="answer-value">单选题仍可开启 allow_custom；用户选项和自定义答案二选一提交。</span></div>
+                <div class="qa-line answer-line"><span class="qa-mark">A：</span><span class="answer-value">单选题仍可开启 allow_custom；用户选项和自定义答案二选一提交。</span></div>
               </div>
-            </div>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
 
-            <div class="answer-row">
+            <button class="answer-row" type="button" data-open="false">
               <svg class="question-green" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4"/><path d="M12 17h.01"/></svg>
               <div class="text">
                 <div class="qa-line"><span class="qa-mark">Q：</span><span>还有哪些必须遵守的展示约束？</span></div>
-                <div class="qa-line"><span class="qa-mark">A：</span><span class="answer-value">提交后回到时间线行；多个问题按工具组形式拆成多条 Q/A。</span></div>
+                <div class="qa-line answer-line"><span class="qa-mark">A：</span><span class="answer-value">提交后回到时间线行；多个问题按工具组形式拆成多条 Q/A。</span></div>
               </div>
-            </div>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
           </div>
         </section>
       </div>
@@ -670,6 +700,11 @@
   });
   prev.addEventListener('click', () => moveSlide(-1));
   next.addEventListener('click', () => moveSlide(1));
+  document.querySelectorAll('.answer-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      row.dataset.open = row.dataset.open === 'true' ? 'false' : 'true';
+    });
+  });
   renderSlide();
   updateSubmitState();
 </script>

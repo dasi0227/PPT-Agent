@@ -50,7 +50,7 @@ export const AppShell: React.FC = () => {
 
   return (
     <div ref={shellRef} className="flex flex-col h-[100dvh] w-screen bg-workspace text-text-900 overflow-hidden font-sans relative">
-      <ProjectTabs />
+      {activeProjectId !== null && <ProjectTabs />}
       
       <div className="flex flex-1 overflow-hidden relative">
         {activeProjectId === null ? (

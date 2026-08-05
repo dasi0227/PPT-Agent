@@ -42,9 +42,9 @@ describe('AppShell layout contract', () => {
     useUIStore.setState({ leftPanelHidden: false, rightPanelHidden: false });
   });
 
-  it('always keeps the top project tabs', () => {
+  it('hides the top project tabs on the home empty state', () => {
     render(<AppShell />);
-    expect(screen.getByTestId('project-tabs')).toBeInTheDocument();
+    expect(screen.queryByTestId('project-tabs')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Dasi PPT Agent' })).toBeInTheDocument();
     expect(screen.getByText('AI 时代下的 PPT 交给 Agent 就好了')).toBeInTheDocument();
     expect(screen.queryByTestId('lucide-layers')).not.toBeInTheDocument();
@@ -53,6 +53,7 @@ describe('AppShell layout contract', () => {
   it('keeps the left, center, and right columns with protected size bounds', () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
     render(<AppShell />);
+    expect(screen.getByTestId('project-tabs')).toBeInTheDocument();
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-default-size', '22');
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-min-size', '16');
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-max-size', '32');

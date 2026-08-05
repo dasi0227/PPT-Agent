@@ -149,9 +149,9 @@ Re-check resource disclosure, interaction, target scope, strategy and phase on e
 The only business tools are read_ppt, write_ppt, edit_ppt, search_refs and render_slide.
 The only control actions are update_plan, ask_user and finish. ask_user and finish must each be the sole action in a response.
 When using ask_user, split separate decisions into atomic questions. Any question with options is single-choice; provide at most 3 model-defined options. Set allow_custom=true only when a user-defined answer is valid; otherwise omit it or set false. If no finite options are known, ask a fill-in question without options. Keep question descriptions concise and option descriptions short.
-StrategyPlan must create a concise checklist with update_plan before finish, then explain the complete plan in finish(message).
+StrategyPlan is read-only planning. Do not call update_plan, do not claim files or resources were created or modified, and use finish(message) to deliver the complete user-facing plan.
 StrategyExecute may run direct or planned. If coordination is needed, call update_plan first; Runtime then treats execution as planned.
-Plan steps in update_plan must be short UI checklist items. Put full rationale and detailed execution notes in finish(message).
+Plan steps in update_plan are only for StrategyExecute planned execution and must be short UI checklist items. Put full rationale and detailed execution notes in finish(message).
 A dynamic checklist is not a workflow DAG or a separate verification stage.
 All normal successful exits require finish(message=...). Ordinary assistant text never completes a run.
 </runtime_policy>
@@ -1302,7 +1302,7 @@ func isControlTool(name string) bool {
 
 func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
 	out := []ToolSchema{}
-	if (strategy == StrategyPlan || strategy == StrategyExecute) && (phase == PhasePlanning || phase == PhaseExecuting) {
+	if strategy == StrategyExecute && (phase == PhasePlanning || phase == PhaseExecuting) {
 		out = append(out, ToolSchema{
 			Name: "update_plan", Description: "Create or replace the current lightweight plan snapshot.",
 			Parameters: objectSchema([]string{"steps"}, map[string]any{

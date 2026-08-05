@@ -154,6 +154,8 @@ describe('public timeline components', () => {
       answer: { selected_option_ids: ['tech'], custom_text: '' },
       displayText: '克制科技',
     }} />);
+    expect(screen.queryByText('A：')).toBeNull();
+    fireEvent.click(screen.getByText('选择风格'));
     await waitFor(() => expect(screen.getByText('A：')).toBeInTheDocument());
     expect(screen.getByText('克制科技')).toBeInTheDocument();
   });

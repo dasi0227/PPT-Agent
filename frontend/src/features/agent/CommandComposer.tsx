@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send } from 'lucide-react';
+import { Send, StopCircle } from 'lucide-react';
 import { llmApi } from '../../api/llm';
 import type { CreateRunRequest, LLMProfile } from '../../api/types';
 import { useComposerStore } from '../../stores/composerStore';
@@ -44,8 +44,8 @@ export const CommandComposer: React.FC = () => {
   const [profilesError, setProfilesError] = useState('');
   const { activeProjectId, slidesByProjectId } = useProjectStore();
   const { currentPage } = useDeckStore();
-  const { ensureActiveThread } = useThreadStore();
-  const { createRun, steerRun } = useRunStore();
+  const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
+  const { cancelRun, createRun, steerRun } = useRunStore();
   const { status: runStatus, activeRunId, plan } = useActiveSession();
   const composer = useComposerStore();
   const applyContextDefault = composer.applyContextDefault;
@@ -54,6 +54,22 @@ export const CommandComposer: React.FC = () => {
   const steering = runStatus === 'running' && Boolean(activeRunId);
   const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'canceling';
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'canceling';
+  const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
+  const showCancelButton = Boolean(activeRunId)
+    && (runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'canceling')
+    && text.trim() === '';
+  const disabledPlaceholder = runStatus === 'waiting'
+    ? '请先回答上方问题'
+    : runStatus === 'canceling'
+      ? '正在取消当前任务'
+      : runStatus === 'creating'
+        ? '正在创建任务'
+        : '输入你的想法与目标';
+  const composerPlaceholder = disabled && activeProjectId
+    ? disabledPlaceholder
+    : steering
+      ? '追加对当前任务的要求'
+      : '输入你的想法与目标';
 
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
   const currentSlide = slides[currentPage];
@@ -150,6 +166,12 @@ export const CommandComposer: React.FC = () => {
     }
   };
 
+  const cancelActiveRun = async () => {
+    if (!activeThreadId || !activeRunId || runStatus === 'canceling') return;
+    setSubmitError('');
+    await cancelRun(activeThreadId, activeRunId);
+  };
+
   const requiresVision = composer.intent === 'execute' && composer.artifact === 'presentation';
   const togglePlanIntent = () => {
     composer.setIntent(composer.intent === 'plan' ? 'execute' : 'plan');
@@ -182,17 +204,11 @@ export const CommandComposer: React.FC = () => {
           onKeyDown={handleKeyDown}
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => setIsComposing(false)}
-          placeholder={steering ? '追加对当前任务的要求' : '输入你的想法与目标'}
+          placeholder={composerPlaceholder}
           disabled={disabled}
-          aria-describedby={disabled ? 'composer-disabled-reason' : undefined}
           className="max-h-32 min-h-[60px] w-full resize-none bg-transparent p-3 text-sm text-text-900 placeholder:text-text-400 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
           rows={2}
         />
-        {disabled && activeProjectId && (
-          <div id="composer-disabled-reason" className="px-3 pb-1 text-xs text-text-600">
-            {runStatus === 'waiting' ? '请先回答上方问题' : runStatus === 'canceling' ? '正在取消当前任务' : '正在创建任务'}
-          </div>
-        )}
         <div className="flex min-w-0 items-center justify-between gap-1 px-3 pb-2">
           <div className="flex min-w-0 items-center gap-0.5">
             <InteractionModeButtons
@@ -227,14 +243,26 @@ export const CommandComposer: React.FC = () => {
               disabled={disabled || steering}
               onChange={composer.setModelProfileName}
             />
-            <button
-              onClick={() => void submit()}
-              disabled={!text.trim() || disabled || (!steering && (profilesLoading || Boolean(profilesError)))}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:bg-text-400 disabled:opacity-50"
-              aria-label="发送"
-            >
-              <Send className="h-4 w-4" />
-            </button>
+            {showCancelButton ? (
+              <button
+                onClick={() => void cancelActiveRun()}
+                disabled={!activeThreadId || runStatus === 'canceling'}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-danger transition-colors hover:bg-danger-soft disabled:bg-panel-muted disabled:text-text-400 disabled:opacity-60"
+                aria-label={runStatus === 'canceling' ? '正在取消' : '终止运行'}
+                title={runStatus === 'canceling' ? '正在取消' : '终止运行'}
+              >
+                <StopCircle className="h-4 w-4" strokeWidth={1.75} />
+              </button>
+            ) : (
+              <button
+                onClick={() => void submit()}
+                disabled={!text.trim() || disabled || (!steering && (profilesLoading || Boolean(profilesError)))}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:bg-text-400 disabled:opacity-50"
+                aria-label="发送"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>

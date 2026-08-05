@@ -276,9 +276,6 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 			issues = append(issues, CompletionIssue{Code: code, Summary: err.Error()})
 		}
 	}
-	if ctx.Strategy == StrategyPlan && ctx.Plan == nil {
-		issues = append(issues, CompletionIssue{Code: "PLAN_REQUIRED", Summary: "plan mode requires a valid plan before finish"})
-	}
 	if ctx.Strategy == StrategyExecute && ctx.ExecuteMode == ExecuteModePlanned && (ctx.Plan == nil || ctx.Plan.HasBlockingSteps()) {
 		issues = append(issues, CompletionIssue{Code: "PLAN_INCOMPLETE", Summary: "planned execution still has pending, in-progress, or failed steps"})
 	}
