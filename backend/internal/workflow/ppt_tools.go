@@ -195,7 +195,7 @@ func (t pptEditTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 
 func stagePPTMutation(
 	pack contextengine.ContextPack,
-	tx *Transaction,
+	tx *RunSession,
 	ref ArtifactRef,
 	source string,
 	raw []byte,
@@ -219,7 +219,7 @@ func stagePPTMutation(
 
 func normalizeResource(
 	pack contextengine.ContextPack,
-	tx *Transaction,
+	tx *RunSession,
 	ref ArtifactRef,
 	content []byte,
 ) ([]byte, int, []Issue, error) {
@@ -268,7 +268,7 @@ func mutationResult(
 	return result
 }
 
-func invalidatedByMutation(pack contextengine.ContextPack, tx *Transaction, resource Resource) []Resource {
+func invalidatedByMutation(pack contextengine.ContextPack, tx *RunSession, resource Resource) []Resource {
 	out := []Resource{resource}
 	switch {
 	case resource == (Resource{Type: "deck", Part: "design"}):

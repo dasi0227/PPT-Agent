@@ -142,16 +142,14 @@ func TestWorkflowCommitRejectsStaleProofWithoutUpdatingSources(t *testing.T) {
 	}
 }
 
-func TestWorkflowCommitFailureRestoresFilesAndDatabase(t *testing.T) {
+func TestWorkflowCommitFailureKeepsDirectWrittenFileButLeavesDatabase(t *testing.T) {
 	fixture := newCommitFixture(t, 1)
-	original, _ := os.ReadFile(filepath.Join(fixture.project.WorkDir, "design.json"))
 	next := fixture.design
 	next.Revision = 2
-	tx, err := workflow.NewTransaction(fixture.project.WorkDir, "atomic-failure")
+	tx, err := workflow.NewRunSession(fixture.project.WorkDir, "atomic-failure")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Cleanup()
 	if _, err := tx.Stage(
 		workflow.ArtifactRef{Kind: workflow.ArtifactDesign, ID: fixture.project.ID, Path: "design.json"},
 		"write_ppt", mustJSON(next),
@@ -167,12 +165,15 @@ func TestWorkflowCommitFailureRestoresFilesAndDatabase(t *testing.T) {
 	if err := tx.Commit(context.Background(), committer.Commit); err == nil {
 		t.Fatal("commit with stale proof succeeded")
 	}
-	restored, _ := os.ReadFile(filepath.Join(fixture.project.WorkDir, "design.json"))
+	// Direct-write: the artifact was written to disk when staged, so a finalize
+	// failure keeps it on disk. Only the database must stay untouched because the
+	// stale proof is rejected before CommitWorkflow runs.
+	written, _ := os.ReadFile(filepath.Join(fixture.project.WorkDir, "design.json"))
 	project, _ := fixture.store.GetProject(context.Background(), fixture.project.ID)
 	slide, _ := fixture.store.GetSlide(context.Background(), "slide-01")
-	if string(restored) != string(original) || project.DesignRevision != 1 ||
+	if string(written) != string(mustJSON(next)) || project.DesignRevision != 1 ||
 		slide.SourceDesignRevision != 1 || slide.HTMLRevision != 1 {
-		t.Fatalf("atomic rollback failed project=%+v slide=%+v", project, slide)
+		t.Fatalf("finalize failure state project=%+v slide=%+v", project, slide)
 	}
 }
 
@@ -192,7 +193,7 @@ func newCommitFixture(t *testing.T, slideCount int) commitFixture {
 	}
 	project := model.Project{
 		ID: "project-1", Title: "Commit", WorkDir: filepath.Join(root, "project"),
-		Theme: "default", Status: "draft", DesignPath: "design.json", OutlinePath: "outline.json",
+		Theme: "default", Status: "draft",
 		OutlineRevision: 1, DesignRevision: 1, LayoutVersion: 2, CreatedAt: 1, UpdatedAt: 1,
 	}
 	if err := os.MkdirAll(project.WorkDir, 0o755); err != nil {

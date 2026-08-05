@@ -44,7 +44,7 @@ type CompletionContext struct {
 	ActiveTools     int
 	Issues          []Issue
 	WorkScope       Scope
-	Transaction     *Transaction
+	Transaction     *RunSession
 	Changes         ChangeSet
 	Evidence        *EvidenceLedger
 	Context         contextengine.ContextPack
@@ -189,7 +189,7 @@ func hasArtifactChange(changes ChangeSet, kind ArtifactKind, id string) bool {
 
 // specChangeAffectsHTML is intentionally conservative. Only a change isolated
 // to speaker_notes is known not to affect rendered HTML.
-func specChangeAffectsHTML(tx *Transaction, ref ArtifactRef) bool {
+func specChangeAffectsHTML(tx *RunSession, ref ArtifactRef) bool {
 	if tx == nil {
 		return true
 	}

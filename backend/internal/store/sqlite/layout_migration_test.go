@@ -60,13 +60,12 @@ func TestProjectLayoutMigrationIsAtomicAndOneWay(t *testing.T) {
 		t.Fatalf("migrated metadata=%+v", saved)
 	}
 	var row struct {
-		LayoutVersion int    `gorm:"column:layout_version"`
-		OutlinePath   string `gorm:"column:outline_path"`
+		LayoutVersion int `gorm:"column:layout_version"`
 	}
 	if err := db.Table("projects").Where("id = ?", "p1").Take(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	if row.LayoutVersion != currentProjectLayoutVersion || row.OutlinePath != "outline.json" {
+	if row.LayoutVersion != currentProjectLayoutVersion {
 		t.Fatalf("database layout not migrated: %+v", row)
 	}
 	var versions []layoutVersionRow
@@ -136,20 +135,19 @@ func TestProjectLayoutMigrationFailureLeavesLegacyLayoutUntouched(t *testing.T) 
 func insertLayoutV1Project(t *testing.T, db *gorm.DB, projectID, workDir string) {
 	t.Helper()
 	if err := db.Exec(`INSERT INTO projects(
-		id,title,work_dir,theme,status,design_path,outline_path,
+		id,title,work_dir,theme,status,
 		outline_revision,design_revision,layout_version,created_at,updated_at
-	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-		projectID, "Legacy", workDir, "default", "draft", "design/design-spec.json", "deck.json",
+	) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		projectID, "Legacy", workDir, "default", "draft",
 		2, 1, 1, 1, 2,
 	).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO slides(
-		id,project_id,position,layout,title,spec_path,html_path,current_version,
+		id,project_id,current_version,
 		spec_revision,html_revision,source_outline_revision,source_spec_revision,source_design_revision
-	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		"slide-01", projectID, 0, "cover", "Legacy slide", "slides/slide-01/slide.json",
-		"slides/slide-01/index.html", 1, 3, 1, 2, 3, 1,
+	) VALUES(?,?,?,?,?,?,?,?)`,
+		"slide-01", projectID, 1, 3, 1, 2, 3, 1,
 	).Error; err != nil {
 		t.Fatal(err)
 	}

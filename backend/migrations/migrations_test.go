@@ -58,16 +58,23 @@ func TestSlidesUsesCanonicalRuntimeColumns(t *testing.T) {
 	}
 	cols := tableColumns(t, db, "slides")
 	for _, want := range []string{
-		"position", "spec_revision", "html_revision",
+		"spec_revision", "html_revision",
 		"source_outline_revision", "source_spec_revision", "source_design_revision",
 	} {
 		if !cols[want] {
 			t.Fatalf("slides table missing column %q; got %v", want, cols)
 		}
 	}
-	for _, removed := range []string{"idx", "order", "outline_dirty"} {
+	// Phase B collapses content columns onto the file system (files are truth).
+	for _, removed := range []string{"idx", "order", "outline_dirty", "position", "layout", "title", "spec_path", "html_path"} {
 		if cols[removed] {
 			t.Fatalf("legacy slides column %q still exists", removed)
+		}
+	}
+	projectCols := tableColumns(t, db, "projects")
+	for _, removed := range []string{"design_path", "outline_path"} {
+		if projectCols[removed] {
+			t.Fatalf("legacy projects column %q still exists", removed)
 		}
 	}
 }

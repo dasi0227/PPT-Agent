@@ -50,8 +50,6 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 		WorkDir:         workDir,
 		Theme:           "swiss-modern",
 		Status:          "draft",
-		DesignPath:      "design.json",
-		OutlinePath:     "outline.json",
 		OutlineRevision: 1,
 		DesignRevision:  1,
 		LayoutVersion:   2,
@@ -105,7 +103,11 @@ func (svc *ProjectService) ListSlides(ctx context.Context, projectID string) ([]
 	if _, err := svc.store.GetProject(ctx, projectID); err != nil {
 		return nil, err
 	}
-	return svc.store.ListSlides(ctx, projectID)
+	slides, err := svc.store.ListSlides(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return projectSlidesFromFiles(ctx, svc.store, projectID, slides)
 }
 
 func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams) error {

@@ -1,6 +1,10 @@
 package model
 
-// Slide is one page's metadata; canonical Slide Spec and HTML stay on disk.
+// Slide is one page's runtime metadata. Content-derived fields (Position,
+// Title, Layout, SpecPath, HTMLPath) are no longer stored in the database:
+// order comes from outline.json, Title/Layout from spec.json, and paths are
+// derived from the stable slide_id. They are projected onto this struct only by
+// read-facing services so the API shape stays stable.
 type Slide struct {
 	ID                    string
 	ProjectID             string

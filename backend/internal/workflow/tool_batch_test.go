@@ -89,11 +89,10 @@ func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testin
 
 func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetDeck)
-	tx, err := NewTransaction(dir, "batch-write")
+	tx, err := NewRunSession(dir, "batch-write")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Cleanup()
 	registry := NewToolRegistry()
 	var mu sync.Mutex
 	order := []string{}

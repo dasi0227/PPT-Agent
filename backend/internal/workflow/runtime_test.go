@@ -801,7 +801,7 @@ func TestAcceptedRenderProofFlowsThroughRuntimeCommitContext(t *testing.T) {
 	}
 }
 
-func TestFailedAndCanceledRunsDoNotModifyFormalFiles(t *testing.T) {
+func TestFailedAndCanceledRunsKeepDirectWrittenProducts(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		cancel bool
@@ -821,12 +821,14 @@ func TestFailedAndCanceledRunsDoNotModifyFormalFiles(t *testing.T) {
 				DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 			})
 			cancel()
+			// Direct-write: the partial product is written straight to disk and a
+			// failed or canceled run keeps it instead of discarding a sandbox.
 			raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("s1")))
-			if string(raw) != "formal" || (test.cancel && outcome.Status != StatusCanceled) || (!test.cancel && outcome.Status != StatusFailed) {
+			if string(raw) != "dirty" || (test.cancel && outcome.Status != StatusCanceled) || (!test.cancel && outcome.Status != StatusFailed) {
 				t.Fatalf("outcome=%+v formal=%q", outcome, raw)
 			}
 			if _, err := os.Stat(filepath.Join(dir, ".staging", test.name)); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("uncommitted staging was not cleaned up: %v", err)
+				t.Fatalf("direct-write must not create a staging directory: %v", err)
 			}
 		})
 	}

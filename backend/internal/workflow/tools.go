@@ -53,7 +53,7 @@ type DomainToolInput struct {
 	Context     contextengine.ContextPack
 	ProjectDir  string
 	RunID       string
-	Transaction *Transaction
+	Transaction *RunSession
 	Scope       Scope
 	Strategy    ExecutionStrategy
 	Phase       RuntimePhase

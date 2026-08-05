@@ -9,9 +9,54 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
 var ErrSlideHTMLMissing = errors.New("service: slide html not rendered")
+
+// projectSlidesFromFiles projects the file-owned content fields (order, title,
+// layout) onto DB slide metadata. Order comes from outline.json's slide_order;
+// title/layout come from each spec.json. Slides not present in the outline are
+// appended after ordered ones so nothing silently disappears from the API.
+func projectSlidesFromFiles(ctx context.Context, st store.Store, projectID string, slides []model.Slide) ([]model.Slide, error) {
+	project, err := st.GetProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]model.Slide, len(slides))
+	for _, slide := range slides {
+		byID[slide.ID] = slide
+	}
+	var outline spec.Outline
+	if err := readJSON(filepath.Join(project.WorkDir, "outline.json"), &outline); err != nil {
+		return nil, err
+	}
+	position := 0
+	fill := func(meta model.Slide) model.Slide {
+		var content spec.SlideSpec
+		if readErr := readJSON(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(meta.ID))), &content); readErr == nil {
+			meta.Title = content.Title
+			meta.Layout = content.VisualIntent.Archetype
+		}
+		meta.Position = position
+		position++
+		return meta
+	}
+	out := make([]model.Slide, 0, len(slides))
+	seen := make(map[string]bool, len(slides))
+	for _, id := range outline.SlideOrder {
+		if meta, ok := byID[id]; ok {
+			out = append(out, fill(meta))
+			seen[id] = true
+		}
+	}
+	for _, slide := range slides {
+		if !seen[slide.ID] {
+			out = append(out, fill(slide))
+		}
+	}
+	return out, nil
+}
 
 func (svc *SlideService) ReadHTML(ctx context.Context, slideID string) ([]byte, error) {
 	slide, err := svc.store.GetSlide(ctx, slideID)

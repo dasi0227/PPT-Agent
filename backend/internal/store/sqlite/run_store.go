@@ -61,7 +61,7 @@ func (s *Store) UpdateProjectRevisions(ctx context.Context, id string, outlineRe
 	return s.db.WithContext(ctx).Model(&projectPO{}).Where("id = ?", id).
 		Updates(map[string]any{
 			"outline_revision": outlineRevision, "design_revision": designRevision,
-			"outline_path": "outline.json", "design_path": "design.json", "layout_version": 2,
+			"layout_version": 2,
 		}).Error
 }
 

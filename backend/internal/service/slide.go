@@ -27,9 +27,26 @@ func NewSlideService(s store.Store) *SlideService {
 	return &SlideService{store: s, clock: nowUnix, newID: uuid.NewString}
 }
 
-// GetSlide 按 id 返回单页元数据。
+// GetSlide 按 id 返回单页元数据，并从文件投影 position/title/layout（文件为真相）。
 func (svc *SlideService) GetSlide(ctx context.Context, id string) (model.Slide, error) {
-	return svc.store.GetSlide(ctx, id)
+	meta, err := svc.store.GetSlide(ctx, id)
+	if err != nil {
+		return model.Slide{}, err
+	}
+	siblings, err := svc.store.ListSlides(ctx, meta.ProjectID)
+	if err != nil {
+		return meta, nil
+	}
+	projected, err := projectSlidesFromFiles(ctx, svc.store, meta.ProjectID, siblings)
+	if err != nil {
+		return meta, nil
+	}
+	for _, slide := range projected {
+		if slide.ID == id {
+			return slide, nil
+		}
+	}
+	return meta, nil
 }
 
 // ListVersions 返回某页的版本列表。

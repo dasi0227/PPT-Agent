@@ -100,17 +100,13 @@ func migrateProjectLayout(db *gorm.DB, project layoutProjectRow) error {
 		cleanup()
 	}
 	err = db.Transaction(func(tx *gorm.DB) error {
+		// outline_path/design_path/spec_path columns were removed once files
+		// became the single source of truth; only the layout_version cursor and
+		// the version-table remapping remain to persist here.
 		if err := tx.Table("projects").Where("id = ?", project.ID).Updates(map[string]any{
-			"outline_path": "outline.json", "design_path": "design.json",
 			"layout_version": currentProjectLayoutVersion,
 		}).Error; err != nil {
 			return err
-		}
-		for _, slide := range slides {
-			if err := tx.Table("slides").Where("id = ? AND project_id = ?", slide.ID, project.ID).
-				Update("spec_path", model.SlideSpecPath(slide.ID)).Error; err != nil {
-				return err
-			}
 		}
 		for _, update := range versionUpdates {
 			if err := tx.Table("versions").Where("id = ?", update.ID).Updates(map[string]any{

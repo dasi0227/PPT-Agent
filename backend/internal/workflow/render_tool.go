@@ -412,9 +412,6 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		ScreenshotPath: screenshotPath, ViewportWidth: renderViewportWidth,
 		ViewportHeight: renderViewportHeight, TimeoutMS: 15000,
 	}
-	if input.Transaction != nil {
-		request.StagingDir = input.Transaction.Root()
-	}
 	started := time.Now()
 	diagnostics, err := t.renderer.Render(ctx, request)
 	if err != nil {

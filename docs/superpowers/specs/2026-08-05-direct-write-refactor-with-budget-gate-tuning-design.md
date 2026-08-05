@@ -1,6 +1,6 @@
 # 直写落地 + 文件为真相 · 含运行预算与门控调优 · 合并设计文档
 
-> 状态：设计定稿，待实施
+> 状态：Phase A 已落地并提交；Phase B 已落地（直写会话取代事务、内容真相收归文件、DB 退出内容、读接口文件投影、按项目串行化 run）
 > 日期：2026-08-05
 > 合并来源：`docs/v2/80-direct-write-and-git-refactor.md`（架构重构）+ 运行预算与完成门控调优（前置缓解）
 > 关联：废弃 `docs/v2/30-agent-pipeline-v2.md` 中的 Run 级 staging→commit 事务模型

@@ -115,8 +115,7 @@ func TestReadPPTRejectsOversizedContentWithoutTruncation(t *testing.T) {
 
 func TestWritePPTRequiresStringAndInjectsManagedMetadata(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "write-string")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "write-string")
 	resource := Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}
 	rejected := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
 		"resource": resourceArgs(resource), "content": map[string]any{"title": "bad"},
@@ -148,8 +147,7 @@ func TestWritePPTRequiresStringAndInjectsManagedMetadata(t *testing.T) {
 
 func TestDesignWriteAtomicallyStagesDerivedTokens(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
-	tx, _ := NewTransaction(dir, "write-design")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "write-design")
 	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
 		"resource": resourceArgs(Resource{Type: "deck", Part: "design"}),
 		"content":  string(mustJSONValue(designModel())),
@@ -169,8 +167,7 @@ func TestDesignWriteAtomicallyStagesDerivedTokens(t *testing.T) {
 
 func TestWritePPTValidatesJSONHTMLArtifactAndScope(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "write-validation")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "write-validation")
 	invalidJSON := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
 		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}), "content": "{",
 	}))
@@ -201,8 +198,7 @@ func TestWritePPTValidatesJSONHTMLArtifactAndScope(t *testing.T) {
 
 func TestEditPPTUsesOrderedUniqueAnchorsAndIsAtomic(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "edit")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "edit")
 	resource := Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}
 	tool := pptEditTool{pack}
 	ok := tool.Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
@@ -239,8 +235,7 @@ func TestEditPPTUsesOrderedUniqueAnchorsAndIsAtomic(t *testing.T) {
 
 func TestRenderSlideUsesStagedHTMLAndProducesEvidence(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "render")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "render")
 	staged := strings.Replace(validToolHTML, "Original", "Staged", 1)
 	if _, err := tx.Stage(slideHTMLRef("slide-01"), "test", []byte(staged)); err != nil {
 		t.Fatal(err)
@@ -277,8 +272,7 @@ func TestRenderSlideUsesStagedHTMLAndProducesEvidence(t *testing.T) {
 
 func TestRenderSlideAttachesScreenshotOnVisualReview(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "render")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "render")
 	staged := strings.Replace(validToolHTML, "Original", "Staged", 1)
 	if _, err := tx.Stage(slideHTMLRef("slide-01"), "test", []byte(staged)); err != nil {
 		t.Fatal(err)
@@ -358,8 +352,7 @@ func TestRenderSlideDoesNotClassifyContextCancellationAsTransient(t *testing.T) 
 
 func TestCompletionGateRequiresLatestStaticAndRenderEvidence(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "gate")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "gate")
 	if _, err := tx.Stage(slideHTMLRef("slide-01"), "edit_ppt", []byte(strings.Replace(validToolHTML, "Original", "Changed", 1))); err != nil {
 		t.Fatal(err)
 	}
@@ -384,8 +377,7 @@ func TestCompletionGateRequiresLatestStaticAndRenderEvidence(t *testing.T) {
 
 func TestSpecArtifactCanFinishAfterSlideSpecOnlyChange(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "spec-only")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "spec-only")
 	next := slideModel("slide-01", "Updated")
 	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
 		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
@@ -411,8 +403,7 @@ func TestPresentationSpecHTMLAffectingChangesRequireHTMLSync(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-			tx, _ := NewTransaction(dir, "presentation-"+test.name)
-			defer tx.Cleanup()
+			tx, _ := NewRunSession(dir, "presentation-"+test.name)
 			next := slideModel("slide-01", "Original")
 			test.mutate(&next)
 			write := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
@@ -435,8 +426,7 @@ func TestPresentationSpecHTMLAffectingChangesRequireHTMLSync(t *testing.T) {
 
 func TestPresentationSpecAndHTMLWithLatestRenderCanFinish(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "presentation-complete")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "presentation-complete")
 	ledger := NewEvidenceLedger()
 	next := slideModel("slide-01", "Updated")
 	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
@@ -459,8 +449,7 @@ func TestPresentationSpecAndHTMLWithLatestRenderCanFinish(t *testing.T) {
 
 func TestPresentationSpeakerNotesOnlyNeedsLatestMaterializationProof(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "speaker-notes")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "speaker-notes")
 	ledger := NewEvidenceLedger()
 	next := slideModel("slide-01", "Original")
 	next.SpeakerNotes = "Updated private notes"
@@ -480,8 +469,7 @@ func TestPresentationSpeakerNotesOnlyNeedsLatestMaterializationProof(t *testing.
 
 func TestPresentationDesignOnlyNeedsLatestRenderAndKeepsHTMLUnchanged(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
-	tx, _ := NewTransaction(dir, "design-only-render")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "design-only-render")
 	ledger := NewEvidenceLedger()
 	next := designModel()
 	next.Signature = "updated signature"
@@ -502,8 +490,7 @@ func TestPresentationDesignOnlyNeedsLatestRenderAndKeepsHTMLUnchanged(t *testing
 
 func TestRenderEvidenceBeforeSpecChangeIsStale(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "stale-render")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "stale-render")
 	ledger := NewEvidenceLedger()
 	recordResultEvidence(ledger, (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
 		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})))
@@ -525,8 +512,7 @@ func TestRenderEvidenceBeforeSpecChangeIsStale(t *testing.T) {
 
 func TestRenderProofWithOldSourceRevisionIsRejected(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewTransaction(dir, "old-proof-revision")
-	defer tx.Cleanup()
+	tx, _ := NewRunSession(dir, "old-proof-revision")
 	ledger := NewEvidenceLedger()
 	next := slideModel("slide-01", "Original")
 	next.SpeakerNotes = "updated notes"
@@ -617,7 +603,7 @@ func recordResultEvidence(ledger *EvidenceLedger, result ToolResult) {
 	}
 }
 
-func completionContext(pack contextengine.ContextPack, tx *Transaction, ledger *EvidenceLedger) CompletionContext {
+func completionContext(pack contextengine.ContextPack, tx *RunSession, ledger *EvidenceLedger) CompletionContext {
 	return CompletionContext{
 		Strategy: StrategySimple, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
 		Transaction: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
@@ -632,7 +618,7 @@ func resourceArgs(resource Resource) map[string]any {
 	return out
 }
 
-func toolInput(pack contextengine.ContextPack, dir string, tx *Transaction, args map[string]any) DomainToolInput {
+func toolInput(pack contextengine.ContextPack, dir string, tx *RunSession, args map[string]any) DomainToolInput {
 	return DomainToolInput{
 		Args: args, Context: pack, ProjectDir: dir, RunID: "run-1", Transaction: tx,
 		Scope: ScopeFromSpec(pack.WorkSpec), Strategy: StrategySimple, Phase: PhaseExecuting,

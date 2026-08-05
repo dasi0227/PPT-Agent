@@ -177,6 +177,16 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	if !created {
 		return svc.replayCreateRun(ctx, record)
 	}
+	// Serialize runs per project: direct-write products can no longer be isolated
+	// in a per-run staging sandbox, so a second concurrent run would race on the
+	// same files. Reuse RUN_ACTIVE to reject a new run while one is in flight.
+	if active, activeErr := svc.store.HasActiveRun(ctx, project.ID); activeErr != nil {
+		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
+		return model.Run{}, activeErr
+	} else if active {
+		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_ACTIVE")
+		return model.Run{}, ErrRunActive
+	}
 	runModel := model.Run{
 		ID: uuid.NewString(), ThreadID: thread.ID, ProjectID: project.ID,
 		ClientRequestID: p.ClientRequestID, WorkSpec: spec,

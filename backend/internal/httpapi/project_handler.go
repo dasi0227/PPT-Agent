@@ -154,9 +154,11 @@ func (h *ProjectHandler) ListSlides(c *gin.Context) {
 }
 
 func toProjectResponse(p model.Project) projectResponse {
+	// design.json / outline.json paths are protocol constants derived from the
+	// project root; they are no longer stored in the database.
 	return projectResponse{
 		ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, Status: p.Status,
-		DesignPath: p.DesignPath, OutlinePath: p.OutlinePath, OutlineRevision: p.OutlineRevision,
+		DesignPath: "design.json", OutlinePath: "outline.json", OutlineRevision: p.OutlineRevision,
 		DesignRevision: p.DesignRevision, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }

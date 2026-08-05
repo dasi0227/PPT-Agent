@@ -214,7 +214,7 @@ type runtimeState struct {
 	resumePhase           RuntimePhase
 	decision              StrategyDecision
 	plan                  *Plan
-	tx                    *Transaction
+	tx                    *RunSession
 	scope                 Scope
 	ledger                *EvidenceLedger
 	issues                []Issue
@@ -278,16 +278,14 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 
 	if state.strategy != StrategyChat {
-		tx, err := NewTransaction(input.ProjectDir, input.RunID)
+		// Direct-write session: typed tools write artifacts straight to the
+		// project directory. A failed or canceled run keeps its partial
+		// products on disk instead of discarding a staging sandbox.
+		session, err := NewRunSession(input.ProjectDir, input.RunID)
 		if err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
-		state.tx = tx
-		defer func() {
-			if !state.committed {
-				_ = tx.Cleanup()
-			}
-		}()
+		state.tx = session
 	}
 
 	registry := NewToolRegistry()

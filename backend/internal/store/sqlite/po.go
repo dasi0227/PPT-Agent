@@ -14,8 +14,6 @@ type projectPO struct {
 	WorkDir         string `gorm:"column:work_dir"`
 	Theme           string `gorm:"column:theme"`
 	Status          string `gorm:"column:status"`
-	DesignPath      string `gorm:"column:design_path"`
-	OutlinePath     string `gorm:"column:outline_path"`
 	OutlineRevision int    `gorm:"column:outline_revision"`
 	DesignRevision  int    `gorm:"column:design_revision"`
 	LayoutVersion   int    `gorm:"column:layout_version"`
@@ -28,7 +26,7 @@ func (projectPO) TableName() string { return "projects" }
 func (p projectPO) toModel() model.Project {
 	return model.Project{
 		ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme,
-		Status: p.Status, DesignPath: p.DesignPath, OutlinePath: p.OutlinePath,
+		Status:          p.Status,
 		OutlineRevision: p.OutlineRevision, DesignRevision: p.DesignRevision,
 		LayoutVersion: p.LayoutVersion,
 		CreatedAt:     p.CreatedAt, UpdatedAt: p.UpdatedAt,
@@ -41,7 +39,7 @@ func projectToPO(m model.Project) projectPO {
 	}
 	return projectPO{
 		ID: m.ID, Title: m.Title, WorkDir: m.WorkDir, Theme: m.Theme,
-		Status: m.Status, DesignPath: m.DesignPath, OutlinePath: m.OutlinePath,
+		Status:          m.Status,
 		OutlineRevision: m.OutlineRevision, DesignRevision: m.DesignRevision,
 		LayoutVersion: m.LayoutVersion,
 		CreatedAt:     m.CreatedAt, UpdatedAt: m.UpdatedAt,
@@ -235,11 +233,6 @@ func (p runContextPO) toModel() model.RunContext {
 type slidePO struct {
 	ID                    string `gorm:"column:id;primaryKey"`
 	ProjectID             string `gorm:"column:project_id"`
-	Position              int    `gorm:"column:position"`
-	Layout                string `gorm:"column:layout"`
-	Title                 string `gorm:"column:title"`
-	SpecPath              string `gorm:"column:spec_path"`
-	HTMLPath              string `gorm:"column:html_path"`
 	CurrentVersion        int    `gorm:"column:current_version"`
 	SpecRevision          int    `gorm:"column:spec_revision"`
 	HTMLRevision          int    `gorm:"column:html_revision"`
@@ -251,11 +244,15 @@ type slidePO struct {
 
 func (slidePO) TableName() string { return "slides" }
 
+// toModel derives the content-addressed paths from the stable slide_id. Order,
+// title and layout are file-projected by read-facing services (files are the
+// single source of truth), so they stay zero here.
 func (s slidePO) toModel() model.Slide {
 	return model.Slide{
-		ID: s.ID, ProjectID: s.ProjectID, Position: s.Position, Layout: s.Layout, Title: s.Title,
-		SpecPath: s.SpecPath, HTMLPath: s.HTMLPath, CurrentVersion: s.CurrentVersion,
-		SpecRevision: s.SpecRevision, HTMLRevision: s.HTMLRevision,
+		ID: s.ID, ProjectID: s.ProjectID,
+		SpecPath: model.SlideSpecPath(s.ID), HTMLPath: model.SlideHTMLPath(s.ID),
+		CurrentVersion: s.CurrentVersion,
+		SpecRevision:   s.SpecRevision, HTMLRevision: s.HTMLRevision,
 		SourceOutlineRevision: s.SourceOutlineRevision, SourceSpecRevision: s.SourceSpecRevision,
 		SourceDesignRevision: s.SourceDesignRevision, LastExportAt: s.LastExportAt,
 	}
@@ -263,9 +260,9 @@ func (s slidePO) toModel() model.Slide {
 
 func slideToPO(m model.Slide) slidePO {
 	return slidePO{
-		ID: m.ID, ProjectID: m.ProjectID, Position: m.Position, Layout: m.Layout, Title: m.Title,
-		SpecPath: m.SpecPath, HTMLPath: m.HTMLPath, CurrentVersion: m.CurrentVersion,
-		SpecRevision: m.SpecRevision, HTMLRevision: m.HTMLRevision,
+		ID: m.ID, ProjectID: m.ProjectID,
+		CurrentVersion: m.CurrentVersion,
+		SpecRevision:   m.SpecRevision, HTMLRevision: m.HTMLRevision,
 		SourceOutlineRevision: m.SourceOutlineRevision, SourceSpecRevision: m.SourceSpecRevision,
 		SourceDesignRevision: m.SourceDesignRevision, LastExportAt: m.LastExportAt,
 	}

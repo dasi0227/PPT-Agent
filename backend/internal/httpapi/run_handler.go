@@ -130,6 +130,8 @@ func handleCreateRunError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, run.ErrRunNotFound):
 		AbortWithError(c, ErrNotFound("thread not found"))
+	case errors.Is(err, service.ErrRunActive):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
 	case errors.Is(err, service.ErrSlideTargetNotFound):
 		AbortWithError(c, ProjectAgentError(model.NewAgentError("SLIDE_NOT_FOUND", "create_run", err), "SLIDE_NOT_FOUND", "create_run"))
 	case errors.Is(err, model.ErrInvalidWorkSpec):

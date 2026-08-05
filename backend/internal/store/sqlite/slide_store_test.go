@@ -33,8 +33,8 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	ctx := context.Background()
 
 	slides := []model.Slide{
-		{ID: "s0", ProjectID: "p1", Position: 0, Layout: "cover", Title: "封面", SpecPath: "slides/s0/spec.json", HTMLPath: "slides/s0/index.html"},
-		{ID: "s1", ProjectID: "p1", Position: 1, Layout: "thanks", Title: "谢谢", SpecPath: "slides/s1/spec.json", HTMLPath: "slides/s1/index.html"},
+		{ID: "s0", ProjectID: "p1", SpecRevision: 1},
+		{ID: "s1", ProjectID: "p1", SpecRevision: 1},
 	}
 	if err := s.ReplaceSlides(ctx, "p1", slides); err != nil {
 		t.Fatalf("replace: %v", err)
@@ -43,16 +43,13 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(got) != 2 || got[0].Layout != "cover" || got[1].Layout != "thanks" {
+	// DB no longer stores order/layout; paths are derived from the stable id.
+	if len(got) != 2 || got[0].SpecPath != "slides/s0/spec.json" || got[1].HTMLPath != "slides/s1/index.html" {
 		t.Fatalf("bad slides: %+v", got)
 	}
 
 	// 幂等替换：再次以 3 页替换，旧的被清掉。
-	three := append(slides, model.Slide{ID: "s2", ProjectID: "p1", Position: 2, Layout: "cta", Title: "行动", SpecPath: "slides/s2/spec.json", HTMLPath: "x"})
-	three[1].Position = 2
-	three[1].Layout = "cta"
-	three[2].Position = 1
-	three[2].Layout = "bullets"
+	three := append(slides, model.Slide{ID: "s2", ProjectID: "p1"})
 	if err := s.ReplaceSlides(ctx, "p1", three); err != nil {
 		t.Fatalf("replace2: %v", err)
 	}
@@ -68,8 +65,8 @@ func TestGetSlideByID(t *testing.T) {
 	ctx := context.Background()
 
 	slides := []model.Slide{
-		{ID: "s0", ProjectID: "p1", Position: 0, Layout: "cover", Title: "封面", SpecPath: "slides/s0/spec.json", HTMLPath: "slides/s0/index.html"},
-		{ID: "s1", ProjectID: "p1", Position: 1, Layout: "thanks", Title: "谢谢", SpecPath: "slides/s1/spec.json", HTMLPath: "slides/s1/index.html"},
+		{ID: "s0", ProjectID: "p1"},
+		{ID: "s1", ProjectID: "p1"},
 	}
 	if err := s.ReplaceSlides(ctx, "p1", slides); err != nil {
 		t.Fatalf("replace: %v", err)
@@ -79,7 +76,7 @@ func TestGetSlideByID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get slide: %v", err)
 	}
-	if got.Position != 1 || got.ProjectID != "p1" || got.HTMLPath != "slides/s1/index.html" {
+	if got.ProjectID != "p1" || got.HTMLPath != "slides/s1/index.html" {
 		t.Fatalf("unexpected slide: %+v", got)
 	}
 
@@ -136,10 +133,9 @@ func TestSlideRevisionMetadataRoundTrip(t *testing.T) {
 	seedProject(t, s)
 	ctx := context.Background()
 	err := s.ReplaceSlides(ctx, "p1", []model.Slide{
-		{ID: "s1", ProjectID: "p1", Position: 10, Layout: "cover", Title: "A",
+		{ID: "s1", ProjectID: "p1",
 			SpecRevision: 2, HTMLRevision: 3, SourceOutlineRevision: 1,
-			SourceSpecRevision: 2, SourceDesignRevision: 1,
-			SpecPath: "slides/s1/spec.json", HTMLPath: "slides/s1/index.html"},
+			SourceSpecRevision: 2, SourceDesignRevision: 1},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -148,30 +144,32 @@ func TestSlideRevisionMetadataRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Position != 10 || got.SpecRevision != 2 || got.HTMLRevision != 3 {
+	if got.SpecRevision != 2 || got.HTMLRevision != 3 || got.SourceSpecRevision != 2 {
 		t.Fatalf("round trip lost fields: %+v", got)
 	}
 }
 
-func TestListSlidesOrderedByPosition(t *testing.T) {
+func TestListSlidesReturnsMembership(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
 	ctx := context.Background()
 	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{
-		{ID: "b", ProjectID: "p1", Position: 20, Layout: "content", Title: "B"},
-		{ID: "a", ProjectID: "p1", Position: 10, Layout: "cover", Title: "A"},
+		{ID: "b", ProjectID: "p1"},
+		{ID: "a", ProjectID: "p1"},
 	})
 	got, _ := s.ListSlides(ctx, "p1")
+	// Order is file-projected; the store returns membership deterministically by id.
 	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "b" {
-		t.Fatalf("expected order a,b got %+v", got)
+		t.Fatalf("expected membership a,b got %+v", got)
 	}
 }
 
-func TestUpdateMetaAndRevisions(t *testing.T) {
+func TestUpdateRevisions(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
 	ctx := context.Background()
-	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1", Position: 10, Layout: "cover", Title: "A"}})
+	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1"}})
+	// title/layout live in spec.json now; UpdateSlideMeta is a no-op cursor.
 	if err := s.UpdateSlideMeta(ctx, "s1", "B", "content"); err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +177,7 @@ func TestUpdateMetaAndRevisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := s.GetSlide(ctx, "s1")
-	if got.Title != "B" || got.Layout != "content" || got.SpecRevision != 2 || got.HTMLRevision != 3 {
+	if got.SpecRevision != 2 || got.HTMLRevision != 3 {
 		t.Fatalf("got %+v", got)
 	}
 }
@@ -210,26 +208,24 @@ func TestHasActiveRun(t *testing.T) {
 	}
 }
 
-func TestInsertDeleteReorder(t *testing.T) {
+func TestInsertDeleteMembership(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
 	ctx := context.Background()
 	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{
-		{ID: "a", ProjectID: "p1", Position: 10, Layout: "cover", Title: "A"},
-		{ID: "b", ProjectID: "p1", Position: 20, Layout: "thanks", Title: "B"}})
-	if err := s.InsertSlide(ctx, model.Slide{ID: "c", ProjectID: "p1", Position: 15, Layout: "content", Title: "C"}); err != nil {
+		{ID: "a", ProjectID: "p1"},
+		{ID: "b", ProjectID: "p1"}})
+	if err := s.InsertSlide(ctx, model.Slide{ID: "c", ProjectID: "p1"}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	got, _ := s.ListSlides(ctx, "p1")
-	if len(got) != 3 || got[1].ID != "c" {
-		t.Fatalf("insert/order wrong: %+v", got)
+	if len(got) != 3 {
+		t.Fatalf("insert wrong: %+v", got)
 	}
+	// SetSlidesOrder is now a no-op (order lives in outline.json); it must succeed
+	// and leave membership intact.
 	if err := s.SetSlidesOrder(ctx, "p1", map[string]int{"a": 30, "b": 20, "c": 10}); err != nil {
 		t.Fatalf("reorder: %v", err)
-	}
-	got, _ = s.ListSlides(ctx, "p1")
-	if got[0].ID != "c" || got[2].ID != "a" {
-		t.Fatalf("reorder wrong: %+v", got)
 	}
 	if err := s.DeleteSlideByID(ctx, "b"); err != nil {
 		t.Fatalf("delete: %v", err)

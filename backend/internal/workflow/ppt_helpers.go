@@ -87,7 +87,7 @@ func parseResource(args map[string]any) (Resource, error) {
 	return Resource{}, fmt.Errorf("resource type must be deck or slide")
 }
 
-func readArtifact(projectDir string, tx *Transaction, ref ArtifactRef) ([]byte, string, error) {
+func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, string, error) {
 	if tx != nil {
 		raw, err := tx.Read(ref)
 		if err == nil {
@@ -164,7 +164,7 @@ func intValue(value any, fallback int) int {
 	return fallback
 }
 
-func normalizeModel(pack contextengine.ContextPack, tx *Transaction, ref ArtifactRef, value any) ([]byte, int, error) {
+func normalizeModel(pack contextengine.ContextPack, tx *RunSession, ref ArtifactRef, value any) ([]byte, int, error) {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return nil, 0, err
@@ -311,7 +311,7 @@ func validateHTML(raw []byte) ([]Issue, error) {
 	return issues, nil
 }
 
-func validateReferences(pack contextengine.ContextPack, tx *Transaction) (string, error) {
+func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string, error) {
 	deckRaw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
 	if err != nil {
 		return "", err
@@ -338,7 +338,7 @@ func validateReferences(pack contextengine.ContextPack, tx *Transaction) (string
 	return hashBytes(deckRaw), nil
 }
 
-func currentOutline(pack contextengine.ContextPack, tx *Transaction) (spec.Outline, error) {
+func currentOutline(pack contextengine.ContextPack, tx *RunSession) (spec.Outline, error) {
 	raw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
 	if err != nil {
 		return spec.Outline{}, err
@@ -350,7 +350,7 @@ func currentOutline(pack contextengine.ContextPack, tx *Transaction) (spec.Outli
 	return deck, nil
 }
 
-func validateSlideReference(pack contextengine.ContextPack, tx *Transaction, slide spec.SlideSpec) error {
+func validateSlideReference(pack contextengine.ContextPack, tx *RunSession, slide spec.SlideSpec) error {
 	deck, err := currentOutline(pack, tx)
 	if err != nil {
 		return err
@@ -371,7 +371,7 @@ func validateSlideReference(pack contextengine.ContextPack, tx *Transaction, sli
 	return nil
 }
 
-func readSlideModel(pack contextengine.ContextPack, tx *Transaction, slideID string) (spec.SlideSpec, []byte, string, error) {
+func readSlideModel(pack contextengine.ContextPack, tx *RunSession, slideID string) (spec.SlideSpec, []byte, string, error) {
 	raw, source, err := readArtifact(tx.ProjectDir(), tx, specSlideRef(slideID))
 	if err != nil {
 		return spec.SlideSpec{}, nil, "", err
@@ -383,7 +383,7 @@ func readSlideModel(pack contextengine.ContextPack, tx *Transaction, slideID str
 	return slide, raw, source, nil
 }
 
-func targetHash(pack contextengine.ContextPack, tx *Transaction, target Resource) (string, error) {
+func targetHash(pack contextengine.ContextPack, tx *RunSession, target Resource) (string, error) {
 	ref, err := refForResource(pack, target)
 	if err != nil {
 		return "", err
@@ -395,7 +395,7 @@ func targetHash(pack contextengine.ContextPack, tx *Transaction, target Resource
 	return hashBytes(raw), nil
 }
 
-func renderSourceHash(pack contextengine.ContextPack, tx *Transaction, slideID string) (string, error) {
+func renderSourceHash(pack contextengine.ContextPack, tx *RunSession, slideID string) (string, error) {
 	designRaw, _, err := readArtifact(tx.ProjectDir(), tx, designRef(pack))
 	if err != nil {
 		return "", err
@@ -434,7 +434,7 @@ func MaterializationSourceHash(slideID string, designRaw, specRaw, htmlRaw []byt
 func currentMaterializationProof(
 	pack contextengine.ContextPack,
 	projectDir string,
-	tx *Transaction,
+	tx *RunSession,
 	slideID string,
 	sourceHash string,
 ) (MaterializationProof, error) {
