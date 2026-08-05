@@ -88,6 +88,44 @@ describe('Timeline', () => {
     expect(visible.every((entry) => entry.kind === 'item')).toBe(true);
   });
 
+  it('folds completed run process events behind the final summary row', () => {
+    setSession([
+      { id: 'u1', type: 'user_turn', runId: 'run_1', text: '生成 PPT', timestamp: 1 },
+      { id: 'r1', type: 'reasoning', runId: 'run_1', messageId: 'm1', text: '我先确认全局设计。', timestamp: 2 },
+      { id: 'm1', type: 'milestone', runId: 'run_1', messageId: 'm2', text: '全局设计已经完成。', completedStepIds: ['s1'], timestamp: 3 },
+      { id: 'f1', type: 'final', runId: 'run_1', messageId: 'm3', text: '整份演示文稿已经完成。', affectedTargets: [], durationMs: 148000, timestamp: 4 },
+    ], { status: 'done' });
+    render(<Timeline />);
+    expect(screen.getByText('生成 PPT')).toBeInTheDocument();
+    expect(screen.getByText('执行完成，耗时 2m 28s')).toBeInTheDocument();
+    expect(screen.getByText('整份演示文稿已经完成。')).toBeInTheDocument();
+    expect(screen.queryByText('我先确认全局设计。')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /执行完成，耗时 2m 28s/ }));
+    expect(screen.getByText('生成 PPT')).toBeInTheDocument();
+    expect(screen.getByText('我先确认全局设计。')).toBeInTheDocument();
+    expect(screen.getByText('全局设计已经完成。')).toBeInTheDocument();
+  });
+
+  it('renders failed run message without exposing error code in the final text', () => {
+    setSession([
+      { id: 'r1', type: 'reasoning', runId: 'run_2', messageId: 'm1', text: '开始检查。', timestamp: 1 },
+      {
+        id: 'terminal',
+        type: 'terminal_notice',
+        runId: 'run_2',
+        status: 'failed',
+        message: '运行达到资源上限，未完成的修改不会提交。',
+        error: { code: 'RUNTIME_BUDGET_EXCEEDED', message: '运行达到资源上限，未完成的修改不会提交。', retryable: false },
+        durationMs: 392000,
+        timestamp: 2,
+      },
+    ], { status: 'error' });
+    render(<Timeline />);
+    expect(screen.getByText('执行错误，耗时 6m 32s')).toBeInTheDocument();
+    expect(screen.getByText('运行达到资源上限，未完成的修改不会提交。')).toBeInTheDocument();
+    expect(screen.queryByText(/RUNTIME_BUDGET_EXCEEDED/)).toBeNull();
+  });
+
   it('shows live progress only while not waiting for a question', () => {
     setSession([{ id: 'u1', type: 'user_turn', text: '开始', timestamp: 1 }], {
       progress: { stage: 'rendering', text: '正在检查第 6 页' },

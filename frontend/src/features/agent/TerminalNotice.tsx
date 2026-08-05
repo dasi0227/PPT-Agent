@@ -12,10 +12,10 @@ export const TerminalNotice: React.FC<{ item: TerminalNoticeItem }> = ({ item })
     && (item.retryable ?? item.error?.retryable) === true;
   return <div className={item.status === 'failed'
     ? 'flex items-start gap-2 px-1.5 py-1.5 text-[13px] text-text-900'
-    : 'flex items-start gap-2 px-1.5 py-1.5 text-[13px] text-text-600'}>
+    : 'flex items-start gap-2 px-1.5 py-1.5 text-[13px] text-text-900'}>
     {item.status === 'failed'
       ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />
-      : <StopCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />}
+      : <StopCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />}
     <div className="min-w-0">
       <p>{item.message}</p>
       {canCreateRetry && (

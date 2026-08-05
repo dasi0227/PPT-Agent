@@ -31,6 +31,18 @@ describe('public timeline components', () => {
     expect(screen.queryByText('已读取全局蓝图')).toBeNull();
   });
 
+  it('keeps failed tool details collapsed by default', () => {
+    render(<ToolActivityRow item={{
+      id: 'r:tool:c3', type: 'tool', runId: 'r', callId: 'c3',
+      tool: 'write_ppt', label: '生成页面失败', status: 'failed', timestamp: 0,
+      error: { code: 'RENDER_FAILED', message: '页面检查未通过', retryable: true },
+    }} />);
+    expect(screen.getByText('生成页面失败')).toBeInTheDocument();
+    expect(screen.queryByText('页面检查未通过')).toBeNull();
+    fireEvent.click(screen.getByRole('button'));
+    expect(screen.getByText('页面检查未通过')).toBeInTheDocument();
+  });
+
   it('renders only controlled render preview URLs and warnings', () => {
     useProjectStore.setState({
       activeProjectId: 'p1',
@@ -74,6 +86,15 @@ describe('public timeline components', () => {
     expect(screen.getByText('完成页面')).toBeInTheDocument();
     expect(screen.getByText('收尾检查')).toBeInTheDocument();
   });
+
+	  it('shows a plan mode button when no plan exists', () => {
+	    const selectPlan = vi.fn();
+	    render(<PlanIndicator running={false} plan={null} selected={false} onSelectPlan={selectPlan} />);
+	    const trigger = screen.getByRole('button', { name: '计划' });
+	    expect(trigger).toHaveAttribute('aria-pressed', 'false');
+	    fireEvent.click(trigger);
+	    expect(selectPlan).toHaveBeenCalledTimes(1);
+	  });
 
   it('renders final as an ordinary agent message with affected target footer', () => {
     render(<FinalMessage item={{

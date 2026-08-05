@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, CheckCircle2, ChevronRight, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { targetLabel } from './runtimeLabels';
@@ -11,10 +11,35 @@ import { QuestionPanel } from './QuestionPanel';
 import { ReasoningRow, MilestoneRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 import { TerminalNotice } from './TerminalNotice';
 import type { TimelineItem } from './eventReducer';
-import { groupTimelineItems } from './timelineGrouping';
+import { DisplayEntry, groupTimelineItems } from './timelineGrouping';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
+}
+
+function formatDuration(durationMs?: number): string {
+  if (durationMs === undefined || !Number.isFinite(durationMs) || durationMs < 0) return '--';
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) return `${seconds}s`;
+  return `${minutes}m ${seconds}s`;
+}
+
+const runSummaryLabel = {
+  completed: '执行完成',
+  canceled: '执行取消',
+  failed: '执行错误',
+} as const;
+
+function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'canceled' }) {
+  if (status === 'completed') {
+    return <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />;
+  }
+  if (status === 'canceled') {
+    return <StopCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
+  }
+  return <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
 }
 
 export const Timeline: React.FC = () => {
@@ -104,6 +129,16 @@ export const Timeline: React.FC = () => {
     );
   };
 
+  const renderEntry = (entry: DisplayEntry) => {
+    if (entry.kind === 'tool_group') {
+      return <ToolGroupRow key={entry.id} items={entry.items} />;
+    }
+    if (entry.kind === 'run_summary') {
+      return <RunSummaryBlock key={entry.id} entry={entry} renderEntry={renderEntry} />;
+    }
+    return renderItem(entry.item);
+  };
+
   return (
     <div className="relative min-h-0 flex-1 bg-panel">
       <div
@@ -117,12 +152,7 @@ export const Timeline: React.FC = () => {
           </div>
         ) : (
           <>
-            {displayEntries.map((entry) => {
-              if (entry.kind === 'tool_group') {
-                return <ToolGroupRow key={entry.id} items={entry.items} />;
-              }
-              return renderItem(entry.item);
-            })}
+            {displayEntries.map(renderEntry)}
             {status !== 'waiting' && (progress || status === 'creating') && (
               <LiveProgressRow progress={progress ?? {
                 stage: 'thinking',
@@ -145,3 +175,49 @@ export const Timeline: React.FC = () => {
     </div>
   );
 };
+
+function RunSummaryBlock({
+  entry,
+  renderEntry,
+}: {
+  entry: Extract<DisplayEntry, { kind: 'run_summary' }>;
+  renderEntry: (entry: DisplayEntry) => React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const terminal = entry.terminalItem;
+  const duration = formatDuration(terminal.durationMs);
+  const label = `${runSummaryLabel[entry.status]}，耗时 ${duration}`;
+  const finalText = terminal.type === 'final' ? terminal.text : terminal.message;
+
+  return (
+    <div className="motion-safe:animate-[timeline-enter_120ms_ease-out]">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+        className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-600"
+      >
+        <RunStatusIcon status={entry.status} />
+        <span className="min-w-0 flex-1 truncate font-semibold">{label}</span>
+        <ChevronRight
+          className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          strokeWidth={1.75}
+        />
+      </button>
+      {expanded && entry.processEntries.length > 0 && (
+        <div className="mt-1.5 border-t border-border pt-1.5">
+          {entry.processEntries.map(renderEntry)}
+        </div>
+      )}
+      <div className="mt-1.5 border-t border-border pt-1.5">
+        {terminal.type === 'final'
+          ? <FinalMessage item={terminal} />
+          : (
+            <article className="pb-4 pt-2 text-sm leading-[1.65] text-text-900">
+              <MarkdownMessage content={finalText} />
+            </article>
+          )}
+      </div>
+    </div>
+  );
+}

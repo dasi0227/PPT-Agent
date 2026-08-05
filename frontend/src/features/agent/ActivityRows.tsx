@@ -100,12 +100,62 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
   );
 };
 
-export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => (
-  <div className="mb-3 flex items-start gap-2 border-b border-border px-1.5 pb-3 pt-1 text-[13px] font-medium leading-5 text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]">
-    <Flag className="mt-0.5 h-4 w-4 shrink-0 text-purple-600" strokeWidth={1.75} />
-    <span>{item.text}</span>
-  </div>
-);
+export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const textRef = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    if (expanded) return;
+    const el = textRef.current;
+    if (!el) return;
+    const measure = () => setOverflowing(el.scrollHeight - el.clientHeight > 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded, item.text]);
+
+  const showToggle = overflowing || expanded;
+  const toggle = () => setExpanded((value) => !value);
+
+  const interactive = showToggle
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        'aria-expanded': expanded,
+        'aria-label': expanded ? '收起计划' : '展开计划',
+        onClick: toggle,
+        onKeyDown: (event: React.KeyboardEvent) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggle();
+          }
+        },
+      }
+    : {};
+
+  return (
+    <div
+      {...interactive}
+      className={cn(
+        'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]',
+        showToggle && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+      )}
+    >
+      <Flag className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={1.75} />
+      <span ref={textRef} className={cn('min-w-0 flex-1', !expanded && 'line-clamp-1')}>{item.text}</span>
+      {showToggle && (
+        <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
+          {expanded
+            ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
+            : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
+        </span>
+      )}
+    </div>
+  );
+};
 
 // 图标字形按工具区分（读取=eye，创建=sparkles，编辑=pencil），颜色由状态决定：
 // 成功=success 绿、失败=danger 红。兜底工具（search/render）成功用勾、失败用三角。
@@ -120,7 +170,7 @@ function toolStatusIcon(tool: string, failed: boolean) {
 }
 
 export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
-  const [expanded, setExpanded] = useState(item.status === 'failed' || Boolean(item.preview?.warnings.length));
+  const [expanded, setExpanded] = useState(Boolean(item.preview?.warnings.length));
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const slides = useProjectStore((state) => activeProjectId ? state.slidesByProjectId[activeProjectId] ?? [] : []);
   const setCurrentPage = useDeckStore((state) => state.setCurrentPage);
@@ -212,7 +262,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
           : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />}
       </button>
       {expanded && (
-        <div className="ml-4 border-l border-border pl-2">
+        <div>
           {items.map((item) => <ToolActivityRow key={item.id} item={item} />)}
         </div>
       )}

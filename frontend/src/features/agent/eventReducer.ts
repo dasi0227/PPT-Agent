@@ -54,6 +54,7 @@ export interface FinalMessageItem extends BaseTimelineItem {
   messageId: string;
   text: string;
   affectedTargets: PublicTarget[];
+  durationMs?: number;
 }
 
 export interface ToolActivityItem extends BaseTimelineItem {
@@ -86,6 +87,7 @@ export interface TerminalNoticeItem extends BaseTimelineItem {
   status: 'failed' | 'canceled';
   error?: PublicError;
   message: string;
+  durationMs?: number;
   technicalMessage?: string;
   requestId?: string;
   retryable?: boolean;
@@ -176,7 +178,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     }
 
     case 'message.final': {
-      const existing = state.find((item) =>
+      const existing = state.find((item): item is FinalMessageItem =>
         item.type === 'final' && item.runId === runId && item.messageId === event.data.message_id);
       const item: FinalMessageItem = {
         id: existing?.id ?? eventItemId(event, `final:${event.data.message_id}`),
@@ -185,6 +187,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         messageId: event.data.message_id,
         text: event.data.text,
         affectedTargets: event.data.affected_targets ?? [],
+        durationMs: existing?.durationMs,
         timestamp,
       };
       return upsertById(state, item);
@@ -268,7 +271,12 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     }
 
     case 'run.finished': {
-      if (event.data.status === 'completed') return state;
+      if (event.data.status === 'completed') {
+        return state.map((item) =>
+          item.type === 'final' && item.runId === runId
+            ? { ...item, durationMs: event.data.duration_ms }
+            : item);
+      }
       const error = event.data.error;
       const item: TerminalNoticeItem = {
         id: `${runId}:terminal`,
@@ -279,6 +287,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         message: event.data.status === 'canceled'
           ? '运行已取消'
           : (error?.message ?? '运行未能完成，请稍后重试。'),
+        durationMs: event.data.duration_ms,
         timestamp,
       };
       return upsertById(state, item);
