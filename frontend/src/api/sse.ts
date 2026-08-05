@@ -99,7 +99,8 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && (data.header === undefined || (typeof data.header === 'string' && !rawHTMLPattern.test(data.header)))
         && ['single', 'multiple'].includes(String(data.selection))
         && typeof data.allow_custom === 'boolean'
-        && validQuestionOptions(data.options, data.allow_custom);
+        && validQuestionOptions(data.options, data.allow_custom)
+        && validOptionalQuestionFields(data.questions);
     case 'question.answered':
       return hasString(data, 'question_id')
         && validAnswer(data.answer)
@@ -209,7 +210,7 @@ function validPreview(value: unknown, runId: string): boolean {
 }
 
 function validQuestionOptions(value: unknown, allowCustom: unknown): boolean {
-  if (!Array.isArray(value) || (value.length === 0 && allowCustom !== true)) return false;
+  if (!Array.isArray(value) || value.length > 3 || (value.length === 0 && allowCustom !== true)) return false;
   const ids = new Set<string>();
   return value.every((rawOption) => {
     if (!isRecord(rawOption)
@@ -223,10 +224,43 @@ function validQuestionOptions(value: unknown, allowCustom: unknown): boolean {
   });
 }
 
+function validOptionalQuestionFields(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length === 0) return false;
+  const ids = new Set<string>();
+  return value.every((rawQuestion) => {
+    if (!isRecord(rawQuestion)
+      || !hasString(rawQuestion, 'id')
+      || !hasSafeString(rawQuestion, 'title')
+      || ids.has(String(rawQuestion.id))
+      || (rawQuestion.description !== undefined
+        && (typeof rawQuestion.description !== 'string' || rawHTMLPattern.test(rawQuestion.description)))
+      || typeof rawQuestion.allow_custom !== 'boolean'
+      || !validQuestionOptions(rawQuestion.options, rawQuestion.allow_custom)) return false;
+    ids.add(String(rawQuestion.id));
+    return true;
+  });
+}
+
 function validAnswer(value: unknown): boolean {
   return isRecord(value)
     && validUniqueStringArray(value.selected_option_ids, true)
-    && typeof value.custom_text === 'string';
+    && typeof value.custom_text === 'string'
+    && (value.answers === undefined || validQuestionAnswers(value.answers));
+}
+
+function validQuestionAnswers(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  const ids = new Set<string>();
+  return value.every((rawAnswer) => {
+    if (!isRecord(rawAnswer)
+      || !hasString(rawAnswer, 'question_id')
+      || ids.has(String(rawAnswer.question_id))
+      || (rawAnswer.selected_option_id !== undefined && typeof rawAnswer.selected_option_id !== 'string')
+      || (rawAnswer.custom_text !== undefined && typeof rawAnswer.custom_text !== 'string')) return false;
+    ids.add(String(rawAnswer.question_id));
+    return rawAnswer.selected_option_id !== undefined || rawAnswer.custom_text !== undefined;
+  });
 }
 
 function containsForbiddenField(value: unknown): boolean {

@@ -3,316 +3,220 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Completion Gate 拒绝分支分析</title>
+<title>Run 最终态折叠设计模拟</title>
 <style>
   :root {
-    --accent: #2F67F6; --accent-soft: #E8EFFF;
-    --success: #2F7D65; --success-soft: #E7F3EE;
-    --warning: #B96D1F; --warning-soft: #FFF3DF;
-    --danger: #C84953; --danger-soft: #FCECEF;
-    --ink: #17202B; --muted: #5F6B7A; --subtle: #95A0AE;
-    --border: #D5DBE3; --panel: #F8F9FB; --surface: #FFFFFF;
+    --accent: #2F67F6;
+    --success: #2F7D65;
+    --danger: #C84953;
+    --ink: #17202B;
+    --muted: #5F6B7A;
+    --subtle: #95A0AE;
+    --border: #D5DBE3;
+    --panel: #F8F9FB;
+    --surface: #FFFFFF;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 40px 32px 80px;
-    font-family: 'Aptos','Inter',-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;
-    background: #E9EDF2; color: var(--ink); line-height: 1.6;
+    margin: 0;
+    padding: 40px 32px 72px;
+    font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+    background: #E9EDF2;
+    color: var(--ink);
   }
-  .wrap { max-width: 1000px; margin: 0 auto; }
-  h1 { font-size: 24px; margin: 0 0 6px; }
-  .lead { color: var(--muted); font-size: 13.5px; margin: 0 0 8px; }
-  .mech {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    padding: 20px 24px; margin: 24px 0 32px;
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.02em; }
+  .lead { margin: 0 0 28px; color: var(--muted); font-size: 13px; }
+  .stack { display: grid; gap: 22px; }
+  .run-card {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: 0 14px 36px rgba(51, 65, 85, 0.13);
   }
-  .mech h2 { font-size: 15px; margin: 0 0 10px; }
-  .mech p { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
-  .flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-  .node {
-    font-size: 12px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--panel); white-space: nowrap;
+  .summary-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    border: 0;
+    background: var(--surface);
+    padding: 12px 16px;
+    color: var(--muted);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
   }
-  .node.stop { background: var(--danger-soft); border-color: rgba(200,73,83,.3); color: var(--danger); font-weight: 600; }
-  .node.ok { background: var(--success-soft); border-color: rgba(47,125,101,.3); color: var(--success); font-weight: 600; }
-  .arrow { color: var(--subtle); font-size: 16px; }
-
-  .legend { display: flex; gap: 16px; margin: 0 0 20px; flex-wrap: wrap; font-size: 12px; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-  .dot.keep { background: var(--success); }
-  .dot.trim { background: var(--warning); }
-  .dot.drop { background: var(--danger); }
-  .dot.talk { background: var(--accent); }
-
-  .budget {
-    background: var(--accent-soft); border: 1px solid rgba(47,103,246,.28); border-radius: 14px;
-    padding: 20px 24px; margin: 0 0 32px;
+  .summary-row:hover { background: var(--panel); }
+  .summary-row svg {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 auto;
+    stroke-width: 1.75;
   }
-  .budget h2 { font-size: 15px; margin: 0 0 4px; color: var(--accent); }
-  .budget p.sub { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
-  .budget .grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
-  .bcard { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
-  .bcard .dim { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-  .bcard .chg { font-size: 13px; }
-  .bcard .old { color: var(--subtle); text-decoration: line-through; }
-  .bcard .new { color: var(--success); font-weight: 700; }
-  .bcard .gone { color: var(--danger); font-weight: 700; }
-  @media (max-width: 720px){ .budget .grid { grid-template-columns: repeat(2,1fr); } }
-
-  .card.talk { border-left-color: var(--accent); }
-  .verdict.talk { background: var(--accent-soft); color: var(--accent); }
-  .card .stance { font-size: 12px; margin: 6px 0 0; padding-top: 6px; border-top: 1px dashed var(--border); }
-  .card .stance b { color: var(--ink); }
-  .stance .you { color: var(--accent); font-weight: 700; }
-  .stance .me { color: var(--warning); font-weight: 700; }
-
-  .group { margin-bottom: 28px; }
-  .group > h3 {
-    font-size: 14px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px;
+  .status-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--muted);
   }
-  .group > .gdesc { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
-  .cards { display: grid; grid-template-columns: 1fr; gap: 10px; }
-  .card {
-    border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--surface);
-    border-left-width: 4px;
+  .chevron {
+    color: var(--subtle);
+    transition: transform 140ms ease;
   }
-  .card.keep { border-left-color: var(--success); }
-  .card.trim { border-left-color: var(--warning); }
-  .card.drop { border-left-color: var(--danger); }
-  .card .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
-  .code { font-family: 'SFMono-Regular',Consolas,monospace; font-size: 12px; font-weight: 700; }
-  .verdict {
-    font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: auto;
+  .run-card[data-open="true"] .chevron { transform: rotate(90deg); }
+  .success { color: var(--success); }
+  .danger { color: var(--danger); }
+  .process {
+    display: none;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    padding: 10px 16px 12px 42px;
   }
-  .verdict.keep { background: var(--success-soft); color: var(--success); }
-  .verdict.trim { background: var(--warning-soft); color: var(--warning); }
-  .verdict.drop { background: var(--danger-soft); color: var(--danger); }
-  .card .trigger { font-size: 12.5px; margin: 4px 0; }
-  .card .trigger b { color: var(--ink); }
-  .card .opinion { font-size: 12px; color: var(--muted); margin: 6px 0 0; padding-top: 6px; border-top: 1px dashed var(--border); }
-  .src { font-family: 'SFMono-Regular',Consolas,monospace; font-size: 10.5px; color: var(--subtle); }
-  .summary {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    padding: 20px 24px; margin-top: 8px;
+  .run-card[data-open="true"] .process { display: block; }
+  .event {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.5;
   }
-  .summary h2 { font-size: 15px; margin: 0 0 12px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; }
-  td .code { font-size: 11.5px; }
+  .event svg {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    stroke-width: 1.75;
+  }
+  .divider { border-top: 1px solid var(--border); }
+  .final {
+    padding: 20px 22px 24px;
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--ink);
+  }
+  .final p { margin: 0 0 12px; }
+  .final p:last-child { margin-bottom: 0; }
+  .final h2 {
+    margin: 18px 0 8px;
+    font-size: 22px;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+  }
+  .final ul { margin: 8px 0 0; padding-left: 1.2em; }
+  .final li { margin: 4px 0; }
+  .code {
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.95em;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0 4px;
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Completion Gate 拒绝分支分析</h1>
-  <p class="lead">Agent 每次调 <code>finish</code> 想收尾时，门控会逐条校验；只要有一条不过就拒绝本次收尾（把原因回灌给模型让它补）。这里列出全部拒绝分支的<b>确切触发条件</b>与<b></b>我们的定夺</b>。<span style="color:var(--accent);font-weight:600">蓝色 = 尚在讨论、待拍板。</span></p>
+  <h1>Run 最终态折叠设计模拟</h1>
+  <p class="lead">最终事件到达后，过程事件默认折叠；顶部状态行可点击展开。分割线下方只展示本次 run 的最终回复文本。</p>
 
-  <!-- 预算决策 -->
-  <div class="budget">
-    <h2>✓ 已定：运行预算维度调整</h2>
-    <p class="sub">此前 4 维硬上限（轮次 48 / 工具调用 64 / token 64000 / 时长 15min）触顶即终止且丢弃进度，语义粗暴。本轮决定如下 —— 待落地到 <code>domain.go:160-166</code>。</p>
-    <div class="grid">
-      <div class="bcard">
-        <div class="dim">Token 上限</div>
-        <div class="chg"><span class="old">64000</span> → <span class="gone">删除</span></div>
+  <div class="stack">
+    <section class="run-card" data-open="false">
+      <button class="summary-row" type="button" onclick="toggleCard(this)" aria-expanded="false">
+        <svg class="success" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        <span class="status-text">执行完成，耗时 14m 48s</span>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+      <div class="process">
+        <div class="event">
+          <svg class="success" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>已生成第 6-10 页 HTML</span>
+        </div>
+        <div class="event">
+          <svg class="success" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>已完成渲染检查</span>
+        </div>
+        <div class="event">
+          <svg class="success" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>已提交最终改动</span>
+        </div>
       </div>
-      <div class="bcard">
-        <div class="dim">工具调用上限</div>
-        <div class="chg"><span class="old">64</span> → <span class="gone">删除</span></div>
-      </div>
-      <div class="bcard">
-        <div class="dim">时长上限</div>
-        <div class="chg"><span class="old">15 min</span> → <span class="new">1 小时</span></div>
-      </div>
-      <div class="bcard">
-        <div class="dim">轮次上限</div>
-        <div class="chg"><span class="old">48</span> → <span class="new">128</span></div>
-      </div>
-    </div>
-    <p class="sub" style="margin:14px 0 0">连带影响：门控分支 <code>RUNTIME_BUDGET_EXCEEDED</code> 随之移除（见下方 A 组）。保留的时长/轮次上限仅作"防失控兜底"，量级已放宽到正常长 PPT 也难触及。</p>
-  </div>
+      <div class="divider"></div>
+      <article class="final">
+        <p>整份演示文稿已经完成。</p>
+        <p>我已补齐剩余页面，并完成布局检查。</p>
+        <h2>完成内容</h2>
+        <ul>
+          <li>生成后 5 页 HTML。</li>
+          <li>检查页面渲染，没有发现阻断性问题。</li>
+          <li>保留原有整体视觉风格。</li>
+        </ul>
+      </article>
+    </section>
 
+    <section class="run-card" data-open="false">
+      <button class="summary-row" type="button" onclick="toggleCard(this)" aria-expanded="false">
+        <svg class="danger" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+        <span class="status-text">执行取消，耗时 2m 04s</span>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+      <div class="process">
+        <div class="event">
+          <svg class="success" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>已读取当前页面结构</span>
+        </div>
+        <div class="event">
+          <svg class="danger" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+          <span>用户取消运行</span>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <article class="final">
+        <p>运行已取消。</p>
+        <p>当前任务已停止，未完成的修改不会继续提交。</p>
+      </article>
+    </section>
 
-  <!-- 机制 -->
-  <div class="mech">
-    <h2>机制：单次拒绝 ≠ 终止；连续 3 次"原地打转"才终止</h2>
-    <p>拒绝一次不结束 run，只回灌 <code>COMPLETION_GATE_BLOCKED</code> 让模型修复。只有当<b>"拒绝原因集合"没变 且 "证据账本版本"没变</b>（= Agent 什么都没改就又提交），连续第 3 次才升级为 <code>COMPLETION_REJECTED_REPEATEDLY</code> 终止整个 run。</p>
-    <p style="font-size:12px">判定"相同状态"比对两样：① 本次所有 issue 的 code 排序拼串（拒绝原因）；② 证据账本 version（每次产生/失效证据都自增）。任一变化即视为"有进展"，计数归零重来。</p>
-    <div class="flow">
-      <span class="node">调用 finish</span>
-      <span class="arrow">→</span>
-      <span class="node">Gate.Check 逐条校验</span>
-      <span class="arrow">→</span>
-      <span class="node ok">全过 → 提交并完成</span>
-    </div>
-    <div class="flow">
-      <span style="width:120px"></span>
-      <span class="arrow">↳ 有 issue</span>
-      <span class="node">回灌原因，模型继续修</span>
-      <span class="arrow">→</span>
-      <span class="node">同状态第 3 次</span>
-      <span class="arrow">→</span>
-      <span class="node stop">终止 run</span>
-    </div>
-  </div>
-
-  <div class="legend">
-    <span><i class="dot keep"></i><b>保留</b>：真正保障产物质量/一致性的闸门</span>
-    <span><i class="dot trim"></i><b>精简</b>：有价值但当前实现偏严，建议放宽或改为警告</span>
-    <span><i class="dot drop"></i><b>移除</b>：价值低、冗余，或与新架构语义重叠</span>
-    <span><i class="dot talk"></i><b>讨论中</b>：你我意见未统一，待拍板</span>
-  </div>
-
-  <!-- A -->
-  <div class="group">
-    <h3>A. 阶段 / 运行状态类</h3>
-    <p class="gdesc">与"当前是否处于可收尾的运行状态"有关，与产物内容无关。</p>
-    <div class="cards">
-      <div class="card trim">
-        <div class="top"><span class="code">FINISH_NOT_ALLOWED</span><span class="src">completion.go:254-256</span><span class="verdict trim">暂留</span></div>
-        <div class="trigger">触发：<b>finish 时所处 phase 既不是 chat 也不是 executing</b>。phase 是 run 的状态机阶段，共 7 个：chat / planning / executing / waiting_input / completion_check / committing / terminal。即"别在还没进入干活或对话状态时（如还在 planning、或在等你输入）就宣布完成"。</div>
-        <p class="opinion">价值中等——防止跳过必要阶段。若未来简化 phase 模型，这条可能变冗余。暂留，待你确认。</p>
+    <section class="run-card" data-open="true">
+      <button class="summary-row" type="button" onclick="toggleCard(this)" aria-expanded="true">
+        <svg class="danger" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+        <span class="status-text">执行错误，耗时 6m 32s</span>
+        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+      <div class="process">
+        <div class="event">
+          <svg class="success" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>已完成前 5 页 spec</span>
+        </div>
+        <div class="event">
+          <svg class="success" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>已尝试生成后 5 页 HTML</span>
+        </div>
+        <div class="event">
+          <svg class="danger" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+          <span>运行达到资源上限</span>
+        </div>
       </div>
-      <div class="card keep">
-        <div class="top"><span class="code">TOOLS_RUNNING</span><span class="src">completion.go:257-259</span><span class="verdict keep">保留</span></div>
-        <div class="trigger">触发：<b>仍有工具在执行中</b>（ActiveTools ≠ 0）就想 finish。</div>
-        <p class="opinion">✓ 已定保留。收尾时还有异步工具没结束会导致提交不完整。</p>
-      </div>
-      <div class="card keep">
-        <div class="top"><span class="code">FATAL_ISSUE</span><span class="src">completion.go:260-264</span><span class="verdict keep">保留</span></div>
-        <div class="trigger">触发：上下文里存在<b>致命级别（SeverityFatal）的 Issue</b>。</div>
-        <p class="opinion">✓ 已定保留。<b>关键事实：目前全代码库没有任何一处把 Issue 构造成 fatal</b>（实际产出的都是 error / warning）——这是一条"预留但当前永不触发"的扩展位，为将来某类需要一票否决的致命场景留接入点。零成本、零误伤，保留即可。</p>
-      </div>
-      <div class="card drop">
-        <div class="top"><span class="code">RUNTIME_BUDGET_EXCEEDED</span><span class="src">completion.go:268-270</span><span class="verdict drop">移除</span></div>
-        <div class="trigger">触发：预算已耗尽，此时 finish 被门控挡下。</div>
-        <p class="opinion">✓ 已定移除。随预算维度调整（删 token / 工具调用上限）一并删除这条门控分支。</p>
-      </div>
-      <div class="card keep">
-        <div class="top"><span class="code">RUN_CANCELED</span><span class="src">completion.go:265-267</span><span class="verdict keep">保留</span></div>
-        <div class="trigger">触发：run 已被用户取消，此时的 finish 被挡下。</div>
-        <p class="opinion">保留。用户主动取消后不应还判成功收尾。</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- B -->
-  <div class="group">
-    <h3>B. 写入类（涉及改盘的 run）</h3>
-    <p class="gdesc">只对"要写文件"的运行生效（Chat 讨论态跳过）。保障暂存事务与 scope 的完整。</p>
-    <div class="cards">
-      <div class="card keep">
-        <div class="top"><span class="code">STAGING_REQUIRED</span><span class="src">completion.go:272-273</span><span class="verdict keep">保留*</span></div>
-        <div class="trigger">触发：写运行却<b>没有暂存事务</b>（Transaction == nil）。</div>
-        <p class="opinion">*注意：这与"废弃 staging→commit 事务"的大重构直接相关。若切到直写落地，本条语义要重写或删除。当前架构下保留。</p>
-      </div>
-      <div class="card keep">
-        <div class="top"><span class="code">REVISION_CONFLICT</span><span class="src">completion.go:274-280</span><span class="verdict keep">保留</span></div>
-        <div class="trigger">触发：<b>基线 hash 被改变</b>（ValidateBaselines 检出 ErrStagedHashMismatch）——即开工后底稿被别处改动，乐观锁冲突。</div>
-        <p class="opinion">保留。防并发覆写，是数据一致性核心。</p>
-      </div>
-      <div class="card drop">
-        <div class="top"><span class="code">CHANGESET_REQUIRED</span><span class="src">completion.go:281-283</span><span class="verdict drop">移除</span></div>
-        <div class="trigger">触发：<b>暂存区没有任何实际变更</b>就想收尾（Changes.Count == 0）——空手收工。</div>
-        <p class="stance">
-          <span class="you">你：</span>✓ 决定移除——即使是写任务，Agent 也可能只想输出一些内容让用户确认，不一定非要落盘。<br/>
-          <span class="me">我：</span>同意。唯一副作用：写任务"零产出却宣称完成"不再被硬挡，但这更属模型质量问题，不该由门控兜。移除。
-        </p>
-      </div>
-      <div class="card drop">
-        <div class="top"><span class="code">TARGET_OUT_OF_SCOPE</span><span class="src">completion.go:284-288</span><span class="verdict drop">移除</span></div>
-        <div class="trigger">触发：某个变更的产物<b>不在本次运行授权的 scope 内</b>（如只让改第 3 页，却动了全局设计）。</div>
-        <p class="stance">
-          <span class="you">你：</span>这校验应该在工具层做，不该在门控。<br/>
-          <span class="me">我：</span>✓ <b>你说得对，同意移除。</b>核实过工具层本就已拦截：ppt_tools.go:33 / :70 / :131 与 render_tool 越权时直接返回 <code>CodeTargetOutOfScope</code>，越权改动在动手那刻就进不了 changeset。门控这条只是提交前的冗余二次断言，可删。
-        </p>
-      </div>
-    </div>
-  </div>
-
-  <!-- C -->
-  <div class="group">
-    <h3>C. 计划类（仅 Complex 策略）</h3>
-    <p class="gdesc">复杂任务走计划驱动时生效。</p>
-    <div class="cards">
-      <div class="card keep">
-        <div class="top"><span class="code">PLAN_INCOMPLETE</span><span class="src">completion.go:290-292 / plan.go:116-123</span><span class="verdict keep">保留</span></div>
-        <div class="trigger">触发：Complex 策略下 <b>Plan 为空，或仍有 pending / in_progress / failed 的步骤</b>就想收尾。</div>
-        <p class="opinion">✓ 已定保留。你的理由：让智能体收尾时若有计划步骤未处理，正需这条兜住、避免遗漏。（我原建议"放宽为可说明理由跳过"，你选择保留硬约束，尊重。）</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- D -->
-  <div class="group">
-    <h3>D. 证据类（核心质量闸门，最常触发）</h3>
-    <p class="gdesc">每种产物变更都要求配套"新鲜证据"，缺失或过期即拒。四种证据分工：<b>schema</b>=结构化数据（outline/design/spec）JSON 结构合法（字段/类型/可反序列化）；<b>reference</b>=引用完整性（slide_order 不指向缺页、章节不断裂）；<b>static</b>=HTML 源码层检查（能否解析 + 设计系统 lint，不开浏览器，便宜）；<b>visual</b>=真在 Chromium 渲染截图查溢出/裁切/报错（贵，但唯一能证明"看得对"）。证据是否"新鲜"由证据账本按 <code>target + 源码hash</code> 比对——<b>没改的产物不会要求重新取证</b>。</p>
-    <div class="cards">
-      <div class="card keep">
-        <div class="top"><span class="code">SCHEMA_EVIDENCE_REQUIRED</span><span class="src">completion.go:88,94,97,135 / ppt_helpers.go:478</span><span class="verdict keep">保留</span></div>
-        <div class="trigger">触发：结构化产物（outline / design / spec）变更后，<b>缺少 schema 结构校验证据</b>——即没验证过 JSON 结构是否合法、能否被反序列化成 Outline / SlideSpec。由 write_ppt 写入时产出。</div>
-        <p class="opinion">保留。结构不合法的产物会让后续渲染直接崩，必须校验。</p>
-      </div>
-      <div class="card keep">
-        <div class="top"><span class="code">REFERENCE_EVIDENCE_REQUIRED</span><span class="src">completion.go:95,99-104 / ppt_helpers.go:313</span><span class="verdict keep">保留</span></div>
-        <div class="trigger">触发：outline / slide_spec 变更后，<b>缺少引用完整性校验</b>——如 slide_order 指向不存在的页、章节引用断裂（ValidateOutline 检出）。</div>
-        <p class="opinion">✓ 已定保留。你也认为必要。断裂引用会导致目录错乱、缺页。</p>
-      </div>
-      <div class="card keep">
-        <div class="top"><span class="code">STATIC_EVIDENCE_REQUIRED</span><span class="src">completion.go:85,121-124,156 / designsystem/lint.go:39</span><span class="verdict keep">保留</span></div>
-        <div class="trigger">触发：HTML 幻灯片编辑后，<b>缺少静态检查证据</b>。静态检查=<code>validateHTML</code>：① HTML 能否解析（非空/无 NUL/nethtml.Parse）；② 过 7 项设计系统 lint（正则扫源码）：有无 slide-stage 舞台、有无引用 tokens/base.css、有无硬编码颜色/字号、img 有无 alt、有无内联 @keyframes、有无白名单外脚本、是否完整文档。<b>全程不开浏览器，纯读源码字符串。</b></div>
-        <p class="opinion">保留。它查的是"代码写得规不规范"（ESLint 级别），成本极低。<b>注意：它完全看不见"渲染出来长什么样"</b>——溢出/裁切/运行时报错这些它一无所知，那是下面 VISUAL 的职责。两者不重复。</p>
-      </div>
-      <div class="card keep">
-        <div class="top"><span class="code">VISUAL_EVIDENCE_REQUIRED</span><span class="src">completion.go:86,128-131 / render_tool.go:441-487 / evidence.go:78</span><span class="verdict keep">保留（拆开）</span></div>
-        <div class="trigger">触发：HTML 幻灯片变更后，账本里<b>没有一条"新鲜 + 内容哈希匹配 + blocking=0"的渲染通过证据</b>。</div>
-        <p class="stance">
-          <span class="you">你：</span>✓ 定为"拆开"——只要客观诊断通过即可，不必每次都把图喂给模型。<br/>
-          <span class="me">我：</span>这条其实捆了两样成本悬殊的东西，本次<b>拆开处理</b>：<br/>
-          &nbsp;&nbsp;<b>①渲染 + 客观诊断（保留为硬闸门）</b>：Chromium 跑一遍，由渲染器客观算出溢出/裁切/console 报错/资源失败；<code>blocking==0</code> 才由引擎写入 <code>Kind:"render"</code> 证据。<b>只耗 CPU，不烧 token。</b>gate 靠内容哈希核验，agent 伪造不了、改内容即失效。<br/>
-          &nbsp;&nbsp;<b>②高清截图回灌模型（改按需）</b>：render_tool.go:471 现在每次成功都以 <code>Detail:"high"</code> 塞图进上下文——<b>这才是大额 image token</b>。改为默认不塞/塞低清，仅当渲染报问题需模型判断、或模型显式要看时才给高清。<br/>
-          <b>净效果：省掉你担心的 token，同时保住 STATIC 抓不到的布局安全网（溢出/裁切/报错）。证据账本的强制逻辑完全不动。</b>
-        </p>
-      </div>
-      <div class="card keep">
-        <div class="top"><span class="code">SLIDE_HTML_SYNC_REQUIRED</span><span class="src">completion.go:110-118</span><span class="verdict keep">保留</span></div>
-        <div class="trigger">触发：<b>改了 slide spec（设计稿）却没同步更新对应 HTML</b>。</div>
-        <p class="stance">
-          <span class="you">你：</span>✓ 本次<b>保留原样</b>（硬阻断不动）。后续要如何处理（是否降级为警告 + dirty 标记等）<b>不列入本次改动设计</b>。<br/>
-          <span class="me">我：</span>照此执行，本次不动这条。
-        </p>
-      </div>
-    </div>
-  </div>
-
-  <!-- 总表 -->
-  <div class="summary">
-    <h2>结论速览</h2>
-    <table>
-      <thead><tr><th>分支</th><th>触发条件（一句话）</th><th>结论</th></tr></thead>
-      <tbody>
-        <tr><td><span class="code">TOOLS_RUNNING</span></td><td>还有工具在跑</td><td><span class="dot keep"></span> 保留 ✓</td></tr>
-        <tr><td><span class="code">FATAL_ISSUE</span></td><td>存在致命问题（当前永不触发的预留位）</td><td><span class="dot keep"></span> 保留 ✓</td></tr>
-        <tr><td><span class="code">RUN_CANCELED</span></td><td>用户已取消</td><td><span class="dot keep"></span> 保留</td></tr>
-        <tr><td><span class="code">REVISION_CONFLICT</span></td><td>底稿被并发改动</td><td><span class="dot keep"></span> 保留</td></tr>
-        <tr><td><span class="code">SCHEMA_EVIDENCE_REQUIRED</span></td><td>结构化产物没做 JSON 结构校验</td><td><span class="dot keep"></span> 保留</td></tr>
-        <tr><td><span class="code">REFERENCE_EVIDENCE_REQUIRED</span></td><td>引用断裂未校验</td><td><span class="dot keep"></span> 保留 ✓</td></tr>
-        <tr><td><span class="code">STATIC_EVIDENCE_REQUIRED</span></td><td>HTML 缺源码层静态检查（便宜）</td><td><span class="dot keep"></span> 保留</td></tr>
-        <tr><td><span class="code">PLAN_INCOMPLETE</span></td><td>还有计划步骤没做完</td><td><span class="dot keep"></span> 保留 ✓</td></tr>
-        <tr><td><span class="code">FINISH_NOT_ALLOWED</span></td><td>phase 不对就收尾（引擎驱动，几乎不触发的防御断言）</td><td><span class="dot keep"></span> 保留 ✓</td></tr>
-        <tr><td><span class="code">STAGING_REQUIRED</span></td><td>写运行没有暂存事务</td><td><span class="dot trim"></span> 随直写重构重写</td></tr>
-        <tr><td><span class="code">SLIDE_HTML_SYNC_REQUIRED</span></td><td>spec 改了 HTML 没跟</td><td><span class="dot keep"></span> 本次保留原样（后续不列入）</td></tr>
-        <tr><td><span class="code">RUNTIME_BUDGET_EXCEEDED</span></td><td>预算耗尽被挡</td><td><span class="dot drop"></span> 移除 ✓</td></tr>
-        <tr><td><span class="code">TARGET_OUT_OF_SCOPE</span></td><td>改了授权范围外的产物（工具层已拦）</td><td><span class="dot drop"></span> 移除 ✓</td></tr>
-        <tr><td><span class="code">CHANGESET_REQUIRED</span></td><td>写任务空手收尾、无任何变更</td><td><span class="dot drop"></span> 移除 ✓</td></tr>
-        <tr><td><span class="code">VISUAL_EVIDENCE_REQUIRED</span></td><td>HTML 未经渲染验证</td><td><span class="dot keep"></span> 保留客观诊断硬闸门 + 截图回灌改按需 ✓</td></tr>
-      </tbody>
-    </table>
-    <p style="font-size:12px;color:var(--muted);margin-top:14px">
-      <b>✓ = 全部拍板完成。</b>已定 <b>11 保留</b>（含 FINISH_NOT_ALLOWED、PLAN_INCOMPLETE、SLIDE_HTML_SYNC 本次保留原样、STATIC/SCHEMA/REFERENCE 证据、VISUAL 保留客观诊断硬闸门等）、<b>3 移除</b>（RUNTIME_BUDGET_EXCEEDED、TARGET_OUT_OF_SCOPE、CHANGESET_REQUIRED）、<b>1 随重构重写</b>（STAGING）。VISUAL 单独附带一处优化：<b>高清截图回灌模型改为按需</b>（省 image token），但渲染客观诊断（溢出/裁切/报错）仍为硬闸门、证据账本逻辑不动。<b>门控取舍已全部定案，可进入后端落地。</b>
-    </p>
+      <div class="divider"></div>
+      <article class="final">
+        <p>运行达到资源上限，未完成的修改不会提交。</p>
+        <p>本次任务已停止。你可以调整要求后重新发起任务。</p>
+        <p>错误详情：<span class="code">RUNTIME_BUDGET_EXCEEDED</span></p>
+      </article>
+    </section>
   </div>
 </div>
+
+<script>
+  function toggleCard(button) {
+    const card = button.closest('.run-card');
+    const open = card.dataset.open !== 'true';
+    card.dataset.open = String(open);
+    button.setAttribute('aria-expanded', String(open));
+  }
+</script>
 </body>
 </html>

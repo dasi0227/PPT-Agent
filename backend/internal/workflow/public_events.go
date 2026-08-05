@@ -208,7 +208,7 @@ func toolDisplay(tool string, args map[string]any, started bool, result ToolResu
 			return "创建" + targetName, "", true
 		}
 		if result.OK {
-			return "已创建" + targetName, safeToolDetail(result, "内容已写入安全暂存区"), true
+			return "已创建" + targetName, safeToolDetail(result, "内容已生成"), true
 		}
 		return "创建" + targetName + "失败", publicToolError(result), true
 	case "edit_ppt":
@@ -216,7 +216,7 @@ func toolDisplay(tool string, args map[string]any, started bool, result ToolResu
 			return "更新" + targetName, "", true
 		}
 		if result.OK {
-			return "已更新" + targetName, safeToolDetail(result, "修改已写入安全暂存区"), true
+			return "已更新" + targetName, safeToolDetail(result, "修改已完成"), true
 		}
 		return "更新" + targetName + "失败", publicToolError(result), true
 	case "search_refs":
@@ -246,7 +246,8 @@ func safeToolDetail(result ToolResult, fallback string) string {
 		return publicToolError(result)
 	}
 	text := sanitizePublicText(result.Summary, 100)
-	if text == "" || localPathPattern.MatchString(text) || htmlTagPattern.MatchString(text) {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	if text == "" || normalized == "resource staged" || localPathPattern.MatchString(text) || htmlTagPattern.MatchString(text) {
 		return fallback
 	}
 	return text
@@ -321,9 +322,73 @@ func newMessageID() string {
 }
 
 func publicQuestion(runID, questionID string, args map[string]any) model.QuestionAskedPayload {
+	questions := publicQuestionFields(args)
+	if len(questions) == 0 {
+		questions = []model.QuestionField{legacyQuestionField(args, "question-1")}
+	}
+	first := questions[0]
+	prompt := first.Title
+	if prompt == "" {
+		prompt = sanitizePublicText(stringValue(args["question"]), 240)
+	}
+	return model.QuestionAskedPayload{
+		PublicEventBase: publicBase(runID), QuestionID: questionID,
+		Header: sanitizePublicText(stringValue(args["header"]), 24), Prompt: prompt,
+		Selection: "single", Options: first.Options, AllowCustom: first.AllowCustom,
+		Questions: questions,
+	}
+}
+
+func publicQuestionFields(args map[string]any) []model.QuestionField {
+	rawQuestions, _ := args["questions"].([]any)
+	questions := []model.QuestionField{}
+	seen := map[string]bool{}
+	for index, raw := range rawQuestions {
+		question, _ := raw.(map[string]any)
+		id := sanitizePublicText(stringValue(question["id"]), 64)
+		if id == "" {
+			id = fmt.Sprintf("question-%d", index+1)
+		}
+		if seen[id] {
+			id = fmt.Sprintf("%s-%d", id, index+1)
+		}
+		seen[id] = true
+		field := legacyQuestionField(question, id)
+		if field.Title == "" {
+			continue
+		}
+		questions = append(questions, field)
+	}
+	return questions
+}
+
+func legacyQuestionField(args map[string]any, fallbackID string) model.QuestionField {
+	options := publicQuestionOptions(args)
+	allowCustom, _ := args["allow_custom"].(bool)
+	if len(options) == 0 {
+		allowCustom = true
+	}
+	title := sanitizePublicText(stringValue(args["title"]), 120)
+	if title == "" {
+		title = sanitizePublicText(stringValue(args["question"]), 120)
+	}
+	description := sanitizePublicText(stringValue(args["description"]), 260)
+	if description == "" && title == "" {
+		title = sanitizePublicText(stringValue(args["prompt"]), 120)
+	}
+	return model.QuestionField{
+		ID: fallbackID, Title: title, Description: description,
+		Options: options, AllowCustom: allowCustom,
+	}
+}
+
+func publicQuestionOptions(args map[string]any) []model.QuestionOption {
 	options := []model.QuestionOption{}
 	rawOptions, _ := args["options"].([]any)
 	for index, raw := range rawOptions {
+		if index >= 3 {
+			break
+		}
 		option, _ := raw.(map[string]any)
 		label := sanitizePublicText(stringValue(option["label"]), 80)
 		if label == "" {
@@ -335,23 +400,10 @@ func publicQuestion(runID, questionID string, args map[string]any) model.Questio
 		}
 		options = append(options, model.QuestionOption{
 			ID: id, Label: label,
-			Description: sanitizePublicText(stringValue(option["description"]), 140),
+			Description: sanitizePublicText(stringValue(option["description"]), 220),
 		})
 	}
-	selection := "single"
-	if multiple, _ := args["multiple"].(bool); multiple {
-		selection = "multiple"
-	}
-	allowCustom, _ := args["allow_custom"].(bool)
-	if len(options) == 0 {
-		allowCustom = true
-	}
-	return model.QuestionAskedPayload{
-		PublicEventBase: publicBase(runID), QuestionID: questionID,
-		Header:    sanitizePublicText(stringValue(args["header"]), 24),
-		Prompt:    sanitizePublicText(stringValue(args["question"]), 240),
-		Selection: selection, Options: options, AllowCustom: allowCustom,
-	}
+	return options
 }
 
 func currentPlanStepID(plan *Plan) string {

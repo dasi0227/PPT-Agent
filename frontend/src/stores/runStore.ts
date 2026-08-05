@@ -393,7 +393,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
             if (event.event === 'question.asked') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
-              pendingQuestion = { id: event.data.question_id, prompt: event.data.prompt };
+              pendingQuestion = { id: event.data.question_id, prompt: event.data.questions?.[0]?.title ?? event.data.prompt };
               progress = null;
             } else if (event.event === 'question.answered') {
               status = prev.status === 'canceling' ? 'canceling' : 'running';

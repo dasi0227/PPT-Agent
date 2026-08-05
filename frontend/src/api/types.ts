@@ -237,9 +237,24 @@ export interface QuestionOption {
   description?: string;
 }
 
+export interface QuestionField {
+  id: string;
+  title: string;
+  description?: string;
+  options: QuestionOption[];
+  allow_custom: boolean;
+}
+
+export interface QuestionFieldAnswer {
+  question_id: string;
+  selected_option_id?: string;
+  custom_text?: string;
+}
+
 export interface QuestionAnswer {
   selected_option_ids: string[];
   custom_text: string;
+  answers?: QuestionFieldAnswer[];
 }
 
 export type RunProgressStage =
@@ -311,6 +326,7 @@ export type SSEEvent =
       selection: 'single' | 'multiple';
       options: QuestionOption[];
       allow_custom: boolean;
+      questions?: QuestionField[];
     }>
   | SSEEventBase<'question.answered', PublicEventBase & {
       question_id: string;

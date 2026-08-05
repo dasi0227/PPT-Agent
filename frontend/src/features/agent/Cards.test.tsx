@@ -131,7 +131,14 @@ describe('public timeline components', () => {
       id: 'r1:question:q1', type: 'question', runId: 'r1', questionId: 'q1',
       prompt: '选择风格', selection: 'single',
       options: [{ id: 'tech', label: '克制科技', description: '深色背景' }],
-      allowCustom: false, timestamp: 0,
+      allowCustom: false,
+      questions: [{
+        id: 'question-1', title: '选择风格',
+        options: [{ id: 'tech', label: '克制科技', description: '深色背景' }],
+        allow_custom: false,
+      }],
+      grouped: false,
+      timestamp: 0,
     };
     const { rerender } = render(<QuestionPanel item={item} />);
     fireEvent.click(screen.getByLabelText(/克制科技/));
@@ -147,7 +154,68 @@ describe('public timeline components', () => {
       answer: { selected_option_ids: ['tech'], custom_text: '' },
       displayText: '克制科技',
     }} />);
-    await waitFor(() => expect(screen.getByText('你选择了：克制科技')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('A：')).toBeInTheDocument());
+    expect(screen.getByText('克制科技')).toBeInTheDocument();
+  });
+
+  it('requires every grouped question before submitting', async () => {
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
+    const answerQuestion = vi.fn().mockResolvedValue(true);
+    useRunStore.setState({
+      answerQuestion,
+      sessions: {
+        t1: {
+          activeRunId: 'r1', status: 'waiting',
+          target: { artifact: 'presentation', level: 'deck' },
+          interaction: { intent: 'ask' }, timelineItems: [],
+          pendingQuestion: { id: 'q2', prompt: '题型' },
+          progress: null, eventSourceClose: null, plan: null,
+        },
+      },
+    });
+    const item: QuestionItem = {
+      id: 'r1:question:q2', type: 'question', runId: 'r1', questionId: 'q2',
+      prompt: '题型', selection: 'single', options: [], allowCustom: true,
+      questions: [
+        {
+          id: 'type', title: '有明确选项时，题型如何处理？',
+          options: [{ id: 'single', label: '单选题' }],
+          allow_custom: false,
+        },
+        {
+          id: 'icon', title: '如果选项可能不完整，如何允许用户补充？',
+          options: [{ id: 'msg', label: 'MessageCircleQuestion' }],
+          allow_custom: true,
+        },
+        { id: 'note', title: '还有哪些约束？', options: [], allow_custom: true },
+      ],
+      grouped: true,
+      timestamp: 0,
+    };
+    render(<QuestionPanel item={item} />);
+    const submit = screen.getByRole('button', { name: /提交回答/ });
+    expect(submit).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/单选题/));
+    fireEvent.click(screen.getByRole('button', { name: '下一个问题' }));
+    fireEvent.click(screen.getByLabelText(/自定义回答/));
+    fireEvent.change(screen.getByPlaceholderText('输入自定义回答'), { target: { value: '其他问题图标' } });
+    fireEvent.click(screen.getByRole('button', { name: '下一个问题' }));
+    fireEvent.change(screen.getByPlaceholderText('输入你的回答'), { target: { value: '保持简洁' } });
+    expect(submit).not.toBeDisabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(answerQuestion).toHaveBeenCalledWith(
+      't1', 'r1', 'q2',
+      JSON.stringify({
+        selected_option_ids: [],
+        custom_text: '',
+        answers: [
+          { question_id: 'type', selected_option_id: 'single' },
+          { question_id: 'icon', custom_text: '其他问题图标' },
+          { question_id: 'note', custom_text: '保持简洁' },
+        ],
+      }),
+    ));
   });
 
   it('renders progress as an aria-live row', () => {

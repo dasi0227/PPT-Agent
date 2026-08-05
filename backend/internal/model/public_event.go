@@ -159,6 +159,14 @@ type QuestionOption struct {
 	Description string `json:"description,omitempty"`
 }
 
+type QuestionField struct {
+	ID          string           `json:"id"`
+	Title       string           `json:"title"`
+	Description string           `json:"description,omitempty"`
+	Options     []QuestionOption `json:"options"`
+	AllowCustom bool             `json:"allow_custom"`
+}
+
 type QuestionAskedPayload struct {
 	PublicEventBase
 	QuestionID  string           `json:"question_id"`
@@ -167,11 +175,19 @@ type QuestionAskedPayload struct {
 	Selection   string           `json:"selection"`
 	Options     []QuestionOption `json:"options"`
 	AllowCustom bool             `json:"allow_custom"`
+	Questions   []QuestionField  `json:"questions,omitempty"`
+}
+
+type QuestionFieldAnswer struct {
+	QuestionID       string `json:"question_id"`
+	SelectedOptionID string `json:"selected_option_id,omitempty"`
+	CustomText       string `json:"custom_text,omitempty"`
 }
 
 type QuestionAnswer struct {
-	SelectedOptionIDs []string `json:"selected_option_ids"`
-	CustomText        string   `json:"custom_text"`
+	SelectedOptionIDs []string              `json:"selected_option_ids"`
+	CustomText        string                `json:"custom_text"`
+	Answers           []QuestionFieldAnswer `json:"answers,omitempty"`
 }
 
 type QuestionAnsweredPayload struct {
@@ -339,12 +355,21 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			}
 		}
 	case EventQuestionAsked:
-		if err := requireString(data, "question_id", "prompt", "selection"); err != nil {
+		if err := requireString(data, "question_id"); err != nil {
 			return err
 		}
 		if rawHTMLPattern.MatchString(stringValue(data["prompt"])) ||
 			rawHTMLPattern.MatchString(stringValue(data["header"])) {
 			return errors.New("question text must not contain raw HTML")
+		}
+		if questions, ok := data["questions"].([]any); ok && len(questions) > 0 {
+			if err := validateQuestionFields(questions); err != nil {
+				return err
+			}
+			break
+		}
+		if err := requireString(data, "prompt", "selection"); err != nil {
+			return err
 		}
 		if !oneOf(stringValue(data["selection"]), "single", "multiple") {
 			return errors.New("invalid question selection")
@@ -379,6 +404,9 @@ func validateQuestionOptions(data map[string]any) error {
 	if !ok {
 		return errors.New("question options are required")
 	}
+	if len(options) > 3 {
+		return errors.New("question options cannot exceed 3")
+	}
 	allowCustom, ok := data["allow_custom"].(bool)
 	if !ok {
 		return errors.New("allow_custom is required")
@@ -404,6 +432,62 @@ func validateQuestionOptions(data map[string]any) error {
 			return errors.New("question option ids must be unique")
 		}
 		seen[id] = true
+	}
+	return nil
+}
+
+func validateQuestionFields(questions []any) error {
+	seenQuestions := map[string]bool{}
+	for _, raw := range questions {
+		question, ok := raw.(map[string]any)
+		if !ok {
+			return errors.New("invalid question item")
+		}
+		if err := requireString(question, "id", "title"); err != nil {
+			return err
+		}
+		if rawHTMLPattern.MatchString(stringValue(question["title"])) ||
+			rawHTMLPattern.MatchString(stringValue(question["description"])) {
+			return errors.New("question text must not contain raw HTML")
+		}
+		id := stringValue(question["id"])
+		if seenQuestions[id] {
+			return errors.New("question ids must be unique")
+		}
+		seenQuestions[id] = true
+		allowCustom, ok := question["allow_custom"].(bool)
+		if !ok {
+			return errors.New("question allow_custom is required")
+		}
+		options, ok := question["options"].([]any)
+		if !ok {
+			return errors.New("question options are required")
+		}
+		if len(options) > 3 {
+			return errors.New("question options cannot exceed 3")
+		}
+		if len(options) == 0 && !allowCustom {
+			return errors.New("fill-in question requires allow_custom")
+		}
+		seenOptions := map[string]bool{}
+		for _, rawOption := range options {
+			option, ok := rawOption.(map[string]any)
+			if !ok {
+				return errors.New("invalid question option")
+			}
+			if err := requireString(option, "id", "label"); err != nil {
+				return err
+			}
+			if rawHTMLPattern.MatchString(stringValue(option["label"])) ||
+				rawHTMLPattern.MatchString(stringValue(option["description"])) {
+				return errors.New("question options must not contain raw HTML")
+			}
+			optionID := stringValue(option["id"])
+			if seenOptions[optionID] {
+				return errors.New("question option ids must be unique")
+			}
+			seenOptions[optionID] = true
+		}
 	}
 	return nil
 }

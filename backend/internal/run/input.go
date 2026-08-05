@@ -101,6 +101,9 @@ func validateQuestionAnswer(question model.QuestionAskedPayload, content string)
 	if err := json.Unmarshal([]byte(content), &answer); err != nil {
 		return model.QuestionAnswer{}, "", false
 	}
+	if len(question.Questions) > 0 {
+		return validateGroupedQuestionAnswer(question, answer)
+	}
 	labels := map[string]string{}
 	for _, option := range question.Options {
 		labels[option.ID] = option.Label
@@ -128,4 +131,56 @@ func validateQuestionAnswer(question model.QuestionAskedPayload, content string)
 		return model.QuestionAnswer{}, "", false
 	}
 	return answer, strings.Join(display, "；"), true
+}
+
+func validateGroupedQuestionAnswer(question model.QuestionAskedPayload, answer model.QuestionAnswer) (model.QuestionAnswer, string, bool) {
+	if len(answer.Answers) != len(question.Questions) {
+		return model.QuestionAnswer{}, "", false
+	}
+	byID := map[string]model.QuestionField{}
+	for _, item := range question.Questions {
+		byID[item.ID] = item
+	}
+	seen := map[string]bool{}
+	display := []string{}
+	for index, reply := range answer.Answers {
+		item, ok := byID[reply.QuestionID]
+		if !ok || seen[reply.QuestionID] {
+			return model.QuestionAnswer{}, "", false
+		}
+		seen[reply.QuestionID] = true
+		selected := strings.TrimSpace(reply.SelectedOptionID)
+		custom := strings.TrimSpace(reply.CustomText)
+		answer.Answers[index].SelectedOptionID = selected
+		answer.Answers[index].CustomText = custom
+		optionLabels := map[string]string{}
+		for _, option := range item.Options {
+			optionLabels[option.ID] = option.Label
+		}
+		value := ""
+		switch {
+		case len(item.Options) == 0:
+			if custom == "" {
+				return model.QuestionAnswer{}, "", false
+			}
+			value = custom
+		case selected != "":
+			if optionLabels[selected] == "" || custom != "" {
+				return model.QuestionAnswer{}, "", false
+			}
+			value = optionLabels[selected]
+		case custom != "":
+			if !item.AllowCustom {
+				return model.QuestionAnswer{}, "", false
+			}
+			value = custom
+		default:
+			return model.QuestionAnswer{}, "", false
+		}
+		display = append(display, "Q："+item.Title+"\nA："+value)
+	}
+	if len(seen) != len(question.Questions) {
+		return model.QuestionAnswer{}, "", false
+	}
+	return answer, strings.Join(display, "\n"), true
 }

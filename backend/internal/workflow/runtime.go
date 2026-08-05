@@ -148,6 +148,7 @@ Use only disclosed tools. talk, ask and plan are read-only; execute writes throu
 Re-check resource disclosure, interaction, target scope, strategy and phase on every call.
 The only business tools are read_ppt, write_ppt, edit_ppt, search_refs and render_slide.
 The only control actions are update_plan, ask_user and finish. ask_user and finish must each be the sole action in a response.
+When using ask_user, split separate decisions into atomic questions. Any question with options is single-choice; provide at most 3 model-defined options. Set allow_custom=true only when a user-defined answer is valid; otherwise omit it or set false. If no finite options are known, ask a fill-in question without options. Keep question descriptions concise and option descriptions short.
 StrategyPlan must create a concise checklist with update_plan before finish, then explain the complete plan in finish(message).
 StrategyExecute may run direct or planned. If coordination is needed, call update_plan first; Runtime then treats execution as planned.
 Plan steps in update_plan must be short UI checklist items. Put full rationale and detailed execution notes in finish(message).
@@ -770,8 +771,9 @@ func (r *Runtime) executeControl(
 			return StructuredOutcome{}, false
 		}
 		question := stringValue(call.Args["question"])
-		if question == "" {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "question is required", true))
+		questions, _ := call.Args["questions"].([]any)
+		if question == "" && len(questions) == 0 {
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "questions are required", true))
 			return StructuredOutcome{}, false
 		}
 		questionID := call.ID
@@ -795,7 +797,7 @@ func (r *Runtime) executeControl(
 		result := SuccessfulToolResult("user answered")
 		result.Data = map[string]any{
 			"selected_option_ids": answer.SelectedOptionIDs,
-			"custom_text":         answer.CustomText, "display_text": displayText,
+			"custom_text":         answer.CustomText, "answers": answer.Answers, "display_text": displayText,
 		}
 		r.appendControlObservation(state, call, assistantText, result)
 		return StructuredOutcome{}, false
@@ -1317,11 +1319,20 @@ func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction 
 	allowAsk := interaction == model.IntentAsk || interaction == model.IntentPlan || (interaction == model.IntentExecute && phase != PhaseCompletionCheck)
 	if allowAsk && phase != PhaseWaitingInput && phase != PhaseCommitting && phase != PhaseTerminal {
 		out = append(out, ToolSchema{
-			Name: "ask_user", Description: "Ask one blocking question and pause this same loop until the user answers.",
-			Parameters: objectSchema([]string{"question"}, map[string]any{
-				"question": map[string]any{"type": "string"},
-				"options":  map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-				"multiple": map[string]any{"type": "boolean"}, "allow_custom": map[string]any{"type": "boolean"},
+			Name: "ask_user", Description: "Ask one blocking group of atomic user questions and pause this same loop until the user answers. Use questions[] for all new calls. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
+			Parameters: objectSchema([]string{"questions"}, map[string]any{
+				"questions": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"id", "title"}, map[string]any{
+					"id":          map[string]any{"type": "string"},
+					"title":       map[string]any{"type": "string"},
+					"description": map[string]any{"type": "string"},
+					"options": map[string]any{"type": "array", "maxItems": 3, "items": objectSchema([]string{"id", "label"}, map[string]any{
+						"id": map[string]any{"type": "string"}, "label": map[string]any{"type": "string"}, "description": map[string]any{"type": "string"},
+					})},
+					"allow_custom": map[string]any{"type": "boolean"},
+				})},
+				"question":     map[string]any{"type": "string", "description": "Legacy single-question fallback. Prefer questions[]."},
+				"options":      map[string]any{"type": "array", "maxItems": 3, "items": map[string]any{"type": "object"}},
+				"allow_custom": map[string]any{"type": "boolean"},
 			}),
 		})
 	}
