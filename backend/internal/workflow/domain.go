@@ -194,15 +194,16 @@ type CommitContext struct {
 type CommitMetadata func(context.Context, CommitContext) error
 
 const (
-	CodeCanceled              = "RUN_CANCELED"
-	CodeBudgetExceeded        = "RUNTIME_BUDGET_EXCEEDED"
-	CodeConsecutiveErrors     = "CONSECUTIVE_TOOL_ERRORS"
-	CodeDependencyFailed      = "DEPENDENCY_FAILED"
-	CodeGateRejectedRepeated  = "COMPLETION_REJECTED_REPEATEDLY"
-	CodeCommitFailed          = "COMMIT_FAILED"
-	CodeAgentFailed           = "AGENT_FAILED"
-	CodeInvalidControlCall    = "INVALID_CONTROL_CALL"
-	CodeScopeExpansion        = "SCOPE_EXPANSION_REQUIRED"
-	CodeRevisionConflict      = "REVISION_CONFLICT"
-	CodeCompletionGateBlocked = "COMPLETION_GATE_BLOCKED"
+	CodeCanceled                = "RUN_CANCELED"
+	CodeBudgetExceeded          = "RUNTIME_BUDGET_EXCEEDED"
+	CodeConsecutiveErrors       = "CONSECUTIVE_TOOL_ERRORS"
+	CodeDependencyFailed        = "DEPENDENCY_FAILED"
+	CodeGateRejectedRepeated    = "COMPLETION_REJECTED_REPEATEDLY"
+	CodeCommitFailed            = "COMMIT_FAILED"
+	CodeAgentFailed             = "AGENT_FAILED"
+	CodeInvalidControlCall      = "INVALID_CONTROL_CALL"
+	CodeScopeExpansion          = "SCOPE_EXPANSION_REQUIRED"
+	CodeRevisionConflict        = "REVISION_CONFLICT"
+	CodeCompletionGateBlocked   = "COMPLETION_GATE_BLOCKED"
+	CodeFinishContractViolation = "FINISH_CONTRACT_VIOLATION"
 )

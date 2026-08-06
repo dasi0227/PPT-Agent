@@ -39,18 +39,20 @@ func (r CompletionResult) RejectionKey() string {
 }
 
 type CompletionContext struct {
-	Strategy    ExecutionStrategy
-	ExecuteMode ExecuteMode
-	FinishPhase RuntimePhase
-	ActiveTools int
-	Issues      []Issue
-	WorkScope   Scope
-	Session     *RunSession
-	Changes     ChangeSet
-	Evidence    *EvidenceLedger
-	Context     contextengine.ContextPack
-	Plan        *Plan
-	Canceled    bool
+	Strategy      ExecutionStrategy
+	ExecuteMode   ExecuteMode
+	FinishPhase   RuntimePhase
+	ActiveTools   int
+	Issues        []Issue
+	WorkScope     Scope
+	Session       *RunSession
+	Changes       ChangeSet
+	Evidence      *EvidenceLedger
+	Context       contextengine.ContextPack
+	Plan          *Plan
+	Requirements  *RequirementLedger
+	FinishMessage string
+	Canceled      bool
 }
 
 type CompletionPolicy interface {
@@ -227,6 +229,44 @@ func isPPTDomainChange(change ArtifactChange) bool {
 	return source == "write_ppt" || source == "edit_ppt"
 }
 
+type SemanticCompletionPolicy struct{}
+
+func (SemanticCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
+	if ctx.Strategy != StrategyExecute {
+		return nil
+	}
+	issues := []CompletionIssue{}
+	if ctx.Context.WorkSpec.Interaction.Intent == model.IntentExecute && ctx.Changes.Count() == 0 {
+		issues = append(issues, CompletionIssue{
+			Code:            "REQUIREMENT_UNADDRESSED",
+			Summary:         "execute intent has no changed targets; the user request has not been materially addressed",
+			RequiredActions: semanticRequiredActions(ctx),
+		})
+	}
+	for _, item := range ctx.Requirements.BlockingItems() {
+		issues = append(issues, CompletionIssue{
+			Code:            "REQUIREMENT_UNADDRESSED",
+			Summary:         "requirement is still pending: " + item.Text,
+			RequiredActions: semanticRequiredActions(ctx),
+		})
+	}
+	return dedupeCompletionIssues(issues)
+}
+
+func semanticRequiredActions(ctx CompletionContext) []RequiredAction {
+	target := Resource{Type: "deck", Part: "outline"}
+	if ctx.WorkScope.Target.Level == model.TargetSlide {
+		part := "spec"
+		if ctx.WorkScope.Target.Artifact == model.ArtifactPresentation {
+			part = "html"
+		}
+		target = Resource{Type: "slide", SlideID: ctx.WorkScope.Target.SlideID, Part: part}
+	} else if ctx.WorkScope.Target.Artifact == model.ArtifactPresentation {
+		target = Resource{Type: "deck", Part: "design"}
+	}
+	return []RequiredAction{{Tool: "write_ppt", Target: target}}
+}
+
 func dedupeCompletionIssues(values []CompletionIssue) []CompletionIssue {
 	out := []CompletionIssue{}
 	seen := map[string]bool{}
@@ -246,7 +286,7 @@ type CompletionGate struct {
 }
 
 func NewCompletionGate() CompletionGate {
-	return CompletionGate{Policies: []CompletionPolicy{EvidenceCompletionPolicy{}}}
+	return CompletionGate{Policies: []CompletionPolicy{SemanticCompletionPolicy{}, EvidenceCompletionPolicy{}}}
 }
 
 func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {

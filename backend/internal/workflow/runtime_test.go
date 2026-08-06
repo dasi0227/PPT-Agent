@@ -492,7 +492,14 @@ func TestContextCompactionDropsOnlySupersededSlideImages(t *testing.T) {
 func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryStrategy(t *testing.T) {
 	for _, strategy := range []ExecutionStrategy{StrategyTalk, StrategyAsk, StrategyPlan, StrategyExecute} {
 		prompt := runtimeSystemPrompt(PhaseExecuting, strategy, "{}")
-		if !strings.Contains(prompt, "All normal successful exits require finish(message=...). Ordinary assistant text never completes a run.") {
+		if !strings.Contains(prompt, `<prompt_module id="core_runtime_policy" version="`) ||
+			!strings.Contains(prompt, `<prompt_module id="finish_contract" version="`) ||
+			!strings.Contains(prompt, `<prompt_module id="ppt_quality_rubric" version="`) ||
+			!strings.Contains(prompt, `path="core/core_runtime_policy.md"`) ||
+			!strings.Contains(prompt, `hash="`) {
+			t.Fatalf("%s prompt is not assembled from versioned modules: %q", strategy, prompt)
+		}
+		if !strings.Contains(prompt, "Ordinary assistant text is never a completion signal. Every successful run must end with finish(message=...).") {
 			t.Fatalf("%s prompt does not require explicit finish: %q", strategy, prompt)
 		}
 	}
@@ -513,21 +520,21 @@ func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryStrategy(t *te
 		t.Fatalf("finish schema must expose only message: %+v", finishParameters)
 	}
 	planPrompt := runtimeSystemPrompt(PhasePlanning, StrategyPlan, "{}")
-	if !strings.Contains(planPrompt, "StrategyPlan is read-only planning") ||
-		!strings.Contains(planPrompt, "use finish(message) to deliver the complete user-facing plan") {
+	if !strings.Contains(planPrompt, "StrategyPlan is a read-only planning strategy") ||
+		!strings.Contains(planPrompt, "Put the complete user-facing plan in finish(message)") {
 		t.Fatalf("plan prompt missing plan-mode guidance: %q", planPrompt)
 	}
 }
 
 func TestRuntimePromptAgentContractsDoNotRequireManagedFields(t *testing.T) {
 	prompt := runtimeSystemPrompt(PhaseExecuting, StrategyExecute, "{}")
-	prefix := "authoritative schemas: "
+	prefix := "Authoritative schema contracts:\n"
 	start := strings.Index(prompt, prefix)
 	if start < 0 {
 		t.Fatal("compiled contracts are missing from the system prompt")
 	}
 	start += len(prefix)
-	end := strings.Index(prompt[start:], "\n</current_resource_contracts>")
+	end := strings.Index(prompt[start:], "\n</prompt_module>")
 	if end < 0 {
 		t.Fatal("compiled contract boundary is missing")
 	}
@@ -551,6 +558,102 @@ func TestRuntimePromptAgentContractsDoNotRequireManagedFields(t *testing.T) {
 				t.Errorf("%s prompt contract leaks runtime-managed field %q: %+v", name, field, contract)
 			}
 		}
+	}
+}
+
+func TestRuntimePromptUsesModeSpecificModulesAndContextBriefing(t *testing.T) {
+	pack := testPack(model.IntentExecute, model.ArtifactPresentation, model.TargetSlide, false, "优化当前页视觉层级")
+	direct := runtimeSystemPromptForRequest(AgentRequest{
+		Strategy: StrategyExecute, ExecuteMode: ExecuteModeDirect, Phase: PhaseExecuting,
+		Context: pack, ContextBriefing: "Objective: optimize visual hierarchy",
+	}, "{}")
+	if !strings.Contains(direct, `id="mode_policy_execute_direct"`) ||
+		!strings.Contains(direct, `id="playbook_slide_presentation_edit"`) ||
+		!strings.Contains(direct, `path="playbooks/slide_presentation_edit.md"`) ||
+		!strings.Contains(direct, "single-slide presentation edit") ||
+		!strings.Contains(direct, "Objective: optimize visual hierarchy") {
+		t.Fatalf("direct prompt missing cognitive modules:\n%s", direct)
+	}
+	planned := runtimeSystemPromptForRequest(AgentRequest{
+		Strategy: StrategyExecute, ExecuteMode: ExecuteModePlanned, Phase: PhasePlanning,
+		Context: pack,
+	}, "{}")
+	if !strings.Contains(planned, `id="mode_policy_execute_planned"`) ||
+		!strings.Contains(planned, "When update_plan is disclosed and no valid plan exists") {
+		t.Fatalf("planned prompt missing planned policy:\n%s", planned)
+	}
+}
+
+func TestAgentRequestCarriesContextBriefingAndRequirementLedger(t *testing.T) {
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "briefing", ProjectDir: t.TempDir(),
+		Context:     testPack(model.IntentTalk, model.ArtifactSpec, model.TargetSlide, false, "分析当前页结构"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+	})
+	if outcome.Status != StatusCompleted || len(agent.requests) != 1 {
+		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
+	}
+	req := agent.requests[0]
+	if req.Requirements == nil || len(req.Requirements.Items) == 0 ||
+		!strings.Contains(req.ContextBriefing, "Objective: 分析当前页结构") ||
+		!strings.Contains(req.ContextBriefing, "Requirement ledger:") ||
+		!strings.Contains(req.ContextBriefing, "Working set:") {
+		t.Fatalf("request missing cognitive context: briefing=%q requirements=%+v", req.ContextBriefing, req.Requirements)
+	}
+}
+
+func TestFinishContractRejectsSubstantiveAssistantDelivery(t *testing.T) {
+	longDelivery := strings.Join([]string{
+		"## 完整计划",
+		"",
+		"### 步骤",
+		"- 读取当前上下文",
+		"- 制定执行方案",
+		"- 输出风险和下一步",
+		"",
+		"### 风险",
+		"- 需要避免普通 assistant text 承载最终交付。",
+		"- finish.message 必须包含完整 markdown。",
+		"",
+		"### 建议",
+		"- 重新通过 finish(message) 提交完整内容。",
+	}, "\n")
+	agent := &scriptedAgent{responses: []AgentResponse{
+		{Text: longDelivery, ToolCalls: []llm.ToolCall{{ID: "bad", Name: "finish", Args: map[string]any{"message": "done"}}}},
+		{ToolCalls: []llm.ToolCall{{ID: "good", Name: "finish", Args: map[string]any{"message": longDelivery}}}},
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "strict-finish", ProjectDir: t.TempDir(),
+		Context:     testPack(model.IntentPlan, model.ArtifactSpec, model.TargetDeck, false, "生成计划"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+	})
+	if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
+		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
+	}
+	if len(agent.requests[1].Messages) < 2 ||
+		!strings.Contains(agent.requests[1].Messages[1].Text(), CodeFinishContractViolation) {
+		t.Fatalf("finish contract violation was not returned to the loop: %+v", agent.requests[1].Messages)
+	}
+}
+
+func TestSemanticCompletionRejectsExecuteFinishWithoutChanges(t *testing.T) {
+	budget := DefaultRuntimeBudget()
+	budget.MaxIdenticalGateRejections = 2
+	agent := &scriptedAgent{responses: []AgentResponse{
+		finishCall("first"), finishCall("second"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "semantic-no-change", ProjectDir: t.TempDir(),
+		Context:     testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Budget:      budget,
+	})
+	if outcome.Status != StatusFailed || outcome.Code != CodeGateRejectedRepeated {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if len(agent.requests) < 2 || !strings.Contains(agent.requests[1].Messages[1].Text(), "REQUIREMENT_UNADDRESSED") {
+		t.Fatalf("semantic rejection missing from context: %+v", agent.requests)
 	}
 }
 

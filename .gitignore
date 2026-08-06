@@ -20,6 +20,8 @@
 # 环境变量
 .env
 .env.*
+!.env.example
+!**/.env.example
 
 # 本地 LLM Profile（可能包含明文 Key）
 config.yaml

@@ -15,7 +15,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 type EventEmitter interface {
@@ -55,19 +54,20 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
-	RunID              string            `json:"run_id"`
-	LoopID             string            `json:"loop_id"`
-	Strategy           ExecutionStrategy `json:"strategy"`
-	ExecuteMode        ExecuteMode       `json:"execute_mode,omitempty"`
-	Phase              RuntimePhase      `json:"phase"`
-	ResumePhase        RuntimePhase      `json:"resume_phase,omitempty"`
-	Plan               *Plan             `json:"plan,omitempty"`
-	Changes            ChangeSet         `json:"changes"`
-	Evidence           []Evidence        `json:"evidence"`
-	Turns              int               `json:"turns"`
-	ToolCalls          int               `json:"tool_calls"`
-	WaitingQuestionID  string            `json:"waiting_question_id,omitempty"`
-	CompletionFailures int               `json:"completion_failures"`
+	RunID              string             `json:"run_id"`
+	LoopID             string             `json:"loop_id"`
+	Strategy           ExecutionStrategy  `json:"strategy"`
+	ExecuteMode        ExecuteMode        `json:"execute_mode,omitempty"`
+	Phase              RuntimePhase       `json:"phase"`
+	ResumePhase        RuntimePhase       `json:"resume_phase,omitempty"`
+	Plan               *Plan              `json:"plan,omitempty"`
+	Requirements       *RequirementLedger `json:"requirements,omitempty"`
+	Changes            ChangeSet          `json:"changes"`
+	Evidence           []Evidence         `json:"evidence"`
+	Turns              int                `json:"turns"`
+	ToolCalls          int                `json:"tool_calls"`
+	WaitingQuestionID  string             `json:"waiting_question_id,omitempty"`
+	CompletionFailures int                `json:"completion_failures"`
 }
 
 type AgentRequest struct {
@@ -80,6 +80,8 @@ type AgentRequest struct {
 	Plan            *Plan
 	Changes         ChangeSet
 	Evidence        []Evidence
+	Requirements    *RequirementLedger
+	ContextBriefing string
 	Messages        []llm.Message
 	Tools           []ToolSchema
 	ImageResolver   llm.ImageRefResolver
@@ -108,10 +110,10 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	}
 	runtimeState, _ := json.Marshal(map[string]any{
 		"strategy": req.Strategy, "execute_mode": req.ExecuteMode, "phase": req.Phase, "plan": req.Plan,
-		"changes": req.Changes, "evidence": req.Evidence,
+		"changes": req.Changes, "evidence": req.Evidence, "requirements": req.Requirements,
 	})
 	system, user := contextengine.CompileForRunner(&req.Context,
-		runtimeSystemPrompt(req.Phase, req.Strategy, string(runtimeState)),
+		runtimeSystemPromptForRequest(req, string(runtimeState)),
 		req.Context.WorkSpec.Instruction)
 	messages := append([]llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(system)},
@@ -132,54 +134,6 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		ToolCalls: response.ToolCalls, Text: response.Text(),
 		Continuation: response.Continuation, Usage: response.Usage,
 	}, nil
-}
-
-func runtimeSystemPrompt(phase RuntimePhase, strategy ExecutionStrategy, state string) string {
-	contracts := map[string]any{}
-	for _, name := range []string{pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName} {
-		if contract, err := pptschema.AgentContract(name); err == nil {
-			contracts[name] = contract
-		}
-	}
-	contractJSON, _ := json.Marshal(contracts)
-	return fmt.Sprintf(`<runtime_policy>
-You are the single continuous ReAct agent for this HTML PPT run. Strategy=%s Phase=%s.
-Use only disclosed tools. talk, ask and plan are read-only; execute writes through the active run session.
-Re-check resource disclosure, interaction, target scope, strategy and phase on every call.
-The only business tools are read_ppt, write_ppt, edit_ppt, search_refs and render_slide.
-The only control actions are update_plan, ask_user and finish. ask_user and finish must each be the sole action in a response.
-When using ask_user, split separate decisions into atomic questions. Any question with options is single-choice; provide at most 3 model-defined options. Set allow_custom=true only when a user-defined answer is valid; otherwise omit it or set false. If no finite options are known, ask a fill-in question without options. Keep question descriptions concise and option descriptions short.
-StrategyPlan is read-only planning. Do not call update_plan, do not claim files or resources were created or modified, and use finish(message) to deliver the complete user-facing plan.
-StrategyExecute may run direct or planned. If coordination is needed, call update_plan first; Runtime then treats execution as planned.
-Plan steps in update_plan are only for StrategyExecute planned execution and must be short UI checklist items. Put full rationale and detailed execution notes in finish(message).
-A dynamic checklist is not a workflow DAG or a separate verification stage.
-All normal successful exits require finish(message=...). Ordinary assistant text never completes a run.
-</runtime_policy>
-
-<ppt_business_policy>
-Outline owns deck goal, audience, narrative sections and stable slide order.
-Design owns the deck-wide 16:9 visual system: 1600x900 canvas, palette, typography, spacing, grid, density and motion.
-Each Slide Spec owns one page's semantic role, title, key message, content hierarchy, visual intent and speaker notes.
-Each Slide HTML is the final page implementation. It must use a 1600x900 .slide-stage, accessible semantic HTML, useful alt text, CJK-safe fonts and project-local/data/blob resources only.
-Every Slide HTML must link ../../common/tokens.css and ../../common/base.css. Runtime derives tokens.css from Design. Available shared tokens are --color-bg, --color-fg, --color-primary, --color-accent, --color-muted, --font-sans, --font-serif, --font-mono, --text-title, --text-h1, --text-body, --text-caption, --space-1, --space-2, --space-3, --space-4, --space-6, --space-8, --radius-sm, --radius-md, --radius-lg, --shadow-card, --shadow-pop, --stage-w and --stage-h.
-For an empty complete Presentation, establish Outline, then Design, then every Slide Spec in outline order, then every Slide HTML. Maintain a coherent cross-slide narrative, controlled information density, strong hierarchy and visual consistency.
-Use read_ppt when exact saved text is needed. Use edit_ppt only for small uniquely anchored replacements. Use write_ppt for full creation or broad reconstruction.
-After every latest HTML or design-affecting change, render affected pages, observe diagnostics, repair failures in the same ReAct loop, and render again.
-Independent reads/searches and renders for different pages may be returned together. Writes must respect resource dependency order.
-</ppt_business_policy>
-
-<current_resource_contracts>
-Resources are exactly deck:outline, deck:design, slide:&lt;slide_id&gt;:spec and slide:&lt;slide_id&gt;:html.
-Never pass disk paths, project paths, runtime paths, database IDs or storage artifact kinds.
-read_ppt(resource) returns the complete saved JSON or HTML string.
-write_ppt(resource, content) always receives content as a string. Runtime owns schema_version, revision, project_id, slide_id, source revisions and timestamps.
-edit_ppt(resource, edits) uses ordered objects with old_text and new_text. Each old_text must match exactly once.
-Domain contracts generated from the authoritative schemas: %s
-</current_resource_contracts>
-
-<current_runtime_state>
-%s
-</current_runtime_state>`, strategy, phase, contractJSON, state)
 }
 
 const noToolCallGuidance = "Ordinary assistant text is not a completion signal. If the task is complete, call finish(message=...) with the final response. If the task is not complete, call one of the currently disclosed tools to continue."
@@ -244,6 +198,7 @@ type runtimeState struct {
 	lastMilestoneRevision int
 	trace                 TraceRecorder
 	lifecycle             LifecycleObserver
+	requirements          *RequirementLedger
 }
 
 func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome {
@@ -261,7 +216,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		executeMode: executeMode,
 		decision:    decision, scope: ScopeFromSpec(input.Context.WorkSpec), ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, started: time.Now(), budget: input.Budget,
-		trace: input.Trace, lifecycle: input.Lifecycle,
+		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.WorkSpec),
 	}
 	if r.Agent == nil {
 		return r.fail(input, state, CodeAgentFailed, errors.New("ReAct agent is required"))
@@ -334,10 +289,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		response, err := r.Agent.Next(ctx, AgentRequest{
 			RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, ExecuteMode: state.executeMode, Phase: state.phase,
 			Context: input.Context, Plan: state.plan, Changes: state.changeSet(),
-			Evidence: state.ledger.Entries(state.changeSet()), Messages: append([]llm.Message{}, state.messages...),
-			Tools:         schemas,
-			ImageResolver: input.ImageResolver,
-			Continuation:  state.continuation,
+			Evidence: state.ledger.Entries(state.changeSet()), Requirements: state.requirements,
+			ContextBriefing: BuildContextBriefing(input.Context, state),
+			Messages:        append([]llm.Message{}, state.messages...),
+			Tools:           schemas,
+			ImageResolver:   input.ImageResolver,
+			Continuation:    state.continuation,
 			OnProviderRetry: func(attempt int) {
 				r.emitProgress(input.Emitter, state, "thinking", fmt.Sprintf("模型服务暂时不可用，正在自动重试（%d）", attempt), nil)
 			},
@@ -401,6 +358,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
 		upgrade := false
 		recordToolFailures(state, results)
+		if state.requirements != nil {
+			state.requirements.ObserveToolResults(results)
+		}
 		for _, result := range results {
 			upgrade = upgrade || result.Code == CodeScopeExpansion
 		}
@@ -721,7 +681,7 @@ func (r *Runtime) executeControl(
 ) (StructuredOutcome, bool) {
 	switch call.Name {
 	case "update_plan":
-		if (state.strategy != StrategyPlan && state.strategy != StrategyExecute) ||
+		if state.strategy != StrategyExecute ||
 			(state.phase != PhasePlanning && state.phase != PhaseExecuting) {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "update_plan is not allowed now", false))
 			return StructuredOutcome{}, false
@@ -818,6 +778,10 @@ func (r *Runtime) finishCandidate(
 	assistantText string,
 	message string,
 ) (StructuredOutcome, bool) {
+	if violation := finishContractViolation(assistantText, message); violation != "" {
+		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeFinishContractViolation, violation, true))
+		return StructuredOutcome{}, false
+	}
 	finishPhase := state.phase
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
 	r.emitProgress(input.Emitter, state, "finalizing", "正在完成最终检查", nil)
@@ -825,7 +789,8 @@ func (r *Runtime) finishCandidate(
 	result := r.Gate.Check(CompletionContext{
 		Strategy: state.strategy, ExecuteMode: state.executeMode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
 		Issues: state.issues, WorkScope: state.scope, Session: state.tx, Changes: changes,
-		Evidence: state.ledger, Context: input.Context, Plan: state.plan, Canceled: ctx.Err() != nil,
+		Evidence: state.ledger, Context: input.Context, Plan: state.plan,
+		Requirements: state.requirements, FinishMessage: message, Canceled: ctx.Err() != nil,
 	})
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{
 		"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,
@@ -1033,7 +998,7 @@ func (state *runtimeState) changeSet() ChangeSet {
 func (state *runtimeState) checkpoint(questionID string) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
 		RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, Phase: state.phase,
-		ExecuteMode: state.executeMode, ResumePhase: state.resumePhase, Plan: state.plan, Changes: state.changeSet(),
+		ExecuteMode: state.executeMode, ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
 		WaitingQuestionID: questionID, CompletionFailures: state.gateCount,
 	}
@@ -1192,6 +1157,47 @@ func (r *Runtime) appendControlObservation(
 	result ToolResult,
 ) {
 	state.messages = appendToolObservation(state.messages, call, assistantText, result)
+}
+
+func finishContractViolation(assistantText, message string) string {
+	assistant := strings.TrimSpace(assistantText)
+	final := strings.TrimSpace(message)
+	if final == "" {
+		return "finish.message is required and must contain the complete final user-facing answer"
+	}
+	if assistant == "" {
+		return ""
+	}
+	assistantRunes := len([]rune(assistant))
+	finalRunes := len([]rune(final))
+	if assistantRunes < 120 {
+		return ""
+	}
+	if finalRunes*2 < assistantRunes {
+		return "substantive final content appears in ordinary assistant text; move the complete delivery into finish.message"
+	}
+	if looksLikeFinalDelivery(assistant) && !looksLikeFinalDelivery(final) {
+		return "markdown/table/list final delivery appears outside finish.message; resubmit finish with the complete markdown in message"
+	}
+	return ""
+}
+
+func looksLikeFinalDelivery(value string) bool {
+	lines := strings.Split(value, "\n")
+	signals := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") ||
+			strings.HasPrefix(trimmed, "- ") ||
+			strings.HasPrefix(trimmed, "|") ||
+			strings.HasPrefix(trimmed, "1.") ||
+			strings.Contains(trimmed, "总结") ||
+			strings.Contains(trimmed, "计划") ||
+			strings.Contains(trimmed, "建议") {
+			signals++
+		}
+	}
+	return signals >= 2
 }
 
 func appendToolObservation(
