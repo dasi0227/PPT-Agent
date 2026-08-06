@@ -44,9 +44,29 @@ function uniqueTargets(targets: PublicTarget[]): PublicTarget[] {
   return out;
 }
 
+function CopyReplyButton({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const copyReply = async () => {
+    await navigator.clipboard?.writeText(text);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => void copyReply()}
+      className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-md text-text-400 hover:bg-panel-muted hover:text-text-900"
+      aria-label="复制回复"
+      title={copied ? '已复制' : '复制回复'}
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
 function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
   const [expanded, setExpanded] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
   const slides = useProjectStore((state) => state.activeProjectId ? state.slidesByProjectId[state.activeProjectId] ?? [] : []);
   const setCurrentPage = useDeckStore((state) => state.setCurrentPage);
   const setGlobalView = useDeckStore((state) => state.setGlobalView);
@@ -62,16 +82,6 @@ function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
       return;
     }
     setGlobalView('outline');
-  };
-
-  const copySummary = async () => {
-    const text = [
-      summaryText(changes),
-      ...changes.map((target) => `${targetLabel(target)} +${target.insertions ?? 0} -${target.deletions ?? 0}`),
-    ].join('\n');
-    await navigator.clipboard?.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
   };
 
   return (
@@ -141,17 +151,6 @@ function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
               </span>
             </div>
           ))}
-          <div className="flex items-center justify-start px-3 py-2">
-            <button
-              type="button"
-              onClick={() => void copySummary()}
-              className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-text-400 hover:bg-panel-muted hover:text-text-900"
-              aria-label="复制变更汇总"
-            >
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
-              {copied ? '已复制' : '复制'}
-            </button>
-          </div>
         </div>
       )}
     </section>
@@ -163,6 +162,7 @@ export const FinalMessage: React.FC<{ item: FinalMessageItem }> = ({ item }) => 
     <article className="pb-4 pt-2 text-sm leading-[1.65] text-text-900">
       <MarkdownMessage content={item.text} />
       {item.affectedTargets.length > 0 && <FinalChangeSummary targets={item.affectedTargets} />}
+      <CopyReplyButton text={item.text} />
     </article>
   );
 };

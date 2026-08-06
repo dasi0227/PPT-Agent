@@ -32,7 +32,7 @@ const runSummaryLabel = {
   failed: '执行错误',
 } as const;
 
-function CopyInlineButton({ text, label = '复制' }: { text: string; label?: string }) {
+function CopyIconButton({ text, label = '复制' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     await navigator.clipboard?.writeText(text);
@@ -43,11 +43,11 @@ function CopyInlineButton({ text, label = '复制' }: { text: string; label?: st
     <button
       type="button"
       onClick={() => void copy()}
-      className="mt-1 inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-text-400 hover:bg-panel-muted hover:text-text-900"
+      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-400 hover:bg-panel-muted hover:text-text-900"
       aria-label={label}
+      title={copied ? '已复制' : label}
     >
       {copied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
-      {copied ? '已复制' : '复制'}
     </button>
   );
 }
@@ -118,25 +118,27 @@ export const Timeline: React.FC = () => {
       <React.Fragment key={item.id}>
         {item.type === 'user_turn' && (
           <div className="flex justify-end">
-            <div className="max-w-[88%] rounded-[10px] border border-border bg-panel-muted px-3 py-2">
-              {item.target && (
-                <div className="mb-1 text-[10px] font-medium text-text-400">
-                  {targetLabel(item.target.artifact as 'spec' | 'presentation', item.target.level as 'slide' | 'deck')}
-                </div>
-              )}
-              <MarkdownMessage content={item.text} />
-              <CopyInlineButton text={item.text} label="复制用户消息" />
-              {item.deliveryStatus && (
-                <div className={`mt-1 text-[10px] ${
-                  item.deliveryStatus === 'rejected' ? 'text-danger' : 'text-text-400'
-                }`}>
-                  {item.deliveryStatus === 'sending'
-                    ? '发送中'
-                    : item.deliveryStatus === 'accepted'
-                      ? '已接收'
-                      : '未能加入当前任务'}
-                </div>
-              )}
+            <div className="flex max-w-[88%] flex-col items-start">
+              <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
+                {item.target && (
+                  <div className="mb-1 text-[10px] font-medium text-text-400">
+                    {targetLabel(item.target.artifact as 'spec' | 'presentation', item.target.level as 'slide' | 'deck')}
+                  </div>
+                )}
+                <MarkdownMessage content={item.text} />
+                {item.deliveryStatus && (
+                  <div className={`mt-1 text-[10px] ${
+                    item.deliveryStatus === 'rejected' ? 'text-danger' : 'text-text-400'
+                  }`}>
+                    {item.deliveryStatus === 'sending'
+                      ? '发送中'
+                      : item.deliveryStatus === 'accepted'
+                        ? '已接收'
+                        : '未能加入当前任务'}
+                  </div>
+                )}
+              </div>
+              <CopyIconButton text={item.text} label="复制用户消息" />
             </div>
           </div>
         )}
