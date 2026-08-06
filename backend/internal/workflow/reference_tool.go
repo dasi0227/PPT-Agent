@@ -3,7 +3,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -53,24 +52,32 @@ func (t referenceSearchTool) Execute(_ context.Context, input DomainToolInput) T
 	if err != nil {
 		return failedToolResult(CodeModelInvalid, err.Error(), false)
 	}
-	candidates := t.candidates(query, kinds)
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].score == candidates[j].score {
-			return candidates[i].refID < candidates[j].refID
+	kindList := make([]string, 0, len(kinds))
+	for kind, enabled := range kinds {
+		if enabled {
+			kindList = append(kindList, normalizeRetrievalKind(kind)...)
 		}
-		return candidates[i].score > candidates[j].score
-	})
-	if len(candidates) > limit {
-		candidates = candidates[:limit]
 	}
-	results := make([]map[string]any, 0, len(candidates))
+	index := NewContextIndexFromPack(t.pack, input.Scope, HashEmbeddingProvider{})
+	retrieval, err := (HybridContextRetriever{
+		Index: index, Embedder: HashEmbeddingProvider{}, Scope: input.Scope,
+	}).Retrieve(context.Background(), RetrievalQuery{
+		RunID: input.RunID, WorkSpec: input.Context.WorkSpec, LatestIssues: []Issue{},
+		Phase: input.Phase, Strategy: input.Strategy, QueryText: query,
+		Kinds: kindList, Limit: limit, DetailBudget: 4000,
+	})
+	if err != nil {
+		return failedToolResult(CodeContextBudget, err.Error(), true)
+	}
+	results := make([]map[string]any, 0, len(retrieval.Results))
 	estimated := 0
-	for _, item := range candidates {
-		estimated += len([]rune(item.snippet))/4 + 30
+	for _, item := range retrieval.Results {
+		estimated += item.EstimatedTokens
 		results = append(results, map[string]any{
-			"ref_id": item.refID, "kind": item.kind, "title": item.title,
-			"source": item.source, "snippet": item.snippet, "revision": item.revision,
-			"hash": item.hash, "detail_available": item.detail,
+			"ref_id": item.RefID, "kind": item.Kind, "source": item.Source,
+			"snippet": item.Snippet, "revision": item.Revision, "hash": item.Hash,
+			"detail_available": item.DetailAvailable, "score": item.Score,
+			"selection_reason": item.SelectionReason, "freshness": item.Freshness,
 		})
 	}
 	remaining := manifest.BudgetTokens - manifest.EstimatedTokens
@@ -83,9 +90,28 @@ func (t referenceSearchTool) Execute(_ context.Context, input DomainToolInput) T
 	result := SuccessfulToolResult(fmt.Sprintf("found %d authorized references", len(results)))
 	result.Data = map[string]any{
 		"query": query, "results": results, "estimated_tokens": estimated,
-		"remaining_budget": remaining,
+		"remaining_budget": remaining, "context_index_ref": retrieval.IndexRef,
 	}
 	return result
+}
+
+func normalizeRetrievalKind(kind string) []string {
+	switch kind {
+	case "reference":
+		return []string{"slide_html"}
+	case "memory":
+		return []string{"memory"}
+	case "history":
+		return []string{"history"}
+	case "project":
+		return []string{
+			string(contextengine.SegmentOutline), string(contextengine.SegmentTarget),
+			string(contextengine.SegmentRelated), string(contextengine.SegmentDesign),
+			string(contextengine.SegmentSlideHTML), string(contextengine.SegmentAssets),
+		}
+	default:
+		return nil
+	}
 }
 
 func searchKinds(value any) (map[string]bool, error) {

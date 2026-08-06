@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>最终汇总 · 横向变更列表</title>
+<style>
+  :root {
+    --ink: #17202B;
+    --muted: #5F6B7A;
+    --subtle: #95A0AE;
+    --border: #D5DBE3;
+    --panel: #F8F9FB;
+    --surface: #FFFFFF;
+    --success: #10B981;
+    --danger: #C84953;
+    --accent: #7C3AED;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 36px 28px 64px;
+    font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+    background: #E9EDF2;
+    color: var(--ink);
+  }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    margin: 0 0 6px;
+    font-size: 24px;
+    letter-spacing: -0.02em;
+  }
+
+  .lead {
+    margin: 0 0 24px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .panel {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: 0 12px 32px rgba(51, 65, 85, 0.12);
+  }
+
+  .summary-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 58px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    padding: 12px 16px;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .doc-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: var(--success);
+  }
+
+  .doc-icon svg,
+  .change-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 1.8;
+  }
+
+  .summary-title {
+    min-width: 0;
+    font-size: 18px;
+    font-weight: 680;
+  }
+
+  .delta {
+    margin-left: auto;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 13px;
+  }
+
+  .delta .plus { color: var(--success); }
+  .delta .minus { color: var(--danger); }
+
+  .chevron {
+    width: 15px;
+    height: 15px;
+    color: var(--subtle);
+    transition: transform 140ms ease;
+  }
+
+  .panel[data-open="true"] .summary-row > .chevron {
+    transform: rotate(90deg);
+  }
+
+  .changes {
+    display: none;
+  }
+
+  .panel[data-open="true"] .changes {
+    display: block;
+  }
+
+  .change-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 42px;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .change-row:last-child {
+    border-bottom: 0;
+  }
+
+  .change-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--success);
+  }
+
+  .change-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 620;
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 26px;
+    min-width: 26px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 12px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .action svg {
+    width: 14px;
+    height: 14px;
+    stroke-width: 1.8;
+  }
+
+  .action:hover {
+    border-color: var(--subtle);
+    color: var(--ink);
+  }
+
+  .notes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 18px;
+  }
+
+  .note {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(255,255,255,.72);
+    padding: 14px 16px;
+  }
+
+  .note h2 {
+    margin: 0 0 8px;
+    font-size: 14px;
+  }
+
+  .note p,
+  .note li {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.75;
+  }
+
+  .note ul {
+    margin: 0;
+    padding-left: 1.1em;
+  }
+
+  .icon-options {
+    margin-top: 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(255,255,255,.72);
+    overflow: hidden;
+  }
+
+  .icon-options h2 {
+    margin: 0;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+
+  .icon-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .icon-table th,
+  .icon-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  .icon-table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .icon-table th {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .icon-cell {
+    width: 72px;
+  }
+
+  .icon-cell .action {
+    margin: 0;
+  }
+
+  .icon-name {
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 12px;
+    color: var(--ink);
+  }
+
+  .icon-note {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  code {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--panel);
+    color: var(--ink);
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: .94em;
+    padding: 0 4px;
+  }
+
+  @media (max-width: 860px) {
+    .change-row {
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+    }
+    .notes {
+      grid-template-columns: 1fr;
+    }
+    .icon-table {
+      font-size: 12px;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>最终汇总 · 横向变更列表</h1>
+  <p class="lead">默认只给用户一个简短汇总；展开后按“每行一个变更”展示。每行可跳转到应用内页面，也可以提供 VS Code 深链作为开发调试入口。</p>
+
+  <section class="panel" data-open="true">
+    <button class="summary-row" type="button" aria-expanded="true">
+      <span class="doc-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>
+      </span>
+      <span class="summary-title">10 个页面已经变更</span>
+      <span class="delta"><span class="plus">+10</span> <span class="minus">-0</span></span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+
+    <div class="changes">
+      <div class="change-row">
+        <span class="change-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg></span>
+        <span class="change-title">第 1 页设计稿</span>
+        <span class="actions">
+          <button class="action jump-action" type="button" title="跳到应用内第 1 页设计稿" data-toast="应用内跳转：setCurrentPage(0) + setGlobalView('outline')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M22 12h-4"/><path d="M6 12H2"/><path d="M12 6V2"/><path d="M12 22v-4"/></svg></button>
+          <a class="action" title="用 VS Code 打开" href="vscode://file/Users/bytedance/Desktop/ByteDance/PPT_Agent/.run/projects/demo/slides/slide-01/slide.json"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+        </span>
+      </div>
+      <div class="change-row">
+        <span class="change-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg></span>
+        <span class="change-title">第 1 页幻灯片</span>
+        <span class="actions">
+          <button class="action jump-action" type="button" title="跳到应用内第 1 页幻灯片" data-toast="应用内跳转：setCurrentPage(0) + setGlobalView('html')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M22 12h-4"/><path d="M6 12H2"/><path d="M12 6V2"/><path d="M12 22v-4"/></svg></button>
+          <a class="action" title="用 VS Code 打开" href="vscode://file/Users/bytedance/Desktop/ByteDance/PPT_Agent/.run/projects/demo/slides/slide-01/index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+        </span>
+      </div>
+      <div class="change-row">
+        <span class="change-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg></span>
+        <span class="change-title">第 2 页设计稿</span>
+        <span class="actions">
+          <button class="action jump-action" type="button" title="跳到应用内第 2 页设计稿" data-toast="应用内跳转：setCurrentPage(1) + setGlobalView('outline')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M22 12h-4"/><path d="M6 12H2"/><path d="M12 6V2"/><path d="M12 22v-4"/></svg></button>
+          <a class="action" title="用 VS Code 打开" href="vscode://file/Users/bytedance/Desktop/ByteDance/PPT_Agent/.run/projects/demo/slides/slide-02/slide.json"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+        </span>
+      </div>
+      <div class="change-row">
+        <span class="change-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg></span>
+        <span class="change-title">全局视觉设计</span>
+        <span class="actions">
+          <button class="action jump-action" type="button" title="跳到应用内全局设计" data-toast="应用内跳转：setGlobalView('outline') + openDesignSummary()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M22 12h-4"/><path d="M6 12H2"/><path d="M12 6V2"/><path d="M12 22v-4"/></svg></button>
+          <a class="action" title="用 VS Code 打开" href="vscode://file/Users/bytedance/Desktop/ByteDance/PPT_Agent/.run/projects/demo/design/design-spec.json"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div class="note">
+      <h2>点击跳转怎么做</h2>
+      <ul>
+        <li>应用内跳转：事件 target 带 <code>slide_id</code> 和 <code>part</code>。</li>
+        <li>点行或跳转按钮时：<code>setCurrentPage(index)</code>，再按 part 设置 <code>outline/html</code>。</li>
+        <li>这应该是产品主路径，因为它不离开当前 App。</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h2>能不能默认 VS Code 打开</h2>
+      <p>浏览器网页不能强制指定默认用 VS Code 打开。可以提供 <code>vscode://file/绝对路径:行:列</code> 深链；如果用户本机注册了 VS Code 协议，浏览器会询问并打开。更强制的方式需要本地后端提供 “open in editor” 接口并执行 <code>code -g</code>，但这只适合本地开发模式，不能默认面向普通产品用户。</p>
+    </div>
+  </section>
+
+  <section class="icon-options">
+    <h2>变更标记 icon 候选（lucide-react）</h2>
+    <table class="icon-table">
+      <thead>
+        <tr><th class="icon-cell">预览</th><th>名称</th><th>语义</th><th>建议</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg></button></td>
+          <td><span class="icon-name">Sparkle</span></td>
+          <td><span class="icon-note">单个四角星，最接近当前视觉。</span></td>
+          <td>已选</td>
+        </tr>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/><path d="M5 3v4"/><path d="M19 17v4"/></svg></button></td>
+          <td><span class="icon-name">Sparkles</span></td>
+          <td><span class="icon-note">更像生成/魔法感，略活泼。</span></td>
+          <td>可选</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>跳转页面 icon 候选（lucide-react）</h2>
+    <table class="icon-table">
+      <thead>
+        <tr><th class="icon-cell">预览</th><th>名称</th><th>语义</th><th>建议</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button></td>
+          <td><span class="icon-name">ArrowRight</span></td>
+          <td><span class="icon-note">进入应用内目标页；最朴素。</span></td>
+          <td>可选</td>
+        </tr>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></button></td>
+          <td><span class="icon-name">ExternalLink</span></td>
+          <td><span class="icon-note">跳转感最强，但容易和外部打开混淆。</span></td>
+          <td>不推荐用于应用内跳转</td>
+        </tr>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/></svg></button></td>
+          <td><span class="icon-name">LocateFixed</span></td>
+          <td><span class="icon-note">定位到当前页面/目标资源，语义准确。</span></td>
+          <td>可选</td>
+        </tr>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M22 12h-4"/><path d="M6 12H2"/><path d="M12 6V2"/><path d="M12 22v-4"/></svg></button></td>
+          <td><span class="icon-name">Crosshair</span></td>
+          <td><span class="icon-note">瞄准镜/准星，定位感最强。</span></td>
+          <td>已选</td>
+        </tr>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg></button></td>
+          <td><span class="icon-name">Focus</span></td>
+          <td><span class="icon-note">聚焦目标，视觉更克制。</span></td>
+          <td>可选</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>打开文件 icon 候选（lucide-react）</h2>
+    <table class="icon-table">
+      <thead>
+        <tr><th class="icon-cell">预览</th><th>名称</th><th>语义</th><th>建议</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></button></td>
+          <td><span class="icon-name">ExternalLink</span></td>
+          <td><span class="icon-note">打开到外部应用/编辑器，通用且清晰。</span></td>
+          <td>已选</td>
+        </tr>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/></svg></button></td>
+          <td><span class="icon-name">FileCode2</span></td>
+          <td><span class="icon-note">打开源码文件，开发者语义更强。</span></td>
+          <td>可选</td>
+        </tr>
+        <tr>
+          <td class="icon-cell"><button class="action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg></button></td>
+          <td><span class="icon-name">Code2</span></td>
+          <td><span class="icon-note">强调代码，但不像“打开”。</span></td>
+          <td>不推荐单独使用</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<script>
+  const panel = document.querySelector('.panel');
+  const summary = document.querySelector('.summary-row');
+  summary.addEventListener('click', () => {
+    const open = panel.dataset.open !== 'true';
+    panel.dataset.open = String(open);
+    summary.setAttribute('aria-expanded', String(open));
+  });
+
+  document.querySelectorAll('.jump-action').forEach((button) => {
+    button.addEventListener('click', () => showToast(button.dataset.toast || '应用内跳转'));
+  });
+
+  function showToast(text) {
+    let toast = document.querySelector('.toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);border:1px solid var(--border);border-radius:999px;background:var(--surface);box-shadow:0 12px 28px rgba(51,65,85,.18);padding:8px 12px;color:var(--ink);font-size:12px;';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = text;
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(() => toast.remove(), 2200);
+  }
+</script>
+</body>
+</html>

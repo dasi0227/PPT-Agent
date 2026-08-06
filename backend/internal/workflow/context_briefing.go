@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -25,11 +26,77 @@ func BuildContextBriefing(pack contextengine.ContextPack, state *runtimeState) s
 	if state.requirements != nil {
 		sections = append(sections, "Requirement ledger:\n"+state.requirements.Brief())
 	}
+	if len(state.retrievedContext) > 0 {
+		sections = append(sections, "Retrieved context:\n"+retrievedContextBrief(state.retrievedContext))
+	}
 	sections = append(sections, "Working set:\n"+workingSetSummary(state))
 	if focus := nextFocus(state); focus != "" {
 		sections = append(sections, "Next focus: "+focus)
 	}
 	return strings.Join(sections, "\n")
+}
+
+func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, state *runtimeState) error {
+	if state == nil {
+		return nil
+	}
+	retriever := HybridContextRetriever{
+		Index: state.contextIndex, Embedder: r.Embedder, Scope: state.scope,
+	}
+	result, err := retriever.Retrieve(ctx, RetrievalQuery{
+		RunID: state.runID, WorkSpec: input.Context.WorkSpec, RequirementLedger: state.requirements,
+		LatestIssues: state.issues, Phase: state.phase, Strategy: state.strategy,
+		QueryText: retrievalQueryText(input.Context, state), Limit: 5, DetailBudget: 1200,
+	})
+	if err != nil {
+		return err
+	}
+	state.retrievedContext = result.Results
+	state.contextIndexRef = result.IndexRef
+	state.contextBriefing = BuildContextBriefing(input.Context, state)
+	recordTrace(input.Trace, state.runID, "context.retrieved", map[string]any{
+		"loop_id": state.loopID, "query": result.Query, "count": len(result.Results),
+		"estimated_tokens": result.EstimatedTokens, "index_ref": result.IndexRef,
+	})
+	return nil
+}
+
+func retrievalQueryText(pack contextengine.ContextPack, state *runtimeState) string {
+	parts := []string{pack.WorkSpec.Instruction}
+	if state.plan != nil {
+		parts = append(parts, state.plan.Brief())
+	}
+	for _, issue := range state.issues {
+		parts = append(parts, issue.Code, issue.Summary)
+	}
+	if state.requirements != nil {
+		for _, item := range state.requirements.BlockingItems() {
+			parts = append(parts, item.Text)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func retrievedContextBrief(items []RetrievedContextItem) string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		target := item.Target.Key()
+		if item.Target.Type == "" {
+			target = "global"
+		}
+		lines = append(lines, fmt.Sprintf(
+			"- %s kind=%s target=%s rev=%d hash=%s score=%.2f reason=%s",
+			item.RefID, item.Kind, target, item.Revision, shortHash(item.Hash), item.Score, item.SelectionReason,
+		))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func shortHash(value string) string {
+	if len(value) <= 12 {
+		return value
+	}
+	return value[:12]
 }
 
 func workingSetSummary(state *runtimeState) string {

@@ -29,9 +29,9 @@ export const useDeckStore = create<DeckState>((set, get) => ({
 
   setGlobalView: (view) => set({ globalView: view }),
 
-  // 全局视图优先：outline 全部走大纲；html 全局时按页 hasHtml 兜底（无 html → outline）。
-  effectiveView: (_slideId, hasHtml) => {
+  // 全局视图优先：用户点“幻灯片”时即使当前页未生成 HTML，也保持幻灯片视图并展示空态。
+  effectiveView: (_slideId, _hasHtml) => {
     if (get().globalView === 'outline') return 'outline';
-    return hasHtml ? 'html' : 'outline';
+    return 'html';
   },
 }));

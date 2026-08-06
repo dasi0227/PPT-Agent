@@ -46,6 +46,30 @@ func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (m
 	return e.StartWithContext(ctx, r, execution, nil)
 }
 
+// Resume starts an existing non-terminal Run from a persisted runtime checkpoint.
+// It does not create a new runs row; recovery metadata is carried by the
+// execution and checkpoint tables.
+func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (model.Run, error) {
+	if r.Status.Terminal() {
+		return model.Run{}, ErrRunNotRunning
+	}
+	e.mu.Lock()
+	if _, exists := e.actives[r.ID]; exists {
+		e.mu.Unlock()
+		return model.Run{}, ErrRunNotRunning
+	}
+	e.mu.Unlock()
+	bus := NewBus(r.ID, r.ThreadID, e.store, e.hw)
+	queue := NewInputQueue()
+	runCtx, cancel := context.WithCancel(context.Background())
+	a := &active{run: r, bus: bus, queue: queue, cancel: cancel}
+	e.mu.Lock()
+	e.actives[r.ID] = a
+	e.mu.Unlock()
+	go e.execute(runCtx, a, execution)
+	return r, nil
+}
+
 // StartWithContext atomically establishes the Run row and its auditable ContextManifest
 // before any execution code runs.
 func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Execution, manifest *model.RunContext) (model.Run, error) {

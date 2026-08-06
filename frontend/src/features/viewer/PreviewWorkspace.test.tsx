@@ -210,7 +210,7 @@ describe('PreviewWorkspace', () => {
     useDeckStore.setState({ previewMode: 'main', globalView: 'html', currentPage: 0 });
     render(<PreviewWorkspace />);
 
-    expect(screen.getByText('暂无内容')).toBeInTheDocument();
+    expect(screen.getByText('暂时没有幻灯片内容')).toBeInTheDocument();
     expect(screen.queryByText('暂无页面')).not.toBeInTheDocument();
   });
 
@@ -305,7 +305,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
     setSpecs();
   });
 
-  it('renders SlideSpecCard (not iframe) when current page has no html', () => {
+  it('renders an empty slide state when current page has no html in presentation view', () => {
     useProjectStore.setState({
       projects: [],
       activeProjectId: 'p1',
@@ -316,6 +316,24 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       },
       loadingProjects: false
     });
+    render(<PreviewWorkspace />);
+    expect(screen.getByText('暂时没有幻灯片内容')).toBeInTheDocument();
+    expect(screen.queryByText('要点一')).toBeNull();
+    expect(document.querySelector('iframe')).toBeNull();
+  });
+
+  it('renders SlideSpecCard when switching to design view', () => {
+    useProjectStore.setState({
+      projects: [],
+      activeProjectId: 'p1',
+      slidesByProjectId: {
+        p1: [
+          { id: 's1', project_id: 'p1', position: 0, layout: 'bullets', title: '封面标题', html_path: '', spec_path: '/slides/p1/s1.json', current_version: 0 },
+        ]
+      },
+      loadingProjects: false
+    });
+    useDeckStore.setState({ globalView: 'outline' });
     render(<PreviewWorkspace />);
     expect(screen.getAllByText('封面标题').length).toBeGreaterThan(0);
     expect(screen.getByText('要点一')).toBeInTheDocument();

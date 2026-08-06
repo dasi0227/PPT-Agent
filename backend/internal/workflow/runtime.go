@@ -54,20 +54,27 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
-	RunID              string             `json:"run_id"`
-	LoopID             string             `json:"loop_id"`
-	Strategy           ExecutionStrategy  `json:"strategy"`
-	ExecuteMode        ExecuteMode        `json:"execute_mode,omitempty"`
-	Phase              RuntimePhase       `json:"phase"`
-	ResumePhase        RuntimePhase       `json:"resume_phase,omitempty"`
-	Plan               *Plan              `json:"plan,omitempty"`
-	Requirements       *RequirementLedger `json:"requirements,omitempty"`
-	Changes            ChangeSet          `json:"changes"`
-	Evidence           []Evidence         `json:"evidence"`
-	Turns              int                `json:"turns"`
-	ToolCalls          int                `json:"tool_calls"`
-	WaitingQuestionID  string             `json:"waiting_question_id,omitempty"`
-	CompletionFailures int                `json:"completion_failures"`
+	RunID                string                        `json:"run_id"`
+	LoopID               string                        `json:"loop_id"`
+	Boundary             string                        `json:"boundary,omitempty"`
+	Strategy             ExecutionStrategy             `json:"strategy"`
+	ExecuteMode          ExecuteMode                   `json:"execute_mode,omitempty"`
+	Phase                RuntimePhase                  `json:"phase"`
+	ResumePhase          RuntimePhase                  `json:"resume_phase,omitempty"`
+	Plan                 *Plan                         `json:"plan,omitempty"`
+	Requirements         *RequirementLedger            `json:"requirements,omitempty"`
+	Changes              ChangeSet                     `json:"changes"`
+	Evidence             []Evidence                    `json:"evidence"`
+	ContextIndexRef      string                        `json:"context_index_ref,omitempty"`
+	ContextBriefing      string                        `json:"context_briefing,omitempty"`
+	MessageSummary       []CheckpointMessage           `json:"message_summary,omitempty"`
+	LatestToolResults    []CheckpointToolResult        `json:"latest_tool_results,omitempty"`
+	Turns                int                           `json:"turns"`
+	ToolCalls            int                           `json:"tool_calls"`
+	WaitingQuestionID    string                        `json:"waiting_question_id,omitempty"`
+	ProviderContinuation *ProviderContinuationSnapshot `json:"provider_continuation,omitempty"`
+	CompletionFailures   int                           `json:"completion_failures"`
+	CreatedAt            int64                         `json:"created_at"`
 }
 
 type AgentRequest struct {
@@ -139,66 +146,83 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 const noToolCallGuidance = "Ordinary assistant text is not a completion signal. If the task is complete, call finish(message=...) with the final response. If the task is not complete, call one of the currently disclosed tools to continue."
 
 type RuntimeInput struct {
-	RunID          string
-	ProjectDir     string
-	Context        contextengine.ContextPack
-	Emitter        EventEmitter
-	Prompter       Prompter
-	Steering       SteeringSource
-	Checkpoint     CheckpointSink
-	CommitMetadata CommitMetadata
-	DomainTools    DomainToolProvider
-	Budget         RuntimeBudget
-	Trace          TraceRecorder
-	ImageResolver  llm.ImageRefResolver
-	Lifecycle      LifecycleObserver
-	Idempotency    IdempotencyStore
+	RunID               string
+	ProjectDir          string
+	Context             contextengine.ContextPack
+	Emitter             EventEmitter
+	Prompter            Prompter
+	Steering            SteeringSource
+	Checkpoint          CheckpointSink
+	CommitMetadata      CommitMetadata
+	DomainTools         DomainToolProvider
+	Budget              RuntimeBudget
+	Trace               TraceRecorder
+	ImageResolver       llm.ImageRefResolver
+	Lifecycle           LifecycleObserver
+	Idempotency         IdempotencyStore
+	ContextIndexStore   ContextIndexStore
+	SemanticReviews     SemanticReviewer
+	SemanticReviewStore SemanticReviewStore
+	ResumeCheckpoint    *RuntimeCheckpoint
 }
 
 type Runtime struct {
-	Router    StrategyRouter
-	Agent     ReActAgent
-	Gate      CompletionGate
-	Compactor ContextCompactor
+	Router         StrategyRouter
+	Agent          ReActAgent
+	Gate           CompletionGate
+	Compactor      ContextCompactor
+	Embedder       EmbeddingProvider
+	SemanticPolicy SemanticReviewPolicy
 }
 
 func NewRuntime(agent ReActAgent) *Runtime {
-	return &Runtime{Router: StrategyRouter{}, Agent: agent, Gate: NewCompletionGate()}
+	return &Runtime{
+		Router: StrategyRouter{}, Agent: agent, Gate: NewCompletionGate(),
+		Embedder: HashEmbeddingProvider{}, SemanticPolicy: DefaultSemanticReviewPolicy(),
+	}
 }
 
 type runtimeState struct {
-	runID                 string
-	loopID                string
-	strategy              ExecutionStrategy
-	executeMode           ExecuteMode
-	phase                 RuntimePhase
-	resumePhase           RuntimePhase
-	decision              StrategyDecision
-	plan                  *Plan
-	tx                    *RunSession
-	scope                 Scope
-	ledger                *EvidenceLedger
-	issues                []Issue
-	messages              []llm.Message
-	continuation          *llm.ProviderContinuation
-	turns                 int
-	toolCalls             int
-	tokens                int
-	toolFailures          int
-	activeTools           int
-	started               time.Time
-	budget                RuntimeBudget
-	gateKey               string
-	gateCount             int
-	gateEvidence          int64
-	lastSummary           string
-	committed             bool
-	lastProgress          string
-	lastReasoning         string
-	lastMilestoneRevision int
-	trace                 TraceRecorder
-	lifecycle             LifecycleObserver
-	requirements          *RequirementLedger
+	runID                   string
+	loopID                  string
+	strategy                ExecutionStrategy
+	executeMode             ExecuteMode
+	phase                   RuntimePhase
+	resumePhase             RuntimePhase
+	decision                StrategyDecision
+	plan                    *Plan
+	tx                      *RunSession
+	scope                   Scope
+	ledger                  *EvidenceLedger
+	issues                  []Issue
+	messages                []llm.Message
+	continuation            *llm.ProviderContinuation
+	turns                   int
+	toolCalls               int
+	tokens                  int
+	toolFailures            int
+	activeTools             int
+	started                 time.Time
+	budget                  RuntimeBudget
+	gateKey                 string
+	gateCount               int
+	gateEvidence            int64
+	lastSummary             string
+	committed               bool
+	lastProgress            string
+	lastReasoning           string
+	lastMilestoneRevision   int
+	trace                   TraceRecorder
+	lifecycle               LifecycleObserver
+	requirements            *RequirementLedger
+	contextIndex            ContextIndex
+	contextIndexRef         string
+	retrievedContext        []RetrievedContextItem
+	contextBriefing         string
+	latestToolResults       []CheckpointToolResult
+	lastCheckpointTurn      int
+	lastCheckpointToolCalls int
+	lastCheckpointAt        time.Time
 }
 
 func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome {
@@ -218,6 +242,27 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		issues: []Issue{}, messages: []llm.Message{}, started: time.Now(), budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.WorkSpec),
 	}
+	if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.RunID == input.RunID {
+		state.loopID = input.ResumeCheckpoint.LoopID
+		state.strategy = input.ResumeCheckpoint.Strategy
+		state.executeMode = input.ResumeCheckpoint.ExecuteMode
+		state.phase = input.ResumeCheckpoint.ResumePhase
+		if state.phase == "" {
+			state.phase = input.ResumeCheckpoint.Phase
+		}
+		state.resumePhase = input.ResumeCheckpoint.ResumePhase
+		state.plan = input.ResumeCheckpoint.Plan
+		if input.ResumeCheckpoint.Requirements != nil {
+			state.requirements = input.ResumeCheckpoint.Requirements
+		}
+		state.turns = input.ResumeCheckpoint.Turns
+		state.toolCalls = input.ResumeCheckpoint.ToolCalls
+		state.gateCount = input.ResumeCheckpoint.CompletionFailures
+		state.contextIndexRef = input.ResumeCheckpoint.ContextIndexRef
+		recordTrace(input.Trace, input.RunID, "checkpoint.loaded", map[string]any{
+			"loop_id": state.loopID, "phase": state.phase, "boundary": input.ResumeCheckpoint.Boundary,
+		})
+	}
 	if r.Agent == nil {
 		return r.fail(input, state, CodeAgentFailed, errors.New("ReAct agent is required"))
 	}
@@ -234,6 +279,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			initialPhase = PhaseExecuting
 		}
 	}
+	if input.ResumeCheckpoint != nil && state.phase != "" && state.phase != PhaseTerminal {
+		initialPhase = state.phase
+	}
 	manifest := input.Context.Manifest
 	recordTrace(input.Trace, input.RunID, "context.assembled", map[string]any{
 		"loop_id": state.loopID, "context_id": manifest.ContextID,
@@ -241,8 +289,20 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		"budget_tokens": manifest.BudgetTokens, "segments": len(manifest.Segments),
 		"refs": len(manifest.Refs), "warnings": manifest.Warnings, "read_only": manifest.ReadOnly,
 	})
+	state.contextIndex = NewContextIndexFromPack(input.Context, state.scope, r.Embedder)
+	state.contextIndexRef = state.contextIndex.ID
+	if input.ContextIndexStore != nil {
+		if id, err := input.ContextIndexStore.SaveContextIndex(ctx, state.contextIndex); err == nil && id != "" {
+			state.contextIndexRef = id
+		} else if err != nil {
+			return r.fail(input, state, CodeAgentFailed, err)
+		}
+	}
 	r.emitStrategy(state, false)
 	r.changePhase(input.Emitter, state, initialPhase, "strategy initialized")
+	if err := r.saveCheckpoint(ctx, input, state, checkpointStrategyInitialized, ""); err != nil {
+		return r.fail(input, state, CodeAgentFailed, err)
+	}
 	if initialPhase == PhasePlanning {
 		r.emitProgress(input.Emitter, state, "planning", "正在整理执行计划", nil)
 	} else {
@@ -283,6 +343,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.compactIfNeeded(ctx, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
+		if err := r.retrieveTurnContext(ctx, input, state); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err)
+		}
+		if err := r.maybePeriodicCheckpoint(ctx, input, state); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err)
+		}
 		schemas := registry.Disclose(state.strategy, state.phase, input.Context.WorkSpec.Interaction.Intent)
 		schemas = append(schemas, controlSchemas(state.strategy, state.phase, input.Context.WorkSpec.Interaction.Intent)...)
 		state.turns++
@@ -290,7 +356,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, ExecuteMode: state.executeMode, Phase: state.phase,
 			Context: input.Context, Plan: state.plan, Changes: state.changeSet(),
 			Evidence: state.ledger.Entries(state.changeSet()), Requirements: state.requirements,
-			ContextBriefing: BuildContextBriefing(input.Context, state),
+			ContextBriefing: state.contextBriefing,
 			Messages:        append([]llm.Message{}, state.messages...),
 			Tools:           schemas,
 			ImageResolver:   input.ImageResolver,
@@ -500,6 +566,10 @@ func (r *Runtime) executeToolBatch(
 			"issues": result.Issues, "changed_targets": result.ChangedTargets,
 			"retryable": result.Retryable, "code": result.Code,
 		})
+		state.latestToolResults = append(state.latestToolResults, checkpointToolResult(call, result))
+		if len(state.latestToolResults) > 12 {
+			state.latestToolResults = state.latestToolResults[len(state.latestToolResults)-12:]
+		}
 		for _, target := range uniqueTargets(append(result.InvalidatedTargets, changedResources(result.ChangedTargets)...)) {
 			state.ledger.Invalidate(target)
 		}
@@ -512,6 +582,14 @@ func (r *Runtime) executeToolBatch(
 				"target": target.Target(), "revision": target.Revision, "hash": target.Hash,
 				"fields": target.Fields, "tentative": false,
 			})
+		}
+		if result.OK {
+			if len(result.ChangedTargets) > 0 {
+				_ = r.saveCheckpoint(context.Background(), input, state, checkpointAfterWrite, "")
+			}
+			if call.Name == "render_slide" {
+				_ = r.saveCheckpoint(context.Background(), input, state, checkpointAfterRender, "")
+			}
 		}
 	}
 	return results
@@ -724,6 +802,9 @@ func (r *Runtime) executeControl(
 		if state.strategy == StrategyExecute && created && state.phase == PhasePlanning {
 			r.changePhase(input.Emitter, state, PhaseExecuting, "first valid plan created")
 		}
+		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, ""); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
 		return StructuredOutcome{}, false
 	case "ask_user":
 		if input.Prompter == nil {
@@ -740,10 +821,8 @@ func (r *Runtime) executeControl(
 		questionEvent := publicQuestion(state.runID, questionID, call.Args)
 		state.resumePhase = state.phase
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "agent requested required user input")
-		if input.Checkpoint != nil {
-			if err := input.Checkpoint.SaveCheckpoint(ctx, state.checkpoint(questionID)); err != nil {
-				return r.fail(input, state, CodeAgentFailed, err), true
-			}
+		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeAskUser, questionID); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		answer, displayText, err := input.Prompter.Ask(ctx, questionEvent)
 		if err != nil {
@@ -760,6 +839,9 @@ func (r *Runtime) executeControl(
 			"custom_text":         answer.CustomText, "answers": answer.Answers, "display_text": displayText,
 		}
 		r.appendControlObservation(state, call, assistantText, result)
+		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterUserAnswer, ""); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
 		return StructuredOutcome{}, false
 	case "finish":
 		message := stringValue(call.Args["message"])
@@ -795,6 +877,19 @@ func (r *Runtime) finishCandidate(
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{
 		"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,
 	})
+	if result.Accepted {
+		var reviewed bool
+		var reviewErr error
+		result, reviewed, reviewErr = r.runSemanticReview(ctx, input, state, call.ID, message, result)
+		if reviewErr != nil {
+			return r.fail(input, state, CodeAgentFailed, reviewErr), true
+		}
+		if reviewed {
+			recordTrace(input.Trace, state.runID, "completion.semantic_reviewed", map[string]any{
+				"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,
+			})
+		}
+	}
 	if !result.Accepted {
 		key, evidenceVersion := result.RejectionKey(), state.ledger.Version()
 		if key == state.gateKey && evidenceVersion == state.gateEvidence {
@@ -819,6 +914,9 @@ func (r *Runtime) finishCandidate(
 			state.messages,
 			call, assistantText, observation,
 		)
+		if err := r.saveCheckpoint(ctx, input, state, checkpointGateRejected, ""); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
 		return StructuredOutcome{}, false
 	}
 	state.lastSummary = strings.TrimSpace(message)
@@ -828,6 +926,9 @@ func (r *Runtime) finishCandidate(
 	if state.strategy == StrategyExecute {
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted")
 		state.tx.AcceptMaterializationProofs(result.MaterializationProofs)
+		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommit, ""); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
 		commitHash, hashErr := idempotency.CanonicalHash(map[string]any{
 			"changes": changes, "proofs": result.MaterializationProofs,
 		})
@@ -879,6 +980,9 @@ func (r *Runtime) finishCandidate(
 			}
 		}
 		state.committed = true
+		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterCommit, ""); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
 		for _, change := range changes.All() {
 			recordTrace(input.Trace, state.runID, "target.committed", map[string]any{
 				"target": resourceForArtifact(change.Artifact), "artifact": change.Artifact,
@@ -886,6 +990,9 @@ func (r *Runtime) finishCandidate(
 		}
 	}
 	r.changePhase(input.Emitter, state, PhaseTerminal, "run completed")
+	if err := r.saveCheckpoint(ctx, input, state, checkpointTerminal, ""); err != nil {
+		return r.fail(input, state, CodeAgentFailed, err), true
+	}
 	outcome := state.outcome(StatusCompleted, "", "")
 	if input.Emitter != nil {
 		affected := publicAffectedTargets(changes)
@@ -966,6 +1073,7 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *runtimeState, agentE
 	}
 	recordTrace(input.Trace, state.runID, "error.projected", agentErr.TraceProjection())
 	r.changePhase(input.Emitter, state, PhaseTerminal, agentErr.Code)
+	_ = r.saveCheckpoint(context.Background(), input, state, checkpointTerminal, "")
 	outcome := state.outcome(status, agentErr.Code, agentErr.Error())
 	if input.Emitter != nil {
 		payload := model.RunFinishedPayload{

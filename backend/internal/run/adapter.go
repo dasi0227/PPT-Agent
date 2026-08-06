@@ -53,8 +53,13 @@ func (c *inputCheckpoint) PhaseChanged(phase workflow.RuntimePhase) {
 	c.active.mu.Unlock()
 }
 
-func (c *inputCheckpoint) SaveCheckpoint(_ context.Context, state workflow.RuntimeCheckpoint) error {
+func (c *inputCheckpoint) SaveCheckpoint(ctx context.Context, state workflow.RuntimeCheckpoint) error {
 	c.state = state
+	if store, ok := c.store.(interface {
+		SaveCheckpoint(context.Context, workflow.RuntimeCheckpoint) error
+	}); ok {
+		return store.SaveCheckpoint(ctx, state)
+	}
 	return nil
 }
 

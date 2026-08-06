@@ -246,9 +246,10 @@ func mutationResult(
 	summary string,
 ) ToolResult {
 	result := SuccessfulToolResult(summary)
+	insertions, deletions := changeLineStats(input.Session, ref, raw)
 	result.ChangedTargets = []ChangedTarget{{
 		Type: resource.Type, SlideID: resource.SlideID, Part: resource.Part,
-		Revision: revision, Hash: hashBytes(raw),
+		Revision: revision, Hash: hashBytes(raw), Insertions: insertions, Deletions: deletions,
 	}}
 	result.InvalidatedTargets = invalidatedByMutation(pack, input.Session, resource)
 	switch ref.Kind {
@@ -266,6 +267,66 @@ func mutationResult(
 		"operation": operationFor(change), "resource": resource, "revision": revision,
 	}
 	return result
+}
+
+func changeLineStats(tx *RunSession, ref ArtifactRef, after []byte) (int, int) {
+	var before []byte
+	if tx != nil {
+		before = tx.baselineForChange(ref)
+	}
+	return lineDiffStat(before, after)
+}
+
+func lineDiffStat(before, after []byte) (int, int) {
+	beforeLines := splitDiffLines(string(before))
+	afterLines := splitDiffLines(string(after))
+	if len(beforeLines) == 0 {
+		return len(afterLines), 0
+	}
+	if len(afterLines) == 0 {
+		return 0, len(beforeLines)
+	}
+	common := longestCommonSubsequenceLength(beforeLines, afterLines)
+	return len(afterLines) - common, len(beforeLines) - common
+}
+
+func splitDiffLines(value string) []string {
+	if value == "" {
+		return nil
+	}
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	value = strings.ReplaceAll(value, "\r", "\n")
+	if strings.HasSuffix(value, "\n") {
+		value = strings.TrimSuffix(value, "\n")
+	}
+	if value == "" {
+		return nil
+	}
+	return strings.Split(value, "\n")
+}
+
+func longestCommonSubsequenceLength(a, b []string) int {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	previous := make([]int, len(b)+1)
+	current := make([]int, len(b)+1)
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			if a[i-1] == b[j-1] {
+				current[j] = previous[j-1] + 1
+			} else if previous[j] > current[j-1] {
+				current[j] = previous[j]
+			} else {
+				current[j] = current[j-1]
+			}
+		}
+		previous, current = current, previous
+		for j := range current {
+			current[j] = 0
+		}
+	}
+	return previous[len(b)]
 }
 
 func invalidatedByMutation(pack contextengine.ContextPack, tx *RunSession, resource Resource) []Resource {

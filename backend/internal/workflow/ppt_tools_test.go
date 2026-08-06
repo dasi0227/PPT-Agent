@@ -165,6 +165,16 @@ func TestDesignWriteAtomicallyWritesDerivedTokens(t *testing.T) {
 	}
 }
 
+func TestLineDiffStatCountsInsertionsAndDeletions(t *testing.T) {
+	insertions, deletions := lineDiffStat(
+		[]byte("a\nb\nc\n"),
+		[]byte("a\nb2\nc\nd\n"),
+	)
+	if insertions != 2 || deletions != 1 {
+		t.Fatalf("stat +%d -%d, want +2 -1", insertions, deletions)
+	}
+}
+
 func TestWritePPTValidatesJSONHTMLArtifactAndScope(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewRunSession(dir, "write-validation")

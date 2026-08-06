@@ -212,6 +212,9 @@ export interface PublicTarget {
   type: 'deck' | 'slide';
   slide_id?: string;
   part: 'outline' | 'design' | 'spec' | 'html';
+  display_name?: string;
+  insertions?: number;
+  deletions?: number;
 }
 
 export interface PublicDisplay {

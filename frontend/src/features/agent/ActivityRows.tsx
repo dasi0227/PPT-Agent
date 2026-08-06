@@ -36,8 +36,8 @@ function presentActivityText(text: string, target: PublicTarget | undefined, sli
   const presented = presentUserText(text);
   if (!target || target.type !== 'slide' || !target.slide_id) return presented;
   const index = slides.findIndex((slide) => slide.id === target.slide_id);
-  // 页码随 outline 顺序实时换算；新页尚未进入有序列表时，抹去占位符只留产物裸名，绝不暴露 slide_id。
-  const replacement = index >= 0 ? `第 ${index + 1} 页` : '';
+  // 页码随 outline 顺序实时换算；新页尚未进入有序列表时，使用后端给出的安全展示名，避免泄露 slide_id。
+  const replacement = index >= 0 ? `第 ${index + 1} 页` : target.display_name || '页面';
   return presented.split(`页面 ${target.slide_id}`).join(replacement);
 }
 
@@ -144,7 +144,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
         showToggle && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
       )}
     >
-      <Flag className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={1.75} />
+      <Flag className="mt-0.5 h-4 w-4 shrink-0 text-[#7C3AED]" strokeWidth={1.75} />
       <span ref={textRef} className={cn('min-w-0 flex-1', !expanded && 'line-clamp-1')}>{item.text}</span>
       {showToggle && (
         <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">

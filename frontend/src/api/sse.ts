@@ -133,11 +133,21 @@ function validPublicTarget(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (value.type === 'deck') {
     return (value.slide_id === undefined || value.slide_id === '')
+      && (value.display_name === undefined || (typeof value.display_name === 'string' && !rawHTMLPattern.test(value.display_name)))
+      && validOptionalNonNegativeInteger(value.insertions)
+      && validOptionalNonNegativeInteger(value.deletions)
       && ['outline', 'design'].includes(String(value.part));
   }
   return value.type === 'slide'
     && hasString(value, 'slide_id')
+    && (value.display_name === undefined || (typeof value.display_name === 'string' && !rawHTMLPattern.test(value.display_name)))
+    && validOptionalNonNegativeInteger(value.insertions)
+    && validOptionalNonNegativeInteger(value.deletions)
     && ['spec', 'html'].includes(String(value.part));
+}
+
+function validOptionalNonNegativeInteger(value: unknown): boolean {
+  return value === undefined || (typeof value === 'number' && Number.isInteger(value) && value >= 0);
 }
 
 function validTargets(value: unknown): boolean {

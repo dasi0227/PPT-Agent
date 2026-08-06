@@ -6,11 +6,11 @@ describe('deckStore globalView', () => {
     useDeckStore.setState({ globalView: 'html' });
   });
 
-  test('default is html; effectiveView falls back to outline when hasHtml=false', () => {
+  test('default is html and stays html even when hasHtml=false', () => {
     const s = useDeckStore.getState();
     expect(s.globalView).toBe('html');
     expect(s.effectiveView('s1', true)).toBe('html');
-    expect(s.effectiveView('s2', false)).toBe('outline');
+    expect(s.effectiveView('s2', false)).toBe('html');
   });
 
   test('globalView=outline forces outline regardless of hasHtml', () => {
@@ -25,7 +25,7 @@ describe('deckStore globalView', () => {
     useDeckStore.getState().setGlobalView('html');
     expect(useDeckStore.getState().globalView).toBe('html');
     expect(useDeckStore.getState().effectiveView('s1', true)).toBe('html');
-    expect(useDeckStore.getState().effectiveView('s2', false)).toBe('outline');
+    expect(useDeckStore.getState().effectiveView('s2', false)).toBe('html');
   });
 
 });

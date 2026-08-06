@@ -230,6 +230,42 @@ func (p runContextPO) toModel() model.RunContext {
 		EstimatedTokens: p.EstimatedTokens, BudgetTokens: p.BudgetTokens, ManifestJSON: p.ManifestJSON, CreatedAt: p.CreatedAt}
 }
 
+type runCheckpointPO struct {
+	ID             string `gorm:"column:id;primaryKey"`
+	RunID          string `gorm:"column:run_id"`
+	LoopID         string `gorm:"column:loop_id"`
+	Seq            int64  `gorm:"column:seq"`
+	Phase          string `gorm:"column:phase"`
+	CheckpointJSON string `gorm:"column:checkpoint_json"`
+	CreatedAt      int64  `gorm:"column:created_at"`
+}
+
+func (runCheckpointPO) TableName() string { return "run_checkpoints" }
+
+type contextIndexSnapshotPO struct {
+	ID        string `gorm:"column:id;primaryKey"`
+	RunID     string `gorm:"column:run_id"`
+	PackHash  string `gorm:"column:pack_hash"`
+	IndexJSON string `gorm:"column:index_json"`
+	CreatedAt int64  `gorm:"column:created_at"`
+}
+
+func (contextIndexSnapshotPO) TableName() string { return "context_index_snapshots" }
+
+type semanticReviewPO struct {
+	ID                 string  `gorm:"column:id;primaryKey"`
+	RunID              string  `gorm:"column:run_id"`
+	FinishCallID       string  `gorm:"column:finish_call_id"`
+	Accepted           int     `gorm:"column:accepted"`
+	Confidence         float64 `gorm:"column:confidence"`
+	InputHash          string  `gorm:"column:input_hash"`
+	OutputJSON         string  `gorm:"column:output_json"`
+	PromptManifestJSON string  `gorm:"column:prompt_manifest_json"`
+	CreatedAt          int64   `gorm:"column:created_at"`
+}
+
+func (semanticReviewPO) TableName() string { return "semantic_reviews" }
+
 type slidePO struct {
 	ID                    string `gorm:"column:id;primaryKey"`
 	ProjectID             string `gorm:"column:project_id"`

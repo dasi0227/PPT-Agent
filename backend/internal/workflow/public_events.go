@@ -2,7 +2,9 @@ package workflow
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -15,13 +17,43 @@ func publicBase(runID string) model.PublicEventBase {
 }
 
 func publicTarget(target Resource) model.PublicTarget {
-	return model.PublicTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part}
+	out := model.PublicTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part}
+	if target.Type == "slide" {
+		out.DisplayName = slideDisplayName(target.SlideID)
+	}
+	return out
 }
 
 func publicAffectedTargets(changes ChangeSet) []model.PublicTarget {
 	seen := map[string]model.PublicTarget{}
 	for _, change := range changes.All() {
 		target := publicTarget(resourceForArtifact(change.Artifact))
+		target.Insertions = change.Insertions
+		target.Deletions = change.Deletions
+		seen[target.Type+":"+target.SlideID+":"+target.Part] = target
+	}
+	keys := make([]string, 0, len(seen))
+	for key := range seen {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make([]model.PublicTarget, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, seen[key])
+	}
+	return out
+}
+
+func publicChangedTargets(changes []ChangedTarget) []model.PublicTarget {
+	seen := map[string]model.PublicTarget{}
+	for _, change := range changes {
+		target := model.PublicTarget{
+			Type: change.Type, SlideID: change.SlideID, Part: change.Part,
+			Insertions: change.Insertions, Deletions: change.Deletions,
+		}
+		if target.Type == "slide" {
+			target.DisplayName = slideDisplayName(target.SlideID)
+		}
 		seen[target.Type+":"+target.SlideID+":"+target.Part] = target
 	}
 	keys := make([]string, 0, len(seen))
@@ -128,6 +160,12 @@ func (ToolPublicProjector) Completed(runID, callID, tool string, args map[string
 		Target:  publicToolTarget(tool, args),
 		Display: model.PublicDisplay{Label: label, Detail: detail},
 	}
+	if result.OK && len(result.ChangedTargets) > 0 {
+		targets := publicChangedTargets(result.ChangedTargets)
+		if len(targets) > 0 {
+			payload.Target = &targets[0]
+		}
+	}
 	if !result.OK {
 		agentErr := model.NewAgentError(publicErrorCode(result.Code), "tool_call", nil)
 		payload.Error = agentErr.Public()
@@ -142,7 +180,7 @@ func publicToolTarget(tool string, args map[string]any) *model.PublicTarget {
 	if tool == "render_slide" {
 		slideID := stringValue(args["slide_id"])
 		if slideID != "" {
-			return &model.PublicTarget{Type: "slide", SlideID: slideID, Part: "html"}
+			return &model.PublicTarget{Type: "slide", SlideID: slideID, Part: "html", DisplayName: slideDisplayName(slideID)}
 		}
 	}
 	target, _ := args["resource"].(map[string]any)
@@ -151,8 +189,9 @@ func publicToolTarget(tool string, args map[string]any) *model.PublicTarget {
 		return &model.PublicTarget{Type: "deck", Part: stringValue(target["part"])}
 	}
 	if targetType == "slide" {
+		slideID := stringValue(target["slide_id"])
 		return &model.PublicTarget{
-			Type: "slide", SlideID: stringValue(target["slide_id"]), Part: stringValue(target["part"]),
+			Type: "slide", SlideID: slideID, Part: stringValue(target["part"]), DisplayName: slideDisplayName(slideID),
 		}
 	}
 	return nil
@@ -287,12 +326,19 @@ func publicWarnings(result ToolResult) []string {
 	return out
 }
 
+var trailingSlideNumber = regexp.MustCompile(`(\d+)$`)
+
 func slideDisplayName(slideID string) string {
-	slideID = sanitizePublicText(slideID, 40)
-	if slideID == "" {
+	match := trailingSlideNumber.FindStringSubmatch(slideID)
+	if len(match) == 2 {
+		if index, err := strconv.Atoi(match[1]); err == nil && index > 0 {
+			return fmt.Sprintf("第 %d 页", index)
+		}
+	}
+	if strings.TrimSpace(slideID) == "" {
 		return "页面"
 	}
-	return "页面 " + slideID
+	return "页面"
 }
 
 func newMessageID() string {

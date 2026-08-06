@@ -128,6 +128,8 @@ type ArtifactChange struct {
 	AfterHash  string      `json:"after_hash"`
 	Source     string      `json:"source"`
 	Tentative  bool        `json:"tentative,omitempty"`
+	Insertions int         `json:"insertions,omitempty"`
+	Deletions  int         `json:"deletions,omitempty"`
 }
 
 type ChangeSet struct {

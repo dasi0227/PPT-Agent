@@ -25,6 +25,12 @@ type scriptedAgent struct {
 	err       error
 }
 
+type acceptingReviewer struct{}
+
+func (acceptingReviewer) Review(context.Context, SemanticReviewInput) (SemanticReviewResult, error) {
+	return SemanticReviewResult{Accepted: true, Confidence: 1, Summary: "accepted"}, nil
+}
+
 type cancelingAgent struct {
 	cancel context.CancelFunc
 }
@@ -625,8 +631,9 @@ func TestFinishContractRejectsSubstantiveAssistantDelivery(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "strict-finish", ProjectDir: t.TempDir(),
-		Context:     testPack(model.IntentPlan, model.ArtifactSpec, model.TargetDeck, false, "生成计划"),
-		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Context:         testPack(model.IntentPlan, model.ArtifactSpec, model.TargetDeck, false, "生成计划"),
+		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
+		SemanticReviews: acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
@@ -674,8 +681,10 @@ func TestPlannedExecuteDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T)
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "complex", ProjectDir: dir,
-		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "重建当前页结构"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Context:         testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "重建当前页结构"),
+		Emitter:         events,
+		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
+		SemanticReviews: acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
@@ -704,8 +713,10 @@ func TestPlanInteractionFinishesWithoutPlanSnapshotOrWriteSession(t *testing.T) 
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "plan-only", ProjectDir: dir,
-		Context: testPack(model.IntentPlan, model.ArtifactSpec, model.TargetSlide, false, "规划当前页优化"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Context:         testPack(model.IntentPlan, model.ArtifactSpec, model.TargetSlide, false, "规划当前页优化"),
+		Emitter:         events,
+		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
+		SemanticReviews: acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyPlan || len(outcome.Changes.All()) != 0 {
 		t.Fatalf("outcome=%+v", outcome)
@@ -893,10 +904,16 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 		Context:  testPack(model.IntentAsk, model.ArtifactSpec, model.TargetSlide, false, "讨论当前页"),
 		Prompter: prompter, Checkpoint: checkpoints, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
-	if outcome.Status != StatusCompleted || prompter.calls != 1 || len(checkpoints.checkpoints) != 1 {
+	if outcome.Status != StatusCompleted || prompter.calls != 1 || len(checkpoints.checkpoints) == 0 {
 		t.Fatalf("outcome=%+v calls=%d checkpoints=%d", outcome, prompter.calls, len(checkpoints.checkpoints))
 	}
-	if agent.requests[0].LoopID != agent.requests[1].LoopID || checkpoints.checkpoints[0].Phase != PhaseWaitingInput {
+	foundWaiting := false
+	for _, checkpoint := range checkpoints.checkpoints {
+		if checkpoint.Boundary == string(checkpointBeforeAskUser) && checkpoint.Phase == PhaseWaitingInput {
+			foundWaiting = true
+		}
+	}
+	if agent.requests[0].LoopID != agent.requests[1].LoopID || !foundWaiting {
 		t.Fatal("ask_user did not resume the same waiting loop")
 	}
 }
@@ -1136,7 +1153,8 @@ func TestEmptyProjectPlannedPresentationGenerationUsesUnifiedPPTTargets(t *testi
 	renderer := &recordingRenderer{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "empty-complex", ProjectDir: dir, Context: pack,
-		DomainTools: DefaultDomainToolProvider{Pack: pack, Renderer: renderer},
+		DomainTools:     DefaultDomainToolProvider{Pack: pack, Renderer: renderer},
+		SemanticReviews: acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyExecute {
 		t.Fatalf("outcome=%+v", outcome)
@@ -1249,8 +1267,10 @@ func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "milestone", ProjectDir: dir,
-		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "重建当前页结构"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Context:         testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "重建当前页结构"),
+		Emitter:         events,
+		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
+		SemanticReviews: acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)

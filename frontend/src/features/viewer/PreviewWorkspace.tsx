@@ -328,7 +328,7 @@ export const PreviewWorkspace: React.FC = () => {
               />
             ) : currentView === 'html' ? (
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
-                <EmptyState />
+                <p className="text-sm text-text-400">暂时没有幻灯片内容</p>
               </div>
             ) : specView?.slide_specs?.[currentSlide.id] ? (
               <SlideSpecCard

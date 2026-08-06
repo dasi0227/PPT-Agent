@@ -8,7 +8,7 @@ export function SlideSpecCard({ spec, state, compact = false }: {
   compact?: boolean;
 }) {
   return (
-    <article className={`h-full w-full rounded-xl border border-border bg-surface ${compact ? 'p-3' : 'p-7'} shadow-sm`}>
+    <article className={`h-full w-full overflow-y-auto rounded-xl border border-border bg-surface ${compact ? 'p-3' : 'p-7'} shadow-sm`}>
       <div className="flex items-center justify-between gap-2">
         <span className="rounded bg-accent-soft px-2 py-1 text-[10px] font-semibold text-accent">
           {spec.role}

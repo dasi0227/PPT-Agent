@@ -41,9 +41,12 @@ func NewPublicEventBase(runID string) PublicEventBase {
 }
 
 type PublicTarget struct {
-	Type    string `json:"type"`
-	SlideID string `json:"slide_id,omitempty"`
-	Part    string `json:"part"`
+	Type        string `json:"type"`
+	SlideID     string `json:"slide_id,omitempty"`
+	Part        string `json:"part"`
+	DisplayName string `json:"display_name,omitempty"`
+	Insertions  int    `json:"insertions,omitempty"`
+	Deletions   int    `json:"deletions,omitempty"`
 }
 
 type PublicDisplay struct {
@@ -596,6 +599,12 @@ func validatePublicTarget(value any) error {
 		return errors.New("target must be an object")
 	}
 	part := stringValue(target["part"])
+	if value, ok := target["insertions"]; ok && (!isInteger(value) || intValue(value) < 0) {
+		return errors.New("target insertions must be a non-negative integer")
+	}
+	if value, ok := target["deletions"]; ok && (!isInteger(value) || intValue(value) < 0) {
+		return errors.New("target deletions must be a non-negative integer")
+	}
 	switch stringValue(target["type"]) {
 	case "deck":
 		if strings.TrimSpace(stringValue(target["slide_id"])) != "" {

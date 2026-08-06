@@ -63,13 +63,16 @@ func NewRunServiceWithExecutionFactoryAndRegistry(
 }
 
 type workflowExecution struct {
-	runtime       *workflow.Runtime
-	pack          contextengine.ContextPack
-	project       model.Project
-	store         store.Store
-	runID         string
-	renderer      workflow.SlideRenderer
-	imageResolver llm.ImageRefResolver
+	runtime          *workflow.Runtime
+	pack             contextengine.ContextPack
+	project          model.Project
+	store            store.Store
+	runID            string
+	renderer         workflow.SlideRenderer
+	imageResolver    llm.ImageRefResolver
+	semanticReviewer workflow.SemanticReviewer
+	resumeCheckpoint *workflow.RuntimeCheckpoint
+	reconciliation   workflow.RecoverySnapshot
 }
 
 func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
@@ -80,12 +83,16 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 	outcome := r.runtime.Run(ctx, workflow.RuntimeInput{
 		RunID: r.runID, ProjectDir: r.project.WorkDir, Context: r.pack,
 		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
-		CommitMetadata: committer.Commit,
-		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
-		DomainTools:    workflow.DefaultDomainToolProvider{Pack: r.pack, Renderer: r.renderer},
-		ImageResolver:  r.imageResolver,
-		Lifecycle:      checkpoint,
-		Idempotency:    r.store,
+		CommitMetadata:      committer.Commit,
+		Trace:               workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
+		DomainTools:         workflow.DefaultDomainToolProvider{Pack: r.pack, Renderer: r.renderer},
+		ImageResolver:       r.imageResolver,
+		Lifecycle:           checkpoint,
+		Idempotency:         r.store,
+		ContextIndexStore:   optionalContextIndexStore(r.store),
+		SemanticReviews:     r.semanticReviewer,
+		SemanticReviewStore: optionalSemanticReviewStore(r.store),
+		ResumeCheckpoint:    r.resumeCheckpoint,
 	})
 	if outcome.Status == workflow.StatusCompleted {
 		memoryStore := contextengine.ThreadMemoryStore{}
@@ -236,8 +243,9 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	execution := &workflowExecution{
 		runtime: workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()}),
 		pack:    pack, project: project, store: svc.store, runID: runModel.ID,
-		renderer:      svc.renderer,
-		imageResolver: runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
+		renderer:         svc.renderer,
+		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
+		semanticReviewer: workflow.LLMSemanticReviewer{Provider: selectedProfile.Adapter()},
 	}
 	createdRun, startErr := svc.engine.StartWithContext(ctx, runModel, execution, runContext)
 	if startErr != nil {
@@ -246,6 +254,64 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	svc.completeCreateSuccess(ctx, thread.ID, p.ClientRequestID, createdRun.ID)
 	return createdRun, nil
+}
+
+func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, error) {
+	runModel, err := svc.store.GetRun(ctx, runID)
+	if err != nil {
+		return model.Run{}, err
+	}
+	if runModel.Status.Terminal() {
+		return model.Run{}, run.ErrRunNotRunning
+	}
+	project, err := svc.store.GetProject(ctx, runModel.ProjectID)
+	if err != nil {
+		return model.Run{}, err
+	}
+	if active, activeErr := svc.store.HasActiveRun(ctx, project.ID); activeErr != nil {
+		return model.Run{}, activeErr
+	} else if active && runModel.Status != model.RunRunning && runModel.Status != model.RunWaiting {
+		return model.Run{}, ErrRunActive
+	}
+	checkpointStore, ok := svc.store.(interface {
+		LatestCheckpoint(context.Context, string) (workflow.RuntimeCheckpoint, error)
+	})
+	if !ok {
+		return model.Run{}, run.ErrContextStoreUnavailable
+	}
+	checkpoint, err := checkpointStore.LatestCheckpoint(ctx, runID)
+	if err != nil {
+		return model.Run{}, err
+	}
+	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
+		RunID: runModel.ID, ThreadID: runModel.ThreadID, ProjectID: runModel.ProjectID,
+		WorkSpec: runModel.WorkSpec, Budget: contextengine.DefaultBudget(),
+	}, project)
+	if err != nil {
+		return model.Run{}, err
+	}
+	reconciled, err := workflow.ReconcileDirectWrites(ctx, project.WorkDir, checkpoint)
+	if err != nil {
+		return model.Run{}, err
+	}
+	provider, err := svc.resumeProvider(runModel)
+	if err != nil {
+		return model.Run{}, err
+	}
+	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: provider})
+	execution := &workflowExecution{
+		runtime: runtime, pack: pack, project: project, store: svc.store, runID: runModel.ID,
+		renderer:         svc.renderer,
+		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
+		semanticReviewer: workflow.LLMSemanticReviewer{Provider: provider},
+		resumeCheckpoint: &checkpoint,
+		reconciliation:   reconciled,
+	}
+	resumed, err := svc.engine.Resume(ctx, runModel, execution)
+	if err != nil {
+		return model.Run{}, err
+	}
+	return resumed, nil
 }
 
 func (svc *RunService) completeCreateSuccess(ctx context.Context, threadID, key, runID string) {

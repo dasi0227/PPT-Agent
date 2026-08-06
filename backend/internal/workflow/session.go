@@ -26,6 +26,7 @@ type sessionArtifact struct {
 	Source        string
 	Relative      string
 	BeforeContent []byte
+	AfterContent  []byte
 	BeforeHash    string
 	AfterHash     string
 	Existed       bool
@@ -87,9 +88,10 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 		if err := atomicWrite(finalPath, content); err != nil {
 			return ArtifactChange{}, err
 		}
-		previous.Source, previous.AfterHash, previous.Delete = source, hashBytes(content), false
+		previous.Source, previous.AfterContent, previous.AfterHash, previous.Delete = source, append([]byte(nil), content...), hashBytes(content), false
 		s.artifacts[relative] = previous
-		return ArtifactChange{Artifact: ref, BeforeHash: previous.BeforeHash, AfterHash: previous.AfterHash, Source: source}, nil
+		insertions, deletions := lineDiffStat(previous.BeforeContent, previous.AfterContent)
+		return ArtifactChange{Artifact: ref, BeforeHash: previous.BeforeHash, AfterHash: previous.AfterHash, Source: source, Insertions: insertions, Deletions: deletions}, nil
 	}
 	before, readErr := os.ReadFile(finalPath)
 	existed := readErr == nil
@@ -102,10 +104,11 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 	entry := sessionArtifact{
 		Ref: ref, Source: source, Relative: relative,
 		BeforeContent: append([]byte(nil), before...), BeforeHash: hashBytes(before),
-		AfterHash: hashBytes(content), Existed: existed,
+		AfterContent: append([]byte(nil), content...), AfterHash: hashBytes(content), Existed: existed,
 	}
 	s.artifacts[relative] = entry
-	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, Source: source}, nil
+	insertions, deletions := lineDiffStat(entry.BeforeContent, entry.AfterContent)
+	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, Source: source, Insertions: insertions, Deletions: deletions}, nil
 }
 
 // WriteBatch applies a logical domain-target update by writing every item to
@@ -163,6 +166,17 @@ func (s *RunSession) ReadBaseline(ref ArtifactRef) ([]byte, error) {
 	return os.ReadFile(filepath.Join(s.projectDir, relative))
 }
 
+func (s *RunSession) baselineForChange(ref ArtifactRef) []byte {
+	relative, err := s.resolveRelative(ref)
+	if err != nil {
+		return nil
+	}
+	if entry, ok := s.artifacts[relative]; ok && entry.Existed {
+		return append([]byte(nil), entry.BeforeContent...)
+	}
+	return nil
+}
+
 func (s *RunSession) ProjectDir() string { return s.projectDir }
 
 func (s *RunSession) ChangeSet() ChangeSet {
@@ -182,6 +196,7 @@ func (s *RunSession) ChangeSet() ChangeSet {
 			AfterHash: entry.AfterHash, Source: entry.Source,
 			Tentative: strings.HasPrefix(entry.Source, "tentative:"),
 		}
+		change.Insertions, change.Deletions = lineDiffStat(entry.BeforeContent, entry.AfterContent)
 		switch {
 		case entry.Delete:
 			out.Deleted = append(out.Deleted, change)

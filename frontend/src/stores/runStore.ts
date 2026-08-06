@@ -278,20 +278,42 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     schedule(0);
   };
 
-  const refreshTarget = (session: RunSession, event: SSEEvent) => {
-    if (event.event !== 'run.finished' || event.data.status !== 'completed' || !session.projectId) return;
-    const target = session.target;
-    if (target.level === 'slide' && target.slide_id) {
-      if (target.artifact === 'presentation') {
-        void useProjectStore.getState().loadProjectSlides(session.projectId);
-      }
-      void useSpecStore.getState().refreshSlide(session.projectId, target.slide_id);
+  const refreshPublicTarget = (projectId: string, target?: PublicTarget) => {
+    if (!target) return;
+    if (target.type === 'slide' && target.slide_id) {
+      void useProjectStore.getState().loadProjectSlides(projectId);
+      void useSpecStore.getState().refreshSlide(projectId, target.slide_id);
       return;
     }
-    if (target.artifact === 'presentation') {
-      void useProjectStore.getState().loadProjectSlides(session.projectId);
+    void useProjectStore.getState().loadProjectSlides(projectId);
+    void useSpecStore.getState().loadProject(projectId);
+  };
+
+  const refreshTarget = (session: RunSession, event: SSEEvent) => {
+    if (!session.projectId) return;
+    if (event.event === 'tool.completed' && event.data.status === 'completed'
+      && (event.data.tool === 'write_ppt' || event.data.tool === 'edit_ppt')) {
+      refreshPublicTarget(session.projectId, event.data.target);
+      return;
     }
-    void useSpecStore.getState().loadProject(session.projectId);
+    if (event.event !== 'run.finished' || event.data.status !== 'completed') return;
+    if (event.data.affected_targets?.length) {
+      const projectId = session.projectId;
+      event.data.affected_targets.forEach((target) => refreshPublicTarget(projectId, target));
+      return;
+    }
+    if (session.target.level === 'slide' && session.target.slide_id) {
+      refreshPublicTarget(session.projectId, {
+        type: 'slide',
+        slide_id: session.target.slide_id,
+        part: session.target.artifact === 'presentation' ? 'html' : 'spec',
+      });
+    } else {
+      refreshPublicTarget(session.projectId, {
+        type: 'deck',
+        part: session.target.artifact === 'presentation' ? 'outline' : 'design',
+      });
+    }
   };
 
   return {
@@ -445,8 +467,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             updated.eventSourceClose?.();
             removePersistedRun(threadId);
             patchSession(threadId, { eventSourceClose: null, streamStatus: 'closed' });
-            refreshTarget(updated, event);
           }
+          refreshTarget(updated, event);
         },
         onError: () => {
           patchSession(threadId, { streamStatus: 'reconnecting' });

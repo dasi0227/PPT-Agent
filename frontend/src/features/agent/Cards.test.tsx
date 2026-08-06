@@ -31,6 +31,19 @@ describe('public timeline components', () => {
     expect(screen.queryByText('已读取全局蓝图')).toBeNull();
   });
 
+  it('uses safe target display names before slide list refreshes', () => {
+    render(<ToolActivityRow item={{
+      id: 'r:tool:c2', type: 'tool', runId: 'r', callId: 'c2',
+      tool: 'write_ppt',
+      label: '已创建页面 slide-04设计稿',
+      target: { type: 'slide', slide_id: 'slide-04', part: 'spec', display_name: '第 4 页' },
+      status: 'completed',
+      timestamp: 0,
+    }} />);
+    expect(screen.getByText('已创建第 4 页设计稿')).toBeInTheDocument();
+    expect(screen.queryByText(/slide-04/)).toBeNull();
+  });
+
   it('keeps failed tool details collapsed by default', () => {
     render(<ToolActivityRow item={{
       id: 'r:tool:c3', type: 'tool', runId: 'r', callId: 'c3',
@@ -96,18 +109,23 @@ describe('public timeline components', () => {
 	    expect(selectPlan).toHaveBeenCalledTimes(1);
 	  });
 
-  it('renders final as an ordinary agent message with affected target footer', () => {
+  it('renders final with a compact affected target summary', () => {
     render(<FinalMessage item={{
       id: 'f1', type: 'final', messageId: 'm1', text: '**整份演示文稿已完成**',
       affectedTargets: [
-        { type: 'deck', part: 'design' },
-        { type: 'slide', slide_id: 's1', part: 'spec' },
-        { type: 'slide', slide_id: 's1', part: 'html' },
+        { type: 'deck', part: 'design', insertions: 8, deletions: 1 },
+        { type: 'slide', slide_id: 's1', part: 'spec', display_name: '第 1 页', insertions: 12, deletions: 0 },
+        { type: 'slide', slide_id: 's1', part: 'html', display_name: '第 1 页', insertions: 30, deletions: 2 },
       ],
       timestamp: 0,
     }} />);
+    expect(screen.getByText('1 个页面已经变更')).toBeInTheDocument();
+    expect(screen.getByText('第 1 页设计稿')).toBeInTheDocument();
+    expect(screen.getByText('第 1 页幻灯片')).toBeInTheDocument();
+    expect(screen.getByText('全局视觉设计')).toBeInTheDocument();
+    expect(screen.getByText('+50')).toBeInTheDocument();
+    expect(screen.getByText('-3')).toBeInTheDocument();
     expect(screen.getByText('整份演示文稿已完成')).toBeInTheDocument();
-    expect(screen.getByText('已更新全局设计和1 张页面')).toBeInTheDocument();
     expect(screen.queryByText('执行结果')).toBeNull();
   });
 

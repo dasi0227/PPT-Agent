@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const slideLoads: string[] = [];
 const specRefreshes: string[] = [];
+const specLoads: string[] = [];
 vi.mock('./projectStore', () => ({
   useProjectStore: {
     getState: () => ({
@@ -14,7 +15,7 @@ vi.mock('./specStore', () => ({
   useSpecStore: {
     getState: () => ({
       refreshSlide: async (_projectId: string, slideId: string) => { specRefreshes.push(slideId); },
-      loadProject: async () => {},
+      loadProject: async (projectId: string) => { specLoads.push(projectId); },
     }),
   },
 }));
@@ -104,6 +105,7 @@ function reset() {
   vi.useRealTimers();
   slideLoads.length = 0;
   specRefreshes.length = 0;
+  specLoads.length = 0;
   connections.length = 0;
   createMode = 'resolve';
   resolveCreate = null;
@@ -207,6 +209,25 @@ describe('runStore public event sessions', () => {
       clientMessageId: 'msg-stable',
       deliveryStatus: 'accepted',
     });
+  });
+
+  test('refreshes project data immediately after successful write tool completion', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    const connection = connections[0];
+    connection.onMessage({
+      id: 'tool-1',
+      event: 'tool.completed',
+      data: {
+        ...base,
+        call_id: 'c1',
+        tool: 'write_ppt',
+        status: 'completed',
+        target: { type: 'slide', slide_id: 's1', part: 'spec', display_name: '第 1 页' },
+        display: { label: '已创建第 1 页设计稿' },
+      },
+    });
+    expect(slideLoads).toContain('p1');
+    expect(specRefreshes).toContain('s1');
   });
 
   test('keeps rejected steering text and retry creates a new request identity', async () => {
