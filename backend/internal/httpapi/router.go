@@ -53,6 +53,7 @@ func (r *Router) register() {
 	v1.GET("/projects/:id/slides", r.project.ListSlides)
 	v1.POST("/projects/:id/slides", r.project.CreateSlide)
 	v1.POST("/projects/:id/slides/reorder", r.project.ReorderSlides)
+	v1.POST("/projects/:id/slides/restructure", r.project.RestructureSlides)
 	if r.spec != nil {
 		v1.GET("/projects/:id/spec", r.spec.GetProject)
 		v1.PATCH("/projects/:id/spec", r.spec.PatchProject)

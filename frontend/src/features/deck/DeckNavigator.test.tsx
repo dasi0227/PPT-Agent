@@ -5,18 +5,20 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { slidesApi } from '../../api/slides';
 import { useSpecStore } from '../../stores/specStore';
+import { clearSlideRenderCache } from '../viewer/useSlideRenderCache';
 
 describe('DeckNavigator', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    useDeckStore.setState({ currentPage: 0 });
+    clearSlideRenderCache();
+    useDeckStore.setState({ currentPage: 0, globalView: 'html' });
     useProjectStore.setState({
       projects: [{ id: 'p1', title: '演示项目', work_dir: '', theme: 'swiss', status: 'draft', design_path: '', created_at: 0, updated_at: 0 }],
       activeProjectId: 'p1',
       slidesByProjectId: {
         p1: [
-          { id: 's1', project_id: 'p1', position: 0, layout: 'cover', title: '市场分析', html_path: '/a.html', spec_path: '/a.json', current_version: 1 },
-          { id: 's2', project_id: 'p1', position: 1, layout: 'content', title: '增长趋势', html_path: '/b.html', spec_path: '/b.json', current_version: 1 },
+          { id: 's1', project_id: 'p1', position: 0, layout: 'cover', title: '市场分析', html_path: '', spec_path: '/a.json', current_version: 0 },
+          { id: 's2', project_id: 'p1', position: 1, layout: 'content', title: '增长趋势', html_path: '', spec_path: '/b.json', current_version: 0 },
         ]
       },
       loadingProjects: false
@@ -36,22 +38,75 @@ describe('DeckNavigator', () => {
   });
 
   it('shows real slide titles instead of generic labels', () => {
+    useDeckStore.setState({ globalView: 'outline' });
     render(<DeckNavigator />);
     expect(screen.getByText('市场分析')).toBeInTheDocument();
     expect(screen.getByText('增长趋势')).toBeInTheDocument();
     expect(screen.queryByText('Slide 1')).not.toBeInTheDocument();
     expect(screen.queryByText('核心命题')).not.toBeInTheDocument();
+    expect(screen.queryByText('暂无')).toBeNull();
   });
 
-  it('marks stale pages with a materialization badge', () => {
+  it('hides materialization badges and layout machine fields from the directory', () => {
     render(<DeckNavigator />);
-    expect(screen.getByText('设计稿有更新')).toBeInTheDocument();
+    expect(screen.queryByText('设计稿有更新')).toBeNull();
+    expect(screen.queryByText('未生成')).toBeNull();
+    expect(screen.queryByText('cover')).toBeNull();
+    expect(screen.queryByText('content')).toBeNull();
+    expect(screen.getAllByText('暂无')).toHaveLength(2);
+    expect(screen.queryByText('市场分析')).toBeNull();
+    expect(screen.queryByText('增长趋势')).toBeNull();
   });
 
   it('renders section and subsection directory hierarchy', () => {
     render(<DeckNavigator />);
-    expect(screen.getByText('01 市场')).toBeInTheDocument();
+    expect(screen.getByText('1. 市场')).toBeInTheDocument();
     expect(screen.getByText('1.1 趋势')).toBeInTheDocument();
+  });
+
+  it('renders low-resolution HTML thumbnails when a page has HTML', async () => {
+    useProjectStore.setState((state) => ({
+      slidesByProjectId: {
+        ...state.slidesByProjectId,
+        p1: [
+          { ...state.slidesByProjectId.p1[0], html_path: '/slides/s1/index.html', current_version: 1, html_revision: 1 },
+          state.slidesByProjectId.p1[1],
+        ],
+      },
+    }));
+    vi.spyOn(slidesApi, 'render').mockResolvedValue('<!doctype html><html><body><section>Preview</section></body></html>');
+
+    render(<DeckNavigator />);
+
+    await waitFor(() => expect(slidesApi.render).toHaveBeenCalledWith('s1', expect.any(AbortSignal)));
+    expect(await screen.findByTitle('第 1 页缩略图')).toBeInTheDocument();
+    expect(screen.getAllByText('暂无')).toHaveLength(1);
+  });
+
+  it('dragging a page onto a subsection page updates its placement', async () => {
+    useDeckStore.setState({ globalView: 'outline' });
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockResolvedValue(undefined as never);
+    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+    const transfer = {
+      value: '',
+      setData: vi.fn((_type: string, value: string) => { transfer.value = value; }),
+      getData: vi.fn(() => transfer.value),
+      effectAllowed: '',
+      dropEffect: '',
+    };
+
+    render(<DeckNavigator />);
+    fireEvent.dragStart(screen.getByText('市场分析').closest('[draggable="true"]')!, { dataTransfer: transfer });
+    fireEvent.drop(screen.getByText('增长趋势').closest('[draggable="true"]')!, { dataTransfer: transfer });
+
+    await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
+      'p1',
+      ['s1', 's2'],
+      [
+        { slide_id: 's1', section_id: 'sec', subsection_id: 'sub' },
+        { slide_id: 's2', section_id: 'sec', subsection_id: 'sub' },
+      ],
+    ));
   });
 
   it('add page button calls slidesApi.add with last slide as anchor', async () => {

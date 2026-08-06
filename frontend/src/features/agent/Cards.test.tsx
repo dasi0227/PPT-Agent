@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { ToolActivityRow } from './ActivityRows';
+import { ReasoningRow, ToolActivityRow } from './ActivityRows';
 import { PlanIndicator } from './PlanIndicator';
 import { FinalMessage } from './FinalMessage';
 import { QuestionPanel } from './QuestionPanel';
@@ -12,6 +12,23 @@ import { useRunStore } from '../../stores/runStore';
 import type { QuestionItem } from './eventReducer';
 
 describe('public timeline components', () => {
+  it('aligns the reasoning icon to the first text line without margin offsets', () => {
+    const { container } = render(<ReasoningRow item={{
+      id: 'r:reasoning:m1',
+      type: 'reasoning',
+      messageId: 'm1',
+      text: '我来帮你设计这个关于「Skill 是什么」的演示文稿。',
+      timestamp: 0,
+    }} />);
+    const row = container.firstElementChild;
+    const iconCell = container.querySelector('span[aria-hidden="true"]');
+
+    expect(row).toHaveClass('grid-cols-[16px_minmax(0,1fr)_16px]', 'leading-5');
+    expect(iconCell).toHaveClass('h-5', 'items-center');
+    expect(screen.getByText(/我来帮你设计/).closest('.prose')).toHaveClass('prose-p:my-0', 'prose-p:leading-5');
+    expect(container.innerHTML).not.toContain('mt-[');
+  });
+
   it('renders a compact tool row without raw args or observations', () => {
     render(<ToolActivityRow item={{
       id: 'r:tool:c1', type: 'tool', runId: 'r', callId: 'c1',
@@ -124,7 +141,10 @@ describe('public timeline components', () => {
     expect(screen.getByText('+50')).toBeInTheDocument();
     expect(screen.getByText('-3')).toBeInTheDocument();
     expect(screen.queryByText('第 1 页设计稿')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /1 个页面已经变更/ }));
+    const summaryButton = screen.getByRole('button', { name: /1 个页面已经变更/ });
+    expect(summaryButton).not.toHaveClass('border-b');
+    fireEvent.click(summaryButton);
+    expect(summaryButton).toHaveClass('border-b', 'border-border');
     expect(screen.getByText('第 1 页设计稿')).toBeInTheDocument();
     expect(screen.getByText('第 1 页幻灯片')).toBeInTheDocument();
     expect(screen.getByText('全局视觉设计')).toBeInTheDocument();

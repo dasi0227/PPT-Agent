@@ -1,6 +1,12 @@
 import { fetchClient } from './client';
 import { Slide } from './types';
 
+export interface SlidePlacement {
+  slide_id: string;
+  section_id: string;
+  subsection_id?: string;
+}
+
 export const slidesApi = {
   render: (id: string, signal?: AbortSignal) =>
     fetchClient<string>(`/slides/${encodeURIComponent(id)}/render`, {
@@ -14,4 +20,9 @@ export const slidesApi = {
   remove: (id: string) => fetchClient<void>(`/slides/${id}`, { method: 'DELETE' }),
   reorder: (projectId: string, orderedIds: string[]) =>
     fetchClient<void>(`/projects/${projectId}/slides/reorder`, { method: 'POST', body: JSON.stringify({ ordered_ids: orderedIds }) }),
+  restructure: (projectId: string, orderedIds: string[], placements: SlidePlacement[]) =>
+    fetchClient<void>(`/projects/${projectId}/slides/restructure`, {
+      method: 'POST',
+      body: JSON.stringify({ ordered_ids: orderedIds, placements }),
+    }),
 };

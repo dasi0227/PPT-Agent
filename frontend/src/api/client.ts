@@ -121,8 +121,11 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     }
 
     if (response.status === 204) return undefined as T;
+    if (responseType === 'text') return response.text() as Promise<T>;
 
-    return (responseType === 'text' ? response.text() : response.json()) as Promise<T>;
+    const text = await response.text();
+    if (text.trim() === '') return undefined as T;
+    return JSON.parse(text) as T;
   } catch (error) {
     if (error instanceof APIError) throw error;
     if (timeoutController.signal.aborted) throw new RequestTimeoutError(timeoutMs);

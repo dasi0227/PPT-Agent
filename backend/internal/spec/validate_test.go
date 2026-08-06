@@ -32,3 +32,22 @@ func TestValidateOutlineReferences(t *testing.T) {
 		t.Fatal("duplicate stable id should fail")
 	}
 }
+
+func TestValidateOutlineRejectsSubsectionFromAnotherSection(t *testing.T) {
+	outline := Outline{
+		SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "p", Title: "Deck",
+		Goal: "goal", Audience: "audience", Language: "en-US", CoreThesis: "thesis",
+		NarrativeArc: "arc", CreatedAt: 1, UpdatedAt: 1,
+		Sections: []Section{
+			{ID: "s1", Number: "01", Title: "One", Subsections: []Subsection{{ID: "sub1", Number: "1.1", Title: "Sub"}}},
+			{ID: "s2", Number: "02", Title: "Two", Subsections: []Subsection{}},
+		},
+		SlideOrder: []string{"stable"},
+	}
+	slide := validSlide("stable")
+	slide.SectionID = "s2"
+	slide.SubsectionID = "sub1"
+	if err := ValidateOutline(outline, map[string]SlideSpec{"stable": slide}); err == nil {
+		t.Fatal("subsection from another section should fail")
+	}
+}

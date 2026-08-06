@@ -17,7 +17,7 @@ type pptReadTool struct{ pack contextengine.ContextPack }
 func (pptReadTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name:        "read_ppt",
-		Description: "Read one disclosed PPT resource. Returns the complete saved JSON or HTML string.",
+		Description: "Read one disclosed PPT resource object and return the complete saved JSON or HTML string. " + resourceObjectGuidance,
 		Parameters: objectSchema([]string{"resource"}, map[string]any{
 			"resource": resourceSchema(),
 		}),
@@ -53,7 +53,7 @@ type pptWriteTool struct{ pack contextengine.ContextPack }
 func (pptWriteTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name:        "write_ppt",
-		Description: "Create or fully replace one disclosed PPT resource through the active run session. content is always a string.",
+		Description: "Create or fully replace one disclosed PPT resource object through the active run session. content is always a string. " + resourceObjectGuidance,
 		Parameters: objectSchema([]string{"resource", "content"}, map[string]any{
 			"resource": resourceSchema(),
 			"content":  map[string]any{"type": "string", "maxLength": maxPPTContentBytes},
@@ -114,7 +114,7 @@ func (pptEditTool) Schema() ToolSchema {
 	})
 	return ToolSchema{
 		Name:        "edit_ppt",
-		Description: "Atomically apply ordered, uniquely anchored exact text replacements to one PPT resource.",
+		Description: "Atomically apply ordered, uniquely anchored exact text replacements to one PPT resource object. " + resourceObjectGuidance,
 		Parameters: objectSchema([]string{"resource", "edits"}, map[string]any{
 			"resource": resourceSchema(),
 			"edits":    map[string]any{"type": "array", "minItems": 1, "maxItems": 32, "items": edit},

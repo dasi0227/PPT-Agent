@@ -13,6 +13,16 @@ describe('fetchClient', () => {
     vi.useRealTimers();
   });
 
+  it('returns undefined for successful empty JSON responses', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 200 })));
+    await expect(fetchClient<void>('/empty')).resolves.toBeUndefined();
+  });
+
+  it('returns undefined for no-content responses', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })));
+    await expect(fetchClient<void>('/empty')).resolves.toBeUndefined();
+  });
+
   it('preserves structured error fields and request ID', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       error: { code: 'BAD_STATE', message: '当前状态不可执行', details: { stage: 'verify' } },

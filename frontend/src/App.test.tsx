@@ -15,6 +15,7 @@ globalThis.ResizeObserver = class {
 
 describe('App Level Interactions', () => {
   beforeEach(() => {
+    window.history.pushState({}, '', '/projects/p1');
     useProjectStore.setState({
         projects: [
           { id: 'p1', title: 'Project 1', work_dir: '', theme: 'default', status: 'draft', design_path: '', created_at: 0, updated_at: 0 },
@@ -78,12 +79,24 @@ describe('App Level Interactions', () => {
       render(<App />);
     });
     
-    const slide2Btn = screen.getByText('Slide 2');
+    const slide2Btn = screen.getByRole('button', { name: '下一页' });
     await act(async () => {
       slide2Btn.click();
     });
     
     expect(useDeckStore.getState().currentPage).toBe(1);
+  });
+
+  it('uses the root route as the home state even when a project was previously active', async () => {
+    window.history.pushState({}, '', '/');
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    expect(useProjectStore.getState().activeProjectId).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Dasi PPT Agent' })).toBeInTheDocument();
+    expect(screen.queryByText('Project 1')).not.toBeInTheDocument();
   });
   
   it('shows run events in agent panel', async () => {

@@ -1,13 +1,16 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { cn } from '../../lib/utils';
 import { Loader2, Plus, MoreHorizontal } from 'lucide-react';
 import { ProjectMenu } from './ProjectMenu';
+import { projectRoute } from './routes';
 
 export const ProjectTabs: React.FC = () => {
   const { projects, activeProjectId, selectProject, loadingProjects, loadProjects } = useProjectStore();
   const { status: runStatus } = useActiveSession();
+  const navigate = useNavigate();
 
   React.useEffect(() => {
     loadProjects();
@@ -16,12 +19,16 @@ export const ProjectTabs: React.FC = () => {
   const openProjectIds = useProjectStore((s) => s.openProjectIds);
   
   const displayProjects = openProjectIds.map((id) => projects.find((project) => project.id === id) || { id, title: '加载中…' });
+  const activateProject = (projectId: string) => {
+    selectProject(projectId);
+    navigate(projectRoute(projectId));
+  };
 
   return (
     <div className="flex h-12 items-center overflow-hidden border-b border-border-strong bg-panel px-2 select-none">
       <div className="mr-4 flex shrink-0 items-center px-2 font-bold text-text-900">
-        <img src="/logo.jpg" alt="Logo" className="w-5 h-5 rounded-sm mr-2 object-cover" />
-        Dasi Studio
+        <img src="/logo.jpg" alt="Logo" className="w-10 h-10 rounded-sm mr-2 object-cover" />
+        Dasi PPT Agent
       </div>
 
       <div className="flex min-w-0 flex-1 items-center">
@@ -37,11 +44,11 @@ export const ProjectTabs: React.FC = () => {
                 role="tab"
                 aria-selected={isActive}
                 tabIndex={0}
-                onClick={() => selectProject(proj.id)}
+                onClick={() => activateProject(proj.id)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    selectProject(proj.id);
+                    activateProject(proj.id);
                   }
                 }}
                 className={cn(

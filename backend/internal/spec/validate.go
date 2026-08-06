@@ -24,17 +24,17 @@ func ValidateOutline(d Outline, slides map[string]SlideSpec) error {
 	if err := validateSchema(pptschema.OutlineName, d); err != nil {
 		return err
 	}
-	sections, subsections := map[string]bool{}, map[string]bool{}
+	sections, subsectionOwners := map[string]bool{}, map[string]string{}
 	for _, section := range d.Sections {
 		if section.ID == "" || section.Number == "" || section.Title == "" || sections[section.ID] {
 			return fmt.Errorf("%w: invalid or duplicate section", ErrInvalid)
 		}
 		sections[section.ID] = true
 		for _, subsection := range section.Subsections {
-			if subsection.ID == "" || subsection.Number == "" || subsection.Title == "" || subsections[subsection.ID] {
+			if subsection.ID == "" || subsection.Number == "" || subsection.Title == "" || subsectionOwners[subsection.ID] != "" {
 				return fmt.Errorf("%w: invalid or duplicate subsection", ErrInvalid)
 			}
-			subsections[subsection.ID] = true
+			subsectionOwners[subsection.ID] = section.ID
 		}
 	}
 	seen := map[string]bool{}
@@ -56,7 +56,7 @@ func ValidateOutline(d Outline, slides map[string]SlideSpec) error {
 		if s.SlideID != id {
 			return fmt.Errorf("%w: slide key %s does not match slide_id %s", ErrReferenceBroken, id, s.SlideID)
 		}
-		if !sections[s.SectionID] || (s.SubsectionID != "" && !subsections[s.SubsectionID]) {
+		if !sections[s.SectionID] || (s.SubsectionID != "" && subsectionOwners[s.SubsectionID] != s.SectionID) {
 			return fmt.Errorf("%w: slide %s references an unknown section", ErrReferenceBroken, id)
 		}
 	}

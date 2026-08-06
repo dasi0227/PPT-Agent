@@ -45,4 +45,90 @@ describe('SSE parser', () => {
       reasoning_content: 'hidden',
     }))).toBeNull();
   });
+
+  it('parses tool events with local file target fields', () => {
+    const started = parseSSEEvent('tool.started', JSON.stringify({
+      schema_version: 2,
+      run_id: 'r1',
+      occurred_at: '2026-08-06T16:03:16.051323Z',
+      call_id: 'write_ppt_4',
+      tool: 'write_ppt',
+      target: {
+        type: 'deck',
+        part: 'outline',
+        display_name: '整份结构',
+        local_path: '/Users/test/.dasi/ppt/projects/p1/outline.json',
+        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/outline.json',
+        insertions: 69,
+        deletions: 9,
+      },
+      display: {
+        label: '正在创建整份结构',
+        detail: '/Users/test/.dasi/ppt/projects/p1/outline.json',
+      },
+    }), '1a');
+    expect(started).not.toBeNull();
+
+    const completed = parseSSEEvent('tool.completed', JSON.stringify({
+      schema_version: 2,
+      run_id: 'r1',
+      occurred_at: '2026-08-06T16:03:17.051323Z',
+      call_id: 'write_ppt_4',
+      tool: 'write_ppt',
+      status: 'completed',
+      target: {
+        type: 'deck',
+        part: 'outline',
+        local_path: '/Users/test/.dasi/ppt/projects/p1/outline.json',
+        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/outline.json',
+        insertions: 69,
+        deletions: 9,
+      },
+      display: {
+        label: '已创建整份结构',
+        detail: '/Users/test/.dasi/ppt/projects/p1/outline.json',
+      },
+    }), '1');
+
+    expect(completed).not.toBeNull();
+  });
+
+  it('parses final and finished events with local affected targets', () => {
+    const finalEvent = parseSSEEvent('message.final', JSON.stringify({
+      schema_version: 2,
+      run_id: 'r1',
+      occurred_at: '2026-08-06T16:06:31.781954Z',
+      message_id: 'm1',
+      text: '## 完成',
+      affected_targets: [{
+        type: 'deck',
+        part: 'outline',
+        local_path: '/Users/test/.dasi/ppt/projects/p1/outline.json',
+        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/outline.json',
+        insertions: 69,
+        deletions: 9,
+      }],
+    }), '2');
+
+    expect(finalEvent).not.toBeNull();
+
+    const finishedEvent = parseSSEEvent('run.finished', JSON.stringify({
+      schema_version: 2,
+      run_id: 'r1',
+      occurred_at: '2026-08-06T16:06:31.791303Z',
+      status: 'completed',
+      duration_ms: 1000,
+      affected_targets: [{
+        type: 'slide',
+        slide_id: 'slide-01',
+        part: 'spec',
+        display_name: '页面',
+        local_path: '/Users/test/.dasi/ppt/projects/p1/slides/slide-01/spec.json',
+        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/slides/slide-01/spec.json',
+        insertions: 29,
+      }],
+    }), '3');
+
+    expect(finishedEvent).not.toBeNull();
+  });
 });

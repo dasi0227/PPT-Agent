@@ -158,8 +158,13 @@ export const useProjectStore = create<ProjectState>()(
     { 
       name: 'ppt-agent-project-v6', 
       partialize: (s) => {
-        return { openProjectIds: s.openProjectIds, activeProjectId: s.activeProjectId };
-      }
+        return { openProjectIds: s.openProjectIds };
+      },
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted as Partial<ProjectState>),
+        activeProjectId: null,
+      }),
     }
   )
 );

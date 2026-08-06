@@ -5,6 +5,7 @@ Resource ownership:
 - deck:design owns the deck-wide 16:9 visual system: canvas, palette, typography, spacing, grid, density, components and motion direction.
 - slide:<slide_id>:spec owns one page's semantic role, title, key message, content hierarchy, visual intent, asset intent and speaker notes.
 - slide:<slide_id>:html is the final page implementation.
+These names are display keys only. Tool calls must use resource objects such as {"type":"deck","part":"outline"} or {"type":"slide","slide_id":"slide-01","part":"html"}, never display-key strings.
 
 Presentation implementation rules:
 - Every Slide HTML must use a 1600x900 .slide-stage.
@@ -12,7 +13,7 @@ Presentation implementation rules:
 - Runtime derives tokens.css from Design.
 - Use accessible semantic HTML, useful alt text, CJK-safe fonts and readable typography.
 - Use project-local, data or blob resources only.
-- Do not pass disk paths, project paths, runtime paths, database identifiers or storage artifact kinds as model-visible resources.
+- Do not pass disk paths, project paths, runtime paths, database identifiers, storage artifact kinds, display keys or "current" as tool resource arguments.
 
 Available shared tokens:
 --color-bg, --color-fg, --color-primary, --color-accent, --color-muted,

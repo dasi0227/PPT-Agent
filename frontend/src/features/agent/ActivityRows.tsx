@@ -82,20 +82,28 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
     <div
       {...interactive}
       className={cn(
-        'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-[1.55] text-text-600',
+        'grid grid-cols-[16px_minmax(0,1fr)_16px] items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-600',
         showToggle && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
       )}
     >
-      <BrainCircuit className="mt-0.5 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
+      <span className="flex h-5 w-4 items-center justify-center" aria-hidden="true">
+        <BrainCircuit className="h-4 w-4 text-accent" strokeWidth={1.75} />
+      </span>
       <div ref={textRef} className={cn('min-w-0 flex-1', !expanded && 'line-clamp-1')}>
-        <MarkdownMessage content={safeReasoningMarkdown(item.text)} />
+        <MarkdownMessage
+          content={safeReasoningMarkdown(item.text)}
+          className="text-text-600 prose-headings:my-0 prose-p:my-0 prose-p:leading-5 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-strong:text-text-600"
+        />
       </div>
       {showToggle && (
-        <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
+        <span className="flex h-5 w-4 items-center justify-center text-text-400" aria-hidden="true">
           {expanded
             ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
             : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
         </span>
+      )}
+      {!showToggle && (
+        <span aria-hidden="true" />
       )}
     </div>
   );

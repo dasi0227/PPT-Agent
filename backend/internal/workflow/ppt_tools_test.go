@@ -52,29 +52,79 @@ func (r *recordingRenderer) Render(_ context.Context, request RenderRequest) (Re
 	return out, nil
 }
 
-func TestPPTToolSchemasExposeOnlyResourceStringContracts(t *testing.T) {
+func TestPPTToolSchemasExposeResourceObjectContracts(t *testing.T) {
 	_, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
 	tests := []struct {
 		tool     DomainTool
 		required []string
 		forbid   []string
 	}{
-		{pptReadTool{pack}, []string{`"resource"`}, []string{`"include"`, `"target"`}},
-		{pptWriteTool{pack}, []string{`"resource"`, `"content"`, `"type":"string"`}, []string{`"model"`, `"target"`}},
-		{pptEditTool{pack}, []string{`"resource"`, `"old_text"`, `"new_text"`}, []string{`"json_edit"`, `"path"`, `"target"`}},
+		{pptReadTool{pack}, []string{`"resource"`, `resource must be an object`, `"const":"deck"`, `"enum":["outline","design"]`}, []string{`"include"`, `"target"`}},
+		{pptWriteTool{pack}, []string{`"resource"`, `"content"`, `"type":"string"`, `not a string or path`}, []string{`"model"`, `"target"`}},
+		{pptEditTool{pack}, []string{`"resource"`, `"old_text"`, `"new_text"`, `"slide_id"`}, []string{`"json_edit"`, `"target"`}},
 	}
 	for _, test := range tests {
-		raw, _ := json.Marshal(test.tool.Schema().Parameters)
+		schema := test.tool.Schema()
+		raw, _ := json.Marshal(map[string]any{
+			"description": schema.Description,
+			"parameters":  schema.Parameters,
+		})
 		text := string(raw)
 		for _, value := range test.required {
 			if !strings.Contains(text, value) {
-				t.Fatalf("%s schema missing %s: %s", test.tool.Schema().Name, value, text)
+				t.Fatalf("%s schema missing %s: %s", schema.Name, value, text)
 			}
 		}
 		for _, value := range test.forbid {
 			if strings.Contains(text, value) {
-				t.Fatalf("%s schema leaked %s: %s", test.tool.Schema().Name, value, text)
+				t.Fatalf("%s schema leaked %s: %s", schema.Name, value, text)
 			}
+		}
+	}
+}
+
+func TestResourceInvalidObservationTeachesObjectShape(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	result := (pptReadTool{pack}).Execute(context.Background(), toolInput(pack, dir, nil, map[string]any{
+		"resource": "deck:outline",
+	}))
+	if result.OK || result.Code != CodeResourceInvalid {
+		t.Fatalf("invalid resource unexpectedly accepted: %+v", result)
+	}
+	var observation map[string]any
+	if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
+		t.Fatalf("invalid observation json: %v", err)
+	}
+	reason, _ := observation["reason"].(string)
+	nextAction, _ := observation["next_action"].(string)
+	text := reason + " " + nextAction
+	for _, want := range []string{
+		`resource must be an object`,
+		`{"type":"deck","part":"outline"}`,
+		`{"type":"slide","slide_id":"<stable slide_id>","part":"spec|html"}`,
+		`Never use display keys`,
+		`"deck:outline"`,
+		`"slides/..."`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("resource invalid observation missing %s: %s", want, text)
+		}
+	}
+	if observation["code"] != CodeResourceInvalid {
+		t.Fatalf("wrong observation code: %#v", observation)
+	}
+}
+
+func TestResourceContractsPromptShowsObjectArguments(t *testing.T) {
+	body := resourceContractsModule().Body
+	for _, want := range []string{
+		`Display keys are labels for discussion`,
+		`deck:outline -> {"type":"deck","part":"outline"}`,
+		`slide:<slide_id>:html -> {"type":"slide","slide_id":"<stable slide_id>","part":"html"}`,
+		`Never pass resource as a string`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("resource contracts prompt missing %s:\n%s", want, body)
 		}
 	}
 }
@@ -400,6 +450,35 @@ func TestSpecArtifactCanFinishAfterSlideSpecOnlyChange(t *testing.T) {
 	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
 	if !result.OK || !gate.Accepted || len(gate.MaterializationProofs) != 0 {
 		t.Fatalf("spec-only finish rejected: write=%+v gate=%+v", result, gate)
+	}
+}
+
+func TestDeckOutlineMissingSlideSpecsDirectsSpecCreation(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetDeck)
+	if err := os.Remove(filepath.Join(dir, model.SlideSpecPath("slide-01"))); err != nil {
+		t.Fatal(err)
+	}
+	tx, _ := NewRunSession(dir, "deck-outline-missing-spec")
+	next := deckModel("p1", []string{"slide-01"})
+	next.Title = "Deck Updated"
+	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
+		"resource": resourceArgs(Resource{Type: "deck", Part: "outline"}),
+		"content":  string(mustJSONValue(next)),
+	}))
+	ledger := NewEvidenceLedger()
+	recordResultEvidence(ledger, result)
+	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
+	if !result.OK || gate.Accepted {
+		t.Fatalf("missing slide spec unexpectedly accepted: write=%+v gate=%+v", result, gate)
+	}
+	if !hasCompletionCode(gate, "SLIDE_SPEC_REQUIRED") {
+		t.Fatalf("gate did not report missing slide specs: %+v", gate)
+	}
+	if hasRequiredAction(gate, "write_ppt", "deck:outline") {
+		t.Fatalf("gate directed outline rewrite instead of missing slide spec creation: %+v", gate)
+	}
+	if !hasRequiredAction(gate, "write_ppt", "slide:slide-01:spec") {
+		t.Fatalf("gate did not direct missing slide spec creation: %+v", gate)
 	}
 }
 

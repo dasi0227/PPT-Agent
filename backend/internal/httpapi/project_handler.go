@@ -197,9 +197,32 @@ func (h *ProjectHandler) ReorderSlides(c *gin.Context) {
 	err := h.slideSvc.ReorderSlides(c.Request.Context(), c.Param("id"), body.OrderedIDs)
 	switch {
 	case err == nil:
-		c.Status(http.StatusOK)
+		c.Status(http.StatusNoContent)
 	case errors.Is(err, service.ErrRunActive):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	default:
+		AbortWithError(c, ErrInternal(err.Error()))
+	}
+}
+
+// RestructureSlides POST /projects/:id/slides/restructure：按 ordered_ids 与 placements 重组目录归属。
+func (h *ProjectHandler) RestructureSlides(c *gin.Context) {
+	var body struct {
+		OrderedIDs []string                 `json:"ordered_ids"`
+		Placements []service.SlidePlacement `json:"placements"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || len(body.OrderedIDs) == 0 || len(body.Placements) == 0 {
+		AbortWithError(c, ErrBadRequest("ordered_ids and placements are required"))
+		return
+	}
+	err := h.slideSvc.RestructureSlides(c.Request.Context(), c.Param("id"), body.OrderedIDs, body.Placements)
+	switch {
+	case err == nil:
+		c.Status(http.StatusNoContent)
+	case errors.Is(err, service.ErrRunActive):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	case service.IsValidationError(err):
+		AbortWithError(c, ErrBadRequest(err.Error()))
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}

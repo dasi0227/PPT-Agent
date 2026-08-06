@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { AppShell } from './features/workspace/AppShell';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { GlobalModals } from './features/workspace/GlobalModals';
+import { UnknownRouteRedirect, WorkspaceRoute } from './features/workspace/WorkspaceRoute';
 import { useRunStore } from './stores/runStore';
 
 export function App() {
@@ -13,10 +14,14 @@ export function App() {
   }, []);
 
   return (
-    <>
-      <AppShell />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<WorkspaceRoute />} />
+        <Route path="/projects/:projectId" element={<WorkspaceRoute />} />
+        <Route path="*" element={<UnknownRouteRedirect />} />
+      </Routes>
       <GlobalModals />
-    </>
+    </BrowserRouter>
   );
 }
 

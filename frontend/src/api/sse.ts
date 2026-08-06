@@ -285,7 +285,7 @@ function containsForbiddenField(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(containsForbiddenField);
   if (!isRecord(value)) return false;
   const forbidden = new Set([
-    'args', 'arguments', 'html', 'observation', 'result', 'path', 'local_path',
+    'args', 'arguments', 'html', 'observation', 'result', 'path',
     'screenshot_path', 'hash', 'reasoning_content', 'provider_reasoning',
   ]);
   return Object.entries(value).some(([key, child]) =>

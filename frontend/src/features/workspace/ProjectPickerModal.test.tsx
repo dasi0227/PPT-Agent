@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../../stores/projectStore';
 import { ProjectPickerModal } from './ProjectPickerModal';
@@ -19,7 +20,11 @@ describe('ProjectPickerModal', () => {
 
   it('creates a real project only after the user confirms its name', async () => {
     createProject.mockResolvedValue({ id: 'project-1' });
-    render(<ProjectPickerModal open onOpenChange={onOpenChange} onOpenExisting={onOpenExisting} />);
+    render(
+      <MemoryRouter>
+        <ProjectPickerModal open onOpenChange={onOpenChange} onOpenExisting={onOpenExisting} />
+      </MemoryRouter>,
+    );
 
     expect(screen.queryByText('选择操作')).not.toBeInTheDocument();
     expect(screen.queryByText('新建一个演示文稿，或继续已有项目。')).not.toBeInTheDocument();

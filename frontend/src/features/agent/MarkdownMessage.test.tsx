@@ -28,4 +28,10 @@ describe('MarkdownMessage', () => {
     const img = screen.getByAltText('Alt Text');
     expect(img).toHaveAttribute('src', 'https://example.com/img.png');
   });
+
+  it('keeps markdown dividers compact in the agent panel', () => {
+    const { container } = render(<MarkdownMessage content={'上文\n\n---\n\n下文'} />);
+    expect(container.querySelector('hr')).toBeInTheDocument();
+    expect(container.querySelector('.prose')).toHaveClass('prose-hr:my-4', 'prose-hr:border-border');
+  });
 });

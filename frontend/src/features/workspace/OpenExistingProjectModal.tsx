@@ -1,8 +1,10 @@
 import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PickerModal } from '../../components/ui/modal-picker';
 import { useProjectStore } from '../../stores/projectStore';
 import { Project } from '../../api/types';
 import { ArrowLeft } from 'lucide-react';
+import { projectRoute } from './routes';
 
 interface OpenExistingProjectModalProps {
   open: boolean;
@@ -12,6 +14,7 @@ interface OpenExistingProjectModalProps {
 
 export const OpenExistingProjectModal: React.FC<OpenExistingProjectModalProps> = ({ open, onOpenChange, onBack }) => {
   const { projects, openProject, loadProjects } = useProjectStore();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (open) {
@@ -21,6 +24,7 @@ export const OpenExistingProjectModal: React.FC<OpenExistingProjectModalProps> =
 
   const handlePick = (project: Project) => {
     openProject(project.id);
+    navigate(projectRoute(project.id));
     onOpenChange(false);
   };
 

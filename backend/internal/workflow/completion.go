@@ -67,8 +67,9 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 	}
 	issues := []CompletionIssue{}
 	referenceHash := ""
+	var referenceErr error
 	if ctx.Session != nil {
-		referenceHash, _ = validateReferences(ctx.Context, ctx.Session)
+		referenceHash, referenceErr = validateReferences(ctx.Context, ctx.Session)
 	}
 	for _, change := range ctx.Changes.All() {
 		target := resourceForArtifact(change.Artifact)
@@ -94,10 +95,30 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 		switch change.Artifact.Kind {
 		case ArtifactOutline:
 			require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
+			if referenceErr != nil {
+				if actions := missingSlideSpecActions(ctx); len(actions) > 0 {
+					issues = append(issues, CompletionIssue{
+						Code:            "SLIDE_SPEC_REQUIRED",
+						Summary:         "outline declares slides without slide specs",
+						RequiredActions: actions,
+					})
+					continue
+				}
+			}
 			require("reference", referenceHash, "REFERENCE_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
 		case ArtifactSlideSpec:
 			require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
 			outline := Resource{Type: "deck", Part: "outline"}
+			if referenceErr != nil {
+				if actions := missingSlideSpecActions(ctx); len(actions) > 0 {
+					issues = append(issues, CompletionIssue{
+						Code:            "SLIDE_SPEC_REQUIRED",
+						Summary:         "outline declares slides without slide specs",
+						RequiredActions: actions,
+					})
+					continue
+				}
+			}
 			if referenceHash == "" || ctx.Evidence == nil || !ctx.Evidence.HasFresh(outline, referenceHash, "reference") {
 				issues = append(issues, CompletionIssue{
 					Code: "REFERENCE_EVIDENCE_REQUIRED", Summary: "outline reference integrity is missing or stale",
@@ -165,6 +186,26 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 		}
 	}
 	return dedupeCompletionIssues(issues)
+}
+
+func missingSlideSpecActions(ctx CompletionContext) []RequiredAction {
+	if ctx.Session == nil {
+		return nil
+	}
+	deck, err := currentOutline(ctx.Context, ctx.Session)
+	if err != nil {
+		return nil
+	}
+	actions := []RequiredAction{}
+	for _, slideID := range deck.SlideOrder {
+		if _, _, err := readArtifact(ctx.Session.ProjectDir(), ctx.Session, specSlideRef(slideID)); errorsIsNotExist(err) {
+			actions = append(actions, RequiredAction{
+				Tool:   "write_ppt",
+				Target: Resource{Type: "slide", SlideID: slideID, Part: "spec"},
+			})
+		}
+	}
+	return actions
 }
 
 func hasFreshMaterialization(ctx CompletionContext, target Resource, hash string) bool {

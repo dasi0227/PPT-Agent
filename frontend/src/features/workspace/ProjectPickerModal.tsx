@@ -1,7 +1,9 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { useProjectStore } from '../../stores/projectStore';
 import { ArrowLeft, FilePlus, FolderOpen, Loader2 } from 'lucide-react';
+import { projectRoute } from './routes';
 
 interface ProjectPickerModalProps {
   open: boolean;
@@ -11,6 +13,7 @@ interface ProjectPickerModalProps {
 
 export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, onOpenChange, onOpenExisting }) => {
   const { createProject, openProject } = useProjectStore();
+  const navigate = useNavigate();
   const [mode, setMode] = React.useState<'choose' | 'create'>('choose');
   const [title, setTitle] = React.useState('');
   const [isCreating, setIsCreating] = React.useState(false);
@@ -38,6 +41,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
     try {
       const project = await createProject(projectTitle, '', 10, 'zh-CN');
       openProject(project.id);
+      navigate(projectRoute(project.id));
       reset();
       onOpenChange(false);
     } catch (error) {

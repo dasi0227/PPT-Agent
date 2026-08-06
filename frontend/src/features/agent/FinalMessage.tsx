@@ -3,6 +3,7 @@ import { Check, ChevronDown, ChevronRight, Clipboard, Crosshair, ExternalLink, S
 import type { PublicTarget } from '../../api/types';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { cn } from '../../lib/utils';
 import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
 
@@ -90,7 +91,10 @@ function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="grid min-h-10 w-full grid-cols-[24px_minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border px-3 py-2 text-left text-[13px] text-text-900"
+        className={cn(
+          'grid min-h-10 w-full grid-cols-[24px_minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-left text-[13px] text-text-900',
+          expanded && 'border-b border-border',
+        )}
       >
         <Sparkle className="h-4 w-4 text-success" strokeWidth={1.75} />
         <span className="truncate text-sm font-semibold">{summaryText(changes)}</span>

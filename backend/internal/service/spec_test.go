@@ -67,3 +67,64 @@ func TestCanonicalSpecLifecycleUsesStableSlideIDs(t *testing.T) {
 		t.Fatalf("after delete=%v", after.Outline.SlideOrder)
 	}
 }
+
+func TestRestructureSlidesUpdatesOrderAndPlacement(t *testing.T) {
+	root := t.TempDir()
+	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "restructure.db")}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	store, err := sqlitestore.NewStore(db, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := service.NewProjectService(store, service.WorkRoot(root)).CreateProject(context.Background(), service.CreateProjectParams{
+		Topic: "Restructure deck", Brief: "Explain structure", Language: "zh-CN",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slides := service.NewSlideService(store)
+	first, err := slides.AddSlide(context.Background(), project.ID, "", "content")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := slides.AddSlide(context.Background(), project.ID, first.ID, "content")
+	if err != nil {
+		t.Fatal(err)
+	}
+	specSvc := service.NewSpecService(store)
+	view, err := specSvc.EnsureProject(context.Background(), project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outline := view.Outline
+	outline.Sections = []spec.Section{
+		{ID: "section-main", Number: "01", Title: "Main", Subsections: []spec.Subsection{}},
+		{ID: "section-two", Number: "02", Title: "Two", Subsections: []spec.Subsection{{ID: "sub-two", Number: "2.1", Title: "Sub"}}},
+	}
+	if _, err := specSvc.ReplaceOutline(context.Background(), project.ID, view.Outline.Revision, outline); err != nil {
+		t.Fatal(err)
+	}
+	if err := slides.RestructureSlides(context.Background(), project.ID, []string{second.ID, first.ID}, []service.SlidePlacement{
+		{SlideID: second.ID, SectionID: "section-two", SubsectionID: "sub-two"},
+		{SlideID: first.ID, SectionID: "section-main"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := specSvc.EnsureProject(context.Background(), project.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := after.Outline.SlideOrder; len(got) != 2 || got[0] != second.ID || got[1] != first.ID {
+		t.Fatalf("order=%v", got)
+	}
+	moved := after.SlideSpecs[second.ID]
+	if moved.SectionID != "section-two" || moved.SubsectionID != "sub-two" {
+		t.Fatalf("placement=%+v", moved)
+	}
+	if moved.Revision != view.SlideSpecs[second.ID].Revision+1 {
+		t.Fatalf("moved revision=%d", moved.Revision)
+	}
+}

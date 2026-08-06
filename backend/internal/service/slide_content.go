@@ -14,6 +14,12 @@ import (
 
 var ErrSlideHTMLMissing = errors.New("service: slide html not rendered")
 
+type SlidePlacement struct {
+	SlideID      string `json:"slide_id"`
+	SectionID    string `json:"section_id"`
+	SubsectionID string `json:"subsection_id,omitempty"`
+}
+
 // projectSlidesFromFiles projects the file-owned content fields (order, title,
 // layout) onto DB slide metadata. Order comes from outline.json's slide_order;
 // title/layout come from each spec.json. Slides not present in the outline are
@@ -209,6 +215,127 @@ func (svc *SlideService) ReorderSlides(ctx context.Context, projectID string, or
 	nextOutline.SlideOrder = append([]string{}, orderedIDs...)
 	if _, err := NewSpecService(svc.store).ReplaceOutline(ctx, projectID, view.Outline.Revision, nextOutline); err != nil {
 		return err
+	}
+	positions := make(map[string]int, len(orderedIDs))
+	for index, id := range orderedIDs {
+		positions[id] = index
+	}
+	return svc.store.SetSlidesOrder(ctx, projectID, positions)
+}
+
+func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string, orderedIDs []string, placements []SlidePlacement) error {
+	if active, err := svc.store.HasActiveRun(ctx, projectID); err != nil {
+		return err
+	} else if active {
+		return ErrRunActive
+	}
+	project, err := svc.store.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	metas, err := svc.store.ListSlides(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	view, err := NewSpecService(svc.store).EnsureProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if !sameIDs(view.Outline.SlideOrder, orderedIDs) {
+		return validationError("ordered_ids must contain every slide exactly once")
+	}
+	if len(placements) != len(orderedIDs) {
+		return validationError("placements must contain every slide exactly once")
+	}
+
+	metaByID := make(map[string]model.Slide, len(metas))
+	for _, meta := range metas {
+		metaByID[meta.ID] = meta
+	}
+	sectionIDs := make(map[string]bool, len(view.Outline.Sections))
+	subsectionOwners := map[string]string{}
+	for _, section := range view.Outline.Sections {
+		sectionIDs[section.ID] = true
+		for _, subsection := range section.Subsections {
+			subsectionOwners[subsection.ID] = section.ID
+		}
+	}
+
+	seen := map[string]bool{}
+	nextSpecs := make(map[string]spec.SlideSpec, len(view.SlideSpecs))
+	for id, slide := range view.SlideSpecs {
+		nextSpecs[id] = slide
+	}
+
+	nextOutline := view.Outline
+	nextOutline.SlideOrder = append([]string{}, orderedIDs...)
+	nextOutline.Revision = view.Outline.Revision + 1
+	now := svc.clock()
+	changed := map[string]spec.SlideSpec{}
+	for _, placement := range placements {
+		if seen[placement.SlideID] {
+			return validationError("placements must not contain duplicate slide_id %s", placement.SlideID)
+		}
+		seen[placement.SlideID] = true
+		current, ok := view.SlideSpecs[placement.SlideID]
+		if !ok {
+			return validationError("placement references unknown slide_id %s", placement.SlideID)
+		}
+		if !sectionIDs[placement.SectionID] {
+			return validationError("placement references unknown section_id %s", placement.SectionID)
+		}
+		if placement.SubsectionID != "" && subsectionOwners[placement.SubsectionID] != placement.SectionID {
+			return validationError("placement subsection_id %s does not belong to section_id %s", placement.SubsectionID, placement.SectionID)
+		}
+		next := current
+		if next.SectionID != placement.SectionID || next.SubsectionID != placement.SubsectionID {
+			next.SectionID = placement.SectionID
+			next.SubsectionID = placement.SubsectionID
+			next.SourceOutlineRevision = nextOutline.Revision
+			next.Revision++
+			next.UpdatedAt = now
+			if err := spec.ValidateSlideSpec(next); err != nil {
+				return validationError("%v", err)
+			}
+			changed[placement.SlideID] = next
+		}
+		nextSpecs[placement.SlideID] = next
+	}
+	for _, id := range orderedIDs {
+		if !seen[id] {
+			return validationError("placements missing slide_id %s", id)
+		}
+	}
+	if err := spec.ValidateOutline(nextOutline, nextSpecs); err != nil {
+		return validationError("%v", err)
+	}
+
+	rollbackSpecs := map[string][]byte{}
+	for id, next := range changed {
+		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id)))
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		rollbackSpecs[id] = raw
+		if err := atomicWrite(path, mustJSON(next)); err != nil {
+			for rollbackID, rollbackRaw := range rollbackSpecs {
+				_ = atomicWrite(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(rollbackID))), rollbackRaw)
+			}
+			return err
+		}
+	}
+	if _, err := NewSpecService(svc.store).ReplaceOutline(ctx, projectID, view.Outline.Revision, nextOutline); err != nil {
+		for id, raw := range rollbackSpecs {
+			_ = atomicWrite(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id))), raw)
+		}
+		return err
+	}
+	for id, next := range changed {
+		meta := metaByID[id]
+		if err := svc.store.UpdateSlideRevisions(ctx, id, next.Revision, meta.HTMLRevision, meta.SourceOutlineRevision, meta.SourceSpecRevision, meta.SourceDesignRevision); err != nil {
+			return err
+		}
 	}
 	positions := make(map[string]int, len(orderedIDs))
 	for index, id := range orderedIDs {

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '../../components/ui/dropdown-menu';
 import { FormModal } from '../../components/ui/modal-form';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { useProjectStore } from '../../stores/projectStore';
 import { Project } from '../../api/types';
+import { homeRoute, projectRoute } from './routes';
 
 interface ProjectMenuProps {
   project: Pick<Project, 'id' | 'title'>;
@@ -12,9 +14,15 @@ interface ProjectMenuProps {
 
 export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) => {
   const { renameProject, closeProject, deleteProject } = useProjectStore();
+  const navigate = useNavigate();
   
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const navigateToCurrentProject = () => {
+    const nextActive = useProjectStore.getState().activeProjectId;
+    navigate(nextActive ? projectRoute(nextActive) : homeRoute);
+  };
 
   return (
     <>
@@ -26,7 +34,11 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
           <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
             重命名
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => closeProject(project.id)}>
+          <DropdownMenuItem onSelect={() => {
+            const wasActive = useProjectStore.getState().activeProjectId === project.id;
+            closeProject(project.id);
+            if (wasActive) navigateToCurrentProject();
+          }}>
             关闭项目
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -72,7 +84,9 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
         confirmLabel="删除"
         variant="danger"
         onConfirm={async () => {
+          const wasActive = useProjectStore.getState().activeProjectId === project.id;
           await deleteProject(project.id);
+          if (wasActive) navigateToCurrentProject();
         }}
       />
     </>

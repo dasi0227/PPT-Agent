@@ -21,6 +21,8 @@ import (
 
 var stableSlideID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 
+const resourceObjectGuidance = `resource must be an object, not a string or path. Use {"type":"deck","part":"outline"}, {"type":"deck","part":"design"}, or {"type":"slide","slide_id":"<stable slide_id>","part":"spec|html"}. Never use display keys such as "deck:outline" or "slide:<id>:html", "current", or "slides/...".`
+
 func outlineRef(pack contextengine.ContextPack) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactOutline, ID: pack.Project.ID, Path: "outline.json", Project: pack.Project.ID}
 }
@@ -61,9 +63,16 @@ func refForResource(pack contextengine.ContextPack, resource Resource) (Artifact
 }
 
 func parseResource(args map[string]any) (Resource, error) {
-	value, ok := args["resource"].(map[string]any)
+	raw, exists := args["resource"]
+	if !exists {
+		return Resource{}, fmt.Errorf(resourceObjectGuidance)
+	}
+	if _, ok := raw.(string); ok {
+		return Resource{}, fmt.Errorf(resourceObjectGuidance)
+	}
+	value, ok := raw.(map[string]any)
 	if !ok {
-		return Resource{}, fmt.Errorf("resource must be an object")
+		return Resource{}, fmt.Errorf(resourceObjectGuidance)
 	}
 	resource := Resource{
 		Type: stringValue(value["type"]), SlideID: stringValue(value["slide_id"]),
@@ -71,20 +80,20 @@ func parseResource(args map[string]any) (Resource, error) {
 	}
 	if resource.Type == "deck" {
 		if resource.SlideID != "" || (resource.Part != "outline" && resource.Part != "design") {
-			return Resource{}, fmt.Errorf("deck resource requires part outline or design and forbids slide_id")
+			return Resource{}, fmt.Errorf(`deck resource requires {"type":"deck","part":"outline|design"} and forbids slide_id`)
 		}
 		return resource, nil
 	}
 	if resource.Type == "slide" {
 		if !stableSlideID.MatchString(resource.SlideID) || resource.SlideID == "current" {
-			return Resource{}, fmt.Errorf("slide_id must be stable and must not contain a path")
+			return Resource{}, fmt.Errorf(`slide resource requires a stable slide_id from the current project; never use "current" or a path such as "slides/..."`)
 		}
 		if resource.Part != "spec" && resource.Part != "html" {
-			return Resource{}, fmt.Errorf("slide resource requires part spec or html")
+			return Resource{}, fmt.Errorf(`slide resource requires {"type":"slide","slide_id":"<stable slide_id>","part":"spec|html"}`)
 		}
 		return resource, nil
 	}
-	return Resource{}, fmt.Errorf("resource type must be deck or slide")
+	return Resource{}, fmt.Errorf(`resource type must be "deck" or "slide"; ` + resourceObjectGuidance)
 }
 
 func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, string, error) {
@@ -123,17 +132,25 @@ func writeFailure(err error) ToolResult {
 
 func resourceSchema() map[string]any {
 	return map[string]any{
+		"description": resourceObjectGuidance,
 		"oneOf": []any{
 			objectSchema([]string{"type", "part"}, map[string]any{
-				"type": map[string]any{"const": "deck"},
-				"part": map[string]any{"type": "string", "enum": []string{"outline", "design"}},
+				"type": map[string]any{"const": "deck", "description": `Use "deck" for deck-wide resources.`},
+				"part": map[string]any{
+					"type": "string", "enum": []string{"outline", "design"},
+					"description": `Use "outline" for deck narrative/order, or "design" for deck-wide visual system.`,
+				},
 			}),
 			objectSchema([]string{"type", "slide_id", "part"}, map[string]any{
-				"type": map[string]any{"const": "slide"},
+				"type": map[string]any{"const": "slide", "description": `Use "slide" for one page resource.`},
 				"slide_id": map[string]any{
 					"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`,
+					"description": `Stable slide identifier from the current project, for example "slide-01"; never use "current" or a file path.`,
 				},
-				"part": map[string]any{"type": "string", "enum": []string{"spec", "html"}},
+				"part": map[string]any{
+					"type": "string", "enum": []string{"spec", "html"},
+					"description": `Use "spec" for the page design/spec JSON, or "html" for the final slide implementation.`,
+				},
 			}),
 		},
 	}
