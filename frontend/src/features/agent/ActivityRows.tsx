@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  ExternalLink,
   Flag,
   Loader2,
   Pencil,
@@ -206,7 +207,18 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       </button>
       {expanded && hasDetails && (
         <div className="ml-6 space-y-2 px-1.5 pb-2 text-xs leading-5 text-text-600">
-          {detailText && <p>{presentActivityText(detailText, item.target, slides)}</p>}
+          {detailText && (
+            item.target?.open_url ? (
+              <a
+                href={item.target.open_url}
+                className="inline-flex max-w-full items-center gap-1 text-text-600 underline decoration-border underline-offset-2 hover:text-text-900"
+                title={item.target.local_path ?? detailText}
+              >
+                <span className="truncate">{presentActivityText(detailText, item.target, slides)}</span>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+              </a>
+            ) : <p>{presentActivityText(detailText, item.target, slides)}</p>
+          )}
           {item.error?.retryable && <p>Agent 可以调整后继续尝试。</p>}
           {item.preview && (
             <div className="overflow-hidden rounded-lg border border-border bg-surface">

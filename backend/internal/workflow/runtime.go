@@ -478,7 +478,7 @@ func (r *Runtime) executeToolBatch(
 	results := make([]ToolResult, len(calls))
 	started := make([]bool, len(calls))
 	replayed := make([]bool, len(calls))
-	projector := ToolPublicProjector{}
+	projector := ToolPublicProjector{ProjectDir: input.ProjectDir}
 	planStepID := currentPlanStepID(state.plan)
 	var lifecycleMu sync.Mutex
 	state.toolCalls += len(calls)
@@ -522,12 +522,6 @@ func (r *Runtime) executeToolBatch(
 		for index, call := range calls {
 			desc, _ := registry.Descriptor(call.Name)
 			if writeFailed {
-				started[index] = true
-				if input.Emitter != nil {
-					if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID); ok {
-						input.Emitter.Emit(model.EventToolStarted, event)
-					}
-				}
 				results[index] = failedToolResult(CodeDependencyFailed, "call skipped after an earlier write failure", false)
 				continue
 			}
@@ -995,7 +989,7 @@ func (r *Runtime) finishCandidate(
 	}
 	outcome := state.outcome(StatusCompleted, "", "")
 	if input.Emitter != nil {
-		affected := publicAffectedTargets(changes)
+		affected := publicAffectedTargets(input.ProjectDir, changes)
 		input.Emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: publicBase(state.runID), MessageID: newMessageID(),
 			Text:            safeFinalMessage(state.lastSummary, state.strategy, len(affected)),
@@ -1186,7 +1180,7 @@ func (r *Runtime) emitProgress(
 
 func (r *Runtime) emitToolProgress(emitter EventEmitter, state *runtimeState, call llm.ToolCall) {
 	stage, text := "thinking", "正在继续处理任务"
-	target := publicToolTarget(call.Name, call.Args)
+	target := publicToolTarget("", call.Name, call.Args)
 	switch call.Name {
 	case "read_ppt":
 		stage, text = "reading", "正在读取 PPT 内容"

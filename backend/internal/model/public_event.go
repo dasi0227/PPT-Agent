@@ -47,6 +47,8 @@ type PublicTarget struct {
 	DisplayName string `json:"display_name,omitempty"`
 	Insertions  int    `json:"insertions,omitempty"`
 	Deletions   int    `json:"deletions,omitempty"`
+	LocalPath   string `json:"local_path,omitempty"`
+	OpenURL     string `json:"open_url,omitempty"`
 }
 
 type PublicDisplay struct {
@@ -491,7 +493,7 @@ func forbiddenPublicField(value any) bool {
 	case map[string]any:
 		for key, child := range current {
 			switch strings.ToLower(key) {
-			case "args", "arguments", "html", "observation", "result", "path", "local_path",
+			case "args", "arguments", "html", "observation", "result", "path",
 				"screenshot_path", "hash", "reasoning_content", "provider_reasoning":
 				return true
 			}
@@ -604,6 +606,10 @@ func validatePublicTarget(value any) error {
 	}
 	if value, ok := target["deletions"]; ok && (!isInteger(value) || intValue(value) < 0) {
 		return errors.New("target deletions must be a non-negative integer")
+	}
+	if strings.TrimSpace(stringValue(target["local_path"])) != "" &&
+		strings.Contains(stringValue(target["local_path"]), "\x00") {
+		return errors.New("target local_path is invalid")
 	}
 	switch stringValue(target["type"]) {
 	case "deck":

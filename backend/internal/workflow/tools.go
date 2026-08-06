@@ -64,14 +64,14 @@ type DomainToolInput struct {
 // ChangedTarget is deliberately domain-shaped. Model-visible results never
 // expose artifact paths, runtime paths, database keys, or session details.
 type ChangedTarget struct {
-	Type      string   `json:"type"`
-	SlideID   string   `json:"slide_id,omitempty"`
-	Part      string   `json:"part"`
-	Revision  int      `json:"revision,omitempty"`
-	Hash      string   `json:"hash"`
-	Fields    []string `json:"fields,omitempty"`
-	Insertions int     `json:"insertions,omitempty"`
-	Deletions  int     `json:"deletions,omitempty"`
+	Type       string   `json:"type"`
+	SlideID    string   `json:"slide_id,omitempty"`
+	Part       string   `json:"part"`
+	Revision   int      `json:"revision,omitempty"`
+	Hash       string   `json:"hash"`
+	Fields     []string `json:"fields,omitempty"`
+	Insertions int      `json:"insertions,omitempty"`
+	Deletions  int      `json:"deletions,omitempty"`
 }
 
 func (c ChangedTarget) Target() Resource {

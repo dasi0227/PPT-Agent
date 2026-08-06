@@ -12,15 +12,13 @@ export type DisplayEntry =
       processEntries: DisplayEntry[];
     };
 
-function canGroupTool(item: ToolActivityItem, currentSlideId?: string): boolean {
+function canGroupTool(item: ToolActivityItem): boolean {
   return item.status === 'completed'
     && !item.error
-    && (item.preview?.warnings.length ?? 0) === 0
-    // 仅当条目确有 slide_id 且正是当前查看页时才排除；deck 级（无 slide_id）始终可汇聚。
-    && !(item.target?.slide_id !== undefined && item.target.slide_id === currentSlideId);
+    && (item.preview?.warnings.length ?? 0) === 0;
 }
 
-function groupToolItems(items: TimelineItem[], currentSlideId?: string): DisplayEntry[] {
+function groupToolItems(items: TimelineItem[]): DisplayEntry[] {
   const result: DisplayEntry[] = [];
   let pending: ToolActivityItem[] = [];
 
@@ -34,7 +32,7 @@ function groupToolItems(items: TimelineItem[], currentSlideId?: string): Display
   };
 
   for (const item of items) {
-    if (item.type !== 'tool' || !canGroupTool(item, currentSlideId)) {
+    if (item.type !== 'tool' || !canGroupTool(item)) {
       flush();
       result.push({ kind: 'item', item });
       continue;
@@ -56,7 +54,7 @@ function terminalStatus(item: TimelineItem): 'completed' | 'failed' | 'canceled'
   return null;
 }
 
-export function groupTimelineItems(items: TimelineItem[], currentSlideId?: string): DisplayEntry[] {
+export function groupTimelineItems(items: TimelineItem[], _currentSlideId?: string): DisplayEntry[] {
   const terminalByRunId = new Map<string, FinalMessageItem | TerminalNoticeItem>();
   const processItemsByRunId = new Map<string, TimelineItem[]>();
 
@@ -66,7 +64,7 @@ export function groupTimelineItems(items: TimelineItem[], currentSlideId?: strin
     if (status) terminalByRunId.set(item.runId, item as FinalMessageItem | TerminalNoticeItem);
   }
 
-  if (terminalByRunId.size === 0) return groupToolItems(items, currentSlideId);
+  if (terminalByRunId.size === 0) return groupToolItems(items);
 
   for (const item of items) {
     if (!item.runId) continue;
@@ -109,11 +107,11 @@ export function groupTimelineItems(items: TimelineItem[], currentSlideId?: strin
         runId,
         status: terminalStatus(item) ?? 'failed',
         terminalItem: terminal,
-        processEntries: groupToolItems(processItemsByRunId.get(runId) ?? [], currentSlideId),
+        processEntries: groupToolItems(processItemsByRunId.get(runId) ?? []),
       });
       continue;
     }
-    if (item.type !== 'tool' || !canGroupTool(item, currentSlideId)) {
+    if (item.type !== 'tool' || !canGroupTool(item)) {
       flush();
       result.push({ kind: 'item', item });
       continue;

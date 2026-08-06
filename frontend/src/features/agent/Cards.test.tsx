@@ -119,13 +119,15 @@ describe('public timeline components', () => {
       ],
       timestamp: 0,
     }} />);
+    expect(screen.getByText('整份演示文稿已完成')).toBeInTheDocument();
     expect(screen.getByText('1 个页面已经变更')).toBeInTheDocument();
+    expect(screen.getByText('+50')).toBeInTheDocument();
+    expect(screen.getByText('-3')).toBeInTheDocument();
+    expect(screen.queryByText('第 1 页设计稿')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /1 个页面已经变更/ }));
     expect(screen.getByText('第 1 页设计稿')).toBeInTheDocument();
     expect(screen.getByText('第 1 页幻灯片')).toBeInTheDocument();
     expect(screen.getByText('全局视觉设计')).toBeInTheDocument();
-    expect(screen.getByText('+50')).toBeInTheDocument();
-    expect(screen.getByText('-3')).toBeInTheDocument();
-    expect(screen.getByText('整份演示文稿已完成')).toBeInTheDocument();
     expect(screen.queryByText('执行结果')).toBeNull();
   });
 

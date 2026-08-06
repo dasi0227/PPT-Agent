@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -16,18 +18,19 @@ func publicBase(runID string) model.PublicEventBase {
 	return model.NewPublicEventBase(runID)
 }
 
-func publicTarget(target Resource) model.PublicTarget {
+func publicTarget(projectDir string, target Resource) model.PublicTarget {
 	out := model.PublicTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part}
 	if target.Type == "slide" {
 		out.DisplayName = slideDisplayName(target.SlideID)
 	}
+	attachLocalOpenTarget(projectDir, &out)
 	return out
 }
 
-func publicAffectedTargets(changes ChangeSet) []model.PublicTarget {
+func publicAffectedTargets(projectDir string, changes ChangeSet) []model.PublicTarget {
 	seen := map[string]model.PublicTarget{}
 	for _, change := range changes.All() {
-		target := publicTarget(resourceForArtifact(change.Artifact))
+		target := publicTarget(projectDir, resourceForArtifact(change.Artifact))
 		target.Insertions = change.Insertions
 		target.Deletions = change.Deletions
 		seen[target.Type+":"+target.SlideID+":"+target.Part] = target
@@ -44,7 +47,7 @@ func publicAffectedTargets(changes ChangeSet) []model.PublicTarget {
 	return out
 }
 
-func publicChangedTargets(changes []ChangedTarget) []model.PublicTarget {
+func publicChangedTargets(projectDir string, changes []ChangedTarget) []model.PublicTarget {
 	seen := map[string]model.PublicTarget{}
 	for _, change := range changes {
 		target := model.PublicTarget{
@@ -54,6 +57,7 @@ func publicChangedTargets(changes []ChangedTarget) []model.PublicTarget {
 		if target.Type == "slide" {
 			target.DisplayName = slideDisplayName(target.SlideID)
 		}
+		attachLocalOpenTarget(projectDir, &target)
 		seen[target.Type+":"+target.SlideID+":"+target.Part] = target
 	}
 	keys := make([]string, 0, len(seen))
@@ -130,11 +134,13 @@ func normalizePublicText(text string) string {
 	return strings.TrimSpace(text)
 }
 
-type ToolPublicProjector struct{}
+type ToolPublicProjector struct {
+	ProjectDir string
+}
 
-func (ToolPublicProjector) Started(runID, callID, tool string, args map[string]any, planStepID string) (model.ToolStartedPayload, bool) {
-	target := publicToolTarget(tool, args)
-	label, detail, ok := toolDisplay(tool, args, true, ToolResult{})
+func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string]any, planStepID string) (model.ToolStartedPayload, bool) {
+	target := publicToolTarget(p.ProjectDir, tool, args)
+	label, detail, ok := toolDisplay(p.ProjectDir, tool, args, true, ToolResult{})
 	if !ok {
 		return model.ToolStartedPayload{}, false
 	}
@@ -145,8 +151,11 @@ func (ToolPublicProjector) Started(runID, callID, tool string, args map[string]a
 	}, true
 }
 
-func (ToolPublicProjector) Completed(runID, callID, tool string, args map[string]any, result ToolResult) (model.ToolCompletedPayload, bool) {
-	label, detail, ok := toolDisplay(tool, args, false, result)
+func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[string]any, result ToolResult) (model.ToolCompletedPayload, bool) {
+	if result.Code == CodeDependencyFailed {
+		return model.ToolCompletedPayload{}, false
+	}
+	label, detail, ok := toolDisplay(p.ProjectDir, tool, args, false, result)
 	if !ok {
 		return model.ToolCompletedPayload{}, false
 	}
@@ -157,11 +166,11 @@ func (ToolPublicProjector) Completed(runID, callID, tool string, args map[string
 	payload := model.ToolCompletedPayload{
 		PublicEventBase: publicBase(runID),
 		CallID:          callID, Tool: tool, Status: status,
-		Target:  publicToolTarget(tool, args),
+		Target:  publicToolTarget(p.ProjectDir, tool, args),
 		Display: model.PublicDisplay{Label: label, Detail: detail},
 	}
 	if result.OK && len(result.ChangedTargets) > 0 {
-		targets := publicChangedTargets(result.ChangedTargets)
+		targets := publicChangedTargets(p.ProjectDir, result.ChangedTargets)
 		if len(targets) > 0 {
 			payload.Target = &targets[0]
 		}
@@ -176,29 +185,35 @@ func (ToolPublicProjector) Completed(runID, callID, tool string, args map[string
 	return payload, true
 }
 
-func publicToolTarget(tool string, args map[string]any) *model.PublicTarget {
+func publicToolTarget(projectDir string, tool string, args map[string]any) *model.PublicTarget {
 	if tool == "render_slide" {
 		slideID := stringValue(args["slide_id"])
 		if slideID != "" {
-			return &model.PublicTarget{Type: "slide", SlideID: slideID, Part: "html", DisplayName: slideDisplayName(slideID)}
+			target := &model.PublicTarget{Type: "slide", SlideID: slideID, Part: "html", DisplayName: slideDisplayName(slideID)}
+			attachLocalOpenTarget(projectDir, target)
+			return target
 		}
 	}
 	target, _ := args["resource"].(map[string]any)
 	targetType := stringValue(target["type"])
 	if targetType == "deck" {
-		return &model.PublicTarget{Type: "deck", Part: stringValue(target["part"])}
+		out := &model.PublicTarget{Type: "deck", Part: stringValue(target["part"])}
+		attachLocalOpenTarget(projectDir, out)
+		return out
 	}
 	if targetType == "slide" {
 		slideID := stringValue(target["slide_id"])
-		return &model.PublicTarget{
+		out := &model.PublicTarget{
 			Type: "slide", SlideID: slideID, Part: stringValue(target["part"]), DisplayName: slideDisplayName(slideID),
 		}
+		attachLocalOpenTarget(projectDir, out)
+		return out
 	}
 	return nil
 }
 
-func toolDisplay(tool string, args map[string]any, started bool, result ToolResult) (string, string, bool) {
-	target := publicToolTarget(tool, args)
+func toolDisplay(projectDir string, tool string, args map[string]any, started bool, result ToolResult) (string, string, bool) {
+	target := publicToolTarget(projectDir, tool, args)
 	targetName := "内容"
 	if target != nil && target.Type == "deck" && target.Part == "outline" {
 		targetName = "整份结构"
@@ -217,7 +232,7 @@ func toolDisplay(tool string, args map[string]any, started bool, result ToolResu
 			return "读取" + targetName, "确认内容与设计约束", true
 		}
 		if result.OK {
-			return "已读取" + targetName, safeToolDetail(result, "已获得所需内容"), true
+			return "已读取" + targetName, targetDetail(target, "已获得所需内容"), true
 		}
 		return "读取" + targetName + "失败", publicToolError(result), true
 	case "write_ppt":
@@ -225,7 +240,7 @@ func toolDisplay(tool string, args map[string]any, started bool, result ToolResu
 			return "创建" + targetName, "", true
 		}
 		if result.OK {
-			return "已创建" + targetName, safeToolDetail(result, "内容已生成"), true
+			return "已创建" + targetName, targetDetail(target, "内容已生成"), true
 		}
 		return "创建" + targetName + "失败", publicToolError(result), true
 	case "edit_ppt":
@@ -233,7 +248,7 @@ func toolDisplay(tool string, args map[string]any, started bool, result ToolResu
 			return "更新" + targetName, "", true
 		}
 		if result.OK {
-			return "已更新" + targetName, safeToolDetail(result, "修改已完成"), true
+			return "已更新" + targetName, targetDetail(target, "修改已完成"), true
 		}
 		return "更新" + targetName + "失败", publicToolError(result), true
 	case "search_refs":
@@ -264,10 +279,59 @@ func safeToolDetail(result ToolResult, fallback string) string {
 	}
 	text := sanitizePublicText(result.Summary, 100)
 	normalized := strings.ToLower(strings.TrimSpace(text))
-	if text == "" || normalized == "resource staged" {
+	if text == "" || internalToolSummary(normalized) {
 		return fallback
 	}
 	return text
+}
+
+func internalToolSummary(value string) bool {
+	switch value {
+	case "resource staged", "resource read", "resource written", "resource edited atomically":
+		return true
+	default:
+		return false
+	}
+}
+
+func targetDetail(target *model.PublicTarget, fallback string) string {
+	if target != nil && target.LocalPath != "" {
+		return target.LocalPath
+	}
+	return fallback
+}
+
+func attachLocalOpenTarget(projectDir string, target *model.PublicTarget) {
+	if target == nil || strings.TrimSpace(projectDir) == "" {
+		return
+	}
+	rel := publicTargetRelativePath(*target)
+	if rel == "" {
+		return
+	}
+	localPath := filepath.Join(projectDir, rel)
+	target.LocalPath = localPath
+	target.OpenURL = (&url.URL{Scheme: "vscode", Host: "file", Path: filepath.ToSlash(localPath)}).String()
+}
+
+func publicTargetRelativePath(target model.PublicTarget) string {
+	if target.Type == "deck" {
+		switch target.Part {
+		case "outline":
+			return "outline.json"
+		case "design":
+			return "design.json"
+		}
+	}
+	if target.Type == "slide" && target.SlideID != "" {
+		switch target.Part {
+		case "spec":
+			return model.SlideSpecPath(target.SlideID)
+		case "html":
+			return model.SlideHTMLPath(target.SlideID)
+		}
+	}
+	return ""
 }
 
 func publicToolError(result ToolResult) string {

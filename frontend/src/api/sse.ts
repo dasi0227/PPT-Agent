@@ -136,6 +136,8 @@ function validPublicTarget(value: unknown): boolean {
       && (value.display_name === undefined || (typeof value.display_name === 'string' && !rawHTMLPattern.test(value.display_name)))
       && validOptionalNonNegativeInteger(value.insertions)
       && validOptionalNonNegativeInteger(value.deletions)
+      && validOptionalSafeString(value.local_path)
+      && validOptionalSafeString(value.open_url)
       && ['outline', 'design'].includes(String(value.part));
   }
   return value.type === 'slide'
@@ -143,11 +145,17 @@ function validPublicTarget(value: unknown): boolean {
     && (value.display_name === undefined || (typeof value.display_name === 'string' && !rawHTMLPattern.test(value.display_name)))
     && validOptionalNonNegativeInteger(value.insertions)
     && validOptionalNonNegativeInteger(value.deletions)
+    && validOptionalSafeString(value.local_path)
+    && validOptionalSafeString(value.open_url)
     && ['spec', 'html'].includes(String(value.part));
 }
 
 function validOptionalNonNegativeInteger(value: unknown): boolean {
   return value === undefined || (typeof value === 'number' && Number.isInteger(value) && value >= 0);
+}
+
+function validOptionalSafeString(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && !rawHTMLPattern.test(value));
 }
 
 function validTargets(value: unknown): boolean {

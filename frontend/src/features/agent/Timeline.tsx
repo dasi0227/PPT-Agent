@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, CheckCircle2, ChevronRight, StopCircle, XCircle } from 'lucide-react';
+import { ArrowDown, Check, CheckCircle2, ChevronRight, Clipboard, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { targetLabel } from './runtimeLabels';
@@ -31,6 +31,26 @@ const runSummaryLabel = {
   canceled: '执行取消',
   failed: '执行错误',
 } as const;
+
+function CopyInlineButton({ text, label = '复制' }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await navigator.clipboard?.writeText(text);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      className="mt-1 inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs text-text-400 hover:bg-panel-muted hover:text-text-900"
+      aria-label={label}
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
+      {copied ? '已复制' : '复制'}
+    </button>
+  );
+}
 
 function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'canceled' }) {
   if (status === 'completed') {
@@ -105,6 +125,7 @@ export const Timeline: React.FC = () => {
                 </div>
               )}
               <MarkdownMessage content={item.text} />
+              <CopyInlineButton text={item.text} label="复制用户消息" />
               {item.deliveryStatus && (
                 <div className={`mt-1 text-[10px] ${
                   item.deliveryStatus === 'rejected' ? 'text-danger' : 'text-text-400'

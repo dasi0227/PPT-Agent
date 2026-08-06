@@ -126,8 +126,8 @@ func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 	if peak != 1 || results[1].OK || results[2].Code != "DEPENDENCY_FAILED" {
 		t.Fatalf("writes were not serial/fail-fast: peak=%d results=%+v", peak, results)
 	}
-	if events.count(model.EventToolStarted) != 3 || events.count(model.EventToolCompleted) != 3 {
-		t.Fatalf("skipped call did not receive paired events: %+v", events.events)
+	if events.count(model.EventToolStarted) != 2 || events.count(model.EventToolCompleted) != 2 {
+		t.Fatalf("dependency-skipped call should not emit public tool events: %+v", events.events)
 	}
 }
 

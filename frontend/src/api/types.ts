@@ -215,6 +215,8 @@ export interface PublicTarget {
   display_name?: string;
   insertions?: number;
   deletions?: number;
+  local_path?: string;
+  open_url?: string;
 }
 
 export interface PublicDisplay {
