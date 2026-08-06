@@ -62,7 +62,7 @@ Phase 3: LLM Semantic Reviewer
 - 新增 reviewer 输入结构和 JSON 输出结构。
 - deterministic CompletionGate 通过后，再调用 reviewer。
 - reviewer reject 时转成 CompletionIssue / ToolResult observation，回到同一 ReAct loop。
-- reviewer unavailable 的默认策略：plan、execute-planned、deck-level execute 阻塞；低风险 execute-direct 可配置。
+- reviewer unavailable 的默认策略：plan、fulfill、deck-level execute 阻塞；低风险 execute 可配置。
 - 添加单测覆盖 reviewer accepted、rejected、invalid JSON、unavailable policy、issue mapping。
 
 Phase 4: Resume / Recovery

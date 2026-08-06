@@ -198,7 +198,7 @@ func (r *ToolRegistry) Disclose(strategy ExecutionStrategy, phase RuntimePhase, 
 		if interaction != model.IntentExecute && !desc.ReadOnly {
 			continue
 		}
-		if strategy != StrategyExecute && !desc.ReadOnly {
+		if !isWriteStrategy(strategy) && !desc.ReadOnly {
 			continue
 		}
 		if phase == PhasePlanning && !desc.ReadOnly {
@@ -227,7 +227,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	if input.Interaction != model.IntentExecute && !desc.ReadOnly {
 		return failedToolResult(ErrCapabilityDenied.Error(), "read-only interaction cannot use write capabilities", false)
 	}
-	if input.Strategy != StrategyExecute && !desc.ReadOnly {
+	if !isWriteStrategy(input.Strategy) && !desc.ReadOnly {
 		return failedToolResult(ErrCapabilityDenied.Error(), "read-only strategy cannot use write capabilities", false)
 	}
 	if input.Phase == PhasePlanning && !desc.ReadOnly {

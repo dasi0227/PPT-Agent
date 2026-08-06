@@ -301,15 +301,15 @@ func TestRouterMapsReadOnlyInteractionsToNamedStrategies(t *testing.T) {
 func TestRouterSelectsDirectExecuteForExplicitSingleTarget(t *testing.T) {
 	pack := testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题")
 	decision := (StrategyRouter{}).Decide(pack)
-	if decision.Strategy != StrategyExecute || decision.ExecuteMode != ExecuteModeDirect {
+	if decision.Strategy != StrategyExecute {
 		t.Fatalf("decision=%+v", decision)
 	}
 }
 
-func TestRouterSelectsPlannedExecuteForEmptyWholeDeck(t *testing.T) {
+func TestRouterSelectsFulfillForEmptyWholeDeck(t *testing.T) {
 	pack := testPack(model.IntentExecute, model.ArtifactSpec, model.TargetDeck, true, "生成产品发布演示")
 	decision := (StrategyRouter{}).Decide(pack)
-	if decision.Strategy != StrategyExecute || decision.ExecuteMode != ExecuteModePlanned {
+	if decision.Strategy != StrategyFulfill {
 		t.Fatalf("decision=%+v", decision)
 	}
 }
@@ -570,7 +570,7 @@ func TestRuntimePromptAgentContractsDoNotRequireManagedFields(t *testing.T) {
 func TestRuntimePromptUsesModeSpecificModulesAndContextBriefing(t *testing.T) {
 	pack := testPack(model.IntentExecute, model.ArtifactPresentation, model.TargetSlide, false, "优化当前页视觉层级")
 	direct := runtimeSystemPromptForRequest(AgentRequest{
-		Strategy: StrategyExecute, ExecuteMode: ExecuteModeDirect, Phase: PhaseExecuting,
+		Strategy: StrategyExecute, Phase: PhaseExecuting,
 		Context: pack, ContextBriefing: "Objective: optimize visual hierarchy",
 	}, "{}")
 	if !strings.Contains(direct, `id="mode_policy_execute_direct"`) ||
@@ -580,13 +580,13 @@ func TestRuntimePromptUsesModeSpecificModulesAndContextBriefing(t *testing.T) {
 		!strings.Contains(direct, "Objective: optimize visual hierarchy") {
 		t.Fatalf("direct prompt missing cognitive modules:\n%s", direct)
 	}
-	planned := runtimeSystemPromptForRequest(AgentRequest{
-		Strategy: StrategyExecute, ExecuteMode: ExecuteModePlanned, Phase: PhasePlanning,
+	fulfill := runtimeSystemPromptForRequest(AgentRequest{
+		Strategy: StrategyFulfill, Phase: PhasePlanning,
 		Context: pack,
 	}, "{}")
-	if !strings.Contains(planned, `id="mode_policy_execute_planned"`) ||
-		!strings.Contains(planned, "When update_plan is disclosed and no valid plan exists") {
-		t.Fatalf("planned prompt missing planned policy:\n%s", planned)
+	if !strings.Contains(fulfill, `id="mode_policy_fulfill"`) ||
+		!strings.Contains(fulfill, "When update_plan is disclosed and no valid plan exists") {
+		t.Fatalf("fulfill prompt missing fulfill policy:\n%s", fulfill)
 	}
 }
 
@@ -673,7 +673,7 @@ func contains(values []string, target string) bool {
 	return false
 }
 
-func TestPlannedExecuteDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T) {
+func TestFulfillDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		planCall("plan", true), toolCall("write", "write_ppt", map[string]any{"content": "next"}), finishCall("finish"),
@@ -694,9 +694,9 @@ func TestPlannedExecuteDisclosesNoWriteAndFirstPlanEntersExecuting(t *testing.T)
 			t.Fatal("planning disclosed a write tool")
 		}
 	}
-	if agent.requests[0].ExecuteMode != ExecuteModePlanned ||
+	if agent.requests[0].Strategy != StrategyFulfill ||
 		agent.requests[1].Phase != PhaseExecuting ||
-		agent.requests[1].ExecuteMode != ExecuteModePlanned ||
+		agent.requests[1].Strategy != StrategyFulfill ||
 		events.count(model.EventPlanUpdated) != 1 {
 		t.Fatalf("requests=%+v events=%+v", agent.requests, events.events)
 	}
@@ -721,7 +721,7 @@ func TestPlanInteractionFinishesWithoutPlanSnapshotOrWriteSession(t *testing.T) 
 	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyPlan || len(outcome.Changes.All()) != 0 {
 		t.Fatalf("outcome=%+v", outcome)
 	}
-	if agent.requests[0].Phase != PhasePlanning || agent.requests[0].ExecuteMode != ExecuteModeNone {
+	if agent.requests[0].Phase != PhasePlanning || agent.requests[0].Strategy != StrategyPlan {
 		t.Fatalf("plan request=%+v", agent.requests[0])
 	}
 	for _, schema := range agent.requests[0].Tools {
@@ -765,13 +765,12 @@ func TestDirectExecuteProducesNoPlan(t *testing.T) {
 		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
-	if outcome.Strategy != StrategyExecute || agent.requests[0].ExecuteMode != ExecuteModeDirect ||
-		events.count(model.EventPlanUpdated) != 0 {
+	if outcome.Strategy != StrategyExecute || events.count(model.EventPlanUpdated) != 0 {
 		t.Fatalf("outcome=%+v events=%+v", outcome, events.events)
 	}
 }
 
-func TestDirectExecuteScopeExpansionUpgradesSameRunToPlanned(t *testing.T) {
+func TestDirectExecuteScopeExpansionUpgradesSameRunToFulfill(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
@@ -783,11 +782,11 @@ func TestDirectExecuteScopeExpansionUpgradesSameRunToPlanned(t *testing.T) {
 		Context: testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
-	if outcome.Strategy != StrategyExecute {
+	if outcome.Strategy != StrategyFulfill {
 		t.Fatalf("outcome=%+v events=%+v", outcome, events.events)
 	}
-	if agent.requests[0].ExecuteMode != ExecuteModeDirect || agent.requests[1].ExecuteMode != ExecuteModePlanned {
-		t.Fatalf("execute mode did not upgrade: %+v", agent.requests)
+	if agent.requests[0].Strategy != StrategyExecute || agent.requests[1].Strategy != StrategyFulfill {
+		t.Fatalf("strategy did not upgrade: %+v", agent.requests)
 	}
 	for _, request := range agent.requests {
 		if request.LoopID != outcome.LoopID {
@@ -1156,11 +1155,11 @@ func TestEmptyProjectPlannedPresentationGenerationUsesUnifiedPPTTargets(t *testi
 		DomainTools:     DefaultDomainToolProvider{Pack: pack, Renderer: renderer},
 		SemanticReviews: acceptingReviewer{},
 	})
-	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyExecute {
+	if outcome.Status != StatusCompleted || outcome.Strategy != StrategyFulfill {
 		t.Fatalf("outcome=%+v", outcome)
 	}
-	if agent.requests[0].ExecuteMode != ExecuteModePlanned {
-		t.Fatalf("empty deck generation should start planned: %+v", agent.requests[0])
+	if agent.requests[0].Strategy != StrategyFulfill || agent.requests[0].Phase != PhasePlanning {
+		t.Fatalf("empty deck generation should start fulfill planning: %+v", agent.requests[0])
 	}
 	for _, slideID := range []string{"slide-01", "slide-02"} {
 		if _, err := os.Stat(filepath.Join(dir, model.SlideSpecPath(slideID))); err != nil {

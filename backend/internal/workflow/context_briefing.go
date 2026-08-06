@@ -14,13 +14,13 @@ func BuildContextBriefing(pack contextengine.ContextPack, state *runtimeState) s
 	}
 	sections := []string{
 		"Objective: " + strings.TrimSpace(pack.WorkSpec.Instruction),
-		fmt.Sprintf("Mode: strategy=%s execute_mode=%s phase=%s", state.strategy, state.executeMode, state.phase),
+		fmt.Sprintf("Mode: strategy=%s phase=%s", state.strategy, state.phase),
 		"Authority: use only disclosed tools and current target scope; ordinary assistant text never completes the run.",
 	}
 	if state.strategy == StrategyPlan {
 		sections = append(sections, "Authority detail: this is read-only planning; do not call update_plan or write tools.")
 	}
-	if state.strategy == StrategyExecute {
+	if isWriteStrategy(state.strategy) {
 		sections = append(sections, "Authority detail: writes are allowed only through the active run session and only inside target scope.")
 	}
 	if state.requirements != nil {
@@ -145,7 +145,7 @@ func workingSetSummary(state *runtimeState) string {
 }
 
 func nextFocus(state *runtimeState) string {
-	if state.strategy == StrategyExecute && state.executeMode == ExecuteModePlanned {
+	if state.strategy == StrategyFulfill {
 		if state.plan == nil {
 			return "create a lightweight execution plan with update_plan before writing."
 		}
@@ -153,7 +153,7 @@ func nextFocus(state *runtimeState) string {
 			return "complete the next pending plan step and keep the plan statuses current."
 		}
 	}
-	if state.strategy == StrategyExecute && len(state.changeSet().All()) > 0 {
+	if isWriteStrategy(state.strategy) && len(state.changeSet().All()) > 0 {
 		return "ensure latest changed targets have fresh required evidence, then finish with complete message."
 	}
 	if state.strategy == StrategyPlan {

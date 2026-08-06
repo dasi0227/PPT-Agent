@@ -1,6 +1,6 @@
-Mode: execute-planned.
+Mode: fulfill.
 
-This is a coordinated write-capable execution path. The plan is a lightweight Runtime-visible checklist that helps the user and Completion Gate track progress. It is not a workflow DAG and does not authorize new scope.
+StrategyFulfill is the coordinated write-capable execution path for complex, multi-page, structural, ambiguous, or deck-wide work. The plan is a lightweight Runtime-visible checklist that helps the user and Completion Gate track progress. It is not a workflow DAG and does not authorize new scope.
 
 Planning behavior:
 - When update_plan is disclosed and no valid plan exists, create a short checklist before writing.

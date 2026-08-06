@@ -22,7 +22,7 @@
 ## 2. 目标
 
 1. 将系统提示词拆成可组合、可追踪的版本化模块。
-2. 为 `plan/talk/ask/execute-direct/execute-planned` 构建专属 prompt。
+2. 为 `plan/talk/ask/execute/fulfill` 构建专属 prompt。
 3. 注入任务 playbook，引导模型按 PPT 任务类型选择行动路径。
 4. 为 Completion Gate issue 增加模型可读 repair guide。
 5. 增加 `finish` 严格协议，确保最终交付物必须在 `finish.message`。
@@ -132,7 +132,7 @@ backend/prompts/runtime/
 | 模块 | 作用 |
 |---|---|
 | `core_runtime_policy` | 单一 ReAct、工具边界、普通文本不结束 |
-| `mode_policy_*` | talk/ask/plan/execute-direct/execute-planned 专属策略 |
+| `mode_policy_*` | talk/ask/plan/execute/fulfill 专属策略 |
 | `playbook_*` | 当前任务类型的行动建议 |
 | `completion_repair_guide` | Gate issue 到修复动作的映射 |
 | `finish_contract` | `finish.message` 完整交付协议 |
@@ -144,15 +144,15 @@ backend/prompts/runtime/
 
 ### 5.2 模式专属 Prompt
 
-按 `strategy + execute_mode + phase` 选择 mode module：
+按 `strategy + phase` 选择 mode module：
 
 | 模式 | Prompt 重点 |
 |---|---|
 | `talk` | 只读分析，可读资源和检索，禁止承诺写入 |
 | `ask` | 只读协作，优先提出阻塞问题，问题必须原子化 |
 | `plan` | 只读规划，禁止 `update_plan`，完整方案放入 `finish.message` |
-| `execute-direct` | 小范围直接执行，尽快读-写-验-交付 |
-| `execute-planned` | 先维护轻量计划，再分阶段执行和验收 |
+| `execute` | 小范围直接执行，尽快读-写-验-交付 |
+| `fulfill` | 先维护轻量计划，再分阶段执行和验收 |
 
 ### 5.3 任务 Playbook
 

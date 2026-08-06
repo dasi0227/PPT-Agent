@@ -40,7 +40,6 @@ func (r CompletionResult) RejectionKey() string {
 
 type CompletionContext struct {
 	Strategy      ExecutionStrategy
-	ExecuteMode   ExecuteMode
 	FinishPhase   RuntimePhase
 	ActiveTools   int
 	Issues        []Issue
@@ -62,7 +61,7 @@ type CompletionPolicy interface {
 type EvidenceCompletionPolicy struct{}
 
 func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	if ctx.Strategy != StrategyExecute {
+	if !isWriteStrategy(ctx.Strategy) {
 		return nil
 	}
 	issues := []CompletionIssue{}
@@ -273,7 +272,7 @@ func isPPTDomainChange(change ArtifactChange) bool {
 type SemanticCompletionPolicy struct{}
 
 func (SemanticCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	if ctx.Strategy != StrategyExecute {
+	if !isWriteStrategy(ctx.Strategy) {
 		return nil
 	}
 	issues := []CompletionIssue{}
@@ -346,7 +345,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	if ctx.Canceled {
 		issues = append(issues, CompletionIssue{Code: CodeCanceled, Summary: "run was canceled"})
 	}
-	if ctx.Strategy == StrategyExecute {
+	if isWriteStrategy(ctx.Strategy) {
 		if ctx.Session == nil {
 			issues = append(issues, CompletionIssue{Code: CodeRunSessionRequired, Summary: "write run has no active run session"})
 		} else if err := ctx.Session.ValidateBaselines(); err != nil {
@@ -357,8 +356,8 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 			issues = append(issues, CompletionIssue{Code: code, Summary: err.Error()})
 		}
 	}
-	if ctx.Strategy == StrategyExecute && ctx.ExecuteMode == ExecuteModePlanned && (ctx.Plan == nil || ctx.Plan.HasBlockingSteps()) {
-		issues = append(issues, CompletionIssue{Code: "PLAN_INCOMPLETE", Summary: "planned execution still has pending, in-progress, or failed steps"})
+	if ctx.Strategy == StrategyFulfill && (ctx.Plan == nil || ctx.Plan.HasBlockingSteps()) {
+		issues = append(issues, CompletionIssue{Code: "PLAN_INCOMPLETE", Summary: "fulfill strategy still has pending, in-progress, or failed steps"})
 	}
 	for _, policy := range g.Policies {
 		issues = append(issues, policy.Check(ctx)...)
@@ -376,7 +375,7 @@ func finishAllowed(strategy ExecutionStrategy, phase RuntimePhase) bool {
 		return phase == PhaseChat
 	case StrategyPlan:
 		return phase == PhasePlanning
-	case StrategyExecute:
+	case StrategyExecute, StrategyFulfill:
 		return phase == PhaseExecuting
 	default:
 		return false

@@ -22,7 +22,6 @@ type PromptModule struct {
 type runtimePromptInput struct {
 	Phase           RuntimePhase
 	Strategy        ExecutionStrategy
-	ExecuteMode     ExecuteMode
 	Context         contextengine.ContextPack
 	ContextBriefing string
 	State           string
@@ -36,7 +35,7 @@ func runtimeSystemPrompt(phase RuntimePhase, strategy ExecutionStrategy, state s
 
 func runtimeSystemPromptForRequest(req AgentRequest, state string) string {
 	return buildRuntimeSystemPrompt(runtimePromptInput{
-		Phase: req.Phase, Strategy: req.Strategy, ExecuteMode: req.ExecuteMode,
+		Phase: req.Phase, Strategy: req.Strategy,
 		Context: req.Context, ContextBriefing: req.ContextBriefing, State: state,
 	})
 }
@@ -44,7 +43,7 @@ func runtimeSystemPromptForRequest(req AgentRequest, state string) string {
 func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	modules := []PromptModule{
 		loadPromptModule("core_runtime_policy"),
-		loadPromptModule(modePolicyID(input.Strategy, input.ExecuteMode, input.Phase)),
+		loadPromptModule(modePolicyID(input.Strategy)),
 		loadPromptModule(playbookID(input.Context)),
 		loadPromptModule("completion_repair_guide"),
 		loadPromptModule("finish_contract"),
@@ -62,8 +61,8 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	})
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "<runtime_prompt_manifest version=\"%s\" strategy=\"%s\" execute_mode=\"%s\" phase=\"%s\">\n",
-		runtimeprompts.Version, input.Strategy, input.ExecuteMode, input.Phase)
+	fmt.Fprintf(&b, "<runtime_prompt_manifest version=\"%s\" strategy=\"%s\" phase=\"%s\">\n",
+		runtimeprompts.Version, input.Strategy, input.Phase)
 	for _, module := range modules {
 		if strings.TrimSpace(module.Body) == "" {
 			continue
@@ -89,7 +88,7 @@ func loadPromptModule(id string) PromptModule {
 	}
 }
 
-func modePolicyID(strategy ExecutionStrategy, executeMode ExecuteMode, phase RuntimePhase) string {
+func modePolicyID(strategy ExecutionStrategy) string {
 	switch strategy {
 	case StrategyTalk:
 		return "mode_policy_talk"
@@ -98,10 +97,9 @@ func modePolicyID(strategy ExecutionStrategy, executeMode ExecuteMode, phase Run
 	case StrategyPlan:
 		return "mode_policy_plan"
 	case StrategyExecute:
-		if executeMode == ExecuteModePlanned || phase == PhasePlanning {
-			return "mode_policy_execute_planned"
-		}
 		return "mode_policy_execute_direct"
+	case StrategyFulfill:
+		return "mode_policy_fulfill"
 	default:
 		return "mode_policy_talk"
 	}

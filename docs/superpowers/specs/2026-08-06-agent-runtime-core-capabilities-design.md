@@ -141,11 +141,11 @@ Runtime 根据 reviewer 结果决定：
 
 第一版不需要每个 run 都调用 reviewer。建议启用条件：
 
-- `StrategyExecute` 且 finish 已通过 deterministic gate。
+- `StrategyExecute` 或 `StrategyFulfill` 且 finish 已通过 deterministic gate。
 - `StrategyPlan` 且用户请求明确要求完整计划/报告。
-- `execute_planned` 总是启用。
+- `StrategyFulfill` 总是启用。
 - deck-level 或 multi-target 任务总是启用。
-- direct single-slide 小改动可按配置启用。
+- `StrategyExecute` single-slide 小改动可按配置启用。
 
 配置建议：
 
@@ -166,8 +166,8 @@ type SemanticReviewPolicy struct {
 ```text
 plan: enabled
 talk/ask: disabled
-execute-direct: disabled unless high risk or gate repaired before
-execute-planned: enabled
+execute: disabled unless high risk or gate repaired before
+fulfill: enabled
 deck-level execute: enabled
 ```
 
@@ -179,7 +179,6 @@ Reviewer 不直接吃全量 message history。输入必须是结构化包：
 type SemanticReviewInput struct {
     RunID string
     Strategy ExecutionStrategy
-    ExecuteMode ExecuteMode
     WorkSpec model.WorkSpec
     RequirementLedger RequirementLedger
     Plan *Plan
@@ -293,8 +292,8 @@ Reviewer issue 映射到 CompletionIssue：
 
 Reviewer provider 调用失败时：
 
-- execute-planned / deck-level：阻塞 finish，返回 `SEMANTIC_REVIEW_UNAVAILABLE`，可重试。
-- execute-direct low-risk：可配置为 warning-only。
+- fulfill / deck-level：阻塞 finish，返回 `SEMANTIC_REVIEW_UNAVAILABLE`，可重试。
+- execute low-risk：可配置为 warning-only。
 - plan：阻塞，避免交付不完整计划。
 
 建议默认 conservative：
@@ -529,7 +528,6 @@ type RuntimeCheckpoint struct {
     RunID string
     LoopID string
     Strategy ExecutionStrategy
-    ExecuteMode ExecuteMode
     Phase RuntimePhase
     ResumePhase RuntimePhase
     Plan *Plan
@@ -858,7 +856,7 @@ backend/prompts/context_retrieval/
 
 ### Integration Tests
 
-- execute planned finish -> deterministic gate pass -> reviewer reject -> same loop repair。
+- fulfill finish -> deterministic gate pass -> reviewer reject -> same loop repair。
 - reviewer unavailable -> policy reject。
 - search_refs returns semantic result with selection reason。
 - crash simulation after write -> resume -> render evidence refreshed。

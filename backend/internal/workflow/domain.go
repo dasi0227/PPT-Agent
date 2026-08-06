@@ -15,14 +15,7 @@ const (
 	StrategyAsk     ExecutionStrategy = "ask"
 	StrategyPlan    ExecutionStrategy = "plan"
 	StrategyExecute ExecutionStrategy = "execute"
-)
-
-type ExecuteMode string
-
-const (
-	ExecuteModeNone    ExecuteMode = ""
-	ExecuteModeDirect  ExecuteMode = "direct"
-	ExecuteModePlanned ExecuteMode = "planned"
+	StrategyFulfill ExecutionStrategy = "fulfill"
 )
 
 type RuntimePhase string

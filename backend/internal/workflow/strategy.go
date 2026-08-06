@@ -22,12 +22,11 @@ type DecisionSignal struct {
 }
 
 type StrategyDecision struct {
-	Strategy    ExecutionStrategy `json:"strategy"`
-	ExecuteMode ExecuteMode       `json:"execute_mode,omitempty"`
-	Reason      string            `json:"reason"`
-	Confidence  float64           `json:"confidence"`
-	Risk        RiskLevel         `json:"risk"`
-	Signals     []DecisionSignal  `json:"signals"`
+	Strategy   ExecutionStrategy `json:"strategy"`
+	Reason     string            `json:"reason"`
+	Confidence float64           `json:"confidence"`
+	Risk       RiskLevel         `json:"risk"`
+	Signals    []DecisionSignal  `json:"signals"`
 }
 
 type StrategyRouter struct{}
@@ -105,7 +104,7 @@ func (StrategyRouter) Decide(pack contextengine.ContextPack) StrategyDecision {
 		return complexDecision("instruction is not explicit enough for a safe direct write", RiskMedium, .78, signals)
 	default:
 		return StrategyDecision{
-			Strategy: StrategyExecute, ExecuteMode: ExecuteModeDirect,
+			Strategy:   StrategyExecute,
 			Reason:     "explicit local instruction affects one declared target",
 			Confidence: .92, Risk: RiskLow, Signals: signals,
 		}
@@ -114,8 +113,8 @@ func (StrategyRouter) Decide(pack contextengine.ContextPack) StrategyDecision {
 
 func complexDecision(reason string, risk RiskLevel, confidence float64, signals []DecisionSignal) StrategyDecision {
 	return StrategyDecision{
-		Strategy: StrategyExecute, ExecuteMode: ExecuteModePlanned,
-		Reason: reason, Confidence: confidence, Risk: risk, Signals: signals,
+		Strategy: StrategyFulfill,
+		Reason:   reason, Confidence: confidence, Risk: risk, Signals: signals,
 	}
 }
 

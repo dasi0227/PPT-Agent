@@ -55,7 +55,6 @@ type SemanticReviewInput struct {
 	RunID             string              `json:"run_id"`
 	FinishCallID      string              `json:"finish_call_id"`
 	Strategy          ExecutionStrategy   `json:"strategy"`
-	ExecuteMode       ExecuteMode         `json:"execute_mode"`
 	WorkSpec          model.WorkSpec      `json:"work_spec"`
 	RequirementLedger *RequirementLedger  `json:"requirement_ledger,omitempty"`
 	Plan              *Plan               `json:"plan,omitempty"`
@@ -166,10 +165,9 @@ func (r *Runtime) semanticReviewEnabled(state *runtimeState, pack contextengine.
 		return r.SemanticPolicy.ReviewPlan
 	case StrategyTalk, StrategyAsk:
 		return r.SemanticPolicy.ReviewTalk
+	case StrategyFulfill:
+		return r.SemanticPolicy.ReviewExecutePlanned
 	case StrategyExecute:
-		if state.executeMode == ExecuteModePlanned {
-			return r.SemanticPolicy.ReviewExecutePlanned
-		}
 		if pack.WorkSpec.Target.Level == model.TargetDeck {
 			return r.SemanticPolicy.ReviewDeckLevel
 		}
@@ -194,7 +192,7 @@ func (r *Runtime) runSemanticReview(
 		recordTrace(input.Trace, state.runID, "semantic.review.started", map[string]any{"loop_id": state.loopID, "call_id": callID})
 	}
 	if input.SemanticReviews == nil {
-		if state.strategy == StrategyExecute && state.executeMode == ExecuteModeDirect && r.SemanticPolicy.AllowDirectBypass {
+		if state.strategy == StrategyExecute && r.SemanticPolicy.AllowDirectBypass {
 			return deterministic, false, nil
 		}
 		issue := CompletionIssue{Code: CodeSemanticReviewUnavailable, Summary: "semantic reviewer is unavailable for this run"}
@@ -207,7 +205,7 @@ func (r *Runtime) runSemanticReview(
 		return out, true, nil
 	}
 	reviewInput := SemanticReviewInput{
-		RunID: state.runID, FinishCallID: callID, Strategy: state.strategy, ExecuteMode: state.executeMode,
+		RunID: state.runID, FinishCallID: callID, Strategy: state.strategy,
 		WorkSpec: input.Context.WorkSpec, RequirementLedger: state.requirements, Plan: state.plan,
 		Changes: state.changeSet(), Evidence: state.ledger.Entries(state.changeSet()), LatestIssues: state.issues,
 		ContextBriefing: state.contextBriefing, RetrievedContext: reviewContextItems(state.retrievedContext),

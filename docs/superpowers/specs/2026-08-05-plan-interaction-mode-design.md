@@ -34,27 +34,18 @@ StrategyTalk
 StrategyAsk
 StrategyPlan
 StrategyExecute
+StrategyFulfill
 ```
 
-执行内部是否带计划不再用顶层 Strategy 表达，而由 Runtime 内部状态表示：
+执行策略不再通过 `ExecuteMode` 二级轴表达。局部明确写任务走 `StrategyExecute`，复杂、多页、结构调整或需要计划跟踪的履约任务走 `StrategyFulfill`。
 
-```go
-ExecuteModeDirect
-ExecuteModePlanned
-```
-
-`ExecuteMode` 只在 `StrategyExecute` 内生效：
-
-- `direct`：直接进入 executing，可按权限写入。
-- `planned`：先进入 planning，只读 + `update_plan`，首个有效计划后进入 executing。
-
-触发 `planned` 的路径：
+触发 `StrategyFulfill` 的路径：
 
 1. Router 根据整份生成、批量修改、结构调整等高风险信号强制要求计划。
-2. Agent 在 direct 执行中主动调用 `update_plan`，Runtime 校验通过后切换为 planned。
-3. Completion Gate 多次发现需要协同修复时，Runtime 可把 direct 升级为 planned。
+2. Agent 在 `StrategyExecute` 执行中主动调用 `update_plan`，Runtime 校验通过后升级为 `StrategyFulfill`。
+3. Completion Gate 多次发现需要协同修复时，Runtime 可把 `StrategyExecute` 升级为 `StrategyFulfill`。
 
-Agent 不能直接修改 `ExecuteMode` 字段，只能通过 `update_plan` 间接请求进入 planned。
+Agent 不能直接修改 strategy 字段，只能通过 `update_plan` 间接请求从 `StrategyExecute` 升级到 `StrategyFulfill`。
 
 ## Runtime 行为
 
@@ -81,11 +72,20 @@ Agent 不能直接修改 `ExecuteMode` 字段，只能通过 `update_plan` 间�
 
 ### StrategyExecute
 
-- 默认 `ExecuteModeDirect`
-- Router 可将初始 mode 设为 `ExecuteModePlanned`
-- 只有 execute 才创建 `RunSession`
-- 只有 execute 可披露写工具
-- `ExecuteModePlanned` 下 completion 必须检查 Plan 无 pending/in_progress/failed step
+- phase: `executing`
+- 创建 `RunSession`
+- 可披露写工具
+- 不披露 `update_plan`
+- 适合局部、明确、低协同任务
+
+### StrategyFulfill
+
+- 初始 phase: `planning`
+- 首个有效 `update_plan` 后进入 `executing`
+- 创建 `RunSession`
+- planning phase 只读 + `update_plan`
+- executing phase 可披露写工具
+- completion 必须检查 Plan 无 pending/in_progress/failed step
 
 ## Plan 内容分层
 
@@ -131,7 +131,7 @@ Runtime system prompt 需要新增以下约束：
 - `talk`、`ask`、`plan` 都是只读。
 - 只有 `execute` 通过 active run session 写入。
 - `StrategyPlan` 不调用 `update_plan`；通过 `finish(message)` 输出完整计划。
-- `StrategyExecute` 可以 direct 执行，也可以在需要协调时调用 `update_plan` 进入 planned mode。
+- `StrategyExecute` 直接执行；需要协调时调用 `update_plan` 进入 `StrategyFulfill`。
 - `update_plan` 的步骤必须简短；详细解释放入 `finish(message)`。
 
 ## 非目标
@@ -139,7 +139,7 @@ Runtime system prompt 需要新增以下约束：
 - 不引入新的 Runner 架构。
 - 不把 Plan step 变成独立 Workflow 节点。
 - 不改变 `target`、资源模型、工具业务接口。
-- 不把 `ExecuteMode` 暴露到前端 UI。
+- 不把内部 Strategy 路由暴露到前端 UI。
 - 不重构整体前后端架构。
 
 ## 验收标准

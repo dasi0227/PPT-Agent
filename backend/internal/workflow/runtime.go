@@ -58,7 +58,6 @@ type RuntimeCheckpoint struct {
 	LoopID               string                        `json:"loop_id"`
 	Boundary             string                        `json:"boundary,omitempty"`
 	Strategy             ExecutionStrategy             `json:"strategy"`
-	ExecuteMode          ExecuteMode                   `json:"execute_mode,omitempty"`
 	Phase                RuntimePhase                  `json:"phase"`
 	ResumePhase          RuntimePhase                  `json:"resume_phase,omitempty"`
 	Plan                 *Plan                         `json:"plan,omitempty"`
@@ -81,7 +80,6 @@ type AgentRequest struct {
 	RunID           string
 	LoopID          string
 	Strategy        ExecutionStrategy
-	ExecuteMode     ExecuteMode
 	Phase           RuntimePhase
 	Context         contextengine.ContextPack
 	Plan            *Plan
@@ -116,7 +114,7 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		return AgentResponse{}, errors.New("LLM provider is required for ReAct execution")
 	}
 	runtimeState, _ := json.Marshal(map[string]any{
-		"strategy": req.Strategy, "execute_mode": req.ExecuteMode, "phase": req.Phase, "plan": req.Plan,
+		"strategy": req.Strategy, "phase": req.Phase, "plan": req.Plan,
 		"changes": req.Changes, "evidence": req.Evidence, "requirements": req.Requirements,
 	})
 	system, user := contextengine.CompileForRunner(&req.Context,
@@ -186,7 +184,6 @@ type runtimeState struct {
 	runID                   string
 	loopID                  string
 	strategy                ExecutionStrategy
-	executeMode             ExecuteMode
 	phase                   RuntimePhase
 	resumePhase             RuntimePhase
 	decision                StrategyDecision
@@ -230,22 +227,15 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		input.Budget = DefaultRuntimeBudget()
 	}
 	decision := r.Router.Decide(input.Context)
-	executeMode := decision.ExecuteMode
-	if decision.Strategy == StrategyExecute && executeMode == ExecuteModeNone {
-		executeMode = ExecuteModeDirect
-	}
-	decision.ExecuteMode = executeMode
 	state := &runtimeState{
 		runID: input.RunID, loopID: "loop_" + uuid.NewString(), strategy: decision.Strategy,
-		executeMode: executeMode,
-		decision:    decision, scope: ScopeFromSpec(input.Context.WorkSpec), ledger: NewEvidenceLedger(),
+		decision: decision, scope: ScopeFromSpec(input.Context.WorkSpec), ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, started: time.Now(), budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.WorkSpec),
 	}
 	if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.RunID == input.RunID {
 		state.loopID = input.ResumeCheckpoint.LoopID
 		state.strategy = input.ResumeCheckpoint.Strategy
-		state.executeMode = input.ResumeCheckpoint.ExecuteMode
 		state.phase = input.ResumeCheckpoint.ResumePhase
 		if state.phase == "" {
 			state.phase = input.ResumeCheckpoint.Phase
@@ -273,11 +263,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	case StrategyPlan:
 		initialPhase = PhasePlanning
 	case StrategyExecute:
-		if state.executeMode == ExecuteModePlanned {
-			initialPhase = PhasePlanning
-		} else {
-			initialPhase = PhaseExecuting
-		}
+		initialPhase = PhaseExecuting
+	case StrategyFulfill:
+		initialPhase = PhasePlanning
 	}
 	if input.ResumeCheckpoint != nil && state.phase != "" && state.phase != PhaseTerminal {
 		initialPhase = state.phase
@@ -309,7 +297,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		r.emitProgress(input.Emitter, state, "thinking", "正在分析任务与当前内容", nil)
 	}
 
-	if state.strategy == StrategyExecute {
+	if isWriteStrategy(state.strategy) {
 		// Direct-write session: typed tools write artifacts straight to the
 		// project directory. A failed or canceled run keeps its partial
 		// products on disk instead of discarding a private write sandbox.
@@ -353,7 +341,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		schemas = append(schemas, controlSchemas(state.strategy, state.phase, input.Context.WorkSpec.Interaction.Intent)...)
 		state.turns++
 		response, err := r.Agent.Next(ctx, AgentRequest{
-			RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, ExecuteMode: state.executeMode, Phase: state.phase,
+			RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, Phase: state.phase,
 			Context: input.Context, Plan: state.plan, Changes: state.changeSet(),
 			Evidence: state.ledger.Entries(state.changeSet()), Requirements: state.requirements,
 			ContextBriefing: state.contextBriefing,
@@ -430,12 +418,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		for _, result := range results {
 			upgrade = upgrade || result.Code == CodeScopeExpansion
 		}
-		if state.strategy == StrategyExecute && state.executeMode == ExecuteModeDirect && (upgrade || requiresComplexCoordination(state.changeSet())) {
-			r.upgradeToPlanned(input.Emitter, state, "runtime scope expansion requires coordinated planning")
+		if state.strategy == StrategyExecute && (upgrade || requiresComplexCoordination(state.changeSet())) {
+			r.upgradeToFulfill(input.Emitter, state, "runtime scope expansion requires coordinated planning")
 			continue
 		}
-		if state.strategy == StrategyExecute && state.executeMode == ExecuteModeDirect && state.toolCalls >= state.budget.SimpleUpgradeToolRoundTrips {
-			r.upgradeToPlanned(input.Emitter, state, "direct execution exceeded six tool round trips")
+		if state.strategy == StrategyExecute && state.toolCalls >= state.budget.SimpleUpgradeToolRoundTrips {
+			r.upgradeToFulfill(input.Emitter, state, "direct execution exceeded six tool round trips")
 			continue
 		}
 		if state.toolFailures >= state.budget.MaxConsecutiveToolFailures {
@@ -753,7 +741,7 @@ func (r *Runtime) executeControl(
 ) (StructuredOutcome, bool) {
 	switch call.Name {
 	case "update_plan":
-		if state.strategy != StrategyExecute ||
+		if state.strategy != StrategyFulfill ||
 			(state.phase != PhasePlanning && state.phase != PhaseExecuting) {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "update_plan is not allowed now", false))
 			return StructuredOutcome{}, false
@@ -789,11 +777,7 @@ func (r *Runtime) executeControl(
 			}
 		}
 		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan revision accepted"))
-		if state.strategy == StrategyExecute {
-			state.executeMode = ExecuteModePlanned
-			state.decision.ExecuteMode = ExecuteModePlanned
-		}
-		if state.strategy == StrategyExecute && created && state.phase == PhasePlanning {
+		if state.strategy == StrategyFulfill && created && state.phase == PhasePlanning {
 			r.changePhase(input.Emitter, state, PhaseExecuting, "first valid plan created")
 		}
 		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, ""); err != nil {
@@ -863,7 +847,7 @@ func (r *Runtime) finishCandidate(
 	r.emitProgress(input.Emitter, state, "finalizing", "正在完成最终检查", nil)
 	changes := state.changeSet()
 	result := r.Gate.Check(CompletionContext{
-		Strategy: state.strategy, ExecuteMode: state.executeMode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
+		Strategy: state.strategy, FinishPhase: finishPhase, ActiveTools: state.activeTools,
 		Issues: state.issues, WorkScope: state.scope, Session: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: input.Context, Plan: state.plan,
 		Requirements: state.requirements, FinishMessage: message, Canceled: ctx.Err() != nil,
@@ -894,8 +878,8 @@ func (r *Runtime) finishCandidate(
 		if state.gateCount >= state.budget.MaxIdenticalGateRejections {
 			return r.fail(input, state, CodeGateRejectedRepeated, errors.New("completion gate rejected the same unchanged state three times")), true
 		}
-		if state.strategy == StrategyExecute && state.executeMode == ExecuteModeDirect && state.gateCount >= 2 && gateNeedsCoordination(result) {
-			r.upgradeToPlanned(input.Emitter, state, "completion issues require multi-step coordination")
+		if state.strategy == StrategyExecute && state.gateCount >= 2 && gateNeedsCoordination(result) {
+			r.upgradeToFulfill(input.Emitter, state, "completion issues require multi-step coordination")
 		} else {
 			r.changePhase(input.Emitter, state, finishPhase, "completion rejected; continuing the same loop")
 		}
@@ -917,7 +901,7 @@ func (r *Runtime) finishCandidate(
 	if state.lastSummary == "" {
 		state.lastSummary = "Run completed"
 	}
-	if state.strategy == StrategyExecute {
+	if isWriteStrategy(state.strategy) {
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted")
 		state.tx.AcceptMaterializationProofs(result.MaterializationProofs)
 		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommit, ""); err != nil {
@@ -1011,13 +995,13 @@ func changedResources(values []ChangedTarget) []Resource {
 	return out
 }
 
-func (r *Runtime) upgradeToPlanned(emitter EventEmitter, state *runtimeState, reason string) {
-	if state.strategy != StrategyExecute || state.executeMode == ExecuteModePlanned {
+func (r *Runtime) upgradeToFulfill(emitter EventEmitter, state *runtimeState, reason string) {
+	if state.strategy != StrategyExecute {
 		return
 	}
-	state.executeMode = ExecuteModePlanned
+	state.strategy = StrategyFulfill
 	state.decision = StrategyDecision{
-		Strategy: StrategyExecute, ExecuteMode: ExecuteModePlanned, Reason: reason, Confidence: 1, Risk: RiskMedium,
+		Strategy: StrategyFulfill, Reason: reason, Confidence: 1, Risk: RiskMedium,
 		Signals: append(state.decision.Signals, DecisionSignal{Name: "runtime_upgrade", Value: "true"}),
 	}
 	if state.tx != nil {
@@ -1047,7 +1031,7 @@ func (r *Runtime) changePhase(emitter EventEmitter, state *runtimeState, next Ru
 func (r *Runtime) emitStrategy(state *runtimeState, upgraded bool) {
 	recordTrace(state.trace, state.runID, "strategy.selected", map[string]any{
 		"loop_id":  state.loopID,
-		"strategy": state.decision.Strategy, "execute_mode": state.decision.ExecuteMode, "reason": state.decision.Reason,
+		"strategy": state.decision.Strategy, "reason": state.decision.Reason,
 		"confidence": state.decision.Confidence, "risk": state.decision.Risk,
 		"signals": state.decision.Signals, "upgraded": upgraded,
 	})
@@ -1100,7 +1084,7 @@ func (state *runtimeState) changeSet() ChangeSet {
 func (state *runtimeState) checkpoint(questionID string) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
 		RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, Phase: state.phase,
-		ExecuteMode: state.executeMode, ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Changes: state.changeSet(),
+		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
 		WaitingQuestionID: questionID, CompletionFailures: state.gateCount,
 	}
@@ -1408,9 +1392,13 @@ func isControlTool(name string) bool {
 	return name == "update_plan" || name == "ask_user" || name == "finish"
 }
 
+func isWriteStrategy(strategy ExecutionStrategy) bool {
+	return strategy == StrategyExecute || strategy == StrategyFulfill
+}
+
 func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
 	out := []ToolSchema{}
-	if strategy == StrategyExecute && (phase == PhasePlanning || phase == PhaseExecuting) {
+	if strategy == StrategyFulfill && (phase == PhasePlanning || phase == PhaseExecuting) {
 		out = append(out, ToolSchema{
 			Name: "update_plan", Description: "Create or replace the current lightweight plan snapshot.",
 			Parameters: objectSchema([]string{"steps"}, map[string]any{

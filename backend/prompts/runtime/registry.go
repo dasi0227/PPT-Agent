@@ -28,7 +28,7 @@ var modulePaths = map[string]string{
 	"mode_policy_ask":                  "modes/ask.md",
 	"mode_policy_plan":                 "modes/plan.md",
 	"mode_policy_execute_direct":       "modes/execute_direct.md",
-	"mode_policy_execute_planned":      "modes/execute_planned.md",
+	"mode_policy_fulfill":              "modes/fulfill.md",
 	"playbook_read_only_planning":      "playbooks/read_only_planning.md",
 	"playbook_read_only_collaboration": "playbooks/read_only_collaboration.md",
 	"playbook_spec_edit":               "playbooks/spec_edit.md",
