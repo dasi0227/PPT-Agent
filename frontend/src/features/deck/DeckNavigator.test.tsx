@@ -37,6 +37,46 @@ describe('DeckNavigator', () => {
     } } });
   });
 
+  function setMultiSectionFixture() {
+    useProjectStore.setState((state) => ({
+      slidesByProjectId: {
+        ...state.slidesByProjectId,
+        p1: [
+          { id: 's1', project_id: 'p1', position: 0, layout: 'content', title: '章节一第一项', html_path: '', spec_path: '/s1.json', current_version: 0 },
+          { id: 's2', project_id: 'p1', position: 1, layout: 'content', title: '章节一第二项', html_path: '', spec_path: '/s2.json', current_version: 0 },
+          { id: 's3', project_id: 'p1', position: 2, layout: 'content', title: '章节二第一项', html_path: '', spec_path: '/s3.json', current_version: 0 },
+        ],
+      },
+    }));
+    useSpecStore.setState({ byProjectId: { p1: {
+      outline: {
+        schema_version: '3.0', revision: 1, project_id: 'p1', title: '演示项目',
+        goal: '', audience: '', language: 'zh-CN', core_thesis: '核心命题', narrative_arc: '',
+        sections: [
+          {
+            id: 'sec1', number: '01', title: '第一章',
+            subsections: [
+              { id: 'sub11', number: '1.1', title: '第一节' },
+              { id: 'sub12', number: '1.2', title: '第二节' },
+            ],
+          },
+          {
+            id: 'sec2', number: '02', title: '第二章',
+            subsections: [{ id: 'sub21', number: '2.1', title: '第一节' }],
+          },
+        ],
+        slide_order: ['s1', 's2', 's3'], created_at: 1, updated_at: 1,
+      },
+      slide_specs: {
+        s1: { schema_version: '3.0', revision: 1, project_id: 'p1', slide_id: 's1', source_outline_revision: 1, section_id: 'sec1', subsection_id: 'sub11', role: 'context', title: '章节一第一项', key_message: 'A', content: { summary: 'A', points: [] }, visual_intent: { archetype: 'content', description: 'A', asset_queries: [] }, speaker_notes: '', created_at: 1, updated_at: 1 },
+        s2: { schema_version: '3.0', revision: 1, project_id: 'p1', slide_id: 's2', source_outline_revision: 1, section_id: 'sec1', subsection_id: 'sub12', role: 'context', title: '章节一第二项', key_message: 'B', content: { summary: 'B', points: [] }, visual_intent: { archetype: 'content', description: 'B', asset_queries: [] }, speaker_notes: '', created_at: 1, updated_at: 1 },
+        s3: { schema_version: '3.0', revision: 1, project_id: 'p1', slide_id: 's3', source_outline_revision: 1, section_id: 'sec2', subsection_id: 'sub21', role: 'context', title: '章节二第一项', key_message: 'C', content: { summary: 'C', points: [] }, visual_intent: { archetype: 'content', description: 'C', asset_queries: [] }, speaker_notes: '', created_at: 1, updated_at: 1 },
+      },
+      design: { schema_version: '3.0', revision: 1, project_id: 'p1', canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {}, created_at: 1, updated_at: 1 },
+      materialization: {},
+    } } });
+  }
+
   it('shows real slide titles instead of generic labels', () => {
     useDeckStore.setState({ globalView: 'outline' });
     render(<DeckNavigator />);
@@ -60,8 +100,14 @@ describe('DeckNavigator', () => {
 
   it('renders section and subsection directory hierarchy', () => {
     render(<DeckNavigator />);
-    expect(screen.getByText('1. 市场')).toBeInTheDocument();
-    expect(screen.getByText('1.1 趋势')).toBeInTheDocument();
+    const section = screen.getByText('1. 市场');
+    const subsection = screen.getByText('1.1 趋势');
+    expect(section).toBeInTheDocument();
+    expect(subsection).toBeInTheDocument();
+    expect(section).toHaveClass('font-normal');
+    expect(subsection).toHaveClass('font-normal');
+    expect(section).not.toHaveClass('font-semibold');
+    expect(subsection).not.toHaveClass('font-medium');
   });
 
   it('renders low-resolution HTML thumbnails when a page has HTML', async () => {
@@ -81,6 +127,25 @@ describe('DeckNavigator', () => {
     await waitFor(() => expect(slidesApi.render).toHaveBeenCalledWith('s1', expect.any(AbortSignal)));
     expect(await screen.findByTitle('第 1 页缩略图')).toBeInTheDocument();
     expect(screen.getAllByText('暂无')).toHaveLength(1);
+  });
+
+  it('prefetches directory thumbnails before switching into HTML view', async () => {
+    useDeckStore.setState({ globalView: 'outline' });
+    useProjectStore.setState((state) => ({
+      slidesByProjectId: {
+        ...state.slidesByProjectId,
+        p1: [
+          { ...state.slidesByProjectId.p1[0], html_path: '/slides/s1/index.html', current_version: 1, html_revision: 1 },
+          state.slidesByProjectId.p1[1],
+        ],
+      },
+    }));
+    vi.spyOn(slidesApi, 'render').mockResolvedValue('<!doctype html><html><body><section>Preview</section></body></html>');
+
+    render(<DeckNavigator />);
+
+    expect(screen.getByText('市场分析')).toBeInTheDocument();
+    await waitFor(() => expect(slidesApi.render).toHaveBeenCalledWith('s1', expect.any(AbortSignal)));
   });
 
   it('dragging a page onto a subsection page updates its placement', async () => {
@@ -105,6 +170,72 @@ describe('DeckNavigator', () => {
       [
         { slide_id: 's1', section_id: 'sec', subsection_id: 'sub' },
         { slide_id: 's2', section_id: 'sec', subsection_id: 'sub' },
+      ],
+    ));
+  });
+
+  it('moves pages across subsection boundaries with the same restructure contract as dragging', async () => {
+    useDeckStore.setState({ globalView: 'outline' });
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockResolvedValue(undefined as never);
+    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+
+    render(<DeckNavigator />);
+
+    const upButtons = screen.getAllByRole('button', { name: '上移本页' });
+    const downButtons = screen.getAllByRole('button', { name: '下移本页' });
+    expect(upButtons[0]).toBeDisabled();
+    expect(downButtons[0]).not.toBeDisabled();
+    expect(upButtons[1]).not.toBeDisabled();
+    expect(downButtons[1]).toBeDisabled();
+
+    fireEvent.click(downButtons[0]);
+
+    await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
+      'p1',
+      ['s2', 's1'],
+      [
+        { slide_id: 's2', section_id: 'sec', subsection_id: 'sub' },
+        { slide_id: 's1', section_id: 'sec', subsection_id: 'sub' },
+      ],
+    ));
+  });
+
+  it('moves the last page of a section down as the next section direct boundary item', async () => {
+    useDeckStore.setState({ globalView: 'outline' });
+    setMultiSectionFixture();
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockResolvedValue(undefined as never);
+    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+
+    render(<DeckNavigator />);
+    fireEvent.click(screen.getAllByRole('button', { name: '下移本页' })[1]);
+
+    await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
+      'p1',
+      ['s1', 's2', 's3'],
+      [
+        { slide_id: 's1', section_id: 'sec1', subsection_id: 'sub11' },
+        { slide_id: 's2', section_id: 'sec2' },
+        { slide_id: 's3', section_id: 'sec2', subsection_id: 'sub21' },
+      ],
+    ));
+  });
+
+  it('moves the first page of a section up as the previous section direct boundary item', async () => {
+    useDeckStore.setState({ globalView: 'outline' });
+    setMultiSectionFixture();
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockResolvedValue(undefined as never);
+    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+
+    render(<DeckNavigator />);
+    fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[2]);
+
+    await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
+      'p1',
+      ['s1', 's2', 's3'],
+      [
+        { slide_id: 's1', section_id: 'sec1', subsection_id: 'sub11' },
+        { slide_id: 's2', section_id: 'sec1', subsection_id: 'sub12' },
+        { slide_id: 's3', section_id: 'sec1' },
       ],
     ));
   });

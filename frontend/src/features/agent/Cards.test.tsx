@@ -260,6 +260,42 @@ describe('public timeline components', () => {
     ));
   });
 
+  it('collapses answered grouped questions by default', () => {
+    const item: QuestionItem = {
+      id: 'r1:question:q3', type: 'question', runId: 'r1', questionId: 'q3',
+      prompt: '补充信息', selection: 'single', options: [], allowCustom: true,
+      questions: [
+        { id: 'audience', title: '这个演示的目标受众是谁？', options: [], allow_custom: true },
+        { id: 'depth', title: '希望这个演示达到什么深度？', options: [], allow_custom: true },
+      ],
+      grouped: true,
+      answer: {
+        selected_option_ids: [],
+        custom_text: '',
+        answers: [
+          { question_id: 'audience', custom_text: '产品经理' },
+          { question_id: 'depth', custom_text: '入门但不浅' },
+        ],
+      },
+      displayText: '产品经理；入门但不浅',
+      timestamp: 0,
+    };
+
+    render(<QuestionPanel item={item} />);
+    const groupButton = screen.getByRole('button', { name: /询问了 2 个问题/ });
+    expect(groupButton).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('这个演示的目标受众是谁？')).toBeNull();
+    expect(screen.queryByText('产品经理')).toBeNull();
+
+    fireEvent.click(groupButton);
+
+    expect(groupButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('这个演示的目标受众是谁？')).toBeInTheDocument();
+    expect(screen.getByText('产品经理')).toBeInTheDocument();
+    expect(screen.getByText('希望这个演示达到什么深度？')).toBeInTheDocument();
+    expect(screen.getByText('入门但不浅')).toBeInTheDocument();
+  });
+
   it('renders progress as an aria-live row', () => {
     render(<LiveProgressRow progress={{
       stage: 'rendering', text: '正在检查第 6 页的布局', current: 6, total: 12,

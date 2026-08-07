@@ -78,6 +78,21 @@ function SubmittedQuestionRow({ question, value }: { question: QuestionField; va
   );
 }
 
+function SubmittedQuestionDetailRow({ question, value }: { question: QuestionField; value: string }) {
+  return (
+    <div className="rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900">
+      <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-1">
+        <span className="font-medium text-text-400">Q：</span>
+        <span>{question.title}</span>
+      </div>
+      <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-1">
+        <span className="font-medium text-text-400">A：</span>
+        <span>{value}</span>
+      </div>
+    </div>
+  );
+}
+
 export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   const threadId = useActiveThreadId();
   const { activeRunId, pendingQuestion } = useActiveSession();
@@ -91,6 +106,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, DraftAnswer>>(() => initialDrafts(questions));
   const [submitting, setSubmitting] = useState(false);
+  const [answeredGroupExpanded, setAnsweredGroupExpanded] = useState(false);
   const panelRef = useRef<HTMLFieldSetElement>(null);
   const pending = pendingQuestion?.id === item.questionId && !item.answer;
   const currentQuestion = questions[Math.min(currentIndex, questions.length - 1)];
@@ -101,6 +117,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   useEffect(() => {
     setCurrentIndex(0);
     setDrafts(initialDrafts(questions));
+    setAnsweredGroupExpanded(false);
   }, [item.questionId, questions]);
 
   useEffect(() => {
@@ -109,14 +126,37 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
 
   if (item.answer) {
     const groupedAnswers = item.answer.answers ?? [];
+    if (questions.length > 1) {
+      return (
+        <div className="rounded-lg transition-colors duration-150">
+          <button
+            type="button"
+            aria-expanded={answeredGroupExpanded}
+            onClick={() => setAnsweredGroupExpanded((value) => !value)}
+            className="flex min-h-8 w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <MessageCircleQuestion className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
+            <span className="min-w-0 flex-1 truncate font-medium">询问了 {questions.length} 个问题</span>
+            {answeredGroupExpanded
+              ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />
+              : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />}
+          </button>
+          {answeredGroupExpanded && (
+            <div className="ml-6 space-y-1 px-1.5 pb-1">
+              {questions.map((question) => (
+                <SubmittedQuestionDetailRow
+                  key={question.id}
+                  question={question}
+                  value={answerText(question, groupedAnswers.find((answer) => answer.question_id === question.id), item)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="space-y-1">
-        {questions.length > 1 && (
-          <div className="flex items-start gap-2 px-1.5 py-1 text-[13px] font-medium leading-5 text-text-900">
-            <MessageCircleQuestion className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
-            <span>询问了 {questions.length} 个问题</span>
-          </div>
-        )}
         {questions.map((question) => (
           <SubmittedQuestionRow
             key={question.id}

@@ -43,7 +43,7 @@ function SlideThumbnail({
           slides={[{ id: slide.id, html }]}
           index={0}
           title={`第 ${index + 1} 页缩略图`}
-          className="border-0 bg-white"
+          className="border-0 bg-white motion-safe:animate-[timeline-enter_120ms_ease-out]"
           style={{
             width: '400%',
             height: '400%',
@@ -53,6 +53,38 @@ function SlideThumbnail({
           }}
         />
       ) : '暂无'}
+    </div>
+  );
+}
+
+function SlideDirectoryContent({
+  slide,
+  index,
+  title,
+  view,
+  state,
+}: {
+  slide: Slide;
+  index: number;
+  title: string;
+  view: 'html' | 'outline';
+  state: ResourceState<string>;
+}) {
+  return (
+    <div className="relative flex h-9 min-w-0 items-center overflow-hidden">
+      {view === 'html' ? (
+        <div key="html" className="motion-safe:animate-[timeline-enter_120ms_ease-out]">
+          <SlideThumbnail slide={slide} index={index} state={state} />
+        </div>
+      ) : (
+        <span
+          key="outline"
+          className="min-w-0 truncate text-[13px] font-medium text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]"
+          title={title}
+        >
+          {title}
+        </span>
+      )}
     </div>
   );
 }
@@ -145,11 +177,10 @@ export const DeckNavigator: React.FC = () => {
   );
 
   useEffect(() => {
-    if (globalView !== 'html') return;
     for (const slide of slides) {
       if (hasRenderedHTML(slide)) void loadRender(slide, 'prefetch');
     }
-  }, [globalView, loadRender, slides]);
+  }, [loadRender, slides]);
 
   const refresh = () => {
     if (activeProjectId) void loadProjectSlides(activeProjectId);
@@ -243,17 +274,29 @@ export const DeckNavigator: React.FC = () => {
     void submitStructure(next);
   };
 
-  const moveEntryWithinGroup = (entry: DirectoryEntry, direction: -1 | 1) => {
-    const group = directoryEntries.filter((candidate) => samePlacement(candidate.placement, entry.placement));
-    const groupIndex = group.findIndex((candidate) => candidate.slide.id === entry.slide.id);
-    const target = group[groupIndex + direction];
+  const moveEntryByDirection = (entry: DirectoryEntry, direction: -1 | 1) => {
+    const currentIndex = directoryEntries.findIndex((candidate) => candidate.slide.id === entry.slide.id);
+    const target = directoryEntries[currentIndex + direction];
     if (!target) return;
-    const next = directoryEntries.map((candidate) => ({ ...candidate, placement: { ...candidate.placement } }));
-    const from = next.findIndex((candidate) => candidate.slide.id === entry.slide.id);
-    const to = next.findIndex((candidate) => candidate.slide.id === target.slide.id);
-    [next[from], next[to]] = [next[to], next[from]];
+    const crossesSection = entry.placement.section_id !== target.placement.section_id;
+    const next = directoryEntries
+      .filter((candidate) => candidate.slide.id !== entry.slide.id)
+      .map((candidate) => ({ ...candidate, placement: { ...candidate.placement } }));
+    const moved: DirectoryEntry = {
+      slide: entry.slide,
+      placement: {
+        slide_id: entry.slide.id,
+        section_id: target.placement.section_id,
+        ...(!crossesSection && target.placement.subsection_id ? { subsection_id: target.placement.subsection_id } : {}),
+      },
+    };
+    const targetIndex = next.findIndex((candidate) => candidate.slide.id === target.slide.id);
+    const insertAt = crossesSection
+      ? targetIndex + (direction < 0 ? 1 : 0)
+      : targetIndex + (direction > 0 ? 1 : 0);
+    next.splice(insertAt, 0, moved);
     void submitStructure(next);
-    setCurrentPage(to);
+    setCurrentPage(insertAt);
   };
 
   const handleGroupDrop = (event: React.DragEvent, targetPlacement: Omit<SlidePlacement, 'slide_id'>) => {
@@ -264,11 +307,11 @@ export const DeckNavigator: React.FC = () => {
     moveEntry(sourceSlideId, targetPlacement);
   };
 
-  const renderSlideRow = (entry: DirectoryEntry, renderedIndex: number, groupEntries: DirectoryEntry[]) => {
+  const renderSlideRow = (entry: DirectoryEntry, renderedIndex: number) => {
     const { slide } = entry;
     const spec = specView?.slide_specs?.[slide.id];
     const slideIndex = slides.findIndex((item) => item.id === slide.id);
-    const groupIndex = groupEntries.findIndex((item) => item.slide.id === slide.id);
+    const directoryIndex = directoryEntries.findIndex((item) => item.slide.id === slide.id);
     return (
       <div
         key={slide.id}
@@ -287,19 +330,19 @@ export const DeckNavigator: React.FC = () => {
         onClick={() => slideIndex >= 0 && setCurrentPage(slideIndex)}
       >
         <span className="text-center text-xs font-semibold tabular-nums text-text-400 group-hover:text-text-600">{String(renderedIndex + 1).padStart(2, '0')}</span>
-        {globalView === 'html' ? (
-          <SlideThumbnail slide={slide} index={renderedIndex} state={getRenderState(slide)} />
-        ) : (
-          <span className="truncate text-[13px] font-medium text-text-900" title={slide.title || spec?.title || '未命名'}>
-            {slide.title || spec?.title || '未命名'}
-          </span>
-        )}
+        <SlideDirectoryContent
+          slide={slide}
+          index={renderedIndex}
+          title={slide.title || spec?.title || '未命名'}
+          view={globalView}
+          state={getRenderState(slide)}
+        />
         {!runActive && (
           <div className="flex shrink-0 justify-end opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
-            <IconButton label="上移本页" className="h-6 w-6" disabled={groupIndex <= 0} onClick={(event) => { event.stopPropagation(); moveEntryWithinGroup(entry, -1); }}>
+            <IconButton label="上移本页" className="h-6 w-6" disabled={directoryIndex <= 0} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, -1); }}>
               <ArrowUp className="h-3.5 w-3.5" />
             </IconButton>
-            <IconButton label="下移本页" className="h-6 w-6" disabled={groupIndex < 0 || groupIndex >= groupEntries.length - 1} onClick={(event) => { event.stopPropagation(); moveEntryWithinGroup(entry, 1); }}>
+            <IconButton label="下移本页" className="h-6 w-6" disabled={directoryIndex < 0 || directoryIndex >= directoryEntries.length - 1} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, 1); }}>
               <ArrowDown className="h-3.5 w-3.5" />
             </IconButton>
             <IconButton label="删除本页" className="h-6 w-6 hover:bg-danger-soft hover:text-danger" onClick={(event) => { event.stopPropagation(); handleDelete(slide.id, slide.title); }}>
@@ -357,31 +400,49 @@ export const DeckNavigator: React.FC = () => {
                     <div
                       onDragOver={handleDragOver}
                       onDrop={(event) => handleGroupDrop(event, { section_id: section.id })}
-                      className="px-3 pb-1 pt-3 text-[12px] font-semibold text-text-600"
+                      className="px-3 pb-1 pt-3 text-[12px] font-normal text-text-600"
                     >
                       {formatDirectoryNumber(section.number, 'section')} {section.title}
                     </div>
-                    {section.directSlides.map((entry) => {
-                      const row = renderSlideRow(entry, renderedIndex, section.directSlides);
-                      renderedIndex += 1;
-                      return row;
-                    })}
-                    {section.subsections.map((subsection) => (
-                      <React.Fragment key={subsection.id}>
-                        <div
-                          onDragOver={handleDragOver}
-                          onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
-                          className="px-3 py-1 text-[11px] font-medium text-text-400"
-                        >
-                          {formatDirectoryNumber(subsection.number, 'subsection')} {subsection.title}
-                        </div>
-                        {subsection.slides.map((entry) => {
-                          const row = renderSlideRow(entry, renderedIndex, subsection.slides);
-                          renderedIndex += 1;
-                          return row;
-                        })}
-                      </React.Fragment>
-                    ))}
+                    {(() => {
+                      const subsectionByID = new Map(section.subsections.map((subsection) => [subsection.id, subsection]));
+                      const renderedSubsections = new Set<string>();
+                      const sectionEntries = directoryEntries.filter((entry) => entry.placement.section_id === section.id);
+                      const rows: React.ReactNode[] = [];
+                      for (const entry of sectionEntries) {
+                        const subsectionID = entry.placement.subsection_id;
+                        const subsection = subsectionID ? subsectionByID.get(subsectionID) : undefined;
+                        if (subsection && !renderedSubsections.has(subsection.id)) {
+                          renderedSubsections.add(subsection.id);
+                          rows.push(
+                            <div
+                              key={`${section.id}:${subsection.id}:heading`}
+                              onDragOver={handleDragOver}
+                              onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
+                              className="px-3 py-1 text-[11px] font-normal text-text-400"
+                            >
+                              {formatDirectoryNumber(subsection.number, 'subsection')} {subsection.title}
+                            </div>,
+                          );
+                        }
+                        rows.push(renderSlideRow(entry, renderedIndex));
+                        renderedIndex += 1;
+                      }
+                      for (const subsection of section.subsections) {
+                        if (renderedSubsections.has(subsection.id)) continue;
+                        rows.push(
+                          <div
+                            key={`${section.id}:${subsection.id}:empty-heading`}
+                            onDragOver={handleDragOver}
+                            onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
+                            className="px-3 py-1 text-[11px] font-normal text-text-400"
+                          >
+                            {formatDirectoryNumber(subsection.number, 'subsection')} {subsection.title}
+                          </div>,
+                        );
+                      }
+                      return rows;
+                    })()}
                   </React.Fragment>
                 ));
               })()
