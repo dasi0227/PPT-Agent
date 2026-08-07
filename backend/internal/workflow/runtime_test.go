@@ -28,7 +28,24 @@ type scriptedAgent struct {
 type acceptingReviewer struct{}
 
 func (acceptingReviewer) Review(context.Context, SemanticReviewInput) (SemanticReviewResult, error) {
-	return SemanticReviewResult{Accepted: true, Confidence: 1, Summary: "accepted"}, nil
+	return SemanticReviewResult{Checks: []SemanticReviewCheck{{
+		Code:    "REVIEW_PASS",
+		Summary: "未发现需要提示或修复的问题，当前计划或执行结果可以继续交付。",
+	}}}, nil
+}
+
+type scriptedReviewer struct {
+	result SemanticReviewResult
+	inputs []SemanticReviewInput
+	err    error
+}
+
+func (r *scriptedReviewer) Review(_ context.Context, input SemanticReviewInput) (SemanticReviewResult, error) {
+	r.inputs = append(r.inputs, input)
+	if r.err != nil {
+		return SemanticReviewResult{}, r.err
+	}
+	return r.result, nil
 }
 
 type cancelingAgent struct {
@@ -638,6 +655,36 @@ func TestExecuteFinishWithoutChangesIsAllowedByGate(t *testing.T) {
 	})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
+	}
+}
+
+func TestReviewCompletionReturnsChecksToSameLoop(t *testing.T) {
+	reviewer := &scriptedReviewer{result: SemanticReviewResult{Checks: []SemanticReviewCheck{{
+		Code:    "REVIEW_INTENT_MISMATCH",
+		Summary: "用户要求检查第 3 页，但当前候选交付只描述了第 2 页，主 Agent 需要继续核对目标页。",
+	}}}}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("review", "review_completion", map[string]any{
+			"candidate_message": "我已经完成第 2 页。",
+			"focus":             "final",
+		}),
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "review-tool", ProjectDir: t.TempDir(),
+		Context:         testPack(model.IntentPlan, model.ArtifactSpec, model.TargetDeck, false, "检查计划"),
+		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
+		SemanticReviews: reviewer,
+	})
+	if outcome.Status != StatusCompleted || len(reviewer.inputs) != 1 {
+		t.Fatalf("outcome=%+v review_inputs=%d", outcome, len(reviewer.inputs))
+	}
+	if reviewer.inputs[0].CandidateMessage != "我已经完成第 2 页。" || reviewer.inputs[0].Focus != "final" {
+		t.Fatalf("review input not populated: %+v", reviewer.inputs[0])
+	}
+	if len(agent.requests) < 2 || len(agent.requests[1].Messages) < 2 ||
+		!strings.Contains(agent.requests[1].Messages[1].Text(), "REVIEW_INTENT_MISMATCH") {
+		t.Fatalf("review checks were not returned to loop: %+v", agent.requests)
 	}
 }
 

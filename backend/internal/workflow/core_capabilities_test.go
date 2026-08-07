@@ -59,19 +59,20 @@ func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
 	}
 }
 
-func TestSemanticReviewParseAndIssueMapping(t *testing.T) {
-	raw := `{"accepted":false,"confidence":0.7,"summary":"missing","coverage":[],"issues":[{"code":"FINAL_ANSWER_INCOMPLETE","severity":"error","summary":"final answer omits deliverable","required_action":{"tool":"finish","target":{"type":"deck","part":"outline"}}}]}`
+func TestSemanticReviewParseChecksContract(t *testing.T) {
+	raw := `{"checks":[{"code":"REVIEW_INTENT_MISMATCH","summary":"用户要求更新第 3 页，但当前结果只显示第 2 页发生了变化，需要主 Agent 继续核对目标页。"}]}`
 	result, err := ParseSemanticReviewResult(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	issues := semanticIssuesToCompletion(result.Issues)
-	if len(issues) != 1 || issues[0].Code != "FINAL_ANSWER_INCOMPLETE" ||
-		issues[0].RequiredActions[0].Tool != "finish" {
-		t.Fatalf("mapped issues=%+v", issues)
+	if len(result.Checks) != 1 || result.Checks[0].Code != "REVIEW_INTENT_MISMATCH" {
+		t.Fatalf("parsed checks=%+v", result.Checks)
 	}
-	if _, err := ParseSemanticReviewResult(`{"accepted":false,"confidence":2,"issues":[]}`); err == nil {
-		t.Fatal("expected invalid confidence rejection")
+	if _, err := ParseSemanticReviewResult(`{"checks":[]}`); err == nil {
+		t.Fatal("expected empty checks rejection")
+	}
+	if _, err := ParseSemanticReviewResult(`{"checks":[{"code":"REVIEW_PASS","summary":"ok"}]}`); err == nil {
+		t.Fatal("expected vague summary rejection")
 	}
 }
 

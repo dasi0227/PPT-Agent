@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	semanticprompts "github.com/dasi0227/PPT-Agent/backend/prompts/semantic_reviewer"
 )
 
-const CodeSemanticReviewUnavailable = "SEMANTIC_REVIEW_UNAVAILABLE"
+const CodeReviewServiceUnavailable = "REVIEW_SERVICE_UNAVAILABLE"
 
 type SemanticReviewPolicy struct {
 	Enabled              bool
@@ -59,11 +58,13 @@ type SemanticReviewInput struct {
 	RequirementLedger *RequirementLedger  `json:"requirement_ledger,omitempty"`
 	Plan              *Plan               `json:"plan,omitempty"`
 	Changes           ChangeSet           `json:"changes"`
+	GateResult        CompletionResult    `json:"gate_result"`
 	Evidence          []Evidence          `json:"evidence"`
 	LatestIssues      []Issue             `json:"latest_issues"`
 	ContextBriefing   string              `json:"context_briefing"`
 	RetrievedContext  []ReviewContextItem `json:"retrieved_context"`
-	FinishMessage     string              `json:"finish_message"`
+	CandidateMessage  string              `json:"candidate_message,omitempty"`
+	Focus             string              `json:"focus,omitempty"`
 	Rubric            string              `json:"rubric"`
 }
 
@@ -80,32 +81,16 @@ type ReviewContextItem struct {
 }
 
 type SemanticReviewResult struct {
-	Accepted   bool                  `json:"accepted"`
-	Issues     []SemanticReviewIssue `json:"issues"`
-	Coverage   []RequirementCoverage `json:"coverage"`
-	Confidence float64               `json:"confidence"`
-	Summary    string                `json:"summary"`
+	Checks []SemanticReviewCheck `json:"checks"`
 }
 
-type RequirementCoverage struct {
-	RequirementID string   `json:"requirement_id"`
-	Status        string   `json:"status"`
-	EvidenceRefs  []string `json:"evidence_refs"`
-	Reason        string   `json:"reason"`
+type SemanticReviewCheck struct {
+	Code    string `json:"code"`
+	Summary string `json:"summary"`
 }
 
-type SemanticReviewIssue struct {
-	Code           string                 `json:"code"`
-	Severity       string                 `json:"severity"`
-	RequirementID  string                 `json:"requirement_id,omitempty"`
-	Target         Resource               `json:"target,omitempty"`
-	Summary        string                 `json:"summary"`
-	RequiredAction SemanticRequiredAction `json:"required_action,omitempty"`
-}
-
-type SemanticRequiredAction struct {
-	Tool   string   `json:"tool,omitempty"`
-	Target Resource `json:"target,omitempty"`
+func (r SemanticReviewResult) Passed() bool {
+	return len(r.Checks) == 1 && r.Checks[0].Code == "REVIEW_PASS"
 }
 
 type LLMSemanticReviewer struct {
@@ -142,122 +127,115 @@ func ParseSemanticReviewResult(raw string) (SemanticReviewResult, error) {
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		return SemanticReviewResult{}, fmt.Errorf("invalid semantic review JSON: %w", err)
 	}
-	if result.Confidence < 0 || result.Confidence > 1 {
-		return SemanticReviewResult{}, errors.New("semantic review confidence must be between 0 and 1")
-	}
-	for _, issue := range result.Issues {
-		if strings.TrimSpace(issue.Code) == "" || strings.TrimSpace(issue.Summary) == "" {
-			return SemanticReviewResult{}, errors.New("semantic review issues require code and summary")
-		}
-	}
-	if !result.Accepted && len(result.Issues) == 0 {
-		return SemanticReviewResult{}, errors.New("semantic review rejection requires at least one issue")
+	if err := validateSemanticReviewResult(result); err != nil {
+		return SemanticReviewResult{}, err
 	}
 	return result, nil
 }
 
-func (r *Runtime) semanticReviewEnabled(state *runtimeState, pack contextengine.ContextPack) bool {
-	if state == nil || !r.SemanticPolicy.Enabled {
-		return false
+func validateSemanticReviewResult(result SemanticReviewResult) error {
+	if len(result.Checks) == 0 {
+		return errors.New("semantic review checks are required")
 	}
-	switch state.strategy {
-	case StrategyPlan:
-		return r.SemanticPolicy.ReviewPlan
-	case StrategyTalk, StrategyAsk:
-		return r.SemanticPolicy.ReviewTalk
-	case StrategyFulfill:
-		return r.SemanticPolicy.ReviewExecutePlanned
-	case StrategyExecute:
-		if pack.WorkSpec.Target.Level == model.TargetDeck {
-			return r.SemanticPolicy.ReviewDeckLevel
+	if len(result.Checks) > 5 {
+		return errors.New("semantic review checks must contain at most 5 items")
+	}
+	for _, check := range result.Checks {
+		if !validReviewCode(check.Code) {
+			return fmt.Errorf("semantic review check code %q is not allowed", check.Code)
 		}
-		return r.SemanticPolicy.ReviewExecuteDirect
+		if len([]rune(strings.TrimSpace(check.Summary))) < 20 {
+			return errors.New("semantic review check summary must be specific and at least 20 characters")
+		}
+	}
+	return nil
+}
+
+func validReviewCode(code string) bool {
+	switch code {
+	case "REVIEW_PASS",
+		CodeReviewServiceUnavailable,
+		"REVIEW_LACK_INFO",
+		"REVIEW_QUALITY_POOR",
+		"REVIEW_INTENT_MISMATCH",
+		"REVIEW_EXECUTE_WRONG":
+		return true
 	default:
 		return false
 	}
 }
 
-func (r *Runtime) runSemanticReview(
+func (r *Runtime) runReviewCompletion(
 	ctx context.Context,
 	input RuntimeInput,
 	state *runtimeState,
 	callID string,
-	message string,
-	deterministic CompletionResult,
-) (CompletionResult, bool, error) {
-	if !r.semanticReviewEnabled(state, input.Context) {
-		return deterministic, false, nil
+	candidateMessage string,
+	focus string,
+) SemanticReviewResult {
+	if focus == "" {
+		focus = "all"
 	}
-	if input.SemanticReviews != nil {
-		recordTrace(input.Trace, state.runID, "semantic.review.started", map[string]any{"loop_id": state.loopID, "call_id": callID})
-	}
-	if input.SemanticReviews == nil {
-		if state.strategy == StrategyExecute && r.SemanticPolicy.AllowDirectBypass {
-			return deterministic, false, nil
-		}
-		issue := CompletionIssue{Code: CodeSemanticReviewUnavailable, Summary: "semantic reviewer is unavailable for this run"}
-		out := deterministic
-		out.Accepted = false
-		out.Issues = append(out.Issues, issue)
-		recordTrace(input.Trace, state.runID, "semantic.review.completed", map[string]any{
-			"loop_id": state.loopID, "call_id": callID, "accepted": false, "unavailable": true,
-		})
-		return out, true, nil
-	}
+	gate := r.Gate.Check(CompletionContext{
+		Strategy: state.strategy, FinishPhase: state.phase, ActiveTools: state.activeTools,
+		Issues: state.issues, WorkScope: state.scope, Session: state.tx, Changes: state.changeSet(),
+		Evidence: state.ledger, Context: input.Context, Plan: state.plan,
+		Requirements: state.requirements, FinishMessage: candidateMessage, Canceled: ctx.Err() != nil,
+	})
 	reviewInput := SemanticReviewInput{
 		RunID: state.runID, FinishCallID: callID, Strategy: state.strategy,
 		WorkSpec: input.Context.WorkSpec, RequirementLedger: state.requirements, Plan: state.plan,
-		Changes: state.changeSet(), Evidence: state.ledger.Entries(state.changeSet()), LatestIssues: state.issues,
+		Changes: state.changeSet(), GateResult: gate,
+		Evidence: state.ledger.Entries(state.changeSet()), LatestIssues: state.issues,
 		ContextBriefing: state.contextBriefing, RetrievedContext: reviewContextItems(state.retrievedContext),
-		FinishMessage: message, Rubric: semanticprompts.MustLoad("ppt_completion_rubric").Body,
+		CandidateMessage: candidateMessage, Focus: focus,
+		Rubric: semanticprompts.MustLoad("ppt_completion_rubric").Body,
+	}
+	recordTrace(input.Trace, state.runID, "semantic.review.started", map[string]any{
+		"loop_id": state.loopID, "call_id": callID, "focus": focus,
+	})
+	if input.SemanticReviews == nil {
+		result := reviewUnavailable("semantic reviewer provider is unavailable")
+		recordTrace(input.Trace, state.runID, "semantic.review.completed", map[string]any{
+			"loop_id": state.loopID, "call_id": callID, "checks": result.Checks,
+		})
+		return result
 	}
 	result, err := input.SemanticReviews.Review(ctx, reviewInput)
 	if err != nil {
-		out := deterministic
-		out.Accepted = false
-		out.Issues = append(out.Issues, CompletionIssue{
-			Code: CodeSemanticReviewUnavailable, Summary: err.Error(),
-		})
+		result = reviewUnavailable(err.Error())
 		recordTrace(input.Trace, state.runID, "semantic.review.completed", map[string]any{
-			"loop_id": state.loopID, "call_id": callID, "accepted": false, "error": err.Error(),
+			"loop_id": state.loopID, "call_id": callID, "checks": result.Checks, "error": err.Error(),
 		})
-		return out, true, nil
+		return result
+	}
+	if err := validateSemanticReviewResult(result); err != nil {
+		result = reviewUnavailable(err.Error())
+		recordTrace(input.Trace, state.runID, "semantic.review.completed", map[string]any{
+			"loop_id": state.loopID, "call_id": callID, "checks": result.Checks, "error": err.Error(),
+		})
+		return result
 	}
 	raw, _ := json.Marshal(result)
 	if input.SemanticReviewStore != nil {
 		_ = input.SemanticReviewStore.SaveSemanticReview(ctx, StoredSemanticReview{
 			ID:    "semrev_" + hashBytes([]byte(state.runID + "\x00" + callID + "\x00" + string(raw)))[:24],
-			RunID: state.runID, FinishCallID: callID, Accepted: result.Accepted,
-			Confidence: result.Confidence, InputHash: hashCheckpointValue(reviewInput),
+			RunID: state.runID, FinishCallID: callID, Accepted: result.Passed(),
+			Confidence: 0, InputHash: hashCheckpointValue(reviewInput),
 			OutputJSON: string(raw), PromptManifestJSON: semanticReviewerPromptManifest(),
 		})
 	}
 	recordTrace(input.Trace, state.runID, "semantic.review.completed", map[string]any{
-		"loop_id": state.loopID, "call_id": callID, "accepted": result.Accepted,
-		"confidence": result.Confidence, "issues": result.Issues,
+		"loop_id": state.loopID, "call_id": callID, "checks": result.Checks,
 	})
-	if result.Accepted {
-		return deterministic, true, nil
-	}
-	out := deterministic
-	out.Accepted = false
-	out.Issues = append(out.Issues, semanticIssuesToCompletion(result.Issues)...)
-	return out, true, nil
+	return result
 }
 
-func semanticIssuesToCompletion(values []SemanticReviewIssue) []CompletionIssue {
-	out := make([]CompletionIssue, 0, len(values))
-	for _, issue := range values {
-		action := RequiredAction{Tool: issue.RequiredAction.Tool, Target: issue.RequiredAction.Target}
-		if action.Tool == "" {
-			action.Tool = "search_refs"
-		}
-		out = append(out, CompletionIssue{
-			Code: issue.Code, Summary: issue.Summary,
-			RequiredActions: []RequiredAction{action},
-		})
-	}
-	return out
+func reviewUnavailable(reason string) SemanticReviewResult {
+	return SemanticReviewResult{Checks: []SemanticReviewCheck{{
+		Code:    CodeReviewServiceUnavailable,
+		Summary: "Reviewer service is unavailable or returned invalid output: " + strings.TrimSpace(reason),
+	}}}
 }
 
 func reviewContextItems(values []RetrievedContextItem) []ReviewContextItem {

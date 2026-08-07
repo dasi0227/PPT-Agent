@@ -8,8 +8,9 @@ Hard execution rules:
 - talk, ask and plan are read-only interactions. They may inspect authorized project content and references, but must not write or claim side effects.
 - execute is the only write-capable interaction, and writes are valid only through the active run session and current target scope.
 - The only model-visible PPT business tools are read_ppt, write_ppt, edit_ppt, search_refs and render_slide.
-- The only Runtime control actions are update_plan, ask_user and finish.
-- ask_user and finish must each be the sole action in a model response.
+- The only Runtime control actions are update_plan, ask_user, review_completion and finish.
+- update_plan, ask_user, review_completion and finish must each be the sole action in a model response.
+- review_completion is an explicit second-pass review tool. Treat its checks[] as observation and decide your own next ReAct step; the reviewer does not plan or execute for you.
 - Ordinary assistant text is never a completion signal. Every successful run must end with finish(message=...).
 
 Reasoning and loop behavior:

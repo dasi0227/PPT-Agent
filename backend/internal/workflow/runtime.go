@@ -821,6 +821,23 @@ func (r *Runtime) executeControl(
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return StructuredOutcome{}, false
+	case "review_completion":
+		if state.strategy != StrategyPlan && state.strategy != StrategyExecute && state.strategy != StrategyFulfill {
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "review_completion is not allowed now", false))
+			return StructuredOutcome{}, false
+		}
+		candidate := stringValue(call.Args["candidate_message"])
+		focus := stringValue(call.Args["focus"])
+		result := r.runReviewCompletion(ctx, input, state, call.ID, candidate, focus)
+		toolResult := SuccessfulToolResult("completion review completed")
+		toolResult.Data = map[string]any{"checks": result.Checks}
+		observation, _ := json.Marshal(toolResult.Data)
+		toolResult.Observation = string(observation)
+		r.appendControlObservation(state, call, assistantText, toolResult)
+		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterReview, ""); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
+		return StructuredOutcome{}, false
 	case "finish":
 		message := stringValue(call.Args["message"])
 		return r.finishCandidate(ctx, input, state, call, assistantText, message)
@@ -855,19 +872,6 @@ func (r *Runtime) finishCandidate(
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{
 		"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,
 	})
-	reviewed := false
-	if result.Accepted {
-		var reviewErr error
-		result, reviewed, reviewErr = r.runSemanticReview(ctx, input, state, call.ID, message, result)
-		if reviewErr != nil {
-			return r.fail(input, state, CodeAgentFailed, reviewErr), true
-		}
-		if reviewed {
-			recordTrace(input.Trace, state.runID, "completion.semantic_reviewed", map[string]any{
-				"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,
-			})
-		}
-	}
 	if !result.Accepted {
 		key, evidenceVersion := result.RejectionKey(), state.ledger.Version()
 		if key == state.gateKey && evidenceVersion == state.gateEvidence {
@@ -883,14 +887,10 @@ func (r *Runtime) finishCandidate(
 		} else {
 			r.changePhase(input.Emitter, state, finishPhase, "completion rejected; continuing the same loop")
 		}
-		blockCode := CodeCompletionGateBlocked
-		if reviewed {
-			blockCode = CodeCompletionReviewBlocked
-		}
 		observation := ToolResult{
 			OK: false, Summary: "completion rejected", Data: map[string]any{"issues": result.Issues},
 			ChangedTargets: []ChangedTarget{}, Evidence: []Evidence{}, Issues: []Issue{},
-			Retryable: false, Code: blockCode,
+			Retryable: false, Code: CodeCompletionGateBlocked,
 		}
 		state.messages = appendToolObservation(
 			state.messages,
@@ -1360,7 +1360,7 @@ func gateNeedsCoordination(result CompletionResult) bool {
 }
 
 func isControlTool(name string) bool {
-	return name == "update_plan" || name == "ask_user" || name == "finish"
+	return name == "update_plan" || name == "ask_user" || name == "review_completion" || name == "finish"
 }
 
 func isWriteStrategy(strategy ExecutionStrategy) bool {
@@ -1400,6 +1400,23 @@ func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction 
 				"question":     map[string]any{"type": "string", "description": "Legacy single-question fallback. Prefer questions[]."},
 				"options":      map[string]any{"type": "array", "maxItems": 3, "items": map[string]any{"type": "object"}},
 				"allow_custom": map[string]any{"type": "boolean"},
+			}),
+		})
+	}
+	if (strategy == StrategyPlan && phase == PhasePlanning) ||
+		(strategy == StrategyExecute && phase == PhaseExecuting) ||
+		(strategy == StrategyFulfill && (phase == PhasePlanning || phase == PhaseExecuting)) {
+		out = append(out, ToolSchema{
+			Name: "review_completion", Description: "Ask the semantic reviewer for a second-pass review of the current plan, execution result, or candidate final message. Returns checks[] only; the main agent decides the next ReAct step.",
+			Parameters: objectSchema([]string{}, map[string]any{
+				"candidate_message": map[string]any{
+					"type":        "string",
+					"description": "Optional draft message intended for finish(message). Provide it when asking the reviewer to assess final delivery wording.",
+				},
+				"focus": map[string]any{
+					"type": "string", "enum": []string{"plan", "execution", "final", "all"},
+					"description": "Review focus. Use all when unsure.",
+				},
 			}),
 		})
 	}
