@@ -53,6 +53,42 @@ describe('slide runtime', () => {
     dom.window.close();
   });
 
+  it('appends prefetched slides without rebuilding existing frames', () => {
+    const dom = createRuntime();
+    const { window } = dom;
+
+    window.dispatchEvent(new window.MessageEvent('message', {
+      source: window as unknown as Window,
+      data: {
+        type: 'updateDeck',
+        slides: [{ id: 's1', html: '<!doctype html><title>one</title>' }],
+        index: 0,
+      },
+    }));
+    const firstFrame = window.document.querySelector('[data-slide-frame]') as HTMLIFrameElement;
+
+    window.dispatchEvent(new window.MessageEvent('message', {
+      source: window as unknown as Window,
+      data: {
+        type: 'updateDeck',
+        slides: [
+          { id: 's1', html: '<!doctype html><title>one</title>' },
+          { id: 's2', html: '<!doctype html><title>two</title>' },
+        ],
+        index: 0,
+      },
+    }));
+
+    const frames = Array.from(
+      window.document.querySelectorAll('[data-slide-frame]'),
+    ) as HTMLIFrameElement[];
+    expect(frames).toHaveLength(2);
+    expect(frames[0]).toBe(firstFrame);
+    expect(frames[0]?.dataset.active).toBe('true');
+    expect(frames[1]?.dataset.active).toBe('false');
+    dom.window.close();
+  });
+
   it('ignores undeclared payloads and messages not sent by the parent', () => {
     const dom = createRuntime();
     const { window } = dom;

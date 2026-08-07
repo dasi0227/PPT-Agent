@@ -70,24 +70,29 @@ describe('PreviewWorkspace', () => {
     setSpecs();
   });
 
-  it('loads the current slide first, then prefetches an adjacent slide', async () => {
+  it('loads the current slide, prefetches adjacent slides, then switches without rebuilding a single-slide deck', async () => {
     render(<PreviewWorkspace />);
 
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe('/api/v1/slides/s1/render');
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s2/render', expect.any(Object));
+    });
     await waitFor(() => {
       expect(postMessage).toHaveBeenCalledWith(
         {
           type: 'updateDeck',
-          slides: [{ id: 's1', html: '<h1>Slide 1</h1>' }],
+          slides: [
+            { id: 's1', html: '<h1>Slide 1</h1>' },
+            { id: 's2', html: '<h1>Slide 2</h1>' },
+          ],
           index: 0,
         },
         '*'
       );
     });
-    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe('/api/v1/slides/s1/render');
-    await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s2/render', expect.any(Object));
-    });
 
+    postMessage.mockClear();
     await act(async () => {
       useDeckStore.getState().setCurrentPage(1);
     });
@@ -95,13 +100,20 @@ describe('PreviewWorkspace', () => {
     await waitFor(() => {
       expect(postMessage).toHaveBeenCalledWith(
         {
-          type: 'updateDeck',
-          slides: [{ id: 's2', html: '<h1>Slide 2</h1>' }],
-          index: 0,
+          type: 'gotoSlide',
+          index: 1,
         },
         '*'
       );
     });
+    expect(postMessage).not.toHaveBeenCalledWith(
+      {
+        type: 'updateDeck',
+        slides: [{ id: 's2', html: '<h1>Slide 2</h1>' }],
+        index: 0,
+      },
+      '*'
+    );
   });
 
   it('keeps the main runtime sandboxed without same-origin privilege', async () => {

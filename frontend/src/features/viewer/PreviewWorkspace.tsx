@@ -17,32 +17,47 @@ import { useUIStore } from '../../stores/uiStore';
 import { DesignSummary } from './DesignSummary';
 import { EmptyState } from './EmptyState';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
+import type { RuntimeSlide } from './previewProtocol';
 import { SlideSpecCard } from './SlideSpecCard';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
+
+function visibleHTML(state: ResourceState<string>): string | undefined {
+  if (state.status === 'ready') return state.data;
+  if (state.status === 'loading' || state.status === 'error') return state.previous;
+  return undefined;
+}
 
 function PreviewFrame({
   slide,
   state,
   retry,
   title,
+  runtimeSlides,
+  runtimeIndex,
 }: {
   slide: Slide;
   state: ResourceState<string>;
   retry: () => void;
   title: string;
+  runtimeSlides?: RuntimeSlide[];
+  runtimeIndex?: number;
 }) {
-  const visibleHtml = state.status === 'ready'
-    ? state.data
-    : state.status === 'loading' || state.status === 'error'
-      ? state.previous
-      : undefined;
+  const visibleHtml = visibleHTML(state);
+  const deck = runtimeSlides && runtimeIndex !== undefined && runtimeIndex >= 0
+    ? runtimeSlides
+    : visibleHtml !== undefined
+      ? [{ id: slide.id, html: visibleHtml }]
+      : [];
+  const deckIndex = runtimeSlides && runtimeIndex !== undefined && runtimeIndex >= 0
+    ? runtimeIndex
+    : 0;
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded bg-white shadow-canvas ring-1 ring-border">
-      {visibleHtml !== undefined && (
+      {deck.length > 0 && (
         <IsolatedSlidePreview
-          slides={[{ id: slide.id, html: visibleHtml }]}
-          index={0}
+          slides={deck}
+          index={deckIndex}
           className="h-full w-full border-0"
           title={title}
         />
@@ -201,6 +216,16 @@ export const PreviewWorkspace: React.FC = () => {
   const currentHasHTML = currentSlide ? hasRenderedHTML(currentSlide) : false;
   const currentView = currentSlide ? effectiveView(currentSlide.id, currentHasHTML) : 'html';
   const currentState = currentSlide ? getState(currentSlide) : { status: 'idle' as const };
+  const runtimeSlides = useMemo<RuntimeSlide[]>(() => {
+    return slides.flatMap((slide) => {
+      if (!hasRenderedHTML(slide)) return [];
+      const html = visibleHTML(getState(slide));
+      return html === undefined ? [] : [{ id: slide.id, html }];
+    });
+  }, [getState, slides]);
+  const runtimeIndex = currentSlide
+    ? runtimeSlides.findIndex((slide) => slide.id === currentSlide.id)
+    : -1;
 
   useEffect(() => {
     if (!currentSlide || !currentHasHTML || currentView !== 'html' || previewMode !== 'main') return;
@@ -325,6 +350,8 @@ export const PreviewWorkspace: React.FC = () => {
                 state={currentState}
                 retry={() => void load(currentSlide, 'current')}
                 title={`第 ${safePage + 1} 页 HTML 预览`}
+                runtimeSlides={runtimeSlides}
+                runtimeIndex={runtimeIndex}
               />
             ) : currentView === 'html' ? (
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">

@@ -67,16 +67,6 @@
         && isIndex(value.index);
     }
 
-    function sameSlides(nextSlides) {
-      if (state.slides.length !== nextSlides.length) {
-        return false;
-      }
-
-      return state.slides.every((slide, index) => (
-        slide.id === nextSlides[index].id && slide.html === nextSlides[index].html
-      ));
-    }
-
     function setActive(index) {
       const frames = Array.from(deck.querySelectorAll('[data-slide-frame]'));
       if (!frames.length) {
@@ -92,30 +82,41 @@
     }
 
     function loadSlides(slides) {
-      if (sameSlides(slides)) {
-        return;
-      }
-
-      deck.innerHTML = '';
+      const existing = new Map(
+        Array.from(deck.querySelectorAll('[data-slide-frame]')).map((frame) => [frame.dataset.slideId, frame])
+      );
+      const nextIDs = new Set(slides.map((slide) => slide.id));
       state.slides = slides.slice();
 
       slides.forEach((slide, index) => {
-        const frame = document.createElement('iframe');
-        frame.className = 'slide-frame';
-        frame.dataset.slideFrame = 'true';
-        frame.dataset.active = 'false';
+        let frame = existing.get(slide.id);
+        if (!frame) {
+          frame = document.createElement('iframe');
+          frame.className = 'slide-frame';
+          frame.dataset.slideFrame = 'true';
+          frame.dataset.active = 'false';
+          frame.dataset.slideId = slide.id;
+          frame.setAttribute('sandbox', 'allow-scripts');
+          frame.addEventListener('error', () => {
+            window.parent.postMessage({
+              type: 'renderError',
+              index,
+              message: `第 ${index + 1} 页渲染失败`
+            }, '*');
+          });
+        }
+        if (frame.getAttribute('srcdoc') !== slide.html) {
+          frame.srcdoc = slide.html;
+        }
         frame.dataset.index = String(index);
-        frame.srcdoc = slide.html;
         frame.title = `Slide ${index + 1}`;
-        frame.setAttribute('sandbox', 'allow-scripts');
-        frame.addEventListener('error', () => {
-          window.parent.postMessage({
-            type: 'renderError',
-            index,
-            message: `第 ${index + 1} 页渲染失败`
-          }, '*');
-        });
         deck.appendChild(frame);
+      });
+
+      existing.forEach((frame, slideID) => {
+        if (!nextIDs.has(slideID)) {
+          frame.remove();
+        }
       });
     }
 
