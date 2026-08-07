@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PPT Agent Completion Gate 错误码与设计复盘</title>
+  <style>
+    :root {
+      --bg: #f5f1e8;
+      --paper: #fffdf7;
+      --ink: #1d1a14;
+      --muted: #6c665b;
+      --line: #ded6c6;
+      --soft: #eee6d8;
+      --purple: #6d28d9;
+      --teal: #0f766e;
+      --red: #b42318;
+      --amber: #b45309;
+      --green: #166534;
+      --code: #242018;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 14% 0%, rgba(109, 40, 217, .13), transparent 30%),
+        radial-gradient(circle at 86% 12%, rgba(15, 118, 110, .12), transparent 28%),
+        var(--bg);
+      color: var(--ink);
+      font: 15px/1.68 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    main {
+      width: min(1240px, calc(100vw - 48px));
+      margin: 0 auto;
+      padding: 44px 0 76px;
+    }
+    h1, h2, h3 { margin: 0; line-height: 1.16; letter-spacing: -0.02em; }
+    h1 { font-size: clamp(34px, 5vw, 62px); max-width: 980px; }
+    h2 { font-size: 26px; margin-bottom: 14px; }
+    h3 { font-size: 18px; margin-bottom: 8px; }
+    p { margin: 0; }
+    a { color: var(--purple); text-decoration: none; border-bottom: 1px solid rgba(109, 40, 217, .35); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    pre {
+      margin: 14px 0 0;
+      padding: 16px;
+      border-radius: 16px;
+      overflow: auto;
+      background: var(--code);
+      color: #fff7e6;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.25fr .75fr;
+      gap: 22px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: rgba(255, 253, 247, .9);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: 0 24px 70px rgba(51, 39, 20, .08);
+      padding: 24px;
+    }
+    .lede {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 18px;
+      max-width: 920px;
+    }
+    .section { margin-top: 22px; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .tag {
+      border-radius: 999px;
+      background: var(--soft);
+      color: #4c4538;
+      padding: 6px 10px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .verdict {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+    .verdict strong {
+      display: block;
+      color: var(--red);
+      font-size: 13px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--paper);
+    }
+    table {
+      width: 100%;
+      min-width: 920px;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--soft);
+      color: #463f34;
+      font-size: 13px;
+    }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child {
+      white-space: nowrap;
+      font-weight: 800;
+    }
+    .ok { color: var(--green); font-weight: 800; }
+    .bad { color: var(--red); font-weight: 800; }
+    .warn { color: var(--amber); font-weight: 800; }
+    .neutral { color: var(--teal); font-weight: 800; }
+    .callout {
+      border-radius: 18px;
+      border: 1px solid rgba(109, 40, 217, .24);
+      background: rgba(109, 40, 217, .07);
+      padding: 18px;
+    }
+    .danger {
+      border-color: rgba(180, 35, 24, .28);
+      background: rgba(180, 35, 24, .07);
+    }
+    .good {
+      border-color: rgba(15, 118, 110, .28);
+      background: rgba(15, 118, 110, .07);
+    }
+    ul { margin: 10px 0 0; padding-left: 20px; }
+    li { margin: 6px 0; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fffaf0;
+      padding: 16px;
+      min-height: 128px;
+    }
+    .step b { display: block; color: var(--teal); margin-bottom: 6px; }
+    .small { color: var(--muted); font-size: 13px; }
+    @media (max-width: 940px) {
+      main { width: min(100vw - 28px, 1240px); padding-top: 24px; }
+      .hero, .grid-2, .grid-3, .flow { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <div class="card">
+      <h1>Completion Gate 错误码、盲区与推荐重构方案</h1>
+      <p class="lede">
+        这版说明记录当前已确认的 Gate 错误码设计。Gate 只处理确定性状态、证据和同步问题；语义问题交给 Agent 和后续 Review 设计。
+      </p>
+      <div class="tag-row">
+        <span class="tag">确定性 Gate</span>
+        <span class="tag">Semantic Reviewer</span>
+        <span class="tag">Evidence Freshness</span>
+        <span class="tag">Requirement Ledger 问题</span>
+        <span class="tag">推荐方案</span>
+      </div>
+    </div>
+    <aside class="card verdict">
+      <strong>核心判断</strong>
+      <p>
+        Gate 应该阻止不安全提交、过期提交、证据不新鲜提交；不应该用“有没有 ChangeSet”
+        粗暴判断用户需求是否完成。Reviewer 也不应该对“你好”这种低风险对话硬触发。
+      </p>
+    </aside>
+  </section>
+
+  <section class="card section">
+    <h2>1. Completion Gate 错误码表</h2>
+    <p class="small">
+      这里记录目标设计命名。语义问题不在 Gate 里用程序规则写死；Gate 只负责状态机、会话一致性、证据新鲜度和结构完整性。
+    </p>
+    <div class="table-wrap" style="margin-top:14px">
+      <table>
+        <thead>
+          <tr>
+            <th>错误码</th>
+            <th>校验逻辑</th>
+            <th>解释</th>
+            <th>修改方案</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>FINISH_MESSAGE_EMPTY</td>
+            <td>只校验 <code>finish.message</code> 去空白后非空。</td>
+            <td>最终交付入口必须带用户可见 message；不再根据 Markdown 形态、长度比例或“是否像完整交付物”做程序判断。</td>
+            <td><span class="ok">采纳。</span>只保留非空校验，删除其他启发式校验。</td>
+          </tr>
+          <tr>
+            <td>FINISH_NOT_ALLOWED</td>
+            <td>调用 <code>finishAllowed(strategy, finishPhase)</code>：<code>talk/ask + chat</code>、<code>plan + planning</code>、<code>execute/fulfill + executing</code> 才允许。</td>
+            <td>只有当前 Runtime state 与策略匹配时才允许 finish。等待用户输入、检查中、提交中、已终态等阶段都不允许再次 finish。</td>
+            <td><span class="ok">保留。</span>作为 Runtime 状态机保护；正常情况下模型只会在工具披露允许时看到 finish。</td>
+          </tr>
+          <tr>
+            <td>TOOLS_STILL_RUNNING</td>
+            <td>检查 <code>ActiveTools != 0</code>。</td>
+            <td>还有工具调用未结束时不允许最终交付，防止提前宣布完成。</td>
+            <td><span class="ok">采纳。</span>作为工具并发硬约束。</td>
+          </tr>
+          <tr>
+            <td>RUN_ALREADY_CANCELED</td>
+            <td>检查 finish 时上下文是否已取消：<code>ctx.Err() != nil</code> 或 CompletionContext.Canceled。</td>
+            <td>用户或系统已取消 Run，禁止继续成功交付或 commit。</td>
+            <td><span class="ok">采纳。</span>由 <code>RUN_CANCELED</code> 重命名。</td>
+          </tr>
+          <tr>
+            <td>RUN_FATAL_EXIST</td>
+            <td>遍历 Runtime issues，存在 <code>SeverityFatal</code> 即拒绝。</td>
+            <td>存在严重级别为 <code>fatal</code> 的内部问题。当前 Gate 只把 fatal issue 当全局硬阻塞。</td>
+            <td><span class="ok">采纳。</span>后续需定义 fatal 产生边界。</td>
+          </tr>
+          <tr>
+            <td>RUN_SESSION_MISSING</td>
+            <td>写策略下检查 <code>Session != nil</code>。</td>
+            <td>写任务没有活跃 RunSession。没有会话就无法安全记录变更、baseline 和 commit。</td>
+            <td><span class="ok">采纳。</span>只对真实写入/commit 路径触发。</td>
+          </tr>
+          <tr>
+            <td>RUN_REVISION_CONFLICT</td>
+            <td>调用 <code>Session.ValidateBaselines()</code>，若 baseline hash 与当前资源 hash 不一致则拒绝。</td>
+            <td>Run 开始或首次触碰资源时记录的 baseline 与 finish 时资源实际状态不一致，说明资源被其他操作改过。</td>
+            <td><span class="ok">采纳。</span>保留为乐观并发/恢复场景的冲突错误。</td>
+          </tr>
+          <tr>
+            <td>PLAN_NOT_COMPLETE</td>
+            <td><code>execute/planned</code> 下检查 <code>Plan == nil || Plan.HasBlockingSteps()</code>。</td>
+            <td><code>execute/planned</code> 下仍有 <code>pending</code>、<code>in_progress</code> 或 <code>failed</code> 步骤，不能交付。</td>
+            <td><span class="ok">采纳。</span>计划模式必须闭环。</td>
+          </tr>
+          <tr>
+            <td>EVIDENCE_SCHEMA_MISSING</td>
+            <td>对发生变更的 outline、design、slide spec 执行结构化 schema/模型校验。</td>
+            <td>结构化资源变更后，必须证明当前 JSON 模型合法。</td>
+            <td><span class="ok">采纳。</span>作为结构化资源证据缺失的唯一 Gate code。</td>
+          </tr>
+          <tr>
+            <td>EVIDENCE_HTML_MISSING</td>
+            <td>对发生变更的 HTML 执行静态校验与渲染校验。</td>
+            <td>HTML 变更后，必须证明 HTML 静态合法且实际渲染无阻塞问题；不再拆成 static/render 两个对外错误。</td>
+            <td><span class="ok">采纳。</span>合并静态与渲染校验；不再使用组合 hash 作为对外概念。</td>
+          </tr>
+          <tr>
+            <td>ASYNC_SPEC_HTML</td>
+            <td>当目标要求 presentation/HTML 成品时，检查 Slide Spec 或 Design 变更是否已同步到对应/受影响 HTML。</td>
+            <td>Spec/Design 到 HTML 的同步问题；如果用户只要求修改设计稿/spec/design，则不应触发。</td>
+            <td><span class="warn">先保留。</span>合并原 <code>ASYNC_SPEC_HTML</code> 与 <code>ASYNC_DESIGN_HTML</code>；后续再处理工作目标设计。</td>
+          </tr>
+          <tr>
+            <td>ASYNC_DECK_SLIDE</td>
+            <td>对 outline 和 slide specs 做完整引用合法性校验。</td>
+            <td>Deck outline 与 slide specs 不同步，或 section/subsection/slide order 引用非法。</td>
+            <td><span class="ok">采纳。</span>作为 deck/slide 结构同步问题的唯一 Gate code。</td>
+          </tr>
+          <tr>
+            <td>COMPLETION_GATE_BLOCK</td>
+            <td>Gate 拒绝后，Runtime 生成一个失败 tool observation，把 Gate issues 回灌给同一 ReAct Loop。</td>
+            <td>Gate 问题的汇总 wrapper，不是根因；根因在 issues 列表里。</td>
+            <td><span class="ok">采纳。</span>只汇总 Gate 问题，不混入 Review 问题。</td>
+          </tr>
+          <tr>
+            <td>COMPLETION_REVIEW_BLOCK</td>
+            <td>Review 拒绝后，Runtime 生成一个失败 observation，把 Review issues 回灌给同一 ReAct Loop。</td>
+            <td>Review 问题的汇总 wrapper，不是根因；根因在 Review issues 列表里。</td>
+            <td><span class="ok">采纳。</span>用于和 Gate block 明确拆分。</td>
+          </tr>
+          <tr>
+            <td>COMPLETION_BLOCK_REPEAT</td>
+            <td>同一 rejection key 且 EvidenceLedger version 未变化，重复达到 <code>MaxIdenticalGateRejections</code>。</td>
+            <td>同一组 BLOCK 原因超过 3 次，终止本次 Run，防止无限 finish/reject 循环。</td>
+            <td><span class="ok">采纳。</span>由 <code>COMPLETION_REJECTED_REPEATEDLY</code> 重命名。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <h2 style="margin-top:24px">1.1 Semantic Review 错误码表</h2>
+    <p class="small">
+      Review 错误与 Gate 错误拆开。Review 负责语义判断，不应被写成固定程序规则；后续将单独重新设计 Review 的触发方式、输出分级和修复协议。
+    </p>
+    <div class="table-wrap" style="margin-top:14px">
+      <table>
+        <thead>
+          <tr>
+            <th>错误码</th>
+            <th>校验逻辑</th>
+            <th>解释</th>
+            <th>修改方案</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>SEMANTIC_REVIEW_UNAVAILABLE</td>
+            <td>按 SemanticReviewPolicy 需要 reviewer，但 reviewer store/provider 不可用，或 reviewer 输出无法解析。</td>
+            <td>当前默认 conservative，会阻塞 finish；但这不应该影响低风险普通对话。</td>
+            <td><span class="warn">待重设。</span>后续和 Review 触发机制一起设计。</td>
+          </tr>
+          <tr>
+            <td>QUALITY_RUBRIC_FAILED</td>
+            <td>Reviewer 根据 PPT completion rubric 判断存在质量问题。</td>
+            <td>涉及叙事、层级、空间、对比、可读性、一致性等语义/审美判断。</td>
+            <td><span class="warn">待重设。</span>不应作为程序硬规则；需要 Review 分级。</td>
+          </tr>
+          <tr>
+            <td>FINAL_ANSWER_INCOMPLETE</td>
+            <td>Reviewer 判断 <code>finish.message</code> 不包含完整用户可见交付，或与完成事实不匹配。</td>
+            <td>这是语义判断，不由 Gate 的 Markdown/长度启发式替代。</td>
+            <td><span class="warn">待重设。</span>放入 Review 设计讨论。</td>
+          </tr>
+          <tr>
+            <td>USER_INTENT_MISMATCH</td>
+            <td>Reviewer 比对 WorkSpec、上下文和最终声明，判断结果偏离用户真实意图。</td>
+            <td>这是 Review 的核心价值之一，但需要可解释、可修复。</td>
+            <td><span class="warn">待重设。</span>后续确认是否返回 ask_user / repair / warning。</td>
+          </tr>
+          <tr>
+            <td>EVIDENCE_CONTRADICTION</td>
+            <td>Reviewer 比对 final claims 与 ChangeSet/Evidence/Issues，发现声明无法被证据支持。</td>
+            <td>例如 final 声称已渲染，但没有相应 render evidence。</td>
+            <td><span class="warn">待重设。</span>后续设计 claim-check 协议。</td>
+          </tr>
+          <tr>
+            <td>CONTEXT_INSUFFICIENT</td>
+            <td>Reviewer 判断 review input 缺少做出接受判断所需的资源、证据或上下文。</td>
+            <td>不一定是失败，也可能意味着需要 read/search/ask_user。</td>
+            <td><span class="warn">待重设。</span>暂列入 Review 表，后续确认是否保留。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card section">
+    <h2>2. Semantic Reviewer 应该怎么触发</h2>
+    <p>
+      你说“规则触发式不好”有道理，但完全交给 Agent 主动选择也不够安全。生产级产品一般是混合模式：
+      确定性边界必须由系统守住；需要判断力的审查可以由风险路由触发，也允许 Agent 主动请求。
+    </p>
+    <div class="grid-3 section">
+      <div class="callout">
+        <h3>A. 全规则触发</h3>
+        <p><span class="bad">不推荐。</span>呆板、贵、误拒绝多。尤其“你好”这种无风险输入不应被 reviewer 阻塞。</p>
+      </div>
+      <div class="callout">
+        <h3>B. 全 Agent 主动选择</h3>
+        <p><span class="warn">不够。</span>主 Agent 有任务完成压力，可能低估风险；它不该自己决定所有审查边界。</p>
+      </div>
+      <div class="callout good">
+        <h3>C. 风险路由 + 主动请求</h3>
+        <p><span class="ok">推荐。</span>Runtime 根据风险强制少量审查；Agent 可主动调用 reviewer 工具获取第二视角。</p>
+      </div>
+    </div>
+    <p class="section">
+      Codex 的 Auto-review 做法是把 reviewer 放在 sandbox boundary：大部分沙箱内动作不打扰，只有越界动作交给独立 reviewer；
+      reviewer 也不能扩大权限。Claude Code 的 hooks 设计也强调：确定性规则用 hooks，判断型规则才用 prompt/agent hooks。
+      Trae 的 skill 实践更偏“按任务选择专门 reviewer/skill”，而不是所有普通对话都过一个重型最终审查。
+    </p>
+  </section>
+
+  <section class="card section">
+    <h2>3. 推荐的最佳设计</h2>
+    <div class="grid-2">
+      <div>
+        <h3>3.1 拆开 intent 和 expected_effect</h3>
+        <p>
+          <code>execute</code> 只表示“允许写”。是否必须写，应该由一个独立字段表达。
+        </p>
+        <pre>{
+  "interaction": { "intent": "execute" },
+  "expected_effect": "none | may_write | write_required",
+  "target": { "artifact": "presentation", "level": "slide" }
+}</pre>
+        <ul>
+          <li><code>none</code>：问候、解释、状态查询，必须不写。</li>
+          <li><code>may_write</code>：Agent 可判断是否需要写；无变更也可完成，但不能谎称已修改。</li>
+          <li><code>write_required</code>：用户明确要求改/生成/删除，没 ChangeSet 才阻塞。</li>
+        </ul>
+      </div>
+      <div>
+        <h3>3.2 Gate 只守硬边界</h3>
+        <ul>
+          <li>finish contract。</li>
+          <li>phase / cancel / tools running / fatal issue。</li>
+          <li>scope / session / revision conflict。</li>
+          <li>如果有实际 ChangeSet，则要求对应 evidence fresh。</li>
+          <li>如果 expected_effect=write_required，则要求至少一个授权范围内的 material change。</li>
+          <li>不再用粗糙 Requirement Ledger 阻塞所有 execute。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="grid-2 section">
+      <div>
+        <h3>3.3 Reviewer 变成“风险审查器 + 可调用工具”</h3>
+        <ul>
+          <li>Runtime 强制触发：结构调整、整份 deck、多页、删除、跨 scope、用户要求高质量交付、准备 commit 公共成品。</li>
+          <li>Agent 主动触发：觉得需求复杂、视觉判断不确定、用户要求 review、自己做了大改。</li>
+          <li>Runtime 禁止触发：问候、纯说明、无资源访问的 chat、小型 no-op。</li>
+        </ul>
+      </div>
+      <div>
+        <h3>3.4 Reviewer 审查 claims，而不是审查“有没有干活”</h3>
+        <p>
+          reviewer 的输入应包含 final claims、ChangeSet、Evidence、风险等级和用户需求。它应该判断：
+        </p>
+        <ul>
+          <li>最终回答有没有夸大。</li>
+          <li>声称的修改是否有证据支持。</li>
+          <li>用户明确要求是否被覆盖。</li>
+          <li>是否需要人确认，而不是盲目阻塞。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="card section">
+    <h2>4. 建议落地改动清单</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>优先级</th>
+            <th>改动</th>
+            <th>原因</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>P0</td>
+            <td>删除 <code>IntentExecute && ChangeSet.Count()==0</code> 这类语义硬判断</td>
+            <td>这是当前最严重误判来源，会让“你好”或 no-op 被判失败。</td>
+          </tr>
+          <tr>
+            <td>P0</td>
+            <td>从 runtime prompt / repair guide 删除“execute 必须有变更、ledger pending 必须完成”的硬表述</td>
+            <td>避免模型被提示词训练成“为了通过 Gate 强行改东西”。</td>
+          </tr>
+          <tr>
+            <td>P1</td>
+            <td>新增 <code>expected_effect</code> 或等价字段</td>
+            <td>把“允许写”和“必须写”拆开，消除系统性歧义。</td>
+          </tr>
+          <tr>
+            <td>P1</td>
+            <td>Requirement Ledger 降级为 advisory，不再硬阻塞</td>
+            <td>当前标记算法不能证明逐条需求完成。</td>
+          </tr>
+          <tr>
+            <td>P1</td>
+            <td>新增 <code>request_review</code> / <code>review_finish</code> 控制工具，允许 Agent 主动请求 reviewer</td>
+            <td>保留 Agent 主动判断能力，不把 reviewer 做成死规则。</td>
+          </tr>
+          <tr>
+            <td>P1</td>
+            <td>Runtime 增加风险路由：低风险跳过，中高风险强制 reviewer</td>
+            <td>符合生产实践：少量高风险过强审查，低风险保持流畅。</td>
+          </tr>
+          <tr>
+            <td>P2</td>
+            <td>Reviewer 输出分级：block / warn / ask_user / pass</td>
+            <td>不要所有 reviewer concern 都阻塞；有些应该成为最终 warning 或用户确认。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card section">
+    <h2>5. 外部实践参考</h2>
+    <ul>
+      <li>
+        Claude Code Hooks：官方文档强调 hooks 用于确定性控制，prompt/agent hooks 用于需要判断力的条件。
+        <a href="https://code.claude.com/docs/en/hooks-guide">Claude Code hooks guide</a>
+      </li>
+      <li>
+        OpenAI Codex Auto-review：reviewer 替代的是 sandbox boundary 的人工审批，不扩大权限，也不是审查所有普通动作。
+        <a href="https://alignment.openai.com/auto-review">OpenAI Auto-review</a>
+      </li>
+      <li>
+        OpenAI Codex 安全部署：强调 sandbox、审批、网络策略、规则和 telemetry 的分层，而不是一个万能 reviewer。
+        <a href="https://openai.com/sl-SI/index/running-codex-safely/">Running Codex safely</a>
+      </li>
+      <li>
+        Trae Skill 生态：公开推荐实践更偏“按研发场景选择专门 skill / reviewer”，不是每个普通回答都强制二次审查。
+        <a href="https://docs.trae.ai/ide/top-10-recommended-skills-for-development-scenarios?_lang=zh">Trae 研发场景 Skill 推荐</a>
+      </li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

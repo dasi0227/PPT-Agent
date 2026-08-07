@@ -256,9 +256,7 @@ func mutationResult(
 	case ArtifactOutline, ArtifactDesign, ArtifactSlideSpec:
 		result.Evidence = append(result.Evidence, schemaEvidence(resource, hashBytes(raw)))
 	case ArtifactSlideHTML:
-		if renderHash, err := renderSourceHash(pack, input.Session, resource.SlideID); err == nil {
-			result.Evidence = append(result.Evidence, staticEvidence(resource, renderHash))
-		}
+		result.Evidence = append(result.Evidence, staticEvidence(resource, hashBytes(raw)))
 	}
 	if referenceHash, err := validateReferences(pack, input.Session); err == nil {
 		result.Evidence = append(result.Evidence, referenceEvidence(referenceHash))

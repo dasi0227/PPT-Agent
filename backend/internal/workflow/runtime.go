@@ -838,8 +838,8 @@ func (r *Runtime) finishCandidate(
 	assistantText string,
 	message string,
 ) (StructuredOutcome, bool) {
-	if violation := finishContractViolation(assistantText, message); violation != "" {
-		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeFinishContractViolation, violation, true))
+	if violation := finishMessageViolation(message); violation != "" {
+		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeFinishMessageEmpty, violation, true))
 		return StructuredOutcome{}, false
 	}
 	finishPhase := state.phase
@@ -855,8 +855,8 @@ func (r *Runtime) finishCandidate(
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{
 		"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,
 	})
+	reviewed := false
 	if result.Accepted {
-		var reviewed bool
 		var reviewErr error
 		result, reviewed, reviewErr = r.runSemanticReview(ctx, input, state, call.ID, message, result)
 		if reviewErr != nil {
@@ -883,10 +883,14 @@ func (r *Runtime) finishCandidate(
 		} else {
 			r.changePhase(input.Emitter, state, finishPhase, "completion rejected; continuing the same loop")
 		}
+		blockCode := CodeCompletionGateBlocked
+		if reviewed {
+			blockCode = CodeCompletionReviewBlocked
+		}
 		observation := ToolResult{
 			OK: false, Summary: "completion rejected", Data: map[string]any{"issues": result.Issues},
 			ChangedTargets: []ChangedTarget{}, Evidence: []Evidence{}, Issues: []Issue{},
-			Retryable: false, Code: CodeCompletionGateBlocked,
+			Retryable: false, Code: blockCode,
 		}
 		state.messages = appendToolObservation(
 			state.messages,
@@ -1245,45 +1249,12 @@ func (r *Runtime) appendControlObservation(
 	state.messages = appendToolObservation(state.messages, call, assistantText, result)
 }
 
-func finishContractViolation(assistantText, message string) string {
-	assistant := strings.TrimSpace(assistantText)
+func finishMessageViolation(message string) string {
 	final := strings.TrimSpace(message)
 	if final == "" {
 		return "finish.message is required and must contain the complete final user-facing answer"
 	}
-	if assistant == "" {
-		return ""
-	}
-	assistantRunes := len([]rune(assistant))
-	finalRunes := len([]rune(final))
-	if assistantRunes < 120 {
-		return ""
-	}
-	if finalRunes*2 < assistantRunes {
-		return "substantive final content appears in ordinary assistant text; move the complete delivery into finish.message"
-	}
-	if looksLikeFinalDelivery(assistant) && !looksLikeFinalDelivery(final) {
-		return "markdown/table/list final delivery appears outside finish.message; resubmit finish with the complete markdown in message"
-	}
 	return ""
-}
-
-func looksLikeFinalDelivery(value string) bool {
-	lines := strings.Split(value, "\n")
-	signals := 0
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "#") ||
-			strings.HasPrefix(trimmed, "- ") ||
-			strings.HasPrefix(trimmed, "|") ||
-			strings.HasPrefix(trimmed, "1.") ||
-			strings.Contains(trimmed, "总结") ||
-			strings.Contains(trimmed, "计划") ||
-			strings.Contains(trimmed, "建议") {
-			signals++
-		}
-	}
-	return signals >= 2
 }
 
 func appendToolObservation(
@@ -1381,7 +1352,7 @@ func gateNeedsCoordination(result CompletionResult) bool {
 		return true
 	}
 	for _, issue := range result.Issues {
-		if issue.Code == "PLAN_INCOMPLETE" || issue.Code == "TARGET_OUT_OF_SCOPE" {
+		if issue.Code == "PLAN_NOT_COMPLETE" || issue.Code == "TARGET_OUT_OF_SCOPE" {
 			return true
 		}
 	}

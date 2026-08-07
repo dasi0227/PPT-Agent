@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"encoding/json"
-	"errors"
 	"reflect"
 	"sort"
 	"strings"
@@ -64,147 +63,78 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 	if !isWriteStrategy(ctx.Strategy) {
 		return nil
 	}
+	if ctx.Changes.Count() == 0 {
+		return nil
+	}
 	issues := []CompletionIssue{}
-	referenceHash := ""
 	var referenceErr error
-	if ctx.Session != nil {
-		referenceHash, referenceErr = validateReferences(ctx.Context, ctx.Session)
+	if ctx.Session != nil && hasPPTDomainChanges(ctx.Changes) {
+		_, referenceErr = validateReferences(ctx.Context, ctx.Session)
+	}
+	if referenceErr != nil {
+		issues = append(issues, asyncDeckSlideIssue(ctx, referenceErr))
 	}
 	for _, change := range ctx.Changes.All() {
 		target := resourceForArtifact(change.Artifact)
-		require := func(kind, hash, code string, action RequiredAction) {
-			if hash == "" || ctx.Evidence == nil || !ctx.Evidence.HasFresh(target, hash, kind) {
-				issues = append(issues, CompletionIssue{
-					Code:            code,
-					Summary:         kind + " evidence is missing or stale for " + target.Key(),
-					RequiredActions: []RequiredAction{action},
-				})
-			}
-		}
 		if !isPPTDomainChange(change) {
 			switch change.Artifact.Kind {
 			case ArtifactSlideHTML:
-				require("static", change.AfterHash, "STATIC_EVIDENCE_REQUIRED", RequiredAction{Tool: "edit_ppt", Target: target})
-				require("render", change.AfterHash, "VISUAL_EVIDENCE_REQUIRED", RequiredAction{Tool: "render_slide", Target: target})
+				if !hasFreshHTMLEvidence(ctx, target, change.AfterHash) {
+					issues = append(issues, htmlEvidenceIssue(target))
+				}
 			default:
-				require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
+				if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
+					issues = append(issues, schemaEvidenceIssue(target))
+				}
 			}
 			continue
 		}
 		switch change.Artifact.Kind {
 		case ArtifactOutline:
-			require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
-			if referenceErr != nil {
-				if actions := missingSlideSpecActions(ctx); len(actions) > 0 {
-					issues = append(issues, CompletionIssue{
-						Code:            "SLIDE_SPEC_REQUIRED",
-						Summary:         "outline declares slides without slide specs",
-						RequiredActions: actions,
-					})
-					continue
-				}
+			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
+				issues = append(issues, schemaEvidenceIssue(target))
 			}
-			require("reference", referenceHash, "REFERENCE_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
 		case ArtifactSlideSpec:
-			require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
-			outline := Resource{Type: "deck", Part: "outline"}
-			if referenceErr != nil {
-				if actions := missingSlideSpecActions(ctx); len(actions) > 0 {
-					issues = append(issues, CompletionIssue{
-						Code:            "SLIDE_SPEC_REQUIRED",
-						Summary:         "outline declares slides without slide specs",
-						RequiredActions: actions,
-					})
-					continue
-				}
-			}
-			if referenceHash == "" || ctx.Evidence == nil || !ctx.Evidence.HasFresh(outline, referenceHash, "reference") {
-				issues = append(issues, CompletionIssue{
-					Code: "REFERENCE_EVIDENCE_REQUIRED", Summary: "outline reference integrity is missing or stale",
-					RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: outline}},
-				})
+			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
+				issues = append(issues, schemaEvidenceIssue(target))
 			}
 			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Session != nil {
 				htmlTarget := Resource{Type: "slide", SlideID: change.Artifact.ID, Part: "html"}
-				hash, hashErr := renderSourceHash(ctx.Context, ctx.Session, change.Artifact.ID)
 				if specChangeAffectsHTML(ctx.Session, change.Artifact) {
 					if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, change.Artifact.ID) {
-						issues = append(issues, CompletionIssue{
-							Code:    "SLIDE_HTML_SYNC_REQUIRED",
-							Summary: "Slide Spec changes affect Presentation HTML for " + htmlTarget.Key(),
-							RequiredActions: []RequiredAction{
-								{Tool: "edit_ppt", Target: htmlTarget},
-								{Tool: "render_slide", Target: htmlTarget},
-							},
-						})
-						continue
+						issues = append(issues, asyncSpecHTMLIssue(htmlTarget))
 					}
-					if hashErr != nil || ctx.Evidence == nil || !ctx.Evidence.HasFresh(htmlTarget, hash, "static") {
-						issues = append(issues, CompletionIssue{
-							Code: "STATIC_EVIDENCE_REQUIRED", Summary: "static evidence is missing or stale for " + htmlTarget.Key(),
-							RequiredActions: []RequiredAction{{Tool: "edit_ppt", Target: htmlTarget}},
-						})
-					}
-				}
-				if hashErr != nil || !hasFreshMaterialization(ctx, htmlTarget, hash) {
-					issues = append(issues, CompletionIssue{
-						Code: "VISUAL_EVIDENCE_REQUIRED", Summary: "render evidence is missing or stale for " + htmlTarget.Key(),
-						RequiredActions: []RequiredAction{{Tool: "render_slide", Target: htmlTarget}},
-					})
 				}
 			}
 		case ArtifactDesign:
-			require("schema", change.AfterHash, "SCHEMA_EVIDENCE_REQUIRED", RequiredAction{Tool: "write_ppt", Target: target})
+			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
+				issues = append(issues, schemaEvidenceIssue(target))
+			}
 			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Session != nil {
 				if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
 					for _, slideID := range deck.SlideOrder {
 						slideTarget := Resource{Type: "slide", SlideID: slideID, Part: "html"}
-						hash, hashErr := renderSourceHash(ctx.Context, ctx.Session, slideID)
-						if hashErr != nil || !hasFreshMaterialization(ctx, slideTarget, hash) {
-							issues = append(issues, CompletionIssue{
-								Code:            "VISUAL_EVIDENCE_REQUIRED",
-								Summary:         "render evidence is missing or stale for " + slideTarget.Key(),
-								RequiredActions: []RequiredAction{{Tool: "render_slide", Target: slideTarget}},
-							})
+						if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, slideID) {
+							issues = append(issues, asyncSpecHTMLIssue(slideTarget))
 						}
 					}
 				}
 			}
 		case ArtifactSlideHTML:
-			hash := ""
-			if ctx.Session != nil {
-				hash, _ = renderSourceHash(ctx.Context, ctx.Session, change.Artifact.ID)
-			}
-			require("static", hash, "STATIC_EVIDENCE_REQUIRED", RequiredAction{Tool: "edit_ppt", Target: target})
-			if !hasFreshMaterialization(ctx, target, hash) {
-				issues = append(issues, CompletionIssue{
-					Code: "VISUAL_EVIDENCE_REQUIRED", Summary: "render evidence is missing or stale for " + target.Key(),
-					RequiredActions: []RequiredAction{{Tool: "render_slide", Target: target}},
-				})
+			if !hasFreshHTMLEvidence(ctx, target, change.AfterHash) {
+				issues = append(issues, htmlEvidenceIssue(target))
 			}
 		}
 	}
 	return dedupeCompletionIssues(issues)
 }
 
-func missingSlideSpecActions(ctx CompletionContext) []RequiredAction {
-	if ctx.Session == nil {
-		return nil
-	}
-	deck, err := currentOutline(ctx.Context, ctx.Session)
-	if err != nil {
-		return nil
-	}
-	actions := []RequiredAction{}
-	for _, slideID := range deck.SlideOrder {
-		if _, _, err := readArtifact(ctx.Session.ProjectDir(), ctx.Session, specSlideRef(slideID)); errorsIsNotExist(err) {
-			actions = append(actions, RequiredAction{
-				Tool:   "write_ppt",
-				Target: Resource{Type: "slide", SlideID: slideID, Part: "spec"},
-			})
-		}
-	}
-	return actions
+func hasFreshEvidence(ctx CompletionContext, target Resource, hash string, kind string) bool {
+	return hash != "" && ctx.Evidence != nil && ctx.Evidence.HasFresh(target, hash, kind)
+}
+
+func hasFreshHTMLEvidence(ctx CompletionContext, target Resource, hash string) bool {
+	return hasFreshEvidence(ctx, target, hash, "static") && hasFreshMaterialization(ctx, target, hash)
 }
 
 func hasFreshMaterialization(ctx CompletionContext, target Resource, hash string) bool {
@@ -219,6 +149,58 @@ func hasFreshMaterialization(ctx CompletionContext, target Resource, hash string
 		ctx.Context, ctx.Session.ProjectDir(), ctx.Session, target.SlideID, hash,
 	)
 	return err == nil && proof == expected
+}
+
+func schemaEvidenceIssue(target Resource) CompletionIssue {
+	return CompletionIssue{
+		Code: "EVIDENCE_SCHEMA_MISSING", Summary: "schema evidence is missing or stale for " + target.Key(),
+		RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: target}},
+	}
+}
+
+func htmlEvidenceIssue(target Resource) CompletionIssue {
+	return CompletionIssue{
+		Code: "EVIDENCE_HTML_MISSING", Summary: "HTML evidence is missing or stale for " + target.Key(),
+		RequiredActions: []RequiredAction{
+			{Tool: "edit_ppt", Target: target},
+			{Tool: "render_slide", Target: target},
+		},
+	}
+}
+
+func asyncSpecHTMLIssue(target Resource) CompletionIssue {
+	return CompletionIssue{
+		Code: "ASYNC_SPEC_HTML", Summary: "Spec or Design changes are not materialized in HTML for " + target.Key(),
+		RequiredActions: []RequiredAction{
+			{Tool: "edit_ppt", Target: target},
+			{Tool: "render_slide", Target: target},
+		},
+	}
+}
+
+func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
+	actions := []RequiredAction{{Tool: "write_ppt", Target: Resource{Type: "deck", Part: "outline"}}}
+	if ctx.Session != nil {
+		if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
+			actions = actions[:0]
+			for _, slideID := range deck.SlideOrder {
+				if _, _, err := readArtifact(ctx.Session.ProjectDir(), ctx.Session, specSlideRef(slideID)); errorsIsNotExist(err) {
+					actions = append(actions, RequiredAction{
+						Tool:   "write_ppt",
+						Target: Resource{Type: "slide", SlideID: slideID, Part: "spec"},
+					})
+				}
+			}
+			if len(actions) == 0 {
+				actions = append(actions, RequiredAction{Tool: "write_ppt", Target: Resource{Type: "deck", Part: "outline"}})
+			}
+		}
+	}
+	return CompletionIssue{
+		Code:            "ASYNC_DECK_SLIDE",
+		Summary:         "outline and slide specs are not synchronized: " + cause.Error(),
+		RequiredActions: actions,
+	}
 }
 
 func hasArtifactChange(changes ChangeSet, kind ArtifactKind, id string) bool {
@@ -269,42 +251,13 @@ func isPPTDomainChange(change ArtifactChange) bool {
 	return source == "write_ppt" || source == "edit_ppt"
 }
 
-type SemanticCompletionPolicy struct{}
-
-func (SemanticCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	if !isWriteStrategy(ctx.Strategy) {
-		return nil
-	}
-	issues := []CompletionIssue{}
-	if ctx.Context.WorkSpec.Interaction.Intent == model.IntentExecute && ctx.Changes.Count() == 0 {
-		issues = append(issues, CompletionIssue{
-			Code:            "REQUIREMENT_UNADDRESSED",
-			Summary:         "execute intent has no changed targets; the user request has not been materially addressed",
-			RequiredActions: semanticRequiredActions(ctx),
-		})
-	}
-	for _, item := range ctx.Requirements.BlockingItems() {
-		issues = append(issues, CompletionIssue{
-			Code:            "REQUIREMENT_UNADDRESSED",
-			Summary:         "requirement is still pending: " + item.Text,
-			RequiredActions: semanticRequiredActions(ctx),
-		})
-	}
-	return dedupeCompletionIssues(issues)
-}
-
-func semanticRequiredActions(ctx CompletionContext) []RequiredAction {
-	target := Resource{Type: "deck", Part: "outline"}
-	if ctx.WorkScope.Target.Level == model.TargetSlide {
-		part := "spec"
-		if ctx.WorkScope.Target.Artifact == model.ArtifactPresentation {
-			part = "html"
+func hasPPTDomainChanges(changes ChangeSet) bool {
+	for _, change := range changes.All() {
+		if isPPTDomainChange(change) {
+			return true
 		}
-		target = Resource{Type: "slide", SlideID: ctx.WorkScope.Target.SlideID, Part: part}
-	} else if ctx.WorkScope.Target.Artifact == model.ArtifactPresentation {
-		target = Resource{Type: "deck", Part: "design"}
 	}
-	return []RequiredAction{{Tool: "write_ppt", Target: target}}
+	return false
 }
 
 func dedupeCompletionIssues(values []CompletionIssue) []CompletionIssue {
@@ -326,7 +279,7 @@ type CompletionGate struct {
 }
 
 func NewCompletionGate() CompletionGate {
-	return CompletionGate{Policies: []CompletionPolicy{SemanticCompletionPolicy{}, EvidenceCompletionPolicy{}}}
+	return CompletionGate{Policies: []CompletionPolicy{EvidenceCompletionPolicy{}}}
 }
 
 func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
@@ -335,29 +288,25 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		issues = append(issues, CompletionIssue{Code: "FINISH_NOT_ALLOWED", Summary: "finish is not allowed in the current phase"})
 	}
 	if ctx.ActiveTools != 0 {
-		issues = append(issues, CompletionIssue{Code: "TOOLS_RUNNING", Summary: "a tool call is still running"})
+		issues = append(issues, CompletionIssue{Code: "TOOLS_STILL_RUNNING", Summary: "a tool call is still running"})
 	}
 	for _, issue := range ctx.Issues {
 		if issue.Severity == SeverityFatal {
-			issues = append(issues, CompletionIssue{Code: "FATAL_ISSUE", Summary: issue.Summary})
+			issues = append(issues, CompletionIssue{Code: "RUN_FATAL_EXIST", Summary: issue.Summary})
 		}
 	}
 	if ctx.Canceled {
-		issues = append(issues, CompletionIssue{Code: CodeCanceled, Summary: "run was canceled"})
+		issues = append(issues, CompletionIssue{Code: CodeRunAlreadyCanceled, Summary: "run was canceled"})
 	}
 	if isWriteStrategy(ctx.Strategy) {
 		if ctx.Session == nil {
 			issues = append(issues, CompletionIssue{Code: CodeRunSessionRequired, Summary: "write run has no active run session"})
 		} else if err := ctx.Session.ValidateBaselines(); err != nil {
-			code := CodeRevisionConflict
-			if !errors.Is(err, ErrArtifactHashMismatch) {
-				code = "RUN_SESSION_INVALID"
-			}
-			issues = append(issues, CompletionIssue{Code: code, Summary: err.Error()})
+			issues = append(issues, CompletionIssue{Code: CodeRevisionConflict, Summary: err.Error()})
 		}
 	}
 	if ctx.Strategy == StrategyFulfill && (ctx.Plan == nil || ctx.Plan.HasBlockingSteps()) {
-		issues = append(issues, CompletionIssue{Code: "PLAN_INCOMPLETE", Summary: "fulfill strategy still has pending, in-progress, or failed steps"})
+		issues = append(issues, CompletionIssue{Code: "PLAN_NOT_COMPLETE", Summary: "fulfill strategy still has pending, in-progress, or failed steps"})
 	}
 	for _, policy := range g.Policies {
 		issues = append(issues, policy.Check(ctx)...)
@@ -396,11 +345,11 @@ func acceptedMaterializationProofs(ctx CompletionContext) []MaterializationProof
 			!hasArtifactChange(ctx.Changes, ArtifactSlideHTML, slideID) {
 			continue
 		}
-		hash, err := renderSourceHash(ctx.Context, ctx.Session, slideID)
+		target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
+		hash, err := targetHash(ctx.Context, ctx.Session, target)
 		if err != nil {
 			continue
 		}
-		target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
 		if proof, ok := ctx.Evidence.FreshMaterializationProof(target, hash); ok {
 			expected, expectedErr := currentMaterializationProof(
 				ctx.Context, ctx.Session.ProjectDir(), ctx.Session, slideID, hash,

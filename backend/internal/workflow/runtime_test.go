@@ -609,25 +609,10 @@ func TestAgentRequestCarriesContextBriefingAndRequirementLedger(t *testing.T) {
 	}
 }
 
-func TestFinishContractRejectsSubstantiveAssistantDelivery(t *testing.T) {
-	longDelivery := strings.Join([]string{
-		"## 完整计划",
-		"",
-		"### 步骤",
-		"- 读取当前上下文",
-		"- 制定执行方案",
-		"- 输出风险和下一步",
-		"",
-		"### 风险",
-		"- 需要避免普通 assistant text 承载最终交付。",
-		"- finish.message 必须包含完整 markdown。",
-		"",
-		"### 建议",
-		"- 重新通过 finish(message) 提交完整内容。",
-	}, "\n")
+func TestFinishMessageEmptyRejectsEmptyMessage(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{
-		{Text: longDelivery, ToolCalls: []llm.ToolCall{{ID: "bad", Name: "finish", Args: map[string]any{"message": "done"}}}},
-		{ToolCalls: []llm.ToolCall{{ID: "good", Name: "finish", Args: map[string]any{"message": longDelivery}}}},
+		{ToolCalls: []llm.ToolCall{{ID: "bad", Name: "finish", Args: map[string]any{"message": "  "}}}},
+		{ToolCalls: []llm.ToolCall{{ID: "good", Name: "finish", Args: map[string]any{"message": "完整计划"}}}},
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "strict-finish", ProjectDir: t.TempDir(),
@@ -639,28 +624,20 @@ func TestFinishContractRejectsSubstantiveAssistantDelivery(t *testing.T) {
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
 	}
 	if len(agent.requests[1].Messages) < 2 ||
-		!strings.Contains(agent.requests[1].Messages[1].Text(), CodeFinishContractViolation) {
-		t.Fatalf("finish contract violation was not returned to the loop: %+v", agent.requests[1].Messages)
+		!strings.Contains(agent.requests[1].Messages[1].Text(), CodeFinishMessageEmpty) {
+		t.Fatalf("finish message violation was not returned to the loop: %+v", agent.requests[1].Messages)
 	}
 }
 
-func TestSemanticCompletionRejectsExecuteFinishWithoutChanges(t *testing.T) {
-	budget := DefaultRuntimeBudget()
-	budget.MaxIdenticalGateRejections = 2
-	agent := &scriptedAgent{responses: []AgentResponse{
-		finishCall("first"), finishCall("second"),
-	}}
+func TestExecuteFinishWithoutChangesIsAllowedByGate(t *testing.T) {
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "semantic-no-change", ProjectDir: t.TempDir(),
+		RunID: "execute-no-change", ProjectDir: t.TempDir(),
 		Context:     testPack(model.IntentExecute, model.ArtifactSpec, model.TargetSlide, false, "修改当前页标题"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
-		Budget:      budget,
 	})
-	if outcome.Status != StatusFailed || outcome.Code != CodeGateRejectedRepeated {
+	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
-	}
-	if len(agent.requests) < 2 || !strings.Contains(agent.requests[1].Messages[1].Text(), "REQUIREMENT_UNADDRESSED") {
-		t.Fatalf("semantic rejection missing from context: %+v", agent.requests)
 	}
 }
 

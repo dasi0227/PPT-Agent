@@ -33,7 +33,7 @@ const (
 	CodeContextBudget           = "CONTEXT_BUDGET_EXCEEDED"
 	CodeRenderFailed            = "RENDER_FAILED"
 	CodeRenderWorkerUnavailable = "RENDER_WORKER_UNAVAILABLE"
-	CodeRunSessionRequired      = "RUN_SESSION_REQUIRED"
+	CodeRunSessionRequired      = "RUN_SESSION_MISSING"
 )
 
 type ToolSchema struct {

@@ -410,13 +410,13 @@ func TestRenderSlideDoesNotClassifyContextCancellationAsTransient(t *testing.T) 
 	}
 }
 
-func TestCompletionGateRequiresLatestStaticAndRenderEvidence(t *testing.T) {
+func TestCompletionGateRequiresLatestHTMLEvidence(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewRunSession(dir, "gate")
 	if _, err := tx.Write(slideHTMLRef("slide-01"), "edit_ppt", []byte(strings.Replace(validToolHTML, "Original", "Changed", 1))); err != nil {
 		t.Fatal(err)
 	}
-	hash, _ := renderSourceHash(pack, tx, "slide-01")
+	hash, _ := targetHash(pack, tx, Resource{Type: "slide", SlideID: "slide-01", Part: "html"})
 	resource := Resource{Type: "slide", SlideID: "slide-01", Part: "html"}
 	ledger := NewEvidenceLedger()
 	ledger.Record(staticEvidence(resource, hash))
@@ -424,7 +424,7 @@ func TestCompletionGateRequiresLatestStaticAndRenderEvidence(t *testing.T) {
 		Strategy: StrategyExecute, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
 		Session: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
-	if result := NewCompletionGate().Check(ctx); result.Accepted || !hasCompletionCode(result, "VISUAL_EVIDENCE_REQUIRED") {
+	if result := NewCompletionGate().Check(ctx); result.Accepted || !hasCompletionCode(result, "EVIDENCE_HTML_MISSING") {
 		t.Fatalf("missing render accepted: %+v", result)
 	}
 	rendered := (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
@@ -471,7 +471,7 @@ func TestDeckOutlineMissingSlideSpecsDirectsSpecCreation(t *testing.T) {
 	if !result.OK || gate.Accepted {
 		t.Fatalf("missing slide spec unexpectedly accepted: write=%+v gate=%+v", result, gate)
 	}
-	if !hasCompletionCode(gate, "SLIDE_SPEC_REQUIRED") {
+	if !hasCompletionCode(gate, "ASYNC_DECK_SLIDE") {
 		t.Fatalf("gate did not report missing slide specs: %+v", gate)
 	}
 	if hasRequiredAction(gate, "write_ppt", "deck:outline") {
@@ -502,7 +502,7 @@ func TestPresentationSpecHTMLAffectingChangesRequireHTMLSync(t *testing.T) {
 			ledger := NewEvidenceLedger()
 			recordResultEvidence(ledger, write)
 			gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
-			if gate.Accepted || !hasCompletionCode(gate, "SLIDE_HTML_SYNC_REQUIRED") {
+			if gate.Accepted || !hasCompletionCode(gate, "ASYNC_SPEC_HTML") {
 				t.Fatalf("HTML-affecting spec change accepted: write=%+v gate=%+v", write, gate)
 			}
 			if !hasRequiredAction(gate, "edit_ppt", "slide:slide-01:html") ||
@@ -536,7 +536,7 @@ func TestPresentationSpecAndHTMLWithLatestRenderCanFinish(t *testing.T) {
 	}
 }
 
-func TestPresentationSpeakerNotesOnlyNeedsLatestMaterializationProof(t *testing.T) {
+func TestPresentationSpeakerNotesOnlyDoesNotRequireHTMLSync(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewRunSession(dir, "speaker-notes")
 	ledger := NewEvidenceLedger()
@@ -547,18 +547,16 @@ func TestPresentationSpeakerNotesOnlyNeedsLatestMaterializationProof(t *testing.
 			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
 			"content":  string(mustJSONValue(next)),
 		})))
-	recordResultEvidence(ledger, (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
-		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})))
 	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
 	if !gate.Accepted || hasArtifactChange(tx.ChangeSet(), ArtifactSlideHTML, "slide-01") ||
-		len(gate.MaterializationProofs) != 1 {
-		t.Fatalf("speaker-notes materialization rejected: %+v changes=%+v", gate, tx.ChangeSet())
+		len(gate.MaterializationProofs) != 0 {
+		t.Fatalf("speaker-notes sync rejected: %+v changes=%+v", gate, tx.ChangeSet())
 	}
 }
 
-func TestPresentationDesignOnlyNeedsLatestRenderAndKeepsHTMLUnchanged(t *testing.T) {
+func TestPresentationDesignChangeRequiresHTMLSync(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
-	tx, _ := NewRunSession(dir, "design-only-render")
+	tx, _ := NewRunSession(dir, "design-html-sync")
 	ledger := NewEvidenceLedger()
 	next := designModel()
 	next.Signature = "updated signature"
@@ -567,17 +565,14 @@ func TestPresentationDesignOnlyNeedsLatestRenderAndKeepsHTMLUnchanged(t *testing
 			"resource": resourceArgs(Resource{Type: "deck", Part: "design"}),
 			"content":  string(mustJSONValue(next)),
 		})))
-	recordResultEvidence(ledger, (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
-		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})))
 	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
-	if !gate.Accepted || hasArtifactChange(tx.ChangeSet(), ArtifactSlideHTML, "slide-01") ||
-		len(gate.MaterializationProofs) != 1 ||
-		gate.MaterializationProofs[0].HTMLRevision != pack.Revisions.SlideHTML["slide-01"] {
-		t.Fatalf("design-only render rejected or changed HTML revision: gate=%+v changes=%+v", gate, tx.ChangeSet())
+	if gate.Accepted || !hasCompletionCode(gate, "ASYNC_SPEC_HTML") ||
+		!hasRequiredAction(gate, "edit_ppt", "slide:slide-01:html") {
+		t.Fatalf("design HTML sync was not required: gate=%+v changes=%+v", gate, tx.ChangeSet())
 	}
 }
 
-func TestRenderEvidenceBeforeSpecChangeIsStale(t *testing.T) {
+func TestRenderEvidenceBeforeSpeakerNotesChangeRemainsAcceptable(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewRunSession(dir, "stale-render")
 	ledger := NewEvidenceLedger()
@@ -594,45 +589,30 @@ func TestRenderEvidenceBeforeSpecChangeIsStale(t *testing.T) {
 	}
 	recordResultEvidence(ledger, write)
 	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
-	if gate.Accepted || !hasCompletionCode(gate, "VISUAL_EVIDENCE_REQUIRED") {
-		t.Fatalf("pre-change render evidence accepted: %+v", gate)
+	if !gate.Accepted {
+		t.Fatalf("speaker-notes change should not require HTML evidence: %+v", gate)
 	}
 }
 
-func TestRenderProofWithOldSourceRevisionIsRejected(t *testing.T) {
+func TestRenderProofWithOldHTMLRevisionIsRejected(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	tx, _ := NewRunSession(dir, "old-proof-revision")
 	ledger := NewEvidenceLedger()
-	next := slideModel("slide-01", "Original")
-	next.SpeakerNotes = "updated notes"
 	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
 		context.Background(), toolInput(pack, dir, tx, map[string]any{
-			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
-			"content":  string(mustJSONValue(next)),
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "html"}),
+			"content":  strings.Replace(validToolHTML, "Original", "Changed", 1),
 		})))
 	rendered := (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
 		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"}))
 	if len(rendered.Evidence) != 1 || rendered.Evidence[0].Materialization == nil {
 		t.Fatalf("render proof missing: %+v", rendered)
 	}
-	rendered.Evidence[0].Materialization.SourceSpecRevision--
+	rendered.Evidence[0].Materialization.HTMLRevision--
 	recordResultEvidence(ledger, rendered)
 	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
-	if gate.Accepted || !hasCompletionCode(gate, "VISUAL_EVIDENCE_REQUIRED") {
+	if gate.Accepted || !hasCompletionCode(gate, "EVIDENCE_HTML_MISSING") {
 		t.Fatalf("old source revision passed gate: %+v", gate)
-	}
-}
-
-func TestMaterializationSourceHashBindsDesignSpecAndHTML(t *testing.T) {
-	base := MaterializationSourceHash("slide-01", []byte("design"), []byte("spec"), []byte("html"))
-	for name, hash := range map[string]string{
-		"design": MaterializationSourceHash("slide-01", []byte("design-2"), []byte("spec"), []byte("html")),
-		"spec":   MaterializationSourceHash("slide-01", []byte("design"), []byte("spec-2"), []byte("html")),
-		"html":   MaterializationSourceHash("slide-01", []byte("design"), []byte("spec"), []byte("html-2")),
-	} {
-		if hash == base {
-			t.Errorf("%s change did not invalidate source hash", name)
-		}
 	}
 }
 

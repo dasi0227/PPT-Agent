@@ -16,7 +16,7 @@ Schema:
   ],
   "issues": [
     {
-      "code": "REQUIREMENT_UNADDRESSED | QUALITY_RUBRIC_FAILED | FINAL_ANSWER_INCOMPLETE | USER_INTENT_MISMATCH | EVIDENCE_CONTRADICTION | CONTEXT_INSUFFICIENT",
+      "code": "QUALITY_RUBRIC_FAILED | FINAL_ANSWER_INCOMPLETE | USER_INTENT_MISMATCH | EVIDENCE_CONTRADICTION | CONTEXT_INSUFFICIENT",
       "severity": "warning | error | fatal",
       "requirement_id": "req_01",
       "target": {"type": "slide", "slide_id": "slide-01", "part": "html"},

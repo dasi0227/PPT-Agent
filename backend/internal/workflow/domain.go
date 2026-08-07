@@ -190,15 +190,17 @@ type CommitMetadata func(context.Context, CommitContext) error
 
 const (
 	CodeCanceled                = "RUN_CANCELED"
+	CodeRunAlreadyCanceled      = "RUN_ALREADY_CANCELED"
 	CodeBudgetExceeded          = "RUNTIME_BUDGET_EXCEEDED"
 	CodeConsecutiveErrors       = "CONSECUTIVE_TOOL_ERRORS"
 	CodeDependencyFailed        = "DEPENDENCY_FAILED"
-	CodeGateRejectedRepeated    = "COMPLETION_REJECTED_REPEATEDLY"
+	CodeGateRejectedRepeated    = "COMPLETION_BLOCK_REPEAT"
 	CodeCommitFailed            = "COMMIT_FAILED"
 	CodeAgentFailed             = "AGENT_FAILED"
 	CodeInvalidControlCall      = "INVALID_CONTROL_CALL"
 	CodeScopeExpansion          = "SCOPE_EXPANSION_REQUIRED"
-	CodeRevisionConflict        = "REVISION_CONFLICT"
-	CodeCompletionGateBlocked   = "COMPLETION_GATE_BLOCKED"
-	CodeFinishContractViolation = "FINISH_CONTRACT_VIOLATION"
+	CodeRevisionConflict        = "RUN_REVISION_CONFLICT"
+	CodeCompletionGateBlocked   = "COMPLETION_GATE_BLOCK"
+	CodeCompletionReviewBlocked = "COMPLETION_REVIEW_BLOCK"
+	CodeFinishMessageEmpty      = "FINISH_MESSAGE_EMPTY"
 )

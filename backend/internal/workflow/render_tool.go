@@ -491,22 +491,11 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 }
 
 func renderHashWithoutSession(pack contextengine.ContextPack, input DomainToolInput, slideID string) (string, error) {
-	if input.Session != nil {
-		return renderSourceHash(pack, input.Session, slideID)
-	}
-	designRaw, _, err := readArtifact(input.ProjectDir, nil, designRef(pack))
+	htmlRaw, _, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
 	if err != nil {
 		return "", err
 	}
-	specRaw, _, err := readArtifact(input.ProjectDir, nil, specSlideRef(slideID))
-	if err != nil {
-		return "", err
-	}
-	htmlRaw, _, err := readArtifact(input.ProjectDir, nil, slideHTMLRef(slideID))
-	if err != nil {
-		return "", err
-	}
-	return MaterializationSourceHash(slideID, designRaw, specRaw, htmlRaw), nil
+	return hashBytes(htmlRaw), nil
 }
 
 func presentationRevision(pack contextengine.ContextPack, input DomainToolInput, slideID string) int {
