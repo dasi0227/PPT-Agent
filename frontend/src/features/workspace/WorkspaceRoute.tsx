@@ -4,6 +4,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { AppShell } from './AppShell';
 import { homeRoute } from './routes';
+import { useWorkspaceUrlState } from './useWorkspaceUrlState';
 
 function syncProjectRoute(projectId: string | undefined) {
   if (!projectId) {
@@ -26,6 +27,7 @@ export function WorkspaceRoute() {
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const loadProjectSlides = useProjectStore((state) => state.loadProjectSlides);
   const loadThreads = useThreadStore((state) => state.loadThreads);
+  useWorkspaceUrlState(projectId);
 
   React.useLayoutEffect(() => {
     syncProjectRoute(projectId);

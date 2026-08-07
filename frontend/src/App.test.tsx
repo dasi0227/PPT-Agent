@@ -87,6 +87,56 @@ describe('App Level Interactions', () => {
     expect(useDeckStore.getState().currentPage).toBe(1);
   });
 
+  it('restores workspace view state from the project URL after refresh', async () => {
+    window.history.pushState({}, '', '/projects/p1?slide=s2&view=outline&mode=overview');
+    useDeckStore.setState({
+      currentPage: 0,
+      globalView: 'html',
+      previewMode: 'main',
+    });
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(useDeckStore.getState().currentPage).toBe(1);
+    expect(useDeckStore.getState().globalView).toBe('outline');
+    expect(useDeckStore.getState().previewMode).toBe('overview');
+  });
+
+  it('keeps the project URL in sync when the current page changes', async () => {
+    window.history.pushState({}, '', '/projects/p1');
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    await act(async () => {
+      useDeckStore.getState().setCurrentPage(1);
+    });
+
+    expect(window.location.pathname).toBe('/projects/p1');
+    expect(new URLSearchParams(window.location.search).get('slide')).toBe('s2');
+  });
+
+  it('updates the URL when switching away from a slide restored from URL', async () => {
+    window.history.pushState({}, '', '/projects/p1?slide=s1');
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    await act(async () => {
+      useDeckStore.getState().setCurrentPage(1);
+    });
+
+    expect(new URLSearchParams(window.location.search).get('slide')).toBe('s2');
+  });
+
   it('uses the root route as the home state even when a project was previously active', async () => {
     window.history.pushState({}, '', '/');
 
