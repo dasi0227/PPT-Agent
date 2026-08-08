@@ -186,17 +186,13 @@ func (s *SpecService) read(project model.Project, metas []model.Slide) (spec.Pro
 func defaultDesign(projectID string, now int64) spec.Design {
 	return spec.Design{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID,
-		Canvas:  spec.CanvasSpec{Width: 1600, Height: 900, Ratio: "16:9"},
-		Palette: []string{"#111827", "#ffffff", "#2563eb"},
-		Typography: spec.TypographySpec{
-			Display: spec.FontSpec{Family: "Inter, sans-serif", Weight: 700},
-			Body:    spec.FontSpec{Family: "Inter, sans-serif", Weight: 400},
-			Utility: spec.FontSpec{Family: "Inter, sans-serif", Weight: 500},
+		Theme:     "swiss-modern",
+		Direction: "清晰、克制、结构化的通用商务演示",
+		Density:   "medium",
+		Chrome: []spec.ChromeItem{
+			{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono counter"},
+			{Type: "section_marker", Placement: "top-left", Style: "compact section label"},
 		},
-		Spacing: spec.SpacingSpec{Unit: 8}, Radius: spec.RadiusSpec{Card: 16},
-		Shadows:      spec.ShadowSpec{Card: "0 12px 36px rgba(15,23,42,.12)"},
-		LayoutSystem: spec.LayoutSystem{Grid: "12-col", Rhythm: "generous", Density: "medium"},
-		Signature:    "minimal geometric accent", Motion: spec.MotionSpec{Policy: "restrained"},
 		CreatedAt: now, UpdatedAt: now,
 	}
 }

@@ -31,34 +31,33 @@ export interface SlideSpec {
 }
 
 export interface Outline {
-  schema_version: '3.0';
+  version: '3.0';
   revision: number;
-  project_id: string;
+  project: string;
   title: string;
   goal: string;
   audience: string;
   language: string;
-  core_thesis: string;
-  narrative_arc: string;
-  sections: Array<{ id: string; number: string; title: string; subsections: Array<{ id: string; number: string; title: string }> }>;
+  positioning?: string;
+  constraints: { must_include: string[]; must_avoid: string[]; style_limits: string[]; content_limits: string[] };
+  sections: Array<{ id: string; title: string; purpose: string; subsections: Array<{ id: string; title: string }> }>;
   slide_order: string[];
   created_at: number;
   updated_at: number;
 }
 
 export interface Design {
-  schema_version: '3.0';
+  version: '3.0';
   revision: number;
-  project_id: string;
-  canvas: Record<string, unknown>;
-  palette: string[];
-  typography: Record<string, unknown>;
-  spacing: Record<string, unknown>;
-  radius: Record<string, unknown>;
-  shadows: Record<string, unknown>;
-  layout_system: Record<string, unknown>;
-  signature: string;
-  motion: Record<string, unknown>;
+  project: string;
+  theme: string;
+  direction: string;
+  density: 'sparse' | 'medium' | 'dense';
+  chrome: Array<{
+    type: 'page_number' | 'section_marker' | 'key_message' | 'deck_title';
+    placement: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' | 'left-edge' | 'right-edge';
+    style: string;
+  }>;
   created_at: number;
   updated_at: number;
 }

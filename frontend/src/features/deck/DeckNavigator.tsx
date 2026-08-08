@@ -134,7 +134,7 @@ export const DeckNavigator: React.FC = () => {
   const directorySections = useMemo<DirectorySection[]>(() => {
     if (!specView?.outline) return [];
     const used = new Set<string>();
-    return specView.outline.sections.map((section) => {
+    return specView.outline.sections.map((section, sectionIndex) => {
       const directSlides: DirectoryEntry[] = [];
       const subsectionSlides = new Map<string, DirectoryEntry[]>();
       for (const subsection of section.subsections) subsectionSlides.set(subsection.id, []);
@@ -156,12 +156,12 @@ export const DeckNavigator: React.FC = () => {
       }
       return {
         id: section.id,
-        number: section.number,
+        number: String(sectionIndex + 1).padStart(2, '0'),
         title: section.title,
         directSlides,
-        subsections: section.subsections.map((subsection) => ({
+        subsections: section.subsections.map((subsection, subsectionIndex) => ({
           id: subsection.id,
-          number: subsection.number,
+          number: `${sectionIndex + 1}.${subsectionIndex + 1}`,
           title: subsection.title,
           slides: subsectionSlides.get(subsection.id) ?? [],
         })),

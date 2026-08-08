@@ -195,7 +195,7 @@ func TestWritePPTRequiresStringAndInjectsManagedMetadata(t *testing.T) {
 	}
 }
 
-func TestDesignWriteAtomicallyWritesDerivedTokens(t *testing.T) {
+func TestDesignWriteAtomicallyWritesThemeTokens(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
 	tx, _ := NewRunSession(dir, "write-design")
 	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
@@ -206,8 +206,8 @@ func TestDesignWriteAtomicallyWritesDerivedTokens(t *testing.T) {
 		t.Fatalf("design write=%+v", result)
 	}
 	tokens, err := tx.Read(designTokensRef(pack))
-	if err != nil || !strings.Contains(string(tokens), "--stage-w: 1600") {
-		t.Fatalf("derived tokens were not written: %q err=%v", tokens, err)
+	if err != nil || !strings.Contains(string(tokens), "theme: swiss-modern") || !strings.Contains(string(tokens), "--color-primary:") {
+		t.Fatalf("theme tokens were not written: %q err=%v", tokens, err)
 	}
 	if changes := tx.ChangeSet(); changes.Count() != 1 ||
 		changes.All()[0].Artifact.Kind != ArtifactDesign {
@@ -559,7 +559,7 @@ func TestPresentationDesignChangeRequiresHTMLSync(t *testing.T) {
 	tx, _ := NewRunSession(dir, "design-html-sync")
 	ledger := NewEvidenceLedger()
 	next := designModel()
-	next.Signature = "updated signature"
+	next.Direction = "updated direction"
 	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
 		context.Background(), toolInput(pack, dir, tx, map[string]any{
 			"resource": resourceArgs(Resource{Type: "deck", Part: "design"}),
@@ -760,9 +760,10 @@ func deckModel(projectID string, order []string) spec.Outline {
 	return spec.Outline{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID,
 		Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN",
-		CoreThesis: "Thesis", NarrativeArc: "Arc",
-		Sections:   []spec.Section{{ID: "section-1", Number: "1", Title: "Section", Subsections: []spec.Subsection{}}},
-		SlideOrder: append([]string{}, order...), CreatedAt: 1, UpdatedAt: 1,
+		Positioning: "Thesis",
+		Constraints: spec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
+		Sections:    []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Test section", Subsections: []spec.Subsection{}}},
+		SlideOrder:  append([]string{}, order...), CreatedAt: 1, UpdatedAt: 1,
 	}
 }
 
@@ -780,17 +781,13 @@ func slideModel(id, title string) spec.SlideSpec {
 func designModel() spec.Design {
 	return spec.Design{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "p1",
-		Canvas:  spec.CanvasSpec{Width: 1600, Height: 900, Ratio: "16:9"},
-		Palette: []string{"#111111", "#FFFFFF", "#3366FF"},
-		Typography: spec.TypographySpec{
-			Display: spec.FontSpec{Family: "Arial", Weight: 700},
-			Body:    spec.FontSpec{Family: "Arial", Weight: 400},
-			Utility: spec.FontSpec{Family: "Arial", Weight: 500},
+		Theme:     "swiss-modern",
+		Direction: "test",
+		Density:   "medium",
+		Chrome: []spec.ChromeItem{
+			{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono counter"},
 		},
-		Spacing: spec.SpacingSpec{Unit: 8}, Radius: spec.RadiusSpec{Card: 8},
-		Shadows:      spec.ShadowSpec{Card: "none"},
-		LayoutSystem: spec.LayoutSystem{Grid: "12-col", Rhythm: "regular", Density: "medium"},
-		Signature:    "test", Motion: spec.MotionSpec{Policy: "none"}, CreatedAt: 1, UpdatedAt: 1,
+		CreatedAt: 1, UpdatedAt: 1,
 	}
 }
 

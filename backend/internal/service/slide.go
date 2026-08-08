@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -24,7 +22,7 @@ type SlideService struct {
 }
 
 func NewSlideService(s store.Store) *SlideService {
-	return &SlideService{store: s, clock: nowUnix, newID: uuid.NewString}
+	return &SlideService{store: s, clock: nowUnix, newID: func() string { return model.MustShortID("sli") }}
 }
 
 // GetSlide 按 id 返回单页元数据，并从文件投影 position/title/layout（文件为真相）。

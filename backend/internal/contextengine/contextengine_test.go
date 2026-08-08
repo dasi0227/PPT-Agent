@@ -34,23 +34,19 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := t.TempDir()
 	deck := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders",
-		Language: "zh-CN", CoreThesis: "thesis", NarrativeArc: "arc",
-		Sections:   []pptspec.Section{{ID: "sec", Number: "1", Title: "Section", Subsections: []pptspec.Subsection{{ID: "sub", Number: "1.1", Title: "Sub"}}}},
-		SlideOrder: []string{"s1", "s2", "s3"}, CreatedAt: 1, UpdatedAt: 2}
+		Language: "zh-CN", Positioning: "thesis",
+		Constraints: pptspec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
+		Sections:    []pptspec.Section{{ID: "sec", Title: "Section", Purpose: "Test section", Subsections: []pptspec.Subsection{{ID: "sub", Title: "Sub"}}}},
+		SlideOrder:  []string{"s1", "s2", "s3"}, CreatedAt: 1, UpdatedAt: 2}
 	writeJSON(t, filepath.Join(dir, "outline.json"), deck)
 	design := pptspec.Design{
 		SchemaVersion: pptspec.SchemaVersion, Revision: 3, ProjectID: "p1", CreatedAt: 1, UpdatedAt: 2,
-		Canvas:  pptspec.CanvasSpec{Width: 1600, Height: 900, Ratio: "16:9"},
-		Palette: []string{"#000000", "#FFFFFF"},
-		Typography: pptspec.TypographySpec{
-			Display: pptspec.FontSpec{Family: "Inter", Weight: 700},
-			Body:    pptspec.FontSpec{Family: "Inter", Weight: 400},
-			Utility: pptspec.FontSpec{Family: "Inter", Weight: 500},
+		Theme:     "swiss-modern",
+		Direction: "test direction",
+		Density:   "medium",
+		Chrome: []pptspec.ChromeItem{
+			{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono counter"},
 		},
-		Spacing: pptspec.SpacingSpec{Unit: 8}, Radius: pptspec.RadiusSpec{Card: 12},
-		Shadows:      pptspec.ShadowSpec{Card: "0 8px 24px rgba(0,0,0,.2)"},
-		LayoutSystem: pptspec.LayoutSystem{Grid: "12", Rhythm: "8", Density: "medium"},
-		Signature:    "pulse", Motion: pptspec.MotionSpec{Policy: "restrained"},
 	}
 	writeJSON(t, filepath.Join(dir, "design.json"), design)
 	slides := map[string]model.Slide{}

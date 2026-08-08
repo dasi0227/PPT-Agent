@@ -121,11 +121,11 @@ func (svc *SlideService) AddSlide(ctx context.Context, projectID, afterSlideID, 
 	if err != nil {
 		return model.Slide{}, err
 	}
-	sectionID := "section-main"
+	sectionID := model.MustShortID("sec")
 	nextOutline := view.Outline
 	if len(nextOutline.Sections) == 0 {
 		nextOutline.Sections = []spec.Section{{
-			ID: sectionID, Number: "01", Title: "正文", Subsections: []spec.Subsection{},
+			ID: sectionID, Title: "正文", Purpose: "承载主要内容页面", Subsections: []spec.Subsection{},
 		}}
 	} else {
 		sectionID = nextOutline.Sections[0].ID

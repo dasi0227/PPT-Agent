@@ -100,16 +100,17 @@ func TestRestructureSlidesUpdatesOrderAndPlacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	outline := view.Outline
+	mainSectionID := view.SlideSpecs[first.ID].SectionID
 	outline.Sections = []spec.Section{
-		{ID: "section-main", Number: "01", Title: "Main", Subsections: []spec.Subsection{}},
-		{ID: "section-two", Number: "02", Title: "Two", Subsections: []spec.Subsection{{ID: "sub-two", Number: "2.1", Title: "Sub"}}},
+		{ID: mainSectionID, Title: "Main", Purpose: "Main section", Subsections: []spec.Subsection{}},
+		{ID: "section-two", Title: "Two", Purpose: "Second section", Subsections: []spec.Subsection{{ID: "sub-two", Title: "Sub"}}},
 	}
 	if _, err := specSvc.ReplaceOutline(context.Background(), project.ID, view.Outline.Revision, outline); err != nil {
 		t.Fatal(err)
 	}
 	if err := slides.RestructureSlides(context.Background(), project.ID, []string{second.ID, first.ID}, []service.SlidePlacement{
 		{SlideID: second.ID, SectionID: "section-two", SubsectionID: "sub-two"},
-		{SlideID: first.ID, SectionID: "section-main"},
+		{SlideID: first.ID, SectionID: mainSectionID},
 	}); err != nil {
 		t.Fatal(err)
 	}

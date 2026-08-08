@@ -2,26 +2,25 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ppt-agent.local/schemas/outline.schema.json",
   "title": "PPT Outline",
-  "description": "Deck-wide audience, thesis, narrative structure, sections, and stable slide order.",
+  "description": "Deck-wide goal, audience, positioning, constraints, section structure, and stable slide order.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version",
+    "version",
     "revision",
-    "project_id",
+    "project",
     "title",
     "goal",
     "audience",
     "language",
-    "core_thesis",
-    "narrative_arc",
+    "constraints",
     "sections",
     "slide_order",
     "created_at",
     "updated_at"
   ],
   "properties": {
-    "schema_version": {
+    "version": {
       "const": "3.0",
       "x-runtime-managed": true
     },
@@ -30,10 +29,9 @@
       "minimum": 1,
       "x-runtime-managed": true
     },
-    "project_id": {
+    "project": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
       "x-runtime-managed": true
     },
     "title": {
@@ -56,15 +54,21 @@
       "minLength": 2,
       "maxLength": 32
     },
-    "core_thesis": {
+    "positioning": {
       "type": "string",
       "minLength": 1,
       "maxLength": 600
     },
-    "narrative_arc": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 1600
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["must_include", "must_avoid", "style_limits", "content_limits"],
+      "properties": {
+        "must_include": { "$ref": "#/$defs/constraint_list" },
+        "must_avoid": { "$ref": "#/$defs/constraint_list" },
+        "style_limits": { "$ref": "#/$defs/constraint_list" },
+        "content_limits": { "$ref": "#/$defs/constraint_list" }
+      }
     },
     "sections": {
       "type": "array",
@@ -72,21 +76,22 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "number", "title", "subsections"],
+        "required": ["id", "title", "purpose", "subsections"],
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
-          },
-          "number": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 24
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
+            "x-runtime-managed": true
           },
           "title": {
             "type": "string",
             "minLength": 1,
             "maxLength": 160
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
           },
           "subsections": {
             "type": "array",
@@ -94,16 +99,12 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["id", "number", "title"],
+              "required": ["id", "title"],
               "properties": {
                 "id": {
                   "type": "string",
-                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
-                },
-                "number": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 24
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
+                  "x-runtime-managed": true
                 },
                 "title": {
                   "type": "string",
@@ -136,21 +137,36 @@
       "x-runtime-managed": true
     }
   },
+  "$defs": {
+    "constraint_list": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300
+      }
+    }
+  },
   "x-agent-example": {
     "title": "季度业务复盘",
     "goal": "解释增长来源并明确下一季度行动",
     "audience": "管理团队",
     "language": "zh-CN",
-    "core_thesis": "聚焦高质量增长",
-    "narrative_arc": "结论先行，再解释证据与行动",
+    "positioning": "Q4 增长的关键不再是扩大线索规模，而是提高高价值客户的续约与扩展效率。",
+    "constraints": {
+      "must_include": ["说明企业客户续约趋势"],
+      "must_avoid": ["不要虚构未提供的数据"],
+      "style_limits": ["保持正式汇报语气"],
+      "content_limits": ["控制在 12 页以内"]
+    },
     "sections": [
       {
-        "id": "section-main",
-        "number": "01",
         "title": "核心结论",
+        "purpose": "先给出管理层需要决策的主判断",
         "subsections": []
       }
     ],
-    "slide_order": ["slide-01"]
+    "slide_order": ["sli_abcd23"]
   }
 }

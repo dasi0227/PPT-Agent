@@ -266,16 +266,73 @@ func migrateResourceJSON(raw []byte, kind string, project layoutProjectRow, revi
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return nil, err
 	}
-	value["schema_version"] = spec.SchemaVersion
 	value["revision"] = maxMigrationInt(revision, intValueFromJSON(value["revision"], 1))
-	value["project_id"] = project.ID
 	value["created_at"] = int64ValueFromJSON(value["created_at"], project.CreatedAt)
 	value["updated_at"] = int64ValueFromJSON(value["updated_at"], project.UpdatedAt)
 	switch kind {
 	case "outline":
+		value["version"] = spec.SchemaVersion
+		value["project"] = project.ID
+		delete(value, "schema_version")
+		delete(value, "project_id")
+		if positioning, ok := value["positioning"].(string); !ok || strings.TrimSpace(positioning) == "" {
+			if thesis, ok := value["core_thesis"].(string); ok && strings.TrimSpace(thesis) != "" {
+				value["positioning"] = thesis
+			}
+		}
+		delete(value, "core_thesis")
+		delete(value, "narrative_arc")
+		if _, ok := value["constraints"].(map[string]any); !ok {
+			value["constraints"] = map[string]any{
+				"must_include": []any{}, "must_avoid": []any{}, "style_limits": []any{}, "content_limits": []any{},
+			}
+		}
+		if sections, ok := value["sections"].([]any); ok {
+			for _, rawSection := range sections {
+				section, ok := rawSection.(map[string]any)
+				if !ok {
+					continue
+				}
+				delete(section, "number")
+				if purpose, ok := section["purpose"].(string); !ok || strings.TrimSpace(purpose) == "" {
+					title, _ := section["title"].(string)
+					section["purpose"] = firstMigrationText(title, "组织本章节内容")
+				}
+				if subsections, ok := section["subsections"].([]any); ok {
+					for _, rawSubsection := range subsections {
+						if subsection, ok := rawSubsection.(map[string]any); ok {
+							delete(subsection, "number")
+						}
+					}
+				}
+			}
+		}
 	case "design":
-		value["canvas"] = map[string]any{"width": 1600, "height": 900, "ratio": "16:9"}
+		value["version"] = spec.SchemaVersion
+		value["project"] = project.ID
+		delete(value, "schema_version")
+		delete(value, "project_id")
+		value["theme"] = firstMigrationText(stringValueFromJSON(value["theme"]), "swiss-modern")
+		value["direction"] = firstMigrationText(stringValueFromJSON(value["direction"]), firstMigrationText(stringValueFromJSON(value["signature"]), "清晰、克制、结构化的通用商务演示"))
+		if density := stringValueFromJSON(value["density"]); density != "" {
+			value["density"] = density
+		} else if layoutSystem, ok := value["layout_system"].(map[string]any); ok {
+			value["density"] = firstMigrationText(stringValueFromJSON(layoutSystem["density"]), "medium")
+		} else {
+			value["density"] = "medium"
+		}
+		if _, ok := value["chrome"].([]any); !ok {
+			value["chrome"] = []any{
+				map[string]any{"type": "page_number", "placement": "bottom-right", "style": "tiny muted mono counter"},
+				map[string]any{"type": "section_marker", "placement": "top-left", "style": "compact section label"},
+			}
+		}
+		for _, removed := range []string{"canvas", "palette", "typography", "spacing", "radius", "shadows", "layout_system", "signature", "motion"} {
+			delete(value, removed)
+		}
 	case "slide_spec":
+		value["schema_version"] = spec.SchemaVersion
+		value["project_id"] = project.ID
 		value["slide_id"] = slideID
 		value["source_outline_revision"] = maxMigrationInt(project.OutlineRevision, 1)
 	default:
@@ -430,6 +487,20 @@ func int64ValueFromJSON(value any, fallback int64) int64 {
 		return int64(number)
 	}
 	return fallback
+}
+
+func stringValueFromJSON(value any) string {
+	text, _ := value.(string)
+	return strings.TrimSpace(text)
+}
+
+func firstMigrationText(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func maxMigrationInt(a, b int) int {

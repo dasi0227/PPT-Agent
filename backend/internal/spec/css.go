@@ -1,65 +1,42 @@
 package spec
 
 import (
-	"fmt"
+	"io/fs"
 	"strings"
+
+	"github.com/dasi0227/PPT-Agent/backend/seed"
 )
 
 // DesignTokensCSS materializes the model-visible Design resource into the
 // project-local CSS contract consumed by slide HTML. The CSS is derived
 // runtime state, not an additional model-visible resource.
 func DesignTokensCSS(design Design) []byte {
-	palette := append([]string{}, design.Palette...)
-	for len(palette) < 5 {
-		palette = append(palette, palette[len(palette)-1])
+	theme := strings.TrimSpace(design.Theme)
+	if theme == "" {
+		theme = "swiss-modern"
 	}
-	unit := design.Spacing.Unit
-	if unit < 2 {
-		unit = 8
+	raw, err := fs.ReadFile(seed.FS(), "assets/themes/"+theme+"/tokens.css")
+	if err == nil {
+		return raw
 	}
-	font := strings.TrimSpace(design.Typography.Body.Family)
-	if font == "" {
-		font = "Inter, \"Noto Sans SC\", system-ui, sans-serif"
+	fallback, fallbackErr := fs.ReadFile(seed.FS(), "assets/themes/swiss-modern/tokens.css")
+	if fallbackErr == nil {
+		return fallback
 	}
-	return []byte(fmt.Sprintf(`/* Generated from design.json. Runtime-managed; do not edit directly. */
-:root {
-  --color-bg: %s;
-  --color-fg: %s;
-  --color-primary: %s;
-  --color-accent: %s;
-  --color-muted: %s;
-  --font-sans: %s;
-  --font-serif: "Noto Serif SC", Georgia, serif;
-  --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
-  --text-title: 72px;
-  --text-h1: 52px;
-  --text-body: 28px;
-  --text-caption: 20px;
-  --space-1: %dpx;
-  --space-2: %dpx;
-  --space-3: %dpx;
-  --space-4: %dpx;
-  --space-6: %dpx;
-  --space-8: %dpx;
-  --radius-sm: %dpx;
-  --radius-md: %dpx;
-  --radius-lg: %dpx;
-  --shadow-card: %s;
-  --shadow-pop: %s;
-  --stage-w: 1600;
-  --stage-h: 900;
+	return []byte(`:root {
+  --color-bg: #ffffff;
+  --color-fg: #111418;
+  --color-primary: #d0021b;
+  --color-accent: #1c1c1c;
+  --color-muted: #f2f3f5;
+  --font-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --text-title: 84px;
+  --text-body: 32px;
+  --space-4: 16px;
+  --radius-md: 4px;
+  --shadow-card: none;
+  --stage-w: 1920;
+  --stage-h: 1080;
 }
-`,
-		palette[0], palette[1], palette[2], palette[3], palette[4], font,
-		maxCSSInt(unit/2, 2), unit, unit*2, unit*3, unit*4, unit*6,
-		maxCSSInt(design.Radius.Card/2, 0), design.Radius.Card, design.Radius.Card*2,
-		design.Shadows.Card, design.Shadows.Card,
-	))
-}
-
-func maxCSSInt(left, right int) int {
-	if left > right {
-		return left
-	}
-	return right
+`)
 }

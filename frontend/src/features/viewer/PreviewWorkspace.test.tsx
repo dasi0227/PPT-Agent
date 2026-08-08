@@ -15,9 +15,9 @@ const slideSpec = (id: string, title = '封面标题') => ({
 });
 const setSpecs = () => useSpecStore.setState({
   byProjectId: { p1: {
-    outline: { schema_version: '3.0', revision: 1, project_id: 'p1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', core_thesis: '', narrative_arc: '', sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+    outline: { version: '3.0', revision: 1, project: 'pro_aaaaaa', title: 'Deck', goal: '', audience: '', language: 'zh-CN', positioning: '', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] }, sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
     slide_specs: { s1: slideSpec('s1'), s2: slideSpec('s2', '第二页') },
-    design: { schema_version: '3.0', revision: 1, project_id: 'p1', canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {}, created_at: 1, updated_at: 1 },
+    design: { version: '3.0', revision: 1, project: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
     materialization: {
       s1: { state: 'not_materialized', revisions: { slide_html: 0, source_outline: 0, source_spec: 0, source_design: 0 } },
       s2: { state: 'not_materialized', revisions: { slide_html: 0, source_outline: 0, source_spec: 0, source_design: 0 } },

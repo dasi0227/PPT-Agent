@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -33,7 +31,7 @@ type CreateProjectParams struct {
 }
 
 func NewProjectService(s store.Store, workRoot WorkRoot) *ProjectService {
-	return &ProjectService{store: s, workRoot: string(workRoot), clock: func() int64 { return time.Now().Unix() }, newID: uuid.NewString}
+	return &ProjectService{store: s, workRoot: string(workRoot), clock: func() int64 { return time.Now().Unix() }, newID: func() string { return model.MustShortID("pro") }}
 }
 
 func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectParams) (model.Project, error) {
@@ -144,8 +142,11 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	outline := spec.Outline{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID, Title: proj.Title,
 		Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
-		Language: firstNonEmpty(p.Language, "zh-CN"), CoreThesis: proj.Title,
-		NarrativeArc: "背景 → 核心内容 → 结论", Sections: []spec.Section{},
+		Language: firstNonEmpty(p.Language, "zh-CN"), Positioning: proj.Title,
+		Constraints: spec.Constraints{
+			MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{},
+		},
+		Sections:   []spec.Section{},
 		SlideOrder: []string{}, CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt,
 	}
 	if err := sb.Write(filepath.Join(projectRel, "outline.json"), mustJSON(outline)); err != nil {

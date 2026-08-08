@@ -262,8 +262,8 @@ func normalizeModel(pack contextengine.ContextPack, tx *RunSession, ref Artifact
 		if err := spec.ValidateDesign(next); err != nil {
 			return nil, 0, err
 		}
-		if next.Typography.Utility.Family == "" || next.Spacing.Unit <= 0 ||
-			next.Shadows.Card == "" || next.LayoutSystem.Density == "" || next.Motion.Policy == "" {
+		if strings.TrimSpace(next.Theme) == "" || strings.TrimSpace(next.Direction) == "" ||
+			strings.TrimSpace(next.Density) == "" || next.Chrome == nil {
 			return nil, 0, fmt.Errorf("%w: incomplete design spec", spec.ErrInvalid)
 		}
 		raw, _ = json.MarshalIndent(next, "", "  ")
@@ -277,18 +277,17 @@ func validateOutlineStructure(deck spec.Outline) error {
 	if deck.SchemaVersion != spec.SchemaVersion || deck.Revision < 1 ||
 		deck.ProjectID == "" || strings.TrimSpace(deck.Title) == "" ||
 		strings.TrimSpace(deck.Goal) == "" || strings.TrimSpace(deck.Audience) == "" ||
-		strings.TrimSpace(deck.Language) == "" || strings.TrimSpace(deck.CoreThesis) == "" ||
-		strings.TrimSpace(deck.NarrativeArc) == "" || deck.Sections == nil || deck.SlideOrder == nil {
+		strings.TrimSpace(deck.Language) == "" || deck.Sections == nil || deck.SlideOrder == nil {
 		return fmt.Errorf("%w: invalid deck header", spec.ErrInvalid)
 	}
 	sections, subsections := map[string]bool{}, map[string]bool{}
 	for _, section := range deck.Sections {
-		if section.ID == "" || section.Number == "" || section.Title == "" || sections[section.ID] {
+		if section.ID == "" || section.Title == "" || section.Purpose == "" || sections[section.ID] {
 			return fmt.Errorf("%w: invalid or duplicate section", spec.ErrInvalid)
 		}
 		sections[section.ID] = true
 		for _, subsection := range section.Subsections {
-			if subsection.ID == "" || subsection.Number == "" || subsection.Title == "" || subsections[subsection.ID] {
+			if subsection.ID == "" || subsection.Title == "" || subsections[subsection.ID] {
 				return fmt.Errorf("%w: invalid or duplicate subsection", spec.ErrInvalid)
 			}
 			subsections[subsection.ID] = true
@@ -550,7 +549,7 @@ func controlledModelPath(path string) bool {
 		first = parts[1]
 	}
 	switch first {
-	case "schema_version", "revision", "project_id", "slide_id", "created_at", "updated_at":
+	case "schema_version", "version", "revision", "project_id", "project", "slide_id", "created_at", "updated_at":
 		return true
 	default:
 		return false

@@ -2,27 +2,22 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ppt-agent.local/schemas/design.schema.json",
   "title": "PPT Design",
-  "description": "Deck-wide visual language, canvas, typography, spacing, layout rhythm, signature style, and motion policy.",
+  "description": "Deck-wide theme selection, visual direction, density, and shared chrome.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version",
+    "version",
     "revision",
-    "project_id",
-    "canvas",
-    "palette",
-    "typography",
-    "spacing",
-    "radius",
-    "shadows",
-    "layout_system",
-    "signature",
-    "motion",
+    "project",
+    "theme",
+    "direction",
+    "density",
+    "chrome",
     "created_at",
     "updated_at"
   ],
   "properties": {
-    "schema_version": {
+    "version": {
       "const": "3.0",
       "x-runtime-managed": true
     },
@@ -31,124 +26,56 @@
       "minimum": 1,
       "x-runtime-managed": true
     },
-    "project_id": {
+    "project": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
       "x-runtime-managed": true
     },
-    "canvas": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["width", "height", "ratio"],
-      "properties": {
-        "width": {
-          "const": 1600
-        },
-        "height": {
-          "const": 900
-        },
-        "ratio": {
-          "const": "16:9"
-        }
-      }
+    "theme": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,80}$",
+      "minLength": 1,
+      "maxLength": 80
     },
-    "palette": {
-      "type": "array",
-      "minItems": 2,
-      "maxItems": 12,
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "pattern": "^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
-      }
-    },
-    "typography": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["display", "body", "utility"],
-      "properties": {
-        "display": {
-          "$ref": "#/$defs/font"
-        },
-        "body": {
-          "$ref": "#/$defs/font"
-        },
-        "utility": {
-          "$ref": "#/$defs/font"
-        }
-      }
-    },
-    "spacing": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["unit"],
-      "properties": {
-        "unit": {
-          "type": "integer",
-          "minimum": 2,
-          "maximum": 24
-        }
-      }
-    },
-    "radius": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["card"],
-      "properties": {
-        "card": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 64
-        }
-      }
-    },
-    "shadows": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["card"],
-      "properties": {
-        "card": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 240
-        }
-      }
-    },
-    "layout_system": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["grid", "rhythm", "density"],
-      "properties": {
-        "grid": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 120
-        },
-        "rhythm": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 120
-        },
-        "density": {
-          "type": "string",
-          "enum": ["sparse", "medium", "dense"]
-        }
-      }
-    },
-    "signature": {
+    "direction": {
       "type": "string",
       "minLength": 1,
       "maxLength": 600
     },
-    "motion": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["policy"],
-      "properties": {
-        "policy": {
-          "type": "string",
-          "enum": ["none", "restrained", "expressive"]
+    "density": {
+      "type": "string",
+      "enum": ["sparse", "medium", "dense"]
+    },
+    "chrome": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "placement", "style"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["page_number", "section_marker", "key_message", "deck_title"]
+          },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "top-left",
+              "top-center",
+              "top-right",
+              "bottom-left",
+              "bottom-center",
+              "bottom-right",
+              "left-edge",
+              "right-edge"
+            ]
+          },
+          "style": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
         }
       }
     },
@@ -163,64 +90,26 @@
       "x-runtime-managed": true
     }
   },
-  "$defs": {
-    "font": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["family", "weight"],
-      "properties": {
-        "family": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200
-        },
-        "weight": {
-          "type": "integer",
-          "minimum": 100,
-          "maximum": 900,
-          "multipleOf": 100
-        }
-      }
-    }
-  },
   "x-agent-example": {
-    "canvas": {
-      "width": 1600,
-      "height": 900,
-      "ratio": "16:9"
-    },
-    "palette": ["#111827", "#FFFFFF", "#2563EB"],
-    "typography": {
-      "display": {
-        "family": "Inter, sans-serif",
-        "weight": 700
+    "theme": "tokyo-night",
+    "direction": "偏云原生控制台感，而不是赛博朋克海报感",
+    "density": "medium",
+    "chrome": [
+      {
+        "type": "page_number",
+        "placement": "bottom-right",
+        "style": "tiny muted mono counter"
       },
-      "body": {
-        "family": "Inter, sans-serif",
-        "weight": 400
+      {
+        "type": "section_marker",
+        "placement": "left-edge",
+        "style": "vertical thin-line label with section keyword"
       },
-      "utility": {
-        "family": "Inter, sans-serif",
-        "weight": 500
+      {
+        "type": "key_message",
+        "placement": "bottom-center",
+        "style": "low-contrast single-line takeaway"
       }
-    },
-    "spacing": {
-      "unit": 8
-    },
-    "radius": {
-      "card": 16
-    },
-    "shadows": {
-      "card": "0 12px 36px rgba(15,23,42,.12)"
-    },
-    "layout_system": {
-      "grid": "12-column",
-      "rhythm": "generous",
-      "density": "medium"
-    },
-    "signature": "克制的几何强调元素",
-    "motion": {
-      "policy": "restrained"
-    }
+    ]
   }
 }

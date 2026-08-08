@@ -205,21 +205,20 @@ func newCommitFixture(t *testing.T, slideCount int) commitFixture {
 	outline := spec.Outline{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: project.ID,
 		Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN",
-		CoreThesis: "Thesis", NarrativeArc: "Arc",
-		Sections:   []spec.Section{{ID: "section-1", Number: "1", Title: "Section", Subsections: []spec.Subsection{}}},
-		SlideOrder: []string{}, CreatedAt: 1, UpdatedAt: 1,
+		Positioning: "Thesis",
+		Constraints: spec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
+		Sections:    []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Test section", Subsections: []spec.Subsection{}}},
+		SlideOrder:  []string{}, CreatedAt: 1, UpdatedAt: 1,
 	}
 	design := spec.Design{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: project.ID,
-		Canvas:  spec.CanvasSpec{Width: 1600, Height: 900, Ratio: "16:9"},
-		Palette: []string{"#111111", "#FFFFFF"}, Typography: spec.TypographySpec{
-			Display: spec.FontSpec{Family: "Arial"}, Body: spec.FontSpec{Family: "Arial"},
-			Utility: spec.FontSpec{Family: "Arial"},
+		Theme:     "swiss-modern",
+		Direction: "test",
+		Density:   "medium",
+		Chrome: []spec.ChromeItem{
+			{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono counter"},
 		},
-		Spacing: spec.SpacingSpec{Unit: 8}, Radius: spec.RadiusSpec{Card: 8},
-		Shadows:      spec.ShadowSpec{Card: "none"},
-		LayoutSystem: spec.LayoutSystem{Grid: "12-col", Rhythm: "regular", Density: "medium"},
-		Signature:    "test", Motion: spec.MotionSpec{Policy: "none"}, CreatedAt: 1, UpdatedAt: 1,
+		CreatedAt: 1, UpdatedAt: 1,
 	}
 	specs := map[string]spec.SlideSpec{}
 	metas := make([]model.Slide, 0, slideCount)

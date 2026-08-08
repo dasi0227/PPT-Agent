@@ -24,12 +24,12 @@ describe('DeckNavigator', () => {
       loadingProjects: false
     });
     useSpecStore.setState({ byProjectId: { p1: {
-      outline: { schema_version: '3.0', revision: 1, project_id: 'p1', title: '演示项目', goal: '', audience: '', language: 'zh-CN', core_thesis: '核心命题', narrative_arc: '', sections: [{ id: 'sec', number: '01', title: '市场', subsections: [{ id: 'sub', number: '1.1', title: '趋势' }] }], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+      outline: { version: '3.0', revision: 1, project: 'pro_aaaaaa', title: '演示项目', goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] }, sections: [{ id: 'sec', title: '市场', purpose: '说明市场趋势', subsections: [{ id: 'sub', title: '趋势' }] }], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
       slide_specs: {
         s1: { schema_version: '3.0', revision: 1, project_id: 'p1', slide_id: 's1', source_outline_revision: 1, section_id: 'sec', role: 'cover', title: '市场分析', key_message: '市场在扩大', content: { summary: '摘要', points: [] }, visual_intent: { archetype: 'cover', description: '封面', asset_queries: [] }, speaker_notes: '', created_at: 1, updated_at: 1 },
         s2: { schema_version: '3.0', revision: 2, project_id: 'p1', slide_id: 's2', source_outline_revision: 1, section_id: 'sec', subsection_id: 'sub', role: 'evidence', title: '增长趋势', key_message: '增长持续', content: { summary: '摘要', points: [] }, visual_intent: { archetype: 'chart', description: '趋势图', asset_queries: [] }, speaker_notes: '', created_at: 1, updated_at: 2 },
       },
-      design: { schema_version: '3.0', revision: 1, project_id: 'p1', canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {}, created_at: 1, updated_at: 1 },
+      design: { version: '3.0', revision: 1, project: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
       materialization: {
         s1: { state: 'fresh', revisions: { slide_html: 1, source_outline: 1, source_spec: 1, source_design: 1 } },
         s2: { state: 'spec_stale', revisions: { slide_html: 1, source_outline: 1, source_spec: 1, source_design: 1 } },
@@ -50,19 +50,19 @@ describe('DeckNavigator', () => {
     }));
     useSpecStore.setState({ byProjectId: { p1: {
       outline: {
-        schema_version: '3.0', revision: 1, project_id: 'p1', title: '演示项目',
-        goal: '', audience: '', language: 'zh-CN', core_thesis: '核心命题', narrative_arc: '',
+        version: '3.0', revision: 1, project: 'pro_aaaaaa', title: '演示项目',
+        goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] },
         sections: [
           {
-            id: 'sec1', number: '01', title: '第一章',
+            id: 'sec1', title: '第一章', purpose: '第一章定位',
             subsections: [
-              { id: 'sub11', number: '1.1', title: '第一节' },
-              { id: 'sub12', number: '1.2', title: '第二节' },
+              { id: 'sub11', title: '第一节' },
+              { id: 'sub12', title: '第二节' },
             ],
           },
           {
-            id: 'sec2', number: '02', title: '第二章',
-            subsections: [{ id: 'sub21', number: '2.1', title: '第一节' }],
+            id: 'sec2', title: '第二章', purpose: '第二章定位',
+            subsections: [{ id: 'sub21', title: '第一节' }],
           },
         ],
         slide_order: ['s1', 's2', 's3'], created_at: 1, updated_at: 1,
@@ -72,7 +72,7 @@ describe('DeckNavigator', () => {
         s2: { schema_version: '3.0', revision: 1, project_id: 'p1', slide_id: 's2', source_outline_revision: 1, section_id: 'sec1', subsection_id: 'sub12', role: 'context', title: '章节一第二项', key_message: 'B', content: { summary: 'B', points: [] }, visual_intent: { archetype: 'content', description: 'B', asset_queries: [] }, speaker_notes: '', created_at: 1, updated_at: 1 },
         s3: { schema_version: '3.0', revision: 1, project_id: 'p1', slide_id: 's3', source_outline_revision: 1, section_id: 'sec2', subsection_id: 'sub21', role: 'context', title: '章节二第一项', key_message: 'C', content: { summary: 'C', points: [] }, visual_intent: { archetype: 'content', description: 'C', asset_queries: [] }, speaker_notes: '', created_at: 1, updated_at: 1 },
       },
-      design: { schema_version: '3.0', revision: 1, project_id: 'p1', canvas: {}, palette: [], typography: {}, spacing: {}, radius: {}, shadows: {}, layout_system: {}, signature: '', motion: {}, created_at: 1, updated_at: 1 },
+      design: { version: '3.0', revision: 1, project: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
       materialization: {},
     } } });
   }

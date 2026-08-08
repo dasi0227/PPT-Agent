@@ -26,12 +26,12 @@ func ValidateOutline(d Outline, slides map[string]SlideSpec) error {
 	}
 	sections, subsectionOwners := map[string]bool{}, map[string]string{}
 	for _, section := range d.Sections {
-		if section.ID == "" || section.Number == "" || section.Title == "" || sections[section.ID] {
+		if section.ID == "" || section.Title == "" || section.Purpose == "" || sections[section.ID] {
 			return fmt.Errorf("%w: invalid or duplicate section", ErrInvalid)
 		}
 		sections[section.ID] = true
 		for _, subsection := range section.Subsections {
-			if subsection.ID == "" || subsection.Number == "" || subsection.Title == "" || subsectionOwners[subsection.ID] != "" {
+			if subsection.ID == "" || subsection.Title == "" || subsectionOwners[subsection.ID] != "" {
 				return fmt.Errorf("%w: invalid or duplicate subsection", ErrInvalid)
 			}
 			subsectionOwners[subsection.ID] = section.ID

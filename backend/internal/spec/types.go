@@ -3,32 +3,38 @@ package spec
 const SchemaVersion = "3.0"
 
 type Outline struct {
-	SchemaVersion string    `json:"schema_version"`
-	Revision      int       `json:"revision"`
-	ProjectID     string    `json:"project_id"`
-	Title         string    `json:"title"`
-	Goal          string    `json:"goal"`
-	Audience      string    `json:"audience"`
-	Language      string    `json:"language"`
-	CoreThesis    string    `json:"core_thesis"`
-	NarrativeArc  string    `json:"narrative_arc"`
-	Sections      []Section `json:"sections"`
-	SlideOrder    []string  `json:"slide_order"`
-	CreatedAt     int64     `json:"created_at"`
-	UpdatedAt     int64     `json:"updated_at"`
+	SchemaVersion string      `json:"version"`
+	Revision      int         `json:"revision"`
+	ProjectID     string      `json:"project"`
+	Title         string      `json:"title"`
+	Goal          string      `json:"goal"`
+	Audience      string      `json:"audience"`
+	Language      string      `json:"language"`
+	Positioning   string      `json:"positioning,omitempty"`
+	Constraints   Constraints `json:"constraints"`
+	Sections      []Section   `json:"sections"`
+	SlideOrder    []string    `json:"slide_order"`
+	CreatedAt     int64       `json:"created_at"`
+	UpdatedAt     int64       `json:"updated_at"`
+}
+
+type Constraints struct {
+	MustInclude   []string `json:"must_include"`
+	MustAvoid     []string `json:"must_avoid"`
+	StyleLimits   []string `json:"style_limits"`
+	ContentLimits []string `json:"content_limits"`
 }
 
 type Section struct {
 	ID          string       `json:"id"`
-	Number      string       `json:"number"`
 	Title       string       `json:"title"`
+	Purpose     string       `json:"purpose"`
 	Subsections []Subsection `json:"subsections"`
 }
 
 type Subsection struct {
-	ID     string `json:"id"`
-	Number string `json:"number"`
-	Title  string `json:"title"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
 }
 
 type SlideSpec struct {
@@ -61,59 +67,21 @@ type VisualIntent struct {
 }
 
 type Design struct {
-	SchemaVersion string         `json:"schema_version"`
-	Revision      int            `json:"revision"`
-	ProjectID     string         `json:"project_id"`
-	Canvas        CanvasSpec     `json:"canvas"`
-	Palette       []string       `json:"palette"`
-	Typography    TypographySpec `json:"typography"`
-	Spacing       SpacingSpec    `json:"spacing"`
-	Radius        RadiusSpec     `json:"radius"`
-	Shadows       ShadowSpec     `json:"shadows"`
-	LayoutSystem  LayoutSystem   `json:"layout_system"`
-	Signature     string         `json:"signature"`
-	Motion        MotionSpec     `json:"motion"`
-	CreatedAt     int64          `json:"created_at"`
-	UpdatedAt     int64          `json:"updated_at"`
+	SchemaVersion string       `json:"version"`
+	Revision      int          `json:"revision"`
+	ProjectID     string       `json:"project"`
+	Theme         string       `json:"theme"`
+	Direction     string       `json:"direction"`
+	Density       string       `json:"density"`
+	Chrome        []ChromeItem `json:"chrome"`
+	CreatedAt     int64        `json:"created_at"`
+	UpdatedAt     int64        `json:"updated_at"`
 }
 
-type CanvasSpec struct {
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-	Ratio  string `json:"ratio"`
-}
-
-type FontSpec struct {
-	Family string `json:"family"`
-	Weight int    `json:"weight,omitempty"`
-}
-
-type TypographySpec struct {
-	Display FontSpec `json:"display"`
-	Body    FontSpec `json:"body"`
-	Utility FontSpec `json:"utility"`
-}
-
-type SpacingSpec struct {
-	Unit int `json:"unit"`
-}
-
-type RadiusSpec struct {
-	Card int `json:"card"`
-}
-
-type ShadowSpec struct {
-	Card string `json:"card"`
-}
-
-type LayoutSystem struct {
-	Grid    string `json:"grid"`
-	Rhythm  string `json:"rhythm"`
-	Density string `json:"density"`
-}
-
-type MotionSpec struct {
-	Policy string `json:"policy"`
+type ChromeItem struct {
+	Type      string `json:"type"`
+	Placement string `json:"placement"`
+	Style     string `json:"style"`
 }
 
 type ProjectView struct {

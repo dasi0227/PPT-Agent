@@ -146,7 +146,7 @@ func AgentContract(name string) (Contract, error) {
 		managed, _ := property["x-runtime-managed"].(bool)
 		if !managed {
 			fields = append(fields, key)
-			fieldSchema[key] = cloneValue(value)
+			fieldSchema[key] = stripRuntimeManaged(value)
 		}
 	}
 	sort.Strings(fields)
@@ -199,6 +199,56 @@ func cloneValue(value any) any {
 	var out any
 	_ = json.Unmarshal(raw, &out)
 	return out
+}
+
+func stripRuntimeManaged(value any) any {
+	cloned := cloneValue(value)
+	return stripRuntimeManagedInPlace(cloned)
+}
+
+func stripRuntimeManagedInPlace(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		properties, _ := v["properties"].(map[string]any)
+		if len(properties) > 0 {
+			removed := map[string]bool{}
+			for key, raw := range properties {
+				property, _ := raw.(map[string]any)
+				if managed, _ := property["x-runtime-managed"].(bool); managed {
+					delete(properties, key)
+					removed[key] = true
+					continue
+				}
+				properties[key] = stripRuntimeManagedInPlace(raw)
+			}
+			if len(removed) > 0 {
+				required := stringList(v["required"])
+				filtered := make([]any, 0, len(required))
+				for _, field := range required {
+					if !removed[field] {
+						filtered = append(filtered, field)
+					}
+				}
+				v["required"] = filtered
+			}
+		}
+		if items, ok := v["items"]; ok {
+			v["items"] = stripRuntimeManagedInPlace(items)
+		}
+		if defs, ok := v["$defs"].(map[string]any); ok {
+			for key, raw := range defs {
+				defs[key] = stripRuntimeManagedInPlace(raw)
+			}
+		}
+		return v
+	case []any:
+		for i, item := range v {
+			v[i] = stripRuntimeManagedInPlace(item)
+		}
+		return v
+	default:
+		return value
+	}
 }
 
 func filterMap(value map[string]any, allowed []string) map[string]any {
