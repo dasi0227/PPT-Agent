@@ -18,7 +18,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/seed"
 )
 
-const currentProjectLayoutVersion = 4
+const currentProjectLayoutVersion = 5
 
 type layoutProjectRow struct {
 	ID            string `gorm:"column:id"`
@@ -332,11 +332,18 @@ func migrateResourceJSON(raw []byte, kind string, project layoutProjectRow, revi
 		}
 		delete(value, "core_thesis")
 		delete(value, "narrative_arc")
-		if _, ok := value["constraints"].(map[string]any); !ok {
-			value["constraints"] = map[string]any{
-				"must_include": []any{}, "must_avoid": []any{}, "style_limits": []any{}, "content_limits": []any{},
-			}
+		constraints, _ := value["constraints"].(map[string]any)
+		if _, ok := value["requirements"].([]any); !ok {
+			value["requirements"] = migrationStringList(
+				constraints["must_include"],
+				constraints["style_limits"],
+				constraints["content_limits"],
+			)
 		}
+		if _, ok := value["prohibitions"].([]any); !ok {
+			value["prohibitions"] = migrationStringList(constraints["must_avoid"])
+		}
+		delete(value, "constraints")
 		if sections, ok := value["sections"].([]any); ok {
 			for _, rawSection := range sections {
 				section, ok := rawSection.(map[string]any)
@@ -590,6 +597,22 @@ func int64ValueFromJSON(value any, fallback int64) int64 {
 func stringValueFromJSON(value any) string {
 	text, _ := value.(string)
 	return strings.TrimSpace(text)
+}
+
+func migrationStringList(values ...any) []any {
+	result := []any{}
+	seen := map[string]bool{}
+	for _, value := range values {
+		items, _ := value.([]any)
+		for _, item := range items {
+			text := stringValueFromJSON(item)
+			if text != "" && !seen[text] {
+				result = append(result, text)
+				seen[text] = true
+			}
+		}
+	}
+	return result
 }
 
 func firstMigrationText(values ...string) string {

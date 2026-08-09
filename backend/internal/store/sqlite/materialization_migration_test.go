@@ -44,9 +44,9 @@ func TestMaterializationMigrationWritesFileAndDropsBackup(t *testing.T) {
 	writeMaterializationFixture(t, workDir, "outline.json", spec.Outline{
 		SchemaVersion: spec.SchemaVersion, Revision: 2, ProjectID: "p1",
 		Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN",
-		Constraints: spec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
-		Sections:    []spec.Section{{ID: "sec", Title: "Main", Purpose: "Main section", Subsections: []spec.Subsection{}}},
-		SlideOrder:  []string{"s1"}, CreatedAt: 1, UpdatedAt: 2,
+		Requirements: []string{}, Prohibitions: []string{},
+		Sections:   []spec.Section{{ID: "sec", Title: "Main", Purpose: "Main section", Subsections: []spec.Subsection{}}},
+		SlideOrder: []string{"s1"}, CreatedAt: 1, UpdatedAt: 2,
 	})
 	writeMaterializationFixture(t, workDir, "design.json", spec.Design{
 		SchemaVersion: spec.SchemaVersion, Revision: 2, ProjectID: "p1",

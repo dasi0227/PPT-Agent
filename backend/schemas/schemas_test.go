@@ -82,6 +82,22 @@ func TestAuthoringSchemasUseProjectID(t *testing.T) {
 	}
 }
 
+func TestOutlineUsesTopLevelRules(t *testing.T) {
+	contract, err := RuntimeContract(OutlineName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	properties := contract["properties"].(map[string]any)
+	for _, field := range []string{"requirements", "prohibitions"} {
+		if _, exists := properties[field]; !exists {
+			t.Errorf("outline runtime contract does not contain %q", field)
+		}
+	}
+	if _, exists := properties["constraints"]; exists {
+		t.Error("outline runtime contract still contains obsolete constraints field")
+	}
+}
+
 func TestSchemasRejectUnknownFields(t *testing.T) {
 	raw, err := Raw(OutlineName)
 	if err != nil {

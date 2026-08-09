@@ -135,9 +135,9 @@ func TestProjectLayoutV2NormalizesSlideSpecInPlace(t *testing.T) {
 	write("outline.json", spec.Outline{
 		SchemaVersion: spec.SchemaVersion, Revision: 2, ProjectID: "p1",
 		Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN",
-		Constraints: spec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
-		Sections:    []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Main", Subsections: []spec.Subsection{}}},
-		SlideOrder:  []string{"slide-01"}, CreatedAt: 1, UpdatedAt: 2,
+		Requirements: []string{}, Prohibitions: []string{},
+		Sections:   []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Main", Subsections: []spec.Subsection{}}},
+		SlideOrder: []string{"slide-01"}, CreatedAt: 1, UpdatedAt: 2,
 	})
 	write("design.json", spec.Design{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "p1",
@@ -163,9 +163,9 @@ func TestProjectLayoutV2NormalizesSlideSpecInPlace(t *testing.T) {
 	}
 }
 
-func TestProjectLayoutV3RenamesProjectFieldInPlace(t *testing.T) {
+func TestProjectLayoutV4FlattensOutlineConstraintsInPlace(t *testing.T) {
 	root := t.TempDir()
-	db, cleanup, err := Open(&config.Config{DBPath: filepath.Join(root, "v3.db")}, zap.NewNop())
+	db, cleanup, err := Open(&config.Config{DBPath: filepath.Join(root, "v4.db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestProjectLayoutV3RenamesProjectFieldInPlace(t *testing.T) {
 	if err := db.Exec(`
 		INSERT INTO projects(id,title,work_dir,theme,status,layout_version,created_at,updated_at)
 		VALUES(?,?,?,?,?,?,?,?)
-	`, "p1", "Deck", workDir, "default", "draft", 3, 1, 2).Error; err != nil {
+	`, "p1", "Deck", workDir, "default", "draft", 4, 1, 2).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO slides(id,project_id) VALUES(?,?)`, "slide-01", "p1").Error; err != nil {
@@ -188,7 +188,7 @@ func TestProjectLayoutV3RenamesProjectFieldInPlace(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		raw, _ := json.Marshal(legacyProjectField(t, value))
+		raw, _ := json.Marshal(legacyV4Resource(t, value))
 		if err := os.WriteFile(path, raw, 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -196,9 +196,10 @@ func TestProjectLayoutV3RenamesProjectFieldInPlace(t *testing.T) {
 	outline := spec.Outline{
 		SchemaVersion: spec.SchemaVersion, Revision: 2, ProjectID: "p1",
 		Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN",
-		Constraints: spec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
-		Sections:    []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Main", Subsections: []spec.Subsection{}}},
-		SlideOrder:  []string{"slide-01"}, CreatedAt: 1, UpdatedAt: 2,
+		Requirements: []string{"Include trend", "Formal tone", "At most 12 pages"},
+		Prohibitions: []string{"Fabricated data"},
+		Sections:     []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Main", Subsections: []spec.Subsection{}}},
+		SlideOrder:   []string{"slide-01"}, CreatedAt: 1, UpdatedAt: 2,
 	}
 	design := spec.Design{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "p1",
@@ -284,6 +285,18 @@ func TestProjectLayoutV3RenamesProjectFieldInPlace(t *testing.T) {
 	if want := spec.SourceHash(outlineRaw, specRaw, designRaw); migratedMaterialization.Source.Hash != want {
 		t.Fatalf("materialization source hash=%q want %q", migratedMaterialization.Source.Hash, want)
 	}
+	var migratedOutline spec.Outline
+	if err := json.Unmarshal(outlineRaw, &migratedOutline); err != nil {
+		t.Fatal(err)
+	}
+	if len(migratedOutline.Requirements) != 3 ||
+		migratedOutline.Requirements[0] != "Include trend" ||
+		migratedOutline.Requirements[1] != "Formal tone" ||
+		migratedOutline.Requirements[2] != "At most 12 pages" ||
+		len(migratedOutline.Prohibitions) != 1 ||
+		migratedOutline.Prohibitions[0] != "Fabricated data" {
+		t.Fatalf("migrated outline rules=%+v", migratedOutline)
+	}
 }
 
 func TestProjectLayoutMigrationFailureLeavesLegacyLayoutUntouched(t *testing.T) {
@@ -317,7 +330,7 @@ func TestProjectLayoutMigrationFailureLeavesLegacyLayoutUntouched(t *testing.T) 
 	}
 }
 
-func legacyProjectField(t *testing.T, value any) map[string]any {
+func legacyV4Resource(t *testing.T, value any) map[string]any {
 	t.Helper()
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -327,8 +340,16 @@ func legacyProjectField(t *testing.T, value any) map[string]any {
 	if err := json.Unmarshal(raw, &result); err != nil {
 		t.Fatal(err)
 	}
-	result["project"] = result["project_id"]
-	delete(result, "project_id")
+	if _, isOutline := result["sections"]; isOutline {
+		result["constraints"] = map[string]any{
+			"must_include":   []any{"Include trend"},
+			"must_avoid":     []any{"Fabricated data"},
+			"style_limits":   []any{"Formal tone"},
+			"content_limits": []any{"At most 12 pages"},
+		}
+		delete(result, "requirements")
+		delete(result, "prohibitions")
+	}
 	return result
 }
 

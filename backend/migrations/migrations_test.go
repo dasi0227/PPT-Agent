@@ -78,8 +78,8 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 	if err := db.Exec(`
 		INSERT INTO projects(id,title,work_dir,theme,status,layout_version,created_at,updated_at)
 		VALUES(?,?,?,?,?,?,?,?)
-	`, "layout-v4", "Deck", "/tmp/layout-v4", "default", "draft", 4, 1, 1).Error; err != nil {
-		t.Fatalf("layout version 4 is not accepted: %v", err)
+	`, "layout-v5", "Deck", "/tmp/layout-v5", "default", "draft", 5, 1, 1).Error; err != nil {
+		t.Fatalf("layout version 5 is not accepted: %v", err)
 	}
 }
 

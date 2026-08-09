@@ -35,9 +35,9 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	dir := t.TempDir()
 	deck := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders",
 		Language: "zh-CN", Positioning: "thesis",
-		Constraints: pptspec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
-		Sections:    []pptspec.Section{{ID: "sec", Title: "Section", Purpose: "Test section", Subsections: []pptspec.Subsection{{ID: "sub", Title: "Sub"}}}},
-		SlideOrder:  []string{"s1", "s2", "s3"}, CreatedAt: 1, UpdatedAt: 2}
+		Requirements: []string{}, Prohibitions: []string{},
+		Sections:   []pptspec.Section{{ID: "sec", Title: "Section", Purpose: "Test section", Subsections: []pptspec.Subsection{{ID: "sub", Title: "Sub"}}}},
+		SlideOrder: []string{"s1", "s2", "s3"}, CreatedAt: 1, UpdatedAt: 2}
 	writeJSON(t, filepath.Join(dir, "outline.json"), deck)
 	design := pptspec.Design{
 		SchemaVersion: pptspec.SchemaVersion, Revision: 3, ProjectID: "p1", CreatedAt: 1, UpdatedAt: 2,

@@ -24,7 +24,7 @@ describe('DeckNavigator', () => {
       loadingProjects: false
     });
     useSpecStore.setState({ byProjectId: { p1: {
-      outline: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: '演示项目', goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] }, sections: [{ id: 'sec', title: '市场', purpose: '说明市场趋势', subsections: [{ id: 'sub', title: '趋势' }] }], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+      outline: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: '演示项目', goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', requirements: [], prohibitions: [], sections: [{ id: 'sec', title: '市场', purpose: '说明市场趋势', subsections: [{ id: 'sub', title: '趋势' }] }], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
       slide_specs: {
         s1: { version: '3.0', revision: 1, project_id: 'p1', slide_id: 's1', section_id: 'sec', role: 'cover', title: '市场分析', key_message: '市场在扩大', elements: [{ type: 'text', intent: '摘要' }], layout: 'cover', created_at: 1, updated_at: 1 },
         s2: { version: '3.0', revision: 2, project_id: 'p1', slide_id: 's2', section_id: 'sec', subsection_id: 'sub', role: 'evidence', title: '增长趋势', key_message: '增长持续', elements: [{ type: 'chart', intent: '趋势图' }], layout: 'chart', created_at: 1, updated_at: 2 },
@@ -51,7 +51,7 @@ describe('DeckNavigator', () => {
     useSpecStore.setState({ byProjectId: { p1: {
       outline: {
         version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: '演示项目',
-        goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] },
+        goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', requirements: [], prohibitions: [],
         sections: [
           {
             id: 'sec1', title: '第一章', purpose: '第一章定位',

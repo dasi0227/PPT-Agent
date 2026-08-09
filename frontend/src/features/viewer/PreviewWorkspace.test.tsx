@@ -14,7 +14,7 @@ const slideSpec = (id: string, title = '封面标题') => ({
 });
 const setSpecs = () => useSpecStore.setState({
   byProjectId: { p1: {
-    outline: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: 'Deck', goal: '', audience: '', language: 'zh-CN', positioning: '', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] }, sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+    outline: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: 'Deck', goal: '', audience: '', language: 'zh-CN', positioning: '', requirements: [], prohibitions: [], sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
     slide_specs: { s1: slideSpec('s1'), s2: slideSpec('s2', '第二页') },
     design: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
     materialization: {

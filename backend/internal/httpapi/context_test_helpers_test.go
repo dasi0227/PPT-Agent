@@ -22,8 +22,8 @@ func writeV3ContextSources(t *testing.T, workDir, projectID string, slides []mod
 	deck := spec.Outline{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Test deck",
 		Goal: "test goal", Audience: "test audience", Language: "zh-CN", Positioning: "test thesis",
-		Constraints: spec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
-		Sections:    sections, SlideOrder: order, CreatedAt: 1, UpdatedAt: 1,
+		Requirements: []string{}, Prohibitions: []string{},
+		Sections: sections, SlideOrder: order, CreatedAt: 1, UpdatedAt: 1,
 	}
 	for _, sl := range slides {
 		order = append(order, sl.ID)

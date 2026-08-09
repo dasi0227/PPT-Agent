@@ -300,8 +300,8 @@
           <span>统一短 ID 格式：<code>project_id=pro_&lt;rand6&gt;</code>、<code>slide_id=sli_&lt;rand6&gt;</code>、<code>section_id=sec_&lt;rand6&gt;</code>、<code>subsection_id=sub_&lt;rand6&gt;</code>。Agent-facing contract 不暴露真实 ID；Agent 通过标题、顺序、选择项或 Runtime handle 表达意图，由 Runtime 映射到持久 ID。</span>
         </li>
         <li>
-          <b>006. 新增 <code>constraints</code></b>
-          <span>Deck 级硬约束字段，用来记录“必须写什么”和“不能写什么”。其他字段主要表达正向目标，<code>constraints</code> 专门承载禁区、边界、不可违反项和用户显式要求。</span>
+          <b>006. 新增顶层 <code>requirements</code> / <code>prohibitions</code></b>
+          <span>Deck 级规则提升为一等语义：<code>requirements</code> 记录必须满足的内容、风格、数量和业务规则，<code>prohibitions</code> 记录禁止出现的内容或行为；不再使用仅负责包裹的 <code>constraints</code> 对象。</span>
         </li>
         <li>
           <b>007. 新增 <code>sections[].purpose</code></b>
@@ -562,7 +562,7 @@
         <table>
           <thead><tr><th>阶段</th><th>动作</th><th>范围</th><th>风险</th><th>验证</th></tr></thead>
           <tbody>
-            <tr><td>Phase 1：3.1 兼容增强</td><td>增加已敲定字段：<code>outline.constraints</code>、<code>outline.sections[].purpose</code>；同步把 <code>schema_version</code> 改为 <code>version</code>；为新 <code>design</code> 合约准备 TS/Go 类型。</td><td>schema + Go/TS 类型 + AgentContract 示例 + 前端只读展示。</td><td>低；旧项目不破。</td><td>schema 正反例、AgentContract 不泄露 runtime-managed 字段、前端 spec card 展示可选信息。</td></tr>
+            <tr><td>Phase 1：3.1 兼容增强</td><td>增加已敲定字段：<code>outline.requirements</code>、<code>outline.prohibitions</code>、<code>outline.sections[].purpose</code>；同步把 <code>schema_version</code> 改为 <code>version</code>；为新 <code>design</code> 合约准备 TS/Go 类型。</td><td>schema + Go/TS 类型 + AgentContract 示例 + 前端只读展示。</td><td>低；旧项目通过 layout migration 升级。</td><td>schema 正反例、AgentContract 不泄露 runtime-managed 字段、前端 spec card 展示可选信息。</td></tr>
             <tr><td>Phase 2：生成链路消费</td><td>HTML 生成器读取 <code>design.theme/direction/density/chrome</code> 与 <code>spec.layout/elements</code>；素材查询来自 <code>elements[type=asset].intent</code>。</td><td>workflow、context engine、render、前端。</td><td>中；会影响生成质量。</td><td>端到端生成 deck，验证 render proof、materialization hash 与 stale 状态。</td></tr>
             <tr><td>Phase 3：文件为真相</td><td>删除 DB 当前 revision 镜像，把 HTML artifact/source revision 与 hash 写入每页 <code>materialization.json</code>。</td><td>SQLite migration + filesystem migration + API 投影。</td><td>高；必须一次闭环。</td><td>旧项目迁移、提交回滚、HTML rollback 失效物化记录、文件 projection。</td></tr>
           </tbody>

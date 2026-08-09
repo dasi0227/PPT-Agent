@@ -50,7 +50,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 		Status:          "draft",
 		OutlineRevision: 1,
 		DesignRevision:  1,
-		LayoutVersion:   4,
+		LayoutVersion:   5,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -172,11 +172,9 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID, Title: proj.Title,
 		Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
 		Language: firstNonEmpty(p.Language, "zh-CN"), Positioning: proj.Title,
-		Constraints: spec.Constraints{
-			MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{},
-		},
-		Sections:   []spec.Section{},
-		SlideOrder: []string{}, CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt,
+		Requirements: []string{}, Prohibitions: []string{},
+		Sections: []spec.Section{}, SlideOrder: []string{},
+		CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt,
 	}
 	if err := sb.Write(filepath.Join(projectRel, "outline.json"), mustJSON(outline)); err != nil {
 		return err

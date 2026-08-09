@@ -40,7 +40,8 @@ export interface Outline {
   audience: string;
   language: string;
   positioning?: string;
-  constraints: { must_include: string[]; must_avoid: string[]; style_limits: string[]; content_limits: string[] };
+  requirements: string[];
+  prohibitions: string[];
   sections: Array<{ id: string; title: string; purpose: string; subsections: Array<{ id: string; title: string }> }>;
   slide_order: string[];
   created_at: number;

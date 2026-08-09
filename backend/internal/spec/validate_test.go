@@ -40,8 +40,8 @@ func TestValidateOutlineReferences(t *testing.T) {
 	outline := Outline{
 		SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Title: "Deck",
 		Goal: "goal", Audience: "audience", Language: "en-US",
-		Constraints: Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
-		CreatedAt:   1, UpdatedAt: 1,
+		Requirements: []string{}, Prohibitions: []string{},
+		CreatedAt: 1, UpdatedAt: 1,
 		Sections:   []Section{{ID: "sec_aaaaaa", Title: "Main", Purpose: "Introduce the main section", Subsections: []Subsection{}}},
 		SlideOrder: []string{"sli_aaaaaa"},
 	}
@@ -61,8 +61,8 @@ func TestValidateOutlineRejectsSubsectionFromAnotherSection(t *testing.T) {
 	outline := Outline{
 		SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Title: "Deck",
 		Goal: "goal", Audience: "audience", Language: "en-US",
-		Constraints: Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
-		CreatedAt:   1, UpdatedAt: 1,
+		Requirements: []string{}, Prohibitions: []string{},
+		CreatedAt: 1, UpdatedAt: 1,
 		Sections: []Section{
 			{ID: "sec_aaaaaa", Title: "One", Purpose: "First section", Subsections: []Subsection{{ID: "sub_aaaaaa", Title: "Sub"}}},
 			{ID: "sec_bbbbbb", Title: "Two", Purpose: "Second section", Subsections: []Subsection{}},

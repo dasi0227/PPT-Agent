@@ -3,26 +3,20 @@ package spec
 const SchemaVersion = "3.0"
 
 type Outline struct {
-	SchemaVersion string      `json:"version"`
-	Revision      int         `json:"revision"`
-	ProjectID     string      `json:"project_id"`
-	Title         string      `json:"title"`
-	Goal          string      `json:"goal"`
-	Audience      string      `json:"audience"`
-	Language      string      `json:"language"`
-	Positioning   string      `json:"positioning,omitempty"`
-	Constraints   Constraints `json:"constraints"`
-	Sections      []Section   `json:"sections"`
-	SlideOrder    []string    `json:"slide_order"`
-	CreatedAt     int64       `json:"created_at"`
-	UpdatedAt     int64       `json:"updated_at"`
-}
-
-type Constraints struct {
-	MustInclude   []string `json:"must_include"`
-	MustAvoid     []string `json:"must_avoid"`
-	StyleLimits   []string `json:"style_limits"`
-	ContentLimits []string `json:"content_limits"`
+	SchemaVersion string    `json:"version"`
+	Revision      int       `json:"revision"`
+	ProjectID     string    `json:"project_id"`
+	Title         string    `json:"title"`
+	Goal          string    `json:"goal"`
+	Audience      string    `json:"audience"`
+	Language      string    `json:"language"`
+	Positioning   string    `json:"positioning,omitempty"`
+	Requirements  []string  `json:"requirements"`
+	Prohibitions  []string  `json:"prohibitions"`
+	Sections      []Section `json:"sections"`
+	SlideOrder    []string  `json:"slide_order"`
+	CreatedAt     int64     `json:"created_at"`
+	UpdatedAt     int64     `json:"updated_at"`
 }
 
 type Section struct {

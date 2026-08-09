@@ -722,10 +722,10 @@ func deckModel(projectID string, order []string) spec.Outline {
 	return spec.Outline{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID,
 		Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN",
-		Positioning: "Thesis",
-		Constraints: spec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
-		Sections:    []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Test section", Subsections: []spec.Subsection{}}},
-		SlideOrder:  append([]string{}, order...), CreatedAt: 1, UpdatedAt: 1,
+		Positioning:  "Thesis",
+		Requirements: []string{}, Prohibitions: []string{},
+		Sections:   []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Test section", Subsections: []spec.Subsection{}}},
+		SlideOrder: append([]string{}, order...), CreatedAt: 1, UpdatedAt: 1,
 	}
 }
 
