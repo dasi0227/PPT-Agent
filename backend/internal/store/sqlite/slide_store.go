@@ -28,8 +28,7 @@ func (s *Store) ReplaceSlides(ctx context.Context, projectID string, slides []mo
 func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&projectPO{}).Where("id = ?", commit.ProjectID).Updates(map[string]any{
-			"outline_revision": commit.OutlineRevision, "design_revision": commit.DesignRevision,
-			"layout_version": 2, "updated_at": nowUnix(),
+			"layout_version": currentProjectLayoutVersion, "updated_at": nowUnix(),
 		}).Error; err != nil {
 			return err
 		}
@@ -44,8 +43,7 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 			if err := tx.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
-					"project_id", "current_version", "spec_revision", "html_revision",
-					"source_outline_revision", "source_spec_revision", "source_design_revision",
+					"project_id", "current_version", "last_export_at",
 				}),
 			}).Create(&po).Error; err != nil {
 				return err
@@ -111,25 +109,6 @@ func (s *Store) SetProjectStatus(ctx context.Context, id, status string) error {
 	return s.db.WithContext(ctx).Model(&projectPO{}).
 		Where("id = ?", id).
 		Updates(map[string]any{"status": status, "updated_at": nowUnix()}).Error
-}
-
-// UpdateSlideMeta is a no-op cursor: title/layout now live solely in spec.json.
-// Callers persist them by rewriting the slide spec.
-func (s *Store) UpdateSlideMeta(ctx context.Context, slideID, title, layout string) error {
-	_ = ctx
-	_ = slideID
-	_ = title
-	_ = layout
-	return nil
-}
-
-func (s *Store) UpdateSlideRevisions(ctx context.Context, slideID string, specRevision, htmlRevision, sourceOutlineRevision, sourceSpecRevision, sourceDesignRevision int) error {
-	return s.db.WithContext(ctx).Model(&slidePO{}).Where("id = ?", slideID).
-		Updates(map[string]any{
-			"spec_revision": specRevision, "html_revision": htmlRevision,
-			"source_outline_revision": sourceOutlineRevision, "source_spec_revision": sourceSpecRevision,
-			"source_design_revision": sourceDesignRevision,
-		}).Error
 }
 
 // NextVersionNo 返回 (target_type,target_id) 维度下一个版本号（单调递增，不复用 DATA-VERSION-002）。

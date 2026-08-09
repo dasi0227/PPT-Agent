@@ -13,19 +13,20 @@ export interface Project {
 }
 
 export interface SlideSpec {
-  schema_version: '3.0';
+  version: '3.0';
   revision: number;
-  project_id: string;
+  project: string;
   slide_id: string;
-  source_outline_revision: number;
   section_id: string;
   subsection_id?: string;
   role: string;
   title: string;
   key_message: string;
-  content: { summary: string; points: string[] };
-  visual_intent: { archetype: string; description: string; asset_queries: string[] };
-  speaker_notes: string;
+  elements: Array<{
+    type: 'text' | 'list' | 'metric' | 'quote' | 'table' | 'chart' | 'diagram' | 'code' | 'asset';
+    intent: string;
+  }>;
+  layout?: string;
   created_at: number;
   updated_at: number;
 }

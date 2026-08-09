@@ -50,7 +50,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 		Status:          "draft",
 		OutlineRevision: 1,
 		DesignRevision:  1,
-		LayoutVersion:   2,
+		LayoutVersion:   3,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -75,15 +75,44 @@ func (svc *ProjectService) RenameProject(ctx context.Context, id, title string) 
 	if err := svc.store.UpdateProjectTitle(ctx, p.ID, p.Title, p.UpdatedAt); err != nil {
 		return model.Project{}, err
 	}
-	return p, nil
+	return svc.projectWithFileRevisions(p)
 }
 
 func (svc *ProjectService) ListProjects(ctx context.Context) ([]model.Project, error) {
-	return svc.store.ListProjects(ctx)
+	projects, err := svc.store.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for index := range projects {
+		projects[index], err = svc.projectWithFileRevisions(projects[index])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return projects, nil
 }
 
 func (svc *ProjectService) GetProject(ctx context.Context, id string) (model.Project, error) {
-	return svc.store.GetProject(ctx, id)
+	project, err := svc.store.GetProject(ctx, id)
+	if err != nil {
+		return model.Project{}, err
+	}
+	return svc.projectWithFileRevisions(project)
+}
+
+func (svc *ProjectService) projectWithFileRevisions(project model.Project) (model.Project, error) {
+	var outline spec.Outline
+	if err := readJSON(filepath.Join(project.WorkDir, "outline.json"), &outline); err != nil {
+		return model.Project{}, err
+	}
+	project.OutlineRevision = outline.Revision
+	var design spec.Design
+	if err := readJSON(filepath.Join(project.WorkDir, "design.json"), &design); err != nil {
+		return model.Project{}, err
+	}
+	project.DesignRevision = design.Revision
+	project.Theme = design.Theme
+	return project, nil
 }
 
 func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {

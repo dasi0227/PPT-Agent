@@ -42,7 +42,16 @@ func projectSlidesFromFiles(ctx context.Context, st store.Store, projectID strin
 		var content spec.SlideSpec
 		if readErr := readJSON(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(meta.ID))), &content); readErr == nil {
 			meta.Title = content.Title
-			meta.Layout = content.VisualIntent.Archetype
+			meta.Layout = content.Layout
+			meta.SpecRevision = content.Revision
+		}
+		if materialization, readErr := spec.ReadMaterialization(
+			filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideMaterializationPath(meta.ID))),
+		); readErr == nil {
+			meta.HTMLRevision = materialization.Artifact.Revision
+			meta.SourceOutlineRevision = materialization.Source.Outline
+			meta.SourceSpecRevision = materialization.Source.Spec
+			meta.SourceDesignRevision = materialization.Source.Design
 		}
 		meta.Position = position
 		position++
@@ -137,14 +146,12 @@ func (svc *SlideService) AddSlide(ctx context.Context, projectID, afterSlideID, 
 	}
 	content := spec.SlideSpec{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, SlideID: id,
-		SourceOutlineRevision: nextOutline.Revision + 1,
-		SectionID:             sectionID, Role: "context", Title: "未命名页面",
+		SectionID: sectionID, Role: "context", Title: "未命名页面",
 		KeyMessage: "待补充本页核心信息",
-		Content:    spec.Content{Summary: "待补充本页内容", Points: []string{}},
-		VisualIntent: spec.VisualIntent{
-			Archetype: layout, Description: "使用清晰的信息层级表达本页核心信息", AssetQueries: []string{},
-		},
-		SpeakerNotes: "", CreatedAt: now, UpdatedAt: now,
+		Elements: []spec.Element{{
+			Type: "text", Intent: "补充支持本页核心信息的正文内容",
+		}},
+		Layout: layout, CreatedAt: now, UpdatedAt: now,
 	}
 	order := insertAfter(nextOutline.SlideOrder, afterSlideID, id)
 	nextOutline.SlideOrder = order
@@ -233,10 +240,6 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 	if err != nil {
 		return err
 	}
-	metas, err := svc.store.ListSlides(ctx, projectID)
-	if err != nil {
-		return err
-	}
 	view, err := NewSpecService(svc.store).EnsureProject(ctx, projectID)
 	if err != nil {
 		return err
@@ -248,10 +251,6 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 		return validationError("placements must contain every slide exactly once")
 	}
 
-	metaByID := make(map[string]model.Slide, len(metas))
-	for _, meta := range metas {
-		metaByID[meta.ID] = meta
-	}
 	sectionIDs := make(map[string]bool, len(view.Outline.Sections))
 	subsectionOwners := map[string]string{}
 	for _, section := range view.Outline.Sections {
@@ -291,7 +290,6 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 		if next.SectionID != placement.SectionID || next.SubsectionID != placement.SubsectionID {
 			next.SectionID = placement.SectionID
 			next.SubsectionID = placement.SubsectionID
-			next.SourceOutlineRevision = nextOutline.Revision
 			next.Revision++
 			next.UpdatedAt = now
 			if err := spec.ValidateSlideSpec(next); err != nil {
@@ -330,12 +328,6 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 			_ = atomicWrite(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id))), raw)
 		}
 		return err
-	}
-	for id, next := range changed {
-		meta := metaByID[id]
-		if err := svc.store.UpdateSlideRevisions(ctx, id, next.Revision, meta.HTMLRevision, meta.SourceOutlineRevision, meta.SourceSpecRevision, meta.SourceDesignRevision); err != nil {
-			return err
-		}
 	}
 	positions := make(map[string]int, len(orderedIDs))
 	for index, id := range orderedIDs {

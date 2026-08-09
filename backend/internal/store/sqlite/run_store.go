@@ -57,14 +57,6 @@ func (s *Store) UpdateProjectTitle(ctx context.Context, id, title string, update
 	return mapErr(err)
 }
 
-func (s *Store) UpdateProjectRevisions(ctx context.Context, id string, outlineRevision, designRevision int) error {
-	return s.db.WithContext(ctx).Model(&projectPO{}).Where("id = ?", id).
-		Updates(map[string]any{
-			"outline_revision": outlineRevision, "design_revision": designRevision,
-			"layout_version": 2,
-		}).Error
-}
-
 func (s *Store) UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error {
 	err := s.db.WithContext(ctx).Model(&threadPO{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"title":      title,

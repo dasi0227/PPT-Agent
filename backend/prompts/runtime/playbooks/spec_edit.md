@@ -5,13 +5,13 @@ Use this playbook when the target artifact is spec. The output should modify can
 Resource responsibilities:
 - deck:outline controls deck goal, audience, sections and stable slide order.
 - deck:design controls deck-wide visual system.
-- slide:<id>:spec controls semantic role, key message, content hierarchy, visual intent and speaker notes.
-- Runtime owns managed fields such as schema_version, revision, project_id, slide_id, source revisions and timestamps.
+- slide:<id>:spec controls semantic role, title, key message, ordered element intents and optional layout direction.
+- Runtime owns managed fields such as version, revision, project, slide_id, section_id, subsection_id and timestamps.
 
 Execution steps:
 1. Read the relevant spec resource if exact current content matters.
 2. Prefer write_ppt for normalized JSON model updates.
-3. Preserve existing stable identifiers unless the user explicitly asks for structure changes.
+3. Express planned page content only through elements with type and natural-language intent.
 4. Keep cross-resource references valid.
 5. Finish after schema evidence is fresh and requirements are covered.
 

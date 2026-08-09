@@ -38,32 +38,24 @@ type Subsection struct {
 }
 
 type SlideSpec struct {
-	SchemaVersion         string       `json:"schema_version"`
-	Revision              int          `json:"revision"`
-	ProjectID             string       `json:"project_id"`
-	SlideID               string       `json:"slide_id"`
-	SourceOutlineRevision int          `json:"source_outline_revision"`
-	SectionID             string       `json:"section_id"`
-	SubsectionID          string       `json:"subsection_id,omitempty"`
-	Role                  string       `json:"role"`
-	Title                 string       `json:"title"`
-	KeyMessage            string       `json:"key_message"`
-	Content               Content      `json:"content"`
-	VisualIntent          VisualIntent `json:"visual_intent"`
-	SpeakerNotes          string       `json:"speaker_notes"`
-	CreatedAt             int64        `json:"created_at"`
-	UpdatedAt             int64        `json:"updated_at"`
+	SchemaVersion string    `json:"version"`
+	Revision      int       `json:"revision"`
+	ProjectID     string    `json:"project"`
+	SlideID       string    `json:"slide_id"`
+	SectionID     string    `json:"section_id"`
+	SubsectionID  string    `json:"subsection_id,omitempty"`
+	Role          string    `json:"role"`
+	Title         string    `json:"title"`
+	KeyMessage    string    `json:"key_message"`
+	Elements      []Element `json:"elements"`
+	Layout        string    `json:"layout,omitempty"`
+	CreatedAt     int64     `json:"created_at"`
+	UpdatedAt     int64     `json:"updated_at"`
 }
 
-type Content struct {
-	Summary string   `json:"summary"`
-	Points  []string `json:"points"`
-}
-
-type VisualIntent struct {
-	Archetype    string   `json:"archetype"`
-	Description  string   `json:"description"`
-	AssetQueries []string `json:"asset_queries"`
+type Element struct {
+	Type   string `json:"type"`
+	Intent string `json:"intent"`
 }
 
 type Design struct {
@@ -94,4 +86,23 @@ type ProjectView struct {
 type Materialization struct {
 	State     string `json:"state"`
 	Revisions any    `json:"revisions"`
+}
+
+type MaterializationRecord struct {
+	SchemaVersion string                  `json:"version"`
+	Artifact      MaterializationArtifact `json:"artifact"`
+	Source        MaterializationSource   `json:"source"`
+	RenderedAt    int64                   `json:"rendered_at"`
+}
+
+type MaterializationArtifact struct {
+	Revision int    `json:"revision"`
+	Hash     string `json:"hash"`
+}
+
+type MaterializationSource struct {
+	Outline int    `json:"outline"`
+	Spec    int    `json:"spec"`
+	Design  int    `json:"design"`
+	Hash    string `json:"hash"`
 }

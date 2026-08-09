@@ -21,18 +21,18 @@ export function SlideSpecCard({ spec, state, compact = false }: {
         <strong>{spec.key_message}</strong>
       </div>
       {!compact && (
-        <>
-          <p className="mt-5 text-sm text-text-600">{spec.content.summary}</p>
-          {spec.content.points.length > 0 && (
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-text-600">
-              {spec.content.points.map((point) => <li key={point}>{point}</li>)}
-            </ul>
-          )}
-          <div className="mt-5 flex gap-2 border-t border-border pt-4 text-sm text-text-600">
-            <Eye className="h-4 w-4 shrink-0 text-accent" />
-            <div><strong>{spec.visual_intent.archetype}</strong><p className="mt-1">{spec.visual_intent.description}</p></div>
-          </div>
-        </>
+        <div className="mt-5 space-y-3 border-t border-border pt-4">
+          {spec.layout && <p className="font-mono text-xs text-text-500">Layout: {spec.layout}</p>}
+          {spec.elements.map((element, index) => (
+            <div key={`${element.type}-${index}`} className="flex gap-2 text-sm text-text-600">
+              <Eye className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+              <div>
+                <strong className="font-mono text-xs uppercase">{element.type}</strong>
+                <p className="mt-1">{element.intent}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </article>
   );

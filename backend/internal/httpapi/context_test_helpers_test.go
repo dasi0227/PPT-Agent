@@ -29,11 +29,10 @@ func writeV3ContextSources(t *testing.T, workDir, projectID string, slides []mod
 		order = append(order, sl.ID)
 		slideSpec := spec.SlideSpec{
 			SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, SlideID: sl.ID,
-			SourceOutlineRevision: 1, SectionID: "section-main",
-			Role: "evidence", Title: sl.Title, KeyMessage: sl.Title + " key message",
-			Content:      spec.Content{Summary: sl.Title + " summary", Points: []string{"point"}},
-			VisualIntent: spec.VisualIntent{Archetype: sl.Layout, Description: "test visual", AssetQueries: []string{}},
-			CreatedAt:    1, UpdatedAt: 1,
+			SectionID: "section-main",
+			Role:      "evidence", Title: sl.Title, KeyMessage: sl.Title + " key message",
+			Elements: []spec.Element{{Type: "text", Intent: sl.Title + " summary"}},
+			Layout:   sl.Layout, CreatedAt: 1, UpdatedAt: 1,
 		}
 		writeTestJSON(t, filepath.Join(workDir, model.SlideSpecPath(sl.ID)), slideSpec)
 	}

@@ -47,8 +47,7 @@ func normalize(sql string) string {
 	return b.String()
 }
 
-// TestSlidesUsesCanonicalRuntimeColumns verifies the clean-cut schema.
-func TestSlidesUsesCanonicalRuntimeColumns(t *testing.T) {
+func TestContentRevisionsLiveInFiles(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open in-memory: %v", err)
@@ -57,22 +56,21 @@ func TestSlidesUsesCanonicalRuntimeColumns(t *testing.T) {
 		t.Fatalf("apply migrations: %v", err)
 	}
 	cols := tableColumns(t, db, "slides")
-	for _, want := range []string{
-		"spec_revision", "html_revision",
-		"source_outline_revision", "source_spec_revision", "source_design_revision",
-	} {
+	for _, want := range []string{"id", "project_id", "current_version", "last_export_at"} {
 		if !cols[want] {
 			t.Fatalf("slides table missing column %q; got %v", want, cols)
 		}
 	}
-	// Phase B collapses content columns onto the file system (files are truth).
-	for _, removed := range []string{"idx", "order", "outline_dirty", "position", "layout", "title", "spec_path", "html_path"} {
+	for _, removed := range []string{
+		"idx", "order", "outline_dirty", "position", "layout", "title", "spec_path", "html_path",
+		"spec_revision", "html_revision", "source_outline_revision", "source_spec_revision", "source_design_revision",
+	} {
 		if cols[removed] {
 			t.Fatalf("legacy slides column %q still exists", removed)
 		}
 	}
 	projectCols := tableColumns(t, db, "projects")
-	for _, removed := range []string{"design_path", "outline_path"} {
+	for _, removed := range []string{"design_path", "outline_path", "outline_revision", "design_revision"} {
 		if projectCols[removed] {
 			t.Fatalf("legacy projects column %q still exists", removed)
 		}

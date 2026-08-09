@@ -128,27 +128,6 @@ func TestSetProjectStatus(t *testing.T) {
 	}
 }
 
-func TestSlideRevisionMetadataRoundTrip(t *testing.T) {
-	s := newTestStore(t)
-	seedProject(t, s)
-	ctx := context.Background()
-	err := s.ReplaceSlides(ctx, "p1", []model.Slide{
-		{ID: "s1", ProjectID: "p1",
-			SpecRevision: 2, HTMLRevision: 3, SourceOutlineRevision: 1,
-			SourceSpecRevision: 2, SourceDesignRevision: 1},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := s.GetSlide(ctx, "s1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.SpecRevision != 2 || got.HTMLRevision != 3 || got.SourceSpecRevision != 2 {
-		t.Fatalf("round trip lost fields: %+v", got)
-	}
-}
-
 func TestListSlidesReturnsMembership(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
@@ -161,24 +140,6 @@ func TestListSlidesReturnsMembership(t *testing.T) {
 	// Order is file-projected; the store returns membership deterministically by id.
 	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "b" {
 		t.Fatalf("expected membership a,b got %+v", got)
-	}
-}
-
-func TestUpdateRevisions(t *testing.T) {
-	s := newTestStore(t)
-	seedProject(t, s)
-	ctx := context.Background()
-	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{{ID: "s1", ProjectID: "p1"}})
-	// title/layout live in spec.json now; UpdateSlideMeta is a no-op cursor.
-	if err := s.UpdateSlideMeta(ctx, "s1", "B", "content"); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.UpdateSlideRevisions(ctx, "s1", 2, 3, 1, 2, 1); err != nil {
-		t.Fatal(err)
-	}
-	got, _ := s.GetSlide(ctx, "s1")
-	if got.SpecRevision != 2 || got.HTMLRevision != 3 {
-		t.Fatalf("got %+v", got)
 	}
 }
 

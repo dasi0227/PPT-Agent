@@ -16,7 +16,6 @@ type Store interface {
 	ListProjects(ctx context.Context) ([]model.Project, error)
 	DeleteProject(ctx context.Context, id string) error
 	UpdateProjectTitle(ctx context.Context, id, title string, updatedAt int64) error
-	UpdateProjectRevisions(ctx context.Context, id string, outlineRevision, designRevision int) error
 
 	CreateThread(ctx context.Context, t model.Thread) error
 	GetThread(ctx context.Context, id string) (model.Thread, error)
@@ -53,8 +52,6 @@ type Store interface {
 	ListVersions(ctx context.Context, targetType, targetID string) ([]model.Version, error)
 	DeleteVersion(ctx context.Context, targetType, targetID string, versionNo int) error
 	SetSlideVersion(ctx context.Context, slideID string, versionNo int) error
-	UpdateSlideMeta(ctx context.Context, slideID, title, layout string) error
-	UpdateSlideRevisions(ctx context.Context, slideID string, specRevision, htmlRevision, sourceOutlineRevision, sourceSpecRevision, sourceDesignRevision int) error
 	CommitWorkflow(ctx context.Context, commit model.ArtifactCommit) error
 
 	CreateAsset(ctx context.Context, a model.Asset) error

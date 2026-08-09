@@ -7,11 +7,10 @@ import { useSpecStore } from '../../stores/specStore';
 import { clearSlideRenderCache } from './useSlideRenderCache';
 
 const slideSpec = (id: string, title = '封面标题') => ({
-  schema_version: '3.0' as const, revision: 1, project_id: 'p1', slide_id: id,
-  source_outline_revision: 1, section_id: 'main', role: 'cover',
-  title, key_message: title, content: { summary: title, points: ['要点一'] },
-  visual_intent: { archetype: 'hero', description: '主视觉', asset_queries: [] },
-  speaker_notes: '', created_at: 1, updated_at: 1,
+  version: '3.0' as const, revision: 1, project: 'p1', slide_id: id,
+  section_id: 'main', role: 'cover',
+  title, key_message: title, elements: [{ type: 'text' as const, intent: '要点一' }],
+  layout: 'hero', created_at: 1, updated_at: 1,
 });
 const setSpecs = () => useSpecStore.setState({
   byProjectId: { p1: {

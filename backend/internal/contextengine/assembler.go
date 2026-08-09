@@ -102,11 +102,11 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		s := slides[id]
 		summary := slideSummary(s)
 		if profile.ID == ProfilePresentationDeck || profile.ID == ProfilePresentationSlide {
-			if meta, err := a.store.GetSlide(ctx, id); err == nil {
-				_, htmlErr := os.Stat(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(id))))
-				source := model.MaterializationRevisions{SlideHTML: meta.HTMLRevision, Outline: meta.SourceOutlineRevision, SlideSpec: meta.SourceSpecRevision, Design: meta.SourceDesignRevision}
-				summary.State = string(model.DeriveMaterializationState(htmlErr == nil, outline.Revision, s.Revision, design.Revision, source))
-			}
+			state, source := loadMaterializationState(
+				project.WorkDir, id, outline.Revision, s.Revision, design.Revision,
+			)
+			summary.State = state
+			pack.Revisions.SlideHTML[id] = source.SlideHTML
 		}
 		pack.Outline.Summaries = append(pack.Outline.Summaries, summary)
 		pack.Revisions.SlideSpecs[id] = s.Revision
@@ -223,25 +223,23 @@ func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextReque
 	}
 	for _, id := range ids {
 		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(id)))
-		meta, metaErr := a.store.GetSlide(context.Background(), id)
 		summary, raw, err := (SlideHTMLSummaryLoader{}).Load(path)
+		state, source := loadMaterializationState(
+			project.WorkDir,
+			id,
+			pack.Outline.Outline.Revision,
+			slides[id].Revision,
+			pack.Revisions.Design,
+		)
 		if req.WorkSpec.Target.Level == model.TargetSlide && id == req.WorkSpec.Target.SlideID {
-			source := model.MaterializationRevisions{}
-			if metaErr == nil {
-				source = model.MaterializationRevisions{SlideHTML: meta.HTMLRevision, Outline: meta.SourceOutlineRevision, SlideSpec: meta.SourceSpecRevision, Design: meta.SourceDesignRevision}
-			}
-			state := model.DeriveMaterializationState(err == nil, pack.Outline.Outline.Revision, slides[id].Revision, pack.Revisions.Design, source)
-			pack.Target.Materialization = &pptspec.Materialization{State: string(state), Revisions: source}
+			pack.Target.Materialization = &pptspec.Materialization{State: state, Revisions: source}
 		}
 		if err != nil {
 			manifest.Warnings = append(manifest.Warnings, "slide HTML missing for "+id)
 			continue
 		}
 		pack.SlideHTML.Summaries[id] = summary
-		revision := 0
-		if metaErr == nil {
-			revision = meta.HTMLRevision
-		}
+		revision := source.SlideHTML
 		pack.Revisions.SlideHTML[id] = revision
 		ref := ContextRef{
 			ID: opaqueID("ctxref", req.RunID, id, summary.SourceHash), Kind: RefSlideHTML,
@@ -261,8 +259,10 @@ func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextReque
 				return nil, 0, "", err
 			}
 			currentRevision := revision
-			if sl, err := a.store.GetSlide(context.Background(), id); err == nil {
-				currentRevision = sl.HTMLRevision
+			if materialization, err := pptspec.ReadMaterialization(
+				filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideMaterializationPath(id))),
+			); err == nil {
+				currentRevision = materialization.Artifact.Revision
 			}
 			switch level {
 			case DetailSummary:
@@ -365,7 +365,11 @@ func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec,
 func selectAssets(assets []model.Asset, target *pptspec.SlideSpec) []AssetCandidate {
 	queries := []string{}
 	if target != nil {
-		queries = target.VisualIntent.AssetQueries
+		for _, element := range target.Elements {
+			if element.Type == "asset" {
+				queries = append(queries, element.Intent)
+			}
+		}
 	}
 	out := []AssetCandidate{}
 	for _, a := range assets {

@@ -63,7 +63,7 @@ func (s *SpecService) PatchSlide(ctx context.Context, slideID string, expected i
 		return spec.SlideSpec{}, ErrSpecRevisionConflict
 	}
 	next.SchemaVersion, next.ProjectID, next.SlideID = spec.SchemaVersion, meta.ProjectID, slideID
-	next.SourceOutlineRevision = view.Outline.Revision
+	next.SectionID, next.SubsectionID = current.SectionID, current.SubsectionID
 	next.Revision, next.CreatedAt, next.UpdatedAt = current.Revision+1, current.CreatedAt, s.clock()
 	if err := spec.ValidateSlideSpec(next); err != nil {
 		return spec.SlideSpec{}, err
@@ -75,14 +75,6 @@ func (s *SpecService) PatchSlide(ctx context.Context, slideID string, expected i
 	}
 	path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(slideID)))
 	if err := atomicWrite(path, raw); err != nil {
-		return spec.SlideSpec{}, err
-	}
-	if err := s.store.UpdateSlideMeta(ctx, slideID, next.Title, next.VisualIntent.Archetype); err != nil {
-		_ = atomicWrite(path, mustJSON(current))
-		return spec.SlideSpec{}, err
-	}
-	if err := s.store.UpdateSlideRevisions(ctx, slideID, next.Revision, meta.HTMLRevision, meta.SourceOutlineRevision, meta.SourceSpecRevision, meta.SourceDesignRevision); err != nil {
-		_ = atomicWrite(path, mustJSON(current))
 		return spec.SlideSpec{}, err
 	}
 	return next, nil
@@ -107,10 +99,6 @@ func (s *SpecService) ReplaceOutline(ctx context.Context, projectID string, expe
 	}
 	path := filepath.Join(project.WorkDir, "outline.json")
 	if err := atomicWrite(path, mustJSON(next)); err != nil {
-		return spec.Outline{}, err
-	}
-	if err := s.store.UpdateProjectRevisions(ctx, projectID, next.Revision, view.Design.Revision); err != nil {
-		_ = atomicWrite(path, mustJSON(view.Outline))
 		return spec.Outline{}, err
 	}
 	return next, nil
@@ -141,20 +129,24 @@ func (s *SpecService) ReplaceDesign(ctx context.Context, projectID string, expec
 	if err := atomicWrite(path, mustJSON(next)); err != nil {
 		return spec.Design{}, err
 	}
-	if err := s.store.UpdateProjectRevisions(ctx, projectID, view.Outline.Revision, next.Revision); err != nil {
-		_ = atomicWrite(path, mustJSON(view.Design))
-		return spec.Design{}, err
-	}
 	return next, nil
 }
 
 func (s *SpecService) read(project model.Project, metas []model.Slide) (spec.ProjectView, error) {
+	outlineRaw, err := os.ReadFile(filepath.Join(project.WorkDir, "outline.json"))
+	if err != nil {
+		return spec.ProjectView{}, err
+	}
 	var outline spec.Outline
-	if err := readJSON(filepath.Join(project.WorkDir, "outline.json"), &outline); err != nil {
+	if err := json.Unmarshal(outlineRaw, &outline); err != nil {
+		return spec.ProjectView{}, err
+	}
+	designRaw, err := os.ReadFile(filepath.Join(project.WorkDir, "design.json"))
+	if err != nil {
 		return spec.ProjectView{}, err
 	}
 	var design spec.Design
-	if err := readJSON(filepath.Join(project.WorkDir, "design.json"), &design); err != nil {
+	if err := json.Unmarshal(designRaw, &design); err != nil {
 		return spec.ProjectView{}, err
 	}
 	out := spec.ProjectView{
@@ -162,18 +154,41 @@ func (s *SpecService) read(project model.Project, metas []model.Slide) (spec.Pro
 		SlideSpecs: map[string]spec.SlideSpec{}, States: map[string]spec.Materialization{},
 	}
 	for _, meta := range metas {
+		specPath := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(meta.ID)))
+		specRaw, err := os.ReadFile(specPath)
+		if err != nil {
+			return spec.ProjectView{}, err
+		}
 		var slide spec.SlideSpec
-		if err := readJSON(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(meta.ID))), &slide); err != nil {
+		if err := json.Unmarshal(specRaw, &slide); err != nil {
 			return spec.ProjectView{}, err
 		}
 		out.SlideSpecs[meta.ID] = slide
-		_, statErr := os.Stat(filepath.Join(project.WorkDir, filepath.FromSlash(meta.HTMLPath)))
-		revs := model.MaterializationRevisions{
-			SlideHTML: meta.HTMLRevision, Outline: meta.SourceOutlineRevision,
-			SlideSpec: meta.SourceSpecRevision, Design: meta.SourceDesignRevision,
+		htmlRaw, htmlErr := os.ReadFile(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(meta.ID))))
+		materialization, materializationErr := spec.ReadMaterialization(
+			filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideMaterializationPath(meta.ID))),
+		)
+		var record *spec.MaterializationRecord
+		revs := model.MaterializationRevisions{}
+		if materializationErr == nil {
+			record = &materialization
+			revs = model.MaterializationRevisions{
+				SlideHTML: materialization.Artifact.Revision,
+				Outline:   materialization.Source.Outline,
+				SlideSpec: materialization.Source.Spec,
+				Design:    materialization.Source.Design,
+			}
 		}
 		out.States[meta.ID] = spec.Materialization{
-			State:     string(model.DeriveMaterializationState(statErr == nil, outline.Revision, slide.Revision, design.Revision, revs)),
+			State: spec.DeriveMaterializationState(
+				htmlErr == nil,
+				record,
+				outline.Revision,
+				slide.Revision,
+				design.Revision,
+				spec.ContentHash(htmlRaw),
+				spec.SourceHash(outlineRaw, specRaw, designRaw),
+			),
 			Revisions: revs,
 		}
 	}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppt-agent.local/schemas/materialization.schema.json",
+  "title": "Slide Materialization",
+  "description": "Runtime-owned record of a successfully rendered slide HTML artifact and its source revisions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "artifact", "source", "rendered_at"],
+  "properties": {
+    "version": {
+      "const": "3.0",
+      "x-runtime-managed": true
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "hash"],
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outline", "spec", "design", "hash"],
+      "properties": {
+        "outline": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "spec": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "design": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "rendered_at": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

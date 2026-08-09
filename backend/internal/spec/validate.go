@@ -13,13 +13,6 @@ var (
 	ErrReferenceBroken = errors.New("spec reference broken")
 )
 
-var validRoles = map[string]bool{
-	"cover": true, "agenda": true, "section-divider": true, "context": true,
-	"problem": true, "insight": true, "evidence": true, "comparison": true,
-	"solution": true, "process": true, "case-study": true, "summary": true,
-	"cta": true, "closing": true,
-}
-
 func ValidateOutline(d Outline, slides map[string]SlideSpec) error {
 	if err := validateSchema(pptschema.OutlineName, d); err != nil {
 		return err
@@ -64,14 +57,15 @@ func ValidateOutline(d Outline, slides map[string]SlideSpec) error {
 }
 
 func ValidateSlideSpec(s SlideSpec) error {
-	if !validRoles[s.Role] {
-		return fmt.Errorf("%w: unsupported role %q", ErrInvalid, s.Role)
-	}
 	return validateSchema(pptschema.SlideSpecName, s)
 }
 
 func ValidateDesign(d Design) error {
 	return validateSchema(pptschema.DesignName, d)
+}
+
+func ValidateMaterialization(value MaterializationRecord) error {
+	return validateSchema(pptschema.MaterializationName, value)
 }
 
 func validateSchema(name string, value any) error {

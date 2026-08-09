@@ -36,21 +36,32 @@ func TestAgentContractsComeFromSchemas(t *testing.T) {
 	}
 }
 
-func TestRuntimeContractsStillRequireManagedFields(t *testing.T) {
-	for _, name := range []string{OutlineName, DesignName, SlideSpecName} {
+func TestRuntimeContractsContainManagedFields(t *testing.T) {
+	for _, name := range []string{OutlineName, DesignName, SlideSpecName, MaterializationName} {
 		contract, err := RuntimeContract(name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		required := stringList(contract["required"])
 		managed, err := RuntimeManagedFields(name)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for field := range managed {
-			if !containsString(required, field) {
-				t.Errorf("%s runtime contract no longer requires %q", name, field)
+			if _, exists := contract["properties"].(map[string]any)[field]; !exists {
+				t.Errorf("%s runtime contract no longer contains %q", name, field)
 			}
+		}
+	}
+}
+
+func TestSlideSpecAgentContractHidesPlacementIDs(t *testing.T) {
+	contract, err := AgentContract(SlideSpecName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"project", "slide_id", "section_id", "subsection_id"} {
+		if containsString(contract.Fields, field) {
+			t.Fatalf("managed field %q leaked into slide agent contract", field)
 		}
 	}
 }

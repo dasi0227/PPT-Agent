@@ -18,7 +18,7 @@ Never pass resource as a string. Never pass disk paths, project paths, runtime p
 
 Tool contracts:
 - read_ppt(resource_object) returns the complete saved JSON or HTML string for an authorized resource.
-- write_ppt(resource_object, content) receives content as a string. Runtime owns schema_version, revision, project_id, slide_id, source revisions and timestamps.
+- write_ppt(resource_object, content) receives content as a string. Runtime owns version, revision, project, slide_id, section_id, subsection_id and timestamps.
 - edit_ppt(resource_object, edits) applies ordered exact replacements. Each old_text must match exactly once.
 - search_refs(query, kinds, limit) searches only authorized current-run context, references, memory, history and project material.
 - render_slide(slide_id, visual_review) renders one authorized slide in isolated Chromium and returns diagnostics plus screenshot-bound evidence when needed.

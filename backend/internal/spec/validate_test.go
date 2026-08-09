@@ -5,11 +5,34 @@ import "testing"
 func validSlide(id string) SlideSpec {
 	return SlideSpec{
 		SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", SlideID: id,
-		SourceOutlineRevision: 1, SectionID: "sec_aaaaaa",
-		Role: "evidence", Title: "Title", KeyMessage: "Message",
-		Content:      Content{Summary: "Summary", Points: []string{}},
-		VisualIntent: VisualIntent{Archetype: "data-story", Description: "Chart", AssetQueries: []string{}},
-		SpeakerNotes: "", CreatedAt: 1, UpdatedAt: 1,
+		SectionID: "sec_aaaaaa",
+		Role:      "evidence", Title: "Title", KeyMessage: "Message",
+		Elements: []Element{{Type: "chart", Intent: "Show growth"}},
+		Layout:   "two-column", CreatedAt: 1, UpdatedAt: 1,
+	}
+}
+
+func TestValidateMaterialization(t *testing.T) {
+	record := MaterializationRecord{
+		SchemaVersion: SchemaVersion,
+		Artifact: MaterializationArtifact{
+			Revision: 1,
+			Hash:     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+		Source: MaterializationSource{
+			Outline: 1,
+			Spec:    1,
+			Design:  1,
+			Hash:    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+		RenderedAt: 1,
+	}
+	if err := ValidateMaterialization(record); err != nil {
+		t.Fatalf("valid materialization rejected: %v", err)
+	}
+	record.Artifact.Hash = "bad"
+	if err := ValidateMaterialization(record); err == nil {
+		t.Fatal("invalid materialization hash should fail")
 	}
 }
 

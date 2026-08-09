@@ -1,7 +1,8 @@
 package model
 
-// Project 是一个 PPT 项目（合并原 Deck）。内容真相在文件系统，DB 仅存编排与修订游标；
-// design.json / outline.json 路径由协议固定推导，不再入库。
+// Project is one PPT workspace. OutlineRevision and DesignRevision are
+// read-time projections from files; SQLite stores identity and orchestration
+// metadata only.
 type Project struct {
 	ID              string
 	Title           string

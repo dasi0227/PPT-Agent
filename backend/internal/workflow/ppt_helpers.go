@@ -225,8 +225,12 @@ func normalizeModel(pack contextengine.ContextPack, tx *RunSession, ref Artifact
 		next.SchemaVersion = spec.SchemaVersion
 		next.ProjectID = pack.Project.ID
 		next.SlideID = ref.ID
-		if outline, outlineErr := currentOutline(pack, tx); outlineErr == nil {
-			next.SourceOutlineRevision = outline.Revision
+		if current.SectionID != "" {
+			next.SectionID = current.SectionID
+			next.SubsectionID = current.SubsectionID
+		} else if pack.Target.SlideSpec != nil && pack.Target.SlideSpec.SlideID == ref.ID {
+			next.SectionID = pack.Target.SlideSpec.SectionID
+			next.SubsectionID = pack.Target.SlideSpec.SubsectionID
 		}
 		next.Revision = maxInt(current.Revision+1, 1)
 		if current.CreatedAt != 0 {
@@ -420,31 +424,16 @@ func renderSourceHash(pack contextengine.ContextPack, tx *RunSession, slideID st
 	if err != nil {
 		return "", err
 	}
-	htmlRaw, _, err := readArtifact(tx.ProjectDir(), tx, slideHTMLRef(slideID))
+	outlineRaw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
 	if err != nil {
 		return "", err
 	}
-	return MaterializationSourceHash(slideID, designRaw, specRaw, htmlRaw), nil
+	return MaterializationSourceHash(outlineRaw, specRaw, designRaw), nil
 }
 
-// MaterializationSourceHash binds the exact Design, Slide Spec and Slide HTML
-// bytes used by render and commit.
-func MaterializationSourceHash(slideID string, designRaw, specRaw, htmlRaw []byte) string {
-	parts := make([]byte, 0, len(designRaw)+len(specRaw)+len(htmlRaw)+128)
-	for _, item := range []struct {
-		key string
-		raw []byte
-	}{
-		{key: (Resource{Type: "deck", Part: "design"}).Key(), raw: designRaw},
-		{key: (Resource{Type: "slide", SlideID: slideID, Part: "spec"}).Key(), raw: specRaw},
-		{key: (Resource{Type: "slide", SlideID: slideID, Part: "html"}).Key(), raw: htmlRaw},
-	} {
-		parts = append(parts, []byte(item.key)...)
-		parts = append(parts, 0)
-		parts = append(parts, item.raw...)
-		parts = append(parts, 0)
-	}
-	return hashBytes(parts)
+// MaterializationSourceHash binds the exact authoring resources used by render.
+func MaterializationSourceHash(outlineRaw, specRaw, designRaw []byte) string {
+	return spec.SourceHash(outlineRaw, specRaw, designRaw)
 }
 
 func currentMaterializationProof(
@@ -478,16 +467,28 @@ func currentMaterializationProof(
 	if err := json.Unmarshal(specRaw, &slide); err != nil {
 		return MaterializationProof{}, err
 	}
+	htmlRaw, _, err := readArtifact(projectDir, tx, slideHTMLRef(slideID))
+	if err != nil {
+		return MaterializationProof{}, err
+	}
+	artifactHash := hashBytes(htmlRaw)
+	if sourceHash != artifactHash {
+		return MaterializationProof{}, errors.New("rendered HTML hash does not match current artifact")
+	}
 	htmlRevision := pack.Revisions.SlideHTML[slideID]
 	if tx != nil && tx.HasChange(slideHTMLRef(slideID)) {
 		htmlRevision++
+	}
+	if htmlRevision < 1 {
+		htmlRevision = 1
 	}
 	return MaterializationProof{
 		SlideID: slideID, HTMLRevision: htmlRevision,
 		SourceOutlineRevision: outline.Revision,
 		SourceSpecRevision:    slide.Revision,
 		SourceDesignRevision:  design.Revision,
-		SourceHash:            sourceHash,
+		ArtifactHash:          artifactHash,
+		SourceHash:            MaterializationSourceHash(outlineRaw, specRaw, designRaw),
 	}, nil
 }
 
@@ -549,7 +550,8 @@ func controlledModelPath(path string) bool {
 		first = parts[1]
 	}
 	switch first {
-	case "schema_version", "version", "revision", "project_id", "project", "slide_id", "created_at", "updated_at":
+	case "schema_version", "version", "revision", "project_id", "project", "slide_id",
+		"section_id", "subsection_id", "created_at", "updated_at":
 		return true
 	default:
 		return false

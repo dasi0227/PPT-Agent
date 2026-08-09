@@ -46,6 +46,10 @@ func TestPresentationRollbackCreatesNewCanonicalVersion(t *testing.T) {
 	if err := os.WriteFile(currentPath, []byte("<html>current</html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	materializationPath := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideMaterializationPath(slide.ID)))
+	if err := os.WriteFile(materializationPath, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	target := model.SlideHTMLVersionTarget(project.ID, slide.ID)
 	snapshot := model.SlideHTMLVersionSnapshot(slide.ID, 0)
 	snapshotPath := filepath.Join(project.WorkDir, filepath.FromSlash(snapshot))
@@ -74,6 +78,9 @@ func TestPresentationRollbackCreatesNewCanonicalVersion(t *testing.T) {
 	}
 	if string(raw) != "<html>old</html>" {
 		t.Fatalf("html=%s", raw)
+	}
+	if _, err := os.Stat(materializationPath); !os.IsNotExist(err) {
+		t.Fatalf("rollback did not invalidate materialization: %v", err)
 	}
 	versions, err := svc.ListVersions(context.Background(), slide.ID)
 	if err != nil {

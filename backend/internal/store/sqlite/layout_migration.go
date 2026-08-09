@@ -18,20 +18,18 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/seed"
 )
 
-const currentProjectLayoutVersion = 2
+const currentProjectLayoutVersion = 3
 
 type layoutProjectRow struct {
-	ID              string `gorm:"column:id"`
-	WorkDir         string `gorm:"column:work_dir"`
-	OutlineRevision int    `gorm:"column:outline_revision"`
-	CreatedAt       int64  `gorm:"column:created_at"`
-	UpdatedAt       int64  `gorm:"column:updated_at"`
-	LayoutVersion   int    `gorm:"column:layout_version"`
+	ID            string `gorm:"column:id"`
+	WorkDir       string `gorm:"column:work_dir"`
+	CreatedAt     int64  `gorm:"column:created_at"`
+	UpdatedAt     int64  `gorm:"column:updated_at"`
+	LayoutVersion int    `gorm:"column:layout_version"`
 }
 
 type layoutSlideRow struct {
-	ID           string `gorm:"column:id"`
-	SpecRevision int    `gorm:"column:spec_revision"`
+	ID string `gorm:"column:id"`
 }
 
 type layoutVersionRow struct {
@@ -148,7 +146,7 @@ func prepareLayoutFiles(
 		}
 		return nil
 	}
-	if err := addJSON("deck.json", "outline.json", "outline", project.OutlineRevision, ""); err != nil {
+	if err := addJSON("deck.json", "outline.json", "outline", 0, ""); err != nil {
 		return nil, nil, err
 	}
 	if err := addJSON("design/design-spec.json", "design.json", "design", 1, ""); err != nil {
@@ -159,7 +157,7 @@ func prepareLayoutFiles(
 			"slides/"+slide.ID+"/slide.json",
 			model.SlideSpecPath(slide.ID),
 			"slide_spec",
-			slide.SpecRevision,
+			0,
 			slide.ID,
 		); err != nil {
 			return nil, nil, err
@@ -331,10 +329,58 @@ func migrateResourceJSON(raw []byte, kind string, project layoutProjectRow, revi
 			delete(value, removed)
 		}
 	case "slide_spec":
-		value["schema_version"] = spec.SchemaVersion
-		value["project_id"] = project.ID
+		value["version"] = spec.SchemaVersion
+		value["project"] = project.ID
 		value["slide_id"] = slideID
-		value["source_outline_revision"] = maxMigrationInt(project.OutlineRevision, 1)
+		delete(value, "schema_version")
+		delete(value, "project_id")
+		delete(value, "source_outline_revision")
+		delete(value, "speaker_notes")
+		if layout := stringValueFromJSON(value["layout"]); strings.TrimSpace(layout) == "" {
+			if visual, ok := value["visual_intent"].(map[string]any); ok {
+				if archetype := stringValueFromJSON(visual["archetype"]); strings.TrimSpace(archetype) != "" {
+					value["layout"] = archetype
+				}
+			}
+		}
+		if _, ok := value["elements"].([]any); !ok {
+			elements := []any{}
+			if content, ok := value["content"].(map[string]any); ok {
+				if summary := stringValueFromJSON(content["summary"]); strings.TrimSpace(summary) != "" {
+					elements = append(elements, map[string]any{"type": "text", "intent": summary})
+				}
+				if points, ok := content["points"].([]any); ok {
+					texts := []string{}
+					for _, point := range points {
+						if text, ok := point.(string); ok && strings.TrimSpace(text) != "" {
+							texts = append(texts, text)
+						}
+					}
+					if len(texts) > 0 {
+						elements = append(elements, map[string]any{
+							"type": "list", "intent": strings.Join(texts, "；"),
+						})
+					}
+				}
+			}
+			if visual, ok := value["visual_intent"].(map[string]any); ok {
+				if queries, ok := visual["asset_queries"].([]any); ok {
+					for _, query := range queries {
+						if text, ok := query.(string); ok && strings.TrimSpace(text) != "" {
+							elements = append(elements, map[string]any{"type": "asset", "intent": text})
+						}
+					}
+				}
+			}
+			if len(elements) == 0 {
+				elements = append(elements, map[string]any{
+					"type": "text", "intent": firstMigrationText(stringValueFromJSON(value["key_message"]), stringValueFromJSON(value["title"])),
+				})
+			}
+			value["elements"] = elements
+		}
+		delete(value, "content")
+		delete(value, "visual_intent")
 	default:
 		return nil, fmt.Errorf("unknown resource kind %q", kind)
 	}

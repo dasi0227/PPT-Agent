@@ -39,25 +39,3 @@ func TestWorkSpecValidationAcceptsPlanIntent(t *testing.T) {
 		t.Fatalf("plan intent rejected: %v", err)
 	}
 }
-
-func TestDeriveMaterializationState(t *testing.T) {
-	if got := DeriveMaterializationState(false, 2, 2, 2, MaterializationRevisions{}); got != MaterializationNotMaterialized {
-		t.Fatalf("not materialized: %s", got)
-	}
-	source := MaterializationRevisions{SlideHTML: 1, Outline: 2, SlideSpec: 2, Design: 2}
-	if got := DeriveMaterializationState(true, 2, 3, 2, source); got != MaterializationSpecStale {
-		t.Fatalf("spec stale: %s", got)
-	}
-	source.SlideSpec = 3
-	if got := DeriveMaterializationState(true, 3, 3, 2, source); got != MaterializationSpecStale {
-		t.Fatalf("deck stale: %s", got)
-	}
-	source.Outline = 3
-	if got := DeriveMaterializationState(true, 3, 3, 3, source); got != MaterializationDesignStale {
-		t.Fatalf("design stale: %s", got)
-	}
-	source.Design = 3
-	if got := DeriveMaterializationState(true, 3, 3, 3, source); got != MaterializationFresh {
-		t.Fatalf("fresh: %s", got)
-	}
-}

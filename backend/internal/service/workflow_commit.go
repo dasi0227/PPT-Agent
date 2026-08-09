@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,10 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 	changes := commitContext.Changes
 	var deck spec.Outline
 	if err := readJSON(filepath.Join(c.project.WorkDir, "outline.json"), &deck); err != nil {
+		return err
+	}
+	outlineRaw, err := os.ReadFile(filepath.Join(c.project.WorkDir, "outline.json"))
+	if err != nil {
 		return err
 	}
 	var design spec.Design
@@ -59,10 +64,27 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 	}
 	versions := []model.Version{}
 	snapshotPaths := []string{}
+	type materializationBackup struct {
+		path    string
+		raw     []byte
+		existed bool
+	}
+	materializationBackups := []materializationBackup{}
+	restoreMaterializations := func() {
+		for index := len(materializationBackups) - 1; index >= 0; index-- {
+			backup := materializationBackups[index]
+			if backup.existed {
+				_ = atomicWrite(backup.path, backup.raw)
+			} else {
+				_ = os.Remove(backup.path)
+			}
+		}
+	}
 	cleanup := func() {
 		for _, path := range snapshotPaths {
 			_ = os.Remove(filepath.Join(c.project.WorkDir, filepath.FromSlash(path)))
 		}
+		restoreMaterializations()
 	}
 	addVersion := func(targetType, targetID, path string, content []byte) (int, error) {
 		number, err := c.store.NextVersionNo(ctx, targetType, targetID)
@@ -112,7 +134,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		meta := byID[id]
 		meta.ID, meta.ProjectID = id, c.project.ID
 		meta.Position = position
-		meta.Layout, meta.Title = semantic.VisualIntent.Archetype, semantic.Title
+		meta.Layout, meta.Title = semantic.Layout, semantic.Title
 		meta.SpecPath, meta.HTMLPath = model.SlideSpecPath(id), model.SlideHTMLPath(id)
 		meta.SpecRevision = semantic.Revision
 		if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactSlideSpec, ID: id}).Key()]; ok {
@@ -134,17 +156,29 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			}
 			htmlRaw = raw
 		}
-		expectedHTMLRevision := meta.HTMLRevision
+		materializationPath := filepath.Join(
+			c.project.WorkDir,
+			filepath.FromSlash(model.SlideMaterializationPath(id)),
+		)
+		currentMaterialization, materializationErr := spec.ReadMaterialization(materializationPath)
+		expectedHTMLRevision := 0
+		if materializationErr == nil {
+			expectedHTMLRevision = currentMaterialization.Artifact.Revision
+		}
 		if htmlChanged {
 			expectedHTMLRevision++
+		} else if expectedHTMLRevision == 0 && hasProof {
+			expectedHTMLRevision = 1
 		}
 		if htmlChanged && !hasProof {
 			cleanup()
 			return fmt.Errorf("latest materialization proof is required for changed HTML %s", id)
 		}
 		if hasProof {
-			currentHash := workflow.MaterializationSourceHash(id, designRaw, specRaw, htmlRaw)
-			if proof.SourceHash != currentHash ||
+			artifactHash := spec.ContentHash(htmlRaw)[len("sha256:"):]
+			sourceHash := spec.SourceHash(outlineRaw, specRaw, designRaw)
+			if proof.ArtifactHash != artifactHash ||
+				proof.SourceHash != sourceHash ||
 				proof.HTMLRevision != expectedHTMLRevision ||
 				proof.SourceOutlineRevision != deck.Revision ||
 				proof.SourceSpecRevision != semantic.Revision ||
@@ -154,7 +188,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			}
 		}
 		if htmlChanged {
-			meta.HTMLRevision++
+			meta.HTMLRevision = expectedHTMLRevision
 			target := model.SlideHTMLVersionTarget(c.project.ID, id)
 			number, versionErr := c.store.NextVersionNo(ctx, "slide_html", target)
 			if versionErr != nil {
@@ -175,6 +209,37 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			meta.CurrentVersion = number
 		}
 		if hasProof {
+			record := spec.MaterializationRecord{
+				SchemaVersion: spec.SchemaVersion,
+				Artifact: spec.MaterializationArtifact{
+					Revision: proof.HTMLRevision,
+					Hash:     "sha256:" + proof.ArtifactHash,
+				},
+				Source: spec.MaterializationSource{
+					Outline: proof.SourceOutlineRevision,
+					Spec:    proof.SourceSpecRevision,
+					Design:  proof.SourceDesignRevision,
+					Hash:    proof.SourceHash,
+				},
+				RenderedAt: time.Now().Unix(),
+			}
+			if err := spec.ValidateMaterialization(record); err != nil {
+				cleanup()
+				return err
+			}
+			recordRaw, err := json.MarshalIndent(record, "", "  ")
+			if err != nil {
+				cleanup()
+				return err
+			}
+			before, readErr := os.ReadFile(materializationPath)
+			materializationBackups = append(materializationBackups, materializationBackup{
+				path: materializationPath, raw: before, existed: readErr == nil,
+			})
+			if err := atomicWrite(materializationPath, recordRaw); err != nil {
+				cleanup()
+				return err
+			}
 			meta.SourceOutlineRevision = proof.SourceOutlineRevision
 			meta.SourceSpecRevision = proof.SourceSpecRevision
 			meta.SourceDesignRevision = proof.SourceDesignRevision
@@ -188,12 +253,13 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		}
 	}
 	commit := model.ArtifactCommit{
-		ProjectID: c.project.ID, OutlineRevision: deck.Revision, DesignRevision: design.Revision,
-		Slides: nextSlides, DeletedSlideIDs: deleted, Versions: versions,
+		ProjectID: c.project.ID,
+		Slides:    nextSlides, DeletedSlideIDs: deleted, Versions: versions,
 	}
 	if err := c.store.CommitWorkflow(ctx, commit); err != nil {
 		cleanup()
 		return err
 	}
+	materializationBackups = nil
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
@@ -94,16 +95,25 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 		return model.Slide{}, fmt.Errorf("read snapshot %s: %w", snapshotPath, err)
 	}
 	previous, readErr := sandbox.Read(sl.HTMLPath)
+	materializationPath := model.SlideMaterializationPath(sl.ID)
+	previousMaterialization, materializationReadErr := sandbox.Read(materializationPath)
 	restoreCurrent := func() {
 		if readErr == nil {
 			_ = sandbox.Write(sl.HTMLPath, previous)
 		} else {
 			_ = sandbox.Delete(sl.HTMLPath)
 		}
+		if materializationReadErr == nil {
+			_ = sandbox.Write(materializationPath, previousMaterialization)
+		}
 	}
 
 	// 1) 用历史内容覆盖当前 html。
 	if err := sandbox.Write(sl.HTMLPath, historical); err != nil {
+		return model.Slide{}, err
+	}
+	if err := sandbox.Delete(materializationPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		restoreCurrent()
 		return model.Slide{}, err
 	}
 

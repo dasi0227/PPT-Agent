@@ -212,8 +212,8 @@ func hasArtifactChange(changes ChangeSet, kind ArtifactKind, id string) bool {
 	return false
 }
 
-// specChangeAffectsHTML is intentionally conservative. Only a change isolated
-// to speaker_notes is known not to affect rendered HTML.
+// specChangeAffectsHTML ignores bookkeeping fields but treats every semantic
+// or placement change as presentation-affecting.
 func specChangeAffectsHTML(tx *RunSession, ref ArtifactRef) bool {
 	if tx == nil {
 		return true
@@ -231,18 +231,16 @@ func specChangeAffectsHTML(tx *RunSession, ref ArtifactRef) bool {
 	if json.Unmarshal(beforeRaw, &before) != nil || json.Unmarshal(afterRaw, &after) != nil {
 		return true
 	}
-	clearRuntimeAndNotes := func(value *spec.SlideSpec) {
+	clearRuntime := func(value *spec.SlideSpec) {
 		value.SchemaVersion = ""
 		value.Revision = 0
 		value.ProjectID = ""
 		value.SlideID = ""
-		value.SourceOutlineRevision = 0
-		value.SpeakerNotes = ""
 		value.CreatedAt = 0
 		value.UpdatedAt = 0
 	}
-	clearRuntimeAndNotes(&before)
-	clearRuntimeAndNotes(&after)
+	clearRuntime(&before)
+	clearRuntime(&after)
 	return !reflect.DeepEqual(before, after)
 }
 

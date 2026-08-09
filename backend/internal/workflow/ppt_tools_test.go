@@ -175,6 +175,7 @@ func TestWritePPTRequiresStringAndInjectsManagedMetadata(t *testing.T) {
 	}
 	next := slideModel("model-controlled-id", "Updated")
 	next.SchemaVersion, next.ProjectID, next.Revision = "wrong", "wrong", 999
+	next.SectionID, next.SubsectionID = "wrong-section", "wrong-subsection"
 	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
 		"resource": resourceArgs(resource), "content": string(mustJSONValue(next)),
 	}))
@@ -187,7 +188,8 @@ func TestWritePPTRequiresStringAndInjectsManagedMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	if saved.SchemaVersion != spec.SchemaVersion || saved.ProjectID != "p1" ||
-		saved.SlideID != "slide-01" || saved.Revision != 2 || saved.SourceOutlineRevision != 1 {
+		saved.SlideID != "slide-01" || saved.Revision != 2 ||
+		saved.SectionID != "section-1" || saved.SubsectionID != "" {
 		t.Fatalf("runtime metadata not enforced: %+v", saved)
 	}
 	if err := pptschema.ValidateJSON(pptschema.SlideSpecName, raw); err != nil {
@@ -488,7 +490,7 @@ func TestPresentationSpecHTMLAffectingChangesRequireHTMLSync(t *testing.T) {
 		mutate func(*spec.SlideSpec)
 	}{
 		{name: "title", mutate: func(value *spec.SlideSpec) { value.Title = "Updated" }},
-		{name: "content", mutate: func(value *spec.SlideSpec) { value.Content.Summary = "Updated" }},
+		{name: "elements", mutate: func(value *spec.SlideSpec) { value.Elements[0].Intent = "Updated" }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
@@ -536,24 +538,6 @@ func TestPresentationSpecAndHTMLWithLatestRenderCanFinish(t *testing.T) {
 	}
 }
 
-func TestPresentationSpeakerNotesOnlyDoesNotRequireHTMLSync(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewRunSession(dir, "speaker-notes")
-	ledger := NewEvidenceLedger()
-	next := slideModel("slide-01", "Original")
-	next.SpeakerNotes = "Updated private notes"
-	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
-		context.Background(), toolInput(pack, dir, tx, map[string]any{
-			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
-			"content":  string(mustJSONValue(next)),
-		})))
-	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
-	if !gate.Accepted || hasArtifactChange(tx.ChangeSet(), ArtifactSlideHTML, "slide-01") ||
-		len(gate.MaterializationProofs) != 0 {
-		t.Fatalf("speaker-notes sync rejected: %+v changes=%+v", gate, tx.ChangeSet())
-	}
-}
-
 func TestPresentationDesignChangeRequiresHTMLSync(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
 	tx, _ := NewRunSession(dir, "design-html-sync")
@@ -569,28 +553,6 @@ func TestPresentationDesignChangeRequiresHTMLSync(t *testing.T) {
 	if gate.Accepted || !hasCompletionCode(gate, "ASYNC_SPEC_HTML") ||
 		!hasRequiredAction(gate, "edit_ppt", "slide:slide-01:html") {
 		t.Fatalf("design HTML sync was not required: gate=%+v changes=%+v", gate, tx.ChangeSet())
-	}
-}
-
-func TestRenderEvidenceBeforeSpeakerNotesChangeRemainsAcceptable(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
-	tx, _ := NewRunSession(dir, "stale-render")
-	ledger := NewEvidenceLedger()
-	recordResultEvidence(ledger, (slideRenderTool{pack: pack, renderer: &recordingRenderer{}}).Execute(
-		context.Background(), toolInput(pack, dir, tx, map[string]any{"slide_id": "slide-01"})))
-	next := slideModel("slide-01", "Original")
-	next.SpeakerNotes = "changed after render"
-	write := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
-		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
-		"content":  string(mustJSONValue(next)),
-	}))
-	for _, target := range write.InvalidatedTargets {
-		ledger.Invalidate(target)
-	}
-	recordResultEvidence(ledger, write)
-	gate := NewCompletionGate().Check(completionContext(pack, tx, ledger))
-	if !gate.Accepted {
-		t.Fatalf("speaker-notes change should not require HTML evidence: %+v", gate)
 	}
 }
 
@@ -770,11 +732,10 @@ func deckModel(projectID string, order []string) spec.Outline {
 func slideModel(id, title string) spec.SlideSpec {
 	return spec.SlideSpec{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "p1", SlideID: id,
-		SourceOutlineRevision: 1, SectionID: "section-1",
-		Role: "cover", Title: title, KeyMessage: title,
-		Content:      spec.Content{Summary: title, Points: []string{}},
-		VisualIntent: spec.VisualIntent{Archetype: "cover", Description: "Cover", AssetQueries: []string{}},
-		SpeakerNotes: "", CreatedAt: 1, UpdatedAt: 1,
+		SectionID: "section-1",
+		Role:      "cover", Title: title, KeyMessage: title,
+		Elements: []spec.Element{{Type: "text", Intent: title}},
+		Layout:   "cover", CreatedAt: 1, UpdatedAt: 1,
 	}
 }
 

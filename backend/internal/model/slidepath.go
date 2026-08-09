@@ -13,6 +13,11 @@ func SlideSpecPath(slideID string) string { return SlideDir(slideID) + "/spec.js
 // SlideHTMLPath 返回某页 index.html 相对路径。
 func SlideHTMLPath(slideID string) string { return SlideDir(slideID) + "/index.html" }
 
+// SlideMaterializationPath returns Runtime-owned HTML materialization metadata.
+func SlideMaterializationPath(slideID string) string {
+	return SlideDir(slideID) + "/materialization.json"
+}
+
 // SlideHTMLVersionSnapshot 返回某页某版本 html 快照相对路径。
 func SlideHTMLVersionSnapshot(slideID string, versionNo int) string {
 	return fmt.Sprintf("versions/slide-html-%s/v%d.html", slideID, versionNo)

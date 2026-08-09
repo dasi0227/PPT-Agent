@@ -51,10 +51,16 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	writeJSON(t, filepath.Join(dir, "design.json"), design)
 	slides := map[string]model.Slide{}
 	for i, id := range deck.SlideOrder {
-		bp := pptspec.SlideSpec{SchemaVersion: pptspec.SchemaVersion, Revision: i + 1, ProjectID: "p1", SlideID: id, SourceOutlineRevision: 2, SectionID: "sec", SubsectionID: "sub", Role: "evidence",
-			Title: "Title " + id, KeyMessage: "Message " + id, Content: pptspec.Content{Summary: "Summary " + id, Points: []string{"point"}},
-			VisualIntent: pptspec.VisualIntent{Archetype: "data-story", Description: "chart", AssetQueries: []string{"growth chart"}},
-			CreatedAt:    1, UpdatedAt: 2}
+		bp := pptspec.SlideSpec{
+			SchemaVersion: pptspec.SchemaVersion, Revision: i + 1, ProjectID: "p1", SlideID: id,
+			SectionID: "sec", SubsectionID: "sub", Role: "evidence",
+			Title: "Title " + id, KeyMessage: "Message " + id,
+			Elements: []pptspec.Element{
+				{Type: "chart", Intent: "Show growth"},
+				{Type: "asset", Intent: "growth chart"},
+			},
+			Layout: "two-column", CreatedAt: 1, UpdatedAt: 2,
+		}
 		writeJSON(t, filepath.Join(dir, "slides", id, "spec.json"), bp)
 		html := `<!doctype html><html><head><title>` + id + `</title><style>:root{--color:red}</style></head><body><main id="slide" data-slide="` + id + `"><section class="hero token-accent"><h1>` + bp.Title + `</h1><img src="asset.png" alt="asset"></section></main></body></html>`
 		if err := os.WriteFile(filepath.Join(dir, "slides", id, "index.html"), []byte(html), 0o644); err != nil {
@@ -239,7 +245,20 @@ func TestRefStaleAfterRevisionChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store.slides["s2"] = model.Slide{ID: "s2", HTMLRevision: 5}
+	writeJSON(t, filepath.Join(project.WorkDir, model.SlideMaterializationPath("s2")), pptspec.MaterializationRecord{
+		SchemaVersion: pptspec.SchemaVersion,
+		Artifact: pptspec.MaterializationArtifact{
+			Revision: 5,
+			Hash:     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+		Source: pptspec.MaterializationSource{
+			Outline: 2,
+			Spec:    2,
+			Design:  1,
+			Hash:    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+		RenderedAt: 2,
+	})
 	_, err = (&ContextRefResolver{Registry: registry}).Read(context.Background(), RefReadRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", RefID: pack.Target.SlideHTMLRef.ID, Detail: DetailFull, RemainingBudget: 100000})
 	if code(err) != CodeRefStale {
 		t.Fatalf("err=%v", err)

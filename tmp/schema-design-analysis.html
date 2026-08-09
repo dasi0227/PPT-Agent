@@ -334,7 +334,7 @@
       <div class="card span-4">
         <h3 style="margin-top:0">建议版本策略</h3>
         <p><b>短期：</b>发 <code>3.1</code>，只增加可选字段，前端与旧项目不破。</p>
-        <p><b>中期：</b>发 <code>4.0</code>，替换位置型 <code>palette[]</code>、过窄的 <code>content.summary/points</code>，并清理已敲定删除/替换的叙事字段。</p>
+        <p><b>本轮：</b>完成 <code>spec.json</code> 的轻量语义规划结构，并把 HTML 物化关系迁移到 Runtime-owned 的 <code>materialization.json</code>。</p>
       </div>
     </section>
 
@@ -402,7 +402,7 @@
           </thead>
           <tbody>
             <tr><td><code>version</code></td><td><code>const "3.0"</code></td><td>schema 合约版本。旧名 <code>schema_version</code> 已敲定替换。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>命名更短，仍用于迁移和兼容判断；模型不可写。</td></tr>
-            <tr><td><code>revision</code></td><td>integer, min 1</td><td>outline 内容版本。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>驱动 slide spec 的 <code>source_outline_revision</code> 与 stale 判断。</td></tr>
+            <tr><td><code>revision</code></td><td>integer, min 1</td><td>outline 内容版本。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>作为当前文件版本，与每页 <code>materialization.source.outline</code> 比较以判断 HTML 是否 stale。</td></tr>
             <tr><td><code>project</code></td><td><code>^pro_[a-z2-9]{6}$</code></td><td>所属项目 ID。旧名 <code>project_id</code> 已敲定替换。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>字段值仍是项目 ID；由 Runtime 生成并对 Agent 隐藏，DB unique + 冲突重试。</td></tr>
             <tr><td><code>title</code></td><td>string, 1-200</td><td>整份 PPT 的对外标题。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>区别于项目管理标题；是演示稿内容的一部分。</td></tr>
             <tr><td><code>goal</code></td><td>string, 1-1200</td><td>这份 PPT 要达成的结果。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>对齐生成、审查和后续编辑的最高层约束。</td></tr>
@@ -476,35 +476,30 @@
             <tr><td><code>revision</code></td><td>integer, min 1</td><td>单页 spec 版本。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>用于判断 HTML 是否 <code>spec_stale</code>。</td></tr>
             <tr><td><code>project</code></td><td><code>^pro_[a-z2-9]{6}$</code></td><td>所属项目 ID。旧名 <code>project_id</code> 已敲定替换。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>字段值仍是项目 ID；由 Runtime 生成并对 Agent 隐藏，用于隔离资源。</td></tr>
             <tr><td><code>slide_id</code></td><td><code>^sli_[a-z2-9]{6}$</code></td><td>稳定页身份。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>由 Runtime 生成并对 Agent 隐藏。路径、版本快照、前端跳转、目录移动都依赖它；不能用 page index 代替。</td></tr>
-            <tr><td><code>source_outline_revision</code></td><td>integer, min 1</td><td>生成/同步时依赖的 outline 版本。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>outline 改动后判断 spec stale 的核心依据。</td></tr>
-            <tr><td><code>section_id</code></td><td><code>^sec_[a-z2-9]{6}$</code></td><td>所属章节引用。</td><td class="managed">Runtime 持久化；Agent 表达归属意图</td><td><span class="decision replace">替换</span></td><td>持久 JSON 保存真实 ID，但 Agent 不直接写。Runtime 根据 Agent 的归属选择映射到合法 section，并做引用完整性校验。</td></tr>
-            <tr><td><code>subsection_id</code></td><td>optional <code>^sub_[a-z2-9]{6}$</code></td><td>所属二级章节引用。</td><td class="managed">Runtime 持久化；Agent 表达归属意图</td><td><span class="decision replace">替换</span></td><td>持久 JSON 保存真实 ID，但 Agent 不直接写。跨 section 移动时由 Runtime 清空或重写非法 subsection 引用。</td></tr>
-            <tr><td><code>role</code></td><td>enum 14 种</td><td>页面叙事角色。</td><td class="agent">Agent / 用户</td><td><span class="decision add">放宽/增强</span></td><td>枚举利于 UI 和校验，但会限制业务新角色。建议 3.1 加 <code>role_label</code> 或 <code>custom_role</code>，4.0 改为基础 role + open subtype。</td></tr>
+            <tr><td><code>section_id</code></td><td><code>^sec_[a-z2-9]{6}$</code></td><td>所属章节引用。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>持久 JSON 保存真实 ID，Agent Contract 隐藏；普通 spec 写入继承当前值，章节移动走显式 restructure。</td></tr>
+            <tr><td><code>subsection_id</code></td><td>optional <code>^sub_[a-z2-9]{6}$</code></td><td>所属二级章节引用。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>与 section 一样由 Runtime 托管，避免 Agent 直接操作持久 ID。</td></tr>
+            <tr><td><code>role</code></td><td>string, 1-80</td><td>页面叙事角色。</td><td class="agent">Agent / 用户</td><td><span class="decision replace">改为开放字符串</span></td><td>允许 Agent 根据业务语义定义角色，不再受固定枚举限制。</td></tr>
             <tr><td><code>title</code></td><td>string, 1-160</td><td>页面标题。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>前端目录、spec 卡片和 HTML 生成都需要。</td></tr>
             <tr><td><code>key_message</code></td><td>string, 1-500</td><td>本页最重要的一句话。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>这是防止页面堆信息的关键字段。</td></tr>
-            <tr><td><code>content.summary</code></td><td>string, 1-1600</td><td>页面内容摘要。</td><td class="agent">Agent / 用户</td><td><span class="decision replace">替换</span></td><td>摘要无法表达表格、代码、时间线、对比矩阵、指标卡等结构。</td></tr>
-            <tr><td><code>content.points</code></td><td>string array, max 8</td><td>要点列表。</td><td class="agent">Agent / 用户</td><td><span class="decision replace">替换</span></td><td>适合 bullets，不适合数据故事、图表、流程和案例页。</td></tr>
-            <tr><td><code>visual_intent.archetype</code></td><td>string, 1-80</td><td>视觉原型。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>当前前端用它作为 layout/title 的兜底，继续保留。</td></tr>
-            <tr><td><code>visual_intent.description</code></td><td>string, 1-1200</td><td>视觉描述。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>给 HTML 实现留出 LLM 灵活性，避免程序写死语义。</td></tr>
-            <tr><td><code>visual_intent.asset_queries</code></td><td>string array, max 12</td><td>素材检索/生成提示。</td><td class="agent">Agent / 用户</td><td><span class="decision add">增强</span></td><td>建议扩展为可区分 image/icon/chart/reference 的 asset intent。</td></tr>
-            <tr><td><code>speaker_notes</code></td><td>string, max 4000</td><td>讲稿/演讲备注。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>必须保持“只进 notes，不进可见 slide”。html-ppt 原文对此有明确规则。</td></tr>
+            <tr><td><code>elements</code></td><td>array, max 32</td><td>按阅读顺序排列的页面语义元素。</td><td class="agent">Agent / 用户</td><td><span class="decision replace">替换 content / visual_intent</span></td><td>每项只含枚举 <code>type</code> 与自然语言 <code>intent</code>，不定义数据载荷或 HTML AST。</td></tr>
+            <tr><td><code>elements[].type</code></td><td><code>text | list | metric | quote | table | chart | diagram | code | asset</code></td><td>表达类型。</td><td class="agent">Agent / 用户</td><td><span class="decision add">新增</span></td><td><code>asset</code> 同时承接旧素材检索意图，不再维护独立 asset_intents。</td></tr>
+            <tr><td><code>elements[].intent</code></td><td>string, 1-1200</td><td>该元素准备表达什么。</td><td class="agent">Agent / 用户</td><td><span class="decision add">新增</span></td><td>实际文案、数据和实现由后续 HTML Agent 处理。</td></tr>
+            <tr><td><code>layout</code></td><td>optional string, 1-80</td><td>页面布局方向。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">暂时保留</span></td><td>本轮不做静态枚举或资产存在性校验。</td></tr>
             <tr><td><code>created_at</code> / <code>updated_at</code></td><td>integer timestamp</td><td>创建/更新时间。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>运行时托管。</td></tr>
           </tbody>
         </table>
       </div>
 
-      <h3>spec.json 建议新增 / 替换字段</h3>
+      <h3>spec.json 已删除字段</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>字段</th><th>建议版本</th><th>动作</th><th>含义</th><th>为什么需要</th></tr></thead>
+          <thead><tr><th>字段</th><th>动作</th><th>原因</th><th>替代位置</th><th>结果</th></tr></thead>
           <tbody>
-            <tr><td><code>layout_ref</code></td><td>3.1 可选，4.0 必选</td><td><span class="decision add">增加</span></td><td>引用 seed layout/template，如 <code>cover</code>、<code>two-column</code>、<code>timeline</code>。</td><td>html-ppt 的核心规则是“从模板开始，不从零写”。本仓库已有 seed layouts，但 spec 还没有显式承接。</td></tr>
-            <tr><td><code>content_blocks</code></td><td>3.1 可选，4.0 替换 <code>content</code></td><td><span class="decision replace">替换</span></td><td>数组：每个 block 有 <code>id/type/intent/text/items/data</code>。</td><td>比 summary/points 更能表达复杂页，同时仍是语义层，不是 HTML。</td></tr>
-            <tr><td><code>data_intent</code></td><td>3.1 可选</td><td><span class="decision add">增加</span></td><td>图表、表格、指标、公式的结构化意图。</td><td>没有它时，HTML 生成器只能从自然语言里猜图表结构，审查也难验证。</td></tr>
-            <tr><td><code>evidence_refs</code></td><td>3.1 可选</td><td><span class="decision add">增加</span></td><td>引用素材、文档、数据来源。</td><td>用于报告类/技术类 PPT 的可信度，也利于 context engine 精准组装上下文。</td></tr>
-            <tr><td><code>visual_intent.composition</code></td><td>3.1 可选</td><td><span class="decision add">增加</span></td><td>主体布局关系，如 left-claim-right-chart、hero-image、matrix。</td><td>比 archetype 更接近实现，但仍不写像素。</td></tr>
-            <tr><td><code>asset_intents</code></td><td>3.1 可选</td><td><span class="decision add">增加</span></td><td>结构化素材意图，区分 image/icon/diagram/chart。</td><td>替代纯字符串 <code>asset_queries</code> 的一部分能力，便于后续素材工具接入。</td></tr>
-            <tr><td><code>speaker_notes_meta</code></td><td>3.1 可选</td><td><span class="decision add">增加</span></td><td>讲稿模式、预计时长、提示粒度。</td><td>与 html-ppt presenter mode 对齐；保留 <code>speaker_notes</code> 字符串承载正文。</td></tr>
+            <tr><td><code>source_outline_revision</code></td><td><span class="decision replace">删除</span></td><td>没有参与实际 stale 链路。</td><td><code>materialization.source.outline</code></td><td>Spec 不再保存派生依赖版本。</td></tr>
+            <tr><td><code>content</code></td><td><span class="decision replace">删除</span></td><td>summary/points 过窄。</td><td><code>elements</code></td><td>统一为轻量语义规划。</td></tr>
+            <tr><td><code>visual_intent</code></td><td><span class="decision replace">删除</span></td><td>混合布局、构图和素材职责。</td><td><code>layout</code> + <code>elements</code></td><td>素材使用 <code>type: asset</code>。</td></tr>
+            <tr><td><code>speaker_notes</code></td><td><span class="decision replace">删除</span></td><td>不属于当前单页规划契约。</td><td>无</td><td>所有 Spec 语义变化统一触发 HTML 同步。</td></tr>
+            <tr><td><code>composition</code> / <code>asset_intents</code></td><td><span class="decision replace">不增加</span></td><td>避免与 elements 重复。</td><td><code>elements[].intent</code></td><td>保持 Schema 简洁。</td></tr>
           </tbody>
         </table>
       </div>
@@ -519,11 +514,10 @@
             <table>
               <thead><tr><th>字段</th><th>含义</th><th>建议</th></tr></thead>
               <tbody>
-                <tr><td><code>state</code></td><td><code>not_materialized/fresh/spec_stale/design_stale/unknown</code></td><td><span class="decision keep">保留</span> 派生状态，不让 Agent 写。</td></tr>
-                <tr><td><code>revisions.slide_html</code></td><td>HTML 版本。</td><td><span class="decision keep">保留</span> 用于 render 新鲜度。</td></tr>
-                <tr><td><code>revisions.source_outline</code></td><td>HTML 依赖的 outline 版本。</td><td><span class="decision keep">保留</span> outline 改动后触发 stale。</td></tr>
-                <tr><td><code>revisions.source_spec</code></td><td>HTML 依赖的 slide spec 版本。</td><td><span class="decision keep">保留</span> spec 改动后触发 stale。</td></tr>
-                <tr><td><code>revisions.source_design</code></td><td>HTML 依赖的 design 版本。</td><td><span class="decision keep">保留</span> design 改动后触发 stale。</td></tr>
+                <tr><td><code>artifact.revision/hash</code></td><td>HTML 版本与精确内容 hash。</td><td><span class="decision replace">迁入文件</span> 位于每页 <code>materialization.json</code>。</td></tr>
+                <tr><td><code>source.outline/spec/design</code></td><td>成功渲染时使用的三份当前文件 revision。</td><td><span class="decision replace">迁入文件</span> 与当前 JSON revision 比较。</td></tr>
+                <tr><td><code>source.hash</code></td><td>outline/spec/design 精确字节的组合 hash。</td><td><span class="decision add">新增</span> 防止 revision 未变但内容漂移。</td></tr>
+                <tr><td><code>rendered_at</code></td><td>成功渲染时间。</td><td><span class="decision add">新增</span> 完全由 Runtime 托管。</td></tr>
               </tbody>
             </table>
           </div>
@@ -569,8 +563,8 @@
           <thead><tr><th>阶段</th><th>动作</th><th>范围</th><th>风险</th><th>验证</th></tr></thead>
           <tbody>
             <tr><td>Phase 1：3.1 兼容增强</td><td>增加已敲定字段：<code>outline.constraints</code>、<code>outline.sections[].purpose</code>；同步把 <code>schema_version</code> 改为 <code>version</code>；为新 <code>design</code> 合约准备 TS/Go 类型。</td><td>schema + Go/TS 类型 + AgentContract 示例 + 前端只读展示。</td><td>低；旧项目不破。</td><td>schema 正反例、AgentContract 不泄露 runtime-managed 字段、前端 spec card 展示可选信息。</td></tr>
-            <tr><td>Phase 2：生成链路消费</td><td>HTML 生成器优先读 <code>design.theme/direction/density/chrome</code> 与 <code>spec.layout_ref/content_blocks</code>；<code>common/tokens.css</code> 由仓库 theme.css 复制/派生，不再由 design.json 重建整套 token。</td><td>workflow、render、theme repo、tokens.css 生成、seed layout 选择。</td><td>中；会影响生成质量。</td><td>端到端生成 deck，render evidence，检查 chrome 出现位置、theme token 完整性和 stale 状态。</td></tr>
-            <tr><td>Phase 3：4.0 清理</td><td>替换 <code>palette[]</code>、<code>typography</code>、<code>spacing</code>、<code>radius</code>、<code>shadows</code>、<code>layout_system</code>、<code>signature</code>、<code>motion</code>、<code>content.summary/points</code>、<code>core_thesis</code>、<code>project_id</code> 和所有 ID 格式；删除 <code>sections[].number</code>、<code>narrative_arc</code> 与 <code>design.canvas</code>。</td><td>schema breaking change + migration + API 投影 + AgentContract 嵌套字段隐藏。</td><td>高；必须一次闭环。</td><td>迁移幂等、旧项目可打开、目录编号由 UI/API 派生，<code>core_thesis</code> 迁移为可选 <code>positioning</code>，<code>project_id</code> 迁移为 <code>project</code>，UUID 迁移到短 ID 并保持引用完整，固定画布由系统协议校验。</td></tr>
+            <tr><td>Phase 2：生成链路消费</td><td>HTML 生成器读取 <code>design.theme/direction/density/chrome</code> 与 <code>spec.layout/elements</code>；素材查询来自 <code>elements[type=asset].intent</code>。</td><td>workflow、context engine、render、前端。</td><td>中；会影响生成质量。</td><td>端到端生成 deck，验证 render proof、materialization hash 与 stale 状态。</td></tr>
+            <tr><td>Phase 3：文件为真相</td><td>删除 DB 当前 revision 镜像，把 HTML artifact/source revision 与 hash 写入每页 <code>materialization.json</code>。</td><td>SQLite migration + filesystem migration + API 投影。</td><td>高；必须一次闭环。</td><td>旧项目迁移、提交回滚、HTML rollback 失效物化记录、文件 projection。</td></tr>
           </tbody>
         </table>
       </div>
@@ -581,9 +575,7 @@
       <div class="card">
         <ul class="clean">
           <li><b>场景字段放哪里：</b><code>outline.scenario</code> 还是 <code>WorkSpec.options</code>？我的建议是创建时来自 options，落盘后进入 outline。</li>
-          <li><b>role 是否继续 enum：</b>继续 enum 有利于 UI 和审查，但要给 custom/subtype 留口。</li>
-          <li><b>content_blocks 的复杂度：</b>要不要做 typed union，还是先用轻量 block schema。</li>
-          <li><b>speaker notes 的形态：</b>保留正文字符串，另加 meta；不要把讲稿混入可见 slide 内容。</li>
+          <li><b>layout 的资源机制：</b>字段暂时保留为开放字符串；后续再确定布局仓库来源、候选值暴露方式与 Runtime 校验规则。</li>
         </ul>
       </div>
     </section>

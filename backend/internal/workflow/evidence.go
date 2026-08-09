@@ -25,6 +25,7 @@ type MaterializationProof struct {
 	SourceOutlineRevision int
 	SourceSpecRevision    int
 	SourceDesignRevision  int
+	ArtifactHash          string
 	SourceHash            string
 }
 
@@ -97,7 +98,7 @@ func (l *EvidenceLedger) FreshMaterializationProof(target Resource, sourceHash s
 			continue
 		}
 		proof := *entry.Materialization
-		if proof.SlideID == target.SlideID && proof.SourceHash == sourceHash {
+		if proof.SlideID == target.SlideID && proof.ArtifactHash == sourceHash {
 			return proof, true
 		}
 	}

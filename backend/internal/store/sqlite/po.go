@@ -9,16 +9,14 @@ import (
 // 持久化对象（PO）：GORM tag 仅出现在本包（ARCH-BACKEND-006）。PO↔model 在 store 边界互转。
 
 type projectPO struct {
-	ID              string `gorm:"column:id;primaryKey"`
-	Title           string `gorm:"column:title"`
-	WorkDir         string `gorm:"column:work_dir"`
-	Theme           string `gorm:"column:theme"`
-	Status          string `gorm:"column:status"`
-	OutlineRevision int    `gorm:"column:outline_revision"`
-	DesignRevision  int    `gorm:"column:design_revision"`
-	LayoutVersion   int    `gorm:"column:layout_version"`
-	CreatedAt       int64  `gorm:"column:created_at"`
-	UpdatedAt       int64  `gorm:"column:updated_at"`
+	ID            string `gorm:"column:id;primaryKey"`
+	Title         string `gorm:"column:title"`
+	WorkDir       string `gorm:"column:work_dir"`
+	Theme         string `gorm:"column:theme"`
+	Status        string `gorm:"column:status"`
+	LayoutVersion int    `gorm:"column:layout_version"`
+	CreatedAt     int64  `gorm:"column:created_at"`
+	UpdatedAt     int64  `gorm:"column:updated_at"`
 }
 
 func (projectPO) TableName() string { return "projects" }
@@ -26,8 +24,7 @@ func (projectPO) TableName() string { return "projects" }
 func (p projectPO) toModel() model.Project {
 	return model.Project{
 		ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme,
-		Status:          p.Status,
-		OutlineRevision: p.OutlineRevision, DesignRevision: p.DesignRevision,
+		Status:        p.Status,
 		LayoutVersion: p.LayoutVersion,
 		CreatedAt:     p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
@@ -39,8 +36,7 @@ func projectToPO(m model.Project) projectPO {
 	}
 	return projectPO{
 		ID: m.ID, Title: m.Title, WorkDir: m.WorkDir, Theme: m.Theme,
-		Status:          m.Status,
-		OutlineRevision: m.OutlineRevision, DesignRevision: m.DesignRevision,
+		Status:        m.Status,
 		LayoutVersion: m.LayoutVersion,
 		CreatedAt:     m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
@@ -267,15 +263,10 @@ type semanticReviewPO struct {
 func (semanticReviewPO) TableName() string { return "semantic_reviews" }
 
 type slidePO struct {
-	ID                    string `gorm:"column:id;primaryKey"`
-	ProjectID             string `gorm:"column:project_id"`
-	CurrentVersion        int    `gorm:"column:current_version"`
-	SpecRevision          int    `gorm:"column:spec_revision"`
-	HTMLRevision          int    `gorm:"column:html_revision"`
-	SourceOutlineRevision int    `gorm:"column:source_outline_revision"`
-	SourceSpecRevision    int    `gorm:"column:source_spec_revision"`
-	SourceDesignRevision  int    `gorm:"column:source_design_revision"`
-	LastExportAt          *int64 `gorm:"column:last_export_at"`
+	ID             string `gorm:"column:id;primaryKey"`
+	ProjectID      string `gorm:"column:project_id"`
+	CurrentVersion int    `gorm:"column:current_version"`
+	LastExportAt   *int64 `gorm:"column:last_export_at"`
 }
 
 func (slidePO) TableName() string { return "slides" }
@@ -288,9 +279,7 @@ func (s slidePO) toModel() model.Slide {
 		ID: s.ID, ProjectID: s.ProjectID,
 		SpecPath: model.SlideSpecPath(s.ID), HTMLPath: model.SlideHTMLPath(s.ID),
 		CurrentVersion: s.CurrentVersion,
-		SpecRevision:   s.SpecRevision, HTMLRevision: s.HTMLRevision,
-		SourceOutlineRevision: s.SourceOutlineRevision, SourceSpecRevision: s.SourceSpecRevision,
-		SourceDesignRevision: s.SourceDesignRevision, LastExportAt: s.LastExportAt,
+		LastExportAt:   s.LastExportAt,
 	}
 }
 
@@ -298,9 +287,7 @@ func slideToPO(m model.Slide) slidePO {
 	return slidePO{
 		ID: m.ID, ProjectID: m.ProjectID,
 		CurrentVersion: m.CurrentVersion,
-		SpecRevision:   m.SpecRevision, HTMLRevision: m.HTMLRevision,
-		SourceOutlineRevision: m.SourceOutlineRevision, SourceSpecRevision: m.SourceSpecRevision,
-		SourceDesignRevision: m.SourceDesignRevision, LastExportAt: m.LastExportAt,
+		LastExportAt:   m.LastExportAt,
 	}
 }
 

@@ -97,19 +97,3 @@ type MaterializationRevisions struct {
 	SlideSpec int `json:"source_spec"`
 	Design    int `json:"source_design"`
 }
-
-func DeriveMaterializationState(hasHTML bool, currentOutline, currentSpec, currentDesign int, source MaterializationRevisions) MaterializationState {
-	if !hasHTML {
-		return MaterializationNotMaterialized
-	}
-	if source.SlideHTML == 0 || source.SlideSpec == 0 || source.Design == 0 {
-		return MaterializationUnknown
-	}
-	if source.Outline < currentOutline || source.SlideSpec < currentSpec {
-		return MaterializationSpecStale
-	}
-	if source.Design < currentDesign {
-		return MaterializationDesignStale
-	}
-	return MaterializationFresh
-}

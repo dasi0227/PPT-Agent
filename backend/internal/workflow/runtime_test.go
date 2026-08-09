@@ -966,11 +966,15 @@ func TestCommitOnlyAfterGateAcceptance(t *testing.T) {
 func TestAcceptedRenderProofFlowsThroughRuntimeCommitContext(t *testing.T) {
 	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
 	next := slideModel("slide-01", "Original")
-	next.SpeakerNotes = "updated notes"
+	next.Title = "Updated"
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("spec", "write_ppt", map[string]any{
 			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}),
 			"content":  string(mustJSONValue(next)),
+		}),
+		toolCall("html", "write_ppt", map[string]any{
+			"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "html"}),
+			"content":  strings.Replace(validToolHTML, "Original", "Updated", 1),
 		}),
 		toolCall("render", "render_slide", map[string]any{"slide_id": "slide-01"}),
 		finishCall("done"),
@@ -988,7 +992,7 @@ func TestAcceptedRenderProofFlowsThroughRuntimeCommitContext(t *testing.T) {
 		t.Fatalf("outcome=%+v commit=%+v", outcome, committed)
 	}
 	proof := committed.MaterializationProofs[0]
-	if proof.SlideID != "slide-01" || proof.HTMLRevision != 1 || proof.SourceSpecRevision != 2 {
+	if proof.SlideID != "slide-01" || proof.HTMLRevision != 2 || proof.SourceSpecRevision != 2 {
 		t.Fatalf("unexpected proof=%+v", proof)
 	}
 }

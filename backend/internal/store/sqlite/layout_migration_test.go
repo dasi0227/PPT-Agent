@@ -56,7 +56,8 @@ func TestProjectLayoutMigrationIsAtomicAndOneWay(t *testing.T) {
 		t.Fatal(err)
 	}
 	if saved.SchemaVersion != spec.SchemaVersion || saved.ProjectID != "p1" ||
-		saved.SlideID != "slide-01" || saved.SourceOutlineRevision != 2 {
+		saved.SlideID != "slide-01" || saved.Layout != "cover" ||
+		len(saved.Elements) != 1 || saved.Elements[0].Type != "text" {
 		t.Fatalf("migrated metadata=%+v", saved)
 	}
 	var row struct {
@@ -101,6 +102,67 @@ func TestProjectLayoutMigrationIsAtomicAndOneWay(t *testing.T) {
 	}
 }
 
+func TestProjectLayoutV2NormalizesSlideSpecInPlace(t *testing.T) {
+	root := t.TempDir()
+	db, cleanup, err := Open(&config.Config{DBPath: filepath.Join(root, "v2.db")}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if err := Migrate(db, zap.NewNop()); err != nil {
+		t.Fatal(err)
+	}
+	workDir := filepath.Join(root, "project")
+	if err := db.Exec(`
+		INSERT INTO projects(id,title,work_dir,theme,status,layout_version,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?,?)
+	`, "p1", "Deck", workDir, "default", "draft", 2, 1, 2).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO slides(id,project_id) VALUES(?,?)`, "slide-01", "p1").Error; err != nil {
+		t.Fatal(err)
+	}
+	write := func(relative string, value any) {
+		path := filepath.Join(workDir, filepath.FromSlash(relative))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(value)
+		if err := os.WriteFile(path, raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("outline.json", spec.Outline{
+		SchemaVersion: spec.SchemaVersion, Revision: 2, ProjectID: "p1",
+		Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN",
+		Constraints: spec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
+		Sections:    []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Main", Subsections: []spec.Subsection{}}},
+		SlideOrder:  []string{"slide-01"}, CreatedAt: 1, UpdatedAt: 2,
+	})
+	write("design.json", spec.Design{
+		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "p1",
+		Theme: "swiss-modern", Direction: "test", Density: "medium",
+		Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 2,
+	})
+	write(model.SlideSpecPath("slide-01"), slideModelForMigration())
+
+	if err := MigrateProjectLayouts(db, zap.NewNop()); err != nil {
+		t.Fatal(err)
+	}
+	var saved spec.SlideSpec
+	raw, err := os.ReadFile(filepath.Join(workDir, model.SlideSpecPath("slide-01")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.Layout != "cover" || len(saved.Elements) != 1 ||
+		saved.Elements[0].Type != "text" || saved.Elements[0].Intent != "Legacy" {
+		t.Fatalf("normalized spec=%+v", saved)
+	}
+}
+
 func TestProjectLayoutMigrationFailureLeavesLegacyLayoutUntouched(t *testing.T) {
 	root := t.TempDir()
 	db, cleanup, err := Open(&config.Config{DBPath: filepath.Join(root, "rollback.db")}, zap.NewNop())
@@ -135,19 +197,17 @@ func TestProjectLayoutMigrationFailureLeavesLegacyLayoutUntouched(t *testing.T) 
 func insertLayoutV1Project(t *testing.T, db *gorm.DB, projectID, workDir string) {
 	t.Helper()
 	if err := db.Exec(`INSERT INTO projects(
-		id,title,work_dir,theme,status,
-		outline_revision,design_revision,layout_version,created_at,updated_at
-	) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		id,title,work_dir,theme,status,layout_version,created_at,updated_at
+	) VALUES(?,?,?,?,?,?,?,?)`,
 		projectID, "Legacy", workDir, "default", "draft",
-		2, 1, 1, 1, 2,
+		1, 1, 2,
 	).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec(`INSERT INTO slides(
-		id,project_id,current_version,
-		spec_revision,html_revision,source_outline_revision,source_spec_revision,source_design_revision
-	) VALUES(?,?,?,?,?,?,?,?)`,
-		"slide-01", projectID, 1, 3, 1, 2, 3, 1,
+		id,project_id,current_version
+	) VALUES(?,?,?)`,
+		"slide-01", projectID, 1,
 	).Error; err != nil {
 		t.Fatal(err)
 	}

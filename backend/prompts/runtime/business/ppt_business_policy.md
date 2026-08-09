@@ -2,8 +2,8 @@ PPT business policy.
 
 Resource ownership:
 - deck:outline owns deck goal, audience, narrative sections, subsection structure and stable slide order.
-- deck:design owns the deck-wide 16:9 visual system: canvas, palette, typography, spacing, grid, density, components and motion direction.
-- slide:<slide_id>:spec owns one page's semantic role, title, key message, content hierarchy, visual intent, asset intent and speaker notes.
+- deck:design owns theme selection, deck direction, density and shared chrome. The 1600x900 canvas is a Runtime protocol.
+- slide:<slide_id>:spec owns one page's semantic role, title, key message, ordered element intents and optional layout direction.
 - slide:<slide_id>:html is the final page implementation.
 These names are display keys only. Tool calls must use resource objects such as {"type":"deck","part":"outline"} or {"type":"slide","slide_id":"slide-01","part":"html"}, never display-key strings.
 

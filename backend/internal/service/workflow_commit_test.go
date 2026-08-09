@@ -41,19 +41,23 @@ func TestWorkflowCommitMaterializationProofUpdatesSourcesWithoutHTMLRevision(t *
 		if err != nil {
 			t.Fatal(err)
 		}
-		slide, _ := fixture.store.GetSlide(context.Background(), "slide-01")
-		if slide.HTMLRevision != 1 || slide.SourceDesignRevision != 2 ||
-			slide.SourceSpecRevision != 1 || slide.SourceOutlineRevision != 1 {
-			t.Fatalf("design-only materialization=%+v", slide)
+		materialization := fixture.materialization(t, "slide-01")
+		if materialization.Artifact.Revision != 1 || materialization.Source.Design != 2 ||
+			materialization.Source.Spec != 1 || materialization.Source.Outline != 1 {
+			t.Fatalf("design-only materialization=%+v", materialization)
 		}
-		assertFresh(t, slide, 1, 1, 2)
+		projected, err := NewSlideService(fixture.store).GetSlide(context.Background(), "slide-01")
+		if err != nil || projected.HTMLRevision != 1 || projected.SourceDesignRevision != 2 {
+			t.Fatalf("file-projected slide=%+v err=%v", projected, err)
+		}
+		assertFresh(t, materialization, 1, 1, 2)
 	})
 
-	t.Run("speaker notes only", func(t *testing.T) {
+	t.Run("spec only", func(t *testing.T) {
 		fixture := newCommitFixture(t, 1)
 		slideSpec := fixture.slides["slide-01"]
 		slideSpec.Revision = 2
-		slideSpec.SpeakerNotes = "updated notes"
+		slideSpec.Role = "updated-role"
 		fixture.slides["slide-01"] = slideSpec
 		writeCommitJSON(t, fixture.project.WorkDir, model.SlideSpecPath("slide-01"), slideSpec)
 		proof := fixture.proof(t, "slide-01", 1)
@@ -67,11 +71,11 @@ func TestWorkflowCommitMaterializationProofUpdatesSourcesWithoutHTMLRevision(t *
 		if err != nil {
 			t.Fatal(err)
 		}
-		slide, _ := fixture.store.GetSlide(context.Background(), "slide-01")
-		if slide.HTMLRevision != 1 || slide.SpecRevision != 2 || slide.SourceSpecRevision != 2 {
-			t.Fatalf("spec-only materialization=%+v", slide)
+		materialization := fixture.materialization(t, "slide-01")
+		if materialization.Artifact.Revision != 1 || materialization.Source.Spec != 2 {
+			t.Fatalf("spec-only materialization=%+v", materialization)
 		}
-		assertFresh(t, slide, 1, 2, 1)
+		assertFresh(t, materialization, 1, 2, 1)
 	})
 }
 
@@ -89,12 +93,14 @@ func TestWorkflowCommitUpdatesOnlySlidesWithAcceptedProof(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, _ := fixture.store.GetSlide(context.Background(), "slide-01")
-	second, _ := fixture.store.GetSlide(context.Background(), "slide-02")
-	if first.SourceDesignRevision != 2 || second.SourceDesignRevision != 1 {
+	first := fixture.materialization(t, "slide-01")
+	second := fixture.materialization(t, "slide-02")
+	if first.Source.Design != 2 || second.Source.Design != 1 {
 		t.Fatalf("proof scope first=%+v second=%+v", first, second)
 	}
-	if state := model.DeriveMaterializationState(true, 1, 1, 2, revisions(second)); state != model.MaterializationDesignStale {
+	if state := spec.DeriveMaterializationState(
+		true, &second, 1, 1, 2, second.Artifact.Hash, "changed",
+	); state != string(model.MaterializationDesignStale) {
 		t.Fatalf("unrendered slide state=%s", state)
 	}
 }
@@ -115,9 +121,9 @@ func TestWorkflowCommitHTMLChangeIncrementsHTMLRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	slide, _ := fixture.store.GetSlide(context.Background(), "slide-01")
-	if slide.HTMLRevision != 2 || slide.SourceSpecRevision != 1 || slide.SourceDesignRevision != 1 {
-		t.Fatalf("HTML revision=%+v", slide)
+	materialization := fixture.materialization(t, "slide-01")
+	if materialization.Artifact.Revision != 2 || materialization.Source.Spec != 1 || materialization.Source.Design != 1 {
+		t.Fatalf("HTML revision=%+v", materialization)
 	}
 }
 
@@ -136,9 +142,9 @@ func TestWorkflowCommitRejectsStaleProofWithoutUpdatingSources(t *testing.T) {
 	if err == nil {
 		t.Fatal("stale proof was accepted")
 	}
-	slide, _ := fixture.store.GetSlide(context.Background(), "slide-01")
-	if slide.SourceDesignRevision != 1 || slide.HTMLRevision != 1 {
-		t.Fatalf("stale proof updated database: %+v", slide)
+	materialization := fixture.materialization(t, "slide-01")
+	if materialization.Source.Design != 1 || materialization.Artifact.Revision != 1 {
+		t.Fatalf("stale proof updated materialization: %+v", materialization)
 	}
 }
 
@@ -159,7 +165,7 @@ func TestWorkflowCommitFailureKeepsDirectWrittenFileButLeavesDatabase(t *testing
 	tx.AcceptMaterializationProofs([]workflow.MaterializationProof{{
 		SlideID: "slide-01", HTMLRevision: 1,
 		SourceOutlineRevision: 1, SourceSpecRevision: 1, SourceDesignRevision: 2,
-		SourceHash: "stale",
+		ArtifactHash: "stale", SourceHash: "stale",
 	}})
 	committer := workflowCommitter{store: fixture.store, project: fixture.project, runID: "atomic-failure"}
 	if err := tx.Commit(context.Background(), committer.Commit); err == nil {
@@ -169,11 +175,10 @@ func TestWorkflowCommitFailureKeepsDirectWrittenFileButLeavesDatabase(t *testing
 	// failure keeps it on disk. Only the database must stay untouched because the
 	// stale proof is rejected before CommitWorkflow runs.
 	written, _ := os.ReadFile(filepath.Join(fixture.project.WorkDir, "design.json"))
-	project, _ := fixture.store.GetProject(context.Background(), fixture.project.ID)
-	slide, _ := fixture.store.GetSlide(context.Background(), "slide-01")
-	if string(written) != string(mustJSON(next)) || project.DesignRevision != 1 ||
-		slide.SourceDesignRevision != 1 || slide.HTMLRevision != 1 {
-		t.Fatalf("finalize failure state project=%+v slide=%+v", project, slide)
+	materialization := fixture.materialization(t, "slide-01")
+	if string(written) != string(mustJSON(next)) ||
+		materialization.Source.Design != 1 || materialization.Artifact.Revision != 1 {
+		t.Fatalf("finalize failure materialization=%+v", materialization)
 	}
 }
 
@@ -227,10 +232,10 @@ func newCommitFixture(t *testing.T, slideCount int) commitFixture {
 		outline.SlideOrder = append(outline.SlideOrder, id)
 		slideSpec := spec.SlideSpec{
 			SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: project.ID, SlideID: id,
-			SourceOutlineRevision: 1, SectionID: "section-1", Role: "content",
-			Title: id, KeyMessage: id, Content: spec.Content{Summary: id, Points: []string{}},
-			VisualIntent: spec.VisualIntent{Archetype: "content", Description: "content", AssetQueries: []string{}},
-			SpeakerNotes: "", CreatedAt: 1, UpdatedAt: 1,
+			SectionID: "section-1", Role: "content",
+			Title: id, KeyMessage: id,
+			Elements: []spec.Element{{Type: "text", Intent: id}},
+			Layout:   "content", CreatedAt: 1, UpdatedAt: 1,
 		}
 		specs[id] = slideSpec
 		writeCommitJSON(t, project.WorkDir, model.SlideSpecPath(id), slideSpec)
@@ -240,8 +245,7 @@ func newCommitFixture(t *testing.T, slideCount int) commitFixture {
 		metas = append(metas, model.Slide{
 			ID: id, ProjectID: project.ID, Position: index - 1, Layout: "content", Title: id,
 			SpecPath: model.SlideSpecPath(id), HTMLPath: model.SlideHTMLPath(id),
-			CurrentVersion: 1, SpecRevision: 1, HTMLRevision: 1,
-			SourceOutlineRevision: 1, SourceSpecRevision: 1, SourceDesignRevision: 1,
+			CurrentVersion: 1,
 		})
 	}
 	writeCommitJSON(t, project.WorkDir, "outline.json", outline)
@@ -249,11 +253,31 @@ func newCommitFixture(t *testing.T, slideCount int) commitFixture {
 	if err := st.ReplaceSlides(context.Background(), project.ID, metas); err != nil {
 		t.Fatal(err)
 	}
-	return commitFixture{store: st, project: project, outline: outline, design: design, slides: specs}
+	fixture := commitFixture{store: st, project: project, outline: outline, design: design, slides: specs}
+	for _, id := range outline.SlideOrder {
+		proof := fixture.proof(t, id, 1)
+		record := spec.MaterializationRecord{
+			SchemaVersion: spec.SchemaVersion,
+			Artifact: spec.MaterializationArtifact{
+				Revision: 1,
+				Hash:     "sha256:" + proof.ArtifactHash,
+			},
+			Source: spec.MaterializationSource{
+				Outline: proof.SourceOutlineRevision,
+				Spec:    proof.SourceSpecRevision,
+				Design:  proof.SourceDesignRevision,
+				Hash:    proof.SourceHash,
+			},
+			RenderedAt: 1,
+		}
+		writeCommitJSON(t, project.WorkDir, model.SlideMaterializationPath(id), record)
+	}
+	return fixture
 }
 
 func (f commitFixture) proof(t *testing.T, slideID string, htmlRevision int) workflow.MaterializationProof {
 	t.Helper()
+	outlineRaw, _ := os.ReadFile(filepath.Join(f.project.WorkDir, "outline.json"))
 	designRaw, _ := os.ReadFile(filepath.Join(f.project.WorkDir, "design.json"))
 	specRaw, _ := os.ReadFile(filepath.Join(f.project.WorkDir, model.SlideSpecPath(slideID)))
 	htmlRaw, _ := os.ReadFile(filepath.Join(f.project.WorkDir, model.SlideHTMLPath(slideID)))
@@ -262,7 +286,8 @@ func (f commitFixture) proof(t *testing.T, slideID string, htmlRevision int) wor
 		SlideID: slideID, HTMLRevision: htmlRevision,
 		SourceOutlineRevision: f.outline.Revision,
 		SourceSpecRevision:    slideSpec.Revision, SourceDesignRevision: f.design.Revision,
-		SourceHash: workflow.MaterializationSourceHash(slideID, designRaw, specRaw, htmlRaw),
+		ArtifactHash: spec.ContentHash(htmlRaw)[len("sha256:"):],
+		SourceHash:   workflow.MaterializationSourceHash(outlineRaw, specRaw, designRaw),
 	}
 }
 
@@ -277,16 +302,22 @@ func writeCommitJSON(t *testing.T, root, relative string, value any) {
 	}
 }
 
-func revisions(slide model.Slide) model.MaterializationRevisions {
-	return model.MaterializationRevisions{
-		SlideHTML: slide.HTMLRevision, Outline: slide.SourceOutlineRevision,
-		SlideSpec: slide.SourceSpecRevision, Design: slide.SourceDesignRevision,
+func (f commitFixture) materialization(t *testing.T, slideID string) spec.MaterializationRecord {
+	t.Helper()
+	value, err := spec.ReadMaterialization(
+		filepath.Join(f.project.WorkDir, model.SlideMaterializationPath(slideID)),
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
+	return value
 }
 
-func assertFresh(t *testing.T, slide model.Slide, outline, slideSpec, design int) {
+func assertFresh(t *testing.T, value spec.MaterializationRecord, outline, slideSpec, design int) {
 	t.Helper()
-	if state := model.DeriveMaterializationState(true, outline, slideSpec, design, revisions(slide)); state != model.MaterializationFresh {
-		t.Fatalf("materialization state=%s revisions=%+v", state, slide)
+	if state := spec.DeriveMaterializationState(
+		true, &value, outline, slideSpec, design, value.Artifact.Hash, value.Source.Hash,
+	); state != string(model.MaterializationFresh) {
+		t.Fatalf("materialization state=%s revisions=%+v", state, value)
 	}
 }
