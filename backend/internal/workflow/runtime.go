@@ -57,7 +57,6 @@ type RuntimeCheckpoint struct {
 	RunID                string                        `json:"run_id"`
 	LoopID               string                        `json:"loop_id"`
 	Boundary             string                        `json:"boundary,omitempty"`
-	Strategy             ExecutionStrategy             `json:"strategy"`
 	Phase                RuntimePhase                  `json:"phase"`
 	ResumePhase          RuntimePhase                  `json:"resume_phase,omitempty"`
 	Plan                 *Plan                         `json:"plan,omitempty"`
@@ -79,7 +78,6 @@ type RuntimeCheckpoint struct {
 type AgentRequest struct {
 	RunID           string
 	LoopID          string
-	Strategy        ExecutionStrategy
 	Phase           RuntimePhase
 	Context         contextengine.ContextPack
 	Plan            *Plan
@@ -114,7 +112,7 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		return AgentResponse{}, errors.New("LLM provider is required for ReAct execution")
 	}
 	runtimeState, _ := json.Marshal(map[string]any{
-		"strategy": req.Strategy, "phase": req.Phase, "plan": req.Plan,
+		"intent": req.Context.WorkSpec.Interaction.Intent, "phase": req.Phase, "plan": req.Plan,
 		"changes": req.Changes, "evidence": req.Evidence, "requirements": req.Requirements,
 	})
 	system, user := contextengine.CompileForRunner(&req.Context,
@@ -165,7 +163,6 @@ type RuntimeInput struct {
 }
 
 type Runtime struct {
-	Router         StrategyRouter
 	Agent          ReActAgent
 	Gate           CompletionGate
 	Compactor      ContextCompactor
@@ -175,7 +172,7 @@ type Runtime struct {
 
 func NewRuntime(agent ReActAgent) *Runtime {
 	return &Runtime{
-		Router: StrategyRouter{}, Agent: agent, Gate: NewCompletionGate(),
+		Agent: agent, Gate: NewCompletionGate(),
 		Embedder: HashEmbeddingProvider{}, SemanticPolicy: DefaultSemanticReviewPolicy(),
 	}
 }
@@ -183,10 +180,8 @@ func NewRuntime(agent ReActAgent) *Runtime {
 type runtimeState struct {
 	runID                   string
 	loopID                  string
-	strategy                ExecutionStrategy
 	phase                   RuntimePhase
 	resumePhase             RuntimePhase
-	decision                StrategyDecision
 	plan                    *Plan
 	tx                      *RunSession
 	scope                   Scope
@@ -226,16 +221,14 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	if input.Budget.MaxTurns == 0 {
 		input.Budget = DefaultRuntimeBudget()
 	}
-	decision := r.Router.Decide(input.Context)
 	state := &runtimeState{
-		runID: input.RunID, loopID: "loop_" + uuid.NewString(), strategy: decision.Strategy,
-		decision: decision, scope: ScopeFromSpec(input.Context.WorkSpec), ledger: NewEvidenceLedger(),
+		runID: input.RunID, loopID: "loop_" + uuid.NewString(),
+		scope: ScopeFromSpec(input.Context.WorkSpec), ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, started: time.Now(), budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.WorkSpec),
 	}
 	if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.RunID == input.RunID {
 		state.loopID = input.ResumeCheckpoint.LoopID
-		state.strategy = input.ResumeCheckpoint.Strategy
 		state.phase = input.ResumeCheckpoint.ResumePhase
 		if state.phase == "" {
 			state.phase = input.ResumeCheckpoint.Phase
@@ -257,15 +250,13 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		return r.fail(input, state, CodeAgentFailed, errors.New("ReAct agent is required"))
 	}
 	initialPhase := PhaseChat
-	switch state.strategy {
-	case StrategyTalk, StrategyAsk:
+	switch input.Context.WorkSpec.Interaction.Intent {
+	case model.IntentTalk, model.IntentAsk:
 		initialPhase = PhaseChat
-	case StrategyPlan:
+	case model.IntentPlan:
 		initialPhase = PhasePlanning
-	case StrategyExecute:
+	case model.IntentExecute:
 		initialPhase = PhaseExecuting
-	case StrategyFulfill:
-		initialPhase = PhasePlanning
 	}
 	if input.ResumeCheckpoint != nil && state.phase != "" && state.phase != PhaseTerminal {
 		initialPhase = state.phase
@@ -286,9 +277,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
 	}
-	r.emitStrategy(state, false)
-	r.changePhase(input.Emitter, state, initialPhase, "strategy initialized")
-	if err := r.saveCheckpoint(ctx, input, state, checkpointStrategyInitialized, ""); err != nil {
+	r.changePhase(input.Emitter, state, initialPhase, "run intent initialized")
+	if err := r.saveCheckpoint(ctx, input, state, checkpointRuntimeInitialized, ""); err != nil {
 		return r.fail(input, state, CodeAgentFailed, err)
 	}
 	if initialPhase == PhasePlanning {
@@ -297,7 +287,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		r.emitProgress(input.Emitter, state, "thinking", "正在分析任务与当前内容", nil)
 	}
 
-	if isWriteStrategy(state.strategy) {
+	if input.Context.WorkSpec.Interaction.Intent == model.IntentExecute {
 		// Direct-write session: typed tools write artifacts straight to the
 		// project directory. A failed or canceled run keeps its partial
 		// products on disk instead of discarding a private write sandbox.
@@ -337,11 +327,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.maybePeriodicCheckpoint(ctx, input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
-		schemas := registry.Disclose(state.strategy, state.phase, input.Context.WorkSpec.Interaction.Intent)
-		schemas = append(schemas, controlSchemas(state.strategy, state.phase, input.Context.WorkSpec.Interaction.Intent)...)
+		schemas := registry.Disclose(state.phase, input.Context.WorkSpec.Interaction.Intent)
+		schemas = append(schemas, controlSchemas(state.phase, input.Context.WorkSpec.Interaction.Intent)...)
 		state.turns++
 		response, err := r.Agent.Next(ctx, AgentRequest{
-			RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, Phase: state.phase,
+			RunID: state.runID, LoopID: state.loopID, Phase: state.phase,
 			Context: input.Context, Plan: state.plan, Changes: state.changeSet(),
 			Evidence: state.ledger.Entries(state.changeSet()), Requirements: state.requirements,
 			ContextBriefing: state.contextBriefing,
@@ -410,21 +400,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		results := r.executeToolBatch(ctx, input, state, registry, schemasByName(schemas), calls)
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
-		upgrade := false
 		recordToolFailures(state, results)
 		if state.requirements != nil {
 			state.requirements.ObserveToolResults(results)
-		}
-		for _, result := range results {
-			upgrade = upgrade || result.Code == CodeScopeExpansion
-		}
-		if state.strategy == StrategyExecute && (upgrade || requiresComplexCoordination(state.changeSet())) {
-			r.upgradeToFulfill(input.Emitter, state, "runtime scope expansion requires coordinated planning")
-			continue
-		}
-		if state.strategy == StrategyExecute && state.toolCalls >= state.budget.SimpleUpgradeToolRoundTrips {
-			r.upgradeToFulfill(input.Emitter, state, "direct execution exceeded six tool round trips")
-			continue
 		}
 		if state.toolFailures >= state.budget.MaxConsecutiveToolFailures {
 			return r.fail(input, state, CodeConsecutiveErrors, errors.New("consecutive tool failures exhausted the runtime budget"))
@@ -493,8 +471,8 @@ func (r *Runtime) executeToolBatch(
 		lifecycleMu.Unlock()
 		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
 			Args: call.Args, CallID: call.ID, Context: input.Context, ProjectDir: input.ProjectDir, RunID: input.RunID,
-			Session: state.tx, Scope: state.scope, Strategy: state.strategy, Phase: state.phase,
-			Interaction: input.Context.WorkSpec.Interaction.Intent, Risk: state.decision.Risk,
+			Session: state.tx, Scope: state.scope, Phase: state.phase,
+			Interaction: input.Context.WorkSpec.Interaction.Intent,
 		})
 		if ctx.Err() != nil {
 			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
@@ -741,8 +719,8 @@ func (r *Runtime) executeControl(
 ) (StructuredOutcome, bool) {
 	switch call.Name {
 	case "update_plan":
-		if state.strategy != StrategyFulfill ||
-			(state.phase != PhasePlanning && state.phase != PhaseExecuting) {
+		if input.Context.WorkSpec.Interaction.Intent != model.IntentExecute ||
+			state.phase != PhaseExecuting {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "update_plan is not allowed now", false))
 			return StructuredOutcome{}, false
 		}
@@ -752,7 +730,7 @@ func (r *Runtime) executeControl(
 			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
 			return StructuredOutcome{}, false
 		}
-		next, created, err := ApplyPlanUpdate(state.plan, update, state.runID, time.Now())
+		next, _, err := ApplyPlanUpdate(state.plan, update, state.runID, time.Now())
 		if err != nil {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
 			return StructuredOutcome{}, false
@@ -777,9 +755,6 @@ func (r *Runtime) executeControl(
 			}
 		}
 		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan revision accepted"))
-		if state.strategy == StrategyFulfill && created && state.phase == PhasePlanning {
-			r.changePhase(input.Emitter, state, PhaseExecuting, "first valid plan created")
-		}
 		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, ""); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
@@ -822,7 +797,8 @@ func (r *Runtime) executeControl(
 		}
 		return StructuredOutcome{}, false
 	case "review_completion":
-		if state.strategy != StrategyPlan && state.strategy != StrategyExecute && state.strategy != StrategyFulfill {
+		intent := input.Context.WorkSpec.Interaction.Intent
+		if intent != model.IntentPlan && intent != model.IntentExecute {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "review_completion is not allowed now", false))
 			return StructuredOutcome{}, false
 		}
@@ -864,7 +840,7 @@ func (r *Runtime) finishCandidate(
 	r.emitProgress(input.Emitter, state, "finalizing", "正在完成最终检查", nil)
 	changes := state.changeSet()
 	result := r.Gate.Check(CompletionContext{
-		Strategy: state.strategy, FinishPhase: finishPhase, ActiveTools: state.activeTools,
+		Intent: input.Context.WorkSpec.Interaction.Intent, FinishPhase: finishPhase, ActiveTools: state.activeTools,
 		Issues: state.issues, WorkScope: state.scope, Session: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: input.Context, Plan: state.plan,
 		Requirements: state.requirements, FinishMessage: message, Canceled: ctx.Err() != nil,
@@ -882,11 +858,7 @@ func (r *Runtime) finishCandidate(
 		if state.gateCount >= state.budget.MaxIdenticalGateRejections {
 			return r.fail(input, state, CodeGateRejectedRepeated, errors.New("completion gate rejected the same unchanged state three times")), true
 		}
-		if state.strategy == StrategyExecute && state.gateCount >= 2 && gateNeedsCoordination(result) {
-			r.upgradeToFulfill(input.Emitter, state, "completion issues require multi-step coordination")
-		} else {
-			r.changePhase(input.Emitter, state, finishPhase, "completion rejected; continuing the same loop")
-		}
+		r.changePhase(input.Emitter, state, finishPhase, "completion rejected; continuing the same loop")
 		observation := ToolResult{
 			OK: false, Summary: "completion rejected", Data: map[string]any{"issues": result.Issues},
 			ChangedTargets: []ChangedTarget{}, Evidence: []Evidence{}, Issues: []Issue{},
@@ -905,7 +877,7 @@ func (r *Runtime) finishCandidate(
 	if state.lastSummary == "" {
 		state.lastSummary = "Run completed"
 	}
-	if isWriteStrategy(state.strategy) {
+	if input.Context.WorkSpec.Interaction.Intent == model.IntentExecute {
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted")
 		state.tx.AcceptMaterializationProofs(result.MaterializationProofs)
 		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommit, ""); err != nil {
@@ -980,7 +952,9 @@ func (r *Runtime) finishCandidate(
 		affected := publicAffectedTargets(input.ProjectDir, changes)
 		input.Emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: publicBase(state.runID), MessageID: newMessageID(),
-			Text:            safeFinalMessage(state.lastSummary, state.strategy, len(affected)),
+			Text: safeFinalMessage(
+				state.lastSummary, input.Context.WorkSpec.Interaction.Intent, len(affected),
+			),
 			AffectedTargets: affected,
 		})
 		input.Emitter.Emit(model.EventRunFinished, model.RunFinishedPayload{
@@ -999,28 +973,6 @@ func changedResources(values []ChangedTarget) []Resource {
 	return out
 }
 
-func (r *Runtime) upgradeToFulfill(emitter EventEmitter, state *runtimeState, reason string) {
-	if state.strategy != StrategyExecute {
-		return
-	}
-	state.strategy = StrategyFulfill
-	state.decision = StrategyDecision{
-		Strategy: StrategyFulfill, Reason: reason, Confidence: 1, Risk: RiskMedium,
-		Signals: append(state.decision.Signals, DecisionSignal{Name: "runtime_upgrade", Value: "true"}),
-	}
-	if state.tx != nil {
-		state.tx.MarkTentative()
-		for _, change := range state.tx.ChangeSet().All() {
-			recordTrace(state.trace, state.runID, "target.written", map[string]any{
-				"target": resourceForArtifact(change.Artifact), "artifact": change.Artifact, "tentative": true,
-			})
-		}
-	}
-	r.emitStrategy(state, true)
-	r.changePhase(emitter, state, PhasePlanning, reason)
-	r.emitProgress(emitter, state, "planning", "任务范围扩大，正在更新执行计划", nil)
-}
-
 func (r *Runtime) changePhase(emitter EventEmitter, state *runtimeState, next RuntimePhase, reason string) {
 	previous := state.phase
 	state.phase = next
@@ -1029,15 +981,6 @@ func (r *Runtime) changePhase(emitter EventEmitter, state *runtimeState, next Ru
 	}
 	recordTrace(state.trace, state.runID, "phase.changed", map[string]any{
 		"loop_id": state.loopID, "from": previous, "phase": next, "reason": reason,
-	})
-}
-
-func (r *Runtime) emitStrategy(state *runtimeState, upgraded bool) {
-	recordTrace(state.trace, state.runID, "strategy.selected", map[string]any{
-		"loop_id":  state.loopID,
-		"strategy": state.decision.Strategy, "reason": state.decision.Reason,
-		"confidence": state.decision.Confidence, "risk": state.decision.Risk,
-		"signals": state.decision.Signals, "upgraded": upgraded,
 	})
 }
 
@@ -1072,7 +1015,7 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *runtimeState, agentE
 
 func (state *runtimeState) outcome(status WorkflowStatus, code, message string) StructuredOutcome {
 	return StructuredOutcome{
-		LoopID: state.loopID, Strategy: state.strategy, Phase: state.phase, Status: status,
+		LoopID: state.loopID, Phase: state.phase, Status: status,
 		Target: state.scope.Target, Changes: state.changeSet(), Issues: append([]Issue{}, state.issues...),
 		Summary: state.lastSummary, Code: code, Message: message,
 	}
@@ -1087,7 +1030,7 @@ func (state *runtimeState) changeSet() ChangeSet {
 
 func (state *runtimeState) checkpoint(questionID string) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
-		RunID: state.runID, LoopID: state.loopID, Strategy: state.strategy, Phase: state.phase,
+		RunID: state.runID, LoopID: state.loopID, Phase: state.phase,
 		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
 		WaitingQuestionID: questionID, CompletionFailures: state.gateCount,
@@ -1329,49 +1272,15 @@ func approximateMessageTokens(messages []llm.Message) int {
 	return total
 }
 
-func requiresComplexCoordination(changes ChangeSet) bool {
-	owners := map[string]bool{}
-	for _, change := range changes.All() {
-		target := resourceForArtifact(change.Artifact)
-		owner := target.Type
-		if target.Type == "slide" {
-			// Slide Spec and Slide HTML are two representations of the same
-			// page target. Updating both is the normal single-slide path and
-			// must not force a mid-run Complex upgrade.
-			owner += ":" + target.SlideID
-		} else {
-			owner += ":" + target.Part
-		}
-		owners[owner] = true
-	}
-	return len(owners) > 1
-}
-
-func gateNeedsCoordination(result CompletionResult) bool {
-	if len(result.Issues) > 1 {
-		return true
-	}
-	for _, issue := range result.Issues {
-		if issue.Code == "PLAN_NOT_COMPLETE" || issue.Code == "TARGET_OUT_OF_SCOPE" {
-			return true
-		}
-	}
-	return false
-}
-
 func isControlTool(name string) bool {
 	return name == "update_plan" || name == "ask_user" || name == "review_completion" || name == "finish"
 }
 
-func isWriteStrategy(strategy ExecutionStrategy) bool {
-	return strategy == StrategyExecute || strategy == StrategyFulfill
-}
-
-func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
+func controlSchemas(phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
 	out := []ToolSchema{}
-	if strategy == StrategyFulfill && (phase == PhasePlanning || phase == PhaseExecuting) {
+	if interaction == model.IntentExecute && phase == PhaseExecuting {
 		out = append(out, ToolSchema{
-			Name: "update_plan", Description: "Create or replace the current lightweight plan snapshot.",
+			Name: "update_plan", Description: "Create or update an optional lightweight execution plan when coordination would help. The plan does not grant additional scope.",
 			Parameters: objectSchema([]string{"steps"}, map[string]any{
 				"explanation": map[string]any{"type": "string"},
 				"steps": map[string]any{
@@ -1403,9 +1312,8 @@ func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction 
 			}),
 		})
 	}
-	if (strategy == StrategyPlan && phase == PhasePlanning) ||
-		(strategy == StrategyExecute && phase == PhaseExecuting) ||
-		(strategy == StrategyFulfill && (phase == PhasePlanning || phase == PhaseExecuting)) {
+	if (interaction == model.IntentPlan && phase == PhasePlanning) ||
+		(interaction == model.IntentExecute && phase == PhaseExecuting) {
 		out = append(out, ToolSchema{
 			Name: "review_completion", Description: "Ask the semantic reviewer for a second-pass review of the current plan, execution result, or candidate final message. Returns checks[] only; the main agent decides the next ReAct step.",
 			Parameters: objectSchema([]string{}, map[string]any{
@@ -1420,9 +1328,11 @@ func controlSchemas(strategy ExecutionStrategy, phase RuntimePhase, interaction 
 			}),
 		})
 	}
-	if phase == PhaseChat || phase == PhaseExecuting || (strategy == StrategyPlan && phase == PhasePlanning) {
+	if (phase == PhaseChat && (interaction == model.IntentTalk || interaction == model.IntentAsk)) ||
+		(phase == PhasePlanning && interaction == model.IntentPlan) ||
+		(phase == PhaseExecuting && interaction == model.IntentExecute) {
 		out = append(out, ToolSchema{
-			Name: "finish", Description: "所有策略的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。The message is checked by the Completion Gate before the run may complete.",
+			Name: "finish", Description: "所有 Run 的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。The message is checked by the Completion Gate before the run may complete.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{
 				"message": map[string]any{"type": "string"},
 			}),

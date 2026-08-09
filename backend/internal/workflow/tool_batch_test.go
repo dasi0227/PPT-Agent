@@ -155,27 +155,9 @@ func TestFailFastSkipsDoNotExhaustRepairBudget(t *testing.T) {
 	}
 }
 
-func TestSpecAndHTMLChangesForOneSlideRemainSimple(t *testing.T) {
-	changes := EmptyChangeSet()
-	changes.Updated = []ArtifactChange{
-		{Artifact: ArtifactRef{Kind: ArtifactSlideSpec, ID: "slide-01"}},
-		{Artifact: ArtifactRef{Kind: ArtifactSlideHTML, ID: "slide-01"}},
-	}
-	if requiresComplexCoordination(changes) {
-		t.Fatal("one slide's spec and HTML were treated as separate coordination targets")
-	}
-	changes.Updated = append(changes.Updated, ArtifactChange{
-		Artifact: ArtifactRef{Kind: ArtifactSlideHTML, ID: "slide-02"},
-	})
-	if !requiresComplexCoordination(changes) {
-		t.Fatal("multiple slide owners did not require coordination")
-	}
-}
-
 func batchState(pack contextengine.ContextPack) *runtimeState {
 	return &runtimeState{
-		runID: "batch", loopID: "loop-batch", strategy: StrategyExecute,
-		phase: PhaseExecuting, scope: ScopeFromSpec(pack.WorkSpec),
-		ledger: NewEvidenceLedger(), decision: StrategyDecision{Risk: RiskLow},
+		runID: "batch", loopID: "loop-batch", phase: PhaseExecuting,
+		scope: ScopeFromSpec(pack.WorkSpec), ledger: NewEvidenceLedger(),
 	}
 }

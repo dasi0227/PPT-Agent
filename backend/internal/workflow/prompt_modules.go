@@ -21,21 +21,21 @@ type PromptModule struct {
 
 type runtimePromptInput struct {
 	Phase           RuntimePhase
-	Strategy        ExecutionStrategy
+	Intent          model.InteractionIntent
 	Context         contextengine.ContextPack
 	ContextBriefing string
 	State           string
 }
 
-func runtimeSystemPrompt(phase RuntimePhase, strategy ExecutionStrategy, state string) string {
+func runtimeSystemPrompt(phase RuntimePhase, intent model.InteractionIntent, state string) string {
 	return buildRuntimeSystemPrompt(runtimePromptInput{
-		Phase: phase, Strategy: strategy, State: state,
+		Phase: phase, Intent: intent, State: state,
 	})
 }
 
 func runtimeSystemPromptForRequest(req AgentRequest, state string) string {
 	return buildRuntimeSystemPrompt(runtimePromptInput{
-		Phase: req.Phase, Strategy: req.Strategy,
+		Phase: req.Phase, Intent: req.Context.WorkSpec.Interaction.Intent,
 		Context: req.Context, ContextBriefing: req.ContextBriefing, State: state,
 	})
 }
@@ -43,7 +43,7 @@ func runtimeSystemPromptForRequest(req AgentRequest, state string) string {
 func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	modules := []PromptModule{
 		loadPromptModule("core_runtime_policy"),
-		loadPromptModule(modePolicyID(input.Strategy)),
+		loadPromptModule(modePolicyID(input.Intent)),
 		loadPromptModule(playbookID(input.Context)),
 		loadPromptModule("completion_repair_guide"),
 		loadPromptModule("finish_contract"),
@@ -61,8 +61,8 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	})
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "<runtime_prompt_manifest version=\"%s\" strategy=\"%s\" phase=\"%s\">\n",
-		runtimeprompts.Version, input.Strategy, input.Phase)
+	fmt.Fprintf(&b, "<runtime_prompt_manifest version=\"%s\" intent=\"%s\" phase=\"%s\">\n",
+		runtimeprompts.Version, input.Intent, input.Phase)
 	for _, module := range modules {
 		if strings.TrimSpace(module.Body) == "" {
 			continue
@@ -88,18 +88,16 @@ func loadPromptModule(id string) PromptModule {
 	}
 }
 
-func modePolicyID(strategy ExecutionStrategy) string {
-	switch strategy {
-	case StrategyTalk:
+func modePolicyID(intent model.InteractionIntent) string {
+	switch intent {
+	case model.IntentTalk:
 		return "mode_policy_talk"
-	case StrategyAsk:
+	case model.IntentAsk:
 		return "mode_policy_ask"
-	case StrategyPlan:
+	case model.IntentPlan:
 		return "mode_policy_plan"
-	case StrategyExecute:
-		return "mode_policy_execute_direct"
-	case StrategyFulfill:
-		return "mode_policy_fulfill"
+	case model.IntentExecute:
+		return "mode_policy_execute"
 	default:
 		return "mode_policy_talk"
 	}

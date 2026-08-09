@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 func BuildContextBriefing(pack contextengine.ContextPack, state *runtimeState) string {
@@ -14,13 +15,13 @@ func BuildContextBriefing(pack contextengine.ContextPack, state *runtimeState) s
 	}
 	sections := []string{
 		"Objective: " + strings.TrimSpace(pack.WorkSpec.Instruction),
-		fmt.Sprintf("Mode: strategy=%s phase=%s", state.strategy, state.phase),
+		fmt.Sprintf("Mode: intent=%s phase=%s", pack.WorkSpec.Interaction.Intent, state.phase),
 		"Authority: use only disclosed tools and current target scope; ordinary assistant text never completes the run.",
 	}
-	if state.strategy == StrategyPlan {
+	if pack.WorkSpec.Interaction.Intent == model.IntentPlan {
 		sections = append(sections, "Authority detail: this is read-only planning; do not call update_plan or write tools.")
 	}
-	if isWriteStrategy(state.strategy) {
+	if pack.WorkSpec.Interaction.Intent == model.IntentExecute {
 		sections = append(sections, "Authority detail: writes are allowed only through the active run session and only inside target scope.")
 	}
 	if state.requirements != nil {
@@ -30,7 +31,7 @@ func BuildContextBriefing(pack contextengine.ContextPack, state *runtimeState) s
 		sections = append(sections, "Retrieved context:\n"+retrievedContextBrief(state.retrievedContext))
 	}
 	sections = append(sections, "Working set:\n"+workingSetSummary(state))
-	if focus := nextFocus(state); focus != "" {
+	if focus := nextFocus(state, pack.WorkSpec.Interaction.Intent); focus != "" {
 		sections = append(sections, "Next focus: "+focus)
 	}
 	return strings.Join(sections, "\n")
@@ -45,7 +46,7 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 	}
 	result, err := retriever.Retrieve(ctx, RetrievalQuery{
 		RunID: state.runID, WorkSpec: input.Context.WorkSpec, RequirementLedger: state.requirements,
-		LatestIssues: state.issues, Phase: state.phase, Strategy: state.strategy,
+		LatestIssues: state.issues, Phase: state.phase,
 		QueryText: retrievalQueryText(input.Context, state), Limit: 5, DetailBudget: 1200,
 	})
 	if err != nil {
@@ -144,19 +145,14 @@ func workingSetSummary(state *runtimeState) string {
 	return strings.Join(lines, "\n")
 }
 
-func nextFocus(state *runtimeState) string {
-	if state.strategy == StrategyFulfill {
-		if state.plan == nil {
-			return "create a lightweight execution plan with update_plan before writing."
-		}
-		if state.plan.HasBlockingSteps() {
-			return "complete the next pending plan step and keep the plan statuses current."
-		}
+func nextFocus(state *runtimeState, intent model.InteractionIntent) string {
+	if intent == model.IntentExecute && state.plan != nil && state.plan.HasBlockingSteps() {
+		return "complete the next pending plan step and keep the plan statuses current."
 	}
-	if isWriteStrategy(state.strategy) && len(state.changeSet().All()) > 0 {
+	if intent == model.IntentExecute && len(state.changeSet().All()) > 0 {
 		return "ensure latest changed targets have fresh required evidence, then finish with complete message."
 	}
-	if state.strategy == StrategyPlan {
+	if intent == model.IntentPlan {
 		return "deliver the full plan in finish(message), not in ordinary assistant text."
 	}
 	return "use the next disclosed tool or finish(message) when complete."

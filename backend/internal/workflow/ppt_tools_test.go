@@ -423,7 +423,7 @@ func TestCompletionGateRequiresLatestHTMLEvidence(t *testing.T) {
 	ledger := NewEvidenceLedger()
 	ledger.Record(staticEvidence(resource, hash))
 	ctx := CompletionContext{
-		Strategy: StrategyExecute, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
+		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
 		Session: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
 	if result := NewCompletionGate().Check(ctx); result.Accepted || !hasCompletionCode(result, "EVIDENCE_HTML_MISSING") {
@@ -584,13 +584,13 @@ func TestRegistryDisclosesOnlyFixedBusinessSurface(t *testing.T) {
 	if err := (DefaultDomainToolProvider{Pack: pack, Renderer: &recordingRenderer{}}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	all := schemasByName(registry.Disclose(StrategyExecute, PhaseExecuting, model.IntentExecute))
+	all := schemasByName(registry.Disclose(PhaseExecuting, model.IntentExecute))
 	for _, name := range []string{"read_ppt", "write_ppt", "edit_ppt", "search_refs", "render_slide"} {
 		if !all[name] {
 			t.Fatalf("%s not disclosed: %v", name, all)
 		}
 	}
-	chat := schemasByName(registry.Disclose(StrategyTalk, PhaseChat, model.IntentTalk))
+	chat := schemasByName(registry.Disclose(PhaseChat, model.IntentTalk))
 	if chat["write_ppt"] || chat["edit_ppt"] {
 		t.Fatalf("talk disclosed writes: %v", chat)
 	}
@@ -636,7 +636,7 @@ func recordResultEvidence(ledger *EvidenceLedger, result ToolResult) {
 
 func completionContext(pack contextengine.ContextPack, tx *RunSession, ledger *EvidenceLedger) CompletionContext {
 	return CompletionContext{
-		Strategy: StrategyExecute, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
+		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
 		Session: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
 }
@@ -652,8 +652,8 @@ func resourceArgs(resource Resource) map[string]any {
 func toolInput(pack contextengine.ContextPack, dir string, tx *RunSession, args map[string]any) DomainToolInput {
 	return DomainToolInput{
 		Args: args, Context: pack, ProjectDir: dir, RunID: "run-1", Session: tx,
-		Scope: ScopeFromSpec(pack.WorkSpec), Strategy: StrategyExecute, Phase: PhaseExecuting,
-		Interaction: pack.WorkSpec.Interaction.Intent, Risk: RiskLow,
+		Scope: ScopeFromSpec(pack.WorkSpec), Phase: PhaseExecuting,
+		Interaction: pack.WorkSpec.Interaction.Intent,
 	}
 }
 

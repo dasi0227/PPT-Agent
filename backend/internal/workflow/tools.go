@@ -18,6 +18,14 @@ var (
 	ErrTargetOutOfScope = errors.New("TARGET_OUT_OF_SCOPE")
 )
 
+type RiskLevel string
+
+const (
+	RiskLow    RiskLevel = "low"
+	RiskMedium RiskLevel = "medium"
+	RiskHigh   RiskLevel = "high"
+)
+
 const (
 	CodeResourceInvalid         = "RESOURCE_INVALID"
 	CodeResourceNotFound        = "RESOURCE_NOT_FOUND"
@@ -55,10 +63,8 @@ type DomainToolInput struct {
 	RunID       string
 	Session     *RunSession
 	Scope       Scope
-	Strategy    ExecutionStrategy
 	Phase       RuntimePhase
 	Interaction model.InteractionIntent
-	Risk        RiskLevel
 }
 
 // ChangedTarget is deliberately domain-shaped. Model-visible results never
@@ -188,7 +194,7 @@ func (s Scope) AllowsArtifact(ref ArtifactRef) bool {
 	return s.Allows(resourceForArtifact(ref))
 }
 
-func (r *ToolRegistry) Disclose(strategy ExecutionStrategy, phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
+func (r *ToolRegistry) Disclose(phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
 	out := []ToolSchema{}
 	for _, name := range r.order {
 		desc := r.tools[name]
@@ -196,9 +202,6 @@ func (r *ToolRegistry) Disclose(strategy ExecutionStrategy, phase RuntimePhase, 
 			continue
 		}
 		if interaction != model.IntentExecute && !desc.ReadOnly {
-			continue
-		}
-		if !isWriteStrategy(strategy) && !desc.ReadOnly {
 			continue
 		}
 		if phase == PhasePlanning && !desc.ReadOnly {
@@ -226,9 +229,6 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	}
 	if input.Interaction != model.IntentExecute && !desc.ReadOnly {
 		return failedToolResult(ErrCapabilityDenied.Error(), "read-only interaction cannot use write capabilities", false)
-	}
-	if !isWriteStrategy(input.Strategy) && !desc.ReadOnly {
-		return failedToolResult(ErrCapabilityDenied.Error(), "read-only strategy cannot use write capabilities", false)
 	}
 	if input.Phase == PhasePlanning && !desc.ReadOnly {
 		return failedToolResult(ErrCapabilityDenied.Error(), "planning phase cannot use write capabilities", false)

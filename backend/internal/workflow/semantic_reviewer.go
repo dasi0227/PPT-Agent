@@ -53,7 +53,6 @@ type StoredSemanticReview struct {
 type SemanticReviewInput struct {
 	RunID             string              `json:"run_id"`
 	FinishCallID      string              `json:"finish_call_id"`
-	Strategy          ExecutionStrategy   `json:"strategy"`
 	WorkSpec          model.WorkSpec      `json:"work_spec"`
 	RequirementLedger *RequirementLedger  `json:"requirement_ledger,omitempty"`
 	Plan              *Plan               `json:"plan,omitempty"`
@@ -177,13 +176,13 @@ func (r *Runtime) runReviewCompletion(
 		focus = "all"
 	}
 	gate := r.Gate.Check(CompletionContext{
-		Strategy: state.strategy, FinishPhase: state.phase, ActiveTools: state.activeTools,
+		Intent: input.Context.WorkSpec.Interaction.Intent, FinishPhase: state.phase, ActiveTools: state.activeTools,
 		Issues: state.issues, WorkScope: state.scope, Session: state.tx, Changes: state.changeSet(),
 		Evidence: state.ledger, Context: input.Context, Plan: state.plan,
 		Requirements: state.requirements, FinishMessage: candidateMessage, Canceled: ctx.Err() != nil,
 	})
 	reviewInput := SemanticReviewInput{
-		RunID: state.runID, FinishCallID: callID, Strategy: state.strategy,
+		RunID: state.runID, FinishCallID: callID,
 		WorkSpec: input.Context.WorkSpec, RequirementLedger: state.requirements, Plan: state.plan,
 		Changes: state.changeSet(), GateResult: gate,
 		Evidence: state.ledger.Entries(state.changeSet()), LatestIssues: state.issues,

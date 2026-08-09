@@ -7,7 +7,7 @@ Execution steps:
 2. Update dependency owners before dependents.
 3. If design changes affect presentation output, render all affected pages or all pages when the impact is deck-wide.
 4. If a slide spec changes, update and render the corresponding HTML.
-5. Keep the plan current if running in StrategyFulfill.
+5. Keep the plan current when the Agent has chosen to create one.
 6. Use render diagnostics to repair visual regressions.
 
 Quality expectations:

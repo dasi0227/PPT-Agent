@@ -506,14 +506,14 @@ func currentPlanStepID(plan *Plan) string {
 	return ""
 }
 
-func safeFinalMessage(message string, strategy ExecutionStrategy, affected int) string {
+func safeFinalMessage(message string, intent model.InteractionIntent, affected int) string {
 	if text := sanitizePublicMarkdown(message, 0); text != "" {
 		return text
 	}
-	if strategy == StrategyTalk || strategy == StrategyAsk {
+	if intent == model.IntentTalk || intent == model.IntentAsk {
 		return "已完成本次分析。"
 	}
-	if strategy == StrategyPlan {
+	if intent == model.IntentPlan {
 		return "已完成本次计划。"
 	}
 	if affected > 0 {

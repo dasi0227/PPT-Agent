@@ -25,8 +25,7 @@ func TestRuntimeCapabilityStoresRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkpoint := workflow.RuntimeCheckpoint{
-		RunID: "r", LoopID: "loop", Boundary: "strategy_initialized",
-		Strategy: workflow.StrategyExecute, Phase: workflow.PhaseExecuting,
+		RunID: "r", LoopID: "loop", Boundary: "runtime_initialized", Phase: workflow.PhaseExecuting,
 		Requirements:    &workflow.RequirementLedger{Items: []workflow.RequirementItem{{ID: "req_01", Text: "edit", Status: workflow.RequirementPending}}},
 		ContextBriefing: "briefing", ContextIndexRef: "idx",
 	}

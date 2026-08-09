@@ -1,4 +1,4 @@
-// Package workflow implements the strategy-routed, evidence-gated ReAct runtime.
+// Package workflow implements the intent-bounded, evidence-gated ReAct runtime.
 package workflow
 
 import (
@@ -6,16 +6,6 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-)
-
-type ExecutionStrategy string
-
-const (
-	StrategyTalk    ExecutionStrategy = "talk"
-	StrategyAsk     ExecutionStrategy = "ask"
-	StrategyPlan    ExecutionStrategy = "plan"
-	StrategyExecute ExecutionStrategy = "execute"
-	StrategyFulfill ExecutionStrategy = "fulfill"
 )
 
 type RuntimePhase string
@@ -152,33 +142,31 @@ func (c ChangeSet) All() []ArtifactChange {
 }
 
 type RuntimeBudget struct {
-	MaxTurns                    int
-	MaxDuration                 time.Duration
-	MaxConsecutiveToolFailures  int
-	MaxIdenticalGateRejections  int
-	ContextCompactionThreshold  int
-	SimpleUpgradeToolRoundTrips int
+	MaxTurns                   int
+	MaxDuration                time.Duration
+	MaxConsecutiveToolFailures int
+	MaxIdenticalGateRejections int
+	ContextCompactionThreshold int
 }
 
 func DefaultRuntimeBudget() RuntimeBudget {
 	return RuntimeBudget{
 		MaxTurns: 128, MaxDuration: time.Hour,
 		MaxConsecutiveToolFailures: 5, MaxIdenticalGateRejections: 3,
-		ContextCompactionThreshold: 24000, SimpleUpgradeToolRoundTrips: 6,
+		ContextCompactionThreshold: 24000,
 	}
 }
 
 type StructuredOutcome struct {
-	LoopID   string            `json:"loop_id"`
-	Strategy ExecutionStrategy `json:"strategy"`
-	Phase    RuntimePhase      `json:"phase"`
-	Status   WorkflowStatus    `json:"status"`
-	Target   model.RunTarget   `json:"target"`
-	Changes  ChangeSet         `json:"changes"`
-	Issues   []Issue           `json:"issues"`
-	Summary  string            `json:"summary"`
-	Code     string            `json:"code,omitempty"`
-	Message  string            `json:"message,omitempty"`
+	LoopID  string          `json:"loop_id"`
+	Phase   RuntimePhase    `json:"phase"`
+	Status  WorkflowStatus  `json:"status"`
+	Target  model.RunTarget `json:"target"`
+	Changes ChangeSet       `json:"changes"`
+	Issues  []Issue         `json:"issues"`
+	Summary string          `json:"summary"`
+	Code    string          `json:"code,omitempty"`
+	Message string          `json:"message,omitempty"`
 }
 
 type CommitContext struct {

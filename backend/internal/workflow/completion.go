@@ -38,7 +38,7 @@ func (r CompletionResult) RejectionKey() string {
 }
 
 type CompletionContext struct {
-	Strategy      ExecutionStrategy
+	Intent        model.InteractionIntent
 	FinishPhase   RuntimePhase
 	ActiveTools   int
 	Issues        []Issue
@@ -60,7 +60,7 @@ type CompletionPolicy interface {
 type EvidenceCompletionPolicy struct{}
 
 func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	if !isWriteStrategy(ctx.Strategy) {
+	if ctx.Intent != model.IntentExecute {
 		return nil
 	}
 	if ctx.Changes.Count() == 0 {
@@ -282,7 +282,7 @@ func NewCompletionGate() CompletionGate {
 
 func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	issues := []CompletionIssue{}
-	if !finishAllowed(ctx.Strategy, ctx.FinishPhase) {
+	if !finishAllowed(ctx.Intent, ctx.FinishPhase) {
 		issues = append(issues, CompletionIssue{Code: "FINISH_NOT_ALLOWED", Summary: "finish is not allowed in the current phase"})
 	}
 	if ctx.ActiveTools != 0 {
@@ -296,15 +296,15 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	if ctx.Canceled {
 		issues = append(issues, CompletionIssue{Code: CodeRunAlreadyCanceled, Summary: "run was canceled"})
 	}
-	if isWriteStrategy(ctx.Strategy) {
+	if ctx.Intent == model.IntentExecute {
 		if ctx.Session == nil {
 			issues = append(issues, CompletionIssue{Code: CodeRunSessionRequired, Summary: "write run has no active run session"})
 		} else if err := ctx.Session.ValidateBaselines(); err != nil {
 			issues = append(issues, CompletionIssue{Code: CodeRevisionConflict, Summary: err.Error()})
 		}
 	}
-	if ctx.Strategy == StrategyFulfill && (ctx.Plan == nil || ctx.Plan.HasBlockingSteps()) {
-		issues = append(issues, CompletionIssue{Code: "PLAN_NOT_COMPLETE", Summary: "fulfill strategy still has pending, in-progress, or failed steps"})
+	if ctx.Intent == model.IntentExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
+		issues = append(issues, CompletionIssue{Code: "PLAN_NOT_COMPLETE", Summary: "the optional execution plan still has pending, in-progress, or failed steps"})
 	}
 	for _, policy := range g.Policies {
 		issues = append(issues, policy.Check(ctx)...)
@@ -316,13 +316,13 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	return result
 }
 
-func finishAllowed(strategy ExecutionStrategy, phase RuntimePhase) bool {
-	switch strategy {
-	case StrategyTalk, StrategyAsk:
+func finishAllowed(intent model.InteractionIntent, phase RuntimePhase) bool {
+	switch intent {
+	case model.IntentTalk, model.IntentAsk:
 		return phase == PhaseChat
-	case StrategyPlan:
+	case model.IntentPlan:
 		return phase == PhasePlanning
-	case StrategyExecute, StrategyFulfill:
+	case model.IntentExecute:
 		return phase == PhaseExecuting
 	default:
 		return false

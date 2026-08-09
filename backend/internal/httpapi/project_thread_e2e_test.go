@@ -27,7 +27,7 @@ import (
 type noOpRunner struct{}
 
 func (noOpRunner) Run(context.Context, workflow.EventEmitter, run.Checkpointer, run.Prompter) workflow.StructuredOutcome {
-	return workflow.StructuredOutcome{Status: workflow.StatusCompleted, Strategy: workflow.StrategyTalk}
+	return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 }
 
 func setupProjectThreadServer(t *testing.T) (*httptest.Server, string) {

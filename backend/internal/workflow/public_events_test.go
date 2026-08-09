@@ -18,7 +18,7 @@ func TestSafeFinalMessagePreservesMarkdownBlocks(t *testing.T) {
 		"- 下一步：进入执行模式",
 	}, "\n")
 
-	got := safeFinalMessage(markdown, StrategyPlan, 0)
+	got := safeFinalMessage(markdown, "plan", 0)
 	for _, want := range []string{
 		"## 规划完成\n\n### 大纲结构",
 		"| 页码 | 标题 |\n|---|---|\n| 01 | 开场 |",
@@ -32,7 +32,7 @@ func TestSafeFinalMessagePreservesMarkdownBlocks(t *testing.T) {
 
 func TestSafeFinalMessageKeepsLocalPathsAndHTMLAsText(t *testing.T) {
 	markdown := "查看 /Users/example/project/outline.json\r\n<script>alert(1)</script>\r\n正文"
-	got := safeFinalMessage(markdown, StrategyPlan, 0)
+	got := safeFinalMessage(markdown, "plan", 0)
 	for _, want := range []string{
 		"/Users/example/project/outline.json",
 		"<script>alert(1)</script>",

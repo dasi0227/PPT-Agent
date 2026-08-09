@@ -63,7 +63,7 @@ func (t referenceSearchTool) Execute(_ context.Context, input DomainToolInput) T
 		Index: index, Embedder: HashEmbeddingProvider{}, Scope: input.Scope,
 	}).Retrieve(context.Background(), RetrievalQuery{
 		RunID: input.RunID, WorkSpec: input.Context.WorkSpec, LatestIssues: []Issue{},
-		Phase: input.Phase, Strategy: input.Strategy, QueryText: query,
+		Phase: input.Phase, QueryText: query,
 		Kinds: kindList, Limit: limit, DetailBudget: 4000,
 	})
 	if err != nil {

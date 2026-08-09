@@ -107,7 +107,6 @@ type RetrievalQuery struct {
 	RequirementLedger *RequirementLedger
 	LatestIssues      []Issue
 	Phase             RuntimePhase
-	Strategy          ExecutionStrategy
 	QueryText         string
 	Kinds             []string
 	Limit             int
