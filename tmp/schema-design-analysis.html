@@ -297,7 +297,7 @@
         </li>
         <li>
           <b>005. 所有 ID 由 Runtime 生成并对 Agent 隐藏</b>
-          <span>统一短 ID 格式：<code>project=pro_&lt;rand6&gt;</code>、<code>slide_id=sli_&lt;rand6&gt;</code>、<code>section_id=sec_&lt;rand6&gt;</code>、<code>subsection_id=sub_&lt;rand6&gt;</code>。Agent-facing contract 不暴露真实 ID；Agent 通过标题、顺序、选择项或 Runtime handle 表达意图，由 Runtime 映射到持久 ID。</span>
+          <span>统一短 ID 格式：<code>project_id=pro_&lt;rand6&gt;</code>、<code>slide_id=sli_&lt;rand6&gt;</code>、<code>section_id=sec_&lt;rand6&gt;</code>、<code>subsection_id=sub_&lt;rand6&gt;</code>。Agent-facing contract 不暴露真实 ID；Agent 通过标题、顺序、选择项或 Runtime handle 表达意图，由 Runtime 映射到持久 ID。</span>
         </li>
         <li>
           <b>006. 新增 <code>constraints</code></b>
@@ -312,8 +312,8 @@
           <span>固定 16:9 / 1600x900 是 Runtime/System Prompt/HTML Output Contract，不是设计稿字段。<code>design.json</code> 不再保存 <code>canvas</code>，避免伪可配置和重复 diff。</span>
         </li>
         <li>
-          <b>009. <code>project_id</code> 重命名为 <code>project</code></b>
-          <span>所有 schema 中统一使用 <code>project</code> 字段承载项目 ID 值，值格式仍为 <code>pro_&lt;rand6&gt;</code>，语义和 Runtime 托管属性不变。</span>
+          <b>009. 所有 Schema 统一使用 <code>project_id</code></b>
+          <span>所有 schema 中统一使用 <code>project_id</code> 字段承载项目 ID 值，值格式仍为 <code>pro_&lt;rand6&gt;</code>，语义和 Runtime 托管属性不变。</span>
         </li>
         <li>
           <b>010. <code>design.json</code> 收敛为主题引用 + 设计指挥</b>
@@ -357,7 +357,7 @@
       <div class="grid">
         <div class="card span-6">
           <h3 style="margin-top:0">Agent 可写 vs Runtime 托管</h3>
-          <p>当前 schema 使用 <code>x-runtime-managed</code> 标记 <code>version</code>、<code>revision</code>、<code>project</code>、<code>slide_id</code>、source revision、timestamp 等字段；后续还应覆盖嵌套的 <code>sections[].id</code>、<code>subsections[].id</code> 和 spec 里的 section 引用字段。</p>
+          <p>当前 schema 使用 <code>x-runtime-managed</code> 标记 <code>version</code>、<code>revision</code>、<code>project_id</code>、<code>slide_id</code>、source revision、timestamp 等字段；后续还应覆盖嵌套的 <code>sections[].id</code>、<code>subsections[].id</code> 和 spec 里的 section 引用字段。</p>
           <p class="callout">已敲定：所有真实 ID 都由 Runtime 生成并维护，Agent-facing contract 不暴露真实 ID。模型只表达标题、顺序、归属意图或选择 Runtime 给出的临时 handle，不能伪造持久 ID。</p>
         </div>
         <div class="card span-6">
@@ -374,7 +374,7 @@
         <table>
           <thead><tr><th>字段</th><th>格式</th><th>唯一性边界</th><th>生成者</th><th>Agent 可见性</th><th>说明</th></tr></thead>
           <tbody>
-            <tr><td><code>project</code></td><td><code>pro_&lt;rand6&gt;</code></td><td>全局唯一，DB unique + 冲突重试</td><td class="managed">Runtime</td><td>不可见</td><td>替代旧名 <code>project_id</code> 和 UUID；字段值仍是项目 ID，创建时必须查重，冲突重新生成。</td></tr>
+            <tr><td><code>project_id</code></td><td><code>pro_&lt;rand6&gt;</code></td><td>全局唯一，DB unique + 冲突重试</td><td class="managed">Runtime</td><td>不可见</td><td>字段值是项目 ID，创建时必须查重，冲突重新生成。</td></tr>
             <tr><td><code>slide_id</code></td><td><code>sli_&lt;rand6&gt;</code></td><td>项目内唯一</td><td class="managed">Runtime</td><td>不可见</td><td>不表达页码或顺序；页面顺序由 <code>slide_order</code> 投影。</td></tr>
             <tr><td><code>section_id</code></td><td><code>sec_&lt;rand6&gt;</code></td><td>outline 内唯一</td><td class="managed">Runtime</td><td>不可见</td><td>不使用语义 slug，标题修改不影响稳定身份。</td></tr>
             <tr><td><code>subsection_id</code></td><td><code>sub_&lt;rand6&gt;</code></td><td>outline 内唯一</td><td class="managed">Runtime</td><td>不可见</td><td>跨 section 移动时由 Runtime 校验和重写引用关系。</td></tr>
@@ -403,7 +403,7 @@
           <tbody>
             <tr><td><code>version</code></td><td><code>const "3.0"</code></td><td>schema 合约版本。旧名 <code>schema_version</code> 已敲定替换。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>命名更短，仍用于迁移和兼容判断；模型不可写。</td></tr>
             <tr><td><code>revision</code></td><td>integer, min 1</td><td>outline 内容版本。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>作为当前文件版本，与每页 <code>materialization.source.outline</code> 比较以判断 HTML 是否 stale。</td></tr>
-            <tr><td><code>project</code></td><td><code>^pro_[a-z2-9]{6}$</code></td><td>所属项目 ID。旧名 <code>project_id</code> 已敲定替换。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>字段值仍是项目 ID；由 Runtime 生成并对 Agent 隐藏，DB unique + 冲突重试。</td></tr>
+            <tr><td><code>project_id</code></td><td><code>^pro_[a-z2-9]{6}$</code></td><td>所属项目 ID。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>字段值由 Runtime 生成并对 Agent 隐藏，DB unique + 冲突重试。</td></tr>
             <tr><td><code>title</code></td><td>string, 1-200</td><td>整份 PPT 的对外标题。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>区别于项目管理标题；是演示稿内容的一部分。</td></tr>
             <tr><td><code>goal</code></td><td>string, 1-1200</td><td>这份 PPT 要达成的结果。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>对齐生成、审查和后续编辑的最高层约束。</td></tr>
             <tr><td><code>audience</code></td><td>string, 1-600</td><td>受众画像。</td><td class="agent">Agent / 用户</td><td><span class="decision keep">保留</span></td><td>影响深度、术语、证据密度和设计风格；也是 html-ppt 原文要求先确认的三件事之一。</td></tr>
@@ -441,7 +441,7 @@
           <tbody>
             <tr><td><code>version</code></td><td><code>const "3.0"</code></td><td>schema 合约版本。旧名 <code>schema_version</code> 已敲定替换。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>版本迁移入口；字段名统一为 <code>version</code>。</td></tr>
             <tr><td><code>revision</code></td><td>integer, min 1</td><td>视觉系统版本。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>设计变化会让受影响 HTML <code>design_stale</code>。</td></tr>
-            <tr><td><code>project</code></td><td><code>^pro_[a-z2-9]{6}$</code></td><td>所属项目 ID。旧名 <code>project_id</code> 已敲定替换。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>字段值仍是项目 ID；由 Runtime 生成并对 Agent 隐藏，用于跨项目隔离。</td></tr>
+            <tr><td><code>project_id</code></td><td><code>^pro_[a-z2-9]{6}$</code></td><td>所属项目 ID。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>字段值由 Runtime 生成并对 Agent 隐藏，用于跨项目隔离。</td></tr>
             <tr><td><code>theme</code></td><td>string，仓库主题 ID</td><td>当前 deck 使用的主题，例如 <code>tokyo-night</code>。seed 主题也是 repo 初始值，不需要 source 字段。</td><td class="agent">Agent / 用户选择，Runtime 校验</td><td><span class="decision add">新增</span></td><td>theme.css 承担 palette、typography、spacing、radius、shadows 等可复用视觉系统。</td></tr>
             <tr><td><code>direction</code></td><td>string, 1-600</td><td>在选定主题之上，本 deck 的视觉方向。例如“偏云原生控制台感，而不是赛博朋克海报感”。</td><td class="agent">Agent / 用户</td><td><span class="decision add">新增</span></td><td>替代 <code>visual_positioning</code> 命名；比 style 更不容易和 theme 重叠。</td></tr>
             <tr><td><code>density</code></td><td><code>sparse | medium | dense</code></td><td>页面信息密度。控制页面更像海报、常规汇报页，还是数据/架构密集页。</td><td class="agent">Agent / 用户</td><td><span class="decision replace">替换</span></td><td>从旧 <code>layout_system.density</code> 提升为顶层字段；删除 <code>tone</code> 和 <code>motion</code>。</td></tr>
@@ -474,7 +474,7 @@
           <tbody>
             <tr><td><code>version</code></td><td><code>const "3.0"</code></td><td>schema 合约版本。旧名 <code>schema_version</code> 已敲定替换。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>版本迁移入口；字段名统一为 <code>version</code>。</td></tr>
             <tr><td><code>revision</code></td><td>integer, min 1</td><td>单页 spec 版本。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>用于判断 HTML 是否 <code>spec_stale</code>。</td></tr>
-            <tr><td><code>project</code></td><td><code>^pro_[a-z2-9]{6}$</code></td><td>所属项目 ID。旧名 <code>project_id</code> 已敲定替换。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>字段值仍是项目 ID；由 Runtime 生成并对 Agent 隐藏，用于隔离资源。</td></tr>
+            <tr><td><code>project_id</code></td><td><code>^pro_[a-z2-9]{6}$</code></td><td>所属项目 ID。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>字段值由 Runtime 生成并对 Agent 隐藏，用于隔离资源。</td></tr>
             <tr><td><code>slide_id</code></td><td><code>^sli_[a-z2-9]{6}$</code></td><td>稳定页身份。</td><td class="managed">Runtime</td><td><span class="decision replace">替换</span></td><td>由 Runtime 生成并对 Agent 隐藏。路径、版本快照、前端跳转、目录移动都依赖它；不能用 page index 代替。</td></tr>
             <tr><td><code>section_id</code></td><td><code>^sec_[a-z2-9]{6}$</code></td><td>所属章节引用。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>持久 JSON 保存真实 ID，Agent Contract 隐藏；普通 spec 写入继承当前值，章节移动走显式 restructure。</td></tr>
             <tr><td><code>subsection_id</code></td><td>optional <code>^sub_[a-z2-9]{6}$</code></td><td>所属二级章节引用。</td><td class="managed">Runtime</td><td><span class="decision keep">保留</span></td><td>与 section 一样由 Runtime 托管，避免 Agent 直接操作持久 ID。</td></tr>

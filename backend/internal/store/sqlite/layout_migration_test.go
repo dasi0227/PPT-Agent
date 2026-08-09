@@ -163,6 +163,129 @@ func TestProjectLayoutV2NormalizesSlideSpecInPlace(t *testing.T) {
 	}
 }
 
+func TestProjectLayoutV3RenamesProjectFieldInPlace(t *testing.T) {
+	root := t.TempDir()
+	db, cleanup, err := Open(&config.Config{DBPath: filepath.Join(root, "v3.db")}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if err := Migrate(db, zap.NewNop()); err != nil {
+		t.Fatal(err)
+	}
+	workDir := filepath.Join(root, "project")
+	if err := db.Exec(`
+		INSERT INTO projects(id,title,work_dir,theme,status,layout_version,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?,?)
+	`, "p1", "Deck", workDir, "default", "draft", 3, 1, 2).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO slides(id,project_id) VALUES(?,?)`, "slide-01", "p1").Error; err != nil {
+		t.Fatal(err)
+	}
+	write := func(relative string, value any) {
+		path := filepath.Join(workDir, filepath.FromSlash(relative))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := json.Marshal(legacyProjectField(t, value))
+		if err := os.WriteFile(path, raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	outline := spec.Outline{
+		SchemaVersion: spec.SchemaVersion, Revision: 2, ProjectID: "p1",
+		Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN",
+		Constraints: spec.Constraints{MustInclude: []string{}, MustAvoid: []string{}, StyleLimits: []string{}, ContentLimits: []string{}},
+		Sections:    []spec.Section{{ID: "section-1", Title: "Section", Purpose: "Main", Subsections: []spec.Subsection{}}},
+		SlideOrder:  []string{"slide-01"}, CreatedAt: 1, UpdatedAt: 2,
+	}
+	design := spec.Design{
+		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "p1",
+		Theme: "swiss-modern", Direction: "test", Density: "medium",
+		Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 2,
+	}
+	slideSpec := spec.SlideSpec{
+		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "p1", SlideID: "slide-01",
+		SectionID: "section-1", Role: "content", Title: "Slide", KeyMessage: "Message",
+		Elements: []spec.Element{{Type: "text", Intent: "Content"}}, CreatedAt: 1, UpdatedAt: 2,
+	}
+	write("outline.json", outline)
+	write("design.json", design)
+	write(model.SlideSpecPath("slide-01"), slideSpec)
+	write(model.OutlineVersionSnapshot(2), outline)
+	write(model.DesignVersionSnapshot(1), design)
+	write(model.SlideSpecVersionSnapshot("slide-01", 1), slideSpec)
+	outlineRaw, _ := os.ReadFile(filepath.Join(workDir, "outline.json"))
+	designRaw, _ := os.ReadFile(filepath.Join(workDir, "design.json"))
+	specRaw, _ := os.ReadFile(filepath.Join(workDir, model.SlideSpecPath("slide-01")))
+	materialization := spec.MaterializationRecord{
+		SchemaVersion: spec.SchemaVersion,
+		Artifact: spec.MaterializationArtifact{
+			Revision: 1,
+			Hash:     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+		Source: spec.MaterializationSource{
+			Outline: 2,
+			Spec:    1,
+			Design:  1,
+			Hash:    spec.SourceHash(outlineRaw, specRaw, designRaw),
+		},
+		RenderedAt: 2,
+	}
+	materializationRaw, _ := json.Marshal(materialization)
+	materializationPath := filepath.Join(workDir, model.SlideMaterializationPath("slide-01"))
+	if err := os.WriteFile(materializationPath, materializationRaw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO versions(
+		id,target_type,target_id,version_no,snapshot_path,run_id,created_at
+	) VALUES
+		(?,?,?,?,?,?,?),
+		(?,?,?,?,?,?,?),
+		(?,?,?,?,?,?,?)`,
+		"v-outline", "outline", model.OutlineVersionTarget("p1"), 2, model.OutlineVersionSnapshot(2), nil, 2,
+		"v-design", "design", model.DesignVersionTarget("p1"), 1, model.DesignVersionSnapshot(1), nil, 2,
+		"v-spec", "slide_spec", model.SlideSpecVersionTarget("p1", "slide-01"), 1, model.SlideSpecVersionSnapshot("slide-01", 1), nil, 2,
+	).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateProjectLayouts(db, zap.NewNop()); err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range []string{
+		"outline.json", "design.json", model.SlideSpecPath("slide-01"),
+		model.OutlineVersionSnapshot(2), model.DesignVersionSnapshot(1),
+		model.SlideSpecVersionSnapshot("slide-01", 1),
+	} {
+		raw, err := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(relative)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var value map[string]any
+		if err := json.Unmarshal(raw, &value); err != nil {
+			t.Fatal(err)
+		}
+		if value["project_id"] != "p1" {
+			t.Errorf("%s project_id=%v", relative, value["project_id"])
+		}
+		if _, exists := value["project"]; exists {
+			t.Errorf("%s still contains obsolete project field", relative)
+		}
+	}
+	migratedMaterialization, err := spec.ReadMaterialization(materializationPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outlineRaw, _ = os.ReadFile(filepath.Join(workDir, "outline.json"))
+	designRaw, _ = os.ReadFile(filepath.Join(workDir, "design.json"))
+	specRaw, _ = os.ReadFile(filepath.Join(workDir, model.SlideSpecPath("slide-01")))
+	if want := spec.SourceHash(outlineRaw, specRaw, designRaw); migratedMaterialization.Source.Hash != want {
+		t.Fatalf("materialization source hash=%q want %q", migratedMaterialization.Source.Hash, want)
+	}
+}
+
 func TestProjectLayoutMigrationFailureLeavesLegacyLayoutUntouched(t *testing.T) {
 	root := t.TempDir()
 	db, cleanup, err := Open(&config.Config{DBPath: filepath.Join(root, "rollback.db")}, zap.NewNop())
@@ -192,6 +315,21 @@ func TestProjectLayoutMigrationFailureLeavesLegacyLayoutUntouched(t *testing.T) 
 	if layoutVersion != 1 {
 		t.Fatalf("failed migration updated database version: %d", layoutVersion)
 	}
+}
+
+func legacyProjectField(t *testing.T, value any) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(raw, &result); err != nil {
+		t.Fatal(err)
+	}
+	result["project"] = result["project_id"]
+	delete(result, "project_id")
+	return result
 }
 
 func insertLayoutV1Project(t *testing.T, db *gorm.DB, projectID, workDir string) {

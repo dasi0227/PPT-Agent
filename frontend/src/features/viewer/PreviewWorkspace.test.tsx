@@ -7,16 +7,16 @@ import { useSpecStore } from '../../stores/specStore';
 import { clearSlideRenderCache } from './useSlideRenderCache';
 
 const slideSpec = (id: string, title = '封面标题') => ({
-  version: '3.0' as const, revision: 1, project: 'p1', slide_id: id,
+  version: '3.0' as const, revision: 1, project_id: 'p1', slide_id: id,
   section_id: 'main', role: 'cover',
   title, key_message: title, elements: [{ type: 'text' as const, intent: '要点一' }],
   layout: 'hero', created_at: 1, updated_at: 1,
 });
 const setSpecs = () => useSpecStore.setState({
   byProjectId: { p1: {
-    outline: { version: '3.0', revision: 1, project: 'pro_aaaaaa', title: 'Deck', goal: '', audience: '', language: 'zh-CN', positioning: '', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] }, sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+    outline: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: 'Deck', goal: '', audience: '', language: 'zh-CN', positioning: '', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] }, sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
     slide_specs: { s1: slideSpec('s1'), s2: slideSpec('s2', '第二页') },
-    design: { version: '3.0', revision: 1, project: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
+    design: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
     materialization: {
       s1: { state: 'not_materialized', revisions: { slide_html: 0, source_outline: 0, source_spec: 0, source_design: 0 } },
       s2: { state: 'not_materialized', revisions: { slide_html: 0, source_outline: 0, source_spec: 0, source_design: 0 } },

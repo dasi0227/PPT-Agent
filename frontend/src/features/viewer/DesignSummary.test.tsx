@@ -7,7 +7,7 @@ describe('DesignSummary', () => {
     render(<DesignSummary design={{
       version: '3.0',
       revision: 3,
-      project: 'pro_aaaaaa',
+      project_id: 'pro_aaaaaa',
       theme: 'swiss-modern',
       direction: 'minimal geometric accent',
       density: 'medium',

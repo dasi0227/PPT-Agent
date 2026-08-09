@@ -15,7 +15,7 @@ export interface Project {
 export interface SlideSpec {
   version: '3.0';
   revision: number;
-  project: string;
+  project_id: string;
   slide_id: string;
   section_id: string;
   subsection_id?: string;
@@ -34,7 +34,7 @@ export interface SlideSpec {
 export interface Outline {
   version: '3.0';
   revision: number;
-  project: string;
+  project_id: string;
   title: string;
   goal: string;
   audience: string;
@@ -50,7 +50,7 @@ export interface Outline {
 export interface Design {
   version: '3.0';
   revision: number;
-  project: string;
+  project_id: string;
   theme: string;
   direction: string;
   density: 'sparse' | 'medium' | 'dense';

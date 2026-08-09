@@ -59,9 +59,25 @@ func TestSlideSpecAgentContractHidesPlacementIDs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"project", "slide_id", "section_id", "subsection_id"} {
+	for _, field := range []string{"project_id", "slide_id", "section_id", "subsection_id"} {
 		if containsString(contract.Fields, field) {
 			t.Fatalf("managed field %q leaked into slide agent contract", field)
+		}
+	}
+}
+
+func TestAuthoringSchemasUseProjectID(t *testing.T) {
+	for _, name := range []string{OutlineName, DesignName, SlideSpecName} {
+		contract, err := RuntimeContract(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		properties := contract["properties"].(map[string]any)
+		if _, exists := properties["project_id"]; !exists {
+			t.Errorf("%s runtime contract does not contain project_id", name)
+		}
+		if _, exists := properties["project"]; exists {
+			t.Errorf("%s runtime contract still contains obsolete project field", name)
 		}
 	}
 }

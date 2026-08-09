@@ -24,12 +24,12 @@ describe('DeckNavigator', () => {
       loadingProjects: false
     });
     useSpecStore.setState({ byProjectId: { p1: {
-      outline: { version: '3.0', revision: 1, project: 'pro_aaaaaa', title: '演示项目', goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] }, sections: [{ id: 'sec', title: '市场', purpose: '说明市场趋势', subsections: [{ id: 'sub', title: '趋势' }] }], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
+      outline: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: '演示项目', goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] }, sections: [{ id: 'sec', title: '市场', purpose: '说明市场趋势', subsections: [{ id: 'sub', title: '趋势' }] }], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
       slide_specs: {
-        s1: { version: '3.0', revision: 1, project: 'p1', slide_id: 's1', section_id: 'sec', role: 'cover', title: '市场分析', key_message: '市场在扩大', elements: [{ type: 'text', intent: '摘要' }], layout: 'cover', created_at: 1, updated_at: 1 },
-        s2: { version: '3.0', revision: 2, project: 'p1', slide_id: 's2', section_id: 'sec', subsection_id: 'sub', role: 'evidence', title: '增长趋势', key_message: '增长持续', elements: [{ type: 'chart', intent: '趋势图' }], layout: 'chart', created_at: 1, updated_at: 2 },
+        s1: { version: '3.0', revision: 1, project_id: 'p1', slide_id: 's1', section_id: 'sec', role: 'cover', title: '市场分析', key_message: '市场在扩大', elements: [{ type: 'text', intent: '摘要' }], layout: 'cover', created_at: 1, updated_at: 1 },
+        s2: { version: '3.0', revision: 2, project_id: 'p1', slide_id: 's2', section_id: 'sec', subsection_id: 'sub', role: 'evidence', title: '增长趋势', key_message: '增长持续', elements: [{ type: 'chart', intent: '趋势图' }], layout: 'chart', created_at: 1, updated_at: 2 },
       },
-      design: { version: '3.0', revision: 1, project: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
+      design: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
       materialization: {
         s1: { state: 'fresh', revisions: { slide_html: 1, source_outline: 1, source_spec: 1, source_design: 1 } },
         s2: { state: 'spec_stale', revisions: { slide_html: 1, source_outline: 1, source_spec: 1, source_design: 1 } },
@@ -50,7 +50,7 @@ describe('DeckNavigator', () => {
     }));
     useSpecStore.setState({ byProjectId: { p1: {
       outline: {
-        version: '3.0', revision: 1, project: 'pro_aaaaaa', title: '演示项目',
+        version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: '演示项目',
         goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', constraints: { must_include: [], must_avoid: [], style_limits: [], content_limits: [] },
         sections: [
           {
@@ -68,11 +68,11 @@ describe('DeckNavigator', () => {
         slide_order: ['s1', 's2', 's3'], created_at: 1, updated_at: 1,
       },
       slide_specs: {
-        s1: { version: '3.0', revision: 1, project: 'p1', slide_id: 's1', section_id: 'sec1', subsection_id: 'sub11', role: 'context', title: '章节一第一项', key_message: 'A', elements: [{ type: 'text', intent: 'A' }], layout: 'content', created_at: 1, updated_at: 1 },
-        s2: { version: '3.0', revision: 1, project: 'p1', slide_id: 's2', section_id: 'sec1', subsection_id: 'sub12', role: 'context', title: '章节一第二项', key_message: 'B', elements: [{ type: 'text', intent: 'B' }], layout: 'content', created_at: 1, updated_at: 1 },
-        s3: { version: '3.0', revision: 1, project: 'p1', slide_id: 's3', section_id: 'sec2', subsection_id: 'sub21', role: 'context', title: '章节二第一项', key_message: 'C', elements: [{ type: 'text', intent: 'C' }], layout: 'content', created_at: 1, updated_at: 1 },
+        s1: { version: '3.0', revision: 1, project_id: 'p1', slide_id: 's1', section_id: 'sec1', subsection_id: 'sub11', role: 'context', title: '章节一第一项', key_message: 'A', elements: [{ type: 'text', intent: 'A' }], layout: 'content', created_at: 1, updated_at: 1 },
+        s2: { version: '3.0', revision: 1, project_id: 'p1', slide_id: 's2', section_id: 'sec1', subsection_id: 'sub12', role: 'context', title: '章节一第二项', key_message: 'B', elements: [{ type: 'text', intent: 'B' }], layout: 'content', created_at: 1, updated_at: 1 },
+        s3: { version: '3.0', revision: 1, project_id: 'p1', slide_id: 's3', section_id: 'sec2', subsection_id: 'sub21', role: 'context', title: '章节二第一项', key_message: 'C', elements: [{ type: 'text', intent: 'C' }], layout: 'content', created_at: 1, updated_at: 1 },
       },
-      design: { version: '3.0', revision: 1, project: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
+      design: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
       materialization: {},
     } } });
   }

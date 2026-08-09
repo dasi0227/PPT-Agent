@@ -8,7 +8,7 @@
   "required": [
     "version",
     "revision",
-    "project",
+    "project_id",
     "slide_id",
     "section_id",
     "role",
@@ -28,7 +28,7 @@
       "minimum": 1,
       "x-runtime-managed": true
     },
-    "project": {
+    "project_id": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
       "x-runtime-managed": true

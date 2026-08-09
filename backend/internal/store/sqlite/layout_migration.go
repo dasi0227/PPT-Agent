@@ -18,7 +18,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/seed"
 )
 
-const currentProjectLayoutVersion = 3
+const currentProjectLayoutVersion = 4
 
 type layoutProjectRow struct {
 	ID            string `gorm:"column:id"`
@@ -52,7 +52,7 @@ type appliedLayoutFile struct {
 }
 
 // MigrateProjectLayouts performs the one-time filesystem half of schema 0002.
-// A project is marked version 2 only after all files and metadata are updated.
+// A project is marked current only after all files and metadata are updated.
 // Any error restores every file moved for that project and stops startup.
 func MigrateProjectLayouts(db *gorm.DB, log *zap.Logger) error {
 	var projects []layoutProjectRow
@@ -130,7 +130,12 @@ func prepareLayoutFiles(
 	versions []layoutVersionRow,
 ) ([]layoutFile, []layoutVersionRow, error) {
 	files := []layoutFile{}
+	var originalOutline []byte
+	var originalDesign []byte
+	originalSpecs := map[string][]byte{}
+	var normalizedOutline []byte
 	var normalizedDesign []byte
+	normalizedSpecs := map[string][]byte{}
 	addJSON := func(oldRel, newRel, kind string, revision int, slideID string) error {
 		sourceRel, raw, err := readLegacyOrNew(project.WorkDir, oldRel, newRel)
 		if err != nil {
@@ -141,8 +146,16 @@ func prepareLayoutFiles(
 			return fmt.Errorf("%s: %w", sourceRel, err)
 		}
 		files = append(files, layoutFile{sourceRel: sourceRel, destRel: newRel, content: normalized})
-		if kind == "design" {
+		switch kind {
+		case "outline":
+			originalOutline = raw
+			normalizedOutline = normalized
+		case "design":
+			originalDesign = raw
 			normalizedDesign = normalized
+		case "slide_spec":
+			originalSpecs[slideID] = raw
+			normalizedSpecs[slideID] = normalized
 		}
 		return nil
 	}
@@ -175,6 +188,45 @@ func prepareLayoutFiles(
 		derivedLayoutFile(project.WorkDir, "common/base.css", baseCSS),
 		derivedLayoutFile(project.WorkDir, "common/tokens.css", spec.DesignTokensCSS(design)),
 	)
+	var outline spec.Outline
+	if err := json.Unmarshal(normalizedOutline, &outline); err != nil {
+		return nil, nil, err
+	}
+	for _, slide := range slides {
+		var slideSpec spec.SlideSpec
+		if err := json.Unmarshal(normalizedSpecs[slide.ID], &slideSpec); err != nil {
+			return nil, nil, err
+		}
+		materializationPath := filepath.Join(
+			project.WorkDir,
+			filepath.FromSlash(model.SlideMaterializationPath(slide.ID)),
+		)
+		record, err := spec.ReadMaterialization(materializationPath)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			continue
+		}
+		if record.Source.Outline != outline.Revision ||
+			record.Source.Spec != slideSpec.Revision ||
+			record.Source.Design != design.Revision {
+			continue
+		}
+		if record.Source.Hash != spec.SourceHash(originalOutline, originalSpecs[slide.ID], originalDesign) {
+			continue
+		}
+		record.Source.Hash = spec.SourceHash(normalizedOutline, normalizedSpecs[slide.ID], normalizedDesign)
+		raw, err := json.MarshalIndent(record, "", "  ")
+		if err != nil {
+			return nil, nil, err
+		}
+		files = append(files, derivedLayoutFile(
+			project.WorkDir,
+			model.SlideMaterializationPath(slide.ID),
+			raw,
+		))
+	}
 
 	updates := make([]layoutVersionRow, 0, len(versions))
 	for _, version := range versions {
@@ -270,9 +322,9 @@ func migrateResourceJSON(raw []byte, kind string, project layoutProjectRow, revi
 	switch kind {
 	case "outline":
 		value["version"] = spec.SchemaVersion
-		value["project"] = project.ID
+		value["project_id"] = project.ID
 		delete(value, "schema_version")
-		delete(value, "project_id")
+		delete(value, "project")
 		if positioning, ok := value["positioning"].(string); !ok || strings.TrimSpace(positioning) == "" {
 			if thesis, ok := value["core_thesis"].(string); ok && strings.TrimSpace(thesis) != "" {
 				value["positioning"] = thesis
@@ -307,9 +359,9 @@ func migrateResourceJSON(raw []byte, kind string, project layoutProjectRow, revi
 		}
 	case "design":
 		value["version"] = spec.SchemaVersion
-		value["project"] = project.ID
+		value["project_id"] = project.ID
 		delete(value, "schema_version")
-		delete(value, "project_id")
+		delete(value, "project")
 		value["theme"] = firstMigrationText(stringValueFromJSON(value["theme"]), "swiss-modern")
 		value["direction"] = firstMigrationText(stringValueFromJSON(value["direction"]), firstMigrationText(stringValueFromJSON(value["signature"]), "清晰、克制、结构化的通用商务演示"))
 		if density := stringValueFromJSON(value["density"]); density != "" {
@@ -330,10 +382,10 @@ func migrateResourceJSON(raw []byte, kind string, project layoutProjectRow, revi
 		}
 	case "slide_spec":
 		value["version"] = spec.SchemaVersion
-		value["project"] = project.ID
+		value["project_id"] = project.ID
 		value["slide_id"] = slideID
 		delete(value, "schema_version")
-		delete(value, "project_id")
+		delete(value, "project")
 		delete(value, "source_outline_revision")
 		delete(value, "speaker_notes")
 		if layout := stringValueFromJSON(value["layout"]); strings.TrimSpace(layout) == "" {

@@ -5,7 +5,7 @@ const SchemaVersion = "3.0"
 type Outline struct {
 	SchemaVersion string      `json:"version"`
 	Revision      int         `json:"revision"`
-	ProjectID     string      `json:"project"`
+	ProjectID     string      `json:"project_id"`
 	Title         string      `json:"title"`
 	Goal          string      `json:"goal"`
 	Audience      string      `json:"audience"`
@@ -40,7 +40,7 @@ type Subsection struct {
 type SlideSpec struct {
 	SchemaVersion string    `json:"version"`
 	Revision      int       `json:"revision"`
-	ProjectID     string    `json:"project"`
+	ProjectID     string    `json:"project_id"`
 	SlideID       string    `json:"slide_id"`
 	SectionID     string    `json:"section_id"`
 	SubsectionID  string    `json:"subsection_id,omitempty"`
@@ -61,7 +61,7 @@ type Element struct {
 type Design struct {
 	SchemaVersion string       `json:"version"`
 	Revision      int          `json:"revision"`
-	ProjectID     string       `json:"project"`
+	ProjectID     string       `json:"project_id"`
 	Theme         string       `json:"theme"`
 	Direction     string       `json:"direction"`
 	Density       string       `json:"density"`

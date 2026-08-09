@@ -6,7 +6,7 @@ Resource responsibilities:
 - deck:outline controls deck goal, audience, sections and stable slide order.
 - deck:design controls deck-wide visual system.
 - slide:<id>:spec controls semantic role, title, key message, ordered element intents and optional layout direction.
-- Runtime owns managed fields such as version, revision, project, slide_id, section_id, subsection_id and timestamps.
+- Runtime owns managed fields such as version, revision, project_id, slide_id, section_id, subsection_id and timestamps.
 
 Execution steps:
 1. Read the relevant spec resource if exact current content matters.

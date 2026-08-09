@@ -4,7 +4,7 @@ import type { SlideSpec } from '../../api/types';
 import { SlideSpecCard } from './SlideSpecCard';
 
 const spec: SlideSpec = {
-  version: '3.0', revision: 2, project: 'p1', slide_id: 'slide-stable',
+  version: '3.0', revision: 2, project_id: 'p1', slide_id: 'slide-stable',
   section_id: 'section-main',
   role: 'evidence', title: '预算正在增长', key_message: '投入正在转为正式预算',
   elements: [{ type: 'chart', intent: '用数字与趋势图展示连续增长' }],

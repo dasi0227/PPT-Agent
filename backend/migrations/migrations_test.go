@@ -75,6 +75,12 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 			t.Fatalf("legacy projects column %q still exists", removed)
 		}
 	}
+	if err := db.Exec(`
+		INSERT INTO projects(id,title,work_dir,theme,status,layout_version,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?,?)
+	`, "layout-v4", "Deck", "/tmp/layout-v4", "default", "draft", 4, 1, 1).Error; err != nil {
+		t.Fatalf("layout version 4 is not accepted: %v", err)
+	}
 }
 
 // applyAllMigrations 执行 migrations/ 内全部 SQL（按 ; 切分，跳过注释/空白）。

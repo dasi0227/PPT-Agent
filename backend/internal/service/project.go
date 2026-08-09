@@ -50,7 +50,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 		Status:          "draft",
 		OutlineRevision: 1,
 		DesignRevision:  1,
-		LayoutVersion:   3,
+		LayoutVersion:   4,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
