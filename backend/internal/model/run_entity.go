@@ -7,7 +7,7 @@ type Run struct {
 	ProjectID         string
 	ClientRequestID   string
 	Model             ModelSelection
-	WorkSpec          WorkSpec
+	Command           RunCommand
 	Status            RunStatus
 	CancelRequestedAt int64
 	CreatedAt         int64
@@ -31,7 +31,7 @@ type CreateRunParams struct {
 	ProjectID       string
 	PageIndex       *int
 	Instruction     string
-	// Spec/presentation runner implementation options.
+	// Spec/PPT runner implementation options.
 	Brief      string
 	SlideCount int
 	Language   string
@@ -39,7 +39,7 @@ type CreateRunParams struct {
 	Theme string
 	// Internal deck runner page count.
 	PageCount int
-	WorkSpec  WorkSpec
+	Command   RunCommand
 }
 
 type IdempotencyRecord struct {

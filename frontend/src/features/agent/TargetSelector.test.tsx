@@ -7,7 +7,7 @@ describe('TargetSelector', () => {
     const onTargetChange = vi.fn();
     render(
       <TargetSelector
-        artifact="presentation"
+        artifact="ppt"
         level="slide"
         onTargetChange={onTargetChange}
       />,
@@ -20,14 +20,14 @@ describe('TargetSelector', () => {
     expect(screen.getByRole('group', { name: '对象' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('menuitem', { name: '范围：整份' }));
-    expect(onTargetChange).toHaveBeenCalledWith({ artifact: 'presentation', level: 'deck' });
+    expect(onTargetChange).toHaveBeenCalledWith({ artifact: 'ppt', level: 'deck' });
   });
 
   it('maps the object control through the existing artifact protocol', () => {
     const onTargetChange = vi.fn();
     render(
       <TargetSelector
-        artifact="presentation"
+        artifact="ppt"
         level="slide"
         onTargetChange={onTargetChange}
       />,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
 
-const base = { schema_version: 2, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 3, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const entry = (seq: number, type: string, data: Record<string, unknown>, runId = 'r1'): HistoryEntry => ({
   seq, ts: 1_754_130_600, run_id: runId, turn: type === 'user_turn' ? 'user' : 'agent', type, data,
 });
@@ -9,7 +9,7 @@ const entry = (seq: number, type: string, data: Record<string, unknown>, runId =
 describe('history hydrator', () => {
   it('reuses public reducers for tools, plan, question, final, and terminal', () => {
     const hydrated = hydrateRunFromHistory([
-      entry(1, 'user_turn', { text: '生成 PPT', target: { artifact: 'presentation', level: 'deck' }, interaction: { intent: 'execute' } }),
+      entry(1, 'user_turn', { text: '生成 PPT', scope: { artifact: 'ppt', level: 'deck' }, intent: 'execute' }),
       entry(2, 'plan.updated', { ...base, plan: { plan_id: 'p1', revision: 1, explanation: '开始', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] } }),
       entry(3, 'tool.started', { ...base, call_id: 'c1', tool: 'write_ppt', display: { label: '生成页面' } }),
       entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'write_ppt', status: 'completed', display: { label: '已生成页面' } }),
@@ -33,12 +33,27 @@ describe('history hydrator', () => {
     expect(hydrated.items).toEqual([]);
   });
 
+  it('ignores legacy command and public event shapes', () => {
+    const hydrated = hydrateRunFromHistory([
+      entry(1, 'user_turn', {
+        text: 'legacy',
+        target: { artifact: 'presentation', level: 'deck' },
+        interaction: { intent: 'execute' },
+      }),
+      entry(2, 'message.final', {
+        ...base, schema_version: 2, message_id: 'legacy-final', text: 'legacy',
+      }),
+    ]);
+    expect(hydrated.items).toEqual([]);
+    expect(hydrated.session.status).toBe('idle');
+  });
+
   it('restores accepted and rejected steering messages from thread history', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
         text: '开始',
-        target: { artifact: 'presentation', level: 'deck' },
-        interaction: { intent: 'execute' },
+        scope: { artifact: 'ppt', level: 'deck' },
+        intent: 'execute',
       }),
       entry(2, 'steering', {
         client_message_id: 'msg-1', text: '改成深色', status: 'injected',
@@ -61,15 +76,15 @@ describe('history hydrator', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
         text: '第一轮',
-        target: { artifact: 'presentation', level: 'deck' },
-        interaction: { intent: 'execute' },
+        scope: { artifact: 'ppt', level: 'deck' },
+        intent: 'execute',
       }, 'old'),
       entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成' }, 'old'),
       entry(3, 'run.finished', { ...base, run_id: 'old', status: 'completed', duration_ms: 10 }, 'old'),
       entry(1, 'user_turn', {
         text: '第二轮',
-        target: { artifact: 'presentation', level: 'slide', slide_id: 's2' },
-        interaction: { intent: 'ask' },
+        scope: { artifact: 'ppt', level: 'slide', slide_id: 's2' },
+        intent: 'ask',
       }, 'new'),
       entry(2, 'question.asked', {
         ...base,
@@ -87,7 +102,7 @@ describe('history hydrator', () => {
       activeRunId: 'new',
       status: 'waiting',
       pendingQuestion: { id: 'q2', prompt: '请选择方向' },
-      target: { level: 'slide', slide_id: 's2' },
+      scope: { level: 'slide', slide_id: 's2' },
     });
     expect(hydrated.lastEventId).toBe('2');
     expect(hydrated.plan).toBeNull();

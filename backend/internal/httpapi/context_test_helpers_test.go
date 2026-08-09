@@ -11,7 +11,7 @@ import (
 )
 
 // writeV3ContextSources keeps production-path E2E fixtures on the authoritative
-// WorkSpec + Spec v3 contract.
+// RunCommand + Spec v3 contract.
 func writeV3ContextSources(t *testing.T, workDir, projectID string, slides []model.Slide) {
 	t.Helper()
 	sections := []spec.Section{}

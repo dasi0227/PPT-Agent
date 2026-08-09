@@ -4,38 +4,35 @@
 
 ## 输入和路由
 
-### WorkSpec
+### RunCommand
 
 功能：
 
-定义一次 Run 要解决什么问题、操作什么产物、作用于整份还是单页，以及采用什么交互方式。
+定义一次 Run 的资源边界、调用方授权、自然语言任务和显式选项。
 
 意义：
 
-它是 Runtime 的任务真相。Context、资源范围、工具权限和完成检查都从 WorkSpec 派生，避免各模块分别猜测用户意图。
+它是 Runtime 的任务真相。Context、资源范围、工具权限和完成检查都从 RunCommand 派生，避免各模块分别猜测用户意图。
 
 结构：
 
 ```json
 {
-  "target": {
-    "artifact": "presentation",
+  "scope": {
+    "artifact": "ppt",
     "level": "slide",
     "slide_id": "sli_8n4wcp"
   },
-  "interaction": {
-    "intent": "execute"
-  },
+  "intent": "execute",
   "instruction": "把当前页改成数据对比页，并完成渲染验证",
   "options": {
     "language": "zh-CN",
-    "theme_id": "tokyo-night",
-    "desired_slide_count": 12
+    "range": "9-15"
   }
 }
 ```
 
-### RunTarget
+### RunScope
 
 功能：
 
@@ -55,44 +52,20 @@
 }
 ```
 
-### RunInteraction
+### RunIntent
 
 功能：
 
-声明本次 Run 的交互意图。
+声明调用方授予本次 Run 的最大权限。
 
 意义：
 
-它决定 Runtime 是只读沟通、提问、规划，还是允许真实写入。
+`talk | ask | plan` 只读，`execute` 允许在 RunScope 内写入。
 
 结构：
 
 ```json
-{
-  "intent": "plan"
-}
-```
-
-### Scope
-
-功能：
-
-将 WorkSpec 的目标转换成工具读写边界。
-
-意义：
-
-阻止 Agent 越权修改未声明的页面或产物。
-
-结构：
-
-```json
-{
-  "target": {
-    "artifact": "presentation",
-    "level": "slide",
-    "slide_id": "sli_8n4wcp"
-  }
-}
+"plan"
 ```
 
 ## 上下文系统
@@ -111,9 +84,9 @@
 
 ```json
 {
-  "schema_version": "1.0",
-  "profile": "presentation/slide",
-  "work_spec": {},
+  "schema_version": "2.0",
+  "profile": "ppt/slide",
+  "run_command": {},
   "project": {
     "id": "pro_k7m2qx",
     "title": "季度业务复盘"
@@ -151,7 +124,7 @@
   "run_id": "run_01",
   "thread_id": "thread_01",
   "project_id": "pro_k7m2qx",
-  "profile": "presentation/slide",
+  "profile": "ppt/slide",
   "read_only": false,
   "estimated_tokens": 12400,
   "budget_tokens": 20000,
@@ -248,10 +221,8 @@
   },
   "available_levels": ["summary", "full"],
   "scope": {
-    "target": {
-      "artifact": "presentation",
-      "level": "deck"
-    }
+    "artifact": "ppt",
+    "level": "deck"
   },
   "freshness": "current",
   "updated_at": 1786201200000000000
@@ -266,7 +237,7 @@
 
 意义：
 
-让检索结果受 Scope 和 token budget 控制，并说明每项内容为什么被选中。
+让检索结果受 RunScope 和 token budget 控制，并说明每项内容为什么被选中。
 
 结构：
 
@@ -716,7 +687,7 @@
 {
   "run_id": "run_01",
   "finish_call_id": "call_finish_01",
-  "work_spec": {},
+  "run_command": {},
   "requirement_ledger": {},
   "plan": {},
   "changes": {},
@@ -858,8 +829,8 @@
   "loop_id": "loop_01",
   "phase": "terminal",
   "status": "completed",
-  "target": {
-    "artifact": "presentation",
+  "scope": {
+    "artifact": "ppt",
     "level": "slide",
     "slide_id": "sli_8n4wcp"
   },
@@ -886,7 +857,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:30:00Z"
 }
@@ -900,23 +871,21 @@
 
 意义：
 
-固定前端时间线的任务目标、交互意图和原始用户输入。
+固定前端时间线的 RunScope、RunIntent 和原始用户输入。
 
 结构：
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:30:00Z",
-  "target": {
-    "artifact": "presentation",
+  "scope": {
+    "artifact": "ppt",
     "level": "slide",
     "slide_id": "sli_8n4wcp"
   },
-  "interaction": {
-    "intent": "execute"
-  },
+  "intent": "execute",
   "user_input": "重做当前页"
 }
 ```
@@ -935,7 +904,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:30:05Z",
   "stage": "rendering",
@@ -967,7 +936,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:31:00Z",
   "status": "completed",
@@ -990,7 +959,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:30:10Z",
   "plan": {
@@ -1022,7 +991,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:30:20Z",
   "call_id": "call_01",
@@ -1054,7 +1023,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:30:30Z",
   "call_id": "call_01",
@@ -1090,7 +1059,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:30:40Z",
   "question_id": "question_01",
@@ -1123,7 +1092,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:31:00Z",
   "question_id": "question_01",
@@ -1150,7 +1119,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:30:15Z",
   "message_id": "message_01",
@@ -1172,7 +1141,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:30:35Z",
   "message_id": "message_02",
@@ -1195,7 +1164,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_01",
   "occurred_at": "2026-08-09T14:31:00Z",
   "message_id": "message_final",

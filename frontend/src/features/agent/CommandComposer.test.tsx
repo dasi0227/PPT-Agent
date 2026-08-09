@@ -34,14 +34,14 @@ describe('CommandComposer', () => {
         sessions: {
           t1: {
             activeRunId: null, status: 'idle',
-            target: { artifact: 'presentation', level: 'slide' },
-            interaction: { intent: 'execute' },
+            scope: { artifact: 'ppt', level: 'slide' },
+            intent: 'execute',
             timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null,
           },
         },
       });
       useComposerStore.setState({
-        artifact: 'presentation', level: 'slide', intent: 'execute',
+        artifact: 'ppt', level: 'slide', intent: 'execute',
         modelProfileName: null, userTouchedTarget: false,
       });
       useDeckStore.setState({ currentPage: 0 });
@@ -63,8 +63,8 @@ describe('CommandComposer', () => {
     await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', expect.objectContaining({
       client_request_id: expect.stringMatching(/^req_/),
       model: 'Kimi K3',
-      target: { artifact: 'presentation', level: 'slide', slide_id: 'stable-1' },
-      interaction: { intent: 'execute' },
+      scope: { artifact: 'ppt', level: 'slide', slide_id: 'stable-1' },
+      intent: 'execute',
       instruction: '调整当前页',
     }), 'p1'));
   });
@@ -105,21 +105,21 @@ describe('CommandComposer', () => {
     fireEvent.change(textarea, { target: { value: '/talk 给我建议' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
-      interaction: { intent: 'talk' },
+      intent: 'talk',
       instruction: '给我建议',
     }), 'p1'));
 
     fireEvent.change(textarea, { target: { value: '/ask 先分析方案' } });
     fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
     await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
-      interaction: { intent: 'ask' },
+      intent: 'ask',
       instruction: '先分析方案',
     }), 'p1'));
 
 	    fireEvent.change(textarea, { target: { value: '/plan 拆解执行步骤' } });
 	    fireEvent.click(screen.getByRole('button', { name: '发送' }));
 	    await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
-	      interaction: { intent: 'plan' },
+	      intent: 'plan',
 	      instruction: '拆解执行步骤',
 	    }), 'p1'));
   });
@@ -130,8 +130,8 @@ describe('CommandComposer', () => {
       sessions: {
         t1: {
           activeRunId: 'r-plan', status: 'running',
-          target: { artifact: 'presentation', level: 'slide' },
-          interaction: { intent: 'execute' },
+          scope: { artifact: 'ppt', level: 'slide' },
+          intent: 'execute',
           timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null,
           plan: {
             id: 'p1',
@@ -164,8 +164,8 @@ describe('CommandComposer', () => {
       sessions: {
         t1: {
           activeRunId: 'r1', status: 'waiting',
-          target: { artifact: 'presentation', level: 'slide' },
-          interaction: { intent: 'ask' },
+          scope: { artifact: 'ppt', level: 'slide' },
+          intent: 'ask',
           timelineItems: [], pendingQuestion: { id: 'q1', prompt: '选择' },
           progress: null, eventSourceClose: null, plan: null,
         },
@@ -184,8 +184,8 @@ describe('CommandComposer', () => {
       sessions: {
         t1: {
           activeRunId: 'r1', status: 'running',
-          target: { artifact: 'presentation', level: 'slide' },
-          interaction: { intent: 'execute' },
+          scope: { artifact: 'ppt', level: 'slide' },
+          intent: 'execute',
           timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null,
         },
       },
@@ -244,7 +244,7 @@ describe('CommandComposer', () => {
 
     await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', expect.objectContaining({
       model: 'DeepSeek V4 Pro',
-      interaction: { intent: 'talk' },
+      intent: 'talk',
     }), 'p1'));
   });
 

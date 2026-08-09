@@ -121,8 +121,8 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 
 	if err := a.bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
 		PublicEventBase: model.NewPublicEventBase(a.run.ID),
-		Target:          a.run.WorkSpec.Target, Interaction: a.run.WorkSpec.Interaction,
-		UserInput: a.run.WorkSpec.Instruction,
+		Scope:           a.run.Command.Scope, Intent: a.run.Command.Intent,
+		UserInput: a.run.Command.Instruction,
 	}); err != nil {
 		e.setStatus(context.Background(), a.run.ID, model.RunFailed)
 		return

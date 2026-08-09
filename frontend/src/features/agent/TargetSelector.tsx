@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import type React from 'react';
-import type { Artifact, TargetLevel } from '../../api/types';
+import type { Artifact, ScopeLevel } from '../../api/types';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,10 +8,10 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 
-type ComposerTarget = { artifact: Artifact; level: TargetLevel };
+type ComposerTarget = { artifact: Artifact; level: ScopeLevel };
 
 interface ScopeOption {
-  level: TargetLevel;
+  level: ScopeLevel;
   label: string;
 }
 
@@ -27,10 +27,10 @@ const scopeOptions: ScopeOption[] = [
 
 const objectOptions: ObjectOption[] = [
   { artifact: 'spec', label: '设计稿' },
-  { artifact: 'presentation', label: '幻灯片' },
+  { artifact: 'ppt', label: '幻灯片' },
 ];
 
-function scopeLabel(level: TargetLevel): string {
+function scopeLabel(level: ScopeLevel): string {
   return scopeOptions.find((option) => option.level === level)?.label ?? '整份';
 }
 

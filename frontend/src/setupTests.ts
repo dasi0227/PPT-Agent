@@ -20,7 +20,7 @@ Object.defineProperty(window, 'sessionStorage', { value: localStorageMock });
 globalThis.fetch = async (input: RequestInfo | URL) => {
   const url = input.toString();
   if (url.includes('/api/v1/llm/profiles')) {
-    return { ok: true, status: 200, json: async () => ({
+    const body = {
       default: 'Kimi K3',
       profiles: [
         {
@@ -34,7 +34,13 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
           capabilities: { vision: false, tool_calls: true, multiple_tool_calls: true },
         },
       ],
-    }) } as unknown as Response;
+    };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    } as unknown as Response;
   }
   if (/\/api\/v1\/slides\/[^/]+\/render$/.test(url)) {
     return {

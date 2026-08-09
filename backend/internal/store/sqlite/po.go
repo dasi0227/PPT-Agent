@@ -72,11 +72,11 @@ type runPO struct {
 	ID                string `gorm:"column:id;primaryKey"`
 	ThreadID          string `gorm:"column:thread_id"`
 	ProjectID         string `gorm:"column:project_id"`
-	TargetArtifact    string `gorm:"column:target_artifact"`
-	TargetLevel       string `gorm:"column:target_level"`
-	TargetSlideID     string `gorm:"column:target_slide_id"`
-	InteractionIntent string `gorm:"column:interaction_intent"`
-	WorkSpecJSON      string `gorm:"column:work_spec_json"`
+	ScopeArtifact     string `gorm:"column:scope_artifact"`
+	ScopeLevel        string `gorm:"column:scope_level"`
+	ScopeSlideID      string `gorm:"column:scope_slide_id"`
+	Intent            string `gorm:"column:intent"`
+	RunCommandJSON    string `gorm:"column:run_command_json"`
 	ClientRequestID   string `gorm:"column:client_request_id"`
 	ModelProfileName  string `gorm:"column:model_profile_name"`
 	ModelProvider     string `gorm:"column:model_provider"`
@@ -91,11 +91,11 @@ type runPO struct {
 func (runPO) TableName() string { return "runs" }
 
 func (r runPO) toModel() model.Run {
-	var spec model.WorkSpec
-	_ = json.Unmarshal([]byte(r.WorkSpecJSON), &spec)
+	var command model.RunCommand
+	_ = json.Unmarshal([]byte(r.RunCommandJSON), &command)
 	return model.Run{
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
-		ClientRequestID: r.ClientRequestID, WorkSpec: spec, Status: model.RunStatus(r.Status),
+		ClientRequestID: r.ClientRequestID, Command: command, Status: model.RunStatus(r.Status),
 		Model: model.ModelSelection{
 			ProfileName: r.ModelProfileName, Provider: r.ModelProvider,
 			Model: r.ModelName, URL: r.ModelURL,
@@ -106,13 +106,13 @@ func (r runPO) toModel() model.Run {
 }
 
 func runToPO(m model.Run) runPO {
-	raw, _ := json.Marshal(m.WorkSpec)
+	raw, _ := json.Marshal(m.Command)
 	return runPO{
 		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID,
-		TargetArtifact: string(m.WorkSpec.Target.Artifact),
-		TargetLevel:    string(m.WorkSpec.Target.Level), TargetSlideID: m.WorkSpec.Target.SlideID,
-		InteractionIntent: string(m.WorkSpec.Interaction.Intent),
-		WorkSpecJSON:      string(raw),
+		ScopeArtifact: string(m.Command.Scope.Artifact),
+		ScopeLevel:    string(m.Command.Scope.Level), ScopeSlideID: m.Command.Scope.SlideID,
+		Intent:            string(m.Command.Intent),
+		RunCommandJSON:    string(raw),
 		ClientRequestID:   m.ClientRequestID,
 		ModelProfileName:  m.Model.ProfileName,
 		ModelProvider:     m.Model.Provider,

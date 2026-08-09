@@ -3,7 +3,7 @@ Task playbook: default runtime execution.
 Use this playbook when no more specific playbook matches.
 
 Steps:
-1. Restate the goal internally from WorkSpec, target and interaction.
+1. Restate the goal internally from RunCommand scope, intent and instruction.
 2. Use the smallest safe sequence of disclosed tools.
 3. Read exact project state before making precision changes.
 4. Write only inside authorized scope.

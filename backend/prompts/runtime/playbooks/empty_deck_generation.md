@@ -3,7 +3,7 @@ Task playbook: empty deck generation.
 Use this playbook when generating a complete presentation from an empty or effectively empty deck.
 
 Canonical order:
-1. Establish deck:outline with clear audience, goal, positioning, requirements, prohibitions, section purposes and slide order.
+1. Establish deck:outline with clear audience, goal, positioning, requirements, prohibitions, section purposes, RunCommand.options.language when supplied, and a slide order inside RunCommand.options.range when supplied.
 2. Establish deck:design with theme, direction, density and shared chrome.
 3. Create each slide:<id>:spec in outline order with role, title, key message, semantic elements and optional layout direction.
 4. Create each slide:<id>:html as the final implementation using project CSS, semantic HTML and local/data/blob-safe resources.

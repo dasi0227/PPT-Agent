@@ -111,8 +111,8 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 	threadID := thread["id"].(string)
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{
 		"client_request_id":"req-authority-1",
-		"target":{"artifact":"spec","level":"deck"},
-		"interaction":{"intent":"execute"},
+		"scope":{"artifact":"spec","level":"deck"},
+		"intent":"execute",
 		"instruction":"生成内容"
 	}`)
 	if resp.Code != http.StatusCreated {
@@ -200,8 +200,8 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 
 	body := `{
 		"client_request_id":"req-artifact-1",
-		"target":{"artifact":"spec","level":"deck"},
-		"interaction":{"intent":"talk"},
+		"scope":{"artifact":"spec","level":"deck"},
+		"intent":"talk",
 		"instruction":"评估当前叙事结构"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", body)
@@ -210,9 +210,8 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 	}
 	var created map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &created)
-	target := created["target"].(map[string]any)
-	interaction := created["interaction"].(map[string]any)
-	if target["artifact"] != "spec" || target["level"] != "deck" || interaction["intent"] != "talk" {
+	scope := created["scope"].(map[string]any)
+	if scope["artifact"] != "spec" || scope["level"] != "deck" || created["intent"] != "talk" {
 		t.Fatalf("new protocol was not preserved: %s", resp.Body.String())
 	}
 	runID := created["id"].(string)
@@ -245,14 +244,25 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 		t.Fatalf("GET missing run want 404, got %d: %s", resp.Code, resp.Body.String())
 	}
 
+	legacy := `{
+		"client_request_id":"req-artifact-legacy",
+		"target":{"artifact":"presentation","level":"deck"},
+		"interaction":{"intent":"talk"},
+		"instruction":"legacy"
+	}`
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", legacy)
+	if resp.Code != http.StatusUnprocessableEntity || !strings.Contains(resp.Body.String(), "INVALID_SCOPE") {
+		t.Fatalf("legacy command shape must be rejected: %d %s", resp.Code, resp.Body.String())
+	}
+
 	invalid := `{
 		"client_request_id":"req-artifact-invalid",
-		"target":{"artifact":"presentation","level":"slide","slide_id":"current"},
-		"interaction":{"intent":"execute"},
+		"scope":{"artifact":"ppt","level":"slide","slide_id":"current"},
+		"intent":"execute",
 		"instruction":"修改当前页"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", invalid)
-	if resp.Code != http.StatusUnprocessableEntity || !strings.Contains(resp.Body.String(), "INVALID_TARGET") {
+	if resp.Code != http.StatusUnprocessableEntity || !strings.Contains(resp.Body.String(), "INVALID_SCOPE") {
 		t.Fatalf("unstable current target must be rejected: %d %s", resp.Code, resp.Body.String())
 	}
 }
@@ -271,8 +281,8 @@ func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
 	_ = json.Unmarshal(resp.Body.Bytes(), &thread)
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+thread["id"].(string)+"/runs", `{
 		"client_request_id":"req-screenshot-1",
-		"target":{"artifact":"presentation","level":"deck"},
-		"interaction":{"intent":"talk"},
+		"scope":{"artifact":"ppt","level":"deck"},
+		"intent":"talk",
 		"instruction":"查看当前演示"
 	}`)
 	if resp.Code != http.StatusCreated {
@@ -348,7 +358,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 		t.Fatalf("new thread history should be empty array, got %d: %s", resp.Code, resp.Body.String())
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","target":{"artifact":"spec","level":"deck"},"interaction":{"intent":"execute"},"instruction":"生成设计稿"}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","scope":{"artifact":"spec","level":"deck"},"intent":"execute","instruction":"生成设计稿"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
 	}

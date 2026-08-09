@@ -160,8 +160,8 @@ describe('public timeline components', () => {
       sessions: {
         t1: {
           activeRunId: 'r1', status: 'waiting',
-          target: { artifact: 'presentation', level: 'deck' },
-          interaction: { intent: 'ask' }, timelineItems: [],
+          scope: { artifact: 'ppt', level: 'deck' },
+          intent: 'ask', timelineItems: [],
           pendingQuestion: { id: 'q1', prompt: '选择风格' },
           progress: null, eventSourceClose: null, plan: null,
         },
@@ -209,8 +209,8 @@ describe('public timeline components', () => {
       sessions: {
         t1: {
           activeRunId: 'r1', status: 'waiting',
-          target: { artifact: 'presentation', level: 'deck' },
-          interaction: { intent: 'ask' }, timelineItems: [],
+          scope: { artifact: 'ppt', level: 'deck' },
+          intent: 'ask', timelineItems: [],
           pendingQuestion: { id: 'q2', prompt: '题型' },
           progress: null, eventSourceClose: null, plan: null,
         },

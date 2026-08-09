@@ -19,10 +19,6 @@ const (
 	DetailFull      DetailLevel = "full"
 )
 
-type ScopeDescriptor struct {
-	Target model.RunTarget `json:"target"`
-}
-
 type ContextIndex struct {
 	ID        string             `json:"id,omitempty"`
 	RunID     string             `json:"run_id"`
@@ -45,7 +41,7 @@ type ContextIndexItem struct {
 	Embedding       []float32           `json:"embedding,omitempty"`
 	TokenCost       map[DetailLevel]int `json:"token_cost"`
 	AvailableLevels []DetailLevel       `json:"available_levels"`
-	Scope           ScopeDescriptor     `json:"scope"`
+	Scope           model.RunScope      `json:"scope"`
 	Freshness       string              `json:"freshness"`
 	UpdatedAt       int64               `json:"updated_at"`
 }
@@ -103,7 +99,7 @@ type ContextRetriever interface {
 
 type RetrievalQuery struct {
 	RunID             string
-	WorkSpec          model.WorkSpec
+	Command           model.RunCommand
 	RequirementLedger *RequirementLedger
 	LatestIssues      []Issue
 	Phase             RuntimePhase
@@ -140,11 +136,11 @@ type RetrievedContextItem struct {
 type HybridContextRetriever struct {
 	Index      ContextIndex
 	Embedder   EmbeddingProvider
-	Scope      Scope
+	Scope      model.RunScope
 	PackBudget int
 }
 
-func NewContextIndexFromPack(pack contextengine.ContextPack, scope Scope, embedder EmbeddingProvider) ContextIndex {
+func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScope, embedder EmbeddingProvider) ContextIndex {
 	index := ContextIndex{
 		ID:    "ctxidx_" + hashBytes([]byte(pack.Manifest.ContextID + "\x00" + pack.Manifest.PackHash))[:24],
 		RunID: pack.Manifest.RunID, ThreadID: pack.Manifest.ThreadID, ProjectID: pack.Manifest.ProjectID,
@@ -169,7 +165,7 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope Scope, embedd
 		if item.TokenCost == nil {
 			item.TokenCost = map[DetailLevel]int{DetailSummary: approximateTokens(item.Summary)}
 		}
-		item.Scope = ScopeDescriptor{Target: scope.Target}
+		item.Scope = scope
 		item.Keywords = uniqueKeywords(item.Kind + " " + item.Source + " " + item.Summary)
 		index.Items = append(index.Items, item)
 	}
@@ -189,7 +185,7 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope Scope, embedd
 		})
 	}
 	for _, segment := range pack.Manifest.Segments {
-		if segment.Kind == contextengine.SegmentPolicy || segment.Kind == contextengine.SegmentWorkSpec {
+		if segment.Kind == contextengine.SegmentPolicy || segment.Kind == contextengine.SegmentRunCommand {
 			continue
 		}
 		appendItem(ContextIndexItem{
@@ -239,11 +235,11 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 	}
 	queryText := strings.TrimSpace(query.QueryText)
 	if queryText == "" {
-		queryText = query.WorkSpec.Instruction
+		queryText = query.Command.Instruction
 	}
 	scope := r.Scope
-	if scope.Target.Artifact == "" {
-		scope = ScopeFromSpec(query.WorkSpec)
+	if scope.Artifact == "" {
+		scope = query.Command.Scope
 	}
 	allowedKinds := map[string]bool{}
 	for _, kind := range query.Kinds {
@@ -270,7 +266,7 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 		keyword := normalizedKeywordScore(queryText, item.Kind+" "+item.Source+" "+item.Summary)
 		semantic := cosine(queryVector, item.Embedding)
 		scopeBoost := 0.0
-		if item.Target.Key() == resourceForRunTarget(query.WorkSpec.Target).Key() {
+		if item.Target.Key() == resourceForRunScope(query.Command.Scope).Key() {
 			scopeBoost = 1
 		}
 		freshness := 0.5
@@ -343,22 +339,22 @@ func memoryIndexItem(kind, source string, pack contextengine.ContextPack, item c
 	}
 }
 
-func retrievalScopeAllows(scope Scope, target Resource) bool {
+func retrievalScopeAllows(scope model.RunScope, target Resource) bool {
 	if target.Type == "" {
 		return true
 	}
-	return scope.AllowsRead(target)
+	return AllowsRead(scope, target)
 }
 
-func resourceForRunTarget(target model.RunTarget) Resource {
-	if target.Level == model.TargetSlide {
+func resourceForRunScope(target model.RunScope) Resource {
+	if target.Level == model.ScopeSlide {
 		part := "spec"
-		if target.Artifact == model.ArtifactPresentation {
+		if target.Artifact == model.ArtifactPPT {
 			part = "html"
 		}
 		return Resource{Type: "slide", SlideID: target.SlideID, Part: part}
 	}
-	if target.Artifact == model.ArtifactPresentation {
+	if target.Artifact == model.ArtifactPPT {
 		return Resource{Type: "deck", Part: "design"}
 	}
 	return Resource{Type: "deck", Part: "outline"}
@@ -393,7 +389,7 @@ func selectionReason(query string, item ContextIndexItem, keyword, semantic, sco
 		reasons = append(reasons, "semantic similarity")
 	}
 	if scopeBoost > 0 {
-		reasons = append(reasons, "matches current target scope")
+		reasons = append(reasons, "matches current RunScope")
 	}
 	if issueBoost > 0 {
 		reasons = append(reasons, "matches latest runtime issue")

@@ -1,11 +1,11 @@
 import { MessageCircleQuestion, MessagesSquare } from 'lucide-react';
 import type React from 'react';
-import type { InteractionIntent } from '../../api/types';
+import type { RunIntent } from '../../api/types';
 import { cn } from '../../lib/utils';
 
 interface InteractionModeButtonsProps {
-  intent: InteractionIntent;
-  onIntentChange: (intent: InteractionIntent) => void;
+  intent: RunIntent;
+  onIntentChange: (intent: RunIntent) => void;
   disabled?: boolean;
 }
 

@@ -14,23 +14,23 @@ type ContextProfile struct {
 
 type ContextProfileResolver struct{}
 
-func (ContextProfileResolver) Resolve(spec model.WorkSpec) (ContextProfile, error) {
+func (ContextProfileResolver) Resolve(command model.RunCommand) (ContextProfile, error) {
 	var id ProfileID
 	switch {
-	case spec.Target.Artifact == model.ArtifactSpec && spec.Target.Level == model.TargetDeck:
+	case command.Scope.Artifact == model.ArtifactSpec && command.Scope.Level == model.ScopeDeck:
 		id = ProfileSpecDeck
-	case spec.Target.Artifact == model.ArtifactSpec && spec.Target.Level == model.TargetSlide:
+	case command.Scope.Artifact == model.ArtifactSpec && command.Scope.Level == model.ScopeSlide:
 		id = ProfileSpecSlide
-	case spec.Target.Artifact == model.ArtifactPresentation && spec.Target.Level == model.TargetDeck:
-		id = ProfilePresentationDeck
-	case spec.Target.Artifact == model.ArtifactPresentation && spec.Target.Level == model.TargetSlide:
-		id = ProfilePresentationSlide
+	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeDeck:
+		id = ProfilePPTDeck
+	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeSlide:
+		id = ProfilePPTSlide
 	default:
-		return ContextProfile{}, fmt.Errorf("unsupported context profile: %s/%s", spec.Target.Artifact, spec.Target.Level)
+		return ContextProfile{}, fmt.Errorf("unsupported context profile: %s/%s", command.Scope.Artifact, command.Scope.Level)
 	}
 	p := ContextProfile{ID: id, Required: map[SegmentKind]bool{
-		SegmentPolicy: true, SegmentWorkSpec: true, SegmentOutline: true, SegmentDesign: true,
-		SegmentMemory: true, SegmentTarget: spec.Target.Level == model.TargetSlide,
+		SegmentPolicy: true, SegmentRunCommand: true, SegmentOutline: true, SegmentDesign: true,
+		SegmentMemory: true, SegmentTarget: command.Scope.Level == model.ScopeSlide,
 	}, Forbidden: map[SegmentKind]bool{}}
 	if id == ProfileSpecDeck || id == ProfileSpecSlide {
 		p.Forbidden[SegmentSlideHTML] = true

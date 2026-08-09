@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const PublicEventSchemaVersion = 2
+const PublicEventSchemaVersion = 3
 
 var PublicEventTypes = [...]EventType{
 	EventRunStarted,
@@ -64,9 +64,9 @@ type PublicError struct {
 
 type RunStartedPayload struct {
 	PublicEventBase
-	Target      RunTarget      `json:"target"`
-	Interaction RunInteraction `json:"interaction"`
-	UserInput   string         `json:"user_input"`
+	Scope     RunScope  `json:"scope"`
+	Intent    RunIntent `json:"intent"`
+	UserInput string    `json:"user_input"`
 }
 
 type ProgressValue struct {
@@ -212,7 +212,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		return err
 	}
 	if intValue(data["schema_version"]) != PublicEventSchemaVersion {
-		return errors.New("schema_version must be 2")
+		return errors.New("schema_version must be 3")
 	}
 	if strings.TrimSpace(stringValue(data["run_id"])) == "" {
 		return errors.New("run_id is required")
@@ -228,24 +228,20 @@ func ValidatePublicEvent(event EventType, payload any) error {
 
 	switch event {
 	case EventRunStarted:
-		target, ok := data["target"].(map[string]any)
+		scope, ok := data["scope"].(map[string]any)
 		if !ok {
-			return errors.New("run target is required")
+			return errors.New("run scope is required")
 		}
-		interaction, ok := data["interaction"].(map[string]any)
-		if !ok {
-			return errors.New("run interaction is required")
-		}
-		spec := WorkSpec{
-			Target: RunTarget{
-				Artifact: Artifact(stringValue(target["artifact"])),
-				Level:    TargetLevel(stringValue(target["level"])),
-				SlideID:  stringValue(target["slide_id"]),
+		command := RunCommand{
+			Scope: RunScope{
+				Artifact: Artifact(stringValue(scope["artifact"])),
+				Level:    ScopeLevel(stringValue(scope["level"])),
+				SlideID:  stringValue(scope["slide_id"]),
 			},
-			Interaction: RunInteraction{Intent: InteractionIntent(stringValue(interaction["intent"]))},
+			Intent:      RunIntent(stringValue(data["intent"])),
 			Instruction: stringValue(data["user_input"]),
 		}
-		return spec.Validate()
+		return command.Validate()
 	case EventRunProgress:
 		if !oneOf(stringValue(data["stage"]), "thinking", "planning", "reading", "writing", "rendering", "finalizing") {
 			return errors.New("invalid progress stage")

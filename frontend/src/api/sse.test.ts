@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { parseSSEEvent, SSE_EVENT_NAMES } from './sse';
 
 const base = {
-  schema_version: 2,
+  schema_version: 3,
   run_id: 'r1',
   occurred_at: '2026-08-02T10:30:00.000Z',
 };
 
 const payloads: Record<string, unknown> = {
-  'run.started': { ...base, target: { artifact: 'presentation', level: 'deck' }, interaction: { intent: 'execute' }, user_input: '生成 PPT' },
+  'run.started': { ...base, scope: { artifact: 'ppt', level: 'deck' }, intent: 'execute', user_input: '生成 PPT' },
   'run.progress': { ...base, stage: 'thinking', text: '正在分析' },
   'run.finished': { ...base, status: 'completed', duration_ms: 10 },
   'plan.updated': { ...base, plan: { plan_id: 'p1', revision: 1, steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
@@ -35,6 +35,16 @@ describe('SSE parser', () => {
   it('ignores unknown, malformed, incomplete, and unsafe payloads', () => {
     expect(parseSSEEvent('context.assembled', JSON.stringify(base))).toBeNull();
     expect(parseSSEEvent('run.started', '{')).toBeNull();
+    expect(parseSSEEvent('run.started', JSON.stringify({
+      ...(payloads['run.started'] as Record<string, unknown>),
+      schema_version: 2,
+    }))).toBeNull();
+    expect(parseSSEEvent('run.started', JSON.stringify({
+      ...base,
+      target: { artifact: 'presentation', level: 'deck' },
+      interaction: { intent: 'execute' },
+      user_input: 'legacy',
+    }))).toBeNull();
     expect(parseSSEEvent('tool.started', JSON.stringify({ ...base, call_id: 'c1', tool: 'finish', display: { label: '完成' } }))).toBeNull();
     expect(parseSSEEvent('tool.completed', JSON.stringify({
       ...(payloads['tool.completed'] as Record<string, unknown>),
@@ -48,7 +58,7 @@ describe('SSE parser', () => {
 
   it('parses tool events with local file target fields', () => {
     const started = parseSSEEvent('tool.started', JSON.stringify({
-      schema_version: 2,
+      schema_version: 3,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:16.051323Z',
       call_id: 'write_ppt_4',
@@ -70,7 +80,7 @@ describe('SSE parser', () => {
     expect(started).not.toBeNull();
 
     const completed = parseSSEEvent('tool.completed', JSON.stringify({
-      schema_version: 2,
+      schema_version: 3,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:17.051323Z',
       call_id: 'write_ppt_4',
@@ -95,7 +105,7 @@ describe('SSE parser', () => {
 
   it('parses final and finished events with local affected targets', () => {
     const finalEvent = parseSSEEvent('message.final', JSON.stringify({
-      schema_version: 2,
+      schema_version: 3,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:06:31.781954Z',
       message_id: 'm1',
@@ -113,7 +123,7 @@ describe('SSE parser', () => {
     expect(finalEvent).not.toBeNull();
 
     const finishedEvent = parseSSEEvent('run.finished', JSON.stringify({
-      schema_version: 2,
+      schema_version: 3,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:06:31.791303Z',
       status: 'completed',

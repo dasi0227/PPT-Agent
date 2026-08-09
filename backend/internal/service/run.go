@@ -98,7 +98,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		memoryStore := contextengine.ThreadMemoryStore{}
 		old, _, err := memoryStore.Load(r.project.WorkDir, r.pack.Manifest.ThreadID)
 		if err == nil {
-			next := (contextengine.ThreadMemoryUpdater{}).UpdateSuccessful(old, r.runID, r.pack.WorkSpec.Instruction)
+			next := (contextengine.ThreadMemoryUpdater{}).UpdateSuccessful(old, r.runID, r.pack.Command.Instruction)
 			_ = memoryStore.Save(r.project.WorkDir, r.pack.Manifest.ThreadID, next)
 		}
 	}
@@ -114,8 +114,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	if err != nil {
 		return model.Run{}, err
 	}
-	spec := p.WorkSpec
-	if err := spec.Validate(); err != nil {
+	command := p.Command
+	if err := command.Validate(); err != nil {
 		return model.Run{}, err
 	}
 	var selectedProfile llm.Profile
@@ -132,8 +132,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			agentErr.Details["next_action"] = "请选择支持工具调用的模型。"
 			return model.Run{}, agentErr
 		}
-		if spec.Interaction.Intent == model.IntentExecute &&
-			spec.Target.Artifact == model.ArtifactPresentation &&
+		if command.Intent == model.IntentExecute &&
+			command.Scope.Artifact == model.ArtifactPPT &&
 			!capabilities.Vision {
 			agentErr := model.NewAgentError("MODEL_CAPABILITY_MISMATCH", "create_run", nil)
 			agentErr.Details["required_capability"] = "vision"
@@ -141,14 +141,14 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, agentErr
 		}
 	}
-	if spec.Target.Level == model.TargetSlide {
+	if command.Scope.Level == model.ScopeSlide {
 		slides, err := svc.store.ListSlides(ctx, project.ID)
 		if err != nil {
 			return model.Run{}, err
 		}
 		found := false
 		for _, slide := range slides {
-			if slide.ID == spec.Target.SlideID {
+			if slide.ID == command.Scope.SlideID {
 				found = true
 				break
 			}
@@ -157,7 +157,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, ErrSlideTargetNotFound
 		}
 	}
-	p.WorkSpec, p.Instruction = spec, spec.Instruction
+	p.Command, p.Instruction = command, command.Instruction
 	if p.ClientRequestID == "" {
 		p.ClientRequestID = "internal_" + uuid.NewString()
 	}
@@ -165,8 +165,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, model.NewAgentError("BAD_REQUEST", "create_run", errors.New("invalid client_request_id"))
 	}
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
-		"instruction": spec.Instruction, "target": spec.Target,
-		"interaction": spec.Interaction, "options": spec.Options, "model": p.Model,
+		"instruction": command.Instruction, "scope": command.Scope,
+		"intent": command.Intent, "options": command.Options, "model": p.Model,
 	})
 	if err != nil {
 		return model.Run{}, err
@@ -196,7 +196,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	runModel := model.Run{
 		ID: uuid.NewString(), ThreadID: thread.ID, ProjectID: project.ID,
-		ClientRequestID: p.ClientRequestID, WorkSpec: spec,
+		ClientRequestID: p.ClientRequestID, Command: command,
 	}
 	if selectedProfile.Adapter() != nil {
 		runModel.Model = model.ModelSelection{
@@ -206,13 +206,13 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	if svc.assembler == nil || selectedProfile.Adapter() == nil {
 		if svc.factory == nil {
-			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_TARGET_UNSUPPORTED")
-			return model.Run{}, ErrRunTargetUnsupported
+			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_SCOPE_UNSUPPORTED")
+			return model.Run{}, ErrRunScopeUnsupported
 		}
 		execution := svc.factory(runModel, p, project)
 		if execution == nil {
-			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_TARGET_UNSUPPORTED")
-			return model.Run{}, ErrRunTargetUnsupported
+			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_SCOPE_UNSUPPORTED")
+			return model.Run{}, ErrRunScopeUnsupported
 		}
 		createdRun, startErr := svc.engine.Start(ctx, runModel, execution)
 		if startErr != nil {
@@ -224,7 +224,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
 		RunID: runModel.ID, ThreadID: thread.ID, ProjectID: project.ID,
-		WorkSpec: spec, Budget: contextengine.DefaultBudget(),
+		Command: command, Budget: contextengine.DefaultBudget(),
 	}, project)
 	if err != nil {
 		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
@@ -285,7 +285,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	}
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
 		RunID: runModel.ID, ThreadID: runModel.ThreadID, ProjectID: runModel.ProjectID,
-		WorkSpec: runModel.WorkSpec, Budget: contextengine.DefaultBudget(),
+		Command: runModel.Command, Budget: contextengine.DefaultBudget(),
 	}, project)
 	if err != nil {
 		return model.Run{}, err

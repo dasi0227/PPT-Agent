@@ -102,17 +102,17 @@ func (s *Store) DeleteThread(ctx context.Context, id string) error {
 	return nil
 }
 
-// CreateRun writes the normalized WorkSpec without an action/scope projection.
+// CreateRun writes the normalized RunCommand and its indexed scope projection.
 func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	po := runToPO(r)
 	return s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
-		 target_artifact, target_level, target_slide_id, interaction_intent, work_spec_json,
+		 scope_artifact, scope_level, scope_slide_id, intent, run_command_json,
 		 client_request_id, model_profile_name, model_provider, model_name, model_url,
 		 cancel_requested_at, status, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		po.ID, po.ThreadID, po.ProjectID, po.TargetArtifact, po.TargetLevel,
-		nullIfEmpty(po.TargetSlideID), po.InteractionIntent, po.WorkSpecJSON,
+		po.ID, po.ThreadID, po.ProjectID, po.ScopeArtifact, po.ScopeLevel,
+		nullIfEmpty(po.ScopeSlideID), po.Intent, po.RunCommandJSON,
 		nullIfEmpty(po.ClientRequestID), nullIfEmpty(po.ModelProfileName),
 		nullIfEmpty(po.ModelProvider), nullIfEmpty(po.ModelName), nullIfEmpty(po.ModelURL),
 		po.CancelRequestedAt, po.Status, po.CreatedAt, po.UpdatedAt,

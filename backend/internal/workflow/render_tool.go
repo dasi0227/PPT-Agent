@@ -378,7 +378,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if !stableSlideID.MatchString(slideID) || slideID == "current" {
 		return failedToolResult(CodeModelInvalid, "slide_id must be a stable slide identifier", false)
 	}
-	if !input.Scope.AllowsRead(target) {
+	if !AllowsRead(input.Scope, target) {
 		return failedToolResult(ErrTargetOutOfScope.Error(), "requested render target is outside the current run scope", false)
 	}
 	html, source, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))

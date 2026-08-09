@@ -158,15 +158,15 @@ func DefaultRuntimeBudget() RuntimeBudget {
 }
 
 type StructuredOutcome struct {
-	LoopID  string          `json:"loop_id"`
-	Phase   RuntimePhase    `json:"phase"`
-	Status  WorkflowStatus  `json:"status"`
-	Target  model.RunTarget `json:"target"`
-	Changes ChangeSet       `json:"changes"`
-	Issues  []Issue         `json:"issues"`
-	Summary string          `json:"summary"`
-	Code    string          `json:"code,omitempty"`
-	Message string          `json:"message,omitempty"`
+	LoopID  string         `json:"loop_id"`
+	Phase   RuntimePhase   `json:"phase"`
+	Status  WorkflowStatus `json:"status"`
+	Scope   model.RunScope `json:"scope"`
+	Changes ChangeSet      `json:"changes"`
+	Issues  []Issue        `json:"issues"`
+	Summary string         `json:"summary"`
+	Code    string         `json:"code,omitempty"`
+	Message string         `json:"message,omitempty"`
 }
 
 type CommitContext struct {

@@ -103,26 +103,27 @@ export interface Run {
   thread_id: string;
   project_id: string;
   status: 'pending' | 'running' | 'waiting' | 'done' | 'failed' | 'canceled';
-  target: RunTarget;
-  interaction: RunInteraction;
+  scope: RunScope;
+  intent: RunIntent;
   events_url: string;
   model: string | null;
 }
 
-export type Artifact = 'spec' | 'presentation';
-export type TargetLevel = 'slide' | 'deck';
-export type InteractionIntent = 'talk' | 'ask' | 'plan' | 'execute';
+export type Artifact = 'spec' | 'ppt';
+export type ScopeLevel = 'slide' | 'deck';
+export type RunIntent = 'talk' | 'ask' | 'plan' | 'execute';
+export type RunLanguage = 'zh-CN' | 'en-US';
+export type SlideRange = '5-8' | '9-15' | '16-25' | '26+';
 
-export interface RunTarget { artifact: Artifact; level: TargetLevel; slide_id?: string }
-export interface RunInteraction { intent: InteractionIntent }
+export interface RunScope { artifact: Artifact; level: ScopeLevel; slide_id?: string }
 
 export interface CreateRunRequest {
   client_request_id?: string;
   model?: string;
-  target: RunTarget;
-  interaction: RunInteraction;
+  scope: RunScope;
+  intent: RunIntent;
   instruction: string;
-  options?: { language?: string; theme_id?: string; desired_slide_count?: number };
+  options?: { language?: RunLanguage; range?: SlideRange };
 }
 
 export interface LLMProfileCapabilities {
@@ -203,7 +204,7 @@ export interface PlanState {
 }
 
 export interface PublicEventBase {
-  schema_version: 2;
+  schema_version: 3;
   run_id: string;
   occurred_at: string;
 }
@@ -278,8 +279,8 @@ interface SSEEventBase<Name extends SSEEventName, Data> {
 
 export type SSEEvent =
   | SSEEventBase<'run.started', PublicEventBase & {
-      target: RunTarget;
-      interaction: RunInteraction;
+      scope: RunScope;
+      intent: RunIntent;
       user_input: string;
     }>
   | SSEEventBase<'run.progress', PublicEventBase & {

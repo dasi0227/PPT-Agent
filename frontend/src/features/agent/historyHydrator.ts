@@ -1,7 +1,7 @@
 import type {
   PlanState,
-  RunInteraction,
-  RunTarget,
+  RunIntent,
+  RunScope,
   SSEEvent,
   SSEEventName,
 } from '../../api/types';
@@ -26,8 +26,8 @@ export interface HydratedRunView {
 export interface HistorySessionState {
   activeRunId: string | null;
   status: 'idle' | 'running' | 'waiting' | 'done' | 'error' | 'canceled';
-  target?: RunTarget;
-  interaction?: RunInteraction;
+  scope?: RunScope;
+  intent?: RunIntent;
   pendingQuestion: { id: string; prompt: string } | null;
 }
 
@@ -42,6 +42,30 @@ const publicHistoryEvents = new Set<SSEEventName>([
   'question.answered',
   'run.finished',
 ]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readHistoryScope(data: Record<string, unknown>): RunScope | undefined {
+  const raw = data.scope;
+  if (!isRecord(raw)) return undefined;
+  const artifact = raw.artifact;
+  if ((artifact !== 'spec' && artifact !== 'ppt') ||
+    (raw.level !== 'slide' && raw.level !== 'deck')) return undefined;
+  return {
+    artifact,
+    level: raw.level,
+    ...(typeof raw.slide_id === 'string' && raw.slide_id !== '' ? { slide_id: raw.slide_id } : {}),
+  };
+}
+
+function readHistoryIntent(data: Record<string, unknown>): RunIntent | undefined {
+  const intent = data.intent;
+  return intent === 'talk' || intent === 'ask' || intent === 'plan' || intent === 'execute'
+    ? intent
+    : undefined;
+}
 
 export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): HydratedRunView {
   const emptySession: HistorySessionState = {
@@ -59,12 +83,15 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
 
   for (const entry of ordered) {
     if (entry.type === 'user_turn') {
+      const scope = readHistoryScope(entry.data);
+      const intent = readHistoryIntent(entry.data);
+      if (!scope || !intent) continue;
       plan = null;
       session = {
         activeRunId: entry.run_id,
         status: 'running',
-        target: entry.data.target as RunTarget | undefined,
-        interaction: entry.data.interaction as RunInteraction | undefined,
+        scope,
+        intent,
         pendingQuestion: null,
       };
       items.push({
@@ -73,8 +100,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         runId: entry.run_id,
         text: String(entry.data.text ?? ''),
         timestamp: (entry.ts || 0) * 1000,
-        target: entry.data.target as RunTarget | undefined,
-        interaction: entry.data.interaction as RunInteraction | undefined,
+        scope,
+        intent,
       });
       continue;
     }
@@ -93,6 +120,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       continue;
     }
     if (!publicHistoryEvents.has(entry.type as SSEEventName)) continue;
+    if (entry.data.schema_version !== 3) continue;
     const event = {
       id: String(entry.seq),
       event: entry.type as SSEEventName,

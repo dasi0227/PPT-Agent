@@ -62,7 +62,7 @@ func (t referenceSearchTool) Execute(_ context.Context, input DomainToolInput) T
 	retrieval, err := (HybridContextRetriever{
 		Index: index, Embedder: HashEmbeddingProvider{}, Scope: input.Scope,
 	}).Retrieve(context.Background(), RetrievalQuery{
-		RunID: input.RunID, WorkSpec: input.Context.WorkSpec, LatestIssues: []Issue{},
+		RunID: input.RunID, Command: input.Context.Command, LatestIssues: []Issue{},
 		Phase: input.Phase, QueryText: query,
 		Kinds: kindList, Limit: limit, DetailBudget: 4000,
 	})
@@ -177,7 +177,7 @@ func (t referenceSearchTool) candidates(query string, kinds map[string]bool) []r
 	}
 	if kinds["project"] {
 		for _, segment := range t.pack.Manifest.Segments {
-			if segment.Kind == contextengine.SegmentPolicy || segment.Kind == contextengine.SegmentWorkSpec {
+			if segment.Kind == contextengine.SegmentPolicy || segment.Kind == contextengine.SegmentRunCommand {
 				continue
 			}
 			out = appendCandidate(out, refCandidate{

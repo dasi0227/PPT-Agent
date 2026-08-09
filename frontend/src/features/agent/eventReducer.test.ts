@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SSEEvent } from '../../api/types';
 import { reducePlan, reduceSSEEvent } from './eventReducer';
 
-const base = { schema_version: 2 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 3 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const event = (name: SSEEvent['event'], data: Record<string, unknown>, id = '1') =>
   ({ id, event: name, data: { ...base, ...data } } as SSEEvent);
 

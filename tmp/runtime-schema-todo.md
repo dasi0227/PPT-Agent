@@ -188,5 +188,6 @@ talk | ask | plan | execute
 
 ## 实施状态
 
-- 第 8 项已实施并完成测试。
-- 第 1～7 项仍处于设计确认状态，尚未实施。
+- 第 1～8 项均已实施。
+- 前后端运行时只接受最新 `RunCommand.scope/intent/ppt` 协议，不保留双读或旧事件兼容层。
+- SQLite 通过 `0011_run_command_contract.sql` 一次性升级已有 `runs` 表和持久化 JSON；迁移完成后只使用新列。

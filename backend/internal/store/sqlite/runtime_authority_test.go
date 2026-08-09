@@ -52,9 +52,9 @@ func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
 			ProfileName: "Kimi Stable", Provider: "kimi",
 			Model: "kimi-k3", URL: "https://gateway.example/v1",
 		},
-		WorkSpec: model.WorkSpec{
-			Target:      model.RunTarget{Artifact: model.ArtifactSpec, Level: model.TargetDeck},
-			Interaction: model.RunInteraction{Intent: model.IntentTalk}, Instruction: "inspect",
+		Command: model.RunCommand{
+			Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+			Intent: model.IntentTalk, Instruction: "inspect",
 		},
 		Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1,
 	}
@@ -143,9 +143,9 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	}
 	if err := s.CreateRun(ctx, model.Run{
 		ID: "run-1", ThreadID: "thread-1", ProjectID: "project-1",
-		WorkSpec: model.WorkSpec{
-			Target:      model.RunTarget{Artifact: model.ArtifactSpec, Level: model.TargetDeck},
-			Interaction: model.RunInteraction{Intent: model.IntentExecute}, Instruction: "test",
+		Command: model.RunCommand{
+			Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+			Intent: model.IntentExecute, Instruction: "test",
 		},
 		Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {

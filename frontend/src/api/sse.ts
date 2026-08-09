@@ -42,7 +42,7 @@ const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
 function validBase(data: Record<string, unknown>): boolean {
-  return data.schema_version === 2
+  return data.schema_version === 3
     && hasString(data, 'run_id')
     && hasString(data, 'occurred_at')
     && String(data.occurred_at).endsWith('Z')
@@ -52,9 +52,8 @@ function validBase(data: Record<string, unknown>): boolean {
 function validPayload(eventName: SSEEventName, data: Record<string, unknown>): boolean {
   switch (eventName) {
     case 'run.started':
-      return validRunTarget(data.target)
-        && isRecord(data.interaction)
-        && ['talk', 'ask', 'plan', 'execute'].includes(String(data.interaction.intent))
+      return validRunScope(data.scope)
+        && ['talk', 'ask', 'plan', 'execute'].includes(String(data.intent))
         && hasString(data, 'user_input');
     case 'run.progress':
       return progressStages.has(String(data.stage))
@@ -118,9 +117,9 @@ function hasSafeString(data: Record<string, unknown>, key: string): boolean {
   return hasString(data, key) && !rawHTMLPattern.test(String(data[key]));
 }
 
-function validRunTarget(value: unknown): boolean {
+function validRunScope(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  if (!['spec', 'presentation'].includes(String(value.artifact))) return false;
+  if (!['spec', 'ppt'].includes(String(value.artifact))) return false;
   if (value.level === 'slide') return hasString(value, 'slide_id') && value.slide_id !== 'current';
   return value.level === 'deck' && (value.slide_id === undefined || value.slide_id === '');
 }

@@ -1,6 +1,6 @@
 Task playbook: spec edit.
 
-Use this playbook when the target artifact is spec. The output should modify canonical JSON models, not presentation HTML, unless a later execute run targets presentation.
+Use this playbook when RunCommand.scope.artifact is spec. The output should modify canonical JSON models, not slide HTML, unless a later execute run uses artifact=ppt.
 
 Resource responsibilities:
 - deck:outline controls deck goal, audience, sections and stable slide order.

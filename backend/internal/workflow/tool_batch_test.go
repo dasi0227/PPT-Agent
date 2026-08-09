@@ -53,7 +53,7 @@ func (t timedBatchTool) Execute(ctx context.Context, input DomainToolInput) Tool
 }
 
 func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
 	registry := NewToolRegistry()
 	var mu sync.Mutex
 	order := []string{}
@@ -88,7 +88,7 @@ func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testin
 }
 
 func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetDeck)
+	dir, pack := toolProject(t, model.ArtifactSpec, model.ScopeDeck)
 	tx, err := NewRunSession(dir, "batch-write")
 	if err != nil {
 		t.Fatal(err)
@@ -158,6 +158,6 @@ func TestFailFastSkipsDoNotExhaustRepairBudget(t *testing.T) {
 func batchState(pack contextengine.ContextPack) *runtimeState {
 	return &runtimeState{
 		runID: "batch", loopID: "loop-batch", phase: PhaseExecuting,
-		scope: ScopeFromSpec(pack.WorkSpec), ledger: NewEvidenceLedger(),
+		scope: pack.Command.Scope, ledger: NewEvidenceLedger(),
 	}
 }

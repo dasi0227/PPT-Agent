@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -38,11 +39,11 @@ func (r CompletionResult) RejectionKey() string {
 }
 
 type CompletionContext struct {
-	Intent        model.InteractionIntent
+	Intent        model.RunIntent
 	FinishPhase   RuntimePhase
 	ActiveTools   int
 	Issues        []Issue
-	WorkScope     Scope
+	Scope         model.RunScope
 	Session       *RunSession
 	Changes       ChangeSet
 	Evidence      *EvidenceLedger
@@ -55,6 +56,64 @@ type CompletionContext struct {
 
 type CompletionPolicy interface {
 	Check(CompletionContext) []CompletionIssue
+}
+
+const (
+	CodeRunLanguageUnsatisfied = "RUN_LANGUAGE_UNSATISFIED"
+	CodeRunRangeUnsatisfied    = "RUN_RANGE_UNSATISFIED"
+)
+
+type ScopeCompletionPolicy struct{}
+
+func (ScopeCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
+	if ctx.Intent != model.IntentExecute {
+		return nil
+	}
+	issues := []CompletionIssue{}
+	for _, change := range ctx.Changes.All() {
+		if AllowsArtifact(ctx.Scope, change.Artifact) {
+			continue
+		}
+		target := resourceForArtifact(change.Artifact)
+		issues = append(issues, CompletionIssue{
+			Code: ErrTargetOutOfScope.Error(), Summary: "changed target is outside RunCommand scope",
+			RequiredActions: []RequiredAction{{Target: target}},
+		})
+	}
+	return dedupeCompletionIssues(issues)
+}
+
+type CommandOptionsCompletionPolicy struct{}
+
+func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
+	command := ctx.Context.Command
+	if ctx.Intent != model.IntentExecute || command.Scope.Level != model.ScopeDeck ||
+		(command.Options.Language == "" && command.Options.Range == "") {
+		return nil
+	}
+	outline, err := currentOutline(ctx.Context, ctx.Session)
+	if err != nil {
+		return []CompletionIssue{{
+			Code: "CONTEXT_SOURCE_INVALID", Summary: "cannot verify RunCommand options against the current outline",
+			RequiredActions: []RequiredAction{{Tool: "read_ppt", Target: Resource{Type: "deck", Part: "outline"}}},
+		}}
+	}
+	issues := []CompletionIssue{}
+	if command.Options.Language != "" && string(command.Options.Language) != outline.Language {
+		issues = append(issues, CompletionIssue{
+			Code:            CodeRunLanguageUnsatisfied,
+			Summary:         fmt.Sprintf("outline language %q does not satisfy RunCommand language %q", outline.Language, command.Options.Language),
+			RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: Resource{Type: "deck", Part: "outline"}}},
+		})
+	}
+	if command.Options.Range != "" && !command.Options.Range.Contains(len(outline.SlideOrder)) {
+		issues = append(issues, CompletionIssue{
+			Code:            CodeRunRangeUnsatisfied,
+			Summary:         fmt.Sprintf("outline has %d slides, outside RunCommand range %q", len(outline.SlideOrder), command.Options.Range),
+			RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: Resource{Type: "deck", Part: "outline"}}},
+		})
+	}
+	return issues
 }
 
 type EvidenceCompletionPolicy struct{}
@@ -98,7 +157,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
 			}
-			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Session != nil {
+			if ctx.Context.Command.Scope.Artifact == model.ArtifactPPT && ctx.Session != nil {
 				htmlTarget := Resource{Type: "slide", SlideID: change.Artifact.ID, Part: "html"}
 				if specChangeAffectsHTML(ctx.Session, change.Artifact) {
 					if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, change.Artifact.ID) {
@@ -110,7 +169,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
 			}
-			if ctx.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation && ctx.Session != nil {
+			if ctx.Context.Command.Scope.Artifact == model.ArtifactPPT && ctx.Session != nil {
 				if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
 					for _, slideID := range deck.SlideOrder {
 						slideTarget := Resource{Type: "slide", SlideID: slideID, Part: "html"}
@@ -277,7 +336,11 @@ type CompletionGate struct {
 }
 
 func NewCompletionGate() CompletionGate {
-	return CompletionGate{Policies: []CompletionPolicy{EvidenceCompletionPolicy{}}}
+	return CompletionGate{Policies: []CompletionPolicy{
+		ScopeCompletionPolicy{},
+		CommandOptionsCompletionPolicy{},
+		EvidenceCompletionPolicy{},
+	}}
 }
 
 func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
@@ -316,7 +379,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	return result
 }
 
-func finishAllowed(intent model.InteractionIntent, phase RuntimePhase) bool {
+func finishAllowed(intent model.RunIntent, phase RuntimePhase) bool {
 	switch intent {
 	case model.IntentTalk, model.IntentAsk:
 		return phase == PhaseChat

@@ -11,9 +11,7 @@ import (
 )
 
 func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
-	scope := ScopeFromSpec(model.WorkSpec{
-		Target: model.RunTarget{Artifact: model.ArtifactPresentation, Level: model.TargetSlide, SlideID: "s1"},
-	})
+	scope := model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "s1"}
 	index := ContextIndex{RunID: "r", ID: "idx", Items: []ContextIndexItem{
 		{
 			RefID: "target", Kind: "slide_html", Source: "context_index",
@@ -43,8 +41,8 @@ func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
 	result, err := (HybridContextRetriever{
 		Index: index, Scope: scope, Embedder: HashEmbeddingProvider{},
 	}).Retrieve(context.Background(), RetrievalQuery{
-		WorkSpec: model.WorkSpec{
-			Target: model.RunTarget{Artifact: model.ArtifactPresentation, Level: model.TargetSlide, SlideID: "s1"},
+		Command: model.RunCommand{
+			Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "s1"},
 		},
 		QueryText: "pricing roadmap", Limit: 10, DetailBudget: 300,
 	})

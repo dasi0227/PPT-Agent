@@ -1,9 +1,9 @@
 Task playbook: single-slide presentation edit.
 
-Use this playbook when the target is one presentation slide. The goal is to update the final user-visible slide implementation while preserving the surrounding deck system.
+Use this playbook when RunCommand.scope is ppt/slide. The goal is to update the final user-visible slide implementation while preserving the surrounding deck system.
 
 Execution steps:
-1. Identify the stable slide_id from WorkSpec. Never use "current" as a resource id.
+1. Identify the stable slide_id from RunCommand. Never use "current" as a resource id.
 2. Read slide spec and slide HTML when exact current content, anchors or design intent matter.
 3. Use edit_ppt for small exact replacements with unique anchors.
 4. Use write_ppt for broad layout reconstruction, large visual changes or when exact anchors are not reliable.

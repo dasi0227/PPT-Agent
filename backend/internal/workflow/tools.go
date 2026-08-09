@@ -56,15 +56,15 @@ type DomainTool interface {
 }
 
 type DomainToolInput struct {
-	Args        map[string]any
-	CallID      string
-	Context     contextengine.ContextPack
-	ProjectDir  string
-	RunID       string
-	Session     *RunSession
-	Scope       Scope
-	Phase       RuntimePhase
-	Interaction model.InteractionIntent
+	Args       map[string]any
+	CallID     string
+	Context    contextengine.ContextPack
+	ProjectDir string
+	RunID      string
+	Session    *RunSession
+	Scope      model.RunScope
+	Phase      RuntimePhase
+	Intent     model.RunIntent
 }
 
 // ChangedTarget is deliberately domain-shaped. Model-visible results never
@@ -161,47 +161,39 @@ type DomainToolProvider interface {
 	RegisterDomainTools(*ToolRegistry) error
 }
 
-type Scope struct {
-	Target model.RunTarget
-}
-
-func ScopeFromSpec(spec model.WorkSpec) Scope {
-	return Scope{Target: spec.Target}
-}
-
-func (s Scope) Allows(target Resource) bool {
-	if s.Target.Artifact == model.ArtifactSpec && target.Type == "slide" && target.Part == "html" {
+func AllowsWrite(scope model.RunScope, target Resource) bool {
+	if scope.Artifact == model.ArtifactSpec && target.Type == "slide" && target.Part == "html" {
 		return false
 	}
-	if s.Target.Level == model.TargetDeck {
+	if scope.Level == model.ScopeDeck {
 		return true
 	}
-	return target.Type == "slide" && target.SlideID == s.Target.SlideID
+	return target.Type == "slide" && target.SlideID == scope.SlideID
 }
 
-func (s Scope) AllowsRead(target Resource) bool {
+func AllowsRead(scope model.RunScope, target Resource) bool {
 	if target.Type == "deck" {
 		return true
 	}
-	if s.Target.Level == model.TargetDeck {
+	if scope.Level == model.ScopeDeck {
 		return true
 	}
-	return target.SlideID == s.Target.SlideID &&
-		(s.Target.Artifact == model.ArtifactPresentation || target.Part != "html")
+	return target.SlideID == scope.SlideID &&
+		(scope.Artifact == model.ArtifactPPT || target.Part != "html")
 }
 
-func (s Scope) AllowsArtifact(ref ArtifactRef) bool {
-	return s.Allows(resourceForArtifact(ref))
+func AllowsArtifact(scope model.RunScope, ref ArtifactRef) bool {
+	return AllowsWrite(scope, resourceForArtifact(ref))
 }
 
-func (r *ToolRegistry) Disclose(phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
+func (r *ToolRegistry) Disclose(phase RuntimePhase, intent model.RunIntent) []ToolSchema {
 	out := []ToolSchema{}
 	for _, name := range r.order {
 		desc := r.tools[name]
 		if !containsPhase(desc.Phases, phase) {
 			continue
 		}
-		if interaction != model.IntentExecute && !desc.ReadOnly {
+		if intent != model.IntentExecute && !desc.ReadOnly {
 			continue
 		}
 		if phase == PhasePlanning && !desc.ReadOnly {
@@ -214,8 +206,8 @@ func (r *ToolRegistry) Disclose(phase RuntimePhase, interaction model.Interactio
 }
 
 func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {
-	if err := input.Context.WorkSpec.Validate(); err != nil {
-		return failedToolResult(ErrCapabilityDenied.Error(), "run WorkSpec is invalid: "+err.Error(), false)
+	if err := input.Context.Command.Validate(); err != nil {
+		return failedToolResult(ErrCapabilityDenied.Error(), "RunCommand is invalid: "+err.Error(), false)
 	}
 	if !disclosed[name] {
 		return failedToolResult(ErrToolNotDisclosed.Error(), "tool was not disclosed in this turn", false)
@@ -227,8 +219,8 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	if !containsPhase(desc.Phases, input.Phase) {
 		return failedToolResult(ErrCapabilityDenied.Error(), "tool is not allowed in the current runtime phase", false)
 	}
-	if input.Interaction != model.IntentExecute && !desc.ReadOnly {
-		return failedToolResult(ErrCapabilityDenied.Error(), "read-only interaction cannot use write capabilities", false)
+	if input.Intent != model.IntentExecute && !desc.ReadOnly {
+		return failedToolResult(ErrCapabilityDenied.Error(), "read-only intent cannot use write capabilities", false)
 	}
 	if input.Phase == PhasePlanning && !desc.ReadOnly {
 		return failedToolResult(ErrCapabilityDenied.Error(), "planning phase cannot use write capabilities", false)
@@ -240,13 +232,13 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 		return failedToolResult(CodeRunSessionRequired, "write tool requires an active run session", false)
 	}
 	if !desc.ReadOnly {
-		if target, ok := declaredTarget(args); ok && !input.Scope.Allows(target) {
+		if target, ok := declaredTarget(args); ok && !AllowsWrite(input.Scope, target) {
 			return failedToolResult(ErrTargetOutOfScope.Error(), "requested write target is outside the current run scope", false)
 		}
 	}
 	result := desc.Tool.Execute(ctx, input)
 	for _, target := range result.ChangedTargets {
-		if !input.Scope.Allows(target.Target()) {
+		if !AllowsWrite(input.Scope, target.Target()) {
 			return failedToolResult(ErrTargetOutOfScope.Error(), "tool attempted to write a target outside the current run scope", false)
 		}
 	}
@@ -257,7 +249,7 @@ func executionCapabilityAllowed(desc ToolDescriptor, input DomainToolInput) bool
 	switch desc.Risk {
 	case RiskLow:
 	case RiskMedium:
-		if desc.ReadOnly || input.Interaction != model.IntentExecute || input.Phase != PhaseExecuting {
+		if desc.ReadOnly || input.Intent != model.IntentExecute || input.Phase != PhaseExecuting {
 			return false
 		}
 	default:
@@ -268,8 +260,8 @@ func executionCapabilityAllowed(desc ToolDescriptor, input DomainToolInput) bool
 		return desc.ReadOnly
 	case "write", "ppt.write", "ppt.edit":
 		return !desc.ReadOnly &&
-			(input.Context.WorkSpec.Target.Artifact == model.ArtifactSpec ||
-				input.Context.WorkSpec.Target.Artifact == model.ArtifactPresentation)
+			(input.Context.Command.Scope.Artifact == model.ArtifactSpec ||
+				input.Context.Command.Scope.Artifact == model.ArtifactPPT)
 	default:
 		return false
 	}

@@ -17,9 +17,9 @@ func TestRuntimeCapabilityStoresRoundTrip(t *testing.T) {
 	if err := s.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p", HistoryPath: "threads/t.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", WorkSpec: model.WorkSpec{
-		Target:      model.RunTarget{Artifact: model.ArtifactSpec, Level: model.TargetSlide, SlideID: "s1"},
-		Interaction: model.RunInteraction{Intent: model.IntentExecute}, Instruction: "edit",
+	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", Command: model.RunCommand{
+		Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeSlide, SlideID: "s1"},
+		Intent: model.IntentExecute, Instruction: "edit",
 	}, Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}
 	if err := s.CreateRun(ctx, runModel); err != nil {
 		t.Fatal(err)

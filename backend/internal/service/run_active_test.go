@@ -40,20 +40,20 @@ func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	spec := model.WorkSpec{
-		Target:      model.RunTarget{Artifact: model.ArtifactSpec, Level: model.TargetDeck},
-		Interaction: model.RunInteraction{Intent: model.IntentExecute},
+	spec := model.RunCommand{
+		Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+		Intent: model.IntentExecute,
 		Instruction: "build the deck",
 	}
 	if err := st.CreateRun(ctx, model.Run{
-		ID: "active-run", ThreadID: "t1", ProjectID: "p1", WorkSpec: spec, Status: model.RunRunning,
+		ID: "active-run", ThreadID: "t1", ProjectID: "p1", Command: spec, Status: model.RunRunning,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	svc := NewRunServiceWithExecutionFactory(st, nil, nil)
 	_, err = svc.CreateRun(ctx, "t1", model.CreateRunParams{
-		ClientRequestID: "req-1", WorkSpec: spec,
+		ClientRequestID: "req-1", Command: spec,
 	})
 	if !errors.Is(err, ErrRunActive) {
 		t.Fatalf("expected ErrRunActive while a run is active, got %v", err)
@@ -65,7 +65,7 @@ func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = svc.CreateRun(ctx, "t1", model.CreateRunParams{
-		ClientRequestID: "req-2", WorkSpec: spec,
+		ClientRequestID: "req-2", Command: spec,
 	})
 	if errors.Is(err, ErrRunActive) {
 		t.Fatalf("run creation still blocked after the active run finished: %v", err)

@@ -54,8 +54,8 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 		payload any
 	}{
 		{model.EventRunStarted, model.RunStartedPayload{
-			PublicEventBase: base(), Target: model.RunTarget{Artifact: model.ArtifactPresentation, Level: model.TargetDeck},
-			Interaction: model.RunInteraction{Intent: model.IntentExecute}, UserInput: "change title",
+			PublicEventBase: base(), Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+			Intent: model.IntentExecute, UserInput: "change title",
 		}},
 		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Stage: "thinking", Text: "正在分析"}},
 		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: model.PublicPlan{
@@ -104,6 +104,15 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 	if entries[0].Type != "user_turn" || entries[len(entries)-1].Type != string(model.EventRunFinished) {
 		t.Fatalf("history mapping=%+v", entries)
 	}
+	if _, ok := entries[0].Data["scope"]; !ok || entries[0].Data["intent"] != string(model.IntentExecute) {
+		t.Fatalf("user turn missing v3 command fields: %+v", entries[0])
+	}
+	if _, legacy := entries[0].Data["target"]; legacy {
+		t.Fatalf("user turn contains legacy target: %+v", entries[0])
+	}
+	if _, legacy := entries[0].Data["interaction"]; legacy {
+		t.Fatalf("user turn contains legacy interaction: %+v", entries[0])
+	}
 }
 
 func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
@@ -115,8 +124,8 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 		t.Fatal("accepted an event before run.started")
 	}
 	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
-		PublicEventBase: base(), Target: model.RunTarget{Artifact: model.ArtifactPresentation, Level: model.TargetDeck},
-		Interaction: model.RunInteraction{Intent: model.IntentExecute}, UserInput: "go",
+		PublicEventBase: base(), Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+		Intent: model.IntentExecute, UserInput: "go",
 	}); err != nil {
 		t.Fatal(err)
 	}

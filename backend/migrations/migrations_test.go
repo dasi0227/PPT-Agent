@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,86 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 	}
 }
 
+func TestRunCommandMigrationConvertsPersistedRuns(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open in-memory: %v", err)
+	}
+	files, err := Files()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range files {
+		if name == "0011_run_command_contract.sql" {
+			break
+		}
+		if err := applyMigrationFile(db, name); err != nil {
+			t.Fatalf("apply %s: %v", name, err)
+		}
+	}
+	if err := db.Exec(`
+		INSERT INTO projects(id,title,work_dir,theme,status,layout_version,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?,?)
+	`, "p1", "Deck", "/tmp/p1", "default", "draft", 5, 1, 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`
+		INSERT INTO threads(id,project_id,title,history_path,status,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?)
+	`, "t1", "p1", "Thread", "threads/t1.jsonl", "active", 1, 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	legacy := `{"target":{"artifact":"presentation","level":"deck"},"interaction":{"intent":"execute"},"instruction":"build","options":{"language":"en-US","theme_id":"legacy","desired_slide_count":12}}`
+	if err := db.Exec(`
+		INSERT INTO runs(
+			id,thread_id,project_id,target_artifact,target_level,target_slide_id,
+			interaction_intent,work_spec_json,client_request_id,status,created_at,updated_at
+		) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+	`, "r1", "t1", "p1", "presentation", "deck", nil, "execute", legacy, "req1", "done", 1, 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := applyMigrationFile(db, "0011_run_command_contract.sql"); err != nil {
+		t.Fatalf("apply command migration: %v", err)
+	}
+
+	columns := tableColumns(t, db, "runs")
+	for _, want := range []string{"scope_artifact", "scope_level", "scope_slide_id", "intent", "run_command_json"} {
+		if !columns[want] {
+			t.Fatalf("runs table missing %q: %v", want, columns)
+		}
+	}
+	for _, removed := range []string{"target_artifact", "target_level", "target_slide_id", "interaction_intent", "work_spec_json"} {
+		if columns[removed] {
+			t.Fatalf("legacy runs column %q still exists", removed)
+		}
+	}
+	var row struct {
+		Artifact string `gorm:"column:scope_artifact"`
+		Intent   string `gorm:"column:intent"`
+		Command  string `gorm:"column:run_command_json"`
+	}
+	if err := db.Raw(`SELECT scope_artifact,intent,run_command_json FROM runs WHERE id = ?`, "r1").Scan(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Artifact != "ppt" || row.Intent != "execute" {
+		t.Fatalf("projection not migrated: %+v", row)
+	}
+	var command map[string]any
+	if err := json.Unmarshal([]byte(row.Command), &command); err != nil {
+		t.Fatalf("invalid command JSON: %v\n%s", err, row.Command)
+	}
+	scope, _ := command["scope"].(map[string]any)
+	options, _ := command["options"].(map[string]any)
+	if scope["artifact"] != "ppt" || scope["level"] != "deck" ||
+		command["intent"] != "execute" || command["instruction"] != "build" ||
+		options["language"] != "en-US" || options["range"] != "9-15" {
+		t.Fatalf("command not migrated: %+v", command)
+	}
+	if _, exists := options["theme_id"]; exists {
+		t.Fatalf("legacy theme_id survived: %+v", options)
+	}
+}
+
 // applyAllMigrations 执行 migrations/ 内全部 SQL（按 ; 切分，跳过注释/空白）。
 func applyAllMigrations(t *testing.T, db *gorm.DB) error {
 	t.Helper()
@@ -91,29 +172,36 @@ func applyAllMigrations(t *testing.T, db *gorm.DB) error {
 		return err
 	}
 	for _, name := range files {
-		content, err := FS.ReadFile(name)
-		if err != nil {
+		if err := applyMigrationFile(db, name); err != nil {
 			return err
 		}
-		for _, chunk := range strings.Split(string(content), ";") {
-			stmt := strings.TrimSpace(chunk)
-			if stmt == "" {
-				continue
+	}
+	return nil
+}
+
+func applyMigrationFile(db *gorm.DB, name string) error {
+	content, err := FS.ReadFile(name)
+	if err != nil {
+		return err
+	}
+	for _, chunk := range strings.Split(string(content), ";") {
+		stmt := strings.TrimSpace(chunk)
+		if stmt == "" {
+			continue
+		}
+		hasSQL := false
+		for _, line := range strings.Split(stmt, "\n") {
+			l := strings.TrimSpace(line)
+			if l != "" && !strings.HasPrefix(l, "--") {
+				hasSQL = true
+				break
 			}
-			hasSQL := false
-			for _, line := range strings.Split(stmt, "\n") {
-				l := strings.TrimSpace(line)
-				if l != "" && !strings.HasPrefix(l, "--") {
-					hasSQL = true
-					break
-				}
-			}
-			if !hasSQL {
-				continue
-			}
-			if err := db.Exec(stmt).Error; err != nil {
-				return err
-			}
+		}
+		if !hasSQL {
+			continue
+		}
+		if err := db.Exec(stmt).Error; err != nil {
+			return err
 		}
 	}
 	return nil

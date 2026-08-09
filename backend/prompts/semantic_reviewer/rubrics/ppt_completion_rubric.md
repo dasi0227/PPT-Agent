@@ -1,7 +1,7 @@
 PPT completion rubric:
 
 - Narrative: the deck or slide has a coherent message, clear intent, and no unsupported leap.
-- Scope: only the requested target scope is claimed as changed.
+- Scope: only resources inside RunCommand.scope are claimed as changed.
 - Content coverage: all explicit user requirements and target constraints are addressed.
 - Visual quality: presentation edits should preserve hierarchy, spacing, contrast, consistency, and readability.
 - Evidence alignment: changed artifacts must have matching fresh evidence where the runtime reports it.

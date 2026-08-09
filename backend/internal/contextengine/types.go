@@ -7,22 +7,22 @@ import (
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-const SchemaVersion = "1.0"
+const SchemaVersion = "2.0"
 
 type ProfileID string
 
 const (
-	ProfileSpecDeck          ProfileID = "spec/deck"
-	ProfileSpecSlide         ProfileID = "spec/slide"
-	ProfilePresentationDeck  ProfileID = "presentation/deck"
-	ProfilePresentationSlide ProfileID = "presentation/slide"
+	ProfileSpecDeck  ProfileID = "spec/deck"
+	ProfileSpecSlide ProfileID = "spec/slide"
+	ProfilePPTDeck   ProfileID = "ppt/deck"
+	ProfilePPTSlide  ProfileID = "ppt/slide"
 )
 
 type SegmentKind string
 
 const (
 	SegmentPolicy      SegmentKind = "policy"
-	SegmentWorkSpec    SegmentKind = "work_spec"
+	SegmentRunCommand  SegmentKind = "run_command"
 	SegmentOutline     SegmentKind = "outline"
 	SegmentTarget      SegmentKind = "target_artifact"
 	SegmentRelated     SegmentKind = "related_slides"
@@ -50,7 +50,7 @@ type TokenBudget struct {
 
 func DefaultBudget() TokenBudget {
 	return TokenBudget{ContextWindow: 32768, InputLimit: 20000, OutputReserve: 8000, SegmentCaps: map[SegmentKind]int{
-		SegmentPolicy: 3000, SegmentWorkSpec: 1200, SegmentOutline: 3000, SegmentTarget: 6000,
+		SegmentPolicy: 3000, SegmentRunCommand: 1200, SegmentOutline: 3000, SegmentTarget: 6000,
 		SegmentRelated: 2400, SegmentDesign: 3000, SegmentSlideHTML: 6000,
 		SegmentAssets: 1800, SegmentMemory: 2000, SegmentRecentTurns: 1200,
 	}}
@@ -60,7 +60,7 @@ type ContextRequest struct {
 	RunID     string
 	ThreadID  string
 	ProjectID string
-	WorkSpec  model.WorkSpec
+	Command   model.RunCommand
 	Budget    TokenBudget
 }
 
@@ -86,7 +86,7 @@ type SlideSummary struct {
 
 type TargetContext struct {
 	Artifact         model.Artifact           `json:"artifact"`
-	Level            model.TargetLevel        `json:"level"`
+	Level            model.ScopeLevel         `json:"level"`
 	SlideSpec        *pptspec.SlideSpec       `json:"slide_spec,omitempty"`
 	Materialization  *pptspec.Materialization `json:"materialization,omitempty"`
 	SlideHTMLSummary *HTMLSummary             `json:"slide_html_summary,omitempty"`
@@ -128,7 +128,7 @@ type RevisionRefs struct {
 type ContextPack struct {
 	SchemaVersion string              `json:"schema_version"`
 	Profile       ProfileID           `json:"profile"`
-	WorkSpec      model.WorkSpec      `json:"work_spec"`
+	Command       model.RunCommand    `json:"run_command"`
 	Project       ProjectContext      `json:"project"`
 	Outline       OutlineContext      `json:"outline"`
 	Target        TargetContext       `json:"target"`

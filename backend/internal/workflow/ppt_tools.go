@@ -29,7 +29,7 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if err != nil {
 		return failedToolResult(CodeResourceInvalid, err.Error(), false)
 	}
-	if !input.Scope.AllowsRead(resource) {
+	if !AllowsRead(input.Scope, resource) {
 		return failedToolResult(CodeTargetOutOfScope, "requested resource is outside the current run scope", false)
 	}
 	ref, err := refForResource(t.pack, resource)
@@ -66,7 +66,7 @@ func (t pptWriteTool) Execute(_ context.Context, input DomainToolInput) ToolResu
 	if err != nil {
 		return failedToolResult(CodeResourceInvalid, err.Error(), false)
 	}
-	if !input.Scope.Allows(resource) {
+	if !AllowsWrite(input.Scope, resource) {
 		return failedToolResult(CodeTargetOutOfScope, "requested resource is outside the current run scope", false)
 	}
 	if input.Session == nil {
@@ -127,7 +127,7 @@ func (t pptEditTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if err != nil {
 		return failedToolResult(CodeResourceInvalid, err.Error(), false)
 	}
-	if !input.Scope.Allows(resource) {
+	if !AllowsWrite(input.Scope, resource) {
 		return failedToolResult(CodeTargetOutOfScope, "requested resource is outside the current run scope", false)
 	}
 	if input.Session == nil {

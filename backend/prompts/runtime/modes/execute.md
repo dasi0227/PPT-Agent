@@ -12,7 +12,7 @@ Planning behavior:
   involved.
 - Keep an existing plan current. Do not finish while one of its steps is
   pending, in_progress or failed.
-- A plan never grants additional target scope or tool capability.
+- A plan never grants additional RunScope or tool capability.
 
 Execution behavior:
 - Read only the resources needed to perform the change correctly.

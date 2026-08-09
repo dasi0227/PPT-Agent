@@ -1,12 +1,12 @@
-import type { Artifact, TargetLevel } from '../../api/types';
+import type { Artifact, ScopeLevel } from '../../api/types';
 import type { RunStatus } from '../../stores/runStore';
 
 export const artifactTargetLabels: Record<Artifact, string> = {
   spec: '设计稿',
-  presentation: 'HTML',
+  ppt: 'HTML',
 };
 
-export const levelLabels: Record<TargetLevel, string> = {
+export const levelLabels: Record<ScopeLevel, string> = {
   slide: '当前页',
   deck: '整份',
 };
@@ -22,7 +22,7 @@ export const runStatusLabels: Record<RunStatus, string> = {
   canceled: '已取消',
 };
 
-export function targetLabel(artifact: Artifact, level: TargetLevel): string {
+export function targetLabel(artifact: Artifact, level: ScopeLevel): string {
   return `${levelLabels[level]}${artifactTargetLabels[artifact]}`;
 }
 

@@ -30,8 +30,8 @@ export interface BaseTimelineItem {
 export interface UserTurnItem extends BaseTimelineItem {
   type: 'user_turn';
   text: string;
-  target?: { artifact: string; level: string; slide_id?: string };
-  interaction?: { intent: string };
+  scope?: { artifact: string; level: string; slide_id?: string };
+  intent?: string;
   deliveryStatus?: 'sending' | 'accepted' | 'rejected';
   clientMessageId?: string;
   rejectionCode?: string;

@@ -21,13 +21,13 @@ type PromptModule struct {
 
 type runtimePromptInput struct {
 	Phase           RuntimePhase
-	Intent          model.InteractionIntent
+	Intent          model.RunIntent
 	Context         contextengine.ContextPack
 	ContextBriefing string
 	State           string
 }
 
-func runtimeSystemPrompt(phase RuntimePhase, intent model.InteractionIntent, state string) string {
+func runtimeSystemPrompt(phase RuntimePhase, intent model.RunIntent, state string) string {
 	return buildRuntimeSystemPrompt(runtimePromptInput{
 		Phase: phase, Intent: intent, State: state,
 	})
@@ -35,7 +35,7 @@ func runtimeSystemPrompt(phase RuntimePhase, intent model.InteractionIntent, sta
 
 func runtimeSystemPromptForRequest(req AgentRequest, state string) string {
 	return buildRuntimeSystemPrompt(runtimePromptInput{
-		Phase: req.Phase, Intent: req.Context.WorkSpec.Interaction.Intent,
+		Phase: req.Phase, Intent: req.Context.Command.Intent,
 		Context: req.Context, ContextBriefing: req.ContextBriefing, State: state,
 	})
 }
@@ -88,7 +88,7 @@ func loadPromptModule(id string) PromptModule {
 	}
 }
 
-func modePolicyID(intent model.InteractionIntent) string {
+func modePolicyID(intent model.RunIntent) string {
 	switch intent {
 	case model.IntentTalk:
 		return "mode_policy_talk"
@@ -104,19 +104,19 @@ func modePolicyID(intent model.InteractionIntent) string {
 }
 
 func playbookID(pack contextengine.ContextPack) string {
-	spec := pack.WorkSpec
+	command := pack.Command
 	switch {
-	case spec.Interaction.Intent == model.IntentPlan:
+	case command.Intent == model.IntentPlan:
 		return "playbook_read_only_planning"
-	case spec.Interaction.Intent != model.IntentExecute:
+	case command.Intent != model.IntentExecute:
 		return "playbook_read_only_collaboration"
-	case spec.Target.Artifact == model.ArtifactSpec:
+	case command.Scope.Artifact == model.ArtifactSpec:
 		return "playbook_spec_edit"
-	case spec.Target.Artifact == model.ArtifactPresentation && spec.Target.Level == model.TargetSlide:
+	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeSlide:
 		return "playbook_slide_presentation_edit"
-	case spec.Target.Artifact == model.ArtifactPresentation && spec.Target.Level == model.TargetDeck && len(pack.Outline.Outline.SlideOrder) == 0:
+	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeDeck && len(pack.Outline.Outline.SlideOrder) == 0:
 		return "playbook_empty_deck_generation"
-	case spec.Target.Artifact == model.ArtifactPresentation && spec.Target.Level == model.TargetDeck:
+	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeDeck:
 		return "playbook_deck_coordinated_edit"
 	default:
 		return "playbook_default"

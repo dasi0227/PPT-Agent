@@ -26,23 +26,23 @@ func NewRunHandler(svc *service.RunService) *RunHandler {
 }
 
 type createRunBody struct {
-	ClientRequestID string               `json:"client_request_id"`
-	Model           string               `json:"model"`
-	Instruction     string               `json:"instruction"`
-	Target          model.RunTarget      `json:"target"`
-	Interaction     model.RunInteraction `json:"interaction"`
-	Options         model.RunOptions     `json:"options"`
+	ClientRequestID string           `json:"client_request_id"`
+	Model           string           `json:"model"`
+	Instruction     string           `json:"instruction"`
+	Scope           model.RunScope   `json:"scope"`
+	Intent          model.RunIntent  `json:"intent"`
+	Options         model.RunOptions `json:"options"`
 }
 
 type runResponse struct {
-	ID          string               `json:"id"`
-	ThreadID    string               `json:"thread_id"`
-	ProjectID   string               `json:"project_id"`
-	Status      string               `json:"status"`
-	EventsURL   string               `json:"events_url"`
-	Target      model.RunTarget      `json:"target"`
-	Interaction model.RunInteraction `json:"interaction"`
-	Model       *string              `json:"model"`
+	ID        string          `json:"id"`
+	ThreadID  string          `json:"thread_id"`
+	ProjectID string          `json:"project_id"`
+	Status    string          `json:"status"`
+	EventsURL string          `json:"events_url"`
+	Scope     model.RunScope  `json:"scope"`
+	Intent    model.RunIntent `json:"intent"`
+	Model     *string         `json:"model"`
 }
 
 func toRunResponse(r model.Run) runResponse {
@@ -54,7 +54,7 @@ func toRunResponse(r model.Run) runResponse {
 	return runResponse{
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
-		Target: r.WorkSpec.Target, Interaction: r.WorkSpec.Interaction,
+		Scope: r.Command.Scope, Intent: r.Command.Intent,
 		Model: profileName,
 	}
 }
@@ -67,8 +67,8 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
-	if body.Target.Artifact == "" {
-		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "INVALID_TARGET", Message: "target is required"})
+	if body.Scope.Artifact == "" {
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "INVALID_SCOPE", Message: "scope is required"})
 		return
 	}
 	if strings.TrimSpace(body.ClientRequestID) == "" {
@@ -79,8 +79,8 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		ClientRequestID: body.ClientRequestID,
 		Model:           body.Model,
 		Instruction:     body.Instruction,
-		WorkSpec: model.WorkSpec{
-			Target: body.Target, Interaction: body.Interaction,
+		Command: model.RunCommand{
+			Scope: body.Scope, Intent: body.Intent,
 			Instruction: body.Instruction, Options: body.Options,
 		},
 	}
@@ -134,10 +134,10 @@ func handleCreateRunError(c *gin.Context, err error) {
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
 	case errors.Is(err, service.ErrSlideTargetNotFound):
 		AbortWithError(c, ProjectAgentError(model.NewAgentError("SLIDE_NOT_FOUND", "create_run", err), "SLIDE_NOT_FOUND", "create_run"))
-	case errors.Is(err, model.ErrInvalidWorkSpec):
-		AbortWithError(c, ProjectAgentError(model.NewAgentError("INVALID_TARGET", "create_run", err), "INVALID_TARGET", "create_run"))
-	case errors.Is(err, service.ErrRunTargetUnsupported):
-		AbortWithError(c, ProjectAgentError(model.NewAgentError("RUN_TARGET_UNSUPPORTED", "create_run", err), "RUN_TARGET_UNSUPPORTED", "create_run"))
+	case errors.Is(err, model.ErrInvalidRunCommand):
+		AbortWithError(c, ProjectAgentError(model.NewAgentError("INVALID_SCOPE", "create_run", err), "INVALID_SCOPE", "create_run"))
+	case errors.Is(err, service.ErrRunScopeUnsupported):
+		AbortWithError(c, ProjectAgentError(model.NewAgentError("RUN_SCOPE_UNSUPPORTED", "create_run", err), "RUN_SCOPE_UNSUPPORTED", "create_run"))
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}

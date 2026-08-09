@@ -21,15 +21,15 @@ function applyShortcut(raw: string, request: CreateRunRequest): CreateRunRequest
   const instruction = rest.join(' ').trim() || raw;
   switch (command) {
     case '/talk':
-      return { ...request, instruction, interaction: { intent: 'talk' } };
+      return { ...request, instruction, intent: 'talk' };
     case '/ask':
-      return { ...request, instruction, interaction: { intent: 'ask' } };
+      return { ...request, instruction, intent: 'ask' };
     case '/plan':
-      return { ...request, instruction, interaction: { intent: 'plan' } };
+      return { ...request, instruction, intent: 'plan' };
     case '/overview':
-      return { ...request, instruction, target: { artifact: 'presentation', level: 'deck' } };
+      return { ...request, instruction, scope: { artifact: 'ppt', level: 'deck' } };
     case '/current':
-      return { ...request, instruction, target: { ...request.target, level: 'slide' } };
+      return { ...request, instruction, scope: { ...request.scope, level: 'slide' } };
     default:
       return request;
   }
@@ -129,7 +129,7 @@ export const CommandComposer: React.FC = () => {
       setSubmitError(profilesError || '模型列表仍在加载，请稍候');
       return;
     }
-    const target = {
+    const scope = {
       artifact: composer.artifact,
       level: composer.level === 'slide' && !currentSlide ? 'deck' as const : composer.level,
       ...(composer.level === 'slide' && currentSlide ? { slide_id: currentSlide.id } : {}),
@@ -137,17 +137,17 @@ export const CommandComposer: React.FC = () => {
     let request: CreateRunRequest = {
       client_request_id: newClientIdentity('req'),
       model: composer.modelProfileName,
-      target,
-      interaction: { intent: composer.intent },
+      scope,
+      intent: composer.intent,
       instruction: raw,
     };
     request = applyShortcut(raw, request);
-    if (request.target.level === 'slide' && !request.target.slide_id) {
-      request.target = { artifact: request.target.artifact, level: 'deck' };
+    if (request.scope.level === 'slide' && !request.scope.slide_id) {
+      request.scope = { artifact: request.scope.artifact, level: 'deck' };
     }
     const selectedProfile = profiles.find((profile) => profile.name === request.model);
-    const requiresVision = request.interaction.intent === 'execute' &&
-      request.target.artifact === 'presentation';
+    const requiresVision = request.intent === 'execute' &&
+      request.scope.artifact === 'ppt';
     if (!selectedProfile) {
       setSubmitError('所选模型已不可用，请重新选择');
       return;
@@ -172,7 +172,7 @@ export const CommandComposer: React.FC = () => {
     await cancelRun(activeThreadId, activeRunId);
   };
 
-  const requiresVision = composer.intent === 'execute' && composer.artifact === 'presentation';
+  const requiresVision = composer.intent === 'execute' && composer.artifact === 'ppt';
   const togglePlanIntent = () => {
     composer.setIntent(composer.intent === 'plan' ? 'execute' : 'plan');
   };

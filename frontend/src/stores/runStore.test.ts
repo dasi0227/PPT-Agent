@@ -61,8 +61,8 @@ vi.mock('../api/runs', () => ({
         thread_id: threadId,
         project_id: 'p1',
         status: 'running',
-        target: payload.target,
-        interaction: payload.interaction,
+        scope: payload.scope,
+        intent: payload.intent,
         events_url: '',
         model: payload.model ?? 'Kimi K3',
       };
@@ -94,11 +94,11 @@ import { useComposerStore } from './composerStore';
 import type { TimelineItem } from '../features/agent/eventReducer';
 
 const request = (instruction: string) => ({
-  target: { artifact: 'presentation' as const, level: 'slide' as const, slide_id: 's1' },
-  interaction: { intent: 'execute' as const },
+  scope: { artifact: 'ppt' as const, level: 'slide' as const, slide_id: 's1' },
+  intent: 'execute' as const ,
   instruction,
 });
-const base = { schema_version: 2, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 3, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
 
 function reset() {
   useRunStore.getState().dropSessions(Object.keys(useRunStore.getState().sessions));
@@ -127,8 +127,8 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'done' | '
     thread_id: 't1',
     project_id: 'p1',
     status,
-    target: request('').target,
-    interaction: request('').interaction,
+    scope: request('').scope,
+    intent: request('').intent,
     events_url: '',
     model: 'Kimi K3',
   };
@@ -145,7 +145,7 @@ describe('runStore public event sessions', () => {
     ]);
     resolveCreate?.({
       id: 'run_1', thread_id: 't1', project_id: 'p1', status: 'running',
-      target: request('').target, interaction: request('').interaction, events_url: '',
+      scope: request('').scope, intent: request('').intent, events_url: '',
     });
     await pending;
   });
@@ -246,8 +246,8 @@ describe('runStore public event sessions', () => {
     expect(createRequests[1]).toMatchObject({
       instruction: 'original',
       model: 'Kimi K3',
-      target: request('').target,
-      interaction: request('').interaction,
+      scope: request('').scope,
+      intent: request('').intent,
     });
     expect(createRequests[1].client_request_id).not.toBe(firstRequestId);
   });
@@ -427,7 +427,7 @@ describe('runStore public event sessions', () => {
     }));
     recoveredRun = {
       id: 'saved', thread_id: 't1', project_id: 'p1', status: 'running',
-      target: request('').target, interaction: request('').interaction, events_url: '',
+      scope: request('').scope, intent: request('').intent, events_url: '',
       model: 'Kimi K3',
     };
     await useRunStore.getState().recoverPersistedRuns();
@@ -445,7 +445,7 @@ describe('runStore public event sessions', () => {
       sessions: {
         t1: {
           activeRunId: null, status: 'idle',
-          target: request('').target, interaction: request('').interaction,
+          scope: request('').scope, intent: request('').intent,
           timelineItems: [seed], pendingQuestion: null, progress: null,
           eventSourceClose: null, plan: null,
         },

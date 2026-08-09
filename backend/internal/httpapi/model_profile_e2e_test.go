@@ -101,8 +101,8 @@ func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 	explicit := `{
 		"client_request_id":"req-model-explicit",
 		"model":"Text Profile",
-		"target":{"artifact":"spec","level":"deck"},
-		"interaction":{"intent":"execute"},
+		"scope":{"artifact":"spec","level":"deck"},
+		"intent":"execute",
 		"instruction":"write spec"
 	}`
 	response := apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", explicit)
@@ -122,8 +122,8 @@ func TestCreateRunRejectsMissingProfileAndCapabilityMismatch(t *testing.T) {
 	missing := `{
 		"client_request_id":"req-model-missing",
 		"model":"Removed Profile",
-		"target":{"artifact":"spec","level":"deck"},
-		"interaction":{"intent":"talk"},
+		"scope":{"artifact":"spec","level":"deck"},
+		"intent":"talk",
 		"instruction":"inspect"
 	}`
 	response := apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", missing)
@@ -134,8 +134,8 @@ func TestCreateRunRejectsMissingProfileAndCapabilityMismatch(t *testing.T) {
 	mismatch := `{
 		"client_request_id":"req-model-mismatch",
 		"model":"Text Profile",
-		"target":{"artifact":"presentation","level":"deck"},
-		"interaction":{"intent":"execute"},
+		"scope":{"artifact":"ppt","level":"deck"},
+		"intent":"execute",
 		"instruction":"make presentation"
 	}`
 	response = apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", mismatch)
@@ -151,8 +151,8 @@ func TestCreateRunIdempotencyHashIncludesResolvedProfile(t *testing.T) {
 	request := `{
 		"client_request_id":"req-model-idempotency",
 		"model":"Text Profile",
-		"target":{"artifact":"spec","level":"deck"},
-		"interaction":{"intent":"execute"},
+		"scope":{"artifact":"spec","level":"deck"},
+		"intent":"execute",
 		"instruction":"write spec"
 	}`
 	first := apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", request)

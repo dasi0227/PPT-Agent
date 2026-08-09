@@ -25,22 +25,32 @@ type RequirementLedger struct {
 	Items []RequirementItem `json:"items"`
 }
 
-func NewRequirementLedger(spec model.WorkSpec) *RequirementLedger {
-	parts := splitRequirements(spec.Instruction)
+func NewRequirementLedger(command model.RunCommand) *RequirementLedger {
+	parts := splitRequirements(command.Instruction)
 	if len(parts) == 0 {
-		parts = []string{strings.TrimSpace(spec.Instruction)}
+		parts = []string{strings.TrimSpace(command.Instruction)}
 	}
-	items := make([]RequirementItem, 0, len(parts)+1)
+	items := make([]RequirementItem, 0, len(parts)+3)
 	for index, part := range parts {
 		items = append(items, RequirementItem{
 			ID: fmt.Sprintf("req_%02d", index+1), Text: part, Status: RequirementPending,
 		})
 	}
-	target := fmt.Sprintf("Target artifact=%s level=%s", spec.Target.Artifact, spec.Target.Level)
-	if spec.Target.SlideID != "" {
-		target += " slide_id=" + spec.Target.SlideID
+	scope := fmt.Sprintf("Scope artifact=%s level=%s", command.Scope.Artifact, command.Scope.Level)
+	if command.Scope.SlideID != "" {
+		scope += " slide_id=" + command.Scope.SlideID
 	}
-	items = append(items, RequirementItem{ID: "req_target_scope", Text: target, Status: RequirementSatisfied})
+	items = append(items, RequirementItem{ID: "req_scope", Text: scope, Status: RequirementSatisfied})
+	if command.Options.Language != "" {
+		items = append(items, RequirementItem{
+			ID: "req_language", Text: "Output language=" + string(command.Options.Language), Status: RequirementPending,
+		})
+	}
+	if command.Options.Range != "" {
+		items = append(items, RequirementItem{
+			ID: "req_range", Text: "Deck slide range=" + string(command.Options.Range), Status: RequirementPending,
+		})
+	}
 	return &RequirementLedger{Items: items}
 }
 

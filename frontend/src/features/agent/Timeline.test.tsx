@@ -17,8 +17,8 @@ function setSession(items: TimelineItem[], overrides: Record<string, unknown> = 
       t1: {
         activeRunId: 'r1',
         status: 'running',
-        target: { artifact: 'presentation', level: 'deck' },
-        interaction: { intent: 'execute' },
+        scope: { artifact: 'ppt', level: 'deck' },
+        intent: 'execute',
         timelineItems: items,
         pendingQuestion: null,
         progress: null,

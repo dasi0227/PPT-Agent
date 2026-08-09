@@ -115,9 +115,9 @@ func TestRunContextRoundTripStoresManifestOnly(t *testing.T) {
 	if err := s.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p", HistoryPath: "threads/t.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", WorkSpec: model.WorkSpec{
-		Target:      model.RunTarget{Artifact: model.ArtifactSpec, Level: model.TargetDeck},
-		Interaction: model.RunInteraction{Intent: model.IntentExecute}, Instruction: "x",
+	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", Command: model.RunCommand{
+		Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+		Intent: model.IntentExecute, Instruction: "x",
 	}, Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1}
 	if err := s.CreateRun(ctx, runModel); err != nil {
 		t.Fatal(err)

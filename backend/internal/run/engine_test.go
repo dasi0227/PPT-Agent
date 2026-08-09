@@ -423,10 +423,10 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 func testRun(id string) model.Run {
 	return model.Run{
 		ID: id, ThreadID: "t1", ProjectID: "p1",
-		WorkSpec: model.WorkSpec{
+		Command: model.RunCommand{
 			Instruction: "test",
-			Target:      model.RunTarget{Artifact: model.ArtifactPresentation, Level: model.TargetDeck},
-			Interaction: model.RunInteraction{Intent: model.IntentExecute},
+			Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+			Intent: model.IntentExecute,
 		},
 	}
 }

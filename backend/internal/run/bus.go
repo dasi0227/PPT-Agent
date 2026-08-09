@@ -73,7 +73,7 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 		entry.Turn = "user"
 		entry.Type = "user_turn"
 		entry.Data = map[string]any{
-			"text": text, "target": data["target"], "interaction": data["interaction"],
+			"text": text, "scope": data["scope"], "intent": data["intent"],
 		}
 	default:
 		entry.Turn = "agent"

@@ -14,15 +14,15 @@ func BuildContextBriefing(pack contextengine.ContextPack, state *runtimeState) s
 		return ""
 	}
 	sections := []string{
-		"Objective: " + strings.TrimSpace(pack.WorkSpec.Instruction),
-		fmt.Sprintf("Mode: intent=%s phase=%s", pack.WorkSpec.Interaction.Intent, state.phase),
-		"Authority: use only disclosed tools and current target scope; ordinary assistant text never completes the run.",
+		"Objective: " + strings.TrimSpace(pack.Command.Instruction),
+		fmt.Sprintf("Mode: intent=%s phase=%s", pack.Command.Intent, state.phase),
+		"Authority: use only disclosed tools and RunCommand.scope; ordinary assistant text never completes the run.",
 	}
-	if pack.WorkSpec.Interaction.Intent == model.IntentPlan {
+	if pack.Command.Intent == model.IntentPlan {
 		sections = append(sections, "Authority detail: this is read-only planning; do not call update_plan or write tools.")
 	}
-	if pack.WorkSpec.Interaction.Intent == model.IntentExecute {
-		sections = append(sections, "Authority detail: writes are allowed only through the active run session and only inside target scope.")
+	if pack.Command.Intent == model.IntentExecute {
+		sections = append(sections, "Authority detail: writes are allowed only through the active run session and only inside RunCommand.scope.")
 	}
 	if state.requirements != nil {
 		sections = append(sections, "Requirement ledger:\n"+state.requirements.Brief())
@@ -31,7 +31,7 @@ func BuildContextBriefing(pack contextengine.ContextPack, state *runtimeState) s
 		sections = append(sections, "Retrieved context:\n"+retrievedContextBrief(state.retrievedContext))
 	}
 	sections = append(sections, "Working set:\n"+workingSetSummary(state))
-	if focus := nextFocus(state, pack.WorkSpec.Interaction.Intent); focus != "" {
+	if focus := nextFocus(state, pack.Command.Intent); focus != "" {
 		sections = append(sections, "Next focus: "+focus)
 	}
 	return strings.Join(sections, "\n")
@@ -45,7 +45,7 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 		Index: state.contextIndex, Embedder: r.Embedder, Scope: state.scope,
 	}
 	result, err := retriever.Retrieve(ctx, RetrievalQuery{
-		RunID: state.runID, WorkSpec: input.Context.WorkSpec, RequirementLedger: state.requirements,
+		RunID: state.runID, Command: input.Context.Command, RequirementLedger: state.requirements,
 		LatestIssues: state.issues, Phase: state.phase,
 		QueryText: retrievalQueryText(input.Context, state), Limit: 5, DetailBudget: 1200,
 	})
@@ -63,7 +63,7 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 }
 
 func retrievalQueryText(pack contextengine.ContextPack, state *runtimeState) string {
-	parts := []string{pack.WorkSpec.Instruction}
+	parts := []string{pack.Command.Instruction}
 	if state.plan != nil {
 		parts = append(parts, state.plan.Brief())
 	}
@@ -145,7 +145,7 @@ func workingSetSummary(state *runtimeState) string {
 	return strings.Join(lines, "\n")
 }
 
-func nextFocus(state *runtimeState, intent model.InteractionIntent) string {
+func nextFocus(state *runtimeState, intent model.RunIntent) string {
 	if intent == model.IntentExecute && state.plan != nil && state.plan.HasBlockingSteps() {
 		return "complete the next pending plan step and keep the plan statuses current."
 	}

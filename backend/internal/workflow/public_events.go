@@ -506,7 +506,7 @@ func currentPlanStepID(plan *Plan) string {
 	return ""
 }
 
-func safeFinalMessage(message string, intent model.InteractionIntent, affected int) string {
+func safeFinalMessage(message string, intent model.RunIntent, affected int) string {
 	if text := sanitizePublicMarkdown(message, 0); text != "" {
 		return text
 	}

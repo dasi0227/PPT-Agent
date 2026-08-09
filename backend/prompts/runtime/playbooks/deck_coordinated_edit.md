@@ -9,12 +9,14 @@ Execution steps:
 4. If a slide spec changes, update and render the corresponding HTML.
 5. Keep the plan current when the Agent has chosen to create one.
 6. Use render diagnostics to repair visual regressions.
+7. If RunCommand.options.range is set, keep the final slide count inside that range.
+8. If RunCommand.options.language conflicts with an existing outline and the instruction does not explicitly authorize translation, ask the user instead of switching silently.
 
 Quality expectations:
 - Preserve cross-slide narrative and section continuity.
 - Keep typography, palette, spacing and component style consistent.
 - Avoid creating a deck where individual pages look like unrelated one-offs.
-- Do not over-expand target scope beyond WorkSpec.
+- Do not write outside RunCommand.scope.
 
 Completion:
 - Finish only after requirements, plan status and evidence are all complete.

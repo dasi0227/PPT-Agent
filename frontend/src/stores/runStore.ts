@@ -8,9 +8,9 @@ import {
   PlanState,
   PublicTarget,
   Run,
-  RunInteraction,
+  RunIntent,
   RunProgressStage,
-  RunTarget,
+  RunScope,
   SSEEvent,
 } from '../api/types';
 import { TimelineItem, reducePlan, reduceSSEEvent } from '../features/agent/eventReducer';
@@ -34,8 +34,8 @@ export interface RunSession {
   projectId?: string | null;
   status: RunStatus;
   streamStatus?: StreamStatus;
-  target: RunTarget;
-  interaction: RunInteraction;
+  scope: RunScope;
+  intent: RunIntent;
   timelineItems: TimelineItem[];
   pendingQuestion: { id: string; prompt: string } | null;
   progress: {
@@ -58,8 +58,8 @@ export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   projectId: null,
   status: 'idle',
   streamStatus: 'idle',
-  target: { artifact: 'presentation', level: 'slide' },
-  interaction: { intent: 'execute' },
+  scope: { artifact: 'ppt', level: 'slide' },
+  intent: 'execute',
   timelineItems: [],
   pendingQuestion: null,
   progress: null,
@@ -157,15 +157,15 @@ function requestFromTimeline(
 ): CreateRunRequest | undefined {
   const original = [...items].reverse().find((item) =>
     item.type === 'user_turn' &&
-    Boolean(item.target) &&
-    Boolean(item.interaction) &&
+    Boolean(item.scope) &&
+    Boolean(item.intent) &&
     (!runId || item.runId === runId));
-  if (!original || original.type !== 'user_turn' || !original.target || !original.interaction) return undefined;
+  if (!original || original.type !== 'user_turn' || !original.scope || !original.intent) return undefined;
   return {
     client_request_id: newClientIdentity('req'),
     ...(model ? { model } : {}),
-    target: original.target as RunTarget,
-    interaction: original.interaction as RunInteraction,
+    scope: original.scope as RunScope,
+    intent: original.intent as RunIntent,
     instruction: original.text,
   };
 }
@@ -302,16 +302,16 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       event.data.affected_targets.forEach((target) => refreshPublicTarget(projectId, target));
       return;
     }
-    if (session.target.level === 'slide' && session.target.slide_id) {
+    if (session.scope.level === 'slide' && session.scope.slide_id) {
       refreshPublicTarget(session.projectId, {
         type: 'slide',
-        slide_id: session.target.slide_id,
-        part: session.target.artifact === 'presentation' ? 'html' : 'spec',
+        slide_id: session.scope.slide_id,
+        part: session.scope.artifact === 'ppt' ? 'html' : 'spec',
       });
     } else {
       refreshPublicTarget(session.projectId, {
         type: 'deck',
-        part: session.target.artifact === 'presentation' ? 'outline' : 'design',
+        part: session.scope.artifact === 'ppt' ? 'outline' : 'design',
       });
     }
   };
@@ -329,8 +329,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: 'user_turn',
         text: payload.instruction,
-        target: payload.target,
-        interaction: payload.interaction,
+        scope: payload.scope,
+        intent: payload.intent,
         timestamp: Date.now(),
       };
       updateSession(threadId, (prev) => ({
@@ -340,8 +340,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         status: 'creating',
         streamStatus: 'idle',
         pendingQuestion: null,
-        target: payload.target,
-        interaction: payload.interaction,
+        scope: payload.scope,
+        intent: payload.intent,
         progress: null,
         plan: null,
         eventSourceClose: null,
@@ -505,8 +505,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             streamStatus: status === 'running' || status === 'waiting' || status === 'canceling'
               ? 'connecting'
               : 'closed',
-            target: run.target,
-            interaction: run.interaction,
+            scope: run.scope,
+            intent: run.intent,
             lastEventId: record.lastEventId,
             timelineItems: prev.timelineItems.length > 0 ? prev.timelineItems : hydratedItems,
             plan: prev.plan ?? hydratedPlan,
@@ -716,8 +716,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         plan: plan ?? null,
         activeRunId: session?.activeRunId ?? null,
         status: session?.status ?? 'idle',
-        target: session?.target ?? IDLE_SESSION.target,
-        interaction: session?.interaction ?? IDLE_SESSION.interaction,
+        scope: session?.scope ?? IDLE_SESSION.scope,
+        intent: session?.intent ?? IDLE_SESSION.intent,
         pendingQuestion: session?.pendingQuestion ?? null,
         lastEventId,
         originalRequest: requestFromTimeline(items, session?.activeRunId),

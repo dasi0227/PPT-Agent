@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -35,12 +36,12 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 	for _, payload := range []map[string]any{
 		{
-			"schema_version": 2, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 3, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"call_id": "c1", "tool": "write_ppt", "display": map[string]any{"label": "生成"},
 			"args": map[string]any{"html": "<section />"},
 		},
 		{
-			"schema_version": 2, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 3, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"message_id": "m1", "text": "安全摘要", "reasoning_content": "hidden",
 		},
 	} {
@@ -55,5 +56,32 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 	if err := ValidatePublicEvent(EventType("context.assembled"), base); err == nil {
 		t.Fatal("internal trace event was accepted as public")
+	}
+}
+
+func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
+	payload := RunStartedPayload{
+		PublicEventBase: NewPublicEventBase("r1"),
+		Scope:           RunScope{Artifact: ArtifactPPT, Level: ScopeSlide, SlideID: "s1"},
+		Intent:          IntentExecute,
+		UserInput:       "revise",
+	}
+	if err := ValidatePublicEvent(EventRunStarted, payload); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value := string(raw)
+	for _, want := range []string{`"schema_version":3`, `"scope":`, `"artifact":"ppt"`, `"intent":"execute"`} {
+		if !strings.Contains(value, want) {
+			t.Fatalf("run.started missing %s: %s", want, value)
+		}
+	}
+	for _, legacy := range []string{`"target":`, `"interaction":`, `"presentation"`} {
+		if strings.Contains(value, legacy) {
+			t.Fatalf("run.started contains legacy field %s: %s", legacy, value)
+		}
 	}
 }

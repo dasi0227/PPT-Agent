@@ -53,7 +53,7 @@ func (r *recordingRenderer) Render(_ context.Context, request RenderRequest) (Re
 }
 
 func TestPPTToolSchemasExposeResourceObjectContracts(t *testing.T) {
-	_, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	_, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
 	tests := []struct {
 		tool     DomainTool
 		required []string
@@ -84,7 +84,7 @@ func TestPPTToolSchemasExposeResourceObjectContracts(t *testing.T) {
 }
 
 func TestResourceInvalidObservationTeachesObjectShape(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
 	result := (pptReadTool{pack}).Execute(context.Background(), toolInput(pack, dir, nil, map[string]any{
 		"resource": "deck:outline",
 	}))
@@ -130,7 +130,7 @@ func TestResourceContractsPromptShowsObjectArguments(t *testing.T) {
 }
 
 func TestReadPPTReturnsCompleteRawStringForAllResources(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
 	resources := []Resource{
 		{Type: "deck", Part: "outline"},
 		{Type: "deck", Part: "design"},
@@ -150,7 +150,7 @@ func TestReadPPTReturnsCompleteRawStringForAllResources(t *testing.T) {
 }
 
 func TestReadPPTRejectsOversizedContentWithoutTruncation(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
 	large := strings.Repeat("x", maxPPTContentBytes+1)
 	if err := os.WriteFile(filepath.Join(dir, model.SlideHTMLPath("slide-01")), []byte(large), 0o644); err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestReadPPTRejectsOversizedContentWithoutTruncation(t *testing.T) {
 }
 
 func TestWritePPTRequiresStringAndInjectsManagedMetadata(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactSpec, model.ScopeSlide)
 	tx, _ := NewRunSession(dir, "write-string")
 	resource := Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}
 	rejected := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
@@ -198,7 +198,7 @@ func TestWritePPTRequiresStringAndInjectsManagedMetadata(t *testing.T) {
 }
 
 func TestDesignWriteAtomicallyWritesThemeTokens(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
 	tx, _ := NewRunSession(dir, "write-design")
 	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
 		"resource": resourceArgs(Resource{Type: "deck", Part: "design"}),
@@ -228,7 +228,7 @@ func TestLineDiffStatCountsInsertionsAndDeletions(t *testing.T) {
 }
 
 func TestWritePPTValidatesJSONHTMLArtifactAndScope(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	tx, _ := NewRunSession(dir, "write-validation")
 	invalidJSON := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
 		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}), "content": "{",
@@ -243,7 +243,7 @@ func TestWritePPTValidatesJSONHTMLArtifactAndScope(t *testing.T) {
 		t.Fatalf("invalid HTML accepted: %+v", invalidHTML)
 	}
 	specPack := pack
-	specPack.WorkSpec.Target.Artifact = model.ArtifactSpec
+	specPack.Command.Scope.Artifact = model.ArtifactSpec
 	forbidden := (pptWriteTool{specPack}).Execute(context.Background(), toolInput(specPack, dir, tx, map[string]any{
 		"resource": resourceArgs(Resource{Type: "slide", SlideID: "slide-01", Part: "html"}), "content": validToolHTML,
 	}))
@@ -259,7 +259,7 @@ func TestWritePPTValidatesJSONHTMLArtifactAndScope(t *testing.T) {
 }
 
 func TestEditPPTUsesOrderedUniqueAnchorsAndIsAtomic(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	tx, _ := NewRunSession(dir, "edit")
 	resource := Resource{Type: "slide", SlideID: "slide-01", Part: "spec"}
 	tool := pptEditTool{pack}
@@ -296,7 +296,7 @@ func TestEditPPTUsesOrderedUniqueAnchorsAndIsAtomic(t *testing.T) {
 }
 
 func TestRenderSlideUsesDirectWrittenHTMLAndProducesEvidence(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	tx, _ := NewRunSession(dir, "render")
 	written := strings.Replace(validToolHTML, "Original", "Written", 1)
 	if _, err := tx.Write(slideHTMLRef("slide-01"), "test", []byte(written)); err != nil {
@@ -333,7 +333,7 @@ func TestRenderSlideUsesDirectWrittenHTMLAndProducesEvidence(t *testing.T) {
 }
 
 func TestRenderSlideAttachesScreenshotOnVisualReview(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	tx, _ := NewRunSession(dir, "render")
 	written := strings.Replace(validToolHTML, "Original", "Written", 1)
 	if _, err := tx.Write(slideHTMLRef("slide-01"), "test", []byte(written)); err != nil {
@@ -350,7 +350,7 @@ func TestRenderSlideAttachesScreenshotOnVisualReview(t *testing.T) {
 }
 
 func TestRenderSlideClassifiesWorkerInfrastructureFailureAsTransient(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	renderer := &recordingRenderer{err: renderWorkerError(
 		"worker_stdin_write", errors.New("broken pipe /Users/private/worker.mjs"),
 	)}
@@ -386,7 +386,7 @@ func TestNodeRendererStartupFailureUsesWorkerUnavailableSentinel(t *testing.T) {
 }
 
 func TestRenderSlideKeepsPageDiagnosticsAgentRepairableAndNonRetryable(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	renderer := &recordingRenderer{diagnostics: RenderDiagnostics{
 		Overflow: map[string]bool{"horizontal": true, "vertical": false},
 	}}
@@ -403,7 +403,7 @@ func TestRenderSlideKeepsPageDiagnosticsAgentRepairableAndNonRetryable(t *testin
 }
 
 func TestRenderSlideDoesNotClassifyContextCancellationAsTransient(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	result := (slideRenderTool{pack: pack, renderer: &recordingRenderer{err: context.Canceled}}).Execute(
 		context.Background(), toolInput(pack, dir, nil, map[string]any{"slide_id": "slide-01"}),
 	)
@@ -413,7 +413,7 @@ func TestRenderSlideDoesNotClassifyContextCancellationAsTransient(t *testing.T) 
 }
 
 func TestCompletionGateRequiresLatestHTMLEvidence(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	tx, _ := NewRunSession(dir, "gate")
 	if _, err := tx.Write(slideHTMLRef("slide-01"), "edit_ppt", []byte(strings.Replace(validToolHTML, "Original", "Changed", 1))); err != nil {
 		t.Fatal(err)
@@ -423,7 +423,7 @@ func TestCompletionGateRequiresLatestHTMLEvidence(t *testing.T) {
 	ledger := NewEvidenceLedger()
 	ledger.Record(staticEvidence(resource, hash))
 	ctx := CompletionContext{
-		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
+		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
 		Session: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
 	if result := NewCompletionGate().Check(ctx); result.Accepted || !hasCompletionCode(result, "EVIDENCE_HTML_MISSING") {
@@ -437,8 +437,54 @@ func TestCompletionGateRequiresLatestHTMLEvidence(t *testing.T) {
 	}
 }
 
+func TestCompletionGateEnforcesRunCommandOptions(t *testing.T) {
+	dir, pack := toolProject(t, model.ArtifactSpec, model.ScopeDeck)
+	pack.Command.Options = model.RunOptions{
+		Language: model.LanguageEnglish,
+		Range:    model.SlideRangeFiveToEight,
+	}
+	tx, err := NewRunSession(dir, "command-options")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := CompletionContext{
+		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
+		Session: tx, Context: pack,
+	}
+	result := NewCompletionGate().Check(ctx)
+	if result.Accepted || !hasCompletionCode(result, CodeRunLanguageUnsatisfied) ||
+		!hasCompletionCode(result, CodeRunRangeUnsatisfied) {
+		t.Fatalf("mismatched command options accepted: %+v", result)
+	}
+
+	pack.Command.Options.Language = model.LanguageChinese
+	pack.Outline.Outline.SlideOrder = []string{"s1", "s2", "s3", "s4", "s5"}
+	if err := os.WriteFile(filepath.Join(dir, "outline.json"), mustJSONValue(pack.Outline.Outline), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx.Context = pack
+	if result := NewCompletionGate().Check(ctx); !result.Accepted {
+		t.Fatalf("satisfied command options rejected: %+v", result)
+	}
+}
+
+func TestCompletionGateRejectsOutOfScopeChanges(t *testing.T) {
+	_, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
+	result := NewCompletionGate().Check(CompletionContext{
+		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
+		Context: pack,
+		Changes: ChangeSet{Updated: []ArtifactChange{{
+			Artifact: ArtifactRef{Kind: ArtifactSlideHTML, ID: "another-slide"},
+			Source:   "write_ppt",
+		}}},
+	})
+	if result.Accepted || !hasCompletionCode(result, ErrTargetOutOfScope.Error()) {
+		t.Fatalf("out-of-scope change accepted: %+v", result)
+	}
+}
+
 func TestSpecArtifactCanFinishAfterSlideSpecOnlyChange(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactSpec, model.ScopeSlide)
 	tx, _ := NewRunSession(dir, "spec-only")
 	next := slideModel("slide-01", "Updated")
 	result := (pptWriteTool{pack}).Execute(context.Background(), toolInput(pack, dir, tx, map[string]any{
@@ -456,7 +502,7 @@ func TestSpecArtifactCanFinishAfterSlideSpecOnlyChange(t *testing.T) {
 }
 
 func TestDeckOutlineMissingSlideSpecsDirectsSpecCreation(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactSpec, model.TargetDeck)
+	dir, pack := toolProject(t, model.ArtifactSpec, model.ScopeDeck)
 	if err := os.Remove(filepath.Join(dir, model.SlideSpecPath("slide-01"))); err != nil {
 		t.Fatal(err)
 	}
@@ -493,7 +539,7 @@ func TestPresentationSpecHTMLAffectingChangesRequireHTMLSync(t *testing.T) {
 		{name: "elements", mutate: func(value *spec.SlideSpec) { value.Elements[0].Intent = "Updated" }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+			dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 			tx, _ := NewRunSession(dir, "presentation-"+test.name)
 			next := slideModel("slide-01", "Original")
 			test.mutate(&next)
@@ -516,7 +562,7 @@ func TestPresentationSpecHTMLAffectingChangesRequireHTMLSync(t *testing.T) {
 }
 
 func TestPresentationSpecAndHTMLWithLatestRenderCanFinish(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	tx, _ := NewRunSession(dir, "presentation-complete")
 	ledger := NewEvidenceLedger()
 	next := slideModel("slide-01", "Updated")
@@ -539,7 +585,7 @@ func TestPresentationSpecAndHTMLWithLatestRenderCanFinish(t *testing.T) {
 }
 
 func TestPresentationDesignChangeRequiresHTMLSync(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
 	tx, _ := NewRunSession(dir, "design-html-sync")
 	ledger := NewEvidenceLedger()
 	next := designModel()
@@ -557,7 +603,7 @@ func TestPresentationDesignChangeRequiresHTMLSync(t *testing.T) {
 }
 
 func TestRenderProofWithOldHTMLRevisionIsRejected(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPresentation, model.TargetSlide)
+	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	tx, _ := NewRunSession(dir, "old-proof-revision")
 	ledger := NewEvidenceLedger()
 	recordResultEvidence(ledger, (pptWriteTool{pack}).Execute(
@@ -579,7 +625,7 @@ func TestRenderProofWithOldHTMLRevisionIsRejected(t *testing.T) {
 }
 
 func TestRegistryDisclosesOnlyFixedBusinessSurface(t *testing.T) {
-	_, pack := toolProject(t, model.ArtifactPresentation, model.TargetDeck)
+	_, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
 	registry := NewToolRegistry()
 	if err := (DefaultDomainToolProvider{Pack: pack, Renderer: &recordingRenderer{}}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
@@ -636,7 +682,7 @@ func recordResultEvidence(ledger *EvidenceLedger, result ToolResult) {
 
 func completionContext(pack contextengine.ContextPack, tx *RunSession, ledger *EvidenceLedger) CompletionContext {
 	return CompletionContext{
-		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, WorkScope: ScopeFromSpec(pack.WorkSpec),
+		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
 		Session: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
 }
@@ -652,12 +698,12 @@ func resourceArgs(resource Resource) map[string]any {
 func toolInput(pack contextengine.ContextPack, dir string, tx *RunSession, args map[string]any) DomainToolInput {
 	return DomainToolInput{
 		Args: args, Context: pack, ProjectDir: dir, RunID: "run-1", Session: tx,
-		Scope: ScopeFromSpec(pack.WorkSpec), Phase: PhaseExecuting,
-		Interaction: pack.WorkSpec.Interaction.Intent,
+		Scope: pack.Command.Scope, Phase: PhaseExecuting,
+		Intent: pack.Command.Intent,
 	}
 }
 
-func toolProject(t *testing.T, artifact model.Artifact, level model.TargetLevel) (string, contextengine.ContextPack) {
+func toolProject(t *testing.T, artifact model.Artifact, level model.ScopeLevel) (string, contextengine.ContextPack) {
 	t.Helper()
 	dir := t.TempDir()
 	for _, rel := range []string{"slides/slide-01", "common"} {
@@ -686,14 +732,14 @@ func toolProject(t *testing.T, artifact model.Artifact, level model.TargetLevel)
 	if err := os.WriteFile(filepath.Join(dir, "common", "base.css"), []byte(".slide-stage{width:1600px;height:900px}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	target := model.RunTarget{Artifact: artifact, Level: level}
-	if level == model.TargetSlide {
+	target := model.RunScope{Artifact: artifact, Level: level}
+	if level == model.ScopeSlide {
 		target.SlideID = "slide-01"
 	}
 	pack := contextengine.ContextPack{
 		SchemaVersion: contextengine.SchemaVersion,
-		WorkSpec: model.WorkSpec{
-			Target: target, Interaction: model.RunInteraction{Intent: model.IntentExecute}, Instruction: "test",
+		Command: model.RunCommand{
+			Scope: target, Intent: model.IntentExecute, Instruction: "test",
 		},
 		Project: contextengine.ProjectContext{ID: "p1", Title: "Test"},
 		Outline: contextengine.OutlineContext{

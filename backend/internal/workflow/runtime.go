@@ -112,12 +112,12 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		return AgentResponse{}, errors.New("LLM provider is required for ReAct execution")
 	}
 	runtimeState, _ := json.Marshal(map[string]any{
-		"intent": req.Context.WorkSpec.Interaction.Intent, "phase": req.Phase, "plan": req.Plan,
+		"intent": req.Context.Command.Intent, "phase": req.Phase, "plan": req.Plan,
 		"changes": req.Changes, "evidence": req.Evidence, "requirements": req.Requirements,
 	})
 	system, user := contextengine.CompileForRunner(&req.Context,
 		runtimeSystemPromptForRequest(req, string(runtimeState)),
-		req.Context.WorkSpec.Instruction)
+		req.Context.Command.Instruction)
 	messages := append([]llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(system)},
 		{Role: llm.RoleUser, Content: llm.TextContent(user)},
@@ -184,7 +184,7 @@ type runtimeState struct {
 	resumePhase             RuntimePhase
 	plan                    *Plan
 	tx                      *RunSession
-	scope                   Scope
+	scope                   model.RunScope
 	ledger                  *EvidenceLedger
 	issues                  []Issue
 	messages                []llm.Message
@@ -223,9 +223,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	state := &runtimeState{
 		runID: input.RunID, loopID: "loop_" + uuid.NewString(),
-		scope: ScopeFromSpec(input.Context.WorkSpec), ledger: NewEvidenceLedger(),
+		scope: input.Context.Command.Scope, ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, started: time.Now(), budget: input.Budget,
-		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.WorkSpec),
+		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
 	}
 	if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.RunID == input.RunID {
 		state.loopID = input.ResumeCheckpoint.LoopID
@@ -250,7 +250,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		return r.fail(input, state, CodeAgentFailed, errors.New("ReAct agent is required"))
 	}
 	initialPhase := PhaseChat
-	switch input.Context.WorkSpec.Interaction.Intent {
+	switch input.Context.Command.Intent {
 	case model.IntentTalk, model.IntentAsk:
 		initialPhase = PhaseChat
 	case model.IntentPlan:
@@ -287,7 +287,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		r.emitProgress(input.Emitter, state, "thinking", "正在分析任务与当前内容", nil)
 	}
 
-	if input.Context.WorkSpec.Interaction.Intent == model.IntentExecute {
+	if input.Context.Command.Intent == model.IntentExecute {
 		// Direct-write session: typed tools write artifacts straight to the
 		// project directory. A failed or canceled run keeps its partial
 		// products on disk instead of discarding a private write sandbox.
@@ -327,8 +327,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.maybePeriodicCheckpoint(ctx, input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
-		schemas := registry.Disclose(state.phase, input.Context.WorkSpec.Interaction.Intent)
-		schemas = append(schemas, controlSchemas(state.phase, input.Context.WorkSpec.Interaction.Intent)...)
+		schemas := registry.Disclose(state.phase, input.Context.Command.Intent)
+		schemas = append(schemas, controlSchemas(state.phase, input.Context.Command.Intent)...)
 		state.turns++
 		response, err := r.Agent.Next(ctx, AgentRequest{
 			RunID: state.runID, LoopID: state.loopID, Phase: state.phase,
@@ -472,7 +472,7 @@ func (r *Runtime) executeToolBatch(
 		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
 			Args: call.Args, CallID: call.ID, Context: input.Context, ProjectDir: input.ProjectDir, RunID: input.RunID,
 			Session: state.tx, Scope: state.scope, Phase: state.phase,
-			Interaction: input.Context.WorkSpec.Interaction.Intent,
+			Intent: input.Context.Command.Intent,
 		})
 		if ctx.Err() != nil {
 			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
@@ -610,7 +610,7 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 		return ToolResult{}, true
 	}
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
-		"tool": call.Name, "args": call.Args, "scope": state.scope.Target,
+		"tool": call.Name, "args": call.Args, "scope": state.scope,
 	})
 	if err != nil {
 		return failedToolResult("INTERNAL", "cannot hash tool request", false), false
@@ -719,7 +719,7 @@ func (r *Runtime) executeControl(
 ) (StructuredOutcome, bool) {
 	switch call.Name {
 	case "update_plan":
-		if input.Context.WorkSpec.Interaction.Intent != model.IntentExecute ||
+		if input.Context.Command.Intent != model.IntentExecute ||
 			state.phase != PhaseExecuting {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "update_plan is not allowed now", false))
 			return StructuredOutcome{}, false
@@ -797,7 +797,7 @@ func (r *Runtime) executeControl(
 		}
 		return StructuredOutcome{}, false
 	case "review_completion":
-		intent := input.Context.WorkSpec.Interaction.Intent
+		intent := input.Context.Command.Intent
 		if intent != model.IntentPlan && intent != model.IntentExecute {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "review_completion is not allowed now", false))
 			return StructuredOutcome{}, false
@@ -840,8 +840,8 @@ func (r *Runtime) finishCandidate(
 	r.emitProgress(input.Emitter, state, "finalizing", "正在完成最终检查", nil)
 	changes := state.changeSet()
 	result := r.Gate.Check(CompletionContext{
-		Intent: input.Context.WorkSpec.Interaction.Intent, FinishPhase: finishPhase, ActiveTools: state.activeTools,
-		Issues: state.issues, WorkScope: state.scope, Session: state.tx, Changes: changes,
+		Intent: input.Context.Command.Intent, FinishPhase: finishPhase, ActiveTools: state.activeTools,
+		Issues: state.issues, Scope: state.scope, Session: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: input.Context, Plan: state.plan,
 		Requirements: state.requirements, FinishMessage: message, Canceled: ctx.Err() != nil,
 	})
@@ -877,7 +877,7 @@ func (r *Runtime) finishCandidate(
 	if state.lastSummary == "" {
 		state.lastSummary = "Run completed"
 	}
-	if input.Context.WorkSpec.Interaction.Intent == model.IntentExecute {
+	if input.Context.Command.Intent == model.IntentExecute {
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted")
 		state.tx.AcceptMaterializationProofs(result.MaterializationProofs)
 		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommit, ""); err != nil {
@@ -953,7 +953,7 @@ func (r *Runtime) finishCandidate(
 		input.Emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: publicBase(state.runID), MessageID: newMessageID(),
 			Text: safeFinalMessage(
-				state.lastSummary, input.Context.WorkSpec.Interaction.Intent, len(affected),
+				state.lastSummary, input.Context.Command.Intent, len(affected),
 			),
 			AffectedTargets: affected,
 		})
@@ -1016,7 +1016,7 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *runtimeState, agentE
 func (state *runtimeState) outcome(status WorkflowStatus, code, message string) StructuredOutcome {
 	return StructuredOutcome{
 		LoopID: state.loopID, Phase: state.phase, Status: status,
-		Target: state.scope.Target, Changes: state.changeSet(), Issues: append([]Issue{}, state.issues...),
+		Scope: state.scope, Changes: state.changeSet(), Issues: append([]Issue{}, state.issues...),
 		Summary: state.lastSummary, Code: code, Message: message,
 	}
 }
@@ -1276,9 +1276,9 @@ func isControlTool(name string) bool {
 	return name == "update_plan" || name == "ask_user" || name == "review_completion" || name == "finish"
 }
 
-func controlSchemas(phase RuntimePhase, interaction model.InteractionIntent) []ToolSchema {
+func controlSchemas(phase RuntimePhase, intent model.RunIntent) []ToolSchema {
 	out := []ToolSchema{}
-	if interaction == model.IntentExecute && phase == PhaseExecuting {
+	if intent == model.IntentExecute && phase == PhaseExecuting {
 		out = append(out, ToolSchema{
 			Name: "update_plan", Description: "Create or update an optional lightweight execution plan when coordination would help. The plan does not grant additional scope.",
 			Parameters: objectSchema([]string{"steps"}, map[string]any{
@@ -1292,7 +1292,7 @@ func controlSchemas(phase RuntimePhase, interaction model.InteractionIntent) []T
 			}),
 		})
 	}
-	allowAsk := interaction == model.IntentAsk || interaction == model.IntentPlan || (interaction == model.IntentExecute && phase != PhaseCompletionCheck)
+	allowAsk := intent == model.IntentAsk || intent == model.IntentPlan || (intent == model.IntentExecute && phase != PhaseCompletionCheck)
 	if allowAsk && phase != PhaseWaitingInput && phase != PhaseCommitting && phase != PhaseTerminal {
 		out = append(out, ToolSchema{
 			Name: "ask_user", Description: "Ask one blocking group of atomic user questions and pause this same loop until the user answers. Use questions[] for all new calls. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
@@ -1312,8 +1312,8 @@ func controlSchemas(phase RuntimePhase, interaction model.InteractionIntent) []T
 			}),
 		})
 	}
-	if (interaction == model.IntentPlan && phase == PhasePlanning) ||
-		(interaction == model.IntentExecute && phase == PhaseExecuting) {
+	if (intent == model.IntentPlan && phase == PhasePlanning) ||
+		(intent == model.IntentExecute && phase == PhaseExecuting) {
 		out = append(out, ToolSchema{
 			Name: "review_completion", Description: "Ask the semantic reviewer for a second-pass review of the current plan, execution result, or candidate final message. Returns checks[] only; the main agent decides the next ReAct step.",
 			Parameters: objectSchema([]string{}, map[string]any{
@@ -1328,9 +1328,9 @@ func controlSchemas(phase RuntimePhase, interaction model.InteractionIntent) []T
 			}),
 		})
 	}
-	if (phase == PhaseChat && (interaction == model.IntentTalk || interaction == model.IntentAsk)) ||
-		(phase == PhasePlanning && interaction == model.IntentPlan) ||
-		(phase == PhaseExecuting && interaction == model.IntentExecute) {
+	if (phase == PhaseChat && (intent == model.IntentTalk || intent == model.IntentAsk)) ||
+		(phase == PhasePlanning && intent == model.IntentPlan) ||
+		(phase == PhaseExecuting && intent == model.IntentExecute) {
 		out = append(out, ToolSchema{
 			Name: "finish", Description: "所有 Run 的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。The message is checked by the Completion Gate before the run may complete.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{

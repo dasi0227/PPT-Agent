@@ -11,7 +11,7 @@ slide counts and instruction length. `StrategyDecision` also carried synthetic
 This conflicted with the single Harness Loop model:
 
 - semantic coordination choices were made by brittle rules instead of the Agent;
-- `talk`, `ask`, `plan` and `execute` duplicated `RunInteraction.intent`;
+- `talk`, `ask`, `plan` and `execute` are expressed by `RunCommand.intent`;
 - `execute` and `fulfill` only represented whether a Runtime Plan was required;
 - `confidence` was hard-coded and had no consumer;
 - task-level `risk` did not participate in tool authorization;
@@ -25,7 +25,7 @@ Remove the Strategy layer completely.
 The Runtime now has one authoritative authorization input:
 
 ```text
-WorkSpec.interaction.intent = talk | ask | plan | execute
+RunCommand.intent = talk | ask | plan | execute
 ```
 
 Intent determines the maximum capability:
@@ -33,7 +33,7 @@ Intent determines the maximum capability:
 - `talk` and `ask` run in chat phase and are read-only;
 - `plan` runs in planning phase and is read-only;
 - `execute` runs in executing phase and is write-capable inside the declared
-  target scope.
+  RunScope.
 
 There is no `StrategyDecision`, `StrategyRouter`, `ExecutionStrategy` or
 `execute -> fulfill` transition.
@@ -59,8 +59,8 @@ The plan is not a workflow DAG, permission grant or scope expansion mechanism.
 
 The deterministic Runtime continues to enforce:
 
-- interaction intent and read/write authority;
-- target scope;
+- RunIntent and read/write authority;
+- RunScope;
 - phase-specific tool disclosure;
 - tool-level risk;
 - active write session requirements;
@@ -89,7 +89,7 @@ Removed:
 
 Changed:
 
-- Prompt mode selection uses interaction intent.
+- Prompt mode selection uses RunIntent.
 - The direct and fulfill prompts are merged into one execute Harness policy.
 - Tool disclosure uses intent and phase.
 - Completion policies use intent and optional Plan state.

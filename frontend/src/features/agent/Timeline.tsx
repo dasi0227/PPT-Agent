@@ -120,9 +120,9 @@ export const Timeline: React.FC = () => {
           <div className="flex justify-end">
             <div className="flex max-w-[88%] flex-col items-start">
               <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
-                {item.target && (
+                {item.scope && (
                   <div className="mb-1 text-[10px] font-medium text-text-400">
-                    {targetLabel(item.target.artifact as 'spec' | 'presentation', item.target.level as 'slide' | 'deck')}
+                    {targetLabel(item.scope.artifact as 'spec' | 'ppt', item.scope.level as 'slide' | 'deck')}
                   </div>
                 )}
                 <MarkdownMessage content={item.text} />
