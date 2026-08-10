@@ -1,6 +1,6 @@
 # Plan Approval Runtime Design
 
-Status: proposed for user review
+Status: approved; refined after UI review
 
 ## Purpose
 
@@ -55,6 +55,55 @@ The approval transition is atomic. Runtime validates the submitted Plan ID and
 revision, records the decision, activates the Plan, changes the Run Mode,
 switches the prompt module and recalculates tool disclosure before the next
 Agent turn.
+
+## Mode Transition Implementation
+
+The current implementation repeatedly reads the immutable request intent from
+`ContextPack.Command`. That is insufficient for a same-Run transition. The
+authoritative current mode must move into Runtime state:
+
+```text
+runtimeState.mode RunMode
+```
+
+It is initialized from `RunCommand.mode` and then used by every dynamic policy:
+
+- mode prompt selection;
+- domain and control tool disclosure;
+- write authorization checks;
+- completion policy;
+- context briefing and next-focus calculation;
+- semantic review input;
+- public progress and trace projection.
+
+`RuntimeCheckpoint` also persists `mode`. Resume restores both the mode and the
+complete Plan before another Agent turn is allowed.
+
+On an approved decision, Runtime performs this sequence without returning
+control to the model between steps:
+
+```text
+1. Validate waiting interaction, Plan ID and expected revision.
+2. Persist plan.approval_answered.
+3. Set Plan.status=active and approved_revision=current revision.
+4. Set runtimeState.mode=execute.
+5. Create the RunSession required by write tools.
+6. Refresh the ContextPack with the current execute mode.
+7. Rebuild the current context index and briefing.
+8. Set RunPhase=executing.
+9. Save a mode-transition checkpoint.
+10. Emit plan.updated and run.mode_changed.
+11. Start the next Agent turn with execute prompt and write tools.
+```
+
+The persisted Run record is updated to the current mode as part of the same
+service operation. The initial mode remains recoverable from `run.started`, so
+an additional `initial_mode` field is not required.
+
+Refreshing ContextPack is preferable to leaving its original read-only command
+and manifest in place. It prevents the Agent from seeing contradictory
+`plan/read_only` and `execute/write-enabled` authority descriptions after
+approval.
 
 ## Plan Model
 
@@ -172,6 +221,32 @@ execute + active Plan    -> progress patch schema
 Runtime keeps separate internal validators for proposal replacement and
 progress updates.
 
+## Complete Plan Visibility
+
+The Agent must not depend on conversation history to remember the approved
+Plan. Runtime injects the complete, exact Plan snapshot into every Agent turn.
+
+The injection has two layers:
+
+1. A non-compacted `approved_plan` Runtime prompt module contains `plan_id`,
+   `approved_revision`, `title`, complete Markdown `content`, and every step.
+2. `context_briefing` contains a short progress-oriented Plan summary for rapid
+   focus, but never replaces the complete module.
+
+The full module is rebuilt from `runtimeState.plan` on every turn, including
+after message compaction. It is also restored from `RuntimeCheckpoint.Plan`
+after process recovery. Therefore the Plan does not disappear when old chat
+messages are summarized or provider continuations change.
+
+Runtime records an `approved_content_hash` when approval is submitted. Before
+each execute turn it verifies that the current title, content and step
+structure still match that hash. Progress status fields are excluded from this
+hash so `update_plan` can advance execution without invalidating approval.
+
+The execute prompt explicitly treats the injected approved Plan as the
+authoritative implementation contract. Execute-mode `update_plan` cannot alter
+the hashed structural fields.
+
 ## Approval Interaction
 
 The approval card renders:
@@ -200,6 +275,14 @@ Nothing is sent when the user merely selects an option.
 - No separate cancel-selection action is shown.
 - After submission, the decision controls are locked and the card collapses to
   an icon, title, and result status.
+
+The preview follows the current frontend design tokens and component density:
+
+- Aptos-first sans-serif typography;
+- workspace `#E9EDF2`, panel `#F8F9FB`, and surface white;
+- accent `#2F67F6` and the existing success/danger tones;
+- 10-12 px radii, restrained borders, and the current timeline spacing;
+- the same focus-ring and reduced-motion behavior as the application.
 
 ## Public Events
 
@@ -277,4 +360,7 @@ validation, post-submit collapse, and the start of execution progress.
 - Execution updates patch only approved step progress.
 - Plan and step IDs and all revisions are Runtime-generated.
 - `Plan.history` no longer exists.
+- Runtime mode, full Plan and approval revision survive checkpoint resume.
+- Every execute Agent turn receives the complete approved Plan outside the
+  compactable message history.
 - Public events replay to the same approval and progress UI state.
