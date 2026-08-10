@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plan Approval Interaction Preview</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --panel: #f7f8fa;
+      --border: #e2e5e9;
+      --border-strong: #cdd2d9;
+      --text: #202124;
+      --text-soft: #62676f;
+      --text-faint: #90959d;
+      --accent: #5b62d6;
+      --accent-soft: #f0f1ff;
+      --danger: #b64b55;
+      --danger-soft: #fff3f4;
+      --success: #348164;
+      --shadow: 0 16px 48px rgba(26, 31, 44, 0.09);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(91, 98, 214, 0.07), transparent 26rem),
+        var(--bg);
+      color: var(--text);
+    }
+
+    button, textarea { font: inherit; }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(560px, 760px);
+      gap: 40px;
+      align-items: start;
+      width: min(1120px, calc(100% - 40px));
+      margin: 54px auto;
+    }
+
+    .notes {
+      position: sticky;
+      top: 32px;
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255,255,255,.76);
+      backdrop-filter: blur(14px);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.35;
+      letter-spacing: -.02em;
+    }
+
+    .notes p,
+    .notes li {
+      color: var(--text-soft);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .notes ul {
+      margin: 14px 0 0;
+      padding-left: 18px;
+    }
+
+    .demo-caption {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      color: var(--text-faint);
+      font-size: 12px;
+    }
+
+    .reset {
+      border: 0;
+      background: transparent;
+      color: var(--text-soft);
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .timeline {
+      padding: 28px 30px 32px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(255,255,255,.82);
+      box-shadow: var(--shadow);
+    }
+
+    .message {
+      max-width: 88%;
+      margin-left: auto;
+      padding: 10px 13px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .agent-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 26px 0 9px;
+      color: var(--text-faint);
+      font-size: 11px;
+    }
+
+    .agent-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 6px;
+      background: linear-gradient(145deg, #1f2330, #565d75);
+    }
+
+    .plan-card {
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: 13px;
+      background: var(--surface);
+      transition: border-color .16s ease, box-shadow .16s ease;
+    }
+
+    .plan-card:focus-within {
+      border-color: rgba(91, 98, 214, .58);
+      box-shadow: 0 0 0 3px rgba(91, 98, 214, .10);
+    }
+
+    .plan-header {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .plan-icon {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .plan-icon svg { width: 16px; height: 16px; }
+
+    .plan-heading { min-width: 0; flex: 1; }
+
+    .plan-title {
+      overflow: hidden;
+      margin: 0;
+      font-size: 14px;
+      font-weight: 650;
+      line-height: 1.4;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .plan-meta {
+      margin-top: 2px;
+      color: var(--text-faint);
+      font-size: 11px;
+    }
+
+    .plan-content {
+      padding: 15px 16px 4px;
+      color: #35383d;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .plan-content p { margin: 0 0 10px; }
+
+    .plan-content strong { color: var(--text); }
+
+    .plan-content ol {
+      margin: 7px 0 12px;
+      padding-left: 22px;
+    }
+
+    .plan-content li { margin: 5px 0; padding-left: 2px; }
+
+    .decision-area { padding: 12px 16px 16px; }
+
+    .decision-label {
+      margin-bottom: 8px;
+      color: var(--text-soft);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .choices {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .choice {
+      position: relative;
+      min-width: 0;
+    }
+
+    .choice input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .choice label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 36px;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      color: var(--text-soft);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: .14s ease;
+    }
+
+    .choice-dot {
+      width: 12px;
+      height: 12px;
+      flex: 0 0 12px;
+      border: 1.5px solid var(--border-strong);
+      border-radius: 50%;
+      background: var(--surface);
+      box-shadow: inset 0 0 0 3px var(--surface);
+      transition: .14s ease;
+    }
+
+    .choice label:hover { border-color: var(--border-strong); background: var(--panel); }
+
+    .choice input:focus-visible + label {
+      outline: 2px solid rgba(91, 98, 214, .35);
+      outline-offset: 2px;
+    }
+
+    .choice input:checked + label {
+      border-color: rgba(91, 98, 214, .46);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .choice input:checked + label .choice-dot {
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .choice.cancel input:checked + label {
+      border-color: rgba(182, 75, 85, .36);
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .choice.cancel input:checked + label .choice-dot {
+      border-color: var(--danger);
+      background: var(--danger);
+    }
+
+    .feedback-wrap {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transition: grid-template-rows .18s ease, opacity .18s ease;
+    }
+
+    .feedback-wrap.visible {
+      grid-template-rows: 1fr;
+      opacity: 1;
+    }
+
+    .feedback-inner { overflow: hidden; }
+
+    textarea {
+      display: block;
+      width: 100%;
+      min-height: 96px;
+      margin-top: 10px;
+      resize: vertical;
+      border: 1px solid var(--border-strong);
+      border-radius: 9px;
+      outline: none;
+      padding: 10px 11px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    textarea:focus {
+      border-color: rgba(91, 98, 214, .68);
+      box-shadow: 0 0 0 3px rgba(91, 98, 214, .09);
+    }
+
+    .submit-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .hint {
+      min-height: 18px;
+      color: var(--text-faint);
+      font-size: 11px;
+    }
+
+    .submit {
+      min-width: 78px;
+      height: 34px;
+      border: 0;
+      border-radius: 9px;
+      background: var(--text);
+      color: white;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+      transition: opacity .14s ease, transform .14s ease;
+    }
+
+    .submit:hover:not(:disabled) { transform: translateY(-1px); }
+
+    .submit:disabled { cursor: not-allowed; opacity: .32; }
+
+    .result {
+      display: none;
+      align-items: center;
+      gap: 9px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      color: var(--text-soft);
+      font-size: 12px;
+    }
+
+    .result.visible { display: flex; }
+
+    .result-mark {
+      display: grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .collapsed .plan-header { border-bottom: 0; }
+    .collapsed .plan-content,
+    .collapsed .decision-area { display: none; }
+
+    .progress {
+      display: none;
+      margin-top: 12px;
+      padding: 11px 13px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text-soft);
+      font-size: 12px;
+    }
+
+    .progress.visible { display: flex; align-items: center; gap: 8px; }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 1.35s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      50% { opacity: .35; transform: scale(.78); }
+    }
+
+    @media (max-width: 860px) {
+      .shell { grid-template-columns: 1fr; width: min(700px, calc(100% - 28px)); margin: 24px auto; }
+      .notes { position: static; }
+    }
+
+    @media (max-width: 560px) {
+      .timeline { padding: 20px 16px; }
+      .choices { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <aside class="notes">
+      <p class="eyebrow">Interaction preview</p>
+      <h1>计划审批：先选择，再提交</h1>
+      <p>三个选项只是单选状态，不会在点击时立即触发 Runtime 行为。只有统一的“提交”按钮会发送决定。</p>
+      <ul>
+        <li>未选择时禁止提交。</li>
+        <li>选择“返回修改”后才显示必填意见。</li>
+        <li>用户可在提交前切换选择，避免误触。</li>
+        <li>提交后卡片折叠并显示结果状态。</li>
+      </ul>
+    </aside>
+
+    <section>
+      <div class="demo-caption">
+        <span>时间线中的等待输入状态</span>
+        <button class="reset" id="reset" type="button">重置预览</button>
+      </div>
+
+      <div class="timeline">
+        <div class="message">请先给出完整计划，我确认后再开始制作。</div>
+
+        <div class="agent-label">
+          <span class="agent-dot" aria-hidden="true"></span>
+          <span>Agent 已生成计划，等待你的选择</span>
+        </div>
+
+        <article class="plan-card" id="card">
+          <header class="plan-header">
+            <span class="plan-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2"/>
+              </svg>
+            </span>
+            <div class="plan-heading">
+              <h2 class="plan-title">创建一份 Agent 驱动的产品方案演示</h2>
+              <div class="plan-meta" id="meta">5 个步骤 · 等待确认</div>
+            </div>
+          </header>
+
+          <div class="plan-content">
+            <p><strong>目标</strong>：先建立演示文稿的叙事结构和设计方向，再制作可直接预览的 HTML 页面。</p>
+            <ol>
+              <li>确认目标受众、演示目的和期望篇幅。</li>
+              <li>生成完整 Outline，明确每页的叙事职责。</li>
+              <li>确定统一的主题、版式和视觉语言。</li>
+              <li>逐页生成 Slide Spec 与 HTML 页面。</li>
+              <li>完成渲染检查并修复视觉问题。</li>
+            </ol>
+            <p><strong>验收方式</strong>：检查页面数量、内容覆盖、跨页一致性以及最终渲染结果。</p>
+          </div>
+
+          <form class="decision-area" id="form">
+            <div class="decision-label">选择下一步</div>
+            <div class="choices" role="radiogroup" aria-label="计划处理方式">
+              <div class="choice">
+                <input id="approve" name="decision" type="radio" value="approve" />
+                <label for="approve"><span class="choice-dot"></span>批准执行</label>
+              </div>
+              <div class="choice">
+                <input id="revise" name="decision" type="radio" value="revise" />
+                <label for="revise"><span class="choice-dot"></span>返回修改</label>
+              </div>
+              <div class="choice cancel">
+                <input id="cancel" name="decision" type="radio" value="cancel" />
+                <label for="cancel"><span class="choice-dot"></span>取消停止</label>
+              </div>
+            </div>
+
+            <div class="feedback-wrap" id="feedbackWrap">
+              <div class="feedback-inner">
+                <textarea id="feedback" placeholder="说明需要调整的内容，例如：减少技术实现细节，补充目标用户和交付标准。"></textarea>
+              </div>
+            </div>
+
+            <div class="submit-row">
+              <span class="hint" id="hint">请先选择一项操作</span>
+              <button class="submit" id="submit" type="submit" disabled>提交</button>
+            </div>
+          </form>
+
+          <div class="result" id="result" aria-live="polite">
+            <span class="result-mark" id="resultMark">✓</span>
+            <span id="resultText"></span>
+          </div>
+        </article>
+
+        <div class="progress" id="progress">
+          <span class="pulse" aria-hidden="true"></span>
+          <span>计划 0 / 5 · Agent 正在开始执行</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.querySelector('#form');
+    const card = document.querySelector('#card');
+    const feedback = document.querySelector('#feedback');
+    const feedbackWrap = document.querySelector('#feedbackWrap');
+    const hint = document.querySelector('#hint');
+    const submit = document.querySelector('#submit');
+    const result = document.querySelector('#result');
+    const resultText = document.querySelector('#resultText');
+    const resultMark = document.querySelector('#resultMark');
+    const progress = document.querySelector('#progress');
+    const meta = document.querySelector('#meta');
+
+    function selectedDecision() {
+      return document.querySelector('input[name="decision"]:checked')?.value ?? '';
+    }
+
+    function refresh() {
+      const decision = selectedDecision();
+      const revising = decision === 'revise';
+      feedbackWrap.classList.toggle('visible', revising);
+
+      if (!decision) {
+        hint.textContent = '请先选择一项操作';
+        submit.disabled = true;
+        return;
+      }
+      if (revising && !feedback.value.trim()) {
+        hint.textContent = '请填写修改意见后提交';
+        submit.disabled = true;
+        return;
+      }
+      hint.textContent = '选择不会立即执行，提交后才会生效';
+      submit.disabled = false;
+    }
+
+    document.querySelectorAll('input[name="decision"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        refresh();
+        if (input.value === 'revise') requestAnimationFrame(() => feedback.focus());
+      });
+    });
+    feedback.addEventListener('input', refresh);
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const decision = selectedDecision();
+      if (!decision || (decision === 'revise' && !feedback.value.trim())) return;
+
+      const states = {
+        approve: { meta: '5 个步骤 · 已批准并进入执行', mark: '✓', text: '已提交“批准执行”，同一 Run 将切换到 Execute Mode。' },
+        revise: { meta: '5 个步骤 · 已返回修改', mark: '↺', text: `已提交修改意见：“${feedback.value.trim()}”` },
+        cancel: { meta: '5 个步骤 · 已取消', mark: '○', text: '已提交“取消停止”，当前 Run 将结束。' },
+      };
+      const state = states[decision];
+      meta.textContent = state.meta;
+      resultMark.textContent = state.mark;
+      resultText.textContent = state.text;
+      result.classList.add('visible');
+      card.classList.add('collapsed');
+      progress.classList.toggle('visible', decision === 'approve');
+    });
+
+    document.querySelector('#reset').addEventListener('click', () => {
+      form.reset();
+      feedback.value = '';
+      card.classList.remove('collapsed');
+      result.classList.remove('visible');
+      progress.classList.remove('visible');
+      meta.textContent = '5 个步骤 · 等待确认';
+      refresh();
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
