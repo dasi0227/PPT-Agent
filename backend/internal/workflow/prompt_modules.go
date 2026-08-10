@@ -20,30 +20,34 @@ type PromptModule struct {
 }
 
 type runtimePromptInput struct {
-	Phase           RuntimePhase
-	Intent          model.RunIntent
+	Phase           RunPhase
+	Mode            model.RunMode
 	Context         contextengine.ContextPack
+	Plan            *Plan
 	ContextBriefing string
 	State           string
 }
 
-func runtimeSystemPrompt(phase RuntimePhase, intent model.RunIntent, state string) string {
+func runtimeSystemPrompt(phase RunPhase, mode model.RunMode, state string) string {
 	return buildRuntimeSystemPrompt(runtimePromptInput{
-		Phase: phase, Intent: intent, State: state,
+		Phase: phase, Mode: mode, State: state,
 	})
 }
 
 func runtimeSystemPromptForRequest(req AgentRequest, state string) string {
+	if req.Mode == "" {
+		req.Mode = req.Context.Command.Mode
+	}
 	return buildRuntimeSystemPrompt(runtimePromptInput{
-		Phase: req.Phase, Intent: req.Context.Command.Intent,
-		Context: req.Context, ContextBriefing: req.ContextBriefing, State: state,
+		Phase: req.Phase, Mode: req.Mode,
+		Context: req.Context, Plan: req.Plan, ContextBriefing: req.ContextBriefing, State: state,
 	})
 }
 
 func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	modules := []PromptModule{
 		loadPromptModule("core_runtime_policy"),
-		loadPromptModule(modePolicyID(input.Intent)),
+		loadPromptModule(modePolicyID(input.Mode)),
 		loadPromptModule(playbookID(input.Context)),
 		loadPromptModule("completion_repair_guide"),
 		loadPromptModule("finish_contract"),
@@ -56,13 +60,23 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 			ID: "context_briefing", Version: runtimeprompts.Version, Body: input.ContextBriefing,
 		})
 	}
+	if input.Mode == model.ModeExecute && input.Plan != nil && input.Plan.Status == PlanActive {
+		planJSON, _ := json.Marshal(struct {
+			PlanID           string     `json:"plan_id"`
+			ApprovedRevision int        `json:"approved_revision"`
+			Title            string     `json:"title"`
+			Content          string     `json:"content"`
+			Steps            []PlanStep `json:"steps"`
+		}{input.Plan.ID, input.Plan.ApprovedRevision, input.Plan.Title, input.Plan.Content, input.Plan.Steps})
+		modules = append(modules, PromptModule{ID: "approved_plan", Version: runtimeprompts.Version, Body: "Approved plan: this exact structure is the authoritative execution contract.\n" + string(planJSON)})
+	}
 	modules = append(modules, PromptModule{
 		ID: "runtime_state", Version: runtimeprompts.Version, Body: input.State,
 	})
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "<runtime_prompt_manifest version=\"%s\" intent=\"%s\" phase=\"%s\">\n",
-		runtimeprompts.Version, input.Intent, input.Phase)
+	fmt.Fprintf(&b, "<runtime_prompt_manifest version=\"%s\" mode=\"%s\" phase=\"%s\">\n",
+		runtimeprompts.Version, input.Mode, input.Phase)
 	for _, module := range modules {
 		if strings.TrimSpace(module.Body) == "" {
 			continue
@@ -88,15 +102,15 @@ func loadPromptModule(id string) PromptModule {
 	}
 }
 
-func modePolicyID(intent model.RunIntent) string {
-	switch intent {
-	case model.IntentTalk:
+func modePolicyID(mode model.RunMode) string {
+	switch mode {
+	case model.ModeTalk:
 		return "mode_policy_talk"
-	case model.IntentAsk:
+	case model.ModeAsk:
 		return "mode_policy_ask"
-	case model.IntentPlan:
+	case model.ModePlan:
 		return "mode_policy_plan"
-	case model.IntentExecute:
+	case model.ModeExecute:
 		return "mode_policy_execute"
 	default:
 		return "mode_policy_talk"
@@ -106,9 +120,9 @@ func modePolicyID(intent model.RunIntent) string {
 func playbookID(pack contextengine.ContextPack) string {
 	command := pack.Command
 	switch {
-	case command.Intent == model.IntentPlan:
+	case command.Mode == model.ModePlan:
 		return "playbook_read_only_planning"
-	case command.Intent != model.IntentExecute:
+	case command.Mode != model.ModeExecute:
 		return "playbook_read_only_collaboration"
 	case command.Scope.Artifact == model.ArtifactSpec:
 		return "playbook_spec_edit"

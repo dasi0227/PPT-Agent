@@ -1,6 +1,6 @@
 import type {
   PlanState,
-  RunIntent,
+  RunMode,
   RunScope,
   SSEEvent,
   SSEEventName,
@@ -27,7 +27,7 @@ export interface HistorySessionState {
   activeRunId: string | null;
   status: 'idle' | 'running' | 'waiting' | 'done' | 'error' | 'canceled';
   scope?: RunScope;
-  intent?: RunIntent;
+  mode?: RunMode;
   pendingQuestion: { id: string; prompt: string } | null;
 }
 
@@ -60,10 +60,10 @@ function readHistoryScope(data: Record<string, unknown>): RunScope | undefined {
   };
 }
 
-function readHistoryIntent(data: Record<string, unknown>): RunIntent | undefined {
-  const intent = data.intent;
-  return intent === 'talk' || intent === 'ask' || intent === 'plan' || intent === 'execute'
-    ? intent
+function readHistoryIntent(data: Record<string, unknown>): RunMode | undefined {
+  const mode = data.mode;
+  return mode === 'talk' || mode === 'ask' || mode === 'plan' || mode === 'execute'
+    ? mode
     : undefined;
 }
 
@@ -84,14 +84,14 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
   for (const entry of ordered) {
     if (entry.type === 'user_turn') {
       const scope = readHistoryScope(entry.data);
-      const intent = readHistoryIntent(entry.data);
-      if (!scope || !intent) continue;
+      const mode = readHistoryIntent(entry.data);
+      if (!scope || !mode) continue;
       plan = null;
       session = {
         activeRunId: entry.run_id,
         status: 'running',
         scope,
-        intent,
+        mode,
         pendingQuestion: null,
       };
       items.push({
@@ -101,7 +101,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         text: String(entry.data.text ?? ''),
         timestamp: (entry.ts || 0) * 1000,
         scope,
-        intent,
+        mode,
       });
       continue;
     }

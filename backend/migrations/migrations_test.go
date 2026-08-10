@@ -113,7 +113,7 @@ func TestRunCommandMigrationConvertsPersistedRuns(t *testing.T) {
 	`, "t1", "p1", "Thread", "threads/t1.jsonl", "active", 1, 1).Error; err != nil {
 		t.Fatal(err)
 	}
-	legacy := `{"target":{"artifact":"presentation","level":"deck"},"interaction":{"intent":"execute"},"instruction":"build","options":{"language":"en-US","theme_id":"legacy","desired_slide_count":12}}`
+	legacy := `{"target":{"artifact":"presentation","level":"deck"},"interaction":{"mode":"execute"},"instruction":"build","options":{"language":"en-US","theme_id":"legacy","desired_slide_count":12}}`
 	if err := db.Exec(`
 		INSERT INTO runs(
 			id,thread_id,project_id,target_artifact,target_level,target_slide_id,
@@ -127,7 +127,7 @@ func TestRunCommandMigrationConvertsPersistedRuns(t *testing.T) {
 	}
 
 	columns := tableColumns(t, db, "runs")
-	for _, want := range []string{"scope_artifact", "scope_level", "scope_slide_id", "intent", "run_command_json"} {
+	for _, want := range []string{"scope_artifact", "scope_level", "scope_slide_id", "mode", "run_command_json"} {
 		if !columns[want] {
 			t.Fatalf("runs table missing %q: %v", want, columns)
 		}
@@ -139,13 +139,13 @@ func TestRunCommandMigrationConvertsPersistedRuns(t *testing.T) {
 	}
 	var row struct {
 		Artifact string `gorm:"column:scope_artifact"`
-		Intent   string `gorm:"column:intent"`
+		Mode   string `gorm:"column:mode"`
 		Command  string `gorm:"column:run_command_json"`
 	}
-	if err := db.Raw(`SELECT scope_artifact,intent,run_command_json FROM runs WHERE id = ?`, "r1").Scan(&row).Error; err != nil {
+	if err := db.Raw(`SELECT scope_artifact,mode,run_command_json FROM runs WHERE id = ?`, "r1").Scan(&row).Error; err != nil {
 		t.Fatal(err)
 	}
-	if row.Artifact != "ppt" || row.Intent != "execute" {
+	if row.Artifact != "ppt" || row.Mode != "execute" {
 		t.Fatalf("projection not migrated: %+v", row)
 	}
 	var command map[string]any
@@ -155,7 +155,7 @@ func TestRunCommandMigrationConvertsPersistedRuns(t *testing.T) {
 	scope, _ := command["scope"].(map[string]any)
 	options, _ := command["options"].(map[string]any)
 	if scope["artifact"] != "ppt" || scope["level"] != "deck" ||
-		command["intent"] != "execute" || command["instruction"] != "build" ||
+		command["mode"] != "execute" || command["instruction"] != "build" ||
 		options["language"] != "en-US" || options["range"] != "9-15" {
 		t.Fatalf("command not migrated: %+v", command)
 	}

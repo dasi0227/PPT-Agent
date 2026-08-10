@@ -426,7 +426,7 @@ func testRun(id string) model.Run {
 		Command: model.RunCommand{
 			Instruction: "test",
 			Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
-			Intent: model.IntentExecute,
+			Mode: model.ModeExecute,
 		},
 	}
 }

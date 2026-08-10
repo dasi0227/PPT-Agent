@@ -8,11 +8,11 @@ import (
 
 func TestPublicEventTypeSetContainsExactlyElevenEvents(t *testing.T) {
 	want := []EventType{
-		EventRunStarted, EventRunProgress, EventRunFinished, EventPlanUpdated,
+		EventRunStarted, EventRunProgress, EventRunFinished, EventPlanUpdated, EventPlanApprovalRequested, EventPlanApprovalAnswered, EventRunModeChanged,
 		EventMessageReasoning, EventMessageMilestone, EventMessageFinal,
 		EventToolStarted, EventToolCompleted, EventQuestionAsked, EventQuestionAnswered,
 	}
-	if len(PublicEventTypes) != 11 {
+	if len(PublicEventTypes) != 14 {
 		t.Fatalf("public event count=%d", len(PublicEventTypes))
 	}
 	for index, event := range want {
@@ -63,7 +63,7 @@ func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 	payload := RunStartedPayload{
 		PublicEventBase: NewPublicEventBase("r1"),
 		Scope:           RunScope{Artifact: ArtifactPPT, Level: ScopeSlide, SlideID: "s1"},
-		Intent:          IntentExecute,
+		Mode:            ModeExecute,
 		UserInput:       "revise",
 	}
 	if err := ValidatePublicEvent(EventRunStarted, payload); err != nil {
@@ -74,7 +74,7 @@ func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	value := string(raw)
-	for _, want := range []string{`"schema_version":3`, `"scope":`, `"artifact":"ppt"`, `"intent":"execute"`} {
+	for _, want := range []string{`"schema_version":3`, `"scope":`, `"artifact":"ppt"`, `"mode":"execute"`} {
 		if !strings.Contains(value, want) {
 			t.Fatalf("run.started missing %s: %s", want, value)
 		}

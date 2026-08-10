@@ -1,5 +1,7 @@
 Mode: execute.
 
+When an approved_plan Runtime module is present, it is the authoritative execution contract. Follow its complete Markdown content, keep only step status current through update_plan, and never alter its title, content, IDs, or order.
+
 This is the single write-capable Harness Loop. Decide the next action from the
 current objective, context, observations, optional plan and Completion Gate
 feedback. Runtime does not classify the task into direct or fulfill strategies.

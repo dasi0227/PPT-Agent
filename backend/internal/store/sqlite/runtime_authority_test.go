@@ -54,7 +54,7 @@ func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
 		},
 		Command: model.RunCommand{
 			Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
-			Intent: model.IntentTalk, Instruction: "inspect",
+			Mode:  model.ModeTalk, Instruction: "inspect",
 		},
 		Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1,
 	}
@@ -145,7 +145,7 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 		ID: "run-1", ThreadID: "thread-1", ProjectID: "project-1",
 		Command: model.RunCommand{
 			Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
-			Intent: model.IntentExecute, Instruction: "test",
+			Mode:  model.ModeExecute, Instruction: "test",
 		},
 		Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {

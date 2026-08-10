@@ -104,14 +104,14 @@ export interface Run {
   project_id: string;
   status: 'pending' | 'running' | 'waiting' | 'done' | 'failed' | 'canceled';
   scope: RunScope;
-  intent: RunIntent;
+  mode: RunMode;
   events_url: string;
   model: string | null;
 }
 
 export type Artifact = 'spec' | 'ppt';
 export type ScopeLevel = 'slide' | 'deck';
-export type RunIntent = 'talk' | 'ask' | 'plan' | 'execute';
+export type RunMode = 'talk' | 'ask' | 'plan' | 'execute';
 export type RunLanguage = 'zh-CN' | 'en-US';
 export type SlideRange = '5-8' | '9-15' | '16-25' | '26+';
 
@@ -121,7 +121,7 @@ export interface CreateRunRequest {
   client_request_id?: string;
   model?: string;
   scope: RunScope;
-  intent: RunIntent;
+  mode: RunMode;
   instruction: string;
   options?: { language?: RunLanguage; range?: SlideRange };
 }
@@ -172,6 +172,15 @@ export interface RunInputPayload {
   reply_to: string;
 }
 
+export interface PlanApprovalRequest {
+  interaction_id: string;
+  plan_id: string;
+  expected_revision: number;
+  decision: 'approve' | 'revise' | 'cancel';
+  feedback?: string;
+  idempotency_key?: string;
+}
+
 export type JsonRecord = Record<string, unknown>;
 
 export type SSEEventName =
@@ -179,6 +188,9 @@ export type SSEEventName =
   | 'run.progress'
   | 'run.finished'
   | 'plan.updated'
+  | 'plan.approval_requested'
+  | 'plan.approval_answered'
+  | 'run.mode_changed'
   | 'message.reasoning'
   | 'message.milestone'
   | 'message.final'
@@ -199,7 +211,10 @@ export interface PlanStep {
 export interface PlanState {
   id: string;
   title: string;
+  content: string;
   revision: number;
+  approved_revision?: number;
+  status: 'awaiting_approval' | 'active' | 'completed' | 'canceled';
   steps: PlanStep[];
 }
 
@@ -280,7 +295,7 @@ interface SSEEventBase<Name extends SSEEventName, Data> {
 export type SSEEvent =
   | SSEEventBase<'run.started', PublicEventBase & {
       scope: RunScope;
-      intent: RunIntent;
+      mode: RunMode;
       user_input: string;
     }>
   | SSEEventBase<'run.progress', PublicEventBase & {
@@ -296,8 +311,11 @@ export type SSEEvent =
       error?: PublicError;
     }>
   | SSEEventBase<'plan.updated', PublicEventBase & {
-      plan: JsonRecord & { plan_id: string; revision: number; explanation?: string; steps: JsonRecord[] };
+	  plan: JsonRecord & { plan_id: string; revision: number; title: string; content: string; status: string; steps: JsonRecord[] };
     }>
+  | SSEEventBase<'plan.approval_requested', PublicEventBase & { interaction_id: string; plan: JsonRecord & { plan_id: string; revision: number; title: string; content: string; status: string; steps: JsonRecord[] } }>
+  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; plan_id: string; revision: number; decision: 'approve' | 'revise' | 'cancel'; feedback?: string }>
+  | SSEEventBase<'run.mode_changed', PublicEventBase & { previous_mode: RunMode; mode: RunMode }>
   | SSEEventBase<'message.reasoning', PublicEventBase & { message_id: string; text: string }>
   | SSEEventBase<'message.milestone', PublicEventBase & {
       message_id: string;

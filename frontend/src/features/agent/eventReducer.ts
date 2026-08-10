@@ -18,6 +18,7 @@ export type TimelineItemType =
   | 'final'
   | 'tool'
   | 'question'
+  | 'plan_approval'
   | 'terminal_notice';
 
 export interface BaseTimelineItem {
@@ -31,7 +32,7 @@ export interface UserTurnItem extends BaseTimelineItem {
   type: 'user_turn';
   text: string;
   scope?: { artifact: string; level: string; slide_id?: string };
-  intent?: string;
+  mode?: string;
   deliveryStatus?: 'sending' | 'accepted' | 'rejected';
   clientMessageId?: string;
   rejectionCode?: string;
@@ -85,6 +86,11 @@ export interface QuestionItem extends BaseTimelineItem {
   displayText?: string;
 }
 
+export interface PlanApprovalItem extends BaseTimelineItem {
+  type: 'plan_approval'; interactionId: string; plan: PlanState;
+  answer?: { decision: 'approve' | 'revise' | 'cancel'; feedback?: string };
+}
+
 export interface TerminalNoticeItem extends BaseTimelineItem {
   type: 'terminal_notice';
   status: 'failed' | 'canceled';
@@ -103,6 +109,7 @@ export type TimelineItem =
   | FinalMessageItem
   | ToolActivityItem
   | QuestionItem
+  | PlanApprovalItem
   | TerminalNoticeItem;
 
 function normalizeStepStatus(status: unknown): PlanStepStatus {
@@ -111,8 +118,8 @@ function normalizeStepStatus(status: unknown): PlanStepStatus {
 }
 
 export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState | null {
-  if (event.event !== 'plan.updated') return prev;
-  const plan = event.data.plan;
+	if (event.event !== 'plan.updated' && event.event !== 'plan.approval_requested') return prev;
+	const plan = event.data.plan;
   const revision = Number(plan.revision);
   if (prev && revision <= prev.revision) return prev;
   const steps: PlanStep[] = plan.steps.map((step) => ({
@@ -122,7 +129,9 @@ export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState |
   }));
   return {
     id: String(plan.plan_id),
-    title: String(plan.explanation ?? '执行计划'),
+		title: String(plan.title ?? '执行计划'), content: String(plan.content ?? ''),
+		approved_revision: Number(plan.approved_revision || 0) || undefined,
+		status: (String(plan.status) as PlanState['status']),
     revision,
     steps,
   };
@@ -168,8 +177,19 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
   switch (event.event) {
     case 'run.started':
     case 'run.progress':
-    case 'plan.updated':
-      return state;
+	case 'plan.updated':
+	case 'run.mode_changed':
+		return state;
+
+	case 'plan.approval_requested': {
+		const plan = reducePlan(null, event)!;
+		return upsertById(state, { id: `${runId}:plan-approval:${event.data.interaction_id}`, type: 'plan_approval', runId, interactionId: event.data.interaction_id, plan, timestamp });
+	}
+	case 'plan.approval_answered': {
+		const id = `${runId}:plan-approval:${event.data.interaction_id}`;
+		const existing = state.find((item): item is PlanApprovalItem => item.type === 'plan_approval' && item.id === id);
+		return existing ? upsertById(state, { ...existing, answer: { decision: event.data.decision, feedback: event.data.feedback } }) : state;
+	}
 
     case 'message.reasoning': {
       const item: ReasoningItem = {

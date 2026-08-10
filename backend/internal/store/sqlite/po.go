@@ -75,7 +75,7 @@ type runPO struct {
 	ScopeArtifact     string `gorm:"column:scope_artifact"`
 	ScopeLevel        string `gorm:"column:scope_level"`
 	ScopeSlideID      string `gorm:"column:scope_slide_id"`
-	Intent            string `gorm:"column:intent"`
+	Mode              string `gorm:"column:mode"`
 	RunCommandJSON    string `gorm:"column:run_command_json"`
 	ClientRequestID   string `gorm:"column:client_request_id"`
 	ModelProfileName  string `gorm:"column:model_profile_name"`
@@ -111,7 +111,7 @@ func runToPO(m model.Run) runPO {
 		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID,
 		ScopeArtifact: string(m.Command.Scope.Artifact),
 		ScopeLevel:    string(m.Command.Scope.Level), ScopeSlideID: m.Command.Scope.SlideID,
-		Intent:            string(m.Command.Intent),
+		Mode:              string(m.Command.Mode),
 		RunCommandJSON:    string(raw),
 		ClientRequestID:   m.ClientRequestID,
 		ModelProfileName:  m.Model.ProfileName,

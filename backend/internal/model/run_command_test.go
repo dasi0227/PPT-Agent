@@ -7,23 +7,23 @@ import (
 func TestRunCommandValidation(t *testing.T) {
 	valid := RunCommand{
 		Scope:       RunScope{Artifact: ArtifactPPT, Level: ScopeSlide, SlideID: "stable"},
-		Intent:      IntentExecute,
+		Mode:      ModeExecute,
 		Instruction: "revise",
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid command rejected: %v", err)
 	}
 	cases := []RunCommand{
-		{Scope: RunScope{Artifact: "generate", Level: ScopeDeck}, Intent: valid.Intent, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: "current"}, Intent: valid.Intent, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeSlide}, Intent: valid.Intent, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck, SlideID: "current"}, Intent: valid.Intent, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck, SlideID: "stable"}, Intent: valid.Intent, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Intent: "consult", Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Intent: valid.Intent, Instruction: "  "},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Intent: valid.Intent, Instruction: "x", Options: RunOptions{Language: "fr-FR"}},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Intent: valid.Intent, Instruction: "x", Options: RunOptions{Range: "8-15"}},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeSlide, SlideID: "stable"}, Intent: valid.Intent, Instruction: "x", Options: RunOptions{Range: SlideRangeFiveToEight}},
+		{Scope: RunScope{Artifact: "generate", Level: ScopeDeck}, Mode: valid.Mode, Instruction: "x"},
+		{Scope: RunScope{Artifact: ArtifactSpec, Level: "current"}, Mode: valid.Mode, Instruction: "x"},
+		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeSlide}, Mode: valid.Mode, Instruction: "x"},
+		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck, SlideID: "current"}, Mode: valid.Mode, Instruction: "x"},
+		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck, SlideID: "stable"}, Mode: valid.Mode, Instruction: "x"},
+		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Mode: "consult", Instruction: "x"},
+		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Mode: valid.Mode, Instruction: "  "},
+		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Mode: valid.Mode, Instruction: "x", Options: RunOptions{Language: "fr-FR"}},
+		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: "8-15"}},
+		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeSlide, SlideID: "stable"}, Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: SlideRangeFiveToEight}},
 	}
 	for i, command := range cases {
 		if err := command.Validate(); err == nil {
@@ -35,12 +35,12 @@ func TestRunCommandValidation(t *testing.T) {
 func TestRunCommandValidationAcceptsPlanIntentAndOptions(t *testing.T) {
 	command := RunCommand{
 		Scope:       RunScope{Artifact: ArtifactSpec, Level: ScopeDeck},
-		Intent:      IntentPlan,
+		Mode:      ModePlan,
 		Instruction: "plan the work",
 		Options:     RunOptions{Language: LanguageChinese, Range: SlideRangeNineToFifteen},
 	}
 	if err := command.Validate(); err != nil {
-		t.Fatalf("plan intent rejected: %v", err)
+		t.Fatalf("plan mode rejected: %v", err)
 	}
 }
 

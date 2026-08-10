@@ -1,9 +1,9 @@
-import type { Artifact, CreateRunRequest, RunIntent, ScopeLevel, Slide } from '../../api/types';
+import type { Artifact, CreateRunRequest, RunMode, ScopeLevel, Slide } from '../../api/types';
 
 export function createTargetedRun(input: {
   artifact: Artifact;
   level: ScopeLevel;
-  intent: RunIntent;
+  mode: RunMode;
   instruction: string;
   slides: Slide[];
   currentPage: number;
@@ -16,7 +16,7 @@ export function createTargetedRun(input: {
       level,
       ...(level === 'slide' ? { slide_id: slide.id } : {}),
     },
-    intent: input.intent,
+    mode: input.mode,
     instruction: input.instruction,
   };
 }

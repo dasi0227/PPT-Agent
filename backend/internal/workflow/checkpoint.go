@@ -56,7 +56,7 @@ const (
 	checkpointPeriodic           checkpointBoundary = "periodic"
 )
 
-func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state *runtimeState, boundary checkpointBoundary, questionID string) error {
+func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state *RunState, boundary checkpointBoundary, questionID string) error {
 	if input.Checkpoint == nil || state == nil {
 		return nil
 	}
@@ -80,7 +80,7 @@ func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state 
 	return nil
 }
 
-func (r *Runtime) maybePeriodicCheckpoint(ctx context.Context, input RuntimeInput, state *runtimeState) error {
+func (r *Runtime) maybePeriodicCheckpoint(ctx context.Context, input RuntimeInput, state *RunState) error {
 	if state == nil || input.Checkpoint == nil {
 		return nil
 	}

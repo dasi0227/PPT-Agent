@@ -1,21 +1,21 @@
 import { MessageCircleQuestion, MessagesSquare } from 'lucide-react';
 import type React from 'react';
-import type { RunIntent } from '../../api/types';
+import type { RunMode } from '../../api/types';
 import { cn } from '../../lib/utils';
 
 interface InteractionModeButtonsProps {
-  intent: RunIntent;
-  onIntentChange: (intent: RunIntent) => void;
+  mode: RunMode;
+  onIntentChange: (mode: RunMode) => void;
   disabled?: boolean;
 }
 
 export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
-  intent,
+  mode,
   onIntentChange,
   disabled,
 }) => {
-  const isTalk = intent === 'talk';
-  const isAsk = intent === 'ask';
+  const isTalk = mode === 'talk';
+  const isAsk = mode === 'ask';
 
   const toggleTalk = () => {
     onIntentChange(isTalk ? 'execute' : 'talk');

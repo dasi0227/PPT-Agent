@@ -43,3 +43,18 @@ func (c *checkpoint) Ask(
 		return model.QuestionAnswer{}, "", ctx.Err()
 	}
 }
+
+func (c *checkpoint) AskPlanApproval(ctx context.Context, payload model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
+	c.queue.MarkPlanApproval(payload)
+	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
+	if err := c.bus.Emit(ctx, model.EventPlanApprovalRequested, payload); err != nil {
+		return model.PlanApprovalAnswer{}, err
+	}
+	select {
+	case answer := <-c.queue.PlanApprovalSignal():
+		c.engine.setStatus(ctx, c.runID, model.RunRunning)
+		return answer, nil
+	case <-ctx.Done():
+		return model.PlanApprovalAnswer{}, ctx.Err()
+	}
+}

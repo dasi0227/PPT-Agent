@@ -12,7 +12,7 @@ vi.mock('../api/runs', () => ({
   runsApi: {
     create: async (threadId: string, payload: any) => ({
       id: `run_${threadId}`, thread_id: threadId, project_id: 'p1', status: 'running',
-      scope: payload.scope, intent: payload.intent, events_url: '',
+      scope: payload.scope, mode: payload.mode, events_url: '',
     }),
     submitInput: async () => ({}),
     cancel: async () => ({}),
@@ -24,7 +24,7 @@ import { IDLE_SESSION, useRunStore } from './runStore';
 
 const request = (instruction: string) => ({
   scope: { artifact: 'ppt' as const, level: 'deck' as const },
-  intent: 'execute' as const ,
+  mode: 'execute' as const ,
   instruction,
 });
 const base = (runId: string) => ({

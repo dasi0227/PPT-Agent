@@ -46,7 +46,7 @@ func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
 }
 
 // isWhitelistedForHistory persists only product history. Progress remains in the
-// run event store for Last-Event-ID replay but is intentionally transient here.
+// run event store for Last-Event-ID replay but is modeionally transient here.
 func isWhitelistedForHistory(evt model.EventType) bool {
 	switch evt {
 	case model.EventRunStarted, model.EventPlanUpdated,
@@ -73,7 +73,7 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 		entry.Turn = "user"
 		entry.Type = "user_turn"
 		entry.Data = map[string]any{
-			"text": text, "scope": data["scope"], "intent": data["intent"],
+			"text": text, "scope": data["scope"], "mode": data["mode"],
 		}
 	default:
 		entry.Turn = "agent"

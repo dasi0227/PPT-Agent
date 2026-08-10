@@ -18,7 +18,7 @@ function setSession(items: TimelineItem[], overrides: Record<string, unknown> = 
         activeRunId: 'r1',
         status: 'running',
         scope: { artifact: 'ppt', level: 'deck' },
-        intent: 'execute',
+        mode: 'execute',
         timelineItems: items,
         pendingQuestion: null,
         progress: null,
@@ -68,6 +68,12 @@ describe('Timeline', () => {
     expect(screen.getByText('我先确认全局设计。')).toBeInTheDocument();
     expect(screen.getByText('全局设计已经完成。')).toBeInTheDocument();
     expect(screen.getByText('整份演示文稿已经完成。')).toBeInTheDocument();
+    const userCopyButton = screen.getByRole('button', { name: '复制用户消息' });
+    expect(userCopyButton).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
+    expect(userCopyButton.parentElement).toHaveClass('group');
+    const replyCopyButton = screen.getByRole('button', { name: '复制回复' });
+    expect(replyCopyButton).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
+    expect(replyCopyButton.closest('article')).toHaveClass('group');
     // 计划已迁出消息流，改由 composer 上的 PlanIndicator 承载，不应出现在时间线中。
     expect(screen.queryByText('执行计划')).toBeNull();
     expect(screen.queryByText(/Context|Strategy|Completion Gate/)).toBeNull();

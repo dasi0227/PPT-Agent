@@ -9,7 +9,7 @@ const entry = (seq: number, type: string, data: Record<string, unknown>, runId =
 describe('history hydrator', () => {
   it('reuses public reducers for tools, plan, question, final, and terminal', () => {
     const hydrated = hydrateRunFromHistory([
-      entry(1, 'user_turn', { text: '生成 PPT', scope: { artifact: 'ppt', level: 'deck' }, intent: 'execute' }),
+      entry(1, 'user_turn', { text: '生成 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
       entry(2, 'plan.updated', { ...base, plan: { plan_id: 'p1', revision: 1, explanation: '开始', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] } }),
       entry(3, 'tool.started', { ...base, call_id: 'c1', tool: 'write_ppt', display: { label: '生成页面' } }),
       entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'write_ppt', status: 'completed', display: { label: '已生成页面' } }),
@@ -38,7 +38,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', {
         text: 'legacy',
         target: { artifact: 'presentation', level: 'deck' },
-        interaction: { intent: 'execute' },
+        interaction: { mode: 'execute' },
       }),
       entry(2, 'message.final', {
         ...base, schema_version: 2, message_id: 'legacy-final', text: 'legacy',
@@ -53,7 +53,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', {
         text: '开始',
         scope: { artifact: 'ppt', level: 'deck' },
-        intent: 'execute',
+        mode: 'execute',
       }),
       entry(2, 'steering', {
         client_message_id: 'msg-1', text: '改成深色', status: 'injected',
@@ -77,14 +77,14 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', {
         text: '第一轮',
         scope: { artifact: 'ppt', level: 'deck' },
-        intent: 'execute',
+        mode: 'execute',
       }, 'old'),
       entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成' }, 'old'),
       entry(3, 'run.finished', { ...base, run_id: 'old', status: 'completed', duration_ms: 10 }, 'old'),
       entry(1, 'user_turn', {
         text: '第二轮',
         scope: { artifact: 'ppt', level: 'slide', slide_id: 's2' },
-        intent: 'ask',
+        mode: 'ask',
       }, 'new'),
       entry(2, 'question.asked', {
         ...base,

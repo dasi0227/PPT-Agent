@@ -161,7 +161,7 @@ describe('App Level Interactions', () => {
             activeRunId: 'r1',
             status: 'running',
             scope: { artifact: 'ppt', level: 'slide' },
-            intent: 'execute',
+			mode: 'execute',
             timelineItems: [
               { id: '1', type: 'reasoning', messageId: 'm1', text: 'Hello from Agent', timestamp: Date.now() }
             ],

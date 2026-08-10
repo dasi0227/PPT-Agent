@@ -42,7 +42,7 @@ func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	}
 	spec := model.RunCommand{
 		Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
-		Intent: model.IntentExecute,
+		Mode: model.ModeExecute,
 		Instruction: "build the deck",
 	}
 	if err := st.CreateRun(ctx, model.Run{

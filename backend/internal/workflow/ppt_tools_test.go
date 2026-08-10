@@ -423,7 +423,7 @@ func TestCompletionGateRequiresLatestHTMLEvidence(t *testing.T) {
 	ledger := NewEvidenceLedger()
 	ledger.Record(staticEvidence(resource, hash))
 	ctx := CompletionContext{
-		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
+		Mode: model.ModeExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
 		Session: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
 	if result := NewCompletionGate().Check(ctx); result.Accepted || !hasCompletionCode(result, "EVIDENCE_HTML_MISSING") {
@@ -448,7 +448,7 @@ func TestCompletionGateEnforcesRunCommandOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := CompletionContext{
-		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
+		Mode: model.ModeExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
 		Session: tx, Context: pack,
 	}
 	result := NewCompletionGate().Check(ctx)
@@ -471,7 +471,7 @@ func TestCompletionGateEnforcesRunCommandOptions(t *testing.T) {
 func TestCompletionGateRejectsOutOfScopeChanges(t *testing.T) {
 	_, pack := toolProject(t, model.ArtifactPPT, model.ScopeSlide)
 	result := NewCompletionGate().Check(CompletionContext{
-		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
+		Mode: model.ModeExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
 		Context: pack,
 		Changes: ChangeSet{Updated: []ArtifactChange{{
 			Artifact: ArtifactRef{Kind: ArtifactSlideHTML, ID: "another-slide"},
@@ -630,13 +630,13 @@ func TestRegistryDisclosesOnlyFixedBusinessSurface(t *testing.T) {
 	if err := (DefaultDomainToolProvider{Pack: pack, Renderer: &recordingRenderer{}}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	all := schemasByName(registry.Disclose(PhaseExecuting, model.IntentExecute))
+	all := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute))
 	for _, name := range []string{"read_ppt", "write_ppt", "edit_ppt", "search_refs", "render_slide"} {
 		if !all[name] {
 			t.Fatalf("%s not disclosed: %v", name, all)
 		}
 	}
-	chat := schemasByName(registry.Disclose(PhaseChat, model.IntentTalk))
+	chat := schemasByName(registry.Disclose(PhaseChat, model.ModeTalk))
 	if chat["write_ppt"] || chat["edit_ppt"] {
 		t.Fatalf("talk disclosed writes: %v", chat)
 	}
@@ -682,7 +682,7 @@ func recordResultEvidence(ledger *EvidenceLedger, result ToolResult) {
 
 func completionContext(pack contextengine.ContextPack, tx *RunSession, ledger *EvidenceLedger) CompletionContext {
 	return CompletionContext{
-		Intent: model.IntentExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
+		Mode: model.ModeExecute, FinishPhase: PhaseExecuting, Scope: pack.Command.Scope,
 		Session: tx, Changes: tx.ChangeSet(), Evidence: ledger, Context: pack,
 	}
 }
@@ -699,7 +699,7 @@ func toolInput(pack contextengine.ContextPack, dir string, tx *RunSession, args 
 	return DomainToolInput{
 		Args: args, Context: pack, ProjectDir: dir, RunID: "run-1", Session: tx,
 		Scope: pack.Command.Scope, Phase: PhaseExecuting,
-		Intent: pack.Command.Intent,
+		Mode: pack.Command.Mode,
 	}
 }
 
@@ -739,7 +739,7 @@ func toolProject(t *testing.T, artifact model.Artifact, level model.ScopeLevel) 
 	pack := contextengine.ContextPack{
 		SchemaVersion: contextengine.SchemaVersion,
 		Command: model.RunCommand{
-			Scope: target, Intent: model.IntentExecute, Instruction: "test",
+			Scope: target, Mode: model.ModeExecute, Instruction: "test",
 		},
 		Project: contextengine.ProjectContext{ID: "p1", Title: "Test"},
 		Outline: contextengine.OutlineContext{

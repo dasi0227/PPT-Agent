@@ -8,16 +8,16 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-type RuntimePhase string
+type RunPhase string
 
 const (
-	PhaseChat            RuntimePhase = "chat"
-	PhasePlanning        RuntimePhase = "planning"
-	PhaseExecuting       RuntimePhase = "executing"
-	PhaseWaitingInput    RuntimePhase = "waiting_input"
-	PhaseCompletionCheck RuntimePhase = "completion_check"
-	PhaseCommitting      RuntimePhase = "committing"
-	PhaseTerminal        RuntimePhase = "terminal"
+	PhaseChat            RunPhase = "chat"
+	PhasePlanning        RunPhase = "planning"
+	PhaseExecuting       RunPhase = "executing"
+	PhaseWaitingInput    RunPhase = "waiting_input"
+	PhaseCompletionCheck RunPhase = "completion_check"
+	PhaseCommitting      RunPhase = "committing"
+	PhaseTerminal        RunPhase = "terminal"
 )
 
 type WorkflowStatus string
@@ -159,7 +159,7 @@ func DefaultRuntimeBudget() RuntimeBudget {
 
 type StructuredOutcome struct {
 	LoopID  string         `json:"loop_id"`
-	Phase   RuntimePhase   `json:"phase"`
+	Phase   RunPhase       `json:"phase"`
 	Status  WorkflowStatus `json:"status"`
 	Scope   model.RunScope `json:"scope"`
 	Changes ChangeSet      `json:"changes"`

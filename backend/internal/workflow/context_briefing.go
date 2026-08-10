@@ -9,19 +9,19 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func BuildContextBriefing(pack contextengine.ContextPack, state *runtimeState) string {
+func BuildContextBriefing(pack contextengine.ContextPack, state *RunState) string {
 	if state == nil {
 		return ""
 	}
 	sections := []string{
 		"Objective: " + strings.TrimSpace(pack.Command.Instruction),
-		fmt.Sprintf("Mode: intent=%s phase=%s", pack.Command.Intent, state.phase),
+		fmt.Sprintf("Mode: mode=%s phase=%s", state.mode, state.phase),
 		"Authority: use only disclosed tools and RunCommand.scope; ordinary assistant text never completes the run.",
 	}
-	if pack.Command.Intent == model.IntentPlan {
+	if state.mode == model.ModePlan {
 		sections = append(sections, "Authority detail: this is read-only planning; do not call update_plan or write tools.")
 	}
-	if pack.Command.Intent == model.IntentExecute {
+	if state.mode == model.ModeExecute {
 		sections = append(sections, "Authority detail: writes are allowed only through the active run session and only inside RunCommand.scope.")
 	}
 	if state.requirements != nil {
@@ -31,13 +31,13 @@ func BuildContextBriefing(pack contextengine.ContextPack, state *runtimeState) s
 		sections = append(sections, "Retrieved context:\n"+retrievedContextBrief(state.retrievedContext))
 	}
 	sections = append(sections, "Working set:\n"+workingSetSummary(state))
-	if focus := nextFocus(state, pack.Command.Intent); focus != "" {
+	if focus := nextFocus(state, state.mode); focus != "" {
 		sections = append(sections, "Next focus: "+focus)
 	}
 	return strings.Join(sections, "\n")
 }
 
-func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, state *runtimeState) error {
+func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, state *RunState) error {
 	if state == nil {
 		return nil
 	}
@@ -45,16 +45,16 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 		Index: state.contextIndex, Embedder: r.Embedder, Scope: state.scope,
 	}
 	result, err := retriever.Retrieve(ctx, RetrievalQuery{
-		RunID: state.runID, Command: input.Context.Command, RequirementLedger: state.requirements,
+		RunID: state.runID, Command: state.pack.Command, RequirementLedger: state.requirements,
 		LatestIssues: state.issues, Phase: state.phase,
-		QueryText: retrievalQueryText(input.Context, state), Limit: 5, DetailBudget: 1200,
+		QueryText: retrievalQueryText(state.pack, state), Limit: 5, DetailBudget: 1200,
 	})
 	if err != nil {
 		return err
 	}
 	state.retrievedContext = result.Results
 	state.contextIndexRef = result.IndexRef
-	state.contextBriefing = BuildContextBriefing(input.Context, state)
+	state.contextBriefing = BuildContextBriefing(state.pack, state)
 	recordTrace(input.Trace, state.runID, "context.retrieved", map[string]any{
 		"loop_id": state.loopID, "query": result.Query, "count": len(result.Results),
 		"estimated_tokens": result.EstimatedTokens, "index_ref": result.IndexRef,
@@ -62,7 +62,7 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 	return nil
 }
 
-func retrievalQueryText(pack contextengine.ContextPack, state *runtimeState) string {
+func retrievalQueryText(pack contextengine.ContextPack, state *RunState) string {
 	parts := []string{pack.Command.Instruction}
 	if state.plan != nil {
 		parts = append(parts, state.plan.Brief())
@@ -100,7 +100,7 @@ func shortHash(value string) string {
 	return value[:12]
 }
 
-func workingSetSummary(state *runtimeState) string {
+func workingSetSummary(state *RunState) string {
 	lines := []string{}
 	if state.plan != nil {
 		lines = append(lines, "- Plan: "+state.plan.Brief())
@@ -145,14 +145,14 @@ func workingSetSummary(state *runtimeState) string {
 	return strings.Join(lines, "\n")
 }
 
-func nextFocus(state *runtimeState, intent model.RunIntent) string {
-	if intent == model.IntentExecute && state.plan != nil && state.plan.HasBlockingSteps() {
+func nextFocus(state *RunState, mode model.RunMode) string {
+	if mode == model.ModeExecute && state.plan != nil && state.plan.HasBlockingSteps() {
 		return "complete the next pending plan step and keep the plan statuses current."
 	}
-	if intent == model.IntentExecute && len(state.changeSet().All()) > 0 {
+	if mode == model.ModeExecute && len(state.changeSet().All()) > 0 {
 		return "ensure latest changed targets have fresh required evidence, then finish with complete message."
 	}
-	if intent == model.IntentPlan {
+	if mode == model.ModePlan {
 		return "deliver the full plan in finish(message), not in ordinary assistant text."
 	}
 	return "use the next disclosed tool or finish(message) when complete."

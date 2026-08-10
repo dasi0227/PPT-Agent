@@ -63,8 +63,8 @@ type DomainToolInput struct {
 	RunID      string
 	Session    *RunSession
 	Scope      model.RunScope
-	Phase      RuntimePhase
-	Intent     model.RunIntent
+	Phase      RunPhase
+	Mode       model.RunMode
 }
 
 // ChangedTarget is deliberately domain-shaped. Model-visible results never
@@ -112,7 +112,7 @@ type ToolDescriptor struct {
 	ReadOnly   bool
 	Capability string
 	Risk       RiskLevel
-	Phases     []RuntimePhase
+	Phases     []RunPhase
 }
 
 type ToolRegistry struct {
@@ -124,7 +124,7 @@ func NewToolRegistry() *ToolRegistry {
 	return &ToolRegistry{tools: map[string]ToolDescriptor{}, order: []string{}}
 }
 
-func (r *ToolRegistry) RegisterDomainTool(tool DomainTool, readOnly bool, phases ...RuntimePhase) error {
+func (r *ToolRegistry) RegisterDomainTool(tool DomainTool, readOnly bool, phases ...RunPhase) error {
 	capability := "read"
 	risk := RiskLow
 	if !readOnly {
@@ -133,7 +133,7 @@ func (r *ToolRegistry) RegisterDomainTool(tool DomainTool, readOnly bool, phases
 	return r.Register(tool, readOnly, capability, risk, phases...)
 }
 
-func (r *ToolRegistry) Register(tool DomainTool, readOnly bool, capability string, risk RiskLevel, phases ...RuntimePhase) error {
+func (r *ToolRegistry) Register(tool DomainTool, readOnly bool, capability string, risk RiskLevel, phases ...RunPhase) error {
 	if tool == nil || tool.Schema().Name == "" {
 		return errors.New("invalid domain tool")
 	}
@@ -142,11 +142,11 @@ func (r *ToolRegistry) Register(tool DomainTool, readOnly bool, capability strin
 		return fmt.Errorf("duplicate tool %s", name)
 	}
 	if len(phases) == 0 {
-		phases = []RuntimePhase{PhaseChat, PhasePlanning, PhaseExecuting}
+		phases = []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}
 	}
 	r.tools[name] = ToolDescriptor{
 		Tool: tool, ReadOnly: readOnly, Capability: capability, Risk: risk,
-		Phases: append([]RuntimePhase{}, phases...),
+		Phases: append([]RunPhase{}, phases...),
 	}
 	r.order = append(r.order, name)
 	return nil
@@ -186,14 +186,14 @@ func AllowsArtifact(scope model.RunScope, ref ArtifactRef) bool {
 	return AllowsWrite(scope, resourceForArtifact(ref))
 }
 
-func (r *ToolRegistry) Disclose(phase RuntimePhase, intent model.RunIntent) []ToolSchema {
+func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode) []ToolSchema {
 	out := []ToolSchema{}
 	for _, name := range r.order {
 		desc := r.tools[name]
 		if !containsPhase(desc.Phases, phase) {
 			continue
 		}
-		if intent != model.IntentExecute && !desc.ReadOnly {
+		if mode != model.ModeExecute && !desc.ReadOnly {
 			continue
 		}
 		if phase == PhasePlanning && !desc.ReadOnly {
@@ -219,8 +219,8 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	if !containsPhase(desc.Phases, input.Phase) {
 		return failedToolResult(ErrCapabilityDenied.Error(), "tool is not allowed in the current runtime phase", false)
 	}
-	if input.Intent != model.IntentExecute && !desc.ReadOnly {
-		return failedToolResult(ErrCapabilityDenied.Error(), "read-only intent cannot use write capabilities", false)
+	if input.Mode != model.ModeExecute && !desc.ReadOnly {
+		return failedToolResult(ErrCapabilityDenied.Error(), "read-only mode cannot use write capabilities", false)
 	}
 	if input.Phase == PhasePlanning && !desc.ReadOnly {
 		return failedToolResult(ErrCapabilityDenied.Error(), "planning phase cannot use write capabilities", false)
@@ -249,7 +249,7 @@ func executionCapabilityAllowed(desc ToolDescriptor, input DomainToolInput) bool
 	switch desc.Risk {
 	case RiskLow:
 	case RiskMedium:
-		if desc.ReadOnly || input.Intent != model.IntentExecute || input.Phase != PhaseExecuting {
+		if desc.ReadOnly || input.Mode != model.ModeExecute || input.Phase != PhaseExecuting {
 			return false
 		}
 	default:
@@ -295,7 +295,7 @@ func failedToolResult(code, summary string, retryable bool) ToolResult {
 	}
 }
 
-func containsPhase(phases []RuntimePhase, phase RuntimePhase) bool {
+func containsPhase(phases []RunPhase, phase RunPhase) bool {
 	for _, value := range phases {
 		if value == phase {
 			return true

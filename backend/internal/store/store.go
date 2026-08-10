@@ -26,6 +26,7 @@ type Store interface {
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)
 	SetRunStatus(ctx context.Context, id string, status model.RunStatus) error
+	UpdateRunMode(ctx context.Context, id string, mode model.RunMode) error
 	RequestRunCancel(ctx context.Context, id string, requestedAt int64) (model.Run, error)
 	AcquireIdempotency(ctx context.Context, record model.IdempotencyRecord) (model.IdempotencyRecord, bool, error)
 	CompleteIdempotency(ctx context.Context, scope, ownerID, key, status, resultJSON string) error

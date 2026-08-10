@@ -93,6 +93,13 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		SemanticReviews:     r.semanticReviewer,
 		SemanticReviewStore: optionalSemanticReviewStore(r.store),
 		ResumeCheckpoint:    r.resumeCheckpoint,
+		PersistMode:         func(ctx context.Context, mode model.RunMode) error { return r.store.UpdateRunMode(ctx, r.runID, mode) },
+		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
+			pack := r.pack
+			pack.Command.Mode = mode
+			pack.Manifest.ReadOnly = mode != model.ModeExecute
+			return pack, nil
+		},
 	})
 	if outcome.Status == workflow.StatusCompleted {
 		memoryStore := contextengine.ThreadMemoryStore{}
@@ -132,7 +139,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			agentErr.Details["next_action"] = "请选择支持工具调用的模型。"
 			return model.Run{}, agentErr
 		}
-		if command.Intent == model.IntentExecute &&
+		if command.Mode == model.ModeExecute &&
 			command.Scope.Artifact == model.ArtifactPPT &&
 			!capabilities.Vision {
 			agentErr := model.NewAgentError("MODEL_CAPABILITY_MISMATCH", "create_run", nil)
@@ -166,7 +173,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
 		"instruction": command.Instruction, "scope": command.Scope,
-		"intent": command.Intent, "options": command.Options, "model": p.Model,
+		"mode": command.Mode, "options": command.Options, "model": p.Model,
 	})
 	if err != nil {
 		return model.Run{}, err
@@ -412,6 +419,10 @@ func readImageWithContext(ctx context.Context, path string, maxBytes int) ([]byt
 
 func (svc *RunService) InjectInput(ctx context.Context, runID, content, replyTo string) error {
 	return svc.engine.InjectInput(ctx, runID, content, replyTo)
+}
+
+func (svc *RunService) SubmitPlanApproval(ctx context.Context, runID string, answer model.PlanApprovalAnswer) error {
+	return svc.engine.SubmitPlanApproval(ctx, runID, answer)
 }
 
 func (svc *RunService) Cancel(ctx context.Context, runID string) error {

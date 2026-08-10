@@ -10,7 +10,7 @@ export interface SSEOptions {
 }
 
 export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
-  'run.started', 'run.progress', 'run.finished', 'plan.updated',
+  'run.started', 'run.progress', 'run.finished', 'plan.updated', 'plan.approval_requested', 'plan.approval_answered', 'run.mode_changed',
   'message.reasoning', 'message.milestone', 'message.final',
   'tool.started', 'tool.completed', 'question.asked', 'question.answered',
 ];
@@ -53,7 +53,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
   switch (eventName) {
     case 'run.started':
       return validRunScope(data.scope)
-        && ['talk', 'ask', 'plan', 'execute'].includes(String(data.intent))
+        && ['talk', 'ask', 'plan', 'execute'].includes(String(data.mode))
         && hasString(data, 'user_input');
     case 'run.progress':
       return progressStages.has(String(data.stage))
@@ -68,6 +68,15 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && (data.status !== 'failed' || isRecord(data.error));
     case 'plan.updated':
       return validPlan(data.plan);
+    case 'plan.approval_requested':
+      return hasString(data, 'interaction_id') && validPlan(data.plan);
+    case 'plan.approval_answered':
+      return hasString(data, 'interaction_id') && hasString(data, 'plan_id') && isNonNegativeInteger(data.revision)
+        && ['approve', 'revise', 'cancel'].includes(String(data.decision))
+        && (data.decision !== 'revise' || hasSafeString(data, 'feedback'));
+    case 'run.mode_changed':
+      return ['talk', 'ask', 'plan', 'execute'].includes(String(data.previous_mode))
+        && ['talk', 'ask', 'plan', 'execute'].includes(String(data.mode));
     case 'message.reasoning':
     case 'message.final':
       return hasString(data, 'message_id')
@@ -192,8 +201,8 @@ function validPlan(value: unknown): boolean {
     || typeof value.revision !== 'number'
     || !Number.isInteger(value.revision)
     || value.revision < 1
-    || (value.explanation !== undefined
-      && (typeof value.explanation !== 'string' || rawHTMLPattern.test(value.explanation)))
+    || !hasSafeString(value, 'title') || !hasSafeString(value, 'content')
+    || !['awaiting_approval', 'active', 'completed', 'canceled'].includes(String(value.status))
     || !Array.isArray(value.steps)
     || value.steps.length === 0) return false;
   const ids = new Set<string>();

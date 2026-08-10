@@ -12,8 +12,8 @@ import (
 
 func activeRunSpec() model.RunCommand {
 	return model.RunCommand{
-		Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
-		Intent: model.IntentExecute,
+		Scope:       model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+		Mode:        model.ModeExecute,
 		Instruction: "test",
 	}
 }

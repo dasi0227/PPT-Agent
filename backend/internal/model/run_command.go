@@ -20,13 +20,13 @@ const (
 	ScopeDeck  ScopeLevel = "deck"
 )
 
-type RunIntent string
+type RunMode string
 
 const (
-	IntentTalk    RunIntent = "talk"
-	IntentAsk     RunIntent = "ask"
-	IntentPlan    RunIntent = "plan"
-	IntentExecute RunIntent = "execute"
+	ModeTalk    RunMode = "talk"
+	ModeAsk     RunMode = "ask"
+	ModePlan    RunMode = "plan"
+	ModeExecute RunMode = "execute"
 )
 
 type RunLanguage string
@@ -58,7 +58,7 @@ type RunOptions struct {
 
 type RunCommand struct {
 	Scope       RunScope   `json:"scope"`
-	Intent      RunIntent  `json:"intent"`
+	Mode        RunMode    `json:"mode"`
 	Instruction string     `json:"instruction"`
 	Options     RunOptions `json:"options,omitempty"`
 }
@@ -81,10 +81,10 @@ func (c RunCommand) Validate() error {
 	if c.Scope.SlideID == "current" {
 		return fmt.Errorf("%w: current must be resolved to a stable slide_id", ErrInvalidRunCommand)
 	}
-	switch c.Intent {
-	case IntentTalk, IntentAsk, IntentPlan, IntentExecute:
+	switch c.Mode {
+	case ModeTalk, ModeAsk, ModePlan, ModeExecute:
 	default:
-		return fmt.Errorf("%w: unsupported intent %q", ErrInvalidRunCommand, c.Intent)
+		return fmt.Errorf("%w: unsupported mode %q", ErrInvalidRunCommand, c.Mode)
 	}
 	if strings.TrimSpace(c.Instruction) == "" {
 		return fmt.Errorf("%w: instruction is required", ErrInvalidRunCommand)

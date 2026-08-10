@@ -43,7 +43,7 @@ describe('public event reducer', () => {
     const progress = reduceSSEEvent([], event('run.progress', { stage: 'writing', text: '正在生成页面' }));
     expect(progress).toEqual([]);
     const planEvent = event('plan.updated', {
-      plan: { plan_id: 'p1', revision: 1, explanation: '执行', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] },
+	  plan: { plan_id: 'p1', revision: 1, title: '执行', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] },
     });
     expect(reduceSSEEvent([], planEvent)).toEqual([]);
     expect(reducePlan(null, planEvent)).toMatchObject({ id: 'p1', revision: 1 });
@@ -51,10 +51,10 @@ describe('public event reducer', () => {
 
   it('ignores stale plan revisions', () => {
     const revision2 = event('plan.updated', {
-      plan: { plan_id: 'p1', revision: 2, explanation: '新', steps: [{ id: 's1', title: '生成', status: 'completed' }] },
+	  plan: { plan_id: 'p1', revision: 2, title: '新', content: '完整计划', status: 'active', steps: [{ id: 's1', title: '生成', status: 'completed' }] },
     });
     const revision1 = event('plan.updated', {
-      plan: { plan_id: 'p1', revision: 1, explanation: '旧', steps: [{ id: 's1', title: '生成', status: 'pending' }] },
+	  plan: { plan_id: 'p1', revision: 1, title: '旧', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'pending' }] },
     });
     const latest = reducePlan(reducePlan(null, revision2), revision1);
     expect(latest).toMatchObject({ revision: 2, title: '新' });

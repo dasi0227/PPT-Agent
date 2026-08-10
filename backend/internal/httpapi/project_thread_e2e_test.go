@@ -112,7 +112,7 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{
 		"client_request_id":"req-authority-1",
 		"scope":{"artifact":"spec","level":"deck"},
-		"intent":"execute",
+		"mode":"execute",
 		"instruction":"生成内容"
 	}`)
 	if resp.Code != http.StatusCreated {
@@ -201,7 +201,7 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 	body := `{
 		"client_request_id":"req-artifact-1",
 		"scope":{"artifact":"spec","level":"deck"},
-		"intent":"talk",
+		"mode":"talk",
 		"instruction":"评估当前叙事结构"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", body)
@@ -211,7 +211,7 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 	var created map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &created)
 	scope := created["scope"].(map[string]any)
-	if scope["artifact"] != "spec" || scope["level"] != "deck" || created["intent"] != "talk" {
+	if scope["artifact"] != "spec" || scope["level"] != "deck" || created["mode"] != "talk" {
 		t.Fatalf("new protocol was not preserved: %s", resp.Body.String())
 	}
 	runID := created["id"].(string)
@@ -247,7 +247,7 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 	legacy := `{
 		"client_request_id":"req-artifact-legacy",
 		"target":{"artifact":"presentation","level":"deck"},
-		"interaction":{"intent":"talk"},
+		"interaction":{"mode":"talk"},
 		"instruction":"legacy"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", legacy)
@@ -258,7 +258,7 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 	invalid := `{
 		"client_request_id":"req-artifact-invalid",
 		"scope":{"artifact":"ppt","level":"slide","slide_id":"current"},
-		"intent":"execute",
+		"mode":"execute",
 		"instruction":"修改当前页"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", invalid)
@@ -282,7 +282,7 @@ func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+thread["id"].(string)+"/runs", `{
 		"client_request_id":"req-screenshot-1",
 		"scope":{"artifact":"ppt","level":"deck"},
-		"intent":"talk",
+		"mode":"talk",
 		"instruction":"查看当前演示"
 	}`)
 	if resp.Code != http.StatusCreated {
@@ -358,7 +358,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 		t.Fatalf("new thread history should be empty array, got %d: %s", resp.Code, resp.Body.String())
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","scope":{"artifact":"spec","level":"deck"},"intent":"execute","instruction":"生成设计稿"}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","scope":{"artifact":"spec","level":"deck"},"mode":"execute","instruction":"生成设计稿"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
 	}

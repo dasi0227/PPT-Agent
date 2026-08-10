@@ -47,7 +47,7 @@ func (c *inputCheckpoint) MarkInputsInjected(ctx context.Context, ids []string) 
 	return c.store.MarkSteering(ctx, c.runID, ids, model.SteeringInjected, time.Now().UnixNano(), "")
 }
 
-func (c *inputCheckpoint) PhaseChanged(phase workflow.RuntimePhase) {
+func (c *inputCheckpoint) PhaseChanged(phase workflow.RunPhase) {
 	c.active.mu.Lock()
 	c.active.phase = phase
 	c.active.mu.Unlock()

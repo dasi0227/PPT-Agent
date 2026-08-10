@@ -80,8 +80,8 @@ func publicPlan(plan Plan) model.PublicPlan {
 		})
 	}
 	return model.PublicPlan{
-		PlanID: plan.ID, Revision: plan.Revision,
-		Explanation: sanitizePublicText(plan.Explanation, 180), Steps: steps,
+		PlanID: plan.ID, Revision: plan.Revision, ApprovedRevision: plan.ApprovedRevision,
+		Status: string(plan.Status), Title: sanitizePublicText(plan.Title, 180), Content: sanitizePublicMarkdown(plan.Content, 12000), Steps: steps,
 	}
 }
 
@@ -102,8 +102,16 @@ func completedPlanSteps(previous *Plan, next Plan) []PlanStep {
 	return out
 }
 
-func milestoneText(explanation string, completed []PlanStep) string {
-	if text := sanitizePublicText(explanation, 180); text != "" {
+func planStepIDs(steps []PlanStep) []string {
+	ids := make([]string, 0, len(steps))
+	for _, step := range steps {
+		ids = append(ids, step.ID)
+	}
+	return ids
+}
+
+func milestoneText(title string, completed []PlanStep) string {
+	if text := sanitizePublicText(title, 180); text != "" {
 		return text
 	}
 	titles := make([]string, 0, len(completed))
@@ -506,14 +514,14 @@ func currentPlanStepID(plan *Plan) string {
 	return ""
 }
 
-func safeFinalMessage(message string, intent model.RunIntent, affected int) string {
+func safeFinalMessage(message string, mode model.RunMode, affected int) string {
 	if text := sanitizePublicMarkdown(message, 0); text != "" {
 		return text
 	}
-	if intent == model.IntentTalk || intent == model.IntentAsk {
+	if mode == model.ModeTalk || mode == model.ModeAsk {
 		return "已完成本次分析。"
 	}
-	if intent == model.IntentPlan {
+	if mode == model.ModePlan {
 		return "已完成本次计划。"
 	}
 	if affected > 0 {

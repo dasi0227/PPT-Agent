@@ -21,7 +21,7 @@ type active struct {
 	queue           *InputQueue
 	cancel          context.CancelFunc
 	mu              sync.Mutex
-	phase           workflow.RuntimePhase
+	phase           workflow.RunPhase
 	cancelRequested bool
 }
 
@@ -121,7 +121,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 
 	if err := a.bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
 		PublicEventBase: model.NewPublicEventBase(a.run.ID),
-		Scope:           a.run.Command.Scope, Intent: a.run.Command.Intent,
+		Scope:           a.run.Command.Scope, Mode: a.run.Command.Mode,
 		UserInput: a.run.Command.Instruction,
 	}); err != nil {
 		e.setStatus(context.Background(), a.run.ID, model.RunFailed)
@@ -248,6 +248,17 @@ func (e *Engine) InjectInput(ctx context.Context, id, content, replyTo string) e
 		return nil
 	}
 	return ErrReplyMismatch
+}
+
+func (e *Engine) SubmitPlanApproval(ctx context.Context, id string, answer model.PlanApprovalAnswer) error {
+	a, ok := e.lookup(id)
+	if !ok {
+		return ErrRunNotRunning
+	}
+	if !a.queue.ReplyPlanApproval(answer) {
+		return ErrReplyMismatch
+	}
+	return nil
 }
 
 // Cancel 取消 Run：停止后续 LLM 调用，保留已落盘产物（ARCH-RUN-004 / API-RUN-005）。

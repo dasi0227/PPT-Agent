@@ -55,7 +55,7 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 	}{
 		{model.EventRunStarted, model.RunStartedPayload{
 			PublicEventBase: base(), Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
-			Intent: model.IntentExecute, UserInput: "change title",
+			Mode: model.ModeExecute, UserInput: "change title",
 		}},
 		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Stage: "thinking", Text: "正在分析"}},
 		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: model.PublicPlan{
@@ -104,7 +104,7 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 	if entries[0].Type != "user_turn" || entries[len(entries)-1].Type != string(model.EventRunFinished) {
 		t.Fatalf("history mapping=%+v", entries)
 	}
-	if _, ok := entries[0].Data["scope"]; !ok || entries[0].Data["intent"] != string(model.IntentExecute) {
+	if _, ok := entries[0].Data["scope"]; !ok || entries[0].Data["mode"] != string(model.ModeExecute) {
 		t.Fatalf("user turn missing v3 command fields: %+v", entries[0])
 	}
 	if _, legacy := entries[0].Data["target"]; legacy {
@@ -125,7 +125,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}
 	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
 		PublicEventBase: base(), Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
-		Intent: model.IntentExecute, UserInput: "go",
+		Mode: model.ModeExecute, UserInput: "go",
 	}); err != nil {
 		t.Fatal(err)
 	}

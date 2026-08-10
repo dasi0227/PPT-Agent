@@ -38,7 +38,7 @@ func (PromptCompiler) Compile(pack ContextPack, systemPolicy string) (CompiledPr
 		fmt.Fprintf(&b, "<%s>\n%s\n</%s>\n", name, raw, name)
 	}
 	writeSection("run_command", map[string]any{
-		"scope": pack.Command.Scope, "intent": pack.Command.Intent, "options": pack.Command.Options,
+		"scope": pack.Command.Scope, "mode": pack.Command.Mode, "options": pack.Command.Options,
 	})
 	projectContext := map[string]any{"project": pack.Project}
 	if pack.Outline.Outline.SchemaVersion != "" {

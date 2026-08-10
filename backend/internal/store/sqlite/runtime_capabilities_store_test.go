@@ -19,7 +19,7 @@ func TestRuntimeCapabilityStoresRoundTrip(t *testing.T) {
 	}
 	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", Command: model.RunCommand{
 		Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeSlide, SlideID: "s1"},
-		Intent: model.IntentExecute, Instruction: "edit",
+		Mode:  model.ModeExecute, Instruction: "edit",
 	}, Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}
 	if err := s.CreateRun(ctx, runModel); err != nil {
 		t.Fatal(err)

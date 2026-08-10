@@ -8,7 +8,7 @@ import {
   PlanState,
   PublicTarget,
   Run,
-  RunIntent,
+  RunMode,
   RunProgressStage,
   RunScope,
   SSEEvent,
@@ -35,7 +35,7 @@ export interface RunSession {
   status: RunStatus;
   streamStatus?: StreamStatus;
   scope: RunScope;
-  intent: RunIntent;
+  mode: RunMode;
   timelineItems: TimelineItem[];
   pendingQuestion: { id: string; prompt: string } | null;
   progress: {
@@ -59,7 +59,7 @@ export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   status: 'idle',
   streamStatus: 'idle',
   scope: { artifact: 'ppt', level: 'slide' },
-  intent: 'execute',
+  mode: 'execute',
   timelineItems: [],
   pendingQuestion: null,
   progress: null,
@@ -158,14 +158,14 @@ function requestFromTimeline(
   const original = [...items].reverse().find((item) =>
     item.type === 'user_turn' &&
     Boolean(item.scope) &&
-    Boolean(item.intent) &&
+    Boolean(item.mode) &&
     (!runId || item.runId === runId));
-  if (!original || original.type !== 'user_turn' || !original.scope || !original.intent) return undefined;
+  if (!original || original.type !== 'user_turn' || !original.scope || !original.mode) return undefined;
   return {
     client_request_id: newClientIdentity('req'),
     ...(model ? { model } : {}),
     scope: original.scope as RunScope,
-    intent: original.intent as RunIntent,
+    mode: original.mode as RunMode,
     instruction: original.text,
   };
 }
@@ -330,7 +330,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         type: 'user_turn',
         text: payload.instruction,
         scope: payload.scope,
-        intent: payload.intent,
+        mode: payload.mode,
         timestamp: Date.now(),
       };
       updateSession(threadId, (prev) => ({
@@ -341,7 +341,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         streamStatus: 'idle',
         pendingQuestion: null,
         scope: payload.scope,
-        intent: payload.intent,
+        mode: payload.mode,
         progress: null,
         plan: null,
         eventSourceClose: null,
@@ -506,7 +506,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               ? 'connecting'
               : 'closed',
             scope: run.scope,
-            intent: run.intent,
+            mode: run.mode,
             lastEventId: record.lastEventId,
             timelineItems: prev.timelineItems.length > 0 ? prev.timelineItems : hydratedItems,
             plan: prev.plan ?? hydratedPlan,
@@ -717,7 +717,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         activeRunId: session?.activeRunId ?? null,
         status: session?.status ?? 'idle',
         scope: session?.scope ?? IDLE_SESSION.scope,
-        intent: session?.intent ?? IDLE_SESSION.intent,
+        mode: session?.mode ?? IDLE_SESSION.mode,
         pendingQuestion: session?.pendingQuestion ?? null,
         lastEventId,
         originalRequest: requestFromTimeline(items, session?.activeRunId),

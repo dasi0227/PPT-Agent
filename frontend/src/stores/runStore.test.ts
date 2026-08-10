@@ -62,7 +62,7 @@ vi.mock('../api/runs', () => ({
         project_id: 'p1',
         status: 'running',
         scope: payload.scope,
-        intent: payload.intent,
+        mode: payload.mode,
         events_url: '',
         model: payload.model ?? 'Kimi K3',
       };
@@ -95,7 +95,7 @@ import type { TimelineItem } from '../features/agent/eventReducer';
 
 const request = (instruction: string) => ({
   scope: { artifact: 'ppt' as const, level: 'slide' as const, slide_id: 's1' },
-  intent: 'execute' as const ,
+  mode: 'execute' as const ,
   instruction,
 });
 const base = { schema_version: 3, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
@@ -128,7 +128,7 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'done' | '
     project_id: 'p1',
     status,
     scope: request('').scope,
-    intent: request('').intent,
+    mode: request('').mode,
     events_url: '',
     model: 'Kimi K3',
   };
@@ -145,7 +145,7 @@ describe('runStore public event sessions', () => {
     ]);
     resolveCreate?.({
       id: 'run_1', thread_id: 't1', project_id: 'p1', status: 'running',
-      scope: request('').scope, intent: request('').intent, events_url: '',
+      scope: request('').scope, mode: request('').mode, events_url: '',
     });
     await pending;
   });
@@ -247,7 +247,7 @@ describe('runStore public event sessions', () => {
       instruction: 'original',
       model: 'Kimi K3',
       scope: request('').scope,
-      intent: request('').intent,
+      mode: request('').mode,
     });
     expect(createRequests[1].client_request_id).not.toBe(firstRequestId);
   });
@@ -427,7 +427,7 @@ describe('runStore public event sessions', () => {
     }));
     recoveredRun = {
       id: 'saved', thread_id: 't1', project_id: 'p1', status: 'running',
-      scope: request('').scope, intent: request('').intent, events_url: '',
+      scope: request('').scope, mode: request('').mode, events_url: '',
       model: 'Kimi K3',
     };
     await useRunStore.getState().recoverPersistedRuns();
@@ -445,7 +445,7 @@ describe('runStore public event sessions', () => {
       sessions: {
         t1: {
           activeRunId: null, status: 'idle',
-          scope: request('').scope, intent: request('').intent,
+          scope: request('').scope, mode: request('').mode,
           timelineItems: [seed], pendingQuestion: null, progress: null,
           eventSourceClose: null, plan: null,
         },

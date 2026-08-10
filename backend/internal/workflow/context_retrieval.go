@@ -102,7 +102,7 @@ type RetrievalQuery struct {
 	Command           model.RunCommand
 	RequirementLedger *RequirementLedger
 	LatestIssues      []Issue
-	Phase             RuntimePhase
+	Phase             RunPhase
 	QueryText         string
 	Kinds             []string
 	Limit             int

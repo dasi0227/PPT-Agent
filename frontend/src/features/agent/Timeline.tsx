@@ -10,6 +10,7 @@ import { MarkdownMessage } from './MarkdownMessage';
 import { QuestionPanel } from './QuestionPanel';
 import { ReasoningRow, MilestoneRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 import { TerminalNotice } from './TerminalNotice';
+import { PlanApproval } from './PlanApproval';
 import type { TimelineItem } from './eventReducer';
 import { DisplayEntry, groupTimelineItems } from './timelineGrouping';
 
@@ -43,7 +44,7 @@ function CopyIconButton({ text, label = '复制' }: { text: string; label?: stri
     <button
       type="button"
       onClick={() => void copy()}
-      className="inline-flex h-6 w-6 items-center justify-center rounded-md text-text-400 hover:bg-panel-muted hover:text-text-900"
+      className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-text-400 transition-opacity duration-150 motion-reduce:transition-none hover:bg-panel-muted hover:text-text-900 ${copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
       aria-label={label}
       title={copied ? '已复制' : label}
     >
@@ -118,7 +119,7 @@ export const Timeline: React.FC = () => {
       <React.Fragment key={item.id}>
         {item.type === 'user_turn' && (
           <div className="flex justify-end">
-            <div className="flex max-w-[88%] flex-col items-start">
+            <div className="group flex max-w-[88%] flex-col items-start">
               <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
                 {item.scope && (
                   <div className="mb-1 text-[10px] font-medium text-text-400">
@@ -146,6 +147,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'milestone' && <MilestoneRow item={item} />}
         {item.type === 'tool' && <ToolActivityRow item={item} />}
         {item.type === 'question' && <QuestionPanel item={item} />}
+        {item.type === 'plan_approval' && <PlanApproval item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
       </React.Fragment>

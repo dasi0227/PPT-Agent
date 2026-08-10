@@ -167,7 +167,7 @@ func validReviewCode(code string) bool {
 func (r *Runtime) runReviewCompletion(
 	ctx context.Context,
 	input RuntimeInput,
-	state *runtimeState,
+	state *RunState,
 	callID string,
 	candidateMessage string,
 	focus string,
@@ -176,14 +176,14 @@ func (r *Runtime) runReviewCompletion(
 		focus = "all"
 	}
 	gate := r.Gate.Check(CompletionContext{
-		Intent: input.Context.Command.Intent, FinishPhase: state.phase, ActiveTools: state.activeTools,
+		Mode: state.mode, FinishPhase: state.phase, ActiveTools: state.activeTools,
 		Issues: state.issues, Scope: state.scope, Session: state.tx, Changes: state.changeSet(),
-		Evidence: state.ledger, Context: input.Context, Plan: state.plan,
+		Evidence: state.ledger, Context: state.pack, Plan: state.plan,
 		Requirements: state.requirements, FinishMessage: candidateMessage, Canceled: ctx.Err() != nil,
 	})
 	reviewInput := SemanticReviewInput{
 		RunID: state.runID, FinishCallID: callID,
-		Command: input.Context.Command, RequirementLedger: state.requirements, Plan: state.plan,
+		Command: state.pack.Command, RequirementLedger: state.requirements, Plan: state.plan,
 		Changes: state.changeSet(), GateResult: gate,
 		Evidence: state.ledger.Entries(state.changeSet()), LatestIssues: state.issues,
 		ContextBriefing: state.contextBriefing, RetrievedContext: reviewContextItems(state.retrievedContext),

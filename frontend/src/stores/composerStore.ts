@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Artifact, RunIntent, ScopeLevel } from '../api/types';
+import type { Artifact, RunMode, ScopeLevel } from '../api/types';
 
 const RECENT_MODEL_KEY = 'ppt-agent-recent-model-profile-v1';
 
@@ -11,12 +11,12 @@ function initialModelProfile(): string | null {
 interface ComposerState {
   artifact: Artifact;
   level: ScopeLevel;
-  intent: RunIntent;
+  mode: RunMode;
   modelProfileName: string | null;
   userTouchedTarget: boolean;
   setArtifact: (artifact: Artifact) => void;
   setLevel: (level: ScopeLevel) => void;
-  setIntent: (intent: RunIntent) => void;
+  setIntent: (mode: RunMode) => void;
   setModelProfileName: (name: string) => void;
   applyContextDefault: (hasSlides: boolean) => void;
   resetForProject: () => void;
@@ -25,12 +25,12 @@ interface ComposerState {
 export const useComposerStore = create<ComposerState>((set) => ({
   artifact: 'ppt',
   level: 'slide',
-  intent: 'execute',
+  mode: 'execute',
   modelProfileName: initialModelProfile(),
   userTouchedTarget: false,
   setArtifact: (artifact) => set({ artifact, userTouchedTarget: true }),
   setLevel: (level) => set({ level, userTouchedTarget: true }),
-  setIntent: (intent) => set({ intent }),
+  setIntent: (mode) => set({ mode }),
   setModelProfileName: (name) => {
     if (typeof localStorage !== 'undefined') localStorage.setItem(RECENT_MODEL_KEY, name);
     set({ modelProfileName: name });
@@ -44,7 +44,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   resetForProject: () => set({
     artifact: 'ppt',
     level: 'slide',
-    intent: 'execute',
+    mode: 'execute',
     userTouchedTarget: false,
   }),
 }));

@@ -21,11 +21,11 @@ function applyShortcut(raw: string, request: CreateRunRequest): CreateRunRequest
   const instruction = rest.join(' ').trim() || raw;
   switch (command) {
     case '/talk':
-      return { ...request, instruction, intent: 'talk' };
+      return { ...request, instruction, mode: 'talk' };
     case '/ask':
-      return { ...request, instruction, intent: 'ask' };
+      return { ...request, instruction, mode: 'ask' };
     case '/plan':
-      return { ...request, instruction, intent: 'plan' };
+      return { ...request, instruction, mode: 'plan' };
     case '/overview':
       return { ...request, instruction, scope: { artifact: 'ppt', level: 'deck' } };
     case '/current':
@@ -138,7 +138,7 @@ export const CommandComposer: React.FC = () => {
       client_request_id: newClientIdentity('req'),
       model: composer.modelProfileName,
       scope,
-      intent: composer.intent,
+      mode: composer.mode,
       instruction: raw,
     };
     request = applyShortcut(raw, request);
@@ -146,7 +146,7 @@ export const CommandComposer: React.FC = () => {
       request.scope = { artifact: request.scope.artifact, level: 'deck' };
     }
     const selectedProfile = profiles.find((profile) => profile.name === request.model);
-    const requiresVision = request.intent === 'execute' &&
+    const requiresVision = request.mode === 'execute' &&
       request.scope.artifact === 'ppt';
     if (!selectedProfile) {
       setSubmitError('所选模型已不可用，请重新选择');
@@ -172,9 +172,9 @@ export const CommandComposer: React.FC = () => {
     await cancelRun(activeThreadId, activeRunId);
   };
 
-  const requiresVision = composer.intent === 'execute' && composer.artifact === 'ppt';
+  const requiresVision = composer.mode === 'execute' && composer.artifact === 'ppt';
   const togglePlanIntent = () => {
-    composer.setIntent(composer.intent === 'plan' ? 'execute' : 'plan');
+    composer.setIntent(composer.mode === 'plan' ? 'execute' : 'plan');
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -212,14 +212,14 @@ export const CommandComposer: React.FC = () => {
         <div className="flex min-w-0 items-center justify-between gap-1 px-3 pb-2">
           <div className="flex min-w-0 items-center gap-0.5">
             <InteractionModeButtons
-              intent={composer.intent}
+              mode={composer.mode}
               onIntentChange={composer.setIntent}
               disabled={disabled || steering}
             />
             <PlanIndicator
               plan={plan}
               running={runActive}
-              selected={composer.intent === 'plan'}
+              selected={composer.mode === 'plan'}
               disabled={plan && plan.steps.length > 0 ? false : disabled || steering}
               onSelectPlan={togglePlanIntent}
             />

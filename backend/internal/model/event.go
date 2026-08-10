@@ -4,17 +4,20 @@ package model
 type EventType string
 
 const (
-	EventRunStarted       EventType = "run.started"
-	EventRunProgress      EventType = "run.progress"
-	EventRunFinished      EventType = "run.finished"
-	EventPlanUpdated      EventType = "plan.updated"
-	EventMessageReasoning EventType = "message.reasoning"
-	EventMessageMilestone EventType = "message.milestone"
-	EventMessageFinal     EventType = "message.final"
-	EventToolStarted      EventType = "tool.started"
-	EventToolCompleted    EventType = "tool.completed"
-	EventQuestionAsked    EventType = "question.asked"
-	EventQuestionAnswered EventType = "question.answered"
+	EventRunStarted            EventType = "run.started"
+	EventRunProgress           EventType = "run.progress"
+	EventRunFinished           EventType = "run.finished"
+	EventPlanUpdated           EventType = "plan.updated"
+	EventPlanApprovalRequested EventType = "plan.approval_requested"
+	EventPlanApprovalAnswered  EventType = "plan.approval_answered"
+	EventRunModeChanged        EventType = "run.mode_changed"
+	EventMessageReasoning      EventType = "message.reasoning"
+	EventMessageMilestone      EventType = "message.milestone"
+	EventMessageFinal          EventType = "message.final"
+	EventToolStarted           EventType = "tool.started"
+	EventToolCompleted         EventType = "tool.completed"
+	EventQuestionAsked         EventType = "question.asked"
+	EventQuestionAnswered      EventType = "question.answered"
 )
 
 // Terminal 报告事件是否为终态事件（done/error，API-SSE-002）。

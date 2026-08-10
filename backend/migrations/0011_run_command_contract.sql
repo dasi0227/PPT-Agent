@@ -7,7 +7,7 @@ CREATE TABLE runs_v4 (
     scope_artifact      TEXT NOT NULL CHECK (scope_artifact IN ('spec','ppt')),
     scope_level         TEXT NOT NULL CHECK (scope_level IN ('slide','deck')),
     scope_slide_id      TEXT,
-    intent              TEXT NOT NULL CHECK (intent IN ('talk','ask','plan','execute')),
+    mode              TEXT NOT NULL CHECK (mode IN ('talk','ask','plan','execute')),
     run_command_json    TEXT NOT NULL,
     client_request_id   TEXT DEFAULT '',
     model_profile_name  TEXT,
@@ -25,7 +25,7 @@ CREATE TABLE runs_v4 (
 
 INSERT INTO runs_v4 (
     id,thread_id,project_id,scope_artifact,scope_level,scope_slide_id,
-    intent,run_command_json,client_request_id,model_profile_name,
+    mode,run_command_json,client_request_id,model_profile_name,
     model_provider,model_name,model_url,cancel_requested_at,status,created_at,updated_at
 )
 SELECT
@@ -52,7 +52,7 @@ SELECT
                 )
             END
         ),
-        'intent', interaction_intent,
+        'mode', interaction_intent,
         'instruction', COALESCE(json_extract(work_spec_json, '$.instruction'), ''),
         'options',
         json(

@@ -107,12 +107,12 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	po := runToPO(r)
 	return s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
-		 scope_artifact, scope_level, scope_slide_id, intent, run_command_json,
+		 scope_artifact, scope_level, scope_slide_id, mode, run_command_json,
 		 client_request_id, model_profile_name, model_provider, model_name, model_url,
 		 cancel_requested_at, status, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		po.ID, po.ThreadID, po.ProjectID, po.ScopeArtifact, po.ScopeLevel,
-		nullIfEmpty(po.ScopeSlideID), po.Intent, po.RunCommandJSON,
+		nullIfEmpty(po.ScopeSlideID), po.Mode, po.RunCommandJSON,
 		nullIfEmpty(po.ClientRequestID), nullIfEmpty(po.ModelProfileName),
 		nullIfEmpty(po.ModelProvider), nullIfEmpty(po.ModelName), nullIfEmpty(po.ModelURL),
 		po.CancelRequestedAt, po.Status, po.CreatedAt, po.UpdatedAt,
@@ -131,6 +131,10 @@ func (s *Store) SetRunStatus(ctx context.Context, id string, status model.RunSta
 	return s.db.WithContext(ctx).Model(&runPO{}).
 		Where("id = ?", id).
 		Updates(map[string]any{"status": string(status), "updated_at": nowUnix()}).Error
+}
+
+func (s *Store) UpdateRunMode(ctx context.Context, id string, mode model.RunMode) error {
+	return s.db.WithContext(ctx).Model(&runPO{}).Where("id = ?", id).Updates(map[string]any{"mode": string(mode), "updated_at": nowUnix()}).Error
 }
 
 func (s *Store) RequestRunCancel(ctx context.Context, id string, requestedAt int64) (model.Run, error) {

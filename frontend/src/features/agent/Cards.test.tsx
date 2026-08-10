@@ -102,7 +102,7 @@ describe('public timeline components', () => {
 
   it('shows a compact plan indicator and reveals steps in a popover', () => {
     render(<PlanIndicator running={false} plan={{
-      id: 'p1', title: '生成演示文稿', revision: 2,
+	  id: 'p1', title: '生成演示文稿', content: '完整计划', status: 'active', revision: 2,
       steps: [
         { id: 's1', title: '完成页面', status: 'completed' },
         { id: 's2', title: '收尾检查', status: 'pending' },
@@ -161,7 +161,7 @@ describe('public timeline components', () => {
         t1: {
           activeRunId: 'r1', status: 'waiting',
           scope: { artifact: 'ppt', level: 'deck' },
-          intent: 'ask', timelineItems: [],
+          mode: 'ask', timelineItems: [],
           pendingQuestion: { id: 'q1', prompt: '选择风格' },
           progress: null, eventSourceClose: null, plan: null,
         },
@@ -210,7 +210,7 @@ describe('public timeline components', () => {
         t1: {
           activeRunId: 'r1', status: 'waiting',
           scope: { artifact: 'ppt', level: 'deck' },
-          intent: 'ask', timelineItems: [],
+          mode: 'ask', timelineItems: [],
           pendingQuestion: { id: 'q2', prompt: '题型' },
           progress: null, eventSourceClose: null, plan: null,
         },
@@ -281,7 +281,7 @@ describe('public timeline components', () => {
       timestamp: 0,
     };
 
-    render(<QuestionPanel item={item} />);
+    const { container } = render(<QuestionPanel item={item} />);
     const groupButton = screen.getByRole('button', { name: /询问了 2 个问题/ });
     expect(groupButton).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('这个演示的目标受众是谁？')).toBeNull();
@@ -294,6 +294,11 @@ describe('public timeline components', () => {
     expect(screen.getByText('产品经理')).toBeInTheDocument();
     expect(screen.getByText('希望这个演示达到什么深度？')).toBeInTheDocument();
     expect(screen.getByText('入门但不浅')).toBeInTheDocument();
+    const detailRows = container.querySelectorAll('.question-detail-row');
+    expect(detailRows).toHaveLength(2);
+    detailRows.forEach((row) => {
+      expect(row.querySelector('svg')).toHaveClass('text-success');
+    });
   });
 
   it('renders progress as an aria-live row', () => {

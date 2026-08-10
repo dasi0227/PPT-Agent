@@ -17,6 +17,9 @@ var PublicEventTypes = [...]EventType{
 	EventRunProgress,
 	EventRunFinished,
 	EventPlanUpdated,
+	EventPlanApprovalRequested,
+	EventPlanApprovalAnswered,
+	EventRunModeChanged,
 	EventMessageReasoning,
 	EventMessageMilestone,
 	EventMessageFinal,
@@ -64,9 +67,9 @@ type PublicError struct {
 
 type RunStartedPayload struct {
 	PublicEventBase
-	Scope     RunScope  `json:"scope"`
-	Intent    RunIntent `json:"intent"`
-	UserInput string    `json:"user_input"`
+	Scope     RunScope `json:"scope"`
+	Mode      RunMode  `json:"mode"`
+	UserInput string   `json:"user_input"`
 }
 
 type ProgressValue struct {
@@ -98,15 +101,48 @@ type PublicPlanStep struct {
 }
 
 type PublicPlan struct {
-	PlanID      string           `json:"plan_id"`
-	Revision    int              `json:"revision"`
-	Explanation string           `json:"explanation,omitempty"`
-	Steps       []PublicPlanStep `json:"steps"`
+	PlanID           string           `json:"plan_id"`
+	Revision         int              `json:"revision"`
+	ApprovedRevision int              `json:"approved_revision,omitempty"`
+	Status           string           `json:"status"`
+	Title            string           `json:"title"`
+	Content          string           `json:"content"`
+	Steps            []PublicPlanStep `json:"steps"`
 }
 
 type PlanUpdatedPayload struct {
 	PublicEventBase
 	Plan PublicPlan `json:"plan"`
+}
+
+type PlanApprovalRequestedPayload struct {
+	PublicEventBase
+	InteractionID string     `json:"interaction_id"`
+	Plan          PublicPlan `json:"plan"`
+}
+
+type PlanApprovalAnswer struct {
+	InteractionID    string `json:"interaction_id"`
+	PlanID           string `json:"plan_id"`
+	ExpectedRevision int    `json:"expected_revision"`
+	Decision         string `json:"decision"`
+	Feedback         string `json:"feedback,omitempty"`
+	IdempotencyKey   string `json:"idempotency_key,omitempty"`
+}
+
+type PlanApprovalAnsweredPayload struct {
+	PublicEventBase
+	InteractionID string `json:"interaction_id"`
+	PlanID        string `json:"plan_id"`
+	Revision      int    `json:"revision"`
+	Decision      string `json:"decision"`
+	Feedback      string `json:"feedback,omitempty"`
+}
+
+type RunModeChangedPayload struct {
+	PublicEventBase
+	PreviousMode RunMode `json:"previous_mode"`
+	Mode         RunMode `json:"mode"`
 }
 
 type MessageReasoningPayload struct {
@@ -238,7 +274,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 				Level:    ScopeLevel(stringValue(scope["level"])),
 				SlideID:  stringValue(scope["slide_id"]),
 			},
-			Intent:      RunIntent(stringValue(data["intent"])),
+			Mode:        RunMode(stringValue(data["mode"])),
 			Instruction: stringValue(data["user_input"]),
 		}
 		return command.Validate()
@@ -281,6 +317,22 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		}
 	case EventPlanUpdated:
 		return validatePlan(data["plan"])
+	case EventPlanApprovalRequested:
+		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" {
+			return errors.New("interaction_id is required")
+		}
+		return validatePlan(data["plan"])
+	case EventPlanApprovalAnswered:
+		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || strings.TrimSpace(stringValue(data["plan_id"])) == "" || intValue(data["revision"]) < 1 || !oneOf(stringValue(data["decision"]), "approve", "revise", "cancel") {
+			return errors.New("invalid plan approval answer")
+		}
+		if stringValue(data["decision"]) == "revise" && strings.TrimSpace(stringValue(data["feedback"])) == "" {
+			return errors.New("revision feedback is required")
+		}
+	case EventRunModeChanged:
+		if !oneOf(stringValue(data["previous_mode"]), "talk", "ask", "plan", "execute") || !oneOf(stringValue(data["mode"]), "talk", "ask", "plan", "execute") {
+			return errors.New("invalid run mode transition")
+		}
 	case EventMessageReasoning, EventMessageMilestone, EventMessageFinal:
 		if err := requireString(data, "message_id", "text"); err != nil {
 			return err
@@ -520,6 +572,12 @@ func validatePlan(value any) error {
 	}
 	if !isInteger(plan["revision"]) {
 		return errors.New("plan revision must be an integer")
+	}
+	if err := requireString(plan, "title", "content", "status"); err != nil {
+		return err
+	}
+	if !oneOf(stringValue(plan["status"]), "awaiting_approval", "active", "completed", "canceled") {
+		return errors.New("invalid plan status")
 	}
 	steps, ok := plan["steps"].([]any)
 	if !ok || len(steps) == 0 {

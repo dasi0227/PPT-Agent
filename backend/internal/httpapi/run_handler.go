@@ -30,19 +30,19 @@ type createRunBody struct {
 	Model           string           `json:"model"`
 	Instruction     string           `json:"instruction"`
 	Scope           model.RunScope   `json:"scope"`
-	Intent          model.RunIntent  `json:"intent"`
+	Mode            model.RunMode    `json:"mode"`
 	Options         model.RunOptions `json:"options"`
 }
 
 type runResponse struct {
-	ID        string          `json:"id"`
-	ThreadID  string          `json:"thread_id"`
-	ProjectID string          `json:"project_id"`
-	Status    string          `json:"status"`
-	EventsURL string          `json:"events_url"`
-	Scope     model.RunScope  `json:"scope"`
-	Intent    model.RunIntent `json:"intent"`
-	Model     *string         `json:"model"`
+	ID        string         `json:"id"`
+	ThreadID  string         `json:"thread_id"`
+	ProjectID string         `json:"project_id"`
+	Status    string         `json:"status"`
+	EventsURL string         `json:"events_url"`
+	Scope     model.RunScope `json:"scope"`
+	Mode      model.RunMode  `json:"mode"`
+	Model     *string        `json:"model"`
 }
 
 func toRunResponse(r model.Run) runResponse {
@@ -54,7 +54,7 @@ func toRunResponse(r model.Run) runResponse {
 	return runResponse{
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
-		Scope: r.Command.Scope, Intent: r.Command.Intent,
+		Scope: r.Command.Scope, Mode: r.Command.Mode,
 		Model: profileName,
 	}
 }
@@ -80,7 +80,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		Model:           body.Model,
 		Instruction:     body.Instruction,
 		Command: model.RunCommand{
-			Scope: body.Scope, Intent: body.Intent,
+			Scope: body.Scope, Mode: body.Mode,
 			Instruction: body.Instruction, Options: body.Options,
 		},
 	}
@@ -231,6 +231,19 @@ func (h *RunHandler) Input(c *gin.Context) {
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}
+}
+
+func (h *RunHandler) PlanApproval(c *gin.Context) {
+	var answer model.PlanApprovalAnswer
+	if err := c.ShouldBindJSON(&answer); err != nil {
+		AbortWithError(c, ErrBadRequest("invalid plan approval"))
+		return
+	}
+	if err := h.svc.SubmitPlanApproval(c.Request.Context(), c.Param("id"), answer); err != nil {
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "PLAN_APPROVAL_REJECTED", Message: "计划审批已过期或不匹配"})
+		return
+	}
+	c.Status(http.StatusAccepted)
 }
 
 // Cancel DELETE /runs/{id}

@@ -39,8 +39,8 @@ func (r CompletionResult) RejectionKey() string {
 }
 
 type CompletionContext struct {
-	Intent        model.RunIntent
-	FinishPhase   RuntimePhase
+	Mode          model.RunMode
+	FinishPhase   RunPhase
 	ActiveTools   int
 	Issues        []Issue
 	Scope         model.RunScope
@@ -66,7 +66,7 @@ const (
 type ScopeCompletionPolicy struct{}
 
 func (ScopeCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	if ctx.Intent != model.IntentExecute {
+	if ctx.Mode != model.ModeExecute {
 		return nil
 	}
 	issues := []CompletionIssue{}
@@ -87,7 +87,7 @@ type CommandOptionsCompletionPolicy struct{}
 
 func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 	command := ctx.Context.Command
-	if ctx.Intent != model.IntentExecute || command.Scope.Level != model.ScopeDeck ||
+	if ctx.Mode != model.ModeExecute || command.Scope.Level != model.ScopeDeck ||
 		(command.Options.Language == "" && command.Options.Range == "") {
 		return nil
 	}
@@ -119,7 +119,7 @@ func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionI
 type EvidenceCompletionPolicy struct{}
 
 func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	if ctx.Intent != model.IntentExecute {
+	if ctx.Mode != model.ModeExecute {
 		return nil
 	}
 	if ctx.Changes.Count() == 0 {
@@ -345,7 +345,7 @@ func NewCompletionGate() CompletionGate {
 
 func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	issues := []CompletionIssue{}
-	if !finishAllowed(ctx.Intent, ctx.FinishPhase) {
+	if !finishAllowed(ctx.Mode, ctx.FinishPhase) {
 		issues = append(issues, CompletionIssue{Code: "FINISH_NOT_ALLOWED", Summary: "finish is not allowed in the current phase"})
 	}
 	if ctx.ActiveTools != 0 {
@@ -359,14 +359,14 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	if ctx.Canceled {
 		issues = append(issues, CompletionIssue{Code: CodeRunAlreadyCanceled, Summary: "run was canceled"})
 	}
-	if ctx.Intent == model.IntentExecute {
+	if ctx.Mode == model.ModeExecute {
 		if ctx.Session == nil {
 			issues = append(issues, CompletionIssue{Code: CodeRunSessionRequired, Summary: "write run has no active run session"})
 		} else if err := ctx.Session.ValidateBaselines(); err != nil {
 			issues = append(issues, CompletionIssue{Code: CodeRevisionConflict, Summary: err.Error()})
 		}
 	}
-	if ctx.Intent == model.IntentExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
+	if ctx.Mode == model.ModeExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
 		issues = append(issues, CompletionIssue{Code: "PLAN_NOT_COMPLETE", Summary: "the optional execution plan still has pending, in-progress, or failed steps"})
 	}
 	for _, policy := range g.Policies {
@@ -379,13 +379,13 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	return result
 }
 
-func finishAllowed(intent model.RunIntent, phase RuntimePhase) bool {
-	switch intent {
-	case model.IntentTalk, model.IntentAsk:
+func finishAllowed(mode model.RunMode, phase RunPhase) bool {
+	switch mode {
+	case model.ModeTalk, model.ModeAsk:
 		return phase == PhaseChat
-	case model.IntentPlan:
+	case model.ModePlan:
 		return phase == PhasePlanning
-	case model.IntentExecute:
+	case model.ModeExecute:
 		return phase == PhaseExecuting
 	default:
 		return false

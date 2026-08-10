@@ -35,13 +35,13 @@ describe('CommandComposer', () => {
           t1: {
             activeRunId: null, status: 'idle',
             scope: { artifact: 'ppt', level: 'slide' },
-            intent: 'execute',
+            mode: 'execute',
             timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null,
           },
         },
       });
       useComposerStore.setState({
-        artifact: 'ppt', level: 'slide', intent: 'execute',
+        artifact: 'ppt', level: 'slide', mode: 'execute',
         modelProfileName: null, userTouchedTarget: false,
       });
       useDeckStore.setState({ currentPage: 0 });
@@ -64,7 +64,7 @@ describe('CommandComposer', () => {
       client_request_id: expect.stringMatching(/^req_/),
       model: 'Kimi K3',
       scope: { artifact: 'ppt', level: 'slide', slide_id: 'stable-1' },
-      intent: 'execute',
+      mode: 'execute',
       instruction: '调整当前页',
     }), 'p1'));
   });
@@ -76,24 +76,24 @@ describe('CommandComposer', () => {
 	    const plan = screen.getByRole('button', { name: '计划' });
 
     await act(async () => fireEvent.click(talk));
-    expect(useComposerStore.getState()).toMatchObject({ intent: 'talk' });
+    expect(useComposerStore.getState()).toMatchObject({ mode: 'talk' });
     expect(talk).toHaveAttribute('aria-pressed', 'true');
     expect(ask).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '输入你的想法与目标');
 
     await act(async () => fireEvent.click(ask));
-    expect(useComposerStore.getState()).toMatchObject({ intent: 'ask' });
+    expect(useComposerStore.getState()).toMatchObject({ mode: 'ask' });
     expect(talk).toHaveAttribute('aria-pressed', 'false');
     expect(ask).toHaveAttribute('aria-pressed', 'true');
 
 	    await act(async () => fireEvent.click(plan));
-	    expect(useComposerStore.getState()).toMatchObject({ intent: 'plan' });
+	    expect(useComposerStore.getState()).toMatchObject({ mode: 'plan' });
 	    expect(talk).toHaveAttribute('aria-pressed', 'false');
 	    expect(ask).toHaveAttribute('aria-pressed', 'false');
 	    expect(plan).toHaveAttribute('aria-pressed', 'true');
 
 	    await act(async () => fireEvent.click(plan));
-    expect(useComposerStore.getState()).toMatchObject({ intent: 'execute' });
+    expect(useComposerStore.getState()).toMatchObject({ mode: 'execute' });
 	    expect(plan).toHaveAttribute('aria-pressed', 'false');
   });
 
@@ -105,21 +105,21 @@ describe('CommandComposer', () => {
     fireEvent.change(textarea, { target: { value: '/talk 给我建议' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
-      intent: 'talk',
+      mode: 'talk',
       instruction: '给我建议',
     }), 'p1'));
 
     fireEvent.change(textarea, { target: { value: '/ask 先分析方案' } });
     fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
     await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
-      intent: 'ask',
+      mode: 'ask',
       instruction: '先分析方案',
     }), 'p1'));
 
 	    fireEvent.change(textarea, { target: { value: '/plan 拆解执行步骤' } });
 	    fireEvent.click(screen.getByRole('button', { name: '发送' }));
 	    await waitFor(() => expect(createRun).toHaveBeenLastCalledWith('t1', expect.objectContaining({
-	      intent: 'plan',
+	      mode: 'plan',
 	      instruction: '拆解执行步骤',
 	    }), 'p1'));
   });
@@ -131,12 +131,14 @@ describe('CommandComposer', () => {
         t1: {
           activeRunId: 'r-plan', status: 'running',
           scope: { artifact: 'ppt', level: 'slide' },
-          intent: 'execute',
+          mode: 'execute',
           timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null,
-          plan: {
-            id: 'p1',
-            title: '执行计划',
-            revision: 1,
+		  plan: {
+			id: 'p1',
+			title: '执行计划',
+			content: '完整计划',
+			status: 'active',
+			revision: 1,
             steps: [
               { id: 's1', title: '完成结构梳理', status: 'completed' },
               { id: 's2', title: '检查视觉结果', status: 'pending' },
@@ -152,7 +154,7 @@ describe('CommandComposer', () => {
       fireEvent.pointerDown(plan, { button: 0, ctrlKey: false });
       fireEvent.click(plan);
     });
-    expect(useComposerStore.getState()).toMatchObject({ intent: 'execute' });
+    expect(useComposerStore.getState()).toMatchObject({ mode: 'execute' });
     expect(screen.getByText('完成结构梳理')).toBeInTheDocument();
     expect(screen.getByText('检查视觉结果')).toBeInTheDocument();
   });
@@ -165,7 +167,7 @@ describe('CommandComposer', () => {
         t1: {
           activeRunId: 'r1', status: 'waiting',
           scope: { artifact: 'ppt', level: 'slide' },
-          intent: 'ask',
+          mode: 'ask',
           timelineItems: [], pendingQuestion: { id: 'q1', prompt: '选择' },
           progress: null, eventSourceClose: null, plan: null,
         },
@@ -185,7 +187,7 @@ describe('CommandComposer', () => {
         t1: {
           activeRunId: 'r1', status: 'running',
           scope: { artifact: 'ppt', level: 'slide' },
-          intent: 'execute',
+          mode: 'execute',
           timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null,
         },
       },
@@ -244,7 +246,7 @@ describe('CommandComposer', () => {
 
     await waitFor(() => expect(createRun).toHaveBeenCalledWith('t1', expect.objectContaining({
       model: 'DeepSeek V4 Pro',
-      intent: 'talk',
+      mode: 'talk',
     }), 'p1'));
   });
 

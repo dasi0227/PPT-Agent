@@ -8,10 +8,13 @@ const base = {
 };
 
 const payloads: Record<string, unknown> = {
-  'run.started': { ...base, scope: { artifact: 'ppt', level: 'deck' }, intent: 'execute', user_input: '生成 PPT' },
+  'run.started': { ...base, scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute', user_input: '生成 PPT' },
   'run.progress': { ...base, stage: 'thinking', text: '正在分析' },
   'run.finished': { ...base, status: 'completed', duration_ms: 10 },
-  'plan.updated': { ...base, plan: { plan_id: 'p1', revision: 1, steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
+  'plan.updated': { ...base, plan: { plan_id: 'p1', revision: 1, title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
+  'plan.approval_requested': { ...base, interaction_id: 'i1', plan: { plan_id: 'p1', revision: 1, title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
+  'plan.approval_answered': { ...base, interaction_id: 'i1', plan_id: 'p1', revision: 1, decision: 'approve' },
+  'run.mode_changed': { ...base, previous_mode: 'plan', mode: 'execute' },
   'message.reasoning': { ...base, message_id: 'm1', text: '先确认全局设计。' },
   'message.milestone': { ...base, message_id: 'm2', text: '全局设计已完成。', completed_step_ids: ['s1'] },
   'message.final': { ...base, message_id: 'm3', text: '已完成。' },
@@ -22,8 +25,8 @@ const payloads: Record<string, unknown> = {
 };
 
 describe('SSE parser', () => {
-  it('registers and parses exactly the 11 public events', () => {
-    expect(SSE_EVENT_NAMES).toHaveLength(11);
+  it('registers and parses all 14 public events', () => {
+	  expect(SSE_EVENT_NAMES).toHaveLength(14);
     for (const eventName of SSE_EVENT_NAMES) {
       expect(parseSSEEvent(eventName, JSON.stringify(payloads[eventName]), '12')).toMatchObject({
         id: '12',
@@ -42,7 +45,7 @@ describe('SSE parser', () => {
     expect(parseSSEEvent('run.started', JSON.stringify({
       ...base,
       target: { artifact: 'presentation', level: 'deck' },
-      interaction: { intent: 'execute' },
+      interaction: { mode: 'execute' },
       user_input: 'legacy',
     }))).toBeNull();
     expect(parseSSEEvent('tool.started', JSON.stringify({ ...base, call_id: 'c1', tool: 'finish', display: { label: '完成' } }))).toBeNull();

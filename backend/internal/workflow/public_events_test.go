@@ -51,14 +51,14 @@ func TestPublicPlanDoesNotTruncateLongUIText(t *testing.T) {
 	longTitle := strings.Repeat("很长的计划标题", 40)
 	plan := publicPlan(Plan{
 		ID: "p1", Revision: 1,
-		Explanation: strings.Repeat("完整说明", 40),
+		Title: strings.Repeat("完整说明", 40), Content: "完整计划正文",
 		Steps:       []PlanStep{{ID: "s1", Title: longTitle, Status: PlanStepPending}},
 	})
 
 	if plan.Steps[0].Title != longTitle {
 		t.Fatalf("plan step title was truncated: %q", plan.Steps[0].Title)
 	}
-	if strings.Contains(plan.Explanation, "…") {
-		t.Fatalf("plan explanation should not be truncated: %q", plan.Explanation)
+	if strings.Contains(plan.Title, "…") {
+		t.Fatalf("plan title should not be truncated: %q", plan.Title)
 	}
 }

@@ -132,7 +132,7 @@ func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 }
 
 func TestFailFastSkipsDoNotExhaustRepairBudget(t *testing.T) {
-	state := &runtimeState{}
+	state := &RunState{}
 	recordToolFailures(state, []ToolResult{
 		failedToolResult(CodeContentInvalid, "invalid spec", true),
 		failedToolResult(CodeDependencyFailed, "skipped", false),
@@ -155,9 +155,9 @@ func TestFailFastSkipsDoNotExhaustRepairBudget(t *testing.T) {
 	}
 }
 
-func batchState(pack contextengine.ContextPack) *runtimeState {
-	return &runtimeState{
+func batchState(pack contextengine.ContextPack) *RunState {
+	return &RunState{
 		runID: "batch", loopID: "loop-batch", phase: PhaseExecuting,
-		scope: pack.Command.Scope, ledger: NewEvidenceLedger(),
+		scope: pack.Command.Scope, mode: pack.Command.Mode, pack: pack, ledger: NewEvidenceLedger(),
 	}
 }
