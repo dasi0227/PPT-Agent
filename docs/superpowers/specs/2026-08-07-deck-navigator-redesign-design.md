@@ -4,7 +4,7 @@
 
 当前左侧目录同时展示了页面顺序、章节层级、页面标题、layout/archetype 机器字段、HTML 物化状态和操作按钮。信息密度过高，且 `hero-cover`、`problem-statement`、`未生成` 这类内部状态或设计稿细节会干扰用户理解目录。
 
-本设计以 `tmp/deck-navigator-redesign-preview.html` 为视觉方向，落地到现有 React 前端。
+本设计以 `docs/discuss/deck-navigator-redesign-preview.html` 为视觉方向，落地到现有 React 前端。
 
 ## 目标
 

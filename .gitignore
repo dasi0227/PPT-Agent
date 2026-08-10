@@ -28,3 +28,6 @@ config.yaml
 
 # 编辑器/系统
 .DS_Store
+
+# 根目录临时文件
+/tmp/

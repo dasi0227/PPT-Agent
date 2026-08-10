@@ -111,8 +111,8 @@ Files:
 - `backend/prompts/runtime/**`
 - `backend/prompts/semantic_reviewer/**`
 - `docs/learn/ppt-agent-architecture-guide.html`
-- `tmp/runtime-schema.md`
-- `tmp/runtime-schema-todo.md`
+- `docs/discuss/runtime-schema.md`
+- `docs/discuss/runtime-schema-todo.md`
 
 Actions:
 
