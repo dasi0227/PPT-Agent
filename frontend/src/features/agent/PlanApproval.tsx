@@ -1,11 +1,58 @@
 import { useState } from 'react';
-import { CheckCircle2, ListChecks, Send } from 'lucide-react';
+import { ChevronDown, ChevronRight, ListChecks, Send } from 'lucide-react';
 import { runsApi } from '../../api/runs';
 import { MarkdownMessage } from './MarkdownMessage';
 import type { PlanApprovalItem } from './eventReducer';
 
+const decisions = [
+  ['approve', '批准执行'],
+  ['revise', '返回修改'],
+  ['cancel', '取消停止'],
+] as const;
+
+type PlanDecision = typeof decisions[number][0];
+
+function decisionLabel(decision: PlanDecision): string {
+  return decisions.find(([value]) => value === decision)?.[1] ?? '';
+}
+
+function decisionClass(decision: PlanDecision, selected: boolean): string {
+  if (!selected) return 'border-border text-text-600';
+  return decision === 'cancel'
+    ? 'border-danger/40 bg-danger/10 text-danger'
+    : 'border-accent/40 bg-accent-soft text-accent';
+}
+
+function PlanBody({ item, statusText = '等待确认' }: { item: PlanApprovalItem; statusText?: string }) {
+  return <>
+    <div className="flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /><div><h3 className="text-sm font-semibold text-text-900">{item.plan.title}</h3><p className="text-xs text-text-400">{item.plan.steps.length} 个步骤 · {statusText}</p></div></div>
+    <div className="mt-3 text-sm leading-6 text-text-700"><MarkdownMessage content={item.plan.content} /></div>
+  </>;
+}
+
+function AnsweredPlanApproval({ item, decision, feedback }: { item: PlanApprovalItem; decision: PlanDecision; feedback?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const label = decisionLabel(decision);
+  return <article className="overflow-hidden rounded-[10px] border border-border-strong bg-surface">
+    <button type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)} className="flex min-h-10 w-full items-center gap-2 px-3 py-2 text-left text-sm text-text-600">
+      <ListChecks className="h-4 w-4 shrink-0 text-accent" />
+      <span className="min-w-0 flex-1 truncate">计划已{label}</span>
+      {expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" />}
+    </button>
+    {expanded && <div className="border-t border-border p-4">
+      <PlanBody item={item} statusText={`已${label}`} />
+      <div className="mt-4 border-t border-border pt-3" role="group" aria-label="已提交的计划处理方式">
+        <div className="grid grid-cols-3 gap-2">
+          {decisions.map(([value, optionLabel]) => <div key={value} aria-pressed={decision === value} className={`flex items-center justify-center rounded-lg border px-2 py-2 text-xs font-medium ${decisionClass(value, decision === value)}`}>{optionLabel}</div>)}
+        </div>
+        {decision === 'revise' && <p className="mt-3 rounded-lg border border-border bg-panel-muted px-3 py-2 text-sm leading-6 text-text-700"><span className="mr-2 font-medium text-text-900">修改反馈</span>{feedback}</p>}
+      </div>
+    </div>}
+  </article>;
+}
+
 export function PlanApproval({ item }: { item: PlanApprovalItem }) {
-  const [decision, setDecision] = useState<'approve' | 'revise' | 'cancel' | ''>('');
+  const [decision, setDecision] = useState<PlanDecision | ''>('');
   const [feedback, setFeedback] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const answered = item.answer;
@@ -16,14 +63,28 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
     try { await runsApi.submitPlanApproval(item.runId, { interaction_id: item.interactionId, plan_id: item.plan.id, expected_revision: item.plan.revision, decision: decision as 'approve' | 'revise' | 'cancel', feedback: feedback.trim(), idempotency_key: `${item.interactionId}:${item.plan.revision}` }); }
     catch { setSubmitting(false); }
   };
-  if (answered) return <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-600"><CheckCircle2 className="h-4 w-4 text-success" /><span>计划已{answered.decision === 'approve' ? '批准执行' : answered.decision === 'revise' ? '返回修改' : '取消停止'}</span></div>;
+  if (answered) return <AnsweredPlanApproval item={item} decision={answered.decision} feedback={answered.feedback} />;
   return <article className="rounded-[10px] border border-border-strong bg-surface p-4">
-    <div className="flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /><div><h3 className="text-sm font-semibold text-text-900">{item.plan.title}</h3><p className="text-xs text-text-400">{item.plan.steps.length} 个步骤 · 等待确认</p></div></div>
-    <div className="mt-3 text-sm leading-6 text-text-700"><MarkdownMessage content={item.plan.content} /></div>
-    <div className="mt-3 grid grid-cols-3 gap-2" role="radiogroup" aria-label="计划处理方式">
-      {([['approve','批准执行'], ['revise','返回修改'], ['cancel','取消停止']] as const).map(([value, label]) => <label key={value} className={`flex cursor-pointer items-center justify-center rounded-lg border px-2 py-2 text-xs font-medium ${decision === value ? value === 'cancel' ? 'border-danger/40 bg-danger/10 text-danger' : 'border-accent/40 bg-accent-soft text-accent' : 'border-border text-text-600'}`}><input className="sr-only" type="radio" name={item.interactionId} checked={decision === value} onChange={() => setDecision(value)} /><span>{label}</span></label>)}
+    <PlanBody item={item} />
+    <div className="mt-4 border-t border-border pt-3" role="group" aria-label="计划处理方式" data-testid="plan-approval-actions">
+      <div className="grid grid-cols-3 gap-2">
+        {decisions.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={decision === value}
+            onClick={(event) => {
+              event.stopPropagation();
+              setDecision(value);
+            }}
+            className={`flex items-center justify-center rounded-lg border px-2 py-2 text-xs font-medium ${decisionClass(value, decision === value)}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {decision === 'revise' && <textarea className="mt-3 min-h-24 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="说明需要调整的内容" required />}
+      <div className="mt-3 flex justify-end"><button type="button" disabled={!canSubmit} onClick={() => void submit()} className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35"><Send className="h-3.5 w-3.5" />{submitting ? '提交中' : '提交'}</button></div>
     </div>
-    {decision === 'revise' && <textarea className="mt-3 min-h-24 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="说明需要调整的内容" required />}
-    <div className="mt-3 flex justify-end"><button type="button" disabled={!canSubmit} onClick={() => void submit()} className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-35"><Send className="h-3.5 w-3.5" />{submitting ? '提交中' : '提交'}</button></div>
   </article>;
 }

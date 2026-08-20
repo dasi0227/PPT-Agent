@@ -60,6 +60,18 @@ func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state 
 	if input.Checkpoint == nil || state == nil {
 		return nil
 	}
+	cp := r.checkpointForBoundary(state, boundary, questionID)
+	if err := input.Checkpoint.SaveCheckpoint(ctx, cp); err != nil {
+		return err
+	}
+	recordTrace(input.Trace, state.runID, "checkpoint.saved", map[string]any{
+		"loop_id": state.loopID, "phase": state.phase, "boundary": boundary,
+		"turns": state.turns, "tool_calls": state.toolCalls,
+	})
+	return nil
+}
+
+func (r *Runtime) checkpointForBoundary(state *RunState, boundary checkpointBoundary, questionID string) RuntimeCheckpoint {
 	cp := state.checkpoint(questionID)
 	cp.Boundary = string(boundary)
 	cp.ContextBriefing = state.contextBriefing
@@ -70,14 +82,7 @@ func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state 
 	if cp.CreatedAt == 0 {
 		cp.CreatedAt = time.Now().UnixNano()
 	}
-	if err := input.Checkpoint.SaveCheckpoint(ctx, cp); err != nil {
-		return err
-	}
-	recordTrace(input.Trace, state.runID, "checkpoint.saved", map[string]any{
-		"loop_id": state.loopID, "phase": state.phase, "boundary": boundary,
-		"turns": state.turns, "tool_calls": state.toolCalls,
-	})
-	return nil
+	return cp
 }
 
 func (r *Runtime) maybePeriodicCheckpoint(ctx context.Context, input RuntimeInput, state *RunState) error {

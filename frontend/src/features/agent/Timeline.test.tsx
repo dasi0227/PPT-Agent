@@ -72,7 +72,7 @@ describe('Timeline', () => {
     expect(userCopyButton).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
     expect(userCopyButton.parentElement).toHaveClass('group');
     const replyCopyButton = screen.getByRole('button', { name: '复制回复' });
-    expect(replyCopyButton).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
+    expect(replyCopyButton.parentElement).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
     expect(replyCopyButton.closest('article')).toHaveClass('group');
     // 计划已迁出消息流，改由 composer 上的 PlanIndicator 承载，不应出现在时间线中。
     expect(screen.queryByText('执行计划')).toBeNull();

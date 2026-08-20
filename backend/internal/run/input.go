@@ -16,6 +16,7 @@ type InputQueue struct {
 	// awaiting 保存未应答的权威问题，用于校验 reply_to 与结构化答案。
 	awaiting map[string]model.QuestionAskedPayload
 	approval map[string]model.PlanApprovalRequestedPayload
+	answered map[string]model.PlanApprovalAnswer
 	// reply 通道：waiting 状态下收到匹配应答时通知 engine 恢复。
 	replyCh    chan AcceptedReply
 	approvalCh chan model.PlanApprovalAnswer
@@ -25,6 +26,7 @@ func NewInputQueue() *InputQueue {
 	return &InputQueue{
 		awaiting:   map[string]model.QuestionAskedPayload{},
 		approval:   map[string]model.PlanApprovalRequestedPayload{},
+		answered:   map[string]model.PlanApprovalAnswer{},
 		replyCh:    make(chan AcceptedReply, 8),
 		approvalCh: make(chan model.PlanApprovalAnswer, 8),
 	}
@@ -38,11 +40,17 @@ func (q *InputQueue) MarkPlanApproval(payload model.PlanApprovalRequestedPayload
 func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
 	q.mu.Lock()
 	pending, ok := q.approval[answer.InteractionID]
-	if !ok || pending.Plan.PlanID != answer.PlanID || pending.Plan.Revision != answer.ExpectedRevision || (answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "cancel") || (answer.Decision == "revise" && strings.TrimSpace(answer.Feedback) == "") {
+	if !ok {
+		previous, replay := q.answered[answer.InteractionID]
+		q.mu.Unlock()
+		return replay && previous == answer
+	}
+	if pending.Plan.PlanID != answer.PlanID || pending.Plan.Revision != answer.ExpectedRevision || (answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "cancel") || (answer.Decision == "revise" && strings.TrimSpace(answer.Feedback) == "") {
 		q.mu.Unlock()
 		return false
 	}
 	delete(q.approval, answer.InteractionID)
+	q.answered[answer.InteractionID] = answer
 	q.mu.Unlock()
 	select {
 	case q.approvalCh <- answer:

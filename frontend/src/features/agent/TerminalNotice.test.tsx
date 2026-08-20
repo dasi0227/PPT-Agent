@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../../stores/projectStore';
 import { useRunStore } from '../../stores/runStore';
@@ -49,5 +49,20 @@ describe('TerminalNotice retry authority', () => {
 
     expect(screen.queryByRole('button', { name: '重试（创建新任务）' })).not.toBeInTheDocument();
     expect(screen.getByText('页面检查未通过')).toBeInTheDocument();
+  });
+
+  it('shows copy and a hover-only timestamp for terminal messages', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<TerminalNotice item={{
+      id: 'terminal-copy', type: 'terminal_notice', status: 'failed',
+      message: '连续修正未成功，任务已停止。', timestamp: new Date(2026, 7, 11, 14, 5).getTime(),
+    }} />);
+
+    const copy = screen.getByRole('button', { name: '复制消息' });
+    expect(screen.getByText('08-11 14-05')).toBeInTheDocument();
+    expect(copy.parentElement).toHaveClass('opacity-0', 'group-hover:opacity-100');
+    fireEvent.click(copy);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('连续修正未成功，任务已停止。'));
   });
 });

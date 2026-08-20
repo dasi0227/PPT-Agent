@@ -60,11 +60,11 @@ function SubmittedQuestionRow({ question, value }: { question: QuestionField; va
     >
       <MessageCircleQuestion className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
       <div className="min-w-0 flex-1">
-        <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-1">
+        <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-1">
           <span className="font-medium text-text-400">Q：</span>
           <span className="truncate">{question.title}</span>
         </div>
-        {expanded && <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-1">
+        {expanded && <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-1">
           <span className="font-medium text-text-400">A：</span>
           <span>{value}</span>
         </div>}
@@ -80,14 +80,21 @@ function SubmittedQuestionRow({ question, value }: { question: QuestionField; va
 
 function SubmittedQuestionDetailRow({ question, value }: { question: QuestionField; value: string }) {
   return (
-    <div className="rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900">
-      <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-1">
-        <span className="font-medium text-text-400">Q：</span>
-        <span>{question.title}</span>
-      </div>
-      <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-1">
-        <span className="font-medium text-text-400">A：</span>
-        <span>{value}</span>
+    <div className="question-detail-row flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900">
+      <MessageCircleQuestion
+        className="mt-0.5 h-4 w-4 shrink-0 text-success"
+        strokeWidth={1.75}
+        aria-hidden="true"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-1">
+          <span className="font-medium text-text-400">Q：</span>
+          <span>{question.title}</span>
+        </div>
+        <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-1">
+          <span className="font-medium text-text-400">A：</span>
+          <span>{value}</span>
+        </div>
       </div>
     </div>
   );
@@ -142,7 +149,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
               : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />}
           </button>
           {answeredGroupExpanded && (
-            <div className="ml-6 space-y-1 px-1.5 pb-1">
+            <div className="space-y-1 pb-1">
               {questions.map((question) => (
                 <SubmittedQuestionDetailRow
                   key={question.id}

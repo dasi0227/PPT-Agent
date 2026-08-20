@@ -29,6 +29,10 @@ type PlanApprovalPrompter interface {
 	AskPlanApproval(context.Context, model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error)
 }
 
+type PlanApprovalResumer interface {
+	ResumeAfterPlanApproval(context.Context)
+}
+
 type SteeringSource interface {
 	DrainInputs(context.Context) ([]SteeringInput, error)
 	MarkInputsInjected(context.Context, []string) error
@@ -148,26 +152,28 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 const noToolCallGuidance = "Ordinary assistant text is not a completion signal. If the task is complete, call finish(message=...) with the final response. If the task is not complete, call one of the currently disclosed tools to continue."
 
 type RuntimeInput struct {
-	RunID               string
-	ProjectDir          string
-	Context             contextengine.ContextPack
-	Emitter             EventEmitter
-	Prompter            Prompter
-	Steering            SteeringSource
-	Checkpoint          CheckpointSink
-	CommitMetadata      CommitMetadata
-	DomainTools         DomainToolProvider
-	Budget              RuntimeBudget
-	Trace               TraceRecorder
-	ImageResolver       llm.ImageRefResolver
-	Lifecycle           LifecycleObserver
-	Idempotency         IdempotencyStore
-	ContextIndexStore   ContextIndexStore
-	SemanticReviews     SemanticReviewer
-	SemanticReviewStore SemanticReviewStore
-	ResumeCheckpoint    *RuntimeCheckpoint
-	RefreshContext      func(context.Context, model.RunMode) (contextengine.ContextPack, error)
-	PersistMode         func(context.Context, model.RunMode) error
+	RunID                 string
+	ProjectDir            string
+	Context               contextengine.ContextPack
+	Emitter               EventEmitter
+	Prompter              Prompter
+	Steering              SteeringSource
+	Checkpoint            CheckpointSink
+	CommitMetadata        CommitMetadata
+	DomainTools           DomainToolProvider
+	Budget                RuntimeBudget
+	Trace                 TraceRecorder
+	ImageResolver         llm.ImageRefResolver
+	Lifecycle             LifecycleObserver
+	Idempotency           IdempotencyStore
+	ContextIndexStore     ContextIndexStore
+	SemanticReviews       SemanticReviewer
+	SemanticReviewStore   SemanticReviewStore
+	ResumeCheckpoint      *RuntimeCheckpoint
+	RefreshContext        func(context.Context, model.RunMode) (contextengine.ContextPack, error)
+	PersistMode           func(context.Context, model.RunMode) error
+	DomainToolsForContext func(contextengine.ContextPack) DomainToolProvider
+	CommitPlanApproval    func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error
 }
 
 type Runtime struct {
@@ -176,6 +182,21 @@ type Runtime struct {
 	Compactor      ContextCompactor
 	Embedder       EmbeddingProvider
 	SemanticPolicy SemanticReviewPolicy
+}
+
+func buildDomainToolRegistry(input RuntimeInput, pack contextengine.ContextPack) (*ToolRegistry, error) {
+	registry := NewToolRegistry()
+	provider := input.DomainTools
+	if input.DomainToolsForContext != nil {
+		provider = input.DomainToolsForContext(pack)
+	}
+	if provider == nil {
+		provider = DefaultDomainToolProvider{Pack: pack}
+	}
+	if err := provider.RegisterDomainTools(registry); err != nil {
+		return nil, err
+	}
+	return registry, nil
 }
 
 func NewRuntime(agent ReActAgent) *Runtime {
@@ -225,6 +246,7 @@ type RunState struct {
 	lastCheckpointTurn      int
 	lastCheckpointToolCalls int
 	lastCheckpointAt        time.Time
+	tools                   *ToolRegistry
 }
 
 func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome {
@@ -312,13 +334,15 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.tx = session
 	}
 
-	registry := NewToolRegistry()
-	provider := input.DomainTools
-	if provider == nil {
-		provider = DefaultDomainToolProvider{Pack: state.pack}
-	}
-	if err := provider.RegisterDomainTools(registry); err != nil {
+	registry, err := buildDomainToolRegistry(input, state.pack)
+	if err != nil {
 		return r.fail(input, state, CodeAgentFailed, err)
+	}
+	state.tools = registry
+	if state.mode == model.ModePlan && state.phase == PhaseWaitingInput && state.plan != nil && state.plan.Status == PlanAwaitingApproval {
+		if outcome, terminal := r.awaitPlanApproval(ctx, input, state); terminal {
+			return outcome
+		}
 	}
 
 	for {
@@ -341,10 +365,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.maybePeriodicCheckpoint(ctx, input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
-		if state.mode == model.ModeExecute && state.plan != nil && state.plan.Status == PlanActive && state.plan.ApprovedContentHash != state.plan.ContentHash() {
+		if state.mode == model.ModeExecute && state.plan != nil && state.plan.ApprovedRevision > 0 &&
+			(state.plan.Status == PlanActive || state.plan.Status == PlanCompleted) &&
+			state.plan.ApprovedContentHash != state.plan.ContentHash() {
 			return r.fail(input, state, CodeAgentFailed, errors.New("approved plan content hash mismatch"))
 		}
-		schemas := registry.Disclose(state.phase, state.mode)
+		schemas := state.tools.Disclose(state.phase, state.mode)
 		schemas = append(schemas, controlSchemas(state.phase, state.mode, state.plan)...)
 		state.turns++
 		response, err := r.Agent.Next(ctx, AgentRequest{
@@ -415,7 +441,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			}
 			continue
 		}
-		results := r.executeToolBatch(ctx, input, state, registry, schemasByName(schemas), calls)
+		results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), calls)
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
 		recordToolFailures(state, results)
 		if state.requirements != nil {
@@ -733,6 +759,162 @@ func runConcurrentBatch(ctx context.Context, count, limit int, execute func(int)
 	wg.Wait()
 }
 
+func (r *Runtime) prepareAndCommitPlanApproval(
+	ctx context.Context,
+	input RuntimeInput,
+	state *RunState,
+) (*RunState, error) {
+	if state == nil || state.plan == nil || state.mode != model.ModePlan || state.phase != PhaseWaitingInput || state.plan.Status != PlanAwaitingApproval {
+		return nil, errors.New("plan approval transition requires an awaiting plan run")
+	}
+	candidate := *state
+	candidatePlan := *state.plan
+	candidatePlan.Status = PlanActive
+	candidatePlan.ApprovedRevision = candidatePlan.Revision
+	candidatePlan.ApprovedContentHash = candidatePlan.ContentHash()
+	candidatePlan.Revision++
+	candidatePlan.UpdatedAt = time.Now().Unix()
+	candidate.plan = &candidatePlan
+	candidate.mode = model.ModeExecute
+	candidate.phase = PhaseExecuting
+	if candidate.tx == nil {
+		session, err := NewRunSession(input.ProjectDir, input.RunID)
+		if err != nil {
+			return nil, err
+		}
+		candidate.tx = session
+	}
+	if input.RefreshContext != nil {
+		refreshed, err := input.RefreshContext(ctx, model.ModeExecute)
+		if err != nil {
+			return nil, err
+		}
+		candidate.pack = refreshed
+	} else {
+		candidate.pack.Command.Mode = model.ModeExecute
+		candidate.pack.Manifest.ReadOnly = false
+	}
+	if candidate.pack.Command.Mode != model.ModeExecute || candidate.pack.Manifest.ReadOnly {
+		return nil, errors.New("refreshed execute context is not write-enabled")
+	}
+	candidate.contextIndex = NewContextIndexFromPack(candidate.pack, candidate.scope, r.Embedder)
+	candidate.contextIndexRef = candidate.contextIndex.ID
+	candidate.retrievedContext = nil
+	candidate.contextBriefing = BuildContextBriefing(candidate.pack, &candidate)
+	tools, err := buildDomainToolRegistry(input, candidate.pack)
+	if err != nil {
+		return nil, err
+	}
+	candidate.tools = tools
+	if input.ContextIndexStore != nil {
+		id, err := input.ContextIndexStore.SaveContextIndex(ctx, candidate.contextIndex)
+		if err != nil {
+			return nil, err
+		}
+		if id != "" {
+			candidate.contextIndexRef = id
+		}
+	}
+	checkpoint := r.checkpointForBoundary(&candidate, checkpointPlanUpdated, "")
+	if input.CommitPlanApproval != nil {
+		if err := input.CommitPlanApproval(ctx, model.ModeExecute, candidate.pack, checkpoint); err != nil {
+			return nil, err
+		}
+		return &candidate, nil
+	}
+	if input.PersistMode != nil {
+		if err := input.PersistMode(ctx, model.ModeExecute); err != nil {
+			return nil, err
+		}
+	}
+	if input.Checkpoint != nil {
+		if err := input.Checkpoint.SaveCheckpoint(ctx, checkpoint); err != nil {
+			if input.PersistMode != nil {
+				_ = input.PersistMode(ctx, model.ModePlan)
+			}
+			return nil, err
+		}
+	}
+	return &candidate, nil
+}
+
+func (r *Runtime) awaitPlanApproval(
+	ctx context.Context,
+	input RuntimeInput,
+	state *RunState,
+) (StructuredOutcome, bool) {
+	if state == nil || state.plan == nil || state.plan.Status != PlanAwaitingApproval {
+		return r.fail(input, state, CodeInvalidControlCall, errors.New("awaiting plan is required")), true
+	}
+	prompter, ok := input.Prompter.(PlanApprovalPrompter)
+	if !ok {
+		return r.fail(input, state, CodeAgentFailed, errors.New("plan approval prompter is required")), true
+	}
+	plan := *state.plan
+	interactionID := "plan_approval_" + plan.ID + "_" + fmt.Sprint(plan.Revision)
+	request := model.PlanApprovalRequestedPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, Plan: publicPlan(plan)}
+	for {
+		answer, err := prompter.AskPlanApproval(ctx, request)
+		if err != nil {
+			return r.fail(input, state, CodeCanceled, err), true
+		}
+		if answer.InteractionID != interactionID || answer.PlanID != plan.ID || answer.ExpectedRevision != plan.Revision ||
+			(answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "cancel") ||
+			(answer.Decision == "revise" && strings.TrimSpace(answer.Feedback) == "") {
+			return r.fail(input, state, CodeInvalidControlCall, errors.New("invalid plan approval answer")), true
+		}
+		switch answer.Decision {
+		case "cancel":
+			state.plan.Status = PlanCanceled
+			state.plan.Revision++
+			state.plan.UpdatedAt = time.Now().Unix()
+			if input.Emitter != nil {
+				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Revision: plan.Revision, Decision: answer.Decision, Feedback: answer.Feedback})
+				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan)})
+			}
+			r.changePhase(input.Emitter, state, PhaseTerminal, "plan canceled")
+			_ = r.saveCheckpoint(ctx, input, state, checkpointTerminal, "")
+			return state.outcome(StatusCanceled, CodeCanceled, "plan canceled"), true
+		case "revise":
+			if input.Emitter != nil {
+				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Revision: plan.Revision, Decision: answer.Decision, Feedback: answer.Feedback})
+			}
+			r.changePhase(input.Emitter, state, PhasePlanning, "plan revision requested")
+			if resumer, ok := input.Prompter.(PlanApprovalResumer); ok {
+				resumer.ResumeAfterPlanApproval(ctx)
+			}
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Plan revision feedback: " + answer.Feedback)})
+			return StructuredOutcome{}, false
+		case "approve":
+			candidate, transitionErr := r.prepareAndCommitPlanApproval(ctx, input, state)
+			if transitionErr != nil {
+				recordTrace(state.trace, state.runID, "plan.approval_transition_failed", map[string]any{
+					"loop_id": state.loopID, "plan_id": plan.ID, "revision": plan.Revision, "error": transitionErr.Error(),
+				})
+				r.emitProgress(input.Emitter, state, "waiting", "计划批准暂未生效，请重新提交", nil)
+				continue
+			}
+			previous := state.mode
+			*state = *candidate
+			if resumer, ok := input.Prompter.(PlanApprovalResumer); ok {
+				resumer.ResumeAfterPlanApproval(ctx)
+			}
+			if state.lifecycle != nil {
+				state.lifecycle.PhaseChanged(PhaseExecuting)
+			}
+			recordTrace(state.trace, state.runID, "phase.changed", map[string]any{
+				"loop_id": state.loopID, "from": PhaseWaitingInput, "phase": PhaseExecuting, "reason": "plan approved; execute mode enabled",
+			})
+			if input.Emitter != nil {
+				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Revision: plan.Revision, Decision: answer.Decision, Feedback: answer.Feedback})
+				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan)})
+				input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: previous, Mode: state.mode})
+			}
+			return StructuredOutcome{}, false
+		}
+	}
+}
+
 func (r *Runtime) executeControl(
 	ctx context.Context,
 	input RuntimeInput,
@@ -766,85 +948,7 @@ func (r *Runtime) executeControl(
 		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, "plan_approval_"+next.ID); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
-		prompter, ok := input.Prompter.(PlanApprovalPrompter)
-		if !ok {
-			return r.fail(input, state, CodeAgentFailed, errors.New("plan approval prompter is required")), true
-		}
-		interactionID := "plan_approval_" + next.ID + "_" + fmt.Sprint(next.Revision)
-		answer, err := prompter.AskPlanApproval(ctx, model.PlanApprovalRequestedPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, Plan: publicPlan(next)})
-		if err != nil {
-			return r.fail(input, state, CodeCanceled, err), true
-		}
-		if answer.InteractionID != interactionID || answer.PlanID != next.ID || answer.ExpectedRevision != next.Revision || (answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "cancel") || (answer.Decision == "revise" && strings.TrimSpace(answer.Feedback) == "") {
-			return r.fail(input, state, CodeInvalidControlCall, errors.New("invalid plan approval answer")), true
-		}
-		if input.Emitter != nil {
-			input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: next.ID, Revision: next.Revision, Decision: answer.Decision, Feedback: answer.Feedback})
-		}
-		switch answer.Decision {
-		case "cancel":
-			state.plan.Status = PlanCanceled
-			r.changePhase(input.Emitter, state, PhaseTerminal, "plan canceled")
-			_ = r.saveCheckpoint(ctx, input, state, checkpointTerminal, "")
-			return state.outcome(StatusCanceled, CodeCanceled, "plan canceled"), true
-		case "revise":
-			r.changePhase(input.Emitter, state, PhasePlanning, "plan revision requested")
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Plan revision feedback: " + answer.Feedback)})
-			return StructuredOutcome{}, false
-		case "approve":
-			previousPlan, previousPack, previousSession := *state.plan, state.pack, state.tx
-			state.plan.Status = PlanActive
-			state.plan.ApprovedRevision = state.plan.Revision
-			state.plan.ApprovedContentHash = state.plan.ContentHash()
-			previous := state.mode
-			state.mode = model.ModeExecute
-			if state.tx == nil {
-				session, sessionErr := NewRunSession(input.ProjectDir, input.RunID)
-				if sessionErr != nil {
-					state.mode = previous
-					*state.plan, state.pack, state.tx = previousPlan, previousPack, previousSession
-					return r.fail(input, state, CodeAgentFailed, sessionErr), true
-				}
-				state.tx = session
-			}
-			if input.RefreshContext != nil {
-				refreshed, refreshErr := input.RefreshContext(ctx, model.ModeExecute)
-				if refreshErr != nil {
-					state.mode = previous
-					*state.plan, state.pack, state.tx = previousPlan, previousPack, previousSession
-					return r.fail(input, state, CodeAgentFailed, refreshErr), true
-				}
-				state.pack = refreshed
-			} else {
-				state.pack.Command.Mode = model.ModeExecute
-				state.pack.Manifest.ReadOnly = false
-			}
-			if input.PersistMode != nil {
-				if persistErr := input.PersistMode(ctx, model.ModeExecute); persistErr != nil {
-					state.mode = previous
-					*state.plan, state.pack, state.tx = previousPlan, previousPack, previousSession
-					return r.fail(input, state, CodeAgentFailed, persistErr), true
-				}
-			}
-			state.contextIndex = NewContextIndexFromPack(state.pack, state.scope, r.Embedder)
-			state.contextIndexRef = state.contextIndex.ID
-			r.changePhase(input.Emitter, state, PhaseExecuting, "plan approved; execute mode enabled")
-			if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, ""); err != nil {
-				if input.PersistMode != nil {
-					_ = input.PersistMode(ctx, previous)
-				}
-				state.mode = previous
-				*state.plan, state.pack, state.tx = previousPlan, previousPack, previousSession
-				r.changePhase(input.Emitter, state, PhaseWaitingInput, "plan approval rollback")
-				return r.fail(input, state, CodeAgentFailed, err), true
-			}
-			if input.Emitter != nil {
-				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan)})
-				input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: previous, Mode: state.mode})
-			}
-			return StructuredOutcome{}, false
-		}
-		return r.fail(input, state, CodeInvalidControlCall, errors.New("unknown plan approval decision")), true
+		return r.awaitPlanApproval(ctx, input, state)
 	case "update_plan":
 		if (state.mode != model.ModePlan || state.phase != PhasePlanning) && (state.mode != model.ModeExecute || state.phase != PhaseExecuting) {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "update_plan is not allowed now", false))
@@ -886,6 +990,9 @@ func (r *Runtime) executeControl(
 			return StructuredOutcome{}, false
 		}
 		previous := state.plan
+		if state.mode == model.ModeExecute && previous == nil {
+			next.Status = PlanActive
+		}
 		state.plan = &next
 		if input.Emitter != nil {
 			input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{

@@ -6,9 +6,11 @@ import (
 	"errors"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func (s *Store) SaveCheckpoint(ctx context.Context, checkpoint workflow.RuntimeCheckpoint) error {
@@ -31,6 +33,76 @@ func (s *Store) SaveCheckpoint(ctx context.Context, checkpoint workflow.RuntimeC
 		return tx.Create(&runCheckpointPO{
 			ID: id, RunID: checkpoint.RunID, LoopID: checkpoint.LoopID, Seq: seq,
 			Phase: string(checkpoint.Phase), CheckpointJSON: string(raw), CreatedAt: checkpoint.CreatedAt,
+		}).Error
+	})
+}
+
+// CommitPlanApproval is the durable commit point for the in-place plan -> execute
+// transition. The Run command, refreshed ContextManifest, and complete checkpoint
+// become visible together or not at all.
+func (s *Store) CommitPlanApproval(
+	ctx context.Context,
+	runID string,
+	mode model.RunMode,
+	runContext model.RunContext,
+	checkpoint workflow.RuntimeCheckpoint,
+) error {
+	if runID == "" || mode != model.ModeExecute || checkpoint.RunID != runID || checkpoint.Mode != mode {
+		return errors.New("invalid plan approval transition")
+	}
+	if checkpoint.CreatedAt == 0 {
+		checkpoint.CreatedAt = time.Now().UnixNano()
+	}
+	rawCheckpoint, err := json.Marshal(checkpoint)
+	if err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var run runPO
+		if err := tx.First(&run, "id = ?", runID).Error; err != nil {
+			return mapErr(err)
+		}
+		if model.RunMode(run.Mode) != model.ModePlan {
+			return errors.New("run is not in plan mode")
+		}
+		var command model.RunCommand
+		if err := json.Unmarshal([]byte(run.RunCommandJSON), &command); err != nil {
+			return err
+		}
+		command.Mode = mode
+		rawCommand, err := json.Marshal(command)
+		if err != nil {
+			return err
+		}
+		result := tx.Model(&runPO{}).Where("id = ? AND mode = ?", runID, string(model.ModePlan)).Updates(map[string]any{
+			"mode": string(mode), "run_command_json": string(rawCommand), "status": string(model.RunRunning), "updated_at": nowUnix(),
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errors.New("run mode changed during plan approval")
+		}
+		runContext.RunID = runID
+		if runContext.CreatedAt == 0 {
+			runContext.CreatedAt = time.Now().Unix()
+		}
+		if err := tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "run_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"context_id", "profile", "pack_hash", "estimated_tokens", "budget_tokens", "manifest_json", "created_at",
+			}),
+		}).Create(contextToPO(runContext)).Error; err != nil {
+			return err
+		}
+		var seq int64
+		if err := tx.Raw("SELECT COALESCE(MAX(seq), 0) + 1 FROM run_checkpoints WHERE run_id = ?", runID).Scan(&seq).Error; err != nil {
+			return err
+		}
+		id := "ckpt_" + workflowHash(runID, checkpoint.LoopID, seq, checkpoint.CreatedAt)
+		return tx.Create(&runCheckpointPO{
+			ID: id, RunID: runID, LoopID: checkpoint.LoopID, Seq: seq,
+			Phase: string(checkpoint.Phase), CheckpointJSON: string(rawCheckpoint), CreatedAt: checkpoint.CreatedAt,
 		}).Error
 	})
 }

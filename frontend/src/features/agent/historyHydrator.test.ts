@@ -72,6 +72,36 @@ describe('history hydrator', () => {
     ]);
   });
 
+  it('restores a submitted plan approval and the execute mode transition', () => {
+    const plan = {
+      plan_id: 'p1', revision: 1, title: '执行计划', content: '## 完整计划',
+      status: 'awaiting_approval',
+      steps: [{ id: 's1', title: '生成页面', status: 'pending' }],
+    };
+    const hydrated = hydrateRunFromHistory([
+      entry(1, 'user_turn', {
+        text: '先规划再执行', scope: { artifact: 'ppt', level: 'deck' }, mode: 'plan',
+      }),
+      entry(2, 'plan.updated', { ...base, plan }),
+      entry(3, 'plan.approval_requested', { ...base, interaction_id: 'i1', plan }),
+      entry(4, 'plan.approval_answered', {
+        ...base, interaction_id: 'i1', plan_id: 'p1', revision: 1,
+        decision: 'approve', feedback: '',
+      }),
+      entry(5, 'plan.updated', {
+        ...base,
+        plan: { ...plan, revision: 2, approved_revision: 1, status: 'active' },
+      }),
+      entry(6, 'run.mode_changed', { ...base, previous_mode: 'plan', mode: 'execute' }),
+    ]);
+
+    expect(hydrated.items.find((item) => item.type === 'plan_approval')).toMatchObject({
+      interactionId: 'i1', answer: { decision: 'approve' },
+    });
+    expect(hydrated.plan).toMatchObject({ id: 'p1', revision: 2, status: 'active', approved_revision: 1 });
+    expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'running', mode: 'execute' });
+  });
+
   it('preserves append order across runs and restores the latest pending question', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {

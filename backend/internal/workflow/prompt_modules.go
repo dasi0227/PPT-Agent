@@ -60,7 +60,8 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 			ID: "context_briefing", Version: runtimeprompts.Version, Body: input.ContextBriefing,
 		})
 	}
-	if input.Mode == model.ModeExecute && input.Plan != nil && input.Plan.Status == PlanActive {
+	if input.Mode == model.ModeExecute && input.Plan != nil && input.Plan.ApprovedRevision > 0 &&
+		(input.Plan.Status == PlanActive || input.Plan.Status == PlanCompleted) {
 		planJSON, _ := json.Marshal(struct {
 			PlanID           string     `json:"plan_id"`
 			ApprovedRevision int        `json:"approved_revision"`

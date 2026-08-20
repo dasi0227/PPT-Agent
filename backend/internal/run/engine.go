@@ -20,6 +20,7 @@ type active struct {
 	bus             *Bus
 	queue           *InputQueue
 	cancel          context.CancelFunc
+	resumed         bool
 	mu              sync.Mutex
 	phase           workflow.RunPhase
 	cancelRequested bool
@@ -60,9 +61,16 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	}
 	e.mu.Unlock()
 	bus := NewBus(r.ID, r.ThreadID, e.store, e.hw)
+	events, err := e.store.EventsSince(ctx, r.ID, 0)
+	if err != nil {
+		return model.Run{}, err
+	}
+	if err := bus.Restore(events); err != nil {
+		return model.Run{}, err
+	}
 	queue := NewInputQueue()
 	runCtx, cancel := context.WithCancel(context.Background())
-	a := &active{run: r, bus: bus, queue: queue, cancel: cancel}
+	a := &active{run: r, bus: bus, queue: queue, cancel: cancel, resumed: true}
 	e.mu.Lock()
 	e.actives[r.ID] = a
 	e.mu.Unlock()
@@ -119,13 +127,15 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		e.mu.Unlock()
 	}()
 
-	if err := a.bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
-		PublicEventBase: model.NewPublicEventBase(a.run.ID),
-		Scope:           a.run.Command.Scope, Mode: a.run.Command.Mode,
-		UserInput: a.run.Command.Instruction,
-	}); err != nil {
-		e.setStatus(context.Background(), a.run.ID, model.RunFailed)
-		return
+	if !a.resumed {
+		if err := a.bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
+			PublicEventBase: model.NewPublicEventBase(a.run.ID),
+			Scope:           a.run.Command.Scope, Mode: a.run.Command.Mode,
+			UserInput: a.run.Command.Instruction,
+		}); err != nil {
+			e.setStatus(context.Background(), a.run.ID, model.RunFailed)
+			return
+		}
 	}
 
 	// 获取 project 锁（同 project 串行）。锁超时 → Run 转 failed（ARCH-RUN-LOCK-005）。

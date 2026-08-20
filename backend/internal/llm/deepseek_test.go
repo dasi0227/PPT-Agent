@@ -159,11 +159,16 @@ func TestDeepSeekProviderErrorMappingAndCancellation(t *testing.T) {
 
 	t.Run("canceled", func(t *testing.T) {
 		started := make(chan struct{})
+		release := make(chan struct{})
 		server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
 			close(started)
-			<-request.Context().Done()
+			select {
+			case <-request.Context().Done():
+			case <-release:
+			}
 		}))
 		defer server.Close()
+		defer close(release)
 		adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: "secret", BaseURL: server.URL, Model: "deepseek-chat"})
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)

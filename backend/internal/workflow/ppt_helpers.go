@@ -551,7 +551,7 @@ func controlledModelPath(path string) bool {
 	}
 	switch first {
 	case "schema_version", "version", "revision", "project_id", "project", "slide_id",
-		"section_id", "subsection_id", "created_at", "updated_at":
+		"created_at", "updated_at":
 		return true
 	default:
 		return false

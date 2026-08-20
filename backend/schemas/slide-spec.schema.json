@@ -40,13 +40,11 @@
     },
     "section_id": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
-      "x-runtime-managed": true
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
     },
     "subsection_id": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
-      "x-runtime-managed": true
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
     },
     "role": {
       "type": "string",
@@ -100,6 +98,7 @@
     }
   },
   "x-agent-example": {
+    "section_id": "section-key-findings",
     "role": "evidence",
     "title": "增长来自高价值客户",
     "key_message": "企业客户贡献了主要增量",

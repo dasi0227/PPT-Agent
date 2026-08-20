@@ -65,6 +65,7 @@ func NewRunServiceWithExecutionFactoryAndRegistry(
 type workflowExecution struct {
 	runtime          *workflow.Runtime
 	pack             contextengine.ContextPack
+	assembler        *contextengine.ContextAssembler
 	project          model.Project
 	store            store.Store
 	runID            string
@@ -75,6 +76,31 @@ type workflowExecution struct {
 	reconciliation   workflow.RecoverySnapshot
 }
 
+type planApprovalCommitStore interface {
+	CommitPlanApproval(context.Context, string, model.RunMode, model.RunContext, workflow.RuntimeCheckpoint) error
+}
+
+func (r *workflowExecution) commitPlanApproval(
+	ctx context.Context,
+	mode model.RunMode,
+	pack contextengine.ContextPack,
+	checkpoint workflow.RuntimeCheckpoint,
+) error {
+	store, ok := r.store.(planApprovalCommitStore)
+	if !ok {
+		return errors.New("atomic plan approval store is required")
+	}
+	raw, err := json.Marshal(pack.Manifest)
+	if err != nil {
+		return err
+	}
+	return store.CommitPlanApproval(ctx, r.runID, mode, model.RunContext{
+		RunID: r.runID, ContextID: pack.Manifest.ContextID, Profile: string(pack.Manifest.Profile),
+		PackHash: pack.Manifest.PackHash, EstimatedTokens: pack.Manifest.EstimatedTokens,
+		BudgetTokens: pack.Manifest.BudgetTokens, ManifestJSON: string(raw), CreatedAt: time.Now().Unix(),
+	}, checkpoint)
+}
+
 func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
 	if r.pack.RefResolver != nil {
 		defer r.pack.RefResolver.CloseRun(r.runID)
@@ -83,9 +109,11 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 	outcome := r.runtime.Run(ctx, workflow.RuntimeInput{
 		RunID: r.runID, ProjectDir: r.project.WorkDir, Context: r.pack,
 		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
-		CommitMetadata:      committer.Commit,
-		Trace:               workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
-		DomainTools:         workflow.DefaultDomainToolProvider{Pack: r.pack, Renderer: r.renderer},
+		CommitMetadata: committer.Commit,
+		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
+		DomainToolsForContext: func(pack contextengine.ContextPack) workflow.DomainToolProvider {
+			return workflow.DefaultDomainToolProvider{Pack: pack, Renderer: r.renderer}
+		},
 		ImageResolver:       r.imageResolver,
 		Lifecycle:           checkpoint,
 		Idempotency:         r.store,
@@ -94,12 +122,18 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		SemanticReviewStore: optionalSemanticReviewStore(r.store),
 		ResumeCheckpoint:    r.resumeCheckpoint,
 		PersistMode:         func(ctx context.Context, mode model.RunMode) error { return r.store.UpdateRunMode(ctx, r.runID, mode) },
-		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
-			pack := r.pack
-			pack.Command.Mode = mode
-			pack.Manifest.ReadOnly = mode != model.ModeExecute
-			return pack, nil
+		RefreshContext: func(ctx context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
+			if r.assembler == nil {
+				return contextengine.ContextPack{}, errors.New("context assembler is required for mode transition")
+			}
+			command := r.pack.Command
+			command.Mode = mode
+			return r.assembler.Assemble(ctx, contextengine.ContextRequest{
+				RunID: r.runID, ThreadID: r.pack.Manifest.ThreadID, ProjectID: r.project.ID,
+				Command: command, Budget: contextengine.DefaultBudget(),
+			}, r.project)
 		},
+		CommitPlanApproval: r.commitPlanApproval,
 	})
 	if outcome.Status == workflow.StatusCompleted {
 		memoryStore := contextengine.ThreadMemoryStore{}
@@ -249,7 +283,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	execution := &workflowExecution{
 		runtime: workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()}),
-		pack:    pack, project: project, store: svc.store, runID: runModel.ID,
+		pack:    pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		renderer:         svc.renderer,
 		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
 		semanticReviewer: workflow.LLMSemanticReviewer{Provider: selectedProfile.Adapter()},
@@ -307,7 +341,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: provider})
 	execution := &workflowExecution{
-		runtime: runtime, pack: pack, project: project, store: svc.store, runID: runModel.ID,
+		runtime: runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		renderer:         svc.renderer,
 		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
 		semanticReviewer: workflow.LLMSemanticReviewer{Provider: provider},

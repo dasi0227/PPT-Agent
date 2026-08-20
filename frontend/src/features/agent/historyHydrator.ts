@@ -33,6 +33,9 @@ export interface HistorySessionState {
 
 const publicHistoryEvents = new Set<SSEEventName>([
   'plan.updated',
+  'plan.approval_requested',
+  'plan.approval_answered',
+  'run.mode_changed',
   'message.reasoning',
   'message.milestone',
   'message.final',
@@ -139,6 +142,12 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       };
     } else if (event.event === 'question.answered') {
       session = { ...session, status: 'running', pendingQuestion: null };
+    } else if (event.event === 'plan.approval_requested') {
+      session = { ...session, status: 'waiting', pendingQuestion: null };
+    } else if (event.event === 'plan.approval_answered') {
+      session = { ...session, status: 'running', pendingQuestion: null };
+    } else if (event.event === 'run.mode_changed') {
+      session = { ...session, status: 'running', mode: event.data.mode, pendingQuestion: null };
     } else if (event.event === 'run.finished') {
       session = {
         ...session,

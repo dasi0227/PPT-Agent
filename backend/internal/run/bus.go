@@ -45,11 +45,41 @@ func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
 	}
 }
 
+// Restore rebuilds the in-memory sequence guards from durable public events.
+// It does not append history or notify subscribers; subsequent events continue
+// from the persisted sequence instead of emitting a second run.started.
+func (b *Bus) Restore(events []model.Event) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.seq != 0 || b.started || b.terminated {
+		return errors.New("bus has already started")
+	}
+	for _, event := range events {
+		if event.RunID != b.runID || event.Seq != b.seq+1 {
+			return errors.New("persisted run events are not contiguous")
+		}
+		var data map[string]any
+		if err := json.Unmarshal([]byte(event.Payload), &data); err != nil {
+			return err
+		}
+		if err := b.validateSequence(event.Type, data); err != nil {
+			return err
+		}
+		b.seq = event.Seq
+		b.recordSequence(event.Type, data)
+	}
+	if !b.started {
+		return errors.New("persisted run history is missing run.started")
+	}
+	return nil
+}
+
 // isWhitelistedForHistory persists only product history. Progress remains in the
 // run event store for Last-Event-ID replay but is modeionally transient here.
 func isWhitelistedForHistory(evt model.EventType) bool {
 	switch evt {
 	case model.EventRunStarted, model.EventPlanUpdated,
+		model.EventPlanApprovalRequested, model.EventPlanApprovalAnswered, model.EventRunModeChanged,
 		model.EventMessageReasoning, model.EventMessageMilestone, model.EventMessageFinal,
 		model.EventToolStarted, model.EventToolCompleted,
 		model.EventQuestionAsked, model.EventQuestionAnswered, model.EventRunFinished:

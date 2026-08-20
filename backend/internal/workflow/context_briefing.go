@@ -153,7 +153,10 @@ func nextFocus(state *RunState, mode model.RunMode) string {
 		return "ensure latest changed targets have fresh required evidence, then finish with complete message."
 	}
 	if mode == model.ModePlan {
-		return "deliver the full plan in finish(message), not in ordinary assistant text."
+		if state.plan == nil {
+			return "complete the full proposal with create_plan, then wait for explicit approval without calling finish."
+		}
+		return "revise the complete proposal with update_plan when feedback is present, then wait for approval."
 	}
 	return "use the next disclosed tool or finish(message) when complete."
 }

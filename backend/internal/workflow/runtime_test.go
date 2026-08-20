@@ -569,6 +569,87 @@ func TestRuntimePromptUsesModeSpecificModulesAndContextBriefing(t *testing.T) {
 	}
 }
 
+func TestEveryApprovedExecuteTurnInjectsTheFullPlanContract(t *testing.T) {
+	pack := testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeSlide, false, "按批准计划执行")
+	for _, status := range []PlanStatus{PlanActive, PlanCompleted} {
+		plan := &Plan{
+			ID: "plan-1", Revision: 4, ApprovedRevision: 2, Status: status,
+			Title: "完整执行计划", Content: "## 权威正文\n\n不得由消息压缩删除。",
+			Steps: []PlanStep{{ID: "step-1", Title: "生成并验证页面", Status: PlanStepCompleted}},
+		}
+		plan.ApprovedContentHash = plan.ContentHash()
+		prompt := runtimeSystemPromptForRequest(AgentRequest{
+			Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack, Plan: plan,
+			Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("compacted history")}},
+		}, "{}")
+		for _, expected := range []string{`id="approved_plan"`, `"plan_id":"plan-1"`, `"approved_revision":2`, "## 权威正文", `"id":"step-1"`, `"status":"completed"`} {
+			if !strings.Contains(prompt, expected) {
+				t.Fatalf("status=%s approved plan module missing %q:\n%s", status, expected, prompt)
+			}
+		}
+	}
+}
+
+func TestResumeRestoresModeAndFullApprovedPlanBeforeReasoning(t *testing.T) {
+	plan := &Plan{
+		ID: "plan-resume", Revision: 3, ApprovedRevision: 2, Status: PlanActive,
+		Title: "恢复计划", Content: "## 恢复后仍需完整可见",
+		Steps: []PlanStep{{ID: "resume-step", Title: "继续执行", Status: PlanStepCompleted}},
+	}
+	plan.ApprovedContentHash = plan.ContentHash()
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	_ = NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "resume-approved", ProjectDir: t.TempDir(),
+		Context: testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeDeck, false, "继续执行"),
+		ResumeCheckpoint: &RuntimeCheckpoint{
+			RunID: "resume-approved", LoopID: "same-loop", Mode: model.ModeExecute,
+			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Plan: plan,
+		},
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+	})
+	if len(agent.requests) == 0 {
+		t.Fatal("resume did not reach the agent")
+	}
+	request := agent.requests[0]
+	if request.LoopID != "same-loop" || request.Mode != model.ModeExecute || request.Plan == nil ||
+		request.Plan.ID != "plan-resume" || request.Plan.Content != plan.Content || request.Plan.ApprovedContentHash != plan.ApprovedContentHash {
+		t.Fatalf("resume request lost approved authority: %+v", request)
+	}
+}
+
+func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
+	plan := &Plan{
+		ID: "pending-plan", Revision: 3, Status: PlanAwaitingApproval,
+		Title: "待批准计划", Content: "## 完整提案",
+		Steps: []PlanStep{{ID: "pending-step", Title: "执行任务", Status: PlanStepPending}},
+	}
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	prompter := &approvingPrompter{}
+	committed := false
+	_ = NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "resume-pending", ProjectDir: t.TempDir(),
+		Context: testPack(model.ModePlan, model.ArtifactSpec, model.ScopeDeck, false, "继续审批"),
+		ResumeCheckpoint: &RuntimeCheckpoint{
+			RunID: "resume-pending", LoopID: "pending-loop", Mode: model.ModePlan,
+			Phase: PhaseWaitingInput, ResumePhase: PhaseWaitingInput, Plan: plan,
+		},
+		Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
+			return testPack(mode, model.ArtifactSpec, model.ScopeDeck, false, "继续审批"), nil
+		},
+		CommitPlanApproval: func(_ context.Context, _ model.RunMode, _ contextengine.ContextPack, checkpoint RuntimeCheckpoint) error {
+			committed = checkpoint.Plan != nil && checkpoint.Plan.ApprovedRevision == 3
+			return nil
+		},
+	})
+	if !committed || prompter.calls != 1 || len(agent.requests) == 0 {
+		t.Fatalf("committed=%v approvals=%d requests=%d", committed, prompter.calls, len(agent.requests))
+	}
+	if agent.requests[0].LoopID != "pending-loop" || agent.requests[0].Mode != model.ModeExecute || agent.requests[0].Phase != PhaseExecuting {
+		t.Fatalf("resume reasoned before approval transition: %+v", agent.requests[0])
+	}
+}
+
 func TestAgentRequestCarriesContextBriefingAndRequirementLedger(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
@@ -660,11 +741,8 @@ func contains(values []string, target string) bool {
 }
 
 func TestExecuteLetsAgentCreatePlanWithoutChangingPhase(t *testing.T) {
-	t.Skip("superseded by approval-gated create_plan coverage")
 	dir := testProject(t, ArtifactSlideSpec)
-	agent := &scriptedAgent{responses: []AgentResponse{
-		planCall("plan", true), toolCall("write", "write_ppt", map[string]any{"content": "next"}), finishCall("finish"),
-	}}
+	agent := &optionalChecklistAgent{}
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "complex", ProjectDir: dir,
@@ -685,7 +763,8 @@ func TestExecuteLetsAgentCreatePlanWithoutChangingPhase(t *testing.T) {
 			t.Fatalf("optional plan changed the Harness phase: %+v", agent.requests)
 		}
 	}
-	if events.count(model.EventPlanUpdated) != 1 {
+	if events.count(model.EventPlanUpdated) != 2 || events.count(model.EventPlanApprovalRequested) != 0 ||
+		agent.requests[1].Plan == nil || agent.requests[1].Plan.Status != PlanActive {
 		t.Fatalf("requests=%+v events=%+v", agent.requests, events.events)
 	}
 	if events.count(model.EventToolStarted) != 1 {
@@ -896,6 +975,160 @@ func (p *fakePrompter) Ask(_ context.Context, question model.QuestionAskedPayloa
 		return model.QuestionAnswer{}, "", errors.New("missing question id")
 	}
 	return model.QuestionAnswer{CustomText: "用户回答"}, "用户回答", nil
+}
+
+type approvingPrompter struct {
+	calls int
+}
+
+func (p *approvingPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
+	return model.QuestionAnswer{}, "", errors.New("ordinary question was not expected")
+}
+
+func (p *approvingPrompter) AskPlanApproval(_ context.Context, request model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
+	p.calls++
+	return model.PlanApprovalAnswer{
+		InteractionID:    request.InteractionID,
+		PlanID:           request.Plan.PlanID,
+		ExpectedRevision: request.Plan.Revision,
+		Decision:         "approve",
+	}, nil
+}
+
+type approvalExecutionAgent struct {
+	requests []AgentRequest
+}
+
+type optionalChecklistAgent struct {
+	requests []AgentRequest
+}
+
+func (a *optionalChecklistAgent) Next(_ context.Context, request AgentRequest) (AgentResponse, error) {
+	a.requests = append(a.requests, request)
+	switch len(a.requests) {
+	case 1:
+		return toolCall("checklist", "update_plan", map[string]any{
+			"title": "轻量执行清单", "content": "直接执行，无需用户审批。",
+			"steps": []any{map[string]any{"title": "修改当前页"}},
+		}), nil
+	case 2:
+		if request.Plan == nil || len(request.Plan.Steps) != 1 {
+			return AgentResponse{}, errors.New("optional checklist missing")
+		}
+		return toolCall("progress", "update_plan", map[string]any{
+			"updates": []any{map[string]any{"step_id": request.Plan.Steps[0].ID, "status": "completed"}},
+		}), nil
+	case 3:
+		return toolCall("write", "write_ppt", map[string]any{"content": "next"}), nil
+	default:
+		return finishCall("finish"), nil
+	}
+}
+
+func (a *approvalExecutionAgent) Next(_ context.Context, request AgentRequest) (AgentResponse, error) {
+	a.requests = append(a.requests, request)
+	switch len(a.requests) {
+	case 1:
+		return toolCall("create", "create_plan", map[string]any{
+			"title": "执行计划", "content": "## 完整批准计划\n\n执行并验证当前页。",
+			"steps": []any{map[string]any{"title": "修改并验证"}},
+		}), nil
+	case 2:
+		return toolCall("write", "write_ppt", map[string]any{"content": "approved change"}), nil
+	case 3:
+		if request.Plan == nil || len(request.Plan.Steps) != 1 {
+			return AgentResponse{}, errors.New("approved plan missing from execute turn")
+		}
+		return toolCall("progress", "update_plan", map[string]any{
+			"updates": []any{map[string]any{"step_id": request.Plan.Steps[0].ID, "status": "completed"}},
+		}), nil
+	default:
+		return finishCall("finish"), nil
+	}
+}
+
+func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
+	dir := testProject(t, ArtifactSlideSpec)
+	agent := &approvalExecutionAgent{}
+	prompter := &approvingPrompter{}
+	events := &eventRecorder{}
+	commits := 0
+	pack := testPack(model.ModePlan, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行")
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "approval-transition", ProjectDir: dir, Context: pack,
+		Emitter: events, Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		DomainToolsForContext: func(contextengine.ContextPack) DomainToolProvider {
+			return fakeProvider{kind: ArtifactSlideSpec}
+		},
+		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
+			fresh := testPack(mode, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行")
+			fresh.Manifest.ContextID = "ctx_execute"
+			fresh.Manifest.PackHash = "execute_hash"
+			return fresh, nil
+		},
+		CommitPlanApproval: func(_ context.Context, mode model.RunMode, fresh contextengine.ContextPack, checkpoint RuntimeCheckpoint) error {
+			commits++
+			if mode != model.ModeExecute || fresh.Command.Mode != model.ModeExecute || fresh.Manifest.ReadOnly ||
+				checkpoint.Mode != model.ModeExecute || checkpoint.Phase != PhaseExecuting || checkpoint.Plan == nil ||
+				checkpoint.Plan.Status != PlanActive || checkpoint.ContextBriefing == "" {
+				return errors.New("incomplete approval commit")
+			}
+			return nil
+		},
+	})
+	if outcome.Status != StatusCompleted || commits != 1 || prompter.calls != 1 {
+		t.Fatalf("outcome=%+v commits=%d approval_calls=%d", outcome, commits, prompter.calls)
+	}
+	if len(agent.requests) < 4 {
+		t.Fatalf("requests=%d", len(agent.requests))
+	}
+	loopID := agent.requests[0].LoopID
+	for _, request := range agent.requests {
+		if request.LoopID != loopID {
+			t.Fatalf("approval replaced loop: %s != %s", request.LoopID, loopID)
+		}
+	}
+	execute := agent.requests[1]
+	if execute.Mode != model.ModeExecute || execute.Phase != PhaseExecuting || execute.Context.Command.Mode != model.ModeExecute ||
+		execute.Context.Manifest.ReadOnly || execute.Context.Manifest.ContextID != "ctx_execute" || execute.Plan == nil ||
+		execute.Plan.ApprovedRevision != 1 || execute.Plan.ApprovedContentHash != execute.Plan.ContentHash() ||
+		!strings.Contains(execute.ContextBriefing, "mode=execute") || !schemasByName(execute.Tools)["write_ppt"] {
+		t.Fatalf("execute request did not use approved authority: %+v", execute)
+	}
+	if events.count(model.EventPlanApprovalAnswered) != 1 || events.count(model.EventRunModeChanged) != 1 || events.count(model.EventPlanUpdated) != 3 {
+		t.Fatalf("events=%+v", events.events)
+	}
+}
+
+func TestPlanApprovalCommitFailureStaysWaitingAndCanRetry(t *testing.T) {
+	dir := testProject(t, ArtifactSlideSpec)
+	agent := &approvalExecutionAgent{}
+	prompter := &approvingPrompter{}
+	attempts := 0
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "approval-retry", ProjectDir: dir,
+		Context:  testPack(model.ModePlan, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"),
+		Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
+			return testPack(mode, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"), nil
+		},
+		CommitPlanApproval: func(_ context.Context, _ model.RunMode, _ contextengine.ContextPack, checkpoint RuntimeCheckpoint) error {
+			attempts++
+			if attempts == 1 {
+				if checkpoint.Plan == nil || checkpoint.Plan.Status != PlanActive {
+					t.Fatal("candidate checkpoint was not prepared")
+				}
+				return errors.New("transient commit failure")
+			}
+			return nil
+		},
+	})
+	if outcome.Status != StatusCompleted || attempts != 2 || prompter.calls != 2 {
+		t.Fatalf("outcome=%+v attempts=%d approval_calls=%d", outcome, attempts, prompter.calls)
+	}
+	if agent.requests[1].Mode != model.ModeExecute {
+		t.Fatalf("run did not resume in execute mode: %+v", agent.requests[1])
+	}
 }
 
 type checkpointRecorder struct {

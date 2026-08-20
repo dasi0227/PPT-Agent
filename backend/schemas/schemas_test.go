@@ -54,15 +54,57 @@ func TestRuntimeContractsContainManagedFields(t *testing.T) {
 	}
 }
 
-func TestSlideSpecAgentContractHidesPlacementIDs(t *testing.T) {
+func TestSlideSpecAgentContractExposesOutlinePlacementIDs(t *testing.T) {
 	contract, err := AgentContract(SlideSpecName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"project_id", "slide_id", "section_id", "subsection_id"} {
+	for _, field := range []string{"project_id", "slide_id"} {
 		if containsString(contract.Fields, field) {
 			t.Fatalf("managed field %q leaked into slide agent contract", field)
 		}
+	}
+	for _, field := range []string{"section_id", "subsection_id"} {
+		if !containsString(contract.Fields, field) {
+			t.Fatalf("authoring field %q is missing from slide agent contract", field)
+		}
+	}
+}
+
+func TestOutlineAgentContractExposesSectionIdentity(t *testing.T) {
+	contract, err := AgentContract(OutlineName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sections, ok := contract.FieldSchema["sections"].(map[string]any)
+	if !ok {
+		t.Fatal("outline sections contract is missing")
+	}
+	items, ok := sections["items"].(map[string]any)
+	if !ok {
+		t.Fatal("outline section item contract is missing")
+	}
+	properties, ok := items["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("outline section properties are missing")
+	}
+	if _, ok := properties["id"]; !ok {
+		t.Fatal("section id is missing from agent contract")
+	}
+	subsections, ok := properties["subsections"].(map[string]any)
+	if !ok {
+		t.Fatal("subsections contract is missing")
+	}
+	subsectionItems, ok := subsections["items"].(map[string]any)
+	if !ok {
+		t.Fatal("subsection item contract is missing")
+	}
+	subsectionProperties, ok := subsectionItems["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("subsection properties are missing")
+	}
+	if _, ok := subsectionProperties["id"]; !ok {
+		t.Fatal("subsection id is missing from agent contract")
 	}
 }
 

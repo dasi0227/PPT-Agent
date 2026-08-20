@@ -45,3 +45,25 @@ func TestValidateGroupedQuestionAnswerRejectsIncompleteOrInvalidCustom(t *testin
 		t.Fatal("accepted custom answer without allow_custom")
 	}
 }
+
+func TestPlanApprovalReplyIsIdempotentOnlyForIdenticalSubmission(t *testing.T) {
+	queue := NewInputQueue()
+	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{
+		InteractionID: "interaction-1",
+		Plan:          model.PublicPlan{PlanID: "plan-1", Revision: 3},
+	})
+	answer := model.PlanApprovalAnswer{
+		InteractionID: "interaction-1", PlanID: "plan-1", ExpectedRevision: 3, Decision: "approve",
+	}
+	if !queue.ReplyPlanApproval(answer) {
+		t.Fatal("first approval was rejected")
+	}
+	if !queue.ReplyPlanApproval(answer) {
+		t.Fatal("identical approval replay was not idempotent")
+	}
+	changed := answer
+	changed.Decision = "cancel"
+	if queue.ReplyPlanApproval(changed) {
+		t.Fatal("conflicting replay was accepted")
+	}
+}

@@ -52,9 +52,12 @@ func (c *checkpoint) AskPlanApproval(ctx context.Context, payload model.PlanAppr
 	}
 	select {
 	case answer := <-c.queue.PlanApprovalSignal():
-		c.engine.setStatus(ctx, c.runID, model.RunRunning)
 		return answer, nil
 	case <-ctx.Done():
 		return model.PlanApprovalAnswer{}, ctx.Err()
 	}
+}
+
+func (c *checkpoint) ResumeAfterPlanApproval(ctx context.Context) {
+	c.engine.setStatus(ctx, c.runID, model.RunRunning)
 }

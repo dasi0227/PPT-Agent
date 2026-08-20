@@ -72,8 +72,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
-            "x-runtime-managed": true
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
           },
           "title": {
             "type": "string",
@@ -95,8 +94,7 @@
               "properties": {
                 "id": {
                   "type": "string",
-                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
-                  "x-runtime-managed": true
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
                 },
                 "title": {
                   "type": "string",
@@ -154,6 +152,7 @@
     "prohibitions": ["虚构未提供的数据"],
     "sections": [
       {
+        "id": "section-key-findings",
         "title": "核心结论",
         "purpose": "先给出管理层需要决策的主判断",
         "subsections": []

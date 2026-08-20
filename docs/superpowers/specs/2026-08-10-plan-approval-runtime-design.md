@@ -63,7 +63,7 @@ The current implementation repeatedly reads the immutable request intent from
 authoritative current mode must move into Runtime state:
 
 ```text
-runtimeState.mode RunMode
+RunState.mode RunMode
 ```
 
 It is initialized from `RunCommand.mode` and then used by every dynamic policy:
@@ -79,25 +79,28 @@ It is initialized from `RunCommand.mode` and then used by every dynamic policy:
 `RuntimeCheckpoint` also persists `mode`. Resume restores both the mode and the
 complete Plan before another Agent turn is allowed.
 
-On an approved decision, Runtime performs this sequence without returning
-control to the model between steps:
+On an approved decision, Runtime first prepares a complete Execute candidate
+without mutating the authoritative Plan state. It then performs this sequence
+without returning control to the model between steps:
 
 ```text
 1. Validate waiting interaction, Plan ID and expected revision.
-2. Persist plan.approval_answered.
-3. Set Plan.status=active and approved_revision=current revision.
-4. Set runtimeState.mode=execute.
-5. Create the RunSession required by write tools.
-6. Refresh the ContextPack with the current execute mode.
-7. Rebuild the current context index and briefing.
-8. Set RunPhase=executing.
-9. Save a mode-transition checkpoint.
-10. Emit plan.updated and run.mode_changed.
-11. Start the next Agent turn with execute prompt and write tools.
+2. Prepare Plan.status=active, approved_revision and approved_content_hash.
+3. Prepare RunState.mode=execute and the write RunSession.
+4. Reassemble ContextPack from the original scope, instruction and options with mode=execute.
+5. Rebuild ContextIndex, ContextBriefing and the context-bound domain tool registry.
+6. Atomically persist the RunCommand mode, write-enabled ContextManifest and complete transition checkpoint.
+7. Publish the prepared candidate as the authoritative RunState and set RunPhase=executing.
+8. Emit plan.approval_answered, plan.updated and run.mode_changed.
+9. Start the next Agent turn with execute prompt and write tools.
 ```
 
-The persisted Run record is updated to the current mode as part of the same
-service operation. The initial mode remains recoverable from `run.started`, so
+If candidate preparation or the durable commit fails, Runtime discards the
+candidate and reopens the same approval interaction. The persisted Run remains
+in plan mode with its read-only ContextManifest and awaiting Plan checkpoint;
+no answered or mode-changed event is emitted. The persisted Run record and its
+embedded RunCommand JSON are updated together, so Resume cannot reconstruct a
+stale Plan command. The initial mode remains recoverable from `run.started`, so
 an additional `initial_mode` field is not required.
 
 Refreshing ContextPack is preferable to leaving its original read-only command
@@ -110,7 +113,7 @@ approval.
 ```json
 {
   "plan_id": "plan_01",
-  "revision": 3,
+  "revision": 4,
   "approved_revision": 3,
   "status": "active",
   "title": "Create the presentation",
@@ -233,7 +236,7 @@ The injection has two layers:
 2. `context_briefing` contains a short progress-oriented Plan summary for rapid
    focus, but never replaces the complete module.
 
-The full module is rebuilt from `runtimeState.plan` on every turn, including
+The full module is rebuilt from `RunState.plan` on every turn, including
 after message compaction. It is also restored from `RuntimeCheckpoint.Plan`
 after process recovery. Therefore the Plan does not disappear when old chat
 messages are summarized or provider continuations change.

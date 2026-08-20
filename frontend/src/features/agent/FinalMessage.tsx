@@ -1,11 +1,12 @@
 import React from 'react';
-import { Check, ChevronDown, ChevronRight, Clipboard, Crosshair, ExternalLink, Sparkle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Crosshair, ExternalLink, Sparkle } from 'lucide-react';
 import type { PublicTarget } from '../../api/types';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { cn } from '../../lib/utils';
 import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
+import { MessageMetaActions } from './MessageMetaActions';
 
 function targetKey(target: PublicTarget): string {
   return `${target.type}:${target.slide_id ?? ''}:${target.part}`;
@@ -43,27 +44,6 @@ function uniqueTargets(targets: PublicTarget[]): PublicTarget[] {
     out.push(target);
   }
   return out;
-}
-
-function CopyReplyButton({ text }: { text: string }) {
-  const [copied, setCopied] = React.useState(false);
-  const copyReply = async () => {
-    await navigator.clipboard?.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={() => void copyReply()}
-      className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-md text-text-400 hover:bg-panel-muted hover:text-text-900"
-      aria-label="复制回复"
-      title={copied ? '已复制' : '复制回复'}
-    >
-      {copied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
-    </button>
-  );
 }
 
 function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
@@ -163,10 +143,10 @@ function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
 
 export const FinalMessage: React.FC<{ item: FinalMessageItem }> = ({ item }) => {
   return (
-    <article className="pb-4 pt-2 text-sm leading-[1.65] text-text-900">
+    <article className="group pb-4 pt-2 text-sm leading-[1.65] text-text-900">
       <MarkdownMessage content={item.text} />
       {item.affectedTargets.length > 0 && <FinalChangeSummary targets={item.affectedTargets} />}
-      <CopyReplyButton text={item.text} />
+      <MessageMetaActions text={item.text} timestamp={item.timestamp} label="复制回复" />
     </article>
   );
 };

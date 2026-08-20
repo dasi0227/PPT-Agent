@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -134,7 +135,24 @@ func (s *Store) SetRunStatus(ctx context.Context, id string, status model.RunSta
 }
 
 func (s *Store) UpdateRunMode(ctx context.Context, id string, mode model.RunMode) error {
-	return s.db.WithContext(ctx).Model(&runPO{}).Where("id = ?", id).Updates(map[string]any{"mode": string(mode), "updated_at": nowUnix()}).Error
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var run runPO
+		if err := tx.First(&run, "id = ?", id).Error; err != nil {
+			return mapErr(err)
+		}
+		var command model.RunCommand
+		if err := json.Unmarshal([]byte(run.RunCommandJSON), &command); err != nil {
+			return err
+		}
+		command.Mode = mode
+		raw, err := json.Marshal(command)
+		if err != nil {
+			return err
+		}
+		return tx.Model(&runPO{}).Where("id = ?", id).Updates(map[string]any{
+			"mode": string(mode), "run_command_json": string(raw), "updated_at": nowUnix(),
+		}).Error
+	})
 }
 
 func (s *Store) RequestRunCancel(ctx context.Context, id string, requestedAt int64) (model.Run, error) {

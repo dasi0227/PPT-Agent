@@ -298,6 +298,7 @@ describe('public timeline components', () => {
     expect(detailRows).toHaveLength(2);
     detailRows.forEach((row) => {
       expect(row.querySelector('svg')).toHaveClass('text-success');
+      expect(row.querySelector('.grid')).toHaveClass('grid-cols-[max-content_minmax(0,1fr)]', 'gap-x-1');
     });
   });
 
