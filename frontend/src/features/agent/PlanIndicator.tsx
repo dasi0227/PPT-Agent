@@ -99,7 +99,7 @@ function PlanText({
 }
 
 const planButtonClass = (selected: boolean) => cn(
-  'inline-flex h-7 min-w-0 shrink items-center gap-0.5 rounded-md border px-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45',
+  'composer-plan-button inline-flex h-7 min-w-0 shrink items-center gap-0.5 rounded-md border px-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45',
   selected
     ? 'border-accent/30 bg-accent-soft text-accent'
     : 'border-border bg-transparent text-text-600 hover:bg-panel-muted hover:text-text-900',
@@ -132,7 +132,7 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({
         className={planButtonClass(selected)}
       >
         <ListChecks className="h-3.5 w-3.5" strokeWidth={1.75} />
-        计划
+        <span className="composer-plan-label">计划</span>
       </button>
     );
   }
@@ -147,8 +147,8 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({
           className={planButtonClass(false)}
         >
           <ListChecks className={cn('h-3.5 w-3.5 shrink-0', inFlight && 'animate-pulse motion-reduce:animate-none')} strokeWidth={1.75} />
-          <span className="shrink-0 whitespace-nowrap">计划</span>
-          <span className="shrink-0 tabular-nums">{completed} / {total}</span>
+          <span className="composer-plan-label shrink-0 whitespace-nowrap">计划</span>
+          <span className="composer-plan-count shrink-0 tabular-nums">{completed} / {total}</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-[320px] overflow-visible p-2">

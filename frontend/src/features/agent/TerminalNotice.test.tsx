@@ -60,7 +60,7 @@ describe('TerminalNotice retry authority', () => {
     }} />);
 
     const copy = screen.getByRole('button', { name: '复制消息' });
-    expect(screen.getByText('08-11 14-05')).toBeInTheDocument();
+    expect(screen.getByText('08-11 14:05')).toBeInTheDocument();
     expect(copy.parentElement).toHaveClass('opacity-0', 'group-hover:opacity-100');
     fireEvent.click(copy);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('连续修正未成功，任务已停止。'));

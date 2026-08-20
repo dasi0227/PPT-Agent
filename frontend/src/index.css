@@ -50,6 +50,25 @@
   stroke-width: 1.75;
 }
 
+.composer-control-bar {
+  container-type: inline-size;
+}
+
+@container (max-width: 480px) {
+  .composer-mode-button,
+  .composer-plan-button {
+    width: 28px;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .composer-mode-label,
+  .composer-plan-label,
+  .composer-plan-count {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

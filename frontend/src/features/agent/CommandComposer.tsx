@@ -209,7 +209,7 @@ export const CommandComposer: React.FC = () => {
           className="max-h-32 min-h-[60px] w-full resize-none bg-transparent p-3 text-sm text-text-900 placeholder:text-text-400 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
           rows={2}
         />
-        <div className="flex min-w-0 items-center justify-between gap-1 px-3 pb-2">
+        <div className="composer-control-bar flex min-w-0 items-center justify-between gap-1 px-3 pb-2">
           <div className="flex min-w-0 items-center gap-0.5">
             <InteractionModeButtons
               mode={composer.mode}

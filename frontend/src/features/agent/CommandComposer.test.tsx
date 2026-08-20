@@ -54,6 +54,10 @@ describe('CommandComposer', () => {
     expect(screen.getByRole('button', { name: '讨论' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '盘问' })).toHaveAttribute('aria-pressed', 'false');
 	    expect(screen.getByRole('button', { name: '计划' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: '讨论' })).toHaveClass('composer-mode-button');
+    expect(screen.getByRole('button', { name: '盘问' })).toHaveClass('composer-mode-button');
+    expect(screen.getByRole('button', { name: '计划' })).toHaveClass('composer-plan-button');
+    expect(document.querySelector('.composer-control-bar')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '目标：单页幻灯片' })).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '输入你的想法与目标');
 

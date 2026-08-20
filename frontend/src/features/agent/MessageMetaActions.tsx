@@ -5,10 +5,20 @@ import { cn } from '../../lib/utils';
 function formatTimestamp(timestamp: number): string {
   const date = new Date(timestamp);
   const pad = (value: number) => String(value).padStart(2, '0');
-  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}-${pad(date.getMinutes())}`;
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function MessageMetaActions({ text, timestamp, label }: { text: string; timestamp: number; label: string }) {
+export function MessageMetaActions({
+  text,
+  timestamp,
+  label,
+  scopeLabel,
+}: {
+  text: string;
+  timestamp: number;
+  label: string;
+  scopeLabel?: string;
+}) {
   const [copied, setCopied] = React.useState(false);
 
   const copy = async () => {
@@ -31,6 +41,7 @@ export function MessageMetaActions({ text, timestamp, label }: { text: string; t
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
       </button>
+      {scopeLabel && <span className="select-none whitespace-nowrap text-[11px]">{scopeLabel}</span>}
       <time className="select-none whitespace-nowrap text-[11px] tabular-nums" dateTime={new Date(timestamp).toISOString()}>
         {formatTimestamp(timestamp)}
       </time>

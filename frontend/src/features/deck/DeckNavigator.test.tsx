@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DeckNavigator } from './DeckNavigator';
 import { useProjectStore } from '../../stores/projectStore';
@@ -100,14 +100,30 @@ describe('DeckNavigator', () => {
 
   it('renders section and subsection directory hierarchy', () => {
     render(<DeckNavigator />);
-    const section = screen.getByText('1. 市场');
-    const subsection = screen.getByText('1.1 趋势');
-    expect(section).toBeInTheDocument();
-    expect(subsection).toBeInTheDocument();
-    expect(section).toHaveClass('font-normal');
-    expect(subsection).toHaveClass('font-normal');
-    expect(section).not.toHaveClass('font-semibold');
-    expect(subsection).not.toHaveClass('font-medium');
+    const sectionToggle = screen.getByRole('button', { name: '收起第 1 章 市场' });
+    expect(sectionToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('市场')).toHaveClass('font-semibold');
+    expect(screen.getByText('1.1')).toBeInTheDocument();
+    expect(screen.getByText('趋势')).toHaveClass('font-medium');
+    expect(sectionToggle).not.toHaveTextContent('页');
+  });
+
+  it('expands the current section by default and lets multiple sections stay open', () => {
+    setMultiSectionFixture();
+    render(<DeckNavigator />);
+
+    const firstSection = screen.getByRole('button', { name: '收起第 1 章 第一章' });
+    const secondSection = screen.getByRole('button', { name: '展开第 2 章 第二章' });
+    expect(firstSection).toHaveAttribute('aria-expanded', 'true');
+    expect(secondSection).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(secondSection);
+    expect(firstSection).toHaveAttribute('aria-expanded', 'true');
+    expect(secondSection).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(firstSection);
+    expect(firstSection).toHaveAttribute('aria-expanded', 'false');
+    expect(secondSection).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('renders low-resolution HTML thumbnails when a page has HTML', async () => {
@@ -200,6 +216,19 @@ describe('DeckNavigator', () => {
     ));
   });
 
+  it('orders the vertical page actions as move up, delete, then move down', () => {
+    useDeckStore.setState({ globalView: 'outline' });
+    render(<DeckNavigator />);
+
+    const firstPage = screen.getByText('市场分析').closest<HTMLElement>('[draggable="true"]');
+    expect(firstPage).not.toBeNull();
+    expect(within(firstPage!).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
+      '上移本页',
+      '删除本页',
+      '下移本页',
+    ]);
+  });
+
   it('moves the last page of a section down as the next section direct boundary item', async () => {
     useDeckStore.setState({ globalView: 'outline' });
     setMultiSectionFixture();
@@ -227,6 +256,7 @@ describe('DeckNavigator', () => {
     vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
 
     render(<DeckNavigator />);
+    fireEvent.click(screen.getByRole('button', { name: '展开第 2 章 第二章' }));
     fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[2]);
 
     await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(

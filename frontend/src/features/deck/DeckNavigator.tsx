@@ -7,7 +7,7 @@ import { useUIStore } from '../../stores/uiStore';
 import type { Slide } from '../../api/types';
 import { SlidePlacement, slidesApi } from '../../api/slides';
 import { cn } from '../../lib/utils';
-import { Layers, FileText, Plus, Trash2, Presentation, PanelLeftClose, ArrowUp, ArrowDown } from 'lucide-react';
+import { Layers, FileText, Plus, Trash2, Presentation, PanelLeftClose, ArrowUp, ArrowDown, ChevronDown } from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { IconButton, InlineNotice } from '../../components/ui/primitives';
 import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
@@ -23,7 +23,7 @@ function formatDirectoryNumber(value: string | undefined, level: 'section' | 'su
     })
     .join('.');
   if (!normalized) return '';
-  return level === 'section' && !normalized.includes('.') ? `${normalized}.` : normalized;
+  return level === 'section' && normalized.includes('.') ? normalized.split('.')[0] : normalized;
 }
 
 function SlideThumbnail({
@@ -121,6 +121,7 @@ export const DeckNavigator: React.FC = () => {
   const runActive = session.status === 'running' || session.status === 'waiting';
   const [dragSlideId, setDragSlideId] = useState<string | null>(null);
   const [operationError, setOperationError] = useState('');
+  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(new Set());
 
   const [slideToDelete, setSlideToDelete] = useState<{id: string, title: string} | null>(null);
 
@@ -175,6 +176,24 @@ export const DeckNavigator: React.FC = () => {
     ]),
     [directorySections],
   );
+  const currentSectionId = useMemo(() => {
+    const currentSlide = slides[currentPage];
+    return currentSlide ? specView?.slide_specs?.[currentSlide.id]?.section_id : undefined;
+  }, [currentPage, slides, specView]);
+
+  useEffect(() => {
+    setExpandedSectionIds(new Set());
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    if (!currentSectionId) return;
+    setExpandedSectionIds((current) => {
+      if (current.has(currentSectionId)) return current;
+      const next = new Set(current);
+      next.add(currentSectionId);
+      return next;
+    });
+  }, [activeProjectId, currentSectionId]);
 
   useEffect(() => {
     for (const slide of slides) {
@@ -307,6 +326,15 @@ export const DeckNavigator: React.FC = () => {
     moveEntry(sourceSlideId, targetPlacement);
   };
 
+  const toggleSection = (sectionId: string) => {
+    setExpandedSectionIds((current) => {
+      const next = new Set(current);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  };
+
   const renderSlideRow = (entry: DirectoryEntry, renderedIndex: number) => {
     const { slide } = entry;
     const spec = specView?.slide_specs?.[slide.id];
@@ -321,7 +349,7 @@ export const DeckNavigator: React.FC = () => {
         onDrop={(event) => handleRowDrop(event, entry)}
         onDragEnd={() => setDragSlideId(null)}
         className={cn(
-          "group relative grid min-h-[60px] w-full grid-cols-[28px_minmax(0,1fr)_78px] items-center gap-2 rounded-md border-l-[3px] border-transparent px-2 py-2 text-sm transition-colors cursor-pointer focus-within:bg-panel-muted",
+          "group relative ml-9 grid min-h-[60px] w-[calc(100%-44px)] grid-cols-[28px_minmax(0,1fr)] items-center gap-2 rounded-md border-l-[3px] border-transparent px-2 py-2 text-sm transition-colors cursor-pointer focus-within:bg-panel-muted",
           currentPage === slideIndex
             ? "bg-accent-soft text-accent font-medium border-l-[3px] border-accent"
             : "text-text-600 hover:bg-black/5",
@@ -338,15 +366,22 @@ export const DeckNavigator: React.FC = () => {
           state={getRenderState(slide)}
         />
         {!runActive && (
-          <div className="flex shrink-0 justify-end opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
-            <IconButton label="上移本页" className="h-6 w-6" disabled={directoryIndex <= 0} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, -1); }}>
-              <ArrowUp className="h-3.5 w-3.5" />
+          <div
+            className={cn(
+              "pointer-events-none absolute right-1 top-1/2 z-10 grid -translate-y-1/2 py-0.5 pl-5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+              currentPage === slideIndex
+                ? "bg-gradient-to-r from-transparent via-accent-soft to-accent-soft"
+                : "bg-gradient-to-r from-transparent via-panel to-panel",
+            )}
+          >
+            <IconButton label="上移本页" className="h-[18px] w-5" disabled={directoryIndex <= 0} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, -1); }}>
+              <ArrowUp className="h-3 w-3" />
             </IconButton>
-            <IconButton label="下移本页" className="h-6 w-6" disabled={directoryIndex < 0 || directoryIndex >= directoryEntries.length - 1} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, 1); }}>
-              <ArrowDown className="h-3.5 w-3.5" />
+            <IconButton label="删除本页" className="h-[18px] w-5 hover:bg-danger-soft hover:text-danger" onClick={(event) => { event.stopPropagation(); handleDelete(slide.id, slide.title); }}>
+              <Trash2 className="h-3 w-3" />
             </IconButton>
-            <IconButton label="删除本页" className="h-6 w-6 hover:bg-danger-soft hover:text-danger" onClick={(event) => { event.stopPropagation(); handleDelete(slide.id, slide.title); }}>
-              <Trash2 className="h-3.5 w-3.5" />
+            <IconButton label="下移本页" className="h-[18px] w-5" disabled={directoryIndex < 0 || directoryIndex >= directoryEntries.length - 1} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, 1); }}>
+              <ArrowDown className="h-3 w-3" />
             </IconButton>
           </div>
         )}
@@ -387,7 +422,7 @@ export const DeckNavigator: React.FC = () => {
           </div>
 
           {(operationError || projectError) && <InlineNotice tone="danger" className="m-2 text-xs">{operationError || `${projectError}。请重试。`}</InlineNotice>}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          <div className="flex-1 overflow-y-auto p-2">
             {slides.length === 0 ? (
               <div className="text-center p-4 text-text-400 text-sm">暂无页面</div>
             ) : directorySections.length === 0 ? (
@@ -395,15 +430,49 @@ export const DeckNavigator: React.FC = () => {
             ) : (
               (() => {
                 let renderedIndex = 0;
-                return directorySections.map((section) => (
-                  <React.Fragment key={section.id}>
-                    <div
+                return directorySections.map((section) => {
+                  const expanded = expandedSectionIds.has(section.id);
+                  return (
+                  <section
+                    key={section.id}
+                    className={cn(
+                      "mb-1.5 rounded-lg transition-colors",
+                      expanded && "bg-white/50",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-label={`${expanded ? '收起' : '展开'}第 ${formatDirectoryNumber(section.number, 'section')} 章 ${section.title}`}
+                      onClick={() => toggleSection(section.id)}
                       onDragOver={handleDragOver}
                       onDrop={(event) => handleGroupDrop(event, { section_id: section.id })}
-                      className="px-3 pb-1 pt-3 text-[12px] font-normal text-text-600"
+                      className="grid min-h-10 w-full grid-cols-[28px_minmax(0,1fr)_20px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-text-900 hover:bg-black/[0.04]"
                     >
-                      {formatDirectoryNumber(section.number, 'section')} {section.title}
-                    </div>
+                      <span className="text-center text-[11px] font-semibold tabular-nums text-accent">
+                        {formatDirectoryNumber(section.number, 'section')}
+                      </span>
+                      <span className="min-w-0 truncate text-[13px] font-semibold" title={section.title}>
+                        {section.title}
+                      </span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={cn(
+                          "h-4 w-4 text-text-400 transition-transform duration-150 motion-reduce:transition-none",
+                          !expanded && "-rotate-90",
+                        )}
+                      />
+                    </button>
+                    <div
+                      aria-hidden={!expanded}
+                      ref={(node) => node?.toggleAttribute('inert', !expanded)}
+                      className={cn(
+                        "grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none",
+                        expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+                      )}
+                    >
+                      <div className="relative min-h-0 overflow-hidden pb-1">
+                        <span aria-hidden="true" className="absolute bottom-2 left-[22px] top-0 w-px bg-border" />
                     {(() => {
                       const subsectionByID = new Map(section.subsections.map((subsection) => [subsection.id, subsection]));
                       const renderedSubsections = new Set<string>();
@@ -419,9 +488,10 @@ export const DeckNavigator: React.FC = () => {
                               key={`${section.id}:${subsection.id}:heading`}
                               onDragOver={handleDragOver}
                               onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
-                              className="px-3 py-1 text-[11px] font-normal text-text-400"
+                              className="relative flex min-h-7 items-center gap-1.5 py-0.5 pl-[46px] pr-2 text-[11px] font-normal text-text-400 before:absolute before:left-[22px] before:h-px before:w-3 before:bg-border"
                             >
-                              {formatDirectoryNumber(subsection.number, 'subsection')} {subsection.title}
+                              <span className="tabular-nums">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
+                              <span className="min-w-0 truncate font-medium text-text-600">{subsection.title}</span>
                             </div>,
                           );
                         }
@@ -435,16 +505,20 @@ export const DeckNavigator: React.FC = () => {
                             key={`${section.id}:${subsection.id}:empty-heading`}
                             onDragOver={handleDragOver}
                             onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
-                            className="px-3 py-1 text-[11px] font-normal text-text-400"
+                            className="relative flex min-h-7 items-center gap-1.5 py-0.5 pl-[46px] pr-2 text-[11px] font-normal text-text-400 before:absolute before:left-[22px] before:h-px before:w-3 before:bg-border"
                           >
-                            {formatDirectoryNumber(subsection.number, 'subsection')} {subsection.title}
+                            <span className="tabular-nums">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
+                            <span className="min-w-0 truncate font-medium text-text-600">{subsection.title}</span>
                           </div>,
                         );
                       }
                       return rows;
                     })()}
-                  </React.Fragment>
-                ));
+                      </div>
+                    </div>
+                  </section>
+                  );
+                });
               })()
             )}
           </div>

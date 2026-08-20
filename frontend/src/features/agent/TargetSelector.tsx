@@ -1,4 +1,3 @@
-import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import type { Artifact, ScopeLevel } from '../../api/types';
 import {
@@ -97,10 +96,9 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
           type="button"
           aria-label={`目标：${targetLabel(selected)}`}
           disabled={disabled}
-          className="inline-flex h-7 min-w-0 max-w-[112px] shrink items-center gap-0.5 rounded-md border border-border bg-transparent px-1 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+          className="inline-flex h-7 min-w-0 max-w-[112px] shrink items-center rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
         >
           <span className="min-w-0 truncate">{targetLabel(selected)}</span>
-          <ChevronDown className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="end" className="w-[224px] space-y-1 p-1.5">

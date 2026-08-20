@@ -52,7 +52,10 @@ describe('Timeline', () => {
 
   it('renders distinct reasoning, milestone, and final rows without leaking the plan into the stream', () => {
     setSession([
-      { id: 'u1', type: 'user_turn', text: '生成 PPT', timestamp: 1 },
+      {
+        id: 'u1', type: 'user_turn', text: '生成 PPT', timestamp: 1,
+        scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute',
+      },
       { id: 'r1', type: 'reasoning', messageId: 'm1', text: '我先确认全局设计。', timestamp: 2 },
       { id: 'm1', type: 'milestone', messageId: 'm2', text: '全局设计已经完成。', completedStepIds: ['s1'], timestamp: 3 },
       { id: 'f1', type: 'final', messageId: 'm3', text: '整份演示文稿已经完成。', affectedTargets: [], timestamp: 4 },
@@ -69,11 +72,15 @@ describe('Timeline', () => {
     expect(screen.getByText('全局设计已经完成。')).toBeInTheDocument();
     expect(screen.getByText('整份演示文稿已经完成。')).toBeInTheDocument();
     const userCopyButton = screen.getByRole('button', { name: '复制用户消息' });
-    expect(userCopyButton).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
-    expect(userCopyButton.parentElement).toHaveClass('group');
+    expect(userCopyButton.parentElement).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
+    expect(userCopyButton.closest('.group')).toHaveClass('group');
+    expect(userCopyButton.parentElement).toHaveTextContent('整份HTML');
     const replyCopyButton = screen.getByRole('button', { name: '复制回复' });
     expect(replyCopyButton.parentElement).toHaveClass('opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
     expect(replyCopyButton.closest('article')).toHaveClass('group');
+    screen.getAllByText(/^\d{2}-\d{2} \d{2}:\d{2}$/).forEach((time) => {
+      expect(time).toBeInstanceOf(HTMLTimeElement);
+    });
     // 计划已迁出消息流，改由 composer 上的 PlanIndicator 承载，不应出现在时间线中。
     expect(screen.queryByText('执行计划')).toBeNull();
     expect(screen.queryByText(/Context|Strategy|Completion Gate/)).toBeNull();

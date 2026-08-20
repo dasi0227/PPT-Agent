@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>左侧目录操作按钮布局对比</title>
+  <style>
+    :root {
+      --workspace: #e9edf2;
+      --panel: #f8f9fb;
+      --surface: #ffffff;
+      --ink: #17202b;
+      --muted: #5f6b7a;
+      --subtle: #95a0ae;
+      --border: #d5dbe3;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      --danger: #c84953;
+      --danger-soft: #fcecef;
+      --shadow: 0 18px 48px rgba(51, 65, 85, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--workspace);
+      color: var(--ink);
+      font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button { color: inherit; font: inherit; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .page {
+      width: min(1280px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    .intro {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(360px, 480px);
+      gap: 52px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: -0.025em;
+    }
+
+    .intro p {
+      margin: 9px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .alignment-note {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr);
+      gap: 11px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.62);
+      padding: 13px 15px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .alignment-mark {
+      display: grid;
+      height: 32px;
+      place-items: center;
+      border-radius: 9px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 750;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      align-items: start;
+    }
+
+    .option {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .option-head {
+      min-height: 106px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.64);
+      padding: 16px 17px 14px;
+    }
+
+    .option-kicker {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: 0.03em;
+    }
+
+    .recommend {
+      border-radius: 999px;
+      background: var(--accent-soft);
+      padding: 4px 8px;
+      font-size: 10px;
+      letter-spacing: 0;
+    }
+
+    .option h2 {
+      margin: 8px 0 4px;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    .option-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .navigator {
+      min-height: 426px;
+      padding: 12px 10px 16px;
+    }
+
+    .section {
+      --rail-x: 24px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.48);
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) 20px;
+      width: 100%;
+      min-height: 42px;
+      align-items: center;
+      gap: 8px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      padding: 6px 10px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .section-head:hover { background: rgba(23, 32, 43, 0.04); }
+
+    .section-number {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 750;
+      text-align: center;
+    }
+
+    .section-title {
+      overflow: hidden;
+      font-size: 14px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chevron {
+      color: var(--subtle);
+      font-size: 15px;
+      text-align: center;
+      transform: rotate(-90deg);
+      transition: transform 150ms ease;
+    }
+
+    .section.open .chevron { transform: rotate(0); }
+
+    .section-body {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transition: grid-template-rows 180ms ease, opacity 130ms ease;
+    }
+
+    .section.open .section-body { grid-template-rows: 1fr; opacity: 1; }
+
+    .section-body-inner {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      padding-bottom: 8px;
+    }
+
+    /* 轨道直接使用 section 坐标系：24px = 10px 左内边距 + 28px 数字列的一半。 */
+    .section-body-inner::before {
+      position: absolute;
+      top: 0;
+      bottom: 13px;
+      left: var(--rail-x);
+      width: 1px;
+      background: var(--border);
+      content: "";
+    }
+
+    .subheading {
+      position: relative;
+      display: flex;
+      min-height: 30px;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 9px 3px 47px;
+      color: var(--subtle);
+      font-size: 11px;
+    }
+
+    .subheading::before {
+      position: absolute;
+      left: var(--rail-x);
+      width: 14px;
+      height: 1px;
+      background: var(--border);
+      content: "";
+    }
+
+    .subheading strong { color: var(--muted); font-weight: 600; }
+
+    .slide-group {
+      position: relative;
+      margin: 0 8px 4px 36px;
+      border-radius: 10px;
+    }
+
+    .slide-row {
+      position: relative;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      width: 100%;
+      min-height: 70px;
+      align-items: center;
+      gap: 8px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      padding: 10px 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .slide-row:hover { background: rgba(23, 32, 43, 0.045); }
+    .slide-row.active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+
+    .page-number {
+      color: var(--subtle);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .page-title {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 620;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .icon-action {
+      display: inline-grid;
+      width: 22px;
+      height: 22px;
+      place-items: center;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .icon-action:hover { background: rgba(23, 32, 43, 0.07); color: var(--ink); }
+    .icon-action.delete:hover { background: var(--danger-soft); color: var(--danger); }
+
+    .vertical-actions {
+      position: absolute;
+      z-index: 2;
+      top: 50%;
+      right: 7px;
+      display: grid;
+      padding: 2px 0 2px 18px;
+      opacity: 0;
+      background: linear-gradient(90deg, transparent, var(--accent-soft) 28%);
+      transform: translateY(-50%);
+      transition: opacity 130ms ease;
+    }
+
+    .slide-group:hover .vertical-actions,
+    .slide-group:focus-within .vertical-actions { opacity: 1; }
+
+    .more-button {
+      position: absolute;
+      z-index: 3;
+      top: 50%;
+      right: 9px;
+      opacity: 0;
+      background: var(--accent-soft);
+      font-size: 16px;
+      transform: translateY(-50%);
+    }
+
+    .slide-group:hover .more-button,
+    .slide-group:focus-within .more-button,
+    .more-button[aria-expanded="true"] { opacity: 1; }
+
+    .more-menu {
+      position: absolute;
+      z-index: 5;
+      top: 55px;
+      right: 8px;
+      display: none;
+      width: 118px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--surface);
+      box-shadow: 0 12px 30px rgba(51, 65, 85, 0.2);
+      padding: 5px;
+    }
+
+    .more-menu.open { display: grid; }
+
+    .menu-action {
+      display: flex;
+      height: 30px;
+      align-items: center;
+      gap: 8px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 9px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .menu-action:hover { background: var(--panel); color: var(--ink); }
+    .menu-action.delete { color: var(--danger); }
+
+    .shelf-group {
+      overflow: hidden;
+      background: var(--accent-soft);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .shelf-group .slide-row.active { border-radius: 10px 10px 0 0; box-shadow: none; }
+
+    .action-shelf {
+      display: flex;
+      min-height: 34px;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 2px;
+      border-top: 1px solid rgba(47, 103, 246, 0.12);
+      padding: 4px 9px;
+    }
+
+    .shelf-action {
+      display: inline-flex;
+      height: 25px;
+      align-items: center;
+      gap: 4px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 7px;
+      color: var(--muted);
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .shelf-action:hover { background: rgba(255, 255, 255, 0.72); color: var(--ink); }
+    .shelf-action.delete:hover { background: var(--danger-soft); color: var(--danger); }
+
+    .try-tip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 11px 4px 0;
+      color: var(--subtle);
+      font-size: 10px;
+    }
+
+    .try-tip::before {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      content: "";
+    }
+
+    @media (max-width: 1040px) {
+      .page { width: min(760px, calc(100% - 32px)); }
+      .intro { grid-template-columns: 1fr; gap: 16px; }
+      .comparison { grid-template-columns: 1fr; }
+      .option { max-width: 520px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="intro">
+      <div>
+        <h1>目录操作按钮：三种布局对比</h1>
+        <p>三个预览保持相同目录宽度与内容，只比较按钮出现方式。将鼠标移到页面卡片上，体验前两种悬浮交互。</p>
+      </div>
+      <div class="alignment-note">
+        <span class="alignment-mark">│</span>
+        <span><strong>共同修正：</strong>轨道现在与 section 数字的水平中心严格对齐，subsection 通过短横线从主轨道分支，不再额外向右漂移。</span>
+      </div>
+    </header>
+
+    <section class="comparison" aria-label="操作按钮布局方案对比">
+      <article class="option">
+        <header class="option-head">
+          <div class="option-kicker"><span>方案 1</span><span class="recommend">推荐</span></div>
+          <h2>右侧悬浮纵向工具条</h2>
+          <p>保持三项一步操作；平时不占标题宽度，悬浮时仅覆盖最右侧约 28px。</p>
+        </header>
+        <div class="navigator">
+          <section class="section open">
+            <button class="section-head" type="button" aria-expanded="true">
+              <span class="section-number">3</span><span class="section-title">Skill 是什么</span><span class="chevron">⌄</span>
+            </button>
+            <div class="section-body"><div class="section-body-inner">
+              <div class="subheading"><span>3.1</span><strong>定义</strong></div>
+              <div class="slide-group">
+                <button class="slide-row active" type="button"><span class="page-number">03</span><span class="page-title">Skill 的定义与能力边界</span></button>
+                <div class="vertical-actions" aria-label="页面操作">
+                  <button class="icon-action" type="button" title="上移">↑</button>
+                  <button class="icon-action" type="button" title="下移">↓</button>
+                  <button class="icon-action delete" type="button" title="删除">×</button>
+                </div>
+              </div>
+              <div class="subheading"><span>3.2</span><strong>核心特征</strong></div>
+              <div class="slide-group">
+                <button class="slide-row" type="button"><span class="page-number">04</span><span class="page-title">Skill 的核心特征与工作方式</span></button>
+                <div class="vertical-actions" aria-label="页面操作">
+                  <button class="icon-action" type="button" title="上移">↑</button>
+                  <button class="icon-action" type="button" title="下移">↓</button>
+                  <button class="icon-action delete" type="button" title="删除">×</button>
+                </div>
+              </div>
+            </div></div>
+          </section>
+          <div class="try-tip">将鼠标移到页面卡片，观察纵向按钮</div>
+        </div>
+      </article>
+
+      <article class="option">
+        <header class="option-head">
+          <div class="option-kicker"><span>方案 2</span></div>
+          <h2>单个“更多”菜单</h2>
+          <p>标题空间最大、界面最安静；上移、下移和删除需要多一次点击。</p>
+        </header>
+        <div class="navigator">
+          <section class="section open">
+            <button class="section-head" type="button" aria-expanded="true">
+              <span class="section-number">3</span><span class="section-title">Skill 是什么</span><span class="chevron">⌄</span>
+            </button>
+            <div class="section-body"><div class="section-body-inner">
+              <div class="subheading"><span>3.1</span><strong>定义</strong></div>
+              <div class="slide-group">
+                <button class="slide-row active" type="button"><span class="page-number">03</span><span class="page-title">Skill 的定义与能力边界</span></button>
+                <button class="icon-action more-button" type="button" aria-label="更多页面操作" aria-expanded="false">···</button>
+                <div class="more-menu" role="menu">
+                  <button class="menu-action" type="button" role="menuitem"><span>↑</span>上移本页</button>
+                  <button class="menu-action" type="button" role="menuitem"><span>↓</span>下移本页</button>
+                  <button class="menu-action delete" type="button" role="menuitem"><span>×</span>删除本页</button>
+                </div>
+              </div>
+              <div class="subheading"><span>3.2</span><strong>核心特征</strong></div>
+              <div class="slide-group">
+                <button class="slide-row" type="button"><span class="page-number">04</span><span class="page-title">Skill 的核心特征与工作方式</span></button>
+                <button class="icon-action more-button" type="button" aria-label="更多页面操作" aria-expanded="false">···</button>
+                <div class="more-menu" role="menu">
+                  <button class="menu-action" type="button" role="menuitem"><span>↑</span>上移本页</button>
+                  <button class="menu-action" type="button" role="menuitem"><span>↓</span>下移本页</button>
+                  <button class="menu-action delete" type="button" role="menuitem"><span>×</span>删除本页</button>
+                </div>
+              </div>
+            </div></div>
+          </section>
+          <div class="try-tip">悬浮页面后点击“···”查看菜单</div>
+        </div>
+      </article>
+
+      <article class="option">
+        <header class="option-head">
+          <div class="option-kicker"><span>方案 3</span></div>
+          <h2>选中后下方操作栏</h2>
+          <p>标题横向空间完整、文字说明最清楚；代价是选中页面会变高。</p>
+        </header>
+        <div class="navigator">
+          <section class="section open">
+            <button class="section-head" type="button" aria-expanded="true">
+              <span class="section-number">3</span><span class="section-title">Skill 是什么</span><span class="chevron">⌄</span>
+            </button>
+            <div class="section-body"><div class="section-body-inner">
+              <div class="subheading"><span>3.1</span><strong>定义</strong></div>
+              <div class="slide-group shelf-group">
+                <button class="slide-row active" type="button"><span class="page-number">03</span><span class="page-title">Skill 的定义与能力边界</span></button>
+                <div class="action-shelf" aria-label="页面操作">
+                  <button class="shelf-action" type="button"><span>↑</span>上移</button>
+                  <button class="shelf-action" type="button"><span>↓</span>下移</button>
+                  <button class="shelf-action delete" type="button"><span>×</span>删除</button>
+                </div>
+              </div>
+              <div class="subheading"><span>3.2</span><strong>核心特征</strong></div>
+              <div class="slide-group">
+                <button class="slide-row" type="button"><span class="page-number">04</span><span class="page-title">Skill 的核心特征与工作方式</span></button>
+              </div>
+            </div></div>
+          </section>
+          <div class="try-tip">选中页持续展示操作栏，目录高度会变化</div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    document.querySelectorAll('.section-head').forEach((head) => {
+      head.addEventListener('click', () => {
+        const section = head.closest('.section');
+        const open = section.classList.toggle('open');
+        head.setAttribute('aria-expanded', String(open));
+      });
+    });
+
+    document.querySelectorAll('.more-button').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const menu = button.nextElementSibling;
+        const willOpen = !menu.classList.contains('open');
+        document.querySelectorAll('.more-menu.open').forEach((openMenu) => openMenu.classList.remove('open'));
+        document.querySelectorAll('.more-button[aria-expanded="true"]').forEach((openButton) => openButton.setAttribute('aria-expanded', 'false'));
+        menu.classList.toggle('open', willOpen);
+        button.setAttribute('aria-expanded', String(willOpen));
+      });
+    });
+
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.more-menu.open').forEach((menu) => menu.classList.remove('open'));
+      document.querySelectorAll('.more-button[aria-expanded="true"]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+    });
+  </script>
+</body>
+</html>

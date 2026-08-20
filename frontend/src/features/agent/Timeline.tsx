@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, Check, CheckCircle2, ChevronRight, Clipboard, StopCircle, XCircle } from 'lucide-react';
+import { ArrowDown, CheckCircle2, ChevronRight, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { targetLabel } from './runtimeLabels';
@@ -11,6 +11,7 @@ import { QuestionPanel } from './QuestionPanel';
 import { ReasoningRow, MilestoneRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 import { TerminalNotice } from './TerminalNotice';
 import { PlanApproval } from './PlanApproval';
+import { MessageMetaActions } from './MessageMetaActions';
 import type { TimelineItem } from './eventReducer';
 import { DisplayEntry, groupTimelineItems } from './timelineGrouping';
 
@@ -32,26 +33,6 @@ const runSummaryLabel = {
   canceled: '执行取消',
   failed: '执行错误',
 } as const;
-
-function CopyIconButton({ text, label = '复制' }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    await navigator.clipboard?.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
-  };
-  return (
-    <button
-      type="button"
-      onClick={() => void copy()}
-      className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-text-400 transition-opacity duration-150 motion-reduce:transition-none hover:bg-panel-muted hover:text-text-900 ${copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
-      aria-label={label}
-      title={copied ? '已复制' : label}
-    >
-      {copied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
-    </button>
-  );
-}
 
 function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'canceled' }) {
   if (status === 'completed') {
@@ -121,11 +102,6 @@ export const Timeline: React.FC = () => {
           <div className="flex justify-end">
             <div className="group flex max-w-[88%] flex-col items-start">
               <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
-                {item.scope && (
-                  <div className="mb-1 text-[10px] font-medium text-text-400">
-                    {targetLabel(item.scope.artifact as 'spec' | 'ppt', item.scope.level as 'slide' | 'deck')}
-                  </div>
-                )}
                 <MarkdownMessage content={item.text} />
                 {item.deliveryStatus && (
                   <div className={`mt-1 text-[10px] ${
@@ -139,7 +115,14 @@ export const Timeline: React.FC = () => {
                   </div>
                 )}
               </div>
-              <CopyIconButton text={item.text} label="复制用户消息" />
+              <MessageMetaActions
+                text={item.text}
+                timestamp={item.timestamp}
+                label="复制用户消息"
+                scopeLabel={item.scope
+                  ? targetLabel(item.scope.artifact as 'spec' | 'ppt', item.scope.level as 'slide' | 'deck')
+                  : undefined}
+              />
             </div>
           </div>
         )}

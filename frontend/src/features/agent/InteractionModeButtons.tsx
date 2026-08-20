@@ -26,7 +26,7 @@ export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
   };
 
   const buttonClass = (selected: boolean) => cn(
-    'inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md border px-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45',
+    'composer-mode-button inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md border px-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45',
     selected
       ? 'border-accent/30 bg-accent-soft text-accent'
       : 'border-border bg-transparent text-text-600 hover:bg-panel-muted hover:text-text-900',
@@ -44,7 +44,7 @@ export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
         className={buttonClass(isTalk)}
       >
         <MessagesSquare className="h-3.5 w-3.5" strokeWidth={1.75} />
-        讨论
+        <span className="composer-mode-label">讨论</span>
       </button>
       <button
         type="button"
@@ -56,7 +56,7 @@ export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
         className={buttonClass(isAsk)}
       >
         <MessageCircleQuestion className="h-3.5 w-3.5" strokeWidth={1.75} />
-        盘问
+        <span className="composer-mode-label">盘问</span>
       </button>
     </div>
   );

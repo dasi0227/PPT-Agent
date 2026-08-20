@@ -25,7 +25,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   onChange,
 }) => {
   const selected = profiles.find((profile) => profile.name === value);
-  const mismatch = Boolean(selected && requiresVision && !selected.capabilities.vision);
   const triggerLabel = loading
     ? '加载模型…'
     : selected
@@ -33,9 +32,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       : profiles.length === 0
         ? '暂无可用模型'
         : '选择模型';
-  const title = mismatch
-    ? '当前任务需要页面图片观察，请选择标记为支持页面观察的模型'
-    : selected
+  const title = selected
       ? `${selected.name} · ${selected.model}${selected.capabilities.vision ? ' · 支持页面观察' : ''}`
       : '选择本次任务使用的模型';
 
@@ -74,11 +71,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           })}
         </DropdownMenuContent>
       </DropdownMenu>
-      {mismatch && (
-        <p className="mt-0.5 max-w-[190px] text-[10px] leading-4 text-danger">
-          此模型不支持页面观察
-        </p>
-      )}
     </div>
   );
 };
