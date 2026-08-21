@@ -307,7 +307,7 @@ describe('DeckNavigator', () => {
     ]);
   });
 
-  it('moves the last page of a section down as the next section direct boundary item', async () => {
+  it('moves 3.2 down directly into 4.1 when section 4 has no direct pages', async () => {
     useDeckStore.setState({ globalView: 'outline' });
     setMultiSectionFixture();
     const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => ({
@@ -323,13 +323,13 @@ describe('DeckNavigator', () => {
       ['s1', 's2', 's3'],
       [
         { slide_id: 's1', section_id: 'sec1', subsection_id: 'sub11' },
-        { slide_id: 's2', section_id: 'sec2' },
+        { slide_id: 's2', section_id: 'sec2', subsection_id: 'sub21' },
         { slide_id: 's3', section_id: 'sec2', subsection_id: 'sub21' },
       ],
     ));
   });
 
-  it('moves the first subsection page up into its adjacent section direct slot', async () => {
+  it('moves 4.1 up directly into 3.2 when section 4 has no direct pages', async () => {
     useDeckStore.setState({ globalView: 'outline' });
     setMultiSectionFixture();
     const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => ({
@@ -347,7 +347,7 @@ describe('DeckNavigator', () => {
       [
         { slide_id: 's1', section_id: 'sec1', subsection_id: 'sub11' },
         { slide_id: 's2', section_id: 'sec1', subsection_id: 'sub12' },
-        { slide_id: 's3', section_id: 'sec2' },
+        { slide_id: 's3', section_id: 'sec1', subsection_id: 'sub12' },
       ],
     ));
   });

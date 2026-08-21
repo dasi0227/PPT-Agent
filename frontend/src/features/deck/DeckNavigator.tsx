@@ -184,18 +184,22 @@ export const DeckNavigator: React.FC = () => {
     });
   }, [slides, specView]);
   const directoryGroups = useMemo<DirectoryGroup[]>(
-    () => directorySections.flatMap((section) => [
-      {
+    () => directorySections.flatMap((section) => {
+      const directGroup: DirectoryGroup = {
         id: `section:${section.id}`,
         placement: { section_id: section.id },
         entries: section.directSlides,
-      },
-      ...section.subsections.map((subsection) => ({
+      };
+      const subsectionGroups: DirectoryGroup[] = section.subsections.map((subsection) => ({
         id: `subsection:${subsection.id}`,
         placement: { section_id: section.id, subsection_id: subsection.id },
         entries: subsection.slides,
-      })),
-    ]),
+      }));
+      return [
+        ...(section.directSlides.length > 0 || section.subsections.length === 0 ? [directGroup] : []),
+        ...subsectionGroups,
+      ];
+    }),
     [directorySections],
   );
   const directoryEntries = useMemo(
