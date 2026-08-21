@@ -19,7 +19,6 @@ import {
   type HistoryEntry,
   type HistorySessionState,
 } from '../features/agent/historyHydrator';
-import { useSpecStore } from './specStore';
 import { useProjectStore } from './projectStore';
 import { useComposerStore } from './composerStore';
 import { newClientIdentity } from '../lib/clientIdentity';
@@ -280,13 +279,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
   const refreshPublicTarget = (projectId: string, target?: PublicTarget) => {
     if (!target) return;
-    if (target.type === 'slide' && target.slide_id) {
-      void useProjectStore.getState().loadProjectSlides(projectId);
-      void useSpecStore.getState().refreshSlide(projectId, target.slide_id);
-      return;
-    }
-    void useProjectStore.getState().loadProjectSlides(projectId);
-    void useSpecStore.getState().loadProject(projectId);
+    void useProjectStore.getState().loadProjectContent(projectId);
   };
 
   const refreshTarget = (session: RunSession, event: SSEEvent) => {

@@ -167,6 +167,11 @@ export interface SpecProjectView {
   materialization: Record<string, Materialization>;
 }
 
+export interface ProjectContentSnapshot {
+  slides: Slide[];
+  spec: SpecProjectView;
+}
+
 export interface RunInputPayload {
   content: string;
   reply_to: string;

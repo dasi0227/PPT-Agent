@@ -182,7 +182,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const [expanded, setExpanded] = useState(Boolean(item.preview?.warnings.length));
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const slides = useProjectStore((state) => activeProjectId ? state.slidesByProjectId[activeProjectId] ?? [] : []);
-  const setCurrentPage = useDeckStore((state) => state.setCurrentPage);
+  const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const hasDetails = Boolean(item.detail || item.error || item.preview);
   const detailText = item.error?.message ?? item.detail;
   const icon = item.status === 'running'
@@ -190,8 +190,8 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     : toolStatusIcon(item.tool, item.status === 'failed');
   const focusPreview = () => {
     if (!item.preview) return;
-    const index = slides.findIndex((slide) => slide.id === item.preview?.slide_id);
-    if (index >= 0) setCurrentPage(index);
+    const slideId = item.preview.slide_id;
+    if (slides.some((slide) => slide.id === slideId)) setCurrentSlideId(slideId);
   };
 
   return (

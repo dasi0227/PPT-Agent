@@ -1,5 +1,5 @@
 import { fetchClient } from './client';
-import { Slide } from './types';
+import { ProjectContentSnapshot, Slide } from './types';
 
 export interface SlidePlacement {
   slide_id: string;
@@ -21,7 +21,7 @@ export const slidesApi = {
   reorder: (projectId: string, orderedIds: string[]) =>
     fetchClient<void>(`/projects/${projectId}/slides/reorder`, { method: 'POST', body: JSON.stringify({ ordered_ids: orderedIds }) }),
   restructure: (projectId: string, orderedIds: string[], placements: SlidePlacement[]) =>
-    fetchClient<void>(`/projects/${projectId}/slides/restructure`, {
+    fetchClient<ProjectContentSnapshot>(`/projects/${projectId}/slides/restructure`, {
       method: 'POST',
       body: JSON.stringify({ ordered_ids: orderedIds, placements }),
     }),

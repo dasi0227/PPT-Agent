@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
-import { useSpecStore } from '../../stores/specStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { useUIStore } from '../../stores/uiStore';
 import type { Slide } from '../../api/types';
@@ -114,14 +113,23 @@ function samePlacement(left: SlidePlacement, right: SlidePlacement): boolean {
 }
 
 export const DeckNavigator: React.FC = () => {
-  const { activeProjectId, projects, slidesByProjectId, loadProjectSlides, projectError } = useProjectStore();
-  const { currentPage, globalView, setCurrentPage } = useDeckStore();
+  const {
+    activeProjectId,
+    projects,
+    slidesByProjectId,
+    specByProjectId,
+    loadProjectContent,
+    applyProjectContentSnapshot,
+    projectError,
+  } = useProjectStore();
+  const { currentSlideId, globalView, setCurrentSlideId } = useDeckStore();
   const { toggleLeftPanel } = useUIStore();
   const session = useActiveSession();
   const runActive = session.status === 'running' || session.status === 'waiting';
   const [dragSlideId, setDragSlideId] = useState<string | null>(null);
   const [operationError, setOperationError] = useState('');
   const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(new Set());
+  const [structureUpdating, setStructureUpdating] = useState(false);
 
   const [slideToDelete, setSlideToDelete] = useState<{id: string, title: string} | null>(null);
 
@@ -130,7 +138,7 @@ export const DeckNavigator: React.FC = () => {
     () => activeProjectId ? slidesByProjectId[activeProjectId] ?? [] : [],
     [activeProjectId, slidesByProjectId],
   );
-  const specView = useSpecStore((state) => activeProjectId ? state.byProjectId[activeProjectId] : undefined);
+  const specView = activeProjectId ? specByProjectId[activeProjectId] : undefined;
   const { getState: getRenderState, load: loadRender } = useSlideRenderCache(activeProjectId);
   const directorySections = useMemo<DirectorySection[]>(() => {
     if (!specView?.outline) return [];
@@ -177,9 +185,9 @@ export const DeckNavigator: React.FC = () => {
     [directorySections],
   );
   const currentSectionId = useMemo(() => {
-    const currentSlide = slides[currentPage];
+    const currentSlide = slides.find((slide) => slide.id === currentSlideId);
     return currentSlide ? specView?.slide_specs?.[currentSlide.id]?.section_id : undefined;
-  }, [currentPage, slides, specView]);
+  }, [currentSlideId, slides, specView]);
 
   useEffect(() => {
     setExpandedSectionIds(new Set());
@@ -202,7 +210,7 @@ export const DeckNavigator: React.FC = () => {
   }, [loadRender, slides]);
 
   const refresh = () => {
-    if (activeProjectId) void loadProjectSlides(activeProjectId);
+    if (activeProjectId) void loadProjectContent(activeProjectId);
   };
 
   const handleAdd = async () => {
@@ -218,7 +226,7 @@ export const DeckNavigator: React.FC = () => {
   };
 
   const handleDelete = (slideId: string, title: string) => {
-    if (runActive) return;
+    if (runActive || structureUpdating) return;
     setSlideToDelete({ id: slideId, title: title });
   };
 
@@ -255,18 +263,24 @@ export const DeckNavigator: React.FC = () => {
     moveEntry(sourceSlideId, target.placement, target.slide.id);
   };
 
-  const submitStructure = async (entries: DirectoryEntry[]) => {
-    if (!activeProjectId || runActive || entries.length === 0) return;
+  const submitStructure = async (entries: DirectoryEntry[]): Promise<boolean> => {
+    const projectId = activeProjectId;
+    if (!projectId || runActive || structureUpdating || entries.length === 0) return false;
     setOperationError('');
+    setStructureUpdating(true);
     try {
-      await slidesApi.restructure(
-        activeProjectId,
+      const snapshot = await slidesApi.restructure(
+        projectId,
         entries.map((entry) => entry.slide.id),
         entries.map((entry) => entry.placement),
       );
-      refresh();
+      applyProjectContentSnapshot(projectId, snapshot);
+      return true;
     } catch (error) {
       setOperationError(error instanceof Error ? `${error.message}。请重试。` : '页面结构调整失败，请重试。');
+      return false;
+    } finally {
+      setStructureUpdating(false);
     }
   };
 
@@ -294,6 +308,8 @@ export const DeckNavigator: React.FC = () => {
   };
 
   const moveEntryByDirection = (entry: DirectoryEntry, direction: -1 | 1) => {
+    const projectId = activeProjectId;
+    if (!projectId || structureUpdating) return;
     const currentIndex = directoryEntries.findIndex((candidate) => candidate.slide.id === entry.slide.id);
     const target = directoryEntries[currentIndex + direction];
     if (!target) return;
@@ -315,14 +331,13 @@ export const DeckNavigator: React.FC = () => {
       : targetIndex + (direction > 0 ? 1 : 0);
     next.splice(insertAt, 0, moved);
     void submitStructure(next);
-    setCurrentPage(insertAt);
   };
 
   const handleGroupDrop = (event: React.DragEvent, targetPlacement: Omit<SlidePlacement, 'slide_id'>) => {
     event.preventDefault();
     const sourceSlideId = event.dataTransfer.getData('text/plain');
     setDragSlideId(null);
-    if (!sourceSlideId || !activeProjectId || runActive) return;
+    if (!sourceSlideId || !activeProjectId || runActive || structureUpdating) return;
     moveEntry(sourceSlideId, targetPlacement);
   };
 
@@ -338,24 +353,23 @@ export const DeckNavigator: React.FC = () => {
   const renderSlideRow = (entry: DirectoryEntry, renderedIndex: number) => {
     const { slide } = entry;
     const spec = specView?.slide_specs?.[slide.id];
-    const slideIndex = slides.findIndex((item) => item.id === slide.id);
     const directoryIndex = directoryEntries.findIndex((item) => item.slide.id === slide.id);
     return (
       <div
         key={slide.id}
-        draggable={!runActive}
+        draggable={!runActive && !structureUpdating}
         onDragStart={(event) => handleDragStart(event, slide.id)}
         onDragOver={handleDragOver}
         onDrop={(event) => handleRowDrop(event, entry)}
         onDragEnd={() => setDragSlideId(null)}
         className={cn(
           "group relative ml-9 grid min-h-[60px] w-[calc(100%-44px)] grid-cols-[28px_minmax(0,1fr)] items-center gap-2 rounded-md border-l-[3px] border-transparent px-2 py-2 text-sm transition-colors cursor-pointer focus-within:bg-panel-muted",
-          currentPage === slideIndex
+          currentSlideId === slide.id
             ? "bg-accent-soft text-accent font-medium border-l-[3px] border-accent"
             : "text-text-600 hover:bg-black/5",
           dragSlideId === slide.id && "opacity-50"
         )}
-        onClick={() => slideIndex >= 0 && setCurrentPage(slideIndex)}
+        onClick={() => setCurrentSlideId(slide.id)}
       >
         <span className="text-center text-xs font-semibold tabular-nums text-text-400 group-hover:text-text-600">{String(renderedIndex + 1).padStart(2, '0')}</span>
         <SlideDirectoryContent
@@ -369,18 +383,18 @@ export const DeckNavigator: React.FC = () => {
           <div
             className={cn(
               "pointer-events-none absolute right-1 top-1/2 z-10 grid -translate-y-1/2 py-0.5 pl-5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
-              currentPage === slideIndex
+              currentSlideId === slide.id
                 ? "bg-gradient-to-r from-transparent via-accent-soft to-accent-soft"
                 : "bg-gradient-to-r from-transparent via-panel to-panel",
             )}
           >
-            <IconButton label="上移本页" className="h-[18px] w-5" disabled={directoryIndex <= 0} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, -1); }}>
+            <IconButton label="上移本页" className="h-[18px] w-5" disabled={structureUpdating || directoryIndex <= 0} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, -1); }}>
               <ArrowUp className="h-3 w-3" />
             </IconButton>
-            <IconButton label="删除本页" className="h-[18px] w-5 hover:bg-danger-soft hover:text-danger" onClick={(event) => { event.stopPropagation(); handleDelete(slide.id, slide.title); }}>
+            <IconButton label="删除本页" className="h-[18px] w-5 hover:bg-danger-soft hover:text-danger" disabled={structureUpdating} onClick={(event) => { event.stopPropagation(); handleDelete(slide.id, slide.title); }}>
               <Trash2 className="h-3 w-3" />
             </IconButton>
-            <IconButton label="下移本页" className="h-[18px] w-5" disabled={directoryIndex < 0 || directoryIndex >= directoryEntries.length - 1} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, 1); }}>
+            <IconButton label="下移本页" className="h-[18px] w-5" disabled={structureUpdating || directoryIndex < 0 || directoryIndex >= directoryEntries.length - 1} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, 1); }}>
               <ArrowDown className="h-3 w-3" />
             </IconButton>
           </div>

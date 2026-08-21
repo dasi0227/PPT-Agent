@@ -20,6 +20,14 @@ type SlidePlacement struct {
 	SubsectionID string `json:"subsection_id,omitempty"`
 }
 
+// StructureSnapshot is the authoritative project-content state after a
+// structural mutation. Returning both projections together prevents clients
+// from observing a new slide order with an old outline (or vice versa).
+type StructureSnapshot struct {
+	Slides []model.Slide    `json:"slides"`
+	Spec   spec.ProjectView `json:"spec"`
+}
+
 // projectSlidesFromFiles projects the file-owned content fields (order, title,
 // layout) onto DB slide metadata. Order comes from outline.json's slide_order;
 // title/layout come from each spec.json. Slides not present in the outline are
@@ -230,25 +238,25 @@ func (svc *SlideService) ReorderSlides(ctx context.Context, projectID string, or
 	return svc.store.SetSlidesOrder(ctx, projectID, positions)
 }
 
-func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string, orderedIDs []string, placements []SlidePlacement) error {
+func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string, orderedIDs []string, placements []SlidePlacement) (StructureSnapshot, error) {
 	if active, err := svc.store.HasActiveRun(ctx, projectID); err != nil {
-		return err
+		return StructureSnapshot{}, err
 	} else if active {
-		return ErrRunActive
+		return StructureSnapshot{}, ErrRunActive
 	}
 	project, err := svc.store.GetProject(ctx, projectID)
 	if err != nil {
-		return err
+		return StructureSnapshot{}, err
 	}
 	view, err := NewSpecService(svc.store).EnsureProject(ctx, projectID)
 	if err != nil {
-		return err
+		return StructureSnapshot{}, err
 	}
 	if !sameIDs(view.Outline.SlideOrder, orderedIDs) {
-		return validationError("ordered_ids must contain every slide exactly once")
+		return StructureSnapshot{}, validationError("ordered_ids must contain every slide exactly once")
 	}
 	if len(placements) != len(orderedIDs) {
-		return validationError("placements must contain every slide exactly once")
+		return StructureSnapshot{}, validationError("placements must contain every slide exactly once")
 	}
 
 	sectionIDs := make(map[string]bool, len(view.Outline.Sections))
@@ -273,18 +281,18 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 	changed := map[string]spec.SlideSpec{}
 	for _, placement := range placements {
 		if seen[placement.SlideID] {
-			return validationError("placements must not contain duplicate slide_id %s", placement.SlideID)
+			return StructureSnapshot{}, validationError("placements must not contain duplicate slide_id %s", placement.SlideID)
 		}
 		seen[placement.SlideID] = true
 		current, ok := view.SlideSpecs[placement.SlideID]
 		if !ok {
-			return validationError("placement references unknown slide_id %s", placement.SlideID)
+			return StructureSnapshot{}, validationError("placement references unknown slide_id %s", placement.SlideID)
 		}
 		if !sectionIDs[placement.SectionID] {
-			return validationError("placement references unknown section_id %s", placement.SectionID)
+			return StructureSnapshot{}, validationError("placement references unknown section_id %s", placement.SectionID)
 		}
 		if placement.SubsectionID != "" && subsectionOwners[placement.SubsectionID] != placement.SectionID {
-			return validationError("placement subsection_id %s does not belong to section_id %s", placement.SubsectionID, placement.SectionID)
+			return StructureSnapshot{}, validationError("placement subsection_id %s does not belong to section_id %s", placement.SubsectionID, placement.SectionID)
 		}
 		next := current
 		if next.SectionID != placement.SectionID || next.SubsectionID != placement.SubsectionID {
@@ -293,7 +301,7 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 			next.Revision++
 			next.UpdatedAt = now
 			if err := spec.ValidateSlideSpec(next); err != nil {
-				return validationError("%v", err)
+				return StructureSnapshot{}, validationError("%v", err)
 			}
 			changed[placement.SlideID] = next
 		}
@@ -301,11 +309,11 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 	}
 	for _, id := range orderedIDs {
 		if !seen[id] {
-			return validationError("placements missing slide_id %s", id)
+			return StructureSnapshot{}, validationError("placements missing slide_id %s", id)
 		}
 	}
 	if err := spec.ValidateOutline(nextOutline, nextSpecs); err != nil {
-		return validationError("%v", err)
+		return StructureSnapshot{}, validationError("%v", err)
 	}
 
 	rollbackSpecs := map[string][]byte{}
@@ -313,27 +321,46 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id)))
 		raw, readErr := os.ReadFile(path)
 		if readErr != nil {
-			return readErr
+			return StructureSnapshot{}, readErr
 		}
 		rollbackSpecs[id] = raw
 		if err := atomicWrite(path, mustJSON(next)); err != nil {
 			for rollbackID, rollbackRaw := range rollbackSpecs {
 				_ = atomicWrite(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(rollbackID))), rollbackRaw)
 			}
-			return err
+			return StructureSnapshot{}, err
 		}
 	}
 	if _, err := NewSpecService(svc.store).ReplaceOutline(ctx, projectID, view.Outline.Revision, nextOutline); err != nil {
 		for id, raw := range rollbackSpecs {
 			_ = atomicWrite(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id))), raw)
 		}
-		return err
+		return StructureSnapshot{}, err
 	}
 	positions := make(map[string]int, len(orderedIDs))
 	for index, id := range orderedIDs {
 		positions[id] = index
 	}
-	return svc.store.SetSlidesOrder(ctx, projectID, positions)
+	if err := svc.store.SetSlidesOrder(ctx, projectID, positions); err != nil {
+		return StructureSnapshot{}, err
+	}
+	return svc.readStructureSnapshot(ctx, projectID)
+}
+
+func (svc *SlideService) readStructureSnapshot(ctx context.Context, projectID string) (StructureSnapshot, error) {
+	metadata, err := svc.store.ListSlides(ctx, projectID)
+	if err != nil {
+		return StructureSnapshot{}, err
+	}
+	slides, err := projectSlidesFromFiles(ctx, svc.store, projectID, metadata)
+	if err != nil {
+		return StructureSnapshot{}, err
+	}
+	view, err := NewSpecService(svc.store).EnsureProject(ctx, projectID)
+	if err != nil {
+		return StructureSnapshot{}, err
+	}
+	return StructureSnapshot{Slides: slides, Spec: view}, nil
 }
 
 func insertAfter(values []string, after, id string) []string {

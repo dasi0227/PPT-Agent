@@ -11,6 +11,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 type ProjectHandler struct {
@@ -215,10 +216,24 @@ func (h *ProjectHandler) RestructureSlides(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("ordered_ids and placements are required"))
 		return
 	}
-	err := h.slideSvc.RestructureSlides(c.Request.Context(), c.Param("id"), body.OrderedIDs, body.Placements)
+	snapshot, err := h.slideSvc.RestructureSlides(c.Request.Context(), c.Param("id"), body.OrderedIDs, body.Placements)
 	switch {
 	case err == nil:
-		c.Status(http.StatusNoContent)
+		out := make([]slideResponse, len(snapshot.Slides))
+		for i, slide := range snapshot.Slides {
+			response := toSlideResponse(slide)
+			if content, ok := snapshot.Spec.SlideSpecs[slide.ID]; ok {
+				response.Spec = &content
+			}
+			if materialization, ok := snapshot.Spec.States[slide.ID]; ok {
+				response.Materialization = &materialization
+			}
+			out[i] = response
+		}
+		c.JSON(http.StatusOK, struct {
+			Slides []slideResponse  `json:"slides"`
+			Spec   spec.ProjectView `json:"spec"`
+		}{Slides: out, Spec: snapshot.Spec})
 	case errors.Is(err, service.ErrRunActive):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
 	case service.IsValidationError(err):

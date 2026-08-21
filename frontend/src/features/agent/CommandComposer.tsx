@@ -43,7 +43,7 @@ export const CommandComposer: React.FC = () => {
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState('');
   const { activeProjectId, slidesByProjectId } = useProjectStore();
-  const { currentPage } = useDeckStore();
+  const { currentSlideId } = useDeckStore();
   const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
   const { status: runStatus, activeRunId, plan } = useActiveSession();
@@ -72,7 +72,7 @@ export const CommandComposer: React.FC = () => {
       : '输入你的想法与目标';
 
   const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
-  const currentSlide = slides[currentPage];
+  const currentSlide = slides.find((slide) => slide.id === currentSlideId);
   const isEmptyProject = Boolean(activeProjectId) && slides.length === 0;
 
   useEffect(() => {

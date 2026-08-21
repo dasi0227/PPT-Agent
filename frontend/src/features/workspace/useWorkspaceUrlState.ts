@@ -17,22 +17,21 @@ function parseMode(value: string | null): PreviewMode {
 export function useWorkspaceUrlState(projectId: string | undefined) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [hydratedProject, setHydratedProject] = React.useState<string | null>(null);
+  const [hydratedLocationKey, setHydratedLocationKey] = React.useState<string | null>(null);
   const slides = useProjectStore((state) => projectId ? state.slidesByProjectId[projectId] ?? [] : []);
-  const currentPage = useDeckStore((state) => state.currentPage);
+  const contentReady = useProjectStore((state) => projectId
+    ? Boolean(state.specByProjectId[projectId]) || (state.slidesByProjectId[projectId]?.length ?? 0) > 0
+    : false);
+  const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const globalView = useDeckStore((state) => state.globalView);
   const previewMode = useDeckStore((state) => state.previewMode);
-  const setCurrentPage = useDeckStore((state) => state.setCurrentPage);
+  const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const setGlobalView = useDeckStore((state) => state.setGlobalView);
   const enterOverview = useDeckStore((state) => state.enterOverview);
   const exitOverview = useDeckStore((state) => state.exitOverview);
 
-  React.useEffect(() => {
-    setHydratedProject(null);
-  }, [projectId]);
-
-  React.useEffect(() => {
-    if (!projectId) return;
+  React.useLayoutEffect(() => {
+    if (!projectId || !contentReady) return;
     const params = new URLSearchParams(location.search);
     const nextView = parseView(params.get('view'));
     if (nextView !== useDeckStore.getState().globalView) {
@@ -44,31 +43,31 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
       if (nextMode === 'overview') enterOverview();
       else exitOverview();
     }
-  }, [enterOverview, exitOverview, location.search, projectId, setGlobalView]);
-
-  React.useEffect(() => {
-    if (!projectId || slides.length === 0) return;
-    const slideId = new URLSearchParams(location.search).get('slide');
-    if (slideId) {
-      const index = slides.findIndex((slide) => slide.id === slideId);
-      if (index >= 0 && index !== useDeckStore.getState().currentPage) {
-        setCurrentPage(index);
-      }
+    const requestedSlideId = params.get('slide');
+    const requestedSlideExists = requestedSlideId
+      ? slides.some((slide) => slide.id === requestedSlideId)
+      : false;
+    const nextSlideId = requestedSlideExists && requestedSlideId ? requestedSlideId : slides[0]?.id ?? null;
+    if (nextSlideId !== useDeckStore.getState().currentSlideId) {
+      setCurrentSlideId(nextSlideId);
     }
-    setHydratedProject(projectId);
-  }, [location.search, projectId, setCurrentPage, slides]);
+    setHydratedLocationKey(location.key);
+  }, [contentReady, enterOverview, exitOverview, location.key, location.search, projectId, setCurrentSlideId, setGlobalView, slides]);
 
   React.useEffect(() => {
-    if (!projectId || slides.length === 0 || hydratedProject !== projectId) return;
+    if (!projectId || !contentReady || hydratedLocationKey !== location.key) return;
     const current = `${location.pathname}${location.search}`;
-    const currentSlide = slides[Math.min(currentPage, slides.length - 1)];
+    const selectedSlideExists = currentSlideId
+      ? slides.some((slide) => slide.id === currentSlideId)
+      : false;
+    const selectedSlideId = selectedSlideExists && currentSlideId ? currentSlideId : slides[0]?.id;
     const target = projectWorkspaceRoute(projectId, {
-      slideId: currentSlide?.id,
+      slideId: selectedSlideId,
       view: globalView,
       mode: previewMode,
     });
     if (target !== current) {
       navigate(target, { replace: true });
     }
-  }, [currentPage, globalView, hydratedProject, location.pathname, location.search, navigate, previewMode, projectId, slides]);
+  }, [contentReady, currentSlideId, globalView, hydratedLocationKey, location.key, location.pathname, location.search, navigate, previewMode, projectId, slides]);
 }

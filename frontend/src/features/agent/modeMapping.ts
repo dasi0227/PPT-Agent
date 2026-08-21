@@ -6,15 +6,15 @@ export function createTargetedRun(input: {
   mode: RunMode;
   instruction: string;
   slides: Slide[];
-  currentPage: number;
+  currentSlideId: string | null;
 }): CreateRunRequest {
-  const slide = input.slides[input.currentPage];
+  const slide = input.slides.find((candidate) => candidate.id === input.currentSlideId);
   const level = input.level === 'slide' && !slide ? 'deck' : input.level;
   return {
     scope: {
       artifact: input.artifact,
       level,
-      ...(level === 'slide' ? { slide_id: slide.id } : {}),
+      ...(level === 'slide' && slide ? { slide_id: slide.id } : {}),
     },
     mode: input.mode,
     instruction: input.instruction,

@@ -25,7 +25,7 @@ export function WorkspaceRoute() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const loadProjects = useProjectStore((state) => state.loadProjects);
-  const loadProjectSlides = useProjectStore((state) => state.loadProjectSlides);
+  const loadProjectContent = useProjectStore((state) => state.loadProjectContent);
   const loadThreads = useThreadStore((state) => state.loadThreads);
   useWorkspaceUrlState(projectId);
 
@@ -48,7 +48,7 @@ export function WorkspaceRoute() {
         return;
       }
 
-      void loadProjectSlides(projectId);
+      void loadProjectContent(projectId);
       void loadThreads(projectId);
     };
 
@@ -56,7 +56,7 @@ export function WorkspaceRoute() {
     return () => {
       canceled = true;
     };
-  }, [loadProjectSlides, loadProjects, loadThreads, navigate, projectId]);
+  }, [loadProjectContent, loadProjects, loadThreads, navigate, projectId]);
 
   return <AppShell />;
 }

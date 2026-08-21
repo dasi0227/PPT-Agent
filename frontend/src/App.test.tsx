@@ -38,7 +38,7 @@ describe('App Level Interactions', () => {
     });
 
     useDeckStore.setState({
-      currentPage: 0,
+      currentSlideId: 's1',
       previewMode: 'main'
     });
 
@@ -84,13 +84,13 @@ describe('App Level Interactions', () => {
       slide2Btn.click();
     });
     
-    expect(useDeckStore.getState().currentPage).toBe(1);
+    expect(useDeckStore.getState().currentSlideId).toBe('s2');
   });
 
   it('restores workspace view state from the project URL after refresh', async () => {
     window.history.pushState({}, '', '/projects/p1?slide=s2&view=outline&mode=overview');
     useDeckStore.setState({
-      currentPage: 0,
+      currentSlideId: 's1',
       globalView: 'html',
       previewMode: 'main',
     });
@@ -103,7 +103,7 @@ describe('App Level Interactions', () => {
       await Promise.resolve();
     });
 
-    expect(useDeckStore.getState().currentPage).toBe(1);
+    expect(useDeckStore.getState().currentSlideId).toBe('s2');
     expect(useDeckStore.getState().globalView).toBe('outline');
     expect(useDeckStore.getState().previewMode).toBe('overview');
   });
@@ -116,7 +116,7 @@ describe('App Level Interactions', () => {
     });
 
     await act(async () => {
-      useDeckStore.getState().setCurrentPage(1);
+      useDeckStore.getState().setCurrentSlideId('s2');
     });
 
     expect(window.location.pathname).toBe('/projects/p1');
@@ -131,7 +131,7 @@ describe('App Level Interactions', () => {
     });
 
     await act(async () => {
-      useDeckStore.getState().setCurrentPage(1);
+      useDeckStore.getState().setCurrentSlideId('s2');
     });
 
     expect(new URLSearchParams(window.location.search).get('slide')).toBe('s2');

@@ -3,13 +3,11 @@ import { create } from 'zustand';
 export type PageView = 'outline' | 'html';
 
 interface DeckState {
-  currentPage: number;
+  currentSlideId: string | null;
   previewMode: 'main' | 'overview';
   globalView: PageView;
 
-  setCurrentPage: (index: number) => void;
-  goNext: () => void;
-  goPrev: () => void;
+  setCurrentSlideId: (slideId: string | null) => void;
   enterOverview: () => void;
   exitOverview: () => void;
   setGlobalView: (view: PageView) => void;
@@ -17,13 +15,11 @@ interface DeckState {
 }
 
 export const useDeckStore = create<DeckState>((set, get) => ({
-  currentPage: 0,
+  currentSlideId: null,
   previewMode: 'main',
   globalView: 'html',
 
-  setCurrentPage: (index) => set({ currentPage: index }),
-  goNext: () => set((state) => ({ currentPage: state.currentPage + 1 })),
-  goPrev: () => set((state) => ({ currentPage: Math.max(0, state.currentPage - 1) })),
+  setCurrentSlideId: (slideId) => set({ currentSlideId: slideId }),
   enterOverview: () => set({ previewMode: 'overview' }),
   exitOverview: () => set({ previewMode: 'main' }),
 

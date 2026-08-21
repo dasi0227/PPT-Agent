@@ -44,7 +44,7 @@ describe('CommandComposer', () => {
         artifact: 'ppt', level: 'slide', mode: 'execute',
         modelProfileName: null, userTouchedTarget: false,
       });
-      useDeckStore.setState({ currentPage: 0 });
+      useDeckStore.setState({ currentSlideId: 'stable-1' });
     });
   });
 

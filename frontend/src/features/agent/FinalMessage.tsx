@@ -49,7 +49,7 @@ function uniqueTargets(targets: PublicTarget[]): PublicTarget[] {
 function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
   const [expanded, setExpanded] = React.useState(false);
   const slides = useProjectStore((state) => state.activeProjectId ? state.slidesByProjectId[state.activeProjectId] ?? [] : []);
-  const setCurrentPage = useDeckStore((state) => state.setCurrentPage);
+  const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const setGlobalView = useDeckStore((state) => state.setGlobalView);
   const changes = uniqueTargets(targets);
   const insertions = sumStat(changes, 'insertions');
@@ -57,8 +57,7 @@ function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
 
   const jumpToTarget = (target: PublicTarget) => {
     if (target.type === 'slide' && target.slide_id) {
-      const index = slides.findIndex((slide) => slide.id === target.slide_id);
-      if (index >= 0) setCurrentPage(index);
+      if (slides.some((slide) => slide.id === target.slide_id)) setCurrentSlideId(target.slide_id);
       setGlobalView(target.part === 'html' ? 'html' : 'outline');
       return;
     }

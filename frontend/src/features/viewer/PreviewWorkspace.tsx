@@ -10,7 +10,6 @@ import {
 import type { Slide } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
-import { useSpecStore } from '../../stores/specStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -184,23 +183,27 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 export const PreviewWorkspace: React.FC = () => {
   const {
-    currentPage,
+    currentSlideId,
     previewMode,
     enterOverview,
     exitOverview,
-    goNext,
-    goPrev,
     effectiveView,
     globalView,
     setGlobalView,
-    setCurrentPage,
+    setCurrentSlideId,
   } = useDeckStore();
-  const { activeProjectId, slidesByProjectId } = useProjectStore();
+  const {
+    activeProjectId,
+    slidesByProjectId,
+    specByProjectId,
+    contentLoadingByProjectId,
+    contentErrorByProjectId,
+    loadProjectContent,
+  } = useProjectStore();
   const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel } = useUIStore();
-  const specView = useSpecStore((state) => activeProjectId ? state.byProjectId[activeProjectId] : undefined);
-  const specLoading = useSpecStore((state) => activeProjectId ? state.loading[activeProjectId] : false);
-  const specError = useSpecStore((state) => activeProjectId ? state.error[activeProjectId] : undefined);
-  const loadSpec = useSpecStore((state) => state.loadProject);
+  const specView = activeProjectId ? specByProjectId[activeProjectId] : undefined;
+  const specLoading = activeProjectId ? contentLoadingByProjectId[activeProjectId] : false;
+  const specError = activeProjectId ? contentErrorByProjectId[activeProjectId] : undefined;
   const projectId = activeProjectId;
   const slides = useMemo(
     () => projectId ? slidesByProjectId[projectId] || [] : [],
@@ -211,8 +214,15 @@ export const PreviewWorkspace: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const hasSlides = slides.length > 0;
-  const safePage = Math.min(currentPage, Math.max(0, slides.length - 1));
+  const selectedIndex = currentSlideId ? slides.findIndex((slide) => slide.id === currentSlideId) : -1;
+  const safePage = selectedIndex >= 0 ? selectedIndex : 0;
   const currentSlide = slides[safePage];
+  const goPrev = useCallback(() => {
+    if (safePage > 0) setCurrentSlideId(slides[safePage - 1].id);
+  }, [safePage, setCurrentSlideId, slides]);
+  const goNext = useCallback(() => {
+    if (safePage < slides.length - 1) setCurrentSlideId(slides[safePage + 1].id);
+  }, [safePage, setCurrentSlideId, slides]);
   const currentHasHTML = currentSlide ? hasRenderedHTML(currentSlide) : false;
   const currentView = currentSlide ? effectiveView(currentSlide.id, currentHasHTML) : 'html';
   const currentState = currentSlide ? getState(currentSlide) : { status: 'idle' as const };
@@ -378,7 +388,7 @@ export const PreviewWorkspace: React.FC = () => {
                       <p className="break-all font-mono text-[11px]">{specError}</p>
                     </Disclosure>
                   </div>
-                  <Button variant="secondary" onClick={() => projectId && void loadSpec(projectId)}>重试</Button>
+                  <Button variant="secondary" onClick={() => projectId && void loadProjectContent(projectId)}>重试</Button>
                 </div>
               </InlineNotice>
             ) : (
@@ -406,7 +416,7 @@ export const PreviewWorkspace: React.FC = () => {
                   state={getState(slide)}
                   load={() => load(slide, 'prefetch')}
                   select={() => {
-                    setCurrentPage(index);
+                    setCurrentSlideId(slide.id);
                     exitOverview();
                   }}
                   spec={specView?.slide_specs?.[slide.id] ? (

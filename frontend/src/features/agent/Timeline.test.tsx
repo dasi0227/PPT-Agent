@@ -46,7 +46,7 @@ describe('Timeline', () => {
       activeProjectId: 'p1',
       slidesByProjectId: { p1: [{ id: 'current', title: 'Current', order_index: 0 } as any] },
     });
-    useDeckStore.setState({ currentPage: 0 });
+    useDeckStore.setState({ currentSlideId: 'current' });
     useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
   });
 

@@ -108,11 +108,15 @@ func TestRestructureSlidesUpdatesOrderAndPlacement(t *testing.T) {
 	if _, err := specSvc.ReplaceOutline(context.Background(), project.ID, view.Outline.Revision, outline); err != nil {
 		t.Fatal(err)
 	}
-	if err := slides.RestructureSlides(context.Background(), project.ID, []string{second.ID, first.ID}, []service.SlidePlacement{
+	snapshot, err := slides.RestructureSlides(context.Background(), project.ID, []string{second.ID, first.ID}, []service.SlidePlacement{
 		{SlideID: second.ID, SectionID: "section-two", SubsectionID: "sub-two"},
 		{SlideID: first.ID, SectionID: mainSectionID},
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if len(snapshot.Slides) != 2 || snapshot.Slides[0].ID != second.ID || snapshot.Spec.Outline.SlideOrder[0] != second.ID {
+		t.Fatalf("snapshot=%+v", snapshot)
 	}
 	after, err := specSvc.EnsureProject(context.Background(), project.ID)
 	if err != nil {

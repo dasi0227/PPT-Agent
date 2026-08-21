@@ -97,7 +97,7 @@ describe('public timeline components', () => {
     expect(screen.getByText('第 2 页')).toBeInTheDocument();
     expect(screen.getByText('1 项布局提示')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '在工作区查看 第 2 页' }));
-    expect(useDeckStore.getState().currentPage).toBe(1);
+    expect(useDeckStore.getState().currentSlideId).toBe('slide-03');
   });
 
   it('shows a compact plan indicator and reveals steps in a popover', () => {

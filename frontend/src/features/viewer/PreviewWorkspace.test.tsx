@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewWorkspace } from './PreviewWorkspace';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
-import { useSpecStore } from '../../stores/specStore';
 import { clearSlideRenderCache } from './useSlideRenderCache';
 
 const slideSpec = (id: string, title = '封面标题') => ({
@@ -12,8 +11,8 @@ const slideSpec = (id: string, title = '封面标题') => ({
   title, key_message: title, elements: [{ type: 'text' as const, intent: '要点一' }],
   layout: 'hero', created_at: 1, updated_at: 1,
 });
-const setSpecs = () => useSpecStore.setState({
-  byProjectId: { p1: {
+const setSpecs = () => useProjectStore.setState({
+  specByProjectId: { p1: {
     outline: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: 'Deck', goal: '', audience: '', language: 'zh-CN', positioning: '', requirements: [], prohibitions: [], sections: [], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
     slide_specs: { s1: slideSpec('s1'), s2: slideSpec('s2', '第二页') },
     design: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: 'test direction', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
@@ -22,8 +21,8 @@ const setSpecs = () => useSpecStore.setState({
       s2: { state: 'not_materialized', revisions: { slide_html: 0, source_outline: 0, source_spec: 0, source_design: 0 } },
     },
   } },
-  loading: {},
-  error: {},
+  contentLoadingByProjectId: {},
+  contentErrorByProjectId: {},
 });
 
 const postMessage = vi.fn();
@@ -62,7 +61,7 @@ describe('PreviewWorkspace', () => {
     });
 
     useDeckStore.setState({
-      currentPage: 0,
+      currentSlideId: 's1',
       previewMode: 'main',
       globalView: 'html',
     });
@@ -93,7 +92,7 @@ describe('PreviewWorkspace', () => {
 
     postMessage.mockClear();
     await act(async () => {
-      useDeckStore.getState().setCurrentPage(1);
+      useDeckStore.getState().setCurrentSlideId('s2');
     });
 
     await waitFor(() => {
@@ -172,7 +171,7 @@ describe('PreviewWorkspace', () => {
       unobserve() {}
       disconnect() {}
     });
-    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentPage: 0 });
+    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentSlideId: 's1' });
     render(<PreviewWorkspace />);
 
     expect(observers).toHaveLength(2);
@@ -186,7 +185,7 @@ describe('PreviewWorkspace', () => {
 
   it('shows only an empty state in overview when the project has no pages', () => {
     useProjectStore.setState({ slidesByProjectId: { p1: [] } });
-    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentPage: 0 });
+    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentSlideId: null });
     render(<PreviewWorkspace />);
 
     expect(screen.getByText('暂无页面')).toBeInTheDocument();
@@ -196,7 +195,7 @@ describe('PreviewWorkspace', () => {
 
   it('aligns the main preview empty project state with overview', () => {
     useProjectStore.setState({ slidesByProjectId: { p1: [] } });
-    useDeckStore.setState({ previewMode: 'main', globalView: 'html', currentPage: 0 });
+    useDeckStore.setState({ previewMode: 'main', globalView: 'html', currentSlideId: null });
     render(<PreviewWorkspace />);
 
     expect(screen.getByText('暂无页面')).toBeInTheDocument();
@@ -212,13 +211,13 @@ describe('PreviewWorkspace', () => {
         p1: [{ ...state.slidesByProjectId.p1[0], html_path: '' }],
       },
     }));
-    useSpecStore.setState((state) => ({
-      byProjectId: {
-        ...state.byProjectId,
-        p1: { ...state.byProjectId.p1, slide_specs: {} },
+    useProjectStore.setState((state) => ({
+      specByProjectId: {
+        ...state.specByProjectId,
+        p1: { ...state.specByProjectId.p1, slide_specs: {} },
       },
     }));
-    useDeckStore.setState({ previewMode: 'main', globalView: 'html', currentPage: 0 });
+    useDeckStore.setState({ previewMode: 'main', globalView: 'html', currentSlideId: 's1' });
     render(<PreviewWorkspace />);
 
     expect(screen.getByText('暂时没有幻灯片内容')).toBeInTheDocument();
@@ -254,16 +253,16 @@ describe('PreviewWorkspace', () => {
     await act(async () => {
       fireEvent.keyDown(window, { key: 'ArrowRight' });
     });
-    expect(useDeckStore.getState().currentPage).toBe(1);
+    expect(useDeckStore.getState().currentSlideId).toBe('s2');
 
     const input = document.createElement('input');
     document.body.appendChild(input);
     fireEvent.keyDown(input, { key: 'ArrowLeft' });
-    expect(useDeckStore.getState().currentPage).toBe(1);
+    expect(useDeckStore.getState().currentSlideId).toBe('s2');
     input.remove();
 
     fireEvent.keyDown(screen.getByRole('button', { name: '上一页' }), { key: 'ArrowLeft' });
-    expect(useDeckStore.getState().currentPage).toBe(1);
+    expect(useDeckStore.getState().currentSlideId).toBe('s2');
 
     await act(async () => {
       fireEvent.keyDown(window, { key: 'o' });
@@ -312,7 +311,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
         return { postMessage } as unknown as Window;
       }
     });
-    useDeckStore.setState({ currentPage: 0, previewMode: 'main', globalView: 'html' });
+    useDeckStore.setState({ currentSlideId: 's1', previewMode: 'main', globalView: 'html' });
     setSpecs();
   });
 
@@ -393,7 +392,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       },
       loadingProjects: false,
     });
-    useDeckStore.setState({ globalView: 'outline', currentPage: 0, previewMode: 'main' });
+    useDeckStore.setState({ globalView: 'outline', currentSlideId: 's1', previewMode: 'main' });
     render(<PreviewWorkspace />);
     // 全局 outline：主区应显示 OutlineCard 而非 iframe。
     expect(document.querySelector('iframe')).toBeNull();
@@ -411,7 +410,7 @@ describe('PreviewWorkspace dual view (globalView)', () => {
       },
       loadingProjects: false,
     });
-    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentPage: 0 });
+    useDeckStore.setState({ previewMode: 'overview', globalView: 'html', currentSlideId: 's1' });
     render(<PreviewWorkspace />);
     // 网格模式下 s2 无 html_path，应有徽标。
     expect(screen.getByText('未生成 HTML')).toBeInTheDocument();

@@ -1,21 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const slideLoads: string[] = [];
-const specRefreshes: string[] = [];
-const specLoads: string[] = [];
 vi.mock('./projectStore', () => ({
   useProjectStore: {
     getState: () => ({
       activeProjectId: 'p1',
-      loadProjectSlides: async (projectId: string) => { slideLoads.push(projectId); },
-    }),
-  },
-}));
-vi.mock('./specStore', () => ({
-  useSpecStore: {
-    getState: () => ({
-      refreshSlide: async (_projectId: string, slideId: string) => { specRefreshes.push(slideId); },
-      loadProject: async (projectId: string) => { specLoads.push(projectId); },
+      loadProjectContent: async (projectId: string) => { slideLoads.push(projectId); },
     }),
   },
 }));
@@ -104,8 +94,6 @@ function reset() {
   useRunStore.getState().dropSessions(Object.keys(useRunStore.getState().sessions));
   vi.useRealTimers();
   slideLoads.length = 0;
-  specRefreshes.length = 0;
-  specLoads.length = 0;
   connections.length = 0;
   createMode = 'resolve';
   resolveCreate = null;
@@ -227,7 +215,6 @@ describe('runStore public event sessions', () => {
       },
     });
     expect(slideLoads).toContain('p1');
-    expect(specRefreshes).toContain('s1');
   });
 
   test('keeps rejected steering text and retry creates a new request identity', async () => {
@@ -398,7 +385,6 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1.status).toBe('done');
     expect(connection.closed).toBe(true);
     expect(slideLoads).toContain('p1');
-    expect(specRefreshes).toEqual(['s1']);
     expect(useRunStore.getState().sessions.t1.timelineItems.filter((item) => item.type === 'final')).toHaveLength(1);
   });
 
@@ -409,7 +395,6 @@ describe('runStore public event sessions', () => {
       data: { ...base, status: 'failed', duration_ms: 10, error: { code: 'E', message: '失败', retryable: true } },
     });
     expect(slideLoads).toEqual([]);
-    expect(specRefreshes).toEqual([]);
   });
 
   test('deduplicates replayed event IDs and persists Last-Event-ID', async () => {

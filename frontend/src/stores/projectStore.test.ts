@@ -21,10 +21,20 @@ import { useProjectStore } from './projectStore';
 import { useThreadStore } from './threadStore';
 import { useRunStore } from './runStore';
 import { projectsApi } from '../api/projects';
+import { specsApi } from '../api/specs';
 
 function reset() {
   calls.length = 0;
-  useProjectStore.setState({ projects: [], openProjectIds: [], activeProjectId: null, slidesByProjectId: {}, loadingProjects: false });
+  useProjectStore.setState({
+    projects: [],
+    openProjectIds: [],
+    activeProjectId: null,
+    slidesByProjectId: {},
+    specByProjectId: {},
+    contentLoadingByProjectId: {},
+    contentErrorByProjectId: {},
+    loadingProjects: false,
+  });
   useThreadStore.setState({ threadsByProjectId: {}, openThreadIdsByProjectId: {}, activeThreadIdByProjectId: {} });
   useRunStore.setState({ sessions: {} });
 }
@@ -80,5 +90,55 @@ describe('projectStore v6', () => {
     expect(st.openProjectIds).toEqual(['A']);
     expect(st.activeProjectId).toBe('A');
     expect(st.slidesByProjectId['B']).toBeUndefined();
+  });
+
+  it('publishes slides and spec only after the complete project snapshot is ready', async () => {
+    const oldSlide = { id: 'old' } as any;
+    const newSlide = { id: 'new' } as any;
+    const oldSpec = { outline: { revision: 1 } } as any;
+    const newSpec = { outline: { revision: 2 } } as any;
+    useProjectStore.setState({ slidesByProjectId: { p1: [oldSlide] }, specByProjectId: { p1: oldSpec } });
+
+    const originalGetSlides = projectsApi.getSlides;
+    const originalGetSpec = specsApi.getProject;
+    let resolveSpec!: (value: typeof newSpec) => void;
+    projectsApi.getSlides = async () => [newSlide];
+    specsApi.getProject = () => new Promise((resolve) => { resolveSpec = resolve; });
+
+    const loading = useProjectStore.getState().loadProjectContent('p1');
+    await Promise.resolve();
+    expect(useProjectStore.getState().slidesByProjectId.p1).toEqual([oldSlide]);
+    expect(useProjectStore.getState().specByProjectId.p1).toBe(oldSpec);
+
+    resolveSpec(newSpec);
+    await loading;
+    expect(useProjectStore.getState().slidesByProjectId.p1).toEqual([newSlide]);
+    expect(useProjectStore.getState().specByProjectId.p1).toBe(newSpec);
+
+    projectsApi.getSlides = originalGetSlides;
+    specsApi.getProject = originalGetSpec;
+  });
+
+  it('does not let an older content request overwrite a mutation snapshot', async () => {
+    const originalGetSlides = projectsApi.getSlides;
+    const originalGetSpec = specsApi.getProject;
+    let resolveSpec!: (value: any) => void;
+    projectsApi.getSlides = async () => [{ id: 'stale-slide' } as any];
+    specsApi.getProject = () => new Promise((resolve) => { resolveSpec = resolve; });
+
+    const staleLoad = useProjectStore.getState().loadProjectContent('p1');
+    await Promise.resolve();
+    useProjectStore.getState().applyProjectContentSnapshot('p1', {
+      slides: [{ id: 'authoritative-slide' } as any],
+      spec: { outline: { revision: 3 } } as any,
+    });
+    resolveSpec({ outline: { revision: 2 } });
+    await staleLoad;
+
+    expect(useProjectStore.getState().slidesByProjectId.p1[0].id).toBe('authoritative-slide');
+    expect(useProjectStore.getState().specByProjectId.p1.outline.revision).toBe(3);
+
+    projectsApi.getSlides = originalGetSlides;
+    specsApi.getProject = originalGetSpec;
   });
 });

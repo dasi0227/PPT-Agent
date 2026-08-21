@@ -4,14 +4,20 @@ import { DeckNavigator } from './DeckNavigator';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { slidesApi } from '../../api/slides';
-import { useSpecStore } from '../../stores/specStore';
 import { clearSlideRenderCache } from '../viewer/useSlideRenderCache';
+import { BrowserRouter } from 'react-router-dom';
+import { useWorkspaceUrlState } from '../workspace/useWorkspaceUrlState';
+
+function RoutedDeckNavigator() {
+  useWorkspaceUrlState('p1');
+  return <DeckNavigator />;
+}
 
 describe('DeckNavigator', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     clearSlideRenderCache();
-    useDeckStore.setState({ currentPage: 0, globalView: 'html' });
+    useDeckStore.setState({ currentSlideId: 's1', globalView: 'html' });
     useProjectStore.setState({
       projects: [{ id: 'p1', title: '演示项目', work_dir: '', theme: 'swiss', status: 'draft', design_path: '', created_at: 0, updated_at: 0 }],
       activeProjectId: 'p1',
@@ -21,9 +27,8 @@ describe('DeckNavigator', () => {
           { id: 's2', project_id: 'p1', position: 1, layout: 'content', title: '增长趋势', html_path: '', spec_path: '/b.json', current_version: 0 },
         ]
       },
-      loadingProjects: false
-    });
-    useSpecStore.setState({ byProjectId: { p1: {
+      loadingProjects: false,
+      specByProjectId: { p1: {
       outline: { version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: '演示项目', goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', requirements: [], prohibitions: [], sections: [{ id: 'sec', title: '市场', purpose: '说明市场趋势', subsections: [{ id: 'sub', title: '趋势' }] }], slide_order: ['s1', 's2'], created_at: 1, updated_at: 1 },
       slide_specs: {
         s1: { version: '3.0', revision: 1, project_id: 'p1', slide_id: 's1', section_id: 'sec', role: 'cover', title: '市场分析', key_message: '市场在扩大', elements: [{ type: 'text', intent: '摘要' }], layout: 'cover', created_at: 1, updated_at: 1 },
@@ -34,7 +39,8 @@ describe('DeckNavigator', () => {
         s1: { state: 'fresh', revisions: { slide_html: 1, source_outline: 1, source_spec: 1, source_design: 1 } },
         s2: { state: 'spec_stale', revisions: { slide_html: 1, source_outline: 1, source_spec: 1, source_design: 1 } },
       },
-    } } });
+      } },
+    });
   });
 
   function setMultiSectionFixture() {
@@ -48,7 +54,7 @@ describe('DeckNavigator', () => {
         ],
       },
     }));
-    useSpecStore.setState({ byProjectId: { p1: {
+    useProjectStore.setState({ specByProjectId: { p1: {
       outline: {
         version: '3.0', revision: 1, project_id: 'pro_aaaaaa', title: '演示项目',
         goal: '', audience: '', language: 'zh-CN', positioning: '核心命题', requirements: [], prohibitions: [],
@@ -166,8 +172,10 @@ describe('DeckNavigator', () => {
 
   it('dragging a page onto a subsection page updates its placement', async () => {
     useDeckStore.setState({ globalView: 'outline' });
-    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockResolvedValue(undefined as never);
-    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => ({
+      slides: useProjectStore.getState().slidesByProjectId.p1,
+      spec: useProjectStore.getState().specByProjectId.p1,
+    }));
     const transfer = {
       value: '',
       setData: vi.fn((_type: string, value: string) => { transfer.value = value; }),
@@ -192,8 +200,10 @@ describe('DeckNavigator', () => {
 
   it('moves pages across subsection boundaries with the same restructure contract as dragging', async () => {
     useDeckStore.setState({ globalView: 'outline' });
-    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockResolvedValue(undefined as never);
-    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => ({
+      slides: useProjectStore.getState().slidesByProjectId.p1,
+      spec: useProjectStore.getState().specByProjectId.p1,
+    }));
 
     render(<DeckNavigator />);
 
@@ -232,8 +242,10 @@ describe('DeckNavigator', () => {
   it('moves the last page of a section down as the next section direct boundary item', async () => {
     useDeckStore.setState({ globalView: 'outline' });
     setMultiSectionFixture();
-    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockResolvedValue(undefined as never);
-    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => ({
+      slides: useProjectStore.getState().slidesByProjectId.p1,
+      spec: useProjectStore.getState().specByProjectId.p1,
+    }));
 
     render(<DeckNavigator />);
     fireEvent.click(screen.getAllByRole('button', { name: '下移本页' })[1]);
@@ -252,8 +264,10 @@ describe('DeckNavigator', () => {
   it('moves the first page of a section up as the previous section direct boundary item', async () => {
     useDeckStore.setState({ globalView: 'outline' });
     setMultiSectionFixture();
-    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockResolvedValue(undefined as never);
-    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => ({
+      slides: useProjectStore.getState().slidesByProjectId.p1,
+      spec: useProjectStore.getState().specByProjectId.p1,
+    }));
 
     render(<DeckNavigator />);
     fireEvent.click(screen.getByRole('button', { name: '展开第 2 章 第二章' }));
@@ -270,9 +284,64 @@ describe('DeckNavigator', () => {
     ));
   });
 
+  it('keeps the moved slide selected while the authoritative snapshot changes its index', async () => {
+    useDeckStore.setState({ currentSlideId: 's2', globalView: 'outline' });
+    setMultiSectionFixture();
+    let resolveRestructure!: (snapshot: Awaited<ReturnType<typeof slidesApi.restructure>>) => void;
+    vi.spyOn(slidesApi, 'restructure').mockImplementation(() => new Promise((resolve) => {
+      resolveRestructure = resolve;
+    }));
+
+    render(<DeckNavigator />);
+    fireEvent.click(screen.getAllByRole('button', { name: '下移本页' })[1]);
+
+    expect(useDeckStore.getState().currentSlideId).toBe('s2');
+    const state = useProjectStore.getState();
+    resolveRestructure({
+      slides: [state.slidesByProjectId.p1[0], state.slidesByProjectId.p1[2], state.slidesByProjectId.p1[1]],
+      spec: state.specByProjectId.p1,
+    });
+
+    await waitFor(() => {
+      expect(useProjectStore.getState().slidesByProjectId.p1[2].id).toBe('s2');
+      expect(useDeckStore.getState().currentSlideId).toBe('s2');
+    });
+  });
+
+  it('keeps slide 3.2 stable in the real router while moving it up to 3.1', async () => {
+    window.history.pushState({}, '', '/projects/p1?slide=s2&view=outline');
+    useDeckStore.setState({ currentSlideId: 's2', globalView: 'outline', previewMode: 'main' });
+    vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => {
+      const state = useProjectStore.getState();
+      const currentSpec = state.specByProjectId.p1;
+      return {
+        slides: [state.slidesByProjectId.p1[1], state.slidesByProjectId.p1[0]],
+        spec: {
+          ...currentSpec,
+          outline: { ...currentSpec.outline, revision: 2, slide_order: ['s2', 's1'] },
+          slide_specs: {
+            ...currentSpec.slide_specs,
+            s2: { ...currentSpec.slide_specs.s2, subsection_id: undefined, revision: 3 },
+          },
+        },
+      };
+    });
+
+    render(<BrowserRouter><RoutedDeckNavigator /></BrowserRouter>);
+    fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[1]);
+
+    await waitFor(() => expect(useProjectStore.getState().slidesByProjectId.p1[0].id).toBe('s2'));
+    expect(useDeckStore.getState().currentSlideId).toBe('s2');
+    expect(new URLSearchParams(window.location.search).get('slide')).toBe('s2');
+
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    expect(useDeckStore.getState().currentSlideId).toBe('s2');
+    expect(new URLSearchParams(window.location.search).get('slide')).toBe('s2');
+  });
+
   it('add page button calls slidesApi.add with last slide as anchor', async () => {
     const addSpy = vi.spyOn(slidesApi, 'add').mockResolvedValue({} as never);
-    vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+    vi.spyOn(useProjectStore.getState(), 'loadProjectContent').mockResolvedValue();
     render(<DeckNavigator />);
     fireEvent.click(screen.getByRole('button', { name: /加页/ }));
     await waitFor(() => {
@@ -282,7 +351,7 @@ describe('DeckNavigator', () => {
 
   it('delete page opens confirm modal then calls slidesApi.remove', async () => {
     const removeSpy = vi.spyOn(slidesApi, 'remove').mockResolvedValue(undefined as never);
-    const loadProjectSlidesSpy = vi.spyOn(useProjectStore.getState(), 'loadProjectSlides').mockResolvedValue();
+    const loadProjectContentSpy = vi.spyOn(useProjectStore.getState(), 'loadProjectContent').mockResolvedValue();
 
     render(<DeckNavigator />);
     fireEvent.click(screen.getAllByRole('button', { name: /删除本页/ })[0]);
@@ -297,7 +366,7 @@ describe('DeckNavigator', () => {
 
     await waitFor(() => {
       expect(removeSpy).toHaveBeenCalledWith('s1');
-      expect(loadProjectSlidesSpy).toHaveBeenCalledWith('p1');
+      expect(loadProjectContentSpy).toHaveBeenCalledWith('p1');
     });
   });
 

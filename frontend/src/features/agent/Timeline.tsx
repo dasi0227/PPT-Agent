@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, CheckCircle2, ChevronRight, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
-import { useProjectStore } from '../../stores/projectStore';
 import { targetLabel } from './runtimeLabels';
 import { useActiveSession } from './useActiveSession';
 import { FinalMessage } from './FinalMessage';
@@ -47,10 +46,7 @@ function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'canceled'
 export const Timeline: React.FC = () => {
   const session = useActiveSession();
   const { timelineItems, status, plan, progress } = session;
-  const activeProjectId = useProjectStore((state) => state.activeProjectId);
-  const slides = useProjectStore((state) => activeProjectId ? state.slidesByProjectId[activeProjectId] ?? [] : []);
-  const currentPage = useDeckStore((state) => state.currentPage);
-  const currentSlideId = slides[currentPage]?.id;
+  const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const containerRef = useRef<HTMLDivElement>(null);
   const followingRef = useRef(true);
   const [showReturn, setShowReturn] = useState(false);
@@ -58,7 +54,7 @@ export const Timeline: React.FC = () => {
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const displayEntries = useMemo(
-    () => groupTimelineItems(timelineItems, currentSlideId),
+    () => groupTimelineItems(timelineItems, currentSlideId ?? undefined),
     [currentSlideId, timelineItems],
   );
   const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle';
