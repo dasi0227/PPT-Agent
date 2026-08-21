@@ -218,10 +218,78 @@ describe('DeckNavigator', () => {
 
     await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
       'p1',
-      ['s2', 's1'],
+      ['s1', 's2'],
       [
-        { slide_id: 's2', section_id: 'sec', subsection_id: 'sub' },
         { slide_id: 's1', section_id: 'sec', subsection_id: 'sub' },
+        { slide_id: 's2', section_id: 'sec', subsection_id: 'sub' },
+      ],
+    ));
+  });
+
+  it('moves a 3.1 page into empty 3.2 instead of skipping to section 4', async () => {
+    useDeckStore.setState({ globalView: 'outline' });
+    setMultiSectionFixture();
+    useProjectStore.setState((state) => ({
+      specByProjectId: {
+        ...state.specByProjectId,
+        p1: {
+          ...state.specByProjectId.p1,
+          slide_specs: {
+            ...state.specByProjectId.p1.slide_specs,
+            s2: { ...state.specByProjectId.p1.slide_specs.s2, subsection_id: 'sub11' },
+          },
+        },
+      },
+    }));
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => ({
+      slides: useProjectStore.getState().slidesByProjectId.p1,
+      spec: useProjectStore.getState().specByProjectId.p1,
+    }));
+
+    render(<DeckNavigator />);
+    fireEvent.click(screen.getAllByRole('button', { name: '下移本页' })[1]);
+
+    await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
+      'p1',
+      ['s1', 's2', 's3'],
+      [
+        { slide_id: 's1', section_id: 'sec1', subsection_id: 'sub11' },
+        { slide_id: 's2', section_id: 'sec1', subsection_id: 'sub12' },
+        { slide_id: 's3', section_id: 'sec2', subsection_id: 'sub21' },
+      ],
+    ));
+  });
+
+  it('reorders adjacent pages inside one subsection without changing placement', async () => {
+    useDeckStore.setState({ globalView: 'outline' });
+    setMultiSectionFixture();
+    useProjectStore.setState((state) => ({
+      specByProjectId: {
+        ...state.specByProjectId,
+        p1: {
+          ...state.specByProjectId.p1,
+          slide_specs: {
+            ...state.specByProjectId.p1.slide_specs,
+            s2: { ...state.specByProjectId.p1.slide_specs.s2, subsection_id: 'sub11' },
+          },
+        },
+      },
+    }));
+    const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => ({
+      slides: useProjectStore.getState().slidesByProjectId.p1,
+      spec: useProjectStore.getState().specByProjectId.p1,
+    }));
+
+    render(<DeckNavigator />);
+    fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[1]);
+
+    await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
+      'p1',
+      ['s2', 's1', 's3'],
+      [
+        { slide_id: 's2', section_id: 'sec1', subsection_id: 'sub11' },
+        { slide_id: 's1', section_id: 'sec1', subsection_id: 'sub11' },
+        { slide_id: 's3', section_id: 'sec2', subsection_id: 'sub21' },
       ],
     ));
   });
@@ -261,7 +329,7 @@ describe('DeckNavigator', () => {
     ));
   });
 
-  it('moves the first page of a section up as the previous section direct boundary item', async () => {
+  it('moves the first subsection page up into its adjacent section direct slot', async () => {
     useDeckStore.setState({ globalView: 'outline' });
     setMultiSectionFixture();
     const restructureSpy = vi.spyOn(slidesApi, 'restructure').mockImplementation(async () => ({
@@ -279,7 +347,7 @@ describe('DeckNavigator', () => {
       [
         { slide_id: 's1', section_id: 'sec1', subsection_id: 'sub11' },
         { slide_id: 's2', section_id: 'sec1', subsection_id: 'sub12' },
-        { slide_id: 's3', section_id: 'sec1' },
+        { slide_id: 's3', section_id: 'sec2' },
       ],
     ));
   });
@@ -287,23 +355,35 @@ describe('DeckNavigator', () => {
   it('keeps the moved slide selected while the authoritative snapshot changes its index', async () => {
     useDeckStore.setState({ currentSlideId: 's2', globalView: 'outline' });
     setMultiSectionFixture();
+    useProjectStore.setState((state) => ({
+      specByProjectId: {
+        ...state.specByProjectId,
+        p1: {
+          ...state.specByProjectId.p1,
+          slide_specs: {
+            ...state.specByProjectId.p1.slide_specs,
+            s2: { ...state.specByProjectId.p1.slide_specs.s2, subsection_id: 'sub11' },
+          },
+        },
+      },
+    }));
     let resolveRestructure!: (snapshot: Awaited<ReturnType<typeof slidesApi.restructure>>) => void;
     vi.spyOn(slidesApi, 'restructure').mockImplementation(() => new Promise((resolve) => {
       resolveRestructure = resolve;
     }));
 
     render(<DeckNavigator />);
-    fireEvent.click(screen.getAllByRole('button', { name: '下移本页' })[1]);
+    fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[1]);
 
     expect(useDeckStore.getState().currentSlideId).toBe('s2');
     const state = useProjectStore.getState();
     resolveRestructure({
-      slides: [state.slidesByProjectId.p1[0], state.slidesByProjectId.p1[2], state.slidesByProjectId.p1[1]],
+      slides: [state.slidesByProjectId.p1[1], state.slidesByProjectId.p1[0], state.slidesByProjectId.p1[2]],
       spec: state.specByProjectId.p1,
     });
 
     await waitFor(() => {
-      expect(useProjectStore.getState().slidesByProjectId.p1[2].id).toBe('s2');
+      expect(useProjectStore.getState().slidesByProjectId.p1[0].id).toBe('s2');
       expect(useDeckStore.getState().currentSlideId).toBe('s2');
     });
   });
@@ -315,10 +395,10 @@ describe('DeckNavigator', () => {
       const state = useProjectStore.getState();
       const currentSpec = state.specByProjectId.p1;
       return {
-        slides: [state.slidesByProjectId.p1[1], state.slidesByProjectId.p1[0]],
+        slides: state.slidesByProjectId.p1,
         spec: {
           ...currentSpec,
-          outline: { ...currentSpec.outline, revision: 2, slide_order: ['s2', 's1'] },
+          outline: { ...currentSpec.outline, revision: 2, slide_order: ['s1', 's2'] },
           slide_specs: {
             ...currentSpec.slide_specs,
             s2: { ...currentSpec.slide_specs.s2, subsection_id: undefined, revision: 3 },
@@ -330,7 +410,7 @@ describe('DeckNavigator', () => {
     render(<BrowserRouter><RoutedDeckNavigator /></BrowserRouter>);
     fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[1]);
 
-    await waitFor(() => expect(useProjectStore.getState().slidesByProjectId.p1[0].id).toBe('s2'));
+    await waitFor(() => expect(useProjectStore.getState().specByProjectId.p1.slide_specs.s2.subsection_id).toBeUndefined());
     expect(useDeckStore.getState().currentSlideId).toBe('s2');
     expect(new URLSearchParams(window.location.search).get('slide')).toBe('s2');
 

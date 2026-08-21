@@ -108,6 +108,12 @@ type DirectorySection = {
   subsections: DirectorySubsection[];
 };
 
+type DirectoryGroup = {
+  id: string;
+  placement: Omit<SlidePlacement, 'slide_id'>;
+  entries: DirectoryEntry[];
+};
+
 function samePlacement(left: SlidePlacement, right: SlidePlacement): boolean {
   return left.section_id === right.section_id && (left.subsection_id ?? '') === (right.subsection_id ?? '');
 }
@@ -177,12 +183,24 @@ export const DeckNavigator: React.FC = () => {
       };
     });
   }, [slides, specView]);
-  const directoryEntries = useMemo(
+  const directoryGroups = useMemo<DirectoryGroup[]>(
     () => directorySections.flatMap((section) => [
-      ...section.directSlides,
-      ...section.subsections.flatMap((subsection) => subsection.slides),
+      {
+        id: `section:${section.id}`,
+        placement: { section_id: section.id },
+        entries: section.directSlides,
+      },
+      ...section.subsections.map((subsection) => ({
+        id: `subsection:${subsection.id}`,
+        placement: { section_id: section.id, subsection_id: subsection.id },
+        entries: subsection.slides,
+      })),
     ]),
     [directorySections],
+  );
+  const directoryEntries = useMemo(
+    () => directoryGroups.flatMap((group) => group.entries),
+    [directoryGroups],
   );
   const currentSectionId = useMemo(() => {
     const currentSlide = slides.find((slide) => slide.id === currentSlideId);
@@ -310,27 +328,39 @@ export const DeckNavigator: React.FC = () => {
   const moveEntryByDirection = (entry: DirectoryEntry, direction: -1 | 1) => {
     const projectId = activeProjectId;
     if (!projectId || structureUpdating) return;
-    const currentIndex = directoryEntries.findIndex((candidate) => candidate.slide.id === entry.slide.id);
-    const target = directoryEntries[currentIndex + direction];
-    if (!target) return;
-    const crossesSection = entry.placement.section_id !== target.placement.section_id;
-    const next = directoryEntries
-      .filter((candidate) => candidate.slide.id !== entry.slide.id)
-      .map((candidate) => ({ ...candidate, placement: { ...candidate.placement } }));
-    const moved: DirectoryEntry = {
-      slide: entry.slide,
-      placement: {
-        slide_id: entry.slide.id,
-        section_id: target.placement.section_id,
-        ...(!crossesSection && target.placement.subsection_id ? { subsection_id: target.placement.subsection_id } : {}),
-      },
-    };
-    const targetIndex = next.findIndex((candidate) => candidate.slide.id === target.slide.id);
-    const insertAt = crossesSection
-      ? targetIndex + (direction < 0 ? 1 : 0)
-      : targetIndex + (direction > 0 ? 1 : 0);
-    next.splice(insertAt, 0, moved);
-    void submitStructure(next);
+    const groups = directoryGroups.map((group) => ({
+      ...group,
+      entries: group.entries.map((candidate) => ({
+        ...candidate,
+        placement: { ...candidate.placement },
+      })),
+    }));
+    const groupIndex = groups.findIndex((group) =>
+      group.entries.some((candidate) => candidate.slide.id === entry.slide.id));
+    if (groupIndex < 0) return;
+    const currentGroup = groups[groupIndex];
+    const entryIndex = currentGroup.entries.findIndex((candidate) => candidate.slide.id === entry.slide.id);
+    const adjacentIndex = entryIndex + direction;
+
+    if (adjacentIndex >= 0 && adjacentIndex < currentGroup.entries.length) {
+      [currentGroup.entries[entryIndex], currentGroup.entries[adjacentIndex]] =
+        [currentGroup.entries[adjacentIndex], currentGroup.entries[entryIndex]];
+    } else {
+      const targetGroup = groups[groupIndex + direction];
+      if (!targetGroup) return;
+      const [source] = currentGroup.entries.splice(entryIndex, 1);
+      const moved: DirectoryEntry = {
+        ...source,
+        placement: {
+          slide_id: source.slide.id,
+          ...targetGroup.placement,
+        },
+      };
+      if (direction > 0) targetGroup.entries.unshift(moved);
+      else targetGroup.entries.push(moved);
+    }
+
+    void submitStructure(groups.flatMap((group) => group.entries));
   };
 
   const handleGroupDrop = (event: React.DragEvent, targetPlacement: Omit<SlidePlacement, 'slide_id'>) => {
@@ -353,7 +383,16 @@ export const DeckNavigator: React.FC = () => {
   const renderSlideRow = (entry: DirectoryEntry, renderedIndex: number) => {
     const { slide } = entry;
     const spec = specView?.slide_specs?.[slide.id];
-    const directoryIndex = directoryEntries.findIndex((item) => item.slide.id === slide.id);
+    const groupIndex = directoryGroups.findIndex((group) =>
+      group.entries.some((candidate) => candidate.slide.id === slide.id));
+    const groupEntryIndex = groupIndex >= 0
+      ? directoryGroups[groupIndex].entries.findIndex((candidate) => candidate.slide.id === slide.id)
+      : -1;
+    const canMoveUp = groupIndex >= 0 && (groupEntryIndex > 0 || groupIndex > 0);
+    const canMoveDown = groupIndex >= 0 && (
+      groupEntryIndex < directoryGroups[groupIndex].entries.length - 1
+      || groupIndex < directoryGroups.length - 1
+    );
     return (
       <div
         key={slide.id}
@@ -388,13 +427,13 @@ export const DeckNavigator: React.FC = () => {
                 : "bg-gradient-to-r from-transparent via-panel to-panel",
             )}
           >
-            <IconButton label="上移本页" className="h-[18px] w-5" disabled={structureUpdating || directoryIndex <= 0} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, -1); }}>
+            <IconButton label="上移本页" className="h-[18px] w-5" disabled={structureUpdating || !canMoveUp} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, -1); }}>
               <ArrowUp className="h-3 w-3" />
             </IconButton>
             <IconButton label="删除本页" className="h-[18px] w-5 hover:bg-danger-soft hover:text-danger" disabled={structureUpdating} onClick={(event) => { event.stopPropagation(); handleDelete(slide.id, slide.title); }}>
               <Trash2 className="h-3 w-3" />
             </IconButton>
-            <IconButton label="下移本页" className="h-[18px] w-5" disabled={structureUpdating || directoryIndex < 0 || directoryIndex >= directoryEntries.length - 1} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, 1); }}>
+            <IconButton label="下移本页" className="h-[18px] w-5" disabled={structureUpdating || !canMoveDown} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, 1); }}>
               <ArrowDown className="h-3 w-3" />
             </IconButton>
           </div>
