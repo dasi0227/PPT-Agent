@@ -9,6 +9,31 @@ import { CommandComposer } from './CommandComposer';
 
 vi.mock('../../lib/platform', () => ({ isMac: () => false, submitShortcutLabel: () => 'Ctrl + Enter' }));
 
+function mockComposerControlMeasurements() {
+  return vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const bar = this.closest<HTMLElement>('.composer-control-bar');
+    const leftCompact = Boolean(bar?.classList.contains('composer-controls-left-compact'));
+    const rightCompact = Boolean(bar?.classList.contains('composer-controls-right-compact'));
+    let width = 0;
+    if (this.dataset.composerControlGroup === 'start') width = leftCompact ? 92 : 160;
+    else if (this.dataset.composerControlGroup === 'end') width = rightCompact ? 96 : 190;
+    else if (this.matches('.composer-mode-button, .composer-plan-button')) width = leftCompact ? 28 : 50;
+    else if (this.matches('.composer-target-button')) width = rightCompact ? 28 : 82;
+    else if (this.matches('.composer-model-button')) width = rightCompact ? 28 : 100;
+    return {
+      width,
+      height: 0,
+      top: 0,
+      right: width,
+      bottom: 0,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    };
+  });
+}
+
 describe('CommandComposer', () => {
   const createRun = vi.fn();
   const cancelRun = vi.fn();
@@ -73,30 +98,74 @@ describe('CommandComposer', () => {
     }), 'p1'));
   });
 
-  it('switches every labeled composer control together when their full content no longer fits', async () => {
+  it('collapses the left group before the right group and uses hysteresis at both thresholds', async () => {
+    const rectSpy = mockComposerControlMeasurements();
+
     render(<CommandComposer />);
     await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
 
     const bar = document.querySelector<HTMLElement>('.composer-control-bar') as HTMLElement;
-    const start = document.querySelector<HTMLElement>('[data-composer-control-group="start"]') as HTMLElement;
-    const end = document.querySelector<HTMLElement>('[data-composer-control-group="end"]') as HTMLElement;
-
     const styles = window.getComputedStyle(bar);
-    const fullWidth = 160 + 190
-      + (Number.parseFloat(styles.paddingLeft) || 0)
-      + (Number.parseFloat(styles.paddingRight) || 0)
-      + (Number.parseFloat(styles.columnGap) || 0);
-    let barWidth = fullWidth + 4;
+    const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0)
+      + (Number.parseFloat(styles.paddingRight) || 0);
+    let barWidth = horizontalPadding + 330;
     Object.defineProperty(bar, 'clientWidth', { configurable: true, get: () => barWidth });
-    Object.defineProperty(start, 'scrollWidth', { configurable: true, get: () => 160 });
-    Object.defineProperty(end, 'scrollWidth', { configurable: true, get: () => 190 });
 
     fireEvent(window, new Event('resize'));
-    await waitFor(() => expect(bar).toHaveClass('composer-controls-compact'));
+    await waitFor(() => expect(bar).toHaveAttribute('data-controls-density', 'left-compact'));
+    expect(bar).toHaveClass('composer-controls-left-compact');
+    expect(bar).not.toHaveClass('composer-controls-right-compact');
 
-    barWidth = fullWidth + 12;
+    barWidth = horizontalPadding + 280;
     fireEvent(window, new Event('resize'));
-    await waitFor(() => expect(bar).not.toHaveClass('composer-controls-compact'));
+    await waitFor(() => expect(bar).toHaveAttribute('data-controls-density', 'all-compact'));
+    expect(bar).toHaveClass('composer-controls-left-compact', 'composer-controls-right-compact');
+
+    // Crossing the collapse threshold by only a few pixels must not expand again.
+    barWidth = horizontalPadding + 306;
+    fireEvent(window, new Event('resize'));
+    expect(bar).toHaveAttribute('data-controls-density', 'all-compact');
+
+    barWidth = horizontalPadding + 322;
+    fireEvent(window, new Event('resize'));
+    await waitFor(() => expect(bar).toHaveAttribute('data-controls-density', 'left-compact'));
+
+    // The full state has its own 12px expansion deadband.
+    barWidth = horizontalPadding + 356;
+    fireEvent(window, new Event('resize'));
+    expect(bar).toHaveAttribute('data-controls-density', 'left-compact');
+
+    barWidth = horizontalPadding + 366;
+    fireEvent(window, new Event('resize'));
+    await waitFor(() => expect(bar).toHaveAttribute('data-controls-density', 'full'));
+    expect(bar).not.toHaveClass('composer-controls-left-compact', 'composer-controls-right-compact');
+    expect(bar).not.toHaveAttribute('data-measure-full');
+
+    rectSpy.mockRestore();
+  });
+
+  it('keeps the current density stable while switching target tabs', async () => {
+    const rectSpy = mockComposerControlMeasurements();
+    render(<CommandComposer />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
+
+    const bar = document.querySelector<HTMLElement>('.composer-control-bar') as HTMLElement;
+    const styles = window.getComputedStyle(bar);
+    const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0)
+      + (Number.parseFloat(styles.paddingRight) || 0);
+    Object.defineProperty(bar, 'clientWidth', { configurable: true, get: () => horizontalPadding + 330 });
+    fireEvent(window, new Event('resize'));
+    await waitFor(() => expect(bar).toHaveAttribute('data-controls-density', 'left-compact'));
+
+    const target = screen.getByRole('button', { name: '目标：单页幻灯片' });
+    fireEvent.pointerDown(target, { button: 0, ctrlKey: false });
+    fireEvent.click(target);
+    fireEvent.click(screen.getByRole('menuitem', { name: '范围：整份' }));
+
+    await waitFor(() => expect(useComposerStore.getState().level).toBe('deck'));
+    expect(bar).toHaveAttribute('data-controls-density', 'left-compact');
+    expect(bar).not.toHaveAttribute('data-measure-full');
+    rectSpy.mockRestore();
   });
 
 	  it('maps talk, ask and plan buttons mutually exclusively and restores default execution', async () => {

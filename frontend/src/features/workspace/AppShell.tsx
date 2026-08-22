@@ -27,9 +27,10 @@ export const AppShell: React.FC = () => {
   const shellRef = React.useRef<HTMLDivElement>(null);
   const [workspaceWidth, setWorkspaceWidth] = React.useState(() =>
     typeof window === 'undefined' ? 0 : window.innerWidth);
-  const centerDefaultSize =
-    100 - (leftPanelHidden ? 0 : 22) - (rightPanelHidden ? 0 : 28);
   const dynamicRightMinSize = rightPanelMinSize(workspaceWidth);
+  const rightPanelDefaultSize = rightPanelHidden ? 0 : Math.max(28, dynamicRightMinSize);
+  const centerDefaultSize =
+    100 - (leftPanelHidden ? 0 : 22) - rightPanelDefaultSize;
 
   React.useLayoutEffect(() => {
     const shell = shellRef.current;
@@ -80,7 +81,7 @@ export const AppShell: React.FC = () => {
                 <Panel
                   id="right"
                   order={3}
-                  defaultSize={28}
+                  defaultSize={rightPanelDefaultSize}
                   minSize={dynamicRightMinSize}
                   maxSize={RIGHT_PANEL_MAX_SIZE}
                   collapsible={false}

@@ -58,7 +58,7 @@ describe('AppShell layout contract', () => {
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-min-size', '16');
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-max-size', '32');
     expect(screen.getByTestId('panel-center')).toHaveAttribute('data-min-size', '30');
-    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-default-size', '28');
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-default-size', '40');
     expect(screen.getByTestId('panel-right')).toHaveAttribute('data-min-size', '40');
     expect(screen.getByTestId('panel-right')).toHaveAttribute('data-max-size', '40');
     expect(screen.getAllByRole('separator')).toHaveLength(2);
@@ -72,7 +72,7 @@ describe('AppShell layout contract', () => {
     act(() => useUIStore.getState().toggleLeftPanel());
     expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
     expect(screen.getByTestId('panel-right')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '72');
+    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '60');
 
     act(() => useUIStore.getState().toggleRightPanel());
     expect(screen.queryByTestId('panel-right')).not.toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('AppShell layout contract', () => {
     });
     expect(screen.getByTestId('panel-left')).toBeInTheDocument();
     expect(screen.getByTestId('panel-right')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '50');
+    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '38');
     expect(screen.getByTestId('panel-group')).toHaveAttribute('data-autosave-id', expandedKey);
   });
 

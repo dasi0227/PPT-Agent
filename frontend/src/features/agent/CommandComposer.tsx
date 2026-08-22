@@ -16,7 +16,117 @@ import { PlanIndicator } from './PlanIndicator';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
 
-const COMPOSER_CONTROLS_FIT_GUARD_PX = 8;
+const COMPOSER_CONTROLS_FIT_GUARD_PX = 2;
+const COMPOSER_CONTROLS_HYSTERESIS_PX = 12;
+
+type ComposerControlsDensity = 'full' | 'left-compact' | 'all-compact';
+
+interface ComposerControlWidths {
+  start: number;
+  end: number;
+  startButtons: number[];
+  endButtons: number[];
+  gap: number;
+}
+
+interface ComposerControlThresholds {
+  full: number;
+  leftCompact: number;
+  allCompact: number;
+}
+
+function applyDensityClass(element: HTMLElement, density: ComposerControlsDensity) {
+  element.classList.toggle('composer-controls-left-compact', density !== 'full');
+  element.classList.toggle('composer-controls-right-compact', density === 'all-compact');
+}
+
+function elementWidth(element: HTMLElement): number {
+  return Math.ceil(element.getBoundingClientRect().width || element.scrollWidth);
+}
+
+function readControlWidths(element: HTMLElement): ComposerControlWidths | null {
+  const start = element.querySelector<HTMLElement>('[data-composer-control-group="start"]');
+  const end = element.querySelector<HTMLElement>('[data-composer-control-group="end"]');
+  if (!start || !end) return null;
+
+  const styles = window.getComputedStyle(element);
+  return {
+    start: elementWidth(start),
+    end: elementWidth(end),
+    startButtons: Array.from(start.querySelectorAll<HTMLElement>('.composer-mode-button, .composer-plan-button'))
+      .map(elementWidth),
+    endButtons: Array.from(end.querySelectorAll<HTMLElement>('.composer-target-button, .composer-model-button'))
+      .map(elementWidth),
+    gap: Number.parseFloat(styles.columnGap) || 0,
+  };
+}
+
+function largestExpansion(expanded: number[], compact: number[]): number {
+  return expanded.reduce((largest, width, index) => (
+    Math.max(largest, width - (compact[index] ?? width))
+  ), 0);
+}
+
+function measureControlThresholds(bar: HTMLElement): ComposerControlThresholds | null {
+  const clone = bar.cloneNode(true) as HTMLElement;
+  clone.removeAttribute('data-controls-density');
+  clone.classList.add('composer-controls-measure');
+  clone.setAttribute('aria-hidden', 'true');
+  clone.setAttribute('inert', '');
+  clone.querySelectorAll<HTMLElement>('[data-state]').forEach((element) => {
+    element.removeAttribute('data-state');
+  });
+  document.body.appendChild(clone);
+
+  try {
+    applyDensityClass(clone, 'full');
+    const full = readControlWidths(clone);
+    applyDensityClass(clone, 'left-compact');
+    const leftCompact = readControlWidths(clone);
+    applyDensityClass(clone, 'all-compact');
+    const allCompact = readControlWidths(clone);
+    if (!full || !leftCompact || !allCompact || full.start <= 0 || full.end <= 0) return null;
+
+    const leftHoverReserve = largestExpansion(full.startButtons, leftCompact.startButtons);
+    const rightHoverReserve = largestExpansion(full.endButtons, allCompact.endButtons);
+    const guard = COMPOSER_CONTROLS_FIT_GUARD_PX;
+    return {
+      full: full.start + full.end + full.gap + guard,
+      leftCompact: leftCompact.start + full.end + full.gap + leftHoverReserve + guard,
+      allCompact: allCompact.start + allCompact.end + full.gap
+        + Math.max(leftHoverReserve, rightHoverReserve) + guard,
+    };
+  } finally {
+    clone.remove();
+  }
+}
+
+function resolveControlsDensity(
+  current: ComposerControlsDensity,
+  available: number,
+  thresholds: ComposerControlThresholds,
+): ComposerControlsDensity {
+  if (available <= 0) return current;
+  const fullThreshold = thresholds.full;
+  const allThreshold = Math.min(fullThreshold, thresholds.allCompact);
+  const leftThreshold = Math.min(fullThreshold, Math.max(allThreshold, thresholds.leftCompact));
+
+  if (current === 'full') {
+    if (available < leftThreshold) return 'all-compact';
+    if (available < fullThreshold) return 'left-compact';
+    return current;
+  }
+
+  if (current === 'left-compact') {
+    if (available < leftThreshold) return 'all-compact';
+    if (available >= fullThreshold + COMPOSER_CONTROLS_HYSTERESIS_PX) return 'full';
+    return current;
+  }
+
+  if (available >= fullThreshold + COMPOSER_CONTROLS_HYSTERESIS_PX) return 'full';
+  if (available >= leftThreshold + COMPOSER_CONTROLS_HYSTERESIS_PX) return 'left-compact';
+  return current;
+}
 
 function applyShortcut(raw: string, request: CreateRunRequest): CreateRunRequest {
   if (!raw.startsWith('/')) return request;
@@ -45,7 +155,7 @@ export const CommandComposer: React.FC = () => {
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState('');
-  const [controlsCompact, setControlsCompact] = useState(false);
+  const [controlsDensity, setControlsDensity] = useState<ComposerControlsDensity>('full');
   const controlBarRef = useRef<HTMLDivElement>(null);
   const { activeProjectId, slidesByProjectId } = useProjectStore();
   const { currentSlideId } = useDeckStore();
@@ -116,33 +226,30 @@ export const CommandComposer: React.FC = () => {
   useLayoutEffect(() => {
     const bar = controlBarRef.current;
     if (!bar) return undefined;
+    let thresholds = measureControlThresholds(bar);
 
-    const measure = () => {
-      const start = bar.querySelector<HTMLElement>('[data-composer-control-group="start"]');
-      const end = bar.querySelector<HTMLElement>('[data-composer-control-group="end"]');
-      if (!start || !end) return;
-
-      bar.setAttribute('data-measure-full', 'true');
+    const updateDensity = () => {
+      if (!thresholds) return;
+      const currentThresholds = thresholds;
       const styles = window.getComputedStyle(bar);
       const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0)
         + (Number.parseFloat(styles.paddingRight) || 0);
-      const groupGap = Number.parseFloat(styles.columnGap) || 0;
       const available = bar.clientWidth - horizontalPadding;
-      const required = start.scrollWidth + end.scrollWidth + groupGap;
-      bar.removeAttribute('data-measure-full');
-
-      if (available <= 0) return;
-      const nextCompact = required + COMPOSER_CONTROLS_FIT_GUARD_PX > available;
-      setControlsCompact((current) => current === nextCompact ? current : nextCompact);
+      setControlsDensity((current) => resolveControlsDensity(current, available, currentThresholds));
     };
 
-    measure();
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    const refreshThresholds = () => {
+      thresholds = measureControlThresholds(bar) ?? thresholds;
+      updateDensity();
+    };
+
+    updateDensity();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateDensity);
     observer?.observe(bar);
-    window.addEventListener('resize', measure);
+    window.addEventListener('resize', refreshThresholds);
     return () => {
       observer?.disconnect();
-      window.removeEventListener('resize', measure);
+      window.removeEventListener('resize', refreshThresholds);
     };
   }, [
     composer.artifact,
@@ -258,9 +365,11 @@ export const CommandComposer: React.FC = () => {
         />
         <div
           ref={controlBarRef}
+          data-controls-density={controlsDensity}
           className={cn(
-            'composer-control-bar flex min-w-0 items-center justify-between gap-1 px-3 pb-2',
-            controlsCompact && 'composer-controls-compact',
+            'composer-control-bar flex min-w-0 items-center justify-between gap-3 px-3 pb-2',
+            controlsDensity !== 'full' && 'composer-controls-left-compact',
+            controlsDensity === 'all-compact' && 'composer-controls-right-compact',
           )}
         >
           <div data-composer-control-group="start" className="flex min-w-0 items-center gap-0.5">

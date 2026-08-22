@@ -54,10 +54,10 @@
   container-type: inline-size;
 }
 
-.composer-control-bar.composer-controls-compact .composer-mode-button,
-.composer-control-bar.composer-controls-compact .composer-plan-button,
-.composer-control-bar.composer-controls-compact .composer-target-button,
-.composer-control-bar.composer-controls-compact .composer-model-button {
+.composer-control-bar.composer-controls-left-compact .composer-mode-button,
+.composer-control-bar.composer-controls-left-compact .composer-plan-button,
+.composer-control-bar.composer-controls-right-compact .composer-target-button,
+.composer-control-bar.composer-controls-right-compact .composer-model-button {
   width: auto;
   min-width: 28px;
   justify-content: center;
@@ -68,10 +68,10 @@
   transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.composer-control-bar.composer-controls-compact .composer-mode-label,
-.composer-control-bar.composer-controls-compact .composer-plan-label,
-.composer-control-bar.composer-controls-compact .composer-target-label,
-.composer-control-bar.composer-controls-compact .composer-model-label {
+.composer-control-bar.composer-controls-left-compact .composer-mode-label,
+.composer-control-bar.composer-controls-left-compact .composer-plan-label,
+.composer-control-bar.composer-controls-right-compact .composer-target-label,
+.composer-control-bar.composer-controls-right-compact .composer-model-label {
   display: inline-block;
   max-width: 0;
   overflow: hidden;
@@ -83,68 +83,60 @@
   white-space: nowrap;
 }
 
-.composer-control-bar.composer-controls-compact
+.composer-control-bar.composer-controls-left-compact
   .composer-mode-button:is(:hover, :focus-visible, [data-state='open']),
-.composer-control-bar.composer-controls-compact
+.composer-control-bar.composer-controls-left-compact
   .composer-plan-button:is(:hover, :focus-visible, [data-state='open']) {
   gap: 0.125rem;
   padding-inline: 0.25rem;
 }
 
-.composer-control-bar.composer-controls-compact
+.composer-control-bar.composer-controls-right-compact
   .composer-target-button:is(:hover, :focus-visible, [data-state='open']),
-.composer-control-bar.composer-controls-compact
+.composer-control-bar.composer-controls-right-compact
   .composer-model-button:is(:hover, :focus-visible, [data-state='open']) {
   gap: 0.25rem;
   padding-inline: 0.5rem;
 }
 
-.composer-control-bar.composer-controls-compact
+.composer-control-bar.composer-controls-left-compact
   .composer-mode-button:is(:hover, :focus-visible, [data-state='open']) .composer-mode-label,
-.composer-control-bar.composer-controls-compact
+.composer-control-bar.composer-controls-left-compact
   .composer-plan-button:is(:hover, :focus-visible, [data-state='open']) .composer-plan-label {
   max-width: 3rem;
   opacity: 1;
   transform: translateX(0);
 }
 
-.composer-control-bar.composer-controls-compact
+.composer-control-bar.composer-controls-right-compact
   .composer-target-button:is(:hover, :focus-visible, [data-state='open']) .composer-target-label {
   max-width: 7rem;
   opacity: 1;
   transform: translateX(0);
 }
 
-.composer-control-bar.composer-controls-compact
+.composer-control-bar.composer-controls-right-compact
   .composer-model-button:is(:hover, :focus-visible, [data-state='open']) .composer-model-label {
   max-width: 10rem;
   opacity: 1;
   transform: translateX(0);
 }
 
-.composer-control-bar[data-measure-full='true'] .composer-mode-button,
-.composer-control-bar[data-measure-full='true'] .composer-plan-button {
-  width: auto;
-  gap: 0.125rem;
-  padding-inline: 0.25rem;
+.composer-control-bar.composer-controls-measure {
+  position: fixed !important;
+  left: -10000px !important;
+  bottom: 0 !important;
+  width: max-content !important;
+  min-width: max-content !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  contain: layout style !important;
 }
 
-.composer-control-bar[data-measure-full='true'] .composer-target-button,
-.composer-control-bar[data-measure-full='true'] .composer-model-button {
-  width: auto;
-  gap: 0.25rem;
-  padding-inline: 0.5rem;
-}
-
-.composer-control-bar[data-measure-full='true'] .composer-mode-label,
-.composer-control-bar[data-measure-full='true'] .composer-plan-label,
-.composer-control-bar[data-measure-full='true'] .composer-target-label,
-.composer-control-bar[data-measure-full='true'] .composer-model-label {
-  display: inline-block;
-  max-width: none;
-  opacity: 1;
-  transform: none;
-  transition: none;
+.composer-control-bar.composer-controls-measure,
+.composer-control-bar.composer-controls-measure * {
+  transition: none !important;
+  animation: none !important;
 }
 
 .overview-slide-card {
