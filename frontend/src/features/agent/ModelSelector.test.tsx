@@ -18,7 +18,10 @@ describe('ModelSelector', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('文本模型');
+    const trigger = screen.getByRole('button', { name: '模型' });
+    expect(trigger).toHaveTextContent('文本模型');
+    expect(trigger.querySelector('svg')).toBeInTheDocument();
+    expect(trigger).toHaveClass('composer-model-button');
     expect(screen.queryByText('此模型不支持页面观察')).toBeNull();
   });
 });

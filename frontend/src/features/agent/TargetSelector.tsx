@@ -1,4 +1,5 @@
 import type React from 'react';
+import { Crosshair } from 'lucide-react';
 import type { Artifact, ScopeLevel } from '../../api/types';
 import {
   DropdownMenu,
@@ -72,11 +73,12 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
           aria-label={`目标：${LOCKED_TARGET_LABEL}`}
           aria-describedby={hintId}
           className={[
-            'inline-flex h-7 min-w-0 max-w-[112px] shrink cursor-default items-center rounded-md border border-border bg-transparent px-1 text-[11px] font-medium text-text-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            'composer-target-button inline-flex h-7 min-w-0 max-w-[136px] shrink cursor-default items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
             disabled ? 'opacity-45' : '',
           ].join(' ')}
         >
-          <span className="min-w-0 truncate">{LOCKED_TARGET_LABEL}</span>
+          <Crosshair className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+          <span className="composer-target-label min-w-0 truncate">{LOCKED_TARGET_LABEL}</span>
         </button>
         <span
           role="tooltip"
@@ -96,9 +98,10 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
           type="button"
           aria-label={`目标：${targetLabel(selected)}`}
           disabled={disabled}
-          className="inline-flex h-7 min-w-0 max-w-[112px] shrink items-center rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+          className="composer-target-button inline-flex h-7 min-w-0 max-w-[136px] shrink items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
         >
-          <span className="min-w-0 truncate">{targetLabel(selected)}</span>
+          <Crosshair className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+          <span className="composer-target-label min-w-0 truncate">{targetLabel(selected)}</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="end" className="w-[224px] space-y-1 p-1.5">

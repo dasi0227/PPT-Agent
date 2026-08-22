@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Send, StopCircle } from 'lucide-react';
 import { llmApi } from '../../api/llm';
 import type { CreateRunRequest, LLMProfile } from '../../api/types';
+import { cn } from '../../lib/utils';
 import { useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -42,6 +43,8 @@ export const CommandComposer: React.FC = () => {
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState('');
+  const [controlsCompact, setControlsCompact] = useState(false);
+  const controlBarRef = useRef<HTMLDivElement>(null);
   const { activeProjectId, slidesByProjectId } = useProjectStore();
   const { currentSlideId } = useDeckStore();
   const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
@@ -107,6 +110,48 @@ export const CommandComposer: React.FC = () => {
       });
     return () => { current = false; };
   }, []);
+
+  useLayoutEffect(() => {
+    const bar = controlBarRef.current;
+    if (!bar) return undefined;
+
+    const measure = () => {
+      const start = bar.querySelector<HTMLElement>('[data-composer-control-group="start"]');
+      const end = bar.querySelector<HTMLElement>('[data-composer-control-group="end"]');
+      if (!start || !end) return;
+
+      bar.setAttribute('data-measure-full', 'true');
+      const styles = window.getComputedStyle(bar);
+      const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0)
+        + (Number.parseFloat(styles.paddingRight) || 0);
+      const groupGap = Number.parseFloat(styles.columnGap) || 0;
+      const available = bar.clientWidth - horizontalPadding;
+      const required = start.scrollWidth + end.scrollWidth + groupGap;
+      bar.removeAttribute('data-measure-full');
+
+      if (available <= 0) return;
+      const nextCompact = required > available;
+      setControlsCompact((current) => current === nextCompact ? current : nextCompact);
+    };
+
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(bar);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [
+    composer.artifact,
+    composer.level,
+    composer.modelProfileName,
+    isEmptyProject,
+    profiles.length,
+    profilesLoading,
+    showCancelButton,
+  ]);
+
   const submit = async () => {
     const raw = text.trim();
     if (disabled || !activeProjectId || !raw) return;
@@ -209,8 +254,14 @@ export const CommandComposer: React.FC = () => {
           className="max-h-32 min-h-[60px] w-full resize-none bg-transparent p-3 text-sm text-text-900 placeholder:text-text-400 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
           rows={2}
         />
-        <div className="composer-control-bar flex min-w-0 items-center justify-between gap-1 px-3 pb-2">
-          <div className="flex min-w-0 items-center gap-0.5">
+        <div
+          ref={controlBarRef}
+          className={cn(
+            'composer-control-bar flex min-w-0 items-center justify-between gap-1 px-3 pb-2',
+            controlsCompact && 'composer-controls-compact',
+          )}
+        >
+          <div data-composer-control-group="start" className="flex min-w-0 items-center gap-0.5">
             <InteractionModeButtons
               mode={composer.mode}
               onIntentChange={composer.setIntent}
@@ -224,7 +275,7 @@ export const CommandComposer: React.FC = () => {
               onSelectPlan={togglePlanIntent}
             />
           </div>
-          <div className="flex min-w-0 shrink-0 items-center gap-0.5">
+          <div data-composer-control-group="end" className="flex min-w-0 shrink-0 items-center gap-0.5">
             <TargetSelector
               artifact={composer.artifact}
               level={composer.level}

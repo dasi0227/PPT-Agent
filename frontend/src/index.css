@@ -54,6 +54,44 @@
   container-type: inline-size;
 }
 
+.composer-control-bar.composer-controls-compact .composer-mode-button,
+.composer-control-bar.composer-controls-compact .composer-plan-button,
+.composer-control-bar.composer-controls-compact .composer-target-button,
+.composer-control-bar.composer-controls-compact .composer-model-button {
+  width: 28px;
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0;
+}
+
+.composer-control-bar.composer-controls-compact .composer-mode-label,
+.composer-control-bar.composer-controls-compact .composer-plan-label,
+.composer-control-bar.composer-controls-compact .composer-target-label,
+.composer-control-bar.composer-controls-compact .composer-model-label {
+  display: none;
+}
+
+.composer-control-bar[data-measure-full='true'] .composer-mode-button,
+.composer-control-bar[data-measure-full='true'] .composer-plan-button {
+  width: auto;
+  gap: 0.125rem;
+  padding-inline: 0.25rem;
+}
+
+.composer-control-bar[data-measure-full='true'] .composer-target-button,
+.composer-control-bar[data-measure-full='true'] .composer-model-button {
+  width: auto;
+  gap: 0.25rem;
+  padding-inline: 0.5rem;
+}
+
+.composer-control-bar[data-measure-full='true'] .composer-mode-label,
+.composer-control-bar[data-measure-full='true'] .composer-plan-label,
+.composer-control-bar[data-measure-full='true'] .composer-target-label,
+.composer-control-bar[data-measure-full='true'] .composer-model-label {
+  display: inline;
+}
+
 .overview-slide-card {
   container-type: inline-size;
 }
@@ -76,21 +114,6 @@
   margin-top: clamp(4px, 5cqw, 8px);
   font-size: clamp(13px, 10cqw, 17px);
   line-height: 1.2;
-}
-
-@container (max-width: 480px) {
-  .composer-mode-button,
-  .composer-plan-button {
-    width: 28px;
-    justify-content: center;
-    padding-inline: 0;
-  }
-
-  .composer-mode-label,
-  .composer-plan-label,
-  .composer-plan-count {
-    display: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

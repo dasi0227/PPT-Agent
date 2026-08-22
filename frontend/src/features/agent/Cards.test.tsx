@@ -109,6 +109,9 @@ describe('public timeline components', () => {
       ],
     }} />);
     const trigger = screen.getByRole('button', { name: '计划 1 / 2' });
+    const progressBadge = trigger.querySelector('.composer-plan-progress-badge');
+    expect(progressBadge).toHaveTextContent('1/2');
+    expect(progressBadge).toHaveClass('absolute', '-right-2', '-top-2');
     expect(screen.queryByText('完成页面')).toBeNull();
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);

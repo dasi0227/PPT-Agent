@@ -14,7 +14,8 @@ describe('TargetSelector', () => {
     );
 
     const trigger = screen.getByRole('button', { name: '目标：单页幻灯片' });
-    expect(trigger.querySelector('svg')).toBeNull();
+    expect(trigger.querySelector('svg')).toBeInTheDocument();
+    expect(trigger).toHaveClass('composer-target-button');
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
     expect(screen.getByRole('group', { name: '范围' })).toBeInTheDocument();

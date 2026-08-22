@@ -73,6 +73,27 @@ describe('CommandComposer', () => {
     }), 'p1'));
   });
 
+  it('switches every labeled composer control together when their full content no longer fits', async () => {
+    render(<CommandComposer />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
+
+    const bar = document.querySelector<HTMLElement>('.composer-control-bar') as HTMLElement;
+    const start = document.querySelector<HTMLElement>('[data-composer-control-group="start"]') as HTMLElement;
+    const end = document.querySelector<HTMLElement>('[data-composer-control-group="end"]') as HTMLElement;
+
+    let barWidth = 300;
+    Object.defineProperty(bar, 'clientWidth', { configurable: true, get: () => barWidth });
+    Object.defineProperty(start, 'scrollWidth', { configurable: true, get: () => 160 });
+    Object.defineProperty(end, 'scrollWidth', { configurable: true, get: () => 190 });
+
+    fireEvent(window, new Event('resize'));
+    await waitFor(() => expect(bar).toHaveClass('composer-controls-compact'));
+
+    barWidth = 620;
+    fireEvent(window, new Event('resize'));
+    await waitFor(() => expect(bar).not.toHaveClass('composer-controls-compact'));
+  });
+
 	  it('maps talk, ask and plan buttons mutually exclusively and restores default execution', async () => {
     render(<CommandComposer />);
     const talk = screen.getByRole('button', { name: '讨论' });

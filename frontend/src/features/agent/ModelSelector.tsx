@@ -1,4 +1,5 @@
 import React from 'react';
+import { Cpu } from 'lucide-react';
 import type { LLMProfile } from '../../api/types';
 import {
   DropdownMenu,
@@ -44,9 +45,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             type="button"
             aria-label="模型"
             disabled={disabled || loading || profiles.length === 0}
-            className="inline-flex h-7 min-w-0 max-w-[152px] shrink items-center rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+            className="composer-model-button inline-flex h-7 min-w-0 max-w-[176px] shrink items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
           >
-            <span className="min-w-0 truncate">{triggerLabel}</span>
+            <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            <span className="composer-model-label min-w-0 truncate">{triggerLabel}</span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="max-h-64 w-[196px] overflow-y-auto p-1">
