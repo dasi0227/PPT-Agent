@@ -38,14 +38,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       : '选择本次任务使用的模型';
 
   return (
-    <div className="min-w-0" title={title}>
+    <div className="min-w-0 shrink-0" title={title}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
             aria-label="模型"
             disabled={disabled || loading || profiles.length === 0}
-            className="composer-model-button inline-flex h-7 min-w-0 max-w-[176px] shrink items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+            className="composer-model-button inline-flex h-7 min-w-0 max-w-[176px] shrink-0 items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
           >
             <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             <span className="composer-model-label min-w-0 truncate">{triggerLabel}</span>

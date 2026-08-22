@@ -81,7 +81,12 @@ describe('CommandComposer', () => {
     const start = document.querySelector<HTMLElement>('[data-composer-control-group="start"]') as HTMLElement;
     const end = document.querySelector<HTMLElement>('[data-composer-control-group="end"]') as HTMLElement;
 
-    let barWidth = 300;
+    const styles = window.getComputedStyle(bar);
+    const fullWidth = 160 + 190
+      + (Number.parseFloat(styles.paddingLeft) || 0)
+      + (Number.parseFloat(styles.paddingRight) || 0)
+      + (Number.parseFloat(styles.columnGap) || 0);
+    let barWidth = fullWidth + 4;
     Object.defineProperty(bar, 'clientWidth', { configurable: true, get: () => barWidth });
     Object.defineProperty(start, 'scrollWidth', { configurable: true, get: () => 160 });
     Object.defineProperty(end, 'scrollWidth', { configurable: true, get: () => 190 });
@@ -89,7 +94,7 @@ describe('CommandComposer', () => {
     fireEvent(window, new Event('resize'));
     await waitFor(() => expect(bar).toHaveClass('composer-controls-compact'));
 
-    barWidth = 620;
+    barWidth = fullWidth + 12;
     fireEvent(window, new Event('resize'));
     await waitFor(() => expect(bar).not.toHaveClass('composer-controls-compact'));
   });

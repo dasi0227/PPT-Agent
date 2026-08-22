@@ -125,6 +125,8 @@ describe('public timeline components', () => {
 	    render(<PlanIndicator running={false} plan={null} selected={false} onSelectPlan={selectPlan} />);
 	    const trigger = screen.getByRole('button', { name: '计划' });
 	    expect(trigger).toHaveAttribute('aria-pressed', 'false');
+	    expect(trigger).toHaveClass('shrink-0');
+	    expect(screen.getByText('计划')).toHaveClass('whitespace-nowrap');
 	    fireEvent.click(trigger);
 	    expect(selectPlan).toHaveBeenCalledTimes(1);
 	  });

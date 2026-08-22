@@ -16,6 +16,8 @@ import { PlanIndicator } from './PlanIndicator';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
 
+const COMPOSER_CONTROLS_FIT_GUARD_PX = 8;
+
 function applyShortcut(raw: string, request: CreateRunRequest): CreateRunRequest {
   if (!raw.startsWith('/')) return request;
   const [command, ...rest] = raw.split(/\s+/);
@@ -130,7 +132,7 @@ export const CommandComposer: React.FC = () => {
       bar.removeAttribute('data-measure-full');
 
       if (available <= 0) return;
-      const nextCompact = required > available;
+      const nextCompact = required + COMPOSER_CONTROLS_FIT_GUARD_PX > available;
       setControlsCompact((current) => current === nextCompact ? current : nextCompact);
     };
 

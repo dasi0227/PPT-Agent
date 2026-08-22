@@ -67,13 +67,13 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
   if (locked) {
     const hintId = 'target-selector-locked-hint';
     return (
-      <div className="group relative min-w-0">
+      <div className="group relative min-w-0 shrink-0">
         <button
           type="button"
           aria-label={`目标：${LOCKED_TARGET_LABEL}`}
           aria-describedby={hintId}
           className={[
-            'composer-target-button inline-flex h-7 min-w-0 max-w-[136px] shrink cursor-default items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            'composer-target-button inline-flex h-7 min-w-0 max-w-[136px] shrink-0 cursor-default items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
             disabled ? 'opacity-45' : '',
           ].join(' ')}
         >
@@ -98,7 +98,7 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
           type="button"
           aria-label={`目标：${targetLabel(selected)}`}
           disabled={disabled}
-          className="composer-target-button inline-flex h-7 min-w-0 max-w-[136px] shrink items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+          className="composer-target-button inline-flex h-7 min-w-0 max-w-[136px] shrink-0 items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
         >
           <Crosshair className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
           <span className="composer-target-label min-w-0 truncate">{targetLabel(selected)}</span>
