@@ -26,8 +26,11 @@ func TestRuntimeCapabilityStoresRoundTrip(t *testing.T) {
 	}
 	checkpoint := workflow.RuntimeCheckpoint{
 		RunID: "r", LoopID: "loop", Boundary: "runtime_initialized", Phase: workflow.PhaseExecuting,
-		Requirements:    &workflow.RequirementLedger{Items: []workflow.RequirementItem{{ID: "req_01", Text: "edit", Status: workflow.RequirementPending}}},
-		ContextBriefing: "briefing", ContextIndexRef: "idx",
+		Requirements:      &workflow.RequirementLedger{Items: []workflow.RequirementItem{{ID: "req_01", Text: "edit", Status: workflow.RequirementPending}}},
+		ContextBriefing:   "briefing",
+		ContextIndexRef:   "idx",
+		ActiveDurationMS:  1_234,
+		WaitingDurationMS: 5_678,
 	}
 	if err := s.SaveCheckpoint(ctx, checkpoint); err != nil {
 		t.Fatal(err)
@@ -37,6 +40,7 @@ func TestRuntimeCapabilityStoresRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if latest.Boundary != checkpoint.Boundary || latest.ContextBriefing != "briefing" ||
+		latest.ActiveDurationMS != 1_234 || latest.WaitingDurationMS != 5_678 ||
 		latest.Requirements.Items[0].ID != "req_01" {
 		t.Fatalf("checkpoint=%+v", latest)
 	}

@@ -175,6 +175,10 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 		outcome.Status = workflow.StatusCanceled
 		outcome.Code = workflow.CodeCanceled
 	}
+	durationMS := time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds()
+	if outcome.DurationMS != nil && *outcome.DurationMS >= 0 {
+		durationMS = *outcome.DurationMS
+	}
 	if pending, err := e.store.ListPendingSteering(ctx, a.run.ID); err == nil && len(pending) > 0 {
 		ids := make([]string, 0, len(pending))
 		for _, message := range pending {
@@ -196,7 +200,7 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 			})
 			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
 				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "completed",
-				DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+				DurationMS: durationMS,
 			})
 		}
 	case workflow.StatusCanceled:
@@ -204,7 +208,7 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 		if !a.bus.Terminated() {
 			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
 				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "canceled",
-				DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+				DurationMS: durationMS,
 			})
 		}
 	default:
@@ -216,7 +220,7 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 			}
 			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
 				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "failed",
-				DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+				DurationMS: durationMS,
 				Error:      model.NewAgentError(code, "run", errors.New(outcome.Message)).Public(),
 			})
 		}

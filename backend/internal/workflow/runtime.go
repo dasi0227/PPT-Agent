@@ -78,6 +78,8 @@ type RuntimeCheckpoint struct {
 	LatestToolResults    []CheckpointToolResult        `json:"latest_tool_results,omitempty"`
 	Turns                int                           `json:"turns"`
 	ToolCalls            int                           `json:"tool_calls"`
+	ActiveDurationMS     int64                         `json:"active_duration_ms"`
+	WaitingDurationMS    int64                         `json:"waiting_duration_ms"`
 	WaitingQuestionID    string                        `json:"waiting_question_id,omitempty"`
 	ProviderContinuation *ProviderContinuationSnapshot `json:"provider_continuation,omitempty"`
 	CompletionFailures   int                           `json:"completion_failures"`
@@ -182,6 +184,7 @@ type Runtime struct {
 	Compactor      ContextCompactor
 	Embedder       EmbeddingProvider
 	SemanticPolicy SemanticReviewPolicy
+	now            func() time.Time
 }
 
 func buildDomainToolRegistry(input RuntimeInput, pack contextengine.ContextPack) (*ToolRegistry, error) {
@@ -203,6 +206,7 @@ func NewRuntime(agent ReActAgent) *Runtime {
 	return &Runtime{
 		Agent: agent, Gate: NewCompletionGate(),
 		Embedder: HashEmbeddingProvider{}, SemanticPolicy: DefaultSemanticReviewPolicy(),
+		now: time.Now,
 	}
 }
 
@@ -225,7 +229,11 @@ type RunState struct {
 	tokens                  int
 	toolFailures            int
 	activeTools             int
-	started                 time.Time
+	activeElapsed           time.Duration
+	activeSince             time.Time
+	activeRunning           bool
+	waitingElapsed          time.Duration
+	waitingSince            time.Time
 	budget                  RuntimeBudget
 	gateKey                 string
 	gateCount               int
@@ -253,10 +261,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	if input.Budget.MaxTurns == 0 {
 		input.Budget = DefaultRuntimeBudget()
 	}
+	now := r.clockNow()
 	state := &RunState{
 		runID: input.RunID, loopID: "loop_" + uuid.NewString(),
 		scope: input.Context.Command.Scope, mode: input.Context.Command.Mode, pack: input.Context, ledger: NewEvidenceLedger(),
-		issues: []Issue{}, messages: []llm.Message{}, started: time.Now(), budget: input.Budget,
+		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
 	}
 	if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.RunID == input.RunID {
@@ -276,6 +285,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.turns = input.ResumeCheckpoint.Turns
 		state.toolCalls = input.ResumeCheckpoint.ToolCalls
+		if input.ResumeCheckpoint.ActiveDurationMS > 0 {
+			state.activeElapsed = time.Duration(input.ResumeCheckpoint.ActiveDurationMS) * time.Millisecond
+		}
+		if input.ResumeCheckpoint.WaitingDurationMS > 0 {
+			state.waitingElapsed = time.Duration(input.ResumeCheckpoint.WaitingDurationMS) * time.Millisecond
+		}
 		state.gateCount = input.ResumeCheckpoint.CompletionFailures
 		state.contextIndexRef = input.ResumeCheckpoint.ContextIndexRef
 		recordTrace(input.Trace, input.RunID, "checkpoint.loaded", map[string]any{
@@ -388,6 +403,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		})
 		if err != nil {
 			return r.failAgentError(input, state, classifyProviderError(ctx, err))
+		}
+		if err := r.checkActiveDurationBudget(state); err != nil {
+			return r.fail(input, state, CodeBudgetExceeded, err)
 		}
 		state.continuation = response.Continuation
 		if response.Usage.TotalTokens > 0 {
@@ -854,10 +872,12 @@ func (r *Runtime) awaitPlanApproval(
 	interactionID := "plan_approval_" + plan.ID + "_" + fmt.Sprint(plan.Revision)
 	request := model.PlanApprovalRequestedPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, Plan: publicPlan(plan)}
 	for {
+		state.pauseActiveClock(r.clockNow())
 		answer, err := prompter.AskPlanApproval(ctx, request)
 		if err != nil {
 			return r.fail(input, state, CodeCanceled, err), true
 		}
+		state.resumeActiveClock(r.clockNow())
 		if answer.InteractionID != interactionID || answer.PlanID != plan.ID || answer.ExpectedRevision != plan.Revision ||
 			(answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "cancel") ||
 			(answer.Decision == "revise" && strings.TrimSpace(answer.Feedback) == "") {
@@ -874,7 +894,7 @@ func (r *Runtime) awaitPlanApproval(
 			}
 			r.changePhase(input.Emitter, state, PhaseTerminal, "plan canceled")
 			_ = r.saveCheckpoint(ctx, input, state, checkpointTerminal, "")
-			return state.outcome(StatusCanceled, CodeCanceled, "plan canceled"), true
+			return r.outcome(state, StatusCanceled, CodeCanceled, "plan canceled"), true
 		case "revise":
 			if input.Emitter != nil {
 				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Revision: plan.Revision, Decision: answer.Decision, Feedback: answer.Feedback})
@@ -1034,6 +1054,7 @@ func (r *Runtime) executeControl(
 		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeAskUser, questionID); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
+		state.pauseActiveClock(r.clockNow())
 		answer, displayText, err := input.Prompter.Ask(ctx, questionEvent)
 		if err != nil {
 			code := CodeAgentFailed
@@ -1042,6 +1063,7 @@ func (r *Runtime) executeControl(
 			}
 			return r.fail(input, state, code, err), true
 		}
+		state.resumeActiveClock(r.clockNow())
 		r.changePhase(input.Emitter, state, state.resumePhase, "user input received")
 		result := SuccessfulToolResult("user answered")
 		result.Data = map[string]any{
@@ -1204,7 +1226,7 @@ func (r *Runtime) finishCandidate(
 	if err := r.saveCheckpoint(ctx, input, state, checkpointTerminal, ""); err != nil {
 		return r.fail(input, state, CodeAgentFailed, err), true
 	}
-	outcome := state.outcome(StatusCompleted, "", "")
+	outcome := r.outcome(state, StatusCompleted, "", "")
 	if input.Emitter != nil {
 		affected := publicAffectedTargets(input.ProjectDir, changes)
 		input.Emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
@@ -1216,7 +1238,7 @@ func (r *Runtime) finishCandidate(
 		})
 		input.Emitter.Emit(model.EventRunFinished, model.RunFinishedPayload{
 			PublicEventBase: publicBase(state.runID), Status: "completed",
-			AffectedTargets: affected, DurationMS: time.Since(state.started).Milliseconds(),
+			AffectedTargets: affected, DurationMS: outcomeDurationMS(outcome),
 		})
 	}
 	return outcome, true
@@ -1256,11 +1278,11 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 	recordTrace(input.Trace, state.runID, "error.projected", agentErr.TraceProjection())
 	r.changePhase(input.Emitter, state, PhaseTerminal, agentErr.Code)
 	_ = r.saveCheckpoint(context.Background(), input, state, checkpointTerminal, "")
-	outcome := state.outcome(status, agentErr.Code, agentErr.Error())
+	outcome := r.outcome(state, status, agentErr.Code, agentErr.Error())
 	if input.Emitter != nil {
 		payload := model.RunFinishedPayload{
 			PublicEventBase: publicBase(state.runID), Status: publicStatus,
-			DurationMS: time.Since(state.started).Milliseconds(),
+			DurationMS: outcomeDurationMS(outcome),
 		}
 		if publicStatus == "failed" {
 			payload.Error = agentErr.Public()
@@ -1270,12 +1292,27 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 	return outcome
 }
 
-func (state *RunState) outcome(status WorkflowStatus, code, message string) StructuredOutcome {
+func (r *Runtime) outcome(state *RunState, status WorkflowStatus, code, message string) StructuredOutcome {
+	now := r.clockNow()
+	active, wall, waiting := state.durationSnapshot(now)
+	durationMS := active.Milliseconds()
+	recordTrace(state.trace, state.runID, "runtime.duration", map[string]any{
+		"active_duration_ms":  durationMS,
+		"wall_duration_ms":    wall.Milliseconds(),
+		"waiting_duration_ms": waiting.Milliseconds(),
+	})
 	return StructuredOutcome{
 		LoopID: state.loopID, Phase: state.phase, Status: status,
 		Scope: state.scope, Changes: state.changeSet(), Issues: append([]Issue{}, state.issues...),
-		Summary: state.lastSummary, Code: code, Message: message,
+		Summary: state.lastSummary, Code: code, Message: message, DurationMS: &durationMS,
 	}
+}
+
+func outcomeDurationMS(outcome StructuredOutcome) int64 {
+	if outcome.DurationMS == nil || *outcome.DurationMS < 0 {
+		return 0
+	}
+	return *outcome.DurationMS
 }
 
 func (state *RunState) changeSet() ChangeSet {
@@ -1285,11 +1322,13 @@ func (state *RunState) changeSet() ChangeSet {
 	return state.tx.ChangeSet()
 }
 
-func (state *RunState) checkpoint(questionID string) RuntimeCheckpoint {
+func (state *RunState) checkpoint(questionID string, now time.Time) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
+		ActiveDurationMS:  state.activeDurationAt(now).Milliseconds(),
+		WaitingDurationMS: state.waitingDurationAt(now).Milliseconds(),
 		WaitingQuestionID: questionID, CompletionFailures: state.gateCount,
 	}
 }
@@ -1298,15 +1337,88 @@ func (r *Runtime) checkBudget(ctx context.Context, state *RunState) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if r.budgetExhausted(state) {
-		return errors.New("runtime budget exhausted")
+	if state.turns >= state.budget.MaxTurns {
+		recordTrace(state.trace, state.runID, "runtime.budget_exhausted", map[string]any{
+			"budget_kind": "turns", "turns": state.turns, "max_turns": state.budget.MaxTurns,
+		})
+		return errors.New("runtime turn budget exhausted")
+	}
+	return r.checkActiveDurationBudget(state)
+}
+
+func (r *Runtime) checkActiveDurationBudget(state *RunState) error {
+	active, wall, waiting := state.durationSnapshot(r.clockNow())
+	if active >= state.budget.MaxDuration {
+		recordTrace(state.trace, state.runID, "runtime.budget_exhausted", map[string]any{
+			"budget_kind": "active_duration", "active_duration_ms": active.Milliseconds(),
+			"max_duration_ms":  state.budget.MaxDuration.Milliseconds(),
+			"wall_duration_ms": wall.Milliseconds(), "waiting_duration_ms": waiting.Milliseconds(),
+		})
+		return errors.New("runtime active duration budget exhausted")
 	}
 	return nil
 }
 
-func (r *Runtime) budgetExhausted(state *RunState) bool {
-	return state.turns >= state.budget.MaxTurns ||
-		time.Since(state.started) >= state.budget.MaxDuration
+func (r *Runtime) clockNow() time.Time {
+	if r.now != nil {
+		return r.now()
+	}
+	return time.Now()
+}
+
+func (state *RunState) pauseActiveClock(now time.Time) {
+	if state == nil || !state.activeRunning {
+		return
+	}
+	state.activeElapsed = state.activeDurationAt(now)
+	state.activeSince = time.Time{}
+	state.activeRunning = false
+	state.waitingSince = now
+}
+
+func (state *RunState) resumeActiveClock(now time.Time) {
+	if state == nil || state.activeRunning {
+		return
+	}
+	state.waitingElapsed = state.waitingDurationAt(now)
+	state.waitingSince = time.Time{}
+	state.activeSince = now
+	state.activeRunning = true
+}
+
+func (state *RunState) activeDurationAt(now time.Time) time.Duration {
+	if state == nil {
+		return 0
+	}
+	elapsed := state.activeElapsed
+	if state.activeRunning && !state.activeSince.IsZero() && now.After(state.activeSince) {
+		elapsed += now.Sub(state.activeSince)
+	}
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
+}
+
+func (state *RunState) durationSnapshot(now time.Time) (active, wall, waiting time.Duration) {
+	active = state.activeDurationAt(now)
+	waiting = state.waitingDurationAt(now)
+	wall = active + waiting
+	return active, wall, waiting
+}
+
+func (state *RunState) waitingDurationAt(now time.Time) time.Duration {
+	if state == nil {
+		return 0
+	}
+	elapsed := state.waitingElapsed
+	if !state.waitingSince.IsZero() && now.After(state.waitingSince) {
+		elapsed += now.Sub(state.waitingSince)
+	}
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
 }
 
 func (r *Runtime) appendSteering(ctx context.Context, state *RunState, steering SteeringSource) error {

@@ -225,6 +225,34 @@ func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
 	}
 }
 
+func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
+	store := newMemStore()
+	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	activeDurationMS := int64(1_234)
+	execution := scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
+		return workflow.StructuredOutcome{Status: workflow.StatusCompleted, DurationMS: &activeDurationMS}
+	})
+	if _, err := engine.Start(context.Background(), testRun("fallback-duration"), execution); err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, store, "fallback-duration", model.RunDone)
+	events, _ := store.EventsSince(context.Background(), "fallback-duration", 0)
+	for _, event := range events {
+		if event.Type != model.EventRunFinished {
+			continue
+		}
+		var payload model.RunFinishedPayload
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.DurationMS != activeDurationMS {
+			t.Fatalf("duration=%d want=%d", payload.DurationMS, activeDurationMS)
+		}
+		return
+	}
+	t.Fatal("fallback run.finished was not emitted")
+}
+
 func TestCancelAuthorityOverridesLateSuccessfulOutcome(t *testing.T) {
 	store := newMemStore()
 	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
@@ -425,8 +453,8 @@ func testRun(id string) model.Run {
 		ID: id, ThreadID: "t1", ProjectID: "p1",
 		Command: model.RunCommand{
 			Instruction: "test",
-			Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
-			Mode: model.ModeExecute,
+			Scope:       model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+			Mode:        model.ModeExecute,
 		},
 	}
 }

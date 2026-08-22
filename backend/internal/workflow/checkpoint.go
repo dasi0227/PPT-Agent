@@ -72,7 +72,7 @@ func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state 
 }
 
 func (r *Runtime) checkpointForBoundary(state *RunState, boundary checkpointBoundary, questionID string) RuntimeCheckpoint {
-	cp := state.checkpoint(questionID)
+	cp := state.checkpoint(questionID, r.clockNow())
 	cp.Boundary = string(boundary)
 	cp.ContextBriefing = state.contextBriefing
 	cp.ContextIndexRef = state.contextIndexRef

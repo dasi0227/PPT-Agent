@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -167,6 +168,37 @@ func (r *eventRecorder) count(kind model.EventType) int {
 		}
 	}
 	return count
+}
+
+type manualRuntimeClock struct {
+	current time.Time
+}
+
+func newManualRuntimeClock() *manualRuntimeClock {
+	return &manualRuntimeClock{current: time.Unix(1_800_000_000, 0)}
+}
+
+func (c *manualRuntimeClock) Now() time.Time { return c.current }
+
+func (c *manualRuntimeClock) Advance(duration time.Duration) {
+	c.current = c.current.Add(duration)
+}
+
+func runtimeBudgetWithDuration(duration time.Duration) RuntimeBudget {
+	budget := DefaultRuntimeBudget()
+	budget.MaxDuration = duration
+	return budget
+}
+
+func finishedDuration(t *testing.T, recorder *eventRecorder) int64 {
+	t.Helper()
+	for _, event := range recorder.events {
+		if event.kind == model.EventRunFinished {
+			return event.payload.(model.RunFinishedPayload).DurationMS
+		}
+	}
+	t.Fatal("run.finished was not emitted")
+	return 0
 }
 
 type cancelOnToolStartedEmitter struct {
@@ -977,6 +1009,58 @@ func (p *fakePrompter) Ask(_ context.Context, question model.QuestionAskedPayloa
 	return model.QuestionAnswer{CustomText: "用户回答"}, "用户回答", nil
 }
 
+type advancingQuestionPrompter struct {
+	clock  *manualRuntimeClock
+	wait   time.Duration
+	calls  int
+	cancel bool
+}
+
+func (p *advancingQuestionPrompter) Ask(_ context.Context, question model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
+	p.calls++
+	p.clock.Advance(p.wait)
+	if p.cancel {
+		return model.QuestionAnswer{}, "", context.Canceled
+	}
+	if question.QuestionID == "" {
+		return model.QuestionAnswer{}, "", errors.New("missing question id")
+	}
+	return model.QuestionAnswer{CustomText: "用户回答"}, "用户回答", nil
+}
+
+type advancingApprovalPrompter struct {
+	clock *manualRuntimeClock
+	wait  time.Duration
+	calls int
+}
+
+func (p *advancingApprovalPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
+	return model.QuestionAnswer{}, "", errors.New("ordinary question was not expected")
+}
+
+func (p *advancingApprovalPrompter) AskPlanApproval(_ context.Context, request model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
+	p.calls++
+	p.clock.Advance(p.wait)
+	return model.PlanApprovalAnswer{
+		InteractionID:    request.InteractionID,
+		PlanID:           request.Plan.PlanID,
+		ExpectedRevision: request.Plan.Revision,
+		Decision:         "approve",
+	}, nil
+}
+
+type clockAdvancingAgent struct {
+	clock   *manualRuntimeClock
+	advance time.Duration
+	calls   int
+}
+
+func (a *clockAdvancingAgent) Next(context.Context, AgentRequest) (AgentResponse, error) {
+	a.calls++
+	a.clock.Advance(a.advance)
+	return finishCall("不应越过有效时长上限"), nil
+}
+
 type approvingPrompter struct {
 	calls int
 }
@@ -1100,15 +1184,52 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 	}
 }
 
-func TestPlanApprovalCommitFailureStaysWaitingAndCanRetry(t *testing.T) {
+func TestPlanApprovalWaitDoesNotConsumeActiveDurationBudget(t *testing.T) {
+	clock := newManualRuntimeClock()
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &approvalExecutionAgent{}
-	prompter := &approvingPrompter{}
+	prompter := &advancingApprovalPrompter{clock: clock, wait: 6 * time.Hour}
+	events := &eventRecorder{}
+	runtime := NewRuntime(agent)
+	runtime.now = clock.Now
+	outcome := runtime.Run(context.Background(), RuntimeInput{
+		RunID: "approval-active-clock", ProjectDir: dir,
+		Context: testPack(model.ModePlan, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"),
+		Emitter: events, Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Budget: runtimeBudgetWithDuration(time.Hour),
+		DomainToolsForContext: func(contextengine.ContextPack) DomainToolProvider {
+			return fakeProvider{kind: ArtifactSlideSpec}
+		},
+		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
+			return testPack(mode, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"), nil
+		},
+		CommitPlanApproval: func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error {
+			return nil
+		},
+	})
+	if outcome.Status != StatusCompleted || prompter.calls != 1 {
+		t.Fatalf("outcome=%+v approval_calls=%d", outcome, prompter.calls)
+	}
+	if got := finishedDuration(t, events); got != 0 {
+		t.Fatalf("plan approval wait leaked into public duration: %dms", got)
+	}
+}
+
+func TestPlanApprovalCommitFailureStaysWaitingAndCanRetry(t *testing.T) {
+	clock := newManualRuntimeClock()
+	dir := testProject(t, ArtifactSlideSpec)
+	agent := &approvalExecutionAgent{}
+	prompter := &advancingApprovalPrompter{clock: clock, wait: 2 * time.Hour}
+	events := &eventRecorder{}
+	runtime := NewRuntime(agent)
+	runtime.now = clock.Now
 	attempts := 0
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "approval-retry", ProjectDir: dir,
 		Context:  testPack(model.ModePlan, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"),
+		Emitter:  events,
 		Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Budget: runtimeBudgetWithDuration(time.Hour),
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
 			return testPack(mode, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"), nil
 		},
@@ -1125,6 +1246,9 @@ func TestPlanApprovalCommitFailureStaysWaitingAndCanRetry(t *testing.T) {
 	})
 	if outcome.Status != StatusCompleted || attempts != 2 || prompter.calls != 2 {
 		t.Fatalf("outcome=%+v attempts=%d approval_calls=%d", outcome, attempts, prompter.calls)
+	}
+	if got := finishedDuration(t, events); got != 0 {
+		t.Fatalf("retried plan approval waits leaked into public duration: %dms", got)
 	}
 	if agent.requests[1].Mode != model.ModeExecute {
 		t.Fatalf("run did not resume in execute mode: %+v", agent.requests[1])
@@ -1162,6 +1286,112 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 	}
 	if agent.requests[0].LoopID != agent.requests[1].LoopID || !foundWaiting {
 		t.Fatal("ask_user did not resume the same waiting loop")
+	}
+}
+
+func TestQuestionWaitsDoNotConsumeActiveDurationBudget(t *testing.T) {
+	clock := newManualRuntimeClock()
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("question-1", "ask_user", map[string]any{"question": "选择方向？"}),
+		toolCall("question-2", "ask_user", map[string]any{"question": "确认范围？"}),
+		finishCall("finish"),
+	}}
+	prompter := &advancingQuestionPrompter{clock: clock, wait: 3 * time.Hour}
+	events := &eventRecorder{}
+	checkpoints := &checkpointRecorder{}
+	runtime := NewRuntime(agent)
+	runtime.now = clock.Now
+	outcome := runtime.Run(context.Background(), RuntimeInput{
+		RunID: "question-active-clock", ProjectDir: t.TempDir(),
+		Context:  testPack(model.ModeAsk, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
+		Prompter: prompter, Emitter: events, Checkpoint: checkpoints,
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Budget: runtimeBudgetWithDuration(time.Hour),
+	})
+	if outcome.Status != StatusCompleted || prompter.calls != 2 {
+		t.Fatalf("outcome=%+v calls=%d", outcome, prompter.calls)
+	}
+	if got := finishedDuration(t, events); got != 0 {
+		t.Fatalf("HITL wait leaked into public duration: %dms", got)
+	}
+	var maxWaiting int64
+	for _, checkpoint := range checkpoints.checkpoints {
+		if checkpoint.ActiveDurationMS != 0 {
+			t.Fatalf("HITL wait leaked into checkpoint: %+v", checkpoint)
+		}
+		if checkpoint.WaitingDurationMS > maxWaiting {
+			maxWaiting = checkpoint.WaitingDurationMS
+		}
+	}
+	if maxWaiting != (6 * time.Hour).Milliseconds() {
+		t.Fatalf("checkpoint waiting duration=%d", maxWaiting)
+	}
+}
+
+func TestCanceledQuestionWaitKeepsActiveDurationFrozen(t *testing.T) {
+	clock := newManualRuntimeClock()
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("question-cancel", "ask_user", map[string]any{"question": "继续吗？"}),
+	}}
+	prompter := &advancingQuestionPrompter{clock: clock, wait: 5 * time.Hour, cancel: true}
+	events := &eventRecorder{}
+	runtime := NewRuntime(agent)
+	runtime.now = clock.Now
+	outcome := runtime.Run(context.Background(), RuntimeInput{
+		RunID: "question-canceled-clock", ProjectDir: t.TempDir(),
+		Context:  testPack(model.ModeAsk, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
+		Prompter: prompter, Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Budget: runtimeBudgetWithDuration(time.Hour),
+	})
+	if outcome.Status != StatusCanceled || outcome.Code != CodeCanceled {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if got := finishedDuration(t, events); got != 0 {
+		t.Fatalf("canceled HITL wait leaked into public duration: %dms", got)
+	}
+}
+
+func TestActiveExecutionStillConsumesDurationBudget(t *testing.T) {
+	clock := newManualRuntimeClock()
+	agent := &clockAdvancingAgent{clock: clock, advance: 2 * time.Hour}
+	events := &eventRecorder{}
+	runtime := NewRuntime(agent)
+	runtime.now = clock.Now
+	outcome := runtime.Run(context.Background(), RuntimeInput{
+		RunID: "active-budget", ProjectDir: t.TempDir(),
+		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "继续分析"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Budget: runtimeBudgetWithDuration(time.Hour),
+	})
+	if outcome.Status != StatusFailed || outcome.Code != CodeBudgetExceeded || agent.calls != 1 {
+		t.Fatalf("outcome=%+v calls=%d", outcome, agent.calls)
+	}
+	if got := finishedDuration(t, events); got != (2 * time.Hour).Milliseconds() {
+		t.Fatalf("active duration=%d", got)
+	}
+}
+
+func TestCheckpointRestoresActiveDurationBudget(t *testing.T) {
+	clock := newManualRuntimeClock()
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("must-not-run")}}
+	events := &eventRecorder{}
+	runtime := NewRuntime(agent)
+	runtime.now = clock.Now
+	activeBeforeRestart := 90 * time.Minute
+	outcome := runtime.Run(context.Background(), RuntimeInput{
+		RunID: "restored-active-budget", ProjectDir: t.TempDir(),
+		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "继续分析"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Budget: runtimeBudgetWithDuration(time.Hour),
+		ResumeCheckpoint: &RuntimeCheckpoint{
+			RunID: "restored-active-budget", LoopID: "restored-loop", Mode: model.ModeTalk,
+			Phase: PhaseChat, ResumePhase: PhaseChat, ActiveDurationMS: activeBeforeRestart.Milliseconds(),
+		},
+	})
+	if outcome.Status != StatusFailed || outcome.Code != CodeBudgetExceeded || len(agent.requests) != 0 {
+		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
+	}
+	if got := finishedDuration(t, events); got != activeBeforeRestart.Milliseconds() {
+		t.Fatalf("restored duration=%d want=%d", got, activeBeforeRestart.Milliseconds())
 	}
 }
 
