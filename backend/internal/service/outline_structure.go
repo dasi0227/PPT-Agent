@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -19,7 +21,16 @@ const (
 	defaultSectionTitle    = "新章节"
 	defaultSectionPurpose  = "待补充本章节目标"
 	defaultSubsectionTitle = "新子节"
+	maxDirectoryTitleRunes = 60
 )
+
+func normalizeDirectoryTitle(title string) (string, error) {
+	normalized := strings.TrimSpace(title)
+	if normalized == "" || utf8.RuneCountInString(normalized) > maxDirectoryTitleRunes {
+		return "", validationError("title length must be 1..%d", maxDirectoryTitleRunes)
+	}
+	return normalized, nil
+}
 
 // AddSection appends a new empty section (direct form, no pages) to the outline.
 func (svc *SlideService) AddSection(ctx context.Context, projectID, title string) (StructureSnapshot, error) {
@@ -59,6 +70,76 @@ func (svc *SlideService) AddSubsection(ctx context.Context, projectID, sectionID
 		}
 		return changed, nil
 	})
+}
+
+// RenameSection updates only the user-facing section title and returns the
+// authoritative project snapshot.
+func (svc *SlideService) RenameSection(ctx context.Context, projectID, sectionID, title string) (StructureSnapshot, error) {
+	normalized, err := normalizeDirectoryTitle(title)
+	if err != nil {
+		return StructureSnapshot{}, err
+	}
+	return svc.editOutlineStructure(ctx, projectID, func(outline *spec.Outline, _ map[string]spec.SlideSpec) (map[string]spec.SlideSpec, error) {
+		section := findSection(outline, sectionID)
+		if section == nil {
+			return nil, validationError("unknown section_id %s", sectionID)
+		}
+		section.Title = normalized
+		return nil, nil
+	})
+}
+
+// RenameSubsection updates only the user-facing subsection title and returns
+// the authoritative project snapshot.
+func (svc *SlideService) RenameSubsection(ctx context.Context, projectID, sectionID, subsectionID, title string) (StructureSnapshot, error) {
+	normalized, err := normalizeDirectoryTitle(title)
+	if err != nil {
+		return StructureSnapshot{}, err
+	}
+	return svc.editOutlineStructure(ctx, projectID, func(outline *spec.Outline, _ map[string]spec.SlideSpec) (map[string]spec.SlideSpec, error) {
+		section := findSection(outline, sectionID)
+		if section == nil {
+			return nil, validationError("unknown section_id %s", sectionID)
+		}
+		subsection := findSubsection(section, subsectionID)
+		if subsection == nil {
+			return nil, validationError("subsection_id %s does not belong to section_id %s", subsectionID, sectionID)
+		}
+		subsection.Title = normalized
+		return nil, nil
+	})
+}
+
+// RenameSlide updates the title in the slide spec, leaving placement and page
+// order untouched, then returns the authoritative project snapshot.
+func (svc *SlideService) RenameSlide(ctx context.Context, projectID, slideID, title string) (StructureSnapshot, error) {
+	normalized, err := normalizeDirectoryTitle(title)
+	if err != nil {
+		return StructureSnapshot{}, err
+	}
+	meta, err := svc.store.GetSlide(ctx, slideID)
+	if err != nil {
+		return StructureSnapshot{}, err
+	}
+	if meta.ProjectID != projectID {
+		return StructureSnapshot{}, ErrSlideTargetNotFound
+	}
+	if active, err := svc.store.HasActiveRun(ctx, meta.ProjectID); err != nil {
+		return StructureSnapshot{}, err
+	} else if active {
+		return StructureSnapshot{}, ErrRunActive
+	}
+	specService := NewSpecService(svc.store)
+	current, _, err := specService.GetSlide(ctx, slideID)
+	if err != nil {
+		return StructureSnapshot{}, err
+	}
+	next := current
+	next.Title = normalized
+	if _, err := specService.PatchSlide(ctx, slideID, current.Revision, next); err != nil {
+		return StructureSnapshot{}, err
+	}
+	return svc.readStructureSnapshot(ctx, meta.ProjectID)
 }
 
 // RemoveSection deletes a section. It is rejected while the section still owns
@@ -167,6 +248,15 @@ func findSection(outline *spec.Outline, sectionID string) *spec.Section {
 	for i := range outline.Sections {
 		if outline.Sections[i].ID == sectionID {
 			return &outline.Sections[i]
+		}
+	}
+	return nil
+}
+
+func findSubsection(section *spec.Section, subsectionID string) *spec.Subsection {
+	for i := range section.Subsections {
+		if section.Subsections[i].ID == subsectionID {
+			return &section.Subsections[i]
 		}
 	}
 	return nil

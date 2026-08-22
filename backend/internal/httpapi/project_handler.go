@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -246,6 +247,49 @@ func (h *ProjectHandler) AddSubsection(c *gin.Context) {
 	h.writeStructureSnapshot(c, snapshot, err)
 }
 
+type renameDirectoryEntryRequest struct {
+	Title string `json:"title"`
+}
+
+// RenameSlide PATCH /projects/:id/slides/:slide_id：重命名单页并返回权威项目快照。
+func (h *ProjectHandler) RenameSlide(c *gin.Context) {
+	var body renameDirectoryEntryRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		AbortWithError(c, ErrBadRequest("invalid request body"))
+		return
+	}
+	snapshot, err := h.slideSvc.RenameSlide(c.Request.Context(), c.Param("id"), c.Param("slide_id"), body.Title)
+	h.writeStructureSnapshot(c, snapshot, err)
+}
+
+// RenameSection PATCH /projects/:id/sections/:section_id：重命名章节。
+func (h *ProjectHandler) RenameSection(c *gin.Context) {
+	var body renameDirectoryEntryRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		AbortWithError(c, ErrBadRequest("invalid request body"))
+		return
+	}
+	snapshot, err := h.slideSvc.RenameSection(c.Request.Context(), c.Param("id"), c.Param("section_id"), body.Title)
+	h.writeStructureSnapshot(c, snapshot, err)
+}
+
+// RenameSubsection PATCH /projects/:id/sections/:section_id/subsections/:subsection_id：重命名子节。
+func (h *ProjectHandler) RenameSubsection(c *gin.Context) {
+	var body renameDirectoryEntryRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		AbortWithError(c, ErrBadRequest("invalid request body"))
+		return
+	}
+	snapshot, err := h.slideSvc.RenameSubsection(
+		c.Request.Context(),
+		c.Param("id"),
+		c.Param("section_id"),
+		c.Param("subsection_id"),
+		body.Title,
+	)
+	h.writeStructureSnapshot(c, snapshot, err)
+}
+
 // RemoveSubsection DELETE /projects/:id/sections/:section_id/subsections/:subsection_id：删除子节。
 func (h *ProjectHandler) RemoveSubsection(c *gin.Context) {
 	snapshot, err := h.slideSvc.RemoveSubsection(c.Request.Context(), c.Param("id"), c.Param("section_id"), c.Param("subsection_id"))
@@ -274,6 +318,10 @@ func (h *ProjectHandler) writeStructureSnapshot(c *gin.Context, snapshot service
 		}{Slides: out, Spec: snapshot.Spec})
 	case errors.Is(err, service.ErrRunActive):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	case errors.Is(err, service.ErrSpecRevisionConflict):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "SPEC_REVISION_CONFLICT", Message: "spec revision conflict"})
+	case errors.Is(err, service.ErrSlideTargetNotFound), errors.Is(err, gorm.ErrRecordNotFound):
+		AbortWithError(c, ErrNotFound("directory entry not found"))
 	case service.IsValidationError(err):
 		AbortWithError(c, ErrBadRequest(err.Error()))
 	default:

@@ -54,9 +54,12 @@ func (r *Router) register() {
 	v1.POST("/projects/:id/slides", r.project.CreateSlide)
 	v1.POST("/projects/:id/slides/reorder", r.project.ReorderSlides)
 	v1.POST("/projects/:id/slides/restructure", r.project.RestructureSlides)
+	v1.PATCH("/projects/:id/slides/:slide_id", r.project.RenameSlide)
 	v1.POST("/projects/:id/sections", r.project.AddSection)
+	v1.PATCH("/projects/:id/sections/:section_id", r.project.RenameSection)
 	v1.DELETE("/projects/:id/sections/:section_id", r.project.RemoveSection)
 	v1.POST("/projects/:id/sections/:section_id/subsections", r.project.AddSubsection)
+	v1.PATCH("/projects/:id/sections/:section_id/subsections/:subsection_id", r.project.RenameSubsection)
 	v1.DELETE("/projects/:id/sections/:section_id/subsections/:subsection_id", r.project.RemoveSubsection)
 	if r.spec != nil {
 		v1.GET("/projects/:id/spec", r.spec.GetProject)

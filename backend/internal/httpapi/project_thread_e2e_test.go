@@ -83,6 +83,61 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	return srv, root
 }
 
+func TestDirectoryRenameHTTPReturnsAuthoritativeSnapshot(t *testing.T) {
+	srv, _ := setupProjectThreadServer(t)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Rename directory","language":"zh-CN"}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
+	}
+	var project map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &project)
+	projectID := project["id"].(string)
+
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/slides", `{}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create slide: %d %s", resp.Code, resp.Body.String())
+	}
+	var slide map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &slide)
+	slideID := slide["id"].(string)
+
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/spec", "")
+	var view map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &view)
+	sections := view["outline"].(map[string]any)["sections"].([]any)
+	sectionID := sections[0].(map[string]any)["id"].(string)
+
+	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID+"/sections/"+sectionID, `{"title":"新章节"}`)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"title":"新章节"`) {
+		t.Fatalf("rename section: %d %s", resp.Code, resp.Body.String())
+	}
+
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/sections/"+sectionID+"/subsections", `{"title":"旧子节"}`)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("add subsection: %d %s", resp.Code, resp.Body.String())
+	}
+	var grouped map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &grouped)
+	groupedSections := grouped["spec"].(map[string]any)["outline"].(map[string]any)["sections"].([]any)
+	subsections := groupedSections[0].(map[string]any)["subsections"].([]any)
+	subsectionID := subsections[0].(map[string]any)["id"].(string)
+
+	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID+"/sections/"+sectionID+"/subsections/"+subsectionID, `{"title":"新子节"}`)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"title":"新子节"`) {
+		t.Fatalf("rename subsection: %d %s", resp.Code, resp.Body.String())
+	}
+
+	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID+"/slides/"+slideID, `{"title":"新页面"}`)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"title":"新页面"`) {
+		t.Fatalf("rename slide: %d %s", resp.Code, resp.Body.String())
+	}
+
+	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID+"/slides/"+slideID, `{"title":"   "}`)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("blank title should fail: %d %s", resp.Code, resp.Body.String())
+	}
+}
+
 type blockingRunner struct {
 	started chan<- struct{}
 }

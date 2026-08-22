@@ -25,6 +25,11 @@ export const slidesApi = {
       method: 'POST',
       body: JSON.stringify({ ordered_ids: orderedIds, placements }),
     }),
+  renameSlide: (projectId: string, slideId: string, title: string) =>
+    fetchClient<ProjectContentSnapshot>(`/projects/${projectId}/slides/${encodeURIComponent(slideId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    }),
   addSection: (projectId: string, title?: string) =>
     fetchClient<ProjectContentSnapshot>(`/projects/${projectId}/sections`, {
       method: 'POST',
@@ -33,6 +38,11 @@ export const slidesApi = {
   removeSection: (projectId: string, sectionId: string) =>
     fetchClient<ProjectContentSnapshot>(`/projects/${projectId}/sections/${encodeURIComponent(sectionId)}`, {
       method: 'DELETE',
+    }),
+  renameSection: (projectId: string, sectionId: string, title: string) =>
+    fetchClient<ProjectContentSnapshot>(`/projects/${projectId}/sections/${encodeURIComponent(sectionId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
     }),
   addSubsection: (projectId: string, sectionId: string, title?: string) =>
     fetchClient<ProjectContentSnapshot>(`/projects/${projectId}/sections/${encodeURIComponent(sectionId)}/subsections`, {
@@ -43,5 +53,10 @@ export const slidesApi = {
     fetchClient<ProjectContentSnapshot>(
       `/projects/${projectId}/sections/${encodeURIComponent(sectionId)}/subsections/${encodeURIComponent(subsectionId)}`,
       { method: 'DELETE' },
+    ),
+  renameSubsection: (projectId: string, sectionId: string, subsectionId: string, title: string) =>
+    fetchClient<ProjectContentSnapshot>(
+      `/projects/${projectId}/sections/${encodeURIComponent(sectionId)}/subsections/${encodeURIComponent(subsectionId)}`,
+      { method: 'PATCH', body: JSON.stringify({ title }) },
     ),
 };

@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -106,6 +107,56 @@ func TestAddSubsectionMigratesDirectPages(t *testing.T) {
 		if got := snapshot.Spec.SlideSpecs[id].SubsectionID; got != subID {
 			t.Fatalf("slide %s expected subsection %s, got %q", id, subID, got)
 		}
+	}
+}
+
+func TestRenameDirectoryEntriesPersistsAuthoritativeTitles(t *testing.T) {
+	fx := newStructureFixture(t)
+
+	sectionSnapshot, err := fx.slides.RenameSection(context.Background(), fx.projectID, fx.sectionID, "  新章节名称  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findSection(sectionSnapshot.Spec.Outline.Sections, fx.sectionID).Title; got != "新章节名称" {
+		t.Fatalf("expected renamed section, got %q", got)
+	}
+
+	grouped, err := fx.slides.AddSubsection(context.Background(), fx.projectID, fx.sectionID, "旧子节")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subID := findSection(grouped.Spec.Outline.Sections, fx.sectionID).Subsections[0].ID
+	subsectionSnapshot, err := fx.slides.RenameSubsection(context.Background(), fx.projectID, fx.sectionID, subID, "新子节名称")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findSection(subsectionSnapshot.Spec.Outline.Sections, fx.sectionID).Subsections[0].Title; got != "新子节名称" {
+		t.Fatalf("expected renamed subsection, got %q", got)
+	}
+
+	beforeRevision := subsectionSnapshot.Spec.SlideSpecs[fx.first].Revision
+	slideSnapshot, err := fx.slides.RenameSlide(context.Background(), fx.projectID, fx.first, "新页面名称")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := slideSnapshot.Spec.SlideSpecs[fx.first].Title; got != "新页面名称" {
+		t.Fatalf("expected renamed slide spec, got %q", got)
+	}
+	if got := slideSnapshot.Slides[0].Title; got != "新页面名称" {
+		t.Fatalf("expected projected slide title, got %q", got)
+	}
+	if got := slideSnapshot.Spec.SlideSpecs[fx.first].Revision; got != beforeRevision+1 {
+		t.Fatalf("expected slide revision %d, got %d", beforeRevision+1, got)
+	}
+}
+
+func TestRenameDirectoryEntriesRejectsInvalidTitles(t *testing.T) {
+	fx := newStructureFixture(t)
+	if _, err := fx.slides.RenameSection(context.Background(), fx.projectID, fx.sectionID, "   "); err == nil || !service.IsValidationError(err) {
+		t.Fatalf("expected blank title validation error, got %v", err)
+	}
+	if _, err := fx.slides.RenameSlide(context.Background(), fx.projectID, fx.first, strings.Repeat("长", 61)); err == nil || !service.IsValidationError(err) {
+		t.Fatalf("expected long title validation error, got %v", err)
 	}
 }
 

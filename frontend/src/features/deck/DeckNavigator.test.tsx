@@ -95,6 +95,12 @@ describe('DeckNavigator', () => {
     fireEvent.click(trigger);
   }
 
+  function openSubsectionActions(index = 0) {
+    const trigger = screen.getAllByRole('button', { name: '子节操作' })[index];
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+  }
+
   it('shows real slide titles instead of generic labels', () => {
     useDeckStore.setState({ globalView: 'outline' });
     render(<DeckNavigator />);
@@ -137,8 +143,8 @@ describe('DeckNavigator', () => {
   it('aligns the subsection action in the heading grid', () => {
     render(<DeckNavigator />);
 
-    const deleteSubsection = screen.getByRole('button', { name: '删除本子节' });
-    const actionCell = deleteSubsection.parentElement;
+    const subsectionActions = screen.getByRole('button', { name: '子节操作' });
+    const actionCell = subsectionActions.parentElement;
     expect(actionCell).toHaveClass('items-center', 'justify-self-end');
     expect(actionCell).not.toHaveClass('absolute');
     expect(actionCell?.parentElement).toHaveClass('grid-cols-[32px_minmax(0,1fr)_20px]', 'items-center');
@@ -148,7 +154,15 @@ describe('DeckNavigator', () => {
     render(<DeckNavigator />);
 
     openSectionActions(0);
-    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['新增子节', '删除章节']);
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['重命名', '新增子节', '删除章节']);
+  });
+
+  it('puts subsection rename and delete behind one overflow menu', () => {
+    render(<DeckNavigator />);
+
+    expect(screen.queryByRole('button', { name: '删除本子节' })).toBeNull();
+    openSubsectionActions();
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['重命名', '删除子节']);
   });
 
   it('restores hover-only section controls after a pointer interaction', () => {
@@ -375,7 +389,95 @@ describe('DeckNavigator', () => {
     expect(firstPage).not.toBeNull();
     expect(within(firstPage!).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['页面操作']);
     openPageActions(0);
-    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['上移本页', '下移本页', '删除本页']);
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['重命名', '上移本页', '下移本页', '删除本页']);
+  });
+
+  it('renames a section and applies the authoritative snapshot', async () => {
+    const renameSpy = vi.spyOn(slidesApi, 'renameSection').mockImplementation(async (_projectId, sectionId, title) => {
+      const state = useProjectStore.getState();
+      const view = state.specByProjectId.p1;
+      return {
+        slides: state.slidesByProjectId.p1,
+        spec: {
+          ...view,
+          outline: {
+            ...view.outline,
+            revision: view.outline.revision + 1,
+            sections: view.outline.sections.map((section) => section.id === sectionId ? { ...section, title } : section),
+          },
+        },
+      };
+    });
+
+    render(<DeckNavigator />);
+    openSectionActions(0);
+    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '新名称' }), { target: { value: '市场机会' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => expect(renameSpy).toHaveBeenCalledWith('p1', 'sec', '市场机会'));
+    expect(await screen.findByText('市场机会')).toBeInTheDocument();
+  });
+
+  it('renames a subsection and applies the authoritative snapshot', async () => {
+    const renameSpy = vi.spyOn(slidesApi, 'renameSubsection').mockImplementation(async (_projectId, sectionId, subsectionId, title) => {
+      const state = useProjectStore.getState();
+      const view = state.specByProjectId.p1;
+      return {
+        slides: state.slidesByProjectId.p1,
+        spec: {
+          ...view,
+          outline: {
+            ...view.outline,
+            revision: view.outline.revision + 1,
+            sections: view.outline.sections.map((section) => section.id === sectionId
+              ? {
+                  ...section,
+                  subsections: section.subsections.map((subsection) => subsection.id === subsectionId
+                    ? { ...subsection, title }
+                    : subsection),
+                }
+              : section),
+          },
+        },
+      };
+    });
+
+    render(<DeckNavigator />);
+    openSubsectionActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '新名称' }), { target: { value: '长期趋势' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => expect(renameSpy).toHaveBeenCalledWith('p1', 'sec', 'sub', '长期趋势'));
+    expect(await screen.findByText('长期趋势')).toBeInTheDocument();
+  });
+
+  it('renames a page and updates both slide projections', async () => {
+    useDeckStore.setState({ globalView: 'outline' });
+    const renameSpy = vi.spyOn(slidesApi, 'renameSlide').mockImplementation(async (_projectId, slideId, title) => {
+      const state = useProjectStore.getState();
+      const view = state.specByProjectId.p1;
+      return {
+        slides: state.slidesByProjectId.p1.map((slide) => slide.id === slideId ? { ...slide, title } : slide),
+        spec: {
+          ...view,
+          slide_specs: {
+            ...view.slide_specs,
+            [slideId]: { ...view.slide_specs[slideId], title, revision: view.slide_specs[slideId].revision + 1 },
+          },
+        },
+      };
+    });
+
+    render(<DeckNavigator />);
+    openPageActions(0);
+    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '新名称' }), { target: { value: '市场总览' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => expect(renameSpy).toHaveBeenCalledWith('p1', 's1', '市场总览'));
+    expect(await screen.findByText('市场总览')).toBeInTheDocument();
   });
 
   it('moves 3.2 down directly into 4.1 when section 4 has no direct pages', async () => {

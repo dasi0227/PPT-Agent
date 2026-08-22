@@ -6,8 +6,9 @@ import { useUIStore } from '../../stores/uiStore';
 import type { ProjectContentSnapshot, Slide } from '../../api/types';
 import { SlidePlacement, slidesApi } from '../../api/slides';
 import { cn } from '../../lib/utils';
-import { Layers, FileText, Plus, Trash2, Presentation, PanelLeftClose, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { Layers, FileText, Plus, Presentation, PanelLeftClose, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
+import { FormModal } from '../../components/ui/modal-form';
 import { IconButton, InlineNotice } from '../../components/ui/primitives';
 import {
   DropdownMenu,
@@ -121,6 +122,11 @@ type DirectoryGroup = {
   entries: DirectoryEntry[];
 };
 
+type DirectoryRenameTarget =
+  | { kind: 'section'; sectionId: string; title: string }
+  | { kind: 'subsection'; sectionId: string; subsectionId: string; title: string }
+  | { kind: 'slide'; slideId: string; title: string };
+
 function samePlacement(left: SlidePlacement, right: SlidePlacement): boolean {
   return left.section_id === right.section_id && (left.subsection_id ?? '') === (right.subsection_id ?? '');
 }
@@ -152,6 +158,7 @@ export const DeckNavigator: React.FC = () => {
     | { kind: 'subsection'; sectionId: string; subsectionId: string; title: string; fallsBackToDirect: boolean }
     | null
   >(null);
+  const [renameTarget, setRenameTarget] = useState<DirectoryRenameTarget | null>(null);
 
   const project = projects.find(p => p.id === activeProjectId);
   const slides = useMemo(
@@ -348,6 +355,24 @@ export const DeckNavigator: React.FC = () => {
   const handleAddSubsection = (sectionId: string) =>
     void runStructureMutation((projectId) => slidesApi.addSubsection(projectId, sectionId), '新增子节失败，请重试。');
 
+  const confirmRename = async (title: string) => {
+    const target = renameTarget;
+    if (!target) return;
+    const ok = await runStructureMutation(
+      (projectId) => {
+        if (target.kind === 'section') {
+          return slidesApi.renameSection(projectId, target.sectionId, title);
+        }
+        if (target.kind === 'subsection') {
+          return slidesApi.renameSubsection(projectId, target.sectionId, target.subsectionId, title);
+        }
+        return slidesApi.renameSlide(projectId, target.slideId, title);
+      },
+      '重命名失败，请重试。',
+    );
+    if (!ok) throw new Error('重命名失败');
+  };
+
   const confirmStructureDelete = async () => {
     if (!structureToDelete) return;
     const target = structureToDelete;
@@ -460,6 +485,7 @@ export const DeckNavigator: React.FC = () => {
   const renderSlideRow = (entry: DirectoryEntry, renderedIndex: number) => {
     const { slide } = entry;
     const spec = specView?.slide_specs?.[slide.id];
+    const slideTitle = slide.title || spec?.title || '未命名';
     const groupIndex = directoryGroups.findIndex((group) =>
       group.entries.some((candidate) => candidate.slide.id === slide.id));
     const groupEntryIndex = groupIndex >= 0
@@ -497,7 +523,7 @@ export const DeckNavigator: React.FC = () => {
         <SlideDirectoryContent
           slide={slide}
           index={renderedIndex}
-          title={slide.title || spec?.title || '未命名'}
+          title={slideTitle}
           view={globalView}
           state={getRenderState(slide)}
         />
@@ -517,6 +543,10 @@ export const DeckNavigator: React.FC = () => {
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[132px]">
+                <DropdownMenuItem disabled={structureUpdating} onSelect={() => setRenameTarget({ kind: 'slide', slideId: slide.id, title: slideTitle })}>
+                  重命名
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem disabled={structureUpdating || !canMoveUp} onSelect={() => moveEntryByDirection(entry, -1)}>
                   上移本页
                 </DropdownMenuItem>
@@ -524,7 +554,7 @@ export const DeckNavigator: React.FC = () => {
                   下移本页
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem destructive disabled={structureUpdating} onSelect={() => handleDelete(slide.id, slide.title)}>
+                <DropdownMenuItem destructive disabled={structureUpdating} onSelect={() => handleDelete(slide.id, slideTitle)}>
                   删除本页
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -535,7 +565,7 @@ export const DeckNavigator: React.FC = () => {
     );
   };
 
-  // renderSubsectionHeading draws a subsection label plus a hover delete control.
+  // renderSubsectionHeading draws a subsection label plus a hover action menu.
   // ownsPage + subsectionCount decide the confirm copy: a lone subsection that
   // owns pages drops them to direct; deleting one among several requires it empty.
   const renderSubsectionHeading = (
@@ -562,23 +592,44 @@ export const DeckNavigator: React.FC = () => {
             "pointer-events-none flex h-5 w-5 items-center justify-center justify-self-end opacity-0 transition-opacity group-hover/sub:pointer-events-auto group-hover/sub:opacity-100",
             keyboardFocused && "pointer-events-auto opacity-100",
           )}>
-            <IconButton
-              label="删除本子节"
-              className="h-5 w-5 hover:bg-danger-soft hover:text-danger"
-              disabled={structureUpdating}
-              onClick={(event) => {
-                event.stopPropagation();
-                setStructureToDelete({
-                  kind: 'subsection',
-                  sectionId: section.id,
-                  subsectionId: subsection.id,
-                  title: subsection.title,
-                  fallsBackToDirect,
-                });
-              }}
-            >
-              <Trash2 className="h-3 w-3" />
-            </IconButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton
+                  label="子节操作"
+                  className="h-5 w-5"
+                  disabled={structureUpdating}
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[132px]">
+                <DropdownMenuItem
+                  disabled={structureUpdating}
+                  onSelect={() => setRenameTarget({
+                    kind: 'subsection',
+                    sectionId: section.id,
+                    subsectionId: subsection.id,
+                    title: subsection.title,
+                  })}
+                >
+                  重命名
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  destructive
+                  disabled={structureUpdating}
+                  onSelect={() => setStructureToDelete({
+                    kind: 'subsection',
+                    sectionId: section.id,
+                    subsectionId: subsection.id,
+                    title: subsection.title,
+                    fallsBackToDirect,
+                  })}
+                >
+                  删除子节
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>
@@ -687,6 +738,12 @@ export const DeckNavigator: React.FC = () => {
                               </IconButton>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="min-w-[132px]">
+                              <DropdownMenuItem
+                                disabled={structureUpdating}
+                                onSelect={() => setRenameTarget({ kind: 'section', sectionId: section.id, title: section.title })}
+                              >
+                                重命名
+                              </DropdownMenuItem>
                               <DropdownMenuItem disabled={structureUpdating} onSelect={() => handleAddSubsection(section.id)}>
                                 新增子节
                               </DropdownMenuItem>
@@ -785,6 +842,39 @@ export const DeckNavigator: React.FC = () => {
             variant="danger"
             confirmLabel="删除"
             onConfirm={confirmStructureDelete}
+          />
+
+          <FormModal<string>
+            open={!!renameTarget}
+            onOpenChange={(open) => !open && setRenameTarget(null)}
+            title={renameTarget?.kind === 'section'
+              ? '重命名章节'
+              : renameTarget?.kind === 'subsection'
+                ? '重命名子节'
+                : '重命名页面'}
+            initialValue={renameTarget?.title ?? ''}
+            validate={(value) => {
+              const normalized = value.trim();
+              if (!normalized) return '名称不能为空';
+              if ([...normalized].length > 60) return '名称不能超过 60 个字符';
+              return null;
+            }}
+            confirmLabel="保存"
+            onSubmit={(value) => confirmRename(value.trim())}
+            renderField={(value, setValue, error) => (
+              <div>
+                <input
+                  autoFocus
+                  aria-label="新名称"
+                  type="text"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm transition-colors focus:border-accent"
+                  placeholder="请输入新名称"
+                />
+                {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+              </div>
+            )}
           />
         </>
       )}
