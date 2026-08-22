@@ -7,7 +7,7 @@ import {
   PanelLeftOpen,
   PanelRightOpen,
 } from 'lucide-react';
-import type { Slide } from '../../api/types';
+import type { Slide, SlideSpec } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { useDeckStore, type PageView } from '../../stores/deckStore';
@@ -18,6 +18,7 @@ import { EmptyState } from './EmptyState';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import type { RuntimeSlide } from './previewProtocol';
 import { SlideSpecCard } from './SlideSpecCard';
+import { slideRoleLabel } from './semanticLabels';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
 
 function visibleHTML(state: ResourceState<string>): string | undefined {
@@ -105,7 +106,7 @@ function OverviewSlide({
   state: ResourceState<string>;
   load: () => void;
   select: () => void;
-  spec?: React.ReactNode;
+  spec?: SlideSpec;
   view: PageView;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -129,15 +130,19 @@ function OverviewSlide({
   }, [slide, view]);
 
   const html = view === 'html' && state.status === 'ready' ? state.data : undefined;
+  const title = spec?.title || slide.title || '未命名页面';
   return (
     <button
       ref={ref}
       type="button"
       data-testid={`overview-slide-${slide.id}`}
       onClick={select}
-      aria-label={`打开第 ${index + 1} 页：${slide.title || '未命名页面'}`}
+      aria-label={`打开第 ${index + 1} 页：${title}`}
       className={cn(
-        'group relative aspect-video overflow-hidden rounded bg-surface text-left shadow-sm ring-1 ring-border hover:ring-accent',
+        'group relative aspect-video overflow-hidden text-left ring-1 ring-border hover:ring-accent',
+        view === 'outline'
+          ? 'rounded-lg bg-surface transition-[background-color,box-shadow] hover:bg-panel'
+          : 'rounded bg-surface shadow-sm',
         selected && 'ring-2 ring-accent',
       )}
     >
@@ -153,7 +158,19 @@ function OverviewSlide({
           <span>HTML 加载失败</span>
           <span className="text-text-600">打开页面后可重试</span>
         </div>
-      ) : spec ?? (
+      ) : view === 'outline' && spec ? (
+        <div className="flex h-full flex-col p-5">
+          <div className="flex items-center gap-2 text-[11px] leading-none">
+            <span className="font-semibold tracking-[0.12em] tabular-nums text-text-600">
+              {String(index + 1).padStart(2, '0')}
+            </span>
+            <span className="font-medium text-text-400">{slideRoleLabel(spec.role)}</span>
+          </div>
+          <h2 className="mt-auto line-clamp-2 text-[17px] font-semibold leading-tight text-text-900">
+            {title}
+          </h2>
+        </div>
+      ) : (
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-5 text-center">
           <span className="text-[10px] font-medium uppercase tracking-wide text-text-400">
             {slide.layout || '页面'}
@@ -166,7 +183,9 @@ function OverviewSlide({
           </span>
         </div>
       )}
-      <span className="absolute bottom-2 right-2 rounded bg-ink/75 px-1.5 py-0.5 text-xs text-white">{index + 1}</span>
+      {view !== 'outline' && (
+        <span className="absolute bottom-2 right-2 rounded bg-ink/75 px-1.5 py-0.5 text-xs text-white">{index + 1}</span>
+      )}
       {view === 'html' && !hasRenderedHTML(slide) && (
         <span className="absolute bottom-2 left-2 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">
           未生成 HTML
@@ -404,7 +423,7 @@ export const PreviewWorkspace: React.FC = () => {
         ) : (
           <div className="absolute inset-0 overflow-y-auto p-6">
             <div className="mx-auto mb-6 max-w-6xl">
-              {specView?.design && <DesignSummary design={specView.design} />}
+              {specView?.design && <DesignSummary design={specView.design} compact />}
             </div>
             <div className="mx-auto grid max-w-6xl grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
               {slides.map((slide, index) => (
@@ -420,15 +439,7 @@ export const PreviewWorkspace: React.FC = () => {
                     setCurrentSlideId(slide.id);
                     exitOverview();
                   }}
-                  spec={specView?.slide_specs?.[slide.id] ? (
-                    <div className="pointer-events-none h-full w-full">
-                      <SlideSpecCard
-                        spec={specView.slide_specs[slide.id]}
-                        state={specView.materialization?.[slide.id]?.state ?? 'unknown'}
-                        compact
-                      />
-                    </div>
-                  ) : undefined}
+                  spec={specView?.slide_specs?.[slide.id]}
                 />
               ))}
             </div>

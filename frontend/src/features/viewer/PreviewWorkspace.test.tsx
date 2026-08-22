@@ -1,4 +1,4 @@
-import { render, waitFor, act, screen, fireEvent } from '@testing-library/react';
+import { render, waitFor, act, screen, fireEvent, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PreviewWorkspace } from './PreviewWorkspace';
 import { useDeckStore } from '../../stores/deckStore';
@@ -181,6 +181,18 @@ describe('PreviewWorkspace', () => {
     });
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     expect(fetch).toHaveBeenCalledWith('/api/v1/slides/s1/render', expect.any(Object));
+  });
+
+  it('renders design overview pages as single-layer index tiles', () => {
+    useDeckStore.setState({ previewMode: 'overview', globalView: 'outline', currentSlideId: 's1' });
+    render(<PreviewWorkspace />);
+
+    const firstTile = screen.getByTestId('overview-slide-s1');
+    expect(within(firstTile).getByText('01')).toHaveClass('text-text-600');
+    expect(within(firstTile).getByText('封面')).toHaveClass('text-text-400');
+    expect(within(firstTile).getByText('封面标题')).toHaveClass('line-clamp-2');
+    expect(within(firstTile).queryByText('要点一')).toBeNull();
+    expect(firstTile.querySelector('article')).toBeNull();
   });
 
   it('shows only an empty state in overview when the project has no pages', () => {
