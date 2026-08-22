@@ -553,13 +553,13 @@ export const DeckNavigator: React.FC = () => {
         onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
         onFocusCapture={() => handleDirectoryFocus(`subsection:${subsection.id}`)}
         onBlurCapture={(event) => handleDirectoryBlur(event, `subsection:${subsection.id}`)}
-        className="group/sub relative grid min-h-7 grid-cols-[32px_minmax(0,1fr)] items-center gap-2 px-2 pt-2 pb-0.5 text-[11px]"
+        className="group/sub relative grid min-h-7 grid-cols-[32px_minmax(0,1fr)_20px] items-center gap-2 px-2 pt-2 pb-0.5 text-[11px]"
       >
         <span className="text-left tabular-nums text-text-400">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
         <span className="min-w-0 truncate font-medium text-text-400">{subsection.title}</span>
         {!runActive && (
           <div className={cn(
-            "pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center bg-gradient-to-r from-transparent via-panel to-panel pl-6 opacity-0 transition-opacity group-hover/sub:pointer-events-auto group-hover/sub:opacity-100",
+            "pointer-events-none flex h-5 w-5 items-center justify-center justify-self-end opacity-0 transition-opacity group-hover/sub:pointer-events-auto group-hover/sub:opacity-100",
             keyboardFocused && "pointer-events-auto opacity-100",
           )}>
             <IconButton
@@ -636,11 +636,11 @@ export const DeckNavigator: React.FC = () => {
                   return (
                   <section
                     key={section.id}
-                    className="group/section mb-1.5"
+                    className="mb-1.5"
                     onFocusCapture={() => handleDirectoryFocus(`section:${section.id}`)}
                     onBlurCapture={(event) => handleDirectoryBlur(event, `section:${section.id}`)}
                   >
-                    <div className="relative">
+                    <div className="group/section relative">
                       <button
                         type="button"
                         aria-expanded={expanded}

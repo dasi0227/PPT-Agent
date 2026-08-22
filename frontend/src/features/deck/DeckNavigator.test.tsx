@@ -126,6 +126,24 @@ describe('DeckNavigator', () => {
     expect(sectionToggle).not.toHaveTextContent('页');
   });
 
+  it('limits section hover controls to the section heading row', () => {
+    render(<DeckNavigator />);
+
+    const sectionToggle = screen.getByRole('button', { name: '收起第 1 章 市场' });
+    expect(sectionToggle.parentElement).toHaveClass('group/section');
+    expect(sectionToggle.closest('section')).not.toHaveClass('group/section');
+  });
+
+  it('aligns the subsection action in the heading grid', () => {
+    render(<DeckNavigator />);
+
+    const deleteSubsection = screen.getByRole('button', { name: '删除本子节' });
+    const actionCell = deleteSubsection.parentElement;
+    expect(actionCell).toHaveClass('items-center', 'justify-self-end');
+    expect(actionCell).not.toHaveClass('absolute');
+    expect(actionCell?.parentElement).toHaveClass('grid-cols-[32px_minmax(0,1fr)_20px]', 'items-center');
+  });
+
   it('puts section structure edits behind the overflow menu', () => {
     render(<DeckNavigator />);
 
