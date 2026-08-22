@@ -159,16 +159,16 @@ function OverviewSlide({
           <span className="text-text-600">打开页面后可重试</span>
         </div>
       ) : view === 'outline' && spec ? (
-        <div className="flex h-full flex-col p-5">
-          <div className="flex items-center gap-2 text-[11px] leading-none">
-            <span className="inline-flex h-6 items-center rounded-md bg-panel-muted px-2 font-semibold tracking-[0.12em] tabular-nums text-text-600">
+        <div className="h-full p-3.5">
+          <div className="absolute right-3.5 top-3.5 flex items-center gap-1.5 text-[10px] leading-none">
+            <span className="inline-flex h-5 items-center rounded-md bg-panel-muted px-1.5 font-semibold tracking-[0.12em] tabular-nums text-text-600">
               {String(index + 1).padStart(2, '0')}
             </span>
-            <span className="inline-flex h-6 items-center rounded-md bg-accent-soft px-2 font-semibold text-accent">
+            <span className="inline-flex h-5 items-center rounded-md bg-accent-soft px-1.5 font-semibold text-accent">
               {slideRoleLabel(spec.role)}
             </span>
           </div>
-          <div className="mt-6 h-[44px]">
+          <div className="absolute inset-x-4 top-1/2 h-[44px] -translate-y-1/2">
             <h2 className="line-clamp-2 text-[17px] font-semibold leading-[22px] text-text-900">
               {title}
             </h2>
