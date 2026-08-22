@@ -161,12 +161,14 @@ function OverviewSlide({
       ) : view === 'outline' && spec ? (
         <div className="flex h-full flex-col p-5">
           <div className="flex items-center gap-2 text-[11px] leading-none">
-            <span className="font-semibold tracking-[0.12em] tabular-nums text-text-600">
+            <span className="inline-flex h-6 items-center rounded-md bg-panel-muted px-2 font-semibold tracking-[0.12em] tabular-nums text-text-600">
               {String(index + 1).padStart(2, '0')}
             </span>
-            <span className="font-medium text-text-400">{slideRoleLabel(spec.role)}</span>
+            <span className="inline-flex h-6 items-center rounded-md bg-accent-soft px-2 font-semibold text-accent">
+              {slideRoleLabel(spec.role)}
+            </span>
           </div>
-          <h2 className="mt-auto line-clamp-2 text-[17px] font-semibold leading-tight text-text-900">
+          <h2 className="mt-6 h-[44px] line-clamp-2 text-[17px] font-semibold leading-[22px] text-text-900">
             {title}
           </h2>
         </div>
@@ -423,7 +425,7 @@ export const PreviewWorkspace: React.FC = () => {
         ) : (
           <div className="absolute inset-0 overflow-y-auto p-6">
             <div className="mx-auto mb-6 max-w-6xl">
-              {specView?.design && <DesignSummary design={specView.design} compact />}
+              {specView?.design && <DesignSummary design={specView.design} />}
             </div>
             <div className="mx-auto grid max-w-6xl grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
               {slides.map((slide, index) => (

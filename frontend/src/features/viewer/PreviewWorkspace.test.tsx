@@ -188,11 +188,12 @@ describe('PreviewWorkspace', () => {
     render(<PreviewWorkspace />);
 
     const firstTile = screen.getByTestId('overview-slide-s1');
-    expect(within(firstTile).getByText('01')).toHaveClass('text-text-600');
-    expect(within(firstTile).getByText('封面')).toHaveClass('text-text-400');
-    expect(within(firstTile).getByText('封面标题')).toHaveClass('line-clamp-2');
+    expect(within(firstTile).getByText('01')).toHaveClass('bg-panel-muted');
+    expect(within(firstTile).getByText('封面')).toHaveClass('bg-accent-soft');
+    expect(within(firstTile).getByText('封面标题')).toHaveClass('line-clamp-2', 'h-[44px]');
     expect(within(firstTile).queryByText('要点一')).toBeNull();
     expect(firstTile.querySelector('article')).toBeNull();
+    expect(screen.getByText('全局视觉规范').closest('section')).toHaveClass('rounded-xl', 'border');
   });
 
   it('shows only an empty state in overview when the project has no pages', () => {
