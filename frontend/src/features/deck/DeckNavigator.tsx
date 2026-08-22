@@ -6,9 +6,16 @@ import { useUIStore } from '../../stores/uiStore';
 import type { ProjectContentSnapshot, Slide } from '../../api/types';
 import { SlidePlacement, slidesApi } from '../../api/slides';
 import { cn } from '../../lib/utils';
-import { Layers, FileText, Plus, Trash2, Presentation, PanelLeftClose, ArrowUp, ArrowDown, ChevronDown } from 'lucide-react';
+import { Layers, FileText, Plus, Trash2, Presentation, PanelLeftClose, ChevronRight, MoreHorizontal } from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { IconButton, InlineNotice } from '../../components/ui/primitives';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
 import { hasRenderedHTML, type ResourceState, useSlideRenderCache } from '../viewer/useSlideRenderCache';
 
@@ -462,7 +469,7 @@ export const DeckNavigator: React.FC = () => {
         {currentSlideId === slide.id && (
           <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-accent" />
         )}
-        <span className="text-left text-sm font-bold tabular-nums text-text-600">{String(renderedIndex + 1).padStart(2, '0')}</span>
+        <span className="text-left text-[16px] font-bold tracking-[0.02em] tabular-nums text-text-900">{String(renderedIndex + 1).padStart(2, '0')}</span>
         <SlideDirectoryContent
           slide={slide}
           index={renderedIndex}
@@ -471,18 +478,30 @@ export const DeckNavigator: React.FC = () => {
           state={getRenderState(slide)}
         />
         {!runActive && (
-          <div
-            className="pointer-events-none absolute right-1 top-1/2 z-10 grid -translate-y-1/2 bg-gradient-to-r from-transparent via-panel to-panel py-0.5 pl-5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
-          >
-            <IconButton label="上移本页" className="h-[18px] w-5" disabled={structureUpdating || !canMoveUp} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, -1); }}>
-              <ArrowUp className="h-3 w-3" />
-            </IconButton>
-            <IconButton label="删除本页" className="h-[18px] w-5 hover:bg-danger-soft hover:text-danger" disabled={structureUpdating} onClick={(event) => { event.stopPropagation(); handleDelete(slide.id, slide.title); }}>
-              <Trash2 className="h-3 w-3" />
-            </IconButton>
-            <IconButton label="下移本页" className="h-[18px] w-5" disabled={structureUpdating || !canMoveDown} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, 1); }}>
-              <ArrowDown className="h-3 w-3" />
-            </IconButton>
+          <div className="pointer-events-none absolute right-1 top-1/2 z-10 -translate-y-1/2 bg-gradient-to-r from-transparent via-panel to-panel pl-5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton
+                  label="页面操作"
+                  className="h-7 w-7"
+                  disabled={structureUpdating}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[132px]">
+                <DropdownMenuItem disabled={structureUpdating || !canMoveUp} onSelect={() => moveEntryByDirection(entry, -1)}>
+                  上移本页
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={structureUpdating || !canMoveDown} onSelect={() => moveEntryByDirection(entry, 1)}>
+                  下移本页
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem destructive disabled={structureUpdating} onSelect={() => handleDelete(slide.id, slide.title)}>
+                  删除本页
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>
@@ -579,10 +598,7 @@ export const DeckNavigator: React.FC = () => {
                   return (
                   <section
                     key={section.id}
-                    className={cn(
-                      "group/section mb-1.5 rounded-lg transition-colors",
-                      expanded && "bg-white/50",
-                    )}
+                    className="group/section mb-1.5"
                   >
                     <div className="relative">
                       <button
@@ -592,43 +608,51 @@ export const DeckNavigator: React.FC = () => {
                         onClick={() => toggleSection(section.id)}
                         onDragOver={handleDragOver}
                         onDrop={(event) => handleGroupDrop(event, { section_id: section.id })}
-                        className="grid min-h-10 w-full grid-cols-[32px_minmax(0,1fr)_20px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-text-900 hover:bg-black/[0.04]"
+                        className="grid min-h-10 w-full grid-cols-[32px_minmax(0,1fr)_28px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-text-900 hover:bg-black/[0.04]"
                       >
-                        <span className="text-left text-[13px] font-semibold tabular-nums text-text-600">
-                          {formatDirectoryNumber(section.number, 'section')}
+                        <span className="relative flex h-4 items-center text-left text-[13px] font-semibold tabular-nums text-text-600">
+                          <span className="transition-opacity group-hover/section:opacity-0 group-focus-within/section:opacity-0">
+                            {formatDirectoryNumber(section.number, 'section')}
+                          </span>
+                          <ChevronRight
+                            aria-hidden="true"
+                            className={cn(
+                              "absolute h-4 w-4 text-text-600 opacity-0 transition-[opacity,transform] duration-150 motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100",
+                              expanded && "rotate-90",
+                            )}
+                          />
                         </span>
                         <span className="min-w-0 truncate text-[13px] font-semibold" title={section.title}>
                           {section.title}
                         </span>
-                        <ChevronDown
-                          aria-hidden="true"
-                          className={cn(
-                            "h-4 w-4 text-text-400 transition-transform duration-150 motion-reduce:transition-none",
-                            !expanded && "-rotate-90",
-                          )}
-                        />
+                        <span aria-hidden="true" />
                       </button>
                       {!runActive && (
-                        <div className="pointer-events-none absolute right-6 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 bg-gradient-to-r from-transparent via-panel to-panel pl-6 opacity-0 transition-opacity group-hover/section:pointer-events-auto group-hover/section:opacity-100 group-focus-within/section:pointer-events-auto group-focus-within/section:opacity-100">
-                          <IconButton
-                            label="新增子节"
-                            className="h-6 w-6"
-                            disabled={structureUpdating}
-                            onClick={(event) => { event.stopPropagation(); handleAddSubsection(section.id); }}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </IconButton>
-                          <IconButton
-                            label="删除本章"
-                            className="h-6 w-6 hover:bg-danger-soft hover:text-danger"
-                            disabled={structureUpdating}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setStructureToDelete({ kind: 'section', sectionId: section.id, title: section.title });
-                            }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </IconButton>
+                        <div className="pointer-events-none absolute right-2 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover/section:pointer-events-auto group-hover/section:opacity-100 group-focus-within/section:pointer-events-auto group-focus-within/section:opacity-100">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <IconButton
+                                label="章节操作"
+                                className="h-7 w-7 bg-panel/95"
+                                disabled={structureUpdating}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </IconButton>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="min-w-[132px]">
+                              <DropdownMenuItem disabled={structureUpdating} onSelect={() => handleAddSubsection(section.id)}>
+                                新增子节
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                destructive
+                                disabled={structureUpdating}
+                                onSelect={() => setStructureToDelete({ kind: 'section', sectionId: section.id, title: section.title })}
+                              >
+                                删除章节
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       )}
                     </div>
@@ -678,7 +702,7 @@ export const DeckNavigator: React.FC = () => {
               title={runActive ? 'AI 运行中，暂不可编辑结构' : '在末尾加一页'}
               className="flex items-center justify-center px-3 py-2 rounded-md text-sm text-text-600 hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
-              <Plus className="w-4 h-4 mr-1" /> 加页
+              <Plus className="w-4 h-4 mr-1" /> 新增页面
             </button>
             <button
               onClick={handleAddSection}

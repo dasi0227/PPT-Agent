@@ -24,24 +24,23 @@ export function Button({
   );
 }
 
-export function IconButton({
-  label,
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      {...props}
-      className={cn(
-        'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-40',
-        className,
-      )}
-    />
-  );
-}
+export const IconButton = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }
+>(({ label, className, ...props }, ref) => (
+  <button
+    ref={ref}
+    type="button"
+    aria-label={label}
+    title={label}
+    {...props}
+    className={cn(
+      'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-40',
+      className,
+    )}
+  />
+));
+IconButton.displayName = 'IconButton';
 
 export function Badge({
   tone = 'neutral',

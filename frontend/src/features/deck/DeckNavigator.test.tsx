@@ -83,6 +83,18 @@ describe('DeckNavigator', () => {
     } } });
   }
 
+  function openPageActions(index: number) {
+    const trigger = screen.getAllByRole('button', { name: '页面操作' })[index];
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+  }
+
+  function openSectionActions(index: number) {
+    const trigger = screen.getAllByRole('button', { name: '章节操作' })[index];
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+  }
+
   it('shows real slide titles instead of generic labels', () => {
     useDeckStore.setState({ globalView: 'outline' });
     render(<DeckNavigator />);
@@ -112,6 +124,19 @@ describe('DeckNavigator', () => {
     expect(screen.getByText('1.1')).toBeInTheDocument();
     expect(screen.getByText('趋势')).toHaveClass('font-medium');
     expect(sectionToggle).not.toHaveTextContent('页');
+  });
+
+  it('puts section structure edits behind the overflow menu', () => {
+    render(<DeckNavigator />);
+
+    openSectionActions(0);
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['新增子节', '删除章节']);
+  });
+
+  it('gives page numbers a stronger visual weight than directory numbers', () => {
+    render(<DeckNavigator />);
+
+    expect(screen.getByText('01')).toHaveClass('text-[16px]', 'font-bold', 'text-text-900');
   });
 
   it('expands the current section by default and lets multiple sections stay open', () => {
@@ -207,14 +232,18 @@ describe('DeckNavigator', () => {
 
     render(<DeckNavigator />);
 
-    const upButtons = screen.getAllByRole('button', { name: '上移本页' });
-    const downButtons = screen.getAllByRole('button', { name: '下移本页' });
-    expect(upButtons[0]).toBeDisabled();
-    expect(downButtons[0]).not.toBeDisabled();
-    expect(upButtons[1]).not.toBeDisabled();
-    expect(downButtons[1]).toBeDisabled();
+    openPageActions(0);
+    expect(screen.getByRole('menuitem', { name: '上移本页' })).toHaveAttribute('data-disabled');
+    expect(screen.getByRole('menuitem', { name: '下移本页' })).not.toHaveAttribute('data-disabled');
+    fireEvent.keyDown(document, { key: 'Escape' });
 
-    fireEvent.click(downButtons[0]);
+    openPageActions(1);
+    expect(screen.getByRole('menuitem', { name: '上移本页' })).not.toHaveAttribute('data-disabled');
+    expect(screen.getByRole('menuitem', { name: '下移本页' })).toHaveAttribute('data-disabled');
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    openPageActions(0);
+    fireEvent.click(screen.getByRole('menuitem', { name: '下移本页' }));
 
     await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
       'p1',
@@ -247,7 +276,8 @@ describe('DeckNavigator', () => {
     }));
 
     render(<DeckNavigator />);
-    fireEvent.click(screen.getAllByRole('button', { name: '下移本页' })[1]);
+    openPageActions(1);
+    fireEvent.click(screen.getByRole('menuitem', { name: '下移本页' }));
 
     await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
       'p1',
@@ -281,7 +311,8 @@ describe('DeckNavigator', () => {
     }));
 
     render(<DeckNavigator />);
-    fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[1]);
+    openPageActions(1);
+    fireEvent.click(screen.getByRole('menuitem', { name: '上移本页' }));
 
     await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
       'p1',
@@ -294,17 +325,15 @@ describe('DeckNavigator', () => {
     ));
   });
 
-  it('orders the vertical page actions as move up, delete, then move down', () => {
+  it('keeps page actions behind a single overflow menu', () => {
     useDeckStore.setState({ globalView: 'outline' });
     render(<DeckNavigator />);
 
     const firstPage = screen.getByText('市场分析').closest<HTMLElement>('[draggable="true"]');
     expect(firstPage).not.toBeNull();
-    expect(within(firstPage!).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
-      '上移本页',
-      '删除本页',
-      '下移本页',
-    ]);
+    expect(within(firstPage!).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['页面操作']);
+    openPageActions(0);
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['上移本页', '下移本页', '删除本页']);
   });
 
   it('moves 3.2 down directly into 4.1 when section 4 has no direct pages', async () => {
@@ -316,7 +345,8 @@ describe('DeckNavigator', () => {
     }));
 
     render(<DeckNavigator />);
-    fireEvent.click(screen.getAllByRole('button', { name: '下移本页' })[1]);
+    openPageActions(1);
+    fireEvent.click(screen.getByRole('menuitem', { name: '下移本页' }));
 
     await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
       'p1',
@@ -339,7 +369,8 @@ describe('DeckNavigator', () => {
 
     render(<DeckNavigator />);
     fireEvent.click(screen.getByRole('button', { name: '展开第 2 章 第二章' }));
-    fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[2]);
+    openPageActions(2);
+    fireEvent.click(screen.getByRole('menuitem', { name: '上移本页' }));
 
     await waitFor(() => expect(restructureSpy).toHaveBeenCalledWith(
       'p1',
@@ -373,7 +404,8 @@ describe('DeckNavigator', () => {
     }));
 
     render(<DeckNavigator />);
-    fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[1]);
+    openPageActions(1);
+    fireEvent.click(screen.getByRole('menuitem', { name: '上移本页' }));
 
     expect(useDeckStore.getState().currentSlideId).toBe('s2');
     const state = useProjectStore.getState();
@@ -408,7 +440,8 @@ describe('DeckNavigator', () => {
     });
 
     render(<BrowserRouter><RoutedDeckNavigator /></BrowserRouter>);
-    fireEvent.click(screen.getAllByRole('button', { name: '上移本页' })[1]);
+    openPageActions(1);
+    fireEvent.click(screen.getByRole('menuitem', { name: '上移本页' }));
 
     await waitFor(() => expect(useProjectStore.getState().specByProjectId.p1.slide_specs.s2.subsection_id).toBeUndefined());
     expect(useDeckStore.getState().currentSlideId).toBe('s2');
@@ -423,7 +456,7 @@ describe('DeckNavigator', () => {
     const addSpy = vi.spyOn(slidesApi, 'add').mockResolvedValue({} as never);
     vi.spyOn(useProjectStore.getState(), 'loadProjectContent').mockResolvedValue();
     render(<DeckNavigator />);
-    fireEvent.click(screen.getByRole('button', { name: /加页/ }));
+    fireEvent.click(screen.getByRole('button', { name: /新增页面/ }));
     await waitFor(() => {
       expect(addSpy).toHaveBeenCalledWith('p1', { after_slide_id: 's2' });
     });
@@ -434,7 +467,8 @@ describe('DeckNavigator', () => {
     const loadProjectContentSpy = vi.spyOn(useProjectStore.getState(), 'loadProjectContent').mockResolvedValue();
 
     render(<DeckNavigator />);
-    fireEvent.click(screen.getAllByRole('button', { name: /删除本页/ })[0]);
+    openPageActions(0);
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除本页' }));
 
     // modal should be visible
     expect(screen.getByRole('heading', { name: '删除页面' })).toBeInTheDocument();
@@ -454,7 +488,8 @@ describe('DeckNavigator', () => {
     const removeSpy = vi.spyOn(slidesApi, 'remove').mockResolvedValue(undefined as never);
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<DeckNavigator />);
-    fireEvent.click(screen.getAllByRole('button', { name: /删除本页/ })[0]);
+    openPageActions(0);
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除本页' }));
     expect(removeSpy).not.toHaveBeenCalled();
   });
 });
