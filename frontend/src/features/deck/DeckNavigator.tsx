@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useActiveSession } from '../agent/useActiveSession';
@@ -143,6 +143,8 @@ export const DeckNavigator: React.FC = () => {
   const [operationError, setOperationError] = useState('');
   const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(new Set());
   const [structureUpdating, setStructureUpdating] = useState(false);
+  const [keyboardFocusTarget, setKeyboardFocusTarget] = useState<string | null>(null);
+  const lastInteractionWasKeyboard = useRef(false);
 
   const [slideToDelete, setSlideToDelete] = useState<{id: string, title: string} | null>(null);
   const [structureToDelete, setStructureToDelete] = useState<
@@ -436,6 +438,25 @@ export const DeckNavigator: React.FC = () => {
     });
   };
 
+  const handleKeyboardNavigation = () => {
+    lastInteractionWasKeyboard.current = true;
+  };
+
+  const handlePointerInteraction = () => {
+    lastInteractionWasKeyboard.current = false;
+    setKeyboardFocusTarget(null);
+  };
+
+  const handleDirectoryFocus = (target: string) => {
+    if (lastInteractionWasKeyboard.current) setKeyboardFocusTarget(target);
+  };
+
+  const handleDirectoryBlur = (event: React.FocusEvent<HTMLElement>, target: string) => {
+    if (!event.relatedTarget || !event.currentTarget.contains(event.relatedTarget as Node)) {
+      setKeyboardFocusTarget((current) => current === target ? null : current);
+    }
+  };
+
   const renderSlideRow = (entry: DirectoryEntry, renderedIndex: number) => {
     const { slide } = entry;
     const spec = specView?.slide_specs?.[slide.id];
@@ -449,6 +470,7 @@ export const DeckNavigator: React.FC = () => {
       groupEntryIndex < directoryGroups[groupIndex].entries.length - 1
       || groupIndex < directoryGroups.length - 1
     );
+    const keyboardFocused = keyboardFocusTarget === `slide:${slide.id}`;
     return (
       <div
         key={slide.id}
@@ -457,6 +479,8 @@ export const DeckNavigator: React.FC = () => {
         onDragOver={handleDragOver}
         onDrop={(event) => handleRowDrop(event, entry)}
         onDragEnd={() => setDragSlideId(null)}
+        onFocusCapture={() => handleDirectoryFocus(`slide:${slide.id}`)}
+        onBlurCapture={(event) => handleDirectoryBlur(event, `slide:${slide.id}`)}
         className={cn(
           "group relative grid min-h-[60px] w-full grid-cols-[32px_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors cursor-pointer focus-within:bg-panel-muted",
           currentSlideId === slide.id
@@ -478,7 +502,10 @@ export const DeckNavigator: React.FC = () => {
           state={getRenderState(slide)}
         />
         {!runActive && (
-          <div className="pointer-events-none absolute right-1 top-1/2 z-10 -translate-y-1/2 bg-gradient-to-r from-transparent via-panel to-panel pl-5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+          <div className={cn(
+            "pointer-events-none absolute right-1 top-1/2 z-10 -translate-y-1/2 bg-gradient-to-r from-transparent via-panel to-panel pl-5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100",
+            keyboardFocused && "pointer-events-auto opacity-100",
+          )}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <IconButton
@@ -518,17 +545,23 @@ export const DeckNavigator: React.FC = () => {
   ) => {
     const ownsPage = subsection.slides.length > 0;
     const fallsBackToDirect = ownsPage && section.subsections.length === 1;
+    const keyboardFocused = keyboardFocusTarget === `subsection:${subsection.id}`;
     return (
       <div
         key={`${section.id}:${subsection.id}:${keySuffix}`}
         onDragOver={handleDragOver}
         onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
+        onFocusCapture={() => handleDirectoryFocus(`subsection:${subsection.id}`)}
+        onBlurCapture={(event) => handleDirectoryBlur(event, `subsection:${subsection.id}`)}
         className="group/sub relative grid min-h-7 grid-cols-[32px_minmax(0,1fr)] items-center gap-2 px-2 pt-2 pb-0.5 text-[11px]"
       >
         <span className="text-left tabular-nums text-text-400">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
         <span className="min-w-0 truncate font-medium text-text-400">{subsection.title}</span>
         {!runActive && (
-          <div className="pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center bg-gradient-to-r from-transparent via-panel to-panel pl-6 opacity-0 transition-opacity group-hover/sub:pointer-events-auto group-hover/sub:opacity-100 group-focus-within/sub:pointer-events-auto group-focus-within/sub:opacity-100">
+          <div className={cn(
+            "pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center bg-gradient-to-r from-transparent via-panel to-panel pl-6 opacity-0 transition-opacity group-hover/sub:pointer-events-auto group-hover/sub:opacity-100",
+            keyboardFocused && "pointer-events-auto opacity-100",
+          )}>
             <IconButton
               label="删除本子节"
               className="h-5 w-5 hover:bg-danger-soft hover:text-danger"
@@ -553,7 +586,11 @@ export const DeckNavigator: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-panel">
+    <div
+      className="flex flex-col h-full bg-panel"
+      onKeyDownCapture={handleKeyboardNavigation}
+      onPointerDownCapture={handlePointerInteraction}
+    >
       <div className="h-12 border-b border-border flex items-center justify-between px-3 shrink-0 bg-panel">
         <div className="flex items-center">
           <Presentation className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} />
@@ -595,10 +632,13 @@ export const DeckNavigator: React.FC = () => {
                 let renderedIndex = 0;
                 return directorySections.map((section) => {
                   const expanded = expandedSectionIds.has(section.id);
+                  const keyboardFocused = keyboardFocusTarget === `section:${section.id}`;
                   return (
                   <section
                     key={section.id}
                     className="group/section mb-1.5"
+                    onFocusCapture={() => handleDirectoryFocus(`section:${section.id}`)}
+                    onBlurCapture={(event) => handleDirectoryBlur(event, `section:${section.id}`)}
                   >
                     <div className="relative">
                       <button
@@ -611,13 +651,17 @@ export const DeckNavigator: React.FC = () => {
                         className="grid min-h-10 w-full grid-cols-[32px_minmax(0,1fr)_28px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-text-900 hover:bg-black/[0.04]"
                       >
                         <span className="relative flex h-4 items-center text-left text-[13px] font-semibold tabular-nums text-text-600">
-                          <span className="transition-opacity group-hover/section:opacity-0 group-focus-within/section:opacity-0">
+                          <span className={cn(
+                            "transition-opacity group-hover/section:opacity-0",
+                            keyboardFocused && "opacity-0",
+                          )}>
                             {formatDirectoryNumber(section.number, 'section')}
                           </span>
                           <ChevronRight
                             aria-hidden="true"
                             className={cn(
-                              "absolute h-4 w-4 text-text-600 opacity-0 transition-[opacity,transform] duration-150 motion-reduce:transition-none group-hover/section:opacity-100 group-focus-within/section:opacity-100",
+                              "absolute h-4 w-4 text-text-600 opacity-0 transition-[opacity,transform] duration-150 motion-reduce:transition-none group-hover/section:opacity-100",
+                              keyboardFocused && "opacity-100",
                               expanded && "rotate-90",
                             )}
                           />
@@ -628,7 +672,10 @@ export const DeckNavigator: React.FC = () => {
                         <span aria-hidden="true" />
                       </button>
                       {!runActive && (
-                        <div className="pointer-events-none absolute right-2 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover/section:pointer-events-auto group-hover/section:opacity-100 group-focus-within/section:pointer-events-auto group-focus-within/section:opacity-100">
+                        <div className={cn(
+                          "pointer-events-none absolute right-2 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity group-hover/section:pointer-events-auto group-hover/section:opacity-100",
+                          keyboardFocused && "pointer-events-auto opacity-100",
+                        )}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <IconButton

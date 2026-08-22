@@ -133,6 +133,30 @@ describe('DeckNavigator', () => {
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['新增子节', '删除章节']);
   });
 
+  it('restores hover-only section controls after a pointer interaction', () => {
+    render(<DeckNavigator />);
+
+    const trigger = screen.getByRole('button', { name: '章节操作' });
+    const controls = trigger.parentElement;
+    expect(controls).not.toBeNull();
+
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+
+    expect(controls).toHaveClass('opacity-0');
+  });
+
+  it('keeps section controls visible for keyboard navigation', () => {
+    render(<DeckNavigator />);
+
+    const trigger = screen.getByRole('button', { name: '章节操作' });
+    const controls = trigger.parentElement;
+    fireEvent.keyDown(trigger, { key: 'Tab' });
+    fireEvent.focus(trigger);
+
+    expect(controls).toHaveClass('opacity-100');
+  });
+
   it('gives page numbers a stronger visual weight than directory numbers', () => {
     render(<DeckNavigator />);
 
