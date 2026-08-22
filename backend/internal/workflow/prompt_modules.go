@@ -47,6 +47,7 @@ func runtimeSystemPromptForRequest(req AgentRequest, state string) string {
 func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	modules := []PromptModule{
 		loadPromptModule("core_runtime_policy"),
+		loadPromptModule("user_facing_output"),
 		loadPromptModule(modePolicyID(input.Mode)),
 		loadPromptModule(playbookID(input.Context)),
 		loadPromptModule("completion_repair_guide"),

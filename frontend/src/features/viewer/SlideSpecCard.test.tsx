@@ -14,6 +14,7 @@ const spec: SlideSpec = {
 describe('SlideSpecCard', () => {
   it('renders semantic spec fields and state', () => {
     render(<SlideSpecCard spec={spec} state="spec_stale" />);
+    expect(screen.getByText('论据')).toBeInTheDocument();
     expect(screen.getByText('预算正在增长')).toBeInTheDocument();
     expect(screen.getByText('投入正在转为正式预算')).toBeInTheDocument();
     expect(screen.getByText('Layout: data-story')).toBeInTheDocument();

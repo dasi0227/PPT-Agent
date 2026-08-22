@@ -118,7 +118,8 @@ func TestResourceInvalidObservationTeachesObjectShape(t *testing.T) {
 func TestResourceContractsPromptShowsObjectArguments(t *testing.T) {
 	body := resourceContractsModule().Body
 	for _, want := range []string{
-		`Display keys are labels for discussion`,
+		`Display keys are labels for internal reasoning`,
+		`They must never appear in user-facing text`,
 		`deck:outline -> {"type":"deck","part":"outline"}`,
 		`slide:<slide_id>:html -> {"type":"slide","slide_id":"<stable slide_id>","part":"html"}`,
 		`Never pass resource as a string`,

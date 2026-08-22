@@ -13,6 +13,7 @@ Hard boundaries:
 
 Planning quality:
 - Give a concrete implementation path, not generic advice.
+- Plan titles and step titles are shown to the user as progress and milestones; write them in product vocabulary (obey the user-facing output law), not with tool names, resource keys or runtime jargon.
 - Include RunScope, resource order, tool strategy, validation approach, risks and rollback/verification considerations.
 - When relevant, distinguish spec-only work from presentation HTML work.
 - When relevant, mention render requirements and evidence expectations.

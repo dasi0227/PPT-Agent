@@ -124,21 +124,63 @@ func milestoneText(title string, completed []PlanStep) string {
 }
 
 func sanitizePublicReasoning(text string) string {
+	// Reasoning tolerates engineering vocabulary more than final delivery does;
+	// the frontend already frames it as a collapsed thinking trace. Keep it lenient
+	// and only normalize whitespace, so we never distort the model's own wording.
 	return normalizePublicText(text)
 }
 
 func sanitizePublicText(text string, _ int) string {
-	return normalizePublicText(text)
+	return redactInternalTerms(normalizePublicText(text))
 }
 
 func sanitizePublicMarkdown(text string, _ int) string {
-	return normalizePublicText(text)
+	return redactInternalTerms(normalizePublicText(text))
 }
 
 func normalizePublicText(text string) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	return strings.TrimSpace(text)
+}
+
+// internalTermReplacements is the Layer 3 fallback: when a leak slips past the
+// user-facing output law (Layer 2), we still translate the highest-signal
+// engineering tokens into product language before they reach the user. Patterns
+// are ordered specific-before-generic and only match shapes that cannot collide
+// with ordinary Chinese prose (resource keys, snake_case identifiers, ALL_CAPS
+// error codes, RunX jargon).
+var internalTermReplacements = []struct {
+	pattern     *regexp.Regexp
+	replacement string
+}{
+	// Resource display keys — match the compound slide forms before deck forms.
+	{regexp.MustCompile(`(?i)\bslide:[A-Za-z0-9_-]+:spec\b`), "页面设计稿"},
+	{regexp.MustCompile(`(?i)\bslide:[A-Za-z0-9_-]+:html\b`), "幻灯片页面"},
+	{regexp.MustCompile(`(?i)\bdeck:outline\b`), "整份结构"},
+	{regexp.MustCompile(`(?i)\bdeck:design\b`), "全局设计"},
+	// Tool and control action identifiers.
+	{regexp.MustCompile(`\b(?:read_ppt|write_ppt|edit_ppt)\b`), "PPT 内容操作"},
+	{regexp.MustCompile(`\bsearch_refs\b`), "参考检索"},
+	{regexp.MustCompile(`\brender_slide\b`), "页面渲染检查"},
+	{regexp.MustCompile(`\b(?:create_plan|update_plan)\b`), "计划"},
+	{regexp.MustCompile(`\breview_completion\b`), "完成检查"},
+	{regexp.MustCompile(`\bask_user\b`), "提问"},
+	// Runtime jargon.
+	{regexp.MustCompile(`\bRun(?:Command|Scope|Mode|Phase)\b`), "任务设置"},
+	{regexp.MustCompile(`(?i)\bcompletion gate\b`), "完成检查"},
+	// Raw error codes such as EVIDENCE_HTML_MISSING (2+ underscore-joined caps).
+	{regexp.MustCompile(`\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b`), ""},
+}
+
+func redactInternalTerms(text string) string {
+	if text == "" {
+		return text
+	}
+	for _, rule := range internalTermReplacements {
+		text = rule.pattern.ReplaceAllString(text, rule.replacement)
+	}
+	return text
 }
 
 type ToolPublicProjector struct {

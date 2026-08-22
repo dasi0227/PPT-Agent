@@ -62,3 +62,48 @@ func TestPublicPlanDoesNotTruncateLongUIText(t *testing.T) {
 		t.Fatalf("plan title should not be truncated: %q", plan.Title)
 	}
 }
+
+func TestSanitizePublicTextRedactsInternalTerms(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		absent  []string
+		present []string
+	}{
+		{
+			name:   "resource display keys",
+			in:     "已写入 deck:design 与 slide:slide-01:html，并同步 deck:outline",
+			absent: []string{"deck:design", "slide:slide-01:html", "deck:outline"},
+		},
+		{
+			name:   "tool and control names",
+			in:     "我调用 write_ppt 与 render_slide，随后 create_plan",
+			absent: []string{"write_ppt", "render_slide", "create_plan"},
+		},
+		{
+			name:   "runtime jargon and error codes",
+			in:     "RunScope 校验触发 EVIDENCE_HTML_MISSING，未通过 completion gate",
+			absent: []string{"RunScope", "EVIDENCE_HTML_MISSING", "completion gate"},
+		},
+		{
+			name:    "leaves ordinary product prose intact",
+			in:      "我已经完成了封面和第 2 页目录，并检查了排版。",
+			present: []string{"封面", "第 2 页目录", "检查了排版"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := sanitizePublicText(tc.in, 0)
+			for _, term := range tc.absent {
+				if strings.Contains(got, term) {
+					t.Fatalf("expected %q to be redacted, got: %q", term, got)
+				}
+			}
+			for _, term := range tc.present {
+				if !strings.Contains(got, term) {
+					t.Fatalf("expected %q to survive redaction, got: %q", term, got)
+				}
+			}
+		})
+	}
+}

@@ -4,6 +4,7 @@ finish(message) is the final user-facing delivery. It is not a short stop signal
 
 Rules:
 - The message argument must contain the complete final answer.
+- Write the message in the user's language and product vocabulary; obey the user-facing output law (no resource keys, tool names, runtime jargon, error codes or schema field names).
 - If the final answer includes markdown headings, lists, tables, risks, implementation notes, affected targets or next steps, all of that content belongs inside finish.message.
 - Ordinary assistant text immediately before finish may be empty or a brief transition only.
 - Do not place the substantive final answer in ordinary assistant text.
