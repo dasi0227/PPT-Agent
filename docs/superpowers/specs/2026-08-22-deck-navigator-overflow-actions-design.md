@@ -18,6 +18,7 @@ This update refines the left-hand deck navigator and its manual title-editing co
   - `PATCH /projects/:id/sections/:section_id/subsections/:subsection_id`
   - `PATCH /projects/:id/slides/:slide_id`
 - Hover state belongs to the exact row being pointed at. Descendant page hover must not activate its parent section controls.
+- Section, subsection, and page overflow triggers have no persistent white backing plate; only the shared icon-button hover feedback may add a temporary neutral tint.
 - Page numbers are 18px, bold, and dark neutral, so they are visually distinct from section and subsection numbering.
 - Page titles are 16px and semibold, remain single-line, and truncate only when the navigator width cannot contain the full title.
 - The footer label changes from `加页` to `新增页面`.

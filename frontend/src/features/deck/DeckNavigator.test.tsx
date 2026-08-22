@@ -387,9 +387,20 @@ describe('DeckNavigator', () => {
 
     const firstPage = screen.getByText('市场分析').closest<HTMLElement>('[draggable="true"]');
     expect(firstPage).not.toBeNull();
-    expect(within(firstPage!).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['页面操作']);
+    expect(firstPage).toHaveClass('grid-cols-[32px_minmax(0,1fr)_28px]');
+    const pageActions = within(firstPage!).getByRole('button', { name: '页面操作' });
+    expect(pageActions.parentElement).not.toHaveClass('absolute', 'bg-gradient-to-r');
     openPageActions(0);
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['重命名', '上移本页', '下移本页', '删除本页']);
+  });
+
+  it('keeps section and page overflow triggers transparent until hover feedback', () => {
+    render(<DeckNavigator />);
+
+    expect(screen.getByRole('button', { name: '章节操作' })).not.toHaveClass('bg-panel/95');
+    for (const pageActions of screen.getAllByRole('button', { name: '页面操作' })) {
+      expect(pageActions.parentElement).not.toHaveClass('via-panel', 'to-panel');
+    }
   });
 
   it('renames a section and applies the authoritative snapshot', async () => {

@@ -508,7 +508,7 @@ export const DeckNavigator: React.FC = () => {
         onFocusCapture={() => handleDirectoryFocus(`slide:${slide.id}`)}
         onBlurCapture={(event) => handleDirectoryBlur(event, `slide:${slide.id}`)}
         className={cn(
-          "group relative grid min-h-[60px] w-full grid-cols-[32px_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors cursor-pointer focus-within:bg-panel-muted",
+          "group relative grid min-h-[60px] w-full grid-cols-[32px_minmax(0,1fr)_28px] items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors cursor-pointer focus-within:bg-panel-muted",
           currentSlideId === slide.id
             ? "bg-accent/5"
             : "text-text-600 hover:bg-black/5",
@@ -529,7 +529,7 @@ export const DeckNavigator: React.FC = () => {
         />
         {!runActive && (
           <div className={cn(
-            "pointer-events-none absolute right-1 top-1/2 z-10 -translate-y-1/2 bg-gradient-to-r from-transparent via-panel to-panel pl-5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100",
+            "pointer-events-none relative z-10 justify-self-end opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100",
             keyboardFocused && "pointer-events-auto opacity-100",
           )}>
             <DropdownMenu>
@@ -731,7 +731,7 @@ export const DeckNavigator: React.FC = () => {
                             <DropdownMenuTrigger asChild>
                               <IconButton
                                 label="章节操作"
-                                className="h-7 w-7 bg-panel/95"
+                                className="h-7 w-7"
                                 disabled={structureUpdating}
                               >
                                 <MoreHorizontal className="h-4 w-4" />
