@@ -111,17 +111,16 @@ func planStepIDs(steps []PlanStep) []string {
 }
 
 func milestoneText(title string, completed []PlanStep) string {
-	if text := sanitizePublicText(title, 180); text != "" {
-		return text
-	}
 	titles := make([]string, 0, len(completed))
 	for _, step := range completed {
-		titles = append(titles, strings.TrimSpace(step.Title))
+		if t := strings.TrimSpace(step.Title); t != "" {
+			titles = append(titles, t)
+		}
 	}
-	if len(titles) == 1 {
-		return titles[0] + "已经完成。"
+	if len(titles) > 0 {
+		return strings.Join(titles, "、") + "已完成"
 	}
-	return strings.Join(titles, "、") + "已经完成。"
+	return sanitizePublicText(title, 180)
 }
 
 func sanitizePublicReasoning(text string) string {
