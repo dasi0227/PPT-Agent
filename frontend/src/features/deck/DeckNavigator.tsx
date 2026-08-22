@@ -519,7 +519,7 @@ export const DeckNavigator: React.FC = () => {
         {currentSlideId === slide.id && (
           <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-accent" />
         )}
-        <span className="text-left text-[16px] font-bold tracking-[0.02em] tabular-nums text-text-900">{String(renderedIndex + 1).padStart(2, '0')}</span>
+        <span className="text-left text-[18px] font-bold tracking-[0.02em] tabular-nums text-text-900">{String(renderedIndex + 1).padStart(2, '0')}</span>
         <SlideDirectoryContent
           slide={slide}
           index={renderedIndex}

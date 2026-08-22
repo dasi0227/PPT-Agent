@@ -192,7 +192,7 @@ describe('DeckNavigator', () => {
   it('gives page numbers a stronger visual weight than directory numbers', () => {
     render(<DeckNavigator />);
 
-    expect(screen.getByText('01')).toHaveClass('text-[16px]', 'font-bold', 'text-text-900');
+    expect(screen.getByText('01')).toHaveClass('text-[18px]', 'font-bold', 'text-text-900');
   });
 
   it('expands the current section by default and lets multiple sections stay open', () => {
