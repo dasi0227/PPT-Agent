@@ -10,7 +10,7 @@ import {
 import type { Slide } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
-import { useDeckStore } from '../../stores/deckStore';
+import { useDeckStore, type PageView } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { DesignSummary } from './DesignSummary';
@@ -97,6 +97,7 @@ function OverviewSlide({
   load,
   select,
   spec,
+  view,
 }: {
   slide: Slide;
   index: number;
@@ -105,13 +106,14 @@ function OverviewSlide({
   load: () => void;
   select: () => void;
   spec?: React.ReactNode;
+  view: PageView;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
   useEffect(() => {
     const node = ref.current;
-    if (!node || !hasRenderedHTML(slide)) return;
+    if (!node || view !== 'html' || !hasRenderedHTML(slide)) return;
     if (typeof IntersectionObserver === 'undefined') {
       void loadRef.current();
       return;
@@ -124,9 +126,9 @@ function OverviewSlide({
     }, { rootMargin: '160px' });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [slide]);
+  }, [slide, view]);
 
-  const html = state.status === 'ready' ? state.data : undefined;
+  const html = view === 'html' && state.status === 'ready' ? state.data : undefined;
   return (
     <button
       ref={ref}
@@ -146,7 +148,7 @@ function OverviewSlide({
           className="h-[400%] w-[400%] origin-top-left scale-25 border-0 bg-white pointer-events-none"
           title={`第 ${index + 1} 页预览`}
         />
-      ) : state.status === 'error' ? (
+      ) : view === 'html' && state.status === 'error' ? (
         <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-xs text-danger">
           <span>HTML 加载失败</span>
           <span className="text-text-600">打开页面后可重试</span>
@@ -160,12 +162,12 @@ function OverviewSlide({
             {slide.title || '未命名页面'}
           </span>
           <span className="text-[10px] text-text-400">
-            {hasRenderedHTML(slide) ? '缩略图加载中' : '页面未物化'}
+            {view === 'html' && hasRenderedHTML(slide) ? '缩略图加载中' : '页面未物化'}
           </span>
         </div>
       )}
       <span className="absolute bottom-2 right-2 rounded bg-ink/75 px-1.5 py-0.5 text-xs text-white">{index + 1}</span>
-      {!hasRenderedHTML(slide) && (
+      {view === 'html' && !hasRenderedHTML(slide) && (
         <span className="absolute bottom-2 left-2 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">
           未生成 HTML
         </span>
@@ -301,28 +303,26 @@ export const PreviewWorkspace: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          {previewMode === 'main' && (
-            <div className="flex items-center rounded-full bg-panel-muted p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setGlobalView('outline')}
-                aria-pressed={globalView === 'outline'}
-                className={cn(
-                  'h-7 rounded-full px-3 font-medium transition-colors',
-                  globalView === 'outline' ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-700',
-                )}
-              >设计稿</button>
-              <button
-                type="button"
-                onClick={() => setGlobalView('html')}
-                aria-pressed={globalView === 'html'}
-                className={cn(
-                  'h-7 rounded-full px-3 font-medium transition-colors',
-                  globalView === 'html' ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-700',
-                )}
-              >幻灯片</button>
-            </div>
-          )}
+          <div className="flex items-center rounded-full bg-panel-muted p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setGlobalView('outline')}
+              aria-pressed={globalView === 'outline'}
+              className={cn(
+                'h-7 rounded-full px-3 font-medium transition-colors',
+                globalView === 'outline' ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-700',
+              )}
+            >设计稿</button>
+            <button
+              type="button"
+              onClick={() => setGlobalView('html')}
+              aria-pressed={globalView === 'html'}
+              className={cn(
+                'h-7 rounded-full px-3 font-medium transition-colors',
+                globalView === 'html' ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-700',
+              )}
+            >幻灯片</button>
+          </div>
 
           <div className="flex items-center gap-1">
             <IconButton label="上一页" onClick={goPrev} disabled={!hasSlides || safePage === 0}>
@@ -414,6 +414,7 @@ export const PreviewWorkspace: React.FC = () => {
                   index={index}
                   selected={safePage === index}
                   state={getState(slide)}
+                  view={globalView}
                   load={() => load(slide, 'prefetch')}
                   select={() => {
                     setCurrentSlideId(slide.id);

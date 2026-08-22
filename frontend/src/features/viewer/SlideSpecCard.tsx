@@ -13,7 +13,7 @@ export function SlideSpecCard({ spec, state, compact = false }: {
         <span className="rounded bg-accent-soft px-2 py-1 text-[10px] font-semibold text-accent">
           {spec.role}
         </span>
-        <MaterializationBadge state={state} />
+        {!compact && <MaterializationBadge state={state} />}
       </div>
       <h2 className={`${compact ? 'mt-2 text-sm' : 'mt-5 text-2xl'} font-semibold text-text-900`}>{spec.title}</h2>
       <div className={`${compact ? 'mt-2 text-[10px]' : 'mt-4 text-base'} flex gap-2 rounded-lg bg-accent-soft/70 p-3 text-text-900`}>

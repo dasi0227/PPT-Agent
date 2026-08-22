@@ -18,7 +18,7 @@ describe('DesignSummary', () => {
     expect(screen.getByText('全局视觉规范')).toBeInTheDocument();
     expect(screen.getByText('rev 3')).toBeInTheDocument();
     expect(screen.getByText('minimal geometric accent')).toBeInTheDocument();
-    expect(screen.getByText('swiss-modern · medium')).toBeInTheDocument();
-    expect(screen.getByText('chrome: page_number@bottom-right')).toBeInTheDocument();
+    expect(screen.getByText('swiss-modern · 适中')).toBeInTheDocument();
+    expect(screen.getByText('页面装饰：页码（右下）')).toBeInTheDocument();
   });
 });
