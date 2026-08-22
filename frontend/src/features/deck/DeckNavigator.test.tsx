@@ -104,8 +104,8 @@ describe('DeckNavigator', () => {
   it('shows real slide titles instead of generic labels', () => {
     useDeckStore.setState({ globalView: 'outline' });
     render(<DeckNavigator />);
-    expect(screen.getByText('市场分析')).toBeInTheDocument();
-    expect(screen.getByText('增长趋势')).toBeInTheDocument();
+    expect(screen.getByText('市场分析')).toHaveClass('text-[16px]', 'font-semibold');
+    expect(screen.getByText('增长趋势')).toHaveClass('text-[16px]', 'font-semibold');
     expect(screen.queryByText('Slide 1')).not.toBeInTheDocument();
     expect(screen.queryByText('核心命题')).not.toBeInTheDocument();
     expect(screen.queryByText('暂无')).toBeNull();

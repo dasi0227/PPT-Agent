@@ -86,7 +86,7 @@ function SlideDirectoryContent({
       ) : (
         <span
           key="outline"
-          className="min-w-0 truncate text-[13px] font-medium text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]"
+          className="min-w-0 truncate text-[16px] font-semibold text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]"
           title={title}
         >
           {title}
