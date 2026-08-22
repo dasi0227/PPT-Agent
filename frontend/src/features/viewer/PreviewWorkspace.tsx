@@ -160,7 +160,7 @@ function OverviewSlide({
         </div>
       ) : view === 'outline' && spec ? (
         <div className="h-full p-3.5">
-          <div className="absolute right-3.5 top-3.5 flex items-center gap-1.5 text-[10px] leading-none">
+          <div className="flex items-center gap-1.5 text-[10px] leading-none">
             <span className="inline-flex h-5 items-center rounded-md bg-panel-muted px-1.5 font-semibold tracking-[0.12em] tabular-nums text-text-600">
               {String(index + 1).padStart(2, '0')}
             </span>
@@ -168,7 +168,7 @@ function OverviewSlide({
               {slideRoleLabel(spec.role)}
             </span>
           </div>
-          <div className="absolute inset-x-4 top-1/2 h-[44px] -translate-y-1/2">
+          <div className="mt-3 h-[44px]">
             <h2 className="line-clamp-2 text-[17px] font-semibold leading-[22px] text-text-900">
               {title}
             </h2>

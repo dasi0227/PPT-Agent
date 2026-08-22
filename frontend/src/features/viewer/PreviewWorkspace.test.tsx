@@ -188,11 +188,15 @@ describe('PreviewWorkspace', () => {
     render(<PreviewWorkspace />);
 
     const firstTile = screen.getByTestId('overview-slide-s1');
-    expect(within(firstTile).getByText('01')).toHaveClass('bg-panel-muted', 'h-5');
+    const pageNumber = within(firstTile).getByText('01');
+    expect(pageNumber).toHaveClass('bg-panel-muted', 'h-5');
+    expect(pageNumber.parentElement).toHaveClass('flex');
+    expect(pageNumber.parentElement).not.toHaveClass('absolute');
     expect(within(firstTile).getByText('封面')).toHaveClass('bg-accent-soft', 'h-5');
     const firstTitle = within(firstTile).getByText('封面标题');
     expect(firstTitle).toHaveClass('line-clamp-2');
-    expect(firstTitle.parentElement).toHaveClass('h-[44px]', 'top-1/2');
+    expect(firstTitle.parentElement).toHaveClass('h-[44px]', 'mt-3');
+    expect(firstTitle.parentElement).not.toHaveClass('absolute');
     expect(within(firstTile).queryByText('要点一')).toBeNull();
     expect(firstTile.querySelector('article')).toBeNull();
     expect(screen.getByText('全局视觉规范').closest('section')).toHaveClass('rounded-xl', 'border');
