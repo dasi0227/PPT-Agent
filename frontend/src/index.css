@@ -54,6 +54,30 @@
   container-type: inline-size;
 }
 
+.overview-slide-card {
+  container-type: inline-size;
+}
+
+.overview-slide-content {
+  padding: clamp(8px, 8cqw, 14px);
+}
+
+.overview-slide-meta {
+  gap: clamp(3px, 3cqw, 4px);
+  font-size: clamp(8px, 5.5cqw, 9px);
+}
+
+.overview-slide-meta-chip {
+  height: clamp(16px, 11cqw, 18px);
+  padding-inline: clamp(5px, 4cqw, 6px);
+}
+
+.overview-slide-title {
+  margin-top: clamp(4px, 5cqw, 8px);
+  font-size: clamp(13px, 10cqw, 17px);
+  line-height: 1.2;
+}
+
 @container (max-width: 480px) {
   .composer-mode-button,
   .composer-plan-button {

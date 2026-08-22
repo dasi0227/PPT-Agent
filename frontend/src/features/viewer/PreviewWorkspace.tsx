@@ -139,7 +139,7 @@ function OverviewSlide({
       onClick={select}
       aria-label={`打开第 ${index + 1} 页：${title}`}
       className={cn(
-        'group relative aspect-video overflow-hidden text-left ring-1 ring-border hover:ring-accent',
+        'overview-slide-card group relative aspect-video overflow-hidden text-left ring-1 ring-border hover:ring-accent',
         view === 'outline'
           ? 'rounded-lg bg-surface transition-[background-color,box-shadow] hover:bg-panel'
           : 'rounded bg-surface shadow-sm',
@@ -159,20 +159,18 @@ function OverviewSlide({
           <span className="text-text-600">打开页面后可重试</span>
         </div>
       ) : view === 'outline' && spec ? (
-        <div className="h-full p-3.5">
-          <div className="flex items-center gap-1 text-[9px] leading-none">
-            <span className="inline-flex h-[18px] items-center rounded-[5px] bg-panel-muted px-1.5 font-semibold tracking-[0.12em] tabular-nums text-text-600">
+        <div className="overview-slide-content h-full">
+          <div className="overview-slide-meta flex items-center leading-none">
+            <span className="overview-slide-meta-chip inline-flex items-center rounded-[5px] bg-panel-muted font-semibold tracking-[0.12em] tabular-nums text-text-600">
               {String(index + 1).padStart(2, '0')}
             </span>
-            <span className="inline-flex h-[18px] items-center rounded-[5px] bg-accent-soft px-1.5 font-semibold text-accent">
+            <span className="overview-slide-meta-chip inline-flex items-center rounded-[5px] bg-accent-soft font-semibold text-accent">
               {slideRoleLabel(spec.role)}
             </span>
           </div>
-          <div className="mt-2 h-[44px]">
-            <h2 className="line-clamp-2 text-[17px] font-semibold leading-[22px] text-text-900">
-              {title}
-            </h2>
-          </div>
+          <h2 className="overview-slide-title line-clamp-2 font-semibold text-text-900">
+            {title}
+          </h2>
         </div>
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-5 text-center">
