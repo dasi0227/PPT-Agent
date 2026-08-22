@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ChevronDown, ChevronRight, ListChecks, Send } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, ChevronUp, ListChecks, Send } from 'lucide-react';
 import { runsApi } from '../../api/runs';
 import { MarkdownMessage } from './MarkdownMessage';
 import type { PlanApprovalItem } from './eventReducer';
@@ -23,10 +23,75 @@ function decisionClass(decision: PlanDecision, selected: boolean): string {
     : 'border-accent/40 bg-accent-soft text-accent';
 }
 
-function PlanBody({ item, statusText = '等待确认' }: { item: PlanApprovalItem; statusText?: string }) {
+function PlanContentPreview({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (expanded) return undefined;
+    const element = contentRef.current;
+    if (!element) return undefined;
+    const measure = () => setOverflowing(element.scrollHeight - element.clientHeight > 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [content, expanded]);
+
+  return (
+    <div className="mt-3">
+      <div
+        ref={contentRef}
+        data-testid="plan-content-preview"
+        className={expanded ? '' : 'relative max-h-[480px] overflow-hidden'}
+      >
+        <div className="text-sm leading-6 text-text-700">
+          <MarkdownMessage content={content} />
+        </div>
+        {!expanded && overflowing && (
+          <div className="absolute inset-x-0 bottom-0 flex h-16 items-end justify-center bg-gradient-to-b from-surface/0 via-surface/85 to-surface pb-1 backdrop-blur-[1px]">
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="inline-flex h-7 items-center rounded-full border border-border bg-surface px-3 text-xs font-medium text-text-700 shadow-sm hover:bg-panel-muted hover:text-text-900"
+            >
+              展开全部
+            </button>
+          </div>
+        )}
+      </div>
+      {expanded && overflowing && (
+        <div className="mt-2 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-text-400 hover:bg-panel-muted hover:text-text-700"
+          >
+            <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.75} />
+            收起
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanBody({
+  item,
+  statusText = '等待确认',
+  preview = false,
+}: {
+  item: PlanApprovalItem;
+  statusText?: string;
+  preview?: boolean;
+}) {
   return <>
     <div className="flex items-center gap-2"><ListChecks className="h-5 w-5 text-accent" /><div><h3 className="text-sm font-semibold text-text-900">{item.plan.title}</h3><p className="text-xs text-text-400">{item.plan.steps.length} 个步骤 · {statusText}</p></div></div>
-    <div className="mt-3 text-sm leading-6 text-text-700"><MarkdownMessage content={item.plan.content} /></div>
+    {preview
+      ? <PlanContentPreview content={item.plan.content} />
+      : <div className="mt-3 text-sm leading-6 text-text-700"><MarkdownMessage content={item.plan.content} /></div>}
   </>;
 }
 
@@ -65,7 +130,7 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
   };
   if (answered) return <AnsweredPlanApproval item={item} decision={answered.decision} feedback={answered.feedback} />;
   return <article className="rounded-[10px] border border-border-strong bg-surface p-4">
-    <PlanBody item={item} />
+    <PlanBody item={item} preview />
     <div className="mt-4 border-t border-border pt-3" role="group" aria-label="计划处理方式" data-testid="plan-approval-actions">
       <div className="grid grid-cols-3 gap-2">
         {decisions.map(([value, label]) => (

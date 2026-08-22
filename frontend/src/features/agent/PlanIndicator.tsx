@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Circle, ListChecks, Loader2, XCircle } from 'lucide-react';
+import { CircleArrowRight, CircleCheck, CircleDashed, CircleX, ListChecks } from 'lucide-react';
 import type { PlanState, PlanStepStatus } from '../../api/types';
 import { cn } from '../../lib/utils';
 import {
@@ -12,14 +12,58 @@ function StepIcon({ status }: { status: PlanStepStatus }) {
   const classes = 'h-4 w-4 shrink-0';
   switch (status) {
     case 'completed':
-      return <Check className={cn(classes, 'text-success')} strokeWidth={1.75} />;
+      return <CircleCheck data-plan-step-status="completed" className={cn(classes, 'text-success')} strokeWidth={1.75} />;
     case 'in_progress':
-      return <Loader2 className={cn(classes, 'animate-spin text-accent motion-reduce:animate-none')} strokeWidth={1.75} />;
+      return <CircleArrowRight data-plan-step-status="in_progress" className={cn(classes, 'text-accent')} strokeWidth={1.75} />;
     case 'failed':
-      return <XCircle className={cn(classes, 'text-danger')} strokeWidth={1.75} />;
+      return <CircleX data-plan-step-status="failed" className={cn(classes, 'text-danger')} strokeWidth={1.75} />;
     default:
-      return <Circle className={cn(classes, 'text-text-400')} strokeWidth={1.75} />;
+      return <CircleDashed data-plan-step-status="pending" className={cn(classes, 'text-text-400')} strokeWidth={1.75} />;
   }
+}
+
+function RollingCharacter({ character }: { character: string }) {
+  const previous = React.useRef(character);
+  const [transition, setTransition] = React.useState<{ from: string; to: string } | null>(null);
+  const [active, setActive] = React.useState(false);
+
+  React.useEffect(() => {
+    if (character === previous.current) return undefined;
+    const from = previous.current;
+    previous.current = character;
+    setTransition({ from, to: character });
+    setActive(false);
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => setActive(true)));
+    const done = window.setTimeout(() => setTransition(null), 320);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(done);
+    };
+  }, [character]);
+
+  return (
+    <span className="plan-count-character">
+      {transition ? (
+        <span className={cn('plan-count-character-track', active && 'is-active')}>
+          <span>{transition.from}</span>
+          <span>{transition.to}</span>
+        </span>
+      ) : character}
+    </span>
+  );
+}
+
+function RollingCount({ completed, total }: { completed: number; total: number }) {
+  const value = `${completed}/${total}`;
+  return (
+    <span className="inline-flex tabular-nums" aria-label={`${completed} / ${total}`}>
+      <span aria-hidden="true" className="inline-flex">
+        {value.split('').map((character, index) => (
+          <RollingCharacter key={index} character={character} />
+        ))}
+      </span>
+    </span>
+  );
 }
 
 interface PlanIndicatorProps {
@@ -149,7 +193,7 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({
           <ListChecks className={cn('h-3.5 w-3.5 shrink-0', inFlight && 'animate-pulse motion-reduce:animate-none')} strokeWidth={1.75} />
           <span className="composer-plan-label shrink-0 whitespace-nowrap">计划</span>
           <span className="composer-plan-progress-badge absolute -right-2 -top-2 z-10 inline-flex h-4 min-w-[24px] items-center justify-center rounded-full border-2 border-panel bg-text-600 px-1 text-[9px] leading-none tabular-nums text-white shadow-sm">
-            {completed}/{total}
+            <RollingCount completed={completed} total={total} />
           </span>
         </button>
       </DropdownMenuTrigger>
@@ -158,7 +202,9 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({
           <PlanText className="max-w-[248px] text-sm font-semibold text-text-900">
             {plan?.title || '执行计划'}
           </PlanText>
-          <span className="shrink-0 text-xs tabular-nums text-text-400">{completed}/{total}</span>
+          <span className="shrink-0 text-xs text-text-400">
+            <RollingCount completed={completed} total={total} />
+          </span>
         </div>
         <div className="max-h-[280px] space-y-0.5 overflow-y-auto pr-1">
           {plan?.steps.map((step) => (
@@ -166,7 +212,7 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({
               key={step.id}
               className={cn(
                 'flex min-h-8 items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
-                step.status === 'in_progress' && 'bg-accent-soft',
+                step.status === 'in_progress' && 'bg-accent-soft/80',
               )}
             >
               <StepIcon status={step.status} />

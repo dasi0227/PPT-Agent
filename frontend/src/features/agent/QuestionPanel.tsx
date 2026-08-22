@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, MessageCircleQuestion, Send } from 'lucide-react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, MessageCircleQuestion } from 'lucide-react';
 import { useRunStore } from '../../stores/runStore';
 import { cn } from '../../lib/utils';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
@@ -39,6 +39,129 @@ function answerText(question: QuestionField, answer: QuestionFieldAnswer | undef
     .filter(Boolean);
   if (legacy.answer.custom_text) labels.push(legacy.answer.custom_text);
   return labels.join('；');
+}
+
+function QuestionSlide({
+  active,
+  draft,
+  pending,
+  question,
+  questionGroupId,
+  setDraft,
+  submitting,
+  slideRef,
+}: {
+  active: boolean;
+  draft: DraftAnswer;
+  pending: boolean;
+  question: QuestionField;
+  questionGroupId: string;
+  setDraft: (questionId: string, patch: Partial<DraftAnswer>) => void;
+  submitting: boolean;
+  slideRef: (element: HTMLDivElement | null) => void;
+}) {
+  const disabled = !pending || submitting || !active;
+  return (
+    <div
+      ref={slideRef}
+      aria-hidden={!active}
+      className="w-full shrink-0 px-3 py-3"
+    >
+      <div className="flex items-start gap-2">
+        <MessageCircleQuestion
+          className={cn('mt-0.5 h-4 w-4 shrink-0 text-success', pending && active && 'animate-pulse motion-reduce:animate-none')}
+          strokeWidth={1.75}
+        />
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[14px] font-semibold leading-5 text-text-900">{question.title}</h3>
+          {question.description && (
+            <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{question.description}</p>
+          )}
+        </div>
+      </div>
+
+      {question.options.length > 0 ? (
+        <div className="mt-3 space-y-2 pl-6">
+          {question.options.slice(0, 3).map((option) => {
+            const checked = draft.selectedOptionId === option.id;
+            return (
+              <label
+                key={option.id}
+                className={cn(
+                  'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
+                  checked ? 'border-border-strong bg-panel-muted' : 'border-border bg-surface',
+                  disabled && 'cursor-default opacity-70',
+                )}
+              >
+                <input
+                  type="radio"
+                  name={`${questionGroupId}:${question.id}`}
+                  value={option.id}
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => setDraft(question.id, { selectedOptionId: option.id, customText: '' })}
+                  className="mt-1 accent-text-900"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium text-text-900">{option.label}</span>
+                  {option.description && (
+                    <span
+                      title={option.description}
+                      className="mt-0.5 block line-clamp-2 text-xs leading-5 text-text-600"
+                    >
+                      {option.description}
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
+          {question.allow_custom && (
+            <label
+              className={cn(
+                'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
+                draft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-border-strong bg-panel-muted' : 'border-border bg-surface',
+                disabled && 'cursor-default opacity-70',
+              )}
+            >
+              <input
+                type="radio"
+                name={`${questionGroupId}:${question.id}`}
+                value={CUSTOM_OPTION_ID}
+                checked={draft.selectedOptionId === CUSTOM_OPTION_ID}
+                disabled={disabled}
+                onChange={() => setDraft(question.id, { selectedOptionId: CUSTOM_OPTION_ID })}
+                className="mt-1 accent-text-900"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-medium text-text-900">自定义回答</span>
+                <input
+                  type="text"
+                  value={draft.customText}
+                  disabled={disabled}
+                  onFocus={() => setDraft(question.id, { selectedOptionId: CUSTOM_OPTION_ID })}
+                  onChange={(event) => setDraft(question.id, {
+                    selectedOptionId: CUSTOM_OPTION_ID,
+                    customText: event.target.value,
+                  })}
+                  placeholder="输入自定义回答"
+                  className="mt-2 h-8 w-full rounded-md border border-border bg-surface px-2 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                />
+              </span>
+            </label>
+          )}
+        </div>
+      ) : (
+        <textarea
+          value={draft.customText}
+          disabled={disabled}
+          onChange={(event) => setDraft(question.id, { customText: event.target.value })}
+          placeholder="输入你的回答"
+          className="mt-3 h-28 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        />
+      )}
+    </div>
+  );
 }
 
 function SubmittedQuestionRow({ question, value }: { question: QuestionField; value: string }) {
@@ -114,12 +237,12 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   const [drafts, setDrafts] = useState<Record<string, DraftAnswer>>(() => initialDrafts(questions));
   const [submitting, setSubmitting] = useState(false);
   const [answeredGroupExpanded, setAnsweredGroupExpanded] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number>();
   const panelRef = useRef<HTMLFieldSetElement>(null);
+  const questionRefs = useRef<Array<HTMLDivElement | null>>([]);
   const pending = pendingQuestion?.id === item.questionId && !item.answer;
   const currentQuestion = questions[Math.min(currentIndex, questions.length - 1)];
-  const currentDraft = drafts[currentQuestion.id] ?? { customText: '' };
   const complete = questions.every((question) => hasAnswer(question, drafts[question.id]));
-  const stableQuestionHeight = questions.length > 1 || currentQuestion.options.length > 0;
 
   useEffect(() => {
     setCurrentIndex(0);
@@ -130,6 +253,21 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   useEffect(() => {
     if (pending) panelRef.current?.focus();
   }, [pending]);
+
+  useLayoutEffect(() => {
+    if (item.answer) return undefined;
+    const current = questionRefs.current[currentIndex];
+    if (!current) return undefined;
+    const measure = () => {
+      const nextHeight = current.offsetHeight;
+      if (nextHeight > 0) setViewportHeight(nextHeight);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(current);
+    return () => observer.disconnect();
+  }, [currentIndex, drafts, item.answer, questions]);
 
   if (item.answer) {
     const groupedAnswers = item.answer.answers ?? [];
@@ -217,100 +355,28 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
       className="rounded-[10px] border border-border-strong bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
     >
       <legend className="sr-only">{currentQuestion.title}</legend>
-      <div className={cn('px-3 py-3', stableQuestionHeight && 'min-h-[330px]')}>
-        <div className="flex items-start gap-2">
-          <MessageCircleQuestion
-            className={cn('mt-0.5 h-4 w-4 shrink-0 text-success', pending && 'animate-pulse motion-reduce:animate-none')}
-            strokeWidth={1.75}
-          />
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[14px] font-semibold leading-5 text-text-900">{currentQuestion.title}</h3>
-            {currentQuestion.description && (
-              <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{currentQuestion.description}</p>
-            )}
-          </div>
+      <div
+        className="overflow-hidden transition-[height] duration-200 motion-reduce:transition-none"
+        style={viewportHeight === undefined ? undefined : { height: viewportHeight }}
+      >
+        <div
+          className="flex transition-transform duration-200 ease-out motion-reduce:transition-none"
+          style={{ transform: `translate3d(-${currentIndex * 100}%, 0, 0)` }}
+        >
+          {questions.map((question, index) => (
+            <QuestionSlide
+              key={question.id}
+              active={index === currentIndex}
+              draft={drafts[question.id] ?? { customText: '' }}
+              pending={pending}
+              question={question}
+              questionGroupId={item.questionId}
+              setDraft={setDraft}
+              submitting={submitting}
+              slideRef={(element) => { questionRefs.current[index] = element; }}
+            />
+          ))}
         </div>
-
-        {currentQuestion.options.length > 0 ? (
-          <div className="mt-3 space-y-2 pl-6">
-            {currentQuestion.options.slice(0, 3).map((option) => {
-              const checked = currentDraft.selectedOptionId === option.id;
-              return (
-                <label
-                  key={option.id}
-                  className={cn(
-                    'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2',
-                    checked ? 'border-border-strong bg-panel-muted' : 'border-border bg-surface',
-                    !pending && 'cursor-default opacity-70',
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name={`${item.questionId}:${currentQuestion.id}`}
-                    value={option.id}
-                    checked={checked}
-                    disabled={!pending || submitting}
-                    onChange={() => setDraft(currentQuestion.id, { selectedOptionId: option.id, customText: '' })}
-                    className="mt-1 accent-text-900"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-medium text-text-900">{option.label}</span>
-                    {option.description && (
-                      <span
-                        title={option.description}
-                        className="mt-0.5 block line-clamp-2 text-xs leading-5 text-text-600"
-                      >
-                        {option.description}
-                      </span>
-                    )}
-                  </span>
-                </label>
-              );
-            })}
-            {currentQuestion.allow_custom && (
-              <label
-                className={cn(
-                  'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2',
-                  currentDraft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-border-strong bg-panel-muted' : 'border-border bg-surface',
-                  !pending && 'cursor-default opacity-70',
-                )}
-              >
-                <input
-                  type="radio"
-                  name={`${item.questionId}:${currentQuestion.id}`}
-                  value={CUSTOM_OPTION_ID}
-                  checked={currentDraft.selectedOptionId === CUSTOM_OPTION_ID}
-                  disabled={!pending || submitting}
-                  onChange={() => setDraft(currentQuestion.id, { selectedOptionId: CUSTOM_OPTION_ID })}
-                  className="mt-1 accent-text-900"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-medium text-text-900">自定义回答</span>
-                  <input
-                    type="text"
-                    value={currentDraft.customText}
-                    disabled={!pending || submitting}
-                    onFocus={() => setDraft(currentQuestion.id, { selectedOptionId: CUSTOM_OPTION_ID })}
-                    onChange={(event) => setDraft(currentQuestion.id, {
-                      selectedOptionId: CUSTOM_OPTION_ID,
-                      customText: event.target.value,
-                    })}
-                    placeholder="输入自定义回答"
-                    className="mt-2 h-8 w-full rounded-md border border-border bg-surface px-2 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                  />
-                </span>
-              </label>
-            )}
-          </div>
-        ) : (
-          <textarea
-            value={currentDraft.customText}
-            disabled={!pending || submitting}
-            onChange={(event) => setDraft(currentQuestion.id, { customText: event.target.value })}
-            placeholder="输入你的回答"
-            className="mt-3 h-28 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-          />
-        )}
       </div>
 
       <div className="flex items-center justify-between border-t border-border px-3 py-2.5">
@@ -321,9 +387,9 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
               aria-label="上一个问题"
               disabled={currentIndex === 0}
               onClick={() => go(-1)}
-              className="px-1 text-base disabled:opacity-35"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted disabled:opacity-35"
             >
-              &lt;
+              <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
             </button>
             <span className="min-w-[38px] text-center tabular-nums">{currentIndex + 1} / {questions.length}</span>
             <button
@@ -331,20 +397,21 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
               aria-label="下一个问题"
               disabled={currentIndex === questions.length - 1}
               onClick={() => go(1)}
-              className="px-1 text-base disabled:opacity-35"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted disabled:opacity-35"
             >
-              &gt;
+              <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
             </button>
           </div>
         ) : <span />}
         <button
           type="button"
-          aria-label="提交回答"
+          aria-label="继续"
           disabled={!pending || submitting || !complete}
           onClick={() => void submit()}
           className="inline-flex h-9 items-center gap-1 rounded-lg bg-text-900 px-3 text-sm text-surface disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Send className="h-4 w-4" strokeWidth={1.75} /> 提交回答
+          {submitting ? '提交中' : '继续'}
+          {!submitting && <ArrowRight className="h-4 w-4" strokeWidth={1.75} />}
         </button>
       </div>
     </fieldset>

@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Send, StopCircle } from 'lucide-react';
+import { Send, Sparkles, StopCircle } from 'lucide-react';
 import { llmApi } from '../../api/llm';
 import type { CreateRunRequest, LLMProfile } from '../../api/types';
 import { cn } from '../../lib/utils';
@@ -18,6 +18,7 @@ import { useActiveSession } from './useActiveSession';
 
 const COMPOSER_CONTROLS_FIT_GUARD_PX = 2;
 const COMPOSER_CONTROLS_HYSTERESIS_PX = 12;
+const ENHANCE_PREVIEW_MS = 1000;
 
 type ComposerControlsDensity = 'full' | 'left-compact' | 'all-compact';
 
@@ -156,7 +157,10 @@ export const CommandComposer: React.FC = () => {
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState('');
   const [controlsDensity, setControlsDensity] = useState<ComposerControlsDensity>('full');
+  const [enhancing, setEnhancing] = useState(false);
   const controlBarRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const enhanceTimerRef = useRef<number | null>(null);
   const { activeProjectId, slidesByProjectId } = useProjectStore();
   const { currentSlideId } = useDeckStore();
   const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
@@ -223,6 +227,10 @@ export const CommandComposer: React.FC = () => {
     return () => { current = false; };
   }, []);
 
+  useEffect(() => () => {
+    if (enhanceTimerRef.current !== null) window.clearTimeout(enhanceTimerRef.current);
+  }, []);
+
   useLayoutEffect(() => {
     const bar = controlBarRef.current;
     if (!bar) return undefined;
@@ -263,7 +271,7 @@ export const CommandComposer: React.FC = () => {
 
   const submit = async () => {
     const raw = text.trim();
-    if (disabled || !activeProjectId || !raw) return;
+    if (disabled || enhancing || !activeProjectId || !raw) return;
     setSubmitError('');
     const projectId = activeProjectId;
     let threadId: string;
@@ -331,8 +339,26 @@ export const CommandComposer: React.FC = () => {
     composer.setIntent(composer.mode === 'plan' ? 'execute' : 'plan');
   };
 
+  const enhanceText = () => {
+    const textarea = textareaRef.current;
+    if (!textarea || disabled || enhancing || text.trim() === '') return;
+    const selectionStart = textarea.selectionStart;
+    const selectionEnd = textarea.selectionEnd;
+    setEnhancing(true);
+    enhanceTimerRef.current = window.setTimeout(() => {
+      enhanceTimerRef.current = null;
+      setEnhancing(false);
+      requestAnimationFrame(() => {
+        const current = textareaRef.current;
+        if (!current || current.disabled) return;
+        current.focus();
+        current.setSelectionRange(selectionStart, selectionEnd);
+      });
+    }, ENHANCE_PREVIEW_MS);
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.nativeEvent.isComposing || isComposing) return;
+    if (event.nativeEvent.isComposing || isComposing || enhancing) return;
     if (event.key === 'Enter' && (isMac() ? event.metaKey : event.ctrlKey)) {
       event.preventDefault();
       void submit();
@@ -352,17 +378,41 @@ export const CommandComposer: React.FC = () => {
         </div>
       )}
       <div className="relative rounded-[22px] border border-border/80 bg-panel shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={handleKeyDown}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={() => setIsComposing(false)}
-          placeholder={composerPlaceholder}
-          disabled={disabled}
-          className="max-h-32 min-h-[60px] w-full resize-none bg-transparent p-3 text-sm text-text-900 placeholder:text-text-400 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
-          rows={2}
-        />
+        <div className="relative overflow-hidden rounded-t-[22px]">
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={handleKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            placeholder={composerPlaceholder}
+            disabled={disabled}
+            readOnly={enhancing}
+            aria-busy={enhancing}
+            className="max-h-32 min-h-[60px] w-full resize-none bg-transparent py-3 pl-3 pr-12 text-sm text-text-900 placeholder:text-text-400 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
+            rows={2}
+          />
+          {text.trim() !== '' && !disabled && (
+            <button
+              type="button"
+              onClick={enhanceText}
+              disabled={enhancing}
+              aria-label={enhancing ? '正在优化表达' : '优化表达'}
+              title={enhancing ? '正在优化表达' : '优化表达'}
+              className="absolute right-2.5 top-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 bg-surface/90 text-accent shadow-sm backdrop-blur-sm hover:bg-accent-soft disabled:cursor-wait disabled:opacity-100"
+            >
+              <Sparkles
+                className={cn('h-3.5 w-3.5', enhancing && 'enhance-sparkles-active')}
+                strokeWidth={1.75}
+              />
+            </button>
+          )}
+          {enhancing && <span className="composer-enhance-sweep" aria-hidden="true" />}
+          <span className="sr-only" aria-live="polite">
+            {enhancing ? '正在优化表达' : ''}
+          </span>
+        </div>
         <div
           ref={controlBarRef}
           data-controls-density={controlsDensity}
@@ -418,7 +468,7 @@ export const CommandComposer: React.FC = () => {
             ) : (
               <button
                 onClick={() => void submit()}
-                disabled={!text.trim() || disabled || (!steering && (profilesLoading || Boolean(profilesError)))}
+                disabled={!text.trim() || disabled || enhancing || (!steering && (profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:bg-text-400 disabled:opacity-50"
                 aria-label="发送"
               >

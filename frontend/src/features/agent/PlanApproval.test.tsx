@@ -30,6 +30,7 @@ describe('PlanApproval', () => {
 
     const approve = screen.getByRole('button', { name: '批准执行' });
     expect(screen.getByText('演示文稿制作计划')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '展开全部' })).toBeNull();
     expect(approve).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '提交' })).toBeDisabled();
 
@@ -39,6 +40,41 @@ describe('PlanApproval', () => {
     expect(approve).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: '提交' })).not.toBeDisabled();
     expect(runsApi.submitPlanApproval).not.toHaveBeenCalled();
+  });
+
+  it('shows an expandable fade only when pending plan content overflows', () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === 'plan-content-preview' ? 220 : 0;
+    });
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === 'plan-content-preview' ? 96 : 0;
+    });
+
+    try {
+      render(<PlanApproval item={{
+        ...item,
+        plan: {
+          ...item.plan,
+          content: '先完成结构。\n\n再生成全部页面。\n\n逐页检查视觉和布局。\n\n最后统一复核。',
+        },
+      }} />);
+
+      const approve = screen.getByRole('button', { name: '批准执行' });
+      fireEvent.click(approve);
+      expect(approve).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('plan-content-preview')).toHaveClass('max-h-[480px]', 'overflow-hidden');
+
+      fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
+      expect(screen.getByTestId('plan-content-preview')).not.toHaveClass('max-h-[480px]');
+      expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument();
+      expect(approve).toHaveAttribute('aria-pressed', 'true');
+
+      fireEvent.click(screen.getByRole('button', { name: '收起' }));
+      expect(screen.getByRole('button', { name: '展开全部' })).toBeInTheDocument();
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
   });
 
   it('separates the decision controls and requires feedback for a revision', () => {

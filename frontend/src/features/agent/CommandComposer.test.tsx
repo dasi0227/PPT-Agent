@@ -199,7 +199,7 @@ describe('CommandComposer', () => {
 	  it('keeps /talk, /ask and /plan shortcuts mapped to their interaction protocols', async () => {
     render(<CommandComposer />);
     await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
-    const textarea = screen.getByRole('textbox');
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
 
     fireEvent.change(textarea, { target: { value: '/talk 给我建议' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
@@ -256,6 +256,27 @@ describe('CommandComposer', () => {
     expect(useComposerStore.getState()).toMatchObject({ mode: 'execute' });
     expect(screen.getByText('完成结构梳理')).toBeInTheDocument();
     expect(screen.getByText('检查视觉结果')).toBeInTheDocument();
+    expect(document.querySelector('[data-plan-step-status="completed"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-plan-step-status="pending"]')).toBeInTheDocument();
+
+    act(() => {
+      const current = useRunStore.getState().sessions.t1;
+      useRunStore.setState({
+        sessions: {
+          ...useRunStore.getState().sessions,
+          t1: {
+            ...current,
+            plan: current.plan ? {
+              ...current.plan,
+              revision: 2,
+              steps: current.plan.steps.map((step) => ({ ...step, status: 'completed' as const })),
+            } : null,
+          },
+        },
+      });
+    });
+    expect(document.querySelector('button[aria-label="计划 2 / 2"]')).toBeInTheDocument();
+    expect(document.querySelector('.plan-count-character-track')).toBeInTheDocument();
   });
 
   it('uses the pending question guidance as textarea placeholder', async () => {
@@ -298,6 +319,38 @@ describe('CommandComposer', () => {
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '补充要求' } });
     expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '优化表达' })).toBeInTheDocument();
+  });
+
+  it('previews Enhance for one second without changing the instruction', async () => {
+    render(<CommandComposer />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: '做一页克制的产品介绍' } });
+    textarea.focus();
+    textarea.setSelectionRange(2, 6);
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '优化表达' }));
+      expect(textarea).toHaveAttribute('readonly');
+      expect(textarea).toHaveAttribute('aria-busy', 'true');
+      expect(screen.getByRole('button', { name: '正在优化表达' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
+      expect(document.querySelector('.composer-enhance-sweep')).toBeInTheDocument();
+
+      act(() => { vi.advanceTimersByTime(1000); });
+      act(() => { vi.advanceTimersByTime(20); });
+
+      expect(textarea).toHaveValue('做一页克制的产品介绍');
+      expect(textarea).not.toHaveAttribute('readonly');
+      expect(textarea).toHaveFocus();
+      expect(textarea.selectionStart).toBe(2);
+      expect(textarea.selectionEnd).toBe(6);
+      expect(createRun).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not render the removed materialization control or duplicate status line', async () => {

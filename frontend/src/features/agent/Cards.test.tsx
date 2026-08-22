@@ -187,7 +187,7 @@ describe('public timeline components', () => {
     };
     const { rerender } = render(<QuestionPanel item={item} />);
     fireEvent.click(screen.getByLabelText(/克制科技/));
-    fireEvent.click(screen.getByRole('button', { name: /提交/ }));
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
     await waitFor(() => expect(answerQuestion).toHaveBeenCalledWith(
       't1', 'r1', 'q1',
       JSON.stringify({ selected_option_ids: ['tech'], custom_text: '' }),
@@ -241,12 +241,19 @@ describe('public timeline components', () => {
       timestamp: 0,
     };
     render(<QuestionPanel item={item} />);
-    const submit = screen.getByRole('button', { name: /提交回答/ });
+    const submit = screen.getByRole('button', { name: '继续' });
     expect(submit).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/单选题/));
+    expect(screen.getByText('1 / 3')).toBeInTheDocument();
+    expect(submit).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '下一个问题' }));
+    expect(screen.getByText('2 / 3')).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/自定义回答/));
     fireEvent.change(screen.getByPlaceholderText('输入自定义回答'), { target: { value: '其他问题图标' } });
+    fireEvent.click(screen.getByRole('button', { name: '上一个问题' }));
+    expect(screen.getByLabelText(/单选题/)).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: '下一个问题' }));
+    expect(screen.getByPlaceholderText('输入自定义回答')).toHaveValue('其他问题图标');
     fireEvent.click(screen.getByRole('button', { name: '下一个问题' }));
     fireEvent.change(screen.getByPlaceholderText('输入你的回答'), { target: { value: '保持简洁' } });
     expect(submit).not.toBeDisabled();
@@ -313,6 +320,7 @@ describe('public timeline components', () => {
     }} />);
     expect(screen.getByText('正在检查第 6 页的布局').closest('[aria-live="polite"]')).toBeInTheDocument();
     expect(screen.getByText('6 / 12')).toBeInTheDocument();
-    expect(document.querySelector('.motion-reduce\\:animate-none')).toBeInTheDocument();
+    expect(document.querySelector('.agent-b2-orb')).toBeInTheDocument();
+    expect(document.querySelectorAll('.agent-b2-orb-shape')).toHaveLength(3);
   });
 });
