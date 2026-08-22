@@ -406,15 +406,18 @@ export const DeckNavigator: React.FC = () => {
         onDrop={(event) => handleRowDrop(event, entry)}
         onDragEnd={() => setDragSlideId(null)}
         className={cn(
-          "group relative ml-9 grid min-h-[60px] w-[calc(100%-44px)] grid-cols-[28px_minmax(0,1fr)] items-center gap-2 rounded-md border-l-[3px] border-transparent px-2 py-2 text-sm transition-colors cursor-pointer focus-within:bg-panel-muted",
+          "group relative grid min-h-[60px] w-full grid-cols-[32px_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors cursor-pointer focus-within:bg-panel-muted",
           currentSlideId === slide.id
-            ? "bg-accent-soft text-accent font-medium border-l-[3px] border-accent"
+            ? "bg-accent/5"
             : "text-text-600 hover:bg-black/5",
           dragSlideId === slide.id && "opacity-50"
         )}
         onClick={() => setCurrentSlideId(slide.id)}
       >
-        <span className="text-center text-xs font-semibold tabular-nums text-text-400 group-hover:text-text-600">{String(renderedIndex + 1).padStart(2, '0')}</span>
+        {currentSlideId === slide.id && (
+          <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-accent" />
+        )}
+        <span className="text-left text-sm font-bold tabular-nums text-text-600">{String(renderedIndex + 1).padStart(2, '0')}</span>
         <SlideDirectoryContent
           slide={slide}
           index={renderedIndex}
@@ -424,12 +427,7 @@ export const DeckNavigator: React.FC = () => {
         />
         {!runActive && (
           <div
-            className={cn(
-              "pointer-events-none absolute right-1 top-1/2 z-10 grid -translate-y-1/2 py-0.5 pl-5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
-              currentSlideId === slide.id
-                ? "bg-gradient-to-r from-transparent via-accent-soft to-accent-soft"
-                : "bg-gradient-to-r from-transparent via-panel to-panel",
-            )}
+            className="pointer-events-none absolute right-1 top-1/2 z-10 grid -translate-y-1/2 bg-gradient-to-r from-transparent via-panel to-panel py-0.5 pl-5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           >
             <IconButton label="上移本页" className="h-[18px] w-5" disabled={structureUpdating || !canMoveUp} onClick={(event) => { event.stopPropagation(); moveEntryByDirection(entry, -1); }}>
               <ArrowUp className="h-3 w-3" />
@@ -504,9 +502,9 @@ export const DeckNavigator: React.FC = () => {
                       onClick={() => toggleSection(section.id)}
                       onDragOver={handleDragOver}
                       onDrop={(event) => handleGroupDrop(event, { section_id: section.id })}
-                      className="grid min-h-10 w-full grid-cols-[28px_minmax(0,1fr)_20px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-text-900 hover:bg-black/[0.04]"
+                      className="grid min-h-10 w-full grid-cols-[32px_minmax(0,1fr)_20px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-text-900 hover:bg-black/[0.04]"
                     >
-                      <span className="text-center text-[11px] font-semibold tabular-nums text-accent">
+                      <span className="text-left text-[13px] font-semibold tabular-nums text-text-600">
                         {formatDirectoryNumber(section.number, 'section')}
                       </span>
                       <span className="min-w-0 truncate text-[13px] font-semibold" title={section.title}>
@@ -529,7 +527,6 @@ export const DeckNavigator: React.FC = () => {
                       )}
                     >
                       <div className="relative min-h-0 overflow-hidden pb-1">
-                        <span aria-hidden="true" className="absolute bottom-2 left-[22px] top-0 w-px bg-border" />
                     {(() => {
                       const subsectionByID = new Map(section.subsections.map((subsection) => [subsection.id, subsection]));
                       const renderedSubsections = new Set<string>();
@@ -545,10 +542,10 @@ export const DeckNavigator: React.FC = () => {
                               key={`${section.id}:${subsection.id}:heading`}
                               onDragOver={handleDragOver}
                               onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
-                              className="relative flex min-h-7 items-center gap-1.5 py-0.5 pl-[46px] pr-2 text-[11px] font-normal text-text-400 before:absolute before:left-[22px] before:h-px before:w-3 before:bg-border"
+                              className="grid min-h-7 grid-cols-[32px_minmax(0,1fr)] items-center gap-2 px-2 pt-2 pb-0.5 text-[11px]"
                             >
-                              <span className="tabular-nums">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
-                              <span className="min-w-0 truncate font-medium text-text-600">{subsection.title}</span>
+                              <span className="text-left tabular-nums text-text-400">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
+                              <span className="min-w-0 truncate font-medium text-text-400">{subsection.title}</span>
                             </div>,
                           );
                         }
@@ -562,10 +559,10 @@ export const DeckNavigator: React.FC = () => {
                             key={`${section.id}:${subsection.id}:empty-heading`}
                             onDragOver={handleDragOver}
                             onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
-                            className="relative flex min-h-7 items-center gap-1.5 py-0.5 pl-[46px] pr-2 text-[11px] font-normal text-text-400 before:absolute before:left-[22px] before:h-px before:w-3 before:bg-border"
+                            className="grid min-h-7 grid-cols-[32px_minmax(0,1fr)] items-center gap-2 px-2 pt-2 pb-0.5 text-[11px]"
                           >
-                            <span className="tabular-nums">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
-                            <span className="min-w-0 truncate font-medium text-text-600">{subsection.title}</span>
+                            <span className="text-left tabular-nums text-text-400">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
+                            <span className="min-w-0 truncate font-medium text-text-400">{subsection.title}</span>
                           </div>,
                         );
                       }

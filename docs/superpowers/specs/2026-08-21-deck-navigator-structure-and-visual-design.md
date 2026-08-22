@@ -7,7 +7,7 @@
 1. 结构模型：section / subsection / slide 的挂载规则、编号、折叠、人工增删。
 2. 视觉呈现：编号权重、层级视觉、选中态。
 
-本设计**只定义决策与验收标准，不在本轮改动代码**。实现节奏由用户在 spec 审阅后单独决定。
+实现分两期（见"交付分期"）。第一期为纯前端视觉重构，随本设计落地；第二期为结构模型与人工增删，需前后端改动，单独规划。
 
 本设计在"页面挂载规则"上**取代** [2026-08-07-deck-navigator-redesign-design.md](2026-08-07-deck-navigator-redesign-design.md) 第 95 行"页面允许没有 subsection_id，是该 section 的直属页"这一条。其余（缩略图、移除机器字段、结构化 restructure 接口）继续有效。
 
@@ -54,12 +54,16 @@
 
 ## 视觉决策
 
-### D5 编号：页码为主角，结构编号为背景
+### D5 编号：阿拉伯层级，垂直对齐，靠权重区分
 
-- 页码：保留两位补零 `02`，作为唯一强调数字（用户跳转锚点）。
-- section 编号：去掉补零，`3` 而非 `03`；弱化为中性色，不再使用 accent 蓝作为最抢眼元素。
-- subsection 编号：保留 `3.2` 点分格式，压为浅灰小字。
-- 视觉权重排序：页码 > section > subsection。当前恰好相反（section 号用 accent 最抢眼），需扭转。
+- 编号体系：section=`1 2 3`，subsection=`1.1 1.2`，页码=两位补零 `02 03`。三层均为阿拉伯数字。
+- 垂直对齐：三层记号落在同一条最左记号栏，全部**左对齐**、宽度一致，不缩进、无竖向引导线。
+- 靠**字号 / 字重 / 颜色**区分层级权重，而非缩进或颜色抢眼度：
+  - 页码：最重（`text-text-600` 级、`font-semibold`），是导航主角。
+  - section 号：中性中灰、`font-semibold`，不再使用 accent 蓝。
+  - subsection 号：最浅（`text-text-400`）、小字。
+- 去除 section 号补零（`1` 而非 `01`）。
+- 视觉权重排序：页码 ≥ section > subsection。当前 section 号用 accent 蓝最抢眼，需扭转。
 
 ### D6 选中态：两个信号
 
@@ -68,14 +72,14 @@
 - 去掉：文字变 accent 色、`font-medium` 加粗。
 - 目标：选中态表达"当前位置"，而非"高亮内容"，风格向 Keynote 缩略图选中的克制感靠拢。
 
-## 交付分期建议
+## 交付分期
 
-- **第一期（视觉，低风险，纯前端）**：D3 折叠维持现状 + D5 编号弱化 + D6 选中降噪。只改 [DeckNavigator.tsx](../../frontend/src/features/deck/DeckNavigator.tsx)，不动契约。
+- **第一期（视觉，低风险，纯前端）＝本次落地**：D3 折叠维持现状 + D5 编号阿拉伯层级与垂直对齐 + D6 选中降噪。只改 [DeckNavigator.tsx](../../frontend/src/features/deck/DeckNavigator.tsx)，不动契约、不改后端。
 - **第二期（结构模型，高风险，前后端）**：D1/D2 严格两层 + D4 校验与 Agent 约束 + D3 人工增删。动后端 restructure 校验、outline 写路径与 Agent outline 约束。
 
 ## 非目标
 
-- 本轮不改动代码，只固化决策。
+- 本次（第一期）不改动数据结构、后端校验与 outline 写路径；不实现人工增删入口。
 - 不引入三层及以上 outline 结构。
 - 不改变缩略图、页面删除、拖拽落点的既有交互。
 - 不为历史混合结构数据设计兼容层（开发期原则）。
@@ -85,7 +89,7 @@
 1. section 只呈现两种形态之一（全直属 / 全归组），UI 与数据均不出现"subsection 与直属页混排"。
 2. 后端 restructure 拒绝违反 D4 互斥规则的 placement。
 3. 只有 section 级可折叠；subsection 恒平铺。
-4. 页码是视觉上最强调的数字；section / subsection 编号为从属背景。
+4. section=`1`、subsection=`1.1`、页码=`02` 三层记号左对齐、垂直对齐、不缩进无竖线；靠字号/字重/颜色区分权重，页码最重、section 号不再用 accent 蓝。
 5. 选中态仅由左侧竖条 + 极浅底色表达，文字不变色不加粗。
-6. 存在人工新增 / 删除 section 与 subsection 的入口，且经 restructure 快照协议提交并原子应用。
-7. 活跃 run 期间人工结构编辑被禁用。
+6. 存在人工新增 / 删除 section 与 subsection 的入口，且经 restructure 快照协议提交并原子应用。（第二期）
+7. 活跃 run 期间人工结构编辑被禁用。（第二期）
