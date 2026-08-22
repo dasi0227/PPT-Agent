@@ -6,7 +6,7 @@ Resource responsibilities:
 - deck:outline controls deck goal, audience, sections and stable slide order.
 - deck:design controls deck-wide visual system.
 - slide:<id>:spec controls semantic role, title, key message, ordered element intents and optional layout direction.
-- Runtime owns version, revision, project_id, slide_id and timestamps. Author stable section/subsection IDs in the outline, then use those IDs in every slide spec's section_id/subsection_id.
+- Runtime owns version, revision, project_id, slide_id and timestamps. Author stable section/subsection IDs in the outline, then use those IDs in every slide spec's section_id/subsection_id. Keep the strict two-level rule: a section is either direct (no subsections, pages set only section_id) or grouped (has subsections, every page sets an owned subsection_id); never mix the two under one section.
 
 Execution steps:
 1. Read the relevant spec resource if exact current content matters.

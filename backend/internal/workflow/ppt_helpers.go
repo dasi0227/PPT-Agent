@@ -375,18 +375,15 @@ func validateSlideReference(pack contextengine.ContextPack, tx *RunSession, slid
 	if err != nil {
 		return err
 	}
-	sections, subsections, ordered := map[string]bool{}, map[string]bool{}, false
-	for _, section := range deck.Sections {
-		sections[section.ID] = true
-		for _, subsection := range section.Subsections {
-			subsections[subsection.ID] = true
-		}
-	}
+	ordered := false
 	for _, id := range deck.SlideOrder {
 		ordered = ordered || id == slide.SlideID
 	}
-	if !ordered || !sections[slide.SectionID] || (slide.SubsectionID != "" && !subsections[slide.SubsectionID]) {
+	if !ordered {
 		return fmt.Errorf("%w: slide %s is not declared by the current outline", spec.ErrReferenceBroken, slide.SlideID)
+	}
+	if err := spec.BuildSectionIndex(deck.Sections).ValidatePlacement(slide.SectionID, slide.SubsectionID); err != nil {
+		return fmt.Errorf("%w: slide %s %v", spec.ErrReferenceBroken, slide.SlideID, err)
 	}
 	return nil
 }

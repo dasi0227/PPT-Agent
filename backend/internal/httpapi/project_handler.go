@@ -217,6 +217,44 @@ func (h *ProjectHandler) RestructureSlides(c *gin.Context) {
 		return
 	}
 	snapshot, err := h.slideSvc.RestructureSlides(c.Request.Context(), c.Param("id"), body.OrderedIDs, body.Placements)
+	h.writeStructureSnapshot(c, snapshot, err)
+}
+
+// AddSection POST /projects/:id/sections：追加一个空的直属形态章节。
+func (h *ProjectHandler) AddSection(c *gin.Context) {
+	var body struct {
+		Title string `json:"title"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	snapshot, err := h.slideSvc.AddSection(c.Request.Context(), c.Param("id"), body.Title)
+	h.writeStructureSnapshot(c, snapshot, err)
+}
+
+// RemoveSection DELETE /projects/:id/sections/:section_id：删除不再挂页的章节。
+func (h *ProjectHandler) RemoveSection(c *gin.Context) {
+	snapshot, err := h.slideSvc.RemoveSection(c.Request.Context(), c.Param("id"), c.Param("section_id"))
+	h.writeStructureSnapshot(c, snapshot, err)
+}
+
+// AddSubsection POST /projects/:id/sections/:section_id/subsections：为章节新增子节。
+func (h *ProjectHandler) AddSubsection(c *gin.Context) {
+	var body struct {
+		Title string `json:"title"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	snapshot, err := h.slideSvc.AddSubsection(c.Request.Context(), c.Param("id"), c.Param("section_id"), body.Title)
+	h.writeStructureSnapshot(c, snapshot, err)
+}
+
+// RemoveSubsection DELETE /projects/:id/sections/:section_id/subsections/:subsection_id：删除子节。
+func (h *ProjectHandler) RemoveSubsection(c *gin.Context) {
+	snapshot, err := h.slideSvc.RemoveSubsection(c.Request.Context(), c.Param("id"), c.Param("section_id"), c.Param("subsection_id"))
+	h.writeStructureSnapshot(c, snapshot, err)
+}
+
+// writeStructureSnapshot maps a StructureSnapshot result to the shared
+// {slides, spec} response and the standard structural-mutation error codes.
+func (h *ProjectHandler) writeStructureSnapshot(c *gin.Context, snapshot service.StructureSnapshot, err error) {
 	switch {
 	case err == nil:
 		out := make([]slideResponse, len(snapshot.Slides))

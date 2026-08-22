@@ -10,6 +10,10 @@ Canonical order:
 5. Render every generated HTML slide.
 6. Repair blocking render diagnostics and render affected slides again.
 
+Structure rule (strict two levels):
+- Each section is exactly one form: direct (no subsections; its pages set only section_id) or grouped (one or more subsections; every page sets a subsection_id owned by that section).
+- Never mix direct pages and subsections under the same section. Choose per section: leave subsections empty, or route all its pages through subsections.
+
 Quality expectations:
 - The deck should have one coherent narrative, not isolated pages.
 - Visual language should be consistent across all slides.

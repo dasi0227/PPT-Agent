@@ -25,4 +25,23 @@ export const slidesApi = {
       method: 'POST',
       body: JSON.stringify({ ordered_ids: orderedIds, placements }),
     }),
+  addSection: (projectId: string, title?: string) =>
+    fetchClient<ProjectContentSnapshot>(`/projects/${projectId}/sections`, {
+      method: 'POST',
+      body: JSON.stringify(title ? { title } : {}),
+    }),
+  removeSection: (projectId: string, sectionId: string) =>
+    fetchClient<ProjectContentSnapshot>(`/projects/${projectId}/sections/${encodeURIComponent(sectionId)}`, {
+      method: 'DELETE',
+    }),
+  addSubsection: (projectId: string, sectionId: string, title?: string) =>
+    fetchClient<ProjectContentSnapshot>(`/projects/${projectId}/sections/${encodeURIComponent(sectionId)}/subsections`, {
+      method: 'POST',
+      body: JSON.stringify(title ? { title } : {}),
+    }),
+  removeSubsection: (projectId: string, sectionId: string, subsectionId: string) =>
+    fetchClient<ProjectContentSnapshot>(
+      `/projects/${projectId}/sections/${encodeURIComponent(sectionId)}/subsections/${encodeURIComponent(subsectionId)}`,
+      { method: 'DELETE' },
+    ),
 };

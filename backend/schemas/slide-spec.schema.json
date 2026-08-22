@@ -40,11 +40,13 @@
     },
     "section_id": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
+      "description": "The owning outline section. Required for every slide."
     },
     "subsection_id": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
+      "description": "Required and must belong to section_id when that section is grouped (has subsections); must be omitted when that section is direct (no subsections)."
     },
     "role": {
       "type": "string",

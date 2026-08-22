@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -259,14 +260,7 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 		return StructureSnapshot{}, validationError("placements must contain every slide exactly once")
 	}
 
-	sectionIDs := make(map[string]bool, len(view.Outline.Sections))
-	subsectionOwners := map[string]string{}
-	for _, section := range view.Outline.Sections {
-		sectionIDs[section.ID] = true
-		for _, subsection := range section.Subsections {
-			subsectionOwners[subsection.ID] = section.ID
-		}
-	}
+	sectionIndex := spec.BuildSectionIndex(view.Outline.Sections)
 
 	seen := map[string]bool{}
 	nextSpecs := make(map[string]spec.SlideSpec, len(view.SlideSpecs))
@@ -288,11 +282,8 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 		if !ok {
 			return StructureSnapshot{}, validationError("placement references unknown slide_id %s", placement.SlideID)
 		}
-		if !sectionIDs[placement.SectionID] {
-			return StructureSnapshot{}, validationError("placement references unknown section_id %s", placement.SectionID)
-		}
-		if placement.SubsectionID != "" && subsectionOwners[placement.SubsectionID] != placement.SectionID {
-			return StructureSnapshot{}, validationError("placement subsection_id %s does not belong to section_id %s", placement.SubsectionID, placement.SectionID)
+		if err := sectionIndex.ValidatePlacement(placement.SectionID, placement.SubsectionID); err != nil {
+			return StructureSnapshot{}, validationError("placement %s", err)
 		}
 		next := current
 		if next.SectionID != placement.SectionID || next.SubsectionID != placement.SubsectionID {
@@ -316,25 +307,7 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 		return StructureSnapshot{}, validationError("%v", err)
 	}
 
-	rollbackSpecs := map[string][]byte{}
-	for id, next := range changed {
-		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id)))
-		raw, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return StructureSnapshot{}, readErr
-		}
-		rollbackSpecs[id] = raw
-		if err := atomicWrite(path, mustJSON(next)); err != nil {
-			for rollbackID, rollbackRaw := range rollbackSpecs {
-				_ = atomicWrite(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(rollbackID))), rollbackRaw)
-			}
-			return StructureSnapshot{}, err
-		}
-	}
-	if _, err := NewSpecService(svc.store).ReplaceOutline(ctx, projectID, view.Outline.Revision, nextOutline); err != nil {
-		for id, raw := range rollbackSpecs {
-			_ = atomicWrite(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id))), raw)
-		}
+	if err := svc.persistStructureChange(ctx, project, projectID, view.Outline.Revision, nextOutline, changed); err != nil {
 		return StructureSnapshot{}, err
 	}
 	positions := make(map[string]int, len(orderedIDs))
@@ -345,6 +318,57 @@ func (svc *SlideService) RestructureSlides(ctx context.Context, projectID string
 		return StructureSnapshot{}, err
 	}
 	return svc.readStructureSnapshot(ctx, projectID)
+}
+
+// persistStructureChange writes the changed slide specs and the next outline
+// atomically. The caller must have already validated that nextOutline and the
+// changed specs are mutually consistent (strict two-level), because the section
+// form may flip (direct↔grouped) — a state that is only valid when outline and
+// specs are written together. Any write failure rolls every touched file back to
+// its previous bytes. It does not touch slide ordering; callers that reorder call
+// SetSlidesOrder after.
+func (svc *SlideService) persistStructureChange(ctx context.Context, project model.Project, projectID string, expectedRev int, nextOutline spec.Outline, changed map[string]spec.SlideSpec) error {
+	outlinePath := filepath.Join(project.WorkDir, "outline.json")
+	outlineRollback, err := os.ReadFile(outlinePath)
+	if err != nil {
+		return err
+	}
+	var current spec.Outline
+	if err := json.Unmarshal(outlineRollback, &current); err != nil {
+		return err
+	}
+	if current.Revision != expectedRev {
+		return ErrSpecRevisionConflict
+	}
+	nextOutline.SchemaVersion = spec.SchemaVersion
+	nextOutline.ProjectID = projectID
+	nextOutline.UpdatedAt = svc.clock()
+
+	rollbackSpecs := map[string][]byte{}
+	restore := func() {
+		_ = atomicWrite(outlinePath, outlineRollback)
+		for id, raw := range rollbackSpecs {
+			_ = atomicWrite(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id))), raw)
+		}
+	}
+	for id, next := range changed {
+		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id)))
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			restore()
+			return readErr
+		}
+		rollbackSpecs[id] = raw
+		if err := atomicWrite(path, mustJSON(next)); err != nil {
+			restore()
+			return err
+		}
+	}
+	if err := atomicWrite(outlinePath, mustJSON(nextOutline)); err != nil {
+		restore()
+		return err
+	}
+	return nil
 }
 
 func (svc *SlideService) readStructureSnapshot(ctx context.Context, projectID string) (StructureSnapshot, error) {

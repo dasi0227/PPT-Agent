@@ -3,7 +3,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { useUIStore } from '../../stores/uiStore';
-import type { Slide } from '../../api/types';
+import type { ProjectContentSnapshot, Slide } from '../../api/types';
 import { SlidePlacement, slidesApi } from '../../api/slides';
 import { cn } from '../../lib/utils';
 import { Layers, FileText, Plus, Trash2, Presentation, PanelLeftClose, ArrowUp, ArrowDown, ChevronDown } from 'lucide-react';
@@ -138,6 +138,11 @@ export const DeckNavigator: React.FC = () => {
   const [structureUpdating, setStructureUpdating] = useState(false);
 
   const [slideToDelete, setSlideToDelete] = useState<{id: string, title: string} | null>(null);
+  const [structureToDelete, setStructureToDelete] = useState<
+    | { kind: 'section'; sectionId: string; title: string }
+    | { kind: 'subsection'; sectionId: string; subsectionId: string; title: string; fallsBackToDirect: boolean }
+    | null
+  >(null);
 
   const project = projects.find(p => p.id === activeProjectId);
   const slides = useMemo(
@@ -306,6 +311,46 @@ export const DeckNavigator: React.FC = () => {
     }
   };
 
+  // runStructureMutation drives the manual add/remove-section/subsection calls:
+  // they all return the authoritative {slides, spec} snapshot, applied atomically.
+  const runStructureMutation = async (
+    mutate: (projectId: string) => Promise<ProjectContentSnapshot>,
+    failureText: string,
+  ): Promise<boolean> => {
+    const projectId = activeProjectId;
+    if (!projectId || runActive || structureUpdating) return false;
+    setOperationError('');
+    setStructureUpdating(true);
+    try {
+      const snapshot = await mutate(projectId);
+      applyProjectContentSnapshot(projectId, snapshot);
+      return true;
+    } catch (error) {
+      setOperationError(error instanceof Error ? `${error.message}。请重试。` : failureText);
+      return false;
+    } finally {
+      setStructureUpdating(false);
+    }
+  };
+
+  const handleAddSection = () =>
+    void runStructureMutation((projectId) => slidesApi.addSection(projectId), '新增章节失败，请重试。');
+
+  const handleAddSubsection = (sectionId: string) =>
+    void runStructureMutation((projectId) => slidesApi.addSubsection(projectId, sectionId), '新增子节失败，请重试。');
+
+  const confirmStructureDelete = async () => {
+    if (!structureToDelete) return;
+    const target = structureToDelete;
+    const ok = await runStructureMutation(
+      (projectId) => target.kind === 'section'
+        ? slidesApi.removeSection(projectId, target.sectionId)
+        : slidesApi.removeSubsection(projectId, target.sectionId, target.subsectionId),
+      target.kind === 'section' ? '删除章节失败，请重试。' : '删除子节失败，请重试。',
+    );
+    if (!ok) throw new Error(operationError || '删除失败');
+  };
+
   const moveEntry = (slideId: string, targetPlacement: Omit<SlidePlacement, 'slide_id'>, beforeSlideId?: string) => {
     const source = directoryEntries.find((entry) => entry.slide.id === slideId);
     if (!source) return;
@@ -444,6 +489,50 @@ export const DeckNavigator: React.FC = () => {
     );
   };
 
+  // renderSubsectionHeading draws a subsection label plus a hover delete control.
+  // ownsPage + subsectionCount decide the confirm copy: a lone subsection that
+  // owns pages drops them to direct; deleting one among several requires it empty.
+  const renderSubsectionHeading = (
+    section: DirectorySection,
+    subsection: DirectorySubsection,
+    keySuffix: string,
+  ) => {
+    const ownsPage = subsection.slides.length > 0;
+    const fallsBackToDirect = ownsPage && section.subsections.length === 1;
+    return (
+      <div
+        key={`${section.id}:${subsection.id}:${keySuffix}`}
+        onDragOver={handleDragOver}
+        onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
+        className="group/sub relative grid min-h-7 grid-cols-[32px_minmax(0,1fr)] items-center gap-2 px-2 pt-2 pb-0.5 text-[11px]"
+      >
+        <span className="text-left tabular-nums text-text-400">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
+        <span className="min-w-0 truncate font-medium text-text-400">{subsection.title}</span>
+        {!runActive && (
+          <div className="pointer-events-none absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center bg-gradient-to-r from-transparent via-panel to-panel pl-6 opacity-0 transition-opacity group-hover/sub:pointer-events-auto group-hover/sub:opacity-100 group-focus-within/sub:pointer-events-auto group-focus-within/sub:opacity-100">
+            <IconButton
+              label="删除本子节"
+              className="h-5 w-5 hover:bg-danger-soft hover:text-danger"
+              disabled={structureUpdating}
+              onClick={(event) => {
+                event.stopPropagation();
+                setStructureToDelete({
+                  kind: 'subsection',
+                  sectionId: section.id,
+                  subsectionId: subsection.id,
+                  title: subsection.title,
+                  fallsBackToDirect,
+                });
+              }}
+            >
+              <Trash2 className="h-3 w-3" />
+            </IconButton>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full bg-panel">
       <div className="h-12 border-b border-border flex items-center justify-between px-3 shrink-0 bg-panel">
@@ -491,33 +580,58 @@ export const DeckNavigator: React.FC = () => {
                   <section
                     key={section.id}
                     className={cn(
-                      "mb-1.5 rounded-lg transition-colors",
+                      "group/section mb-1.5 rounded-lg transition-colors",
                       expanded && "bg-white/50",
                     )}
                   >
-                    <button
-                      type="button"
-                      aria-expanded={expanded}
-                      aria-label={`${expanded ? '收起' : '展开'}第 ${formatDirectoryNumber(section.number, 'section')} 章 ${section.title}`}
-                      onClick={() => toggleSection(section.id)}
-                      onDragOver={handleDragOver}
-                      onDrop={(event) => handleGroupDrop(event, { section_id: section.id })}
-                      className="grid min-h-10 w-full grid-cols-[32px_minmax(0,1fr)_20px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-text-900 hover:bg-black/[0.04]"
-                    >
-                      <span className="text-left text-[13px] font-semibold tabular-nums text-text-600">
-                        {formatDirectoryNumber(section.number, 'section')}
-                      </span>
-                      <span className="min-w-0 truncate text-[13px] font-semibold" title={section.title}>
-                        {section.title}
-                      </span>
-                      <ChevronDown
-                        aria-hidden="true"
-                        className={cn(
-                          "h-4 w-4 text-text-400 transition-transform duration-150 motion-reduce:transition-none",
-                          !expanded && "-rotate-90",
-                        )}
-                      />
-                    </button>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-label={`${expanded ? '收起' : '展开'}第 ${formatDirectoryNumber(section.number, 'section')} 章 ${section.title}`}
+                        onClick={() => toggleSection(section.id)}
+                        onDragOver={handleDragOver}
+                        onDrop={(event) => handleGroupDrop(event, { section_id: section.id })}
+                        className="grid min-h-10 w-full grid-cols-[32px_minmax(0,1fr)_20px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-text-900 hover:bg-black/[0.04]"
+                      >
+                        <span className="text-left text-[13px] font-semibold tabular-nums text-text-600">
+                          {formatDirectoryNumber(section.number, 'section')}
+                        </span>
+                        <span className="min-w-0 truncate text-[13px] font-semibold" title={section.title}>
+                          {section.title}
+                        </span>
+                        <ChevronDown
+                          aria-hidden="true"
+                          className={cn(
+                            "h-4 w-4 text-text-400 transition-transform duration-150 motion-reduce:transition-none",
+                            !expanded && "-rotate-90",
+                          )}
+                        />
+                      </button>
+                      {!runActive && (
+                        <div className="pointer-events-none absolute right-6 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 bg-gradient-to-r from-transparent via-panel to-panel pl-6 opacity-0 transition-opacity group-hover/section:pointer-events-auto group-hover/section:opacity-100 group-focus-within/section:pointer-events-auto group-focus-within/section:opacity-100">
+                          <IconButton
+                            label="新增子节"
+                            className="h-6 w-6"
+                            disabled={structureUpdating}
+                            onClick={(event) => { event.stopPropagation(); handleAddSubsection(section.id); }}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </IconButton>
+                          <IconButton
+                            label="删除本章"
+                            className="h-6 w-6 hover:bg-danger-soft hover:text-danger"
+                            disabled={structureUpdating}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setStructureToDelete({ kind: 'section', sectionId: section.id, title: section.title });
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </IconButton>
+                        </div>
+                      )}
+                    </div>
                     <div
                       aria-hidden={!expanded}
                       ref={(node) => node?.toggleAttribute('inert', !expanded)}
@@ -537,34 +651,14 @@ export const DeckNavigator: React.FC = () => {
                         const subsection = subsectionID ? subsectionByID.get(subsectionID) : undefined;
                         if (subsection && !renderedSubsections.has(subsection.id)) {
                           renderedSubsections.add(subsection.id);
-                          rows.push(
-                            <div
-                              key={`${section.id}:${subsection.id}:heading`}
-                              onDragOver={handleDragOver}
-                              onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
-                              className="grid min-h-7 grid-cols-[32px_minmax(0,1fr)] items-center gap-2 px-2 pt-2 pb-0.5 text-[11px]"
-                            >
-                              <span className="text-left tabular-nums text-text-400">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
-                              <span className="min-w-0 truncate font-medium text-text-400">{subsection.title}</span>
-                            </div>,
-                          );
+                          rows.push(renderSubsectionHeading(section, subsection, 'heading'));
                         }
                         rows.push(renderSlideRow(entry, renderedIndex));
                         renderedIndex += 1;
                       }
                       for (const subsection of section.subsections) {
                         if (renderedSubsections.has(subsection.id)) continue;
-                        rows.push(
-                          <div
-                            key={`${section.id}:${subsection.id}:empty-heading`}
-                            onDragOver={handleDragOver}
-                            onDrop={(event) => handleGroupDrop(event, { section_id: section.id, subsection_id: subsection.id })}
-                            className="grid min-h-7 grid-cols-[32px_minmax(0,1fr)] items-center gap-2 px-2 pt-2 pb-0.5 text-[11px]"
-                          >
-                            <span className="text-left tabular-nums text-text-400">{formatDirectoryNumber(subsection.number, 'subsection')}</span>
-                            <span className="min-w-0 truncate font-medium text-text-400">{subsection.title}</span>
-                          </div>,
-                        );
+                        rows.push(renderSubsectionHeading(section, subsection, 'empty-heading'));
                       }
                       return rows;
                     })()}
@@ -577,14 +671,22 @@ export const DeckNavigator: React.FC = () => {
             )}
           </div>
 
-          <div className="p-2 border-t border-border">
+          <div className="grid grid-cols-2 gap-1 border-t border-border p-2">
             <button
               onClick={() => void handleAdd()}
               disabled={runActive}
               title={runActive ? 'AI 运行中，暂不可编辑结构' : '在末尾加一页'}
-              className="w-full flex items-center justify-center px-3 py-2 rounded-md text-sm text-text-600 hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center justify-center px-3 py-2 rounded-md text-sm text-text-600 hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <Plus className="w-4 h-4 mr-1" /> 加页
+            </button>
+            <button
+              onClick={handleAddSection}
+              disabled={runActive || structureUpdating}
+              title={runActive ? 'AI 运行中，暂不可编辑结构' : '在末尾新增章节'}
+              className="flex items-center justify-center px-3 py-2 rounded-md text-sm text-text-600 hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Plus className="w-4 h-4 mr-1" /> 新增章节
             </button>
           </div>
 
@@ -596,6 +698,22 @@ export const DeckNavigator: React.FC = () => {
             variant="danger"
             confirmLabel="删除"
             onConfirm={confirmDelete}
+          />
+
+          <ConfirmModal
+            open={!!structureToDelete}
+            onOpenChange={(open) => !open && setStructureToDelete(null)}
+            title={structureToDelete?.kind === 'section' ? '删除章节' : '删除子节'}
+            description={
+              structureToDelete?.kind === 'section'
+                ? `确认删除章节「${structureToDelete.title || '未命名'}」吗？此操作不可撤销。`
+                : structureToDelete?.fallsBackToDirect
+                  ? `确认删除子节「${structureToDelete?.title || '未命名'}」吗？其页面将回落为本章直属页。`
+                  : `确认删除子节「${structureToDelete?.title || '未命名'}」吗？此操作不可撤销。`
+            }
+            variant="danger"
+            confirmLabel="删除"
+            onConfirm={confirmStructureDelete}
           />
         </>
       )}

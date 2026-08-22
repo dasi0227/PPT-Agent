@@ -65,6 +65,7 @@
     "sections": {
       "type": "array",
       "maxItems": 32,
+      "description": "Strict two-level structure. A section is exactly one form: direct (subsections empty, its pages set only section_id) or grouped (one or more subsections, every page of that section must set a subsection_id owned by it). A section must never mix direct pages with subsections.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -87,6 +88,7 @@
           "subsections": {
             "type": "array",
             "maxItems": 64,
+            "description": "Empty means the section is direct and its pages carry no subsection_id. Non-empty means the section is grouped and every one of its pages must belong to one of these subsections.",
             "items": {
               "type": "object",
               "additionalProperties": false,
