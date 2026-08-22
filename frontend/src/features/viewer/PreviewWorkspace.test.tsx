@@ -190,7 +190,9 @@ describe('PreviewWorkspace', () => {
     const firstTile = screen.getByTestId('overview-slide-s1');
     expect(within(firstTile).getByText('01')).toHaveClass('bg-panel-muted');
     expect(within(firstTile).getByText('封面')).toHaveClass('bg-accent-soft');
-    expect(within(firstTile).getByText('封面标题')).toHaveClass('line-clamp-2', 'h-[44px]');
+    const firstTitle = within(firstTile).getByText('封面标题');
+    expect(firstTitle).toHaveClass('line-clamp-2');
+    expect(firstTitle.parentElement).toHaveClass('h-[44px]');
     expect(within(firstTile).queryByText('要点一')).toBeNull();
     expect(firstTile.querySelector('article')).toBeNull();
     expect(screen.getByText('全局视觉规范').closest('section')).toHaveClass('rounded-xl', 'border');

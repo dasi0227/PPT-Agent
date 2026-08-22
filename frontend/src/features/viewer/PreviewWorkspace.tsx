@@ -168,9 +168,11 @@ function OverviewSlide({
               {slideRoleLabel(spec.role)}
             </span>
           </div>
-          <h2 className="mt-6 h-[44px] line-clamp-2 text-[17px] font-semibold leading-[22px] text-text-900">
-            {title}
-          </h2>
+          <div className="mt-6 h-[44px]">
+            <h2 className="line-clamp-2 text-[17px] font-semibold leading-[22px] text-text-900">
+              {title}
+            </h2>
+          </div>
         </div>
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-5 text-center">
