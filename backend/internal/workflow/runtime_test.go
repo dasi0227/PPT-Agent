@@ -41,6 +41,18 @@ type scriptedReviewer struct {
 	err    error
 }
 
+type capturingProvider struct {
+	request llm.GenerateRequest
+}
+
+func (p *capturingProvider) Name() string                   { return "capture" }
+func (p *capturingProvider) Model() string                  { return "capture-model" }
+func (p *capturingProvider) Capabilities() llm.Capabilities { return llm.Capabilities{ToolCalls: true} }
+func (p *capturingProvider) Generate(_ context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
+	p.request = request
+	return llm.GenerateResponse{}, nil
+}
+
 func (r *scriptedReviewer) Review(_ context.Context, input SemanticReviewInput) (SemanticReviewResult, error) {
 	r.inputs = append(r.inputs, input)
 	if r.err != nil {
@@ -355,7 +367,7 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 		messages[0].Text() != "这是尚未通过 finish 提交的分析。" {
 		t.Fatalf("assistant text was not retained: %+v", messages[0])
 	}
-	if messages[1].Role != llm.RoleUser || messages[1].Text() != noToolCallGuidance {
+	if messages[1].Role != llm.RoleUser || messages[1].Text() != noToolCallGuidance(model.ModeTalk) {
 		t.Fatalf("explicit finish guidance missing: %+v", messages[1])
 	}
 	if events.count(model.EventMessageFinal) != 1 || events.count(model.EventRunFinished) != 1 {
@@ -511,20 +523,43 @@ func TestContextCompactionDropsOnlySupersededSlideImages(t *testing.T) {
 	}
 }
 
-func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryIntent(t *testing.T) {
+func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 	for _, mode := range []model.RunMode{
 		model.ModeTalk, model.ModeAsk, model.ModePlan, model.ModeExecute,
 	} {
-		prompt := runtimeSystemPrompt(PhaseExecuting, mode, "{}")
+		phase := PhaseChat
+		if mode == model.ModePlan {
+			phase = PhasePlanning
+		}
+		if mode == model.ModeExecute {
+			phase = PhaseExecuting
+		}
+		prompt := runtimeSystemPromptForRequest(AgentRequest{
+			Phase: phase, Mode: mode,
+			Context: testPack(mode, model.ArtifactPPT, model.ScopeDeck, false, "检查 Prompt 装配"),
+		})
 		if !strings.Contains(prompt, `<prompt_module id="core_runtime_policy" version="`) ||
-			!strings.Contains(prompt, `<prompt_module id="finish_contract" version="`) ||
-			!strings.Contains(prompt, `<prompt_module id="ppt_quality_rubric" version="`) ||
 			!strings.Contains(prompt, `path="core/core_runtime_policy.md"`) ||
 			!strings.Contains(prompt, `hash="`) {
 			t.Fatalf("%s prompt is not assembled from versioned modules: %q", mode, prompt)
 		}
-		if !strings.Contains(prompt, "Ordinary assistant text is never a completion signal. Every successful run must end with finish(message=...).") {
-			t.Fatalf("%s prompt does not require explicit finish: %q", mode, prompt)
+		hasFinish := strings.Contains(prompt, `id="finish_contract"`)
+		hasQuality := strings.Contains(prompt, `id="ppt_quality_rubric"`)
+		hasRepair := strings.Contains(prompt, `id="completion_repair_guide"`)
+		hasContracts := strings.Contains(prompt, `id="resource_contracts"`)
+		switch mode {
+		case model.ModeTalk, model.ModeAsk:
+			if !hasFinish || hasQuality || hasRepair || hasContracts {
+				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
+			}
+		case model.ModePlan:
+			if hasFinish || !hasQuality || hasRepair || !hasContracts {
+				t.Fatalf("plan prompt contains wrong conditional modules: %q", prompt)
+			}
+		case model.ModeExecute:
+			if !hasFinish || !hasQuality || !hasRepair || !hasContracts {
+				t.Fatalf("execute prompt is missing required conditional modules: %q", prompt)
+			}
 		}
 	}
 	schemas := controlSchemas(PhaseChat, model.ModeTalk, nil)
@@ -536,23 +571,30 @@ func TestRuntimePromptAndFinishSchemaRequireExplicitFinishForEveryIntent(t *test
 			finishParameters = schema.Parameters
 		}
 	}
-	if !strings.Contains(finishDescription, "所有 Run 的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。") {
+	if !strings.Contains(finishDescription, "Submit the complete final user-facing response") ||
+		!strings.Contains(finishDescription, "Ordinary assistant text is not a completion signal") {
 		t.Fatalf("finish schema description=%q", finishDescription)
 	}
 	properties, _ := finishParameters["properties"].(map[string]any)
 	if len(properties) != 1 || properties["message"] == nil {
 		t.Fatalf("finish schema must expose only message: %+v", finishParameters)
 	}
-	planPrompt := runtimeSystemPrompt(PhasePlanning, model.ModePlan, "{}")
+	planPrompt := runtimeSystemPrompt(PhasePlanning, model.ModePlan)
 	if !strings.Contains(planPrompt, "Plan Mode is read-only") ||
-		!strings.Contains(planPrompt, "call create_plan") {
+		!strings.Contains(planPrompt, "submit the complete proposal with create_plan") {
 		t.Fatalf("plan prompt missing plan-mode guidance: %q", planPrompt)
+	}
+	if schemasByName(controlSchemas(PhasePlanning, model.ModePlan, nil))["finish"] {
+		t.Fatal("plan mode disclosed finish")
 	}
 }
 
 func TestRuntimePromptAgentContractsDoNotRequireManagedFields(t *testing.T) {
-	prompt := runtimeSystemPrompt(PhaseExecuting, model.ModeExecute, "{}")
-	prefix := "Authoritative schema contracts:\n"
+	prompt := runtimeSystemPromptForRequest(AgentRequest{
+		Phase: PhaseExecuting, Mode: model.ModeExecute,
+		Context: testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeDeck, false, "生成整套演示文稿"),
+	})
+	prefix := "Authoritative writable model contracts:\n"
 	start := strings.Index(prompt, prefix)
 	if start < 0 {
 		t.Fatal("compiled contracts are missing from the system prompt")
@@ -590,14 +632,56 @@ func TestRuntimePromptUsesModeSpecificModulesAndContextBriefing(t *testing.T) {
 	execute := runtimeSystemPromptForRequest(AgentRequest{
 		Phase: PhaseExecuting, Mode: model.ModeExecute,
 		Context: pack, ContextBriefing: "Objective: optimize visual hierarchy",
-	}, "{}")
+	})
 	if !strings.Contains(execute, `id="mode_policy_execute"`) ||
 		!strings.Contains(execute, `id="playbook_slide_presentation_edit"`) ||
 		!strings.Contains(execute, `path="playbooks/slide_presentation_edit.md"`) ||
 		!strings.Contains(execute, "single-slide presentation edit") ||
-		!strings.Contains(execute, "update_plan is optional") ||
-		!strings.Contains(execute, "Objective: optimize visual hierarchy") {
+		!strings.Contains(execute, "Simple local work may proceed directly") {
 		t.Fatalf("execute prompt missing cognitive modules:\n%s", execute)
+	}
+	if strings.Contains(execute, "Objective: optimize visual hierarchy") || strings.Contains(execute, `id="runtime_state"`) {
+		t.Fatalf("dynamic context leaked into system prompt:\n%s", execute)
+	}
+	dynamic := runtimeTaskStateForRequest(AgentRequest{
+		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack,
+		ContextBriefing: "Working set: current slide",
+	})
+	if !strings.Contains(dynamic, "Working set: current slide") {
+		t.Fatalf("dynamic context missing from runtime state: %s", dynamic)
+	}
+}
+
+func TestCognitiveAgentPlacesTaskStateOnlyInUserMessage(t *testing.T) {
+	provider := &capturingProvider{}
+	pack := testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "把标题改成季度总结")
+	plan := &Plan{
+		ID: "plan-trust", Revision: 2, ApprovedRevision: 1, Status: PlanActive,
+		Title: "批准计划", Content: "只修改标题",
+	}
+	plan.ApprovedContentHash = plan.ContentHash()
+	requirements := NewRequirementLedger(pack.Command)
+	_, err := (CognitiveAgent{Provider: provider}).Next(context.Background(), AgentRequest{
+		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack, Plan: plan,
+		Requirements: requirements, ContextBriefing: "Working set: title only",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.request.Messages) < 2 || provider.request.Messages[0].Role != llm.RoleSystem || provider.request.Messages[1].Role != llm.RoleUser {
+		t.Fatalf("unexpected message roles: %+v", provider.request.Messages)
+	}
+	system, user := provider.request.Messages[0].Text(), provider.request.Messages[1].Text()
+	for _, dynamic := range []string{"把标题改成季度总结", "只修改标题", "Working set: title only", "req_01"} {
+		if strings.Contains(system, dynamic) {
+			t.Fatalf("dynamic task data %q leaked into system prompt: %s", dynamic, system)
+		}
+		if !strings.Contains(user, dynamic) {
+			t.Fatalf("dynamic task data %q missing from user message: %s", dynamic, user)
+		}
+	}
+	if !strings.Contains(user, "untrusted runtime input") || !strings.Contains(user, `"plan_authority":"approved_execution_contract"`) {
+		t.Fatalf("user message lacks trust boundary or plan authority: %s", user)
 	}
 }
 
@@ -610,13 +694,18 @@ func TestEveryApprovedExecuteTurnInjectsTheFullPlanContract(t *testing.T) {
 			Steps: []PlanStep{{ID: "step-1", Title: "生成并验证页面", Status: PlanStepCompleted}},
 		}
 		plan.ApprovedContentHash = plan.ContentHash()
-		prompt := runtimeSystemPromptForRequest(AgentRequest{
+		req := AgentRequest{
 			Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack, Plan: plan,
 			Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("compacted history")}},
-		}, "{}")
-		for _, expected := range []string{`id="approved_plan"`, `"plan_id":"plan-1"`, `"approved_revision":2`, "## 权威正文", `"id":"step-1"`, `"status":"completed"`} {
-			if !strings.Contains(prompt, expected) {
-				t.Fatalf("status=%s approved plan module missing %q:\n%s", status, expected, prompt)
+		}
+		prompt := runtimeSystemPromptForRequest(req)
+		if strings.Contains(prompt, "## 权威正文") || strings.Contains(prompt, `id="approved_plan"`) {
+			t.Fatalf("status=%s approved plan leaked into system prompt:\n%s", status, prompt)
+		}
+		dynamic := runtimeTaskStateForRequest(req)
+		for _, expected := range []string{`"plan_authority":"approved_execution_contract"`, `"plan_id":"plan-1"`, `"approved_revision":2`, "## 权威正文", `"id":"step-1"`, `"status":"completed"`} {
+			if !strings.Contains(dynamic, expected) {
+				t.Fatalf("status=%s approved plan runtime data missing %q:\n%s", status, expected, dynamic)
 			}
 		}
 	}
@@ -694,10 +783,11 @@ func TestAgentRequestCarriesContextBriefingAndRequirementLedger(t *testing.T) {
 	}
 	req := agent.requests[0]
 	if req.Requirements == nil || len(req.Requirements.Items) == 0 ||
-		!strings.Contains(req.ContextBriefing, "Objective: 分析当前页结构") ||
-		!strings.Contains(req.ContextBriefing, "Requirement ledger:") ||
 		!strings.Contains(req.ContextBriefing, "Working set:") {
 		t.Fatalf("request missing cognitive context: briefing=%q requirements=%+v", req.ContextBriefing, req.Requirements)
+	}
+	if strings.Contains(req.ContextBriefing, "分析当前页结构") || strings.Contains(req.ContextBriefing, "Requirement ledger:") {
+		t.Fatalf("context briefing duplicated user or requirement text: %q", req.ContextBriefing)
 	}
 }
 
@@ -708,7 +798,7 @@ func TestFinishMessageEmptyRejectsEmptyMessage(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "strict-finish", ProjectDir: t.TempDir(),
-		Context:         testPack(model.ModePlan, model.ArtifactSpec, model.ScopeDeck, false, "生成计划"),
+		Context:         testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "给出完整分析"),
 		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
 		SemanticReviews: acceptingReviewer{},
 	})
@@ -747,7 +837,7 @@ func TestReviewCompletionReturnsChecksToSameLoop(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "review-tool", ProjectDir: t.TempDir(),
-		Context:         testPack(model.ModePlan, model.ArtifactSpec, model.ScopeDeck, false, "检查计划"),
+		Context:         testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeDeck, false, "检查执行结果"),
 		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
 		SemanticReviews: reviewer,
 	})
@@ -804,32 +894,26 @@ func TestExecuteLetsAgentCreatePlanWithoutChangingPhase(t *testing.T) {
 	}
 }
 
-func TestPlanInteractionFinishesWithoutPlanSnapshotOrWriteSession(t *testing.T) {
-	dir := testProject(t, ArtifactSlideSpec)
-	agent := &scriptedAgent{responses: []AgentResponse{
-		finishCall("finish"),
-	}}
-	events := &eventRecorder{}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "plan-only", ProjectDir: dir,
-		Context:         testPack(model.ModePlan, model.ArtifactSpec, model.ScopeSlide, false, "规划当前页优化"),
-		Emitter:         events,
-		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
-		SemanticReviews: acceptingReviewer{},
-	})
-	if outcome.Status != StatusCompleted || len(outcome.Changes.All()) != 0 {
-		t.Fatalf("outcome=%+v", outcome)
+func TestPlanInteractionRequiresPlanControlInsteadOfFinish(t *testing.T) {
+	control := controlSchemas(PhasePlanning, model.ModePlan, nil)
+	schemas := schemasByName(control)
+	if !schemas["create_plan"] || schemas["finish"] {
+		t.Fatalf("plan control disclosure mismatch: %+v", schemas)
 	}
-	if agent.requests[0].Phase != PhasePlanning {
-		t.Fatalf("plan request=%+v", agent.requests[0])
-	}
-	for _, schema := range agent.requests[0].Tools {
-		if schema.Name == "write_ppt" || schema.Name == "edit_ppt" || schema.Name == "update_plan" {
-			t.Fatalf("plan mode disclosed write/progress tool: %+v", agent.requests[0].Tools)
+	for _, schema := range control {
+		if schema.Name != "review_completion" {
+			continue
+		}
+		if strings.Contains(schema.Description, "final message") || strings.Contains(fmt.Sprint(schema.Parameters), "finish(message") {
+			t.Fatalf("plan reviewer schema refers to execute completion: %+v", schema)
 		}
 	}
-	if events.count(model.EventPlanUpdated) != 0 || events.count(model.EventMessageFinal) != 1 {
-		t.Fatalf("events=%+v", events.events)
+	if finishAllowed(model.ModePlan, PhasePlanning) {
+		t.Fatal("completion gate accepted finish in plan mode")
+	}
+	if !strings.Contains(noToolCallGuidance(model.ModePlan), "Use create_plan") ||
+		strings.Contains(noToolCallGuidance(model.ModePlan), "finish(message") {
+		t.Fatalf("plan no-call guidance is inconsistent: %q", noToolCallGuidance(model.ModePlan))
 	}
 }
 
@@ -1176,7 +1260,7 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 	if execute.Mode != model.ModeExecute || execute.Phase != PhaseExecuting || execute.Context.Command.Mode != model.ModeExecute ||
 		execute.Context.Manifest.ReadOnly || execute.Context.Manifest.ContextID != "ctx_execute" || execute.Plan == nil ||
 		execute.Plan.ApprovedRevision != 1 || execute.Plan.ApprovedContentHash != execute.Plan.ContentHash() ||
-		!strings.Contains(execute.ContextBriefing, "mode=execute") || !schemasByName(execute.Tools)["write_ppt"] {
+		!strings.Contains(execute.ContextBriefing, "Plan:") || !schemasByName(execute.Tools)["write_ppt"] {
 		t.Fatalf("execute request did not use approved authority: %+v", execute)
 	}
 	if events.count(model.EventPlanApprovalAnswered) != 1 || events.count(model.EventRunModeChanged) != 1 || events.count(model.EventPlanUpdated) != 3 {

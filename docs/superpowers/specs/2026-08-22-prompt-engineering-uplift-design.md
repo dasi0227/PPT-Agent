@@ -1,5 +1,7 @@
 # Prompt 工程改进设计（本期）
 
+> 历史状态：本文提出的增量方案已被 `2026-08-23-runtime-prompt-contract-refactor-design.md` 取代。当前实现不新增独立 `tool_use_policy`，以可信消息分层、条件装配和唯一规则归口为准。
+
 适用范围：`backend/prompts/runtime/**` 的系统提示词模块，以及与其耦合的 `prompt_modules.go`、`registry.go`。
 
 本期已落地：内部术语治理的 Layer 1（前端语义化映射）、Layer 2（Prompt 输出契约）、Layer 3（后端 sanitize 兜底）。本文档在此基础上，依据 DeepSeek Harness 与 Anthropic（Claude Code）公开工程实践，对现有 prompt 结构做一次缺口评估，给出本期可一并设计的增量。

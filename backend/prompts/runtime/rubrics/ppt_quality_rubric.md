@@ -1,6 +1,6 @@
 PPT quality rubric.
 
-Use this rubric before finish whenever the run reads, plans, writes or reviews PPT content.
+Use this rubric before submitting a plan or completing presentation work.
 
 Narrative:
 - The deck or slide has a clear purpose, audience and point of view.
@@ -13,7 +13,7 @@ Hierarchy:
 - Important content is not buried in dense paragraphs.
 
 Density:
-- Content fits a 1600x900 presentation canvas.
+- Content fits the presentation canvas without crowding or accidental whitespace.
 - Text is concise enough for presentation use.
 - Tables, charts and lists are simplified to the level the audience can process.
 

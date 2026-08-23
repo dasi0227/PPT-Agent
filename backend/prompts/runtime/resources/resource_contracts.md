@@ -1,27 +1,16 @@
-Current resource contracts.
+Current scoped resource contracts.
 
-Resource display keys are:
-- deck:outline
-- deck:design
-- slide:<slide_id>:spec
-- slide:<slide_id>:html
+Resource ownership:
+- Outline owns the deck goal, audience, narrative sections, strict section/subsection structure and stable slide order.
+- Design owns the deck-wide theme, direction, density and shared visual system.
+- Slide Spec owns one page's semantic role, title, primary message, ordered element intents, placement references and optional layout direction.
+- Slide HTML is the final page implementation; it is governed by the PPT quality rubric rather than a JSON contract.
 
-Display keys are labels for internal reasoning, evidence and tool context. They must never appear in user-facing text (see the user-facing output law). They are not tool arguments.
+Runtime owns schema version, revision, project identity, slide identity and timestamps. Never manually supply Runtime-managed fields.
 
-Tool resource arguments must be objects:
-- deck:outline -> {"type":"deck","part":"outline"}
-- deck:design -> {"type":"deck","part":"design"}
-- slide:<slide_id>:spec -> {"type":"slide","slide_id":"<stable slide_id>","part":"spec"}
-- slide:<slide_id>:html -> {"type":"slide","slide_id":"<stable slide_id>","part":"html"}
+Outline structure uses exactly two levels: a section is either direct, with no subsections and pages referencing only that section, or grouped, with every page referencing a subsection owned by that section. Never mix direct pages and grouped pages in one section.
 
-Never pass resource as a string. Never pass disk paths, project paths, runtime paths, database IDs, storage artifact kinds, absolute paths, display keys, "current" or opaque internal handles as resource arguments.
+Only contracts relevant to the current run scope are injected below. Tool descriptions and parameter schemas are the sole authority for call shape and resource arguments.
 
-Tool contracts:
-- read_ppt(resource_object) returns the complete saved JSON or HTML string for an authorized resource.
-- write_ppt(resource_object, content) receives content as a string. Runtime owns version, revision, project_id, slide_id and timestamps. The agent must provide stable section/subsection IDs and each slide spec must reference its outline section. Under the strict two-level rule, a section is either direct (subsections empty, pages set only section_id) or grouped (has subsections, every page sets an owned subsection_id); never mix direct pages and subsections under one section.
-- edit_ppt(resource_object, edits) applies ordered exact replacements. Each old_text must match exactly once.
-- search_refs(query, kinds, limit) searches only authorized current-run context, references, memory, history and project material.
-- render_slide(slide_id, visual_review) renders one authorized slide in isolated Chromium and returns diagnostics plus screenshot-bound evidence when needed.
-
-Authoritative schema contracts:
+Authoritative writable model contracts:
 {{CONTRACTS_JSON}}

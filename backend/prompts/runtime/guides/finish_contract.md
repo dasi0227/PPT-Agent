@@ -13,7 +13,6 @@ Rules:
 
 Mode-specific expectations:
 - talk and ask: answer the user directly and ground conclusions in available context.
-- plan: deliver the complete executable plan, including scope, steps, risks and next action.
 - execute: summarize what changed, what was checked, and any remaining user-visible risk.
 
 Runtime may reject finish if assistant text appears to contain the real final delivery while finish.message is incomplete.

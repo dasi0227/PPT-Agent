@@ -123,13 +123,8 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	if a.Provider == nil {
 		return AgentResponse{}, errors.New("LLM provider is required for ReAct execution")
 	}
-	RunState, _ := json.Marshal(map[string]any{
-		"mode": req.Context.Command.Mode, "phase": req.Phase, "plan": req.Plan,
-		"changes": req.Changes, "evidence": req.Evidence, "requirements": req.Requirements,
-	})
 	system, user := contextengine.CompileForRunner(&req.Context,
-		runtimeSystemPromptForRequest(req, string(RunState)),
-		req.Context.Command.Instruction)
+		runtimeSystemPromptForRequest(req), runtimeTaskStateForRequest(req))
 	messages := append([]llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(system)},
 		{Role: llm.RoleUser, Content: llm.TextContent(user)},
@@ -151,7 +146,12 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	}, nil
 }
 
-const noToolCallGuidance = "Ordinary assistant text is not a completion signal. If the task is complete, call finish(message=...) with the final response. If the task is not complete, call one of the currently disclosed tools to continue."
+func noToolCallGuidance(mode model.RunMode) string {
+	if mode == model.ModePlan {
+		return "Ordinary assistant text cannot submit a plan. Use create_plan for a new complete proposal, update_plan for a complete revision, or another currently disclosed control action when more work is required."
+	}
+	return "Ordinary assistant text is not a completion signal. If the task is complete, call finish(message=...) with the final response. If the task is not complete, call one of the currently disclosed tools to continue."
+}
 
 type RuntimeInput struct {
 	RunID                 string
@@ -385,7 +385,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.plan.ApprovedContentHash != state.plan.ContentHash() {
 			return r.fail(input, state, CodeAgentFailed, errors.New("approved plan content hash mismatch"))
 		}
-		schemas := state.tools.Disclose(state.phase, state.mode)
+		schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
 		schemas = append(schemas, controlSchemas(state.phase, state.mode, state.plan)...)
 		state.turns++
 		response, err := r.Agent.Next(ctx, AgentRequest{
@@ -420,7 +420,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.messages = append(state.messages, llm.Message{
 				Role: llm.RoleAssistant, Content: llm.TextContent(response.Text),
 			})
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(noToolCallGuidance)})
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(noToolCallGuidance(state.mode))})
 			continue
 		}
 		calls := append([]llm.ToolCall{}, response.ToolCalls...)
@@ -1698,25 +1698,32 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	}
 	if (mode == model.ModePlan && phase == PhasePlanning) ||
 		(mode == model.ModeExecute && phase == PhaseExecuting) {
+		reviewDescription := "Ask the semantic reviewer for a second pass on the current execution result or candidate final message. Returns checks[] only; the main agent decides the next ReAct step."
+		candidateDescription := "Optional draft message intended for finish(message). Provide it when reviewing final delivery wording."
+		focusValues := []string{"execution", "final", "all"}
+		if mode == model.ModePlan {
+			reviewDescription = "Ask the semantic reviewer for a second pass on the current plan proposal. Returns checks[] only; the main agent decides whether to revise or submit the plan."
+			candidateDescription = "Optional draft plan text intended for create_plan or update_plan."
+			focusValues = []string{"plan", "all"}
+		}
 		out = append(out, ToolSchema{
-			Name: "review_completion", Description: "Ask the semantic reviewer for a second-pass review of the current plan, execution result, or candidate final message. Returns checks[] only; the main agent decides the next ReAct step.",
+			Name: "review_completion", Description: reviewDescription,
 			Parameters: objectSchema([]string{}, map[string]any{
 				"candidate_message": map[string]any{
 					"type":        "string",
-					"description": "Optional draft message intended for finish(message). Provide it when asking the reviewer to assess final delivery wording.",
+					"description": candidateDescription,
 				},
 				"focus": map[string]any{
-					"type": "string", "enum": []string{"plan", "execution", "final", "all"},
+					"type": "string", "enum": focusValues,
 					"description": "Review focus. Use all when unsure.",
 				},
 			}),
 		})
 	}
 	if (phase == PhaseChat && (mode == model.ModeTalk || mode == model.ModeAsk)) ||
-		(phase == PhasePlanning && mode == model.ModePlan) ||
 		(phase == PhaseExecuting && mode == model.ModeExecute) {
 		out = append(out, ToolSchema{
-			Name: "finish", Description: "所有 Run 的最终答复都必须通过 finish(message=...) 提交。普通 assistant 文本不是结束信号。The message is checked by the Completion Gate before the run may complete.",
+			Name: "finish", Description: "Submit the complete final user-facing response for the current talk, ask, or execute run. Ordinary assistant text is not a completion signal. The Completion Gate checks the message before the run may complete.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{
 				"message": map[string]any{"type": "string"},
 			}),

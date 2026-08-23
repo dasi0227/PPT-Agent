@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-//go:embed core/*.md modes/*.md playbooks/*.md guides/*.md rubrics/*.md business/*.md resources/*.md
+//go:embed core/*.md modes/*.md playbooks/*.md guides/*.md rubrics/*.md resources/*.md
 var promptFiles embed.FS
 
 type Module struct {
@@ -20,7 +20,7 @@ type Module struct {
 	Hash    string
 }
 
-const Version = "2026-08-10.v1"
+const Version = "2026-08-23.v2"
 
 var modulePaths = map[string]string{
 	"core_runtime_policy":              "core/core_runtime_policy.md",
@@ -39,7 +39,6 @@ var modulePaths = map[string]string{
 	"completion_repair_guide":          "guides/completion_repair_guide.md",
 	"finish_contract":                  "guides/finish_contract.md",
 	"ppt_quality_rubric":               "rubrics/ppt_quality_rubric.md",
-	"ppt_business_policy":              "business/ppt_business_policy.md",
 	"resource_contracts":               "resources/resource_contracts.md",
 }
 

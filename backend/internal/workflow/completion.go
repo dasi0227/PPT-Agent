@@ -383,8 +383,6 @@ func finishAllowed(mode model.RunMode, phase RunPhase) bool {
 	switch mode {
 	case model.ModeTalk, model.ModeAsk:
 		return phase == PhaseChat
-	case model.ModePlan:
-		return phase == PhasePlanning
 	case model.ModeExecute:
 		return phase == PhaseExecuting
 	default:

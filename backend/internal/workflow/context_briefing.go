@@ -9,24 +9,11 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func BuildContextBriefing(pack contextengine.ContextPack, state *RunState) string {
+func BuildContextBriefing(_ contextengine.ContextPack, state *RunState) string {
 	if state == nil {
 		return ""
 	}
-	sections := []string{
-		"Objective: " + strings.TrimSpace(pack.Command.Instruction),
-		fmt.Sprintf("Mode: mode=%s phase=%s", state.mode, state.phase),
-		"Authority: use only disclosed tools and RunCommand.scope; ordinary assistant text never completes the run.",
-	}
-	if state.mode == model.ModePlan {
-		sections = append(sections, "Authority detail: this is read-only planning; do not call update_plan or write tools.")
-	}
-	if state.mode == model.ModeExecute {
-		sections = append(sections, "Authority detail: writes are allowed only through the active run session and only inside RunCommand.scope.")
-	}
-	if state.requirements != nil {
-		sections = append(sections, "Requirement ledger:\n"+state.requirements.Brief())
-	}
+	sections := []string{}
 	if len(state.retrievedContext) > 0 {
 		sections = append(sections, "Retrieved context:\n"+retrievedContextBrief(state.retrievedContext))
 	}

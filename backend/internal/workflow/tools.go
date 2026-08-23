@@ -186,7 +186,7 @@ func AllowsArtifact(scope model.RunScope, ref ArtifactRef) bool {
 	return AllowsWrite(scope, resourceForArtifact(ref))
 }
 
-func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode) []ToolSchema {
+func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode, scope model.RunScope) []ToolSchema {
 	out := []ToolSchema{}
 	for _, name := range r.order {
 		desc := r.tools[name]
@@ -199,10 +199,37 @@ func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode) []ToolSchema
 		if phase == PhasePlanning && !desc.ReadOnly {
 			continue
 		}
-		out = append(out, desc.Tool.Schema())
+		if !toolRelevantToRun(name, mode, scope) {
+			continue
+		}
+		out = append(out, scopeToolSchema(desc.Tool.Schema(), scope, desc.ReadOnly))
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+func toolRelevantToRun(name string, mode model.RunMode, scope model.RunScope) bool {
+	if name == "render_slide" {
+		return mode == model.ModeExecute && scope.Artifact == model.ArtifactPPT
+	}
+	return true
+}
+
+func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) ToolSchema {
+	properties, _ := schema.Parameters["properties"].(map[string]any)
+	if properties == nil {
+		return schema
+	}
+	if _, ok := properties["resource"]; ok {
+		properties["resource"] = resourceSchemaForScope(scope, !readOnly)
+	}
+	if schema.Name == "render_slide" && scope.Level == model.ScopeSlide && scope.SlideID != "" {
+		properties["slide_id"] = map[string]any{
+			"type": "string", "const": scope.SlideID,
+			"description": "The only slide authorized by the current run scope.",
+		}
+	}
+	return schema
 }
 
 func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {

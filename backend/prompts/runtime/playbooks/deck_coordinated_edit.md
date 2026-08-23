@@ -7,17 +7,10 @@ Execution steps:
 2. Update dependency owners before dependents.
 3. If design changes affect presentation output, render all affected pages or all pages when the impact is deck-wide.
 4. If a slide spec changes, update and render the corresponding HTML.
-5. Keep the plan current when the Agent has chosen to create one.
-6. Use render diagnostics to repair visual regressions.
-7. If RunCommand.options.range is set, keep the final slide count inside that range.
-8. If RunCommand.options.language conflicts with an existing outline and the instruction does not explicitly authorize translation, ask the user instead of switching silently.
+5. If the requested slide range is present, keep the final slide count inside it.
+6. If the requested language conflicts with the existing outline and translation was not authorized, obtain a user decision instead of switching silently.
 
 Quality expectations:
 - Preserve cross-slide narrative and section continuity.
 - Keep typography, palette, spacing and component style consistent.
 - Avoid creating a deck where individual pages look like unrelated one-offs.
-- Do not write outside RunCommand.scope.
-
-Completion:
-- Finish only after requirements, plan status and evidence are all complete.
-- Summarize impacted targets and validation coverage.

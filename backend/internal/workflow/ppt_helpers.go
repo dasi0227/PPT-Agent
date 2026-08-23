@@ -23,6 +23,8 @@ var stableSlideID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 
 const resourceObjectGuidance = `resource must be an object, not a string or path. Use {"type":"deck","part":"outline"}, {"type":"deck","part":"design"}, or {"type":"slide","slide_id":"<stable slide_id>","part":"spec|html"}. Never use display keys such as "deck:outline" or "slide:<id>:html", "current", or "slides/...".`
 
+const disclosedResourceGuidance = `resource must be an object that matches the current parameter schema; never pass a display key, "current", file path, or opaque handle.`
+
 func outlineRef(pack contextengine.ContextPack) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactOutline, ID: pack.Project.ID, Path: "outline.json", Project: pack.Project.ID}
 }
@@ -131,28 +133,46 @@ func writeFailure(err error) ToolResult {
 }
 
 func resourceSchema() map[string]any {
+	return resourceSchemaForScope(model.RunScope{}, false)
+}
+
+func resourceSchemaForScope(scope model.RunScope, write bool) map[string]any {
+	variants := []any{}
+	deckScope := scope.Level != model.ScopeSlide
+	if !write || deckScope {
+		variants = append(variants, objectSchema([]string{"type", "part"}, map[string]any{
+			"type": map[string]any{"const": "deck", "description": `Use "deck" for deck-wide resources.`},
+			"part": map[string]any{
+				"type": "string", "enum": []string{"outline", "design"},
+				"description": `Use "outline" for deck narrative/order, or "design" for deck-wide visual system.`,
+			},
+		}))
+	}
+	slideParts := []string{"spec"}
+	if scope.Artifact != model.ArtifactSpec {
+		slideParts = append(slideParts, "html")
+	}
+	slideID := map[string]any{
+		"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`,
+		"description": `Stable slide identifier from the current project; never use "current" or a file path.`,
+	}
+	if scope.Level == model.ScopeSlide && scope.SlideID != "" {
+		slideID = map[string]any{
+			"type": "string", "const": scope.SlideID,
+			"description": "The only slide authorized by the current run scope.",
+		}
+	}
+	variants = append(variants, objectSchema([]string{"type", "slide_id", "part"}, map[string]any{
+		"type":     map[string]any{"const": "slide", "description": `Use "slide" for one page resource.`},
+		"slide_id": slideID,
+		"part": map[string]any{
+			"type": "string", "enum": slideParts,
+			"description": `Use "spec" for the page design/spec JSON, or "html" when HTML is included by the current scope.`,
+		},
+	}))
 	return map[string]any{
 		"description": resourceObjectGuidance,
-		"oneOf": []any{
-			objectSchema([]string{"type", "part"}, map[string]any{
-				"type": map[string]any{"const": "deck", "description": `Use "deck" for deck-wide resources.`},
-				"part": map[string]any{
-					"type": "string", "enum": []string{"outline", "design"},
-					"description": `Use "outline" for deck narrative/order, or "design" for deck-wide visual system.`,
-				},
-			}),
-			objectSchema([]string{"type", "slide_id", "part"}, map[string]any{
-				"type": map[string]any{"const": "slide", "description": `Use "slide" for one page resource.`},
-				"slide_id": map[string]any{
-					"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`,
-					"description": `Stable slide identifier from the current project, for example "slide-01"; never use "current" or a file path.`,
-				},
-				"part": map[string]any{
-					"type": "string", "enum": []string{"spec", "html"},
-					"description": `Use "spec" for the page design/spec JSON, or "html" for the final slide implementation.`,
-				},
-			}),
-		},
+		"oneOf":       variants,
 	}
 }
 

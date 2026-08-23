@@ -1,7 +1,7 @@
 # Runtime Prompt Contract Refactor Design
 
 > 日期：2026-08-23  
-> 状态：已确认，实施中  
+> 状态：已实施
 > 范围：Runtime Prompt 分层、按模式与 Scope 装配、工具披露、Plan 完成协议和重复规则治理。
 
 ## 1. 背景与结论

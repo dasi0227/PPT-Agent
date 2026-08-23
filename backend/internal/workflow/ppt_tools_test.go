@@ -115,17 +115,24 @@ func TestResourceInvalidObservationTeachesObjectShape(t *testing.T) {
 	}
 }
 
-func TestResourceContractsPromptShowsObjectArguments(t *testing.T) {
-	body := resourceContractsModule().Body
+func TestResourceContractsPromptContainsOnlyScopedModelContracts(t *testing.T) {
+	module, ok := resourceContractsModule(testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页规格"))
+	if !ok {
+		t.Fatal("slide spec contract was not selected")
+	}
+	body := module.Body
 	for _, want := range []string{
-		`Display keys are labels for internal reasoning`,
-		`They must never appear in user-facing text`,
-		`deck:outline -> {"type":"deck","part":"outline"}`,
-		`slide:<slide_id>:html -> {"type":"slide","slide_id":"<stable slide_id>","part":"html"}`,
-		`Never pass resource as a string`,
+		`Resource ownership:`,
+		`"slide-spec"`,
+		`Tool descriptions and parameter schemas are the sole authority for call shape`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("resource contracts prompt missing %s:\n%s", want, body)
+		}
+	}
+	for _, absent := range []string{`"outline":`, `"design":`, `read_ppt(`, `write_ppt(`} {
+		if strings.Contains(body, absent) {
+			t.Fatalf("resource contracts prompt contains unrelated or duplicate %s:\n%s", absent, body)
 		}
 	}
 }
@@ -631,16 +638,76 @@ func TestRegistryDisclosesOnlyFixedBusinessSurface(t *testing.T) {
 	if err := (DefaultDomainToolProvider{Pack: pack, Renderer: &recordingRenderer{}}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	all := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute))
+	all := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}))
 	for _, name := range []string{"read_ppt", "write_ppt", "edit_ppt", "search_refs", "render_slide"} {
 		if !all[name] {
 			t.Fatalf("%s not disclosed: %v", name, all)
 		}
 	}
-	chat := schemasByName(registry.Disclose(PhaseChat, model.ModeTalk))
-	if chat["write_ppt"] || chat["edit_ppt"] {
-		t.Fatalf("talk disclosed writes: %v", chat)
+	chat := schemasByName(registry.Disclose(PhaseChat, model.ModeTalk, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "slide-01"}))
+	if chat["write_ppt"] || chat["edit_ppt"] || chat["render_slide"] {
+		t.Fatalf("talk disclosed mutation or render tools: %v", chat)
 	}
+}
+
+func TestRegistryScopesToolsAndResourceParameterSchemas(t *testing.T) {
+	_, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
+	registry := NewToolRegistry()
+	if err := (DefaultDomainToolProvider{Pack: pack, Renderer: &recordingRenderer{}}).RegisterDomainTools(registry); err != nil {
+		t.Fatal(err)
+	}
+
+	specSlide := model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeSlide, SlideID: "slide-01"}
+	specTools := registry.Disclose(PhaseExecuting, model.ModeExecute, specSlide)
+	specNames := schemasByName(specTools)
+	if specNames["render_slide"] || !specNames["read_ppt"] || !specNames["write_ppt"] || !specNames["edit_ppt"] {
+		t.Fatalf("spec execute tools are not scoped: %+v", specTools)
+	}
+	var writeSchema ToolSchema
+	for _, schema := range specTools {
+		if schema.Name == "write_ppt" {
+			writeSchema = schema
+		}
+	}
+	properties, _ := writeSchema.Parameters["properties"].(map[string]any)
+	resource, _ := properties["resource"].(map[string]any)
+	variants, _ := resource["oneOf"].([]any)
+	if len(variants) != 1 {
+		t.Fatalf("single-slide spec write should expose one resource variant: %+v", resource)
+	}
+	variant, _ := variants[0].(map[string]any)
+	variantProperties, _ := variant["properties"].(map[string]any)
+	slideID, _ := variantProperties["slide_id"].(map[string]any)
+	part, _ := variantProperties["part"].(map[string]any)
+	parts, _ := part["enum"].([]string)
+	if slideID["const"] != "slide-01" || len(parts) != 1 || parts[0] != "spec" {
+		t.Fatalf("single-slide spec resource schema is too broad: %+v", resource)
+	}
+
+	planTools := schemasByName(registry.Disclose(
+		PhasePlanning, model.ModePlan,
+		model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+	))
+	if !planTools["read_ppt"] || !planTools["search_refs"] || planTools["render_slide"] || planTools["write_ppt"] || planTools["edit_ppt"] {
+		t.Fatalf("plan tools are not read-only and task-relevant: %+v", planTools)
+	}
+
+	pptSlideTools := registry.Disclose(
+		PhaseExecuting, model.ModeExecute,
+		model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "slide-01"},
+	)
+	for _, schema := range pptSlideTools {
+		if schema.Name != "render_slide" {
+			continue
+		}
+		parameters, _ := schema.Parameters["properties"].(map[string]any)
+		renderSlideID, _ := parameters["slide_id"].(map[string]any)
+		if renderSlideID["const"] != "slide-01" {
+			t.Fatalf("single-slide render schema is not fixed to scope: %+v", schema)
+		}
+		return
+	}
+	t.Fatal("ppt execute did not disclose render_slide")
 }
 
 func TestToolResultEnvelopeHidesInternalEvidence(t *testing.T) {
