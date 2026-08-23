@@ -799,20 +799,21 @@ export const DeckNavigator: React.FC = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-1 border-t border-border p-2">
+          <div className="flex items-center border-t border-border p-2">
             <button
               onClick={() => void handleAdd()}
               disabled={runActive}
               title={runActive ? 'AI 运行中，暂不可编辑结构' : '在末尾加一页'}
-              className="flex items-center justify-center px-3 py-2 rounded-md text-sm text-text-600 hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex flex-1 items-center justify-center px-3 py-2 rounded-md text-sm text-text-600 hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <Plus className="w-4 h-4 mr-1" /> 新增页面
             </button>
+            <div aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border/70" />
             <button
               onClick={handleAddSection}
               disabled={runActive || structureUpdating}
               title={runActive ? 'AI 运行中，暂不可编辑结构' : '在末尾新增章节'}
-              className="flex items-center justify-center px-3 py-2 rounded-md text-sm text-text-600 hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex flex-1 items-center justify-center px-3 py-2 rounded-md text-sm text-text-600 hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <Plus className="w-4 h-4 mr-1" /> 新增章节
             </button>
