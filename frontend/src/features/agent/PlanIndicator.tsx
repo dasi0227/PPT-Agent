@@ -187,8 +187,9 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({
         <button
           type="button"
           aria-label={`计划 ${completed} / ${total}`}
+          aria-pressed={selected}
           disabled={disabled}
-          className={planButtonClass(false)}
+          className={planButtonClass(selected)}
         >
           <ListChecks className={cn('h-3.5 w-3.5 shrink-0', inFlight && 'animate-pulse motion-reduce:animate-none')} strokeWidth={1.75} />
           <span className="composer-plan-label shrink-0 whitespace-nowrap">计划</span>

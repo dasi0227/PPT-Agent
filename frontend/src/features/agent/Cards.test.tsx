@@ -101,7 +101,7 @@ describe('public timeline components', () => {
   });
 
   it('shows a compact plan indicator and reveals steps in a popover', () => {
-    render(<PlanIndicator running={false} plan={{
+    render(<PlanIndicator running={false} selected plan={{
 	  id: 'p1', title: '生成演示文稿', content: '完整计划', status: 'active', revision: 2,
       steps: [
         { id: 's1', title: '完成页面', status: 'completed' },
@@ -109,6 +109,8 @@ describe('public timeline components', () => {
       ],
     }} />);
     const trigger = screen.getByRole('button', { name: '计划 1 / 2' });
+    expect(trigger).toHaveAttribute('aria-pressed', 'true');
+    expect(trigger).toHaveClass('bg-accent-soft', 'text-accent');
     const progressBadge = trigger.querySelector('.composer-plan-progress-badge');
     expect(progressBadge).toHaveTextContent('1/2');
     expect(progressBadge).toHaveClass('absolute', '-right-2', '-top-2');
