@@ -88,7 +88,11 @@ POST /api/v1/projects/:project_id/polish
 
 `PolishService` 只依赖 Store、LLM Registry 和只读 Context Engine 投影。它解析 profile，生成上下文，调用 `profile.Adapter().Generate`，并返回文本。它不依赖 `run.Engine`、EventBus、RunService、锁、幂等表或持久化写操作。
 
-模型只需要能进行文本生成；Polish 不要求 tool calls、vision 或 provider continuation。调用使用短 deadline（建议 12 秒），超时或上游不可用映射到现有 `PROVIDER_UNAVAILABLE`，模型不存在映射到 `MODEL_PROFILE_NOT_FOUND`。空白、过长或无效 scope 使用现有 `BAD_REQUEST` / `INVALID_SCOPE`。模型返回空结果时使用内部 `POLISH_OUTPUT_INVALID`，对外安全投影为可重试的服务错误。
+模型只需要能进行文本生成；Polish 不要求 tool calls、vision 或 provider continuation。服务端必须精确使用请求中的 Profile name，不得因为 Polish 是辅助调用而改用默认模型；只有请求没有提供模型时，Registry 才沿用全局默认 Profile。
+
+Polish 使用独立的低延迟生成策略，但仍复用统一 Provider Adapter：`GenerateRequest` 显式关闭 reasoning/thinking，并限制短文本输出。Adapter 负责把该策略翻译为 Provider 参数；未显式提供策略的 Runtime 请求保持现有默认行为，DeepSeek Runtime 的高推理与 reasoning continuation 不受影响。禁止仅根据模型 capability 自动为 Polish 开启高强度推理。
+
+调用使用短 deadline（建议 12 秒），超时或上游不可用映射到现有 `PROVIDER_UNAVAILABLE`，模型不存在映射到 `MODEL_PROFILE_NOT_FOUND`。空白、过长或无效 scope 使用现有 `BAD_REQUEST` / `INVALID_SCOPE`。模型返回空结果时使用内部 `POLISH_OUTPUT_INVALID`，对外安全投影为可重试的服务错误。
 
 ## 5. Polish Context
 
@@ -142,4 +146,6 @@ Polish 使用独立的文件化 prompt registry，例如 `backend/prompts/polish
 5. 输出可消解当前目标页、项目目标和线程已确认决策，但不虚构缺失事实或实现细节。
 6. 视觉/交互/动效的口语表达会在适当时转为可观察、可执行的设计语言；清晰文本不会被无意义扩写。
 7. 支持文本的模型均可用于 Polish；不因缺少 tool-call 或 vision 能力被拒绝。
-8. 所有新 Go、前端和提示词测试通过，已有 Run/steering 测试保持通过。
+8. Polish 精确使用 Composer 当前选择的 Profile，并对 reasoning-capable 模型关闭 reasoning/thinking；Runtime 未显式指定生成策略时保持原有 Provider 行为。
+9. Polish 设置有界的最大输出量，避免短指令润色退化为长文本生成。
+10. 所有新 Go、前端和提示词测试通过，已有 Run/steering 测试保持通过。
