@@ -42,9 +42,3 @@ feat: <核心改动概述>
 - 生成的 HTML 预览文件必须写入 `docs/discuss/` 目录。
 - TODO、分析草稿和其他讨论阶段文件必须写入 `docs/discuss/` 目录。
 - 根目录 `tmp/` 仅用于本地临时数据，已被 Git 忽略，不得存放需要协作或提交的内容。
-
-## Spec 设计文档规则
-
-- 所有正式 Spec 设计文档必须写入 `docs/superpowers/specs/` 目录。
-- 不得把正式 Spec 写入项目根目录、`tmp/`、`docs/discuss/` 或其他文档目录。
-- Spec 文件应清楚记录适用范围、关键决策、非目标和验收标准。
