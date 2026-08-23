@@ -52,6 +52,7 @@ type responsesRequest struct {
 	Input              []any           `json:"input"`
 	Tools              []responsesTool `json:"tools,omitempty"`
 	PreviousResponseID string          `json:"previous_response_id,omitempty"`
+	MaxOutputTokens    int             `json:"max_output_tokens,omitempty"`
 }
 
 type responsesTool struct {
@@ -119,6 +120,7 @@ func (o *OpenAIAdapter) Generate(ctx context.Context, req GenerateRequest) (Gene
 	body := responsesRequest{
 		Model: o.model, Instructions: instructions, Input: input,
 		Tools: responsesTools(req.Tools), PreviousResponseID: continuation.PreviousResponseID,
+		MaxOutputTokens: req.MaxOutputTokens,
 	}
 	var wire responsesResponse
 	if err := o.http.doJSON(ctx, "/v1/responses", body, req.OnRetry, &wire); err != nil {

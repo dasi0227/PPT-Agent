@@ -94,6 +94,7 @@ type deepSeekRequest struct {
 	Tools           []chatTool        `json:"tools,omitempty"`
 	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
 	Thinking        map[string]string `json:"thinking,omitempty"`
+	MaxTokens       int               `json:"max_tokens,omitempty"`
 }
 
 type chatChoice struct {
@@ -131,11 +132,15 @@ func (d *DeepSeekAdapter) Generate(ctx context.Context, req GenerateRequest) (Ge
 		return GenerateResponse{}, err
 	}
 	body := deepSeekRequest{
-		Model: d.model, Messages: messages, Tools: chatTools(req.Tools),
+		Model: d.model, Messages: messages, Tools: chatTools(req.Tools), MaxTokens: req.MaxOutputTokens,
 	}
 	if d.capabilities.Reasoning {
-		body.ReasoningEffort = "high"
-		body.Thinking = map[string]string{"type": "enabled"}
+		if req.Reasoning == ReasoningDisabled {
+			body.Thinking = map[string]string{"type": "disabled"}
+		} else {
+			body.ReasoningEffort = "high"
+			body.Thinking = map[string]string{"type": "enabled"}
+		}
 	}
 	var wire deepSeekResponse
 	if err := d.http.doJSON(ctx, "/v1/chat/completions", body, req.OnRetry, &wire); err != nil {

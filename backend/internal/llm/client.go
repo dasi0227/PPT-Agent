@@ -98,12 +98,23 @@ type Usage struct {
 	TotalTokens  int
 }
 
+// ReasoningPolicy lets one call opt out of provider reasoning without changing
+// the profile's capabilities or the Runtime's provider-default behavior.
+type ReasoningPolicy uint8
+
+const (
+	ReasoningProviderDefault ReasoningPolicy = iota
+	ReasoningDisabled
+)
+
 type GenerateRequest struct {
-	Messages      []Message
-	Tools         []ToolSchema
-	ImageResolver ImageRefResolver
-	Continuation  *ProviderContinuation
-	OnRetry       func(attempt int)
+	Messages        []Message
+	Tools           []ToolSchema
+	ImageResolver   ImageRefResolver
+	Continuation    *ProviderContinuation
+	OnRetry         func(attempt int)
+	Reasoning       ReasoningPolicy
+	MaxOutputTokens int
 }
 
 type GenerateResponse struct {

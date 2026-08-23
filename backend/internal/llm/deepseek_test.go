@@ -88,6 +88,9 @@ func TestDeepSeekGeneratePreservesMultipleToolCallsAndReasoningContinuation(t *t
 		first.Continuation == nil {
 		t.Fatalf("normalized response is incomplete: %+v", first)
 	}
+	if requests[0]["reasoning_effort"] != "high" || requests[0]["thinking"].(map[string]any)["type"] != "enabled" {
+		t.Fatalf("provider-default DeepSeek reasoning changed: %#v", requests[0])
+	}
 	_, err = adapter.Generate(context.Background(), GenerateRequest{
 		Messages: []Message{
 			{Role: RoleUser, Content: TextContent("inspect")},
@@ -105,6 +108,38 @@ func TestDeepSeekGeneratePreservesMultipleToolCallsAndReasoningContinuation(t *t
 	assistant := messages[1].(map[string]any)
 	if assistant["reasoning_content"] != "private-state" {
 		t.Fatalf("DeepSeek reasoning continuation was not replayed: %#v", assistant)
+	}
+}
+
+func TestDeepSeekGenerateCanDisableReasoningForPolish(t *testing.T) {
+	var requestBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if err := json.NewDecoder(request.Body).Decode(&requestBody); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"polished"}}]}`))
+	}))
+	defer server.Close()
+	adapter := NewDeepSeekAdapter(DeepSeekConfig{
+		APIKey: "secret", BaseURL: server.URL, Model: "deepseek-v4-pro",
+	})
+	_, err := adapter.Generate(context.Background(), GenerateRequest{
+		Messages:        []Message{{Role: RoleUser, Content: TextContent("polish")}},
+		Reasoning:       ReasoningDisabled,
+		MaxOutputTokens: 1024,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thinking, ok := requestBody["thinking"].(map[string]any)
+	if !ok || thinking["type"] != "disabled" {
+		t.Fatalf("DeepSeek reasoning was not disabled: %#v", requestBody)
+	}
+	if _, exists := requestBody["reasoning_effort"]; exists {
+		t.Fatalf("disabled reasoning retained reasoning_effort: %#v", requestBody)
+	}
+	if requestBody["max_tokens"] != float64(1024) {
+		t.Fatalf("DeepSeek output limit missing: %#v", requestBody)
 	}
 }
 

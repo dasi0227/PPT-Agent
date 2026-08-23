@@ -36,13 +36,17 @@ func TestOpenAIResponsesMapsImageFunctionOutputAndContinuation(t *testing.T) {
 			{Role: RoleSystem, Content: TextContent("system policy")},
 			{Role: RoleUser, Content: TextContent("make slides")},
 		},
-		Tools: []ToolSchema{{Name: "render_slide"}, {Name: "read_ppt"}},
+		Tools:           []ToolSchema{{Name: "render_slide"}, {Name: "read_ppt"}},
+		MaxOutputTokens: 512,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(first.ToolCalls) != 2 || first.Continuation == nil || first.Usage.TotalTokens != 10 {
 		t.Fatalf("Responses output was not normalized: %+v", first)
+	}
+	if requests[0]["max_output_tokens"] != float64(512) {
+		t.Fatalf("Responses output limit missing: %#v", requests[0])
 	}
 	resolver := &staticImageResolver{data: ImageData{
 		Bytes: testPNG(t, 32, 18), MIMEType: "image/png",

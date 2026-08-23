@@ -45,7 +45,11 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 	provider := &llmtest.FakeProvider{ProviderName: "fake", ModelName: "polish-model", Script: []llm.GenerateResponse{{
 		Content: llm.TextContent("请强化当前页面的核心结论与视觉层级，同时保持董事会叙事的克制风格。"),
 	}}}
-	registry, err := llm.NewRegistryWithProfiles("Polish", []llm.Profile{llm.NewTestProfile("Polish", "https://example.invalid", provider)})
+	defaultProvider := &llmtest.FakeProvider{ProviderName: "fake-default", ModelName: "default-model"}
+	registry, err := llm.NewRegistryWithProfiles("Default", []llm.Profile{
+		llm.NewTestProfile("Default", "https://default.example.invalid", defaultProvider),
+		llm.NewTestProfile("Polish", "https://example.invalid", provider),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +65,12 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 	requests := provider.Requests()
 	if len(requests) != 1 || len(requests[0].Tools) != 0 || requests[0].Continuation != nil || len(requests[0].Messages) != 2 {
 		t.Fatalf("unexpected provider request: %+v", requests)
+	}
+	if len(defaultProvider.Requests()) != 0 {
+		t.Fatal("polish ignored the selected profile and called the registry default")
+	}
+	if requests[0].Reasoning != llm.ReasoningDisabled || requests[0].MaxOutputTokens != maxPolishOutputTokens {
+		t.Fatalf("polish generation policy mismatch: %+v", requests[0])
 	}
 	system := requests[0].Messages[0].Text()
 	if !strings.Contains(system, "Board narrative") || !strings.Contains(system, "Board decision") || !strings.Contains(system, "untrusted reference data") {

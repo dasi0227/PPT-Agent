@@ -45,8 +45,9 @@ func TestKimiGenerateMapsImageAndToolCalls(t *testing.T) {
 				},
 			},
 		},
-		Tools:         []ToolSchema{{Name: "render_slide"}, {Name: "read_ppt"}},
-		ImageResolver: resolver,
+		Tools:           []ToolSchema{{Name: "render_slide"}, {Name: "read_ppt"}},
+		ImageResolver:   resolver,
+		MaxOutputTokens: 512,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -54,6 +55,9 @@ func TestKimiGenerateMapsImageAndToolCalls(t *testing.T) {
 	if len(response.ToolCalls) != 2 || response.ToolCalls[0].ID != "call-1" ||
 		response.ToolCalls[1].ID != "call-2" {
 		t.Fatalf("Kimi tool calls were lost or reordered: %+v", response.ToolCalls)
+	}
+	if requestBody["max_tokens"] != float64(512) || requestBody["thinking"].(map[string]any)["type"] != "disabled" {
+		t.Fatalf("Kimi generation policy mismatch: %#v", requestBody)
 	}
 	messages := requestBody["messages"].([]any)
 	toolResult := messages[2].(map[string]any)

@@ -16,6 +16,7 @@ import (
 
 const maxPolishInstructionRunes = 4000
 const maxPolishOutputRunes = 8000
+const maxPolishOutputTokens = 1024
 const polishTimeout = 12 * time.Second
 
 type PolishParams struct {
@@ -93,7 +94,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(system)},
 		{Role: llm.RoleUser, Content: llm.TextContent(instruction)},
-	}})
+	}, Reasoning: llm.ReasoningDisabled, MaxOutputTokens: maxPolishOutputTokens})
 	if err != nil {
 		if errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {
 			return PolishResult{}, context.Canceled

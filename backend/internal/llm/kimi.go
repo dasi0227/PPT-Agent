@@ -46,10 +46,11 @@ func (k *KimiAdapter) Capabilities() Capabilities {
 }
 
 type kimiRequest struct {
-	Model    string            `json:"model"`
-	Messages []chatWireMessage `json:"messages"`
-	Tools    []chatTool        `json:"tools,omitempty"`
-	Thinking map[string]string `json:"thinking,omitempty"`
+	Model     string            `json:"model"`
+	Messages  []chatWireMessage `json:"messages"`
+	Tools     []chatTool        `json:"tools,omitempty"`
+	Thinking  map[string]string `json:"thinking,omitempty"`
+	MaxTokens int               `json:"max_tokens,omitempty"`
 }
 
 type kimiResponse struct {
@@ -72,7 +73,7 @@ func (k *KimiAdapter) Generate(ctx context.Context, req GenerateRequest) (Genera
 		return GenerateResponse{}, err
 	}
 	body := kimiRequest{
-		Model: k.model, Messages: messages, Tools: chatTools(req.Tools),
+		Model: k.model, Messages: messages, Tools: chatTools(req.Tools), MaxTokens: req.MaxOutputTokens,
 	}
 	// Kimi reasoning parameters are provider-specific. The Runtime does not
 	// consume hidden reasoning, so the initial adapter mode keeps it disabled.
