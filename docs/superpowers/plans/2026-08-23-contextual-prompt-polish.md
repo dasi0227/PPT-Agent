@@ -1,5 +1,7 @@
 # Contextual Prompt Polish Implementation Plan
 
+Status: implemented
+
 Design:
 `docs/superpowers/specs/2026-08-23-contextual-prompt-polish-design.md`
 

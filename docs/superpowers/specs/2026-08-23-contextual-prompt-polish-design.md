@@ -1,7 +1,7 @@
 # Contextual Prompt Polish Design
 
 > 日期：2026-08-23  
-> 状态：已确认，待实施  
+> 状态：已实现
 > 范围：Composer 的 `Enhance` 更名并升级为 `Polish`；新增一次无副作用、带项目上下文的 LLM 输入润色能力。
 
 ## 1. 决策

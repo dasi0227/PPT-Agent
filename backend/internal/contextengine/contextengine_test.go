@@ -318,6 +318,54 @@ func TestPromptCompilerSnapshotSeparatesUserInstruction(t *testing.T) {
 	}
 }
 
+func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
+	project, store := fixture(t)
+	threadDir := filepath.Join(project.WorkDir, "threads")
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	memory := EmptyMemory()
+	memory.Revision = 1
+	memory.ConfirmedDecisions = []MemoryItem{{Key: "audience", Value: "面向董事会，强调可验证结论", SourceRun: "r1", RecordedAt: 1}}
+	if err := (ThreadMemoryStore{}).Save(project.WorkDir, "t1", memory); err != nil {
+		t.Fatal(err)
+	}
+	history := `{"run_id":"r1","turn":"user","type":"user_turn","data":{"text":"保持整体克制"}}` + "\n"
+	if err := os.WriteFile(filepath.Join(threadDir, "t1.jsonl"), []byte(history), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pack, err := NewContextAssembler(store, NewRefRegistry()).AssemblePolish(context.Background(), PolishContextRequest{
+		ThreadID: "t1", Command: spec(model.ArtifactPPT, model.ScopeSlide),
+	}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pack.Target.Spec == nil || pack.Target.Spec.SlideID != "s2" || pack.Target.HTMLTitle != "s2" {
+		t.Fatalf("target context missing: %+v", pack.Target)
+	}
+	if len(pack.Memory.ConfirmedDecisions) != 1 || len(pack.RecentTurns) != 1 {
+		t.Fatalf("thread context missing: memory=%+v turns=%+v", pack.Memory, pack.RecentTurns)
+	}
+	if pack.EstimatedTokens > PolishContextTokenBudget {
+		t.Fatalf("polish context exceeded budget: %d", pack.EstimatedTokens)
+	}
+	raw, err := json.Marshal(pack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"context_id", "available_context_refs", "slide_html_ref", "run_id"} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("polish context leaked runtime field %q: %s", forbidden, raw)
+		}
+	}
+	compiled, err := CompilePolishContext(pack, "SYSTEM POLICY")
+	if err != nil || !strings.Contains(compiled, "untrusted reference data") || strings.Contains(compiled, commandInstruction(pack)) {
+		t.Fatalf("compiled polish context mismatch: %v %s", err, compiled)
+	}
+}
+
+func commandInstruction(PolishContext) string { return "improve target" }
+
 func TestCompileForRunnerKeepsRuntimeStateOutOfSystemPrompt(t *testing.T) {
 	p := ContextPack{SchemaVersion: SchemaVersion, Command: spec(model.ArtifactPPT, model.ScopeSlide), Project: ProjectContext{ID: "p1"}}
 	state := `{"requirements":[{"id":"req-1","text":"keep this dynamic"}],"approved_plan":{"title":"user-approved"}}`

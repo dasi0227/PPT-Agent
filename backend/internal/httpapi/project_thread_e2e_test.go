@@ -61,6 +61,10 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	runSvc := service.NewRunServiceWithExecutionFactoryAndRegistry(st, engine, factory, registry)
 	projectSvc := service.NewProjectService(st, service.WorkRoot(root))
 	threadSvc := service.NewThreadService(st)
+	var polishHandler *httpapi.PolishHandler
+	if registry != nil {
+		polishHandler = httpapi.NewPolishHandler(service.NewPolishService(st, registry))
+	}
 	router := httpapi.NewRouter(
 		cfg,
 		zap.NewNop(),
@@ -76,6 +80,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 			}
 			return httpapi.NewLLMHandler(registry)
 		}(),
+		polishHandler,
 		httpapi.NewSpecHandler(service.NewSpecService(st)),
 	)
 	srv := httptest.NewServer(router.Engine())

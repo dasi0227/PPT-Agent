@@ -143,6 +143,20 @@ export interface LLMProfilesResponse {
   profiles: LLMProfile[];
 }
 
+export interface PolishRequest {
+  instruction: string;
+  thread_id?: string;
+  scope: RunScope;
+  mode: RunMode;
+  model: string;
+}
+
+export interface PolishResponse {
+  polished_instruction: string;
+  changed: boolean;
+  prompt_version: string;
+}
+
 export interface SteerRunRequest {
   expected_run_id: string;
   client_message_id: string;

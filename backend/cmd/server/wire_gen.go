@@ -60,6 +60,8 @@ func initApp() (*App, func(), error) {
 	runService := service.NewRunService(store, engine, registry, workRoot, nodeSlideRenderer)
 	runHandler := httpapi.NewRunHandler(runService)
 	llmHandler := httpapi.NewLLMHandler(registry)
+	polishService := service.NewPolishService(store, registry)
+	polishHandler := httpapi.NewPolishHandler(polishService)
 	projectService := service.NewProjectService(store, workRoot)
 	slideService := service.NewSlideService(store)
 	specService := service.NewSpecService(store)
@@ -70,7 +72,7 @@ func initApp() (*App, func(), error) {
 	assetService := provideAssetService(store, workRoot)
 	assetHandler := httpapi.NewAssetHandler(assetService)
 	specHandler := httpapi.NewSpecHandler(specService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, llmHandler, specHandler)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, llmHandler, polishHandler, specHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	mainSeedDone, err := provideSeed(configConfig, store, zapLogger)
@@ -96,7 +98,7 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideRenderWorker,
 	provideWorkRoot,
 	provideAssetService,
-	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewSlideService, service.NewSpecService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
+	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, service.NewSlideService, service.NewSpecService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
 	httpapi.NewAssetHandler,
 	httpapi.NewSpecHandler,
 	provideHTTPServer,

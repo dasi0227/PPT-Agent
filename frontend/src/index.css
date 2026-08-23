@@ -102,11 +102,11 @@
   transform: translateY(-50%);
 }
 
-.enhance-sparkles-active {
-  animation: enhance-sparkles 900ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
+.polish-sparkles-active {
+  animation: polish-sparkles 900ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
-.composer-enhance-sweep {
+.composer-polish-sweep {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -120,10 +120,10 @@
     transparent 82%
   );
   transform: translateX(-110%);
-  animation: composer-enhance-sweep 1s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: composer-polish-sweep 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-@keyframes enhance-sparkles {
+@keyframes polish-sparkles {
   0%, 100% {
     opacity: 0.7;
     transform: rotate(-8deg) scale(0.92);
@@ -134,7 +134,7 @@
   }
 }
 
-@keyframes composer-enhance-sweep {
+@keyframes composer-polish-sweep {
   to {
     transform: translateX(110%);
   }

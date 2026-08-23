@@ -21,9 +21,10 @@ type Router struct {
 	asset   *AssetHandler
 	spec    *SpecHandler
 	llm     *LLMHandler
+	polish  *PolishHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, llmH *LLMHandler, specHandlers ...*SpecHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, llmH *LLMHandler, polishH *PolishHandler, specHandlers ...*SpecHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
@@ -32,7 +33,7 @@ func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH 
 	if len(specHandlers) > 0 {
 		specH = specHandlers[0]
 	}
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, spec: specH, llm: llmH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, spec: specH, llm: llmH, polish: polishH}
 	r.register()
 	return r
 }
@@ -50,6 +51,9 @@ func (r *Router) register() {
 	v1.PATCH("/projects/:id", r.project.Patch)
 	v1.GET("/projects/:id", r.project.Get)
 	v1.DELETE("/projects/:id", r.project.Delete)
+	if r.polish != nil {
+		v1.POST("/projects/:id/polish", r.polish.Polish)
+	}
 	v1.GET("/projects/:id/slides", r.project.ListSlides)
 	v1.POST("/projects/:id/slides", r.project.CreateSlide)
 	v1.POST("/projects/:id/slides/reorder", r.project.ReorderSlides)

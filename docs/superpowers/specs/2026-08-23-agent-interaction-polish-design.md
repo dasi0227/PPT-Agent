@@ -1,5 +1,9 @@
 # Agent Interaction Polish Design
 
+> Supersession note: section 3's frontend-only `Enhance` preview is superseded by
+> `2026-08-23-contextual-prompt-polish-design.md`. The remaining interaction
+> improvements in this document are unchanged.
+
 ## Scope
 
 This change improves five existing agent-facing interactions without changing the public event protocol, Run lifecycle, Plan schema, Question schema, or backend APIs:

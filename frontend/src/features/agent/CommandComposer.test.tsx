@@ -5,9 +5,11 @@ import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
+import { polishApi } from '../../api/polish';
 import { CommandComposer } from './CommandComposer';
 
 vi.mock('../../lib/platform', () => ({ isMac: () => false, submitShortcutLabel: () => 'Ctrl + Enter' }));
+vi.mock('../../api/polish', () => ({ polishApi: { polish: vi.fn() } }));
 
 function mockComposerControlMeasurements() {
   return vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
@@ -37,12 +39,19 @@ function mockComposerControlMeasurements() {
 describe('CommandComposer', () => {
   const createRun = vi.fn();
   const cancelRun = vi.fn();
+  const polish = vi.mocked(polishApi.polish);
 
   beforeEach(() => {
     createRun.mockReset();
     createRun.mockResolvedValue(true);
     cancelRun.mockReset();
     cancelRun.mockResolvedValue(undefined);
+    polish.mockReset();
+    polish.mockResolvedValue({
+      polished_instruction: '请制作一页克制的产品介绍，突出核心价值并保持清晰的信息层级。',
+      changed: true,
+      prompt_version: '2026-08-23.v1',
+    });
     act(() => {
       useProjectStore.setState({
         activeProjectId: 'p1',
@@ -319,10 +328,12 @@ describe('CommandComposer', () => {
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '补充要求' } });
     expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '优化表达' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '润色表达' })).toBeInTheDocument();
   });
 
-  it('previews Enhance for one second without changing the instruction', async () => {
+  it('polishes the instruction with project context without creating a run', async () => {
+    let resolvePolish: ((value: Awaited<ReturnType<typeof polishApi.polish>>) => void) | undefined;
+    polish.mockReturnValue(new Promise((resolve) => { resolvePolish = resolve; }));
     render(<CommandComposer />);
     await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
@@ -330,27 +341,51 @@ describe('CommandComposer', () => {
     textarea.focus();
     textarea.setSelectionRange(2, 6);
 
-    vi.useFakeTimers();
-    try {
-      fireEvent.click(screen.getByRole('button', { name: '优化表达' }));
-      expect(textarea).toHaveAttribute('readonly');
-      expect(textarea).toHaveAttribute('aria-busy', 'true');
-      expect(screen.getByRole('button', { name: '正在优化表达' })).toBeDisabled();
-      expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
-      expect(document.querySelector('.composer-enhance-sweep')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '润色表达' }));
+    expect(textarea).toHaveAttribute('readonly');
+    expect(textarea).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('button', { name: '正在润色表达' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
+    expect(document.querySelector('.composer-polish-sweep')).toBeInTheDocument();
+    expect(polish).toHaveBeenCalledWith('p1', {
+      instruction: '做一页克制的产品介绍',
+      thread_id: 't1',
+      scope: { artifact: 'ppt', level: 'slide', slide_id: 'stable-1' },
+      mode: 'execute',
+      model: 'Kimi K3',
+    }, expect.any(AbortSignal));
 
-      act(() => { vi.advanceTimersByTime(1000); });
-      act(() => { vi.advanceTimersByTime(20); });
+    await act(async () => resolvePolish?.({
+      polished_instruction: '请制作一页克制的产品介绍，突出核心价值并保持清晰的信息层级。',
+      changed: true,
+      prompt_version: '2026-08-23.v1',
+    }));
 
-      expect(textarea).toHaveValue('做一页克制的产品介绍');
-      expect(textarea).not.toHaveAttribute('readonly');
-      expect(textarea).toHaveFocus();
-      expect(textarea.selectionStart).toBe(2);
-      expect(textarea.selectionEnd).toBe(6);
-      expect(createRun).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+    await waitFor(() => expect(textarea).toHaveValue('请制作一页克制的产品介绍，突出核心价值并保持清晰的信息层级。'));
+    expect(textarea).not.toHaveAttribute('readonly');
+    expect(textarea).toHaveFocus();
+    expect(textarea.selectionStart).toBe(textarea.value.length);
+    expect(textarea.selectionEnd).toBe(textarea.value.length);
+    expect(createRun).not.toHaveBeenCalled();
+  });
+
+  it('preserves the original instruction and selection when Polish fails', async () => {
+    polish.mockRejectedValue(new Error('润色服务暂时不可用'));
+    render(<CommandComposer />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '模型' })).toHaveTextContent('Kimi K3'));
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: '保留原文' } });
+    textarea.focus();
+    textarea.setSelectionRange(1, 3);
+
+    fireEvent.click(screen.getByRole('button', { name: '润色表达' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('润色服务暂时不可用'));
+    expect(textarea).toHaveValue('保留原文');
+    expect(textarea).toHaveFocus();
+    expect(textarea.selectionStart).toBe(1);
+    expect(textarea.selectionEnd).toBe(3);
+    expect(createRun).not.toHaveBeenCalled();
   });
 
   it('does not render the removed materialization control or duplicate status line', async () => {
