@@ -298,6 +298,7 @@ describe('public timeline components', () => {
     const { container } = render(<QuestionPanel item={item} />);
     const groupButton = screen.getByRole('button', { name: /询问了 2 个问题/ });
     expect(groupButton).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('询问了 2 个问题')).not.toHaveClass('font-medium');
     expect(screen.queryByText('这个演示的目标受众是谁？')).toBeNull();
     expect(screen.queryByText('产品经理')).toBeNull();
 

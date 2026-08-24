@@ -34,13 +34,16 @@ describe('PlanApproval', () => {
     expect(screen.queryByText(/等待确认/)).toBeNull();
     expect(screen.queryByRole('button', { name: '展开全部' })).toBeNull();
     expect(approve).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: '提交' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
 
     fireEvent.click(approve);
 
     expect(screen.getByText('演示文稿制作计划')).toBeInTheDocument();
     expect(approve).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '提交' })).not.toBeDisabled();
+    const continueButton = screen.getByRole('button', { name: '继续' });
+    expect(continueButton).not.toBeDisabled();
+    expect(continueButton).toHaveClass('h-9', 'bg-text-900', 'text-surface');
+    expect(continueButton.querySelector('svg')).toHaveClass('h-4', 'w-4');
     expect(runsApi.submitPlanApproval).not.toHaveBeenCalled();
   });
 
@@ -85,10 +88,29 @@ describe('PlanApproval', () => {
     expect(screen.getByTestId('plan-approval-actions')).toHaveClass('border-t');
     fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
     expect(screen.getByPlaceholderText('说明需要调整的内容')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '提交' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
 
     fireEvent.change(screen.getByPlaceholderText('说明需要调整的内容'), { target: { value: '需要调整标题' } });
-    expect(screen.getByRole('button', { name: '提交' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '继续' })).not.toBeDisabled();
+  });
+
+  it('keeps the existing submitting copy while sending the decision', async () => {
+    vi.mocked(runsApi.submitPlanApproval).mockResolvedValueOnce(undefined as never);
+    render(<PlanApproval item={item} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '批准执行' }));
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
+
+    const submitting = await screen.findByRole('button', { name: '提交中' });
+    expect(submitting).toBeDisabled();
+    expect(runsApi.submitPlanApproval).toHaveBeenCalledWith('run-1', {
+      interaction_id: 'interaction-1',
+      plan_id: 'plan-1',
+      expected_revision: 3,
+      decision: 'approve',
+      feedback: '',
+      idempotency_key: 'interaction-1:3',
+    });
   });
 
   it('renders an answered approval as a timeline row with a content-only expanded card', () => {
@@ -96,7 +118,7 @@ describe('PlanApproval', () => {
 
     const toggle = screen.getByRole('button', { name: '计划已返回修改' });
     expect(toggle).toHaveClass('min-h-8', 'px-1.5', 'py-1', 'text-[13px]');
-    expect(screen.queryByRole('button', { name: '提交' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '继续' })).toBeNull();
     expect(screen.queryByText('请补充案例')).toBeNull();
     expect(screen.queryByText('演示文稿制作计划')).toBeNull();
 
@@ -111,7 +133,7 @@ describe('PlanApproval', () => {
     expect(screen.queryByText('批准执行')).toBeNull();
     expect(screen.queryByText('返回修改')).toBeNull();
     expect(screen.queryByText('取消停止')).toBeNull();
-    expect(screen.queryByRole('button', { name: '提交' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '继续' })).toBeNull();
   });
 
   it.each([

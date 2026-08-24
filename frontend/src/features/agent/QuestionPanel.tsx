@@ -281,7 +281,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
             className="flex min-h-8 w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <MessageCircleQuestion className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
-            <span className="min-w-0 flex-1 truncate font-medium">询问了 {questions.length} 个问题</span>
+            <span className="min-w-0 flex-1 truncate">询问了 {questions.length} 个问题</span>
             {answeredGroupExpanded
               ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />
               : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />}
