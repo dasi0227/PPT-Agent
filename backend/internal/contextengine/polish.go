@@ -87,7 +87,7 @@ func (a *ContextAssembler) AssemblePolish(
 	if err := req.Command.Validate(); err != nil {
 		return PolishContext{}, err
 	}
-	outline, slides, design, err := loadSpec(project)
+	deck, outline, slides, design, err := loadSpec(project)
 	if err != nil {
 		return PolishContext{}, err
 	}
@@ -96,22 +96,19 @@ func (a *ContextAssembler) AssemblePolish(
 		Command:       PolishCommandContext{Scope: req.Command.Scope, Mode: req.Command.Mode},
 		Project:       (ProjectLoader{}).Load(project),
 		Outline: PolishOutlineContext{
-			Title: outline.Title, Goal: outline.Goal, Audience: outline.Audience,
-			Language: outline.Language, Positioning: outline.Positioning,
-			Requirements: append([]string(nil), outline.Requirements...),
-			Prohibitions: append([]string(nil), outline.Prohibitions...),
+			Title: deck.Title, Goal: deck.Goal, Audience: deck.Audience,
+			Language: deck.Language, Positioning: deck.Positioning,
+			Requirements: append([]string(nil), deck.Requirements...),
+			Prohibitions: append([]string(nil), deck.Prohibitions...),
 			Sections:     append([]pptspec.Section(nil), outline.Sections...),
 			Slides:       []SlideSummary{},
 		},
 		Design:        DesignContext{Design: &design},
 		RelatedSlides: []SlideSummary{}, RecentTurns: []PolishRecentTurn{}, Warnings: []string{},
 	}
-	for _, slideID := range outline.SlideOrder {
-		slide, ok := slides[slideID]
-		if !ok {
-			continue
-		}
-		pack.Outline.Slides = append(pack.Outline.Slides, slideSummary(slide))
+	for _, loc := range pptspec.FlattenOutline(outline) {
+		slide, ok := slides[loc.Slide.SlideID]
+		pack.Outline.Slides = append(pack.Outline.Slides, slideSummary(loc, slide, ok))
 	}
 	if req.Command.Scope.Level == model.ScopeSlide {
 		target, ok := slides[req.Command.Scope.SlideID]

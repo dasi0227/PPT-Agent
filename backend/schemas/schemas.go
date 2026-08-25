@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	DeckName            = "deck"
 	OutlineName         = "outline"
 	DesignName          = "design"
 	SlideSpecName       = "slide-spec"
@@ -32,6 +33,8 @@ var (
 
 func schemaFilename(name string) (string, error) {
 	switch name {
+	case DeckName:
+		return "deck.schema.json", nil
 	case OutlineName:
 		return "outline.schema.json", nil
 	case DesignName:
@@ -48,7 +51,7 @@ func schemaFilename(name string) (string, error) {
 func compileAll() {
 	compiled = map[string]*jsonschema.Schema{}
 	compiler := jsonschema.NewCompiler()
-	for _, name := range []string{OutlineName, DesignName, SlideSpecName, MaterializationName} {
+	for _, name := range []string{DeckName, OutlineName, DesignName, SlideSpecName, MaterializationName} {
 		filename, _ := schemaFilename(name)
 		raw, err := schemaFS.ReadFile(filename)
 		if err != nil {
@@ -60,7 +63,7 @@ func compileAll() {
 			return
 		}
 	}
-	for _, name := range []string{OutlineName, DesignName, SlideSpecName, MaterializationName} {
+	for _, name := range []string{DeckName, OutlineName, DesignName, SlideSpecName, MaterializationName} {
 		filename, _ := schemaFilename(name)
 		value, err := compiler.Compile(filename)
 		if err != nil {

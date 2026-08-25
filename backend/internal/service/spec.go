@@ -63,7 +63,6 @@ func (s *SpecService) PatchSlide(ctx context.Context, slideID string, expected i
 		return spec.SlideSpec{}, ErrSpecRevisionConflict
 	}
 	next.SchemaVersion, next.ProjectID, next.SlideID = spec.SchemaVersion, meta.ProjectID, slideID
-	next.SectionID, next.SubsectionID = current.SectionID, current.SubsectionID
 	next.Revision, next.CreatedAt, next.UpdatedAt = current.Revision+1, current.CreatedAt, s.clock()
 	if err := spec.ValidateSlideSpec(next); err != nil {
 		return spec.SlideSpec{}, err
@@ -94,7 +93,7 @@ func (s *SpecService) ReplaceOutline(ctx context.Context, projectID string, expe
 	}
 	next.SchemaVersion, next.ProjectID = spec.SchemaVersion, projectID
 	next.Revision, next.CreatedAt, next.UpdatedAt = view.Outline.Revision+1, view.Outline.CreatedAt, s.clock()
-	if err := spec.ValidateOutline(next, view.SlideSpecs); err != nil {
+	if err := spec.ValidateOutline(next); err != nil {
 		return spec.Outline{}, err
 	}
 	path := filepath.Join(project.WorkDir, "outline.json")
@@ -133,6 +132,15 @@ func (s *SpecService) ReplaceDesign(ctx context.Context, projectID string, expec
 }
 
 func (s *SpecService) read(project model.Project, metas []model.Slide) (spec.ProjectView, error) {
+	_ = metas
+	deckRaw, err := os.ReadFile(filepath.Join(project.WorkDir, "deck.json"))
+	if err != nil {
+		return spec.ProjectView{}, err
+	}
+	var deck spec.Deck
+	if err := json.Unmarshal(deckRaw, &deck); err != nil {
+		return spec.ProjectView{}, err
+	}
 	outlineRaw, err := os.ReadFile(filepath.Join(project.WorkDir, "outline.json"))
 	if err != nil {
 		return spec.ProjectView{}, err
@@ -150,12 +158,17 @@ func (s *SpecService) read(project model.Project, metas []model.Slide) (spec.Pro
 		return spec.ProjectView{}, err
 	}
 	out := spec.ProjectView{
-		Outline: outline, Design: design,
+		Deck: deck, Outline: outline, Design: design,
 		SlideSpecs: map[string]spec.SlideSpec{}, States: map[string]spec.Materialization{},
 	}
-	for _, meta := range metas {
-		specPath := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(meta.ID)))
+	for _, location := range spec.FlattenOutline(outline) {
+		id := location.Slide.SlideID
+		specPath := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id)))
 		specRaw, err := os.ReadFile(specPath)
+		if errors.Is(err, os.ErrNotExist) {
+			out.States[id] = spec.Materialization{State: "pending"}
+			continue
+		}
 		if err != nil {
 			return spec.ProjectView{}, err
 		}
@@ -163,10 +176,10 @@ func (s *SpecService) read(project model.Project, metas []model.Slide) (spec.Pro
 		if err := json.Unmarshal(specRaw, &slide); err != nil {
 			return spec.ProjectView{}, err
 		}
-		out.SlideSpecs[meta.ID] = slide
-		htmlRaw, htmlErr := os.ReadFile(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(meta.ID))))
+		out.SlideSpecs[id] = slide
+		htmlRaw, htmlErr := os.ReadFile(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(id))))
 		materialization, materializationErr := spec.ReadMaterialization(
-			filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideMaterializationPath(meta.ID))),
+			filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideMaterializationPath(id))),
 		)
 		var record *spec.MaterializationRecord
 		revs := model.MaterializationRevisions{}
@@ -174,25 +187,30 @@ func (s *SpecService) read(project model.Project, metas []model.Slide) (spec.Pro
 			record = &materialization
 			revs = model.MaterializationRevisions{
 				SlideHTML: materialization.Artifact.Revision,
-				Outline:   materialization.Source.Outline,
-				SlideSpec: materialization.Source.Spec,
-				Design:    materialization.Source.Design,
+				Outline:   outline.Revision,
+				SlideSpec: materialization.Source.SpecRevision,
+				Design:    materialization.Source.DesignRevision,
 			}
 		}
-		out.States[meta.ID] = spec.Materialization{
+		nodeHash := spec.SemanticSlideNodeHash(outline, id)
+		out.States[id] = spec.Materialization{
 			State: spec.DeriveMaterializationState(
 				htmlErr == nil,
 				record,
-				outline.Revision,
+				deck.Revision, nodeHash,
 				slide.Revision,
 				design.Revision,
 				spec.ContentHash(htmlRaw),
-				spec.SourceHash(outlineRaw, specRaw, designRaw),
+				spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw),
+				spec.FrameContextHash(deck, outline, design, id),
 			),
 			Revisions: revs,
 		}
 	}
-	if err := spec.ValidateOutline(outline, out.SlideSpecs); err != nil {
+	if err := spec.ValidateDeck(deck); err != nil {
+		return spec.ProjectView{}, err
+	}
+	if err := spec.ValidateOutline(outline); err != nil {
 		return spec.ProjectView{}, err
 	}
 	return out, nil

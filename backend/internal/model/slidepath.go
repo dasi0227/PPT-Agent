@@ -31,6 +31,10 @@ func OutlineVersionSnapshot(versionNo int) string {
 	return fmt.Sprintf("versions/outline/v%d.json", versionNo)
 }
 
+func DeckVersionSnapshot(versionNo int) string {
+	return fmt.Sprintf("versions/deck/v%d.json", versionNo)
+}
+
 func DesignVersionSnapshot(versionNo int) string {
 	return fmt.Sprintf("versions/design/v%d.json", versionNo)
 }

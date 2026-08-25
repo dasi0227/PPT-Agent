@@ -24,12 +24,16 @@ type workflowCommitter struct {
 
 func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.CommitContext) error {
 	changes := commitContext.Changes
-	var deck spec.Outline
-	if err := readJSON(filepath.Join(c.project.WorkDir, "outline.json"), &deck); err != nil {
+	var deck spec.Deck
+	if err := readJSON(filepath.Join(c.project.WorkDir, "deck.json"), &deck); err != nil {
 		return err
 	}
-	outlineRaw, err := os.ReadFile(filepath.Join(c.project.WorkDir, "outline.json"))
+	deckRaw, err := os.ReadFile(filepath.Join(c.project.WorkDir, "deck.json"))
 	if err != nil {
+		return err
+	}
+	var outline spec.Outline
+	if err := readJSON(filepath.Join(c.project.WorkDir, "outline.json"), &outline); err != nil {
 		return err
 	}
 	var design spec.Design
@@ -104,7 +108,13 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 	}
 	if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactOutline, ID: c.project.ID}).Key()]; ok {
 		if _, err := addVersion("outline", model.OutlineVersionTarget(c.project.ID),
-			model.OutlineVersionSnapshot(deck.Revision), mustJSON(deck)); err != nil {
+			model.OutlineVersionSnapshot(outline.Revision), mustJSON(outline)); err != nil {
+			cleanup()
+			return err
+		}
+	}
+	if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactDeck, ID: c.project.ID}).Key()]; ok {
+		if _, err := addVersion("deck", model.DeckVersionTarget(c.project.ID), model.DeckVersionSnapshot(deck.Revision), mustJSON(deck)); err != nil {
 			cleanup()
 			return err
 		}
@@ -116,9 +126,11 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			return err
 		}
 	}
-	nextSlides := make([]model.Slide, 0, len(deck.SlideOrder))
+	flat := spec.FlattenOutline(outline)
+	nextSlides := make([]model.Slide, 0, len(flat))
 	inDeck := map[string]bool{}
-	for position, id := range deck.SlideOrder {
+	for position, location := range flat {
+		id := location.Slide.SlideID
 		inDeck[id] = true
 		var semantic spec.SlideSpec
 		specPath := filepath.Join(c.project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id)))
@@ -176,13 +188,13 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		}
 		if hasProof {
 			artifactHash := spec.ContentHash(htmlRaw)[len("sha256:"):]
-			sourceHash := spec.SourceHash(outlineRaw, specRaw, designRaw)
+			nodeHash := spec.SemanticSlideNodeHash(outline, id)
+			sourceHash := spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw)
 			if proof.ArtifactHash != artifactHash ||
 				proof.SourceHash != sourceHash ||
 				proof.HTMLRevision != expectedHTMLRevision ||
-				proof.SourceOutlineRevision != deck.Revision ||
-				proof.SourceSpecRevision != semantic.Revision ||
-				proof.SourceDesignRevision != design.Revision {
+				proof.DeckRevision != deck.Revision || proof.OutlineNodeHash != nodeHash ||
+				proof.SpecRevision != semantic.Revision || proof.DesignRevision != design.Revision || proof.FrameContextHash != spec.FrameContextHash(deck, outline, design, id) {
 				cleanup()
 				return fmt.Errorf("stale materialization proof for %s", id)
 			}
@@ -216,11 +228,10 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 					Hash:     "sha256:" + proof.ArtifactHash,
 				},
 				Source: spec.MaterializationSource{
-					Outline: proof.SourceOutlineRevision,
-					Spec:    proof.SourceSpecRevision,
-					Design:  proof.SourceDesignRevision,
-					Hash:    proof.SourceHash,
+					DeckRevision: proof.DeckRevision, OutlineNodeHash: proof.OutlineNodeHash,
+					SpecRevision: proof.SpecRevision, DesignRevision: proof.DesignRevision, Hash: proof.SourceHash,
 				},
+				Frame:      spec.MaterializationFrame{ContextHash: proof.FrameContextHash},
 				RenderedAt: time.Now().Unix(),
 			}
 			if err := spec.ValidateMaterialization(record); err != nil {
@@ -240,9 +251,9 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 				cleanup()
 				return err
 			}
-			meta.SourceOutlineRevision = proof.SourceOutlineRevision
-			meta.SourceSpecRevision = proof.SourceSpecRevision
-			meta.SourceDesignRevision = proof.SourceDesignRevision
+			meta.SourceOutlineRevision = outline.Revision
+			meta.SourceSpecRevision = proof.SpecRevision
+			meta.SourceDesignRevision = proof.DesignRevision
 		}
 		nextSlides = append(nextSlides, meta)
 	}

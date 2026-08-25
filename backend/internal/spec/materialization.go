@@ -7,19 +7,37 @@ import (
 	"os"
 )
 
+func FrameContextHash(deck Deck, outline Outline, design Design, slideID string) string {
+	loc, ok := FindSlide(outline, slideID)
+	if !ok {
+		return ""
+	}
+	sectionTitle, subsectionTitle := loc.Section.Title, ""
+	if loc.Subsection != nil {
+		subsectionTitle = loc.Subsection.Title
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"slide_id": slideID, "ordinal": loc.Ordinal, "total": len(FlattenOutline(outline)),
+		"section": sectionTitle, "subsection": subsectionTitle,
+		"numbering": deck.Numbering, "chrome": design.Chrome,
+	})
+	return ContentHash(raw)
+}
+
 func ContentHash(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func SourceHash(outlineRaw, specRaw, designRaw []byte) string {
-	size := len(outlineRaw) + len(specRaw) + len(designRaw) + 32
+func SourceHash(deckRaw []byte, outlineNodeHash string, specRaw, designRaw []byte) string {
+	size := len(deckRaw) + len(outlineNodeHash) + len(specRaw) + len(designRaw) + 48
 	combined := make([]byte, 0, size)
 	for _, item := range []struct {
 		name string
 		raw  []byte
 	}{
-		{name: "outline", raw: outlineRaw},
+		{name: "deck", raw: deckRaw},
+		{name: "outline_node", raw: []byte(outlineNodeHash)},
 		{name: "spec", raw: specRaw},
 		{name: "design", raw: designRaw},
 	} {
@@ -49,8 +67,8 @@ func ReadMaterialization(path string) (MaterializationRecord, error) {
 func DeriveMaterializationState(
 	hasHTML bool,
 	record *MaterializationRecord,
-	currentOutline, currentSpec, currentDesign int,
-	artifactHash, sourceHash string,
+	currentDeck int, currentOutlineNodeHash string, currentSpec, currentDesign int,
+	artifactHash, sourceHash, frameHash string,
 ) string {
 	if !hasHTML {
 		return "not_materialized"
@@ -59,19 +77,22 @@ func DeriveMaterializationState(
 		return "unknown"
 	}
 	if record.Artifact.Hash != artifactHash ||
-		record.Source.Outline > currentOutline ||
-		record.Source.Spec > currentSpec ||
-		record.Source.Design > currentDesign {
+		record.Source.DeckRevision > currentDeck ||
+		record.Source.SpecRevision > currentSpec ||
+		record.Source.DesignRevision > currentDesign {
 		return "unknown"
 	}
-	if record.Source.Outline < currentOutline || record.Source.Spec < currentSpec {
+	if record.Source.DeckRevision < currentDeck || record.Source.OutlineNodeHash != currentOutlineNodeHash || record.Source.SpecRevision < currentSpec {
 		return "spec_stale"
 	}
-	if record.Source.Design < currentDesign {
+	if record.Source.DesignRevision < currentDesign {
 		return "design_stale"
 	}
 	if record.Source.Hash != sourceHash {
 		return "unknown"
+	}
+	if record.Frame.ContextHash != frameHash {
+		return "frame_stale"
 	}
 	return "fresh"
 }

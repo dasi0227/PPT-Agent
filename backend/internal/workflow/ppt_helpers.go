@@ -19,407 +19,188 @@ import (
 	nethtml "golang.org/x/net/html"
 )
 
-var stableSlideID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
+var stableSlideID = regexp.MustCompile(`^sli_[A-Za-z0-9_-]+$`)
 
-const resourceObjectGuidance = `resource must be an object, not a string or path. Use {"type":"deck","part":"outline"}, {"type":"deck","part":"design"}, or {"type":"slide","slide_id":"<stable slide_id>","part":"spec|html"}. Never use display keys such as "deck:outline" or "slide:<id>:html", "current", or "slides/...".`
-
-const disclosedResourceGuidance = `resource must be an object that matches the current parameter schema; never pass a display key, "current", file path, or opaque handle.`
-
+func deckRef(pack contextengine.ContextPack) ArtifactRef {
+	return ArtifactRef{Kind: ArtifactDeck, ID: pack.Project.ID, Path: "deck.json", Project: pack.Project.ID}
+}
 func outlineRef(pack contextengine.ContextPack) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactOutline, ID: pack.Project.ID, Path: "outline.json", Project: pack.Project.ID}
 }
-
 func designRef(pack contextengine.ContextPack) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactDesign, ID: pack.Project.ID, Path: "design.json", Project: pack.Project.ID}
 }
-
 func designTokensRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{
-		Kind: ArtifactDerived, ID: pack.Project.ID + ":design-tokens",
-		Path: "common/tokens.css", Project: pack.Project.ID,
-	}
+	return ArtifactRef{Kind: ArtifactDerived, ID: pack.Project.ID + ":design-tokens", Path: "common/tokens.css", Project: pack.Project.ID}
 }
-
 func specSlideRef(id string) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactSlideSpec, ID: id, Path: model.SlideSpecPath(id)}
 }
-
 func slideHTMLRef(id string) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactSlideHTML, ID: id, Path: model.SlideHTMLPath(id)}
 }
-
-func refForResource(pack contextengine.ContextPack, resource Resource) (ArtifactRef, error) {
-	switch resource.Key() {
+func refForResource(pack contextengine.ContextPack, r Resource) (ArtifactRef, error) {
+	switch r.Key() {
+	case "deck:deck":
+		return deckRef(pack), nil
 	case "deck:outline":
 		return outlineRef(pack), nil
 	case "deck:design":
 		return designRef(pack), nil
 	}
-	if resource.Type == "slide" && resource.Part == "spec" {
-		return specSlideRef(resource.SlideID), nil
+	if r.Type == "slide" && r.Part == "spec" {
+		return specSlideRef(r.SlideID), nil
 	}
-	if resource.Type == "slide" && resource.Part == "html" {
-		return slideHTMLRef(resource.SlideID), nil
+	if r.Type == "slide" && r.Part == "html" {
+		return slideHTMLRef(r.SlideID), nil
 	}
-	return ArtifactRef{}, fmt.Errorf("unsupported PPT resource")
+	return ArtifactRef{}, errors.New("unsupported PPT resource")
 }
-
 func parseResource(args map[string]any) (Resource, error) {
-	raw, exists := args["resource"]
-	if !exists {
-		return Resource{}, fmt.Errorf(resourceObjectGuidance)
-	}
-	if _, ok := raw.(string); ok {
-		return Resource{}, fmt.Errorf(resourceObjectGuidance)
-	}
-	value, ok := raw.(map[string]any)
+	value, ok := args["resource"].(map[string]any)
 	if !ok {
-		return Resource{}, fmt.Errorf(resourceObjectGuidance)
+		return Resource{}, errors.New("resource must be a structured object")
 	}
-	resource := Resource{
-		Type: stringValue(value["type"]), SlideID: stringValue(value["slide_id"]),
-		Part: stringValue(value["part"]),
+	r := Resource{Type: stringValue(value["kind"]), SlideID: stringValue(value["slide_id"]), Part: stringValue(value["part"])}
+	if r.Type == "" {
+		r.Type = stringValue(value["type"])
 	}
-	if resource.Type == "deck" {
-		if resource.SlideID != "" || (resource.Part != "outline" && resource.Part != "design") {
-			return Resource{}, fmt.Errorf(`deck resource requires {"type":"deck","part":"outline|design"} and forbids slide_id`)
-		}
-		return resource, nil
+	if r.Type == "deck" {
+		r.Part = "deck"
 	}
-	if resource.Type == "slide" {
-		if !stableSlideID.MatchString(resource.SlideID) || resource.SlideID == "current" {
-			return Resource{}, fmt.Errorf(`slide resource requires a stable slide_id from the current project; never use "current" or a path such as "slides/..."`)
-		}
-		if resource.Part != "spec" && resource.Part != "html" {
-			return Resource{}, fmt.Errorf(`slide resource requires {"type":"slide","slide_id":"<stable slide_id>","part":"spec|html"}`)
-		}
-		return resource, nil
+	if r.Type == "outline" {
+		r.Type = "deck"
+		r.Part = "outline"
 	}
-	return Resource{}, fmt.Errorf(`resource type must be "deck" or "slide"; ` + resourceObjectGuidance)
+	if r.Type == "design" {
+		r.Type = "deck"
+		r.Part = "design"
+	}
+	if r.Type == "slide" && stableSlideID.MatchString(r.SlideID) && (r.Part == "spec" || r.Part == "html") {
+		return r, nil
+	}
+	if r.Type == "deck" && (r.Part == "deck" || r.Part == "outline" || r.Part == "design") {
+		return r, nil
+	}
+	return Resource{}, errors.New("resource must identify deck, outline, design, or a stable slide spec/html")
 }
-
 func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, string, error) {
 	if tx != nil {
 		raw, err := tx.Read(ref)
-		if err == nil {
-			source := "committed"
-			if tx.HasChange(ref) {
-				source = "direct_write"
-			}
-			return raw, source, nil
+		source := "committed"
+		if tx.HasChange(ref) {
+			source = "run_overlay"
 		}
-		return nil, "", err
+		return raw, source, err
 	}
 	raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(ref.Path)))
 	return raw, "committed", err
 }
-
-func errorsIsNotExist(err error) bool {
-	return errors.Is(err, fs.ErrNotExist)
-}
-
-func readFailure(err error) ToolResult {
-	if errorsIsNotExist(err) {
-		return failedToolResult(CodeResourceNotFound, "PPT resource was not found", false)
+func errorsIsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
+func resourceSchema() map[string]any  { return resourceSchemaForScope(model.RunScope{}, false) }
+func resourceSchemaForScope(scope model.RunScope, _ bool) map[string]any {
+	variants := []any{objectSchema([]string{"kind"}, map[string]any{"kind": map[string]any{"enum": []string{"deck", "outline", "design"}}})}
+	parts := []string{"spec", "html"}
+	if scope.Artifact == model.ArtifactSpec {
+		parts = []string{"spec"}
 	}
-	return failedToolResult("READ_FAILED", err.Error(), true)
-}
-
-func writeFailure(err error) ToolResult {
-	if errors.Is(err, ErrArtifactHashMismatch) {
-		return failedToolResult(CodeRevisionConflict, err.Error(), true)
-	}
-	return failedToolResult("WRITE_FAILED", err.Error(), true)
-}
-
-func resourceSchema() map[string]any {
-	return resourceSchemaForScope(model.RunScope{}, false)
-}
-
-func resourceSchemaForScope(scope model.RunScope, write bool) map[string]any {
-	variants := []any{}
-	deckScope := scope.Level != model.ScopeSlide
-	if !write || deckScope {
-		variants = append(variants, objectSchema([]string{"type", "part"}, map[string]any{
-			"type": map[string]any{"const": "deck", "description": `Use "deck" for deck-wide resources.`},
-			"part": map[string]any{
-				"type": "string", "enum": []string{"outline", "design"},
-				"description": `Use "outline" for deck narrative/order, or "design" for deck-wide visual system.`,
-			},
-		}))
-	}
-	slideParts := []string{"spec"}
-	if scope.Artifact != model.ArtifactSpec {
-		slideParts = append(slideParts, "html")
-	}
-	slideID := map[string]any{
-		"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`,
-		"description": `Stable slide identifier from the current project; never use "current" or a file path.`,
-	}
+	id := map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}
 	if scope.Level == model.ScopeSlide && scope.SlideID != "" {
-		slideID = map[string]any{
-			"type": "string", "const": scope.SlideID,
-			"description": "The only slide authorized by the current run scope.",
-		}
+		id = map[string]any{"const": scope.SlideID}
 	}
-	variants = append(variants, objectSchema([]string{"type", "slide_id", "part"}, map[string]any{
-		"type":     map[string]any{"const": "slide", "description": `Use "slide" for one page resource.`},
-		"slide_id": slideID,
-		"part": map[string]any{
-			"type": "string", "enum": slideParts,
-			"description": `Use "spec" for the page design/spec JSON, or "html" when HTML is included by the current scope.`,
-		},
-	}))
-	return map[string]any{
-		"description": resourceObjectGuidance,
-		"oneOf":       variants,
-	}
+	variants = append(variants, objectSchema([]string{"kind", "slide_id", "part"}, map[string]any{"kind": map[string]any{"const": "slide"}, "slide_id": id, "part": map[string]any{"enum": parts}}))
+	return map[string]any{"oneOf": variants}
 }
-
-func objectSchema(required []string, properties map[string]any) map[string]any {
-	return map[string]any{
-		"type": "object", "required": required, "properties": properties, "additionalProperties": false,
-	}
-}
-
-func stringValue(value any) string {
-	text, _ := value.(string)
-	return text
-}
-
 func intValue(value any, fallback int) int {
-	switch current := value.(type) {
+	switch v := value.(type) {
 	case float64:
-		return int(current)
+		return int(v)
 	case int:
-		return current
+		return v
 	case string:
-		if parsed, err := strconv.Atoi(current); err == nil {
-			return parsed
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
 		}
 	}
 	return fallback
 }
 
-func normalizeModel(pack contextengine.ContextPack, tx *RunSession, ref ArtifactRef, value any) ([]byte, int, error) {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return nil, 0, err
-	}
-	now := time.Now().Unix()
-	switch ref.Kind {
-	case ArtifactOutline:
-		var next spec.Outline
-		if err := json.Unmarshal(raw, &next); err != nil {
-			return nil, 0, err
-		}
-		var current spec.Outline
-		currentRaw, _, readErr := readArtifact(tx.ProjectDir(), tx, ref)
-		if readErr == nil {
-			_ = json.Unmarshal(currentRaw, &current)
-		}
-		next.SchemaVersion = spec.SchemaVersion
-		next.ProjectID = pack.Project.ID
-		next.Revision = maxInt(current.Revision+1, 1)
-		if current.CreatedAt != 0 {
-			next.CreatedAt = current.CreatedAt
-		} else {
-			next.CreatedAt = now
-		}
-		next.UpdatedAt = now
-		if err := validateOutlineStructure(next); err != nil {
-			return nil, 0, err
-		}
-		raw, _ = json.MarshalIndent(next, "", "  ")
-		return raw, next.Revision, nil
-	case ArtifactSlideSpec:
-		var next spec.SlideSpec
-		if err := json.Unmarshal(raw, &next); err != nil {
-			return nil, 0, err
-		}
-		var current spec.SlideSpec
-		currentRaw, _, readErr := readArtifact(tx.ProjectDir(), tx, ref)
-		if readErr == nil {
-			_ = json.Unmarshal(currentRaw, &current)
-		}
-		next.SchemaVersion = spec.SchemaVersion
-		next.ProjectID = pack.Project.ID
-		next.SlideID = ref.ID
-		if current.SectionID != "" {
-			next.SectionID = current.SectionID
-			next.SubsectionID = current.SubsectionID
-		} else if pack.Target.SlideSpec != nil && pack.Target.SlideSpec.SlideID == ref.ID {
-			next.SectionID = pack.Target.SlideSpec.SectionID
-			next.SubsectionID = pack.Target.SlideSpec.SubsectionID
-		}
-		next.Revision = maxInt(current.Revision+1, 1)
-		if current.CreatedAt != 0 {
-			next.CreatedAt = current.CreatedAt
-		} else {
-			next.CreatedAt = now
-		}
-		next.UpdatedAt = now
-		if err := spec.ValidateSlideSpec(next); err != nil {
-			return nil, 0, err
-		}
-		raw, _ = json.MarshalIndent(next, "", "  ")
-		return raw, next.Revision, nil
-	case ArtifactDesign:
-		var next spec.Design
-		if err := json.Unmarshal(raw, &next); err != nil {
-			return nil, 0, err
-		}
-		var current spec.Design
-		currentRaw, _, readErr := readArtifact(tx.ProjectDir(), tx, ref)
-		if readErr == nil {
-			_ = json.Unmarshal(currentRaw, &current)
-		}
-		next.SchemaVersion = spec.SchemaVersion
-		next.ProjectID = pack.Project.ID
-		next.Revision = maxInt(current.Revision+1, 1)
-		if current.CreatedAt != 0 {
-			next.CreatedAt = current.CreatedAt
-		} else {
-			next.CreatedAt = now
-		}
-		next.UpdatedAt = now
-		if err := spec.ValidateDesign(next); err != nil {
-			return nil, 0, err
-		}
-		if strings.TrimSpace(next.Theme) == "" || strings.TrimSpace(next.Direction) == "" ||
-			strings.TrimSpace(next.Density) == "" || next.Chrome == nil {
-			return nil, 0, fmt.Errorf("%w: incomplete design spec", spec.ErrInvalid)
-		}
-		raw, _ = json.MarshalIndent(next, "", "  ")
-		return raw, next.Revision, nil
-	default:
-		return nil, 0, errors.New("target does not accept a JSON model")
-	}
-}
-
-func validateOutlineStructure(deck spec.Outline) error {
-	if deck.SchemaVersion != spec.SchemaVersion || deck.Revision < 1 ||
-		deck.ProjectID == "" || strings.TrimSpace(deck.Title) == "" ||
-		strings.TrimSpace(deck.Goal) == "" || strings.TrimSpace(deck.Audience) == "" ||
-		strings.TrimSpace(deck.Language) == "" || deck.Sections == nil || deck.SlideOrder == nil {
-		return fmt.Errorf("%w: invalid deck header", spec.ErrInvalid)
-	}
-	sections, subsections := map[string]bool{}, map[string]bool{}
-	for _, section := range deck.Sections {
-		if section.ID == "" || section.Title == "" || section.Purpose == "" || sections[section.ID] {
-			return fmt.Errorf("%w: invalid or duplicate section", spec.ErrInvalid)
-		}
-		sections[section.ID] = true
-		for _, subsection := range section.Subsections {
-			if subsection.ID == "" || subsection.Title == "" || subsections[subsection.ID] {
-				return fmt.Errorf("%w: invalid or duplicate subsection", spec.ErrInvalid)
-			}
-			subsections[subsection.ID] = true
-		}
-	}
-	seen := map[string]bool{}
-	for _, id := range deck.SlideOrder {
-		if !stableSlideID.MatchString(id) || seen[id] {
-			return fmt.Errorf("%w: invalid or duplicate slide_id %s", spec.ErrInvalid, id)
-		}
-		seen[id] = true
-	}
-	return nil
-}
-
 func validateHTML(raw []byte) ([]Issue, error) {
 	issues := []Issue{}
-	if len(raw) == 0 || strings.ContainsRune(string(raw), '\x00') {
-		return []Issue{{Code: "HTML_PARSE_FAILED", Severity: SeverityError, Summary: "HTML is empty or contains NUL bytes"}},
-			errors.New("HTML basic parsing failed")
-	}
 	if _, err := nethtml.Parse(strings.NewReader(string(raw))); err != nil {
-		return []Issue{{Code: "HTML_PARSE_FAILED", Severity: SeverityError, Summary: err.Error()}},
-			fmt.Errorf("HTML basic parsing failed: %w", err)
+		issues = append(issues, Issue{Code: "HTML_PARSE", Severity: SeverityError, Summary: err.Error()})
 	}
 	for _, check := range designsystem.LintSlide(raw) {
 		if !check.OK {
-			issues = append(issues, Issue{
-				Code:     "HTML_" + strings.ToUpper(strings.ReplaceAll(check.ID, "-", "_")),
-				Severity: SeverityError, Summary: check.Reason,
-			})
+			issues = append(issues, Issue{Code: check.ID, Severity: SeverityError, Summary: check.Reason})
 		}
 	}
+	if strings.Contains(string(raw), "data-page-number") || strings.Contains(string(raw), "data-runtime-page-number") {
+		issues = append(issues, Issue{Code: "STATIC_PAGE_NUMBER", Severity: SeverityError, Summary: "page numbers belong to the runtime frame"})
+	}
 	if len(issues) > 0 {
-		return issues, fmt.Errorf("HTML failed %d static checks", len(issues))
+		return issues, errors.New(issues[0].Summary)
 	}
 	return issues, nil
 }
-
-func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string, error) {
-	deckRaw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
+func currentDeck(pack contextengine.ContextPack, tx *RunSession) (spec.Deck, error) {
+	raw, _, err := readArtifact(tx.ProjectDir(), tx, deckRef(pack))
 	if err != nil {
-		return "", err
+		return spec.Deck{}, err
 	}
-	var deck spec.Outline
-	if err := json.Unmarshal(deckRaw, &deck); err != nil {
-		return "", err
-	}
-	slides := make(map[string]spec.SlideSpec, len(deck.SlideOrder))
-	for _, id := range deck.SlideOrder {
-		raw, _, err := readArtifact(tx.ProjectDir(), tx, specSlideRef(id))
-		if err != nil {
-			return "", fmt.Errorf("%w: missing slide %s", spec.ErrReferenceBroken, id)
-		}
-		var slide spec.SlideSpec
-		if err := json.Unmarshal(raw, &slide); err != nil {
-			return "", err
-		}
-		slides[id] = slide
-	}
-	if err := spec.ValidateOutline(deck, slides); err != nil {
-		return "", err
-	}
-	return hashBytes(deckRaw), nil
+	var value spec.Deck
+	err = json.Unmarshal(raw, &value)
+	return value, err
 }
-
 func currentOutline(pack contextengine.ContextPack, tx *RunSession) (spec.Outline, error) {
 	raw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
 	if err != nil {
 		return spec.Outline{}, err
 	}
-	var deck spec.Outline
-	if err := json.Unmarshal(raw, &deck); err != nil {
-		return spec.Outline{}, err
-	}
-	return deck, nil
+	var value spec.Outline
+	err = json.Unmarshal(raw, &value)
+	return value, err
 }
-
-func validateSlideReference(pack contextengine.ContextPack, tx *RunSession, slide spec.SlideSpec) error {
-	deck, err := currentOutline(pack, tx)
+func currentDesign(pack contextengine.ContextPack, tx *RunSession) (spec.Design, error) {
+	raw, _, err := readArtifact(tx.ProjectDir(), tx, designRef(pack))
 	if err != nil {
-		return err
+		return spec.Design{}, err
 	}
-	ordered := false
-	for _, id := range deck.SlideOrder {
-		ordered = ordered || id == slide.SlideID
-	}
-	if !ordered {
-		return fmt.Errorf("%w: slide %s is not declared by the current outline", spec.ErrReferenceBroken, slide.SlideID)
-	}
-	if err := spec.BuildSectionIndex(deck.Sections).ValidatePlacement(slide.SectionID, slide.SubsectionID); err != nil {
-		return fmt.Errorf("%w: slide %s %v", spec.ErrReferenceBroken, slide.SlideID, err)
-	}
-	return nil
+	var value spec.Design
+	err = json.Unmarshal(raw, &value)
+	return value, err
 }
-
-func readSlideModel(pack contextengine.ContextPack, tx *RunSession, slideID string) (spec.SlideSpec, []byte, string, error) {
-	raw, source, err := readArtifact(tx.ProjectDir(), tx, specSlideRef(slideID))
+func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string, error) {
+	outline, err := currentOutline(pack, tx)
+	if err != nil {
+		return "", err
+	}
+	if err = spec.ValidateOutline(outline); err != nil {
+		return "", err
+	}
+	combined := []byte{}
+	for _, loc := range spec.FlattenOutline(outline) {
+		raw, _, readErr := readArtifact(tx.ProjectDir(), tx, specSlideRef(loc.Slide.SlideID))
+		if readErr != nil {
+			return "", fmt.Errorf("pending spec for %s", loc.Slide.SlideID)
+		}
+		var slide spec.SlideSpec
+		if json.Unmarshal(raw, &slide) != nil || spec.ValidateSlideSpec(slide) != nil || slide.SlideID != loc.Slide.SlideID || slide.ProjectID != pack.Project.ID {
+			return "", fmt.Errorf("invalid spec for %s", loc.Slide.SlideID)
+		}
+		combined = append(combined, raw...)
+	}
+	return hashBytes(combined), nil
+}
+func readSlideModel(pack contextengine.ContextPack, tx *RunSession, id string) (spec.SlideSpec, []byte, string, error) {
+	raw, source, err := readArtifact(tx.ProjectDir(), tx, specSlideRef(id))
 	if err != nil {
 		return spec.SlideSpec{}, nil, "", err
 	}
 	var slide spec.SlideSpec
-	if err := json.Unmarshal(raw, &slide); err != nil {
-		return spec.SlideSpec{}, nil, "", err
-	}
-	return slide, raw, source, nil
+	err = json.Unmarshal(raw, &slide)
+	return slide, raw, source, err
 }
-
 func targetHash(pack contextengine.ContextPack, tx *RunSession, target Resource) (string, error) {
 	ref, err := refForResource(pack, target)
 	if err != nil {
@@ -432,34 +213,11 @@ func targetHash(pack contextengine.ContextPack, tx *RunSession, target Resource)
 	return hashBytes(raw), nil
 }
 
-func renderSourceHash(pack contextengine.ContextPack, tx *RunSession, slideID string) (string, error) {
-	designRaw, _, err := readArtifact(tx.ProjectDir(), tx, designRef(pack))
+func currentMaterializationProof(pack contextengine.ContextPack, projectDir string, tx *RunSession, slideID, artifactHash string) (MaterializationProof, error) {
+	deckRaw, _, err := readArtifact(projectDir, tx, deckRef(pack))
 	if err != nil {
-		return "", err
+		return MaterializationProof{}, err
 	}
-	specRaw, _, err := readArtifact(tx.ProjectDir(), tx, specSlideRef(slideID))
-	if err != nil {
-		return "", err
-	}
-	outlineRaw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
-	if err != nil {
-		return "", err
-	}
-	return MaterializationSourceHash(outlineRaw, specRaw, designRaw), nil
-}
-
-// MaterializationSourceHash binds the exact authoring resources used by render.
-func MaterializationSourceHash(outlineRaw, specRaw, designRaw []byte) string {
-	return spec.SourceHash(outlineRaw, specRaw, designRaw)
-}
-
-func currentMaterializationProof(
-	pack contextengine.ContextPack,
-	projectDir string,
-	tx *RunSession,
-	slideID string,
-	sourceHash string,
-) (MaterializationProof, error) {
 	outlineRaw, _, err := readArtifact(projectDir, tx, outlineRef(pack))
 	if err != nil {
 		return MaterializationProof{}, err
@@ -472,193 +230,101 @@ func currentMaterializationProof(
 	if err != nil {
 		return MaterializationProof{}, err
 	}
-	var outline spec.Outline
-	var design spec.Design
-	var slide spec.SlideSpec
-	if err := json.Unmarshal(outlineRaw, &outline); err != nil {
-		return MaterializationProof{}, err
-	}
-	if err := json.Unmarshal(designRaw, &design); err != nil {
-		return MaterializationProof{}, err
-	}
-	if err := json.Unmarshal(specRaw, &slide); err != nil {
-		return MaterializationProof{}, err
-	}
 	htmlRaw, _, err := readArtifact(projectDir, tx, slideHTMLRef(slideID))
 	if err != nil {
 		return MaterializationProof{}, err
 	}
-	artifactHash := hashBytes(htmlRaw)
-	if sourceHash != artifactHash {
-		return MaterializationProof{}, errors.New("rendered HTML hash does not match current artifact")
+	if hashBytes(htmlRaw) != artifactHash {
+		return MaterializationProof{}, errors.New("rendered HTML hash is stale")
 	}
-	htmlRevision := pack.Revisions.SlideHTML[slideID]
-	if tx != nil && tx.HasChange(slideHTMLRef(slideID)) {
-		htmlRevision++
+	var deck spec.Deck
+	var outline spec.Outline
+	var design spec.Design
+	var slide spec.SlideSpec
+	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil || json.Unmarshal(specRaw, &slide) != nil {
+		return MaterializationProof{}, errors.New("render source is invalid")
 	}
-	if htmlRevision < 1 {
-		htmlRevision = 1
+	nodeHash := spec.SemanticSlideNodeHash(outline, slideID)
+	revision := pack.Revisions.SlideHTML[slideID]
+	if tx.HasChange(slideHTMLRef(slideID)) {
+		revision++
 	}
-	return MaterializationProof{
-		SlideID: slideID, HTMLRevision: htmlRevision,
-		SourceOutlineRevision: outline.Revision,
-		SourceSpecRevision:    slide.Revision,
-		SourceDesignRevision:  design.Revision,
-		ArtifactHash:          artifactHash,
-		SourceHash:            MaterializationSourceHash(outlineRaw, specRaw, designRaw),
-	}, nil
+	if revision < 1 {
+		revision = 1
+	}
+	return MaterializationProof{SlideID: slideID, HTMLRevision: revision, DeckRevision: deck.Revision, OutlineNodeHash: nodeHash, SpecRevision: slide.Revision, DesignRevision: design.Revision, ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID)}, nil
 }
-
+func renderSourceHash(pack contextengine.ContextPack, tx *RunSession, slideID string) (string, error) {
+	html, _, err := readArtifact(tx.ProjectDir(), tx, slideHTMLRef(slideID))
+	if err != nil {
+		return "", err
+	}
+	return hashBytes(html), nil
+}
+func MaterializationSourceHash(deckRaw []byte, nodeHash string, specRaw, designRaw []byte) string {
+	return spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw)
+}
 func schemaEvidence(target Resource, hash string) Evidence {
 	return newEvidence("schema", target, hash, map[string]any{"valid": true})
 }
-
 func staticEvidence(target Resource, hash string) Evidence {
 	return newEvidence("static", target, hash, map[string]any{"valid": true})
 }
-
 func referenceEvidence(hash string) Evidence {
 	return newEvidence("reference", Resource{Type: "deck", Part: "outline"}, hash, map[string]any{"valid": true})
 }
-
 func newEvidence(kind string, target Resource, sourceHash string, values ...map[string]any) Evidence {
 	data := map[string]any{}
 	if len(values) > 0 && values[0] != nil {
 		data = values[0]
 	}
-	return Evidence{
-		ID: fmt.Sprintf("evidence_%d_%s", time.Now().UnixNano(), kind), Kind: kind,
-		Target: target, SourceHash: sourceHash, ProducedAt: time.Now().Unix(), Data: data,
-	}
+	return Evidence{ID: fmt.Sprintf("evidence_%d_%s", time.Now().UnixNano(), kind), Kind: kind, Target: target, SourceHash: sourceHash, ProducedAt: time.Now().Unix(), Data: data}
 }
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func revisionFromModel(raw []byte) int {
-	var header struct {
+	var h struct {
 		Revision int `json:"revision"`
 	}
-	_ = json.Unmarshal(raw, &header)
-	return header.Revision
+	_ = json.Unmarshal(raw, &h)
+	return h.Revision
 }
-
 func uniqueTargets(values []Resource) []Resource {
 	out := []Resource{}
 	seen := map[string]bool{}
-	for _, value := range values {
-		if value.Type == "" || seen[value.Key()] {
-			continue
+	for _, v := range values {
+		if v.Type != "" && !seen[v.Key()] {
+			seen[v.Key()] = true
+			out = append(out, v)
 		}
-		seen[value.Key()] = true
-		out = append(out, value)
 	}
 	return out
 }
 
-func controlledModelPath(path string) bool {
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	first := parts[0]
-	if (first == "deck" || first == "design") && len(parts) > 1 {
-		first = parts[1]
+func lineDiffStat(before, after []byte) (int, int) {
+	a := strings.Split(strings.TrimSpace(string(before)), "\n")
+	b := strings.Split(strings.TrimSpace(string(after)), "\n")
+	if len(before) == 0 {
+		return len(b), 0
 	}
-	switch first {
-	case "schema_version", "version", "revision", "project_id", "project", "slide_id",
-		"created_at", "updated_at":
-		return true
-	default:
-		return false
+	if len(after) == 0 {
+		return 0, len(a)
 	}
-}
-
-func applyJSONEdit(doc *any, op, path string, value any) error {
-	if op != "replace" && op != "add" && op != "remove" {
-		return fmt.Errorf("unsupported JSON edit op %q", op)
-	}
-	if !strings.HasPrefix(path, "/") || path == "/" || controlledModelPath(path) {
-		return fmt.Errorf("JSON edit path is not writable")
-	}
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	for index := range parts {
-		parts[index] = strings.ReplaceAll(strings.ReplaceAll(parts[index], "~1", "/"), "~0", "~")
-	}
-	next, err := editJSONValue(*doc, parts, op, value)
-	if err != nil {
-		return err
-	}
-	*doc = next
-	return nil
-}
-
-func editJSONValue(current any, parts []string, op string, value any) (any, error) {
-	if len(parts) == 0 {
-		return nil, errors.New("JSON root replacement is not allowed")
-	}
-	key := parts[0]
-	if len(parts) == 1 {
-		switch node := current.(type) {
-		case map[string]any:
-			_, exists := node[key]
-			if (op == "replace" || op == "remove") && !exists {
-				return nil, errors.New("JSON edit path does not exist")
-			}
-			if op == "remove" {
-				delete(node, key)
+	previous := make([]int, len(b)+1)
+	current := make([]int, len(b)+1)
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			if a[i-1] == b[j-1] {
+				current[j] = previous[j-1] + 1
+			} else if previous[j] > current[j-1] {
+				current[j] = previous[j]
 			} else {
-				node[key] = value
+				current[j] = current[j-1]
 			}
-			return node, nil
-		case []any:
-			if key == "-" && op == "add" {
-				return append(node, value), nil
-			}
-			index, err := strconv.Atoi(key)
-			if err != nil || index < 0 || index > len(node) || (op != "add" && index == len(node)) {
-				return nil, errors.New("JSON array index is invalid")
-			}
-			switch op {
-			case "add":
-				node = append(node, nil)
-				copy(node[index+1:], node[index:])
-				node[index] = value
-			case "replace":
-				node[index] = value
-			case "remove":
-				node = append(node[:index], node[index+1:]...)
-			}
-			return node, nil
-		default:
-			return nil, errors.New("JSON edit parent is not a container")
+		}
+		previous, current = current, previous
+		for j := range current {
+			current[j] = 0
 		}
 	}
-	switch node := current.(type) {
-	case map[string]any:
-		child, ok := node[key]
-		if !ok {
-			return nil, errors.New("JSON edit parent does not exist")
-		}
-		next, err := editJSONValue(child, parts[1:], op, value)
-		if err != nil {
-			return nil, err
-		}
-		node[key] = next
-		return node, nil
-	case []any:
-		index, err := strconv.Atoi(key)
-		if err != nil || index < 0 || index >= len(node) {
-			return nil, errors.New("JSON array index is invalid")
-		}
-		next, err := editJSONValue(node[index], parts[1:], op, value)
-		if err != nil {
-			return nil, err
-		}
-		node[index] = next
-		return node, nil
-	default:
-		return nil, errors.New("JSON edit parent is not a container")
-	}
+	common := previous[len(b)]
+	return len(b) - common, len(a) - common
 }

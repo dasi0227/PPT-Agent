@@ -23,6 +23,7 @@ type SegmentKind string
 const (
 	SegmentPolicy      SegmentKind = "policy"
 	SegmentRunCommand  SegmentKind = "run_command"
+	SegmentDeck        SegmentKind = "deck"
 	SegmentOutline     SegmentKind = "outline"
 	SegmentTarget      SegmentKind = "target_artifact"
 	SegmentRelated     SegmentKind = "related_slides"
@@ -50,7 +51,7 @@ type TokenBudget struct {
 
 func DefaultBudget() TokenBudget {
 	return TokenBudget{ContextWindow: 32768, InputLimit: 20000, OutputReserve: 8000, SegmentCaps: map[SegmentKind]int{
-		SegmentPolicy: 3000, SegmentRunCommand: 1200, SegmentOutline: 3000, SegmentTarget: 6000,
+		SegmentPolicy: 3000, SegmentRunCommand: 1200, SegmentDeck: 1600, SegmentOutline: 3000, SegmentTarget: 6000,
 		SegmentRelated: 2400, SegmentDesign: 3000, SegmentSlideHTML: 6000,
 		SegmentAssets: 1800, SegmentMemory: 2000, SegmentRecentTurns: 1200,
 	}}
@@ -74,8 +75,13 @@ type OutlineContext struct {
 	Summaries []SlideSummary  `json:"slide_summaries"`
 }
 
+type DeckContext struct {
+	Deck pptspec.Deck `json:"deck"`
+}
+
 type SlideSummary struct {
 	ID           string `json:"id"`
+	Ordinal      int    `json:"ordinal"`
 	SectionID    string `json:"section_id"`
 	SubsectionID string `json:"subsection_id,omitempty"`
 	Role         string `json:"role"`
@@ -118,6 +124,7 @@ type RecentTurn struct {
 }
 
 type RevisionRefs struct {
+	Deck         int            `json:"deck"`
 	Outline      int            `json:"outline"`
 	Design       int            `json:"design"`
 	SlideSpecs   map[string]int `json:"slide_specs"`
@@ -130,6 +137,7 @@ type ContextPack struct {
 	Profile       ProfileID           `json:"profile"`
 	Command       model.RunCommand    `json:"run_command"`
 	Project       ProjectContext      `json:"project"`
+	Deck          DeckContext         `json:"deck"`
 	Outline       OutlineContext      `json:"outline"`
 	Target        TargetContext       `json:"target"`
 	RelatedSlides []SlideSummary      `json:"related_slides"`

@@ -23,13 +23,22 @@ func (OutlineLoader) Load(workDir string) (pptspec.Outline, error) {
 	return outline, readSourceJSON(filepath.Join(workDir, "outline.json"), &outline)
 }
 
+type DeckLoader struct{}
+
+func (DeckLoader) Load(workDir string) (pptspec.Deck, error) {
+	var deck pptspec.Deck
+	return deck, readSourceJSON(filepath.Join(workDir, "deck.json"), &deck)
+}
+
 type SlideSpecLoader struct{}
 
 func (SlideSpecLoader) LoadAll(workDir string, ids []string) (map[string]pptspec.SlideSpec, error) {
 	out := make(map[string]pptspec.SlideSpec, len(ids))
 	for _, id := range ids {
 		var slide pptspec.SlideSpec
-		if err := readSourceJSON(filepath.Join(workDir, filepath.FromSlash(model.SlideSpecPath(id))), &slide); err != nil {
+		if err := readSourceJSON(filepath.Join(workDir, filepath.FromSlash(model.SlideSpecPath(id))), &slide); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
 			return nil, fmt.Errorf("slide %s: %w", id, err)
 		}
 		out[id] = slide
@@ -75,9 +84,9 @@ func (l ThreadMemoryLoader) Load(workDir, threadID string) (ThreadMemory, []stri
 
 type RevisionLoader struct{}
 
-func (RevisionLoader) From(outline pptspec.Outline, design pptspec.Design, slides map[string]pptspec.SlideSpec, memory ThreadMemory) RevisionRefs {
+func (RevisionLoader) From(deck pptspec.Deck, outline pptspec.Outline, design pptspec.Design, slides map[string]pptspec.SlideSpec, memory ThreadMemory) RevisionRefs {
 	r := RevisionRefs{
-		Outline: outline.Revision, Design: design.Revision,
+		Deck: deck.Revision, Outline: outline.Revision, Design: design.Revision,
 		SlideSpecs: map[string]int{}, SlideHTML: map[string]int{}, ThreadMemory: memory.Revision,
 	}
 	for id, slide := range slides {

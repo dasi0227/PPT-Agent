@@ -50,7 +50,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 		Status:          "draft",
 		OutlineRevision: 1,
 		DesignRevision:  1,
-		LayoutVersion:   5,
+		LayoutVersion:   6,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -168,14 +168,17 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err := sb.Write(filepath.Join(projectRel, "state.json"), raw); err != nil {
 		return err
 	}
-	outline := spec.Outline{
-		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID, Title: proj.Title,
-		Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
+	deck := spec.Deck{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID,
+		Title: proj.Title, Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
 		Language: firstNonEmpty(p.Language, "zh-CN"), Positioning: proj.Title,
-		Requirements: []string{}, Prohibitions: []string{},
-		Sections: []spec.Section{}, SlideOrder: []string{},
-		CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt,
+		Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"},
+		Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover", "end"}, Format: "number"},
+		CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt}
+	if err := sb.Write(filepath.Join(projectRel, "deck.json"), mustJSON(deck)); err != nil {
+		return err
 	}
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID,
+		Sections: []spec.Section{}, CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt}
 	if err := sb.Write(filepath.Join(projectRel, "outline.json"), mustJSON(outline)); err != nil {
 		return err
 	}
