@@ -47,7 +47,6 @@ type Store interface {
 	GetSlide(ctx context.Context, id string) (model.Slide, error)
 	InsertSlide(ctx context.Context, sl model.Slide) error
 	DeleteSlideByID(ctx context.Context, slideID string) error
-	SetSlidesOrder(ctx context.Context, projectID string, orderByID map[string]int) error
 	NextVersionNo(ctx context.Context, targetType, targetID string) (int, error)
 	CreateVersion(ctx context.Context, v model.Version) error
 	ListVersions(ctx context.Context, targetType, targetID string) ([]model.Version, error)

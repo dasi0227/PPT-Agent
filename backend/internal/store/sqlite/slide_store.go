@@ -95,15 +95,6 @@ func (s *Store) DeleteSlideByID(ctx context.Context, slideID string) error {
 	return s.db.WithContext(ctx).Where("id = ?", slideID).Delete(&slidePO{}).Error
 }
 
-// SetSlidesOrder is a no-op cursor: slide order now lives solely in
-// outline.json's slide_order. Callers persist order by rewriting the outline.
-func (s *Store) SetSlidesOrder(ctx context.Context, projectID string, orderByID map[string]int) error {
-	_ = ctx
-	_ = projectID
-	_ = orderByID
-	return nil
-}
-
 // SetProjectStatus 更新 project 状态游标（draft/generating/ready）。
 func (s *Store) SetProjectStatus(ctx context.Context, id, status string) error {
 	return s.db.WithContext(ctx).Model(&projectPO{}).

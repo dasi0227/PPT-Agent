@@ -37,6 +37,7 @@ var providerSet = wire.NewSet(
 	service.NewPolishService,
 	service.NewSlideService,
 	service.NewSpecService,
+	service.NewPPTMutationService,
 	httpapi.NewHealthHandler,
 	httpapi.NewRunHandler,
 	httpapi.NewPolishHandler,

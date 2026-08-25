@@ -54,22 +54,8 @@ func (r *Router) register() {
 	if r.polish != nil {
 		v1.POST("/projects/:id/polish", r.polish.Polish)
 	}
-	v1.GET("/projects/:id/slides", r.project.ListSlides)
-	v1.POST("/projects/:id/slides", r.project.CreateSlide)
-	v1.POST("/projects/:id/slides/reorder", r.project.ReorderSlides)
-	v1.POST("/projects/:id/slides/restructure", r.project.RestructureSlides)
-	v1.PATCH("/projects/:id/slides/:slide_id", r.project.RenameSlide)
-	v1.POST("/projects/:id/sections", r.project.AddSection)
-	v1.PATCH("/projects/:id/sections/:section_id", r.project.RenameSection)
-	v1.DELETE("/projects/:id/sections/:section_id", r.project.RemoveSection)
-	v1.POST("/projects/:id/sections/:section_id/subsections", r.project.AddSubsection)
-	v1.PATCH("/projects/:id/sections/:section_id/subsections/:subsection_id", r.project.RenameSubsection)
-	v1.DELETE("/projects/:id/sections/:section_id/subsections/:subsection_id", r.project.RemoveSubsection)
-	if r.spec != nil {
-		v1.GET("/projects/:id/spec", r.spec.GetProject)
-		v1.PATCH("/projects/:id/spec", r.spec.PatchProject)
-		v1.PATCH("/projects/:id/spec/design", r.spec.PatchDesign)
-	}
+	v1.GET("/projects/:id/content", r.project.Content)
+	v1.POST("/projects/:id/mutations", r.project.Mutate)
 	v1.GET("/projects/:id/threads", r.thread.List)
 	v1.POST("/projects/:id/threads", r.thread.Create)
 	v1.PATCH("/threads/:id", r.thread.Patch)
@@ -89,14 +75,9 @@ func (r *Router) register() {
 
 	// Slide：读取 / 版本列表 / 回滚（40-api openapi /slides/{id}...）。
 	v1.GET("/slides/:id", r.slide.GetSlide)
-	v1.DELETE("/slides/:id", r.slide.DeleteSlide)
 	v1.GET("/slides/:id/render", r.slide.RenderSlide)
 	v1.GET("/slides/:id/versions", r.slide.ListVersions)
 	v1.POST("/slides/:id/rollback", r.slide.Rollback)
-	if r.spec != nil {
-		v1.GET("/slides/:id/spec", r.spec.GetSlide)
-		v1.PATCH("/slides/:id/spec", r.spec.PatchSlide)
-	}
 
 	v1.GET("/assets", r.asset.List)
 	v1.POST("/assets", r.asset.Create)
