@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -216,6 +217,27 @@ func toolRelevantToRun(name string, mode model.RunMode, scope model.RunScope) bo
 }
 
 func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) ToolSchema {
+	if schema.Name == "mutate_ppt" {
+		variants, _ := schema.Parameters["oneOf"].([]any)
+		filtered := []any{}
+		for _, raw := range variants {
+			variant, _ := raw.(map[string]any)
+			props, _ := variant["properties"].(map[string]any)
+			opSchema, _ := props["op"].(map[string]any)
+			op, _ := opSchema["const"].(string)
+			allowed := scope.Level == model.ScopeDeck || (strings.HasPrefix(op, "slide.spec.") || (scope.Artifact == model.ArtifactPPT && strings.HasPrefix(op, "slide.html.")))
+			if allowed {
+				if scope.Level == model.ScopeSlide && scope.SlideID != "" {
+					if _, ok := props["slide_id"]; ok {
+						props["slide_id"] = map[string]any{"const": scope.SlideID}
+					}
+				}
+				filtered = append(filtered, raw)
+			}
+		}
+		schema.Parameters["oneOf"] = filtered
+		return schema
+	}
 	properties, _ := schema.Parameters["properties"].(map[string]any)
 	if properties == nil {
 		return schema

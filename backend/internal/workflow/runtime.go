@@ -1486,10 +1486,11 @@ func (r *Runtime) emitToolProgress(emitter EventEmitter, state *RunState, call l
 		stage, text = "reading", "正在读取 PPT 内容"
 	case "search_refs":
 		stage, text = "reading", "正在查找相关参考"
-	case "write_ppt":
-		stage, text = "writing", "正在生成 PPT 内容"
-	case "edit_ppt":
+	case "mutate_ppt":
 		stage, text = "writing", "正在更新 PPT 内容"
+		if strings.HasSuffix(stringValue(call.Args["op"]), ".write") || stringValue(call.Args["op"]) == "outline.init" || stringValue(call.Args["op"]) == "outline.insert" {
+			text = "正在创建 PPT 内容"
+		}
 	case "render_slide":
 		stage, text = "rendering", "正在检查页面布局"
 	}
@@ -1497,10 +1498,18 @@ func (r *Runtime) emitToolProgress(emitter EventEmitter, state *RunState, call l
 		switch call.Name {
 		case "read_ppt":
 			text = "正在读取" + slideDisplayName(target.SlideID)
-		case "write_ppt":
-			text = "正在生成" + slideDisplayName(target.SlideID)
-		case "edit_ppt":
-			text = "正在更新" + slideDisplayName(target.SlideID)
+		case "mutate_ppt":
+			projectDir := ""
+			if state.tx != nil {
+				projectDir = state.tx.ProjectDir()
+			}
+			name := runtimeSlideDisplayName(projectDir, target.SlideID)
+			op := stringValue(call.Args["op"])
+			if strings.HasSuffix(op, ".write") {
+				text = "正在创建" + name
+			} else {
+				text = "正在更新" + name
+			}
 		case "render_slide":
 			text = "正在检查" + slideDisplayName(target.SlideID) + "布局"
 		}

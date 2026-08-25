@@ -1,8 +1,10 @@
 package workflow
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -12,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 func publicBase(runID string) model.PublicEventBase {
@@ -21,7 +24,7 @@ func publicBase(runID string) model.PublicEventBase {
 func publicTarget(projectDir string, target Resource) model.PublicTarget {
 	out := model.PublicTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part}
 	if target.Type == "slide" {
-		out.DisplayName = slideDisplayName(target.SlideID)
+		out.DisplayName = runtimeSlideDisplayName(projectDir, target.SlideID)
 	}
 	attachLocalOpenTarget(projectDir, &out)
 	return out
@@ -55,7 +58,7 @@ func publicChangedTargets(projectDir string, changes []ChangedTarget) []model.Pu
 			Insertions: change.Insertions, Deletions: change.Deletions,
 		}
 		if target.Type == "slide" {
-			target.DisplayName = slideDisplayName(target.SlideID)
+			target.DisplayName = runtimeSlideDisplayName(projectDir, target.SlideID)
 		}
 		attachLocalOpenTarget(projectDir, &target)
 		seen[target.Type+":"+target.SlideID+":"+target.Part] = target
@@ -160,7 +163,7 @@ var internalTermReplacements = []struct {
 	{regexp.MustCompile(`(?i)\bdeck:outline\b`), "整份结构"},
 	{regexp.MustCompile(`(?i)\bdeck:design\b`), "全局设计"},
 	// Tool and control action identifiers.
-	{regexp.MustCompile(`\b(?:read_ppt|write_ppt|edit_ppt)\b`), "PPT 内容操作"},
+	{regexp.MustCompile(`\b(?:read_ppt|mutate_ppt)\b`), "PPT 内容操作"},
 	{regexp.MustCompile(`\bsearch_refs\b`), "参考检索"},
 	{regexp.MustCompile(`\brender_slide\b`), "页面渲染检查"},
 	{regexp.MustCompile(`\b(?:create_plan|update_plan)\b`), "计划"},
@@ -243,8 +246,35 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 			return target
 		}
 	}
+	if tool == "mutate_ppt" {
+		op := stringValue(args["op"])
+		slideID := stringValue(args["slide_id"])
+		if strings.HasPrefix(op, "slide.") {
+			part := "spec"
+			if strings.HasPrefix(op, "slide.html.") {
+				part = "html"
+			}
+			out := &model.PublicTarget{Type: "slide", SlideID: slideID, Part: part, DisplayName: runtimeSlideDisplayName(projectDir, slideID)}
+			attachLocalOpenTarget(projectDir, out)
+			return out
+		}
+		part := "outline"
+		if strings.HasPrefix(op, "deck.") {
+			part = "deck"
+		}
+		if strings.HasPrefix(op, "design.") {
+			part = "design"
+		}
+		return &model.PublicTarget{Type: "deck", Part: part}
+	}
 	target, _ := args["resource"].(map[string]any)
-	targetType := stringValue(target["type"])
+	targetType := stringValue(target["kind"])
+	if targetType == "" {
+		targetType = stringValue(target["type"])
+	}
+	if targetType == "outline" || targetType == "design" {
+		return &model.PublicTarget{Type: "deck", Part: targetType}
+	}
 	if targetType == "deck" {
 		out := &model.PublicTarget{Type: "deck", Part: stringValue(target["part"])}
 		attachLocalOpenTarget(projectDir, out)
@@ -269,10 +299,14 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 	} else if target != nil && target.Type == "deck" && target.Part == "design" {
 		targetName = "全局设计"
 	} else if target != nil && target.Type == "slide" {
+		pageName := target.DisplayName
+		if pageName == "" {
+			pageName = slideDisplayName(target.SlideID)
+		}
 		if target.Part == "spec" {
-			targetName = slideDisplayName(target.SlideID) + "设计稿"
+			targetName = pageName + "设计稿"
 		} else {
-			targetName = slideDisplayName(target.SlideID) + "幻灯片"
+			targetName = pageName + "幻灯片"
 		}
 	}
 	switch tool {
@@ -284,22 +318,22 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "已读取" + targetName, targetDetail(target, "已获得所需内容"), true
 		}
 		return "读取" + targetName + "失败", publicToolError(result), true
-	case "write_ppt":
+	case "mutate_ppt":
+		op := stringValue(args["op"])
+		creating := strings.HasSuffix(op, ".write") || op == "outline.init" || op == "outline.insert" || op == "design.write"
 		if started {
-			return "创建" + targetName, "", true
-		}
-		if result.OK {
-			return "已创建" + targetName, targetDetail(target, "内容已生成"), true
-		}
-		return "创建" + targetName + "失败", publicToolError(result), true
-	case "edit_ppt":
-		if started {
+			if creating {
+				return "创建" + targetName, "", true
+			}
 			return "更新" + targetName, "", true
 		}
 		if result.OK {
+			if creating {
+				return "已创建" + targetName, targetDetail(target, "内容已生成"), true
+			}
 			return "已更新" + targetName, targetDetail(target, "修改已完成"), true
 		}
-		return "更新" + targetName + "失败", publicToolError(result), true
+		return targetName + "操作失败", publicToolError(result), true
 	case "search_refs":
 		query := sanitizePublicText(stringValue(args["query"]), 48)
 		if query == "" {
@@ -452,6 +486,16 @@ func slideDisplayName(slideID string) string {
 		return "页面"
 	}
 	return "页面"
+}
+
+func runtimeSlideDisplayName(projectDir, slideID string) string {
+	var outline spec.Outline
+	if raw, err := os.ReadFile(filepath.Join(projectDir, "outline.json")); err == nil && json.Unmarshal(raw, &outline) == nil {
+		if ordinal, ok := spec.ResolveSlideOrdinal(outline, slideID); ok {
+			return fmt.Sprintf("第 %d 页", ordinal)
+		}
+	}
+	return slideDisplayName(slideID)
 }
 
 func newMessageID() string {

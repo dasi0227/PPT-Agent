@@ -7,6 +7,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	runtimeprompts "github.com/dasi0227/PPT-Agent/backend/prompts/runtime"
 	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
@@ -154,7 +155,7 @@ func playbookID(pack contextengine.ContextPack) string {
 		return "playbook_spec_edit"
 	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeSlide:
 		return "playbook_slide_presentation_edit"
-	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeDeck && len(pack.Outline.Outline.SlideOrder) == 0:
+	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeDeck && len(spec.FlattenOutline(pack.Outline.Outline)) == 0:
 		return "playbook_empty_deck_generation"
 	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeDeck:
 		return "playbook_deck_coordinated_edit"
@@ -183,5 +184,5 @@ func resourceContractNames(pack contextengine.ContextPack) []string {
 	if pack.Command.Scope.Level == model.ScopeSlide {
 		return []string{pptschema.SlideSpecName}
 	}
-	return []string{pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}
+	return []string{pptschema.DeckName, pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}
 }

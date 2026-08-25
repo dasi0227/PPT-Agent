@@ -27,6 +27,7 @@ Implementation quality:
 - HTML links ../../common/tokens.css and ../../common/base.css.
 - CSS avoids heavy runtime dependencies and browser-unsafe assumptions.
 - Resources are project-local, data or blob references only.
+- Slide HTML contains no static page number, total page count, ordinal-dependent copy, or section number. Runtime frame injects numbering and shared chrome.
 
 Accessibility:
 - Semantic HTML is used where appropriate.

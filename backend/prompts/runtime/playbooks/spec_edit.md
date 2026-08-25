@@ -6,5 +6,5 @@ Execution steps:
 1. Read the relevant spec resource if exact current content matters.
 2. Follow the currently injected resource contract.
 3. Express planned page content through semantic elements and natural-language intent.
-4. Keep outline, design and page-spec references synchronized.
+4. Keep deck intent, outline nodes, design and page specs synchronized; hierarchy and role remain exclusively in the outline tree.
 5. Validate every changed JSON model against its authoritative contract.

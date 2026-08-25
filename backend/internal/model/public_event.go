@@ -533,7 +533,7 @@ func isPublicEventType(event EventType) bool {
 }
 
 func isBusinessTool(name string) bool {
-	return oneOf(name, "read_ppt", "write_ppt", "edit_ppt", "search_refs", "render_slide")
+	return oneOf(name, "read_ppt", "mutate_ppt", "search_refs", "render_slide")
 }
 
 func forbiddenPublicField(value any) bool {

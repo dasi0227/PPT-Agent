@@ -22,8 +22,7 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 		phases     []RunPhase
 	}{
 		{pptReadTool{pack: p.Pack}, true, "ppt.read", RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
-		{pptWriteTool{pack: p.Pack}, false, "ppt.write", RiskMedium, []RunPhase{PhaseExecuting}},
-		{pptEditTool{pack: p.Pack}, false, "ppt.edit", RiskMedium, []RunPhase{PhaseExecuting}},
+		{mutatePPTTool{pack: p.Pack}, false, "ppt.mutate", RiskMedium, []RunPhase{PhaseExecuting}},
 		{referenceSearchTool{pack: p.Pack}, true, "context.search", RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 		{slideRenderTool{pack: p.Pack, renderer: renderer}, true, "ppt.render", RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 	}

@@ -18,3 +18,4 @@ Reasoning and loop behavior:
 Batching rules:
 - Independent read-only calls may be requested together when all calls are in scope.
 - Mutations must respect resource dependencies. Do not mix unrelated targets unless the disclosed tool semantics support a clear ordered batch.
+- mutate_ppt executes exactly one closed operation per call. Use Runtime-issued stable IDs and never create formal IDs in model output.

@@ -20,6 +20,7 @@ type CompletionIssue struct {
 
 type RequiredAction struct {
 	Tool   string   `json:"tool,omitempty"`
+	Op     string   `json:"op,omitempty"`
 	Target Resource `json:"target,omitempty"`
 }
 
@@ -91,7 +92,7 @@ func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionI
 		(command.Options.Language == "" && command.Options.Range == "") {
 		return nil
 	}
-	outline, err := currentOutline(ctx.Context, ctx.Session)
+	deck, err := currentDeck(ctx.Context, ctx.Session)
 	if err != nil {
 		return []CompletionIssue{{
 			Code: "CONTEXT_SOURCE_INVALID", Summary: "cannot verify RunCommand options against the current outline",
@@ -99,18 +100,23 @@ func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionI
 		}}
 	}
 	issues := []CompletionIssue{}
-	if command.Options.Language != "" && string(command.Options.Language) != outline.Language {
+	if command.Options.Language != "" && string(command.Options.Language) != deck.Language {
 		issues = append(issues, CompletionIssue{
 			Code:            CodeRunLanguageUnsatisfied,
-			Summary:         fmt.Sprintf("outline language %q does not satisfy RunCommand language %q", outline.Language, command.Options.Language),
-			RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: Resource{Type: "deck", Part: "outline"}}},
+			Summary:         fmt.Sprintf("deck language %q does not satisfy RunCommand language %q", deck.Language, command.Options.Language),
+			RequiredActions: []RequiredAction{{Tool: "mutate_ppt", Op: "deck.patch", Target: Resource{Type: "deck", Part: "deck"}}},
 		})
 	}
-	if command.Options.Range != "" && !command.Options.Range.Contains(len(outline.SlideOrder)) {
+	outline, outlineErr := currentOutline(ctx.Context, ctx.Session)
+	if outlineErr != nil {
+		return append(issues, CompletionIssue{Code: "CONTEXT_SOURCE_INVALID", Summary: outlineErr.Error()})
+	}
+	count := len(spec.FlattenOutline(outline))
+	if command.Options.Range != "" && !command.Options.Range.Contains(count) {
 		issues = append(issues, CompletionIssue{
 			Code:            CodeRunRangeUnsatisfied,
-			Summary:         fmt.Sprintf("outline has %d slides, outside RunCommand range %q", len(outline.SlideOrder), command.Options.Range),
-			RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: Resource{Type: "deck", Part: "outline"}}},
+			Summary:         fmt.Sprintf("outline has %d slides, outside RunCommand range %q", count, command.Options.Range),
+			RequiredActions: []RequiredAction{{Tool: "mutate_ppt", Op: "outline.insert", Target: Resource{Type: "deck", Part: "outline"}}},
 		})
 	}
 	return issues
@@ -171,7 +177,8 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			}
 			if ctx.Context.Command.Scope.Artifact == model.ArtifactPPT && ctx.Session != nil {
 				if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
-					for _, slideID := range deck.SlideOrder {
+					for _, location := range spec.FlattenOutline(deck) {
+						slideID := location.Slide.SlideID
 						slideTarget := Resource{Type: "slide", SlideID: slideID, Part: "html"}
 						if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, slideID) {
 							issues = append(issues, asyncSpecHTMLIssue(slideTarget))
@@ -213,15 +220,40 @@ func hasFreshMaterialization(ctx CompletionContext, target Resource, hash string
 func schemaEvidenceIssue(target Resource) CompletionIssue {
 	return CompletionIssue{
 		Code: "EVIDENCE_SCHEMA_MISSING", Summary: "schema evidence is missing or stale for " + target.Key(),
-		RequiredActions: []RequiredAction{{Tool: "write_ppt", Target: target}},
+		RequiredActions: []RequiredAction{{Tool: "mutate_ppt", Op: operationForTarget(target, false), Target: target}},
 	}
+}
+
+func operationForTarget(target Resource, patch bool) string {
+	if target.Type == "slide" {
+		if target.Part == "html" {
+			if patch {
+				return "slide.html.patch"
+			}
+			return "slide.html.write"
+		}
+		if patch {
+			return "slide.spec.patch"
+		}
+		return "slide.spec.write"
+	}
+	if target.Part == "design" {
+		if patch {
+			return "design.patch"
+		}
+		return "design.write"
+	}
+	if target.Part == "deck" {
+		return "deck.patch"
+	}
+	return "outline.update"
 }
 
 func htmlEvidenceIssue(target Resource) CompletionIssue {
 	return CompletionIssue{
 		Code: "EVIDENCE_HTML_MISSING", Summary: "HTML evidence is missing or stale for " + target.Key(),
 		RequiredActions: []RequiredAction{
-			{Tool: "edit_ppt", Target: target},
+			{Tool: "mutate_ppt", Op: "slide.html.patch", Target: target},
 			{Tool: "render_slide", Target: target},
 		},
 	}
@@ -231,27 +263,28 @@ func asyncSpecHTMLIssue(target Resource) CompletionIssue {
 	return CompletionIssue{
 		Code: "ASYNC_SPEC_HTML", Summary: "Spec or Design changes are not materialized in HTML for " + target.Key(),
 		RequiredActions: []RequiredAction{
-			{Tool: "edit_ppt", Target: target},
+			{Tool: "mutate_ppt", Op: "slide.html.patch", Target: target},
 			{Tool: "render_slide", Target: target},
 		},
 	}
 }
 
 func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
-	actions := []RequiredAction{{Tool: "write_ppt", Target: Resource{Type: "deck", Part: "outline"}}}
+	actions := []RequiredAction{{Tool: "mutate_ppt", Op: "outline.init", Target: Resource{Type: "deck", Part: "outline"}}}
 	if ctx.Session != nil {
 		if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
 			actions = actions[:0]
-			for _, slideID := range deck.SlideOrder {
+			for _, location := range spec.FlattenOutline(deck) {
+				slideID := location.Slide.SlideID
 				if _, _, err := readArtifact(ctx.Session.ProjectDir(), ctx.Session, specSlideRef(slideID)); errorsIsNotExist(err) {
 					actions = append(actions, RequiredAction{
-						Tool:   "write_ppt",
+						Tool: "mutate_ppt", Op: "slide.spec.write",
 						Target: Resource{Type: "slide", SlideID: slideID, Part: "spec"},
 					})
 				}
 			}
 			if len(actions) == 0 {
-				actions = append(actions, RequiredAction{Tool: "write_ppt", Target: Resource{Type: "deck", Part: "outline"}})
+				actions = append(actions, RequiredAction{Tool: "mutate_ppt", Op: "outline.update", Target: Resource{Type: "deck", Part: "outline"}})
 			}
 		}
 	}
@@ -305,7 +338,7 @@ func specChangeAffectsHTML(tx *RunSession, ref ArtifactRef) bool {
 
 func isPPTDomainChange(change ArtifactChange) bool {
 	source := strings.TrimPrefix(change.Source, "tentative:")
-	return source == "write_ppt" || source == "edit_ppt"
+	return source == "mutate_ppt"
 }
 
 func hasPPTDomainChanges(changes ChangeSet) bool {
@@ -398,8 +431,10 @@ func acceptedMaterializationProofs(ctx CompletionContext) []MaterializationProof
 	if err != nil {
 		return nil
 	}
-	proofs := make([]MaterializationProof, 0, len(outline.SlideOrder))
-	for _, slideID := range outline.SlideOrder {
+	flat := spec.FlattenOutline(outline)
+	proofs := make([]MaterializationProof, 0, len(flat))
+	for _, location := range flat {
+		slideID := location.Slide.SlideID
 		if specChangeRequiresHTMLSync(ctx, slideID) &&
 			!hasArtifactChange(ctx.Changes, ArtifactSlideHTML, slideID) {
 			continue

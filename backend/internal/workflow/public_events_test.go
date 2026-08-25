@@ -52,7 +52,7 @@ func TestPublicPlanDoesNotTruncateLongUIText(t *testing.T) {
 	plan := publicPlan(Plan{
 		ID: "p1", Revision: 1,
 		Title: strings.Repeat("完整说明", 40), Content: "完整计划正文",
-		Steps:       []PlanStep{{ID: "s1", Title: longTitle, Status: PlanStepPending}},
+		Steps: []PlanStep{{ID: "s1", Title: longTitle, Status: PlanStepPending}},
 	})
 
 	if plan.Steps[0].Title != longTitle {

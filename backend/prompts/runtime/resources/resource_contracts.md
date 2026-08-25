@@ -1,14 +1,16 @@
 Current scoped resource contracts.
 
 Resource ownership:
-- Outline owns the deck goal, audience, narrative sections, strict section/subsection structure and stable slide order.
+- Deck owns presentation intent, audience, language, requirements, prohibitions, canvas, and numbering policy.
+- Outline owns the strict section/subsection tree and is the only owner of slide order.
 - Design owns the deck-wide theme, direction, density and shared visual system.
-- Slide Spec owns one page's semantic role, title, primary message, ordered element intents, placement references and optional layout direction.
-- Slide HTML is the final page implementation; it is governed by the PPT quality rubric rather than a JSON contract.
+- An outline slide node owns the stable slide identity reference, directory label, and semantic role.
+- Slide Spec owns one page's title, primary message, ordered element intents, and optional layout direction. It never stores section, subsection, role, placement, ordinal, or page number.
+- Slide HTML is the Agent-authored page body. Runtime owns the surrounding frame, shared chrome, ordinal, total, and page-number rendering.
 
 Runtime owns schema version, revision, project identity, slide identity and timestamps. Never manually supply Runtime-managed fields.
 
-Outline structure uses exactly two levels: a section is either direct, with no subsections and pages referencing only that section, or grouped, with every page referencing a subsection owned by that section. Never mix direct pages and grouped pages in one section.
+Outline structure uses exactly two levels: a section is either direct, with slides and no subsections, or grouped, with empty section slides and every slide under one subsection. Never mix direct slides and subsections in one section. Use only IDs returned by Runtime; when creating nodes send client_ref and never invent a sec_*, sub_*, or sli_* value.
 
 Only contracts relevant to the current run scope are injected below. Tool descriptions and parameter schemas are the sole authority for call shape and resource arguments.
 

@@ -17,10 +17,9 @@ var (
 	ErrArtifactHashMismatch = errors.New("artifact hash mismatch")
 )
 
-// sessionArtifact records one artifact touched during a run. Content is written
-// straight to the project directory (file is the single source of truth); the
-// baseline bytes captured on first touch let the completion gate compare the
-// run's net change without a private write sandbox.
+// sessionArtifact records one artifact in the run overlay. Project files are
+// untouched until Commit, so failed and canceled runs discard provisional
+// identities and pending resources as one unit.
 type sessionArtifact struct {
 	Ref           ArtifactRef
 	Source        string
@@ -85,9 +84,6 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 	}
 	finalPath := filepath.Join(s.projectDir, relative)
 	if previous, ok := s.artifacts[relative]; ok {
-		if err := atomicWrite(finalPath, content); err != nil {
-			return ArtifactChange{}, err
-		}
 		previous.Source, previous.AfterContent, previous.AfterHash, previous.Delete = source, append([]byte(nil), content...), hashBytes(content), false
 		s.artifacts[relative] = previous
 		insertions, deletions := lineDiffStat(previous.BeforeContent, previous.AfterContent)
@@ -97,9 +93,6 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 	existed := readErr == nil
 	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
 		return ArtifactChange{}, readErr
-	}
-	if err := atomicWrite(finalPath, content); err != nil {
-		return ArtifactChange{}, err
 	}
 	entry := sessionArtifact{
 		Ref: ref, Source: source, Relative: relative,
@@ -147,7 +140,36 @@ func (s *RunSession) Read(ref ArtifactRef) ([]byte, error) {
 	if entry, ok := s.artifacts[relative]; ok && entry.Delete {
 		return nil, fs.ErrNotExist
 	}
+	if entry, ok := s.artifacts[relative]; ok {
+		return append([]byte(nil), entry.AfterContent...), nil
+	}
 	return os.ReadFile(filepath.Join(s.projectDir, relative))
+}
+
+func (s *RunSession) Delete(ref ArtifactRef, source string) error {
+	relative, err := s.resolveRelative(ref)
+	if err != nil {
+		return err
+	}
+	if s.closed {
+		return errors.New("run session is closed")
+	}
+	finalPath := filepath.Join(s.projectDir, relative)
+	entry, ok := s.artifacts[relative]
+	if !ok {
+		before, readErr := os.ReadFile(finalPath)
+		if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
+			return readErr
+		}
+		entry = sessionArtifact{Ref: ref, Relative: relative, BeforeContent: append([]byte(nil), before...), BeforeHash: hashBytes(before), Existed: readErr == nil}
+	}
+	_ = finalPath
+	entry.Source = source
+	entry.AfterContent = nil
+	entry.AfterHash = hashBytes(nil)
+	entry.Delete = true
+	s.artifacts[relative] = entry
+	return nil
 }
 
 // ReadBaseline returns the bytes that existed before this run first touched the
@@ -209,10 +231,21 @@ func (s *RunSession) ChangeSet() ChangeSet {
 	return out
 }
 
-// ValidateBaselines is retained for the completion gate. Direct writes own the
-// project files and runs are serialized per project (RUN_ACTIVE), so there is
-// no separate private baseline to reconcile.
-func (s *RunSession) ValidateBaselines() error { return nil }
+func (s *RunSession) ValidateBaselines() error {
+	for _, entry := range s.artifacts {
+		raw, err := os.ReadFile(filepath.Join(s.projectDir, entry.Relative))
+		if errors.Is(err, fs.ErrNotExist) && !entry.Existed {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if hashBytes(raw) != entry.BeforeHash {
+			return ErrArtifactHashMismatch
+		}
+	}
+	return nil
+}
 
 func (s *RunSession) MarkTentative() {
 	for key, entry := range s.artifacts {
@@ -225,15 +258,51 @@ func (s *RunSession) AcceptMaterializationProofs(proofs []MaterializationProof) 
 	s.materializationProofs = append([]MaterializationProof(nil), proofs...)
 }
 
-// Commit finalizes the run. Artifacts are already on disk, so it only runs the
-// finalize callback (version snapshots + run-time database metadata). A failure
-// here does not roll back the already-written files.
 func (s *RunSession) Commit(ctx context.Context, metadata CommitMetadata) error {
 	if s.closed {
 		return errors.New("run session is closed")
 	}
+	if err := s.ValidateBaselines(); err != nil {
+		return err
+	}
+	keys := make([]string, 0, len(s.artifacts))
+	for key := range s.artifacts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	applied := []sessionArtifact{}
+	rollback := func() {
+		for i := len(applied) - 1; i >= 0; i-- {
+			entry := applied[i]
+			path := filepath.Join(s.projectDir, entry.Relative)
+			if entry.Existed {
+				_ = atomicWrite(path, entry.BeforeContent)
+			} else {
+				_ = os.Remove(path)
+			}
+		}
+	}
+	for _, key := range keys {
+		entry := s.artifacts[key]
+		path := filepath.Join(s.projectDir, entry.Relative)
+		var err error
+		if entry.Delete {
+			err = os.Remove(path)
+			if errors.Is(err, fs.ErrNotExist) {
+				err = nil
+			}
+		} else {
+			err = atomicWrite(path, entry.AfterContent)
+		}
+		if err != nil {
+			rollback()
+			return err
+		}
+		applied = append(applied, entry)
+	}
 	if metadata != nil {
 		if err := ctx.Err(); err != nil {
+			rollback()
 			return err
 		}
 		commitContext := CommitContext{

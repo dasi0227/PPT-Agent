@@ -1,6 +1,7 @@
 package pptmutation
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -328,7 +329,7 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 	}
 	var next spec.Design
 	if req.Op == "design.write" {
-		if err = json.Unmarshal(req.Design, &next); err != nil {
+		if err = strictJSON(req.Design, &next); err != nil {
 			return out, invalid(err)
 		}
 	} else {
@@ -383,7 +384,7 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 	}
 	var next spec.SlideSpec
 	if req.Op == "slide.spec.write" {
-		if err = json.Unmarshal(req.Spec, &next); err != nil {
+		if err = strictJSON(req.Spec, &next); err != nil {
 			return out, invalid(err)
 		}
 	} else {
@@ -480,6 +481,14 @@ func (s Service) writeJSON(path string, value any) error {
 		return err
 	}
 	return s.Workspace.Write(path, raw)
+}
+func strictJSON(raw []byte, out any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	return nil
 }
 func checkRevision(expected, current int) error {
 	if expected > 0 && expected != current {
