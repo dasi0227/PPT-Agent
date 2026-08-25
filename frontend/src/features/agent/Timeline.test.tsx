@@ -101,6 +101,26 @@ describe('Timeline', () => {
     expect(visible.every((entry) => entry.kind === 'item')).toBe(true);
   });
 
+  it('names homogeneous tool groups by object and mixed groups as items', () => {
+    setSession([
+      tool('s1', { target: { type: 'slide', slide_id: 's1', part: 'spec' } }),
+      tool('s2', { target: { type: 'slide', slide_id: 's2', part: 'spec' } }),
+      tool('s3', { target: { type: 'slide', slide_id: 's3', part: 'spec' } }),
+    ]);
+    const { rerender } = render(<Timeline />);
+    expect(screen.getByText('已创建 3 个页面设计稿')).toBeInTheDocument();
+
+    act(() => {
+      setSession([
+        tool('s1', { target: { type: 'slide', slide_id: 's1', part: 'spec' } }),
+        tool('s2', { target: { type: 'slide', slide_id: 's2', part: 'html' } }),
+        tool('deck', { target: { type: 'deck', part: 'design' } }),
+      ]);
+    });
+    rerender(<Timeline />);
+    expect(screen.getByText('已创建 3 项')).toBeInTheDocument();
+  });
+
   it('folds completed run process events behind the final summary row', () => {
     setSession([
       { id: 'u1', type: 'user_turn', runId: 'run_1', text: '生成 PPT', timestamp: 1 },

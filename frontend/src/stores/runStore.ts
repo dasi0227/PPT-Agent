@@ -277,36 +277,15 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     schedule(0);
   };
 
-  const refreshPublicTarget = (projectId: string, target?: PublicTarget) => {
-    if (!target) return;
-    void useProjectStore.getState().loadProjectContent(projectId);
-  };
-
   const refreshTarget = (session: RunSession, event: SSEEvent) => {
     if (!session.projectId) return;
-    if (event.event === 'tool.completed' && event.data.status === 'completed'
-      && (event.data.tool === 'write_ppt' || event.data.tool === 'edit_ppt')) {
-      refreshPublicTarget(session.projectId, event.data.target);
-      return;
-    }
     if (event.event !== 'run.finished' || event.data.status !== 'completed') return;
-    if (event.data.affected_targets?.length) {
-      const projectId = session.projectId;
-      event.data.affected_targets.forEach((target) => refreshPublicTarget(projectId, target));
-      return;
-    }
-    if (session.scope.level === 'slide' && session.scope.slide_id) {
-      refreshPublicTarget(session.projectId, {
-        type: 'slide',
-        slide_id: session.scope.slide_id,
-        part: session.scope.artifact === 'ppt' ? 'html' : 'spec',
-      });
-    } else {
-      refreshPublicTarget(session.projectId, {
-        type: 'deck',
-        part: session.scope.artifact === 'ppt' ? 'outline' : 'design',
-      });
-    }
+    // Typed tools write files directly while a run is active, so cross-resource
+    // invariants may be temporarily incomplete (for example outline references
+    // before every new slide spec exists). Refresh the authoritative project view
+    // once finalization has committed slide metadata instead of requesting a
+    // knowingly partial /spec snapshot after every tool completion.
+    void useProjectStore.getState().loadProjectContent(session.projectId);
   };
 
   return {
@@ -413,6 +392,23 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             } else if (event.event === 'question.answered') {
               status = prev.status === 'canceling' ? 'canceling' : 'running';
               pendingQuestion = null;
+            } else if (event.event === 'plan.approval_requested') {
+              status = prev.status === 'canceling' ? 'canceling' : 'waiting';
+              progress = null;
+            } else if (event.event === 'plan.approval_answered') {
+              pendingQuestion = null;
+              if (prev.status !== 'canceling') {
+                if (event.data.decision === 'cancel') {
+                  status = 'canceling';
+                  progress = { stage: 'thinking', text: '正在停止任务' };
+                } else {
+                  status = 'running';
+                  progress = {
+                    stage: 'thinking',
+                    text: event.data.decision === 'approve' ? '正在启动执行' : '正在调整计划',
+                  };
+                }
+              }
             } else if (event.event === 'run.progress') {
               progress = {
                 stage: event.data.stage,

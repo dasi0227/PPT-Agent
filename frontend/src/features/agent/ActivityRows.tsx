@@ -255,12 +255,26 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   );
 };
 
-// 组按工具汇聚（同组同 tool），产物可能混合，故用中性量词「项」。
 const groupVerbByTool: Record<string, string> = {
   read_ppt: '已读取',
   write_ppt: '已创建',
   edit_ppt: '已更新',
 };
+
+function groupedObjectLabel(items: ToolActivityItem[]): string {
+  const kinds = items.map((item) => {
+    const target = item.target;
+    if (target?.type === 'slide' && target.part === 'spec') return '页面设计稿';
+    if (target?.type === 'slide' && target.part === 'html') return '幻灯片';
+    if (target?.type === 'deck' && target.part === 'outline') return '演示结构';
+    if (target?.type === 'deck' && target.part === 'design') return '全局设计';
+    return '';
+  });
+  const first = kinds[0];
+  if (!first || kinds.some((kind) => kind !== first)) return `${items.length} 项`;
+  const unit = first === '幻灯片' ? '张' : first === '演示结构' ? '份' : first === '全局设计' ? '套' : '个';
+  return `${items.length} ${unit}${first}`;
+}
 
 export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items }) => {
   const [expanded, setExpanded] = useState(false);
@@ -275,7 +289,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
       >
         {toolStatusIcon(items[0].tool, false)}
         <span className="min-w-0 flex-1">
-          {verb} {items.length} 项
+          {verb} {groupedObjectLabel(items)}
         </span>
         {expanded
           ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />

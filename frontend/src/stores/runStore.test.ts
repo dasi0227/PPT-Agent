@@ -199,7 +199,7 @@ describe('runStore public event sessions', () => {
     });
   });
 
-  test('refreshes project data immediately after successful write tool completion', async () => {
+  test('defers project refresh until the run commits a complete snapshot', async () => {
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
     const connection = connections[0];
     connection.onMessage({
@@ -214,7 +214,38 @@ describe('runStore public event sessions', () => {
         display: { label: '已创建第 1 页设计稿' },
       },
     });
-    expect(slideLoads).toContain('p1');
+    expect(slideLoads).toEqual([]);
+  });
+
+  test('returns to running feedback after plan approval is answered', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    const connection = connections[0];
+    connection.onMessage({
+      id: 'approval-requested',
+      event: 'plan.approval_requested',
+      data: {
+        ...base,
+        interaction_id: 'i1',
+        plan: {
+          plan_id: 'plan-1', revision: 1, title: '执行计划', content: '生成页面',
+          status: 'awaiting_approval', steps: [{ id: 'step-1', title: '生成页面', status: 'pending' }],
+        },
+      },
+    });
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'waiting', progress: null });
+
+    connection.onMessage({
+      id: 'approval-answered',
+      event: 'plan.approval_answered',
+      data: {
+        ...base,
+        interaction_id: 'i1', plan_id: 'plan-1', revision: 1, decision: 'approve',
+      },
+    });
+    expect(useRunStore.getState().sessions.t1).toMatchObject({
+      status: 'running',
+      progress: { stage: 'thinking', text: '正在启动执行' },
+    });
   });
 
   test('keeps rejected steering text and retry creates a new request identity', async () => {
@@ -377,14 +408,23 @@ describe('runStore public event sessions', () => {
     useRunStore.getState().clearRun('t1');
   });
 
-  test('completed run closes its stream and refreshes only committed target scope', async () => {
+  test('completed run closes its stream and refreshes the committed project once', async () => {
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
     const connection = connections[0];
     connection.onMessage({ id: '1', event: 'message.final', data: { ...base, message_id: 'm1', text: '已完成' } });
-    connection.onMessage({ id: '2', event: 'run.finished', data: { ...base, status: 'completed', duration_ms: 20 } });
+    connection.onMessage({
+      id: '2', event: 'run.finished',
+      data: {
+        ...base, status: 'completed', duration_ms: 20,
+        affected_targets: [
+          { type: 'slide', slide_id: 's1', part: 'spec' },
+          { type: 'slide', slide_id: 's2', part: 'spec' },
+        ],
+      },
+    });
     expect(useRunStore.getState().sessions.t1.status).toBe('done');
     expect(connection.closed).toBe(true);
-    expect(slideLoads).toContain('p1');
+    expect(slideLoads).toEqual(['p1']);
     expect(useRunStore.getState().sessions.t1.timelineItems.filter((item) => item.type === 'final')).toHaveLength(1);
   });
 
