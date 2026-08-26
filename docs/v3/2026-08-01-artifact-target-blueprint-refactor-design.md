@@ -126,7 +126,7 @@ depends_on:
       ]
     }
   ],
-  "slide_order": [
+  "outline_order": [
     "slide-cover",
     "slide-demand",
     "slide-solution",
@@ -143,7 +143,7 @@ depends_on:
 - `revision` 为单调递增整数，每次结构性修改递增。
 - `sections[].id`、`subsections[].id` 在 deck 内唯一。
 - `number` 是展示标签，不作为主键。
-- `slide_order` 只包含稳定 slide id，且不得重复。
+- `outline_order` 只包含稳定 slide id，且不得重复。
 - 每个 slide id 必须存在对应 `slides/<id>/slide.json`。
 - 删除 section/subsection 前必须确认没有页面引用，或在同一事务中迁移引用。
 
@@ -156,8 +156,8 @@ MVP 使用精简语义模型，不建立页面元素 AST：
   "schema_version": "2.0",
   "revision": 5,
   "id": "slide-demand",
-  "section_id": "section-market",
-  "subsection_id": "subsection-demand",
+  "section": "section-market",
+  "subsection": "subsection-demand",
   "role": "evidence",
   "title": "企业 AI 预算正在快速增长",
   "key_message": "未来两年，AI 投入将从试验预算转向正式业务预算",
@@ -185,7 +185,7 @@ MVP 使用精简语义模型，不建立页面元素 AST：
 字段约束：
 
 - `id` 为稳定标识，创建后不可改变。
-- `section_id` 必填；`subsection_id` 可空。
+- `section` 必填；`subsection` 可空。
 - `role` 允许：
   - `cover`
   - `agenda`
@@ -434,7 +434,7 @@ presentation/slide     -> PresentationSlideRunner
 - 已存在时读取当前 Blueprint，执行目录、页面顺序与多页语义调整。
 - 结构删除仍使用 `needs_input` 或 `before_apply` 策略。
 - 修改 section/subsection 名称不逐页复制写入。
-- 修改 slide 顺序只改 `deck.json.slide_order` 与数据库 position。
+- 修改 slide 顺序只改 `deck.json.outline_order` 与数据库 position。
 - 完成后发 `artifact{blueprint_deck}` 和受影响页面 id。
 
 工具：
@@ -838,7 +838,7 @@ Run 完成后：
 - consult 模式无写工具、无 artifact 写入。
 - before_apply 只在首次写入前产生 needs_input。
 - presentation/slide 自动选择 materialize/revise/rebuild。
-- 页面重排只改变 position/slide_order，不改变 stable id。
+- 页面重排只改变 position/outline_order，不改变 stable id。
 - 文件与 DB 复合写失败补偿。
 - SSE run.started/done 使用新契约。
 - Legacy 请求映射兼容。

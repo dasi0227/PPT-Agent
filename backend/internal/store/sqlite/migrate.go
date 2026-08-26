@@ -62,6 +62,13 @@ func Migrate(db *gorm.DB, log *zap.Logger) error {
 		}
 		log.Info("migration applied", zap.String("file", name))
 	}
+	var incompatible int64
+	if err := db.Raw("SELECT COUNT(*) FROM projects WHERE layout_version <> ?", currentProjectLayoutVersion).Scan(&incompatible).Error; err != nil {
+		return fmt.Errorf("existing development database is not canonical v%d; remove it instead of migrating it: %w", currentProjectLayoutVersion, err)
+	}
+	if incompatible > 0 {
+		return fmt.Errorf("existing development database is not canonical v%d; remove it instead of migrating it", currentProjectLayoutVersion)
+	}
 	return nil
 }
 

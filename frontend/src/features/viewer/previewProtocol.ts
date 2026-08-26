@@ -1,6 +1,7 @@
 export interface RuntimeSlide {
   id: string;
   html: string;
+  frame: import('./runtimeFrame').RuntimeFrameContext;
 }
 
 export type PreviewCommand =
@@ -23,7 +24,11 @@ export function isRuntimeSlide(value: unknown): value is RuntimeSlide {
   return isRecord(value)
     && typeof value.id === 'string'
     && value.id.length > 0
-    && typeof value.html === 'string';
+    && typeof value.html === 'string'
+    && isRecord(value.frame)
+    && value.frame.slide_id === value.id
+    && typeof value.frame.ordinal === 'number'
+    && typeof value.frame.total === 'number';
 }
 
 export function isPreviewCommand(value: unknown): value is PreviewCommand {

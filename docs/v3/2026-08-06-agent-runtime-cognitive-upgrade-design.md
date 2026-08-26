@@ -172,7 +172,7 @@ backend/prompts/runtime/
 
 | Issue | 指南 |
 |---|---|
-| `SCHEMA_EVIDENCE_REQUIRED` | 对目标资源重新 `write_ppt` 或修复 JSON schema |
+| `SCHEMA_EVIDENCE_REQUIRED` | 对目标资源重新 `mutate_ppt` 或修复 JSON schema |
 | `STATIC_EVIDENCE_REQUIRED` | 修复 HTML 后重新写入或编辑 |
 | `VISUAL_EVIDENCE_REQUIRED` | 对目标 slide 调用 `render_slide`，根据诊断修复 |
 | `REFERENCE_EVIDENCE_REQUIRED` | 保证 outline/spec 引用一致，重新写相关资源 |

@@ -42,8 +42,8 @@ describe('canonical outline selectors', () => {
 
   it('derives navigation and pending slides without a second ordered array', () => {
     expect(adjacentSlideIds(outline, 'sli_3')).toEqual({ previous: 'sli_2', next: 'sli_4' });
-    expect(orderedSlides(snapshot).map((slide) => [slide.id, slide.position, slide.materialization?.state])).toEqual([
-      ['sli_1', 0, 'pending'], ['sli_2', 1, 'not_materialized'], ['sli_3', 2, 'not_materialized'], ['sli_4', 3, 'not_materialized'],
+    expect(orderedSlides(snapshot).map((slide) => [slide.id, slide.materialization?.state])).toEqual([
+      ['sli_1', 'pending'], ['sli_2', 'not_materialized'], ['sli_3', 'not_materialized'], ['sli_4', 'not_materialized'],
     ]);
   });
 });

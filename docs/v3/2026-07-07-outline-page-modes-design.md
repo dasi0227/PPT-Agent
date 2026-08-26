@@ -105,7 +105,7 @@ body: { title?, subtitle?, bullets?, content_intent?, chart_intent?, layout?, st
 ```
 POST   /projects/{id}/slides            { after_slide_id?, layout? } 加页→分配 order，空白 slide.json
 DELETE /slides/{id}                     删页（删目录+versions+DB 行）
-POST   /projects/{id}/slides/reorder    { ordered_ids:[...] } 批量重写 order
+POST   /projects/{id}/mutations    { ordered_ids:[...] } 批量重写 order
 （均受 RUN_ACTIVE 互斥 + project 锁）
 ```
 
@@ -148,7 +148,7 @@ POST   /projects/{id}/slides/reorder    { ordered_ids:[...] } 批量重写 order
 **手动 UI**
 - 加页：Deck 底部 [+ 加页] 或某页"在此后插入" → `POST /projects/{id}/slides`，新页空白 slide.json（默认 layout=bullets），order 落相邻页之间，无 html→自动大纲视图。
 - 删页：悬浮/右键 [删除] → **二次确认弹窗**（无回收站）→ `DELETE /slides/{id}`。
-- 重排：Deck 拖拽 → `POST /projects/{id}/slides/reorder`，批量重写 order，磁盘零迁移。
+- 重排：Deck 拖拽 → `POST /projects/{id}/mutations`，批量重写 order，磁盘零迁移。
 
 **AI 工具（大纲编辑 runner 内，与手动共享 service 底层）**
 ```

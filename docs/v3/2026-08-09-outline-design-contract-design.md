@@ -16,8 +16,8 @@ All durable identity and bookkeeping fields are Runtime-owned:
 - `revision`
 - `project`
 - `slide_id`
-- `section_id`
-- `subsection_id`
+- `section`
+- `subsection`
 - source revisions
 - timestamps
 
@@ -33,8 +33,8 @@ Durable IDs use short Runtime-generated identifiers:
 |---|---|---|
 | `project` | `pro_<rand6>` | global |
 | `slide_id` | `sli_<rand6>` | project-local |
-| `section_id` | `sec_<rand6>` | outline-local |
-| `subsection_id` | `sub_<rand6>` | outline-local |
+| `section` | `sec_<rand6>` | outline-local |
+| `subsection` | `sub_<rand6>` | outline-local |
 
 The random segment uses an unambiguous lowercase base32 alphabet. Generation
 must check the relevant scope and retry on collision.
@@ -51,7 +51,7 @@ Required model-visible content fields:
 - `audience`
 - `language`
 - `sections`
-- `slide_order`
+- `outline_order`
 
 Optional model-visible content fields:
 
@@ -176,7 +176,7 @@ New resources use short Runtime-generated IDs.
 Validation must cover:
 
 - schema structure
-- unique `slide_order`
+- unique `outline_order`
 - section and subsection ID uniqueness
 - slide spec references to valid sections/subsections
 - theme ID format and token availability

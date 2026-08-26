@@ -11,8 +11,8 @@ Shell、数据库、磁盘路径、Repo 写入或任意 Artifact 操作。
 业务工具固定为：
 
 - `read_ppt`
-- `write_ppt`
-- `edit_ppt`
+- `mutate_ppt`
+- `mutate_ppt`
 - `search_refs`
 - `render_slide`
 
@@ -75,12 +75,12 @@ read_ppt(resource)
 不得附加路径、hash、Manifest、revision、phase 或 staging 信息。超过上限时返回
 `CONTENT_TOO_LARGE`，不得返回截断正文。
 
-## 5. `write_ppt`
+## 5. `mutate_ppt`
 
 模型可见签名：
 
 ```text
-write_ppt(resource, content: string)
+mutate_ppt(resource, content: string)
 ```
 
 所有 Resource 的 `content` 都是 String。Runtime 解析 JSON 或 HTML，维护
@@ -88,7 +88,7 @@ write_ppt(resource, content: string)
 完整领域校验，再写入当前 Run staging、更新 ChangeSet、失效相关 Evidence，并返回简洁
 Observation。模型不能控制 Runtime 管理字段。
 
-大范围创建或重建使用 `write_ppt`。一次调用只写一个 Resource。
+大范围创建或重建使用 `mutate_ppt`。一次调用只写一个 Resource。
 
 Design 写入时，Runtime 会在同一 staging 事务内派生项目内部的
 `common/tokens.css`；`common/base.css` 在项目创建或一次性布局迁移时建立。两者是
@@ -96,12 +96,12 @@ Design 的内部消费者产物，不是第五类模型可见 Resource，不进�
 Worker 以当前 Run staging 覆盖 committed 项目读取这些派生文件，Commit 时再与
 `design.json` 原子落盘。
 
-## 6. `edit_ppt`
+## 6. `mutate_ppt`
 
 模型可见签名：
 
 ```text
-edit_ppt(resource, edits)
+mutate_ppt(resource, edits)
 ```
 
 `edits` 统一为：
@@ -153,7 +153,7 @@ Provider 与 Runtime 保留模型返回的完整 `ToolCalls[]`。
 
 - 独立 `read_ppt`/`search_refs` 限流并发，默认上限 4。
 - 不同页面 `render_slide` 限流并发，默认上限 3。
-- `write_ppt`/`edit_ppt` 按模型返回顺序串行。
+- `mutate_ppt`/`mutate_ppt` 按模型返回顺序串行。
 - 同一 Resource 串行。
 - 存在数据依赖时按原顺序串行。
 - 写调用失败后 fail-fast，不执行后续依赖调用。

@@ -2,51 +2,29 @@ package spec
 
 import "testing"
 
-func TestDeriveMaterializationState(t *testing.T) {
-	record := MaterializationRecord{
-		Artifact: MaterializationArtifact{Revision: 2, Hash: "artifact"},
-		Source: MaterializationSource{
-			Outline: 3,
-			Spec:    4,
-			Design:  5,
-			Hash:    "source",
-		},
+func TestRuntimeFrameAndMaterializationFreshnessAreIndependent(t *testing.T) {
+	deck, outline := validDeck(), validOutline()
+	design := Design{SchemaVersion: SchemaVersion, Revision: 1, ProjectID: deck.ProjectID, Theme: "clean", Direction: "minimal", Density: "medium", Chrome: []ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono"}}, CreatedAt: 1, UpdatedAt: 1}
+	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa")
+	if !ok || cover.Numbering.Visible || cover.Ordinal != 1 {
+		t.Fatalf("unexpected cover frame: %#v", cover)
 	}
-	tests := []struct {
-		name      string
-		hasHTML   bool
-		record    *MaterializationRecord
-		outline   int
-		slideSpec int
-		design    int
-		artifact  string
-		source    string
-		want      string
-	}{
-		{name: "missing html", record: &record, want: "not_materialized"},
-		{name: "missing record", hasHTML: true, outline: 3, slideSpec: 4, design: 5, want: "unknown"},
-		{name: "outline stale", hasHTML: true, record: &record, outline: 4, slideSpec: 4, design: 5, artifact: "artifact", source: "changed", want: "spec_stale"},
-		{name: "spec stale", hasHTML: true, record: &record, outline: 3, slideSpec: 5, design: 5, artifact: "artifact", source: "changed", want: "spec_stale"},
-		{name: "design stale", hasHTML: true, record: &record, outline: 3, slideSpec: 4, design: 6, artifact: "artifact", source: "changed", want: "design_stale"},
-		{name: "future source", hasHTML: true, record: &record, outline: 2, slideSpec: 4, design: 5, artifact: "artifact", source: "source", want: "unknown"},
-		{name: "artifact drift", hasHTML: true, record: &record, outline: 3, slideSpec: 4, design: 5, artifact: "changed", source: "source", want: "unknown"},
-		{name: "source drift", hasHTML: true, record: &record, outline: 3, slideSpec: 4, design: 5, artifact: "artifact", source: "changed", want: "unknown"},
-		{name: "fresh", hasHTML: true, record: &record, outline: 3, slideSpec: 4, design: 5, artifact: "artifact", source: "source", want: "fresh"},
+	second, _ := BuildRuntimeFrame(deck, outline, design, "sli_bbbbbb")
+	if !second.Numbering.Visible || second.Ordinal != 2 || second.Total != 3 {
+		t.Fatalf("unexpected second frame: %#v", second)
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got := DeriveMaterializationState(
-				test.hasHTML,
-				test.record,
-				test.outline,
-				test.slideSpec,
-				test.design,
-				test.artifact,
-				test.source,
-			)
-			if got != test.want {
-				t.Fatalf("state=%q want=%q", got, test.want)
-			}
-		})
+
+	artifactHash, sourceHash := ContentHash([]byte("html")), ContentHash([]byte("source"))
+	record := &MaterializationRecord{SchemaVersion: SchemaVersion, Artifact: MaterializationArtifact{Revision: 1, Hash: artifactHash}, Source: MaterializationSource{DeckRevision: 1, OutlineNodeHash: SemanticSlideNodeHash(outline, "sli_bbbbbb"), SpecRevision: 1, DesignRevision: 1, Hash: sourceHash}, Frame: MaterializationFrame{ContextHash: FrameContextHash(deck, outline, design, "sli_bbbbbb")}, RenderedAt: 1}
+	if state := DeriveMaterializationState(true, record, 1, record.Source.OutlineNodeHash, 1, 1, artifactHash, sourceHash, record.Frame.ContextHash); state != "fresh" {
+		t.Fatalf("state=%s", state)
+	}
+	reordered := outline
+	reordered.Sections[0].Slides = []SlideNode{outline.Sections[0].Slides[1], outline.Sections[0].Slides[0]}
+	if SemanticSlideNodeHash(reordered, "sli_bbbbbb") != record.Source.OutlineNodeHash {
+		t.Fatal("reorder changed semantic node hash")
+	}
+	if state := DeriveMaterializationState(true, record, 1, record.Source.OutlineNodeHash, 1, 1, artifactHash, sourceHash, FrameContextHash(deck, reordered, design, "sli_bbbbbb")); state != "frame_stale" {
+		t.Fatalf("state=%s", state)
 	}
 }

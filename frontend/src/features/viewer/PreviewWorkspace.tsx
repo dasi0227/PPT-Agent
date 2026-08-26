@@ -17,6 +17,7 @@ import { DesignSummary } from './DesignSummary';
 import { EmptyState } from './EmptyState';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import type { RuntimeSlide } from './previewProtocol';
+import { buildRuntimeFrame } from './runtimeFrame';
 import { SlideSpecCard } from './SlideSpecCard';
 import { slideRoleLabel } from './semanticLabels';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
@@ -35,6 +36,7 @@ function PreviewFrame({
   title,
   runtimeSlides,
   runtimeIndex,
+  fallbackFrame,
 }: {
   slide: Slide;
   state: ResourceState<string>;
@@ -42,12 +44,13 @@ function PreviewFrame({
   title: string;
   runtimeSlides?: RuntimeSlide[];
   runtimeIndex?: number;
+  fallbackFrame?: RuntimeSlide['frame'];
 }) {
   const visibleHtml = visibleHTML(state);
   const deck = runtimeSlides && runtimeIndex !== undefined && runtimeIndex >= 0
     ? runtimeSlides
     : visibleHtml !== undefined
-      ? [{ id: slide.id, html: visibleHtml }]
+      ? fallbackFrame ? [{ id: slide.id, html: visibleHtml, frame: fallbackFrame }] : []
       : [];
   const deckIndex = runtimeSlides && runtimeIndex !== undefined && runtimeIndex >= 0
     ? runtimeIndex
@@ -100,6 +103,7 @@ function OverviewSlide({
   select,
   spec,
   view,
+  frame,
 }: {
   slide: Slide;
   index: number;
@@ -109,6 +113,7 @@ function OverviewSlide({
   select: () => void;
   spec?: SlideSpec;
   view: PageView;
+  frame?: RuntimeSlide['frame'];
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const loadRef = useRef(load);
@@ -147,9 +152,9 @@ function OverviewSlide({
         selected && 'ring-2 ring-accent',
       )}
     >
-      {html !== undefined ? (
+      {html !== undefined && frame ? (
         <IsolatedSlidePreview
-          slides={[{ id: slide.id, html }]}
+          slides={[{ id: slide.id, html, frame }]}
           index={0}
           className="h-[400%] w-[400%] origin-top-left scale-25 border-0 bg-white pointer-events-none"
           title={`第 ${index + 1} 页预览`}
@@ -253,9 +258,10 @@ export const PreviewWorkspace: React.FC = () => {
     return slides.flatMap((slide) => {
       if (!hasRenderedHTML(slide)) return [];
       const html = visibleHTML(getState(slide));
-      return html === undefined ? [] : [{ id: slide.id, html }];
+      const frame = snapshot ? buildRuntimeFrame(snapshot, slide.id) : undefined;
+      return html === undefined || !frame ? [] : [{ id: slide.id, html, frame }];
     });
-  }, [getState, slides]);
+  }, [getState, slides, snapshot]);
   const runtimeIndex = currentSlide
     ? runtimeSlides.findIndex((slide) => slide.id === currentSlide.id)
     : -1;
@@ -383,6 +389,7 @@ export const PreviewWorkspace: React.FC = () => {
                 title={`第 ${safePage + 1} 页 HTML 预览`}
                 runtimeSlides={runtimeSlides}
                 runtimeIndex={runtimeIndex}
+                fallbackFrame={snapshot ? buildRuntimeFrame(snapshot, currentSlide.id) : undefined}
               />
             ) : currentView === 'html' ? (
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
@@ -443,6 +450,7 @@ export const PreviewWorkspace: React.FC = () => {
                     exitOverview();
                   }}
                   spec={slide.spec}
+                  frame={snapshot ? buildRuntimeFrame(snapshot, slide.id) : undefined}
                 />
               ))}
             </div>

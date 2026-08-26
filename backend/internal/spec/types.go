@@ -87,6 +87,27 @@ type ChromeItem struct {
 	Style     string `json:"style"`
 }
 
+type RuntimeFrameContext struct {
+	SlideID    string                `json:"slide_id"`
+	DeckTitle  string                `json:"deck_title"`
+	Ordinal    int                   `json:"ordinal"`
+	Total      int                   `json:"total"`
+	Role       string                `json:"role"`
+	Section    RuntimeFrameAncestor  `json:"section"`
+	Subsection *RuntimeFrameAncestor `json:"subsection,omitempty"`
+	Numbering  RuntimeFrameNumbering `json:"numbering"`
+	Chrome     []ChromeItem          `json:"chrome"`
+}
+type RuntimeFrameAncestor struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Index int    `json:"index"`
+}
+type RuntimeFrameNumbering struct {
+	Visible bool   `json:"visible"`
+	Format  string `json:"format"`
+}
+
 type ProjectContentSnapshot struct {
 	Deck       Deck                    `json:"deck"`
 	Outline    Outline                 `json:"outline"`
@@ -100,13 +121,8 @@ type SlideContent struct {
 	HTMLRevision    int                    `json:"html_revision"`
 	Materialization *MaterializationRecord `json:"materialization"`
 }
-type ProjectView struct {
-	Deck       Deck                       `json:"deck"`
-	Outline    Outline                    `json:"outline"`
-	SlideSpecs map[string]SlideSpec       `json:"slide_specs"`
-	Design     Design                     `json:"design"`
-	States     map[string]Materialization `json:"materialization"`
-}
+
+// Materialization is a read-only per-slide status derived from materialization.json.
 type Materialization struct {
 	State     string `json:"state"`
 	Revisions any    `json:"revisions"`

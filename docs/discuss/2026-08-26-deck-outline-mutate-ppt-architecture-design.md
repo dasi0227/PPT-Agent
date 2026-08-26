@@ -46,8 +46,8 @@ render_slide
 删除 Agent 可见的：
 
 ```text
-write_ppt
-edit_ppt
+mutate_ppt
+mutate_ppt
 ```
 
 `mutate_ppt` 每次调用执行一个封闭、强类型的领域 operation：
@@ -74,8 +74,8 @@ slide.html.patch
 核心不变量：
 
 1. `slide_id` 是 Runtime 生成的稳定不透明身份，AI、页码、标题和文件名都不能替代它。
-2. 页面顺序只存在于 `outline.json` 的有序树中，不再保存独立 `slide_order`。
-3. section/subsection 归属只由树的父子关系表达，slide spec 不再重复保存 `section_id/subsection_id`。
+2. 页面顺序只存在于 `outline.json` 的有序树中，不再保存独立 `outline_order`。
+3. section/subsection 归属只由树的父子关系表达，slide spec 不再重复保存 `section/subsection`。
 4. 工作区“第 N 页”和幻灯片画面页码使用同一个派生序号。
 5. 页码由 Runtime 预览/导出框架注入，Agent HTML 不写死页码。
 6. 空项目先拥有 `deck.json` 和空 outline；`outline.init` 一次性创建结构和稳定 ID，然后 Agent 逐页写 spec 和 HTML。
@@ -86,13 +86,13 @@ slide.html.patch
 
 当前实现有以下结构性耦合：
 
-- `outline.json` 同时保存标题、目标、受众、规则、section 列表和 `slide_order`。
-- section/subsection 层级在 outline 中，页面归属却存于每个 slide spec 的 `section_id/subsection_id`。
+- `outline.json` 同时保存标题、目标、受众、规则、section 列表和 `outline_order`。
+- section/subsection 层级在 outline 中，页面归属却存于每个 slide spec 的 `section/subsection`。
 - 页面移动需要同时提交完整 `ordered_ids` 和完整 placements，并重写受影响 spec。
-- Agent 通过通用字符串资源工具 `write_ppt/edit_ppt` 写 outline、design、spec 和 HTML，Runtime 难以在工具 Schema 层表达结构命令与 ID 分配。
+- Agent 通过通用字符串资源工具 `mutate_ppt/mutate_ppt` 写 outline、design、spec 和 HTML，Runtime 难以在工具 Schema 层表达结构命令与 ID 分配。
 - 空项目没有 slide ID，Agent 只能自行构造 `sli-*` 名称，再先写 outline、后写 spec；两次调用之间可能出现 outline 已引用页面但 spec 尚不存在的非法投影。
 - materialization 将整份 outline revision/hash 视为每页 HTML 来源；仅重排页面也可能把所有页面标记为陈旧。
-- 前端虽然已经使用稳定 `currentSlideId`，但目录仍需从 `slide_order`、sections、spec placement 和 slide 列表拼装。
+- 前端虽然已经使用稳定 `currentSlideId`，但目录仍需从 `outline_order`、sections、spec placement 和 slide 列表拼装。
 - 页码如果进入 Agent HTML，重排页面将迫使大量 HTML 重写。
 
 本设计不在这些结构上继续增加兼容层，而是直接消除重复事实来源。
@@ -272,7 +272,7 @@ Runtime 管理：`version/revision/project_id/created_at/updated_at`。
 
 删除：
 
-- `slide_order`。
+- `outline_order`。
 - deck 标题、目标、受众、语言、定位、requirements、prohibitions。
 
 `flattenOutline(outline)` 按以下顺序产生唯一全局页序：
@@ -307,8 +307,8 @@ Runtime 管理：`version/revision/project_id/created_at/updated_at`。
 
 删除：
 
-- `section_id`。
-- `subsection_id`。
+- `section`。
+- `subsection`。
 - `role`；页面角色由 outline slide node 唯一拥有。
 - `position/page_number`；二者从 outline 派生。
 
@@ -866,7 +866,7 @@ Commit 必须支持 outline 中已声明页面和 spec/HTML 的分阶段 staging
 - 成功 finish 时，完整 PPT 生成必须无 pending。
 - Commit 原子写 deck、outline、design、spec、HTML、materialization、版本快照和 slide identity rows。
 - 不再遍历 `outline.SlideOrder`；统一遍历 `FlattenOutline`。
-- DB `SetSlidesOrder` 删除，不能保留 no-op 权威假象。
+- DB `ApplyPPTMutation` 删除，不能保留 no-op 权威假象。
 
 ### 10.4 Context Engine
 
@@ -892,7 +892,7 @@ HTML 诊断失败   -> slide.html.patch / slide.html.write
 design 缺失     -> design.write
 ```
 
-Completion Gate 不再建议 `write_ppt/edit_ppt`。
+Completion Gate 不再建议 `mutate_ppt/mutate_ppt`。
 
 ### 10.6 数据库
 
@@ -942,8 +942,8 @@ POST /api/v1/projects/:id/mutations
 
 删除旧的分裂接口：
 
-- `/slides/reorder`
-- `/slides/restructure`
+- `/mutations`
+- `/mutations`
 - 单独的 section/subsection add/rename/remove 路由
 
 内部仍可保留 handler helper，但对外不维护两套协议。
@@ -1160,12 +1160,12 @@ Mutation result 必须返回 `invalidated_slide_ids` 和原因，前端只展示
 
 一次性删除，不保留双读/双写：
 
-- `outline.slide_order`。
-- `slide.spec.section_id/subsection_id`。
+- `outline.outline_order`。
+- `slide.spec.section/subsection`。
 - `slide.spec.role`。
 - DB/page API 中作为权威字段的 position/order。
-- `SetSlidesOrder`。
-- Agent 工具 `write_ppt/edit_ppt`。
+- `ApplyPPTMutation`。
+- Agent 工具 `mutate_ppt/mutate_ppt`。
 - 旧 Resource 的 `deck:outline/deck:design` 输入契约。
 - 旧 reorder/restructure/section/subsection 分裂写接口。
 - Prompt 中旧工具名和旧资源职责。
@@ -1228,7 +1228,7 @@ refactor: centralize PPT mutations behind typed commands
 refactor: replace PPT write tools with mutate_ppt
 
 - Expose a scoped discriminated mutation schema to execute runs.
-- Remove write_ppt and edit_ppt from runtime, prompts, events, and repair guidance.
+- Remove mutate_ppt and mutate_ppt from runtime, prompts, events, and repair guidance.
 - Update empty-deck generation to initialize structure before page authoring.
 ```
 
@@ -1342,11 +1342,11 @@ cd frontend && npm run build
 1. 新项目创建后没有 slide ID，仍能完整读取 deck/outline/design 和空快照。
 2. `outline.init` 原子创建结构并返回所有正式 ID；Agent 不再生成 `sli-*`。
 3. spec 缺失的已声明页面返回 pending 200，不出现中间态 422。
-4. outline tree 是唯一顺序来源，代码库不存在 `slide_order` 和 spec placement 双写。
+4. outline tree 是唯一顺序来源，代码库不存在 `outline_order` 和 spec placement 双写。
 5. 移动 page/section/subsection 只修改 outline，并返回 canonical snapshot。
 6. 工作区 ordinal、目录页码和画面页码一致。
 7. 页码不写入 Agent HTML；重排不重写 HTML。
-8. `write_ppt/edit_ppt` 从工具、Prompt、Gate、事件、测试中完全删除。
+8. `mutate_ppt/mutate_ppt` 从工具、Prompt、Gate、事件、测试中完全删除。
 9. `mutate_ppt` 只接受 12 个封闭 op，并按 scope 裁剪。
 10. `deck.patch/design.patch/slide.spec.patch` 只支持 add/remove/replace。
 11. `slide.html.patch` 保留唯一锚点 exact replacement。
@@ -1363,7 +1363,7 @@ docs/discuss/2026-08-26-deck-outline-mutate-ppt-architecture-design.md
 
 这是一次 breaking refactor。严格遵循仓库 AGENTS.md；不要为旧 Schema、旧工具、旧接口或旧开发数据保留兼容层、迁移层、双读或双写。先审计当前代码与最新文档，再按设计贯通后端领域模型、deck/outline/spec/design/materialization 文件、mutate_ppt 工具、Prompt/Context/Completion、HTTP API、前端 store/目录/预览/运行反馈和测试。
 
-可以按设计文档 Phase 1-5 分阶段实施并多次提交，每个提交使用规范 commit message，避免混入无关改动。实现过程中以“稳定 ID、outline 树唯一顺序、Runtime 页码、单一前端快照、Agent 不生成正式 ID”为不可破坏的不变量。不要只修改类型或表面文案，必须删除旧 write_ppt/edit_ppt、slide_order、spec placement 和旧结构 API 的所有生产/测试/Prompt 引用。
+可以按设计文档 Phase 1-5 分阶段实施并多次提交，每个提交使用规范 commit message，避免混入无关改动。实现过程中以“稳定 ID、outline 树唯一顺序、Runtime 页码、单一前端快照、Agent 不生成正式 ID”为不可破坏的不变量。不要只修改类型或表面文案，必须删除旧 mutate_ppt/mutate_ppt、outline_order、spec placement 和旧结构 API 的所有生产/测试/Prompt 引用。
 
 完成后运行全部 Go 测试、前端 test/lint/tsc/build 以及可运行的 render integration tests。最终回复只输出改动总结：分阶段提交列表、核心架构变化、前后端与 Prompt 变化、测试结果，以及任何明确偏离设计的地方；不要输出过程日志。
 ```

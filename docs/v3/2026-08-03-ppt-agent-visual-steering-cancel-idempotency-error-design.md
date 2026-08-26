@@ -69,7 +69,7 @@ strategy        = chat | simple | complex
 - 所有 Strategy 运行在一个连续 ReAct Loop；
 - Complex 只额外拥有动态 Plan；
 - 所有正常成功退出显式调用 `finish` 并通过 Completion Gate；
-- 业务工具固定为 `read_ppt/write_ppt/edit_ppt/search_refs/render_slide`；
+- 业务工具固定为 `read_ppt/mutate_ppt/mutate_ppt/search_refs/render_slide`；
 - 控制动作固定为 `update_plan/ask_user/finish`；
 - 公共事件固定为现有 11 种；
 - staging、Evidence、Context、Strategy、Phase 和 Trace 默认不暴露给普通用户；
@@ -685,7 +685,7 @@ HTTP Error 固定：
 
 禁止自动重试：
 
-- `write_ppt/edit_ppt` 的业务错误；
+- `mutate_ppt/mutate_ppt` 的业务错误；
 - Schema 和锚点错误；
 - Revision Conflict；
 - Idempotency Key Reused；

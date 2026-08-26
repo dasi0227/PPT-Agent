@@ -20,6 +20,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 const (
@@ -61,16 +62,17 @@ func renderWorkerError(operation string, cause error) error {
 }
 
 type RenderRequest struct {
-	Type           string `json:"type,omitempty"`
-	RequestID      string `json:"request_id,omitempty"`
-	RunID          string `json:"run_id"`
-	ProjectDir     string `json:"project_dir"`
-	SlideID        string `json:"slide_id"`
-	HTML           string `json:"html"`
-	ScreenshotPath string `json:"screenshot_path"`
-	ViewportWidth  int    `json:"viewport_width"`
-	ViewportHeight int    `json:"viewport_height"`
-	TimeoutMS      int    `json:"timeout_ms"`
+	Type           string                   `json:"type,omitempty"`
+	RequestID      string                   `json:"request_id,omitempty"`
+	RunID          string                   `json:"run_id"`
+	ProjectDir     string                   `json:"project_dir"`
+	SlideID        string                   `json:"slide_id"`
+	HTML           string                   `json:"html"`
+	ScreenshotPath string                   `json:"screenshot_path"`
+	ViewportWidth  int                      `json:"viewport_width"`
+	ViewportHeight int                      `json:"viewport_height"`
+	TimeoutMS      int                      `json:"timeout_ms"`
+	Frame          spec.RuntimeFrameContext `json:"frame"`
 }
 
 type RenderDiagnostics struct {
@@ -78,6 +80,7 @@ type RenderDiagnostics struct {
 	ContentSize     map[string]int   `json:"content_size"`
 	Overflow        map[string]bool  `json:"overflow"`
 	Clipping        []map[string]any `json:"clipping"`
+	RuntimeChrome   []string         `json:"runtime_chrome"`
 	ConsoleErrors   []string         `json:"console_errors"`
 	FailedResources []string         `json:"failed_resources"`
 	FontStatus      string           `json:"font_status"`
@@ -391,6 +394,10 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if _, htmlErr := validateHTML(html); htmlErr != nil {
 		return failedToolResult(CodeRenderFailed, htmlErr.Error(), true)
 	}
+	frame, frameErr := runtimeFrameForRender(t.pack, input.ProjectDir, input.Session, slideID)
+	if frameErr != nil {
+		return failedToolResult(CodeRenderFailed, frameErr.Error(), true)
+	}
 	if t.renderer == nil {
 		agentErr := classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable))
 		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
@@ -410,6 +417,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		RunID: runID, ProjectDir: input.ProjectDir, SlideID: slideID, HTML: string(html),
 		ScreenshotPath: screenshotPath, ViewportWidth: renderViewportWidth,
 		ViewportHeight: renderViewportHeight, TimeoutMS: 15000,
+		Frame: frame,
 	}
 	started := time.Now()
 	diagnostics, err := t.renderer.Render(ctx, request)
@@ -447,7 +455,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		"revision": presentationRevision(t.pack, input, slideID), "hash": sourceHash,
 		"viewport":     map[string]int{"width": renderViewportWidth, "height": renderViewportHeight},
 		"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
-		"clipping": diagnostics.Clipping, "console_errors": diagnostics.ConsoleErrors,
+		"clipping": diagnostics.Clipping, "runtime_chrome": diagnostics.RuntimeChrome, "console_errors": diagnostics.ConsoleErrors,
 		"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		"duration_ms": diagnostics.DurationMS, "blocking_issues": blocking, "warnings": warnings,
 	}
@@ -459,7 +467,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		"tool_call_id": input.CallID,
 		"resource":     target, "slide_id": slideID, "diagnostics": map[string]any{
 			"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
-			"clipping": diagnostics.Clipping, "console_errors": diagnostics.ConsoleErrors,
+			"clipping": diagnostics.Clipping, "runtime_chrome": diagnostics.RuntimeChrome, "console_errors": diagnostics.ConsoleErrors,
 			"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		},
 		"source_hash": sourceHash,
@@ -488,6 +496,32 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	evidence.Materialization = &proof
 	result.Evidence = []Evidence{evidence}
 	return result
+}
+
+func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, session *RunSession, slideID string) (spec.RuntimeFrameContext, error) {
+	deckRaw, _, err := readArtifact(projectDir, session, deckRef(pack))
+	if err != nil {
+		return spec.RuntimeFrameContext{}, err
+	}
+	outlineRaw, _, err := readArtifact(projectDir, session, outlineRef(pack))
+	if err != nil {
+		return spec.RuntimeFrameContext{}, err
+	}
+	designRaw, _, err := readArtifact(projectDir, session, designRef(pack))
+	if err != nil {
+		return spec.RuntimeFrameContext{}, err
+	}
+	var deck spec.Deck
+	var outline spec.Outline
+	var design spec.Design
+	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {
+		return spec.RuntimeFrameContext{}, errors.New("runtime frame source is invalid")
+	}
+	frame, ok := spec.BuildRuntimeFrame(deck, outline, design, slideID)
+	if !ok {
+		return spec.RuntimeFrameContext{}, errors.New("slide is not present in the current outline")
+	}
+	return frame, nil
 }
 
 func renderHashWithoutSession(pack contextengine.ContextPack, input DomainToolInput, slideID string) (string, error) {

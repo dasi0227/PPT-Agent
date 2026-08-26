@@ -8,20 +8,50 @@ import (
 )
 
 func FrameContextHash(deck Deck, outline Outline, design Design, slideID string) string {
-	loc, ok := FindSlide(outline, slideID)
+	frame, ok := BuildRuntimeFrame(deck, outline, design, slideID)
 	if !ok {
 		return ""
 	}
-	sectionTitle, subsectionTitle := loc.Section.Title, ""
-	if loc.Subsection != nil {
-		subsectionTitle = loc.Subsection.Title
-	}
-	raw, _ := json.Marshal(map[string]any{
-		"slide_id": slideID, "ordinal": loc.Ordinal, "total": len(FlattenOutline(outline)),
-		"section": sectionTitle, "subsection": subsectionTitle,
-		"numbering": deck.Numbering, "chrome": design.Chrome,
-	})
+	raw, _ := json.Marshal(frame)
 	return ContentHash(raw)
+}
+
+func BuildRuntimeFrame(deck Deck, outline Outline, design Design, slideID string) (RuntimeFrameContext, bool) {
+	loc, ok := FindSlide(outline, slideID)
+	if !ok {
+		return RuntimeFrameContext{}, false
+	}
+	sectionIndex := 0
+	for index := range outline.Sections {
+		if outline.Sections[index].ID == loc.Section.ID {
+			sectionIndex = index + 1
+			break
+		}
+	}
+	var subsection *RuntimeFrameAncestor
+	if loc.Subsection != nil {
+		index := 0
+		for candidate := range loc.Section.Subsections {
+			if loc.Section.Subsections[candidate].ID == loc.Subsection.ID {
+				index = candidate + 1
+				break
+			}
+		}
+		subsection = &RuntimeFrameAncestor{ID: loc.Subsection.ID, Title: loc.Subsection.Title, Index: index}
+	}
+	visible := deck.Numbering.Enabled
+	for _, role := range deck.Numbering.HiddenRoles {
+		if role == loc.Slide.Role {
+			visible = false
+			break
+		}
+	}
+	return RuntimeFrameContext{
+		SlideID: slideID, DeckTitle: deck.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: loc.Slide.Role,
+		Section:    RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
+		Subsection: subsection, Numbering: RuntimeFrameNumbering{Visible: visible, Format: deck.Numbering.Format},
+		Chrome: append([]ChromeItem(nil), design.Chrome...),
+	}, true
 }
 
 func ContentHash(raw []byte) string {

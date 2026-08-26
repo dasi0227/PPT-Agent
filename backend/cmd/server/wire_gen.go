@@ -64,16 +64,14 @@ func initApp() (*App, func(), error) {
 	polishHandler := httpapi.NewPolishHandler(polishService)
 	projectService := service.NewProjectService(store, workRoot)
 	slideService := service.NewSlideService(store)
-	specService := service.NewSpecService(store)
 	pptMutationService := service.NewPPTMutationService(store)
-	projectHandler := httpapi.NewProjectHandler(projectService, slideService, pptMutationService)
+	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
 	threadService := service.NewThreadService(store)
 	threadHandler := httpapi.NewThreadHandler(threadService)
 	slideHandler := httpapi.NewSlideHandler(slideService)
 	assetService := provideAssetService(store, workRoot)
 	assetHandler := httpapi.NewAssetHandler(assetService)
-	specHandler := httpapi.NewSpecHandler(specService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, llmHandler, polishHandler, specHandler)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, llmHandler, polishHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	mainSeedDone, err := provideSeed(configConfig, store, zapLogger)
@@ -99,9 +97,8 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideRenderWorker,
 	provideWorkRoot,
 	provideAssetService,
-	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, service.NewSlideService, service.NewSpecService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
+	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, service.NewSlideService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
 	httpapi.NewAssetHandler,
-	httpapi.NewSpecHandler,
 	provideHTTPServer,
 	provideSeed,
 	provideApp,

@@ -6,7 +6,7 @@ import (
 )
 
 func TestAgentContractsComeFromSchemas(t *testing.T) {
-	for _, name := range []string{OutlineName, DesignName, SlideSpecName} {
+	for _, name := range []string{DeckName, OutlineName, DesignName, SlideSpecName} {
 		contract, err := AgentContract(name)
 		if err != nil {
 			t.Fatalf("%s contract: %v", name, err)
@@ -37,7 +37,7 @@ func TestAgentContractsComeFromSchemas(t *testing.T) {
 }
 
 func TestRuntimeContractsContainManagedFields(t *testing.T) {
-	for _, name := range []string{OutlineName, DesignName, SlideSpecName, MaterializationName} {
+	for _, name := range []string{DeckName, OutlineName, DesignName, SlideSpecName, MaterializationName} {
 		contract, err := RuntimeContract(name)
 		if err != nil {
 			t.Fatal(err)
@@ -54,7 +54,7 @@ func TestRuntimeContractsContainManagedFields(t *testing.T) {
 	}
 }
 
-func TestSlideSpecAgentContractExposesOutlinePlacementIDs(t *testing.T) {
+func TestSlideSpecAgentContractExcludesOutlinePlacement(t *testing.T) {
 	contract, err := AgentContract(SlideSpecName)
 	if err != nil {
 		t.Fatal(err)
@@ -64,52 +64,33 @@ func TestSlideSpecAgentContractExposesOutlinePlacementIDs(t *testing.T) {
 			t.Fatalf("managed field %q leaked into slide agent contract", field)
 		}
 	}
-	for _, field := range []string{"section_id", "subsection_id"} {
-		if !containsString(contract.Fields, field) {
-			t.Fatalf("authoring field %q is missing from slide agent contract", field)
+	for _, field := range []string{"section" + "_id", "subsection" + "_id", "role"} {
+		if containsString(contract.Fields, field) {
+			t.Fatalf("outline-owned field %q leaked into slide agent contract", field)
 		}
 	}
 }
 
-func TestOutlineAgentContractExposesSectionIdentity(t *testing.T) {
-	contract, err := AgentContract(OutlineName)
+func TestOutlineRuntimeContractOwnsStableNodeIDs(t *testing.T) {
+	contract, err := RuntimeContract(OutlineName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sections, ok := contract.FieldSchema["sections"].(map[string]any)
-	if !ok {
-		t.Fatal("outline sections contract is missing")
-	}
-	items, ok := sections["items"].(map[string]any)
-	if !ok {
-		t.Fatal("outline section item contract is missing")
-	}
-	properties, ok := items["properties"].(map[string]any)
-	if !ok {
-		t.Fatal("outline section properties are missing")
-	}
-	if _, ok := properties["id"]; !ok {
-		t.Fatal("section id is missing from agent contract")
-	}
-	subsections, ok := properties["subsections"].(map[string]any)
-	if !ok {
-		t.Fatal("subsections contract is missing")
-	}
-	subsectionItems, ok := subsections["items"].(map[string]any)
-	if !ok {
-		t.Fatal("subsection item contract is missing")
-	}
-	subsectionProperties, ok := subsectionItems["properties"].(map[string]any)
-	if !ok {
-		t.Fatal("subsection properties are missing")
-	}
-	if _, ok := subsectionProperties["id"]; !ok {
-		t.Fatal("subsection id is missing from agent contract")
+	defs := contract["$defs"].(map[string]any)
+	for _, name := range []string{"section", "subsection", "slide"} {
+		properties := defs[name].(map[string]any)["properties"].(map[string]any)
+		field := "id"
+		if name == "slide" {
+			field = "slide_id"
+		}
+		if _, ok := properties[field]; !ok {
+			t.Fatalf("%s stable ID missing", name)
+		}
 	}
 }
 
 func TestAuthoringSchemasUseProjectID(t *testing.T) {
-	for _, name := range []string{OutlineName, DesignName, SlideSpecName} {
+	for _, name := range []string{DeckName, OutlineName, DesignName, SlideSpecName} {
 		contract, err := RuntimeContract(name)
 		if err != nil {
 			t.Fatal(err)
@@ -124,19 +105,27 @@ func TestAuthoringSchemasUseProjectID(t *testing.T) {
 	}
 }
 
-func TestOutlineUsesTopLevelRules(t *testing.T) {
-	contract, err := RuntimeContract(OutlineName)
+func TestDeckOwnsPresentationRulesAndOutlineDoesNot(t *testing.T) {
+	deck, err := RuntimeContract(DeckName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	properties := contract["properties"].(map[string]any)
+	deckProperties := deck["properties"].(map[string]any)
+	outline, err := RuntimeContract(OutlineName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outlineProperties := outline["properties"].(map[string]any)
 	for _, field := range []string{"requirements", "prohibitions"} {
-		if _, exists := properties[field]; !exists {
-			t.Errorf("outline runtime contract does not contain %q", field)
+		if _, exists := deckProperties[field]; !exists {
+			t.Errorf("deck runtime contract does not contain %q", field)
+		}
+		if _, exists := outlineProperties[field]; exists {
+			t.Errorf("outline still owns %q", field)
 		}
 	}
-	if _, exists := properties["constraints"]; exists {
-		t.Error("outline runtime contract still contains obsolete constraints field")
+	if _, exists := outlineProperties["slide"+"_order"]; exists {
+		t.Error("outline still contains a second ordering field")
 	}
 }
 

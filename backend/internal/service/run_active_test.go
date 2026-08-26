@@ -31,7 +31,7 @@ func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	if err := st.CreateProject(ctx, model.Project{
 		ID: "p1", Title: "P", WorkDir: filepath.Join(root, "p1"),
 		Theme: "default", Status: "draft", OutlineRevision: 1, DesignRevision: 1,
-		LayoutVersion: 2, CreatedAt: 1, UpdatedAt: 1,
+		LayoutVersion: 6, CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -41,8 +41,8 @@ func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := model.RunCommand{
-		Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
-		Mode: model.ModeExecute,
+		Scope:       model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+		Mode:        model.ModeExecute,
 		Instruction: "build the deck",
 	}
 	if err := st.CreateRun(ctx, model.Run{

@@ -70,7 +70,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 		zap.NewNop(),
 		httpapi.NewHealthHandler(service.NewHealthService(st)),
 		httpapi.NewRunHandler(runSvc),
-		httpapi.NewProjectHandler(projectSvc, service.NewSlideService(st)),
+		httpapi.NewProjectHandler(projectSvc, service.NewPPTMutationService(st)),
 		httpapi.NewThreadHandler(threadSvc),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
 		httpapi.NewAssetHandler(service.NewAssetService(st, root)),
@@ -81,14 +81,13 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 			return httpapi.NewLLMHandler(registry)
 		}(),
 		polishHandler,
-		httpapi.NewSpecHandler(service.NewSpecService(st)),
 	)
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)
 	return srv, root
 }
 
-func TestDirectoryRenameHTTPReturnsAuthoritativeSnapshot(t *testing.T) {
+func TestCanonicalMutationHTTPReturnsAuthoritativeSnapshot(t *testing.T) {
 	srv, _ := setupProjectThreadServer(t)
 	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Rename directory","language":"zh-CN"}`)
 	if resp.Code != http.StatusCreated {
@@ -97,49 +96,34 @@ func TestDirectoryRenameHTTPReturnsAuthoritativeSnapshot(t *testing.T) {
 	var project map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &project)
 	projectID := project["id"].(string)
-
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/slides", `{}`)
-	if resp.Code != http.StatusCreated {
-		t.Fatalf("create slide: %d %s", resp.Code, resp.Body.String())
-	}
-	var slide map[string]any
-	_ = json.Unmarshal(resp.Body.Bytes(), &slide)
-	slideID := slide["id"].(string)
-
-	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/spec", "")
-	var view map[string]any
-	_ = json.Unmarshal(resp.Body.Bytes(), &view)
-	sections := view["outline"].(map[string]any)["sections"].([]any)
-	sectionID := sections[0].(map[string]any)["id"].(string)
-
-	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID+"/sections/"+sectionID, `{"title":"新章节"}`)
-	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"title":"新章节"`) {
-		t.Fatalf("rename section: %d %s", resp.Code, resp.Body.String())
-	}
-
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/sections/"+sectionID+"/subsections", `{"title":"旧子节"}`)
-	if resp.Code != http.StatusOK {
-		t.Fatalf("add subsection: %d %s", resp.Code, resp.Body.String())
-	}
-	var grouped map[string]any
-	_ = json.Unmarshal(resp.Body.Bytes(), &grouped)
-	groupedSections := grouped["spec"].(map[string]any)["outline"].(map[string]any)["sections"].([]any)
-	subsections := groupedSections[0].(map[string]any)["subsections"].([]any)
-	subsectionID := subsections[0].(map[string]any)["id"].(string)
-
-	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID+"/sections/"+sectionID+"/subsections/"+subsectionID, `{"title":"新子节"}`)
-	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"title":"新子节"`) {
-		t.Fatalf("rename subsection: %d %s", resp.Code, resp.Body.String())
-	}
-
-	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID+"/slides/"+slideID, `{"title":"新页面"}`)
-	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"title":"新页面"`) {
-		t.Fatalf("rename slide: %d %s", resp.Code, resp.Body.String())
-	}
-
-	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/projects/"+projectID+"/slides/"+slideID, `{"title":"   "}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.init","structure":[{"id":"sec_agent","client_ref":"opening","title":"开场","purpose":"建立主题","slides":[],"subsections":[]}]}`)
 	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("blank title should fail: %d %s", resp.Code, resp.Body.String())
+		t.Fatalf("agent supplied id accepted: %d %s", resp.Code, resp.Body.String())
+	}
+
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.init","structure":[{"client_ref":"opening","title":"开场","purpose":"建立主题","slides":[{"client_ref":"cover","label":"封面","role":"cover"}],"subsections":[]}]}`)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"spec_state":"pending"`) {
+		t.Fatalf("init outline: %d %s", resp.Code, resp.Body.String())
+	}
+	var mutation map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &mutation)
+	created := mutation["mutation"].(map[string]any)["created"].(map[string]any)
+	sectionID, slideID := created["opening"].(string), created["cover"].(string)
+	if !strings.HasPrefix(sectionID, "sec_") || !strings.HasPrefix(slideID, "sli_") {
+		t.Fatalf("runtime IDs=%v", created)
+	}
+
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.update","expected_revision":2,"node_id":"`+sectionID+`","changes":{"title":"新章节"}}`)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"title":"新章节"`) {
+		t.Fatalf("update outline: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/content", "")
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), slideID) {
+		t.Fatalf("content snapshot: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/slides", `{}`)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("removed slide endpoint returned %d", resp.Code)
 	}
 }
 
@@ -233,7 +217,7 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 	}
 }
 
-func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
+func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	srv, _ := setupProjectThreadServer(t)
 	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Artifact R0","language":"zh-CN"}`)
 	if resp.Code != http.StatusCreated {
@@ -243,13 +227,13 @@ func TestArtifactTargetRunAndSpecAPI(t *testing.T) {
 	_ = json.Unmarshal(resp.Body.Bytes(), &project)
 	projectID := project["id"].(string)
 
-	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/spec", "")
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/content", "")
 	if resp.Code != http.StatusOK {
 		t.Fatalf("get spec: %d %s", resp.Code, resp.Body.String())
 	}
 	var view map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &view)
-	if view["outline"].(map[string]any)["version"] != "3.0" {
+	if view["outline"].(map[string]any)["version"] != "4.0" || view["deck"].(map[string]any)["version"] != "4.0" {
 		t.Fatalf("unexpected spec response: %s", resp.Body.String())
 	}
 
@@ -391,9 +375,9 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 		t.Fatalf("project creation must initialize state.json: %v", err)
 	}
 
-	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/slides", "")
-	if resp.Code != http.StatusOK || strings.TrimSpace(resp.Body.String()) != "[]" {
-		t.Fatalf("new project slides should be empty array, got %d: %s", resp.Code, resp.Body.String())
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/content", "")
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"sections":[]`) || !strings.Contains(resp.Body.String(), `"slides_by_id":{}`) {
+		t.Fatalf("new project content should be empty, got %d: %s", resp.Code, resp.Body.String())
 	}
 
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/threads", `{"title":"内容打磨"}`)

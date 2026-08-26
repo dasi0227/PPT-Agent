@@ -203,7 +203,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := bus.Emit(ctx, model.EventToolCompleted, model.ToolCompletedPayload{
-		PublicEventBase: base(), CallID: "mismatch", Tool: "write_ppt", Status: "completed",
+		PublicEventBase: base(), CallID: "mismatch", Tool: "mutate_ppt", Status: "completed",
 		Display: model.PublicDisplay{Label: "完成"},
 	}); err == nil {
 		t.Fatal("accepted a tool.completed with a different tool name")

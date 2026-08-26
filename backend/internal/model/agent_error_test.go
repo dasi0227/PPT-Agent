@@ -37,14 +37,14 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 
 func TestAgentErrorProjectionsKeepPublicPayloadSafe(t *testing.T) {
 	secret := "/Users/private/project/slide.html api_key=sk-secret raw=<html> stack trace database error provider reasoning Authorization=Bearer auth-secret provider_body=provider-raw"
-	agentErr := NewAgentError("CONTENT_INVALID", "write_ppt", errors.New(secret))
+	agentErr := NewAgentError("CONTENT_INVALID", "mutate_ppt", errors.New(secret))
 	agentErr.CallID = "call-7"
 	agentErr.Resource = &ErrorResource{Type: "slide", SlideID: "slide-2", Part: "html"}
 	agentErr.Details = map[string]any{
 		"json_pointer": "/slides/1/title",
 		"html_checks":  []string{"root dimensions", "overflow"},
 		"revision":     12,
-		"next_action":  "correct the invalid content and call write_ppt again",
+		"next_action":  "correct the invalid content and call mutate_ppt again",
 	}
 
 	modelView := agentErr.ModelObservation()

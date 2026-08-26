@@ -17,7 +17,7 @@
 1. 每个 section 的直属页面区是一个组，即使没有直属页面也保留。
 2. 每个 subsection 是一个组，即使没有页面也保留。
 3. 组顺序严格遵循 outline 中的 section 和 subsection 顺序。
-4. 每个组携带唯一 placement：`section_id`，以及 subsection 组对应的 `subsection_id`。
+4. 每个组携带唯一 placement：`section`，以及 subsection 组对应的 `subsection`。
 
 该结构只用于计算交互，不新增持久化字段，也不改变后端请求格式。
 

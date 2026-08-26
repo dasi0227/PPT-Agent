@@ -252,7 +252,7 @@ Prompt 核心要求：
       "target": {"type": "slide", "slide_id": "slide-01", "part": "html"},
       "summary": "",
       "required_action": {
-        "tool": "read_ppt | write_ppt | edit_ppt | render_slide | search_refs | ask_user | finish",
+        "tool": "read_ppt | mutate_ppt | mutate_ppt | render_slide | search_refs | ask_user | finish",
         "target": {"type": "slide", "slide_id": "slide-01", "part": "html"}
       }
     }

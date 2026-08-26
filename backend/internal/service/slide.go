@@ -26,28 +26,6 @@ func NewSlideService(s store.Store) *SlideService {
 	return &SlideService{store: s, clock: nowUnix, newID: func() string { return model.MustShortID("sli") }}
 }
 
-// GetSlide 按 id 返回单页元数据，并从文件投影 position/title/layout（文件为真相）。
-func (svc *SlideService) GetSlide(ctx context.Context, id string) (model.Slide, error) {
-	meta, err := svc.store.GetSlide(ctx, id)
-	if err != nil {
-		return model.Slide{}, err
-	}
-	siblings, err := svc.store.ListSlides(ctx, meta.ProjectID)
-	if err != nil {
-		return meta, nil
-	}
-	projected, err := projectSlidesFromFiles(ctx, svc.store, meta.ProjectID, siblings)
-	if err != nil {
-		return meta, nil
-	}
-	for _, slide := range projected {
-		if slide.ID == id {
-			return slide, nil
-		}
-	}
-	return meta, nil
-}
-
 // ListVersions 返回某页的版本列表。
 func (svc *SlideService) ListVersions(ctx context.Context, slideID string) ([]model.Version, error) {
 	sl, err := svc.store.GetSlide(ctx, slideID)
@@ -94,14 +72,15 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	if err != nil {
 		return model.Slide{}, fmt.Errorf("read snapshot %s: %w", snapshotPath, err)
 	}
-	previous, readErr := sandbox.Read(sl.HTMLPath)
+	htmlPath := model.SlideHTMLPath(sl.ID)
+	previous, readErr := sandbox.Read(htmlPath)
 	materializationPath := model.SlideMaterializationPath(sl.ID)
 	previousMaterialization, materializationReadErr := sandbox.Read(materializationPath)
 	restoreCurrent := func() {
 		if readErr == nil {
-			_ = sandbox.Write(sl.HTMLPath, previous)
+			_ = sandbox.Write(htmlPath, previous)
 		} else {
-			_ = sandbox.Delete(sl.HTMLPath)
+			_ = sandbox.Delete(htmlPath)
 		}
 		if materializationReadErr == nil {
 			_ = sandbox.Write(materializationPath, previousMaterialization)
@@ -109,7 +88,7 @@ func (svc *SlideService) RollbackSlide(ctx context.Context, slideID string, vers
 	}
 
 	// 1) 用历史内容覆盖当前 html。
-	if err := sandbox.Write(sl.HTMLPath, historical); err != nil {
+	if err := sandbox.Write(htmlPath, historical); err != nil {
 		return model.Slide{}, err
 	}
 	if err := sandbox.Delete(materializationPath); err != nil && !errors.Is(err, os.ErrNotExist) {

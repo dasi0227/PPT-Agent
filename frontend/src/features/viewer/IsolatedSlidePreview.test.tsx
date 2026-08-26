@@ -11,7 +11,7 @@ describe('IsolatedSlidePreview runtime errors', () => {
     });
     const { container } = render(
       <IsolatedSlidePreview
-        slides={[{ id: 's1', html: '<h1>Slide</h1>' }]}
+        slides={[{ id: 's1', html: '<h1>Slide</h1>', frame: { slide_id: 's1', deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, numbering: { visible: true, format: 'number' }, chrome: [] } }]}
         index={0}
         title="安全预览"
       />,

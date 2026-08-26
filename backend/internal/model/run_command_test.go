@@ -7,7 +7,7 @@ import (
 func TestRunCommandValidation(t *testing.T) {
 	valid := RunCommand{
 		Scope:       RunScope{Artifact: ArtifactPPT, Level: ScopeSlide, SlideID: "stable"},
-		Mode:      ModeExecute,
+		Mode:        ModeExecute,
 		Instruction: "revise",
 	}
 	if err := valid.Validate(); err != nil {
@@ -35,7 +35,7 @@ func TestRunCommandValidation(t *testing.T) {
 func TestRunCommandValidationAcceptsPlanIntentAndOptions(t *testing.T) {
 	command := RunCommand{
 		Scope:       RunScope{Artifact: ArtifactSpec, Level: ScopeDeck},
-		Mode:      ModePlan,
+		Mode:        ModePlan,
 		Instruction: "plan the work",
 		Options:     RunOptions{Language: LanguageChinese, Range: SlideRangeNineToFifteen},
 	}

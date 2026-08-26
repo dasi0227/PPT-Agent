@@ -27,7 +27,7 @@
 Project
 └── slides: Slide[]
     └── slide.id
-        ├── slide_specs[slide.id] -> section_id / subsection_id
+        ├── slide_specs[slide.id] -> section / subsection
         ├── outline.sections[] -> section title
         └── outline.sections[].subsections[] -> subsection title
 ```
@@ -92,9 +92,9 @@ section
     slides
 ```
 
-页面允许没有 `subsection_id`。这表示它是该 section 的直属页，不是脏数据。拖动规则：
+页面允许没有 `subsection`。这表示它是该 section 的直属页，不是脏数据。拖动规则：
 
-- 拖到某个页面行：插入到该页面前方，并继承目标页面的 `section_id/subsection_id`。
+- 拖到某个页面行：插入到该页面前方，并继承目标页面的 `section/subsection`。
 - 拖到 section 标题：移动为该 section 的直属页。
 - 拖到 subsection 标题：移动到该 subsection 下。
 - 上移/下移按钮只在当前直属组或当前 subsection 内移动，不跨组，不隐式改变归属。
@@ -105,8 +105,8 @@ section
 {
   "ordered_ids": ["slide-01", "slide-02"],
   "placements": [
-    {"slide_id": "slide-01", "section_id": "section-intro"},
-    {"slide_id": "slide-02", "section_id": "section-intro", "subsection_id": "sub-why"}
+    {"slide_id": "slide-01", "section": "section-intro"},
+    {"slide_id": "slide-02", "section": "section-intro", "subsection": "sub-why"}
   ]
 }
 ```
@@ -115,8 +115,8 @@ section
 
 - `ordered_ids` 必须完整且无重复。
 - `placements` 必须完整且无重复。
-- `section_id` 必须存在。
-- `subsection_id` 如果存在，必须属于该 `section_id`。
+- `section` 必须存在。
+- `subsection` 如果存在，必须属于该 `section`。
 - 活跃 run 时拒绝手动重组。
 
 ## 验收标准

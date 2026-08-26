@@ -1,52 +1,12 @@
 package migrations
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
-
-// 迁移文件 0001_init.sql MUST 与 docs 权威 schema 的 DDL 保持一致（DEV-RULES R1）。
-// 比较时忽略注释与空白，只对齐可执行 SQL 语句集合。
-func TestMigrationMatchesDocsSchema(t *testing.T) {
-	migration, err := FS.ReadFile("0001_init.sql")
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	docsPath := filepath.Join("..", "..", "docs", "v1", "30-data-model", "sqlite-schema.sql")
-	docs, err := os.ReadFile(docsPath)
-	if err != nil {
-		t.Fatalf("read docs schema %s: %v", docsPath, err)
-	}
-
-	got := normalize(string(migration))
-	want := normalize(string(docs))
-	if got != want {
-		t.Errorf("migration DDL diverged from docs schema (source of truth).\nmigration:\n%s\n\ndocs:\n%s", got, want)
-	}
-}
-
-// normalize 去除注释、空行并压缩空白，得到可比较的 DDL 规范形。
-func normalize(sql string) string {
-	var b strings.Builder
-	for _, line := range strings.Split(sql, "\n") {
-		t := strings.TrimSpace(line)
-		if t == "" || strings.HasPrefix(t, "--") {
-			continue
-		}
-		if i := strings.Index(t, "--"); i >= 0 {
-			t = strings.TrimSpace(t[:i])
-		}
-		b.WriteString(strings.Join(strings.Fields(t), " "))
-		b.WriteString("\n")
-	}
-	return b.String()
-}
 
 func TestContentRevisionsLiveInFiles(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -79,88 +39,8 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 	if err := db.Exec(`
 		INSERT INTO projects(id,title,work_dir,theme,status,layout_version,created_at,updated_at)
 		VALUES(?,?,?,?,?,?,?,?)
-	`, "layout-v5", "Deck", "/tmp/layout-v5", "default", "draft", 5, 1, 1).Error; err != nil {
-		t.Fatalf("layout version 5 is not accepted: %v", err)
-	}
-}
-
-func TestRunCommandMigrationConvertsPersistedRuns(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open in-memory: %v", err)
-	}
-	files, err := Files()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range files {
-		if name == "0011_run_command_contract.sql" {
-			break
-		}
-		if err := applyMigrationFile(db, name); err != nil {
-			t.Fatalf("apply %s: %v", name, err)
-		}
-	}
-	if err := db.Exec(`
-		INSERT INTO projects(id,title,work_dir,theme,status,layout_version,created_at,updated_at)
-		VALUES(?,?,?,?,?,?,?,?)
-	`, "p1", "Deck", "/tmp/p1", "default", "draft", 5, 1, 1).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Exec(`
-		INSERT INTO threads(id,project_id,title,history_path,status,created_at,updated_at)
-		VALUES(?,?,?,?,?,?,?)
-	`, "t1", "p1", "Thread", "threads/t1.jsonl", "active", 1, 1).Error; err != nil {
-		t.Fatal(err)
-	}
-	legacy := `{"target":{"artifact":"presentation","level":"deck"},"interaction":{"mode":"execute"},"instruction":"build","options":{"language":"en-US","theme_id":"legacy","desired_slide_count":12}}`
-	if err := db.Exec(`
-		INSERT INTO runs(
-			id,thread_id,project_id,target_artifact,target_level,target_slide_id,
-			interaction_intent,work_spec_json,client_request_id,status,created_at,updated_at
-		) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-	`, "r1", "t1", "p1", "presentation", "deck", nil, "execute", legacy, "req1", "done", 1, 1).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := applyMigrationFile(db, "0011_run_command_contract.sql"); err != nil {
-		t.Fatalf("apply command migration: %v", err)
-	}
-
-	columns := tableColumns(t, db, "runs")
-	for _, want := range []string{"scope_artifact", "scope_level", "scope_slide_id", "mode", "run_command_json"} {
-		if !columns[want] {
-			t.Fatalf("runs table missing %q: %v", want, columns)
-		}
-	}
-	for _, removed := range []string{"target_artifact", "target_level", "target_slide_id", "interaction_intent", "work_spec_json"} {
-		if columns[removed] {
-			t.Fatalf("legacy runs column %q still exists", removed)
-		}
-	}
-	var row struct {
-		Artifact string `gorm:"column:scope_artifact"`
-		Mode   string `gorm:"column:mode"`
-		Command  string `gorm:"column:run_command_json"`
-	}
-	if err := db.Raw(`SELECT scope_artifact,mode,run_command_json FROM runs WHERE id = ?`, "r1").Scan(&row).Error; err != nil {
-		t.Fatal(err)
-	}
-	if row.Artifact != "ppt" || row.Mode != "execute" {
-		t.Fatalf("projection not migrated: %+v", row)
-	}
-	var command map[string]any
-	if err := json.Unmarshal([]byte(row.Command), &command); err != nil {
-		t.Fatalf("invalid command JSON: %v\n%s", err, row.Command)
-	}
-	scope, _ := command["scope"].(map[string]any)
-	options, _ := command["options"].(map[string]any)
-	if scope["artifact"] != "ppt" || scope["level"] != "deck" ||
-		command["mode"] != "execute" || command["instruction"] != "build" ||
-		options["language"] != "en-US" || options["range"] != "9-15" {
-		t.Fatalf("command not migrated: %+v", command)
-	}
-	if _, exists := options["theme_id"]; exists {
-		t.Fatalf("legacy theme_id survived: %+v", options)
+	`, "layout-v6", "Deck", "/tmp/layout-v6", "default", "draft", 6, 1, 1).Error; err != nil {
+		t.Fatalf("layout version 6 is not accepted: %v", err)
 	}
 }
 

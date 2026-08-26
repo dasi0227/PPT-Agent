@@ -129,7 +129,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 	flat := spec.FlattenOutline(outline)
 	nextSlides := make([]model.Slide, 0, len(flat))
 	inDeck := map[string]bool{}
-	for position, location := range flat {
+	for _, location := range flat {
 		id := location.Slide.SlideID
 		inDeck[id] = true
 		var semantic spec.SlideSpec
@@ -145,10 +145,6 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		}
 		meta := byID[id]
 		meta.ID, meta.ProjectID = id, c.project.ID
-		meta.Position = position
-		meta.Layout, meta.Title = semantic.Layout, semantic.Title
-		meta.SpecPath, meta.HTMLPath = model.SlideSpecPath(id), model.SlideHTMLPath(id)
-		meta.SpecRevision = semantic.Revision
 		if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactSlideSpec, ID: id}).Key()]; ok {
 			target := model.SlideSpecVersionTarget(c.project.ID, id)
 			path := model.SlideSpecVersionSnapshot(id, semantic.Revision)
@@ -200,7 +196,6 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			}
 		}
 		if htmlChanged {
-			meta.HTMLRevision = expectedHTMLRevision
 			target := model.SlideHTMLVersionTarget(c.project.ID, id)
 			number, versionErr := c.store.NextVersionNo(ctx, "slide_html", target)
 			if versionErr != nil {
@@ -251,9 +246,6 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 				cleanup()
 				return err
 			}
-			meta.SourceOutlineRevision = outline.Revision
-			meta.SourceSpecRevision = proof.SpecRevision
-			meta.SourceDesignRevision = proof.DesignRevision
 		}
 		nextSlides = append(nextSlides, meta)
 	}

@@ -670,8 +670,8 @@ func validatePublicTarget(value any) error {
 		if strings.TrimSpace(stringValue(target["slide_id"])) != "" {
 			return errors.New("deck target must not contain slide_id")
 		}
-		if !oneOf(part, "outline", "design") {
-			return errors.New("deck target part must be outline or design")
+		if !oneOf(part, "deck", "outline", "design") {
+			return errors.New("deck target part must be deck, outline, or design")
 		}
 	case "slide":
 		if strings.TrimSpace(stringValue(target["slide_id"])) == "" {

@@ -19,21 +19,16 @@ type Router struct {
 	thread  *ThreadHandler
 	slide   *SlideHandler
 	asset   *AssetHandler
-	spec    *SpecHandler
 	llm     *LLMHandler
 	polish  *PolishHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, llmH *LLMHandler, polishH *PolishHandler, specHandlers ...*SpecHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, llmH *LLMHandler, polishH *PolishHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	var specH *SpecHandler
-	if len(specHandlers) > 0 {
-		specH = specHandlers[0]
-	}
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, spec: specH, llm: llmH, polish: polishH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, llm: llmH, polish: polishH}
 	r.register()
 	return r
 }
@@ -73,8 +68,7 @@ func (r *Router) register() {
 	v1.POST("/runs/:id/steer", r.run.Steer)
 	v1.DELETE("/runs/:id", r.run.Cancel)
 
-	// Slide：读取 / 版本列表 / 回滚（40-api openapi /slides/{id}...）。
-	v1.GET("/slides/:id", r.slide.GetSlide)
+	// Slide HTML preview and version operations use stable identities.
 	v1.GET("/slides/:id/render", r.slide.RenderSlide)
 	v1.GET("/slides/:id/versions", r.slide.ListVersions)
 	v1.POST("/slides/:id/rollback", r.slide.Rollback)

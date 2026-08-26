@@ -271,13 +271,10 @@ type slidePO struct {
 
 func (slidePO) TableName() string { return "slides" }
 
-// toModel derives the content-addressed paths from the stable slide_id. Order,
-// title and layout are file-projected by read-facing services (files are the
-// single source of truth), so they stay zero here.
+// toModel exposes runtime identity and version pointers only.
 func (s slidePO) toModel() model.Slide {
 	return model.Slide{
 		ID: s.ID, ProjectID: s.ProjectID,
-		SpecPath: model.SlideSpecPath(s.ID), HTMLPath: model.SlideHTMLPath(s.ID),
 		CurrentVersion: s.CurrentVersion,
 		LastExportAt:   s.LastExportAt,
 	}

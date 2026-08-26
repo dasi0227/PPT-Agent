@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type ProjectHandler struct {
@@ -18,7 +20,7 @@ type ProjectHandler struct {
 	mutations *service.PPTMutationService
 }
 
-func NewProjectHandler(svc *service.ProjectService, _ *service.SlideService, mutations *service.PPTMutationService) *ProjectHandler {
+func NewProjectHandler(svc *service.ProjectService, mutations *service.PPTMutationService) *ProjectHandler {
 	return &ProjectHandler{svc: svc, mutations: mutations}
 }
 
@@ -80,7 +82,7 @@ func (h *ProjectHandler) Get(c *gin.Context) {
 		c.JSON(http.StatusOK, toProjectResponse(p))
 		return
 	}
-	if errors.Is(err, run.ErrRunNotFound) {
+	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
 		AbortWithError(c, ErrNotFound("project not found"))
 		return
 	}
@@ -99,6 +101,10 @@ func (h *ProjectHandler) Patch(c *gin.Context) {
 	}
 	p, err := h.svc.RenameProject(c.Request.Context(), c.Param("id"), title)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
+			AbortWithError(c, ErrNotFound("project not found"))
+			return
+		}
 		AbortWithError(c, ErrInternal(err.Error()))
 		return
 	}
@@ -106,6 +112,10 @@ func (h *ProjectHandler) Patch(c *gin.Context) {
 }
 func (h *ProjectHandler) Delete(c *gin.Context) {
 	if err := h.svc.DeleteProject(c.Request.Context(), c.Param("id")); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
+			AbortWithError(c, ErrNotFound("project not found"))
+			return
+		}
 		AbortWithError(c, ErrInternal(err.Error()))
 		return
 	}
@@ -114,14 +124,20 @@ func (h *ProjectHandler) Delete(c *gin.Context) {
 func (h *ProjectHandler) Content(c *gin.Context) {
 	snapshot, err := h.mutations.Snapshot(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		AbortWithError(c, specError(err))
+		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
+			AbortWithError(c, ErrNotFound("project content not found"))
+		} else {
+			AbortWithError(c, ErrInternal(err.Error()))
+		}
 		return
 	}
 	c.JSON(http.StatusOK, snapshot)
 }
 func (h *ProjectHandler) Mutate(c *gin.Context) {
 	var request pptmutation.Request
-	if c.ShouldBindJSON(&request) != nil {
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&request) != nil {
 		AbortWithError(c, ErrBadRequest("invalid mutation request"))
 		return
 	}

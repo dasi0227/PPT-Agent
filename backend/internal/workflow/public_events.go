@@ -400,6 +400,8 @@ func attachLocalOpenTarget(projectDir string, target *model.PublicTarget) {
 func publicTargetRelativePath(target model.PublicTarget) string {
 	if target.Type == "deck" {
 		switch target.Part {
+		case "deck":
+			return "deck.json"
 		case "outline":
 			return "outline.json"
 		case "design":
@@ -490,7 +492,14 @@ func slideDisplayName(slideID string) string {
 
 func runtimeSlideDisplayName(projectDir, slideID string) string {
 	var outline spec.Outline
-	if raw, err := os.ReadFile(filepath.Join(projectDir, "outline.json")); err == nil && json.Unmarshal(raw, &outline) == nil {
+	var raw []byte
+	var err error
+	if session := ActiveRunSession(projectDir); session != nil {
+		raw, err = session.ReadPath("outline.json")
+	} else {
+		raw, err = os.ReadFile(filepath.Join(projectDir, "outline.json"))
+	}
+	if err == nil && json.Unmarshal(raw, &outline) == nil {
 		if ordinal, ok := spec.ResolveSlideOrdinal(outline, slideID); ok {
 			return fmt.Sprintf("第 %d 页", ordinal)
 		}

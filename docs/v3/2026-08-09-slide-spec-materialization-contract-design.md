@@ -37,8 +37,8 @@ Agent-writable resource.
   "revision": 4,
   "project": "pro_k7m2qx",
   "slide_id": "sli_8n4wcp",
-  "section_id": "sec_a7m2kx",
-  "subsection_id": "sub_q9n3wd",
+  "section": "sec_a7m2kx",
+  "subsection": "sub_q9n3wd",
   "role": "evidence",
   "title": "企业客户成为增长主引擎",
   "key_message": "企业客户贡献了超过七成的新增收入",
@@ -68,8 +68,8 @@ Agent-writable resource.
 - `revision`
 - `project`
 - `slide_id`
-- `section_id`
-- `subsection_id`
+- `section`
+- `subsection`
 - `created_at`
 - `updated_at`
 
@@ -244,7 +244,7 @@ slides become `unknown` until rendered again.
 - Missing HTML produces `not_materialized`.
 - Invalid materialization JSON or hash mismatch produces `unknown`.
 - Stale render evidence is rejected before commit.
-- Materialization is never Agent-writable through `write_ppt` or `edit_ppt`.
+- Materialization is never Agent-writable through `mutate_ppt` or `mutate_ppt`.
 
 ## Validation
 

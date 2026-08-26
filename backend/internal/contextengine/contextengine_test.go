@@ -33,12 +33,10 @@ func (s *fakeStore) ListAssets(context.Context, string) ([]model.Asset, error) {
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := t.TempDir()
-	deck := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders",
-		Language: "zh-CN", Positioning: "thesis",
-		Requirements: []string{}, Prohibitions: []string{},
-		Sections:   []pptspec.Section{{ID: "sec", Title: "Section", Purpose: "Test section", Subsections: []pptspec.Subsection{{ID: "sub", Title: "Sub"}}}},
-		SlideOrder: []string{"s1", "s2", "s3"}, CreatedAt: 1, UpdatedAt: 2}
-	writeJSON(t, filepath.Join(dir, "outline.json"), deck)
+	deck := pptspec.Deck{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Positioning: "thesis", Requirements: []string{}, Prohibitions: []string{}, Canvas: pptspec.CanvasSettings{AspectRatio: "16:9"}, Numbering: pptspec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 2}
+	writeJSON(t, filepath.Join(dir, "deck.json"), deck)
+	outline := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Label: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Label: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Label: "Three", Role: "evidence"}}}}}}, CreatedAt: 1, UpdatedAt: 2}
+	writeJSON(t, filepath.Join(dir, "outline.json"), outline)
 	design := pptspec.Design{
 		SchemaVersion: pptspec.SchemaVersion, Revision: 3, ProjectID: "p1", CreatedAt: 1, UpdatedAt: 2,
 		Theme:     "swiss-modern",
@@ -50,10 +48,10 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	}
 	writeJSON(t, filepath.Join(dir, "design.json"), design)
 	slides := map[string]model.Slide{}
-	for i, id := range deck.SlideOrder {
+	for i, loc := range pptspec.FlattenOutline(outline) {
+		id := loc.Slide.SlideID
 		bp := pptspec.SlideSpec{
 			SchemaVersion: pptspec.SchemaVersion, Revision: i + 1, ProjectID: "p1", SlideID: id,
-			SectionID: "sec", SubsectionID: "sub", Role: "evidence",
 			Title: "Title " + id, KeyMessage: "Message " + id,
 			Elements: []pptspec.Element{
 				{Type: "chart", Intent: "Show growth"},
@@ -66,7 +64,7 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 		if err := os.WriteFile(filepath.Join(dir, "slides", id, "index.html"), []byte(html), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		slides[id] = model.Slide{ID: id, ProjectID: "p1", HTMLRevision: 4}
+		slides[id] = model.Slide{ID: id, ProjectID: "p1", CurrentVersion: 4}
 	}
 	return model.Project{ID: "p1", Title: "Deck", WorkDir: dir}, &fakeStore{slides: slides, assets: []model.Asset{{ID: "a1", Name: "Growth chart", Kind: "component", Tags: []string{"growth"}}}}
 }
@@ -88,7 +86,7 @@ func spec(artifact model.Artifact, level model.ScopeLevel) model.RunCommand {
 		Mode:  model.ModeExecute, Instruction: "improve target",
 	}
 	if level == model.ScopeSlide {
-		s.Scope.SlideID = "s2"
+		s.Scope.SlideID = "sli_bbbbbb"
 	}
 	return s
 }
@@ -118,11 +116,11 @@ func TestFourProfilesIsolationAndStableHash(t *testing.T) {
 				t.Fatal("deck target received full HTML")
 			}
 			if tc.level == model.ScopeSlide {
-				if pack.Target.SlideSpec == nil || pack.Target.SlideSpec.SlideID != "s2" {
+				if pack.Target.SlideSpec == nil || pack.Target.SlideSpec.SlideID != "sli_bbbbbb" {
 					t.Fatal("target spec missing")
 				}
 				for _, related := range pack.RelatedSlides {
-					if related.ID == "s2" {
+					if related.ID == "sli_bbbbbb" {
 						t.Fatal("target duplicated as related")
 					}
 				}
@@ -157,7 +155,7 @@ func TestRevisionChangeChangesPackHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(project.WorkDir, "slides", "s2", "spec.json")
+	path := filepath.Join(project.WorkDir, "slides", "sli_bbbbbb", "spec.json")
 	var slide pptspec.SlideSpec
 	raw, _ := os.ReadFile(path)
 	if err := json.Unmarshal(raw, &slide); err != nil {
@@ -188,7 +186,7 @@ func TestHTMLSummaryDeterministic(t *testing.T) {
 
 func TestLargeHTMLDowngradesToRefAndRefIsRunBound(t *testing.T) {
 	project, store := fixture(t)
-	path := filepath.Join(project.WorkDir, "slides", "s2", "index.html")
+	path := filepath.Join(project.WorkDir, "slides", "sli_bbbbbb", "index.html")
 	if err := os.WriteFile(path, []byte(`<html><body><main><p>`+strings.Repeat("large ", 20000)+`</p></main></body></html>`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -248,18 +246,18 @@ func TestRefStaleAfterRevisionChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeJSON(t, filepath.Join(project.WorkDir, model.SlideMaterializationPath("s2")), pptspec.MaterializationRecord{
+	writeJSON(t, filepath.Join(project.WorkDir, model.SlideMaterializationPath("sli_bbbbbb")), pptspec.MaterializationRecord{
 		SchemaVersion: pptspec.SchemaVersion,
 		Artifact: pptspec.MaterializationArtifact{
 			Revision: 5,
 			Hash:     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
 		Source: pptspec.MaterializationSource{
-			Outline: 2,
-			Spec:    2,
-			Design:  1,
-			Hash:    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			DeckRevision: 2, OutlineNodeHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			SpecRevision: 2, DesignRevision: 1,
+			Hash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
+		Frame:      pptspec.MaterializationFrame{ContextHash: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
 		RenderedAt: 2,
 	})
 	_, err = (&ContextRefResolver{Registry: registry}).Read(context.Background(), RefReadRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", RefID: pack.Target.SlideHTMLRef.ID, Detail: DetailFull, RemainingBudget: 100000})
@@ -340,7 +338,7 @@ func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pack.Target.Spec == nil || pack.Target.Spec.SlideID != "s2" || pack.Target.HTMLTitle != "s2" {
+	if pack.Target.Spec == nil || pack.Target.Spec.SlideID != "sli_bbbbbb" || pack.Target.HTMLTitle != "sli_bbbbbb" {
 		t.Fatalf("target context missing: %+v", pack.Target)
 	}
 	if len(pack.Memory.ConfirmedDecisions) != 1 || len(pack.RecentTurns) != 1 {
@@ -409,7 +407,7 @@ func TestMissingTargetAndCorruptSourcesFail(t *testing.T) {
 
 func TestMissingHTMLIsDiagnosedForMaterialization(t *testing.T) {
 	project, store := fixture(t)
-	if err := os.Remove(filepath.Join(project.WorkDir, "slides", "s2", "index.html")); err != nil {
+	if err := os.Remove(filepath.Join(project.WorkDir, "slides", "sli_bbbbbb", "index.html")); err != nil {
 		t.Fatal(err)
 	}
 	pack, err := NewContextAssembler(store, nil).Assemble(context.Background(), ContextRequest{

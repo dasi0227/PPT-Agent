@@ -30,7 +30,7 @@ describe('projectStore canonical content snapshots', () => {
 
   it('applies a mutation response directly without a duplicate refresh', async () => {
     mutate.mockResolvedValue({ mutation: { operation: 'outline.insert' }, content: snapshot(2) });
-    await useProjectStore.getState().mutateProject('pro_1', { op: 'outline.insert', node: { kind: 'section' }, position: {} });
+    await useProjectStore.getState().mutateProject('pro_1', { op: 'outline.insert', node: { kind: 'section', client_ref: 'section', title: 'Section', purpose: 'Purpose', slides: [], subsections: [] }, position: {} });
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(getContent).not.toHaveBeenCalled();
     expect(useProjectStore.getState().contentByProjectId.pro_1.outline.revision).toBe(2);

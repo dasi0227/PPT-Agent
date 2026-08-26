@@ -14,11 +14,11 @@ export function flattenOutline(outline?: Outline): FlatOutlineSlide[] {
 
 export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
   if (!snapshot) return [];
-  return flattenOutline(snapshot.outline).map(({ node, section, subsection, ordinal }) => {
+  return flattenOutline(snapshot.outline).map(({ node, section, subsection }) => {
     const content = snapshot.slides_by_id[node.slide_id];
     const spec = content?.spec ?? undefined;
     return {
-      id: node.slide_id, project_id: snapshot.outline.project_id, position: ordinal - 1,
+      id: node.slide_id, project_id: snapshot.outline.project_id,
       title: spec?.title ?? node.label, label: node.label, role: node.role,
       layout: spec?.layout ?? '', html_path: content?.html_revision ? `slides/${node.slide_id}/index.html` : '',
       spec_path: spec ? `slides/${node.slide_id}/spec.json` : '', current_version: content?.html_revision ?? 0,

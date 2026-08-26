@@ -74,7 +74,6 @@ export interface Materialization {
 export interface Slide {
   id: string;
   project_id: string;
-  position: number;
   layout: string;
   title: string;
   html_path: string;
@@ -196,12 +195,20 @@ export interface MaterializationRecord {
 }
 
 export type RestrictedPatch = { op: 'add' | 'remove' | 'replace'; path: string; value?: unknown };
+export interface DraftSlide { client_ref: string; label: string; role: string }
+export interface DraftSubsection { client_ref: string; title: string; slides: DraftSlide[] }
+export interface DraftSection { client_ref: string; title: string; purpose: string; slides: DraftSlide[]; subsections: DraftSubsection[] }
+export type DraftOutlineNode =
+  | ({ kind: 'section' } & DraftSection)
+  | { kind: 'subsection'; client_ref: string; title: string }
+  | ({ kind: 'slide' } & DraftSlide);
+export type OutlineNodeChanges = { title?: string; purpose?: string; label?: string; role?: string };
 export type PPTMutation =
   | { op: 'deck.patch'; expected_revision?: number; patch: RestrictedPatch[] }
-  | { op: 'outline.init'; expected_revision?: number; structure: unknown[] }
-  | { op: 'outline.insert'; expected_revision?: number; node: Record<string, unknown>; position: MutationPosition; direct_slides_policy?: 'move_into_new_subsection' }
+  | { op: 'outline.init'; expected_revision?: number; structure: DraftSection[] }
+  | { op: 'outline.insert'; expected_revision?: number; node: DraftOutlineNode; position: MutationPosition; direct_slides_policy?: 'move_into_new_subsection' }
   | { op: 'outline.move'; expected_revision?: number; node_id: string; position: MutationPosition }
-  | { op: 'outline.update'; expected_revision?: number; node_id: string; changes: Record<string, unknown> }
+  | { op: 'outline.update'; expected_revision?: number; node_id: string; changes: OutlineNodeChanges }
   | { op: 'outline.remove'; expected_revision?: number; node_id: string; child_policy?: 'promote_to_section' }
   | { op: 'design.write'; expected_revision?: number; design: Partial<Design> }
   | { op: 'design.patch'; expected_revision?: number; patch: RestrictedPatch[] }

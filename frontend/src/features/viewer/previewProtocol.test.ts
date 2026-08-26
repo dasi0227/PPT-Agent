@@ -5,7 +5,7 @@ describe('preview protocol validation', () => {
   it('accepts only declared commands with schema-valid payloads', () => {
     expect(isPreviewCommand({
       type: 'updateDeck',
-      slides: [{ id: 's1', html: '<h1>one</h1>' }],
+      slides: [{ id: 's1', html: '<h1>one</h1>', frame: { slide_id: 's1', ordinal: 1, total: 1 } }],
       index: 0,
     })).toBe(true);
     expect(isPreviewCommand({ type: 'gotoSlide', index: 2 })).toBe(true);

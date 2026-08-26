@@ -43,7 +43,7 @@ git 安全网与"废弃 versions 表"留待后续与恢复 UI 一起做。**全�
 | **运行时编排** | DB (SQLite) | runs / run_events / run_contexts / steering_inbox / idempotency_records |
 
 原则：
-- **唯一内容写路径**：类型化工具（`write_ppt` 等）直写磁盘并同步运行时状态与版本快照。
+- **唯一内容写路径**：类型化工具（`mutate_ppt` 等）直写磁盘并同步运行时状态与版本快照。
 - **DB 不再镜像内容**：列表/导航所需的 position/title 改为从文件投影。
 
 ---
@@ -186,7 +186,7 @@ outline.json / design.json / spec.json / index.html 成为唯一内容真相；�
 DB 仅保留 runs / run_events / run_contexts / steering_inbox / idempotency_records 及过渡期 versions 表。
 
 ### 4.4 要点 4 · 读接口改为从文件投影
-`GET /slides`、`GET /slides/:id` 等不再信任 DB 内容字段，改从 outline.json（`slide_order` 决定顺序）+ spec.json（title/layout）动态读取，消除"接口返回旧值、预览显示新值"。
+`GET /slides`、`GET /slides/:id` 等不再信任 DB 内容字段，改从 outline.json（`outline_order` 决定顺序）+ spec.json（title/layout）动态读取，消除"接口返回旧值、预览显示新值"。
 
 ### 4.5 要点 5 · Completion Gate 证据来源改造
 门控不再依赖 Transaction 的 ChangeSet，改为直接观测**磁盘实际变更 + 运行时状态**计算证据要求与 ChangeSet（`completion.go`）。渲染新鲜度仍用 spec.json 的 `revision` 与 html 的 source hash 比对。
@@ -227,7 +227,7 @@ outline           = "outline.json"
 design            = "design.json"
 ```
 
-顺序/结构真相在 outline.json 的 `slide_order []string` 与 `sections`（`backend/internal/spec/types.go`）。故 slides 表内容字段均可由文件重建。
+顺序/结构真相在 outline.json 的 `outline_order []string` 与 `sections`（`backend/internal/spec/types.go`）。故 slides 表内容字段均可由文件重建。
 
 ---
 

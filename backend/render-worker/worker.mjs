@@ -88,6 +88,41 @@ async function launchBrowser() {
   });
 }
 
+async function injectRuntimeFrame(page, frame) {
+  if (!frame || frame.slide_id === undefined || !Number.isInteger(frame.ordinal) || !Number.isInteger(frame.total)) {
+    throw new Error('invalid runtime frame context');
+  }
+  await page.evaluate(context => {
+    document.querySelectorAll('[data-runtime-chrome]').forEach(node => node.remove());
+    const positions = {
+      'top-left': ['top:3.2%', 'left:3.4%'], 'top-center': ['top:3.2%', 'left:50%', 'transform:translateX(-50%)'],
+      'top-right': ['top:3.2%', 'right:3.4%'], 'bottom-left': ['bottom:3.2%', 'left:3.4%'],
+      'bottom-center': ['bottom:3.2%', 'left:50%', 'transform:translateX(-50%)'], 'bottom-right': ['bottom:3.2%', 'right:3.4%'],
+      'left-edge': ['left:1.5%', 'top:50%', 'transform:translateY(-50%)'], 'right-edge': ['right:1.5%', 'top:50%', 'transform:translateY(-50%)'],
+    };
+    const chrome = Array.isArray(context.chrome) ? context.chrome : [];
+    for (const item of chrome) {
+      if (item.type === 'page_number' && context.numbering?.visible !== true) continue;
+      const text = item.type === 'page_number' ? String(context.ordinal)
+        : item.type === 'section_marker' ? context.section?.title
+        : item.type === 'deck_title' ? context.deck_title : '';
+      if (!text) continue;
+      const node = document.createElement('div');
+      node.dataset.runtimeChrome = item.type;
+      if (item.type === 'page_number') node.dataset.runtimePageNumber = 'true';
+      node.dataset.chromeStyle = item.style || '';
+      node.textContent = text;
+      if (item.type === 'page_number') node.setAttribute('aria-label', `第 ${context.ordinal} 页，共 ${context.total} 页`);
+      node.style.cssText = [
+        'position:fixed!important', 'z-index:2147483647!important', 'padding:.2em .45em!important',
+        'color:rgba(20,25,35,.58)!important', 'font:500 14px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace!important',
+        'letter-spacing:.04em!important', 'pointer-events:none!important', ...(positions[item.placement] || positions['bottom-right']),
+      ].join(';');
+      document.documentElement.appendChild(node);
+    }
+  }, frame);
+}
+
 async function render(input, browser, handles = new Map()) {
   const started = Date.now();
   if (!input || typeof input.html !== 'string' || typeof input.project_dir !== 'string' ||
@@ -183,6 +218,7 @@ async function render(input, browser, handles = new Map()) {
     });
     page.setDefaultTimeout(timeout);
     await page.goto(`${origin}${slidePath}`, { waitUntil: 'networkidle', timeout });
+    await injectRuntimeFrame(page, input.frame);
     const fontStatus = await page.evaluate(async () => {
       if (!document.fonts) return 'unsupported';
       await document.fonts.ready;
@@ -221,6 +257,7 @@ async function render(input, browser, handles = new Map()) {
         content_size: { width: scrollWidth, height: scrollHeight },
         overflow: { horizontal: scrollWidth > window.innerWidth + 1, vertical: scrollHeight > window.innerHeight + 1 },
         clipping,
+        runtime_chrome: Array.from(document.querySelectorAll('[data-runtime-chrome]')).map(node => node.dataset.runtimeChrome),
       };
     }, MAX_CLIPPING_ITEMS);
     const screenshot = await page.screenshot({
@@ -235,6 +272,7 @@ async function render(input, browser, handles = new Map()) {
       content_size: metrics.content_size,
       overflow: metrics.overflow,
       clipping: metrics.clipping,
+      runtime_chrome: metrics.runtime_chrome,
       console_errors: consoleErrors,
       failed_resources: [...new Set(failedResources)].slice(0, 50),
       font_status: fontStatus,

@@ -33,8 +33,8 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	ctx := context.Background()
 
 	slides := []model.Slide{
-		{ID: "s0", ProjectID: "p1", SpecRevision: 1},
-		{ID: "s1", ProjectID: "p1", SpecRevision: 1},
+		{ID: "s0", ProjectID: "p1", CurrentVersion: 1},
+		{ID: "s1", ProjectID: "p1", CurrentVersion: 1},
 	}
 	if err := s.ReplaceSlides(ctx, "p1", slides); err != nil {
 		t.Fatalf("replace: %v", err)
@@ -43,8 +43,7 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	// DB no longer stores order/layout; paths are derived from the stable id.
-	if len(got) != 2 || got[0].SpecPath != "slides/s0/spec.json" || got[1].HTMLPath != "slides/s1/index.html" {
+	if len(got) != 2 || got[0].ID != "s0" || got[1].ID != "s1" || got[0].CurrentVersion != 1 {
 		t.Fatalf("bad slides: %+v", got)
 	}
 
@@ -76,7 +75,7 @@ func TestGetSlideByID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get slide: %v", err)
 	}
-	if got.ProjectID != "p1" || got.HTMLPath != "slides/s1/index.html" {
+	if got.ProjectID != "p1" || got.ID != "s1" {
 		t.Fatalf("unexpected slide: %+v", got)
 	}
 
@@ -182,11 +181,6 @@ func TestInsertDeleteMembership(t *testing.T) {
 	got, _ := s.ListSlides(ctx, "p1")
 	if len(got) != 3 {
 		t.Fatalf("insert wrong: %+v", got)
-	}
-	// SetSlidesOrder is now a no-op (order lives in outline.json); it must succeed
-	// and leave membership intact.
-	if err := s.SetSlidesOrder(ctx, "p1", map[string]int{"a": 30, "b": 20, "c": 10}); err != nil {
-		t.Fatalf("reorder: %v", err)
 	}
 	if err := s.DeleteSlideByID(ctx, "b"); err != nil {
 		t.Fatalf("delete: %v", err)

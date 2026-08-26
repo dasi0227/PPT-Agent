@@ -4,7 +4,7 @@
 >
 > 状态：设计确认稿
 >
-> 范围：PPT 领域资源模型、`read_ppt/write_ppt/edit_ppt` 参数、文件与字段命名、
+> 范围：PPT 领域资源模型、`read_ppt/mutate_ppt/mutate_ppt` 参数、文件与字段命名、
 > 多工具调用、渲染 Worker 和业务 System Prompt
 >
 > 文档性质：后续实现与验收的权威规格，不包含兼容性双写方案
@@ -17,8 +17,8 @@
 
 ```text
 read_ppt(resource)
-write_ppt(resource, content: string)
-edit_ppt(resource, edits: text replacements)
+mutate_ppt(resource, content: string)
+mutate_ppt(resource, edits: text replacements)
 ```
 
 模型只能寻址四类受控 PPT 资源：
@@ -37,8 +37,8 @@ slide:<slide_id>:html
 3. 文件重命名为 `outline.json`、`design.json`、`spec.json` 和 `index.html`。
 4. 三个 PPT 读写工具不再暴露 `model`、`include`、文件路径、staging 或存储 Artifact Kind。
 5. `read_ppt` 向 Agent 返回目标资源的原始内容字符串。
-6. `write_ppt.content` 对所有资源统一为字符串。
-7. `edit_ppt` 对所有资源统一使用唯一锚点文本替换。
+6. `mutate_ppt.content` 对所有资源统一为字符串。
+7. `mutate_ppt` 对所有资源统一使用唯一锚点文本替换。
 8. Tool Schema 只约束资源寻址和操作外壳；Outline、Design、Slide Spec 的字段由独立领域
    Schema 校验。
 9. Prompt Compiler 从同一份领域 Schema 生成给 Agent 的资源契约，避免 Prompt 与 Runtime 漂移。
@@ -71,7 +71,7 @@ slide:<slide_id>:html
 - 所有 strategy 使用一个连续 ReAct Loop；Complex 只额外拥有动态 Plan。
 - Plan 不是 Workflow DAG。
 - 所有正常成功退出必须显式调用 `finish` 并通过 Completion Gate。
-- 模型业务工具仍只有 `read_ppt/write_ppt/edit_ppt/search_refs/render_slide`。
+- 模型业务工具仍只有 `read_ppt/mutate_ppt/mutate_ppt/search_refs/render_slide`。
 - Runtime 控制动作仍只有 `update_plan/ask_user/finish`。
 - 公共前端事件仍只有 11 种。
 - staging、evidence、context、strategy、phase 和 trace 默认不暴露给普通用户。
@@ -175,7 +175,7 @@ slide:slide-03:html
 
 `deck` 是整份 PPT 的全局资源层，但不是包含所有页面正文和 HTML 的巨型文档。
 
-- `deck:outline` 保存整份目标、受众、核心命题、叙事、章节和 `slide_order`。
+- `deck:outline` 保存整份目标、受众、核心命题、叙事、章节和 `outline_order`。
 - `deck:design` 保存整份画布、色彩、字体、间距、布局、签名视觉和动效规范。
 - `slide:*:spec` 保存一页的语义内容与视觉意图。
 - `slide:*:html` 保存一页的最终 HTML。
@@ -254,8 +254,8 @@ PPT 版本为：
 
 ```text
 read_ppt(resource)
-write_ppt(resource, content)
-edit_ppt(resource, edits)
+mutate_ppt(resource, content)
+mutate_ppt(resource, edits)
 ```
 
 差异是：`resource` 是受控的 PPT 领域地址，不是任意文件路径。
@@ -269,7 +269,7 @@ edit_ppt(resource, edits)
 | `slide:*:spec` | JSON 文本 |
 | `slide:*:html` | HTML 文本 |
 
-外层 Function Calling 参数仍然是 JSON Object；`write_ppt.content` 是该 Object 中的 String 字段。
+外层 Function Calling 参数仍然是 JSON Object；`mutate_ppt.content` 是该 Object 中的 String 字段。
 
 ## 6. 共享 Resource Schema
 
@@ -400,13 +400,13 @@ Runtime 内部的 `DomainToolResult` 仍保留：
 MVP 继续执行资源大小上限。为保证后续精确编辑基于完整正文，`read_ppt` 不返回伪装成完整内容的
 截断字符串；资源超过模型可读上限时直接返回 `CONTENT_TOO_LARGE`，而不是允许读取任意路径。
 
-## 8. `write_ppt`
+## 8. `mutate_ppt`
 
 ### 8.1 参数
 
 ```json
 {
-  "name": "write_ppt",
+  "name": "mutate_ppt",
   "description": "Create or fully replace one authorized PPT resource with raw JSON or HTML source text in the run staging transaction.",
   "parameters": {
     "type": "object",
@@ -461,12 +461,12 @@ MVP 继续执行资源大小上限。为保证后续精确编辑基于完整正�
 
 ### 8.2 语义
 
-- `write_ppt` 完整创建或替换一个资源。
+- `mutate_ppt` 完整创建或替换一个资源。
 - Agent 不提交 revision、schema version、project ID、timestamps、staging 路径或 commit 信息。
 - Runtime 根据 resource 解析字符串、注入内部字段、校验、规范化并写入 staging。
 - JSON 资源成功写入后，staged view 保存规范化 JSON。
 - HTML 保存为原始文本，但必须通过 HTML Contract。
-- 大范围重建使用 `write_ppt`，不使用大量脆弱的 `edit_ppt` 替换。
+- 大范围重建使用 `mutate_ppt`，不使用大量脆弱的 `mutate_ppt` 替换。
 
 ### 8.3 Runtime 处理
 
@@ -502,13 +502,13 @@ source revisions
 materialization state
 ```
 
-## 9. `edit_ppt`
+## 9. `mutate_ppt`
 
 ### 9.1 参数
 
 ```json
 {
-  "name": "edit_ppt",
+  "name": "mutate_ppt",
   "description": "Atomically apply one or more uniquely anchored text replacements to an authorized PPT resource.",
   "parameters": {
     "type": "object",
@@ -751,7 +751,7 @@ ToolCalls []ToolCall
 | --- | --- |
 | 独立 `read_ppt/search_refs` | 限流并发 |
 | 不同 Slide 的 `render_slide` | 限流并发 |
-| `write_ppt/edit_ppt` | 按模型返回顺序串行 |
+| `mutate_ppt/mutate_ppt` | 按模型返回顺序串行 |
 | 同一资源键的任何调用 | 串行 |
 | 包含写入与后续依赖读取/渲染 | 按原顺序串行 |
 | `update_plan` | 单独执行 |
@@ -844,7 +844,7 @@ Prompt 必须明确：
 - HTML 如何遵守 `slide-stage`、公共 tokens/base、16:9、CJK、可访问性和资源限制；
 - 单页信息密度、标题层级、内容取舍和跨页一致性；
 - 写 HTML 后按需 `render_slide`，根据 Observation 自主修正；
-- 小修改优先 `edit_ppt`，大重建使用 `write_ppt`；
+- 小修改优先 `mutate_ppt`，大重建使用 `mutate_ppt`；
 - Agent 调用工具时只传原始 String，不传文件路径或 Runtime 元数据；
 - 一次可返回多个无依赖 Tool Calls；
 - 有依赖的调用必须按因果顺序分 turn 或让 Runtime 顺序执行；
@@ -963,10 +963,10 @@ Prompt 应包含少量、准确示例：
 ### 19.2 工具
 
 - `read_ppt` 对四类资源返回准确原始 String。
-- `write_ppt.content` 只接受 String。
+- `mutate_ppt.content` 只接受 String。
 - 三类 JSON String 分别经过对应领域 Schema。
 - HTML String 经过 HTML parse/lint。
-- `edit_ppt` 唯一锚点成功，零匹配和多匹配原子失败。
+- `mutate_ppt` 唯一锚点成功，零匹配和多匹配原子失败。
 - 多 edit 任一失败时不产生部分 staged changes。
 - talk/ask 不能写。
 - spec Run 不能写 HTML。

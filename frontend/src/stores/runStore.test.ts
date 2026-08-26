@@ -199,7 +199,7 @@ describe('runStore public event sessions', () => {
     });
   });
 
-  test('defers project refresh until the run commits a complete snapshot', async () => {
+  test('refreshes the active-run snapshot after a structured mutation', async () => {
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
     const connection = connections[0];
     connection.onMessage({
@@ -214,7 +214,7 @@ describe('runStore public event sessions', () => {
         display: { label: '已创建第 1 页设计稿' },
       },
     });
-    expect(slideLoads).toEqual([]);
+    expect(slideLoads).toEqual(['p1']);
   });
 
   test('returns to running feedback after plan approval is answered', async () => {
@@ -428,13 +428,13 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1.timelineItems.filter((item) => item.type === 'final')).toHaveLength(1);
   });
 
-  test('failed run does not refresh targets', async () => {
+  test('failed run refreshes once to discard the active overlay', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     connections[0].onMessage({
       id: '1', event: 'run.finished',
       data: { ...base, status: 'failed', duration_ms: 10, error: { code: 'E', message: '失败', retryable: true } },
     });
-    expect(slideLoads).toEqual([]);
+    expect(slideLoads).toEqual(['p1']);
   });
 
   test('deduplicates replayed event IDs and persists Last-Event-ID', async () => {

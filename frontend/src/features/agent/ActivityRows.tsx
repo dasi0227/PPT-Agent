@@ -257,8 +257,13 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
 
 const groupVerbByTool: Record<string, string> = {
   read_ppt: '已读取',
-  mutate_ppt: '已更新',
 };
+
+function groupedVerb(items: ToolActivityItem[]): string {
+  if (items[0].tool !== 'mutate_ppt') return groupVerbByTool[items[0].tool] ?? '已完成';
+  const verbs = items.map((item) => item.label.startsWith('已创建') ? '已创建' : item.label.startsWith('已更新') ? '已更新' : '已完成');
+  return verbs.every((verb) => verb === verbs[0]) ? verbs[0] : '已完成';
+}
 
 function groupedObjectLabel(items: ToolActivityItem[]): string {
   const kinds = items.map((item) => {
@@ -267,6 +272,7 @@ function groupedObjectLabel(items: ToolActivityItem[]): string {
     if (target?.type === 'slide' && target.part === 'html') return '幻灯片';
     if (target?.type === 'deck' && target.part === 'outline') return '演示结构';
     if (target?.type === 'deck' && target.part === 'design') return '全局设计';
+    if (target?.type === 'deck' && target.part === 'deck') return '演示设置';
     return '';
   });
   const first = kinds[0];
@@ -277,7 +283,7 @@ function groupedObjectLabel(items: ToolActivityItem[]): string {
 
 export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items }) => {
   const [expanded, setExpanded] = useState(false);
-  const verb = groupVerbByTool[items[0].tool] ?? '已完成';
+  const verb = groupedVerb(items);
   return (
     <div>
       <button

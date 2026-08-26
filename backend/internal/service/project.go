@@ -126,17 +126,6 @@ func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {
 	return os.RemoveAll(proj.WorkDir)
 }
 
-func (svc *ProjectService) ListSlides(ctx context.Context, projectID string) ([]model.Slide, error) {
-	if _, err := svc.store.GetProject(ctx, projectID); err != nil {
-		return nil, err
-	}
-	slides, err := svc.store.ListSlides(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	return projectSlidesFromFiles(ctx, svc.store, projectID, slides)
-}
-
 func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams) error {
 	sb, err := artifactfs.NewSandbox(svc.workRoot)
 	if err != nil {

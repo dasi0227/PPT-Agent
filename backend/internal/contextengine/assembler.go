@@ -112,6 +112,9 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		pack.Revisions.SlideSpecs[id] = s.Revision
 	}
 	if req.Command.Scope.Level == model.ScopeSlide {
+		if _, exists := pptspec.FindSlide(outline, req.Command.Scope.SlideID); !exists {
+			return ContextPack{}, fmt.Errorf("%w: slide %s is not present in outline", ErrRequiredMissing, req.Command.Scope.SlideID)
+		}
 		target, ok := slides[req.Command.Scope.SlideID]
 		pack.Target = TargetContext{Artifact: req.Command.Scope.Artifact, Level: req.Command.Scope.Level}
 		if ok {
@@ -338,9 +341,9 @@ func (BudgetAllocator) Allocate(pack *ContextPack, manifest *ContextManifest, li
 }
 
 func slideSummary(loc pptspec.SlideLocation, s pptspec.SlideSpec, ready bool) SlideSummary {
-	summary := SlideSummary{ID: loc.Slide.SlideID, Ordinal: loc.Ordinal, SectionID: loc.Section.ID, Role: loc.Slide.Role, Title: loc.Slide.Label}
+	summary := SlideSummary{ID: loc.Slide.SlideID, Ordinal: loc.Ordinal, Section: loc.Section.ID, Role: loc.Slide.Role, Title: loc.Slide.Label}
 	if loc.Subsection != nil {
-		summary.SubsectionID = loc.Subsection.ID
+		summary.Subsection = loc.Subsection.ID
 	}
 	if ready {
 		summary.Title = s.Title

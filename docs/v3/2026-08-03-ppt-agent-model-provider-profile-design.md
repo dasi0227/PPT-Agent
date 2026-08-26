@@ -60,7 +60,7 @@ strategy        = chat | simple | complex
 - 所有策略在一个连续 ReAct Loop 内运行；Complex 只额外拥有动态 Plan；
 - Plan 不是 Workflow DAG，不增加逐 Step 子 Loop 或独立 Verify/Repair Stage；
 - 正常成功退出必须显式调用 `finish` 并通过 Completion Gate；
-- 模型业务工具固定为 `read_ppt/write_ppt/edit_ppt/search_refs/render_slide`；
+- 模型业务工具固定为 `read_ppt/mutate_ppt/mutate_ppt/search_refs/render_slide`；
 - Runtime 控制动作固定为 `update_plan/ask_user/finish`；
 - 公共事件仍严格只有 11 种，不能为模型选择新增 SSE 事件；
 - staging、evidence、context、strategy、phase、trace、Provider continuation 与 Provider 原始响应

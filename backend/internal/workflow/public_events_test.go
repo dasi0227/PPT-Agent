@@ -77,8 +77,8 @@ func TestSanitizePublicTextRedactsInternalTerms(t *testing.T) {
 		},
 		{
 			name:   "tool and control names",
-			in:     "我调用 write_ppt 与 render_slide，随后 create_plan",
-			absent: []string{"write_ppt", "render_slide", "create_plan"},
+			in:     "我调用 mutate_ppt 与 render_slide，随后 create_plan",
+			absent: []string{"mutate_ppt", "render_slide", "create_plan"},
 		},
 		{
 			name:   "runtime jargon and error codes",

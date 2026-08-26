@@ -91,7 +91,7 @@ project/
     - `id`
     - `number`
     - `title`
-- `slide_order[]`：稳定 `slide_id`
+- `outline_order[]`：稳定 `slide_id`
 
 `sections/subsections` 表示目录中的一级模块和二级模块，例如 `01` 与 `1.1`，不是页面内部复杂 content parts。
 
@@ -112,8 +112,8 @@ project/
 - `schema_version`
 - `revision`
 - `slide_id`
-- `section_id`
-- `subsection_id`
+- `section`
+- `subsection`
 - `role`
 - `title`
 - `key_message`
@@ -238,7 +238,7 @@ presentation/slide
 
 - `BlueprintService`
 - `PresentationService`
-- `DesignSpecService`
+- `PPTMutationService`
 - `RevisionService` 或等价聚合
 - `RunnerResolver`
 - `LegacyRunAdapter`

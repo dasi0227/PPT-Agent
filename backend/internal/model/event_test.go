@@ -28,7 +28,7 @@ func TestPublicEventTypeSetContainsExactlyElevenEvents(t *testing.T) {
 func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	base := NewPublicEventBase("r1")
 	valid := ToolStartedPayload{
-		PublicEventBase: base, CallID: "c1", Tool: "write_ppt",
+		PublicEventBase: base, CallID: "c1", Tool: "mutate_ppt",
 		Display: PublicDisplay{Label: "生成第 3 页"},
 	}
 	if err := ValidatePublicEvent(EventToolStarted, valid); err != nil {
@@ -37,7 +37,7 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	for _, payload := range []map[string]any{
 		{
 			"schema_version": 3, "run_id": "r1", "occurred_at": base.OccurredAt,
-			"call_id": "c1", "tool": "write_ppt", "display": map[string]any{"label": "生成"},
+			"call_id": "c1", "tool": "mutate_ppt", "display": map[string]any{"label": "生成"},
 			"args": map[string]any{"html": "<section />"},
 		},
 		{

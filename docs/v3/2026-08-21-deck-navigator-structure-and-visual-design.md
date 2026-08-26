@@ -9,7 +9,7 @@
 
 实现分两期（见"交付分期"）。第一期为纯前端视觉重构，随本设计落地；第二期为结构模型与人工增删，需前后端改动，单独规划。
 
-本设计在"页面挂载规则"上**取代** [2026-08-07-deck-navigator-redesign-design.md](2026-08-07-deck-navigator-redesign-design.md) 第 95 行"页面允许没有 subsection_id，是该 section 的直属页"这一条。其余（缩略图、移除机器字段、结构化 restructure 接口）继续有效。
+本设计在"页面挂载规则"上**取代** [2026-08-07-deck-navigator-redesign-design.md](2026-08-07-deck-navigator-redesign-design.md) 第 95 行"页面允许没有 subsection，是该 section 的直属页"这一条。其余（缩略图、移除机器字段、结构化 restructure 接口）继续有效。
 
 ## 背景
 
@@ -42,13 +42,13 @@
 
 - 目录提供入口：section 区末尾"新增章节"，归组形态 section 内"新增子节"。
 - 前端派生新 outline 结构后，通过 restructure 快照协议提交；后端返回权威 `{slides, spec}` 快照，前端原子应用。
-- 需要后端扩展 outline 结构变更能力（当前 [RestructureSlides](../../backend/internal/service/slide_content.go) 只改 `slide_order` 与 placement，不建 / 删 section/subsection）。
+- 需要后端扩展 outline 结构变更能力（当前 [ApplyPPTMutation](../../backend/internal/service/slide_content.go) 只改 `outline_order` 与 placement，不建 / 删 section/subsection）。
 - Agent 写 outline 与用户手动编辑共享同一份 outline；活跃 run 期间禁用人工结构编辑（沿用现有 `runActive` 门控）。
 
 ### D4 校验与 Agent 约束（严格两层的落地保障）
 
-- 后端 restructure 校验新增一条：当 placement 的 `section_id` 对应 section 拥有 subsection 时，该 placement **必须**带合法 `subsection_id`；否则拒绝。
-- 反之，section 无 subsection 时，placement 不得带 `subsection_id`。
+- 后端 restructure 校验新增一条：当 placement 的 `section` 对应 section 拥有 subsection 时，该 placement **必须**带合法 `subsection`；否则拒绝。
+- 反之，section 无 subsection 时，placement 不得带 `subsection`。
 - Agent 写 outline 时遵守同一互斥规则：section 的 `subsections` 为空 ⟺ 其页面为直属页。
 - 迁移：开发期不为历史混合数据保留兼容分支；若存在旧混合数据，由结构变更能力统一归位（具体归位策略在实现期确定）。
 

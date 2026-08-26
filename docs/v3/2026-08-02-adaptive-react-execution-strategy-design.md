@@ -346,7 +346,7 @@ ask_user
 ### 9.3 约束
 
 - 不创建 staging transaction。
-- 不披露 `write_ppt/edit_ppt/update_plan`。
+- 不披露 `mutate_ppt/mutate_ppt/update_plan`。
 - `render_slide` 只产生读取型视觉证据。
 - 普通文本不是隐式退出信号；最终分析必须作为 `finish.message` 提交。
 - talk 不因 Agent 判断“最好顺手改一下”而升级为 simple。
@@ -376,8 +376,8 @@ Commit / Return Observation
 
 ```text
 read_ppt
-write_ppt
-edit_ppt
+mutate_ppt
+mutate_ppt
 search_refs
 render_slide
 finish
@@ -451,8 +451,8 @@ Planning Phase 的目标是让 Agent在真实上下文基础上建立一份足�
 
 禁止：
 
-- `write_ppt`；
-- `edit_ppt`；
+- `mutate_ppt`；
+- `mutate_ppt`；
 - `finish` 一个尚未建立有效 Plan 的 complex 写任务；
 - 通过计划内容扩大 Target Scope 或工具权限。
 
@@ -597,7 +597,7 @@ System Prompt 可以要求 Agent 在适当时验证，但 Runtime 仍必须处�
 
 工具内置校验不是独立 Verifier 节点，而是成功写入 staging 的前置或后置条件。
 
-### 14.1 `write_ppt/edit_ppt`
+### 14.1 `mutate_ppt/mutate_ppt`
 
 至少执行：
 
@@ -707,10 +707,10 @@ Gate 拒绝不进入 Repair Stage，而是返回：
 Repair 不再是 Runtime Stage。以下过程就是普通 ReAct：
 
 ```text
-edit_ppt
+mutate_ppt
 → render_slide 返回 overflow
 → Agent 分析 observation
-→ edit_ppt 修正布局
+→ mutate_ppt 修正布局
 → render_slide
 → update_plan
 → finish

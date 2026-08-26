@@ -31,7 +31,7 @@
 现状：工具选择与错误处理散落在 `core_runtime_policy`、`execute.md`、`completion_repair_guide` 中，无独立分区。
 
 设计（新增 `core/tool_use_policy.md`，装配位置紧跟 `resource_contracts`）：
-- 工具选择判据 —— 每个工具「目的唯一」，`read_ppt` 只读、`edit_ppt` 用于唯一锚点小改、`write_ppt` 用于整体重建；理由：避免模型在重叠能力间摇摆（Anthropic writing-tools-for-agents）。
+- 工具选择判据 —— 每个工具「目的唯一」，`read_ppt` 只读、`mutate_ppt` 用于唯一锚点小改、`mutate_ppt` 用于整体重建；理由：避免模型在重叠能力间摇摆（Anthropic writing-tools-for-agents）。
 - 错误自纠流程 —— 工具返回 repairable 错误时，先读取当前真值再重试，不要盲目重发相同参数；理由：多数「参数无效」源于对当前状态的过期假设（DeepSeek tool-catalog）。
 - 内部标识不外泄 —— 工具名、错误码、资源键仅用于内部推理，面向用户改用产品语言（复用 `user_facing_output` law，此处只做交叉引用，避免双写）。
 

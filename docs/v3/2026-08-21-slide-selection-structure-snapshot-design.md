@@ -26,7 +26,7 @@ Moving a slide does not change its identity. A reorder therefore leaves `current
 
 ### Unified project content state
 
-Slides and `SpecProjectView` belong to one project-content snapshot and are updated by one Zustand store action. The standalone spec store is removed. Consumers cannot observe a new slide order paired with an old outline or placement map.
+Slides and `ProjectContentSnapshot` belong to one project-content snapshot and are updated by one Zustand store action. The standalone spec store is removed. Consumers cannot observe a new slide order paired with an old outline or placement map.
 
 Loading project content fetches slides and spec concurrently, then publishes both only after both requests succeed.
 
@@ -63,8 +63,8 @@ Up, down, and drag operations submit stable slide IDs and placements. While one 
 
 ## Backend Changes
 
-- Change `SlideService.RestructureSlides` to return a structure snapshot after validation and persistence.
-- Return the snapshot from `POST /projects/:id/slides/restructure` with HTTP 200.
+- Change `SlideService.ApplyPPTMutation` to return a structure snapshot after validation and persistence.
+- Return the snapshot from `POST /projects/:id/mutations` with HTTP 200.
 - Keep validation, active-run conflict handling, and persistence rules unchanged.
 - Add handler and service tests for canonical order, placement, revisions, and response shape.
 

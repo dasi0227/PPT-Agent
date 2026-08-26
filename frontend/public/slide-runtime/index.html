@@ -16,6 +16,13 @@
       width: 100%;
       height: 100%;
     }
+    .runtime-slide {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #fff;
+    }
     .slide-frame {
       position: absolute;
       inset: 0;
@@ -24,9 +31,25 @@
       border: none;
       background: #fff;
     }
-    .slide-frame[data-active="false"] {
+    .runtime-slide[data-active="false"] {
       display: none;
     }
+    .runtime-chrome {
+      position: absolute;
+      z-index: 2;
+      padding: 0.2em 0.45em;
+      color: rgba(20, 25, 35, 0.58);
+      font: 500 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+    }
+    .runtime-chrome[data-placement^="top-"] { top: 3.2%; }
+    .runtime-chrome[data-placement^="bottom-"] { bottom: 3.2%; }
+    .runtime-chrome[data-placement$="-left"] { left: 3.4%; }
+    .runtime-chrome[data-placement$="-center"] { left: 50%; transform: translateX(-50%); }
+    .runtime-chrome[data-placement$="-right"] { right: 3.4%; }
+    .runtime-chrome[data-placement="left-edge"] { left: 1.5%; top: 50%; transform: translateY(-50%); }
+    .runtime-chrome[data-placement="right-edge"] { right: 1.5%; top: 50%; transform: translateY(-50%); }
   </style>
 </head>
 <body>
@@ -48,7 +71,12 @@
         && typeof value === 'object'
         && typeof value.id === 'string'
         && value.id.length > 0
-        && typeof value.html === 'string';
+        && typeof value.html === 'string'
+        && value.frame !== null
+        && typeof value.frame === 'object'
+        && value.frame.slide_id === value.id
+        && Number.isInteger(value.frame.ordinal)
+        && Number.isInteger(value.frame.total);
     }
 
     function isUpdateDeck(value) {
@@ -81,6 +109,27 @@
       });
     }
 
+    function applyRuntimeFrame(container, context) {
+      container.querySelectorAll('[data-runtime-chrome]').forEach((node) => node.remove());
+      const chrome = Array.isArray(context.chrome) ? context.chrome : [];
+      chrome.forEach((item) => {
+        if (item.type === 'page_number' && context.numbering?.visible !== true) return;
+        const text = item.type === 'page_number' ? String(context.ordinal)
+          : item.type === 'section_marker' ? context.section?.title
+          : item.type === 'deck_title' ? context.deck_title : '';
+        if (!text) return;
+        const node = document.createElement('div');
+        node.className = 'runtime-chrome';
+        node.dataset.runtimeChrome = item.type;
+        if (item.type === 'page_number') node.dataset.runtimePageNumber = 'true';
+        node.textContent = text;
+        node.dataset.placement = item.placement || 'bottom-right';
+        node.dataset.chromeStyle = item.style || '';
+        if (item.type === 'page_number') node.setAttribute('aria-label', `第 ${context.ordinal} 页，共 ${context.total} 页`);
+        container.appendChild(node);
+      });
+    }
+
     function loadSlides(slides) {
       const existing = new Map(
         Array.from(deck.querySelectorAll('[data-slide-frame]')).map((frame) => [frame.dataset.slideId, frame])
@@ -89,13 +138,15 @@
       state.slides = slides.slice();
 
       slides.forEach((slide, index) => {
-        let frame = existing.get(slide.id);
-        if (!frame) {
-          frame = document.createElement('iframe');
+        let container = existing.get(slide.id);
+        if (!container) {
+          container = document.createElement('div');
+          container.className = 'runtime-slide';
+          container.dataset.slideFrame = 'true';
+          container.dataset.active = 'false';
+          container.dataset.slideId = slide.id;
+          const frame = document.createElement('iframe');
           frame.className = 'slide-frame';
-          frame.dataset.slideFrame = 'true';
-          frame.dataset.active = 'false';
-          frame.dataset.slideId = slide.id;
           frame.setAttribute('sandbox', 'allow-scripts');
           frame.addEventListener('error', () => {
             window.parent.postMessage({
@@ -104,18 +155,21 @@
               message: `第 ${index + 1} 页渲染失败`
             }, '*');
           });
+          container.appendChild(frame);
         }
+        const frame = container.querySelector('iframe');
         if (frame.getAttribute('srcdoc') !== slide.html) {
           frame.srcdoc = slide.html;
         }
-        frame.dataset.index = String(index);
+        container.dataset.index = String(index);
         frame.title = `Slide ${index + 1}`;
-        deck.appendChild(frame);
+        applyRuntimeFrame(container, slide.frame);
+        deck.appendChild(container);
       });
 
-      existing.forEach((frame, slideID) => {
+      existing.forEach((container, slideID) => {
         if (!nextIDs.has(slideID)) {
-          frame.remove();
+          container.remove();
         }
       });
     }

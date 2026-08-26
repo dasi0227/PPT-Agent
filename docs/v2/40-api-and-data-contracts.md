@@ -89,7 +89,7 @@ project/
         └── index.html
 ```
 
-- `deck.json` 保存 project 目标、受众、核心论点、叙事、section/subsection 与 `slide_order`。
+- `deck.json` 保存 project 目标、受众、核心论点、叙事、section/subsection 与 `outline_order`。
 - `design/design-spec.json` 保存画布、色板、字体、间距、圆角、阴影、layout system、signature 与 motion。
 - 每页 `slide.json` 保存 role、title、key message、语义内容、visual intent 与 speaker notes。
 - schema 版本为 `2.0`；写入采用临时文件、fsync、原子替换。

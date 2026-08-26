@@ -47,7 +47,7 @@
 - Talk / Ask / Plan 只披露 `read_ppt` 与 `search_refs` 等只读事实工具；不披露渲染和写入工具。
 - Execute + Spec 不披露 `render_slide`。
 - Execute + PPT 披露读取、检索、写入、精确编辑和渲染工具。
-- `read_ppt`、`write_ppt`、`edit_ppt` 的 resource 参数 Schema 根据读写权限和当前 Scope 裁剪；单页 Scope 的 `slide_id` 固定为当前稳定 ID。
+- `read_ppt`、`mutate_ppt`、`mutate_ppt` 的 resource 参数 Schema 根据读写权限和当前 Scope 裁剪；单页 Scope 的 `slide_id` 固定为当前稳定 ID。
 - 工具描述和参数 Schema 是工具职责与调用形态的唯一权威来源。
 
 ## 6. Prompt 职责归口

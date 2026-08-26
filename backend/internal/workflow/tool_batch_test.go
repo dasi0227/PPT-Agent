@@ -53,7 +53,7 @@ func (t timedBatchTool) Execute(ctx context.Context, input DomainToolInput) Tool
 }
 
 func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactPPT, model.ScopeDeck)
+	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeDeck, true, "batch")
 	registry := NewToolRegistry()
 	var mu sync.Mutex
 	order := []string{}
@@ -88,7 +88,7 @@ func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testin
 }
 
 func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
-	dir, pack := toolProject(t, model.ArtifactSpec, model.ScopeDeck)
+	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeDeck, true, "batch")
 	tx, err := NewRunSession(dir, "batch-write")
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 	order := []string{}
 	active, peak := 0, 0
 	if err := registry.Register(
-		timedBatchTool{name: "write_ppt", delay: time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
+		timedBatchTool{name: "mutate_ppt", delay: time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
 		false, "ppt.write", RiskMedium, PhaseExecuting,
 	); err != nil {
 		t.Fatal(err)
@@ -107,13 +107,13 @@ func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 	state := batchState(pack)
 	state.tx = tx
 	calls := []llm.ToolCall{
-		{ID: "w1", Name: "write_ppt", Args: map[string]any{"id": "one"}},
-		{ID: "w2", Name: "write_ppt", Args: map[string]any{"id": "two", "fail": true}},
-		{ID: "w3", Name: "write_ppt", Args: map[string]any{"id": "three"}},
+		{ID: "w1", Name: "mutate_ppt", Args: map[string]any{"id": "one"}},
+		{ID: "w2", Name: "mutate_ppt", Args: map[string]any{"id": "two", "fail": true}},
+		{ID: "w3", Name: "mutate_ppt", Args: map[string]any{"id": "three"}},
 	}
 	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 		RunID: "batch-write", ProjectDir: dir, Context: pack, Emitter: events,
-	}, state, registry, map[string]bool{"write_ppt": true}, calls)
+	}, state, registry, map[string]bool{"mutate_ppt": true}, calls)
 	wantOrder := []string{"start:one", "end:one", "start:two", "end:two"}
 	if len(order) != len(wantOrder) {
 		t.Fatalf("unexpected execution order: %v", order)

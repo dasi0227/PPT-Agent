@@ -126,7 +126,7 @@ language. An omitted range imposes no run-specific deck-size requirement.
 ```
 
 For deck execute runs, Completion Gate rejects a final Outline whose
-`slide_order` count is outside the selected bucket.
+`outline_order` count is outside the selected bucket.
 
 ## Resource Access
 

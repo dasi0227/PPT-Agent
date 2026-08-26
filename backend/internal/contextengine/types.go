@@ -80,14 +80,14 @@ type DeckContext struct {
 }
 
 type SlideSummary struct {
-	ID           string `json:"id"`
-	Ordinal      int    `json:"ordinal"`
-	SectionID    string `json:"section_id"`
-	SubsectionID string `json:"subsection_id,omitempty"`
-	Role         string `json:"role"`
-	Title        string `json:"title"`
-	KeyMessage   string `json:"key_message"`
-	State        string `json:"materialization_state,omitempty"`
+	ID         string `json:"id"`
+	Ordinal    int    `json:"ordinal"`
+	Section    string `json:"section"`
+	Subsection string `json:"subsection,omitempty"`
+	Role       string `json:"role"`
+	Title      string `json:"title"`
+	KeyMessage string `json:"key_message"`
+	State      string `json:"materialization_state,omitempty"`
 }
 
 type TargetContext struct {

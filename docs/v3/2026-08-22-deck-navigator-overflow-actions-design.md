@@ -14,8 +14,8 @@ This update refines the left-hand deck navigator and its manual title-editing co
 - Selecting `重命名` opens the same lightweight form-modal pattern used by projects and sessions. Names are trimmed, must contain 1–60 Unicode characters, and are disabled while an Agent run is active.
 - Section and subsection renames update `outline.json`; page renames update the page `spec.json`. Every rename endpoint returns the authoritative `{slides, spec}` snapshot, which the frontend applies atomically.
 - The directory exposes dedicated rename endpoints:
-  - `PATCH /projects/:id/sections/:section_id`
-  - `PATCH /projects/:id/sections/:section_id/subsections/:subsection_id`
+  - `PATCH /projects/:id/sections/:section`
+  - `PATCH /projects/:id/sections/:section/subsections/:subsection`
   - `PATCH /projects/:id/slides/:slide_id`
 - Hover state belongs to the exact row being pointed at. Descendant page hover must not activate its parent section controls.
 - Section, subsection, and page overflow triggers have no persistent white backing plate; only the shared icon-button hover feedback may add a temporary neutral tint.
