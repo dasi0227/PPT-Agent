@@ -2,10 +2,12 @@ import type { MaterializationState } from '../../api/types';
 import { cn } from '../../lib/utils';
 
 const labels: Record<MaterializationState, string> = {
+  pending: '等待生成',
   not_materialized: '未生成',
   fresh: '已同步',
   spec_stale: '设计稿有更新',
   design_stale: '风格有更新',
+  frame_stale: '页码已更新',
   unknown: '状态未知',
 };
 

@@ -9,7 +9,6 @@ import {
   ExternalLink,
   Flag,
   Loader2,
-  Pencil,
   Sparkles,
 } from 'lucide-react';
 import type {
@@ -23,6 +22,7 @@ import { MarkdownMessage } from './MarkdownMessage';
 import { presentUserText } from './runtimeLabels';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { orderedSlides } from '../deck/selectors';
 
 function safeReasoningMarkdown(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').trim();
@@ -171,8 +171,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
 function toolStatusIcon(tool: string, failed: boolean) {
   const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
   if (tool === 'read_ppt') return <Eye className={className} strokeWidth={1.75} />;
-  if (tool === 'edit_ppt') return <Pencil className={className} strokeWidth={1.75} />;
-  if (tool === 'write_ppt') return <Sparkles className={className} strokeWidth={1.75} />;
+  if (tool === 'mutate_ppt') return <Sparkles className={className} strokeWidth={1.75} />;
   return failed
     ? <AlertTriangle className={className} strokeWidth={1.75} />
     : <CheckCircle2 className={className} strokeWidth={1.75} />;
@@ -181,7 +180,8 @@ function toolStatusIcon(tool: string, failed: boolean) {
 export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
   const [expanded, setExpanded] = useState(Boolean(item.preview?.warnings.length));
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
-  const slides = useProjectStore((state) => activeProjectId ? state.slidesByProjectId[activeProjectId] ?? [] : []);
+  const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
+  const slides = orderedSlides(snapshot);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const hasDetails = Boolean(item.detail || item.error || item.preview);
   const detailText = item.error?.message ?? item.detail;
@@ -257,8 +257,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
 
 const groupVerbByTool: Record<string, string> = {
   read_ppt: '已读取',
-  write_ppt: '已创建',
-  edit_ppt: '已更新',
+  mutate_ppt: '已更新',
 };
 
 function groupedObjectLabel(items: ToolActivityItem[]): string {

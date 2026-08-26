@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Crosshair, ExternalLink, Sparkle } from 'luc
 import type { PublicTarget } from '../../api/types';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { orderedSlides } from '../deck/selectors';
 import { cn } from '../../lib/utils';
 import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -48,7 +49,8 @@ function uniqueTargets(targets: PublicTarget[]): PublicTarget[] {
 
 function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
   const [expanded, setExpanded] = React.useState(false);
-  const slides = useProjectStore((state) => state.activeProjectId ? state.slidesByProjectId[state.activeProjectId] ?? [] : []);
+  const snapshot = useProjectStore((state) => state.activeProjectId ? state.contentByProjectId[state.activeProjectId] : undefined);
+  const slides = orderedSlides(snapshot);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const setGlobalView = useDeckStore((state) => state.setGlobalView);
   const changes = uniqueTargets(targets);

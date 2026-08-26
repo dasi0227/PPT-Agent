@@ -20,6 +20,7 @@ import type { RuntimeSlide } from './previewProtocol';
 import { SlideSpecCard } from './SlideSpecCard';
 import { slideRoleLabel } from './semanticLabels';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
+import { orderedSlides } from '../deck/selectors';
 
 function visibleHTML(state: ResourceState<string>): string | undefined {
   if (state.status === 'ready') return state.data;
@@ -165,7 +166,7 @@ function OverviewSlide({
               {String(index + 1).padStart(2, '0')}
             </span>
             <span className="overview-slide-meta-chip inline-flex items-center rounded-[5px] bg-accent-soft font-semibold text-accent">
-              {slideRoleLabel(spec.role)}
+              {slideRoleLabel(slide.role ?? 'content')}
             </span>
           </div>
           <h2 className="overview-slide-title line-clamp-2 font-semibold text-text-900">
@@ -217,20 +218,19 @@ export const PreviewWorkspace: React.FC = () => {
   } = useDeckStore();
   const {
     activeProjectId,
-    slidesByProjectId,
-    specByProjectId,
+    contentByProjectId,
     contentLoadingByProjectId,
     contentErrorByProjectId,
     loadProjectContent,
   } = useProjectStore();
   const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel } = useUIStore();
-  const specView = activeProjectId ? specByProjectId[activeProjectId] : undefined;
+  const snapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const specLoading = activeProjectId ? contentLoadingByProjectId[activeProjectId] : false;
   const specError = activeProjectId ? contentErrorByProjectId[activeProjectId] : undefined;
   const projectId = activeProjectId;
   const slides = useMemo(
-    () => projectId ? slidesByProjectId[projectId] || [] : [],
-    [projectId, slidesByProjectId],
+    () => orderedSlides(snapshot),
+    [snapshot],
   );
   const { getState, load } = useSlideRenderCache(projectId);
   const [fullscreen, setFullscreen] = useState(false);
@@ -386,19 +386,20 @@ export const PreviewWorkspace: React.FC = () => {
               />
             ) : currentView === 'html' ? (
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
-                <p className="text-sm text-text-400">暂时没有幻灯片内容</p>
+                <p className="text-sm text-text-400">{currentSlide.spec ? '页面未物化' : '正在生成设计稿'}</p>
               </div>
-            ) : specView?.slide_specs?.[currentSlide.id] ? (
+            ) : currentSlide.spec ? (
               <SlideSpecCard
-                spec={specView.slide_specs[currentSlide.id]}
-                state={specView.materialization?.[currentSlide.id]?.state ?? 'unknown'}
+                spec={currentSlide.spec}
+                role={currentSlide.role ?? 'content'}
+                state={currentSlide.materialization?.state ?? 'unknown'}
               />
-            ) : specLoading ? (
+            ) : specLoading || currentSlide.materialization?.state === 'pending' ? (
               <div className="flex h-full w-full flex-col gap-3 rounded bg-surface p-8 shadow-canvas ring-1 ring-border">
                 <Skeleton className="h-8 w-2/3" />
                 <Skeleton className="h-5 w-1/2" />
                 <Skeleton className="mt-4 h-40 w-full" />
-                <span className="sr-only">设计稿正在加载</span>
+                <span className="text-sm text-text-400">等待生成设计稿</span>
               </div>
             ) : specError ? (
               <InlineNotice tone="danger" className="max-w-md">
@@ -425,7 +426,7 @@ export const PreviewWorkspace: React.FC = () => {
         ) : (
           <div className="absolute inset-0 overflow-y-auto p-6">
             <div className="mx-auto mb-6 max-w-6xl">
-              {specView?.design && <DesignSummary design={specView.design} />}
+              {snapshot?.design && <DesignSummary design={snapshot.design} />}
             </div>
             <div className="mx-auto grid max-w-6xl grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
               {slides.map((slide, index) => (
@@ -441,7 +442,7 @@ export const PreviewWorkspace: React.FC = () => {
                     setCurrentSlideId(slide.id);
                     exitOverview();
                   }}
-                  spec={specView?.slide_specs?.[slide.id]}
+                  spec={slide.spec}
                 />
               ))}
             </div>

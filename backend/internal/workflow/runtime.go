@@ -268,6 +268,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
 	}
+	defer func() {
+		if state.tx != nil && !state.committed {
+			state.tx.Discard()
+		}
+	}()
 	if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.RunID == input.RunID {
 		state.loopID = input.ResumeCheckpoint.LoopID
 		state.phase = input.ResumeCheckpoint.ResumePhase

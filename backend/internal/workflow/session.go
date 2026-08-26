@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
+
+var activeRunSessions sync.Map
 
 var (
 	ErrInvalidArtifactPath  = errors.New("invalid artifact path")
@@ -38,10 +41,7 @@ type WriteItem struct {
 	Content []byte
 }
 
-// RunSession is the run's direct-write handle. Typed tools write artifacts
-// directly onto disk and the session tracks what changed so the completion gate
-// and finalize step can observe the run. A failed or canceled run therefore
-// leaves its partial products on disk instead of discarding them.
+// RunSession is the run's isolated authoring overlay.
 type RunSession struct {
 	projectDir            string
 	runID                 string
@@ -50,17 +50,30 @@ type RunSession struct {
 	closed                bool
 }
 
-// NewRunSession opens a direct-write session rooted at the project directory.
+// NewRunSession opens an isolated overlay rooted at the project directory.
 func NewRunSession(projectDir, runID string) (*RunSession, error) {
 	projectDir, err := filepath.Abs(projectDir)
 	if err != nil {
 		return nil, err
 	}
-	return &RunSession{
+	session := &RunSession{
 		projectDir: projectDir, runID: runID,
 		artifacts: map[string]sessionArtifact{},
-	}, nil
+	}
+	activeRunSessions.Store(projectDir, session)
+	return session, nil
 }
+
+func ActiveRunSession(projectDir string) *RunSession {
+	abs, _ := filepath.Abs(projectDir)
+	value, _ := activeRunSessions.Load(abs)
+	session, _ := value.(*RunSession)
+	return session
+}
+func (s *RunSession) ReadPath(path string) ([]byte, error) {
+	return s.Read(ArtifactRef{Kind: ArtifactDerived, ID: path, Path: path})
+}
+func (s *RunSession) Discard() { activeRunSessions.CompareAndDelete(s.projectDir, s); s.closed = true }
 
 func (s *RunSession) HasChange(ref ArtifactRef) bool {
 	relative, err := s.resolveRelative(ref)
@@ -314,6 +327,7 @@ func (s *RunSession) Commit(ctx context.Context, metadata CommitMetadata) error 
 		}
 	}
 	s.closed = true
+	activeRunSessions.CompareAndDelete(s.projectDir, s)
 	return nil
 }
 

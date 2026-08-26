@@ -37,7 +37,7 @@ export function parseSSEEvent(eventName: string, raw: string, id?: string): SSEE
 }
 
 const progressStages = new Set(['thinking', 'planning', 'reading', 'writing', 'rendering', 'finalizing']);
-const businessTools = new Set(['read_ppt', 'write_ppt', 'edit_ppt', 'search_refs', 'render_slide']);
+const businessTools = new Set(['read_ppt', 'mutate_ppt', 'search_refs', 'render_slide']);
 const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 

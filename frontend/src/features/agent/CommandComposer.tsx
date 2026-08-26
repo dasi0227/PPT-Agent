@@ -7,6 +7,7 @@ import { cn } from '../../lib/utils';
 import { useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { orderedSlides } from '../deck/selectors';
 import { useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { isMac } from '../../lib/platform';
@@ -161,7 +162,7 @@ export const CommandComposer: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const polishAbortRef = useRef<AbortController | null>(null);
   const polishRequestRef = useRef(0);
-  const { activeProjectId, slidesByProjectId } = useProjectStore();
+  const { activeProjectId, contentByProjectId } = useProjectStore();
   const { currentSlideId } = useDeckStore();
   const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
@@ -190,7 +191,7 @@ export const CommandComposer: React.FC = () => {
       ? '追加对当前任务的要求'
       : '输入你的想法与目标';
 
-  const slides = activeProjectId ? slidesByProjectId[activeProjectId] || [] : [];
+  const slides = orderedSlides(activeProjectId ? contentByProjectId[activeProjectId] : undefined);
   const currentSlide = slides.find((slide) => slide.id === currentSlideId);
   const isEmptyProject = Boolean(activeProjectId) && slides.length === 0;
 

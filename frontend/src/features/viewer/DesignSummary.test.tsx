@@ -5,7 +5,7 @@ import { DesignSummary } from './DesignSummary';
 describe('DesignSummary', () => {
   it('renders global visual language without slide content', () => {
     render(<DesignSummary design={{
-      version: '3.0',
+      version: '4.0',
       revision: 3,
       project_id: 'pro_aaaaaa',
       theme: 'swiss-modern',

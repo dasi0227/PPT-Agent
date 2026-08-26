@@ -1,5 +1,5 @@
 import { fetchClient } from './client';
-import { Project, Slide } from './types';
+import { MutationResponse, PPTMutation, Project, ProjectContentSnapshot } from './types';
 
 export const projectsApi = {
   list: () => fetchClient<Project[]>('/projects'),
@@ -12,6 +12,7 @@ export const projectsApi = {
     body: JSON.stringify(patch)
   }),
   get: (id: string) => fetchClient<Project>(`/projects/${id}`),
-  getSlides: (id: string) => fetchClient<Slide[]>(`/projects/${id}/slides`),
+  getContent: (id: string) => fetchClient<ProjectContentSnapshot>(`/projects/${id}/content`),
+  mutate: (id: string, mutation: PPTMutation) => fetchClient<MutationResponse>(`/projects/${id}/mutations`, { method: 'POST', body: JSON.stringify(mutation) }),
   delete: (id: string) => fetchClient<void>(`/projects/${id}`, { method: 'DELETE' }),
 };

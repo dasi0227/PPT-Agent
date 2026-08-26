@@ -60,7 +60,7 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 }
 
 // ListSlides 返回某 project 的全部 slides。DB 不再存顺序（position 已退出），此处按 id
-// 稳定返回；页面顺序由读路径依据 outline.json 的 slide_order 投影。
+// 稳定返回；页面顺序由读路径依据 outline.json 的树形节点投影。
 func (s *Store) ListSlides(ctx context.Context, projectID string) ([]model.Slide, error) {
 	var pos []slidePO
 	if err := s.db.WithContext(ctx).

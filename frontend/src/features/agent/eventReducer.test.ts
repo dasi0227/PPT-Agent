@@ -9,12 +9,12 @@ const event = (name: SSEEvent['event'], data: Record<string, unknown>, id = '1')
 describe('public event reducer', () => {
   it('upserts tool completion into the started row without raw payloads', () => {
     let state = reduceSSEEvent([], event('tool.started', {
-      call_id: 'c1', tool: 'write_ppt', plan_step_id: 'build',
+      call_id: 'c1', tool: 'mutate_ppt', plan_step_id: 'build',
       target: { type: 'slide', slide_id: 's1', part: 'html' },
       display: { label: '生成页面 s1' },
     }));
     state = reduceSSEEvent(state, event('tool.completed', {
-      call_id: 'c1', tool: 'write_ppt', status: 'completed',
+      call_id: 'c1', tool: 'mutate_ppt', status: 'completed',
       display: { label: '已生成页面 s1', detail: '已写入暂存区' },
     }, '2'));
     expect(state).toHaveLength(1);

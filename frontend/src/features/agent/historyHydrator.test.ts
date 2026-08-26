@@ -11,8 +11,8 @@ describe('history hydrator', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', { text: '生成 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
       entry(2, 'plan.updated', { ...base, plan: { plan_id: 'p1', revision: 1, explanation: '开始', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] } }),
-      entry(3, 'tool.started', { ...base, call_id: 'c1', tool: 'write_ppt', display: { label: '生成页面' } }),
-      entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'write_ppt', status: 'completed', display: { label: '已生成页面' } }),
+      entry(3, 'tool.started', { ...base, call_id: 'c1', tool: 'mutate_ppt', display: { label: '生成页面' } }),
+      entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'mutate_ppt', status: 'completed', display: { label: '已生成页面' } }),
       entry(5, 'question.asked', { ...base, question_id: 'q1', prompt: '选择风格', selection: 'single', options: [{ id: 'tech', label: '科技' }], allow_custom: false }),
       entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { selected_option_ids: ['tech'], custom_text: '' }, display_text: '科技' }),
       entry(7, 'message.final', { ...base, message_id: 'm1', text: '已完成' }),

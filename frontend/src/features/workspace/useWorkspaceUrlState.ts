@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useDeckStore, type PageView } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { projectWorkspaceRoute } from './routes';
+import { orderedSlides } from '../deck/selectors';
 
 type PreviewMode = 'main' | 'overview';
 
@@ -18,10 +19,9 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
   const location = useLocation();
   const navigate = useNavigate();
   const [hydratedLocationKey, setHydratedLocationKey] = React.useState<string | null>(null);
-  const slides = useProjectStore((state) => projectId ? state.slidesByProjectId[projectId] ?? [] : []);
-  const contentReady = useProjectStore((state) => projectId
-    ? Boolean(state.specByProjectId[projectId]) || (state.slidesByProjectId[projectId]?.length ?? 0) > 0
-    : false);
+  const snapshot = useProjectStore((state) => projectId ? state.contentByProjectId[projectId] : undefined);
+  const slides = orderedSlides(snapshot);
+  const contentReady = Boolean(snapshot);
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const globalView = useDeckStore((state) => state.globalView);
   const previewMode = useDeckStore((state) => state.previewMode);

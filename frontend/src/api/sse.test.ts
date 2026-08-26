@@ -64,8 +64,8 @@ describe('SSE parser', () => {
       schema_version: 3,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:16.051323Z',
-      call_id: 'write_ppt_4',
-      tool: 'write_ppt',
+      call_id: 'mutate_ppt_4',
+      tool: 'mutate_ppt',
       target: {
         type: 'deck',
         part: 'outline',
@@ -86,8 +86,8 @@ describe('SSE parser', () => {
       schema_version: 3,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:17.051323Z',
-      call_id: 'write_ppt_4',
-      tool: 'write_ppt',
+      call_id: 'mutate_ppt_4',
+      tool: 'mutate_ppt',
       status: 'completed',
       target: {
         type: 'deck',

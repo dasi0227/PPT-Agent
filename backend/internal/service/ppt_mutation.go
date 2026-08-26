@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
@@ -12,6 +14,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 type PPTMutationService struct{ store store.Store }
@@ -65,29 +68,61 @@ func (s *PPTMutationService) Apply(ctx context.Context, projectID string, req pp
 }
 
 func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (spec.ProjectContentSnapshot, error) {
-	view, err := NewSpecService(s.store).EnsureProject(ctx, projectID)
-	if err != nil {
-		return spec.ProjectContentSnapshot{}, err
-	}
 	project, err := s.store.GetProject(ctx, projectID)
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, err
 	}
-	out := spec.ProjectContentSnapshot{Deck: view.Deck, Outline: view.Outline, Design: view.Design, SlidesByID: map[string]spec.SlideContent{}}
-	for _, loc := range spec.FlattenOutline(view.Outline) {
+	read := func(path string) ([]byte, error) {
+		if session := workflow.ActiveRunSession(project.WorkDir); session != nil {
+			return session.ReadPath(path)
+		}
+		return os.ReadFile(filepath.Join(project.WorkDir, filepath.FromSlash(path)))
+	}
+	deckRaw, err := read("deck.json")
+	if err != nil {
+		return spec.ProjectContentSnapshot{}, err
+	}
+	outlineRaw, err := read("outline.json")
+	if err != nil {
+		return spec.ProjectContentSnapshot{}, err
+	}
+	designRaw, err := read("design.json")
+	if err != nil {
+		return spec.ProjectContentSnapshot{}, err
+	}
+	var deck spec.Deck
+	var outline spec.Outline
+	var design spec.Design
+	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {
+		return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
+	}
+	out := spec.ProjectContentSnapshot{Deck: deck, Outline: outline, Design: design, SlidesByID: map[string]spec.SlideContent{}}
+	for _, loc := range spec.FlattenOutline(outline) {
 		id := loc.Slide.SlideID
 		content := spec.SlideContent{SpecState: "pending", HTMLState: "not_materialized"}
-		if slide, ok := view.SlideSpecs[id]; ok {
-			copy := slide
-			content.Spec = &copy
+		specRaw, specErr := read(model.SlideSpecPath(id))
+		var slide spec.SlideSpec
+		if specErr == nil && json.Unmarshal(specRaw, &slide) == nil {
+			content.Spec = &slide
 			content.SpecState = "ready"
 		}
-		if state, ok := view.States[id]; ok {
-			content.HTMLState = state.State
-		}
-		if record, readErr := spec.ReadMaterialization(filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideMaterializationPath(id)))); readErr == nil {
-			content.Materialization = &record
+		htmlRaw, htmlErr := read(model.SlideHTMLPath(id))
+		materialRaw, materialErr := read(model.SlideMaterializationPath(id))
+		var record spec.MaterializationRecord
+		var recordPtr *spec.MaterializationRecord
+		if materialErr == nil && json.Unmarshal(materialRaw, &record) == nil && spec.ValidateMaterialization(record) == nil {
+			recordPtr = &record
+			content.Materialization = recordPtr
 			content.HTMLRevision = record.Artifact.Revision
+		}
+		if content.SpecState == "ready" {
+			nodeHash := spec.SemanticSlideNodeHash(outline, id)
+			content.HTMLState = spec.DeriveMaterializationState(htmlErr == nil, recordPtr, deck.Revision, nodeHash, slide.Revision, design.Revision, spec.ContentHash(htmlRaw), spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), spec.FrameContextHash(deck, outline, design, id))
+		} else if htmlErr == nil {
+			content.HTMLState = "unknown"
+		}
+		if errors.Is(htmlErr, fs.ErrNotExist) {
+			content.HTMLState = "not_materialized"
 		}
 		out.SlidesByID[id] = content
 	}

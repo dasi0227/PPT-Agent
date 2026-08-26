@@ -13,13 +13,10 @@ export interface Project {
 }
 
 export interface SlideSpec {
-  version: '3.0';
+  version: '4.0';
   revision: number;
   project_id: string;
   slide_id: string;
-  section_id: string;
-  subsection_id?: string;
-  role: string;
   title: string;
   key_message: string;
   elements: Array<{
@@ -32,24 +29,28 @@ export interface SlideSpec {
 }
 
 export interface Outline {
-  version: '3.0';
+  version: '4.0';
   revision: number;
   project_id: string;
-  title: string;
-  goal: string;
-  audience: string;
-  language: string;
-  positioning?: string;
-  requirements: string[];
-  prohibitions: string[];
-  sections: Array<{ id: string; title: string; purpose: string; subsections: Array<{ id: string; title: string }> }>;
-  slide_order: string[];
+  sections: OutlineSection[];
   created_at: number;
   updated_at: number;
 }
 
+export interface OutlineSlideNode { slide_id: string; label: string; role: string }
+export interface OutlineSubsection { id: string; title: string; slides: OutlineSlideNode[] }
+export interface OutlineSection { id: string; title: string; purpose: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
+
+export interface Deck {
+  version: '4.0'; revision: number; project_id: string; title: string; goal: string;
+  audience: string; language: string; positioning?: string; requirements: string[]; prohibitions: string[];
+  canvas: { aspect_ratio: '16:9' | '4:3' };
+  numbering: { enabled: boolean; hidden_roles: string[]; format: 'number' };
+  created_at: number; updated_at: number;
+}
+
 export interface Design {
-  version: '3.0';
+  version: '4.0';
   revision: number;
   project_id: string;
   theme: string;
@@ -64,7 +65,7 @@ export interface Design {
   updated_at: number;
 }
 
-export type MaterializationState = 'not_materialized' | 'fresh' | 'spec_stale' | 'design_stale' | 'unknown';
+export type MaterializationState = 'pending' | 'not_materialized' | 'fresh' | 'spec_stale' | 'design_stale' | 'frame_stale' | 'unknown';
 export interface Materialization {
   state: MaterializationState;
   revisions: { slide_html: number; source_outline: number; source_spec: number; source_design: number };
@@ -86,6 +87,10 @@ export interface Slide {
   source_design_revision?: number;
   spec?: SlideSpec;
   materialization?: Materialization;
+  role?: string;
+  label?: string;
+  sectionId?: string;
+  subsectionId?: string;
 }
 
 export interface Thread {
@@ -174,17 +179,38 @@ export interface CancelRunResponse {
   run_id: string;
 }
 
-export interface SpecProjectView {
+export interface ProjectContentSnapshot {
+  deck: Deck;
   outline: Outline;
-  slide_specs: Record<string, SlideSpec>;
   design: Design;
-  materialization: Record<string, Materialization>;
+  slides_by_id: Record<string, {
+    spec_state: 'pending' | 'ready'; spec: SlideSpec | null; html_state: MaterializationState;
+    html_revision: number; materialization: MaterializationRecord | null;
+  }>;
 }
 
-export interface ProjectContentSnapshot {
-  slides: Slide[];
-  spec: SpecProjectView;
+export interface MaterializationRecord {
+  version: '4.0'; artifact: { revision: number; hash: string };
+  source: { deck_revision: number; outline_node_hash: string; spec_revision: number; design_revision: number; hash: string };
+  frame: { context_hash: string }; rendered_at: number;
 }
+
+export type RestrictedPatch = { op: 'add' | 'remove' | 'replace'; path: string; value?: unknown };
+export type PPTMutation =
+  | { op: 'deck.patch'; expected_revision?: number; patch: RestrictedPatch[] }
+  | { op: 'outline.init'; expected_revision?: number; structure: unknown[] }
+  | { op: 'outline.insert'; expected_revision?: number; node: Record<string, unknown>; position: MutationPosition; direct_slides_policy?: 'move_into_new_subsection' }
+  | { op: 'outline.move'; expected_revision?: number; node_id: string; position: MutationPosition }
+  | { op: 'outline.update'; expected_revision?: number; node_id: string; changes: Record<string, unknown> }
+  | { op: 'outline.remove'; expected_revision?: number; node_id: string; child_policy?: 'promote_to_section' }
+  | { op: 'design.write'; expected_revision?: number; design: Partial<Design> }
+  | { op: 'design.patch'; expected_revision?: number; patch: RestrictedPatch[] }
+  | { op: 'slide.spec.write'; expected_revision?: number; slide_id: string; spec: Partial<SlideSpec> }
+  | { op: 'slide.spec.patch'; expected_revision?: number; slide_id: string; patch: RestrictedPatch[] }
+  | { op: 'slide.html.write'; slide_id: string; html: string }
+  | { op: 'slide.html.patch'; slide_id: string; edits: Array<{ old_text: string; new_text: string }> };
+export interface MutationPosition { parent_id?: string; before_id?: string; after_id?: string }
+export interface MutationResponse { mutation: { operation: string; revisions: Record<string, number>; created: Record<string, string>; affected_slide_ids: string[]; invalidated_slide_ids: string[] }; content: ProjectContentSnapshot }
 
 export interface RunInputPayload {
   content: string;
@@ -246,7 +272,7 @@ export interface PublicEventBase {
 export interface PublicTarget {
   type: 'deck' | 'slide';
   slide_id?: string;
-  part: 'outline' | 'design' | 'spec' | 'html';
+  part: 'deck' | 'outline' | 'design' | 'spec' | 'html';
   display_name?: string;
   insertions?: number;
   deletions?: number;

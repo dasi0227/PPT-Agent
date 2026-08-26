@@ -208,7 +208,7 @@ describe('runStore public event sessions', () => {
       data: {
         ...base,
         call_id: 'c1',
-        tool: 'write_ppt',
+        tool: 'mutate_ppt',
         status: 'completed',
         target: { type: 'slide', slide_id: 's1', part: 'spec', display_name: '第 1 页' },
         display: { label: '已创建第 1 页设计稿' },

@@ -279,13 +279,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
   const refreshTarget = (session: RunSession, event: SSEEvent) => {
     if (!session.projectId) return;
-    if (event.event !== 'run.finished' || event.data.status !== 'completed') return;
-    // Typed tools write files directly while a run is active, so cross-resource
-    // invariants may be temporarily incomplete (for example outline references
-    // before every new slide spec exists). Refresh the authoritative project view
-    // once finalization has committed slide metadata instead of requesting a
-    // knowingly partial /spec snapshot after every tool completion.
-    void useProjectStore.getState().loadProjectContent(session.projectId);
+    const structuredMutation = event.event === 'tool.completed' && event.data.tool === 'mutate_ppt' && event.data.status === 'completed';
+    const terminal = event.event === 'run.finished';
+    if (structuredMutation || terminal) void useProjectStore.getState().loadProjectContent(session.projectId);
   };
 
   return {

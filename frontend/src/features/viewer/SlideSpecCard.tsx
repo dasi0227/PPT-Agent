@@ -3,15 +3,16 @@ import type { MaterializationState, SlideSpec } from '../../api/types';
 import { MaterializationBadge } from './MaterializationBadge';
 import { slideRoleLabel } from './semanticLabels';
 
-export function SlideSpecCard({ spec, state }: {
+export function SlideSpecCard({ spec, state, role }: {
   spec: SlideSpec;
   state: MaterializationState;
+  role: string;
 }) {
   return (
     <article className="h-full w-full overflow-y-auto rounded-xl border border-border bg-surface p-7 shadow-sm">
       <div className="flex items-center justify-between gap-2">
         <span className="rounded bg-accent-soft px-2 py-1 text-[10px] font-semibold text-accent">
-          {slideRoleLabel(spec.role)}
+          {slideRoleLabel(role)}
         </span>
         <MaterializationBadge state={state} />
       </div>
