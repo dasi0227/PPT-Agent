@@ -43,7 +43,10 @@ const publicHistoryEvents = new Set<SSEEventName>([
   'tool.completed',
   'question.asked',
   'question.answered',
-  'run.finished',
+  'run.completed',
+  'run.failed',
+  'run.error',
+  'run.canceled',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -148,14 +151,22 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       session = { ...session, status: 'running', pendingQuestion: null };
     } else if (event.event === 'run.mode_changed') {
       session = { ...session, status: 'running', mode: event.data.mode, pendingQuestion: null };
-    } else if (event.event === 'run.finished') {
+    } else if (event.event === 'run.completed') {
       session = {
         ...session,
-        status: event.data.status === 'completed'
-          ? 'done'
-          : event.data.status === 'canceled'
-            ? 'canceled'
-            : 'error',
+        status: 'done',
+        pendingQuestion: null,
+      };
+    } else if (event.event === 'run.canceled') {
+      session = {
+        ...session,
+        status: 'canceled',
+        pendingQuestion: null,
+      };
+    } else if (event.event === 'run.failed' || event.event === 'run.error') {
+      session = {
+        ...session,
+        status: 'error',
         pendingQuestion: null,
       };
     }

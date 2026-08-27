@@ -147,9 +147,7 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: model.NewPublicEventBase("r1"), MessageID: "m2", Text: "分析完成。",
 		})
-		emitter.Emit(model.EventRunFinished, model.RunFinishedPayload{
-			PublicEventBase: model.NewPublicEventBase("r1"), Status: "completed", DurationMS: 10,
-		})
+		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("r1", 10, nil, nil))
 		outcome := workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 		return outcome
 	})
@@ -191,7 +189,7 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	if len(got) != 3 ||
 		got[0].Type != model.EventMessageReasoning ||
 		got[1].Type != model.EventMessageFinal ||
-		got[2].Type != model.EventRunFinished {
+		got[2].Type != model.EventRunCompleted {
 		t.Fatalf("replay=%+v", got)
 	}
 }
@@ -220,7 +218,7 @@ func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
 	if len(events) != 3 ||
 		events[0].Type != model.EventRunStarted ||
 		events[1].Type != model.EventRunProgress ||
-		events[2].Type != model.EventRunFinished {
+		events[2].Type != model.EventRunCanceled {
 		t.Fatalf("events=%+v", events)
 	}
 }
@@ -238,10 +236,10 @@ func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
 	waitRunStatus(t, store, "fallback-duration", model.RunDone)
 	events, _ := store.EventsSince(context.Background(), "fallback-duration", 0)
 	for _, event := range events {
-		if event.Type != model.EventRunFinished {
+		if event.Type != model.EventRunCompleted {
 			continue
 		}
-		var payload model.RunFinishedPayload
+		var payload model.RunTerminalPayload
 		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
 			t.Fatal(err)
 		}
@@ -250,7 +248,34 @@ func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
 		}
 		return
 	}
-	t.Fatal("fallback run.finished was not emitted")
+	t.Fatal("fallback run.completed was not emitted")
+}
+
+func TestSchedulerRecoversRuntimePanicAsRunError(t *testing.T) {
+	store := newMemStore()
+	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	execution := scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
+		panic("broken runtime")
+	})
+	if _, err := engine.Start(context.Background(), testRun("panic"), execution); err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, store, "panic", model.RunFailed)
+	events, _ := store.EventsSince(context.Background(), "panic", 0)
+	for _, event := range events {
+		if event.Type != model.EventRunError {
+			continue
+		}
+		var payload model.RunTerminalPayload
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Error == nil || payload.Error.Code != "INTERNAL" || payload.TraceID != "panic" {
+			t.Fatalf("run.error payload=%+v", payload)
+		}
+		return
+	}
+	t.Fatalf("run.error was not emitted: %+v", events)
 }
 
 func TestCancelAuthorityOverridesLateSuccessfulOutcome(t *testing.T) {
@@ -278,10 +303,10 @@ func TestCancelAuthorityOverridesLateSuccessfulOutcome(t *testing.T) {
 		if event.Type == model.EventMessageFinal {
 			t.Fatalf("cancel-requested run emitted message.final: %+v", events)
 		}
-		if event.Type == model.EventRunFinished {
+		if event.Type == model.EventRunCanceled {
 			terminalCount++
-			var payload model.RunFinishedPayload
-			if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil || payload.Status != "canceled" {
+			var payload model.RunTerminalPayload
+			if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
 				t.Fatalf("terminal payload=%s err=%v", event.Payload, err)
 			}
 		}
@@ -324,12 +349,8 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 			asked++
 		case model.EventQuestionAnswered:
 			answered++
-		case model.EventRunFinished:
-			var payload model.RunFinishedPayload
-			_ = json.Unmarshal([]byte(event.Payload), &payload)
-			if payload.Status == "canceled" {
-				canceled++
-			}
+		case model.EventRunCanceled:
+			canceled++
 		}
 	}
 	if asked != 1 || answered != 0 || canceled != 1 {
@@ -410,9 +431,7 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: model.NewPublicEventBase("question"), MessageID: "m1", Text: "已继续完成。",
 		})
-		emitter.Emit(model.EventRunFinished, model.RunFinishedPayload{
-			PublicEventBase: model.NewPublicEventBase("question"), Status: "completed", DurationMS: 10,
-		})
+		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("question", 10, nil, nil))
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 	})
 	if _, err := engine.Start(context.Background(), testRun("question"), execution); err != nil {

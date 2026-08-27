@@ -379,7 +379,7 @@ running
 ```
 
 `cancel_requested` 可以是数据库字段或内部时间戳，不增加公共 Run Status 枚举。普通 UI 在请求成功后
-显示“正在取消”，只有收到 `run.finished(status=canceled)` 后显示“已取消”。
+显示“正在取消”，只有收到 `run.canceled` 后显示“已取消”。
 
 ### 7.2 API
 
@@ -431,7 +431,7 @@ HTTP Cancel
 
 ### 7.4 Tool Event 配对
 
-已产生 `tool.started` 的调用，在 `run.finished` 前必须产生对应 `tool.completed`：
+已产生 `tool.started` 的调用，在非 `run.error` 的 terminal event 前必须产生对应 `tool.completed`：
 
 ```text
 status = failed
@@ -445,7 +445,7 @@ retryable = false
 
 ```text
 所有已开始 Tool 的 completed
-→ run.finished(canceled)
+→ run.canceled
 ```
 
 取消不产生 `message.final` 成功消息。
@@ -709,7 +709,7 @@ Active Run 期间 Composer 不禁用：
 
 - Active Run 显示取消按钮；
 - 点击后按钮禁用，状态显示“正在取消”；
-- 只有权威 `run.finished(canceled)` 后显示“已取消”；
+- 只有权威 `run.canceled` 后显示“已取消”；
 - 超时未收到终态时通过 `GET /runs/{id}` 对账；
 - 不在前端自行伪造 terminal event。
 
@@ -728,12 +728,15 @@ Runtime 内部能力，不新增前端“视觉 Agent”概念。
 
 ## 11. 公共事件
 
-仍然只有：
+公共事件列表：
 
 ```text
 run.started
 run.progress
-run.finished
+run.completed
+run.failed
+run.error
+run.canceled
 plan.updated
 message.reasoning
 message.milestone
@@ -749,11 +752,14 @@ question.answered
 - Steering 接收：用户消息进入 Thread History；可用 `run.progress` 短暂显示“已接收追加要求”；
 - Cancel requested：`run.progress(stage=finalizing, text=正在取消)`；
 - Tool canceled：`tool.completed(status=failed, error.code=RUN_CANCELED)`；
-- Run canceled：`run.finished(status=canceled)`；
+- Run completed：`run.completed`；
+- Run failed：`run.failed`；
+- Run runtime error：`run.error`；
+- Run canceled：`run.canceled`；
 - 自动重试：`run.progress`，不新增 retry event；
 - 多模态截图：仍只投影安全 preview URL。
 
-公共事件 `schema_version` 继续为 2，除非实际 payload 结构发生不兼容变化；本设计不要求升级。
+公共事件 `schema_version` 为 3；terminal event 统一携带 `{ run_id, duration_ms, affected_targets, error, trace_id }`。
 
 ## 12. 数据与迁移
 

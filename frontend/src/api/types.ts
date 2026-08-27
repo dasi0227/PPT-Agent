@@ -238,7 +238,10 @@ export type JsonRecord = Record<string, unknown>;
 export type SSEEventName =
   | 'run.started'
   | 'run.progress'
-  | 'run.finished'
+  | 'run.completed'
+  | 'run.failed'
+  | 'run.error'
+  | 'run.canceled'
   | 'plan.updated'
   | 'plan.approval_requested'
   | 'plan.approval_answered'
@@ -296,6 +299,13 @@ export interface PublicError {
   code: string;
   message: string;
   retryable: boolean;
+}
+
+export interface RunTerminalPayload extends PublicEventBase {
+  duration_ms: number;
+  affected_targets: PublicTarget[];
+  error: PublicError | null;
+  trace_id: string;
 }
 
 export interface ToolPreview {
@@ -356,12 +366,10 @@ export type SSEEvent =
       target?: PublicTarget;
       progress?: { current: number; total: number; unit: string };
     }>
-  | SSEEventBase<'run.finished', PublicEventBase & {
-      status: 'completed' | 'failed' | 'canceled';
-      affected_targets?: PublicTarget[];
-      duration_ms: number;
-      error?: PublicError;
-    }>
+  | SSEEventBase<'run.completed', RunTerminalPayload>
+  | SSEEventBase<'run.failed', RunTerminalPayload>
+  | SSEEventBase<'run.error', RunTerminalPayload>
+  | SSEEventBase<'run.canceled', RunTerminalPayload>
   | SSEEventBase<'plan.updated', PublicEventBase & {
 	  plan: JsonRecord & { plan_id: string; revision: number; title: string; content: string; status: string; steps: JsonRecord[] };
     }>

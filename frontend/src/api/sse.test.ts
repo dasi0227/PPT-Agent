@@ -6,11 +6,21 @@ const base = {
   run_id: 'r1',
   occurred_at: '2026-08-02T10:30:00.000Z',
 };
+const terminal = {
+  ...base,
+  duration_ms: 10,
+  affected_targets: [],
+  error: null,
+  trace_id: 'r1',
+};
 
 const payloads: Record<string, unknown> = {
   'run.started': { ...base, scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute', user_input: '生成 PPT' },
   'run.progress': { ...base, stage: 'thinking', text: '正在分析' },
-  'run.finished': { ...base, status: 'completed', duration_ms: 10 },
+  'run.completed': terminal,
+  'run.failed': { ...terminal, error: { code: 'RUN_FAILED', message: '任务未能完成。', retryable: false } },
+  'run.error': { ...terminal, error: { code: 'INTERNAL', message: '服务暂时无法完成请求。', retryable: false } },
+  'run.canceled': terminal,
   'plan.updated': { ...base, plan: { plan_id: 'p1', revision: 1, title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
   'plan.approval_requested': { ...base, interaction_id: 'i1', plan: { plan_id: 'p1', revision: 1, title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
   'plan.approval_answered': { ...base, interaction_id: 'i1', plan_id: 'p1', revision: 1, decision: 'approve' },
@@ -25,8 +35,8 @@ const payloads: Record<string, unknown> = {
 };
 
 describe('SSE parser', () => {
-  it('registers and parses all 14 public events', () => {
-	  expect(SSE_EVENT_NAMES).toHaveLength(14);
+  it('registers and parses all 17 public events', () => {
+	  expect(SSE_EVENT_NAMES).toHaveLength(17);
     for (const eventName of SSE_EVENT_NAMES) {
       expect(parseSSEEvent(eventName, JSON.stringify(payloads[eventName]), '12')).toMatchObject({
         id: '12',
@@ -56,6 +66,10 @@ describe('SSE parser', () => {
     expect(parseSSEEvent('message.reasoning', JSON.stringify({
       ...(payloads['message.reasoning'] as Record<string, unknown>),
       reasoning_content: 'hidden',
+    }))).toBeNull();
+    expect(parseSSEEvent('run.completed', JSON.stringify({
+      ...(payloads['run.completed'] as Record<string, unknown>),
+      trace_id: null,
     }))).toBeNull();
   });
 
@@ -106,7 +120,7 @@ describe('SSE parser', () => {
     expect(completed).not.toBeNull();
   });
 
-  it('parses final and finished events with local affected targets', () => {
+  it('parses final and completed events with local affected targets', () => {
     const finalEvent = parseSSEEvent('message.final', JSON.stringify({
       schema_version: 3,
       run_id: 'r1',
@@ -125,11 +139,10 @@ describe('SSE parser', () => {
 
     expect(finalEvent).not.toBeNull();
 
-    const finishedEvent = parseSSEEvent('run.finished', JSON.stringify({
+    const completedEvent = parseSSEEvent('run.completed', JSON.stringify({
       schema_version: 3,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:06:31.791303Z',
-      status: 'completed',
       duration_ms: 1000,
       affected_targets: [{
         type: 'slide',
@@ -140,8 +153,10 @@ describe('SSE parser', () => {
         open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/slides/slide-01/spec.json',
         insertions: 29,
       }],
+      error: null,
+      trace_id: 'r1',
     }), '3');
 
-    expect(finishedEvent).not.toBeNull();
+    expect(completedEvent).not.toBeNull();
   });
 });

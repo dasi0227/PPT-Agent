@@ -24,6 +24,7 @@ describe('TerminalNotice retry authority', () => {
       type: 'terminal_notice',
       status: 'failed',
       message: '模型服务暂时不可用',
+      affectedTargets: [],
       error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务暂时不可用', retryable: true },
       timestamp: 1,
     }} />);
@@ -41,6 +42,7 @@ describe('TerminalNotice retry authority', () => {
       type: 'terminal_notice',
       status: 'failed',
       message: '页面检查未通过',
+      affectedTargets: [],
       error: retryable === undefined
         ? undefined
         : { code: 'RENDER_FAILED', message: '页面检查未通过', retryable },
@@ -56,7 +58,8 @@ describe('TerminalNotice retry authority', () => {
     Object.assign(navigator, { clipboard: { writeText } });
     render(<TerminalNotice item={{
       id: 'terminal-copy', type: 'terminal_notice', status: 'failed',
-      message: '连续修正未成功，任务已停止。', timestamp: new Date(2026, 7, 11, 14, 5).getTime(),
+      message: '连续修正未成功，任务已停止。', affectedTargets: [],
+      timestamp: new Date(2026, 7, 11, 14, 5).getTime(),
     }} />);
 
     const copy = screen.getByRole('button', { name: '复制消息' });

@@ -3,7 +3,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { AppShell } from './AppShell';
-import { homeRoute } from './routes';
+import { homeRoute, projectRoute } from './routes';
 import { useWorkspaceUrlState } from './useWorkspaceUrlState';
 
 function syncProjectRoute(projectId: string | undefined) {
@@ -26,12 +26,25 @@ export function WorkspaceRoute() {
   const navigate = useNavigate();
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const loadProjectContent = useProjectStore((state) => state.loadProjectContent);
+  const activeProjectId = useProjectStore((state) => state.activeProjectId);
+  const openProjectIds = useProjectStore((state) => state.openProjectIds);
   const loadThreads = useThreadStore((state) => state.loadThreads);
   useWorkspaceUrlState(projectId);
 
   React.useLayoutEffect(() => {
     syncProjectRoute(projectId);
   }, [projectId]);
+
+  React.useEffect(() => {
+    if (!projectId) return;
+    const state = useProjectStore.getState();
+    if (state.openProjectIds.includes(projectId)) return;
+
+    const nextActive = state.activeProjectId && state.openProjectIds.includes(state.activeProjectId)
+      ? state.activeProjectId
+      : state.openProjectIds[state.openProjectIds.length - 1] ?? null;
+    navigate(nextActive ? projectRoute(nextActive) : homeRoute, { replace: true });
+  }, [activeProjectId, navigate, openProjectIds, projectId]);
 
   React.useEffect(() => {
     if (!projectId) return;

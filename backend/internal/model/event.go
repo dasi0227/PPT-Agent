@@ -6,7 +6,10 @@ type EventType string
 const (
 	EventRunStarted            EventType = "run.started"
 	EventRunProgress           EventType = "run.progress"
-	EventRunFinished           EventType = "run.finished"
+	EventRunCompleted          EventType = "run.completed"
+	EventRunFailed             EventType = "run.failed"
+	EventRunError              EventType = "run.error"
+	EventRunCanceled           EventType = "run.canceled"
 	EventPlanUpdated           EventType = "plan.updated"
 	EventPlanApprovalRequested EventType = "plan.approval_requested"
 	EventPlanApprovalAnswered  EventType = "plan.approval_answered"
@@ -22,7 +25,7 @@ const (
 
 // Terminal 报告事件是否为终态事件（done/error，API-SSE-002）。
 func (t EventType) Terminal() bool {
-	return t == EventRunFinished
+	return t == EventRunCompleted || t == EventRunFailed || t == EventRunError || t == EventRunCanceled
 }
 
 // Event 是一条持久化的 Run 事件。payload 为 JSON 文本。

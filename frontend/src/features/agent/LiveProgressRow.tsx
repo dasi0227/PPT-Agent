@@ -7,7 +7,7 @@ export const LiveProgressRow: React.FC<{ progress: RunSession['progress'] }> = (
   return (
     <div className="flex min-h-8 items-center gap-2 px-1.5 text-xs text-text-600" aria-live="polite">
       <B2Orb className="text-accent" label={progress.text} />
-      <span className="min-w-0 flex-1 truncate">{progress.text}</span>
+      <span className="timeline-loading-shimmer min-w-0 flex-1 truncate">{progress.text}</span>
       {progress.current !== undefined && progress.total !== undefined && (
         <span className="tabular-nums text-text-400">{progress.current} / {progress.total}</span>
       )}

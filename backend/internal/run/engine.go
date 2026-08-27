@@ -121,6 +121,21 @@ func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Ex
 
 func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	defer func() {
+		if recovered := recover(); recovered != nil {
+			terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			e.setStatus(terminalCtx, a.run.ID, model.RunFailed)
+			if !a.bus.Terminated() {
+				err := model.NewAgentError("INTERNAL", "runtime_panic", errors.New("runtime panic"))
+				_ = a.bus.Emit(terminalCtx, model.EventRunError, model.NewRunTerminalPayload(
+					a.run.ID,
+					time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+					nil,
+					err.Public(),
+				))
+			}
+			e.log.Error("runtime panic recovered", zap.String("run_id", a.run.ID), zap.Any("panic", recovered))
+		}
 		a.bus.Close()
 		e.mu.Lock()
 		delete(e.actives, a.run.ID)
@@ -144,11 +159,12 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		e.setStatus(terminalCtx, a.run.ID, model.RunFailed)
-		_ = a.bus.Emit(terminalCtx, model.EventRunFinished, model.RunFinishedPayload{
-			PublicEventBase: model.NewPublicEventBase(a.run.ID),
-			Status:          "failed", DurationMS: time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
-			Error: model.NewAgentError("LOCK_TIMEOUT", "project_lock", err).Public(),
-		})
+		_ = a.bus.Emit(terminalCtx, model.EventRunFailed, model.NewRunTerminalPayload(
+			a.run.ID,
+			time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+			nil,
+			model.NewAgentError("LOCK_TIMEOUT", "project_lock", err).Public(),
+		))
 		return
 	}
 	defer release()
@@ -198,18 +214,12 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 				PublicEventBase: model.NewPublicEventBase(a.run.ID),
 				MessageID:       "msg_fallback_" + a.run.ID, Text: "已完成本次任务。",
 			})
-			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
-				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "completed",
-				DurationMS: durationMS,
-			})
+			_ = a.bus.Emit(ctx, model.EventRunCompleted, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
 		}
 	case workflow.StatusCanceled:
 		e.setStatus(ctx, a.run.ID, model.RunCanceled)
 		if !a.bus.Terminated() {
-			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
-				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "canceled",
-				DurationMS: durationMS,
-			})
+			_ = a.bus.Emit(ctx, model.EventRunCanceled, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
 		}
 	default:
 		e.setStatus(ctx, a.run.ID, model.RunFailed)
@@ -218,11 +228,12 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 			if code == "" {
 				code = "RUN_FAILED"
 			}
-			_ = a.bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
-				PublicEventBase: model.NewPublicEventBase(a.run.ID), Status: "failed",
-				DurationMS: durationMS,
-				Error:      model.NewAgentError(code, "run", errors.New(outcome.Message)).Public(),
-			})
+			_ = a.bus.Emit(ctx, model.EventRunFailed, model.NewRunTerminalPayload(
+				a.run.ID,
+				durationMS,
+				nil,
+				model.NewAgentError(code, "run", errors.New(outcome.Message)).Public(),
+			))
 		}
 	}
 }
@@ -304,6 +315,8 @@ func (e *Engine) RequestCancel(ctx context.Context, id string) (model.Run, error
 			current.Status = model.RunDone
 		case "failed":
 			current.Status = model.RunFailed
+		case "error":
+			current.Status = model.RunFailed
 		case "canceled":
 			current.Status = model.RunCanceled
 		}
@@ -313,7 +326,7 @@ func (e *Engine) RequestCancel(ctx context.Context, id string) (model.Run, error
 	a.cancelRequested = true
 	a.mu.Unlock()
 	_ = a.bus.Emit(context.Background(), model.EventRunProgress, model.RunProgressPayload{
-		PublicEventBase: model.NewPublicEventBase(id), Stage: "finalizing", Text: "正在取消",
+		PublicEventBase: model.NewPublicEventBase(id), Stage: "finalizing", Text: "取消任务中",
 	})
 	a.cancel()
 	current.CancelRequestedAt = requestedAt

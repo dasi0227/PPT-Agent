@@ -1,7 +1,7 @@
 # Agent Public Events and Timeline Design
 
 **日期：** 2026-08-02
-**状态：** Accepted，公共事件 Schema v2
+**状态：** Accepted，公共事件 Schema v3
 
 ## 1. 目标
 
@@ -9,13 +9,19 @@
 Ledger、Context Pack、strategy 内部判断、phase、trace、Provider reasoning 和 raw
 Resource content 不进入公共事件。
 
-公共事件仍然严格只有 11 种：
+公共事件严格只有 17 种：
 
 ```text
 run.started
 run.progress
-run.finished
+run.completed
+run.failed
+run.error
+run.canceled
 plan.updated
+plan.approval_requested
+plan.approval_answered
+run.mode_changed
 message.reasoning
 message.milestone
 message.final
@@ -25,7 +31,7 @@ question.asked
 question.answered
 ```
 
-不恢复旧 SSE 协议，不新增事件种类，不做 v1/v2 双写。
+不恢复旧 SSE 协议，不做旧/新终态事件双写。
 
 ## 2. 通用信封
 
@@ -41,7 +47,7 @@ data: <JSON payload>
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_123",
   "occurred_at": "2026-08-02T10:30:00.000Z"
 }
@@ -101,11 +107,41 @@ thinking | planning | reading | writing | rendering | finalizing
 可选 `target` 使用 Resource 投影，可选 `progress` 使用
 `{current,total,unit}`。该事件不是持久时间线卡片。
 
-### `run.finished`
+### Run terminal events
 
-每个 Run 恰好一次且为最后一条公共事件。`status` 只能是
-`completed | failed | canceled`。成功可带 `affected_targets`；失败必须带安全的
-`PublicError`。终态后不再发送公共事件。
+每个 Run 恰好一次终态事件且为最后一条公共事件。终态不再使用
+`run.finished + status`，而是直接从外层事件名区分：
+
+```text
+run.completed
+run.failed
+run.error
+run.canceled
+```
+
+四个终态事件共用统一 payload：
+
+```json
+{
+  "schema_version": 3,
+  "run_id": "run_123",
+  "occurred_at": "2026-08-02T10:30:00.000Z",
+  "duration_ms": 12000,
+  "affected_targets": [],
+  "error": null,
+  "trace_id": "run_123"
+}
+```
+
+- `run.completed`：LLM 调用 finish 后，通过后端完成检查与提交校验。
+- `run.failed`：运行逻辑正常收口，但被规则、预算、门禁或已知依赖失败判定为失败。
+- `run.error`：工程运行时异常，Runtime 状态不可信或发生不可恢复后端错误。
+- `run.canceled`：用户或系统取消。
+
+`run.failed` 和 `run.error` 必须带安全的 `PublicError`；`run.completed` 和
+`run.canceled` 的 `error` 为 `null`。`affected_targets` 只表达后端确认已经落实或能
+定位的改动，不能表达仅尝试过的改动。`trace_id` 是安全排查索引，不包含内部路径、
+Prompt、密钥或原始模型内容。
 
 ## 5. Plan 事件
 
@@ -139,7 +175,7 @@ Prompt、路径、HTML 或 JSON 正文。重复或高相似文本由后端降噪
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "run_123",
   "occurred_at": "2026-08-02T10:30:08.000Z",
   "call_id": "call_01",
@@ -199,17 +235,17 @@ Reducer 以事件为事实源：
 - Message 事件追加低噪声消息；
 - Tool 事件按 `call_id` 合并 activity；
 - Question 事件维护唯一 pending question；
-- `run.finished` 关闭 Session。
+- `run.completed` / `run.failed` / `run.error` / `run.canceled` 关闭 Session。
 
 历史 hydration 与实时 SSE 必须投影为相同状态。未知事件忽略并在开发环境 warning。
 
 ## 10. 安全与验收
 
-- 公共 schema version 固定为 2。
-- 公共事件集合严格为上述 11 种。
+- 公共 schema version 固定为 3。
+- 公共事件集合严格为上述 17 种。
 - `run.started.target.artifact` 只接受 `spec | presentation`。
 - Tool target 只接受四类 Resource 投影。
 - 公共 payload 递归拒绝 raw args/content、内部路径、reasoning、Context、Evidence 和 trace。
 - 每个 Tool Call 的 started/completed 严格成对。
-- `message.final` 先于成功 `run.finished`，两者只出现一次。
+- `message.final` 先于成功 `run.completed`，两者只出现一次。
 - 断线重连通过 seq 恢复，不重复投影已消费事件。

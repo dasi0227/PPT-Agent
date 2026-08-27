@@ -6,20 +6,22 @@ import (
 	"testing"
 )
 
-func TestPublicEventTypeSetContainsExactlyElevenEvents(t *testing.T) {
+func TestPublicEventTypeSetContainsAllEvents(t *testing.T) {
 	want := []EventType{
-		EventRunStarted, EventRunProgress, EventRunFinished, EventPlanUpdated, EventPlanApprovalRequested, EventPlanApprovalAnswered, EventRunModeChanged,
+		EventRunStarted, EventRunProgress, EventRunCompleted, EventRunFailed, EventRunError, EventRunCanceled,
+		EventPlanUpdated, EventPlanApprovalRequested, EventPlanApprovalAnswered, EventRunModeChanged,
 		EventMessageReasoning, EventMessageMilestone, EventMessageFinal,
 		EventToolStarted, EventToolCompleted, EventQuestionAsked, EventQuestionAnswered,
 	}
-	if len(PublicEventTypes) != 14 {
+	if len(PublicEventTypes) != 17 {
 		t.Fatalf("public event count=%d", len(PublicEventTypes))
 	}
 	for index, event := range want {
 		if PublicEventTypes[index] != event {
 			t.Fatalf("event[%d]=%s want=%s", index, PublicEventTypes[index], event)
 		}
-		if event.Terminal() != (event == EventRunFinished) {
+		wantTerminal := event == EventRunCompleted || event == EventRunFailed || event == EventRunError || event == EventRunCanceled
+		if event.Terminal() != wantTerminal {
 			t.Fatalf("terminal(%s)=%v", event, event.Terminal())
 		}
 	}

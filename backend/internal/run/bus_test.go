@@ -122,7 +122,7 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 			Answer: model.QuestionAnswer{SelectedOptionIDs: []string{"tech"}}, DisplayText: "科技",
 		}},
 		{model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: base(), MessageID: "m2", Text: "已完成。"}},
-		{model.EventRunFinished, model.RunFinishedPayload{PublicEventBase: base(), Status: "completed", DurationMS: 10}},
+		{model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 10, nil, nil)},
 	}
 	for _, event := range events {
 		if err := bus.Emit(context.Background(), event.kind, event.payload); err != nil {
@@ -146,7 +146,7 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 			t.Fatal("run.progress entered thread history")
 		}
 	}
-	if entries[0].Type != "user_turn" || entries[len(entries)-1].Type != string(model.EventRunFinished) {
+	if entries[0].Type != "user_turn" || entries[len(entries)-1].Type != string(model.EventRunCompleted) {
 		t.Fatalf("history mapping=%+v", entries)
 	}
 	if _, ok := entries[0].Data["scope"]; !ok || entries[0].Data["mode"] != string(model.ModeExecute) {
@@ -220,9 +220,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}); err == nil {
 		t.Fatal("accepted unmatched question.answered")
 	}
-	if err := bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
-		PublicEventBase: base(), Status: "completed", DurationMS: 1,
-	}); err == nil {
+	if err := bus.Emit(ctx, model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 1, nil, nil)); err == nil {
 		t.Fatal("accepted completed terminal without message.final")
 	}
 	if err := bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{
@@ -230,9 +228,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := bus.Emit(ctx, model.EventRunFinished, model.RunFinishedPayload{
-		PublicEventBase: base(), Status: "completed", DurationMS: 1,
-	}); err != nil {
+	if err := bus.Emit(ctx, model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 1, nil, nil)); err != nil {
 		t.Fatal(err)
 	}
 	_ = bus.Emit(ctx, model.EventMessageReasoning, model.MessageReasoningPayload{

@@ -816,6 +816,7 @@ target.committed
 status.summary
 run.completed
 run.failed
+run.error
 run.canceled
 ```
 

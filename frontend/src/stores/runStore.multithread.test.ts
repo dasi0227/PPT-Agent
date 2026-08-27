@@ -59,8 +59,8 @@ describe('runStore multithread isolation', () => {
     expect(useRunStore.getState().sessions.tB.progress?.text).toBe('处理 B');
 
     connectionA.onMessage({
-      id: '2', event: 'run.finished',
-      data: { ...base('run_tA'), status: 'canceled', duration_ms: 10 },
+      id: '2', event: 'run.canceled',
+      data: { ...base('run_tA'), duration_ms: 10, affected_targets: [], error: null, trace_id: 'run_tA' },
     });
     expect(connectionA.closed).toBe(true);
     expect(connectionB.closed).toBe(false);

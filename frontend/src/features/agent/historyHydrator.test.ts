@@ -5,6 +5,15 @@ const base = { schema_version: 3, run_id: 'r1', occurred_at: '2026-08-02T10:30:0
 const entry = (seq: number, type: string, data: Record<string, unknown>, runId = 'r1'): HistoryEntry => ({
   seq, ts: 1_754_130_600, run_id: runId, turn: type === 'user_turn' ? 'user' : 'agent', type, data,
 });
+const terminal = (runId = 'r1', data: Record<string, unknown> = {}) => ({
+  ...base,
+  run_id: runId,
+  duration_ms: 10,
+  affected_targets: [],
+  error: null,
+  trace_id: runId,
+  ...data,
+});
 
 describe('history hydrator', () => {
   it('reuses public reducers for tools, plan, question, final, and terminal', () => {
@@ -16,7 +25,7 @@ describe('history hydrator', () => {
       entry(5, 'question.asked', { ...base, question_id: 'q1', prompt: '选择风格', selection: 'single', options: [{ id: 'tech', label: '科技' }], allow_custom: false }),
       entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { selected_option_ids: ['tech'], custom_text: '' }, display_text: '科技' }),
       entry(7, 'message.final', { ...base, message_id: 'm1', text: '已完成' }),
-      entry(8, 'run.finished', { ...base, status: 'completed', duration_ms: 10 }),
+      entry(8, 'run.completed', terminal()),
     ]);
     expect(hydrated.plan).toMatchObject({ id: 'p1', revision: 1 });
     expect(hydrated.items.map((item) => item.type)).toEqual(['user_turn', 'tool', 'question', 'final']);
@@ -110,7 +119,7 @@ describe('history hydrator', () => {
         mode: 'execute',
       }, 'old'),
       entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成' }, 'old'),
-      entry(3, 'run.finished', { ...base, run_id: 'old', status: 'completed', duration_ms: 10 }, 'old'),
+      entry(3, 'run.completed', terminal('old'), 'old'),
       entry(1, 'user_turn', {
         text: '第二轮',
         scope: { artifact: 'ppt', level: 'slide', slide_id: 's2' },

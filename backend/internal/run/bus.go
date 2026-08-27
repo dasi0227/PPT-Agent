@@ -82,7 +82,8 @@ func isWhitelistedForHistory(evt model.EventType) bool {
 		model.EventPlanApprovalRequested, model.EventPlanApprovalAnswered, model.EventRunModeChanged,
 		model.EventMessageReasoning, model.EventMessageMilestone, model.EventMessageFinal,
 		model.EventToolStarted, model.EventToolCompleted,
-		model.EventQuestionAsked, model.EventQuestionAnswered, model.EventRunFinished:
+		model.EventQuestionAsked, model.EventQuestionAnswered,
+		model.EventRunCompleted, model.EventRunFailed, model.EventRunError, model.EventRunCanceled:
 		return true
 	}
 	return false
@@ -241,18 +242,21 @@ func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 		if b.finalCount != 0 {
 			return errors.New("message.final may only be emitted once")
 		}
-	case model.EventRunFinished:
-		status, _ := data["status"].(string)
-		if b.cancelRequested && status == "completed" {
+	case model.EventRunCompleted, model.EventRunFailed, model.EventRunCanceled:
+		if b.cancelRequested && evt == model.EventRunCompleted {
 			return errors.New("cancel-requested run cannot complete")
 		}
-		if status == "completed" && b.finalCount != 1 {
+		if evt == model.EventRunCompleted && b.finalCount != 1 {
 			return errors.New("completed run requires exactly one prior message.final")
 		}
 		for _, completed := range b.toolCalls {
 			if !completed {
-				return errors.New("run.finished requires every started tool to complete")
+				return errors.New("terminal run event requires every started tool to complete")
 			}
+		}
+	case model.EventRunError:
+		if b.cancelRequested {
+			return errors.New("cancel-requested run cannot emit runtime error")
 		}
 	}
 	return nil
@@ -290,9 +294,18 @@ func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
 		b.questions[questionID] = true
 	case model.EventMessageFinal:
 		b.finalCount++
-	case model.EventRunFinished:
+	case model.EventRunCompleted:
 		b.terminated = true
-		b.terminalStatus, _ = data["status"].(string)
+		b.terminalStatus = "completed"
+	case model.EventRunFailed:
+		b.terminated = true
+		b.terminalStatus = "failed"
+	case model.EventRunError:
+		b.terminated = true
+		b.terminalStatus = "error"
+	case model.EventRunCanceled:
+		b.terminated = true
+		b.terminalStatus = "canceled"
 	}
 }
 

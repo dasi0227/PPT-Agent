@@ -5,6 +5,13 @@ import { reducePlan, reduceSSEEvent } from './eventReducer';
 const base = { schema_version: 3 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const event = (name: SSEEvent['event'], data: Record<string, unknown>, id = '1') =>
   ({ id, event: name, data: { ...base, ...data } } as SSEEvent);
+const terminal = (data: Record<string, unknown> = {}) => ({
+  duration_ms: 20,
+  affected_targets: [],
+  error: null,
+  trace_id: 'r1',
+  ...data,
+});
 
 describe('public event reducer', () => {
   it('upserts tool completion into the started row without raw payloads', () => {
@@ -64,24 +71,35 @@ describe('public event reducer', () => {
     let state = reduceSSEEvent([], event('message.final', {
       message_id: 'm1', text: '已完成', affected_targets: [{ type: 'slide', slide_id: 's1', part: 'html' }],
     }));
-    state = reduceSSEEvent(state, event('run.finished', { status: 'completed', duration_ms: 20 }, '2'));
+    state = reduceSSEEvent(state, event('run.completed', terminal(), '2'));
     expect(state.map((item) => item.type)).toEqual(['final']);
   });
 
   it('creates one compact notice for failed or canceled terminals', () => {
-    let state = reduceSSEEvent([], event('run.finished', {
-      status: 'failed', duration_ms: 20,
+    let state = reduceSSEEvent([], event('run.failed', terminal({
       error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务暂时不可用', retryable: true },
-    }));
-    state = reduceSSEEvent(state, event('run.finished', {
-      status: 'failed', duration_ms: 20,
+    })));
+    state = reduceSSEEvent(state, event('run.failed', terminal({
       error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务暂时不可用', retryable: true },
-    }, '2'));
+    }), '2'));
     expect(state).toHaveLength(1);
     expect(state[0]).toMatchObject({
       type: 'terminal_notice',
       status: 'failed',
       error: { code: 'PROVIDER_UNAVAILABLE', retryable: true },
+    });
+  });
+
+  it('keeps runtime errors distinct from failed task results', () => {
+    const state = reduceSSEEvent([], event('run.error', terminal({
+      affected_targets: [{ type: 'slide', slide_id: 's1', part: 'html' }],
+      error: { code: 'INTERNAL', message: '服务暂时无法完成请求。', retryable: false },
+    })));
+    expect(state[0]).toMatchObject({
+      type: 'terminal_notice',
+      status: 'error',
+      affectedTargets: [{ type: 'slide', slide_id: 's1', part: 'html' }],
+      traceId: 'r1',
     });
   });
 });

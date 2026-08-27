@@ -338,9 +338,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		return r.fail(input, state, CodeAgentFailed, err)
 	}
 	if initialPhase == PhasePlanning {
-		r.emitProgress(input.Emitter, state, "planning", "正在整理执行计划", nil)
+		r.emitProgress(input.Emitter, state, "planning", "处理任务中", nil)
 	} else {
-		r.emitProgress(input.Emitter, state, "thinking", "正在分析任务与当前内容", nil)
+		r.emitProgress(input.Emitter, state, "thinking", "处理任务中", nil)
 	}
 
 	if state.mode == model.ModeExecute {
@@ -403,7 +403,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			ImageResolver:   input.ImageResolver,
 			Continuation:    state.continuation,
 			OnProviderRetry: func(attempt int) {
-				r.emitProgress(input.Emitter, state, "thinking", fmt.Sprintf("模型服务暂时不可用，正在自动重试（%d）", attempt), nil)
+				r.emitProgress(input.Emitter, state, "thinking", fmt.Sprintf("模型暂时不可用，重试中（%d / 5）", attempt), nil)
 			},
 		})
 		if err != nil {
@@ -1121,7 +1121,7 @@ func (r *Runtime) finishCandidate(
 	}
 	finishPhase := state.phase
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
-	r.emitProgress(input.Emitter, state, "finalizing", "正在完成最终检查", nil)
+	r.emitProgress(input.Emitter, state, "finalizing", "自我审查中", nil)
 	changes := state.changeSet()
 	result := r.Gate.Check(CompletionContext{
 		Mode: state.mode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
@@ -1241,10 +1241,12 @@ func (r *Runtime) finishCandidate(
 			),
 			AffectedTargets: affected,
 		})
-		input.Emitter.Emit(model.EventRunFinished, model.RunFinishedPayload{
-			PublicEventBase: publicBase(state.runID), Status: "completed",
-			AffectedTargets: affected, DurationMS: outcomeDurationMS(outcome),
-		})
+		input.Emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(
+			publicBase(state.runID),
+			outcomeDurationMS(outcome),
+			affected,
+			nil,
+		))
 	}
 	return outcome, true
 }
@@ -1285,16 +1287,41 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 	_ = r.saveCheckpoint(context.Background(), input, state, checkpointTerminal, "")
 	outcome := r.outcome(state, status, agentErr.Code, agentErr.Error())
 	if input.Emitter != nil {
-		payload := model.RunFinishedPayload{
-			PublicEventBase: publicBase(state.runID), Status: publicStatus,
-			DurationMS: outcomeDurationMS(outcome),
-		}
-		if publicStatus == "failed" {
-			payload.Error = agentErr.Public()
-		}
-		input.Emitter.Emit(model.EventRunFinished, payload)
+		event := runTerminalEventForError(publicStatus, agentErr)
+		input.Emitter.Emit(event, model.NewRunTerminalPayloadFromBase(
+			publicBase(state.runID),
+			outcomeDurationMS(outcome),
+			publicAffectedTargets(input.ProjectDir, state.changeSet()),
+			terminalPublicError(event, agentErr),
+		))
 	}
 	return outcome
+}
+
+func runTerminalEventForError(publicStatus string, agentErr *model.AgentError) model.EventType {
+	if publicStatus == "canceled" {
+		return model.EventRunCanceled
+	}
+	if isRuntimeErrorCode(agentErr.Code) {
+		return model.EventRunError
+	}
+	return model.EventRunFailed
+}
+
+func terminalPublicError(event model.EventType, agentErr *model.AgentError) *model.PublicError {
+	if event == model.EventRunCompleted || event == model.EventRunCanceled {
+		return nil
+	}
+	return agentErr.Public()
+}
+
+func isRuntimeErrorCode(code string) bool {
+	switch code {
+	case "INTERNAL", CodeAgentFailed, CodeCommitFailed, "RUN_FATAL_EXIST", "MODEL_PROVIDER_UNSUPPORTED":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *Runtime) outcome(state *RunState, status WorkflowStatus, code, message string) StructuredOutcome {
@@ -1484,39 +1511,34 @@ func (r *Runtime) emitProgress(
 }
 
 func (r *Runtime) emitToolProgress(emitter EventEmitter, state *RunState, call llm.ToolCall) {
-	stage, text := "thinking", "正在继续处理任务"
+	stage, text := "thinking", "调用工具中"
 	target := publicToolTarget("", call.Name, call.Args)
 	switch call.Name {
 	case "read_ppt":
-		stage, text = "reading", "正在读取 PPT 内容"
+		stage, text = "reading", "读取页面中"
 	case "search_refs":
-		stage, text = "reading", "正在查找相关参考"
+		stage, text = "reading", "查找资料中"
 	case "mutate_ppt":
-		stage, text = "writing", "正在更新 PPT 内容"
+		stage, text = "writing", "更新页面中"
 		if strings.HasSuffix(stringValue(call.Args["op"]), ".write") || stringValue(call.Args["op"]) == "outline.init" || stringValue(call.Args["op"]) == "outline.insert" {
-			text = "正在创建 PPT 内容"
+			text = "创建页面中"
 		}
 	case "render_slide":
-		stage, text = "rendering", "正在检查页面布局"
+		stage, text = "rendering", "渲染页面中"
 	}
 	if target != nil && target.Type == "slide" {
 		switch call.Name {
 		case "read_ppt":
-			text = "正在读取" + slideDisplayName(target.SlideID)
+			text = "读取页面中"
 		case "mutate_ppt":
-			projectDir := ""
-			if state.tx != nil {
-				projectDir = state.tx.ProjectDir()
-			}
-			name := runtimeSlideDisplayName(projectDir, target.SlideID)
 			op := stringValue(call.Args["op"])
 			if strings.HasSuffix(op, ".write") {
-				text = "正在创建" + name
+				text = "创建页面中"
 			} else {
-				text = "正在更新" + name
+				text = "更新页面中"
 			}
 		case "render_slide":
-			text = "正在检查" + slideDisplayName(target.SlideID) + "布局"
+			text = "渲染页面中"
 		}
 	}
 	r.emitProgress(emitter, state, stage, text, target)

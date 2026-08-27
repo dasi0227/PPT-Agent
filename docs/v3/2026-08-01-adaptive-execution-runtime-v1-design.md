@@ -217,7 +217,7 @@ target。模型不得通过伪造 tool name 或 artifact id 扩大权限。
 - `verification.completed`
 - `repair.started` / `repair.completed`
 - `status.summary`
-- `run.completed` / `run.failed` / `run.canceled`
+- `run.completed` / `run.failed` / `run.error` / `run.canceled`
 
 `strategy.selected` 至少包含 strategy、reason、risk、complexity 和 signals。
 

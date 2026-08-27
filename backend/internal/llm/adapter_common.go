@@ -20,7 +20,7 @@ import (
 const (
 	defaultProviderTimeout = 180 * time.Second
 	defaultMaxImageBytes   = 4 * 1024 * 1024
-	defaultMaxRetries      = 3
+	defaultMaxRetries      = 5
 )
 
 type adapterHTTP struct {

@@ -89,6 +89,14 @@ const request = (instruction: string) => ({
   instruction,
 });
 const base = { schema_version: 3, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
+const terminal = (data: Record<string, unknown> = {}) => ({
+  ...base,
+  duration_ms: 5,
+  affected_targets: [],
+  error: null,
+  trace_id: String((data.run_id ?? base.run_id)),
+  ...data,
+});
 
 function reset() {
   useRunStore.getState().dropSessions(Object.keys(useRunStore.getState().sessions));
@@ -157,7 +165,40 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1.timelineItems.map((item) => item.type)).toEqual(['user_turn']);
   });
 
-  test('keeps question waiting until authoritative question.answered arrives', async () => {
+  test('returns to generic running feedback after the last tool finishes', async () => {
+    await useRunStore.getState().createRun('t1', request('go'));
+    const connection = connections[0];
+    connection.onMessage({ id: '1', event: 'run.progress', data: { ...base, stage: 'reading', text: '查找资料中' } });
+    connection.onMessage({
+      id: '2',
+      event: 'tool.started',
+      data: {
+        ...base,
+        call_id: 'c1',
+        tool: 'search_refs',
+        display: { label: '查找相关参考' },
+      },
+    });
+    expect(useRunStore.getState().sessions.t1.progress).toMatchObject({
+      stage: 'reading', text: '查找资料中',
+    });
+    connection.onMessage({
+      id: '3',
+      event: 'tool.completed',
+      data: {
+        ...base,
+        call_id: 'c1',
+        tool: 'search_refs',
+        status: 'completed',
+        display: { label: '已查找相关参考' },
+      },
+    });
+    expect(useRunStore.getState().sessions.t1.progress).toMatchObject({
+      stage: 'thinking', text: '工具调用完成，推进任务中',
+    });
+  });
+
+  test('returns to running feedback after a question answer is accepted', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     const connection = connections[0];
     connection.onMessage({
@@ -169,7 +210,18 @@ describe('runStore public event sessions', () => {
       't1', 'run_1', 'q1',
       JSON.stringify({ selected_option_ids: [], custom_text: '克制' }),
     );
-    expect(useRunStore.getState().sessions.t1.status).toBe('waiting');
+    expect(useRunStore.getState().sessions.t1).toMatchObject({
+      status: 'running',
+      pendingQuestion: null,
+      progress: { stage: 'thinking', text: '已收到回答，推进任务中' },
+    });
+    expect(useRunStore.getState().sessions.t1.timelineItems)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          type: 'question',
+          answer: { selected_option_ids: [], custom_text: '克制' },
+        }),
+      ]));
     connection.onMessage({
       id: '2', event: 'question.answered',
       data: { ...base, question_id: 'q1', answer: { selected_option_ids: [], custom_text: '克制' }, display_text: '克制' },
@@ -244,7 +296,7 @@ describe('runStore public event sessions', () => {
     });
     expect(useRunStore.getState().sessions.t1).toMatchObject({
       status: 'running',
-      progress: { stage: 'thinking', text: '正在启动执行' },
+      progress: { stage: 'thinking', text: '已收到计划，推进任务中' },
     });
   });
 
@@ -284,8 +336,8 @@ describe('runStore public event sessions', () => {
     await useRunStore.getState().cancelRun('t1', 'run_1');
     expect(useRunStore.getState().sessions.t1.status).toBe('canceling');
     connections[0].onMessage({
-      id: '1', event: 'run.finished',
-      data: { ...base, status: 'canceled', duration_ms: 5 },
+      id: '1', event: 'run.canceled',
+      data: terminal(),
     });
     expect(useRunStore.getState().sessions.t1.status).toBe('canceled');
   });
@@ -340,8 +392,8 @@ describe('runStore public event sessions', () => {
       .not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice' })]));
 
     connections[1].onMessage({
-      id: '8', event: 'run.finished',
-      data: { ...base, status: 'canceled', duration_ms: 5 },
+      id: '8', event: 'run.canceled',
+      data: terminal(),
     });
     expect(useRunStore.getState().sessions.t1.timelineItems)
       .toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice', status: 'canceled' })]));
@@ -353,8 +405,8 @@ describe('runStore public event sessions', () => {
     await useRunStore.getState().createRun('t1', request('terminal'), 'p1');
     await useRunStore.getState().cancelRun('t1', 'run_1');
     connections[0].onMessage({
-      id: '1', event: 'run.finished',
-      data: { ...base, status: 'canceled', duration_ms: 5 },
+      id: '1', event: 'run.canceled',
+      data: terminal(),
     });
     await vi.advanceTimersByTimeAsync(20_000);
     expect(getRequests).toHaveLength(0);
@@ -413,14 +465,14 @@ describe('runStore public event sessions', () => {
     const connection = connections[0];
     connection.onMessage({ id: '1', event: 'message.final', data: { ...base, message_id: 'm1', text: '已完成' } });
     connection.onMessage({
-      id: '2', event: 'run.finished',
-      data: {
-        ...base, status: 'completed', duration_ms: 20,
+      id: '2', event: 'run.completed',
+      data: terminal({
+        duration_ms: 20,
         affected_targets: [
           { type: 'slide', slide_id: 's1', part: 'spec' },
           { type: 'slide', slide_id: 's2', part: 'spec' },
         ],
-      },
+      }),
     });
     expect(useRunStore.getState().sessions.t1.status).toBe('done');
     expect(connection.closed).toBe(true);
@@ -431,8 +483,8 @@ describe('runStore public event sessions', () => {
   test('failed run refreshes once to discard the active overlay', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     connections[0].onMessage({
-      id: '1', event: 'run.finished',
-      data: { ...base, status: 'failed', duration_ms: 10, error: { code: 'E', message: '失败', retryable: true } },
+      id: '1', event: 'run.failed',
+      data: terminal({ duration_ms: 10, error: { code: 'E', message: '失败', retryable: true } }),
     });
     expect(slideLoads).toEqual(['p1']);
   });

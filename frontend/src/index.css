@@ -13,6 +13,44 @@
   }
 }
 
+.timeline-loading-shimmer {
+  color: inherit;
+}
+
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .timeline-loading-shimmer {
+    background-image: linear-gradient(
+      100deg,
+      #5F6B7A 0%,
+      #5F6B7A 32%,
+      #2F67F6 48%,
+      #17202B 52%,
+      #5F6B7A 68%,
+      #5F6B7A 100%
+    );
+    background-size: 240% 100%;
+    background-position: 120% 0;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: timeline-loading-shimmer 1.7s linear infinite;
+  }
+}
+
+@keyframes timeline-loading-shimmer {
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-loading-shimmer {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
 /* Compact AICSS B2-inspired activity Orb used only by the public live-progress row. */
 .agent-b2-orb {
   position: relative;

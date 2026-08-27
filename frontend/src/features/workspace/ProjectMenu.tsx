@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '../../components/ui/dropdown-menu';
 import { FormModal } from '../../components/ui/modal-form';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
@@ -15,13 +15,13 @@ interface ProjectMenuProps {
 export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) => {
   const { renameProject, closeProject, deleteProject } = useProjectStore();
   const navigate = useNavigate();
+  const { projectId: routeProjectId } = useParams();
   
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const navigateToCurrentProject = () => {
-    const nextActive = useProjectStore.getState().activeProjectId;
-    navigate(nextActive ? projectRoute(nextActive) : homeRoute);
+  const navigateToProject = (nextActive: string | null) => {
+    navigate(nextActive ? projectRoute(nextActive) : homeRoute, { replace: true });
   };
 
   return (
@@ -36,8 +36,9 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => {
             const wasActive = useProjectStore.getState().activeProjectId === project.id;
-            closeProject(project.id);
-            if (wasActive) navigateToCurrentProject();
+            const wasRouteProject = routeProjectId === project.id;
+            const nextActive = closeProject(project.id);
+            if (wasActive || wasRouteProject) navigateToProject(nextActive);
           }}>
             关闭项目
           </DropdownMenuItem>
@@ -86,7 +87,7 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
         onConfirm={async () => {
           const wasActive = useProjectStore.getState().activeProjectId === project.id;
           await deleteProject(project.id);
-          if (wasActive) navigateToCurrentProject();
+          if (wasActive) navigateToProject(useProjectStore.getState().activeProjectId);
         }}
       />
     </>

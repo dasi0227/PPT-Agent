@@ -15,7 +15,10 @@ const PublicEventSchemaVersion = 3
 var PublicEventTypes = [...]EventType{
 	EventRunStarted,
 	EventRunProgress,
-	EventRunFinished,
+	EventRunCompleted,
+	EventRunFailed,
+	EventRunError,
+	EventRunCanceled,
 	EventPlanUpdated,
 	EventPlanApprovalRequested,
 	EventPlanApprovalAnswered,
@@ -86,12 +89,29 @@ type RunProgressPayload struct {
 	Progress *ProgressValue `json:"progress,omitempty"`
 }
 
-type RunFinishedPayload struct {
+type RunTerminalPayload struct {
 	PublicEventBase
-	Status          string         `json:"status"`
-	AffectedTargets []PublicTarget `json:"affected_targets,omitempty"`
-	Error           *PublicError   `json:"error,omitempty"`
 	DurationMS      int64          `json:"duration_ms"`
+	AffectedTargets []PublicTarget `json:"affected_targets"`
+	Error           *PublicError   `json:"error"`
+	TraceID         string         `json:"trace_id"`
+}
+
+func NewRunTerminalPayload(runID string, durationMS int64, affectedTargets []PublicTarget, publicError *PublicError) RunTerminalPayload {
+	return NewRunTerminalPayloadFromBase(NewPublicEventBase(runID), durationMS, affectedTargets, publicError)
+}
+
+func NewRunTerminalPayloadFromBase(base PublicEventBase, durationMS int64, affectedTargets []PublicTarget, publicError *PublicError) RunTerminalPayload {
+	if affectedTargets == nil {
+		affectedTargets = []PublicTarget{}
+	}
+	return RunTerminalPayload{
+		PublicEventBase: base,
+		DurationMS:      durationMS,
+		AffectedTargets: affectedTargets,
+		Error:           publicError,
+		TraceID:         base.RunID,
+	}
 }
 
 type PublicPlanStep struct {
@@ -299,15 +319,21 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := validateOptionalTarget(data["target"]); err != nil {
 			return err
 		}
-	case EventRunFinished:
-		if !oneOf(stringValue(data["status"]), "completed", "failed", "canceled") {
-			return errors.New("invalid run status")
-		}
-		if stringValue(data["status"]) == "failed" && data["error"] == nil {
-			return errors.New("failed run requires error")
-		}
+	case EventRunCompleted, EventRunFailed, EventRunError, EventRunCanceled:
 		if int64Value(data["duration_ms"]) < 0 || !isInteger(data["duration_ms"]) {
 			return errors.New("duration_ms must be a non-negative integer")
+		}
+		if err := requireString(data, "trace_id"); err != nil {
+			return err
+		}
+		if _, exists := data["affected_targets"]; !exists {
+			return errors.New("affected_targets is required")
+		}
+		if _, exists := data["error"]; !exists {
+			return errors.New("error is required")
+		}
+		if (event == EventRunFailed || event == EventRunError) && data["error"] == nil {
+			return errors.New("failed/error run requires error")
 		}
 		if err := validateOptionalError(data["error"]); err != nil {
 			return err

@@ -10,7 +10,7 @@ Exclude user decision latency from the Agent runtime duration budget and from th
 - The active clock runs while the Runtime is reasoning, calling tools, processing an answer, checkpointing active work, or completing a transition.
 - The active clock pauses immediately before Runtime blocks for HITL input and resumes immediately after a valid input signal returns.
 - Cancellation or failure while blocked reports the already accumulated active duration and does not charge the blocked interval.
-- `RuntimeBudget.MaxDuration` and public `run.finished.duration_ms` use the same active clock.
+- `RuntimeBudget.MaxDuration` and public terminal-event `duration_ms` use the same active clock.
 - Checkpoints persist `active_duration_ms` and `waiting_duration_ms`; recovery resumes both accumulated clocks instead of resetting duration accounting.
 - Engine fallback terminal events use the Runtime outcome duration when it is available. Scheduler-only failures before Runtime starts keep their existing wall-clock duration.
 - Trace data records active, wall, and inferred waiting durations for diagnosis. The public event contract remains unchanged.
@@ -22,7 +22,7 @@ Exclude user decision latency from the Agent runtime duration budget and from th
 3. On a user answer, Runtime resumes the clock before validating and processing the answer.
 4. Budget checks read the active clock.
 5. Checkpoints snapshot the active duration.
-6. Terminal outcomes and `run.finished` events expose the active duration.
+6. Terminal outcomes and public terminal events expose the active duration.
 
 ## Non-goals
 

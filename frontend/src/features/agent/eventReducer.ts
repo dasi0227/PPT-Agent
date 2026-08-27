@@ -93,10 +93,12 @@ export interface PlanApprovalItem extends BaseTimelineItem {
 
 export interface TerminalNoticeItem extends BaseTimelineItem {
   type: 'terminal_notice';
-  status: 'failed' | 'canceled';
-  error?: PublicError;
+  status: 'failed' | 'canceled' | 'error';
+  error?: PublicError | null;
   message: string;
+  affectedTargets: PublicTarget[];
   durationMs?: number;
+  traceId?: string | null;
   technicalMessage?: string;
   requestId?: string;
   retryable?: boolean;
@@ -312,22 +314,38 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       });
     }
 
-    case 'run.finished': {
-      if (event.data.status === 'completed') {
-        return state.map((item) =>
-          item.type === 'final' && item.runId === runId
-            ? { ...item, durationMs: event.data.duration_ms }
-            : item);
-      }
+    case 'run.completed': {
+      return state.map((item) =>
+        item.type === 'final' && item.runId === runId
+          ? {
+              ...item,
+              affectedTargets: event.data.affected_targets.length > 0 ? event.data.affected_targets : item.affectedTargets,
+              durationMs: event.data.duration_ms,
+            }
+          : item);
+    }
+
+    case 'run.failed':
+    case 'run.error':
+    case 'run.canceled': {
       const error = event.data.error;
+      const status = event.event === 'run.canceled'
+        ? 'canceled'
+        : event.event === 'run.error'
+          ? 'error'
+          : 'failed';
       const item: TerminalNoticeItem = {
         id: `${runId}:terminal`,
         type: 'terminal_notice',
         runId,
-        status: event.data.status,
+        status,
         error,
-        message: event.data.status === 'canceled'
+        affectedTargets: event.data.affected_targets,
+        traceId: event.data.trace_id,
+        message: status === 'canceled'
           ? '运行已取消'
+          : status === 'error'
+            ? (error?.message ?? '系统运行异常，请稍后重试。')
           : (error?.message ?? '运行未能完成，请稍后重试。'),
         durationMs: event.data.duration_ms,
         timestamp,

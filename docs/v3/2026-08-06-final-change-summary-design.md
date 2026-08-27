@@ -18,7 +18,7 @@
 
 行数统计由后端在写入工具成功时基于 before/after 内容计算，不依赖 Git 仓库。算法目标是 Git stat 风格的新增/删除行数，不需要输出完整 diff。
 
-`RunSession` 已保存首次写入前的 `BeforeContent`，写入工具也持有本次 `raw` 内容，因此可在 `mutationResult` 阶段计算当前工具变更的行数。`run.finished.affected_targets` 也沿用同一 stat 字段，供最终回复聚合展示。
+`RunSession` 已保存首次写入前的 `BeforeContent`，写入工具也持有本次 `raw` 内容，因此可在 `mutationResult` 阶段计算当前工具变更的行数。`run.completed` / `run.failed` / `run.error` / `run.canceled` 的 `affected_targets` 也沿用同一 stat 字段，供最终回复或终态提示聚合展示。
 
 ## 前端交互
 

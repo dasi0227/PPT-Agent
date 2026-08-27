@@ -205,11 +205,11 @@ func runtimeBudgetWithDuration(duration time.Duration) RuntimeBudget {
 func finishedDuration(t *testing.T, recorder *eventRecorder) int64 {
 	t.Helper()
 	for _, event := range recorder.events {
-		if event.kind == model.EventRunFinished {
-			return event.payload.(model.RunFinishedPayload).DurationMS
+		if event.kind.Terminal() {
+			return event.payload.(model.RunTerminalPayload).DurationMS
 		}
 	}
-	t.Fatal("run.finished was not emitted")
+	t.Fatal("terminal run event was not emitted")
 	return 0
 }
 
@@ -370,7 +370,7 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	if messages[1].Role != llm.RoleUser || messages[1].Text() != noToolCallGuidance(model.ModeTalk) {
 		t.Fatalf("explicit finish guidance missing: %+v", messages[1])
 	}
-	if events.count(model.EventMessageFinal) != 1 || events.count(model.EventRunFinished) != 1 {
+	if events.count(model.EventMessageFinal) != 1 || events.count(model.EventRunCompleted) != 1 {
 		t.Fatalf("terminal events=%+v", events.events)
 	}
 	final := ""
@@ -1545,16 +1545,16 @@ func TestProviderErrorAfterContextCancellationFinishesCanceled(t *testing.T) {
 		t.Fatalf("outcome=%+v", outcome)
 	}
 	for _, event := range events.events {
-		if event.kind != model.EventRunFinished {
+		if event.kind != model.EventRunCanceled {
 			continue
 		}
-		finished := event.payload.(model.RunFinishedPayload)
-		if finished.Status != "canceled" || finished.Error != nil {
+		finished := event.payload.(model.RunTerminalPayload)
+		if finished.Error != nil {
 			t.Fatalf("canceled projection=%+v", finished)
 		}
 		return
 	}
-	t.Fatal("canceled run.finished was not emitted")
+	t.Fatal("run.canceled was not emitted")
 }
 
 func TestProviderUnavailableUsesAuthoritativeTransientProjection(t *testing.T) {
@@ -1569,15 +1569,15 @@ func TestProviderUnavailableUsesAuthoritativeTransientProjection(t *testing.T) {
 	if outcome.Status != StatusFailed || outcome.Code != "PROVIDER_UNAVAILABLE" {
 		t.Fatalf("outcome=%+v", outcome)
 	}
-	var finished model.RunFinishedPayload
+	var finished model.RunTerminalPayload
 	for _, event := range events.events {
-		if event.kind == model.EventRunFinished {
-			finished = event.payload.(model.RunFinishedPayload)
+		if event.kind == model.EventRunFailed {
+			finished = event.payload.(model.RunTerminalPayload)
 		}
 	}
 	if finished.Error == nil || finished.Error.Code != "PROVIDER_UNAVAILABLE" || !finished.Error.Retryable ||
 		finished.Error.Message != model.ErrorDefinitionFor("PROVIDER_UNAVAILABLE").SafeMessage {
-		t.Fatalf("run.finished projection=%+v", finished)
+		t.Fatalf("run.failed projection=%+v", finished)
 	}
 	publicRaw, err := json.Marshal(finished)
 	if err != nil {
@@ -1619,10 +1619,8 @@ func TestCancellationPairsEveryStartedToolBeforeCanceledTerminal(t *testing.T) {
 			}
 		case model.EventMessageFinal:
 			t.Fatal("canceled run emitted a successful message.final")
-		case model.EventRunFinished:
-			if event.payload.(model.RunFinishedPayload).Status == "canceled" {
-				terminalIndex = index
-			}
+		case model.EventRunCanceled:
+			terminalIndex = index
 		}
 	}
 	if startedIndex < 0 || completedIndex <= startedIndex || terminalIndex <= completedIndex {
@@ -1667,7 +1665,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 		events.count(model.EventToolStarted) != 1 ||
 		events.count(model.EventToolCompleted) != 1 ||
 		events.count(model.EventMessageFinal) != 1 ||
-		events.count(model.EventRunFinished) != 1 {
+		events.count(model.EventRunCompleted) != 1 {
 		t.Fatalf("public events=%+v", events.events)
 	}
 	raw, _ := json.Marshal(events.events)
@@ -1694,7 +1692,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 		if event.kind == model.EventMessageFinal {
 			finalIndex = index
 		}
-		if event.kind == model.EventRunFinished {
+		if event.kind == model.EventRunCompleted {
 			finishedIndex = index
 		}
 	}

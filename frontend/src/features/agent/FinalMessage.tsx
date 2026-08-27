@@ -47,7 +47,7 @@ function uniqueTargets(targets: PublicTarget[]): PublicTarget[] {
   return out;
 }
 
-function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
+export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
   const [expanded, setExpanded] = React.useState(false);
   const snapshot = useProjectStore((state) => state.activeProjectId ? state.contentByProjectId[state.activeProjectId] : undefined);
   const slides = orderedSlides(snapshot);

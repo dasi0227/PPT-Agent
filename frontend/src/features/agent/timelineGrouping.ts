@@ -7,7 +7,7 @@ export type DisplayEntry =
       kind: 'run_summary';
       id: string;
       runId: string;
-      status: 'completed' | 'failed' | 'canceled';
+      status: 'completed' | 'failed' | 'error' | 'canceled';
       terminalItem: FinalMessageItem | TerminalNoticeItem;
       processEntries: DisplayEntry[];
     };
@@ -48,7 +48,7 @@ function groupToolItems(items: TimelineItem[]): DisplayEntry[] {
   return result;
 }
 
-function terminalStatus(item: TimelineItem): 'completed' | 'failed' | 'canceled' | null {
+function terminalStatus(item: TimelineItem): 'completed' | 'failed' | 'error' | 'canceled' | null {
   if (item.type === 'final') return 'completed';
   if (item.type === 'terminal_notice') return item.status;
   return null;

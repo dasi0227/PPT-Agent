@@ -7,6 +7,8 @@ import {
   CreateRunRequest,
   PlanState,
   PublicTarget,
+  QuestionAnswer,
+  QuestionFieldAnswer,
   Run,
   RunMode,
   RunProgressStage,
@@ -137,6 +139,36 @@ function localizedErrorMessage(message: string, fallback: string): string {
   return /[\u3400-\u9fff]/u.test(message) ? message : fallback;
 }
 
+function parseQuestionAnswer(content: string): QuestionAnswer | null {
+  try {
+    const parsed = JSON.parse(content) as Partial<QuestionAnswer>;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const answers = Array.isArray(parsed.answers)
+      ? parsed.answers
+          .map((answer): QuestionFieldAnswer | null => {
+            if (!answer || typeof answer !== 'object') return null;
+            const candidate = answer as Partial<QuestionFieldAnswer>;
+            if (typeof candidate.question_id !== 'string') return null;
+            return {
+              question_id: candidate.question_id,
+              ...(typeof candidate.selected_option_id === 'string' ? { selected_option_id: candidate.selected_option_id } : {}),
+              ...(typeof candidate.custom_text === 'string' ? { custom_text: candidate.custom_text } : {}),
+            };
+          })
+          .filter((answer): answer is QuestionFieldAnswer => Boolean(answer))
+      : undefined;
+    return {
+      selected_option_ids: Array.isArray(parsed.selected_option_ids)
+        ? parsed.selected_option_ids.filter((id): id is string => typeof id === 'string')
+        : [],
+      custom_text: typeof parsed.custom_text === 'string' ? parsed.custom_text : '',
+      ...(answers && answers.length > 0 ? { answers } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function terminalStatus(status: Run['status']): RunStatus {
   if (status === 'done') return 'done';
   if (status === 'failed') return 'error';
@@ -190,6 +222,14 @@ interface RunStoreV2 {
     session?: HistorySessionState,
     lastEventId?: string,
   ) => void;
+}
+
+function continuingProgress(): NonNullable<RunSession['progress']> {
+  return { stage: 'thinking', text: '工具调用完成，推进任务中' };
+}
+
+function hasRunningTool(items: TimelineItem[], runId: string): boolean {
+  return items.some((item) => item.type === 'tool' && item.runId === runId && item.status === 'running');
 }
 
 export const useRunStore = create<RunStoreV2>((set, get) => {
@@ -280,7 +320,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
   const refreshTarget = (session: RunSession, event: SSEEvent) => {
     if (!session.projectId) return;
     const structuredMutation = event.event === 'tool.completed' && event.data.tool === 'mutate_ppt' && event.data.status === 'completed';
-    const terminal = event.event === 'run.finished';
+    const terminal = event.event === 'run.completed' || event.event === 'run.failed' || event.event === 'run.error' || event.event === 'run.canceled';
     if (structuredMutation || terminal) void useProjectStore.getState().loadProjectContent(session.projectId);
   };
 
@@ -343,6 +383,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             type: 'terminal_notice',
             status: 'failed',
             message: `${localizedErrorMessage(detail.message, '运行创建失败')}。请检查后重试，输入内容已保留。`,
+            affectedTargets: [],
             technicalMessage: detail.message,
             code: detail.code,
             requestId: detail.requestId,
@@ -376,6 +417,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           const current = get().sessions[threadId] ?? freshSession();
           if (event.id && current.processedEventIds?.includes(event.id)) return;
           updateSession(threadId, (prev) => {
+            const nextTimelineItems = reduceSSEEvent(prev.timelineItems, event);
             let status = prev.status === 'creating' ? 'running' : prev.status;
             let pendingQuestion = prev.pendingQuestion;
             let progress = prev.progress;
@@ -396,12 +438,14 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               if (prev.status !== 'canceling') {
                 if (event.data.decision === 'cancel') {
                   status = 'canceling';
-                  progress = { stage: 'thinking', text: '正在停止任务' };
+                  progress = { stage: 'thinking', text: '取消任务中' };
                 } else {
                   status = 'running';
                   progress = {
                     stage: 'thinking',
-                    text: event.data.decision === 'approve' ? '正在启动执行' : '正在调整计划',
+                    text: event.data.decision === 'approve'
+                      ? '已收到计划，推进任务中'
+                      : '已收到建议，推进任务中',
                   };
                 }
               }
@@ -414,18 +458,27 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
                 total: event.data.progress?.total,
                 unit: event.data.progress?.unit,
               };
-            } else if (event.event === 'run.finished') {
-              status = event.data.status === 'completed'
-                ? 'done'
-                : event.data.status === 'canceled'
-                  ? 'canceled'
-                  : 'error';
+            } else if (event.event === 'tool.completed') {
+              if (prev.status !== 'canceling' && !hasRunningTool(nextTimelineItems, event.data.run_id)) {
+                status = 'running';
+                progress = continuingProgress();
+              }
+            } else if (event.event === 'run.completed') {
+              status = 'done';
+              pendingQuestion = null;
+              progress = null;
+            } else if (event.event === 'run.canceled') {
+              status = 'canceled';
+              pendingQuestion = null;
+              progress = null;
+            } else if (event.event === 'run.failed' || event.event === 'run.error') {
+              status = 'error';
               pendingQuestion = null;
               progress = null;
             }
 
             return {
-              timelineItems: reduceSSEEvent(prev.timelineItems, event),
+              timelineItems: nextTimelineItems,
               plan: nextPlan,
               status,
               pendingQuestion,
@@ -447,7 +500,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               canceling: updated.status === 'canceling',
             });
           }
-          if (event.event === 'run.finished') {
+          if (event.event === 'run.completed' || event.event === 'run.failed' || event.event === 'run.error' || event.event === 'run.canceled') {
             stopCancelReconciliation(threadId, runId);
             updated.eventSourceClose?.();
             removePersistedRun(threadId);
@@ -518,6 +571,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               type: 'terminal_notice',
               status: 'failed',
               message: '未找到刷新前的运行记录，已清理。你可以重新发送指令。',
+              affectedTargets: [],
               timestamp: Date.now(),
             }],
           }));
@@ -528,6 +582,28 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     answerQuestion: async (threadId, runId, replyTo, content) => {
       try {
         await runsApi.submitInput(runId, { reply_to: replyTo, content });
+        const optimisticAnswer = parseQuestionAnswer(content);
+        updateSession(threadId, (prev) => {
+          if (prev.activeRunId !== runId) return {};
+          const timelineItems = optimisticAnswer
+            ? prev.timelineItems.map((item) =>
+                item.type === 'question' && item.questionId === replyTo && !item.answer
+                  ? { ...item, answer: optimisticAnswer }
+                  : item)
+            : prev.timelineItems;
+          if (prev.status === 'canceling') {
+            return {
+              pendingQuestion: prev.pendingQuestion?.id === replyTo ? null : prev.pendingQuestion,
+              timelineItems,
+            };
+          }
+          return {
+            status: 'running',
+            pendingQuestion: null,
+            progress: { stage: 'thinking', text: '已收到回答，推进任务中' },
+            timelineItems,
+          };
+        });
         return true;
       } catch (error) {
         const detail = errorMessage(error);
@@ -538,6 +614,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             type: 'terminal_notice',
             status: 'failed',
             message: `${localizedErrorMessage(detail.message, '回答提交失败')}。回答尚未提交，请重试。`,
+            affectedTargets: [],
             technicalMessage: detail.message,
             code: detail.code,
             requestId: detail.requestId,
@@ -577,6 +654,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             type: 'terminal_notice',
             status: 'failed',
             message: `${localizedErrorMessage(detail.message, '停止运行失败')}。运行仍在继续，请再次停止。`,
+            affectedTargets: [],
             technicalMessage: detail.message,
             code: detail.code,
             requestId: detail.requestId,

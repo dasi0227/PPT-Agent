@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, CheckCircle2, ChevronRight, StopCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowDown, CheckCircle2, ChevronRight, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
 import { targetLabel } from './runtimeLabels';
 import { useActiveSession } from './useActiveSession';
@@ -31,14 +31,25 @@ const runSummaryLabel = {
   completed: '执行完成',
   canceled: '执行取消',
   failed: '执行错误',
+  error: '系统异常',
 } as const;
 
-function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'canceled' }) {
+function fallbackProgress(status: ReturnType<typeof useActiveSession>['status']) {
+  if (status === 'creating') return { stage: 'thinking' as const, text: '分析请求中' };
+  if (status === 'running') return { stage: 'thinking' as const, text: '分析任务需求中' };
+  if (status === 'canceling') return { stage: 'thinking' as const, text: '取消任务中' };
+  return null;
+}
+
+function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 'canceled' }) {
   if (status === 'completed') {
     return <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />;
   }
   if (status === 'canceled') {
     return <StopCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
+  }
+  if (status === 'error') {
+    return <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={1.75} />;
   }
   return <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
 }
@@ -57,6 +68,7 @@ export const Timeline: React.FC = () => {
     () => groupTimelineItems(timelineItems, currentSlideId ?? undefined),
     [currentSlideId, timelineItems],
   );
+  const displayedProgress = progress ?? fallbackProgress(status);
   const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle';
 
   const scrollToLatest = useCallback((smooth: boolean) => {
@@ -157,11 +169,8 @@ export const Timeline: React.FC = () => {
         ) : (
           <>
             {displayEntries.map(renderEntry)}
-            {status !== 'waiting' && (progress || status === 'creating') && (
-              <LiveProgressRow progress={progress ?? {
-                stage: 'thinking',
-                text: '正在启动 Agent',
-              }} />
+            {status !== 'waiting' && displayedProgress && (
+              <LiveProgressRow progress={displayedProgress} />
             )}
           </>
         )}

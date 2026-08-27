@@ -16,3 +16,10 @@ Mode-specific expectations:
 - execute: summarize what changed, what was checked, and any remaining user-visible risk.
 
 Runtime may reject finish if assistant text appears to contain the real final delivery while finish.message is incomplete.
+
+Runtime terminal mapping:
+- A valid finish(message) is not itself the public terminal event. Runtime still performs completion review and commit checks.
+- When completion review and commit checks pass, Runtime emits run.completed with the final changed targets.
+- If Runtime rules reject completion after the repair budget is exhausted, the backend emits run.failed.
+- If engineering runtime state becomes unsafe or unavailable, the backend emits run.error. Do not attempt to explain or mask engineering failures in finish(message).
+- If the task is canceled, the backend emits run.canceled.
