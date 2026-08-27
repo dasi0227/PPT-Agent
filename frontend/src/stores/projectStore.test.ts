@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectContentSnapshot } from '../api/types';
 
-const { dropProject, getContent, list, mutate } = vi.hoisted(() => ({
+const { closeProjectThreads, dropProject, getContent, list, mutate } = vi.hoisted(() => ({
+  closeProjectThreads: vi.fn(),
   dropProject: vi.fn(),
   getContent: vi.fn(),
   list: vi.fn(),
   mutate: vi.fn(),
 }));
 vi.mock('../api/projects', () => ({ projectsApi: { getContent, list, mutate } }));
-vi.mock('./threadStore', () => ({ useThreadStore: { getState: () => ({ loadThreads: vi.fn(), dropProject }) } }));
+vi.mock('./threadStore', () => ({ useThreadStore: { getState: () => ({ closeProjectThreads, loadThreads: vi.fn(), dropProject }) } }));
 
 import { useProjectStore } from './projectStore';
 
@@ -23,7 +24,7 @@ function snapshot(revision: number): ProjectContentSnapshot {
 
 describe('projectStore canonical content snapshots', () => {
   beforeEach(() => {
-    dropProject.mockReset(); getContent.mockReset(); list.mockReset(); mutate.mockReset();
+    closeProjectThreads.mockReset(); dropProject.mockReset(); getContent.mockReset(); list.mockReset(); mutate.mockReset();
     useProjectStore.setState({
       projects: [],
       openProjectIds: [],
@@ -51,7 +52,7 @@ describe('projectStore canonical content snapshots', () => {
     expect(useProjectStore.getState().mutationPendingByProjectId.pro_1).toBe(false);
   });
 
-  it('closes project-local threads, run sessions, and cached content', () => {
+  it('closes a project tab without dropping project-local threads or cached content', () => {
     useProjectStore.setState({
       openProjectIds: ['pro_1', 'pro_2'],
       activeProjectId: 'pro_1',
@@ -63,15 +64,16 @@ describe('projectStore canonical content snapshots', () => {
 
     const nextActiveProjectId = useProjectStore.getState().closeProject('pro_1');
 
-    expect(dropProject).toHaveBeenCalledWith('pro_1');
+    expect(closeProjectThreads).toHaveBeenCalledWith('pro_1');
+    expect(dropProject).not.toHaveBeenCalled();
     expect(nextActiveProjectId).toBe('pro_2');
     expect(useProjectStore.getState()).toMatchObject({
       openProjectIds: ['pro_2'],
       activeProjectId: 'pro_2',
-      contentByProjectId: { pro_2: snapshot(2) },
-      contentLoadingByProjectId: { pro_2: false },
-      contentErrorByProjectId: { pro_2: undefined },
-      mutationPendingByProjectId: { pro_2: false },
+      contentByProjectId: { pro_1: snapshot(1), pro_2: snapshot(2) },
+      contentLoadingByProjectId: { pro_1: true, pro_2: false },
+      contentErrorByProjectId: { pro_1: '旧错误', pro_2: undefined },
+      mutationPendingByProjectId: { pro_1: true, pro_2: false },
     });
   });
 
@@ -85,10 +87,12 @@ describe('projectStore canonical content snapshots', () => {
     const nextActiveProjectId = useProjectStore.getState().closeProject('pro_1');
 
     expect(nextActiveProjectId).toBeNull();
+    expect(closeProjectThreads).toHaveBeenCalledWith('pro_1');
+    expect(dropProject).not.toHaveBeenCalled();
     expect(useProjectStore.getState()).toMatchObject({
       openProjectIds: [],
       activeProjectId: null,
-      contentByProjectId: {},
+      contentByProjectId: { pro_1: snapshot(1) },
     });
   });
 

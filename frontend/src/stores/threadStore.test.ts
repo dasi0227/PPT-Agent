@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const calls: Array<{ fn: string; args: any[] }> = [];
+const { listThreads } = vi.hoisted(() => ({ listThreads: vi.fn() }));
 
 vi.mock('../api/threads', () => ({
   threadsApi: {
-    list: async (projectId: string) => { calls.push({ fn: 'list', args: [projectId] }); return []; },
+    list: async (projectId: string) => { calls.push({ fn: 'list', args: [projectId] }); return listThreads(projectId); },
     create: async (projectId: string, title?: string) => {
       calls.push({ fn: 'create', args: [projectId, title] });
       const n = calls.filter((c) => c.fn === 'create').length;
@@ -21,6 +22,8 @@ import { useRunStore } from './runStore';
 
 function reset() {
   calls.length = 0;
+  listThreads.mockReset();
+  listThreads.mockResolvedValue([]);
   useThreadStore.setState({ threadsByProjectId: {}, openThreadIdsByProjectId: {}, activeThreadIdByProjectId: {} });
   useRunStore.setState({ sessions: {} });
 }
@@ -54,6 +57,19 @@ describe('threadStore v6', () => {
     const id = await useThreadStore.getState().ensureActiveThread('p1');
     expect(id).toBe('t2');
     expect(useThreadStore.getState().activeThreadIdByProjectId['p1']).toBe('t2');
+  });
+
+  it('loadThreads opens every existing historical thread for a project', async () => {
+    listThreads.mockResolvedValue([
+      { id: 't1', project_id: 'p1', title: 'T1', history_path: '', status: 'active', created_at: 0, updated_at: 0 },
+      { id: 't2', project_id: 'p1', title: 'T2', history_path: '', status: 'active', created_at: 0, updated_at: 0 },
+    ]);
+
+    await useThreadStore.getState().loadThreads('p1');
+
+    expect(useThreadStore.getState().threadsByProjectId['p1'].map((thread) => thread.id)).toEqual(['t1', 't2']);
+    expect(useThreadStore.getState().openThreadIdsByProjectId['p1']).toEqual(['t1', 't2']);
+    expect(useThreadStore.getState().activeThreadIdByProjectId['p1']).toBe('t1');
   });
 
   it('ensureActiveThread creates new if none exists', async () => {
@@ -94,5 +110,46 @@ describe('threadStore v6', () => {
     expect(st.activeThreadIdByProjectId['p1']).toBe('t1');
     expect(st.threadsByProjectId['p1']).toHaveLength(1);
     expect(useRunStore.getState().sessions['t2']).toBeUndefined();
+  });
+
+  it('closing project threads keeps project thread records and run session history', () => {
+    const close = vi.fn();
+    useThreadStore.setState({
+      threadsByProjectId: {
+        p1: [
+          { id: 't1', project_id: 'p1', title: '', history_path: '', status: '', created_at: 0, updated_at: 0 },
+          { id: 't2', project_id: 'p1', title: '', history_path: '', status: '', created_at: 0, updated_at: 0 },
+        ],
+      },
+      openThreadIdsByProjectId: { p1: ['t1', 't2'] },
+      activeThreadIdByProjectId: { p1: 't2' },
+    });
+    useRunStore.setState({
+      sessions: {
+        t2: {
+          activeRunId: 'run_1',
+          status: 'running',
+          scope: { artifact: 'ppt', level: 'slide' },
+          mode: 'execute',
+          timelineItems: [{ id: 'u1', type: 'user_turn', runId: 'run_1', text: '继续', timestamp: 1 }],
+          pendingQuestion: null,
+          progress: null,
+          eventSourceClose: close,
+          plan: null,
+        },
+      },
+    });
+
+    useThreadStore.getState().closeProjectThreads('p1');
+
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(useThreadStore.getState().threadsByProjectId['p1']).toHaveLength(2);
+    expect(useThreadStore.getState().openThreadIdsByProjectId['p1']).toEqual(['t1', 't2']);
+    expect(useThreadStore.getState().activeThreadIdByProjectId['p1']).toBe('t2');
+    expect(useRunStore.getState().sessions['t2']).toMatchObject({
+      activeRunId: 'run_1',
+      streamStatus: 'closed',
+      timelineItems: [{ id: 'u1', type: 'user_turn', text: '继续' }],
+    });
   });
 });

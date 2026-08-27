@@ -19,6 +19,7 @@ interface ThreadState {
   ensureActiveThread: (projectId: string) => Promise<string>;
   getActiveThreadId: (projectId: string) => string | null;
   displayThreads: (projectId: string) => Thread[];
+  closeProjectThreads: (projectId: string) => void;
   rekeyProject: (oldProjectId: string, newProjectId: string) => void;
   dropProject: (projectId: string) => void;
 }
@@ -44,7 +45,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         const nextOpen = { ...state.openThreadIdsByProjectId };
         const nextActive = { ...state.activeThreadIdByProjectId };
         if ((!alreadyOpen || alreadyOpen.length === 0) && threads.length > 0) {
-          nextOpen[projectId] = [threads[0].id];
+          nextOpen[projectId] = threads.map((thread) => thread.id);
           if (!nextActive[projectId]) nextActive[projectId] = threads[0].id;
         }
         return {
@@ -166,6 +167,14 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   },
 
   getActiveThreadId: (projectId) => get().activeThreadIdByProjectId[projectId] ?? null,
+
+  closeProjectThreads: (projectId) => {
+    const ids = new Set<string>([
+      ...(get().openThreadIdsByProjectId[projectId] || []),
+      ...(get().threadsByProjectId[projectId] || []).map((t) => t.id),
+    ]);
+    useRunStore.getState().closeSessions([...ids]);
+  },
 
   rekeyProject: (oldProjectId, newProjectId) => {
     if (oldProjectId === newProjectId) return;
