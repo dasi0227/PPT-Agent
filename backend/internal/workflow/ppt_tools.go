@@ -238,7 +238,11 @@ func readFailure(err error) ToolResult {
 }
 func writeFailure(err error) ToolResult { return failedToolResult("WRITE_FAILED", err.Error(), true) }
 func objectSchema(required []string, properties map[string]any) map[string]any {
-	return map[string]any{"type": "object", "required": required, "properties": properties, "additionalProperties": false}
+	schema := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
 }
 func stringValue(value any) string { text, _ := value.(string); return text }
 

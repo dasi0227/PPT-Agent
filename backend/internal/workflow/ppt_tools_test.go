@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,6 +52,87 @@ func TestMutatePPTExposesClosedScopedOperations(t *testing.T) {
 		props := raw.(map[string]any)["properties"].(map[string]any)
 		if props["slide_id"].(map[string]any)["const"] != "sli_aaaaaa" {
 			t.Fatal("slide scope was not bound")
+		}
+	}
+}
+
+func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	nonEmpty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Label: "Cover", Role: "cover"}}}}, CreatedAt: 1, UpdatedAt: 1}
+	plan := &Plan{ID: "plan_1", Revision: 1, Status: PlanActive}
+
+	for _, outline := range []spec.Outline{empty, nonEmpty} {
+		pack := mutationPack("pro_aaaaaa", outline)
+		registry := NewToolRegistry()
+		if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
+			t.Fatal(err)
+		}
+		cases := []struct {
+			name    string
+			phase   RunPhase
+			mode    model.RunMode
+			scope   model.RunScope
+			control []ToolSchema
+		}{
+			{
+				name:    "plan deck",
+				phase:   PhasePlanning,
+				mode:    model.ModePlan,
+				scope:   model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+				control: controlSchemas(PhasePlanning, model.ModePlan, nil),
+			},
+			{
+				name:    "execute deck",
+				phase:   PhaseExecuting,
+				mode:    model.ModeExecute,
+				scope:   model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+				control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
+			},
+			{
+				name:    "execute slide",
+				phase:   PhaseExecuting,
+				mode:    model.ModeExecute,
+				scope:   model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "sli_aaaaaa"},
+				control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
+			},
+		}
+		for _, test := range cases {
+			t.Run(test.name, func(t *testing.T) {
+				schemas := append(registry.Disclose(test.phase, test.mode, test.scope), test.control...)
+				for _, schema := range schemas {
+					var wire any
+					raw, err := json.Marshal(schema.Parameters)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := json.Unmarshal(raw, &wire); err != nil {
+						t.Fatal(err)
+					}
+					assertNoNullRequired(t, schema.Name, wire)
+				}
+			})
+		}
+	}
+}
+
+func assertNoNullRequired(t *testing.T, path string, value any) {
+	t.Helper()
+	switch typed := value.(type) {
+	case map[string]any:
+		if required, exists := typed["required"]; exists {
+			if required == nil {
+				t.Fatalf("%s.required encoded as null", path)
+			}
+			if _, ok := required.([]any); !ok {
+				t.Fatalf("%s.required encoded as %T, want array", path, required)
+			}
+		}
+		for key, child := range typed {
+			assertNoNullRequired(t, path+"."+key, child)
+		}
+	case []any:
+		for index, child := range typed {
+			assertNoNullRequired(t, fmt.Sprintf("%s[%d]", path, index), child)
 		}
 	}
 }
