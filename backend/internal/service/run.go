@@ -110,6 +110,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		RunID: r.runID, ProjectDir: r.project.WorkDir, Context: r.pack,
 		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
 		CommitMetadata: committer.Commit,
+		Logger:         zap.L().Named("ppt-runtime"),
 		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
 		DomainToolsForContext: func(pack contextengine.ContextPack) workflow.DomainToolProvider {
 			return workflow.DefaultDomainToolProvider{Pack: pack, Renderer: r.renderer}

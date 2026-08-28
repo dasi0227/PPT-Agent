@@ -3,6 +3,8 @@ package llm
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -91,13 +94,17 @@ func (h adapterHTTP) doJSON(
 			}
 			return nil
 		}
-		drainClose(resp.Body)
+		rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		_ = resp.Body.Close()
+		if readErr != nil {
+			rawBody = nil
+		}
 		if resp.StatusCode == http.StatusRequestTimeout ||
 			resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			lastErr = fmt.Errorf("%w: provider status %d", ErrUnavailable, resp.StatusCode)
+			lastErr = providerHTTPError(resp, rawBody, ErrUnavailable)
 			continue
 		}
-		return fmt.Errorf("%w: provider status %d", ErrBadRequest, resp.StatusCode)
+		return providerHTTPError(resp, rawBody, ErrBadRequest)
 	}
 	if lastErr == nil {
 		lastErr = ErrUnavailable
@@ -136,9 +143,83 @@ func providerBackoff(attempt int) time.Duration {
 	return time.Duration(attempt*attempt) * 200 * time.Millisecond
 }
 
-func drainClose(rc io.ReadCloser) {
-	_, _ = io.Copy(io.Discard, io.LimitReader(rc, 1<<16))
-	_ = rc.Close()
+func providerHTTPError(resp *http.Response, rawBody []byte, kind error) error {
+	out := &ProviderError{
+		Kind:       kind,
+		StatusCode: resp.StatusCode,
+		RequestID:  providerRequestID(resp.Header),
+		BodyBytes:  len(rawBody),
+	}
+	if len(rawBody) > 0 {
+		sum := sha256.Sum256(rawBody)
+		out.BodySHA256 = hex.EncodeToString(sum[:8])
+	}
+	code, typ, message := parseProviderErrorBody(rawBody)
+	out.Code = sanitizeProviderDiagnostic(code, 96)
+	out.Type = sanitizeProviderDiagnostic(typ, 96)
+	out.Message = sanitizeProviderDiagnostic(message, 512)
+	return out
+}
+
+func providerRequestID(header http.Header) string {
+	for _, key := range []string{
+		"x-request-id",
+		"x-ds-request-id",
+		"x-deepseek-request-id",
+		"request-id",
+		"cf-ray",
+	} {
+		if value := strings.TrimSpace(header.Get(key)); value != "" {
+			return sanitizeProviderDiagnostic(value, 128)
+		}
+	}
+	return ""
+}
+
+func parseProviderErrorBody(raw []byte) (code, typ, message string) {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return "", "", ""
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return "", "", ""
+	}
+	if errorValue, ok := body["error"].(map[string]any); ok {
+		return diagnosticField(errorValue["code"]), diagnosticField(errorValue["type"]), diagnosticField(errorValue["message"])
+	}
+	return diagnosticField(body["code"]), diagnosticField(body["type"]), diagnosticField(body["message"])
+}
+
+func diagnosticField(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case nil:
+		return ""
+	default:
+		return fmt.Sprint(typed)
+	}
+}
+
+var providerSecretPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\bauthorization["']?\s*[:=]\s*["']?(?:bearer\s+)?[^"'\s,;}]+["']?`),
+	regexp.MustCompile(`(?i)\b(?:api[_-]?key|token|secret)["']?\s*[:=]\s*["']?[^"'\s,;}]+["']?`),
+	regexp.MustCompile(`(?i)\bsk-[a-z0-9._-]+\b`),
+}
+
+func sanitizeProviderDiagnostic(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	value = strings.Join(strings.Fields(value), " ")
+	for _, pattern := range providerSecretPatterns {
+		value = pattern.ReplaceAllString(value, "[REDACTED]")
+	}
+	if limit > 0 && len(value) > limit {
+		value = value[:limit] + "...[truncated]"
+	}
+	return value
 }
 
 func validateContinuation(continuation *ProviderContinuation, provider, model string) error {

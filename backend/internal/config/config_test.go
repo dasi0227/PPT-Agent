@@ -66,7 +66,7 @@ func validConfig(secret string) string {
 
 func TestLoadReadsDefaultConfigAndKeepsAppEnvSeparate(t *testing.T) {
 	dir := t.TempDir()
-	clearEnvForTest(t, "LLM_CONFIG_PATH", "WORK_ADDR", "WORK_ROOT", "DEEPSEEK_API_KEY")
+	clearEnvForTest(t, "LLM_CONFIG_PATH", "WORK_ADDR", "WORK_ROOT", "LOG_LEVEL", "DEEPSEEK_API_KEY")
 	chdirForTest(t, dir)
 	writeFile(t, filepath.Join(dir, "config.yaml"), validConfig("sk-test-secret"))
 	writeFile(t, filepath.Join(dir, ".env"), "WORK_ADDR=127.0.0.1:9999\nWORK_ROOT=./runtime-data\nDEEPSEEK_API_KEY=must-not-be-an-llm-source\n")
@@ -77,12 +77,28 @@ func TestLoadReadsDefaultConfigAndKeepsAppEnvSeparate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.WorkAddr != "127.0.0.1:9999" || cfg.WorkRoot != "./runtime-data" ||
-		cfg.DBPath != filepath.Join("./runtime-data", "db", "ppt.db") {
+		cfg.DBPath != filepath.Join("./runtime-data", "db", "ppt.db") || cfg.LogLevel != "debug" {
 		t.Fatal("application environment was not preserved")
 	}
 	if cfg.LLM.Default != "Kimi Vision" || len(cfg.LLM.Profiles) != 2 ||
 		cfg.LLM.Profiles[0].Key != "sk-test-secret" {
 		t.Fatal("profile YAML was not loaded")
+	}
+}
+
+func TestLoadReadsLogLevelFromEnv(t *testing.T) {
+	dir := t.TempDir()
+	clearEnvForTest(t, "LLM_CONFIG_PATH", "LOG_LEVEL")
+	chdirForTest(t, dir)
+	writeFile(t, filepath.Join(dir, "config.yaml"), validConfig("secret"))
+	t.Setenv("LOG_LEVEL", "warn")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LogLevel != "warn" {
+		t.Fatalf("LOG_LEVEL was not loaded: %q", cfg.LogLevel)
 	}
 }
 

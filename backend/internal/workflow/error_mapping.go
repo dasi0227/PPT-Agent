@@ -18,6 +18,8 @@ func classifyProviderError(ctx context.Context, err error) *model.AgentError {
 		return model.NewAgentError(CodeCanceled, "provider_request", cause)
 	case errors.Is(err, llm.ErrUnavailable):
 		return model.NewAgentError("PROVIDER_UNAVAILABLE", "provider_request", err)
+	case errors.Is(err, llm.ErrBadRequest):
+		return model.NewAgentError("PROVIDER_BAD_REQUEST", "provider_request", err)
 	default:
 		return model.NewAgentError(CodeAgentFailed, "provider_request", err)
 	}

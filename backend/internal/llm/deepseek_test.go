@@ -241,17 +241,24 @@ func TestDeepSeekProviderErrorMappingAndCancellation(t *testing.T) {
 	})
 }
 
-func TestAdapterErrorsNeverLeakKey(t *testing.T) {
+func TestAdapterProviderErrorCarriesSanitizedDiagnostic(t *testing.T) {
 	const secret = "sk-never-print-this"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("x-request-id", "req-123")
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"error":{"message":"provider body must stay private"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"bad schema api_key=sk-body-secret Authorization=Bearer hidden","type":"invalid_request_error","code":"invalid_request"}}`))
 	}))
 	defer server.Close()
 	adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: secret, BaseURL: server.URL, Model: "deepseek-chat"})
 	_, err := adapter.Generate(context.Background(), GenerateRequest{})
-	if err == nil || strings.Contains(err.Error(), secret) ||
-		strings.Contains(err.Error(), "provider body") || strings.Contains(err.Error(), server.URL) {
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) || providerErr.StatusCode != http.StatusUnauthorized ||
+		providerErr.Code != "invalid_request" || providerErr.Type != "invalid_request_error" ||
+		!strings.Contains(providerErr.Message, "bad schema") || providerErr.RequestID != "req-123" {
+		t.Fatalf("provider diagnostic missing: %#v err=%v", providerErr, err)
+	}
+	if err == nil || strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "sk-body-secret") ||
+		strings.Contains(err.Error(), "hidden") || strings.Contains(err.Error(), server.URL) {
 		t.Fatalf("unsafe provider error projection: %v", err)
 	}
 }

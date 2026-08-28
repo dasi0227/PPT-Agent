@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
@@ -176,6 +177,7 @@ type RuntimeInput struct {
 	PersistMode           func(context.Context, model.RunMode) error
 	DomainToolsForContext func(contextengine.ContextPack) DomainToolProvider
 	CommitPlanApproval    func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error
+	Logger                *zap.Logger
 }
 
 type Runtime struct {
@@ -393,6 +395,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
 		schemas = append(schemas, controlSchemas(state.phase, state.mode, state.plan)...)
 		state.turns++
+		r.logProviderRequest(input, state, schemas)
 		response, err := r.Agent.Next(ctx, AgentRequest{
 			RunID: state.runID, LoopID: state.loopID, Phase: state.phase,
 			Context: state.pack, Mode: state.mode, Plan: state.plan, Changes: state.changeSet(),
@@ -1283,6 +1286,18 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 		status, publicStatus = StatusCanceled, "canceled"
 	}
 	recordTrace(input.Trace, state.runID, "error.projected", agentErr.TraceProjection())
+	if input.Logger != nil {
+		input.Logger.Error("workflow run failed",
+			zap.String("run_id", state.runID),
+			zap.String("loop_id", state.loopID),
+			zap.String("mode", string(state.mode)),
+			zap.String("phase", string(state.phase)),
+			zap.Int("turn", state.turns),
+			zap.String("code", agentErr.Code),
+			zap.String("operation", agentErr.Operation),
+			zap.Any("error", agentErr.TraceProjection()),
+		)
+	}
 	r.changePhase(input.Emitter, state, PhaseTerminal, agentErr.Code)
 	_ = r.saveCheckpoint(context.Background(), input, state, checkpointTerminal, "")
 	outcome := r.outcome(state, status, agentErr.Code, agentErr.Error())
@@ -1296,6 +1311,47 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 		))
 	}
 	return outcome
+}
+
+func (r *Runtime) logProviderRequest(input RuntimeInput, state *RunState, schemas []ToolSchema) {
+	if input.Logger == nil {
+		return
+	}
+	input.Logger.Debug("workflow provider request",
+		zap.String("run_id", state.runID),
+		zap.String("loop_id", state.loopID),
+		zap.String("mode", string(state.mode)),
+		zap.String("phase", string(state.phase)),
+		zap.Int("turn", state.turns),
+		zap.Int("message_count", len(state.messages)),
+		zap.Int("tool_count", len(schemas)),
+		zap.Strings("tools", toolSchemaNames(schemas)),
+		zap.Bool("has_continuation", state.continuation != nil),
+		zap.Int("plan_revision", planRevision(state.plan)),
+		zap.String("plan_status", planStatus(state.plan)),
+	)
+}
+
+func toolSchemaNames(schemas []ToolSchema) []string {
+	out := make([]string, 0, len(schemas))
+	for _, schema := range schemas {
+		out = append(out, schema.Name)
+	}
+	return out
+}
+
+func planRevision(plan *Plan) int {
+	if plan == nil {
+		return 0
+	}
+	return plan.Revision
+}
+
+func planStatus(plan *Plan) string {
+	if plan == nil {
+		return ""
+	}
+	return string(plan.Status)
 }
 
 func runTerminalEventForError(publicStatus string, agentErr *model.AgentError) model.EventType {
@@ -1317,7 +1373,7 @@ func terminalPublicError(event model.EventType, agentErr *model.AgentError) *mod
 
 func isRuntimeErrorCode(code string) bool {
 	switch code {
-	case "INTERNAL", CodeAgentFailed, CodeCommitFailed, "RUN_FATAL_EXIST", "MODEL_PROVIDER_UNSUPPORTED":
+	case "INTERNAL", CodeAgentFailed, CodeCommitFailed, "RUN_FATAL_EXIST", "MODEL_PROVIDER_UNSUPPORTED", "PROVIDER_BAD_REQUEST":
 		return true
 	default:
 		return false

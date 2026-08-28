@@ -35,6 +35,7 @@ type Config struct {
 	WorkAddr string
 	WorkRoot string
 	DBPath   string
+	LogLevel string
 	LLM      LLMConfig
 }
 
@@ -45,10 +46,12 @@ func Load() (*Config, error) {
 	v := viper.New()
 	v.SetDefault("work_addr", "127.0.0.1:8787")
 	v.SetDefault("work_root", defaultWorkRoot())
+	v.SetDefault("log_level", "debug")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 	_ = v.BindEnv("work_addr", "WORK_ADDR")
 	_ = v.BindEnv("work_root", "WORK_ROOT")
+	_ = v.BindEnv("log_level", "LOG_LEVEL")
 
 	llmConfig, err := loadLLMConfig()
 	if err != nil {
@@ -57,6 +60,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		WorkAddr: v.GetString("work_addr"),
 		WorkRoot: v.GetString("work_root"),
+		LogLevel: v.GetString("log_level"),
 		LLM:      llmConfig,
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
