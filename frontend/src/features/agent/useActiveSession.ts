@@ -3,6 +3,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useRunStore, RunSession, IDLE_SESSION } from '../../stores/runStore';
 import { threadsApi } from '../../api/threads';
+import { runsApi } from '../../api/runs';
 import { hydrateRunFromHistory, HistoryEntry } from './historyHydrator';
 
 // 当前聚焦 project 的活跃 threadId（可能为 null）。
@@ -25,25 +26,29 @@ export function useActiveSession(): RunSession {
     // 空态才 replay：运行时 in-memory 优先，防止刷新覆盖已有 SSE 增量。
     const current = useRunStore.getState().sessions[threadId];
     if (current && (current.activeRunId || current.status !== 'idle' || current.timelineItems.length > 0)) return;
-    threadsApi.history(threadId)
-      .then((entries) => {
-        if (!entries || entries.length === 0) return;
+    Promise.all([
+      threadsApi.history(threadId).catch(() => []),
+      runsApi.activeForThread(threadId).catch(() => null),
+    ])
+      .then(([entries, activeRun]) => {
         const hydrated = hydrateRunFromHistory(entries as unknown as HistoryEntry[]);
         const runStore = useRunStore.getState();
-        runStore.hydrateTimeline(
-          threadId,
-          hydrated.items,
-          hydrated.plan,
-          hydrated.session,
-          hydrated.lastEventId,
-        );
-        if ((hydrated.session.status === 'running' || hydrated.session.status === 'waiting')
-          && hydrated.session.activeRunId) {
-          runStore.subscribeRun(
+        if (entries.length > 0) {
+          runStore.hydrateTimeline(
             threadId,
-            hydrated.session.activeRunId,
+            hydrated.items,
+            hydrated.plan,
+            hydrated.session,
             hydrated.lastEventId,
-            activeProjectId ?? undefined,
+          );
+        }
+        const recoverRunId = activeRun?.id ?? hydrated.session.activeRunId;
+        if (recoverRunId) {
+          void runStore.reconcileRun(
+            threadId,
+            recoverRunId,
+            hydrated.lastEventId,
+            activeRun?.project_id ?? activeProjectId ?? undefined,
           );
         }
       })

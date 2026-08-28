@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -36,7 +38,7 @@ func TestMutatePPTExposesClosedScopedOperations(t *testing.T) {
 		t.Fatalf("ops=%v", ops)
 	}
 	registry := NewToolRegistry()
-	if err := registry.Register(tool, false, "ppt.mutate", RiskMedium, PhaseExecuting); err != nil {
+	if err := registry.Register(tool, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
 	schemas := registry.Disclose(PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeSlide, SlideID: "sli_aaaaaa"})
@@ -53,6 +55,56 @@ func TestMutatePPTExposesClosedScopedOperations(t *testing.T) {
 		if props["slide_id"].(map[string]any)["const"] != "sli_aaaaaa" {
 			t.Fatal("slide scope was not bound")
 		}
+	}
+}
+
+func TestMutationPatchSchemaDisclosesTheRuntimePathPolicy(t *testing.T) {
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	variants := mutationSchema(mutationPack("pro_aaaaaa", empty))["oneOf"].([]any)
+	deck := variants[0].(map[string]any)
+	patch := deck["properties"].(map[string]any)["patch"].(map[string]any)
+	if patch["maxItems"] != 32 {
+		t.Fatalf("patch schema=%v", patch)
+	}
+	items := patch["items"].(map[string]any)["oneOf"].([]any)
+	if len(items) != 3 {
+		t.Fatalf("patch variants=%v", items)
+	}
+	add := items[0].(map[string]any)
+	required := fmt.Sprint(add["required"])
+	if !strings.Contains(required, "value") {
+		t.Fatalf("add.required=%v", add["required"])
+	}
+	path := add["properties"].(map[string]any)["path"].(map[string]any)
+	raw, _ := json.Marshal(path)
+	if !strings.Contains(string(raw), "requirements") {
+		t.Fatalf("deck path policy missing from schema: %s", raw)
+	}
+	remove := items[1].(map[string]any)
+	if _, exists := remove["properties"].(map[string]any)["value"]; exists {
+		t.Fatal("remove schema disclosed value")
+	}
+}
+
+func TestSpecDeckScopeNeverDisclosesOrExecutesHTMLMutation(t *testing.T) {
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	tool := mutatePPTTool{pack: mutationPack("pro_aaaaaa", empty)}
+	registry := NewToolRegistry()
+	if err := registry.Register(tool, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
+		t.Fatal(err)
+	}
+	scope := model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck}
+	schemas := registry.Disclose(PhaseExecuting, model.ModeExecute, scope)
+	if len(schemas) != 1 {
+		t.Fatalf("schemas=%v", schemas)
+	}
+	for _, op := range mutationSchemaOps(schemas[0]) {
+		if op == "slide.html.write" || op == "slide.html.patch" {
+			t.Fatalf("spec deck disclosed HTML mutation %q", op)
+		}
+	}
+	if operationAllowed(scope, pptmutation.Request{Op: "slide.html.write", SlideID: "sli_aaaaaa"}) {
+		t.Fatal("spec deck authorized an HTML mutation")
 	}
 }
 
@@ -115,6 +167,69 @@ func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
 	}
 }
 
+func TestDefaultToolDisclosureUsesTheSamePolicyAsExecution(t *testing.T) {
+	pack := mutationPack("pro_aaaaaa", spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1})
+	registry := NewToolRegistry()
+	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name  string
+		phase RunPhase
+		mode  model.RunMode
+		scope model.RunScope
+		want  []string
+	}{
+		{"talk", PhaseChat, model.ModeTalk, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "search_refs"}},
+		{"plan", PhasePlanning, model.ModePlan, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "search_refs"}},
+		{"execute spec deck", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck}, []string{"mutate_ppt", "read_ppt", "search_refs"}},
+		{"execute ppt slide", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "sli_aaaaaa"}, []string{"mutate_ppt", "read_ppt", "render_slide", "search_refs"}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			schemas := registry.Disclose(test.phase, test.mode, test.scope)
+			names := make([]string, 0, len(schemas))
+			for _, schema := range schemas {
+				names = append(names, schema.Name)
+				desc, ok := registry.Descriptor(schema.Name)
+				if !ok || !toolAvailable(desc, test.phase, test.mode, test.scope) {
+					t.Fatalf("disclosed tool %q is not executable by the Runtime policy", schema.Name)
+				}
+			}
+			if fmt.Sprint(names) != fmt.Sprint(test.want) {
+				t.Fatalf("disclosed=%v want=%v", names, test.want)
+			}
+		})
+	}
+}
+
+func TestToolRegistryRejectsIncoherentCapabilityPolicy(t *testing.T) {
+	registry := NewToolRegistry()
+	tool := mutatePPTTool{pack: mutationPack("pro_aaaaaa", spec.Outline{})}
+	if err := registry.Register(tool, false, CapabilityPPTRead, RiskMedium, PhaseExecuting); err == nil {
+		t.Fatal("write tool accepted a read-only capability")
+	}
+	if err := registry.Register(tool, false, ToolCapability("ppt.unknown"), RiskMedium, PhaseExecuting); err == nil {
+		t.Fatal("unknown capability was accepted")
+	}
+}
+
+func TestToolRegistryRejectsScopeOrModeThatDriftsFromRunCommand(t *testing.T) {
+	pack := mutationPack("pro_aaaaaa", spec.Outline{})
+	pack.Command = model.RunCommand{Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, Mode: model.ModeExecute, Instruction: "read deck"}
+	registry := NewToolRegistry()
+	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
+		t.Fatal(err)
+	}
+	result := registry.Execute(context.Background(), map[string]bool{"read_ppt": true}, "read_ppt", map[string]any{}, DomainToolInput{
+		Context: pack, Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+		Mode: model.ModeExecute, Phase: PhaseExecuting,
+	})
+	if result.Code != ErrCapabilityDenied.Error() {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func assertProviderToolSchema(t *testing.T, name string, value any) {
 	t.Helper()
 	root, ok := value.(map[string]any)
@@ -167,9 +282,15 @@ func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 	}
 	defer session.Discard()
 	pack := mutationPack(projectID, outline)
-	result := (mutatePPTTool{pack: pack}).Execute(context.Background(), DomainToolInput{RunID: "run_1", ProjectDir: dir, Session: session, Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, Args: map[string]any{
+	pack.Command = model.RunCommand{Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, Mode: model.ModeExecute, Instruction: "initialize deck"}
+	registry := NewToolRegistry()
+	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
+		t.Fatal(err)
+	}
+	args := map[string]any{
 		"op": "outline.init", "structure": []any{map[string]any{"client_ref": "opening", "title": "Opening", "purpose": "Start", "slides": []any{map[string]any{"client_ref": "cover", "label": "Cover", "role": "cover"}}, "subsections": []any{}}},
-	}})
+	}
+	result := registry.Execute(context.Background(), map[string]bool{"mutate_ppt": true}, "mutate_ppt", args, DomainToolInput{Args: args, RunID: "run_1", ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Phase: PhaseExecuting, Mode: model.ModeExecute})
 	if !result.OK {
 		t.Fatalf("result=%+v", result)
 	}

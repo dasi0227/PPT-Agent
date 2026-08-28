@@ -83,6 +83,9 @@ type runPO struct {
 	ModelName         string `gorm:"column:model_name"`
 	ModelURL          string `gorm:"column:model_url"`
 	CancelRequestedAt *int64 `gorm:"column:cancel_requested_at"`
+	OwnerInstanceID   string `gorm:"column:owner_instance_id"`
+	PauseReason       string `gorm:"column:pause_reason"`
+	PausedAt          *int64 `gorm:"column:paused_at"`
 	Status            string `gorm:"column:status"`
 	CreatedAt         int64  `gorm:"column:created_at"`
 	UpdatedAt         int64  `gorm:"column:updated_at"`
@@ -101,6 +104,9 @@ func (r runPO) toModel() model.Run {
 			Model: r.ModelName, URL: r.ModelURL,
 		},
 		CancelRequestedAt: valueOrZero(r.CancelRequestedAt),
+		OwnerInstanceID:   r.OwnerInstanceID,
+		PauseReason:       r.PauseReason,
+		PausedAt:          valueOrZero(r.PausedAt),
 		CreatedAt:         r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 }
@@ -119,6 +125,9 @@ func runToPO(m model.Run) runPO {
 		ModelName:         m.Model.Model,
 		ModelURL:          m.Model.URL,
 		CancelRequestedAt: int64PtrOrNil(m.CancelRequestedAt),
+		OwnerInstanceID:   m.OwnerInstanceID,
+		PauseReason:       m.PauseReason,
+		PausedAt:          int64PtrOrNil(m.PausedAt),
 		Status:            string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }

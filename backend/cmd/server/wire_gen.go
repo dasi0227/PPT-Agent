@@ -43,7 +43,12 @@ func initApp() (*App, func(), error) {
 	healthHandler := httpapi.NewHealthHandler(healthService)
 	lockManager := provideLockManager()
 	historyWriter := provideHistoryWriter(store)
-	engine := provideEngine(store, lockManager, historyWriter, zapLogger)
+	engine, err := provideEngine(store, lockManager, historyWriter, zapLogger)
+	if err != nil {
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
 	registry, err := provideLLMRegistry(configConfig)
 	if err != nil {
 		cleanup2()
@@ -59,18 +64,18 @@ func initApp() (*App, func(), error) {
 	}
 	runService := service.NewRunService(store, engine, registry, workRoot, nodeSlideRenderer)
 	runHandler := httpapi.NewRunHandler(runService)
-	llmHandler := httpapi.NewLLMHandler(registry)
-	polishService := service.NewPolishService(store, registry)
-	polishHandler := httpapi.NewPolishHandler(polishService)
 	projectService := service.NewProjectService(store, workRoot)
-	slideService := service.NewSlideService(store)
 	pptMutationService := service.NewPPTMutationService(store)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
 	threadService := service.NewThreadService(store)
 	threadHandler := httpapi.NewThreadHandler(threadService)
+	slideService := service.NewSlideService(store)
 	slideHandler := httpapi.NewSlideHandler(slideService)
 	assetService := provideAssetService(store, workRoot)
 	assetHandler := httpapi.NewAssetHandler(assetService)
+	llmHandler := httpapi.NewLLMHandler(registry)
+	polishService := service.NewPolishService(store, registry)
+	polishHandler := httpapi.NewPolishHandler(polishService)
 	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, llmHandler, polishHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
@@ -81,7 +86,7 @@ func initApp() (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	app := provideApp(server, zapLogger, mainSeedDone)
+	app := provideApp(server, engine, zapLogger, mainSeedDone)
 	return app, func() {
 		cleanup3()
 		cleanup2()
@@ -94,13 +99,12 @@ func initApp() (*App, func(), error) {
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
 var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMRegistry,
 	provideLockManager,
-	provideRenderWorker,
 	provideWorkRoot,
 	provideAssetService,
-	provideEngine, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, service.NewSlideService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRouter, engineFromRouter,
-	httpapi.NewAssetHandler,
+	provideEngine,
+	provideHistoryWriter,
+	provideRenderWorker, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, service.NewSlideService, service.NewPPTMutationService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewAssetHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideSeed,
 	provideApp,
-	provideHistoryWriter,
 )

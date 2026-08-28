@@ -5,12 +5,14 @@ package model
 type RunStatus string
 
 const (
-	RunPending  RunStatus = "pending"
-	RunRunning  RunStatus = "running"
-	RunWaiting  RunStatus = "waiting"
-	RunDone     RunStatus = "done"
-	RunFailed   RunStatus = "failed"
-	RunCanceled RunStatus = "canceled"
+	RunPending    RunStatus = "pending"
+	RunRunning    RunStatus = "running"
+	RunWaiting    RunStatus = "waiting"
+	RunPaused     RunStatus = "paused"
+	RunRecovering RunStatus = "recovering"
+	RunDone       RunStatus = "done"
+	RunFailed     RunStatus = "failed"
+	RunCanceled   RunStatus = "canceled"
 )
 
 // Terminal 报告状态是否为终态（不可再注入输入 API-RUN-001）。

@@ -35,14 +35,16 @@ type createRunBody struct {
 }
 
 type runResponse struct {
-	ID        string         `json:"id"`
-	ThreadID  string         `json:"thread_id"`
-	ProjectID string         `json:"project_id"`
-	Status    string         `json:"status"`
-	EventsURL string         `json:"events_url"`
-	Scope     model.RunScope `json:"scope"`
-	Mode      model.RunMode  `json:"mode"`
-	Model     *string        `json:"model"`
+	ID          string         `json:"id"`
+	ThreadID    string         `json:"thread_id"`
+	ProjectID   string         `json:"project_id"`
+	Status      string         `json:"status"`
+	EventsURL   string         `json:"events_url"`
+	Scope       model.RunScope `json:"scope"`
+	Mode        model.RunMode  `json:"mode"`
+	Model       *string        `json:"model"`
+	PauseReason string         `json:"pause_reason,omitempty"`
+	PausedAt    int64          `json:"paused_at,omitempty"`
 }
 
 func toRunResponse(r model.Run) runResponse {
@@ -55,7 +57,7 @@ func toRunResponse(r model.Run) runResponse {
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
 		Scope: r.Command.Scope, Mode: r.Command.Mode,
-		Model: profileName,
+		Model: profileName, PauseReason: r.PauseReason, PausedAt: r.PausedAt,
 	}
 }
 
@@ -107,6 +109,19 @@ func (h *RunHandler) GetRun(c *gin.Context) {
 	c.JSON(http.StatusOK, toRunResponse(r))
 }
 
+func (h *RunHandler) GetActiveRunForThread(c *gin.Context) {
+	runModel, err := h.svc.GetActiveRunForThread(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		if errors.Is(err, run.ErrRunNotFound) {
+			AbortWithError(c, ErrNotFound("active run not found"))
+			return
+		}
+		AbortWithError(c, ErrInternal(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, toRunResponse(runModel))
+}
+
 func (h *RunHandler) Screenshot(c *gin.Context) {
 	raw, err := h.svc.GetRenderScreenshot(c.Request.Context(), c.Param("id"), c.Param("screenshot_id"))
 	if err != nil {
@@ -132,6 +147,8 @@ func handleCreateRunError(c *gin.Context, err error) {
 		AbortWithError(c, ErrNotFound("thread not found"))
 	case errors.Is(err, service.ErrRunActive):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	case errors.Is(err, run.ErrEngineStopping):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusServiceUnavailable, Code: "SERVER_STOPPING", Message: "server is stopping"})
 	case errors.Is(err, service.ErrSlideTargetNotFound):
 		AbortWithError(c, ProjectAgentError(model.NewAgentError("SLIDE_NOT_FOUND", "create_run", err), "SLIDE_NOT_FOUND", "create_run"))
 	case errors.Is(err, model.ErrInvalidRunCommand):
@@ -141,6 +158,25 @@ func handleCreateRunError(c *gin.Context, err error) {
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}
+}
+
+// Resume POST /runs/{id}/resume. Only a durable paused Run may be claimed.
+func (h *RunHandler) Resume(c *gin.Context) {
+	resumed, err := h.svc.ResumeRun(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		switch {
+		case errors.Is(err, run.ErrRunNotFound):
+			AbortWithError(c, ErrNotFound("run not found"))
+		case errors.Is(err, run.ErrRunNotRunning):
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_NOT_PAUSED", Message: "run is not paused"})
+		case errors.Is(err, run.ErrEngineStopping):
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusServiceUnavailable, Code: "SERVER_STOPPING", Message: "server is stopping"})
+		default:
+			AbortWithError(c, ErrInternal(err.Error()))
+		}
+		return
+	}
+	c.JSON(http.StatusAccepted, toRunResponse(resumed))
 }
 
 func (h *RunHandler) Steer(c *gin.Context) {

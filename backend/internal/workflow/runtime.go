@@ -154,6 +154,10 @@ func noToolCallGuidance(mode model.RunMode) string {
 	return "Ordinary assistant text is not a completion signal. If the task is complete, call finish(message=...) with the final response. If the task is not complete, call one of the currently disclosed tools to continue."
 }
 
+func approvedPlanExecutionGuidance() string {
+	return "The user approved the plan. Approval is complete and the runtime is now in execute mode. Begin executing the approved plan immediately with the currently disclosed tools; do not repeat the proposal or say that approval is still pending."
+}
+
 type RuntimeInput struct {
 	RunID                 string
 	ProjectDir            string
@@ -346,9 +350,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 
 	if state.mode == model.ModeExecute {
-		// Direct-write session: typed tools write artifacts straight to the
-		// project directory. A failed or canceled run keeps its partial
-		// products on disk instead of discarding a private write sandbox.
+		// Typed tools write to an isolated RunSession overlay. Runtime commits
+		// the complete overlay only after the completion and commit checks pass.
 		session, err := NewRunSession(input.ProjectDir, input.RunID)
 		if err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
@@ -470,6 +473,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), calls)
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
 		recordToolFailures(state, results)
+		if hasRuntimePolicyFailure(results) {
+			return r.fail(input, state, ErrCapabilityDenied.Error(), errors.New("a disclosed tool was denied by Runtime policy"))
+		}
 		if state.requirements != nil {
 			state.requirements.ObserveToolResults(results)
 		}
@@ -477,6 +483,18 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeConsecutiveErrors, errors.New("consecutive tool failures exhausted the runtime budget"))
 		}
 	}
+}
+
+// CAPABILITY_DENIED after a tool was disclosed is a Runtime configuration
+// invariant failure. Giving it back to the model would only invite expensive
+// retries: no model action can change the Runtime policy in this loop.
+func hasRuntimePolicyFailure(results []ToolResult) bool {
+	for _, result := range results {
+		if result.Code == ErrCapabilityDenied.Error() {
+			return true
+		}
+	}
+	return false
 }
 
 func recordToolFailures(state *RunState, results []ToolResult) {
@@ -924,6 +942,13 @@ func (r *Runtime) awaitPlanApproval(
 			}
 			previous := state.mode
 			*state = *candidate
+			// create_plan leaves a tool result saying that approval is pending as
+			// the final conversation message. Without an explicit transition
+			// observation, the first execute turn can follow that stale tail and
+			// repeat the proposal even though runtime_state already says active.
+			state.messages = append(state.messages, llm.Message{
+				Role: llm.RoleUser, Content: llm.TextContent(approvedPlanExecutionGuidance()),
+			})
 			if resumer, ok := input.Prompter.(PlanApprovalResumer); ok {
 				resumer.ResumeAfterPlanApproval(ctx)
 			}
@@ -1222,7 +1247,12 @@ func (r *Runtime) finishCandidate(
 		}
 		state.committed = true
 		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterCommit, ""); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			// Artifact files and metadata are already durably committed. An audit
+			// checkpoint failure cannot safely turn this into a failed run because
+			// callers would reasonably retry work whose effects already exist.
+			recordTrace(input.Trace, state.runID, "checkpoint.persistence_failed", map[string]any{
+				"loop_id": state.loopID, "boundary": checkpointAfterCommit,
+			})
 		}
 		for _, change := range changes.All() {
 			recordTrace(input.Trace, state.runID, "target.committed", map[string]any{
@@ -1232,7 +1262,12 @@ func (r *Runtime) finishCandidate(
 	}
 	r.changePhase(input.Emitter, state, PhaseTerminal, "run completed")
 	if err := r.saveCheckpoint(ctx, input, state, checkpointTerminal, ""); err != nil {
-		return r.fail(input, state, CodeAgentFailed, err), true
+		if !state.committed {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
+		recordTrace(input.Trace, state.runID, "checkpoint.persistence_failed", map[string]any{
+			"loop_id": state.loopID, "boundary": checkpointTerminal,
+		})
 	}
 	outcome := r.outcome(state, StatusCompleted, "", "")
 	if input.Emitter != nil {
@@ -1373,7 +1408,7 @@ func terminalPublicError(event model.EventType, agentErr *model.AgentError) *mod
 
 func isRuntimeErrorCode(code string) bool {
 	switch code {
-	case "INTERNAL", CodeAgentFailed, CodeCommitFailed, "RUN_FATAL_EXIST", "MODEL_PROVIDER_UNSUPPORTED", "PROVIDER_BAD_REQUEST":
+	case "INTERNAL", CodeAgentFailed, CodeCommitFailed, ErrCapabilityDenied.Error(), "RUN_FATAL_EXIST", "MODEL_PROVIDER_UNSUPPORTED", "PROVIDER_BAD_REQUEST":
 		return true
 	default:
 		return false

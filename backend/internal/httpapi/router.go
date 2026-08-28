@@ -60,12 +60,14 @@ func (r *Router) register() {
 
 	// Run：创建 / SSE 订阅 / HITL 输入 / 取消（40-api/rest-endpoints）。
 	v1.POST("/threads/:id/runs", r.run.CreateRun)
+	v1.GET("/threads/:id/active-run", r.run.GetActiveRunForThread)
 	v1.GET("/runs/:id", r.run.GetRun)
 	v1.GET("/runs/:id/events", r.run.Events)
 	v1.GET("/runs/:id/screenshots/:screenshot_id", r.run.Screenshot)
 	v1.POST("/runs/:id/input", r.run.Input)
 	v1.POST("/runs/:id/plan-approval", r.run.PlanApproval)
 	v1.POST("/runs/:id/steer", r.run.Steer)
+	v1.POST("/runs/:id/resume", r.run.Resume)
 	v1.DELETE("/runs/:id", r.run.Cancel)
 
 	// Slide HTML preview and version operations use stable identities.

@@ -33,11 +33,6 @@ type Service struct {
 	ValidateHTML func([]byte) error
 }
 
-type Patch struct {
-	Op    string `json:"op"`
-	Path  string `json:"path"`
-	Value any    `json:"value,omitempty"`
-}
 type Edit struct {
 	OldText string `json:"old_text"`
 	NewText string `json:"new_text"`
@@ -133,7 +128,7 @@ func (s Service) patchDeck(req Request, out Result) (Result, error) {
 		return out, err
 	}
 	raw, _ := json.Marshal(current)
-	nextRaw, err := applyPatch(raw, req.Patch, map[string]bool{"/title": true, "/goal": true, "/audience": true, "/language": true, "/positioning": true, "/requirements": true, "/prohibitions": true, "/canvas/aspect_ratio": true, "/numbering/enabled": true, "/numbering/hidden_roles": true, "/numbering/format": true})
+	nextRaw, err := applyPatch(raw, req.Patch, req.Op)
 	if err != nil {
 		return out, err
 	}
@@ -334,7 +329,7 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 		}
 	} else {
 		raw, _ := json.Marshal(current)
-		raw, err = applyPatch(raw, req.Patch, map[string]bool{"/theme": true, "/direction": true, "/density": true, "/chrome": true})
+		raw, err = applyPatch(raw, req.Patch, req.Op)
 		if err != nil {
 			return out, err
 		}
@@ -392,7 +387,7 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 			return out, invalid(errors.New("cannot patch pending spec"))
 		}
 		raw, _ := json.Marshal(current)
-		raw, err = applyPatch(raw, req.Patch, map[string]bool{"/title": true, "/key_message": true, "/elements": true, "/layout": true})
+		raw, err = applyPatch(raw, req.Patch, req.Op)
 		if err != nil {
 			return out, err
 		}
@@ -532,63 +527,6 @@ func symmetric(a, b []string) []string {
 		}
 	}
 	return out
-}
-
-func applyPatch(raw []byte, patches []Patch, allowed map[string]bool) ([]byte, error) {
-	var root any
-	if err := json.Unmarshal(raw, &root); err != nil {
-		return nil, invalid(err)
-	}
-	for _, p := range patches {
-		if p.Op != "add" && p.Op != "remove" && p.Op != "replace" {
-			return nil, invalid(errors.New("patch op must be add, remove, or replace"))
-		}
-		if !allowed[p.Path] {
-			return nil, invalid(fmt.Errorf("patch path %s is not writable", p.Path))
-		}
-		parts := strings.Split(strings.TrimPrefix(p.Path, "/"), "/")
-		var err error
-		root, err = patchValue(root, parts, p)
-		if err != nil {
-			return nil, invalid(err)
-		}
-	}
-	return json.Marshal(root)
-}
-func patchValue(current any, parts []string, p Patch) (any, error) {
-	if len(parts) == 0 {
-		return nil, errors.New("empty patch path")
-	}
-	obj, ok := current.(map[string]any)
-	if !ok {
-		return nil, errors.New("patch parent is not an object")
-	}
-	key := strings.ReplaceAll(strings.ReplaceAll(parts[0], "~1", "/"), "~0", "~")
-	if len(parts) == 1 {
-		_, exists := obj[key]
-		if p.Op == "replace" && !exists {
-			return nil, errors.New("replace target does not exist")
-		}
-		if p.Op == "remove" {
-			if !exists {
-				return nil, errors.New("remove target does not exist")
-			}
-			delete(obj, key)
-		} else {
-			obj[key] = p.Value
-		}
-		return obj, nil
-	}
-	next, exists := obj[key]
-	if !exists {
-		return nil, errors.New("patch parent does not exist")
-	}
-	updated, err := patchValue(next, parts[1:], p)
-	if err != nil {
-		return nil, err
-	}
-	obj[key] = updated
-	return obj, nil
 }
 
 func findSection(outline *spec.Outline, id string) *spec.Section {

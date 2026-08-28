@@ -25,8 +25,8 @@ func provideHTTPServer(cfg *config.Config, engine *gin.Engine) *http.Server {
 	}
 }
 
-func provideApp(server *http.Server, log *zap.Logger, _ seedDone) *App {
-	return &App{server: server, log: log}
+func provideApp(server *http.Server, engine *run.Engine, log *zap.Logger, _ seedDone) *App {
+	return &App{server: server, engine: engine, log: log}
 }
 
 // seedDone 是冷启动 seeding 完成的哨兵：provideApp 依赖它，保证服务启动前 seed 就绪（DS-SEED-001）。
@@ -64,8 +64,12 @@ func provideAssetService(s store.Store, workRoot service.WorkRoot) *service.Asse
 	return service.NewAssetService(s, string(workRoot))
 }
 
-func provideEngine(rs run.Store, locks *run.LockManager, hw run.HistoryWriter, log *zap.Logger) *run.Engine {
-	return run.NewEngine(rs, locks, hw, log)
+func provideEngine(rs run.Store, locks *run.LockManager, hw run.HistoryWriter, log *zap.Logger) (*run.Engine, error) {
+	engine := run.NewEngine(rs, locks, hw, log)
+	if err := engine.Initialize(context.Background()); err != nil {
+		return nil, err
+	}
+	return engine, nil
 }
 
 // provideHistoryWriter 用底层 store 作为 ThreadLocator：Store 已实现 GetThread/GetProject（隐式接口）。

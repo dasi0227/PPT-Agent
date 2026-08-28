@@ -3,9 +3,11 @@ package run
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -20,25 +22,47 @@ type active struct {
 	bus             *Bus
 	queue           *InputQueue
 	cancel          context.CancelFunc
+	done            chan struct{}
 	resumed         bool
 	mu              sync.Mutex
 	phase           workflow.RunPhase
 	cancelRequested bool
+	pauseRequested  bool
 }
 
 // Engine 管理 Run 生命周期：状态机、事件扇出、HITL、取消、每 project 锁。
 type Engine struct {
-	store Store
-	locks *LockManager
-	hw    HistoryWriter
-	log   *zap.Logger
+	store      Store
+	locks      *LockManager
+	hw         HistoryWriter
+	log        *zap.Logger
+	instanceID string
 
-	mu      sync.Mutex
-	actives map[string]*active
+	mu       sync.Mutex
+	actives  map[string]*active
+	stopping bool
 }
 
 func NewEngine(store Store, locks *LockManager, hw HistoryWriter, log *zap.Logger) *Engine {
-	return &Engine{store: store, locks: locks, hw: hw, log: log, actives: map[string]*active{}}
+	return &Engine{store: store, locks: locks, hw: hw, log: log, instanceID: uuid.NewString(), actives: map[string]*active{}}
+}
+
+// Initialize reconciles every non-terminal Run left by a previous process
+// before the HTTP server becomes reachable. Paused Runs remain durable and
+// continue to block writes for their project until explicitly resumed/canceled.
+func (e *Engine) Initialize(ctx context.Context) error {
+	lifecycle, ok := e.store.(LifecycleStore)
+	if !ok {
+		return ErrLifecycleStoreUnavailable
+	}
+	paused, err := lifecycle.PauseNonTerminalRuns(ctx, "server_restarted", time.Now().Unix())
+	if err != nil {
+		return err
+	}
+	if len(paused) > 0 {
+		e.log.Info("orphaned runs paused on startup", zap.Int("count", len(paused)), zap.String("instance_id", e.instanceID))
+	}
+	return nil
 }
 
 // Start 创建 Run（pending）并异步执行 canonical execution。返回创建后的 Run 元数据。
@@ -51,15 +75,9 @@ func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (m
 // It does not create a new runs row; recovery metadata is carried by the
 // execution and checkpoint tables.
 func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (model.Run, error) {
-	if r.Status.Terminal() {
+	if r.Status != model.RunPaused {
 		return model.Run{}, ErrRunNotRunning
 	}
-	e.mu.Lock()
-	if _, exists := e.actives[r.ID]; exists {
-		e.mu.Unlock()
-		return model.Run{}, ErrRunNotRunning
-	}
-	e.mu.Unlock()
 	bus := NewBus(r.ID, r.ThreadID, e.store, e.hw)
 	events, err := e.store.EventsSince(ctx, r.ID, 0)
 	if err != nil {
@@ -70,22 +88,58 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	}
 	queue := NewInputQueue()
 	runCtx, cancel := context.WithCancel(context.Background())
-	a := &active{run: r, bus: bus, queue: queue, cancel: cancel, resumed: true}
+
+	// Claiming the durable row and registering the in-memory execution share the
+	// shutdown mutex. This closes the race where PauseAll could otherwise take
+	// its snapshot between the two operations and leave a recovering orphan.
 	e.mu.Lock()
+	if e.stopping {
+		e.mu.Unlock()
+		cancel()
+		return model.Run{}, ErrEngineStopping
+	}
+	if _, exists := e.actives[r.ID]; exists {
+		e.mu.Unlock()
+		cancel()
+		return model.Run{}, ErrRunNotRunning
+	}
+	lifecycle, ok := e.store.(LifecycleStore)
+	if !ok {
+		e.mu.Unlock()
+		cancel()
+		return model.Run{}, ErrLifecycleStoreUnavailable
+	}
+	claimed, err := lifecycle.ClaimPausedRun(ctx, r.ID, e.instanceID)
+	if err != nil {
+		e.mu.Unlock()
+		cancel()
+		return model.Run{}, err
+	}
+	a := &active{run: claimed, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{}), resumed: true}
 	e.actives[r.ID] = a
 	e.mu.Unlock()
 	go e.execute(runCtx, a, execution)
-	return r, nil
+	return claimed, nil
 }
 
 // StartWithContext atomically establishes the Run row and its auditable ContextManifest
 // before any execution code runs.
 func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Execution, manifest *model.RunContext) (model.Run, error) {
+	// Keep creation and in-memory registration atomic with respect to PauseAll.
+	// This is a shutdown-only lock boundary, so the short database section is a
+	// deliberate trade-off for a strict lifecycle invariant.
+	e.mu.Lock()
+	if e.stopping {
+		e.mu.Unlock()
+		return model.Run{}, ErrEngineStopping
+	}
 	now := time.Now().Unix()
 	r.Status = model.RunPending
+	r.OwnerInstanceID = e.instanceID
 	r.CreatedAt = now
 	r.UpdatedAt = now
 	if err := e.store.CreateRun(ctx, r); err != nil {
+		e.mu.Unlock()
 		return model.Run{}, err
 	}
 	if manifest != nil {
@@ -98,10 +152,12 @@ func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Ex
 		})
 		if !ok {
 			_ = e.store.SetRunStatus(ctx, r.ID, model.RunFailed)
+			e.mu.Unlock()
 			return model.Run{}, ErrContextStoreUnavailable
 		}
 		if err := contextStore.SaveRunContext(ctx, *manifest); err != nil {
 			_ = e.store.SetRunStatus(ctx, r.ID, model.RunFailed)
+			e.mu.Unlock()
 			return model.Run{}, err
 		}
 	}
@@ -110,8 +166,7 @@ func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Ex
 	queue := NewInputQueue()
 	runCtx, cancel := context.WithCancel(context.Background())
 
-	a := &active{run: r, bus: bus, queue: queue, cancel: cancel}
-	e.mu.Lock()
+	a := &active{run: r, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{})}
 	e.actives[r.ID] = a
 	e.mu.Unlock()
 
@@ -122,24 +177,30 @@ func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Ex
 func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			e.setStatus(terminalCtx, a.run.ID, model.RunFailed)
-			if !a.bus.Terminated() {
-				err := model.NewAgentError("INTERNAL", "runtime_panic", errors.New("runtime panic"))
-				_ = a.bus.Emit(terminalCtx, model.EventRunError, model.NewRunTerminalPayload(
-					a.run.ID,
-					time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
-					nil,
-					err.Public(),
-				))
+			a.mu.Lock()
+			paused := a.pauseRequested
+			a.mu.Unlock()
+			if !paused {
+				terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				e.setStatus(terminalCtx, a.run.ID, model.RunFailed)
+				if !a.bus.Terminated() {
+					err := model.NewAgentError("INTERNAL", "runtime_panic", errors.New("runtime panic"))
+					_ = a.bus.Emit(terminalCtx, model.EventRunError, model.NewRunTerminalPayload(
+						a.run.ID,
+						time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+						nil,
+						err.Public(),
+					))
+				}
+				e.log.Error("runtime panic recovered", zap.String("run_id", a.run.ID), zap.Any("panic", recovered))
 			}
-			e.log.Error("runtime panic recovered", zap.String("run_id", a.run.ID), zap.Any("panic", recovered))
 		}
 		a.bus.Close()
 		e.mu.Lock()
 		delete(e.actives, a.run.ID)
 		e.mu.Unlock()
+		close(a.done)
 	}()
 
 	if !a.resumed {
@@ -186,7 +247,11 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.StructuredOutcome) {
 	a.mu.Lock()
 	cancelRequested := a.cancelRequested
+	pauseRequested := a.pauseRequested
 	a.mu.Unlock()
+	if pauseRequested {
+		return
+	}
 	if cancelRequested {
 		outcome.Status = workflow.StatusCanceled
 		outcome.Code = workflow.CodeCanceled
@@ -239,6 +304,14 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 }
 
 func (e *Engine) setStatus(ctx context.Context, id string, status model.RunStatus) {
+	if activeRun, ok := e.lookup(id); ok {
+		activeRun.mu.Lock()
+		paused := activeRun.pauseRequested
+		activeRun.mu.Unlock()
+		if paused && status != model.RunPaused {
+			return
+		}
+	}
 	if err := e.store.SetRunStatus(ctx, id, status); err != nil {
 		e.log.Warn("set run status failed", zap.String("run_id", id), zap.Error(err))
 	}
@@ -294,6 +367,28 @@ func (e *Engine) Cancel(ctx context.Context, id string) error {
 
 func (e *Engine) RequestCancel(ctx context.Context, id string) (model.Run, error) {
 	requestedAt := time.Now().UnixNano()
+	stored, getErr := e.store.GetRun(ctx, id)
+	if getErr != nil {
+		return model.Run{}, ErrRunNotFound
+	}
+	if stored.Status == model.RunPaused {
+		lifecycle, ok := e.store.(LifecycleStore)
+		if !ok {
+			return model.Run{}, ErrLifecycleStoreUnavailable
+		}
+		canceled, err := lifecycle.CancelPausedRun(ctx, id, requestedAt)
+		if err != nil {
+			return model.Run{}, err
+		}
+		bus := NewBus(canceled.ID, canceled.ThreadID, e.store, e.hw)
+		if events, eventErr := e.store.EventsSince(ctx, id, 0); eventErr == nil && bus.Restore(events) == nil {
+			_ = bus.Emit(ctx, model.EventRunCanceled, model.NewRunTerminalPayload(
+				id, time.Since(time.Unix(canceled.CreatedAt, 0)).Milliseconds(), nil, nil,
+			))
+			bus.Close()
+		}
+		return canceled, nil
+	}
 	current, err := e.store.RequestRunCancel(ctx, id, requestedAt)
 	if err != nil {
 		return model.Run{}, ErrRunNotFound
@@ -331,6 +426,53 @@ func (e *Engine) RequestCancel(ctx context.Context, id string) (model.Run, error
 	a.cancel()
 	current.CancelRequestedAt = requestedAt
 	return current, nil
+}
+
+// PauseAll is the graceful-shutdown path. Crash safety is provided separately
+// by Initialize, which pauses any non-terminal rows on the next process start.
+func (e *Engine) PauseAll(ctx context.Context, reason string) error {
+	e.mu.Lock()
+	e.stopping = true
+	actives := make([]*active, 0, len(e.actives))
+	for _, activeRun := range e.actives {
+		actives = append(actives, activeRun)
+	}
+	e.mu.Unlock()
+
+	var failures []error
+	lifecycle, ok := e.store.(LifecycleStore)
+	if !ok && len(actives) > 0 {
+		return ErrLifecycleStoreUnavailable
+	}
+	for _, activeRun := range actives {
+		activeRun.mu.Lock()
+		activeRun.pauseRequested = true
+		activeRun.mu.Unlock()
+		pausedRun, err := lifecycle.PauseRun(ctx, activeRun.run.ID, e.instanceID, reason, time.Now().Unix())
+		if err != nil {
+			failures = append(failures, fmt.Errorf("pause %s: %w", activeRun.run.ID, err))
+			activeRun.bus.Close()
+			activeRun.cancel()
+			continue
+		}
+		// The workflow may have persisted a terminal state just before the
+		// shutdown snapshot. Let its terminal event finish instead of closing the
+		// bus in the middle of that commit window.
+		if pausedRun.Status.Terminal() {
+			continue
+		}
+		activeRun.bus.Close()
+		activeRun.cancel()
+	}
+	for _, activeRun := range actives {
+		select {
+		case <-activeRun.done:
+		case <-ctx.Done():
+			failures = append(failures, fmt.Errorf("wait for %s: %w", activeRun.run.ID, ctx.Err()))
+			return errors.Join(failures...)
+		}
+	}
+	return errors.Join(failures...)
 }
 
 func (e *Engine) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, requestHash, content string) (model.SteeringMessage, error) {

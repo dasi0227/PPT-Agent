@@ -14,7 +14,7 @@ import (
 )
 
 // TestCreateRunRejectsWhenProjectHasActiveRun verifies Phase B point 6: with the
-// Direct writes are serialized per project. A create attempt while another run
+// Active authoring overlays are serialized per project. A create attempt while another run
 // is active is rejected with ErrRunActive (mapped to 409 RUN_ACTIVE).
 func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	root := t.TempDir()

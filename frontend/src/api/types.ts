@@ -106,11 +106,13 @@ export interface Run {
   id: string;
   thread_id: string;
   project_id: string;
-  status: 'pending' | 'running' | 'waiting' | 'done' | 'failed' | 'canceled';
+  status: 'pending' | 'running' | 'waiting' | 'paused' | 'recovering' | 'done' | 'failed' | 'canceled';
   scope: RunScope;
   mode: RunMode;
   events_url: string;
   model: string | null;
+  pause_reason?: string;
+  paused_at?: number;
 }
 
 export type Artifact = 'spec' | 'ppt';
@@ -174,7 +176,7 @@ export interface SteerRunResponse {
 }
 
 export interface CancelRunResponse {
-  status: 'cancel_requested' | 'pending' | 'running' | 'waiting' | 'done' | 'failed' | 'canceled';
+  status: 'cancel_requested' | 'pending' | 'running' | 'waiting' | 'paused' | 'recovering' | 'done' | 'failed' | 'canceled';
   run_id: string;
 }
 
@@ -194,7 +196,10 @@ export interface MaterializationRecord {
   frame: { context_hash: string }; rendered_at: number;
 }
 
-export type RestrictedPatch = { op: 'add' | 'remove' | 'replace'; path: string; value?: unknown };
+export type RestrictedPatch =
+  | { op: 'add'; path: string; value: unknown }
+  | { op: 'remove'; path: string }
+  | { op: 'replace'; path: string; value: unknown };
 export interface DraftSlide { client_ref: string; label: string; role: string }
 export interface DraftSubsection { client_ref: string; title: string; slides: DraftSlide[] }
 export interface DraftSection { client_ref: string; title: string; purpose: string; slides: DraftSlide[]; subsections: DraftSubsection[] }

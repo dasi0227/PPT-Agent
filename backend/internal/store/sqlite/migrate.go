@@ -10,8 +10,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/migrations"
 )
 
-// Migrate 按序执行 migrations/ 中的 SQL（schema 权威源，对应 sqlite-schema.sql）。
-// 语句均为幂等 CREATE ... IF NOT EXISTS，可重复执行。
+// Migrate 按序执行 migrations/ 中尚未记录的 SQL（schema 权威源）。
 func Migrate(db *gorm.DB, log *zap.Logger) error {
 	if err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		name TEXT PRIMARY KEY,

@@ -10,11 +10,14 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 )
 
 // App 是装配完成的应用（由 wire 注入），持有运行所需依赖。
 type App struct {
 	server *http.Server
+	engine *run.Engine
 	log    *zap.Logger
 }
 
@@ -37,9 +40,14 @@ func main() {
 	<-quit
 
 	app.log.Info("server shutting down")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := app.server.Shutdown(ctx); err != nil {
+	pauseCtx, cancelPause := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := app.engine.PauseAll(pauseCtx, "server_shutdown"); err != nil {
+		app.log.Error("pausing active runs failed", zap.Error(err))
+	}
+	cancelPause()
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelShutdown()
+	if err := app.server.Shutdown(shutdownCtx); err != nil {
 		app.log.Error("graceful shutdown failed", zap.Error(err))
 	}
 }

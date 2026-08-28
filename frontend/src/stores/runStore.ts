@@ -27,7 +27,7 @@ import { newClientIdentity } from '../lib/clientIdentity';
 
 export type { PlanState } from '../api/types';
 
-export type RunStatus = 'idle' | 'creating' | 'running' | 'waiting' | 'canceling' | 'done' | 'error' | 'canceled';
+export type RunStatus = 'idle' | 'creating' | 'running' | 'waiting' | 'paused' | 'recovering' | 'canceling' | 'done' | 'error' | 'canceled';
 export type StreamStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
 export interface RunSession {
@@ -174,6 +174,8 @@ function terminalStatus(status: Run['status']): RunStatus {
   if (status === 'failed') return 'error';
   if (status === 'canceled') return 'canceled';
   if (status === 'waiting') return 'waiting';
+  if (status === 'paused') return 'paused';
+  if (status === 'recovering') return 'recovering';
   return 'running';
 }
 
@@ -207,6 +209,8 @@ interface RunStoreV2 {
   createRun: (threadId: string, payload: CreateRunRequest, projectId?: string) => Promise<boolean>;
   subscribeRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => void;
   recoverPersistedRuns: () => Promise<void>;
+  reconcileRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => Promise<void>;
+  resumeRun: (threadId: string, runId: string) => Promise<boolean>;
   answerQuestion: (threadId: string, runId: string, replyTo: string, content: string) => Promise<boolean>;
   cancelRun: (threadId: string, runId: string) => Promise<void>;
   steerRun: (threadId: string, runId: string, content: string, clientMessageId: string) => Promise<boolean>;
@@ -268,6 +272,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       return;
     }
     stopCancelReconciliation(threadId, runId);
+    removePersistedRun(threadId);
     patchSession(threadId, { status: terminalStatus(status), progress: null, pendingQuestion: null });
     get().subscribeRun(
       threadId,
@@ -407,7 +412,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         streamStatus: 'connecting',
       });
 
-      const close = subscribeRunEvents(runId, {
+      let reconcilingStreamFailure = false;
+      let close = () => {};
+      close = subscribeRunEvents(runId, {
         lastEventId,
         onStatus: (streamStatus) => patchSession(threadId, { streamStatus }),
         onUnknown: (eventName) => {
@@ -450,6 +457,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
                 }
               }
             } else if (event.event === 'run.progress') {
+              if (prev.status !== 'canceling') status = 'running';
               progress = {
                 stage: event.data.stage,
                 text: event.data.text,
@@ -510,6 +518,33 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         },
         onError: () => {
           patchSession(threadId, { streamStatus: 'reconnecting' });
+          if (reconcilingStreamFailure) return;
+          reconcilingStreamFailure = true;
+          void runsApi.get(runId)
+            .then((run) => {
+              const current = get().sessions[threadId];
+              if (!current || current.activeRunId !== runId) return;
+              if (run.status === 'paused') {
+                close();
+                patchSession(threadId, {
+                  status: 'paused', streamStatus: 'closed', progress: null, pendingQuestion: null,
+                });
+                if (current.projectId) {
+                  writePersistedRun({
+                    runId, threadId, projectId: current.projectId, lastEventId: current.lastEventId,
+                  });
+                }
+              } else if (isTerminalRunStatus(run.status)) {
+                replayAuthoritativeTerminal(threadId, runId, run.status, run.project_id);
+              } else if (current.status !== 'canceling') {
+                patchSession(threadId, { status: terminalStatus(run.status) });
+              }
+            })
+            .catch(() => {
+              // The server may still be offline; EventSource retries and a later
+              // failure will reconcile against the restarted process.
+            })
+            .finally(() => { reconcilingStreamFailure = false; });
         },
       });
 
@@ -540,7 +575,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             activeRunId: run.id,
             projectId: run.project_id,
             status,
-            streamStatus: status === 'running' || status === 'waiting' || status === 'canceling'
+            streamStatus: status === 'running' || status === 'waiting' || status === 'recovering' || status === 'canceling'
               ? 'connecting'
               : 'closed',
             scope: run.scope,
@@ -553,11 +588,18 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               : null,
             originalRequest: prev.originalRequest ?? requestFromTimeline(hydratedItems, run.id, run.model),
           }));
-          if (run.status === 'pending' || run.status === 'running' || run.status === 'waiting') {
+          if (run.status === 'pending' || run.status === 'running' || run.status === 'waiting' || run.status === 'recovering') {
             get().subscribeRun(record.threadId, run.id, record.lastEventId, run.project_id);
             if (status === 'canceling') {
               startCancelReconciliation(record.threadId, run.id);
             }
+          } else if (run.status === 'paused') {
+            writePersistedRun({
+              runId: run.id,
+              threadId: record.threadId,
+              projectId: run.project_id,
+              lastEventId: record.lastEventId,
+            });
           } else {
             removePersistedRun(record.threadId);
           }
@@ -577,6 +619,75 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           }));
         }
       }));
+    },
+
+    reconcileRun: async (threadId, runId, lastEventId, projectId) => {
+      try {
+        const run = await runsApi.get(runId);
+        const status = terminalStatus(run.status);
+        patchSession(threadId, {
+          activeRunId: run.id,
+          projectId: run.project_id || projectId || null,
+          status,
+          streamStatus: run.status === 'paused' || isTerminalRunStatus(run.status) ? 'closed' : 'connecting',
+          scope: run.scope,
+          mode: run.mode,
+          lastEventId,
+          progress: null,
+          pendingQuestion: status === 'waiting' ? get().sessions[threadId]?.pendingQuestion ?? null : null,
+        });
+        if (isTerminalRunStatus(run.status)) {
+          removePersistedRun(threadId);
+          return;
+        }
+        writePersistedRun({ runId: run.id, threadId, projectId: run.project_id, lastEventId });
+        if (run.status !== 'paused') {
+          get().subscribeRun(threadId, run.id, lastEventId, run.project_id);
+        }
+      } catch {
+        // History remains visible. A later refresh can retry authoritative reconciliation.
+      }
+    },
+
+    resumeRun: async (threadId, runId) => {
+      const session = get().sessions[threadId];
+      if (!session || session.activeRunId !== runId || session.status !== 'paused') return false;
+      try {
+        const resumed = await runsApi.resume(runId);
+        patchSession(threadId, {
+          status: terminalStatus(resumed.status),
+          streamStatus: 'connecting',
+          progress: { stage: 'thinking', text: '正在恢复任务' },
+          pendingQuestion: null,
+        });
+        writePersistedRun({
+          runId,
+          threadId,
+          projectId: resumed.project_id,
+          lastEventId: session.lastEventId,
+        });
+        get().subscribeRun(threadId, runId, session.lastEventId, resumed.project_id);
+        return true;
+      } catch (error) {
+        const detail = errorMessage(error);
+        updateSession(threadId, (prev) => ({
+          status: 'paused',
+          progress: null,
+          timelineItems: [...prev.timelineItems, {
+            id: `resume_error_${Date.now()}`,
+            type: 'terminal_notice',
+            status: 'failed',
+            message: `${localizedErrorMessage(detail.message, '恢复运行失败')}。任务仍保持暂停，可再次尝试。`,
+            affectedTargets: [],
+            technicalMessage: detail.message,
+            code: detail.code,
+            requestId: detail.requestId,
+            retryable: detail.retryable,
+            timestamp: Date.now(),
+          }],
+        }));
+        return false;
+      }
     },
 
     answerQuestion: async (threadId, runId, replyTo, content) => {

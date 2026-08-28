@@ -42,6 +42,24 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 	`, "layout-v6", "Deck", "/tmp/layout-v6", "default", "draft", 6, 1, 1).Error; err != nil {
 		t.Fatalf("layout version 6 is not accepted: %v", err)
 	}
+	runCols := tableColumns(t, db, "runs")
+	for _, want := range []string{"owner_instance_id", "pause_reason", "paused_at"} {
+		if !runCols[want] {
+			t.Fatalf("runs table missing lifecycle column %q; got %v", want, runCols)
+		}
+	}
+	if err := db.Exec(`
+		INSERT INTO threads(id,project_id,title,history_path,status,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?)
+	`, "pause-thread", "layout-v6", "", "threads/pause-thread.jsonl", "active", 1, 1).Error; err != nil {
+		t.Fatalf("insert thread: %v", err)
+	}
+	if err := db.Exec(`
+		INSERT INTO runs(id,thread_id,project_id,scope_artifact,scope_level,mode,run_command_json,status,paused_at,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)
+	`, "paused-run", "pause-thread", "layout-v6", "ppt", "deck", "execute", `{}`, "paused", 2, 1, 2).Error; err != nil {
+		t.Fatalf("paused run status is not accepted: %v", err)
+	}
 }
 
 // applyAllMigrations 执行 migrations/ 内全部 SQL（按 ; 切分，跳过注释/空白）。

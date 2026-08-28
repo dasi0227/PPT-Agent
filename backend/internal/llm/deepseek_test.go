@@ -263,6 +263,45 @@ func TestAdapterProviderErrorCarriesSanitizedDiagnostic(t *testing.T) {
 	}
 }
 
+func TestAdapterRetriesMalformedSuccessfulResponseOnceWithDiagnostics(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempt := hits.Add(1)
+		w.Header().Set("x-request-id", "req-decode")
+		if attempt == 1 {
+			_, _ = w.Write([]byte("upstream temporarily returned html"))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"recovered"}}]}`))
+	}))
+	defer server.Close()
+	adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: "secret", BaseURL: server.URL, Model: "deepseek-chat"})
+	response, err := adapter.Generate(context.Background(), GenerateRequest{})
+	if err != nil || response.Text() != "recovered" || hits.Load() != 2 {
+		t.Fatalf("malformed 2xx response was not recovered: response=%+v err=%v hits=%d", response, err, hits.Load())
+	}
+}
+
+func TestAdapterMalformedSuccessfulResponseFailsWithSafeDiagnostics(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("x-request-id", "req-decode")
+		_, _ = w.Write([]byte("<html>gateway failure</html>"))
+	}))
+	defer server.Close()
+	adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: "secret", BaseURL: server.URL, Model: "deepseek-chat"})
+	adapter.http.maxRetries = 0
+	_, err := adapter.Generate(context.Background(), GenerateRequest{})
+	var providerErr *ProviderError
+	if !errors.Is(err, ErrUnavailable) || !errors.As(err, &providerErr) ||
+		providerErr.StatusCode != http.StatusOK || providerErr.RequestID != "req-decode" ||
+		providerErr.BodyBytes == 0 || providerErr.BodySHA256 == "" {
+		t.Fatalf("decode diagnostic missing: provider=%#v err=%v", providerErr, err)
+	}
+	if strings.Contains(err.Error(), "gateway failure") {
+		t.Fatalf("raw malformed provider body leaked into error: %v", err)
+	}
+}
+
 func TestPrepareProviderImageCompressesToProviderLimit(t *testing.T) {
 	raw, mimeType, err := prepareProviderImage(
 		ImageData{Bytes: testPNG(t, 512, 320), MIMEType: "image/png"},

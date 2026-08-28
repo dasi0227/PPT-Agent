@@ -38,6 +38,7 @@ let resolveCreate: ((value: any) => void) | null = null;
 let recoveredRun: any = null;
 let steeringMode: 'resolve' | 'reject' = 'resolve';
 let cancelResponse: any = { status: 'cancel_requested', run_id: 'run_1' };
+let resumeResponse: any = null;
 const reconciledRuns: any[] = [];
 const getRequests: string[] = [];
 const createRequests: any[] = [];
@@ -62,6 +63,7 @@ vi.mock('../api/runs', () => ({
     },
     submitInput: async () => ({}),
     cancel: async () => cancelResponse,
+    resume: async () => resumeResponse,
     steer: async (runId: string, payload: any) => {
       steeringRequests.push({ runId, payload });
       if (steeringMode === 'reject') throw new Error('not steerable');
@@ -108,6 +110,7 @@ function reset() {
   recoveredRun = null;
   steeringMode = 'resolve';
   cancelResponse = { status: 'cancel_requested', run_id: 'run_1' };
+  resumeResponse = null;
   reconciledRuns.length = 0;
   getRequests.length = 0;
   createRequests.length = 0;
@@ -117,7 +120,7 @@ function reset() {
   useRunStore.setState({ sessions: {} });
 }
 
-function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'done' | 'failed' | 'canceled') {
+function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'paused' | 'recovering' | 'done' | 'failed' | 'canceled') {
   return {
     id: 'run_1',
     thread_id: 't1',
@@ -512,6 +515,37 @@ describe('runStore public event sessions', () => {
       activeRunId: 'saved', status: 'running', lastEventId: '17',
     });
     expect(connections[0]).toMatchObject({ runId: 'saved', lastEventId: '17' });
+  });
+
+  test('keeps a restarted run paused until the user explicitly resumes it', async () => {
+    sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
+      t1: { runId: 'run_1', threadId: 't1', projectId: 'p1', lastEventId: '17' },
+    }));
+    recoveredRun = authoritativeRun('paused');
+    await useRunStore.getState().recoverPersistedRuns();
+
+    expect(useRunStore.getState().sessions.t1).toMatchObject({
+      activeRunId: 'run_1', status: 'paused', streamStatus: 'closed', lastEventId: '17',
+    });
+    expect(connections).toHaveLength(0);
+    expect(sessionStorage.getItem('ppt-agent-active-runs-v1')).toContain('run_1');
+
+    resumeResponse = authoritativeRun('recovering');
+    expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(true);
+    expect(useRunStore.getState().sessions.t1.status).toBe('recovering');
+    expect(connections[0]).toMatchObject({ runId: 'run_1', lastEventId: '17' });
+  });
+
+  test('reconciles an open stream to paused after the backend restarts', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    recoveredRun = authoritativeRun('paused');
+
+    connections[0].onError?.(new Event('error'));
+    await vi.waitFor(() => expect(useRunStore.getState().sessions.t1.status).toBe('paused'));
+
+    expect(connections[0].closed).toBe(true);
+    expect(useRunStore.getState().sessions.t1.streamStatus).toBe('closed');
+    expect(sessionStorage.getItem('ppt-agent-active-runs-v1')).toContain('run_1');
   });
 
   test('hydrateTimeline is idempotent', () => {

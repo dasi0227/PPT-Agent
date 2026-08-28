@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Flag,
   Loader2,
+  Search,
   Sparkles,
 } from 'lucide-react';
 import type {
@@ -166,12 +167,15 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
   );
 };
 
-// 图标字形按工具区分（读取=eye，创建=sparkles，编辑=pencil），颜色由状态决定：
-// 成功=success 绿、失败=danger 红。兜底工具（search/render）成功用勾、失败用三角。
+// 图标字形按工具区分（读取=eye，创建=sparkles，搜索=search），颜色由状态决定：
+// 成功=success 绿、失败=danger 红。兜底工具（render）成功用勾、失败用三角。
 function toolStatusIcon(tool: string, failed: boolean) {
   const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
   if (tool === 'read_ppt') return <Eye className={className} strokeWidth={1.75} />;
   if (tool === 'mutate_ppt') return <Sparkles className={className} strokeWidth={1.75} />;
+  if (tool === 'search_reference' || tool.startsWith('search') || tool.includes('reference')) {
+    return <Search className={className} strokeWidth={1.75} />;
+  }
   return failed
     ? <AlertTriangle className={className} strokeWidth={1.75} />
     : <CheckCircle2 className={className} strokeWidth={1.75} />;

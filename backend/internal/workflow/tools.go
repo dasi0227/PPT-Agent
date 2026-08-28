@@ -27,6 +27,38 @@ const (
 	RiskHigh   RiskLevel = "high"
 )
 
+// ToolCapability is an internal Runtime authorization class. It is not part
+// of the model-visible function contract: a model can call only the tool
+// schemas Runtime discloses for the current turn.
+//
+// Keep the capability vocabulary closed. A descriptor that cannot be mapped
+// to this policy is a server configuration error, not something an Agent can
+// repair by trying another call.
+type ToolCapability string
+
+const (
+	CapabilityRead          ToolCapability = "read"
+	CapabilityWrite         ToolCapability = "write"
+	CapabilityPPTRead       ToolCapability = "ppt.read"
+	CapabilityPPTMutate     ToolCapability = "ppt.mutate"
+	CapabilityPPTRender     ToolCapability = "ppt.render"
+	CapabilityContextSearch ToolCapability = "context.search"
+)
+
+type capabilityPolicy struct {
+	ReadOnly bool
+	Risk     RiskLevel
+}
+
+var capabilityPolicies = map[ToolCapability]capabilityPolicy{
+	CapabilityRead:          {ReadOnly: true, Risk: RiskLow},
+	CapabilityWrite:         {ReadOnly: false, Risk: RiskMedium},
+	CapabilityPPTRead:       {ReadOnly: true, Risk: RiskLow},
+	CapabilityPPTMutate:     {ReadOnly: false, Risk: RiskMedium},
+	CapabilityPPTRender:     {ReadOnly: true, Risk: RiskLow},
+	CapabilityContextSearch: {ReadOnly: true, Risk: RiskLow},
+}
+
 const (
 	CodeResourceInvalid         = "RESOURCE_INVALID"
 	CodeResourceNotFound        = "RESOURCE_NOT_FOUND"
@@ -34,6 +66,8 @@ const (
 	CodeTargetOutOfScope        = "TARGET_OUT_OF_SCOPE"
 	CodeContentTooLarge         = "CONTENT_TOO_LARGE"
 	CodeContentInvalid          = "CONTENT_INVALID"
+	CodePatchInvalid            = "PATCH_INVALID"
+	CodePatchPathDenied         = "PATCH_PATH_DENIED"
 	CodeTargetNotFound          = CodeResourceNotFound
 	CodeTargetAlreadyExists     = "TARGET_ALREADY_EXISTS"
 	CodeEditAnchorNotFound      = "EDIT_ANCHOR_NOT_FOUND"
@@ -111,7 +145,7 @@ func SuccessfulToolResult(summary string) ToolResult {
 type ToolDescriptor struct {
 	Tool       DomainTool
 	ReadOnly   bool
-	Capability string
+	Capability ToolCapability
 	Risk       RiskLevel
 	Phases     []RunPhase
 }
@@ -126,17 +160,24 @@ func NewToolRegistry() *ToolRegistry {
 }
 
 func (r *ToolRegistry) RegisterDomainTool(tool DomainTool, readOnly bool, phases ...RunPhase) error {
-	capability := "read"
+	capability := CapabilityRead
 	risk := RiskLow
 	if !readOnly {
-		capability, risk = "write", RiskMedium
+		capability, risk = CapabilityWrite, RiskMedium
 	}
 	return r.Register(tool, readOnly, capability, risk, phases...)
 }
 
-func (r *ToolRegistry) Register(tool DomainTool, readOnly bool, capability string, risk RiskLevel, phases ...RunPhase) error {
+func (r *ToolRegistry) Register(tool DomainTool, readOnly bool, capability ToolCapability, risk RiskLevel, phases ...RunPhase) error {
 	if tool == nil || tool.Schema().Name == "" {
 		return errors.New("invalid domain tool")
+	}
+	policy, ok := capabilityPolicies[capability]
+	if !ok {
+		return fmt.Errorf("unknown tool capability %q", capability)
+	}
+	if policy.ReadOnly != readOnly || policy.Risk != risk {
+		return fmt.Errorf("tool capability %q requires read_only=%t risk=%q", capability, policy.ReadOnly, policy.Risk)
 	}
 	name := tool.Schema().Name
 	if _, ok := r.tools[name]; ok {
@@ -191,16 +232,7 @@ func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode, scope model.
 	out := []ToolSchema{}
 	for _, name := range r.order {
 		desc := r.tools[name]
-		if !containsPhase(desc.Phases, phase) {
-			continue
-		}
-		if mode != model.ModeExecute && !desc.ReadOnly {
-			continue
-		}
-		if phase == PhasePlanning && !desc.ReadOnly {
-			continue
-		}
-		if !toolRelevantToRun(name, mode, scope) {
+		if !toolAvailable(desc, phase, mode, scope) {
 			continue
 		}
 		out = append(out, scopeToolSchema(desc.Tool.Schema(), scope, desc.ReadOnly))
@@ -216,6 +248,30 @@ func toolRelevantToRun(name string, mode model.RunMode, scope model.RunScope) bo
 	return true
 }
 
+// toolAvailable is the single authority for domain-tool exposure and
+// execution. Keeping these checks together prevents a function schema from
+// being shown to the model while Runtime will deterministically deny it.
+func toolAvailable(desc ToolDescriptor, phase RunPhase, mode model.RunMode, scope model.RunScope) bool {
+	if !containsPhase(desc.Phases, phase) || !toolRelevantToRun(desc.Tool.Schema().Name, mode, scope) {
+		return false
+	}
+	if mode != model.ModeExecute && !desc.ReadOnly {
+		return false
+	}
+	if phase == PhasePlanning && !desc.ReadOnly {
+		return false
+	}
+	policy, ok := capabilityPolicies[desc.Capability]
+	if !ok || policy.ReadOnly != desc.ReadOnly || policy.Risk != desc.Risk {
+		return false
+	}
+	if desc.ReadOnly {
+		return true
+	}
+	return mode == model.ModeExecute && phase == PhaseExecuting &&
+		(scope.Artifact == model.ArtifactSpec || scope.Artifact == model.ArtifactPPT)
+}
+
 func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) ToolSchema {
 	if schema.Name == "mutate_ppt" {
 		variants, _ := schema.Parameters["oneOf"].([]any)
@@ -225,7 +281,7 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) Too
 			props, _ := variant["properties"].(map[string]any)
 			opSchema, _ := props["op"].(map[string]any)
 			op, _ := opSchema["const"].(string)
-			allowed := scope.Level == model.ScopeDeck || (strings.HasPrefix(op, "slide.spec.") || (scope.Artifact == model.ArtifactPPT && strings.HasPrefix(op, "slide.html.")))
+			allowed := mutationOperationAllowed(scope, op, scope.SlideID)
 			if allowed {
 				if scope.Level == model.ScopeSlide && scope.SlideID != "" {
 					if _, ok := props["slide_id"]; ok {
@@ -254,9 +310,30 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) Too
 	return schema
 }
 
+// mutationOperationAllowed is the single scope rule used both to disclose a
+// mutate_ppt schema variant and to authorize the decoded mutation request.
+// In particular, deck scope does not override artifact=spec: spec runs must
+// never receive or execute slide HTML mutations.
+func mutationOperationAllowed(scope model.RunScope, op, slideID string) bool {
+	if scope.Artifact == model.ArtifactSpec && strings.HasPrefix(op, "slide.html.") {
+		return false
+	}
+	if scope.Level == model.ScopeDeck {
+		return true
+	}
+	if slideID != scope.SlideID {
+		return false
+	}
+	return strings.HasPrefix(op, "slide.spec.") ||
+		(scope.Artifact == model.ArtifactPPT && strings.HasPrefix(op, "slide.html."))
+}
+
 func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {
 	if err := input.Context.Command.Validate(); err != nil {
 		return failedToolResult(ErrCapabilityDenied.Error(), "RunCommand is invalid: "+err.Error(), false)
+	}
+	if input.Scope != input.Context.Command.Scope || input.Mode != input.Context.Command.Mode {
+		return failedToolResult(ErrCapabilityDenied.Error(), "tool input scope or mode diverges from the Runtime RunCommand", false)
 	}
 	if !disclosed[name] {
 		return failedToolResult(ErrToolNotDisclosed.Error(), "tool was not disclosed in this turn", false)
@@ -265,17 +342,8 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	if !ok {
 		return failedToolResult(ErrToolNotDisclosed.Error(), "tool is not registered", false)
 	}
-	if !containsPhase(desc.Phases, input.Phase) {
-		return failedToolResult(ErrCapabilityDenied.Error(), "tool is not allowed in the current runtime phase", false)
-	}
-	if input.Mode != model.ModeExecute && !desc.ReadOnly {
-		return failedToolResult(ErrCapabilityDenied.Error(), "read-only mode cannot use write capabilities", false)
-	}
-	if input.Phase == PhasePlanning && !desc.ReadOnly {
-		return failedToolResult(ErrCapabilityDenied.Error(), "planning phase cannot use write capabilities", false)
-	}
-	if !executionCapabilityAllowed(desc, input) {
-		return failedToolResult(ErrCapabilityDenied.Error(), "tool capability or risk is denied by the current run policy", false)
+	if !toolAvailable(desc, input.Phase, input.Mode, input.Scope) {
+		return failedToolResult(ErrCapabilityDenied.Error(), "tool is unavailable for the current Runtime mode, phase, scope, capability, or risk policy", false)
 	}
 	if !desc.ReadOnly && input.Session == nil {
 		return failedToolResult(CodeRunSessionRequired, "write tool requires an active run session", false)
@@ -292,28 +360,6 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 		}
 	}
 	return result
-}
-
-func executionCapabilityAllowed(desc ToolDescriptor, input DomainToolInput) bool {
-	switch desc.Risk {
-	case RiskLow:
-	case RiskMedium:
-		if desc.ReadOnly || input.Mode != model.ModeExecute || input.Phase != PhaseExecuting {
-			return false
-		}
-	default:
-		return false
-	}
-	switch desc.Capability {
-	case "read", "ppt.read", "ppt.render", "context.search":
-		return desc.ReadOnly
-	case "write", "ppt.write", "ppt.edit":
-		return !desc.ReadOnly &&
-			(input.Context.Command.Scope.Artifact == model.ArtifactSpec ||
-				input.Context.Command.Scope.Artifact == model.ArtifactPPT)
-	default:
-		return false
-	}
 }
 
 func declaredTarget(args map[string]any) (Resource, bool) {

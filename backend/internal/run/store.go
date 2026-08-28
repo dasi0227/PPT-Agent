@@ -21,3 +21,13 @@ type Store interface {
 	// EventsSince 返回 seq > afterSeq 的事件（升序），用于 Last-Event-ID 续传。
 	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
 }
+
+// LifecycleStore is intentionally separate from Store so event-only tests and
+// alternative Bus stores do not need to implement process-recovery operations.
+type LifecycleStore interface {
+	PauseNonTerminalRuns(ctx context.Context, reason string, pausedAt int64) ([]model.Run, error)
+	PauseRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) (model.Run, error)
+	ClaimPausedRun(ctx context.Context, id, ownerInstanceID string) (model.Run, error)
+	ReleaseRecoveringRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) error
+	CancelPausedRun(ctx context.Context, id string, canceledAt int64) (model.Run, error)
+}

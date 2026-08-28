@@ -226,8 +226,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	if !created {
 		return svc.replayCreateRun(ctx, record)
 	}
-	// Serialize runs per project: direct-write products are persisted immediately,
-	// so a second concurrent run would race on the
+	// Serialize runs per project: each active run owns the project's authoring
+	// overlay, so a second concurrent run would race on the
 	// same files. Reuse RUN_ACTIVE to reject a new run while one is in flight.
 	if active, activeErr := svc.store.HasActiveRun(ctx, project.ID); activeErr != nil {
 		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
@@ -303,17 +303,12 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	if err != nil {
 		return model.Run{}, err
 	}
-	if runModel.Status.Terminal() {
+	if runModel.Status != model.RunPaused {
 		return model.Run{}, run.ErrRunNotRunning
 	}
 	project, err := svc.store.GetProject(ctx, runModel.ProjectID)
 	if err != nil {
 		return model.Run{}, err
-	}
-	if active, activeErr := svc.store.HasActiveRun(ctx, project.ID); activeErr != nil {
-		return model.Run{}, activeErr
-	} else if active && runModel.Status != model.RunRunning && runModel.Status != model.RunWaiting {
-		return model.Run{}, ErrRunActive
 	}
 	checkpointStore, ok := svc.store.(interface {
 		LatestCheckpoint(context.Context, string) (workflow.RuntimeCheckpoint, error)
@@ -321,10 +316,11 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	if !ok {
 		return model.Run{}, run.ErrContextStoreUnavailable
 	}
-	checkpoint, err := checkpointStore.LatestCheckpoint(ctx, runID)
-	if err != nil {
-		return model.Run{}, err
+	checkpoint, checkpointErr := checkpointStore.LatestCheckpoint(ctx, runID)
+	if checkpointErr != nil && !errors.Is(checkpointErr, run.ErrRunNotFound) {
+		return model.Run{}, checkpointErr
 	}
+	hasCheckpoint := checkpointErr == nil
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
 		RunID: runModel.ID, ThreadID: runModel.ThreadID, ProjectID: runModel.ProjectID,
 		Command: runModel.Command, Budget: contextengine.DefaultBudget(),
@@ -332,9 +328,12 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	if err != nil {
 		return model.Run{}, err
 	}
-	reconciled, err := workflow.ReconcileDirectWrites(ctx, project.WorkDir, checkpoint)
-	if err != nil {
-		return model.Run{}, err
+	var reconciled workflow.RecoverySnapshot
+	if hasCheckpoint {
+		reconciled, err = workflow.ReconcileDirectWrites(ctx, project.WorkDir, checkpoint)
+		if err != nil {
+			return model.Run{}, err
+		}
 	}
 	provider, err := svc.resumeProvider(runModel)
 	if err != nil {
@@ -346,8 +345,10 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 		renderer:         svc.renderer,
 		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
 		semanticReviewer: workflow.LLMSemanticReviewer{Provider: provider},
-		resumeCheckpoint: &checkpoint,
 		reconciliation:   reconciled,
+	}
+	if hasCheckpoint {
+		execution.resumeCheckpoint = &checkpoint
 	}
 	resumed, err := svc.engine.Resume(ctx, runModel, execution)
 	if err != nil {
@@ -515,6 +516,16 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 
 func (svc *RunService) GetRun(ctx context.Context, runID string) (model.Run, error) {
 	return svc.store.GetRun(ctx, runID)
+}
+
+func (svc *RunService) GetActiveRunForThread(ctx context.Context, threadID string) (model.Run, error) {
+	finder, ok := svc.store.(interface {
+		GetActiveRunForThread(context.Context, string) (model.Run, error)
+	})
+	if !ok {
+		return model.Run{}, run.ErrRunNotFound
+	}
+	return finder.GetActiveRunForThread(ctx, threadID)
 }
 
 func (svc *RunService) GetRenderScreenshot(ctx context.Context, runID, screenshotID string) ([]byte, error) {

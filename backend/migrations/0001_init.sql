@@ -1,5 +1,5 @@
--- Canonical v6 development schema. Existing development databases are not
--- migrated. Remove them before starting this breaking-refactor build.
+-- Initial v6 development schema. Later schema changes are applied by the
+-- subsequent numbered migrations.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS projects (

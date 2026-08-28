@@ -1,7 +1,7 @@
 # Deck、Outline 与 `mutate_ppt` 整体重构设计
 
 **日期：** 2026-08-26  
-**状态：** 待实施，作为本次重构的最新设计依据  
+**状态：** 已实施；2026-08-28 补充 Runtime 工具契约对齐
 **范围：** 后端领域模型、项目文件持久化、Agent 工具面、Prompt/Context、物化与渲染、HTTP API、前端状态与目录交互、运行反馈  
 **兼容策略：** 开发期直接切换，不保留旧 Schema、旧工具、旧接口或旧数据迁移分支
 
@@ -43,11 +43,11 @@ search_refs
 render_slide
 ```
 
-删除 Agent 可见的：
+删除 Agent 可见的旧写工具：
 
 ```text
-mutate_ppt
-mutate_ppt
+write_ppt
+edit_ppt
 ```
 
 `mutate_ppt` 每次调用执行一个封闭、强类型的领域 operation：
@@ -89,7 +89,7 @@ slide.html.patch
 - `outline.json` 同时保存标题、目标、受众、规则、section 列表和 `outline_order`。
 - section/subsection 层级在 outline 中，页面归属却存于每个 slide spec 的 `section/subsection`。
 - 页面移动需要同时提交完整 `ordered_ids` 和完整 placements，并重写受影响 spec。
-- Agent 通过通用字符串资源工具 `mutate_ppt/mutate_ppt` 写 outline、design、spec 和 HTML，Runtime 难以在工具 Schema 层表达结构命令与 ID 分配。
+- Agent 通过通用字符串资源工具 `write_ppt/edit_ppt` 写 outline、design、spec 和 HTML，Runtime 难以在工具 Schema 层表达结构命令与 ID 分配。
 - 空项目没有 slide ID，Agent 只能自行构造 `sli-*` 名称，再先写 outline、后写 spec；两次调用之间可能出现 outline 已引用页面但 spec 尚不存在的非法投影。
 - materialization 将整份 outline revision/hash 视为每页 HTML 来源；仅重排页面也可能把所有页面标记为陈旧。
 - 前端虽然已经使用稳定 `currentSlideId`，但目录仍需从 `outline_order`、sections、spec placement 和 slide 列表拼装。
@@ -762,6 +762,10 @@ type RestrictedJsonPatch =
 - Execute + PPT + slide scope：只披露绑定当前 slide ID 的 `slide.spec.*`、`slide.html.*`。
 - Execute + PPT + deck scope：披露全部 operation。
 - `outline.init` 只在 deck scope 且 outline 为空时进入 Schema enum。
+- `read_ppt` 与 `search_refs` 是低风险只读工具；`render_slide` 仅在 Execute + PPT scope 进入 Schema；它们的资源参数同样按 scope 裁剪。
+- `mutate_ppt` 的内部 capability 固定为 `ppt.mutate`、风险为 medium。Runtime 必须用同一条策略同时决定工具披露和执行；不得存在“Schema 已披露但执行时必然拒绝”的第二套规则。
+- `create_plan`、`update_plan`、`ask_user`、`review_completion`、`finish` 是 Runtime control actions，按 phase/plan state 单独披露，且一次模型响应只能包含一个 control action。
+- 已披露的 domain tool 若仍返回 `CAPABILITY_DENIED`，这是 Runtime 配置不变量失败，Runtime 立即终止本次 Run，不交给模型重试。
 
 ### 8.6 返回值
 
@@ -892,7 +896,7 @@ HTML 诊断失败   -> slide.html.patch / slide.html.write
 design 缺失     -> design.write
 ```
 
-Completion Gate 不再建议 `mutate_ppt/mutate_ppt`。
+Completion Gate 不再建议旧 `write_ppt/edit_ppt`。
 
 ### 10.6 数据库
 
@@ -1165,7 +1169,7 @@ Mutation result 必须返回 `invalidated_slide_ids` 和原因，前端只展示
 - `slide.spec.role`。
 - DB/page API 中作为权威字段的 position/order。
 - `ApplyPPTMutation`。
-- Agent 工具 `mutate_ppt/mutate_ppt`。
+- Agent 工具 `write_ppt/edit_ppt`。
 - 旧 Resource 的 `deck:outline/deck:design` 输入契约。
 - 旧 reorder/restructure/section/subsection 分裂写接口。
 - Prompt 中旧工具名和旧资源职责。
@@ -1228,7 +1232,7 @@ refactor: centralize PPT mutations behind typed commands
 refactor: replace PPT write tools with mutate_ppt
 
 - Expose a scoped discriminated mutation schema to execute runs.
-- Remove mutate_ppt and mutate_ppt from runtime, prompts, events, and repair guidance.
+- Remove write_ppt and edit_ppt from runtime, prompts, events, and repair guidance.
 - Update empty-deck generation to initialize structure before page authoring.
 ```
 
@@ -1346,7 +1350,7 @@ cd frontend && npm run build
 5. 移动 page/section/subsection 只修改 outline，并返回 canonical snapshot。
 6. 工作区 ordinal、目录页码和画面页码一致。
 7. 页码不写入 Agent HTML；重排不重写 HTML。
-8. `mutate_ppt/mutate_ppt` 从工具、Prompt、Gate、事件、测试中完全删除。
+8. `write_ppt/edit_ppt` 从工具、Prompt、Gate、事件、测试中完全删除。
 9. `mutate_ppt` 只接受 12 个封闭 op，并按 scope 裁剪。
 10. `deck.patch/design.patch/slide.spec.patch` 只支持 add/remove/replace。
 11. `slide.html.patch` 保留唯一锚点 exact replacement。
@@ -1363,7 +1367,7 @@ docs/discuss/2026-08-26-deck-outline-mutate-ppt-architecture-design.md
 
 这是一次 breaking refactor。严格遵循仓库 AGENTS.md；不要为旧 Schema、旧工具、旧接口或旧开发数据保留兼容层、迁移层、双读或双写。先审计当前代码与最新文档，再按设计贯通后端领域模型、deck/outline/spec/design/materialization 文件、mutate_ppt 工具、Prompt/Context/Completion、HTTP API、前端 store/目录/预览/运行反馈和测试。
 
-可以按设计文档 Phase 1-5 分阶段实施并多次提交，每个提交使用规范 commit message，避免混入无关改动。实现过程中以“稳定 ID、outline 树唯一顺序、Runtime 页码、单一前端快照、Agent 不生成正式 ID”为不可破坏的不变量。不要只修改类型或表面文案，必须删除旧 mutate_ppt/mutate_ppt、outline_order、spec placement 和旧结构 API 的所有生产/测试/Prompt 引用。
+可以按设计文档 Phase 1-5 分阶段实施并多次提交，每个提交使用规范 commit message，避免混入无关改动。实现过程中以“稳定 ID、outline 树唯一顺序、Runtime 页码、单一前端快照、Agent 不生成正式 ID”为不可破坏的不变量。不要只修改类型或表面文案，必须删除旧 write_ppt/edit_ppt、outline_order、spec placement 和旧结构 API 的所有生产/测试/Prompt 引用。
 
 完成后运行全部 Go 测试、前端 test/lint/tsc/build 以及可运行的 render integration tests。最终回复只输出改动总结：分阶段提交列表、核心架构变化、前后端与 Prompt 变化、测试结果，以及任何明确偏离设计的地方；不要输出过程日志。
 ```

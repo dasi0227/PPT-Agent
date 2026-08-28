@@ -66,6 +66,9 @@ export const ProjectTabs: React.FC = () => {
                 {isActive && runStatus === 'waiting' && (
                   <span aria-label="等待输入" className="inline-block w-2 h-2 rounded-full bg-warning animate-pulse" />
                 )}
+                {isActive && runStatus === 'paused' && (
+                  <span aria-label="已暂停" className="inline-block h-2 w-2 rounded-full bg-text-400" />
+                )}
                 
                 <ProjectMenu project={proj}>
                   <button

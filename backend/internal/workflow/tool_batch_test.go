@@ -99,7 +99,7 @@ func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 	active, peak := 0, 0
 	if err := registry.Register(
 		timedBatchTool{name: "mutate_ppt", delay: time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
-		false, "ppt.write", RiskMedium, PhaseExecuting,
+		false, CapabilityWrite, RiskMedium, PhaseExecuting,
 	); err != nil {
 		t.Fatal(err)
 	}

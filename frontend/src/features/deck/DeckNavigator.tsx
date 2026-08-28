@@ -21,7 +21,7 @@ export function DeckNavigator() {
   const [draggedSlideId, setDraggedSlideId] = useState<string>();
   const [error, setError] = useState('');
   const slides = useMemo(() => orderedSlides(snapshot), [snapshot]);
-  const locked = pending || ['creating', 'running', 'waiting', 'canceling'].includes(status);
+  const locked = pending || ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(status);
 
   const mutate = async (request: PPTMutation) => {
     if (!activeProjectId || locked) return;
@@ -50,7 +50,7 @@ export function DeckNavigator() {
       <button disabled={locked} className="rounded p-1.5 hover:bg-panel-muted disabled:opacity-40" aria-label="新增章节" onClick={() => void mutate({op:'outline.insert',expected_revision:outlineRevision,node:{kind:'section',client_ref:clientRef('section'),title:'新章节',purpose:'待补充章节目的',slides:[],subsections:[]},position:{}})}><FolderPlus className="h-4 w-4" /></button>
     </div>
     {error && <div role="alert" className="border-b border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>}
-    {locked && <div className="border-b border-border bg-warning-soft px-3 py-2 text-xs text-warning">{pending ? '正在更新目录' : '任务运行中，目录暂不可编辑'}</div>}
+    {locked && <div className="border-b border-border bg-warning-soft px-3 py-2 text-xs text-warning">{pending ? '正在更新目录' : status === 'paused' ? '任务已暂停，继续或终止后方可编辑' : '任务运行中，目录暂不可编辑'}</div>}
     <div className="min-h-0 flex-1 overflow-y-auto p-2">
       {snapshot.outline.sections.length === 0 ? <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-xs text-text-400"><FilePlus2 className="h-5 w-5"/><span>目录为空，先新增章节</span></div> : snapshot.outline.sections.map((section) => {
         const sectionCollapsed=collapsed[section.id];

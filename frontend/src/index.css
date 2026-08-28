@@ -28,8 +28,8 @@
       #5F6B7A 68%,
       #5F6B7A 100%
     );
-    background-size: 240% 100%;
-    background-position: 120% 0;
+    background-size: 200% 100%;
+    background-position: 100% 0;
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -39,7 +39,7 @@
 
 @keyframes timeline-loading-shimmer {
   to {
-    background-position: -120% 0;
+    background-position: -100% 0;
   }
 }
 

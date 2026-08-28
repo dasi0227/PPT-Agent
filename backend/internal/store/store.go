@@ -26,6 +26,11 @@ type Store interface {
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)
 	SetRunStatus(ctx context.Context, id string, status model.RunStatus) error
+	PauseNonTerminalRuns(ctx context.Context, reason string, pausedAt int64) ([]model.Run, error)
+	PauseRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) (model.Run, error)
+	ClaimPausedRun(ctx context.Context, id, ownerInstanceID string) (model.Run, error)
+	ReleaseRecoveringRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) error
+	CancelPausedRun(ctx context.Context, id string, canceledAt int64) (model.Run, error)
 	UpdateRunMode(ctx context.Context, id string, mode model.RunMode) error
 	RequestRunCancel(ctx context.Context, id string, requestedAt int64) (model.Run, error)
 	AcquireIdempotency(ctx context.Context, record model.IdempotencyRecord) (model.IdempotencyRecord, bool, error)

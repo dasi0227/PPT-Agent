@@ -94,6 +94,21 @@ func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 	}
 }
 
+func TestDeckPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
+	service, workspace := mutationFixture(t)
+	if _, err := service.Apply(Request{Op: "deck.patch", ExpectedRevision: 1, Patch: []Patch{{Op: "add", Path: "/requirements/-", Value: "必须包含案例"}}}); err != nil {
+		t.Fatal(err)
+	}
+	var deck spec.Deck
+	raw, _ := workspace.Read("deck.json")
+	if err := json.Unmarshal(raw, &deck); err != nil {
+		t.Fatal(err)
+	}
+	if deck.Revision != 2 || len(deck.Requirements) != 1 || deck.Requirements[0] != "必须包含案例" {
+		t.Fatalf("deck=%+v", deck)
+	}
+}
+
 func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticPageNumber(t *testing.T) {
 	service, _ := mutationFixture(t)
 	init, _ := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "S", Purpose: "P", Slides: []DraftSlide{{ClientRef: "one", Label: "One", Role: "content"}}, Subsections: []DraftSubsection{}}}})

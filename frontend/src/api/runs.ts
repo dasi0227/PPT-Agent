@@ -3,6 +3,7 @@ import { CancelRunResponse, Run, CreateRunRequest, RunInputPayload, PlanApproval
 
 export const runsApi = {
   get: (runId: string) => fetchClient<Run>(`/runs/${runId}`),
+  activeForThread: (threadId: string) => fetchClient<Run>(`/threads/${threadId}/active-run`),
   create: (threadId: string, payload: CreateRunRequest) => fetchClient<Run>(`/threads/${threadId}/runs`, {
     method: 'POST',
     body: JSON.stringify(payload)
@@ -17,6 +18,9 @@ export const runsApi = {
   steer: (runId: string, payload: SteerRunRequest) => fetchClient<SteerRunResponse>(`/runs/${runId}/steer`, {
     method: 'POST',
     body: JSON.stringify(payload)
+  }),
+  resume: (runId: string) => fetchClient<Run>(`/runs/${runId}/resume`, {
+    method: 'POST'
   }),
   cancel: (runId: string) => fetchClient<CancelRunResponse>(`/runs/${runId}`, {
     method: 'DELETE'

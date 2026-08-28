@@ -82,8 +82,13 @@ func (t mutatePPTTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	result, err := engine.Apply(req)
 	if err != nil {
 		code := CodeContentInvalid
-		if errors.Is(err, pptmutation.ErrRevisionConflict) {
+		switch {
+		case errors.Is(err, pptmutation.ErrRevisionConflict):
 			code = CodeRevisionConflict
+		case errors.Is(err, pptmutation.ErrPatchPathDenied):
+			code = CodePatchPathDenied
+		case errors.Is(err, pptmutation.ErrPatchInvalid):
+			code = CodePatchInvalid
 		}
 		return failedToolResult(code, err.Error(), true)
 	}
@@ -171,20 +176,34 @@ func resourceForOperation(req pptmutation.Request) Resource {
 	return Resource{}
 }
 func operationAllowed(scope model.RunScope, req pptmutation.Request) bool {
-	if scope.Level == model.ScopeDeck {
-		return true
-	}
-	if req.SlideID != scope.SlideID {
-		return false
-	}
-	if scope.Artifact == model.ArtifactSpec {
-		return strings.HasPrefix(req.Op, "slide.spec.")
-	}
-	return strings.HasPrefix(req.Op, "slide.spec.") || strings.HasPrefix(req.Op, "slide.html.")
+	return mutationOperationAllowed(scope, req.Op, req.SlideID)
 }
 
 func mutationSchema(pack contextengine.ContextPack) map[string]any {
-	patch := map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"op", "path"}, map[string]any{"op": map[string]any{"enum": []string{"add", "remove", "replace"}}, "path": map[string]any{"type": "string"}, "value": map[string]any{}})}
+	patch := func(operation string) map[string]any {
+		pathSchema := func(patchOp string) map[string]any {
+			rules := pptmutation.PatchPathRules(operation, patchOp)
+			patterns := make([]any, 0, len(rules))
+			for _, rule := range rules {
+				patterns = append(patterns, map[string]any{
+					"type": "string", "pattern": rule.Pattern, "description": rule.Description,
+				})
+			}
+			return map[string]any{"oneOf": patterns}
+		}
+		withValue := func(patchOp string) map[string]any {
+			return objectSchema([]string{"op", "path", "value"}, map[string]any{
+				"op": map[string]any{"const": patchOp}, "path": pathSchema(patchOp), "value": map[string]any{},
+			})
+		}
+		remove := objectSchema([]string{"op", "path"}, map[string]any{
+			"op": map[string]any{"const": "remove"}, "path": pathSchema("remove"),
+		})
+		return map[string]any{
+			"type": "array", "minItems": 1, "maxItems": 32,
+			"items": map[string]any{"oneOf": []any{withValue("add"), remove, withValue("replace")}},
+		}
+	}
 	position := objectSchema(nil, map[string]any{"parent_id": map[string]any{"type": "string"}, "before_id": map[string]any{"type": "string"}, "after_id": map[string]any{"type": "string"}})
 	variant := func(op string, required []string, props map[string]any) any {
 		props["op"] = map[string]any{"const": op}
@@ -210,14 +229,14 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	slideSpec := objectSchema([]string{"title", "key_message", "elements"}, map[string]any{"title": text(200), "key_message": text(1000), "elements": map[string]any{"type": "array", "items": element}, "layout": text(120)})
 	edits := map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{"old_text": text(maxPPTContentBytes), "new_text": map[string]any{"type": "string", "maxLength": maxPPTContentBytes}})}
 	variants := []any{
-		variant("deck.patch", []string{"patch"}, map[string]any{"patch": patch}),
+		variant("deck.patch", []string{"patch"}, map[string]any{"patch": patch("deck.patch")}),
 		variant("outline.init", []string{"structure"}, map[string]any{"structure": map[string]any{"type": "array", "minItems": 1, "items": draftSection}}),
 		variant("outline.insert", []string{"node", "position"}, map[string]any{"node": draftNode, "position": position, "direct_slides_policy": map[string]any{"enum": []string{"move_into_new_subsection"}}}),
 		variant("outline.move", []string{"node_id", "position"}, map[string]any{"node_id": map[string]any{"type": "string"}, "position": position}),
 		variant("outline.update", []string{"node_id", "changes"}, map[string]any{"node_id": map[string]any{"type": "string"}, "changes": changes}),
 		variant("outline.remove", []string{"node_id"}, map[string]any{"node_id": map[string]any{"type": "string"}, "child_policy": map[string]any{"enum": []string{"promote_to_section"}}}),
-		variant("design.write", []string{"design"}, map[string]any{"design": design}), variant("design.patch", []string{"patch"}, map[string]any{"patch": patch}),
-		variant("slide.spec.write", []string{"slide_id", "spec"}, map[string]any{"slide_id": slideIDSchema(pack), "spec": slideSpec}), variant("slide.spec.patch", []string{"slide_id", "patch"}, map[string]any{"slide_id": slideIDSchema(pack), "patch": patch}),
+		variant("design.write", []string{"design"}, map[string]any{"design": design}), variant("design.patch", []string{"patch"}, map[string]any{"patch": patch("design.patch")}),
+		variant("slide.spec.write", []string{"slide_id", "spec"}, map[string]any{"slide_id": slideIDSchema(pack), "spec": slideSpec}), variant("slide.spec.patch", []string{"slide_id", "patch"}, map[string]any{"slide_id": slideIDSchema(pack), "patch": patch("slide.spec.patch")}),
 		variant("slide.html.write", []string{"slide_id", "html"}, map[string]any{"slide_id": slideIDSchema(pack), "html": map[string]any{"type": "string", "minLength": 1, "maxLength": maxPPTContentBytes}}), variant("slide.html.patch", []string{"slide_id", "edits"}, map[string]any{"slide_id": slideIDSchema(pack), "edits": edits}),
 	}
 	if len(spec.FlattenOutline(pack.Outline.Outline)) > 0 || len(pack.Outline.Outline.Sections) > 0 {

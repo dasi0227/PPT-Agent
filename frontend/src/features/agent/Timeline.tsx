@@ -37,21 +37,23 @@ const runSummaryLabel = {
 function fallbackProgress(status: ReturnType<typeof useActiveSession>['status']) {
   if (status === 'creating') return { stage: 'thinking' as const, text: '分析请求中' };
   if (status === 'running') return { stage: 'thinking' as const, text: '分析任务需求中' };
+  if (status === 'paused') return { stage: 'thinking' as const, text: '任务因服务关闭而暂停，请选择继续或终止' };
+  if (status === 'recovering') return { stage: 'thinking' as const, text: '正在从检查点恢复任务' };
   if (status === 'canceling') return { stage: 'thinking' as const, text: '取消任务中' };
   return null;
 }
 
 function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 'canceled' }) {
   if (status === 'completed') {
-    return <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />;
+    return <CheckCircle2 className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />;
   }
   if (status === 'canceled') {
-    return <StopCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
+    return <StopCircle className="h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
   }
   if (status === 'error') {
-    return <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={1.75} />;
+    return <AlertTriangle className="h-4 w-4 shrink-0 text-warning" strokeWidth={1.75} />;
   }
-  return <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
+  return <XCircle className="h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
 }
 
 export const Timeline: React.FC = () => {
@@ -108,7 +110,7 @@ export const Timeline: React.FC = () => {
       <React.Fragment key={item.id}>
         {item.type === 'user_turn' && (
           <div className="flex justify-end">
-            <div className="group flex max-w-[88%] flex-col items-start">
+            <div className="group flex max-w-[88%] flex-col items-end">
               <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
                 <MarkdownMessage content={item.text} />
                 {item.deliveryStatus && (

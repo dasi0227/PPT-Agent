@@ -10,6 +10,9 @@ type Run struct {
 	Command           RunCommand
 	Status            RunStatus
 	CancelRequestedAt int64
+	OwnerInstanceID   string
+	PauseReason       string
+	PausedAt          int64
 	CreatedAt         int64
 	UpdatedAt         int64
 }

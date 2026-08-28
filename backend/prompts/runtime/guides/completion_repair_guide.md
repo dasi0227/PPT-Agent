@@ -9,6 +9,7 @@ Issue handling:
 - ASYNC_DECK_SLIDE: repair the outline tree or create every pending slide spec with the Runtime-issued slide IDs.
 - PLAN_NOT_COMPLETE: update the disclosed execution plan so completed work is marked completed and pending, in_progress or failed work is resolved.
 - TARGET_OUT_OF_SCOPE: stop using the unauthorized target. Work only inside the current scope or ask_user if a user decision is needed.
+- CAPABILITY_DENIED: Runtime treats a denial of an already disclosed domain tool as a terminal policy invariant failure and stops the run. Do not expect another turn to repair or retry it.
 - FINISH_MESSAGE_EMPTY: resubmit finish with a non-empty final user-facing message.
 - TOOLS_STILL_RUNNING, FINISH_NOT_ALLOWED, RUN_ALREADY_CANCELED, RUN_FATAL_EXIST, RUN_SESSION_MISSING or RUN_REVISION_CONFLICT: respect Runtime state. Do not attempt to bypass the gate.
 

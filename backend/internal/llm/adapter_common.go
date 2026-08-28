@@ -87,12 +87,23 @@ func (h adapterHTTP) doJSON(
 			continue
 		}
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(out)
+			rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, (16<<20)+1))
 			_ = resp.Body.Close()
-			if decodeErr != nil {
-				return fmt.Errorf("%w: decode provider response", ErrUnavailable)
+			if readErr == nil && len(rawBody) <= 16<<20 && json.Valid(rawBody) {
+				if decodeErr := json.Unmarshal(rawBody, out); decodeErr == nil {
+					return nil
+				}
 			}
-			return nil
+			// Some provider gateways occasionally return an empty, truncated, or
+			// HTML body with a 2xx status. Treat that as a transient upstream
+			// protocol failure, retain only bounded/sanitized diagnostics, and
+			// retry once. Repeating all configured retries here can multiply a
+			// full provider timeout into a very long stalled run.
+			lastErr = providerDecodeError(resp, rawBody)
+			if attempt < h.maxRetries && attempt < 1 {
+				continue
+			}
+			return lastErr
 		}
 		rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		_ = resp.Body.Close()
@@ -110,6 +121,20 @@ func (h adapterHTTP) doJSON(
 		lastErr = ErrUnavailable
 	}
 	return lastErr
+}
+
+func providerDecodeError(resp *http.Response, rawBody []byte) error {
+	out := &ProviderError{
+		Kind:       ErrUnavailable,
+		StatusCode: resp.StatusCode,
+		RequestID:  providerRequestID(resp.Header),
+		BodyBytes:  len(rawBody),
+	}
+	if len(rawBody) > 0 {
+		sum := sha256.Sum256(rawBody)
+		out.BodySHA256 = hex.EncodeToString(sum[:8])
+	}
+	return fmt.Errorf("%w: decode provider response", out)
 }
 
 func providerContextError(ctx context.Context) error {

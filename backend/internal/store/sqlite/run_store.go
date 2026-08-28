@@ -108,15 +108,17 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	po := runToPO(r)
 	return s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
-		 scope_artifact, scope_level, scope_slide_id, mode, run_command_json,
-		 client_request_id, model_profile_name, model_provider, model_name, model_url,
-		 cancel_requested_at, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 scope_artifact, scope_level, scope_slide_id, mode, run_command_json,
+			 client_request_id, model_profile_name, model_provider, model_name, model_url,
+			 cancel_requested_at, owner_instance_id, pause_reason, paused_at,
+			 status, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		po.ID, po.ThreadID, po.ProjectID, po.ScopeArtifact, po.ScopeLevel,
 		nullIfEmpty(po.ScopeSlideID), po.Mode, po.RunCommandJSON,
 		nullIfEmpty(po.ClientRequestID), nullIfEmpty(po.ModelProfileName),
 		nullIfEmpty(po.ModelProvider), nullIfEmpty(po.ModelName), nullIfEmpty(po.ModelURL),
-		po.CancelRequestedAt, po.Status, po.CreatedAt, po.UpdatedAt,
+		po.CancelRequestedAt, po.OwnerInstanceID, po.PauseReason, po.PausedAt,
+		po.Status, po.CreatedAt, po.UpdatedAt,
 	).Error
 }
 
@@ -129,9 +131,125 @@ func (s *Store) GetRun(ctx context.Context, id string) (model.Run, error) {
 }
 
 func (s *Store) SetRunStatus(ctx context.Context, id string, status model.RunStatus) error {
+	updates := map[string]any{"status": string(status), "updated_at": nowUnix()}
+	if status == model.RunRunning || status == model.RunWaiting || status == model.RunPending {
+		updates["pause_reason"] = ""
+		updates["paused_at"] = nil
+	}
+	if status.Terminal() {
+		updates["owner_instance_id"] = ""
+	}
 	return s.db.WithContext(ctx).Model(&runPO{}).
 		Where("id = ?", id).
-		Updates(map[string]any{"status": string(status), "updated_at": nowUnix()}).Error
+		Updates(updates).Error
+}
+
+func (s *Store) PauseNonTerminalRuns(ctx context.Context, reason string, pausedAt int64) ([]model.Run, error) {
+	var out []model.Run
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var rows []runPO
+		statuses := []string{string(model.RunPending), string(model.RunRunning), string(model.RunWaiting), string(model.RunRecovering)}
+		if err := tx.Where("status IN ?", statuses).Order("created_at ASC").Find(&rows).Error; err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		if err := tx.Model(&runPO{}).Where("status IN ?", statuses).Updates(map[string]any{
+			"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
+			"paused_at": pausedAt, "updated_at": pausedAt,
+		}).Error; err != nil {
+			return err
+		}
+		out = make([]model.Run, 0, len(rows))
+		for _, row := range rows {
+			runModel := row.toModel()
+			runModel.Status = model.RunPaused
+			runModel.OwnerInstanceID = ""
+			runModel.PauseReason = reason
+			runModel.PausedAt = pausedAt
+			out = append(out, runModel)
+		}
+		return nil
+	})
+	return out, err
+}
+
+func (s *Store) PauseRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) (model.Run, error) {
+	var out model.Run
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row runPO
+		if err := tx.First(&row, "id = ?", id).Error; err != nil {
+			return mapErr(err)
+		}
+		status := model.RunStatus(row.Status)
+		if status.Terminal() {
+			out = row.toModel()
+			return nil
+		}
+		if ownerInstanceID != "" && row.OwnerInstanceID != ownerInstanceID {
+			return run.ErrRunNotRunning
+		}
+		if err := tx.Model(&runPO{}).Where("id = ?", id).Updates(map[string]any{
+			"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
+			"paused_at": pausedAt, "updated_at": pausedAt,
+		}).Error; err != nil {
+			return err
+		}
+		out = row.toModel()
+		out.Status, out.OwnerInstanceID, out.PauseReason, out.PausedAt = model.RunPaused, "", reason, pausedAt
+		return nil
+	})
+	return out, err
+}
+
+func (s *Store) ClaimPausedRun(ctx context.Context, id, ownerInstanceID string) (model.Run, error) {
+	now := nowUnix()
+	result := s.db.WithContext(ctx).Model(&runPO{}).
+		Where("id = ? AND status = ?", id, string(model.RunPaused)).
+		Updates(map[string]any{
+			"status": string(model.RunRecovering), "owner_instance_id": ownerInstanceID,
+			"pause_reason": "", "paused_at": nil, "updated_at": now,
+		})
+	if result.Error != nil {
+		return model.Run{}, result.Error
+	}
+	if result.RowsAffected != 1 {
+		return model.Run{}, run.ErrRunNotRunning
+	}
+	return s.GetRun(ctx, id)
+}
+
+func (s *Store) ReleaseRecoveringRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) error {
+	result := s.db.WithContext(ctx).Model(&runPO{}).
+		Where("id = ? AND status = ? AND owner_instance_id = ?", id, string(model.RunRecovering), ownerInstanceID).
+		Updates(map[string]any{
+			"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
+			"paused_at": pausedAt, "updated_at": pausedAt,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return run.ErrRunNotRunning
+	}
+	return nil
+}
+
+func (s *Store) CancelPausedRun(ctx context.Context, id string, canceledAt int64) (model.Run, error) {
+	result := s.db.WithContext(ctx).Model(&runPO{}).
+		Where("id = ? AND status = ?", id, string(model.RunPaused)).
+		Updates(map[string]any{
+			"status": string(model.RunCanceled), "owner_instance_id": "", "pause_reason": "",
+			"paused_at": nil, "cancel_requested_at": canceledAt, "updated_at": canceledAt,
+		})
+	if result.Error != nil {
+		return model.Run{}, result.Error
+	}
+	if result.RowsAffected != 1 {
+		return model.Run{}, run.ErrRunNotRunning
+	}
+	return s.GetRun(ctx, id)
 }
 
 func (s *Store) UpdateRunMode(ctx context.Context, id string, mode model.RunMode) error {
@@ -292,13 +410,26 @@ func (s *Store) MarkSteering(ctx context.Context, runID string, ids []string, st
 		Updates(updates).Error
 }
 
-// HasActiveRun 报告某 project 是否有非终态 run（pending/running/waiting），供手动写操作互斥判定。
+// HasActiveRun 报告某 project 是否有非终态 run（包括 paused/recovering），供手动写操作互斥判定。
 func (s *Store) HasActiveRun(ctx context.Context, projectID string) (bool, error) {
 	var n int64
 	err := s.db.WithContext(ctx).Model(&runPO{}).
 		Where("project_id = ? AND status NOT IN ?", projectID, []string{"done", "failed", "canceled"}).
 		Count(&n).Error
 	return n > 0, err
+}
+
+// GetActiveRunForThread returns the durable non-terminal Run for UI recovery.
+func (s *Store) GetActiveRunForThread(ctx context.Context, threadID string) (model.Run, error) {
+	var po runPO
+	if err := s.db.WithContext(ctx).
+		Where("thread_id = ? AND status NOT IN ?", threadID, []string{
+			string(model.RunDone), string(model.RunFailed), string(model.RunCanceled),
+		}).
+		Order("created_at DESC").First(&po).Error; err != nil {
+		return model.Run{}, mapErr(err)
+	}
+	return po.toModel(), nil
 }
 
 // AppendEvent 持久化一条 run 事件（run_id+seq 主键，seq 单调连续 API-SSE-001）。

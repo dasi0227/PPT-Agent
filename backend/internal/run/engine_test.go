@@ -106,6 +106,70 @@ func (s *memStore) SetRunStatus(_ context.Context, id string, status model.RunSt
 	return nil
 }
 
+func (s *memStore) PauseNonTerminalRuns(_ context.Context, reason string, pausedAt int64) ([]model.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var paused []model.Run
+	for id, value := range s.runs {
+		if value.Status == model.RunPending || value.Status == model.RunRunning || value.Status == model.RunWaiting || value.Status == model.RunRecovering {
+			value.Status, value.OwnerInstanceID = model.RunPaused, ""
+			value.PauseReason, value.PausedAt = reason, pausedAt
+			s.runs[id] = value
+			paused = append(paused, value)
+		}
+	}
+	return paused, nil
+}
+
+func (s *memStore) PauseRun(_ context.Context, id, ownerInstanceID, reason string, pausedAt int64) (model.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.runs[id]
+	if !ok {
+		return model.Run{}, ErrRunNotFound
+	}
+	if ownerInstanceID != "" && value.OwnerInstanceID != ownerInstanceID {
+		return model.Run{}, ErrRunNotRunning
+	}
+	if !value.Status.Terminal() {
+		value.Status, value.OwnerInstanceID = model.RunPaused, ""
+		value.PauseReason, value.PausedAt = reason, pausedAt
+		s.runs[id] = value
+	}
+	return value, nil
+}
+
+func (s *memStore) ClaimPausedRun(_ context.Context, id, ownerInstanceID string) (model.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.runs[id]
+	if !ok || value.Status != model.RunPaused {
+		return model.Run{}, ErrRunNotRunning
+	}
+	value.Status, value.OwnerInstanceID = model.RunRecovering, ownerInstanceID
+	value.PauseReason, value.PausedAt = "", 0
+	s.runs[id] = value
+	return value, nil
+}
+
+func (s *memStore) ReleaseRecoveringRun(_ context.Context, id, ownerInstanceID, reason string, pausedAt int64) error {
+	_, err := s.PauseRun(context.Background(), id, ownerInstanceID, reason, pausedAt)
+	return err
+}
+
+func (s *memStore) CancelPausedRun(_ context.Context, id string, canceledAt int64) (model.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.runs[id]
+	if !ok || value.Status != model.RunPaused {
+		return model.Run{}, ErrRunNotRunning
+	}
+	value.Status, value.CancelRequestedAt = model.RunCanceled, canceledAt
+	value.PauseReason, value.PausedAt = "", 0
+	s.runs[id] = value
+	return value, nil
+}
+
 func (s *memStore) AppendEvent(_ context.Context, event model.Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -135,6 +199,52 @@ type scriptRunner func(context.Context, workflow.EventEmitter, Checkpointer, Pro
 
 func (execution scriptRunner) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint Checkpointer, prompter Prompter) workflow.StructuredOutcome {
 	return execution(ctx, emitter, checkpoint, prompter)
+}
+
+func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
+	store := newMemStore()
+	first := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	started := make(chan struct{})
+	blocking := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
+		close(started)
+		<-ctx.Done()
+		return workflow.StructuredOutcome{Status: workflow.StatusCanceled}
+	})
+	created, err := first.Start(context.Background(), testRun("restartable"), blocking)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	waitRunStatus(t, store, created.ID, model.RunRunning)
+	if err := first.PauseAll(context.Background(), "server_shutdown"); err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, store, created.ID, model.RunPaused)
+	events, err := store.EventsSince(context.Background(), created.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.Type.Terminal() {
+			t.Fatalf("pause must not emit a terminal event: %+v", event)
+		}
+	}
+
+	second := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	if err := second.Initialize(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	paused, _ := store.GetRun(context.Background(), created.ID)
+	resumed, err := second.Resume(context.Background(), paused, scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
+		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumed.Status != model.RunRecovering {
+		t.Fatalf("resume status=%s", resumed.Status)
+	}
+	waitRunStatus(t, store, created.ID, model.RunDone)
 }
 
 func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {

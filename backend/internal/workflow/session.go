@@ -84,9 +84,9 @@ func (s *RunSession) HasChange(ref ArtifactRef) bool {
 	return ok && !entry.Delete
 }
 
-// Write writes content directly to the project directory and records the change.
-// Repeated writes of the same artifact in one run keep the run's baseline (the
-// bytes present before the run touched it) and only advance the after hash.
+// Write records content in the isolated run overlay. Repeated writes of the
+// same artifact in one run keep the run's baseline (the bytes present before
+// the run touched it) and only advance the after hash.
 func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (ArtifactChange, error) {
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
@@ -117,8 +117,8 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, Source: source, Insertions: insertions, Deletions: deletions}, nil
 }
 
-// WriteBatch applies a logical domain-target update by writing every item to
-// disk in order and recording each change.
+// WriteBatch applies a logical domain-target update to the overlay in order
+// and records each change.
 func (s *RunSession) WriteBatch(items []WriteItem) ([]ArtifactChange, error) {
 	if len(items) == 0 {
 		return nil, errors.New("write batch is empty")
@@ -323,6 +323,7 @@ func (s *RunSession) Commit(ctx context.Context, metadata CommitMetadata) error 
 			MaterializationProofs: append([]MaterializationProof(nil), s.materializationProofs...),
 		}
 		if err := metadata(ctx, commitContext); err != nil {
+			rollback()
 			return err
 		}
 	}

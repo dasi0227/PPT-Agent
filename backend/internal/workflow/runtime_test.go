@@ -245,6 +245,22 @@ func (blockingReadTool) Execute(ctx context.Context, _ DomainToolInput) ToolResu
 	return failedToolResult(CodeCanceled, "run canceled", false)
 }
 
+type policyDeniedProvider struct{}
+
+func (policyDeniedProvider) RegisterDomainTools(registry *ToolRegistry) error {
+	return registry.RegisterDomainTool(policyDeniedTool{}, false, PhaseExecuting)
+}
+
+type policyDeniedTool struct{}
+
+func (policyDeniedTool) Schema() ToolSchema {
+	return ToolSchema{Name: "mutate_ppt", Description: "policy failure test", Parameters: objectSchema(nil, map[string]any{})}
+}
+
+func (policyDeniedTool) Execute(context.Context, DomainToolInput) ToolResult {
+	return failedToolResult(ErrCapabilityDenied.Error(), "simulated Runtime policy failure", false)
+}
+
 type fakeProvider struct {
 	kind ArtifactKind
 }
@@ -853,6 +869,29 @@ func TestReviewCompletionReturnsChecksToSameLoop(t *testing.T) {
 	}
 }
 
+func TestRuntimeStopsImmediatelyWhenAnExposedToolHitsPolicyDenial(t *testing.T) {
+	events := &eventRecorder{}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("policy", "mutate_ppt", map[string]any{}),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID:       "policy-denial",
+		ProjectDir:  t.TempDir(),
+		Context:     testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeDeck, false, "apply a change"),
+		DomainTools: policyDeniedProvider{},
+		Emitter:     events,
+	})
+	if outcome.Status != StatusFailed || outcome.Code != ErrCapabilityDenied.Error() {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if len(agent.requests) != 1 {
+		t.Fatalf("Runtime retried an unrecoverable policy denial: requests=%d", len(agent.requests))
+	}
+	if events.count(model.EventRunError) != 1 || events.count(model.EventRunFailed) != 0 {
+		t.Fatalf("policy invariant was projected as an agent failure: %+v", events.events)
+	}
+}
+
 func contains(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {
@@ -1263,6 +1302,10 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 		!strings.Contains(execute.ContextBriefing, "Plan:") || !schemasByName(execute.Tools)["mutate_ppt"] {
 		t.Fatalf("execute request did not use approved authority: %+v", execute)
 	}
+	if len(execute.Messages) == 0 || execute.Messages[len(execute.Messages)-1].Role != llm.RoleUser ||
+		execute.Messages[len(execute.Messages)-1].Text() != approvedPlanExecutionGuidance() {
+		t.Fatalf("execute request did not end with the approval transition: %+v", execute.Messages)
+	}
 	if events.count(model.EventPlanApprovalAnswered) != 1 || events.count(model.EventRunModeChanged) != 1 || events.count(model.EventPlanUpdated) != 3 {
 		t.Fatalf("events=%+v", events.events)
 	}
@@ -1346,6 +1389,41 @@ type checkpointRecorder struct {
 func (r *checkpointRecorder) SaveCheckpoint(_ context.Context, checkpoint RuntimeCheckpoint) error {
 	r.checkpoints = append(r.checkpoints, checkpoint)
 	return nil
+}
+
+type postCommitFailingCheckpoint struct {
+	failures int
+}
+
+func (s *postCommitFailingCheckpoint) SaveCheckpoint(_ context.Context, checkpoint RuntimeCheckpoint) error {
+	if checkpoint.Boundary == string(checkpointAfterCommit) || checkpoint.Boundary == string(checkpointTerminal) {
+		s.failures++
+		return errors.New("checkpoint store unavailable after commit")
+	}
+	return nil
+}
+
+func TestPostCommitCheckpointFailureDoesNotReportCommittedRunAsFailed(t *testing.T) {
+	dir := testProject(t, ArtifactSlideSpec)
+	checkpoints := &postCommitFailingCheckpoint{}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("write", "mutate_ppt", map[string]any{"content": "committed"}),
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "post-commit-checkpoint", ProjectDir: dir,
+		Context:        testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
+		Checkpoint:     checkpoints,
+		CommitMetadata: func(context.Context, CommitContext) error { return nil },
+	})
+	if outcome.Status != StatusCompleted || checkpoints.failures != 2 {
+		t.Fatalf("outcome=%+v checkpoint_failures=%d", outcome, checkpoints.failures)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("s1")))
+	if err != nil || string(raw) != "committed" {
+		t.Fatalf("committed artifact missing: raw=%q err=%v", raw, err)
+	}
 }
 
 func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
