@@ -223,7 +223,7 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	if len(spec.FlattenOutline(pack.Outline.Outline)) > 0 || len(pack.Outline.Outline.Sections) > 0 {
 		variants = append(variants[:1], variants[2:]...)
 	}
-	return map[string]any{"oneOf": variants, "description": "Closed discriminated union of the 12 supported PPT mutations."}
+	return map[string]any{"type": "object", "oneOf": variants, "description": "Closed discriminated union of the 12 supported PPT mutations."}
 }
 func slideIDSchema(pack contextengine.ContextPack) map[string]any {
 	_ = pack

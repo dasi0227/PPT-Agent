@@ -108,11 +108,23 @@ func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
 					if err := json.Unmarshal(raw, &wire); err != nil {
 						t.Fatal(err)
 					}
-					assertNoNullRequired(t, schema.Name, wire)
+					assertProviderToolSchema(t, schema.Name, wire)
 				}
 			})
 		}
 	}
+}
+
+func assertProviderToolSchema(t *testing.T, name string, value any) {
+	t.Helper()
+	root, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("%s.parameters encoded as %T, want object", name, value)
+	}
+	if root["type"] != "object" {
+		t.Fatalf("%s.parameters.type=%#v, want object", name, root["type"])
+	}
+	assertNoNullRequired(t, name, value)
 }
 
 func assertNoNullRequired(t *testing.T, path string, value any) {
