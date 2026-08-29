@@ -270,9 +270,6 @@ func (s Service) insertNode(outline *spec.Outline, req Request, created map[stri
 		return invalid(errors.New("inserted node requires client_ref"))
 	}
 	refs := map[string]bool{}
-	if err := clientRef(req.Node.ClientRef, refs); err != nil {
-		return err
-	}
 	switch req.Node.Kind {
 	case "section":
 		d := DraftSection{ClientRef: req.Node.ClientRef, Title: req.Node.Title, Purpose: req.Node.Purpose, Slides: req.Node.Slides, Subsections: req.Node.Subsections}
@@ -288,6 +285,9 @@ func (s Service) insertNode(outline *spec.Outline, req Request, created map[stri
 		}
 		if len(section.Slides) > 0 && req.DirectSlidesPolicy != "move_into_new_subsection" {
 			return invalid(errors.New("direct_slides_policy is required"))
+		}
+		if err := clientRef(req.Node.ClientRef, refs); err != nil {
+			return err
 		}
 		id := s.NewID("sub")
 		created[req.Node.ClientRef] = id

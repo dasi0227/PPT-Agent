@@ -1,0 +1,1244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>目录视觉重构预览</title>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #e9edf2;
+      --panel: #f8f9fb;
+      --paper: #ffffff;
+      --ink: #18202a;
+      --text: #3f4a58;
+      --muted: #8994a3;
+      --line: #dce1e8;
+      --line-strong: #c9d0da;
+      --accent: #3568f4;
+      --accent-soft: #eef3ff;
+      --accent-line: #a9bfff;
+      --shadow: 0 1px 2px rgb(28 39 54 / 6%), 0 8px 24px rgb(28 39 54 / 5%);
+      --radius: 7px;
+      font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 1024px;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--canvas);
+      color: var(--ink);
+    }
+
+    button {
+      font: inherit;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 352px minmax(520px, 1fr) 336px;
+      width: 100%;
+      height: 100dvh;
+    }
+
+    .navigator {
+      position: relative;
+      display: flex;
+      min-height: 0;
+      flex-direction: column;
+      border-right: 1px solid var(--line-strong);
+      background:
+        linear-gradient(90deg, rgb(255 255 255 / 72%), transparent 24px),
+        var(--panel);
+      box-shadow: 10px 0 28px rgb(43 55 71 / 4%);
+    }
+
+    .nav-header {
+      display: flex;
+      min-height: 78px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px 13px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgb(248 249 251 / 92%);
+      backdrop-filter: blur(14px);
+    }
+
+    .nav-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 720;
+      letter-spacing: 0;
+    }
+
+    .nav-meta {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .view-switch {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #edf0f4;
+    }
+
+    .view-button {
+      display: flex;
+      height: 27px;
+      align-items: center;
+      gap: 5px;
+      padding: 0 9px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: #7b8695;
+      font-size: 11px;
+      font-weight: 620;
+      cursor: pointer;
+      transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+    }
+
+    .view-button:hover {
+      color: var(--ink);
+    }
+
+    .view-button[aria-pressed="true"] {
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 1px 3px rgb(28 39 54 / 10%);
+    }
+
+    .view-button svg {
+      width: 13px;
+      height: 13px;
+      stroke-width: 1.8;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 100ms ease;
+    }
+
+    .icon-button:hover {
+      border-color: var(--line);
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 1px 2px rgb(28 39 54 / 7%);
+    }
+
+    .icon-button:active {
+      transform: translateY(1px);
+    }
+
+    .icon-button svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.8;
+    }
+
+    .directory {
+      flex: 1;
+      overflow-y: auto;
+      padding: 9px 10px 30px;
+      scrollbar-gutter: stable;
+    }
+
+    .directory::-webkit-scrollbar {
+      width: 9px;
+    }
+
+    .directory::-webkit-scrollbar-thumb {
+      border: 3px solid transparent;
+      border-radius: 999px;
+      background: #b7bec8;
+      background-clip: padding-box;
+    }
+
+    .section {
+      position: relative;
+      margin-bottom: 6px;
+    }
+
+    .section + .section {
+      padding-top: 8px;
+      border-top: 1px solid rgb(201 208 218 / 68%);
+    }
+
+    .section-header {
+      display: grid;
+      width: 100%;
+      min-height: 40px;
+      grid-template-columns: 22px 25px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 4px 4px 5px;
+      border: 0;
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--ink);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .section-header:hover {
+      background: #f0f2f5;
+    }
+
+    .section-number {
+      color: #667282;
+      font-size: 12px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .section-title {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 690;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .section-actions {
+      display: flex;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    .section-header:hover .section-actions,
+    .section-header:focus-within .section-actions,
+    .section-actions:has([aria-expanded="true"]) {
+      opacity: 1;
+    }
+
+    .section-actions .icon-button {
+      width: 26px;
+      height: 26px;
+    }
+
+    .chevron {
+      display: grid;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      place-items: center;
+      border: 0;
+      background: transparent;
+      color: #6f7a89;
+      cursor: pointer;
+      transition: transform 180ms cubic-bezier(.2, .8, .2, 1);
+    }
+
+    .chevron svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .section.collapsed .chevron {
+      transform: rotate(-90deg);
+    }
+
+    .section-body {
+      display: grid;
+      grid-template-rows: 1fr;
+      opacity: 1;
+      transition: grid-template-rows 190ms cubic-bezier(.2, .8, .2, 1), opacity 130ms ease;
+    }
+
+    .section.collapsed .section-body {
+      grid-template-rows: 0fr;
+      opacity: 0;
+    }
+
+    .section-body-inner {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .subsection {
+      display: grid;
+      min-height: 29px;
+      grid-template-columns: 51px minmax(0, 1fr) auto;
+      align-items: end;
+      padding: 7px 7px 4px;
+      color: var(--muted);
+    }
+
+    .subsection-number {
+      padding-left: 22px;
+      font-size: 10px;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .subsection-title {
+      overflow: hidden;
+      font-size: 10px;
+      font-weight: 620;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .subsection .icon-button {
+      width: 23px;
+      height: 23px;
+      margin-block: -5px -3px;
+      opacity: 0;
+    }
+
+    .subsection:hover .icon-button,
+    .subsection:focus-within .icon-button,
+    .subsection .icon-button[aria-expanded="true"] {
+      opacity: 1;
+    }
+
+    .slide {
+      position: relative;
+      display: grid;
+      min-height: 57px;
+      grid-template-columns: 18px 30px 64px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      margin: 1px 0;
+      padding: 6px 6px 6px 5px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 130ms ease, border-color 130ms ease, box-shadow 130ms ease;
+    }
+
+    body[data-view="design"] .slide {
+      min-height: 43px;
+      grid-template-columns: 18px 30px minmax(0, 1fr) auto;
+      padding-block: 5px;
+    }
+
+    body[data-view="design"] .thumbnail,
+    body[data-view="design"] .slide-state {
+      display: none;
+    }
+
+    body[data-view="design"] .slide-title {
+      font-size: 12.5px;
+      font-weight: 550;
+    }
+
+    body[data-view="slide"] .slide {
+      min-height: 83px;
+      grid-template-columns: 18px 30px minmax(0, 1fr) auto;
+      padding-block: 7px;
+    }
+
+    body[data-view="slide"] .thumbnail {
+      width: 120px;
+      justify-self: start;
+    }
+
+    body[data-view="slide"] .slide-copy {
+      display: none;
+    }
+
+    .slide::before {
+      position: absolute;
+      top: 8px;
+      bottom: 8px;
+      left: 0;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: transparent;
+      content: "";
+    }
+
+    .slide:hover {
+      background: #f1f3f6;
+    }
+
+    .slide.selected {
+      border-color: #dbe5ff;
+      background: var(--accent-soft);
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 68%);
+    }
+
+    .slide.selected::before {
+      background: var(--accent);
+    }
+
+    .grip {
+      display: grid;
+      place-items: center;
+      color: #a6afbb;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    .slide:hover .grip,
+    .slide.selected .grip {
+      opacity: 1;
+    }
+
+    .grip svg {
+      width: 13px;
+      height: 13px;
+    }
+
+    .page-number {
+      color: #6f7b8b;
+      font-size: 11px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .thumbnail {
+      position: relative;
+      width: 64px;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      border: 1px solid #cdd4de;
+      border-radius: 4px;
+      background: var(--paper);
+      box-shadow: 0 2px 5px rgb(35 46 61 / 10%);
+      isolation: isolate;
+    }
+
+    .selected .thumbnail {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgb(53 104 244 / 18%), 0 2px 7px rgb(53 104 244 / 13%);
+    }
+
+    .thumbnail::before {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: linear-gradient(145deg, #fcfdff, #eef2f7);
+      content: "";
+    }
+
+    .thumb-cover {
+      background:
+        linear-gradient(115deg, #213049 0 49%, transparent 49%),
+        linear-gradient(145deg, #d5e0f7, #f6f8fc);
+    }
+
+    .thumb-cover::after {
+      position: absolute;
+      right: 6px;
+      bottom: 6px;
+      width: 18px;
+      height: 18px;
+      border: 4px solid rgb(53 104 244 / 74%);
+      border-radius: 50%;
+      content: "";
+    }
+
+    .thumb-title::after {
+      position: absolute;
+      top: 8px;
+      right: 7px;
+      bottom: 7px;
+      left: 7px;
+      border-left: 3px solid #3568f4;
+      background:
+        linear-gradient(#334155 0 0) 8px 1px / 31px 3px no-repeat,
+        linear-gradient(#99a5b4 0 0) 8px 9px / 23px 2px no-repeat,
+        linear-gradient(#dfe4ea 0 0) 8px 17px / 37px 1px no-repeat;
+      content: "";
+    }
+
+    .thumb-grid::after {
+      position: absolute;
+      inset: 7px;
+      border-radius: 2px;
+      background:
+        linear-gradient(90deg, #d9e3fb 47%, transparent 47% 53%, #e6eaf0 53%),
+        linear-gradient(#536278 0 0) 3px 3px / 20px 2px no-repeat;
+      content: "";
+    }
+
+    .thumb-steps::after {
+      position: absolute;
+      inset: 7px;
+      background:
+        linear-gradient(#3568f4 0 0) 0 0 / 8px 8px no-repeat,
+        linear-gradient(#9db3ef 0 0) 13px 0 / 8px 8px no-repeat,
+        linear-gradient(#cbd5e1 0 0) 26px 0 / 8px 8px no-repeat,
+        linear-gradient(#344154 0 0) 0 14px / 38px 2px no-repeat,
+        linear-gradient(#bac3cf 0 0) 0 20px / 30px 2px no-repeat;
+      content: "";
+    }
+
+    .slide-copy {
+      min-width: 0;
+    }
+
+    .slide-title {
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 530;
+      line-height: 1.35;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .slide-state {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1;
+    }
+
+    .selected .slide-state {
+      color: #6479ad;
+    }
+
+    .row-actions {
+      display: flex;
+      padding-left: 14px;
+      background: linear-gradient(90deg, transparent, var(--panel) 28%);
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    .selected .row-actions {
+      background: linear-gradient(90deg, transparent, var(--accent-soft) 28%);
+    }
+
+    .slide:hover .row-actions,
+    .slide:focus-within .row-actions,
+    .row-actions:has([aria-expanded="true"]) {
+      opacity: 1;
+    }
+
+    .row-actions .icon-button {
+      width: 25px;
+      height: 25px;
+    }
+
+    .workspace {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      background: #e4e8ed;
+    }
+
+    .workspace-bar,
+    .agent-bar {
+      display: flex;
+      height: 48px;
+      flex: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 15px;
+      border-bottom: 1px solid var(--line-strong);
+      background: #f8f9fb;
+      color: #667282;
+      font-size: 12px;
+    }
+
+    .canvas {
+      display: grid;
+      flex: 1;
+      place-items: center;
+      padding: 42px;
+      overflow: hidden;
+    }
+
+    .slide-paper {
+      position: relative;
+      width: min(78%, 860px);
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      border: 1px solid #d1d7df;
+      border-radius: 4px;
+      background:
+        linear-gradient(112deg, #1e2d46 0 42%, transparent 42%),
+        linear-gradient(145deg, #dce6f8, #f8fafc);
+      box-shadow: 0 22px 60px rgb(35 46 61 / 16%);
+    }
+
+    .design-sheet {
+      width: min(72%, 760px);
+      min-height: 470px;
+      padding: 46px 52px;
+      border: 1px solid #d2d8e1;
+      border-radius: 7px;
+      background: var(--paper);
+      box-shadow: 0 18px 48px rgb(35 46 61 / 13%);
+    }
+
+    .design-sheet-label {
+      margin: 0 0 28px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 720;
+    }
+
+    .design-sheet h2 {
+      margin: 0;
+      max-width: 650px;
+      font-size: 34px;
+      line-height: 1.22;
+    }
+
+    .design-sheet-message {
+      margin: 19px 0 0;
+      max-width: 590px;
+      color: #546171;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    .design-outline {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 50px;
+    }
+
+    .design-outline div {
+      min-height: 105px;
+      padding: 15px;
+      border: 1px solid #e1e5eb;
+      border-radius: 7px;
+      background: #f7f8fa;
+    }
+
+    .design-outline strong {
+      display: block;
+      color: #273241;
+      font-size: 12px;
+    }
+
+    .design-outline span {
+      display: block;
+      margin-top: 8px;
+      color: #84909f;
+      font-size: 10px;
+      line-height: 1.5;
+    }
+
+    body[data-view="design"] .slide-paper,
+    body[data-view="slide"] .design-sheet {
+      display: none;
+    }
+
+    .slide-paper-content {
+      position: absolute;
+      top: 18%;
+      left: 7%;
+      width: 32%;
+      color: #f8fafc;
+    }
+
+    .slide-paper-content small {
+      color: #a9bfff;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .slide-paper-content h2 {
+      margin: 15px 0 13px;
+      font-size: clamp(22px, 3vw, 44px);
+      line-height: 1.16;
+    }
+
+    .slide-paper-content p {
+      margin: 0;
+      color: #cbd4e2;
+      font-size: clamp(10px, 1vw, 15px);
+      line-height: 1.65;
+    }
+
+    .slide-mark {
+      position: absolute;
+      right: 13%;
+      bottom: 18%;
+      width: 24%;
+      aspect-ratio: 1;
+      border: 22px solid rgb(53 104 244 / 74%);
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px rgb(255 255 255 / 25%);
+    }
+
+    .agent {
+      border-left: 1px solid var(--line-strong);
+      background: #f8f9fb;
+    }
+
+    .agent-content {
+      padding: 18px;
+    }
+
+    .message {
+      width: 88%;
+      margin-left: auto;
+      padding: 10px 12px;
+      border-radius: 7px 7px 2px 7px;
+      background: #e9edf4;
+      color: #4e5a69;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .agent-note {
+      margin-top: 18px;
+      color: #8792a1;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .toast {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      z-index: 20;
+      padding: 9px 15px;
+      border: 1px solid #b9c9f9;
+      border-radius: 999px;
+      background: #315fdd;
+      box-shadow: 0 10px 24px rgb(49 95 221 / 22%);
+      color: white;
+      font-size: 12px;
+      font-weight: 650;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, -12px);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .context-menu {
+      position: fixed;
+      z-index: 40;
+      display: none;
+      width: 162px;
+      padding: 5px;
+      border: 1px solid #d4dae3;
+      border-radius: 7px;
+      background: rgb(255 255 255 / 97%);
+      box-shadow: 0 14px 35px rgb(25 35 49 / 18%), 0 2px 6px rgb(25 35 49 / 8%);
+      backdrop-filter: blur(16px);
+    }
+
+    .context-menu.open {
+      display: block;
+    }
+
+    .menu-item {
+      display: flex;
+      width: 100%;
+      height: 31px;
+      align-items: center;
+      gap: 9px;
+      padding: 0 9px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: #344050;
+      font-size: 11px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .menu-item:hover {
+      background: #eef1f5;
+    }
+
+    .menu-item svg {
+      width: 14px;
+      height: 14px;
+      color: #758191;
+    }
+
+    .menu-item.danger {
+      color: #b74751;
+    }
+
+    .menu-item.danger svg {
+      color: #b74751;
+    }
+
+    .menu-separator {
+      height: 1px;
+      margin: 4px 5px;
+      background: #e4e8ee;
+    }
+
+    @media (max-width: 1180px) {
+      .app {
+        grid-template-columns: 336px minmax(500px, 1fr);
+      }
+
+      .agent {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 1ms !important;
+      }
+    }
+  </style>
+</head>
+<body data-view="design">
+  <main class="app">
+    <aside class="navigator" aria-label="演示目录">
+      <header class="nav-header">
+        <div>
+          <h1 class="nav-title">目录</h1>
+          <p class="nav-meta"><span id="page-count">8</span> 页 · <span id="section-count">3</span> 章节</p>
+        </div>
+        <button class="icon-button" type="button" aria-label="新增章节" title="新增章节" data-action="add-section">
+          <i data-lucide="folder-plus"></i>
+        </button>
+      </header>
+
+      <div class="directory" id="directory">
+        <section class="section" data-section data-grouped="false">
+          <div class="section-header">
+            <button class="chevron" type="button" aria-label="折叠开场" data-action="toggle">
+              <i data-lucide="chevron-down"></i>
+            </button>
+            <span class="section-number">1</span>
+            <span class="section-title">开场</span>
+            <span class="section-actions">
+              <button class="icon-button" type="button" aria-label="开场操作" title="更多操作" data-menu-kind="section"><i data-lucide="ellipsis"></i></button>
+            </span>
+          </div>
+          <div class="section-body">
+            <div class="section-body-inner">
+              <div class="slide" tabindex="0" data-slide>
+                <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                <span class="page-number">01</span>
+                <span class="thumbnail thumb-cover"></span>
+                <span class="slide-copy">
+                  <span class="slide-title">如何写好一个 Skill</span>
+                  <span class="slide-state">封面</span>
+                </span>
+                <span class="row-actions">
+                  <button class="icon-button" type="button" aria-label="页面操作" title="更多操作" data-menu-kind="page"><i data-lucide="ellipsis"></i></button>
+                </span>
+              </div>
+              <div class="slide selected" tabindex="0" data-slide>
+                <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                <span class="page-number">02</span>
+                <span class="thumbnail thumb-grid"></span>
+                <span class="slide-copy">
+                  <span class="slide-title">目录：今天讲什么</span>
+                  <span class="slide-state">当前页面</span>
+                </span>
+                <span class="row-actions">
+                  <button class="icon-button" type="button" aria-label="页面操作" title="更多操作" data-menu-kind="page"><i data-lucide="ellipsis"></i></button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" data-section data-grouped="true">
+          <div class="section-header">
+            <button class="chevron" type="button" aria-label="折叠认识 Skill" data-action="toggle">
+              <i data-lucide="chevron-down"></i>
+            </button>
+            <span class="section-number">2</span>
+            <span class="section-title">认识 Skill</span>
+            <span class="section-actions">
+              <button class="icon-button" type="button" aria-label="认识 Skill 操作" title="更多操作" data-menu-kind="section"><i data-lucide="ellipsis"></i></button>
+            </span>
+          </div>
+          <div class="section-body">
+            <div class="section-body-inner">
+              <div class="subsection">
+                <span class="subsection-number">2.1</span>
+                <span class="subsection-title">基本概念</span>
+                <button class="icon-button" type="button" aria-label="基本概念操作" title="更多操作" data-menu-kind="subsection"><i data-lucide="ellipsis"></i></button>
+              </div>
+              <div class="slide" tabindex="0" data-slide>
+                <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                <span class="page-number">03</span>
+                <span class="thumbnail thumb-title"></span>
+                <span class="slide-copy">
+                  <span class="slide-title">什么是 Skill：给 AI 的岗位说明书</span>
+                  <span class="slide-state">标题与论点</span>
+                </span>
+                <span class="row-actions">
+                  <button class="icon-button" type="button" aria-label="页面操作" title="更多操作" data-menu-kind="page"><i data-lucide="ellipsis"></i></button>
+                </span>
+              </div>
+              <div class="slide" tabindex="0" data-slide>
+                <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                <span class="page-number">04</span>
+                <span class="thumbnail thumb-grid"></span>
+                <span class="slide-copy">
+                  <span class="slide-title">Skill 与普通对话的区别</span>
+                  <span class="slide-state">对比</span>
+                </span>
+                <span class="row-actions">
+                  <button class="icon-button" type="button" aria-label="页面操作" title="更多操作" data-menu-kind="page"><i data-lucide="ellipsis"></i></button>
+                </span>
+              </div>
+              <div class="subsection">
+                <span class="subsection-number">2.2</span>
+                <span class="subsection-title">为什么值得认真写</span>
+                <button class="icon-button" type="button" aria-label="为什么值得认真写操作" title="更多操作" data-menu-kind="subsection"><i data-lucide="ellipsis"></i></button>
+              </div>
+              <div class="slide" tabindex="0" data-slide>
+                <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                <span class="page-number">05</span>
+                <span class="thumbnail thumb-steps"></span>
+                <span class="slide-copy">
+                  <span class="slide-title">一次写清，持续复用</span>
+                  <span class="slide-state">过程</span>
+                </span>
+                <span class="row-actions">
+                  <button class="icon-button" type="button" aria-label="页面操作" title="更多操作" data-menu-kind="page"><i data-lucide="ellipsis"></i></button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" data-section data-grouped="false">
+          <div class="section-header">
+            <button class="chevron" type="button" aria-label="折叠怎么写" data-action="toggle">
+              <i data-lucide="chevron-down"></i>
+            </button>
+            <span class="section-number">3</span>
+            <span class="section-title">怎么写：四步法</span>
+            <span class="section-actions">
+              <button class="icon-button" type="button" aria-label="怎么写操作" title="更多操作" data-menu-kind="section"><i data-lucide="ellipsis"></i></button>
+            </span>
+          </div>
+          <div class="section-body">
+            <div class="section-body-inner">
+              <div class="slide" tabindex="0" data-slide>
+                <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                <span class="page-number">06</span>
+                <span class="thumbnail thumb-steps"></span>
+                <span class="slide-copy">
+                  <span class="slide-title">第一步：明确目标与边界</span>
+                  <span class="slide-state">方法</span>
+                </span>
+                <span class="row-actions">
+                  <button class="icon-button" type="button" aria-label="页面操作" title="更多操作" data-menu-kind="page"><i data-lucide="ellipsis"></i></button>
+                </span>
+              </div>
+              <div class="slide" tabindex="0" data-slide>
+                <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                <span class="page-number">07</span>
+                <span class="thumbnail thumb-title"></span>
+                <span class="slide-copy">
+                  <span class="slide-title">第二步：写成可照做的步骤</span>
+                  <span class="slide-state">方法</span>
+                </span>
+                <span class="row-actions">
+                  <button class="icon-button" type="button" aria-label="页面操作" title="更多操作" data-menu-kind="page"><i data-lucide="ellipsis"></i></button>
+                </span>
+              </div>
+              <div class="slide" tabindex="0" data-slide>
+                <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                <span class="page-number">08</span>
+                <span class="thumbnail thumb-grid"></span>
+                <span class="slide-copy">
+                  <span class="slide-title">用示例说话，再实测迭代</span>
+                  <span class="slide-state">案例</span>
+                </span>
+                <span class="row-actions">
+                  <button class="icon-button" type="button" aria-label="页面操作" title="更多操作" data-menu-kind="page"><i data-lucide="ellipsis"></i></button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+    </aside>
+
+    <section class="workspace" aria-label="幻灯片画布">
+      <div class="workspace-bar">
+        <span>如何写好一个 Skill</span>
+        <div class="view-switch" aria-label="页面视角">
+          <button class="view-button" type="button" data-view-option="design" aria-pressed="true">
+            <i data-lucide="file-text"></i>
+            <span>设计稿</span>
+          </button>
+          <button class="view-button" type="button" data-view-option="slide" aria-pressed="false">
+            <i data-lucide="presentation"></i>
+            <span>幻灯片</span>
+          </button>
+        </div>
+      </div>
+      <div class="canvas">
+        <article class="design-sheet">
+          <p class="design-sheet-label">页面 02 · 设计稿</p>
+          <h2>目录：今天讲什么</h2>
+          <p class="design-sheet-message">从结构、边界到验证，把经验写成可重复执行的能力。</p>
+          <div class="design-outline">
+            <div><strong>页面目的</strong><span>让听众快速建立完整学习路径。</span></div>
+            <div><strong>内容结构</strong><span>三个章节，逐步进入实践方法。</span></div>
+            <div><strong>视觉意图</strong><span>克制、清晰，突出章节之间的关系。</span></div>
+          </div>
+        </article>
+        <article class="slide-paper">
+          <div class="slide-paper-content">
+            <small>SKILL DESIGN</small>
+            <h2>目录：今天讲什么</h2>
+            <p>从结构、边界到验证，把经验写成可重复执行的能力。</p>
+          </div>
+          <span class="slide-mark"></span>
+        </article>
+      </div>
+    </section>
+
+    <aside class="agent" aria-label="Agent 面板">
+      <div class="agent-bar">
+        <strong>Agent</strong>
+        <i data-lucide="panel-right-close" style="width:16px"></i>
+      </div>
+      <div class="agent-content">
+        <div class="message">把第二章拆成基本概念和价值两个子节。</div>
+        <p class="agent-note">目录会直接反映 Agent 对内容结构的理解。页面预览承担视觉识别，标题承担语义定位。</p>
+      </div>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast" role="status">已新增页面</div>
+  <div class="context-menu" id="context-menu" role="menu" aria-label="更多操作"></div>
+
+  <script>
+    lucide.createIcons();
+
+    const directory = document.querySelector("#directory");
+    const toast = document.querySelector("#toast");
+    const contextMenu = document.querySelector("#context-menu");
+    const pageCount = document.querySelector("#page-count");
+    const sectionCount = document.querySelector("#section-count");
+    const viewButtons = document.querySelectorAll("[data-view-option]");
+    let activeMenuTrigger = null;
+    const menuItems = {
+      section: [
+        ["pencil", "重命名"],
+        ["file-plus-2", "新增页面"],
+        ["plus", "新增子节"],
+        ["separator"],
+        ["trash-2", "删除章节", "danger"]
+      ],
+      subsection: [
+        ["pencil", "重命名"],
+        ["separator"],
+        ["trash-2", "删除子节", "danger"]
+      ],
+      page: [
+        ["pencil", "重命名"],
+        ["arrow-up", "上移本页"],
+        ["arrow-down", "下移本页"],
+        ["separator"],
+        ["trash-2", "删除本页", "danger"]
+      ]
+    };
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("visible");
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => toast.classList.remove("visible"), 1800);
+    }
+
+    function selectSlide(slide) {
+      directory.querySelectorAll("[data-slide]").forEach((node) => node.classList.remove("selected"));
+      slide.classList.add("selected");
+    }
+
+    function setView(view) {
+      document.body.dataset.view = view;
+      viewButtons.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.viewOption === view));
+      });
+    }
+
+    function closeMenu() {
+      contextMenu.classList.remove("open");
+      document.querySelectorAll("[data-menu-kind][aria-expanded='true']").forEach((button) => {
+        button.setAttribute("aria-expanded", "false");
+      });
+      activeMenuTrigger = null;
+    }
+
+    function openMenu(button) {
+      const kind = button.dataset.menuKind;
+      const items = menuItems[kind];
+      activeMenuTrigger = button;
+      contextMenu.innerHTML = items.map((item) => {
+        if (item[0] === "separator") return '<div class="menu-separator" role="separator"></div>';
+        return `<button class="menu-item ${item[2] || ""}" type="button" role="menuitem" data-menu-label="${item[1]}">
+          <i data-lucide="${item[0]}"></i><span>${item[1]}</span>
+        </button>`;
+      }).join("");
+      contextMenu.classList.add("open");
+      button.setAttribute("aria-expanded", "true");
+      lucide.createIcons();
+
+      const buttonRect = button.getBoundingClientRect();
+      const menuRect = contextMenu.getBoundingClientRect();
+      const left = Math.min(buttonRect.right - menuRect.width, window.innerWidth - menuRect.width - 8);
+      const top = Math.min(buttonRect.bottom + 5, window.innerHeight - menuRect.height - 8);
+      contextMenu.style.left = `${Math.max(8, left)}px`;
+      contextMenu.style.top = `${Math.max(8, top)}px`;
+    }
+
+    function addPage(section, subsectionTitle = "") {
+      const body = section.querySelector(".section-body-inner");
+      const count = directory.querySelectorAll("[data-slide]").length + 1;
+      const row = document.createElement("div");
+      row.className = "slide";
+      row.tabIndex = 0;
+      row.dataset.slide = "";
+      row.innerHTML = `
+        <span class="grip"><i data-lucide="grip-vertical"></i></span>
+        <span class="page-number">${String(count).padStart(2, "0")}</span>
+        <span class="thumbnail thumb-title"></span>
+        <span class="slide-copy">
+          <span class="slide-title">新页面</span>
+          <span class="slide-state">待生成</span>
+        </span>
+        <span class="row-actions">
+          <button class="icon-button" type="button" aria-label="页面操作" title="更多操作" data-menu-kind="page"><i data-lucide="ellipsis"></i></button>
+        </span>`;
+      if (subsectionTitle) {
+        const heading = Array.from(section.querySelectorAll(".subsection")).find((node) =>
+          node.querySelector(".subsection-title")?.textContent === subsectionTitle);
+        let insertionPoint = heading?.nextElementSibling;
+        while (insertionPoint && !insertionPoint.classList.contains("subsection")) {
+          insertionPoint = insertionPoint.nextElementSibling;
+        }
+        body.insertBefore(row, insertionPoint);
+      } else {
+        body.append(row);
+      }
+      section.classList.remove("collapsed");
+      pageCount.textContent = String(count);
+      lucide.createIcons();
+      selectSlide(row);
+      showToast(subsectionTitle ? `已新增到「${subsectionTitle}」` : "已新增到章节");
+    }
+
+    directory.addEventListener("click", (event) => {
+      const target = event.target.closest("button, [data-slide]");
+      if (!target) return;
+      const section = target.closest("[data-section]");
+      if (target.matches("[data-action='toggle']")) {
+        section.classList.toggle("collapsed");
+        return;
+      }
+      if (target.matches("[data-menu-kind]")) {
+        event.stopPropagation();
+        const wasOpen = target.getAttribute("aria-expanded") === "true";
+        closeMenu();
+        if (!wasOpen) openMenu(target);
+        return;
+      }
+      if (target.matches("[data-slide]")) selectSlide(target);
+    });
+
+    document.querySelector("[data-action='add-section']").addEventListener("click", () => {
+      const number = directory.querySelectorAll("[data-section]").length + 1;
+      const section = document.createElement("section");
+      section.className = "section";
+      section.dataset.section = "";
+      section.dataset.grouped = "false";
+      section.innerHTML = `
+        <div class="section-header">
+          <button class="chevron" type="button" aria-label="折叠新章节" data-action="toggle"><i data-lucide="chevron-down"></i></button>
+          <span class="section-number">${number}</span>
+          <span class="section-title">新章节</span>
+          <span class="section-actions">
+            <button class="icon-button" type="button" aria-label="新章节操作" title="更多操作" data-menu-kind="section"><i data-lucide="ellipsis"></i></button>
+          </span>
+        </div>
+        <div class="section-body"><div class="section-body-inner"></div></div>`;
+      directory.append(section);
+      sectionCount.textContent = String(number);
+      lucide.createIcons();
+      showToast("已在末尾新增空章节");
+    });
+
+    viewButtons.forEach((button) => {
+      button.addEventListener("click", () => setView(button.dataset.viewOption));
+    });
+
+    contextMenu.addEventListener("click", (event) => {
+      const item = event.target.closest("[data-menu-label], [data-page-target]");
+      if (!item) return;
+      const label = item.dataset.menuLabel;
+      if (label === "新增页面" && activeMenuTrigger) {
+        const section = activeMenuTrigger.closest("[data-section]");
+        const subsectionTitles = Array.from(section.querySelectorAll(".subsection-title"), (node) => node.textContent);
+        if (subsectionTitles.length > 0) {
+          contextMenu.innerHTML = subsectionTitles.map((title) => `
+            <button class="menu-item" type="button" role="menuitem" data-page-target="${title}">
+              <i data-lucide="corner-down-right"></i><span>${title}</span>
+            </button>`).join("");
+          lucide.createIcons();
+          return;
+        }
+        addPage(section);
+        closeMenu();
+        return;
+      }
+      const pageTarget = event.target.closest("[data-page-target]");
+      if (pageTarget && activeMenuTrigger) {
+        addPage(activeMenuTrigger.closest("[data-section]"), pageTarget.dataset.pageTarget);
+        closeMenu();
+        return;
+      }
+      showToast(`${label}操作`);
+      closeMenu();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest("#context-menu, [data-menu-kind]")) closeMenu();
+    });
+  </script>
+</body>
+</html>

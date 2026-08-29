@@ -62,6 +62,65 @@ func TestOutlineInitAllocatesRuntimeIDsAndPendingLeaves(t *testing.T) {
 	}
 }
 
+func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
+	service, _ := mutationFixture(t)
+
+	sectionResult, err := service.Apply(Request{
+		Op: "outline.insert",
+		Node: DraftNode{
+			Kind:        "section",
+			ClientRef:   "section-client-ref",
+			Title:       "Section",
+			Purpose:     "Purpose",
+			Slides:      []DraftSlide{},
+			Subsections: []DraftSubsection{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sectionID := sectionResult.Created["section-client-ref"]
+
+	slideResult, err := service.Apply(Request{
+		Op:       "outline.insert",
+		Node:     DraftNode{Kind: "slide", ClientRef: "slide-client-ref", Label: "Slide", Role: "content"},
+		Position: Position{ParentID: sectionID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slideResult.Created["slide-client-ref"] == "" {
+		t.Fatalf("created=%v", slideResult.Created)
+	}
+
+	emptySectionResult, err := service.Apply(Request{
+		Op: "outline.insert",
+		Node: DraftNode{
+			Kind:        "section",
+			ClientRef:   "grouped-section-client-ref",
+			Title:       "Grouped section",
+			Purpose:     "Purpose",
+			Slides:      []DraftSlide{},
+			Subsections: []DraftSubsection{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	subsectionResult, err := service.Apply(Request{
+		Op:       "outline.insert",
+		Node:     DraftNode{Kind: "subsection", ClientRef: "subsection-client-ref", Title: "Subsection"},
+		Position: Position{ParentID: emptySectionResult.Created["grouped-section-client-ref"]},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subsectionResult.Created["subsection-client-ref"] == "" {
+		t.Fatalf("created=%v", subsectionResult.Created)
+	}
+}
+
 func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 	service, workspace := mutationFixture(t)
 	init, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "Section", Purpose: "P", Slides: []DraftSlide{{ClientRef: "one", Label: "One", Role: "content"}, {ClientRef: "two", Label: "Two", Role: "content"}}, Subsections: []DraftSubsection{}}}})
