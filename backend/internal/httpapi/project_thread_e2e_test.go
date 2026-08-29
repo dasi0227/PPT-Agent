@@ -81,6 +81,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 			return httpapi.NewLLMHandler(registry)
 		}(),
 		polishHandler,
+		nil,
 	)
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)

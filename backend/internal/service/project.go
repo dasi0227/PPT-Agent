@@ -10,6 +10,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
+	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -21,6 +22,7 @@ type ProjectService struct {
 	workRoot string
 	clock    func() int64
 	newID    func() string
+	git      *gitcommit.Executor
 }
 
 type CreateProjectParams struct {
@@ -31,7 +33,10 @@ type CreateProjectParams struct {
 }
 
 func NewProjectService(s store.Store, workRoot WorkRoot) *ProjectService {
-	return &ProjectService{store: s, workRoot: string(workRoot), clock: func() int64 { return time.Now().Unix() }, newID: func() string { return model.MustShortID("pro") }}
+	return &ProjectService{
+		store: s, workRoot: string(workRoot), clock: func() int64 { return time.Now().Unix() },
+		newID: func() string { return model.MustShortID("pro") }, git: gitcommit.NewExecutor(),
+	}
 }
 
 func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectParams) (model.Project, error) {
@@ -56,6 +61,10 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	}
 
 	if err := svc.initWorkDir(proj, p); err != nil {
+		return model.Project{}, err
+	}
+	if err := svc.git.Bootstrap(ctx, workDir); err != nil {
+		_ = os.RemoveAll(workDir)
 		return model.Project{}, err
 	}
 	if err := svc.store.CreateProject(ctx, proj); err != nil {

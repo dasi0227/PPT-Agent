@@ -236,6 +236,13 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_ACTIVE")
 		return model.Run{}, ErrRunActive
 	}
+	if active, activeErr := svc.store.HasActiveGitCommit(ctx, project.ID); activeErr != nil {
+		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
+		return model.Run{}, activeErr
+	} else if active {
+		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "GIT_COMMIT_ACTIVE")
+		return model.Run{}, ErrGitCommitActive
+	}
 	runModel := model.Run{
 		ID: uuid.NewString(), ThreadID: thread.ID, ProjectID: project.ID,
 		ClientRequestID: p.ClientRequestID, Command: command,

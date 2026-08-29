@@ -212,6 +212,66 @@ func eventToPO(m model.Event) runEventPO {
 	}
 }
 
+type gitCommitOperationPO struct {
+	ID              string `gorm:"column:id;primaryKey"`
+	ProjectID       string `gorm:"column:project_id"`
+	ThreadID        string `gorm:"column:thread_id"`
+	ClientRequestID string `gorm:"column:client_request_id"`
+	ModelProfile    string `gorm:"column:model_profile"`
+	Status          string `gorm:"column:status"`
+	Phase           string `gorm:"column:phase"`
+	ResultJSON      string `gorm:"column:result_json"`
+	ErrorJSON       string `gorm:"column:error_json"`
+	CreatedAt       int64  `gorm:"column:created_at"`
+	UpdatedAt       int64  `gorm:"column:updated_at"`
+}
+
+func (gitCommitOperationPO) TableName() string { return "git_commit_operations" }
+
+func (p gitCommitOperationPO) toModel() model.GitCommitOperation {
+	return model.GitCommitOperation{
+		ID: p.ID, ProjectID: p.ProjectID, ThreadID: p.ThreadID,
+		ClientRequestID: p.ClientRequestID, ModelProfile: p.ModelProfile,
+		Status: model.GitCommitStatus(p.Status), Phase: model.GitCommitPhase(p.Phase),
+		ResultJSON: p.ResultJSON, ErrorJSON: p.ErrorJSON,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+	}
+}
+
+func gitCommitOperationToPO(m model.GitCommitOperation) gitCommitOperationPO {
+	return gitCommitOperationPO{
+		ID: m.ID, ProjectID: m.ProjectID, ThreadID: m.ThreadID,
+		ClientRequestID: m.ClientRequestID, ModelProfile: m.ModelProfile,
+		Status: string(m.Status), Phase: string(m.Phase),
+		ResultJSON: m.ResultJSON, ErrorJSON: m.ErrorJSON,
+		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+	}
+}
+
+type gitCommitEventPO struct {
+	OperationID string `gorm:"column:operation_id;primaryKey"`
+	Seq         int64  `gorm:"column:seq;primaryKey"`
+	Type        string `gorm:"column:type"`
+	Payload     string `gorm:"column:payload"`
+	CreatedAt   int64  `gorm:"column:created_at"`
+}
+
+func (gitCommitEventPO) TableName() string { return "git_commit_events" }
+
+func (p gitCommitEventPO) toModel() model.GitCommitEvent {
+	return model.GitCommitEvent{
+		OperationID: p.OperationID, Seq: p.Seq,
+		Type: model.GitCommitEventType(p.Type), Payload: p.Payload, CreatedAt: p.CreatedAt,
+	}
+}
+
+func gitCommitEventToPO(m model.GitCommitEvent) gitCommitEventPO {
+	return gitCommitEventPO{
+		OperationID: m.OperationID, Seq: m.Seq,
+		Type: string(m.Type), Payload: m.Payload, CreatedAt: m.CreatedAt,
+	}
+}
+
 type runContextPO struct {
 	RunID           string `gorm:"column:run_id;primaryKey"`
 	ContextID       string `gorm:"column:context_id;uniqueIndex"`

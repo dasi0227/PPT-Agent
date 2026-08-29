@@ -46,6 +46,15 @@ type Store interface {
 	SaveRunContext(ctx context.Context, manifest model.RunContext) error
 	GetRunContext(ctx context.Context, runID string) (model.RunContext, error)
 
+	CreateGitCommitOperation(ctx context.Context, operation model.GitCommitOperation) error
+	GetGitCommitOperation(ctx context.Context, id string) (model.GitCommitOperation, error)
+	GetGitCommitOperationByRequest(ctx context.Context, threadID, clientRequestID string) (model.GitCommitOperation, error)
+	UpdateGitCommitOperation(ctx context.Context, operation model.GitCommitOperation) error
+	HasActiveGitCommit(ctx context.Context, projectID string) (bool, error)
+	AppendGitCommitEvent(ctx context.Context, event model.GitCommitEvent) error
+	GitCommitEventsSince(ctx context.Context, operationID string, afterSeq int64) ([]model.GitCommitEvent, error)
+	ListThreadGitCommits(ctx context.Context, threadID string) ([]model.GitCommitOperation, error)
+
 	SetProjectStatus(ctx context.Context, id, status string) error
 	ReplaceSlides(ctx context.Context, projectID string, slides []model.Slide) error
 	ListSlides(ctx context.Context, projectID string) ([]model.Slide, error)

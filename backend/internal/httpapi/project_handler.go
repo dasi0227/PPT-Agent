@@ -146,6 +146,8 @@ func (h *ProjectHandler) Mutate(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrRunActive):
 			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+		case errors.Is(err, service.ErrGitCommitActive):
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "GIT_COMMIT_ACTIVE", Message: "project has an active Git commit"})
 		case errors.Is(err, pptmutation.ErrRevisionConflict):
 			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "REVISION_CONFLICT", Message: err.Error()})
 		case errors.Is(err, pptmutation.ErrInvalid):

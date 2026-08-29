@@ -147,6 +147,8 @@ func handleCreateRunError(c *gin.Context, err error) {
 		AbortWithError(c, ErrNotFound("thread not found"))
 	case errors.Is(err, service.ErrRunActive):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
+	case errors.Is(err, service.ErrGitCommitActive):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "GIT_COMMIT_ACTIVE", Message: "project has an active Git commit"})
 	case errors.Is(err, run.ErrEngineStopping):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusServiceUnavailable, Code: "SERVER_STOPPING", Message: "server is stopping"})
 	case errors.Is(err, service.ErrSlideTargetNotFound):

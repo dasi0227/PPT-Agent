@@ -76,7 +76,9 @@ func initApp() (*App, func(), error) {
 	llmHandler := httpapi.NewLLMHandler(registry)
 	polishService := service.NewPolishService(store, registry)
 	polishHandler := httpapi.NewPolishHandler(polishService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, llmHandler, polishHandler)
+	gitCommitService := service.NewGitCommitService(store, registry, lockManager)
+	gitCommitHandler := httpapi.NewGitCommitHandler(gitCommitService)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, llmHandler, polishHandler, gitCommitHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	mainSeedDone, err := provideSeed(configConfig, store, zapLogger)
@@ -103,7 +105,7 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideAssetService,
 	provideEngine,
 	provideHistoryWriter,
-	provideRenderWorker, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, service.NewSlideService, service.NewPPTMutationService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewAssetHandler, httpapi.NewRouter, engineFromRouter,
+	provideRenderWorker, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, service.NewGitCommitService, service.NewSlideService, service.NewPPTMutationService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewAssetHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideSeed,
 	provideApp,

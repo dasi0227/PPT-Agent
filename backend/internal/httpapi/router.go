@@ -10,25 +10,26 @@ import (
 
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
-	engine  *gin.Engine
-	cfg     *config.Config
-	log     *zap.Logger
-	health  *HealthHandler
-	run     *RunHandler
-	project *ProjectHandler
-	thread  *ThreadHandler
-	slide   *SlideHandler
-	asset   *AssetHandler
-	llm     *LLMHandler
-	polish  *PolishHandler
+	engine    *gin.Engine
+	cfg       *config.Config
+	log       *zap.Logger
+	health    *HealthHandler
+	run       *RunHandler
+	project   *ProjectHandler
+	thread    *ThreadHandler
+	slide     *SlideHandler
+	asset     *AssetHandler
+	llm       *LLMHandler
+	polish    *PolishHandler
+	gitCommit *GitCommitHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, llmH *LLMHandler, polishH *PolishHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, llmH *LLMHandler, polishH *PolishHandler, gitCommitH *GitCommitHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, llm: llmH, polish: polishH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, llm: llmH, polish: polishH, gitCommit: gitCommitH}
 	r.register()
 	return r
 }
@@ -51,6 +52,11 @@ func (r *Router) register() {
 	}
 	v1.GET("/projects/:id/content", r.project.Content)
 	v1.POST("/projects/:id/mutations", r.project.Mutate)
+	if r.gitCommit != nil {
+		v1.POST("/projects/:id/git-commits", r.gitCommit.Create)
+		v1.GET("/git-commits/:id", r.gitCommit.Get)
+		v1.GET("/git-commits/:id/events", r.gitCommit.Events)
+	}
 	v1.GET("/projects/:id/threads", r.thread.List)
 	v1.POST("/projects/:id/threads", r.thread.Create)
 	v1.PATCH("/threads/:id", r.thread.Patch)

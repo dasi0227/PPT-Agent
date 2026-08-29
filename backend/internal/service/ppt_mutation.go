@@ -27,6 +27,11 @@ func (s *PPTMutationService) Apply(ctx context.Context, projectID string, req pp
 	} else if active {
 		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, ErrRunActive
 	}
+	if active, err := s.store.HasActiveGitCommit(ctx, projectID); err != nil {
+		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err
+	} else if active {
+		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, ErrGitCommitActive
+	}
 	project, err := s.store.GetProject(ctx, projectID)
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err

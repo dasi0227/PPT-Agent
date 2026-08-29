@@ -169,6 +169,22 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 			nextSyntheticSeq++
 		}
 	}
+	commits, commitErr := svc.store.ListThreadGitCommits(ctx, id)
+	if commitErr == nil {
+		for _, operation := range commits {
+			entry := gitCommitHistoryEntry(operation)
+			insertAt := len(out)
+			for index, existing := range out {
+				if historyTimestamp(existing) > operation.UpdatedAt {
+					insertAt = index
+					break
+				}
+			}
+			out = append(out, nil)
+			copy(out[insertAt+1:], out[insertAt:])
+			out[insertAt] = entry
+		}
+	}
 	runOrder := map[string]int{}
 	for _, entry := range out {
 		runID := fmt.Sprint(entry["run_id"])
@@ -187,6 +203,45 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 		out = []map[string]any{}
 	}
 	return out, nil
+}
+
+func gitCommitHistoryEntry(operation model.GitCommitOperation) map[string]any {
+	occurredAt := time.Unix(operation.UpdatedAt, 0).UTC().Format(time.RFC3339Nano)
+	base := map[string]any{
+		"schema_version": model.GitCommitEventSchemaVersion,
+		"operation_id":   operation.ID, "project_id": operation.ProjectID,
+		"thread_id": operation.ThreadID, "occurred_at": occurredAt,
+	}
+	entryType := string(model.EventGitCommitFailed)
+	if operation.Status == model.GitCommitCompleted {
+		entryType = string(model.EventGitCommitCompleted)
+		var result any
+		if json.Unmarshal([]byte(operation.ResultJSON), &result) == nil {
+			base["commit"] = result
+		}
+	} else {
+		var publicError any
+		if json.Unmarshal([]byte(operation.ErrorJSON), &publicError) == nil {
+			base["error"] = publicError
+		}
+	}
+	return map[string]any{
+		"seq": 1, "ts": operation.UpdatedAt, "run_id": operation.ID,
+		"turn": "agent", "type": entryType, "data": base,
+	}
+}
+
+func historyTimestamp(entry map[string]any) int64 {
+	switch value := entry["ts"].(type) {
+	case float64:
+		return int64(value)
+	case int64:
+		return value
+	case int:
+		return int64(value)
+	default:
+		return 0
+	}
 }
 
 func historySeq(entry map[string]any) float64 {
