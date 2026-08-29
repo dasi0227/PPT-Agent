@@ -129,4 +129,28 @@ complete:
 	if len(requests) != 1 || len(requests[0].Tools) != 1 || requests[0].Tools[0].Name != "git_commit" {
 		t.Fatalf("unexpected model request: %+v", requests)
 	}
+
+	interrupted := model.GitCommitOperation{
+		ID: "gco_interrupted", ProjectID: "p1", ThreadID: "t1",
+		ClientRequestID: "req-interrupted", ModelProfile: "Commit",
+		Status: model.GitCommitRunning, Phase: model.GitCommitAnalyzing,
+		CreatedAt: 3, UpdatedAt: 3,
+	}
+	if err := st.CreateGitCommitOperation(ctx, interrupted); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Initialize(ctx); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := st.GetGitCommitOperation(ctx, interrupted.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.Status != model.GitCommitFailed {
+		t.Fatalf("interrupted operation was not failed: %+v", recovered)
+	}
+	recoveredEvents, err := st.GitCommitEventsSince(ctx, interrupted.ID, 0)
+	if err != nil || len(recoveredEvents) != 1 || recoveredEvents[0].Type != model.EventGitCommitFailed {
+		t.Fatalf("unexpected recovery events: %+v err=%v", recoveredEvents, err)
+	}
 }

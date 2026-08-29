@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Store) CreateGitCommitOperation(ctx context.Context, operation model.GitCommitOperation) error {
-	return s.db.WithContext(ctx).Create(gitCommitOperationToPO(operation)).Error
+	return mapProjectWriteErr(s.db.WithContext(ctx).Create(gitCommitOperationToPO(operation)).Error)
 }
 
 func (s *Store) GetGitCommitOperation(ctx context.Context, id string) (model.GitCommitOperation, error) {
@@ -28,7 +28,7 @@ func (s *Store) GetGitCommitOperationByRequest(ctx context.Context, threadID, cl
 }
 
 func (s *Store) UpdateGitCommitOperation(ctx context.Context, operation model.GitCommitOperation) error {
-	return s.db.WithContext(ctx).Model(&gitCommitOperationPO{}).
+	return mapProjectWriteErr(s.db.WithContext(ctx).Model(&gitCommitOperationPO{}).
 		Where("id = ?", operation.ID).
 		Updates(map[string]any{
 			"status":      string(operation.Status),
@@ -36,7 +36,7 @@ func (s *Store) UpdateGitCommitOperation(ctx context.Context, operation model.Gi
 			"result_json": operation.ResultJSON,
 			"error_json":  operation.ErrorJSON,
 			"updated_at":  operation.UpdatedAt,
-		}).Error
+		}).Error)
 }
 
 func (s *Store) HasActiveGitCommit(ctx context.Context, projectID string) (bool, error) {
@@ -47,6 +47,21 @@ func (s *Store) HasActiveGitCommit(ctx context.Context, projectID string) (bool,
 		}).
 		Count(&count).Error
 	return count > 0, err
+}
+
+func (s *Store) ListActiveGitCommits(ctx context.Context) ([]model.GitCommitOperation, error) {
+	var rows []gitCommitOperationPO
+	if err := s.db.WithContext(ctx).
+		Where("status IN ?", []string{string(model.GitCommitAccepted), string(model.GitCommitRunning)}).
+		Order("created_at ASC, id ASC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]model.GitCommitOperation, len(rows))
+	for i := range rows {
+		out[i] = rows[i].toModel()
+	}
+	return out, nil
 }
 
 func (s *Store) AppendGitCommitEvent(ctx context.Context, event model.GitCommitEvent) error {

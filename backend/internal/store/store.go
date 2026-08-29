@@ -3,8 +3,14 @@ package store
 
 import (
 	"context"
+	"errors"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+)
+
+var (
+	ErrRunActive       = errors.New("store: project has an active run")
+	ErrGitCommitActive = errors.New("store: project has an active Git commit")
 )
 
 // Store 是持久化层对外暴露的接口。随里程碑推进逐步扩展领域方法。
@@ -51,6 +57,7 @@ type Store interface {
 	GetGitCommitOperationByRequest(ctx context.Context, threadID, clientRequestID string) (model.GitCommitOperation, error)
 	UpdateGitCommitOperation(ctx context.Context, operation model.GitCommitOperation) error
 	HasActiveGitCommit(ctx context.Context, projectID string) (bool, error)
+	ListActiveGitCommits(ctx context.Context) ([]model.GitCommitOperation, error)
 	AppendGitCommitEvent(ctx context.Context, event model.GitCommitEvent) error
 	GitCommitEventsSince(ctx context.Context, operationID string, afterSeq int64) ([]model.GitCommitEvent, error)
 	ListThreadGitCommits(ctx context.Context, threadID string) ([]model.GitCommitOperation, error)

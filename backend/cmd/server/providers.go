@@ -57,6 +57,14 @@ func provideLLMRegistry(cfg *config.Config) (*llm.Registry, error) {
 
 func provideLockManager() *run.LockManager { return run.NewLockManager() }
 
+func provideGitCommitService(s store.Store, registry *llm.Registry, locks *run.LockManager) (*service.GitCommitService, error) {
+	svc := service.NewGitCommitService(s, registry, locks)
+	if err := svc.Initialize(context.Background()); err != nil {
+		return nil, err
+	}
+	return svc, nil
+}
+
 // provideWorkRoot 从配置暴露全局 work_root（供 /repo 资产操作）。
 func provideWorkRoot(cfg *config.Config) service.WorkRoot { return service.WorkRoot(cfg.WorkRoot) }
 

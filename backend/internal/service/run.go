@@ -265,7 +265,10 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		}
 		createdRun, startErr := svc.engine.Start(ctx, runModel, execution)
 		if startErr != nil {
-			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
+			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_START_FAILED")
+			if errors.Is(startErr, store.ErrGitCommitActive) {
+				return model.Run{}, ErrGitCommitActive
+			}
 			return model.Run{}, startErr
 		}
 		svc.completeCreateSuccess(ctx, thread.ID, p.ClientRequestID, createdRun.ID)
@@ -298,7 +301,10 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	createdRun, startErr := svc.engine.StartWithContext(ctx, runModel, execution, runContext)
 	if startErr != nil {
-		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
+		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_START_FAILED")
+		if errors.Is(startErr, store.ErrGitCommitActive) {
+			return model.Run{}, ErrGitCommitActive
+		}
 		return model.Run{}, startErr
 	}
 	svc.completeCreateSuccess(ctx, thread.ID, p.ClientRequestID, createdRun.ID)

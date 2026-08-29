@@ -102,6 +102,27 @@ func NewGitCommitService(s store.Store, registry *llm.Registry, locks *run.LockM
 	}
 }
 
+func (svc *GitCommitService) Initialize(ctx context.Context) error {
+	operations, err := svc.store.ListActiveGitCommits(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range operations {
+		operation := operations[i]
+		events, eventsErr := svc.store.GitCommitEventsSince(ctx, operation.ID, 0)
+		if eventsErr != nil {
+			return eventsErr
+		}
+		bus := newGitCommitBus()
+		if len(events) > 0 {
+			bus.seq = events[len(events)-1].Seq
+		}
+		svc.fail(ctx, &operation, bus, "COMMIT_INTERRUPTED", true, errors.New("Git commit interrupted by service restart"))
+		bus.close()
+	}
+	return nil
+}
+
 func (svc *GitCommitService) Start(ctx context.Context, projectID string, params GitCommitParams) (model.GitCommitOperation, error) {
 	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(params.ThreadID) == "" ||
 		strings.TrimSpace(params.Model) == "" || strings.TrimSpace(params.ClientRequestID) == "" {
@@ -156,6 +177,9 @@ func (svc *GitCommitService) Start(ctx context.Context, projectID string, params
 		release()
 		if existing, getErr := svc.store.GetGitCommitOperationByRequest(ctx, params.ThreadID, params.ClientRequestID); getErr == nil {
 			return existing, nil
+		}
+		if errors.Is(err, store.ErrRunActive) {
+			return model.GitCommitOperation{}, ErrRunActive
 		}
 		return model.GitCommitOperation{}, err
 	}
@@ -291,7 +315,7 @@ func (svc *GitCommitService) execute(
 	result := model.GitCommitResult{
 		Title: message.Title, Items: message.Items,
 		Branch: gitResult.Branch, Hash: gitResult.Hash, CommittedAt: gitResult.CommittedAt,
-		FilesChanged: changes.FilesChanged, Insertions: changes.Insertions, Deletions: changes.Deletions,
+		FilesChanged: gitResult.FilesChanged, Insertions: gitResult.Insertions, Deletions: gitResult.Deletions,
 	}
 	payload := model.GitCommitCompletedPayload{
 		GitCommitEventBase: model.NewGitCommitEventBase(operation.ID, project.ID, operation.ThreadID),

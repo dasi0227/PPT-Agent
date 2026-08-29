@@ -88,22 +88,29 @@ func applyMigrationFile(db *gorm.DB, name string) error {
 	if err != nil {
 		return err
 	}
-	for _, chunk := range strings.Split(string(content), ";") {
-		stmt := strings.TrimSpace(chunk)
-		if stmt == "" {
+	var current strings.Builder
+	inTrigger := false
+	for _, line := range strings.Split(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if current.Len() == 0 && (trimmed == "" || strings.HasPrefix(trimmed, "--")) {
 			continue
 		}
-		hasSQL := false
-		for _, line := range strings.Split(stmt, "\n") {
-			l := strings.TrimSpace(line)
-			if l != "" && !strings.HasPrefix(l, "--") {
-				hasSQL = true
-				break
+		current.WriteString(line)
+		current.WriteByte('\n')
+		upper := strings.ToUpper(trimmed)
+		if !inTrigger && strings.HasPrefix(upper, "CREATE TRIGGER") {
+			inTrigger = true
+		}
+		if (!inTrigger && strings.HasSuffix(trimmed, ";")) || (inTrigger && upper == "END;") {
+			stmt := strings.TrimSuffix(strings.TrimSpace(current.String()), ";")
+			if err := db.Exec(stmt).Error; err != nil {
+				return err
 			}
+			current.Reset()
+			inTrigger = false
 		}
-		if !hasSQL {
-			continue
-		}
+	}
+	if stmt := strings.TrimSpace(current.String()); stmt != "" {
 		if err := db.Exec(stmt).Error; err != nil {
 			return err
 		}

@@ -33,9 +33,12 @@ type Message struct {
 }
 
 type Result struct {
-	Branch      string
-	Hash        string
-	CommittedAt string
+	Branch       string
+	Hash         string
+	CommittedAt  string
+	FilesChanged int
+	Insertions   int
+	Deletions    int
 }
 
 type Executor struct{}
@@ -71,6 +74,15 @@ func (e *Executor) Bootstrap(ctx context.Context, workDir string) error {
 	}
 	if err := ensureIgnore(filepath.Join(workDir, ".gitignore")); err != nil {
 		return err
+	}
+	staleIndexes, err := filepath.Glob(filepath.Join(gitDir, "ppt-agent", "index-*"))
+	if err != nil {
+		return err
+	}
+	for _, staleIndex := range staleIndexes {
+		if err := os.Remove(staleIndex); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	for _, marker := range []string{"MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply"} {
 		if _, err := os.Stat(filepath.Join(gitDir, marker)); err == nil {
@@ -149,7 +161,9 @@ func (e *Executor) Commit(ctx context.Context, workDir string, changes ChangeSet
 	}
 	realIndex := filepath.Join(workDir, ".git", "index")
 	if err := os.Rename(changes.IndexPath, realIndex); err != nil {
-		return Result{}, fmt.Errorf("align Git index: %w", err)
+		if _, resetErr := e.run(ctx, workDir, nil, "read-tree", "HEAD"); resetErr != nil {
+			return Result{}, fmt.Errorf("align Git index: %w", err)
+		}
 	}
 	branch, err := e.run(ctx, workDir, nil, "branch", "--show-current")
 	if err != nil || strings.TrimSpace(branch) == "" {
@@ -163,9 +177,15 @@ func (e *Executor) Commit(ctx context.Context, workDir string, changes ChangeSet
 	if err != nil {
 		return Result{}, err
 	}
+	numStat, err := e.run(ctx, workDir, nil, "show", "--format=", "--numstat", "--no-renames", "HEAD")
+	if err != nil {
+		return Result{}, err
+	}
+	files, insertions, deletions := parseNumStat(numStat)
 	return Result{
 		Branch: strings.TrimSpace(branch), Hash: strings.TrimSpace(hash),
-		CommittedAt: strings.TrimSpace(committedAt),
+		CommittedAt:  strings.TrimSpace(committedAt),
+		FilesChanged: files, Insertions: insertions, Deletions: deletions,
 	}, nil
 }
 

@@ -108,7 +108,7 @@ func (s *Store) DeleteThread(ctx context.Context, id string) error {
 // CreateRun writes the normalized RunCommand and its indexed scope projection.
 func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	po := runToPO(r)
-	return s.db.WithContext(ctx).Exec(
+	return mapProjectWriteErr(s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
 			 scope_artifact, scope_level, scope_slide_id, mode, run_command_json,
 			 client_request_id, model_profile_name, model_provider, model_name, model_url,
@@ -121,7 +121,7 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 		nullIfEmpty(po.ModelProvider), nullIfEmpty(po.ModelName), nullIfEmpty(po.ModelURL),
 		po.CancelRequestedAt, po.OwnerInstanceID, po.PauseReason, po.PausedAt,
 		po.Status, po.CreatedAt, po.UpdatedAt,
-	).Error
+	).Error)
 }
 
 func (s *Store) GetRun(ctx context.Context, id string) (model.Run, error) {

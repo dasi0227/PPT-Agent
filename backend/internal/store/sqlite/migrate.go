@@ -71,14 +71,36 @@ func Migrate(db *gorm.DB, log *zap.Logger) error {
 	return nil
 }
 
-// splitStatements 按 ; 切分脚本，跳过仅含空白/注释的片段。
-// schema 内的语句体不含分号，故简单切分是安全的。
+// splitStatements 按行识别语句边界，并保留 CREATE TRIGGER 的 BEGIN/END 语句体。
 func splitStatements(script string) []string {
 	var out []string
-	for _, chunk := range strings.Split(script, ";") {
-		if containsSQL(chunk) {
-			out = append(out, strings.TrimSpace(chunk))
+	var current strings.Builder
+	inTrigger := false
+	for _, line := range strings.Split(script, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if current.Len() == 0 && (trimmed == "" || strings.HasPrefix(trimmed, "--")) {
+			continue
 		}
+		current.WriteString(line)
+		current.WriteByte('\n')
+		upper := strings.ToUpper(trimmed)
+		if !inTrigger && strings.HasPrefix(upper, "CREATE TRIGGER") {
+			inTrigger = true
+		}
+		terminal := (!inTrigger && strings.HasSuffix(trimmed, ";")) ||
+			(inTrigger && upper == "END;")
+		if terminal {
+			statement := strings.TrimSpace(current.String())
+			statement = strings.TrimSuffix(statement, ";")
+			if containsSQL(statement) {
+				out = append(out, statement)
+			}
+			current.Reset()
+			inTrigger = false
+		}
+	}
+	if statement := strings.TrimSpace(current.String()); containsSQL(statement) {
+		out = append(out, statement)
 	}
 	return out
 }
