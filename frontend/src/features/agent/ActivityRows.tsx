@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BrainCircuit,
@@ -11,6 +11,7 @@ import {
   Loader2,
   RotateCcw,
   Search,
+  SquareTerminal,
   Sparkles,
 } from 'lucide-react';
 import type {
@@ -192,34 +193,61 @@ function toolStatusIcon(tool: string, failed: boolean) {
 
 export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
   const [expanded, setExpanded] = useState(Boolean(item.preview?.warnings.length));
+  const [runningVisible, setRunningVisible] = useState(
+    item.tool !== 'run_command' || item.status !== 'running' || Date.now() - item.timestamp >= 300,
+  );
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
   const slides = orderedSlides(snapshot);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
-  const hasDetails = Boolean(item.detail || item.error || item.preview);
+  const hasDetails = Boolean(item.detail || item.error || item.preview || item.command);
   const detailText = item.error?.message ?? item.detail;
-  const icon = item.status === 'running'
-    ? <Loader2 className="h-4 w-4 animate-spin text-warning motion-reduce:animate-none" strokeWidth={1.75} />
-    : toolStatusIcon(item.tool, item.status === 'failed');
+  const commandOutput = [
+    item.command?.stdout_preview,
+    item.command?.stderr_preview,
+    item.command?.output_truncated ? '输出已裁剪。' : undefined,
+    !item.command?.stdout_preview && !item.command?.stderr_preview ? detailText : undefined,
+  ].filter(Boolean).join('\n');
+  const commandColor = item.status === 'running'
+    ? 'text-accent'
+    : item.status === 'completed'
+      ? 'text-success'
+      : item.status === 'blocked'
+        ? 'text-warning'
+        : 'text-danger';
+  const icon = item.tool === 'run_command'
+    ? <SquareTerminal className={`h-4 w-4 ${commandColor}`} strokeWidth={1.75} />
+    : item.status === 'running'
+      ? <Loader2 className="h-4 w-4 animate-spin text-warning motion-reduce:animate-none" strokeWidth={1.75} />
+      : toolStatusIcon(item.tool, item.status === 'failed' || item.status === 'blocked');
+
+  useEffect(() => {
+    if (item.tool !== 'run_command' || item.status !== 'running') {
+      setRunningVisible(true);
+      return undefined;
+    }
+    const remaining = Math.max(0, 300 - (Date.now() - item.timestamp));
+    const timer = window.setTimeout(() => setRunningVisible(true), remaining);
+    return () => window.clearTimeout(timer);
+  }, [item.status, item.timestamp, item.tool]);
   const focusPreview = () => {
     if (!item.preview) return;
     const slideId = item.preview.slide_id;
     if (slides.some((slide) => slide.id === slideId)) setCurrentSlideId(slideId);
   };
 
+  if (!runningVisible) return null;
+
   return (
-    <div className={cn(
-      'rounded-lg transition-colors duration-150',
-      item.status === 'running' && 'bg-accent-soft/60',
-    )}>
+    <div className="overflow-hidden rounded-lg">
       <button
         type="button"
         disabled={!hasDetails}
         onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left disabled:cursor-default"
+        className="grid min-h-9 w-full grid-cols-[18px_minmax(0,1fr)_16px] items-center gap-2 bg-transparent p-1.5 text-left disabled:cursor-default"
       >
         {icon}
-        <span className="min-w-0 flex-1 truncate text-[13px] text-text-900">
+        <span className="min-w-0 truncate text-[13px] font-normal text-text-900">
           {presentActivityText(item.label, item.target, slides)}
         </span>
         {hasDetails && (expanded
@@ -227,8 +255,22 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
           : <ChevronRight className="h-3.5 w-3.5 text-text-400" />)}
       </button>
       {expanded && hasDetails && (
-        <div className="ml-6 space-y-2 px-1.5 pb-2 text-xs leading-5 text-text-600">
-          {detailText && (
+        <div className="px-2 pb-2.5 pl-8 pt-px text-xs leading-5 text-text-600">
+          {item.command ? (
+            <div className="rounded-md bg-[#EDF0F3] px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]">
+              <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
+                {item.command.text}
+              </code>
+              {commandOutput && (
+                <pre className={cn(
+                  'mt-[7px] whitespace-pre-wrap break-words border-t border-[#D7DCE3] pt-[7px] font-mono text-[11px] font-normal text-[#758191]',
+                  item.status === 'failed' && 'text-[#A34851]',
+                )}>
+                  {commandOutput}
+                </pre>
+              )}
+            </div>
+          ) : detailText && (
             item.target?.open_url ? (
               <a
                 href={item.target.open_url}
@@ -305,9 +347,13 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
         onClick={() => setExpanded((value) => !value)}
         className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-900"
       >
-        {toolStatusIcon(items[0].tool, false)}
+        {items[0].tool === 'run_command'
+          ? <SquareTerminal className="h-4 w-4 text-success" strokeWidth={1.75} />
+          : toolStatusIcon(items[0].tool, false)}
         <span className="min-w-0 flex-1">
-          {verb} {groupedObjectLabel(items)}
+          {items[0].tool === 'run_command'
+            ? `已执行 ${items.length} 条命令`
+            : `${verb} ${groupedObjectLabel(items)}`}
         </span>
         {expanded
           ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />

@@ -49,8 +49,9 @@ const targetGroupRank: Record<PublicTarget['part'], number> = {
   manifest: 0,
   outline: 1,
   design: 2,
-  spec: 3,
-  html: 4,
+  content: 3,
+  spec: 4,
+  html: 5,
 };
 
 function orderedTargets(targets: PublicTarget[], slideIds: string[]): PublicTarget[] {

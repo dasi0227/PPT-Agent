@@ -54,4 +54,27 @@ describe('timeline grouping', () => {
       item: { type: 'user_turn', text: '换一个方向' },
     });
   });
+
+  it('groups three consecutive successful commands but keeps two separate', () => {
+    const command = (id: string): TimelineItem => ({
+      id,
+      type: 'tool',
+      runId: 'r1',
+      callId: id,
+      tool: 'run_command',
+      label: '已执行命令',
+      status: 'completed',
+      command: { text: `pwd ${id}`, status: 'completed' },
+      timestamp: 1,
+    });
+
+    expect(groupTimelineItems([command('1'), command('2')]).map((entry) => entry.kind))
+      .toEqual(['item', 'item']);
+    expect(groupTimelineItems([command('1'), command('2'), command('3')]))
+      .toEqual([expect.objectContaining({ kind: 'tool_group', items: expect.arrayContaining([
+        expect.objectContaining({ callId: '1' }),
+        expect.objectContaining({ callId: '2' }),
+        expect.objectContaining({ callId: '3' }),
+      ]) })]);
+  });
 });

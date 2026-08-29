@@ -25,6 +25,8 @@ const payloads: Record<string, unknown> = {
   'plan.updated': { ...base, plan: { plan_id: 'p1', revision: 1, title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
   'plan.approval_requested': { ...base, interaction_id: 'i1', plan: { plan_id: 'p1', revision: 1, title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
   'plan.approval_answered': { ...base, interaction_id: 'i1', plan_id: 'p1', revision: 1, decision: 'approve' },
+  'command.permission_requested': { ...base, interaction_id: 'cp1', call_id: 'c2', command: 'cat .env', command_hash: 'sha256:abc', reason_code: 'SENSITIVE_READ', reason: '该命令将读取敏感文件。' },
+  'command.permission_answered': { ...base, interaction_id: 'cp1', call_id: 'c2', command_hash: 'sha256:abc', decision: 'allow_once' },
   'run.mode_changed': { ...base, previous_mode: 'plan', mode: 'execute' },
   'message.reasoning': { ...base, message_id: 'm1', text: '先确认全局设计。' },
   'message.milestone': { ...base, message_id: 'm2', text: '全局设计已完成。', completed_step_ids: ['s1'] },
@@ -36,14 +38,47 @@ const payloads: Record<string, unknown> = {
 };
 
 describe('SSE parser', () => {
-  it('registers and parses all 18 public events', () => {
-	  expect(SSE_EVENT_NAMES).toHaveLength(18);
+  it('registers and parses all 20 public events', () => {
+	  expect(SSE_EVENT_NAMES).toHaveLength(20);
     for (const eventName of SSE_EVENT_NAMES) {
       expect(parseSSEEvent(eventName, JSON.stringify(payloads[eventName]), '12')).toMatchObject({
         id: '12',
         event: eventName,
       });
     }
+  });
+
+  it('validates command lifecycle projections and project file targets', () => {
+    expect(parsePublicEvent('tool.started', {
+      ...base,
+      call_id: 'c2',
+      tool: 'run_command',
+      display: { label: '正在执行命令' },
+      command: { text: 'git status --short' },
+    })).not.toBeNull();
+    expect(parsePublicEvent('tool.completed', {
+      ...base,
+      call_id: 'c2',
+      tool: 'run_command',
+      status: 'completed',
+      target: { type: 'file', part: 'content', display_name: 'notes.txt' },
+      display: { label: '已执行命令' },
+      command: {
+        text: 'git status --short',
+        status: 'completed',
+        exit_code: 0,
+        duration_ms: 12,
+        output_truncated: false,
+        stdout_preview: 'M notes.txt',
+      },
+    })).not.toBeNull();
+    expect(parsePublicEvent('tool.started', {
+      ...base,
+      call_id: 'c2',
+      tool: 'run_command',
+      display: { label: '正在执行命令' },
+      command: { text: 'pwd', status: 'completed' },
+    })).toBeNull();
   });
 
   it('ignores unknown, malformed, incomplete, and unsafe payloads', () => {

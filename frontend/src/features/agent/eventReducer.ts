@@ -1,4 +1,5 @@
 import {
+  CommandProjection,
   PlanState,
   PlanStep,
   PlanStepStatus,
@@ -19,6 +20,7 @@ export type TimelineItemType =
   | 'tool'
   | 'question'
   | 'plan_approval'
+  | 'command_permission'
   | 'terminal_notice';
 
 export interface BaseTimelineItem {
@@ -73,9 +75,10 @@ export interface ToolActivityItem extends BaseTimelineItem {
   target?: PublicTarget;
   label: string;
   detail?: string;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'blocked' | 'failed';
   preview?: ToolPreview;
   error?: PublicError;
+  command?: CommandProjection;
 }
 
 export interface QuestionItem extends BaseTimelineItem {
@@ -90,6 +93,17 @@ export interface QuestionItem extends BaseTimelineItem {
 export interface PlanApprovalItem extends BaseTimelineItem {
   type: 'plan_approval'; interactionId: string; plan: PlanState;
   answer?: { decision: 'approve' | 'revise' | 'cancel'; feedback?: string };
+}
+
+export interface CommandPermissionItem extends BaseTimelineItem {
+  type: 'command_permission';
+  interactionId: string;
+  callId: string;
+  command: string;
+  commandHash: string;
+  reasonCode: string;
+  reason: string;
+  answer?: 'allow_once' | 'deny';
 }
 
 export interface TerminalNoticeItem extends BaseTimelineItem {
@@ -115,6 +129,7 @@ export type TimelineItem =
   | ToolActivityItem
   | QuestionItem
   | PlanApprovalItem
+  | CommandPermissionItem
   | TerminalNoticeItem;
 
 function normalizeStepStatus(status: unknown): PlanStepStatus {
@@ -206,6 +221,33 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
 		const existing = state.find((item): item is PlanApprovalItem => item.type === 'plan_approval' && item.id === id);
 		return existing ? upsertById(state, { ...existing, answer: { decision: event.data.decision, feedback: event.data.feedback } }) : state;
 	}
+    case 'command.permission_requested': {
+      const id = `${runId}:command-permission:${event.data.interaction_id}`;
+      const existing = state.find((item): item is CommandPermissionItem =>
+        item.type === 'command_permission' && item.id === id);
+      return upsertById(state, {
+        id,
+        type: 'command_permission',
+        runId,
+        interactionId: event.data.interaction_id,
+        callId: event.data.call_id,
+        command: event.data.command,
+        commandHash: event.data.command_hash,
+        reasonCode: event.data.reason_code,
+        reason: event.data.reason,
+        answer: existing?.answer,
+        timestamp: existing?.timestamp ?? timestamp,
+      });
+    }
+    case 'command.permission_answered': {
+      const id = `${runId}:command-permission:${event.data.interaction_id}`;
+      const existing = state.find((item): item is CommandPermissionItem =>
+        item.type === 'command_permission' && item.id === id);
+      if (!existing || existing.callId !== event.data.call_id || existing.commandHash !== event.data.command_hash) {
+        return state;
+      }
+      return upsertById(state, { ...existing, answer: event.data.decision });
+    }
 
     case 'message.reasoning': {
       const item: ReasoningItem = {
@@ -265,6 +307,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         status: existing?.status ?? 'running',
         preview: existing?.preview,
         error: existing?.error,
+        command: event.data.command ?? existing?.command,
         timestamp: existing?.timestamp ?? timestamp,
       };
       return upsertById(state, item);
@@ -281,12 +324,13 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         callId: event.data.call_id,
         tool: event.data.tool,
         planStepId: existing?.planStepId,
-        target: existing?.target,
+        target: event.data.target ?? existing?.target,
         label: event.data.display.label,
         detail: event.data.display.detail,
         status: event.data.status,
         preview: event.data.preview,
         error: event.data.error,
+        command: event.data.command ?? existing?.command,
         timestamp: existing?.timestamp ?? timestamp,
       };
       return upsertById(state, item);

@@ -46,6 +46,50 @@ describe('public event reducer', () => {
     expect(state[0]).toMatchObject({ type: 'question', displayText: '克制科技' });
   });
 
+  it('tracks command permission and the safe command projection', () => {
+    let state = reduceSSEEvent([], event('command.permission_requested', {
+      interaction_id: 'cp1',
+      call_id: 'c2',
+      command: 'cat .env',
+      command_hash: 'sha256:abc',
+      reason_code: 'SENSITIVE_READ',
+      reason: '该命令将读取敏感文件。',
+    }));
+    state = reduceSSEEvent(state, event('command.permission_answered', {
+      interaction_id: 'cp1',
+      call_id: 'c2',
+      command_hash: 'sha256:abc',
+      decision: 'allow_once',
+    }, '2'));
+    state = reduceSSEEvent(state, event('tool.started', {
+      call_id: 'c2',
+      tool: 'run_command',
+      display: { label: '正在执行命令' },
+      command: { text: 'cat .env' },
+    }, '3'));
+    state = reduceSSEEvent(state, event('tool.completed', {
+      call_id: 'c2',
+      tool: 'run_command',
+      status: 'completed',
+      display: { label: '已执行命令' },
+      command: { text: 'cat .env', status: 'completed', exit_code: 0, stdout_preview: '[REDACTED]' },
+    }, '4'));
+
+    expect(state).toEqual([
+      expect.objectContaining({
+        type: 'command_permission',
+        callId: 'c2',
+        answer: 'allow_once',
+      }),
+      expect.objectContaining({
+        type: 'tool',
+        callId: 'c2',
+        status: 'completed',
+        command: expect.objectContaining({ text: 'cat .env', stdout_preview: '[REDACTED]' }),
+      }),
+    ]);
+  });
+
   it('keeps progress and plan outside timeline items', () => {
     const progress = reduceSSEEvent([], event('run.progress', { stage: 'writing', text: '正在生成页面' }));
     expect(progress).toEqual([]);

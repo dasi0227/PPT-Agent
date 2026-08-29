@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Run Command 状态交互预览</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9edf2;
+      --panel: #f8f9fb;
+      --surface: #ffffff;
+      --muted-surface: #f1f4f7;
+      --ink: #17202b;
+      --text: #455160;
+      --muted: #7a8696;
+      --line: #d7dde5;
+      --line-strong: #c4ccd7;
+      --accent: #2f67f6;
+      --accent-soft: #edf3ff;
+      --success: #25876b;
+      --success-soft: #edf8f4;
+      --warning: #a9631d;
+      --warning-soft: #fff5e6;
+      --warning-line: #e9c98f;
+      --danger: #c84953;
+      --danger-soft: #fff0f1;
+      --danger-line: #e8b8bd;
+      --shadow: 0 18px 48px rgb(29 41 57 / 12%);
+      font-family: Aptos, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 320px;
+      min-height: 100%;
+      margin: 0;
+      background: var(--workspace);
+      color: var(--ink);
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    button {
+      border: 0;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    .preview {
+      width: min(100%, 560px);
+    }
+
+    .preview-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 10px;
+    }
+
+    .preview-title {
+      margin: 0;
+      color: #596576;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .state-switch {
+      display: flex;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgb(248 249 251 / 92%);
+      box-shadow: 0 2px 8px rgb(34 47 64 / 5%);
+    }
+
+    .state-switch button {
+      height: 28px;
+      padding: 0 9px;
+      border-radius: 5px;
+      background: transparent;
+      color: #697587;
+      font-size: 11px;
+      font-weight: 620;
+      white-space: nowrap;
+    }
+
+    .state-switch button:hover {
+      color: var(--ink);
+      background: var(--muted-surface);
+    }
+
+    .state-switch button[aria-pressed="true"] {
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 1px 4px rgb(25 37 53 / 12%);
+    }
+
+    .panel {
+      display: grid;
+      height: min(760px, calc(100dvh - 84px));
+      min-height: 590px;
+      grid-template-rows: 44px minmax(0, 1fr) auto;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .panel-head strong {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .panel-head span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .timeline {
+      overflow-y: auto;
+      padding: 17px 14px 24px;
+      scrollbar-gutter: stable;
+    }
+
+    .user-wrap {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 17px;
+    }
+
+    .user-message {
+      max-width: 86%;
+      padding: 9px 11px;
+      border: 1px solid #dae0e7;
+      border-radius: 9px 9px 3px 9px;
+      background: #eef1f5;
+      color: #344050;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .context-row {
+      display: grid;
+      min-height: 30px;
+      grid-template-columns: 18px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      padding: 4px 6px;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .context-row svg {
+      width: 16px;
+      height: 16px;
+      color: var(--success);
+      stroke-width: 1.75;
+    }
+
+    .scenario {
+      display: none;
+      margin-top: 3px;
+      animation: enter 150ms ease-out both;
+    }
+
+    .scenario.active { display: block; }
+
+    .tool-shell {
+      overflow: hidden;
+      border-radius: 8px;
+    }
+
+    .tool-row {
+      display: grid;
+      width: 100%;
+      min-height: 36px;
+      grid-template-columns: 18px minmax(0, 1fr) 16px;
+      align-items: center;
+      gap: 8px;
+      padding: 6px;
+      background: transparent;
+      color: var(--ink);
+      text-align: left;
+    }
+
+    .tool-row > svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.75;
+    }
+
+    .running .tool-row > svg { color: var(--accent); }
+    .completed .tool-row > svg { color: var(--success); }
+    .blocked .tool-row > svg { color: var(--warning); }
+    .failed .tool-row > svg { color: var(--danger); }
+
+    .tool-label {
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tool-row .chevron {
+      color: var(--muted);
+      transition: transform 150ms ease;
+    }
+
+    .tool-row[aria-expanded="true"] .chevron {
+      transform: rotate(90deg);
+    }
+
+    .tool-detail {
+      padding: 1px 8px 10px 32px;
+    }
+
+    .tool-group-detail {
+      padding-left: 0;
+    }
+
+    .tool-group-detail .tool-row {
+      min-height: 32px;
+    }
+
+    .tool-group-detail .tool-detail {
+      padding-bottom: 8px;
+    }
+
+    .detail-box {
+      padding: 9px 10px;
+      border-radius: 6px;
+      background: #edf0f3;
+      color: #526071;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .command {
+      display: block;
+      overflow-x: auto;
+      padding: 8px 9px;
+      border: 1px solid rgb(105 117 135 / 17%);
+      border-radius: 6px;
+      background: rgb(255 255 255 / 68%);
+      color: #263241;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .detail-box .command {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .detail-output {
+      margin: 7px 0 0;
+      padding-top: 7px;
+      border-top: 1px solid #d7dce3;
+      color: #758191;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .detail-output.error {
+      color: #a34851;
+    }
+
+    .permission {
+      overflow: hidden;
+      border: 1px solid var(--warning-line);
+      border-radius: 9px;
+      background: var(--surface);
+      box-shadow: 0 2px 8px rgb(58 46 25 / 7%);
+    }
+
+    .permission-main {
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr);
+      gap: 9px;
+      padding: 12px 12px 10px;
+    }
+
+    .permission-main > svg {
+      width: 18px;
+      height: 18px;
+      margin-top: 1px;
+      color: var(--warning);
+      stroke-width: 1.75;
+    }
+
+    .permission h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 20px;
+    }
+
+    .permission p {
+      margin: 3px 0 0;
+      color: #687486;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .permission .command {
+      margin-top: 9px;
+      background: #f7f8fa;
+    }
+
+    .permission-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 7px;
+      padding: 9px 11px;
+      border-top: 1px solid #eadfc9;
+      background: #fffaf1;
+    }
+
+    .secondary,
+    .primary {
+      display: inline-flex;
+      height: 30px;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 0 11px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .secondary {
+      border: 1px solid #cfd6df;
+      background: var(--surface);
+      color: #4d5969;
+    }
+
+    .secondary:hover { background: var(--muted-surface); }
+
+    .primary {
+      background: #293544;
+      color: #fff;
+    }
+
+    .primary:hover { background: #1e2835; }
+
+    .primary svg,
+    .secondary svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 1.9;
+    }
+
+    .answer-row {
+      display: none;
+      min-height: 34px;
+      grid-template-columns: 18px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      padding: 5px 6px;
+      color: var(--text);
+      font-size: 13px;
+      animation: enter 150ms ease-out both;
+    }
+
+    .answer-row.visible { display: grid; }
+
+    .answer-row svg {
+      width: 16px;
+      height: 16px;
+      color: var(--success);
+      stroke-width: 1.75;
+    }
+
+    .answer-row.denied svg { color: var(--warning); }
+
+    .composer-zone {
+      padding: 8px 12px 12px;
+      border-top: 1px solid rgb(215 221 229 / 72%);
+      background: var(--panel);
+    }
+
+    .composer {
+      min-height: 74px;
+      padding: 11px 12px 9px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 5px 16px rgb(25 37 53 / 5%);
+    }
+
+    .composer-copy {
+      color: #9aa4b2;
+      font-size: 13px;
+    }
+
+    .composer-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 17px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .send {
+      display: grid;
+      width: 27px;
+      height: 27px;
+      place-items: center;
+      border-radius: 6px;
+      background: #a9b2bf;
+      color: #fff;
+      opacity: .55;
+      cursor: default;
+    }
+
+    .send svg {
+      width: 15px;
+      height: 15px;
+      stroke-width: 1.9;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes enter {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 0; }
+      .preview { width: 100%; }
+      .preview-head {
+        align-items: flex-start;
+        padding: 10px 10px 0;
+      }
+      .preview-title { display: none; }
+      .state-switch {
+        width: 100%;
+        overflow-x: auto;
+      }
+      .state-switch button { flex: 1 0 auto; }
+      .panel {
+        height: calc(100dvh - 52px);
+        min-height: 520px;
+        border-right: 0;
+        border-bottom: 0;
+        border-left: 0;
+        border-radius: 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="preview">
+    <header class="preview-head">
+      <p class="preview-title">Run Command 状态交互预览</p>
+      <nav class="state-switch" aria-label="切换命令状态">
+        <button type="button" data-state="running" aria-pressed="true">执行中</button>
+        <button type="button" data-state="completed" aria-pressed="false">执行成功</button>
+        <button type="button" data-state="blocked" aria-pressed="false">已拦截</button>
+        <button type="button" data-state="failed" aria-pressed="false">执行失败</button>
+        <button type="button" data-state="permission" aria-pressed="false">等待授权</button>
+      </nav>
+    </header>
+
+    <section class="panel" aria-label="Agent 时间线">
+      <header class="panel-head">
+        <strong>Agent</strong>
+        <span id="panel-status">正在执行</span>
+      </header>
+
+      <div class="timeline">
+        <div class="user-wrap">
+          <div class="user-message">检查项目里是否还有旧版 deck 字段，并告诉我分布在哪些文件。</div>
+        </div>
+
+        <div class="context-row">
+          <i data-lucide="eye"></i>
+          <span>已读取当前演示结构</span>
+        </div>
+
+        <section class="scenario active" data-scenario="running">
+          <div class="tool-shell running">
+            <button class="tool-row" type="button" aria-expanded="false">
+              <i data-lucide="square-terminal"></i>
+              <span class="tool-label">正在执行命令</span>
+              <i class="chevron" data-lucide="chevron-right"></i>
+            </button>
+            <div class="tool-detail" hidden>
+              <div class="detail-box">
+                <code class="command">rg "target_type.*deck" backend docs | head -n 40</code>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="scenario" data-scenario="completed">
+          <div class="tool-shell completed">
+            <button class="tool-row" type="button" aria-expanded="false">
+              <i data-lucide="square-terminal"></i>
+              <span class="tool-label">已执行 3 条命令</span>
+              <i class="chevron" data-lucide="chevron-right"></i>
+            </button>
+            <div class="tool-group-detail" hidden>
+              <div class="tool-shell completed">
+                <button class="tool-row" type="button" aria-expanded="false">
+                  <i data-lucide="square-terminal"></i>
+                  <span class="tool-label">已检索旧版 deck 字段</span>
+                  <i class="chevron" data-lucide="chevron-right"></i>
+                </button>
+                <div class="tool-detail" hidden>
+                  <div class="detail-box">
+                    <code class="command">rg "target_type.*deck" backend docs</code>
+                    <pre class="detail-output">backend/agent/handler.go:42  target_type: "deck"
+docs/schema.md:18  target_type: deck</pre>
+                  </div>
+                </div>
+              </div>
+              <div class="tool-shell completed">
+                <button class="tool-row" type="button" aria-expanded="false">
+                  <i data-lucide="square-terminal"></i>
+                  <span class="tool-label">已检查相关 JSON 配置</span>
+                  <i class="chevron" data-lucide="chevron-right"></i>
+                </button>
+                <div class="tool-detail" hidden>
+                  <div class="detail-box">
+                    <code class="command">find . -name "*.json" | head -n 20</code>
+                    <pre class="detail-output">backend/config/deck.json
+frontend/package.json</pre>
+                  </div>
+                </div>
+              </div>
+              <div class="tool-shell completed">
+                <button class="tool-row" type="button" aria-expanded="false">
+                  <i data-lucide="square-terminal"></i>
+                  <span class="tool-label">已确认当前仓库状态</span>
+                  <i class="chevron" data-lucide="chevron-right"></i>
+                </button>
+                <div class="tool-detail" hidden>
+                  <div class="detail-box">
+                    <code class="command">git status --short</code>
+                    <pre class="detail-output">M  docs/discuss/run-command-state-preview.html</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="scenario" data-scenario="blocked">
+          <div class="tool-shell blocked">
+            <button class="tool-row" type="button" aria-expanded="false">
+              <i data-lucide="square-terminal"></i>
+              <span class="tool-label">命令已被安全策略拦截</span>
+              <i class="chevron" data-lucide="chevron-right"></i>
+            </button>
+            <div class="tool-detail" hidden>
+              <div class="detail-box">
+                <code class="command">rg "deck" backend &gt;&gt; findings.txt</code>
+                <p class="detail-output">当前仅允许读取项目目录下的文件。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="scenario" data-scenario="failed">
+          <div class="tool-shell failed">
+            <button class="tool-row" type="button" aria-expanded="false">
+              <i data-lucide="square-terminal"></i>
+              <span class="tool-label">命令执行失败</span>
+              <i class="chevron" data-lucide="chevron-right"></i>
+            </button>
+            <div class="tool-detail" hidden>
+              <div class="detail-box">
+                <code class="command">jq ".slides[]" project/deck.json</code>
+                <p class="detail-output error">找不到 project/deck.json，命令退出码为 2。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="scenario" data-scenario="permission">
+          <div class="permission" id="permission-card">
+            <div class="permission-main">
+              <i data-lucide="shield-question"></i>
+              <div>
+                <h2>命令等待授权执行</h2>
+                <code class="command">sed -i '' 's/target_type/deck_type/g' backend/config.go</code>
+                <p>该命令将修改项目文件，需要经过批准后才能执行。</p>
+              </div>
+            </div>
+            <div class="permission-actions">
+              <button class="secondary" id="deny" type="button">
+                <i data-lucide="x"></i>
+                拒绝
+              </button>
+              <button class="primary" id="allow" type="button">
+                <i data-lucide="check"></i>
+                允许
+              </button>
+            </div>
+          </div>
+          <div class="answer-row" id="answer-row">
+            <i data-lucide="shield-check"></i>
+            <span id="answer-copy">已允许命令执行，正在继续处理</span>
+          </div>
+        </section>
+      </div>
+
+      <footer class="composer-zone">
+        <div class="composer">
+          <div class="composer-copy" id="composer-copy">任务运行中，可继续补充要求</div>
+          <div class="composer-foot">
+            <span id="composer-state">读取模式</span>
+            <span class="send" aria-hidden="true"><i data-lucide="send"></i></span>
+          </div>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    const buttons = Array.from(document.querySelectorAll("[data-state]"));
+    const scenarios = Array.from(document.querySelectorAll("[data-scenario]"));
+    const status = document.querySelector("#panel-status");
+    const composerCopy = document.querySelector("#composer-copy");
+    const composerState = document.querySelector("#composer-state");
+    const permissionCard = document.querySelector("#permission-card");
+    const answerRow = document.querySelector("#answer-row");
+    const answerCopy = document.querySelector("#answer-copy");
+
+    const stateCopy = {
+      running: ["正在执行", "任务运行中，可继续补充要求", "读取模式"],
+      completed: ["继续处理中", "Agent 正在处理命令结果", "读取模式"],
+      blocked: ["继续处理中", "Agent 正在调整命令", "读取模式"],
+      failed: ["继续处理中", "Agent 可根据错误继续尝试", "读取模式"],
+      permission: ["等待你的决定", "请先处理上方授权请求", "任务已暂停"]
+    };
+
+    function drawIcons() {
+      if (window.lucide) {
+        window.lucide.createIcons({ attrs: { "aria-hidden": "true" } });
+      }
+    }
+
+    function selectState(next) {
+      buttons.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.state === next));
+      });
+      document.querySelectorAll(".tool-row").forEach((row) => {
+        row.setAttribute("aria-expanded", "false");
+        row.nextElementSibling.hidden = true;
+      });
+      scenarios.forEach((scenario) => {
+        scenario.classList.toggle("active", scenario.dataset.scenario === next);
+      });
+      const copy = stateCopy[next];
+      status.textContent = copy[0];
+      composerCopy.textContent = copy[1];
+      composerState.textContent = copy[2];
+      if (next === "permission") {
+        permissionCard.hidden = false;
+        answerRow.className = "answer-row";
+      }
+      drawIcons();
+    }
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => selectState(button.dataset.state));
+    });
+
+    document.querySelectorAll(".tool-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const expanded = row.getAttribute("aria-expanded") === "true";
+        row.setAttribute("aria-expanded", String(!expanded));
+        row.nextElementSibling.hidden = expanded;
+      });
+    });
+
+    document.querySelector("#allow").addEventListener("click", () => {
+      permissionCard.hidden = true;
+      answerRow.className = "answer-row visible";
+      answerCopy.textContent = "已允许命令执行，正在继续处理";
+      status.textContent = "正在执行";
+      composerCopy.textContent = "任务运行中，可继续补充要求";
+      composerState.textContent = "读取模式";
+      drawIcons();
+    });
+
+    document.querySelector("#deny").addEventListener("click", () => {
+      permissionCard.hidden = true;
+      answerRow.className = "answer-row visible denied";
+      answerCopy.textContent = "已拒绝命令执行，Agent 将选择其他方式";
+      status.textContent = "继续处理中";
+      composerCopy.textContent = "Agent 正在调整检索方式";
+      composerState.textContent = "读取模式";
+      drawIcons();
+    });
+
+    drawIcons();
+  </script>
+</body>
+</html>

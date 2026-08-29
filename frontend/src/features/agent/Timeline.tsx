@@ -14,6 +14,7 @@ import { MessageMetaActions } from './MessageMetaActions';
 import type { TimelineItem } from './eventReducer';
 import { DisplayEntry, groupTimelineItems } from './timelineGrouping';
 import { PausedRunCard } from './PausedRunCard';
+import { CommandPermissionCard } from './CommandPermissionCard';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -144,6 +145,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'tool' && <ToolActivityRow item={item} />}
         {item.type === 'question' && <QuestionPanel item={item} />}
         {item.type === 'plan_approval' && <PlanApproval item={item} />}
+        {item.type === 'command_permission' && <CommandPermissionCard item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
       </React.Fragment>

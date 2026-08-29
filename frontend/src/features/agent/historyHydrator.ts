@@ -125,6 +125,10 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       session = { ...session, status: 'waiting', pendingQuestion: null };
     } else if (event.event === 'plan.approval_answered') {
       session = { ...session, status: 'running', pendingQuestion: null };
+    } else if (event.event === 'command.permission_requested') {
+      session = { ...session, status: 'waiting', pendingQuestion: null };
+    } else if (event.event === 'command.permission_answered') {
+      session = { ...session, status: 'running', pendingQuestion: null };
     } else if (event.event === 'run.mode_changed') {
       session = { ...session, status: 'running', mode: event.data.mode, pendingQuestion: null };
     } else if (event.event === 'run.resumed') {

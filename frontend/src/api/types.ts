@@ -240,6 +240,13 @@ export interface PlanApprovalRequest {
   idempotency_key?: string;
 }
 
+export interface CommandPermissionRequest {
+  interaction_id: string;
+  call_id: string;
+  command_hash: string;
+  decision: 'allow_once' | 'deny';
+}
+
 export type JsonRecord = Record<string, unknown>;
 
 export type SSEEventName =
@@ -253,6 +260,8 @@ export type SSEEventName =
   | 'plan.updated'
   | 'plan.approval_requested'
   | 'plan.approval_answered'
+  | 'command.permission_requested'
+  | 'command.permission_answered'
   | 'run.mode_changed'
   | 'message.reasoning'
   | 'message.milestone'
@@ -288,9 +297,9 @@ export interface PublicEventBase {
 }
 
 export interface PublicTarget {
-  type: 'deck' | 'slide';
+  type: 'deck' | 'slide' | 'file';
   slide_id?: string;
-  part: 'manifest' | 'outline' | 'design' | 'spec' | 'html';
+  part: 'manifest' | 'outline' | 'design' | 'spec' | 'html' | 'content';
   display_name?: string;
   insertions?: number;
   deletions?: number;
@@ -321,6 +330,16 @@ export interface ToolPreview {
   slide_id: string;
   image_url: string;
   warnings: string[];
+}
+
+export interface CommandProjection {
+  text: string;
+  status?: 'completed' | 'blocked' | 'failed';
+  exit_code?: number;
+  duration_ms?: number;
+  output_truncated?: boolean;
+  stdout_preview?: string;
+  stderr_preview?: string;
 }
 
 export interface QuestionOption {
@@ -383,6 +402,15 @@ export type SSEEvent =
     }>
   | SSEEventBase<'plan.approval_requested', PublicEventBase & { interaction_id: string; plan: JsonRecord & { plan_id: string; revision: number; title: string; content: string; status: string; steps: JsonRecord[] } }>
   | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; plan_id: string; revision: number; decision: 'approve' | 'revise' | 'cancel'; feedback?: string }>
+  | SSEEventBase<'command.permission_requested', PublicEventBase & {
+      interaction_id: string;
+      call_id: string;
+      command: string;
+      command_hash: string;
+      reason_code: string;
+      reason: string;
+    }>
+  | SSEEventBase<'command.permission_answered', PublicEventBase & CommandPermissionRequest>
   | SSEEventBase<'run.mode_changed', PublicEventBase & { previous_mode: RunMode; mode: RunMode }>
   | SSEEventBase<'message.reasoning', PublicEventBase & { message_id: string; text: string }>
   | SSEEventBase<'message.milestone', PublicEventBase & {
@@ -401,15 +429,17 @@ export type SSEEvent =
       plan_step_id?: string;
       target?: PublicTarget;
       display: PublicDisplay;
+      command?: CommandProjection;
     }>
   | SSEEventBase<'tool.completed', PublicEventBase & {
       call_id: string;
       tool: string;
-      status: 'completed' | 'failed';
+      status: 'completed' | 'blocked' | 'failed';
       target?: PublicTarget;
       display: PublicDisplay;
       preview?: ToolPreview;
       error?: PublicError;
+      command?: CommandProjection;
     }>
   | SSEEventBase<'question.asked', PublicEventBase & {
       question_id: string;

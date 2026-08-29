@@ -442,7 +442,13 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := validateOptionalTarget(data["target"]); err != nil {
 			return err
 		}
-		return validateDisplay(data["display"])
+		if err := validateDisplay(data["display"]); err != nil {
+			return err
+		}
+		if (stringValue(data["tool"]) == "run_command") != (data["command"] != nil) {
+			return errors.New("command projection must appear only on run_command events")
+		}
+		return validateCommandProjection(data["command"], false)
 	case EventToolCompleted:
 		if err := requireString(data, "call_id", "tool", "status"); err != nil {
 			return err
@@ -462,8 +468,8 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := validateDisplay(data["display"]); err != nil {
 			return err
 		}
-		if err := validateCommandProjection(data["command"], false); err != nil {
-			return err
+		if (stringValue(data["tool"]) == "run_command") != (data["command"] != nil) {
+			return errors.New("command projection must appear only on run_command events")
 		}
 		if err := validateCommandProjection(data["command"], true); err != nil {
 			return err

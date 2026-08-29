@@ -25,6 +25,7 @@ import {
 import { useProjectStore } from './projectStore';
 import { useComposerStore } from './composerStore';
 import { newClientIdentity } from '../lib/clientIdentity';
+import { showGlobalError } from './toastStore';
 
 export type { PlanState } from '../api/types';
 
@@ -254,6 +255,14 @@ interface RunStoreV2 {
   reconcileRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => Promise<void>;
   resumeRun: (threadId: string, runId: string) => Promise<boolean>;
   answerQuestion: (threadId: string, runId: string, replyTo: string, content: string) => Promise<boolean>;
+  answerCommandPermission: (
+    threadId: string,
+    runId: string,
+    interactionId: string,
+    callId: string,
+    commandHash: string,
+    decision: 'allow_once' | 'deny',
+  ) => Promise<boolean>;
   cancelRun: (threadId: string, runId: string, reason?: RunCancelReason) => Promise<boolean>;
   steerRun: (threadId: string, runId: string, content: string, clientMessageId: string) => Promise<boolean>;
   retryRun: (threadId: string) => Promise<boolean>;
@@ -537,6 +546,20 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
                       : '已收到建议，推进任务中',
                   };
                 }
+              }
+            } else if (event.event === 'command.permission_requested') {
+              status = prev.status === 'canceling' ? 'canceling' : 'waiting';
+              pendingQuestion = null;
+              progress = null;
+            } else if (event.event === 'command.permission_answered') {
+              if (prev.status !== 'canceling') {
+                status = 'running';
+                progress = {
+                  stage: 'thinking',
+                  text: event.data.decision === 'allow_once'
+                    ? '已允许命令执行，正在继续处理'
+                    : '已拒绝命令执行，Agent 正在调整',
+                };
               }
             } else if (event.event === 'run.resumed') {
               if (prev.status !== 'canceling') status = 'recovering';
@@ -826,6 +849,60 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             timestamp: Date.now(),
           }],
         }));
+        return false;
+      }
+    },
+
+    answerCommandPermission: async (
+      threadId,
+      runId,
+      interactionId,
+      callId,
+      commandHash,
+      decision,
+    ) => {
+      try {
+        await runsApi.submitCommandPermission(runId, {
+          interaction_id: interactionId,
+          call_id: callId,
+          command_hash: commandHash,
+          decision,
+        });
+        updateSession(threadId, (prev) => ({
+          status: prev.status === 'canceling' ? 'canceling' : 'running',
+          progress: prev.status === 'canceling'
+            ? prev.progress
+            : {
+                stage: 'thinking',
+                text: decision === 'allow_once'
+                  ? '已允许命令执行，正在继续处理'
+                  : '已拒绝命令执行，Agent 正在调整',
+              },
+          timelineItems: prev.timelineItems.map((item) =>
+            item.type === 'command_permission'
+              && item.interactionId === interactionId
+              && item.callId === callId
+              && item.commandHash === commandHash
+              ? { ...item, answer: decision }
+              : item),
+        }));
+        return true;
+      } catch (error) {
+        const detail = errorMessage(error);
+        showGlobalError(localizedErrorMessage(detail.message, '命令授权提交失败，请重试'));
+        try {
+          const history = await threadsApi.history(threadId);
+          const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
+          updateSession(threadId, (prev) => ({
+            timelineItems: mergeAuthoritativeTimeline(prev.timelineItems, hydrated.items),
+            plan: hydrated.plan,
+            status: hydrated.session.status,
+            pendingQuestion: hydrated.session.pendingQuestion,
+            lastEventId: hydrated.lastEventId ?? prev.lastEventId,
+          }));
+        } catch {
+          // The existing timeline remains usable when an authoritative refresh is unavailable.
+        }
         return false;
       }
     },

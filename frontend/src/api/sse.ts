@@ -12,6 +12,7 @@ export interface SSEOptions {
 export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
   'run.started', 'run.progress', 'run.resumed', 'run.completed', 'run.failed', 'run.error', 'run.canceled',
   'plan.updated', 'plan.approval_requested', 'plan.approval_answered', 'run.mode_changed',
+  'command.permission_requested', 'command.permission_answered',
   'message.reasoning', 'message.milestone', 'message.final',
   'tool.started', 'tool.completed', 'question.asked', 'question.answered',
 ];
@@ -42,7 +43,7 @@ export function parsePublicEvent(eventName: string, data: unknown, id?: string):
 }
 
 const progressStages = new Set(['thinking', 'planning', 'reading', 'writing', 'rendering', 'finalizing']);
-const businessTools = new Set(['read_ppt', 'mutate_ppt', 'search_refs', 'render_slide']);
+const businessTools = new Set(['read_ppt', 'mutate_ppt', 'search_refs', 'render_slide', 'run_command']);
 const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
@@ -86,6 +87,18 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
       return hasString(data, 'interaction_id') && hasString(data, 'plan_id') && isNonNegativeInteger(data.revision)
         && ['approve', 'revise', 'cancel'].includes(String(data.decision))
         && (data.decision !== 'revise' || hasSafeString(data, 'feedback'));
+    case 'command.permission_requested':
+      return hasString(data, 'interaction_id')
+        && hasString(data, 'call_id')
+        && hasSafeString(data, 'command')
+        && hasString(data, 'command_hash')
+        && hasString(data, 'reason_code')
+        && hasSafeString(data, 'reason');
+    case 'command.permission_answered':
+      return hasString(data, 'interaction_id')
+        && hasString(data, 'call_id')
+        && hasString(data, 'command_hash')
+        && ['allow_once', 'deny'].includes(String(data.decision));
     case 'run.mode_changed':
       return ['talk', 'ask', 'plan', 'execute'].includes(String(data.previous_mode))
         && ['talk', 'ask', 'plan', 'execute'].includes(String(data.mode));
@@ -103,16 +116,18 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && businessTools.has(String(data.tool))
         && (data.plan_step_id === undefined || typeof data.plan_step_id === 'string')
         && validOptionalPublicTarget(data.target)
-        && validDisplay(data.display);
+        && validDisplay(data.display)
+        && validCommandProjection(data.command, false, data.tool === 'run_command');
     case 'tool.completed':
       return hasString(data, 'call_id')
         && businessTools.has(String(data.tool))
-        && ['completed', 'failed'].includes(String(data.status))
+        && ['completed', 'blocked', 'failed'].includes(String(data.status))
         && validOptionalPublicTarget(data.target)
         && validDisplay(data.display)
         && validOptionalError(data.error)
         && (data.status !== 'failed' || isRecord(data.error))
-        && validPreview(data.preview, String(data.run_id));
+        && validPreview(data.preview, String(data.run_id))
+        && validCommandProjection(data.command, true, data.tool === 'run_command');
     case 'question.asked':
       return hasString(data, 'question_id')
         && !['prompt', 'selection', 'options', 'allow_custom'].some((field) => field in data)
@@ -148,6 +163,15 @@ function validOptionalPublicTarget(value: unknown): boolean {
 
 function validPublicTarget(value: unknown): boolean {
   if (!isRecord(value)) return false;
+  if (value.type === 'file') {
+    return (value.slide_id === undefined || value.slide_id === '')
+      && value.part === 'content'
+      && hasSafeString(value, 'display_name')
+      && validOptionalNonNegativeInteger(value.insertions)
+      && validOptionalNonNegativeInteger(value.deletions)
+      && validOptionalSafeString(value.local_path)
+      && validOptionalSafeString(value.open_url);
+  }
   if (value.type === 'deck') {
     return (value.slide_id === undefined || value.slide_id === '')
       && (value.display_name === undefined || (typeof value.display_name === 'string' && !rawHTMLPattern.test(value.display_name)))
@@ -242,6 +266,22 @@ function validPreview(value: unknown, runId: string): boolean {
     || !Array.isArray(value.warnings)
     || !value.warnings.every((warning) => typeof warning === 'string' && !rawHTMLPattern.test(warning))) return false;
   return String(value.image_url).startsWith(`/api/v1/runs/${runId}/`);
+}
+
+function validCommandProjection(value: unknown, terminal: boolean, required: boolean): boolean {
+  if (value === undefined) return !required;
+  if (!isRecord(value) || !hasSafeString(value, 'text')) return false;
+  if (!terminal) {
+    return !['status', 'exit_code', 'duration_ms', 'stdout_preview', 'stderr_preview']
+      .some((field) => field in value);
+  }
+  return ['completed', 'blocked', 'failed'].includes(String(value.status))
+    && (value.exit_code === undefined
+      || (typeof value.exit_code === 'number' && Number.isInteger(value.exit_code) && value.exit_code >= -1))
+    && validOptionalNonNegativeInteger(value.duration_ms)
+    && (value.output_truncated === undefined || typeof value.output_truncated === 'boolean')
+    && validOptionalSafeString(value.stdout_preview)
+    && validOptionalSafeString(value.stderr_preview);
 }
 
 function validQuestionOptions(value: unknown, allowCustom: unknown): boolean {

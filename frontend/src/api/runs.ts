@@ -1,5 +1,15 @@
 import { fetchClient } from './client';
-import { CancelRunResponse, Run, CreateRunRequest, RunCancelReason, RunInputPayload, PlanApprovalRequest, SteerRunRequest, SteerRunResponse } from './types';
+import {
+  CancelRunResponse,
+  CommandPermissionRequest,
+  CreateRunRequest,
+  PlanApprovalRequest,
+  Run,
+  RunCancelReason,
+  RunInputPayload,
+  SteerRunRequest,
+  SteerRunResponse,
+} from './types';
 
 export const runsApi = {
   get: (runId: string) => fetchClient<Run>(`/runs/${runId}`, { reportError: false }),
@@ -17,6 +27,12 @@ export const runsApi = {
   submitPlanApproval: (runId: string, payload: PlanApprovalRequest) => fetchClient<void>(`/runs/${runId}/plan-approval`, {
     method: 'POST', body: JSON.stringify(payload), reportError: false,
   }),
+  submitCommandPermission: (runId: string, payload: CommandPermissionRequest) =>
+    fetchClient<void>(`/runs/${runId}/command-permission`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      reportError: false,
+    }),
   steer: (runId: string, payload: SteerRunRequest) => fetchClient<SteerRunResponse>(`/runs/${runId}/steer`, {
     method: 'POST',
     body: JSON.stringify(payload),

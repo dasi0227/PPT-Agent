@@ -106,3 +106,43 @@ func TestRunLifecyclePayloadsValidate(t *testing.T) {
 		t.Fatal("invalid cancellation reason was accepted")
 	}
 }
+
+func TestCommandToolProjectionValidation(t *testing.T) {
+	base := NewPublicEventBase("r1")
+	started := ToolStartedPayload{
+		PublicEventBase: base,
+		CallID:          "c1",
+		Tool:            "run_command",
+		Display:         PublicDisplay{Label: "正在执行命令"},
+		Command:         &CommandProjection{Text: "git status --short"},
+	}
+	if err := ValidatePublicEvent(EventToolStarted, started); err != nil {
+		t.Fatal(err)
+	}
+	exitCode := 0
+	duration := int64(12)
+	completed := ToolCompletedPayload{
+		PublicEventBase: base,
+		CallID:          "c1",
+		Tool:            "run_command",
+		Status:          "completed",
+		Display:         PublicDisplay{Label: "已执行命令"},
+		Command: &CommandProjection{
+			Text:       "git status --short",
+			Status:     "completed",
+			ExitCode:   &exitCode,
+			DurationMS: &duration,
+		},
+	}
+	if err := ValidatePublicEvent(EventToolCompleted, completed); err != nil {
+		t.Fatal(err)
+	}
+	started.Command.Status = "completed"
+	if err := ValidatePublicEvent(EventToolStarted, started); err == nil {
+		t.Fatal("started command projection accepted terminal fields")
+	}
+	completed.Command = nil
+	if err := ValidatePublicEvent(EventToolCompleted, completed); err == nil {
+		t.Fatal("run_command completion accepted without command projection")
+	}
+}

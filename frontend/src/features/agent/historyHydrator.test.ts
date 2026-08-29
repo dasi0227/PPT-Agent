@@ -168,6 +168,42 @@ describe('history hydrator', () => {
     expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'running', mode: 'execute' });
   });
 
+  it('restores pending and answered command permissions through public validation', () => {
+    const requested = entry(2, 'command.permission_requested', {
+      ...base,
+      interaction_id: 'cp1',
+      call_id: 'c1',
+      command: "sed -i '' 's/old/new/g' notes.txt",
+      command_hash: 'sha256:abc',
+      reason_code: 'PROJECT_FILE_EDIT',
+      reason: '该命令将修改项目文件，需要你的批准。',
+    });
+    const pending = hydrateRunFromHistory([
+      entry(1, 'user_turn', {
+        text: '更新文件', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute',
+      }),
+      requested,
+    ]);
+    expect(pending.session.status).toBe('waiting');
+    expect(pending.items[1]).toMatchObject({ type: 'command_permission', answer: undefined });
+
+    const answered = hydrateRunFromHistory([
+      entry(1, 'user_turn', {
+        text: '更新文件', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute',
+      }),
+      requested,
+      entry(3, 'command.permission_answered', {
+        ...base,
+        interaction_id: 'cp1',
+        call_id: 'c1',
+        command_hash: 'sha256:abc',
+        decision: 'deny',
+      }),
+    ]);
+    expect(answered.session.status).toBe('running');
+    expect(answered.items[1]).toMatchObject({ type: 'command_permission', answer: 'deny' });
+  });
+
   it('preserves append order across runs and restores the latest pending question', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
