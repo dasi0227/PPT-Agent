@@ -110,4 +110,20 @@ describe('projectStore canonical content snapshots', () => {
       activeProjectId: null,
     });
   });
+
+  it('does not activate a persisted project while loading the picker list', async () => {
+    list.mockResolvedValue([{ id: 'pro_1', title: '项目', created_at: 0, updated_at: 0 }]);
+    useProjectStore.setState({
+      openProjectIds: ['pro_1'],
+      activeProjectId: null,
+    });
+
+    await useProjectStore.getState().loadProjects();
+
+    expect(useProjectStore.getState()).toMatchObject({
+      openProjectIds: ['pro_1'],
+      activeProjectId: null,
+    });
+    expect(getContent).not.toHaveBeenCalled();
+  });
 });
