@@ -3,11 +3,13 @@ import { create } from 'zustand';
 export interface ErrorToast {
   id: string;
   message: string;
+  tone: 'error' | 'neutral';
 }
 
 interface ToastState {
   errors: ErrorToast[];
   pushError: (message: string) => string;
+  pushNeutral: (message: string) => string;
   removeError: (id: string) => void;
   clearErrors: () => void;
 }
@@ -19,7 +21,13 @@ export const useToastStore = create<ToastState>((set) => ({
   pushError: (message) => {
     nextToastId += 1;
     const id = `error-toast-${nextToastId}`;
-    set((state) => ({ errors: [...state.errors, { id, message }] }));
+    set((state) => ({ errors: [...state.errors, { id, message, tone: 'error' }] }));
+    return id;
+  },
+  pushNeutral: (message) => {
+    nextToastId += 1;
+    const id = `neutral-toast-${nextToastId}`;
+    set((state) => ({ errors: [...state.errors, { id, message, tone: 'neutral' }] }));
     return id;
   },
   removeError: (id) => {
@@ -30,4 +38,8 @@ export const useToastStore = create<ToastState>((set) => ({
 
 export function showGlobalError(message: string): string {
   return useToastStore.getState().pushError(message);
+}
+
+export function showGlobalNotice(message: string): string {
+  return useToastStore.getState().pushNeutral(message);
 }

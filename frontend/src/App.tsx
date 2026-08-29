@@ -4,13 +4,16 @@ import { GlobalErrorToasts } from './components/ui/GlobalErrorToasts';
 import { GlobalModals } from './features/workspace/GlobalModals';
 import { UnknownRouteRedirect, WorkspaceRoute } from './features/workspace/WorkspaceRoute';
 import { useRunStore } from './stores/runStore';
+import { useGitCommitStore } from './stores/gitCommitStore';
 
 export function App() {
   useEffect(() => {
     void useRunStore.getState().recoverPersistedRuns();
+    void useGitCommitStore.getState().recover();
     return () => {
       const sessions = useRunStore.getState().sessions;
       Object.values(sessions).forEach((session) => session.eventSourceClose?.());
+      useGitCommitStore.getState().closeAll();
     };
   }, []);
 

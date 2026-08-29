@@ -236,4 +236,39 @@ describe('history hydrator', () => {
     expect(hydrated.lastEventId).toBe('2');
     expect(hydrated.plan).toBeNull();
   });
+
+  it('restores Git commit terminal items without changing Run session state', () => {
+    const hydrated = hydrateRunFromHistory([
+      entry(1, 'git.commit.completed', {
+        schema_version: 1,
+        operation_id: 'gco_1',
+        project_id: 'p1',
+        thread_id: 't1',
+        occurred_at: '2026-08-30T06:29:08Z',
+        commit: {
+          title: 'fix: align labels',
+          items: ['Align labels with data points'],
+          branch: 'main',
+          hash: '8af42d9',
+          files_changed: 3,
+          insertions: 46,
+          deletions: 18,
+          committed_at: '2026-08-30T06:29:08Z',
+        },
+      }, 'gco_1'),
+      entry(1, 'git.commit.failed', {
+        schema_version: 1,
+        operation_id: 'gco_2',
+        project_id: 'p1',
+        thread_id: 't1',
+        occurred_at: '2026-08-30T06:31:00Z',
+        error: { code: 'COMMIT_MESSAGE_INVALID', message: '提交失败', retryable: true },
+      }, 'gco_2'),
+    ]);
+    expect(hydrated.items).toMatchObject([
+      { type: 'git_commit', operationId: 'gco_1', status: 'completed', hash: '8af42d9' },
+      { type: 'git_commit', operationId: 'gco_2', status: 'failed', retryable: true },
+    ]);
+    expect(hydrated.session.status).toBe('idle');
+  });
 });

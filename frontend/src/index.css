@@ -49,6 +49,33 @@
   animation: global-error-toast-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+.global-error-toast-neutral {
+  grid-template-columns: 16px minmax(0, 1fr) 26px;
+  column-gap: 0.5rem;
+  border-color: #cfd6df;
+  background: #fff;
+  box-shadow: 0 10px 26px rgb(51 65 85 / 14%);
+  color: #263241;
+}
+
+.global-error-toast-neutral .global-error-toast-close {
+  color: #758191;
+}
+
+.global-error-toast-neutral .global-error-toast-close:hover {
+  background: #eef1f4;
+  color: #263241;
+}
+
+.global-error-toast-neutral .global-error-toast-timer {
+  background: linear-gradient(
+    90deg,
+    rgb(96 108 123 / 4%) 0%,
+    rgb(96 108 123 / 4%) 92%,
+    rgb(96 108 123 / 10%) 100%
+  );
+}
+
 .global-error-toast-leaving {
   animation: global-error-toast-out 220ms cubic-bezier(0.4, 0, 1, 1) both;
 }

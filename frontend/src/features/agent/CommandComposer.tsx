@@ -17,6 +17,7 @@ import { ModelSelector } from './ModelSelector';
 import { PlanIndicator } from './PlanIndicator';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
+import { useGitCommitStore } from '../../stores/gitCommitStore';
 
 const COMPOSER_CONTROLS_FIT_GUARD_PX = 2;
 const COMPOSER_CONTROLS_HYSTERESIS_PX = 12;
@@ -167,6 +168,10 @@ export const CommandComposer: React.FC = () => {
   const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
   const { status: runStatus, activeRunId, plan } = useActiveSession();
+  const commitSession = useGitCommitStore((state) => (
+    activeProjectId ? state.sessions[activeProjectId] : undefined
+  ));
+  const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const composer = useComposerStore();
   const applyContextDefault = composer.applyContextDefault;
   const resetForProject = composer.resetForProject;
@@ -282,7 +287,7 @@ export const CommandComposer: React.FC = () => {
 
   const submit = async () => {
     const raw = text.trim();
-    if (disabled || polishing || !activeProjectId || !raw) return;
+    if (disabled || commitActive || polishing || !activeProjectId || !raw) return;
     setSubmitError('');
     const projectId = activeProjectId;
     let threadId: string;
@@ -360,7 +365,7 @@ export const CommandComposer: React.FC = () => {
   const polishText = async () => {
     const textarea = textareaRef.current;
     const instruction = text.trim();
-    if (!textarea || disabled || polishing || !activeProjectId || !instruction) return;
+    if (!textarea || disabled || commitActive || polishing || !activeProjectId || !instruction) return;
     if (profilesError || profilesLoading || !composer.modelProfileName) {
       setSubmitError(profilesError || '模型列表仍在加载，请稍候');
       return;
@@ -414,7 +419,7 @@ export const CommandComposer: React.FC = () => {
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.nativeEvent.isComposing || isComposing || polishing) return;
+    if (event.nativeEvent.isComposing || isComposing || polishing || commitActive) return;
     if (event.key === 'Enter' && (isMac() ? event.metaKey : event.ctrlKey)) {
       event.preventDefault();
       void submit();
@@ -453,7 +458,7 @@ export const CommandComposer: React.FC = () => {
             <button
               type="button"
               onClick={() => void polishText()}
-              disabled={polishing}
+              disabled={polishing || commitActive}
               aria-label={polishing ? '正在润色表达' : '润色表达'}
               title={polishing ? '正在润色表达' : '润色表达'}
               className="absolute right-2.5 top-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 bg-surface/90 text-accent shadow-sm backdrop-blur-sm hover:bg-accent-soft disabled:cursor-wait disabled:opacity-100"
@@ -524,7 +529,7 @@ export const CommandComposer: React.FC = () => {
             ) : (
               <button
                 onClick={() => void submit()}
-                disabled={!text.trim() || disabled || polishing || (!steering && (profilesLoading || Boolean(profilesError)))}
+                disabled={!text.trim() || disabled || commitActive || polishing || (!steering && (profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:bg-text-400 disabled:opacity-50"
                 aria-label="发送"
               >

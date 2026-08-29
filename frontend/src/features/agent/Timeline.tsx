@@ -16,6 +16,9 @@ import { DisplayEntry, groupTimelineItems } from './timelineGrouping';
 import { PausedRunCard } from './PausedRunCard';
 import { TimelineDisclosure } from './TimelineDisclosure';
 import { CommandPermissionCard } from './CommandPermissionCard';
+import { GitCommitEvent, GitCommitProgress } from './GitCommitActivity';
+import { useProjectStore } from '../../stores/projectStore';
+import { useGitCommitStore } from '../../stores/gitCommitStore';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -64,6 +67,10 @@ export const Timeline: React.FC = () => {
   const session = useActiveSession();
   const { activeRunId, timelineItems, status, plan, progress } = session;
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
+  const activeProjectId = useProjectStore((state) => state.activeProjectId);
+  const commitSession = useGitCommitStore((state) => (
+    activeProjectId ? state.sessions[activeProjectId] : undefined
+  ));
   const containerRef = useRef<HTMLDivElement>(null);
   const followingRef = useRef(true);
   const [showReturn, setShowReturn] = useState(false);
@@ -75,7 +82,8 @@ export const Timeline: React.FC = () => {
     [currentSlideId, timelineItems],
   );
   const displayedProgress = progress ?? fallbackProgress(status);
-  const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle';
+  const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
+  const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle' && !commitActive;
 
   const scrollToLatest = useCallback((smooth: boolean) => {
     const container = containerRef.current;
@@ -149,6 +157,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'command_permission' && <CommandPermissionCard item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
+        {item.type === 'git_commit' && <GitCommitEvent item={item} />}
       </div>
     );
   };
@@ -192,6 +201,7 @@ export const Timeline: React.FC = () => {
             {status !== 'waiting' && displayedProgress && (
               <LiveProgressRow progress={displayedProgress} />
             )}
+            {commitActive && commitSession?.phase && <GitCommitProgress phase={commitSession.phase} />}
           </>
         )}
       </div>

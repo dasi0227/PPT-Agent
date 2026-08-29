@@ -21,6 +21,7 @@ export type TimelineItemType =
   | 'question'
   | 'plan_approval'
   | 'command_permission'
+  | 'git_commit'
   | 'terminal_notice';
 
 export interface BaseTimelineItem {
@@ -120,6 +121,20 @@ export interface TerminalNoticeItem extends BaseTimelineItem {
   reason?: 'user_requested' | 'superseded';
 }
 
+export interface GitCommitTimelineItem extends BaseTimelineItem {
+  type: 'git_commit';
+  operationId: string;
+  status: 'completed' | 'failed';
+  title?: string;
+  items?: string[];
+  branch?: string;
+  hash?: string;
+  filesChanged?: number;
+  insertions?: number;
+  deletions?: number;
+  retryable?: boolean;
+}
+
 export type TimelineItem =
   | UserTurnItem
   | RunLifecycleItem
@@ -130,6 +145,7 @@ export type TimelineItem =
   | QuestionItem
   | PlanApprovalItem
   | CommandPermissionItem
+  | GitCommitTimelineItem
   | TerminalNoticeItem;
 
 function normalizeStepStatus(status: unknown): PlanStepStatus {

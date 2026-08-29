@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 import { type ErrorToast, useToastStore } from '../../stores/toastStore';
 import { cn } from '../../lib/utils';
 
@@ -30,9 +30,14 @@ function GlobalErrorToast({ toast }: { toast: ErrorToast }) {
   return (
     <article
       role="alert"
-      className={cn('global-error-toast', leaving && 'global-error-toast-leaving')}
+      className={cn(
+        'global-error-toast',
+        toast.tone === 'neutral' && 'global-error-toast-neutral',
+        leaving && 'global-error-toast-leaving',
+      )}
     >
       <span className="global-error-toast-timer" aria-hidden="true" />
+      {toast.tone === 'neutral' && <Info className="h-4 w-4 shrink-0 text-text-600" aria-hidden="true" />}
       <span className="global-error-toast-message">{toast.message}</span>
       <button
         type="button"

@@ -106,6 +106,37 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       });
       continue;
     }
+    if (entry.type === 'git.commit.completed') {
+      const commit = isRecord(entry.data.commit) ? entry.data.commit : null;
+      if (!commit || typeof commit.title !== 'string' || typeof commit.committed_at !== 'string') continue;
+      items.push({
+        id: `git-commit:${String(entry.data.operation_id ?? entry.run_id)}`,
+        type: 'git_commit',
+        operationId: String(entry.data.operation_id ?? entry.run_id),
+        status: 'completed',
+        title: commit.title,
+        items: Array.isArray(commit.items) ? commit.items.filter((item: unknown): item is string => typeof item === 'string') : [],
+        branch: String(commit.branch ?? ''),
+        hash: String(commit.hash ?? ''),
+        filesChanged: Number(commit.files_changed ?? 0),
+        insertions: Number(commit.insertions ?? 0),
+        deletions: Number(commit.deletions ?? 0),
+        timestamp: Date.parse(commit.committed_at) || (entry.ts || 0) * 1000,
+      });
+      continue;
+    }
+    if (entry.type === 'git.commit.failed') {
+      const error = isRecord(entry.data.error) ? entry.data.error : null;
+      items.push({
+        id: `git-commit:${String(entry.data.operation_id ?? entry.run_id)}`,
+        type: 'git_commit',
+        operationId: String(entry.data.operation_id ?? entry.run_id),
+        status: 'failed',
+        retryable: error?.retryable === true,
+        timestamp: Date.parse(String(entry.data.occurred_at ?? '')) || (entry.ts || 0) * 1000,
+      });
+      continue;
+    }
     const event = parsePublicEvent(entry.type, entry.data, String(entry.seq));
     if (!event) continue;
     items = reduceSSEEvent(items, event);
