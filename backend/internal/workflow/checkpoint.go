@@ -42,18 +42,20 @@ type CheckpointStore interface {
 type checkpointBoundary string
 
 const (
-	checkpointRuntimeInitialized checkpointBoundary = "runtime_initialized"
-	checkpointPlanUpdated        checkpointBoundary = "plan_updated"
-	checkpointBeforeAskUser      checkpointBoundary = "before_ask_user"
-	checkpointAfterUserAnswer    checkpointBoundary = "after_user_answer"
-	checkpointAfterReview        checkpointBoundary = "after_review"
-	checkpointAfterWrite         checkpointBoundary = "after_write"
-	checkpointAfterRender        checkpointBoundary = "after_render"
-	checkpointGateRejected       checkpointBoundary = "completion_gate_rejected"
-	checkpointBeforeCommit       checkpointBoundary = "before_commit"
-	checkpointAfterCommit        checkpointBoundary = "after_commit"
-	checkpointTerminal           checkpointBoundary = "terminal"
-	checkpointPeriodic           checkpointBoundary = "periodic"
+	checkpointRuntimeInitialized      checkpointBoundary = "runtime_initialized"
+	checkpointPlanUpdated             checkpointBoundary = "plan_updated"
+	checkpointBeforeAskUser           checkpointBoundary = "before_ask_user"
+	checkpointAfterUserAnswer         checkpointBoundary = "after_user_answer"
+	checkpointBeforeCommandPermission checkpointBoundary = "before_command_permission"
+	checkpointAfterCommandPermission  checkpointBoundary = "after_command_permission"
+	checkpointAfterReview             checkpointBoundary = "after_review"
+	checkpointAfterWrite              checkpointBoundary = "after_write"
+	checkpointAfterRender             checkpointBoundary = "after_render"
+	checkpointGateRejected            checkpointBoundary = "completion_gate_rejected"
+	checkpointBeforeCommit            checkpointBoundary = "before_commit"
+	checkpointAfterCommit             checkpointBoundary = "after_commit"
+	checkpointTerminal                checkpointBoundary = "terminal"
+	checkpointPeriodic                checkpointBoundary = "periodic"
 )
 
 func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state *RunState, boundary checkpointBoundary, questionID string) error {

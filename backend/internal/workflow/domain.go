@@ -52,11 +52,15 @@ type Resource struct {
 	Type    string `json:"type"`
 	SlideID string `json:"slide_id,omitempty"`
 	Part    string `json:"part"`
+	Path    string `json:"path,omitempty"`
 }
 
 func (r Resource) Key() string {
 	if r.Type == "slide" {
 		return "slide:" + r.SlideID + ":" + r.Part
+	}
+	if r.Type == "file" {
+		return "file:" + r.Path
 	}
 	return "deck:" + r.Part
 }
@@ -72,12 +76,13 @@ type Issue struct {
 type ArtifactKind string
 
 const (
-	ArtifactManifest  ArtifactKind = "manifest"
-	ArtifactOutline   ArtifactKind = "outline"
-	ArtifactDesign    ArtifactKind = "design"
-	ArtifactSlideSpec ArtifactKind = "slide_spec"
-	ArtifactSlideHTML ArtifactKind = "slide_html"
-	ArtifactDerived   ArtifactKind = "derived"
+	ArtifactManifest    ArtifactKind = "manifest"
+	ArtifactOutline     ArtifactKind = "outline"
+	ArtifactDesign      ArtifactKind = "design"
+	ArtifactSlideSpec   ArtifactKind = "slide_spec"
+	ArtifactSlideHTML   ArtifactKind = "slide_html"
+	ArtifactProjectFile ArtifactKind = "project_file"
+	ArtifactDerived     ArtifactKind = "derived"
 )
 
 type ArtifactRef struct {
@@ -103,6 +108,8 @@ func resourceForArtifact(ref ArtifactRef) Resource {
 		return Resource{Type: "slide", SlideID: ref.ID, Part: "html"}
 	case ArtifactDesign:
 		return Resource{Type: "deck", Part: "design"}
+	case ArtifactProjectFile:
+		return Resource{Type: "file", Part: "content", Path: ref.Path}
 	default:
 		return Resource{Type: "deck", Part: "outline"}
 	}

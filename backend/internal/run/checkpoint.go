@@ -61,3 +61,28 @@ func (c *checkpoint) AskPlanApproval(ctx context.Context, payload model.PlanAppr
 func (c *checkpoint) ResumeAfterPlanApproval(ctx context.Context) {
 	c.engine.setStatus(ctx, c.runID, model.RunRunning)
 }
+
+func (c *checkpoint) AskCommandPermission(
+	ctx context.Context,
+	payload model.CommandPermissionRequestedPayload,
+) (model.CommandPermissionAnswer, error) {
+	c.queue.MarkCommandPermission(payload)
+	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
+	if err := c.bus.Emit(ctx, model.EventCommandPermissionRequested, payload); err != nil {
+		return model.CommandPermissionAnswer{}, err
+	}
+	select {
+	case answer := <-c.queue.CommandPermissionSignal():
+		if err := c.bus.Emit(ctx, model.EventCommandPermissionAnswered, model.CommandPermissionAnsweredPayload{
+			PublicEventBase: model.NewPublicEventBase(c.runID),
+			InteractionID:   answer.InteractionID, CallID: answer.CallID,
+			CommandHash: answer.CommandHash, Decision: answer.Decision,
+		}); err != nil {
+			return model.CommandPermissionAnswer{}, err
+		}
+		c.engine.setStatus(ctx, c.runID, model.RunRunning)
+		return answer, nil
+	case <-ctx.Done():
+		return model.CommandPermissionAnswer{}, ctx.Err()
+	}
+}

@@ -180,10 +180,10 @@ func TestDefaultToolDisclosureUsesTheSamePolicyAsExecution(t *testing.T) {
 		scope model.RunScope
 		want  []string
 	}{
-		{"talk", PhaseChat, model.ModeTalk, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "search_refs"}},
-		{"plan", PhasePlanning, model.ModePlan, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "search_refs"}},
-		{"execute spec deck", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck}, []string{"mutate_ppt", "read_ppt", "search_refs"}},
-		{"execute ppt slide", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "sli_aaaaaa"}, []string{"mutate_ppt", "read_ppt", "render_slide", "search_refs"}},
+		{"talk", PhaseChat, model.ModeTalk, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "run_command", "search_refs"}},
+		{"plan", PhasePlanning, model.ModePlan, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "run_command", "search_refs"}},
+		{"execute spec deck", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck}, []string{"mutate_ppt", "read_ppt", "run_command", "search_refs"}},
+		{"execute ppt slide", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "sli_aaaaaa"}, []string{"mutate_ppt", "read_ppt", "render_slide", "run_command", "search_refs"}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

@@ -461,6 +461,10 @@ func (svc *RunService) SubmitPlanApproval(ctx context.Context, runID string, ans
 	return svc.engine.SubmitPlanApproval(ctx, runID, answer)
 }
 
+func (svc *RunService) SubmitCommandPermission(ctx context.Context, runID string, answer model.CommandPermissionAnswer) error {
+	return svc.engine.SubmitCommandPermission(ctx, runID, answer)
+}
+
 func (svc *RunService) Cancel(ctx context.Context, runID string) error {
 	return svc.engine.Cancel(ctx, runID)
 }

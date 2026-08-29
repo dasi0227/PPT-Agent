@@ -26,6 +26,11 @@ func publicTarget(projectDir string, target Resource) model.PublicTarget {
 	if target.Type == "slide" {
 		out.DisplayName = runtimeSlideDisplayName(projectDir, target.SlideID)
 	}
+	if target.Type == "file" {
+		out.SlideID = ""
+		out.DisplayName = target.Path
+		return out
+	}
 	attachLocalOpenTarget(projectDir, &out)
 	return out
 }
@@ -56,6 +61,9 @@ func publicChangedTargets(projectDir string, changes []ChangedTarget) []model.Pu
 		target := model.PublicTarget{
 			Type: change.Type, SlideID: change.SlideID, Part: change.Part,
 			Insertions: change.Insertions, Deletions: change.Deletions,
+		}
+		if target.Type == "file" {
+			target.DisplayName = change.DisplayName
 		}
 		if target.Type == "slide" {
 			target.DisplayName = runtimeSlideDisplayName(projectDir, target.SlideID)
@@ -191,17 +199,21 @@ type ToolPublicProjector struct {
 	ProjectDir string
 }
 
-func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string]any, planStepID string) (model.ToolStartedPayload, bool) {
+func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string]any, planStepID string, decision *ToolDecision) (model.ToolStartedPayload, bool) {
 	target := publicToolTarget(p.ProjectDir, tool, args)
 	label, detail, ok := toolDisplay(p.ProjectDir, tool, args, true, ToolResult{})
 	if !ok {
 		return model.ToolStartedPayload{}, false
 	}
-	return model.ToolStartedPayload{
+	payload := model.ToolStartedPayload{
 		PublicEventBase: publicBase(runID),
 		CallID:          callID, Tool: tool, PlanStepID: planStepID,
 		Target: target, Display: model.PublicDisplay{Label: label, Detail: detail},
-	}, true
+	}
+	if tool == "run_command" && decision != nil {
+		payload.Command = &model.CommandProjection{Text: sanitizePublicText(decision.Command, 4096)}
+	}
+	return payload, true
 }
 
 func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[string]any, result ToolResult) (model.ToolCompletedPayload, bool) {
@@ -221,6 +233,18 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 		CallID:          callID, Tool: tool, Status: status,
 		Target:  publicToolTarget(p.ProjectDir, tool, args),
 		Display: model.PublicDisplay{Label: label, Detail: detail},
+	}
+	if tool == "run_command" && result.Command != nil {
+		exitCode := result.Command.ExitCode
+		durationMS := result.Command.DurationMS
+		payload.Command = &model.CommandProjection{
+			Text: sanitizePublicText(result.Command.Text, 4096), Status: result.Command.Status,
+			ExitCode: &exitCode, DurationMS: &durationMS,
+			OutputTruncated: result.Command.OutputTruncated,
+			StdoutPreview:   sanitizeCommandPreview(result.Command.Stdout, 8<<10),
+			StderrPreview:   sanitizeCommandPreview(result.Command.Stderr, 4<<10),
+		}
+		payload.Status = result.Command.Status
 	}
 	if result.OK && len(result.ChangedTargets) > 0 {
 		targets := publicChangedTargets(p.ProjectDir, result.ChangedTargets)
@@ -267,6 +291,9 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 			part = "design"
 		}
 		return &model.PublicTarget{Type: "deck", Part: part}
+	}
+	if tool == "run_command" {
+		return nil
 	}
 	target, _ := args["resource"].(map[string]any)
 	targetType := stringValue(target["kind"])
@@ -354,9 +381,35 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return targetName + "渲染通过", renderDetail(result), true
 		}
 		return targetName + "渲染未通过", publicToolError(result), true
+	case "run_command":
+		if started {
+			return "正在执行", "", true
+		}
+		if result.Command != nil {
+			switch result.Command.Status {
+			case "completed":
+				return "已执行 1 条命令", sanitizeCommandPreview(result.Command.Stdout, 8<<10), true
+			case "blocked":
+				return "命令已被安全策略拦截", sanitizePublicText(result.Command.Reason, 300), true
+			default:
+				return "命令执行失败", sanitizePublicText(result.Command.Reason, 300), true
+			}
+		}
+		return "命令执行失败", publicToolError(result), true
 	default:
 		return "", "", false
 	}
+}
+
+var terminalEscape = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+
+func sanitizeCommandPreview(value string, limit int) string {
+	value = terminalEscape.ReplaceAllString(strings.ToValidUTF8(value, "\uFFFD"), "")
+	value = sanitizePublicText(value, limit)
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit]
 }
 
 func safeToolDetail(result ToolResult, fallback string) string {

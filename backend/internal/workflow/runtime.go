@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -32,6 +33,10 @@ type PlanApprovalPrompter interface {
 
 type PlanApprovalResumer interface {
 	ResumeAfterPlanApproval(context.Context)
+}
+
+type CommandPermissionPrompter interface {
+	AskCommandPermission(context.Context, model.CommandPermissionRequestedPayload) (model.CommandPermissionAnswer, error)
 }
 
 type SteeringSource interface {
@@ -82,9 +87,24 @@ type RuntimeCheckpoint struct {
 	ActiveDurationMS     int64                         `json:"active_duration_ms"`
 	WaitingDurationMS    int64                         `json:"waiting_duration_ms"`
 	WaitingQuestionID    string                        `json:"waiting_question_id,omitempty"`
+	PendingCommand       *PendingCommandApproval       `json:"pending_command,omitempty"`
 	ProviderContinuation *ProviderContinuationSnapshot `json:"provider_continuation,omitempty"`
 	CompletionFailures   int                           `json:"completion_failures"`
 	CreatedAt            int64                         `json:"created_at"`
+}
+
+type PendingCommandApproval struct {
+	InteractionID string         `json:"interaction_id"`
+	CallID        string         `json:"call_id"`
+	Command       string         `json:"command"`
+	Args          map[string]any `json:"args"`
+	CommandHash   string         `json:"command_hash"`
+	ReasonCode    string         `json:"reason_code"`
+	Reason        string         `json:"reason"`
+	Mutates       bool           `json:"mutates"`
+	TargetPaths   []string       `json:"target_paths"`
+	PreimageHash  string         `json:"preimage_hash,omitempty"`
+	ResumePhase   RunPhase       `json:"resume_phase"`
 }
 
 type AgentRequest struct {
@@ -261,6 +281,7 @@ type RunState struct {
 	lastCheckpointToolCalls int
 	lastCheckpointAt        time.Time
 	tools                   *ToolRegistry
+	pendingCommand          *PendingCommandApproval
 }
 
 func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome {
@@ -303,6 +324,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.waitingElapsed = time.Duration(input.ResumeCheckpoint.WaitingDurationMS) * time.Millisecond
 		}
 		state.gateCount = input.ResumeCheckpoint.CompletionFailures
+		state.pendingCommand = input.ResumeCheckpoint.PendingCommand
 		state.contextIndexRef = input.ResumeCheckpoint.ContextIndexRef
 		recordTrace(input.Trace, input.RunID, "checkpoint.loaded", map[string]any{
 			"loop_id": state.loopID, "phase": state.phase, "boundary": input.ResumeCheckpoint.Boundary,
@@ -358,6 +380,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		return r.fail(input, state, CodeAgentFailed, err)
 	}
 	state.tools = registry
+	if state.pendingCommand != nil {
+		if outcome, terminal := r.resumePendingCommand(ctx, input, state); terminal {
+			return outcome
+		}
+	}
 	if state.mode == model.ModePlan && state.phase == PhaseWaitingInput && state.plan != nil && state.plan.Status == PlanAwaitingApproval {
 		if outcome, terminal := r.awaitPlanApproval(ctx, input, state); terminal {
 			return outcome
@@ -563,12 +590,109 @@ func (r *Runtime) executeToolBatch(
 	results := make([]ToolResult, len(calls))
 	started := make([]bool, len(calls))
 	replayed := make([]bool, len(calls))
+	emitTerminal := make([]bool, len(calls))
+	decisions := make([]*ToolDecision, len(calls))
 	projector := ToolPublicProjector{ProjectDir: input.ProjectDir}
 	planStepID := currentPlanStepID(state.plan)
 	var lifecycleMu sync.Mutex
 	state.toolCalls += len(calls)
 	state.activeTools = len(calls)
+	confirmIndex := -1
+	for index, call := range calls {
+		desc, exists := registry.Descriptor(call.Name)
+		if !exists || !disclosed[call.Name] {
+			continue
+		}
+		decision := &ToolDecision{Outcome: "allow", Mutates: !desc.ReadOnly}
+		if preflight, ok := desc.Tool.(PreflightTool); ok {
+			value := preflight.Preflight(ctx, DomainToolInput{
+				Args: call.Args, CallID: call.ID, Context: state.pack,
+				ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
+				Scope: state.scope, Phase: state.phase, Mode: state.mode,
+			})
+			decision = &value
+		}
+		decisions[index] = decision
+		switch decision.Outcome {
+		case "deny":
+			results[index] = blockedCommandResult(*decision)
+			emitTerminal[index] = true
+		case "confirm":
+			if confirmIndex >= 0 {
+				confirmIndex = -2
+			} else {
+				confirmIndex = index
+			}
+		}
+	}
+	if confirmIndex >= 0 && len(calls) != 1 {
+		for index := range calls {
+			results[index] = failedToolResult(CodeInvalidControlCall, "an approval-bound command must be the only tool call in the model response", true)
+			emitTerminal[index] = true
+			if decisions[index] != nil && calls[index].Name == "run_command" {
+				results[index].Command = &CommandExecution{
+					Text: decisions[index].Command, Status: "failed",
+					Reason: "需要授权的命令必须单独提交。",
+				}
+			}
+		}
+		confirmIndex = -2
+	}
+	if confirmIndex == 0 && len(calls) == 1 {
+		decision := decisions[0]
+		prompter, ok := input.Prompter.(CommandPermissionPrompter)
+		if !ok {
+			results[0] = failedToolResult(CodeAgentFailed, "command permission prompter is required", false)
+			emitTerminal[0] = true
+		} else {
+			call := calls[0]
+			resumePhase := state.phase
+			interactionID := "cmdperm_" + call.ID
+			state.resumePhase = resumePhase
+			state.pendingCommand = &PendingCommandApproval{
+				InteractionID: interactionID, CallID: call.ID,
+				Command: decision.Command, Args: call.Args, CommandHash: decision.CommandHash,
+				ReasonCode: decision.ReasonCode, Reason: decision.PublicReason,
+				Mutates: decision.Mutates, TargetPaths: append([]string(nil), decision.TargetPaths...),
+				PreimageHash: decision.PreimageHash, ResumePhase: resumePhase,
+			}
+			r.changePhase(input.Emitter, state, PhaseWaitingInput, "command permission required")
+			if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommandPermission, ""); err != nil {
+				results[0] = failedToolResult(CodeAgentFailed, err.Error(), false)
+				emitTerminal[0] = true
+			} else {
+				state.pauseActiveClock(r.clockNow())
+				answer, err := prompter.AskCommandPermission(ctx, model.CommandPermissionRequestedPayload{
+					PublicEventBase: publicBase(state.runID), InteractionID: interactionID,
+					CallID: call.ID, Command: decision.Command, CommandHash: decision.CommandHash,
+					ReasonCode: decision.ReasonCode, Reason: decision.PublicReason,
+				})
+				if err != nil {
+					results[0] = failedToolResult(CodeCanceled, err.Error(), false)
+					emitTerminal[0] = true
+				} else {
+					state.resumeActiveClock(r.clockNow())
+					r.changePhase(input.Emitter, state, resumePhase, "command permission answered")
+					state.pendingCommand = nil
+					_ = r.saveCheckpoint(ctx, input, state, checkpointAfterCommandPermission, "")
+					if answer.InteractionID != interactionID || answer.CallID != call.ID ||
+						answer.CommandHash != decision.CommandHash {
+						results[0] = failedToolResult(CodeInvalidControlCall, "command permission answer does not match the pending command", false)
+						emitTerminal[0] = true
+					} else if answer.Decision == "deny" {
+						results[0] = blockedCommandResult(*decision)
+						results[0].Summary = "command permission denied"
+						results[0].Command.Reason = "用户拒绝了本次命令执行。"
+						emitTerminal[0] = true
+					}
+				}
+			}
+		}
+	}
 	execute := func(index int) {
+		if emitTerminal[index] {
+			return
+		}
 		call := calls[index]
 		replay, shouldExecute := r.acquireToolCall(ctx, input, state, call)
 		if !shouldExecute {
@@ -580,7 +704,7 @@ func (r *Runtime) executeToolBatch(
 		lifecycleMu.Lock()
 		r.emitToolProgress(input.Emitter, state, call)
 		if input.Emitter != nil {
-			if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID); ok {
+			if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID, decisions[index]); ok {
 				input.Emitter.Emit(model.EventToolStarted, event)
 			}
 		}
@@ -591,7 +715,7 @@ func (r *Runtime) executeToolBatch(
 		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
 			Args: call.Args, CallID: call.ID, Context: state.pack, ProjectDir: input.ProjectDir, RunID: input.RunID,
 			Session: state.tx, Scope: state.scope, Phase: state.phase,
-			Mode: state.mode,
+			Mode: state.mode, Decision: decisions[index],
 		})
 		if ctx.Err() != nil {
 			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
@@ -600,6 +724,8 @@ func (r *Runtime) executeToolBatch(
 	switch {
 	case batchIsIndependentReads(calls):
 		runConcurrentBatch(ctx, len(calls), 4, execute)
+	case batchIsAllowedCommands(calls, decisions, emitTerminal):
+		runConcurrentBatch(ctx, len(calls), 3, execute)
 	case batchIsIndependentRenders(calls):
 		runConcurrentBatch(ctx, len(calls), 3, execute)
 	default:
@@ -631,7 +757,7 @@ func (r *Runtime) executeToolBatch(
 		if started[index] {
 			r.persistToolCall(context.Background(), input, state, call, result)
 		}
-		if started[index] && input.Emitter != nil {
+		if (started[index] || emitTerminal[index]) && input.Emitter != nil {
 			if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result); ok {
 				input.Emitter.Emit(model.EventToolCompleted, event)
 			}
@@ -791,6 +917,27 @@ func batchIsIndependentReads(calls []llm.ToolCall) bool {
 		}
 	}
 	return true
+}
+
+func batchIsAllowedCommands(calls []llm.ToolCall, decisions []*ToolDecision, terminal []bool) bool {
+	if len(calls) < 2 {
+		return false
+	}
+	for index, call := range calls {
+		if call.Name != "run_command" || index >= len(decisions) || decisions[index] == nil ||
+			decisions[index].Outcome != "allow" || decisions[index].Mutates || terminal[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func blockedCommandResult(decision ToolDecision) ToolResult {
+	result := failedToolResult(decision.ReasonCode, decision.PublicReason, false)
+	result.Command = &CommandExecution{
+		Text: decision.Command, Status: "blocked", Reason: decision.PublicReason,
+	}
+	return result
 }
 
 func batchIsIndependentRenders(calls []llm.ToolCall) bool {
@@ -992,6 +1139,45 @@ func (r *Runtime) awaitPlanApproval(
 			return StructuredOutcome{}, false
 		}
 	}
+}
+
+func (r *Runtime) resumePendingCommand(
+	ctx context.Context,
+	input RuntimeInput,
+	state *RunState,
+) (StructuredOutcome, bool) {
+	pending := state.pendingCommand
+	if pending == nil {
+		return StructuredOutcome{}, false
+	}
+	desc, ok := state.tools.Descriptor("run_command")
+	if !ok {
+		return r.fail(input, state, CodeAgentFailed, errors.New("run_command is unavailable during recovery")), true
+	}
+	preflight, ok := desc.Tool.(PreflightTool)
+	if !ok {
+		return r.fail(input, state, CodeAgentFailed, errors.New("run_command preflight is unavailable during recovery")), true
+	}
+	resumePhase := pending.ResumePhase
+	if resumePhase == "" || resumePhase == PhaseWaitingInput {
+		resumePhase = PhaseExecuting
+	}
+	state.phase = resumePhase
+	decision := preflight.Preflight(ctx, DomainToolInput{
+		Args: pending.Args, CallID: pending.CallID, Context: state.pack,
+		ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
+		Scope: state.scope, Phase: resumePhase, Mode: state.mode,
+	})
+	if decision.CommandHash != pending.CommandHash || decision.PreimageHash != pending.PreimageHash ||
+		decision.Outcome != "confirm" {
+		return r.fail(input, state, commandexec.CodeInvariantViolation, errors.New("pending command no longer matches its approved preflight")), true
+	}
+	call := llm.ToolCall{ID: pending.CallID, Name: "run_command", Args: pending.Args}
+	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
+	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), []llm.ToolCall{call})
+	state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", results)
+	recordToolFailures(state, results)
+	return StructuredOutcome{}, false
 }
 
 func (r *Runtime) executeControl(
@@ -1477,6 +1663,7 @@ func (state *RunState) checkpoint(questionID string, now time.Time) RuntimeCheck
 		ActiveDurationMS:  state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS: state.waitingDurationAt(now).Milliseconds(),
 		WaitingQuestionID: questionID, CompletionFailures: state.gateCount,
+		PendingCommand: state.pendingCommand,
 	}
 }
 

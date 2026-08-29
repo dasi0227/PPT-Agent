@@ -23,6 +23,8 @@ var PublicEventTypes = [...]EventType{
 	EventPlanUpdated,
 	EventPlanApprovalRequested,
 	EventPlanApprovalAnswered,
+	EventCommandPermissionRequested,
+	EventCommandPermissionAnswered,
 	EventRunModeChanged,
 	EventMessageReasoning,
 	EventMessageMilestone,
@@ -165,6 +167,31 @@ type PlanApprovalAnsweredPayload struct {
 	Feedback      string `json:"feedback,omitempty"`
 }
 
+type CommandPermissionAnswer struct {
+	InteractionID string `json:"interaction_id"`
+	CallID        string `json:"call_id"`
+	CommandHash   string `json:"command_hash"`
+	Decision      string `json:"decision"`
+}
+
+type CommandPermissionRequestedPayload struct {
+	PublicEventBase
+	InteractionID string `json:"interaction_id"`
+	CallID        string `json:"call_id"`
+	Command       string `json:"command"`
+	CommandHash   string `json:"command_hash"`
+	ReasonCode    string `json:"reason_code"`
+	Reason        string `json:"reason"`
+}
+
+type CommandPermissionAnsweredPayload struct {
+	PublicEventBase
+	InteractionID string `json:"interaction_id"`
+	CallID        string `json:"call_id"`
+	CommandHash   string `json:"command_hash"`
+	Decision      string `json:"decision"`
+}
+
 type RunModeChangedPayload struct {
 	PublicEventBase
 	PreviousMode RunMode `json:"previous_mode"`
@@ -193,11 +220,12 @@ type MessageFinalPayload struct {
 
 type ToolStartedPayload struct {
 	PublicEventBase
-	CallID     string        `json:"call_id"`
-	Tool       string        `json:"tool"`
-	PlanStepID string        `json:"plan_step_id,omitempty"`
-	Target     *PublicTarget `json:"target,omitempty"`
-	Display    PublicDisplay `json:"display"`
+	CallID     string             `json:"call_id"`
+	Tool       string             `json:"tool"`
+	PlanStepID string             `json:"plan_step_id,omitempty"`
+	Target     *PublicTarget      `json:"target,omitempty"`
+	Display    PublicDisplay      `json:"display"`
+	Command    *CommandProjection `json:"command,omitempty"`
 }
 
 type ToolPreview struct {
@@ -208,13 +236,24 @@ type ToolPreview struct {
 
 type ToolCompletedPayload struct {
 	PublicEventBase
-	CallID  string        `json:"call_id"`
-	Tool    string        `json:"tool"`
-	Status  string        `json:"status"`
-	Target  *PublicTarget `json:"target,omitempty"`
-	Display PublicDisplay `json:"display"`
-	Preview *ToolPreview  `json:"preview,omitempty"`
-	Error   *PublicError  `json:"error,omitempty"`
+	CallID  string             `json:"call_id"`
+	Tool    string             `json:"tool"`
+	Status  string             `json:"status"`
+	Target  *PublicTarget      `json:"target,omitempty"`
+	Display PublicDisplay      `json:"display"`
+	Preview *ToolPreview       `json:"preview,omitempty"`
+	Error   *PublicError       `json:"error,omitempty"`
+	Command *CommandProjection `json:"command,omitempty"`
+}
+
+type CommandProjection struct {
+	Text            string `json:"text"`
+	Status          string `json:"status,omitempty"`
+	ExitCode        *int   `json:"exit_code,omitempty"`
+	DurationMS      *int64 `json:"duration_ms,omitempty"`
+	OutputTruncated bool   `json:"output_truncated,omitempty"`
+	StdoutPreview   string `json:"stdout_preview,omitempty"`
+	StderrPreview   string `json:"stderr_preview,omitempty"`
 }
 
 type QuestionOption struct {
@@ -360,6 +399,17 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if stringValue(data["decision"]) == "revise" && strings.TrimSpace(stringValue(data["feedback"])) == "" {
 			return errors.New("revision feedback is required")
 		}
+	case EventCommandPermissionRequested:
+		if err := requireString(data, "interaction_id", "call_id", "command", "command_hash", "reason_code", "reason"); err != nil {
+			return err
+		}
+	case EventCommandPermissionAnswered:
+		if err := requireString(data, "interaction_id", "call_id", "command_hash", "decision"); err != nil {
+			return err
+		}
+		if !oneOf(stringValue(data["decision"]), "allow_once", "deny") {
+			return errors.New("invalid command permission decision")
+		}
 	case EventRunModeChanged:
 		if !oneOf(stringValue(data["previous_mode"]), "talk", "ask", "plan", "execute") || !oneOf(stringValue(data["mode"]), "talk", "ask", "plan", "execute") {
 			return errors.New("invalid run mode transition")
@@ -397,7 +447,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := requireString(data, "call_id", "tool", "status"); err != nil {
 			return err
 		}
-		if !isBusinessTool(stringValue(data["tool"])) || !oneOf(stringValue(data["status"]), "completed", "failed") {
+		if !isBusinessTool(stringValue(data["tool"])) || !oneOf(stringValue(data["status"]), "completed", "blocked", "failed") {
 			return errors.New("invalid tool completion")
 		}
 		if stringValue(data["status"]) == "failed" && data["error"] == nil {
@@ -410,6 +460,12 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 		if err := validateDisplay(data["display"]); err != nil {
+			return err
+		}
+		if err := validateCommandProjection(data["command"], false); err != nil {
+			return err
+		}
+		if err := validateCommandProjection(data["command"], true); err != nil {
 			return err
 		}
 		if rawPreview, exists := data["preview"]; exists {
@@ -587,7 +643,7 @@ func isPublicEventType(event EventType) bool {
 }
 
 func isBusinessTool(name string) bool {
-	return oneOf(name, "read_ppt", "mutate_ppt", "search_refs", "render_slide")
+	return oneOf(name, "read_ppt", "mutate_ppt", "search_refs", "render_slide", "run_command")
 }
 
 func forbiddenPublicField(value any) bool {
@@ -596,7 +652,7 @@ func forbiddenPublicField(value any) bool {
 		for key, child := range current {
 			switch strings.ToLower(key) {
 			case "args", "arguments", "html", "observation", "result", "path",
-				"screenshot_path", "hash", "reasoning_content", "provider_reasoning":
+				"screenshot_path", "reasoning_content", "provider_reasoning":
 				return true
 			}
 			if forbiddenPublicField(child) {
@@ -680,6 +736,37 @@ func validateDisplay(value any) error {
 	return nil
 }
 
+func validateCommandProjection(value any, terminal bool) error {
+	if value == nil {
+		return nil
+	}
+	command, ok := value.(map[string]any)
+	if !ok {
+		return errors.New("command projection must be an object")
+	}
+	if err := requireString(command, "text"); err != nil {
+		return err
+	}
+	if !terminal {
+		for _, key := range []string{"status", "exit_code", "duration_ms", "stdout_preview", "stderr_preview"} {
+			if _, exists := command[key]; exists {
+				return errors.New("started command projection contains terminal fields")
+			}
+		}
+		return nil
+	}
+	if !oneOf(stringValue(command["status"]), "completed", "blocked", "failed") {
+		return errors.New("invalid command projection status")
+	}
+	if value, exists := command["exit_code"]; exists && (!isInteger(value) || intValue(value) < -1) {
+		return errors.New("invalid command exit_code")
+	}
+	if value, exists := command["duration_ms"]; exists && (!isInteger(value) || int64Value(value) < 0) {
+		return errors.New("invalid command duration_ms")
+	}
+	return nil
+}
+
 func validateTargets(value any) error {
 	if value == nil {
 		return nil
@@ -733,6 +820,11 @@ func validatePublicTarget(value any) error {
 		}
 		if !oneOf(part, "spec", "html") {
 			return errors.New("slide target part must be spec or html")
+		}
+	case "file":
+		if strings.TrimSpace(stringValue(target["slide_id"])) != "" || part != "content" ||
+			strings.TrimSpace(stringValue(target["display_name"])) == "" {
+			return errors.New("file target requires content part and display_name")
 		}
 	default:
 		return errors.New("invalid public target type")

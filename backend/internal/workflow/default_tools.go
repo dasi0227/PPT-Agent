@@ -31,5 +31,12 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 			return err
 		}
 	}
-	return nil
+	return registry.RegisterDynamic(
+		projectCommandTool{},
+		CapabilityProjectCommandRead,
+		CapabilityProjectCommandEdit,
+		PhaseChat,
+		PhasePlanning,
+		PhaseExecuting,
+	)
 }

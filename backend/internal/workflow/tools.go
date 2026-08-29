@@ -37,12 +37,14 @@ const (
 type ToolCapability string
 
 const (
-	CapabilityRead          ToolCapability = "read"
-	CapabilityWrite         ToolCapability = "write"
-	CapabilityPPTRead       ToolCapability = "ppt.read"
-	CapabilityPPTMutate     ToolCapability = "ppt.mutate"
-	CapabilityPPTRender     ToolCapability = "ppt.render"
-	CapabilityContextSearch ToolCapability = "context.search"
+	CapabilityRead               ToolCapability = "read"
+	CapabilityWrite              ToolCapability = "write"
+	CapabilityPPTRead            ToolCapability = "ppt.read"
+	CapabilityPPTMutate          ToolCapability = "ppt.mutate"
+	CapabilityPPTRender          ToolCapability = "ppt.render"
+	CapabilityContextSearch      ToolCapability = "context.search"
+	CapabilityProjectCommandRead ToolCapability = "project.command.read"
+	CapabilityProjectCommandEdit ToolCapability = "project.command.edit"
 )
 
 type capabilityPolicy struct {
@@ -51,12 +53,14 @@ type capabilityPolicy struct {
 }
 
 var capabilityPolicies = map[ToolCapability]capabilityPolicy{
-	CapabilityRead:          {ReadOnly: true, Risk: RiskLow},
-	CapabilityWrite:         {ReadOnly: false, Risk: RiskMedium},
-	CapabilityPPTRead:       {ReadOnly: true, Risk: RiskLow},
-	CapabilityPPTMutate:     {ReadOnly: false, Risk: RiskMedium},
-	CapabilityPPTRender:     {ReadOnly: true, Risk: RiskLow},
-	CapabilityContextSearch: {ReadOnly: true, Risk: RiskLow},
+	CapabilityRead:               {ReadOnly: true, Risk: RiskLow},
+	CapabilityWrite:              {ReadOnly: false, Risk: RiskMedium},
+	CapabilityPPTRead:            {ReadOnly: true, Risk: RiskLow},
+	CapabilityPPTMutate:          {ReadOnly: false, Risk: RiskMedium},
+	CapabilityPPTRender:          {ReadOnly: true, Risk: RiskLow},
+	CapabilityContextSearch:      {ReadOnly: true, Risk: RiskLow},
+	CapabilityProjectCommandRead: {ReadOnly: true, Risk: RiskLow},
+	CapabilityProjectCommandEdit: {ReadOnly: false, Risk: RiskHigh},
 }
 
 const (
@@ -90,6 +94,22 @@ type DomainTool interface {
 	Execute(context.Context, DomainToolInput) ToolResult
 }
 
+type ToolDecision struct {
+	Outcome      string
+	Mutates      bool
+	CommandHash  string
+	Command      string
+	ReasonCode   string
+	PublicReason string
+	TargetPaths  []string
+	PreimageHash string
+	Prepared     any
+}
+
+type PreflightTool interface {
+	Preflight(context.Context, DomainToolInput) ToolDecision
+}
+
 type DomainToolInput struct {
 	Args       map[string]any
 	CallID     string
@@ -100,23 +120,26 @@ type DomainToolInput struct {
 	Scope      model.RunScope
 	Phase      RunPhase
 	Mode       model.RunMode
+	Decision   *ToolDecision
 }
 
 // ChangedTarget is deliberately domain-shaped. Model-visible results never
 // expose artifact paths, runtime paths, database keys, or session details.
 type ChangedTarget struct {
-	Type       string   `json:"type"`
-	SlideID    string   `json:"slide_id,omitempty"`
-	Part       string   `json:"part"`
-	Revision   int      `json:"revision,omitempty"`
-	Hash       string   `json:"hash"`
-	Fields     []string `json:"fields,omitempty"`
-	Insertions int      `json:"insertions,omitempty"`
-	Deletions  int      `json:"deletions,omitempty"`
+	Type        string   `json:"type"`
+	SlideID     string   `json:"slide_id,omitempty"`
+	Part        string   `json:"part"`
+	Path        string   `json:"path,omitempty"`
+	DisplayName string   `json:"display_name,omitempty"`
+	Revision    int      `json:"revision,omitempty"`
+	Hash        string   `json:"hash"`
+	Fields      []string `json:"fields,omitempty"`
+	Insertions  int      `json:"insertions,omitempty"`
+	Deletions   int      `json:"deletions,omitempty"`
 }
 
 func (c ChangedTarget) Target() Resource {
-	return Resource{Type: c.Type, SlideID: c.SlideID, Part: c.Part}
+	return Resource{Type: c.Type, SlideID: c.SlideID, Part: c.Part, Path: c.Path}
 }
 
 type ToolResult struct {
@@ -129,10 +152,22 @@ type ToolResult struct {
 	Code             string            `json:"code,omitempty"`
 	Observation      string            `json:"-"`
 	ObservationParts []llm.ContentPart `json:"-"`
+	Command          *CommandExecution `json:"-"`
 	// Evidence and invalidation are runtime-internal. They are recorded in the
 	// Evidence Ledger and SSE but are not duplicated in model observations.
 	Evidence           []Evidence `json:"-"`
 	InvalidatedTargets []Resource `json:"-"`
+}
+
+type CommandExecution struct {
+	Text            string
+	Status          string
+	ExitCode        int
+	DurationMS      int64
+	OutputTruncated bool
+	Stdout          string
+	Stderr          string
+	Reason          string
 }
 
 func SuccessfulToolResult(summary string) ToolResult {
@@ -143,11 +178,35 @@ func SuccessfulToolResult(summary string) ToolResult {
 }
 
 type ToolDescriptor struct {
-	Tool       DomainTool
-	ReadOnly   bool
-	Capability ToolCapability
-	Risk       RiskLevel
-	Phases     []RunPhase
+	Tool           DomainTool
+	ReadOnly       bool
+	Capability     ToolCapability
+	Risk           RiskLevel
+	Phases         []RunPhase
+	Dynamic        bool
+	EditCapability ToolCapability
+}
+
+func (r *ToolRegistry) RegisterDynamic(
+	tool DomainTool,
+	readCapability ToolCapability,
+	editCapability ToolCapability,
+	phases ...RunPhase,
+) error {
+	if err := r.Register(tool, true, readCapability, RiskLow, phases...); err != nil {
+		return err
+	}
+	name := tool.Schema().Name
+	desc := r.tools[name]
+	if policy, ok := capabilityPolicies[editCapability]; !ok || policy.ReadOnly || policy.Risk != RiskHigh {
+		delete(r.tools, name)
+		r.order = r.order[:len(r.order)-1]
+		return fmt.Errorf("invalid dynamic edit capability %q", editCapability)
+	}
+	desc.Dynamic = true
+	desc.EditCapability = editCapability
+	r.tools[name] = desc
+	return nil
 }
 
 type ToolRegistry struct {
@@ -204,6 +263,9 @@ type DomainToolProvider interface {
 }
 
 func AllowsWrite(scope model.RunScope, target Resource) bool {
+	if target.Type == "file" && target.Part == "content" {
+		return true
+	}
 	if scope.Artifact == model.ArtifactSpec && target.Type == "slide" && target.Part == "html" {
 		return false
 	}
@@ -214,6 +276,9 @@ func AllowsWrite(scope model.RunScope, target Resource) bool {
 }
 
 func AllowsRead(scope model.RunScope, target Resource) bool {
+	if target.Type == "file" && target.Part == "content" {
+		return true
+	}
 	if target.Type == "deck" {
 		return true
 	}
@@ -255,7 +320,7 @@ func toolAvailable(desc ToolDescriptor, phase RunPhase, mode model.RunMode, scop
 	if !containsPhase(desc.Phases, phase) || !toolRelevantToRun(desc.Tool.Schema().Name, mode, scope) {
 		return false
 	}
-	if mode != model.ModeExecute && !desc.ReadOnly {
+	if mode != model.ModeExecute && !desc.ReadOnly && !desc.Dynamic {
 		return false
 	}
 	if phase == PhasePlanning && !desc.ReadOnly {
@@ -345,10 +410,11 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	if !toolAvailable(desc, input.Phase, input.Mode, input.Scope) {
 		return failedToolResult(ErrCapabilityDenied.Error(), "tool is unavailable for the current Runtime mode, phase, scope, capability, or risk policy", false)
 	}
-	if !desc.ReadOnly && input.Session == nil {
+	mutates := input.Decision != nil && input.Decision.Mutates
+	if (!desc.ReadOnly || mutates) && input.Session == nil {
 		return failedToolResult(CodeRunSessionRequired, "write tool requires an active run session", false)
 	}
-	if !desc.ReadOnly {
+	if !desc.ReadOnly || mutates {
 		if target, ok := declaredTarget(args); ok && !AllowsWrite(input.Scope, target) {
 			return failedToolResult(ErrTargetOutOfScope.Error(), "requested write target is outside the current run scope", false)
 		}

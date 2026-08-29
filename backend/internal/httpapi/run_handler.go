@@ -282,6 +282,23 @@ func (h *RunHandler) PlanApproval(c *gin.Context) {
 	c.Status(http.StatusAccepted)
 }
 
+func (h *RunHandler) CommandPermission(c *gin.Context) {
+	var answer model.CommandPermissionAnswer
+	if err := c.ShouldBindJSON(&answer); err != nil {
+		AbortWithError(c, ErrBadRequest("invalid command permission answer"))
+		return
+	}
+	if err := h.svc.SubmitCommandPermission(c.Request.Context(), c.Param("id"), answer); err != nil {
+		AbortWithError(c, &APIError{
+			HTTPStatus: http.StatusConflict,
+			Code:       "COMMAND_PERMISSION_REJECTED",
+			Message:    "命令授权已过期或不匹配",
+		})
+		return
+	}
+	c.Status(http.StatusAccepted)
+}
+
 // Cancel DELETE /runs/{id}
 func (h *RunHandler) Cancel(c *gin.Context) {
 	runID := c.Param("id")

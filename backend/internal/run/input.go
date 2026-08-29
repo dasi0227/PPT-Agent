@@ -15,22 +15,61 @@ type InputQueue struct {
 	mu      sync.Mutex
 	pending []string
 	// awaiting 保存未应答的权威问题，用于校验 reply_to 与结构化答案。
-	awaiting map[string]model.QuestionAskedPayload
-	approval map[string]model.PlanApprovalRequestedPayload
-	answered map[string]model.PlanApprovalAnswer
+	awaiting          map[string]model.QuestionAskedPayload
+	approval          map[string]model.PlanApprovalRequestedPayload
+	answered          map[string]model.PlanApprovalAnswer
+	commandPermission map[string]model.CommandPermissionRequestedPayload
+	commandAnswered   map[string]model.CommandPermissionAnswer
 	// reply 通道：waiting 状态下收到匹配应答时通知 engine 恢复。
-	replyCh    chan AcceptedReply
-	approvalCh chan model.PlanApprovalAnswer
+	replyCh             chan AcceptedReply
+	approvalCh          chan model.PlanApprovalAnswer
+	commandPermissionCh chan model.CommandPermissionAnswer
 }
 
 func NewInputQueue() *InputQueue {
 	return &InputQueue{
-		awaiting:   map[string]model.QuestionAskedPayload{},
-		approval:   map[string]model.PlanApprovalRequestedPayload{},
-		answered:   map[string]model.PlanApprovalAnswer{},
-		replyCh:    make(chan AcceptedReply, 8),
-		approvalCh: make(chan model.PlanApprovalAnswer, 8),
+		awaiting:            map[string]model.QuestionAskedPayload{},
+		approval:            map[string]model.PlanApprovalRequestedPayload{},
+		answered:            map[string]model.PlanApprovalAnswer{},
+		commandPermission:   map[string]model.CommandPermissionRequestedPayload{},
+		commandAnswered:     map[string]model.CommandPermissionAnswer{},
+		replyCh:             make(chan AcceptedReply, 8),
+		approvalCh:          make(chan model.PlanApprovalAnswer, 8),
+		commandPermissionCh: make(chan model.CommandPermissionAnswer, 8),
 	}
+}
+
+func (q *InputQueue) MarkCommandPermission(payload model.CommandPermissionRequestedPayload) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.commandPermission[payload.InteractionID] = payload
+}
+
+func (q *InputQueue) ReplyCommandPermission(answer model.CommandPermissionAnswer) bool {
+	q.mu.Lock()
+	pending, ok := q.commandPermission[answer.InteractionID]
+	if !ok {
+		previous, replay := q.commandAnswered[answer.InteractionID]
+		q.mu.Unlock()
+		return replay && previous == answer
+	}
+	if pending.CallID != answer.CallID || pending.CommandHash != answer.CommandHash ||
+		(answer.Decision != "allow_once" && answer.Decision != "deny") {
+		q.mu.Unlock()
+		return false
+	}
+	delete(q.commandPermission, answer.InteractionID)
+	q.commandAnswered[answer.InteractionID] = answer
+	q.mu.Unlock()
+	select {
+	case q.commandPermissionCh <- answer:
+	default:
+	}
+	return true
+}
+
+func (q *InputQueue) CommandPermissionSignal() <-chan model.CommandPermissionAnswer {
+	return q.commandPermissionCh
 }
 
 func (q *InputQueue) MarkPlanApproval(payload model.PlanApprovalRequestedPayload) {
@@ -123,7 +162,7 @@ func (q *InputQueue) Reply(replyTo, content string) bool {
 func (q *InputQueue) HasAwaiting() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return len(q.awaiting) > 0
+	return len(q.awaiting) > 0 || len(q.commandPermission) > 0 || len(q.approval) > 0
 }
 
 // ReplySignal 暴露应答信号通道，engine 在 waiting 时等待它恢复。

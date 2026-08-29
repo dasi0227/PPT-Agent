@@ -466,6 +466,10 @@ func hashContent(content []byte) string {
 	return fmt.Sprintf("sha256:%x", sum)
 }
 
+func ContentHash(content []byte) string {
+	return hashContent(content)
+}
+
 func appendUnique(values []string, additions ...string) []string {
 	seen := make(map[string]bool, len(values))
 	for _, value := range values {

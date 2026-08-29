@@ -143,6 +143,8 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 		target := resourceForArtifact(change.Artifact)
 		if !isPPTDomainChange(change) {
 			switch change.Artifact.Kind {
+			case ArtifactProjectFile:
+				continue
 			case ArtifactSlideHTML:
 				if !hasFreshHTMLEvidence(ctx, target, change.AfterHash) {
 					issues = append(issues, htmlEvidenceIssue(target))
