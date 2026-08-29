@@ -15,9 +15,9 @@ function targetKey(target: PublicTarget): string {
 
 function targetLabel(target: PublicTarget): string {
   if (target.type === 'deck') {
-    if (target.part === 'outline') return '整份结构';
-    if (target.part === 'design') return '全局视觉设计';
-    return '整份内容';
+    if (target.part === 'manifest') return '演示内容';
+    if (target.part === 'outline') return '目录结构';
+    if (target.part === 'design') return '视觉设计';
   }
   const page = target.display_name || '页面';
   if (target.part === 'spec') return `${page}设计稿`;
@@ -26,9 +26,7 @@ function targetLabel(target: PublicTarget): string {
 }
 
 function summaryText(targets: PublicTarget[]): string {
-  const pages = new Set(targets.filter((target) => target.type === 'slide').map((target) => target.slide_id)).size;
-  if (pages > 0) return `${pages} 个页面已经变更`;
-  return `${targets.length} 项内容已经变更`;
+  return `${targets.length} 个文件已更改`;
 }
 
 function sumStat(targets: PublicTarget[], key: 'insertions' | 'deletions'): number {
@@ -47,13 +45,33 @@ function uniqueTargets(targets: PublicTarget[]): PublicTarget[] {
   return out;
 }
 
+const targetGroupRank: Record<PublicTarget['part'], number> = {
+  manifest: 0,
+  outline: 1,
+  design: 2,
+  spec: 3,
+  html: 4,
+};
+
+function orderedTargets(targets: PublicTarget[], slideIds: string[]): PublicTarget[] {
+  const ordinalById = new Map(slideIds.map((id, index) => [id, index]));
+  return [...uniqueTargets(targets)].sort((left, right) => {
+    const group = targetGroupRank[left.part] - targetGroupRank[right.part];
+    if (group !== 0) return group;
+    const leftOrdinal = left.slide_id ? (ordinalById.get(left.slide_id) ?? Number.MAX_SAFE_INTEGER) : -1;
+    const rightOrdinal = right.slide_id ? (ordinalById.get(right.slide_id) ?? Number.MAX_SAFE_INTEGER) : -1;
+    if (leftOrdinal !== rightOrdinal) return leftOrdinal - rightOrdinal;
+    return targetKey(left).localeCompare(targetKey(right));
+  });
+}
+
 export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
   const [expanded, setExpanded] = React.useState(false);
   const snapshot = useProjectStore((state) => state.activeProjectId ? state.contentByProjectId[state.activeProjectId] : undefined);
   const slides = orderedSlides(snapshot);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const setGlobalView = useDeckStore((state) => state.setGlobalView);
-  const changes = uniqueTargets(targets);
+  const changes = orderedTargets(targets, slides.map((slide) => slide.id));
   const insertions = sumStat(changes, 'insertions');
   const deletions = sumStat(changes, 'deletions');
 

@@ -184,5 +184,5 @@ func resourceContractNames(pack contextengine.ContextPack) []string {
 	if pack.Command.Scope.Level == model.ScopeSlide {
 		return []string{pptschema.SlideSpecName}
 	}
-	return []string{pptschema.DeckName, pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}
+	return []string{pptschema.ManifestName, pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}
 }

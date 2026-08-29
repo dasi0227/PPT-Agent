@@ -6,7 +6,7 @@ import (
 )
 
 func TestAgentContractsComeFromSchemas(t *testing.T) {
-	for _, name := range []string{DeckName, OutlineName, DesignName, SlideSpecName} {
+	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName} {
 		contract, err := AgentContract(name)
 		if err != nil {
 			t.Fatalf("%s contract: %v", name, err)
@@ -37,7 +37,7 @@ func TestAgentContractsComeFromSchemas(t *testing.T) {
 }
 
 func TestRuntimeContractsContainManagedFields(t *testing.T) {
-	for _, name := range []string{DeckName, OutlineName, DesignName, SlideSpecName, MaterializationName} {
+	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName, MaterializationName} {
 		contract, err := RuntimeContract(name)
 		if err != nil {
 			t.Fatal(err)
@@ -90,7 +90,7 @@ func TestOutlineRuntimeContractOwnsStableNodeIDs(t *testing.T) {
 }
 
 func TestAuthoringSchemasUseProjectID(t *testing.T) {
-	for _, name := range []string{DeckName, OutlineName, DesignName, SlideSpecName} {
+	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName} {
 		contract, err := RuntimeContract(name)
 		if err != nil {
 			t.Fatal(err)
@@ -105,20 +105,20 @@ func TestAuthoringSchemasUseProjectID(t *testing.T) {
 	}
 }
 
-func TestDeckOwnsPresentationRulesAndOutlineDoesNot(t *testing.T) {
-	deck, err := RuntimeContract(DeckName)
+func TestManifestOwnsPresentationRulesAndOutlineDoesNot(t *testing.T) {
+	manifest, err := RuntimeContract(ManifestName)
 	if err != nil {
 		t.Fatal(err)
 	}
-	deckProperties := deck["properties"].(map[string]any)
+	manifestProperties := manifest["properties"].(map[string]any)
 	outline, err := RuntimeContract(OutlineName)
 	if err != nil {
 		t.Fatal(err)
 	}
 	outlineProperties := outline["properties"].(map[string]any)
 	for _, field := range []string{"requirements", "prohibitions"} {
-		if _, exists := deckProperties[field]; !exists {
-			t.Errorf("deck runtime contract does not contain %q", field)
+		if _, exists := manifestProperties[field]; !exists {
+			t.Errorf("manifest runtime contract does not contain %q", field)
 		}
 		if _, exists := outlineProperties[field]; exists {
 			t.Errorf("outline still owns %q", field)

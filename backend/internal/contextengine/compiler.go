@@ -44,8 +44,8 @@ func (PromptCompiler) compile(pack ContextPack, systemPolicy, runtimeState strin
 		"scope": pack.Command.Scope, "mode": pack.Command.Mode, "options": pack.Command.Options,
 	})
 	projectContext := map[string]any{"project": pack.Project}
-	if pack.Deck.Deck.SchemaVersion != "" {
-		projectContext["deck"] = pack.Deck
+	if pack.PresentationManifest.Manifest.SchemaVersion != "" {
+		projectContext["manifest"] = pack.PresentationManifest
 	}
 	if pack.Outline.Outline.SchemaVersion != "" {
 		projectContext["outline"] = pack.Outline

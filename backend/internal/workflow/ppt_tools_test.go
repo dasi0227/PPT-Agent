@@ -16,7 +16,7 @@ import (
 )
 
 func mutationPack(projectID string, outline spec.Outline) contextengine.ContextPack {
-	return contextengine.ContextPack{Project: contextengine.ProjectContext{ID: projectID}, Deck: contextengine.DeckContext{Deck: spec.Deck{ProjectID: projectID}}, Outline: contextengine.OutlineContext{Outline: outline}, Revisions: contextengine.RevisionRefs{Deck: 1, Outline: outline.Revision, Design: 1, SlideSpecs: map[string]int{}, SlideHTML: map[string]int{}}}
+	return contextengine.ContextPack{Project: contextengine.ProjectContext{ID: projectID}, PresentationManifest: contextengine.PresentationManifestContext{Manifest: spec.Manifest{ProjectID: projectID}}, Outline: contextengine.OutlineContext{Outline: outline}, Revisions: contextengine.RevisionRefs{Manifest: 1, Outline: outline.Revision, Design: 1, SlideSpecs: map[string]int{}, SlideHTML: map[string]int{}}}
 }
 
 func mutationSchemaOps(schema ToolSchema) []string {
@@ -267,10 +267,10 @@ func assertNoNullRequired(t *testing.T, path string, value any) {
 func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 	dir := t.TempDir()
 	projectID := "pro_aaaaaa"
-	deck := spec.Deck{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	design := spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Density: "medium", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
-	for path, value := range map[string]any{"deck.json": deck, "outline.json": outline, "design.json": design} {
+	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
 			t.Fatal(err)
@@ -319,9 +319,9 @@ func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 	projectID := "pro_aaaaaa"
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{
-		"deck.json":    spec.Deck{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1},
-		"outline.json": outline,
-		"design.json":  spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Density: "medium", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1},
+		"manifest.json": spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1},
+		"outline.json":  outline,
+		"design.json":   spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Density: "medium", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1},
 	} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
@@ -344,10 +344,10 @@ func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	dir := t.TempDir()
 	projectID := "pro_aaaaaa"
-	deck := spec.Deck{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Label: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Label: "Body", Role: "content"}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
 	design := spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Density: "medium", Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}, CreatedAt: 1, UpdatedAt: 1}
-	for path, value := range map[string]any{"deck.json": deck, "outline.json": outline, "design.json": design} {
+	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
 			t.Fatal(err)

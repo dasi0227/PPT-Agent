@@ -233,7 +233,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	}
 	var view map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &view)
-	if view["outline"].(map[string]any)["version"] != "4.0" || view["deck"].(map[string]any)["version"] != "4.0" {
+	if view["outline"].(map[string]any)["version"] != "4.0" || view["manifest"].(map[string]any)["version"] != "4.0" {
 		t.Fatalf("unexpected spec response: %s", resp.Body.String())
 	}
 

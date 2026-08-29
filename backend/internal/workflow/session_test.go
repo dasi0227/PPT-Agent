@@ -10,7 +10,7 @@ import (
 
 func TestRunSessionRollsBackFilesWhenCommitMetadataFails(t *testing.T) {
 	dir := t.TempDir()
-	existingPath := filepath.Join(dir, "deck.json")
+	existingPath := filepath.Join(dir, "manifest.json")
 	if err := os.WriteFile(existingPath, []byte("before"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -19,7 +19,7 @@ func TestRunSessionRollsBackFilesWhenCommitMetadataFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	if _, err := session.Write(ArtifactRef{Kind: ArtifactDeck, ID: "project", Path: "deck.json"}, "test", []byte("after")); err != nil {
+	if _, err := session.Write(ArtifactRef{Kind: ArtifactManifest, ID: "project", Path: "manifest.json"}, "test", []byte("after")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := session.Write(ArtifactRef{Kind: ArtifactDesign, ID: "project", Path: "design.json"}, "test", []byte("created")); err != nil {

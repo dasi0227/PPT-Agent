@@ -158,7 +158,7 @@ function validPublicTarget(value: unknown): boolean {
       && validOptionalNonNegativeInteger(value.deletions)
       && validOptionalSafeString(value.local_path)
       && validOptionalSafeString(value.open_url)
-      && ['deck', 'outline', 'design'].includes(String(value.part));
+      && ['manifest', 'outline', 'design'].includes(String(value.part));
   }
   return value.type === 'slide'
     && hasString(value, 'slide_id')

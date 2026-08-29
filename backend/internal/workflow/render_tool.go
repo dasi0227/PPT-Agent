@@ -499,7 +499,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 }
 
 func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, session *RunSession, slideID string) (spec.RuntimeFrameContext, error) {
-	deckRaw, _, err := readArtifact(projectDir, session, deckRef(pack))
+	deckRaw, _, err := readArtifact(projectDir, session, manifestRef(pack))
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
 	}
@@ -511,7 +511,7 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
 	}
-	var deck spec.Deck
+	var deck spec.Manifest
 	var outline spec.Outline
 	var design spec.Design
 	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {

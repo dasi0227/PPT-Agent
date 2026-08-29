@@ -29,7 +29,7 @@ func (ContextProfileResolver) Resolve(command model.RunCommand) (ContextProfile,
 		return ContextProfile{}, fmt.Errorf("unsupported context profile: %s/%s", command.Scope.Artifact, command.Scope.Level)
 	}
 	p := ContextProfile{ID: id, Required: map[SegmentKind]bool{
-		SegmentPolicy: true, SegmentRunCommand: true, SegmentDeck: true, SegmentOutline: true, SegmentDesign: true,
+		SegmentPolicy: true, SegmentRunCommand: true, SegmentPresentationManifest: true, SegmentOutline: true, SegmentDesign: true,
 		SegmentMemory: true, SegmentTarget: command.Scope.Level == model.ScopeSlide,
 	}, Forbidden: map[SegmentKind]bool{}}
 	if id == ProfileSpecDeck || id == ProfileSpecSlide {

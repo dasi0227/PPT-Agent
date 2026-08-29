@@ -41,7 +41,7 @@ export interface OutlineSlideNode { slide_id: string; label: string; role: strin
 export interface OutlineSubsection { id: string; title: string; slides: OutlineSlideNode[] }
 export interface OutlineSection { id: string; title: string; purpose: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
 
-export interface Deck {
+export interface Manifest {
   version: '4.0'; revision: number; project_id: string; title: string; goal: string;
   audience: string; language: string; positioning?: string; requirements: string[]; prohibitions: string[];
   canvas: { aspect_ratio: '16:9' | '4:3' };
@@ -183,7 +183,7 @@ export interface CancelRunResponse {
 export type RunCancelReason = 'user_requested' | 'superseded';
 
 export interface ProjectContentSnapshot {
-  deck: Deck;
+  manifest: Manifest;
   outline: Outline;
   design: Design;
   slides_by_id: Record<string, {
@@ -194,7 +194,7 @@ export interface ProjectContentSnapshot {
 
 export interface MaterializationRecord {
   version: '4.0'; artifact: { revision: number; hash: string };
-  source: { deck_revision: number; outline_node_hash: string; spec_revision: number; design_revision: number; hash: string };
+  source: { manifest_revision: number; outline_node_hash: string; spec_revision: number; design_revision: number; hash: string };
   frame: { context_hash: string }; rendered_at: number;
 }
 
@@ -211,7 +211,7 @@ export type DraftOutlineNode =
   | ({ kind: 'slide' } & DraftSlide);
 export type OutlineNodeChanges = { title?: string; purpose?: string; label?: string; role?: string };
 export type PPTMutation =
-  | { op: 'deck.patch'; expected_revision?: number; patch: RestrictedPatch[] }
+  | { op: 'manifest.patch'; expected_revision?: number; patch: RestrictedPatch[] }
   | { op: 'outline.init'; expected_revision?: number; structure: DraftSection[] }
   | { op: 'outline.insert'; expected_revision?: number; node: DraftOutlineNode; position: MutationPosition; direct_slides_policy?: 'move_into_new_subsection' }
   | { op: 'outline.move'; expected_revision?: number; node_id: string; position: MutationPosition }
@@ -290,7 +290,7 @@ export interface PublicEventBase {
 export interface PublicTarget {
   type: 'deck' | 'slide';
   slide_id?: string;
-  part: 'deck' | 'outline' | 'design' | 'spec' | 'html';
+  part: 'manifest' | 'outline' | 'design' | 'spec' | 'html';
   display_name?: string;
   insertions?: number;
   deletions?: number;

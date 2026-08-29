@@ -78,7 +78,7 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 		}
 		return os.ReadFile(filepath.Join(project.WorkDir, filepath.FromSlash(path)))
 	}
-	deckRaw, err := read("deck.json")
+	manifestRaw, err := read("manifest.json")
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, err
 	}
@@ -90,13 +90,13 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, err
 	}
-	var deck spec.Deck
+	var manifest spec.Manifest
 	var outline spec.Outline
 	var design spec.Design
-	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {
+	if json.Unmarshal(manifestRaw, &manifest) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {
 		return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
 	}
-	out := spec.ProjectContentSnapshot{Deck: deck, Outline: outline, Design: design, SlidesByID: map[string]spec.SlideContent{}}
+	out := spec.ProjectContentSnapshot{Manifest: manifest, Outline: outline, Design: design, SlidesByID: map[string]spec.SlideContent{}}
 	for _, loc := range spec.FlattenOutline(outline) {
 		id := loc.Slide.SlideID
 		content := spec.SlideContent{SpecState: "pending", HTMLState: "not_materialized"}
@@ -117,7 +117,7 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 		}
 		if content.SpecState == "ready" {
 			nodeHash := spec.SemanticSlideNodeHash(outline, id)
-			content.HTMLState = spec.DeriveMaterializationState(htmlErr == nil, recordPtr, deck.Revision, nodeHash, slide.Revision, design.Revision, spec.ContentHash(htmlRaw), spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), spec.FrameContextHash(deck, outline, design, id))
+			content.HTMLState = spec.DeriveMaterializationState(htmlErr == nil, recordPtr, manifest.Revision, nodeHash, slide.Revision, design.Revision, spec.ContentHash(htmlRaw), spec.SourceHash(manifestRaw, nodeHash, specRaw, designRaw), spec.FrameContextHash(manifest, outline, design, id))
 		} else if htmlErr == nil {
 			content.HTMLState = "unknown"
 		}

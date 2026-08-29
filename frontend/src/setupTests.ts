@@ -53,7 +53,7 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
     if (url.includes('/content')) {
       const body = {
         revision: 1,
-        deck: { version: '4.0', revision: 1, project_id: 'p1', title: 'Project 1', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: ['cover'], format: 'number' }, created_at: 0, updated_at: 0 },
+        manifest: { version: '4.0', revision: 1, project_id: 'p1', title: 'Project 1', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: ['cover'], format: 'number' }, created_at: 0, updated_at: 0 },
         outline: { version: '4.0', revision: 1, project_id: 'p1', sections: [{ id: 'sec_test', title: 'Section', purpose: '', slides: [{ slide_id: 's1', label: 'Slide 1', role: 'cover' }, { slide_id: 's2', label: 'Slide 2', role: 'content' }], subsections: [] }], created_at: 0, updated_at: 0 },
         design: { version: '4.0', revision: 1, project_id: 'p1', theme: 'clean', direction: 'minimal', density: 'medium', chrome: [{ type: 'page_number', placement: 'bottom-right', style: 'muted' }], created_at: 0, updated_at: 0 },
         slides_by_id: {}, active_run: null,

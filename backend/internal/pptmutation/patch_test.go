@@ -13,7 +13,7 @@ func TestRestrictedPatchSupportsRFCArrayAndNestedOperations(t *testing.T) {
 		{Op: "add", Path: "/requirements/0", Value: "zero"},
 		{Op: "replace", Path: "/requirements/1", Value: "updated"},
 		{Op: "remove", Path: "/requirements/0"},
-	}, "deck.patch")
+	}, "manifest.patch")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +54,11 @@ func TestRestrictedPatchRejectsDeniedAndNonStandardPaths(t *testing.T) {
 		{Op: "replace", Path: "/requirements/0"},
 	}
 	for _, patch := range cases {
-		if _, err := applyPatch(raw, []Patch{patch}, "deck.patch"); err == nil {
+		if _, err := applyPatch(raw, []Patch{patch}, "manifest.patch"); err == nil {
 			t.Fatalf("patch unexpectedly accepted: %+v", patch)
 		}
 	}
-	if _, err := applyPatch(raw, []Patch{{Op: "replace", Path: "/revision", Value: 2}}, "deck.patch"); !errors.Is(err, ErrPatchPathDenied) {
+	if _, err := applyPatch(raw, []Patch{{Op: "replace", Path: "/revision", Value: 2}}, "manifest.patch"); !errors.Is(err, ErrPatchPathDenied) {
 		t.Fatalf("error=%v", err)
 	}
 }
@@ -89,7 +89,7 @@ func TestPatchSequenceIsAtomicOnFailure(t *testing.T) {
 	_, err := applyPatch(raw, []Patch{
 		{Op: "replace", Path: "/requirements/0", Value: "changed"},
 		{Op: "remove", Path: "/requirements/5"},
-	}, "deck.patch")
+	}, "manifest.patch")
 	if !errors.Is(err, ErrPatchInvalid) {
 		t.Fatalf("error=%v", err)
 	}

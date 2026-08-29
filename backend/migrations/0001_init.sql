@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_slides_project ON slides(project_id);
 CREATE TABLE IF NOT EXISTS versions (
     id            TEXT PRIMARY KEY,
     target_type   TEXT NOT NULL
-                      CHECK (target_type IN ('deck','outline','slide_spec','slide_html','design','asset')),
+                      CHECK (target_type IN ('manifest','outline','slide_spec','slide_html','design','asset')),
     target_id     TEXT NOT NULL,
     version_no    INTEGER NOT NULL,
     snapshot_path TEXT NOT NULL,

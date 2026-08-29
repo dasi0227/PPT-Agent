@@ -2,7 +2,7 @@ package spec
 
 const SchemaVersion = "4.0"
 
-type Deck struct {
+type Manifest struct {
 	SchemaVersion string          `json:"version"`
 	Revision      int             `json:"revision"`
 	ProjectID     string          `json:"project_id"`
@@ -109,7 +109,7 @@ type RuntimeFrameNumbering struct {
 }
 
 type ProjectContentSnapshot struct {
-	Deck       Deck                    `json:"deck"`
+	Manifest   Manifest                `json:"manifest"`
 	Outline    Outline                 `json:"outline"`
 	Design     Design                  `json:"design"`
 	SlidesByID map[string]SlideContent `json:"slides_by_id"`
@@ -140,11 +140,11 @@ type MaterializationArtifact struct {
 	Hash     string `json:"hash"`
 }
 type MaterializationSource struct {
-	DeckRevision    int    `json:"deck_revision"`
-	OutlineNodeHash string `json:"outline_node_hash"`
-	SpecRevision    int    `json:"spec_revision"`
-	DesignRevision  int    `json:"design_revision"`
-	Hash            string `json:"hash"`
+	ManifestRevision int    `json:"manifest_revision"`
+	OutlineNodeHash  string `json:"outline_node_hash"`
+	SpecRevision     int    `json:"spec_revision"`
+	DesignRevision   int    `json:"design_revision"`
+	Hash             string `json:"hash"`
 }
 type MaterializationFrame struct {
 	ContextHash string `json:"context_hash"`

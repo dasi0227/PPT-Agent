@@ -15,7 +15,9 @@ func OutlineVersionTarget(projectID string) string {
 	return fmt.Sprintf("project/%s/outline", projectID)
 }
 
-func DeckVersionTarget(projectID string) string { return fmt.Sprintf("project/%s/deck", projectID) }
+func ManifestVersionTarget(projectID string) string {
+	return fmt.Sprintf("project/%s/manifest", projectID)
+}
 
 // DesignVersionTarget returns the project-scoped version target for common/tokens.css.
 func DesignVersionTarget(projectID string) string {

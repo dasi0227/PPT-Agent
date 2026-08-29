@@ -21,8 +21,8 @@ import (
 
 var stableSlideID = regexp.MustCompile(`^sli_[A-Za-z0-9_-]+$`)
 
-func deckRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactDeck, ID: pack.Project.ID, Path: "deck.json", Project: pack.Project.ID}
+func manifestRef(pack contextengine.ContextPack) ArtifactRef {
+	return ArtifactRef{Kind: ArtifactManifest, ID: pack.Project.ID, Path: "manifest.json", Project: pack.Project.ID}
 }
 func outlineRef(pack contextengine.ContextPack) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactOutline, ID: pack.Project.ID, Path: "outline.json", Project: pack.Project.ID}
@@ -41,8 +41,8 @@ func slideHTMLRef(id string) ArtifactRef {
 }
 func refForResource(pack contextengine.ContextPack, r Resource) (ArtifactRef, error) {
 	switch r.Key() {
-	case "deck:deck":
-		return deckRef(pack), nil
+	case "deck:manifest":
+		return manifestRef(pack), nil
 	case "deck:outline":
 		return outlineRef(pack), nil
 	case "deck:design":
@@ -65,8 +65,9 @@ func parseResource(args map[string]any) (Resource, error) {
 	if r.Type == "" {
 		r.Type = stringValue(value["type"])
 	}
-	if r.Type == "deck" {
-		r.Part = "deck"
+	if r.Type == "manifest" {
+		r.Type = "deck"
+		r.Part = "manifest"
 	}
 	if r.Type == "outline" {
 		r.Type = "deck"
@@ -79,10 +80,10 @@ func parseResource(args map[string]any) (Resource, error) {
 	if r.Type == "slide" && stableSlideID.MatchString(r.SlideID) && (r.Part == "spec" || r.Part == "html") {
 		return r, nil
 	}
-	if r.Type == "deck" && (r.Part == "deck" || r.Part == "outline" || r.Part == "design") {
+	if r.Type == "deck" && (r.Part == "manifest" || r.Part == "outline" || r.Part == "design") {
 		return r, nil
 	}
-	return Resource{}, errors.New("resource must identify deck, outline, design, or a stable slide spec/html")
+	return Resource{}, errors.New("resource must identify manifest, outline, design, or a stable slide spec/html")
 }
 func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, string, error) {
 	if tx != nil {
@@ -99,7 +100,7 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 func errorsIsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
 func resourceSchema() map[string]any  { return resourceSchemaForScope(model.RunScope{}, false) }
 func resourceSchemaForScope(scope model.RunScope, _ bool) map[string]any {
-	variants := []any{objectSchema([]string{"kind"}, map[string]any{"kind": map[string]any{"enum": []string{"deck", "outline", "design"}}})}
+	variants := []any{objectSchema([]string{"kind"}, map[string]any{"kind": map[string]any{"enum": []string{"manifest", "outline", "design"}}})}
 	parts := []string{"spec", "html"}
 	if scope.Artifact == model.ArtifactSpec {
 		parts = []string{"spec"}
@@ -143,12 +144,12 @@ func validateHTML(raw []byte) ([]Issue, error) {
 	}
 	return issues, nil
 }
-func currentDeck(pack contextengine.ContextPack, tx *RunSession) (spec.Deck, error) {
-	raw, _, err := readArtifact(tx.ProjectDir(), tx, deckRef(pack))
+func currentManifest(pack contextengine.ContextPack, tx *RunSession) (spec.Manifest, error) {
+	raw, _, err := readArtifact(tx.ProjectDir(), tx, manifestRef(pack))
 	if err != nil {
-		return spec.Deck{}, err
+		return spec.Manifest{}, err
 	}
-	var value spec.Deck
+	var value spec.Manifest
 	err = json.Unmarshal(raw, &value)
 	return value, err
 }
@@ -214,7 +215,7 @@ func targetHash(pack contextengine.ContextPack, tx *RunSession, target Resource)
 }
 
 func currentMaterializationProof(pack contextengine.ContextPack, projectDir string, tx *RunSession, slideID, artifactHash string) (MaterializationProof, error) {
-	deckRaw, _, err := readArtifact(projectDir, tx, deckRef(pack))
+	deckRaw, _, err := readArtifact(projectDir, tx, manifestRef(pack))
 	if err != nil {
 		return MaterializationProof{}, err
 	}
@@ -237,7 +238,7 @@ func currentMaterializationProof(pack contextengine.ContextPack, projectDir stri
 	if hashBytes(htmlRaw) != artifactHash {
 		return MaterializationProof{}, errors.New("rendered HTML hash is stale")
 	}
-	var deck spec.Deck
+	var deck spec.Manifest
 	var outline spec.Outline
 	var design spec.Design
 	var slide spec.SlideSpec
@@ -252,7 +253,7 @@ func currentMaterializationProof(pack contextengine.ContextPack, projectDir stri
 	if revision < 1 {
 		revision = 1
 	}
-	return MaterializationProof{SlideID: slideID, HTMLRevision: revision, DeckRevision: deck.Revision, OutlineNodeHash: nodeHash, SpecRevision: slide.Revision, DesignRevision: design.Revision, ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID)}, nil
+	return MaterializationProof{SlideID: slideID, HTMLRevision: revision, ManifestRevision: deck.Revision, OutlineNodeHash: nodeHash, SpecRevision: slide.Revision, DesignRevision: design.Revision, ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID)}, nil
 }
 func renderSourceHash(pack contextengine.ContextPack, tx *RunSession, slideID string) (string, error) {
 	html, _, err := readArtifact(tx.ProjectDir(), tx, slideHTMLRef(slideID))

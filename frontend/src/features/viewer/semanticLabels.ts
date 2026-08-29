@@ -23,7 +23,7 @@ const SLIDE_ROLE_LABELS: Record<string, string> = {
 
 // 资源部位（PublicTarget.part）。
 const PART_LABELS: Record<string, string> = {
-  outline: '整份结构',
+  outline: '目录结构',
   design: '全局设计',
   spec: '设计稿',
   html: '幻灯片',

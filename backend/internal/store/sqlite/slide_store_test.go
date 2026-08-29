@@ -121,8 +121,8 @@ func TestCommitWorkflowRetryReusesVersionRows(t *testing.T) {
 	commit := model.ArtifactCommit{
 		ProjectID: "p1",
 		Versions: []model.Version{{
-			ID: "run-version", TargetType: "deck", TargetID: "p1",
-			VersionNo: 0, SnapshotPath: "versions/deck/v0.json", RunID: "run", CreatedAt: 1,
+			ID: "run-version", TargetType: "manifest", TargetID: "p1",
+			VersionNo: 0, SnapshotPath: "versions/manifest/v0.json", RunID: "run", CreatedAt: 1,
 		}},
 	}
 	if err := s.CommitWorkflow(ctx, commit); err != nil {
@@ -131,7 +131,7 @@ func TestCommitWorkflowRetryReusesVersionRows(t *testing.T) {
 	if err := s.CommitWorkflow(ctx, commit); err != nil {
 		t.Fatalf("commit retry must be idempotent: %v", err)
 	}
-	versions, err := s.ListVersions(ctx, "deck", "p1")
+	versions, err := s.ListVersions(ctx, "manifest", "p1")
 	if err != nil {
 		t.Fatal(err)
 	}

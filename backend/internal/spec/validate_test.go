@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func validDeck() Deck {
-	return Deck{SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: CanvasSettings{AspectRatio: "16:9"}, Numbering: NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+func validDeck() Manifest {
+	return Manifest{SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Title: "Manifest", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: CanvasSettings{AspectRatio: "16:9"}, Numbering: NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
 }
 func validOutline() Outline {
 	return Outline{SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", CreatedAt: 1, UpdatedAt: 1, Sections: []Section{
@@ -17,7 +17,7 @@ func validOutline() Outline {
 }
 
 func TestDeckAndTreeOutlineValidation(t *testing.T) {
-	if err := ValidateDeck(validDeck()); err != nil {
+	if err := ValidateManifest(validDeck()); err != nil {
 		t.Fatal(err)
 	}
 	outline := validOutline()

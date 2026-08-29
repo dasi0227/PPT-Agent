@@ -12,7 +12,7 @@ vi.mock('../viewer/IsolatedSlidePreview', () => ({
 
 function snapshot(): ProjectContentSnapshot {
   return {
-    deck: {
+    manifest: {
       version: '4.0',
       revision: 1,
       project_id: 'pro_1',

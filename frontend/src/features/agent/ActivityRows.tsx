@@ -283,14 +283,14 @@ function groupedObjectLabel(items: ToolActivityItem[]): string {
     const target = item.target;
     if (target?.type === 'slide' && target.part === 'spec') return '页面设计稿';
     if (target?.type === 'slide' && target.part === 'html') return '幻灯片';
-    if (target?.type === 'deck' && target.part === 'outline') return '演示结构';
-    if (target?.type === 'deck' && target.part === 'design') return '全局设计';
-    if (target?.type === 'deck' && target.part === 'deck') return '演示设置';
+    if (target?.type === 'deck' && target.part === 'manifest') return '演示内容';
+    if (target?.type === 'deck' && target.part === 'outline') return '目录结构';
+    if (target?.type === 'deck' && target.part === 'design') return '视觉设计';
     return '';
   });
   const first = kinds[0];
   if (!first || kinds.some((kind) => kind !== first)) return `${items.length} 项`;
-  const unit = first === '幻灯片' ? '张' : first === '演示结构' ? '份' : first === '全局设计' ? '套' : '个';
+  const unit = first === '幻灯片' ? '张' : first === '目录结构' ? '份' : first === '视觉设计' ? '套' : '个';
   return `${items.length} ${unit}${first}`;
 }
 

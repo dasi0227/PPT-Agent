@@ -20,7 +20,7 @@ type SlideLocation struct {
 	Ordinal    int
 }
 
-func ValidateDeck(d Deck) error { return validateSchema(pptschema.DeckName, d) }
+func ValidateManifest(d Manifest) error { return validateSchema(pptschema.ManifestName, d) }
 func ValidateOutline(d Outline) error {
 	if err := validateSchema(pptschema.OutlineName, d); err != nil {
 		return err

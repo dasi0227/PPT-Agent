@@ -157,13 +157,13 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err := sb.Write(filepath.Join(projectRel, "state.json"), raw); err != nil {
 		return err
 	}
-	deck := spec.Deck{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID,
+	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID,
 		Title: proj.Title, Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
 		Language: firstNonEmpty(p.Language, "zh-CN"), Positioning: proj.Title,
 		Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"},
 		Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover", "end"}, Format: "number"},
 		CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt}
-	if err := sb.Write(filepath.Join(projectRel, "deck.json"), mustJSON(deck)); err != nil {
+	if err := sb.Write(filepath.Join(projectRel, "manifest.json"), mustJSON(manifest)); err != nil {
 		return err
 	}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID,

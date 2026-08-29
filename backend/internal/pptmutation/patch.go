@@ -78,7 +78,7 @@ type PatchPathRule struct {
 }
 
 var patchPathRules = map[string]map[string][]PatchPathRule{
-	"deck.patch": {
+	"manifest.patch": {
 		"add": {
 			{Pattern: `^/(?:title|goal|audience|language|positioning|requirements|prohibitions)$`, Description: "deck author fields"},
 			{Pattern: `^/(?:canvas/aspect_ratio|numbering/(?:enabled|hidden_roles|format))$`, Description: "deck settings"},

@@ -16,7 +16,7 @@ import (
 var ErrRevisionConflict = errors.New("mutation revision conflict")
 var ErrInvalid = errors.New("mutation invalid")
 
-var Operations = []string{"deck.patch", "outline.init", "outline.insert", "outline.move", "outline.update", "outline.remove", "design.write", "design.patch", "slide.spec.write", "slide.spec.patch", "slide.html.write", "slide.html.patch"}
+var Operations = []string{"manifest.patch", "outline.init", "outline.insert", "outline.move", "outline.update", "outline.remove", "design.write", "design.patch", "slide.spec.write", "slide.spec.patch", "slide.html.write", "slide.html.patch"}
 
 type Workspace interface {
 	Read(path string) ([]byte, error)
@@ -104,8 +104,8 @@ func (s Service) Apply(req Request) (Result, error) {
 	}
 	result := Result{Operation: req.Op, Revisions: map[string]int{}, Created: map[string]string{}, AffectedSlideIDs: []string{}, InvalidatedSlideIDs: []string{}, InvalidatedReasons: map[string]string{}}
 	switch req.Op {
-	case "deck.patch":
-		return s.patchDeck(req, result)
+	case "manifest.patch":
+		return s.patchManifest(req, result)
 	case "outline.init", "outline.insert", "outline.move", "outline.update", "outline.remove":
 		return s.mutateOutline(req, result)
 	case "design.write", "design.patch":
@@ -119,9 +119,9 @@ func (s Service) Apply(req Request) (Result, error) {
 	}
 }
 
-func (s Service) patchDeck(req Request, out Result) (Result, error) {
-	var current spec.Deck
-	if err := s.readJSON("deck.json", &current); err != nil {
+func (s Service) patchManifest(req Request, out Result) (Result, error) {
+	var current spec.Manifest
+	if err := s.readJSON("manifest.json", &current); err != nil {
 		return out, err
 	}
 	if err := checkRevision(req.ExpectedRevision, current.Revision); err != nil {
@@ -132,7 +132,7 @@ func (s Service) patchDeck(req Request, out Result) (Result, error) {
 	if err != nil {
 		return out, err
 	}
-	var next spec.Deck
+	var next spec.Manifest
 	if err = json.Unmarshal(nextRaw, &next); err != nil {
 		return out, invalid(err)
 	}
@@ -141,17 +141,17 @@ func (s Service) patchDeck(req Request, out Result) (Result, error) {
 	next.Revision = current.Revision + 1
 	next.CreatedAt = current.CreatedAt
 	next.UpdatedAt = s.Now()
-	if err = spec.ValidateDeck(next); err != nil {
+	if err = spec.ValidateManifest(next); err != nil {
 		return out, invalid(err)
 	}
-	if err = s.writeJSON("deck.json", next); err != nil {
+	if err = s.writeJSON("manifest.json", next); err != nil {
 		return out, err
 	}
-	out.Revisions["deck"] = next.Revision
+	out.Revisions["manifest"] = next.Revision
 	flat, _ := s.currentOutline()
 	for _, loc := range spec.FlattenOutline(flat) {
 		out.InvalidatedSlideIDs = append(out.InvalidatedSlideIDs, loc.Slide.SlideID)
-		out.InvalidatedReasons[loc.Slide.SlideID] = "deck_changed"
+		out.InvalidatedReasons[loc.Slide.SlideID] = "manifest_changed"
 	}
 	return out, nil
 }

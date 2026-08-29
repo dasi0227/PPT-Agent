@@ -22,7 +22,7 @@ type Evidence struct {
 type MaterializationProof struct {
 	SlideID          string
 	HTMLRevision     int
-	DeckRevision     int
+	ManifestRevision int
 	OutlineNodeHash  string
 	SpecRevision     int
 	DesignRevision   int

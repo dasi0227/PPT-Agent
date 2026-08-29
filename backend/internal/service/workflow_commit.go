@@ -24,11 +24,11 @@ type workflowCommitter struct {
 
 func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.CommitContext) error {
 	changes := commitContext.Changes
-	var deck spec.Deck
-	if err := readJSON(filepath.Join(c.project.WorkDir, "deck.json"), &deck); err != nil {
+	var manifest spec.Manifest
+	if err := readJSON(filepath.Join(c.project.WorkDir, "manifest.json"), &manifest); err != nil {
 		return err
 	}
-	deckRaw, err := os.ReadFile(filepath.Join(c.project.WorkDir, "deck.json"))
+	manifestRaw, err := os.ReadFile(filepath.Join(c.project.WorkDir, "manifest.json"))
 	if err != nil {
 		return err
 	}
@@ -133,8 +133,8 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			return err
 		}
 	}
-	if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactDeck, ID: c.project.ID}).Key()]; ok {
-		if _, err := addVersion("deck", model.DeckVersionTarget(c.project.ID), model.DeckVersionSnapshot(deck.Revision), mustJSON(deck)); err != nil {
+	if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactManifest, ID: c.project.ID}).Key()]; ok {
+		if _, err := addVersion("manifest", model.ManifestVersionTarget(c.project.ID), model.ManifestVersionSnapshot(manifest.Revision), mustJSON(manifest)); err != nil {
 			cleanup()
 			return err
 		}
@@ -205,12 +205,12 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		if hasProof {
 			artifactHash := spec.ContentHash(htmlRaw)[len("sha256:"):]
 			nodeHash := spec.SemanticSlideNodeHash(outline, id)
-			sourceHash := spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw)
+			sourceHash := spec.SourceHash(manifestRaw, nodeHash, specRaw, designRaw)
 			if proof.ArtifactHash != artifactHash ||
 				proof.SourceHash != sourceHash ||
 				proof.HTMLRevision != expectedHTMLRevision ||
-				proof.DeckRevision != deck.Revision || proof.OutlineNodeHash != nodeHash ||
-				proof.SpecRevision != semantic.Revision || proof.DesignRevision != design.Revision || proof.FrameContextHash != spec.FrameContextHash(deck, outline, design, id) {
+				proof.ManifestRevision != manifest.Revision || proof.OutlineNodeHash != nodeHash ||
+				proof.SpecRevision != semantic.Revision || proof.DesignRevision != design.Revision || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id) {
 				cleanup()
 				return fmt.Errorf("stale materialization proof for %s", id)
 			}
@@ -251,7 +251,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 					Hash:     "sha256:" + proof.ArtifactHash,
 				},
 				Source: spec.MaterializationSource{
-					DeckRevision: proof.DeckRevision, OutlineNodeHash: proof.OutlineNodeHash,
+					ManifestRevision: proof.ManifestRevision, OutlineNodeHash: proof.OutlineNodeHash,
 					SpecRevision: proof.SpecRevision, DesignRevision: proof.DesignRevision, Hash: proof.SourceHash,
 				},
 				Frame:      spec.MaterializationFrame{ContextHash: proof.FrameContextHash},

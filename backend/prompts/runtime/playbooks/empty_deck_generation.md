@@ -3,7 +3,7 @@ Task playbook: empty deck generation.
 Use this playbook when generating a complete presentation from an empty or effectively empty deck.
 
 Canonical order:
-1. Read the deck to confirm the goal, audience, language, requirements, and requested page range.
+1. Read the manifest to confirm the goal, audience, language, requirements, and requested page range.
 2. Call mutate_ppt with outline.init. Submit client_ref values only; never generate formal section, subsection, or slide IDs.
 3. Use the returned client_ref-to-ID mapping and canonical outline revision for all later page operations.
 4. Establish the deck-wide design direction with design.write.

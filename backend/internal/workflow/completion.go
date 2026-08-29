@@ -92,7 +92,7 @@ func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionI
 		(command.Options.Language == "" && command.Options.Range == "") {
 		return nil
 	}
-	deck, err := currentDeck(ctx.Context, ctx.Session)
+	deck, err := currentManifest(ctx.Context, ctx.Session)
 	if err != nil {
 		return []CompletionIssue{{
 			Code: "CONTEXT_SOURCE_INVALID", Summary: "cannot verify RunCommand options against the current outline",
@@ -104,7 +104,7 @@ func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionI
 		issues = append(issues, CompletionIssue{
 			Code:            CodeRunLanguageUnsatisfied,
 			Summary:         fmt.Sprintf("deck language %q does not satisfy RunCommand language %q", deck.Language, command.Options.Language),
-			RequiredActions: []RequiredAction{{Tool: "mutate_ppt", Op: "deck.patch", Target: Resource{Type: "deck", Part: "deck"}}},
+			RequiredActions: []RequiredAction{{Tool: "mutate_ppt", Op: "manifest.patch", Target: Resource{Type: "deck", Part: "manifest"}}},
 		})
 	}
 	outline, outlineErr := currentOutline(ctx.Context, ctx.Session)
@@ -243,8 +243,8 @@ func operationForTarget(target Resource, patch bool) string {
 		}
 		return "design.write"
 	}
-	if target.Part == "deck" {
-		return "deck.patch"
+	if target.Part == "manifest" {
+		return "manifest.patch"
 	}
 	return "outline.update"
 }

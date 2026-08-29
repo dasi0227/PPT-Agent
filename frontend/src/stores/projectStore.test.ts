@@ -15,7 +15,7 @@ import { useProjectStore } from './projectStore';
 
 function snapshot(revision: number): ProjectContentSnapshot {
   return {
-    deck: { version: '4.0', revision, project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
+    manifest: { version: '4.0', revision, project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
     outline: { version: '4.0', revision, project_id: 'pro_1', sections: [], created_at: 1, updated_at: 1 },
     design: { version: '4.0', revision, project_id: 'pro_1', theme: 'default', direction: '', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
     slides_by_id: {},

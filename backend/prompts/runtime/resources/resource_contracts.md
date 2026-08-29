@@ -1,7 +1,7 @@
 Current scoped resource contracts.
 
 Resource ownership:
-- Deck owns presentation intent, audience, language, requirements, prohibitions, canvas, and numbering policy.
+- Manifest owns presentation intent, audience, language, requirements, prohibitions, canvas, and numbering policy.
 - Outline owns the strict section/subsection tree and is the only owner of slide order.
 - Design owns the deck-wide theme, direction, density and shared visual system.
 - An outline slide node owns the stable slide identity reference, directory label, and semantic role.

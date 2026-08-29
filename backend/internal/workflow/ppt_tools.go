@@ -20,7 +20,7 @@ const maxPPTContentBytes = 2 * 1024 * 1024
 type pptReadTool struct{ pack contextengine.ContextPack }
 
 func (pptReadTool) Schema() ToolSchema {
-	return ToolSchema{Name: "read_ppt", Description: "Read one authorized deck, outline, design, slide spec, or slide HTML resource by structured identity.", Parameters: objectSchema([]string{"resource"}, map[string]any{"resource": resourceSchema()})}
+	return ToolSchema{Name: "read_ppt", Description: "Read one authorized manifest, outline, design, slide spec, or slide HTML resource by structured identity.", Parameters: objectSchema([]string{"resource"}, map[string]any{"resource": resourceSchema()})}
 }
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)
@@ -135,8 +135,8 @@ func (w runWorkspace) Delete(path string) error {
 
 func refForPath(pack contextengine.ContextPack, path string) ArtifactRef {
 	switch path {
-	case "deck.json":
-		return deckRef(pack)
+	case "manifest.json":
+		return manifestRef(pack)
 	case "outline.json":
 		return outlineRef(pack)
 	case "design.json":
@@ -162,8 +162,8 @@ func refForPath(pack contextengine.ContextPack, path string) ArtifactRef {
 
 func resourceForOperation(req pptmutation.Request) Resource {
 	switch {
-	case req.Op == "deck.patch":
-		return Resource{Type: "deck", Part: "deck"}
+	case req.Op == "manifest.patch":
+		return Resource{Type: "deck", Part: "manifest"}
 	case strings.HasPrefix(req.Op, "outline."):
 		return Resource{Type: "deck", Part: "outline"}
 	case strings.HasPrefix(req.Op, "design."):
@@ -229,7 +229,7 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	slideSpec := objectSchema([]string{"title", "key_message", "elements"}, map[string]any{"title": text(200), "key_message": text(1000), "elements": map[string]any{"type": "array", "items": element}, "layout": text(120)})
 	edits := map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{"old_text": text(maxPPTContentBytes), "new_text": map[string]any{"type": "string", "maxLength": maxPPTContentBytes}})}
 	variants := []any{
-		variant("deck.patch", []string{"patch"}, map[string]any{"patch": patch("deck.patch")}),
+		variant("manifest.patch", []string{"patch"}, map[string]any{"patch": patch("manifest.patch")}),
 		variant("outline.init", []string{"structure"}, map[string]any{"structure": map[string]any{"type": "array", "minItems": 1, "items": draftSection}}),
 		variant("outline.insert", []string{"node", "position"}, map[string]any{"node": draftNode, "position": position, "direct_slides_policy": map[string]any{"enum": []string{"move_into_new_subsection"}}}),
 		variant("outline.move", []string{"node_id", "position"}, map[string]any{"node_id": map[string]any{"type": "string"}, "position": position}),

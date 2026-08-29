@@ -92,7 +92,7 @@ describe('history hydrator', () => {
     const valid = hydrateRunFromHistory([
       entry(1, 'user_turn', { text: '修改整份 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
       entry(2, 'run.error', terminal('r1', {
-        affected_targets: [{ type: 'deck', part: 'deck' }],
+        affected_targets: [{ type: 'deck', part: 'manifest' }],
         error: { code: 'COMMIT_FAILED', message: '保存失败', retryable: true },
       })),
     ]);

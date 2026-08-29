@@ -33,8 +33,8 @@ func (s *fakeStore) ListAssets(context.Context, string) ([]model.Asset, error) {
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := t.TempDir()
-	deck := pptspec.Deck{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Positioning: "thesis", Requirements: []string{}, Prohibitions: []string{}, Canvas: pptspec.CanvasSettings{AspectRatio: "16:9"}, Numbering: pptspec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 2}
-	writeJSON(t, filepath.Join(dir, "deck.json"), deck)
+	deck := pptspec.Manifest{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Positioning: "thesis", Requirements: []string{}, Prohibitions: []string{}, Canvas: pptspec.CanvasSettings{AspectRatio: "16:9"}, Numbering: pptspec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 2}
+	writeJSON(t, filepath.Join(dir, "manifest.json"), deck)
 	outline := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Label: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Label: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Label: "Three", Role: "evidence"}}}}}}, CreatedAt: 1, UpdatedAt: 2}
 	writeJSON(t, filepath.Join(dir, "outline.json"), outline)
 	design := pptspec.Design{
@@ -253,7 +253,7 @@ func TestRefStaleAfterRevisionChange(t *testing.T) {
 			Hash:     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
 		Source: pptspec.MaterializationSource{
-			DeckRevision: 2, OutlineNodeHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			ManifestRevision: 2, OutlineNodeHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 			SpecRevision: 2, DesignRevision: 1,
 			Hash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},

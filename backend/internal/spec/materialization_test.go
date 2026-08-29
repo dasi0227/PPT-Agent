@@ -15,7 +15,7 @@ func TestRuntimeFrameAndMaterializationFreshnessAreIndependent(t *testing.T) {
 	}
 
 	artifactHash, sourceHash := ContentHash([]byte("html")), ContentHash([]byte("source"))
-	record := &MaterializationRecord{SchemaVersion: SchemaVersion, Artifact: MaterializationArtifact{Revision: 1, Hash: artifactHash}, Source: MaterializationSource{DeckRevision: 1, OutlineNodeHash: SemanticSlideNodeHash(outline, "sli_bbbbbb"), SpecRevision: 1, DesignRevision: 1, Hash: sourceHash}, Frame: MaterializationFrame{ContextHash: FrameContextHash(deck, outline, design, "sli_bbbbbb")}, RenderedAt: 1}
+	record := &MaterializationRecord{SchemaVersion: SchemaVersion, Artifact: MaterializationArtifact{Revision: 1, Hash: artifactHash}, Source: MaterializationSource{ManifestRevision: 1, OutlineNodeHash: SemanticSlideNodeHash(outline, "sli_bbbbbb"), SpecRevision: 1, DesignRevision: 1, Hash: sourceHash}, Frame: MaterializationFrame{ContextHash: FrameContextHash(deck, outline, design, "sli_bbbbbb")}, RenderedAt: 1}
 	if state := DeriveMaterializationState(true, record, 1, record.Source.OutlineNodeHash, 1, 1, artifactHash, sourceHash, record.Frame.ContextHash); state != "fresh" {
 		t.Fatalf("state=%s", state)
 	}

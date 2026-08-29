@@ -7,8 +7,8 @@ import (
 	"os"
 )
 
-func FrameContextHash(deck Deck, outline Outline, design Design, slideID string) string {
-	frame, ok := BuildRuntimeFrame(deck, outline, design, slideID)
+func FrameContextHash(manifest Manifest, outline Outline, design Design, slideID string) string {
+	frame, ok := BuildRuntimeFrame(manifest, outline, design, slideID)
 	if !ok {
 		return ""
 	}
@@ -16,7 +16,7 @@ func FrameContextHash(deck Deck, outline Outline, design Design, slideID string)
 	return ContentHash(raw)
 }
 
-func BuildRuntimeFrame(deck Deck, outline Outline, design Design, slideID string) (RuntimeFrameContext, bool) {
+func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideID string) (RuntimeFrameContext, bool) {
 	loc, ok := FindSlide(outline, slideID)
 	if !ok {
 		return RuntimeFrameContext{}, false
@@ -39,17 +39,17 @@ func BuildRuntimeFrame(deck Deck, outline Outline, design Design, slideID string
 		}
 		subsection = &RuntimeFrameAncestor{ID: loc.Subsection.ID, Title: loc.Subsection.Title, Index: index}
 	}
-	visible := deck.Numbering.Enabled
-	for _, role := range deck.Numbering.HiddenRoles {
+	visible := manifest.Numbering.Enabled
+	for _, role := range manifest.Numbering.HiddenRoles {
 		if role == loc.Slide.Role {
 			visible = false
 			break
 		}
 	}
 	return RuntimeFrameContext{
-		SlideID: slideID, DeckTitle: deck.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: loc.Slide.Role,
+		SlideID: slideID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: loc.Slide.Role,
 		Section:    RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
-		Subsection: subsection, Numbering: RuntimeFrameNumbering{Visible: visible, Format: deck.Numbering.Format},
+		Subsection: subsection, Numbering: RuntimeFrameNumbering{Visible: visible, Format: manifest.Numbering.Format},
 		Chrome: append([]ChromeItem(nil), design.Chrome...),
 	}, true
 }
@@ -59,14 +59,14 @@ func ContentHash(raw []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func SourceHash(deckRaw []byte, outlineNodeHash string, specRaw, designRaw []byte) string {
-	size := len(deckRaw) + len(outlineNodeHash) + len(specRaw) + len(designRaw) + 48
+func SourceHash(manifestRaw []byte, outlineNodeHash string, specRaw, designRaw []byte) string {
+	size := len(manifestRaw) + len(outlineNodeHash) + len(specRaw) + len(designRaw) + 48
 	combined := make([]byte, 0, size)
 	for _, item := range []struct {
 		name string
 		raw  []byte
 	}{
-		{name: "deck", raw: deckRaw},
+		{name: "manifest", raw: manifestRaw},
 		{name: "outline_node", raw: []byte(outlineNodeHash)},
 		{name: "spec", raw: specRaw},
 		{name: "design", raw: designRaw},
@@ -97,7 +97,7 @@ func ReadMaterialization(path string) (MaterializationRecord, error) {
 func DeriveMaterializationState(
 	hasHTML bool,
 	record *MaterializationRecord,
-	currentDeck int, currentOutlineNodeHash string, currentSpec, currentDesign int,
+	currentManifest int, currentOutlineNodeHash string, currentSpec, currentDesign int,
 	artifactHash, sourceHash, frameHash string,
 ) string {
 	if !hasHTML {
@@ -107,12 +107,12 @@ func DeriveMaterializationState(
 		return "unknown"
 	}
 	if record.Artifact.Hash != artifactHash ||
-		record.Source.DeckRevision > currentDeck ||
+		record.Source.ManifestRevision > currentManifest ||
 		record.Source.SpecRevision > currentSpec ||
 		record.Source.DesignRevision > currentDesign {
 		return "unknown"
 	}
-	if record.Source.DeckRevision < currentDeck || record.Source.OutlineNodeHash != currentOutlineNodeHash || record.Source.SpecRevision < currentSpec {
+	if record.Source.ManifestRevision < currentManifest || record.Source.OutlineNodeHash != currentOutlineNodeHash || record.Source.SpecRevision < currentSpec {
 		return "spec_stale"
 	}
 	if record.Source.DesignRevision < currentDesign {

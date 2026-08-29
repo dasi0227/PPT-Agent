@@ -8,7 +8,7 @@ import (
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func loadMaterializationState(workDir, slideID string, deck pptspec.Deck, outline pptspec.Outline, slide pptspec.SlideSpec, design pptspec.Design) (string, model.MaterializationRevisions) {
+func loadMaterializationState(workDir, slideID string, deck pptspec.Manifest, outline pptspec.Outline, slide pptspec.SlideSpec, design pptspec.Design) (string, model.MaterializationRevisions) {
 	htmlRaw, htmlErr := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideHTMLPath(slideID))))
 	if htmlErr != nil {
 		return string(model.MaterializationNotMaterialized), model.MaterializationRevisions{}
@@ -18,7 +18,7 @@ func loadMaterializationState(workDir, slideID string, deck pptspec.Deck, outlin
 		return string(model.MaterializationUnknown), model.MaterializationRevisions{}
 	}
 	revisions := model.MaterializationRevisions{SlideHTML: record.Artifact.Revision, Outline: outline.Revision, SlideSpec: record.Source.SpecRevision, Design: record.Source.DesignRevision}
-	deckRaw, deckErr := os.ReadFile(filepath.Join(workDir, "deck.json"))
+	deckRaw, deckErr := os.ReadFile(filepath.Join(workDir, "manifest.json"))
 	specRaw, specErr := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideSpecPath(slideID))))
 	designRaw, designErr := os.ReadFile(filepath.Join(workDir, "design.json"))
 	if deckErr != nil || specErr != nil || designErr != nil {

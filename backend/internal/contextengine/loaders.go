@@ -23,11 +23,11 @@ func (OutlineLoader) Load(workDir string) (pptspec.Outline, error) {
 	return outline, readSourceJSON(filepath.Join(workDir, "outline.json"), &outline)
 }
 
-type DeckLoader struct{}
+type ManifestLoader struct{}
 
-func (DeckLoader) Load(workDir string) (pptspec.Deck, error) {
-	var deck pptspec.Deck
-	return deck, readSourceJSON(filepath.Join(workDir, "deck.json"), &deck)
+func (ManifestLoader) Load(workDir string) (pptspec.Manifest, error) {
+	var manifest pptspec.Manifest
+	return manifest, readSourceJSON(filepath.Join(workDir, "manifest.json"), &manifest)
 }
 
 type SlideSpecLoader struct{}
@@ -84,9 +84,9 @@ func (l ThreadMemoryLoader) Load(workDir, threadID string) (ThreadMemory, []stri
 
 type RevisionLoader struct{}
 
-func (RevisionLoader) From(deck pptspec.Deck, outline pptspec.Outline, design pptspec.Design, slides map[string]pptspec.SlideSpec, memory ThreadMemory) RevisionRefs {
+func (RevisionLoader) From(manifest pptspec.Manifest, outline pptspec.Outline, design pptspec.Design, slides map[string]pptspec.SlideSpec, memory ThreadMemory) RevisionRefs {
 	r := RevisionRefs{
-		Deck: deck.Revision, Outline: outline.Revision, Design: design.Revision,
+		Manifest: manifest.Revision, Outline: outline.Revision, Design: design.Revision,
 		SlideSpecs: map[string]int{}, SlideHTML: map[string]int{}, ThreadMemory: memory.Revision,
 	}
 	for id, slide := range slides {

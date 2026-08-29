@@ -160,8 +160,9 @@ var internalTermReplacements = []struct {
 	// Resource display keys — match the compound slide forms before deck forms.
 	{regexp.MustCompile(`(?i)\bslide:[A-Za-z0-9_-]+:spec\b`), "页面设计稿"},
 	{regexp.MustCompile(`(?i)\bslide:[A-Za-z0-9_-]+:html\b`), "幻灯片页面"},
-	{regexp.MustCompile(`(?i)\bdeck:outline\b`), "整份结构"},
-	{regexp.MustCompile(`(?i)\bdeck:design\b`), "全局设计"},
+	{regexp.MustCompile(`(?i)\bdeck:manifest\b`), "演示内容"},
+	{regexp.MustCompile(`(?i)\bdeck:outline\b`), "目录结构"},
+	{regexp.MustCompile(`(?i)\bdeck:design\b`), "视觉设计"},
 	// Tool and control action identifiers.
 	{regexp.MustCompile(`\b(?:read_ppt|mutate_ppt)\b`), "PPT 内容操作"},
 	{regexp.MustCompile(`\bsearch_refs\b`), "参考检索"},
@@ -259,8 +260,8 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 			return out
 		}
 		part := "outline"
-		if strings.HasPrefix(op, "deck.") {
-			part = "deck"
+		if strings.HasPrefix(op, "manifest.") {
+			part = "manifest"
 		}
 		if strings.HasPrefix(op, "design.") {
 			part = "design"
@@ -272,7 +273,7 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 	if targetType == "" {
 		targetType = stringValue(target["type"])
 	}
-	if targetType == "outline" || targetType == "design" {
+	if targetType == "manifest" || targetType == "outline" || targetType == "design" {
 		return &model.PublicTarget{Type: "deck", Part: targetType}
 	}
 	if targetType == "deck" {
@@ -294,10 +295,12 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 func toolDisplay(projectDir string, tool string, args map[string]any, started bool, result ToolResult) (string, string, bool) {
 	target := publicToolTarget(projectDir, tool, args)
 	targetName := "内容"
-	if target != nil && target.Type == "deck" && target.Part == "outline" {
-		targetName = "整份结构"
+	if target != nil && target.Type == "deck" && target.Part == "manifest" {
+		targetName = "演示内容"
+	} else if target != nil && target.Type == "deck" && target.Part == "outline" {
+		targetName = "目录结构"
 	} else if target != nil && target.Type == "deck" && target.Part == "design" {
-		targetName = "全局设计"
+		targetName = "视觉设计"
 	} else if target != nil && target.Type == "slide" {
 		pageName := target.DisplayName
 		if pageName == "" {
@@ -400,8 +403,8 @@ func attachLocalOpenTarget(projectDir string, target *model.PublicTarget) {
 func publicTargetRelativePath(target model.PublicTarget) string {
 	if target.Type == "deck" {
 		switch target.Part {
-		case "deck":
-			return "deck.json"
+		case "manifest":
+			return "manifest.json"
 		case "outline":
 			return "outline.json"
 		case "design":

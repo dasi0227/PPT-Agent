@@ -99,7 +99,7 @@ func writePolishFixture(t *testing.T, dir string) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(dir, "deck.json"), pptspec.Deck{
+	write(filepath.Join(dir, "manifest.json"), pptspec.Manifest{
 		SchemaVersion: pptspec.SchemaVersion, Revision: 1, ProjectID: "p1", Title: "Board narrative", Goal: "Secure investment", Audience: "Board", Language: "zh-CN", Requirements: []string{"Evidence first"}, Prohibitions: []string{}, Canvas: pptspec.CanvasSettings{AspectRatio: "16:9"}, Numbering: pptspec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1,
 	})
 	write(filepath.Join(dir, "outline.json"), pptspec.Outline{

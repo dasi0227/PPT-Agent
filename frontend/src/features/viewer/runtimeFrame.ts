@@ -21,15 +21,15 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
   const subsectionIndex = item.subsection ? item.section.subsections.findIndex((subsection) => subsection.id === item.subsection?.id) : -1;
   return {
     slide_id: slideId,
-    deck_title: snapshot.deck.title,
+    deck_title: snapshot.manifest.title,
     ordinal: item.ordinal,
     total: flat.length,
     role: item.node.role,
     section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 },
     ...(item.subsection ? { subsection: { id: item.subsection.id, title: item.subsection.title, index: subsectionIndex + 1 } } : {}),
     numbering: {
-      visible: snapshot.deck.numbering.enabled && !snapshot.deck.numbering.hidden_roles.includes(item.node.role),
-      format: snapshot.deck.numbering.format,
+      visible: snapshot.manifest.numbering.enabled && !snapshot.manifest.numbering.hidden_roles.includes(item.node.role),
+      format: snapshot.manifest.numbering.format,
     },
     chrome: snapshot.design.chrome.map((entry) => ({ ...entry })),
   };

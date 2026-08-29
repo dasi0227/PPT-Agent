@@ -84,14 +84,14 @@ describe('SSE parser', () => {
       target: {
         type: 'deck',
         part: 'outline',
-        display_name: '整份结构',
+        display_name: '目录结构',
         local_path: '/Users/test/.dasi/ppt/projects/p1/outline.json',
         open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/outline.json',
         insertions: 69,
         deletions: 9,
       },
       display: {
-        label: '正在创建整份结构',
+        label: '正在创建目录结构',
         detail: '/Users/test/.dasi/ppt/projects/p1/outline.json',
       },
     }), '1a');
@@ -113,7 +113,7 @@ describe('SSE parser', () => {
         deletions: 9,
       },
       display: {
-        label: '已创建整份结构',
+        label: '已创建目录结构',
         detail: '/Users/test/.dasi/ppt/projects/p1/outline.json',
       },
     }), '1');
@@ -164,14 +164,14 @@ describe('SSE parser', () => {
   it('accepts deck snapshots through both live and structured event parsers', () => {
     const payload = {
       ...terminal,
-      affected_targets: [{ type: 'deck', part: 'deck' }],
+      affected_targets: [{ type: 'deck', part: 'manifest' }],
       error: { code: 'COMMIT_FAILED', message: '修改未能安全保存，请重新发起任务。', retryable: true },
     };
 
     expect(parseSSEEvent('run.error', JSON.stringify(payload), '82')).toMatchObject({
       id: '82',
       event: 'run.error',
-      data: { affected_targets: [{ type: 'deck', part: 'deck' }] },
+      data: { affected_targets: [{ type: 'deck', part: 'manifest' }] },
     });
     expect(parsePublicEvent('run.error', payload, '82')).toMatchObject({
       id: '82',
