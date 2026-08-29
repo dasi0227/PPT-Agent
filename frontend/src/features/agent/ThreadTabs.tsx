@@ -7,20 +7,20 @@ import { ThreadMenu } from './ThreadMenu';
 
 export const ThreadTabs: React.FC = () => {
   const { activeProjectId } = useProjectStore();
-  const { displayThreads, activeThreadIdByProjectId, setActiveThread, createThread, errorByProjectId } = useThreadStore();
+  const { displayThreads, activeThreadIdByProjectId, setActiveThread, createThread } = useThreadStore();
   const [creating, setCreating] = React.useState(false);
 
   if (!activeProjectId) return null;
 
   const threads = displayThreads(activeProjectId);
   const activeId = activeThreadIdByProjectId[activeProjectId];
-  const error = errorByProjectId[activeProjectId];
-
   const handleCreate = async () => {
     if (creating) return;
     setCreating(true);
     try {
       await createThread(activeProjectId);
+    } catch {
+      // The API client reports non-Agent backend errors through the global toast layer.
     } finally {
       setCreating(false);
     }
@@ -28,7 +28,6 @@ export const ThreadTabs: React.FC = () => {
 
   return (
     <div className="flex flex-col border-b border-border bg-surface">
-      {error && <div role="alert" className="border-b border-danger/20 bg-danger-soft px-3 py-1.5 text-xs text-danger">{error}。请重新打开项目。</div>}
       <div className="flex items-center px-2 py-1 select-none min-h-[36px]">
         <div className="flex min-w-0 items-center overflow-x-auto">
           {threads.length === 0 ? (

@@ -19,14 +19,16 @@ export function DeckNavigator() {
   const { status } = useActiveSession();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [draggedSlideId, setDraggedSlideId] = useState<string>();
-  const [error, setError] = useState('');
   const slides = useMemo(() => orderedSlides(snapshot), [snapshot]);
   const locked = pending || ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(status);
 
   const mutate = async (request: PPTMutation) => {
     if (!activeProjectId || locked) return;
-    setError('');
-    try { await mutateProject(activeProjectId, request); } catch (reason) { setError(reason instanceof Error ? reason.message : '目录操作失败，请重试'); }
+    try {
+      await mutateProject(activeProjectId, request);
+    } catch {
+      // The API client reports non-Agent backend errors through the global toast layer.
+    }
   };
   const outlineRevision = snapshot?.outline.revision;
   const positionForSibling = (parentId: string, siblings: string[], index: number): MutationPosition => index < siblings.length ? { parent_id: parentId, before_id: siblings[index] } : { parent_id: parentId };
@@ -49,7 +51,6 @@ export function DeckNavigator() {
       <div><h2 className="text-sm font-semibold text-text-900">目录</h2><p className="text-[10px] text-text-400">{slides.length} 页</p></div>
       <button disabled={locked} className="rounded p-1.5 hover:bg-panel-muted disabled:opacity-40" aria-label="新增章节" onClick={() => void mutate({op:'outline.insert',expected_revision:outlineRevision,node:{kind:'section',client_ref:clientRef('section'),title:'新章节',purpose:'待补充章节目的',slides:[],subsections:[]},position:{}})}><FolderPlus className="h-4 w-4" /></button>
     </div>
-    {error && <div role="alert" className="border-b border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>}
     {locked && <div className="border-b border-border bg-warning-soft px-3 py-2 text-xs text-warning">{pending ? '正在更新目录' : status === 'paused' ? '任务已暂停，目录暂不可编辑' : '任务运行中，目录暂不可编辑'}</div>}
     <div className="min-h-0 flex-1 overflow-y-auto p-2">
       {snapshot.outline.sections.length === 0 ? <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-xs text-text-400"><FilePlus2 className="h-5 w-5"/><span>目录为空，先新增章节</span></div> : snapshot.outline.sections.map((section) => {

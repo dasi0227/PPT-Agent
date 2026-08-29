@@ -13,6 +13,118 @@
   }
 }
 
+.global-error-toast-viewport {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  z-index: 1000;
+  display: flex;
+  width: min(600px, calc(100vw - 2rem));
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.global-error-toast {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  align-items: center;
+  width: max-content;
+  min-width: 332px;
+  max-width: 100%;
+  min-height: 41px;
+  overflow: hidden;
+  padding: 7px 7px 7px 19px;
+  border: 1px solid #dc747c;
+  border-radius: 999px;
+  background: #c84953;
+  box-shadow:
+    0 10px 26px rgb(126 45 53 / 20%),
+    inset 0 1px 0 rgb(255 255 255 / 18%);
+  color: #fff;
+  pointer-events: auto;
+  animation: global-error-toast-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.global-error-toast-leaving {
+  animation: global-error-toast-out 220ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.global-error-toast-message,
+.global-error-toast-close {
+  position: relative;
+  z-index: 1;
+}
+
+.global-error-toast-message {
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.global-error-toast-close {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgb(255 255 255 / 82%);
+  cursor: pointer;
+}
+
+.global-error-toast-close:hover {
+  background: rgb(255 255 255 / 13%);
+  color: #fff;
+}
+
+.global-error-toast-timer {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: left;
+  background: linear-gradient(
+    90deg,
+    rgb(238 241 245 / 13%) 0%,
+    rgb(238 241 245 / 13%) 92%,
+    rgb(238 241 245 / 28%) 100%
+  );
+  pointer-events: none;
+  animation: global-error-toast-countdown 5s linear forwards;
+}
+
+@keyframes global-error-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes global-error-toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.98);
+  }
+}
+
+@keyframes global-error-toast-countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
 .timeline-loading-shimmer {
   color: inherit;
 }
@@ -44,6 +156,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .global-error-toast,
+  .global-error-toast-leaving {
+    animation-duration: 1ms;
+  }
+
+  .global-error-toast-timer {
+    display: none;
+  }
+
   .timeline-loading-shimmer {
     animation: none;
     background-image: none;

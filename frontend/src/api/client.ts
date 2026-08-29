@@ -1,3 +1,5 @@
+import { showGlobalError } from '../stores/toastStore';
+
 const API_BASE = '/api/v1';
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -45,6 +47,7 @@ export class NetworkError extends Error {
 export interface FetchClientOptions extends RequestInit {
   timeoutMs?: number;
   responseType?: 'json' | 'text';
+  reportError?: boolean;
 }
 
 function combineSignals(signals: Array<AbortSignal | undefined>): { signal: AbortSignal; cleanup: () => void } {
@@ -93,6 +96,7 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
   const {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     responseType = 'json',
+    reportError = true,
     signal: externalSignal,
     ...requestOptions
   } = options;
@@ -127,11 +131,17 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     if (text.trim() === '') return undefined as T;
     return JSON.parse(text) as T;
   } catch (error) {
-    if (error instanceof APIError) throw error;
-    if (timeoutController.signal.aborted) throw new RequestTimeoutError(timeoutMs);
-    if (externalSignal?.aborted) throw new RequestCanceledError();
-    if (error instanceof DOMException && error.name === 'AbortError') throw new RequestCanceledError();
-    throw new NetworkError(error);
+    let requestError: Error;
+    if (error instanceof APIError) requestError = error;
+    else if (timeoutController.signal.aborted) requestError = new RequestTimeoutError(timeoutMs);
+    else if (externalSignal?.aborted) requestError = new RequestCanceledError();
+    else if (error instanceof DOMException && error.name === 'AbortError') requestError = new RequestCanceledError();
+    else requestError = new NetworkError(error);
+
+    if (reportError && !(requestError instanceof RequestCanceledError)) {
+      showGlobalError(requestError.message);
+    }
+    throw requestError;
   } finally {
     window.clearTimeout(timeout);
     combined.cleanup();

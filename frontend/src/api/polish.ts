@@ -8,6 +8,7 @@ export const polishApi = {
       body: JSON.stringify(payload),
       signal,
       timeoutMs: 15_000,
+      reportError: false,
     })
   ),
 };

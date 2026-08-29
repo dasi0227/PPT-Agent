@@ -9,7 +9,7 @@ export const threadsApi = {
     method: 'POST',
     body: JSON.stringify({ title: title || '' })
   }),
-  history: (threadId: string) => fetchClient<ThreadHistoryEntry[]>(`/threads/${threadId}/history`),
+  history: (threadId: string) => fetchClient<ThreadHistoryEntry[]>(`/threads/${threadId}/history`, { reportError: false }),
   patch: (id: string, patch: {title?: string}) => fetchClient<Thread>(`/threads/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(patch)

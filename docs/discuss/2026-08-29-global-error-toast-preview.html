@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>全局错误 Toast 交互预览</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9edf2;
+      --panel: #f8f9fb;
+      --panel-muted: #f0f3f7;
+      --canvas: #dfe5ec;
+      --surface: #ffffff;
+      --ink: #17202b;
+      --muted: #5f6b7a;
+      --subtle: #95a0ae;
+      --border: #d5dbe3;
+      --border-strong: #bcc5d0;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      --warning: #b96d1f;
+      --warning-soft: #fff3df;
+      --danger: #c84953;
+      --danger-dark: #b63e48;
+      --danger-edge: #dc747c;
+      --danger-shadow: rgba(126, 45, 53, 0.2);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--workspace);
+      color: var(--ink);
+      font-family: Aptos, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    button { font: inherit; }
+
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: 48px minmax(0, 1fr);
+      width: 100%;
+      height: 100%;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border-strong);
+      background: var(--panel);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      flex: none;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 4px;
+      background: #26364d;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .tab {
+      align-self: end;
+      min-width: 172px;
+      height: 40px;
+      padding: 0 14px;
+      border: 1px solid var(--border-strong);
+      border-bottom-color: var(--panel);
+      border-radius: 6px 6px 0 0;
+      background: var(--panel);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 40px;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 260px minmax(420px, 1fr) 360px;
+      min-height: 0;
+    }
+
+    .left,
+    .right {
+      min-width: 0;
+      background: var(--panel);
+    }
+
+    .left { border-right: 1px solid var(--border); }
+    .right { border-left: 1px solid var(--border); }
+
+    .panel-heading {
+      display: flex;
+      height: 62px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-heading h2 {
+      margin: 0 0 2px;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    .panel-heading p {
+      margin: 0;
+      color: var(--subtle);
+      font-size: 11px;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .icon-button:hover { background: var(--panel-muted); color: var(--ink); }
+
+    .folder-plus {
+      position: relative;
+      width: 18px;
+      height: 13px;
+      border: 2px solid currentColor;
+      border-radius: 3px;
+    }
+
+    .folder-plus::before {
+      content: "";
+      position: absolute;
+      top: -5px;
+      left: -2px;
+      width: 8px;
+      height: 5px;
+      border: 2px solid currentColor;
+      border-bottom: 0;
+      border-radius: 3px 3px 0 0;
+    }
+
+    .folder-plus::after {
+      content: "+";
+      position: absolute;
+      right: -5px;
+      bottom: -7px;
+      display: grid;
+      width: 12px;
+      height: 12px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--panel);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .lock-notice {
+      padding: 10px 14px;
+      border-bottom: 1px solid #ecd8b5;
+      background: var(--warning-soft);
+      color: var(--warning);
+      font-size: 13px;
+    }
+
+    .outline {
+      padding: 10px;
+    }
+
+    .section-row {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 38px;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .chevron {
+      width: 7px;
+      height: 7px;
+      border-right: 1.5px solid var(--muted);
+      border-bottom: 1.5px solid var(--muted);
+      transform: rotate(45deg) translateY(-2px);
+    }
+
+    .slide-row {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      align-items: center;
+      min-height: 34px;
+      margin: 0 6px 6px;
+      padding: 0 8px;
+      border-radius: 4px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+    }
+
+    .center {
+      display: grid;
+      grid-template-rows: 48px minmax(0, 1fr);
+      min-width: 0;
+      background: var(--canvas);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tool-group { display: flex; align-items: center; gap: 6px; }
+
+    .tool {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+    }
+
+    .tool.active { background: var(--accent-soft); color: var(--accent); }
+
+    .canvas-wrap {
+      display: grid;
+      min-height: 0;
+      place-items: center;
+      padding: 42px;
+    }
+
+    .slide {
+      position: relative;
+      width: min(78%, 760px);
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(71, 85, 105, 0.14);
+    }
+
+    .slide-band {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 28%;
+      background: #243451;
+    }
+
+    .slide-copy {
+      position: absolute;
+      top: 22%;
+      left: 35%;
+      right: 9%;
+    }
+
+    .slide-copy small { color: var(--accent); font-size: 12px; font-weight: 700; }
+    .slide-copy h1 { margin: 14px 0 12px; font-size: clamp(24px, 3vw, 42px); line-height: 1.15; letter-spacing: 0; }
+    .slide-copy p { max-width: 38ch; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+    .agent-head {
+      display: flex;
+      height: 48px;
+      align-items: center;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .agent-body {
+      display: flex;
+      height: calc(100% - 48px);
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px 14px 14px;
+    }
+
+    .message {
+      max-width: 88%;
+      padding: 10px 12px;
+      border-radius: 6px;
+      background: var(--panel-muted);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .composer {
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--subtle);
+      font-size: 12px;
+    }
+
+    .toast-viewport {
+      position: fixed;
+      z-index: 1000;
+      top: 16px;
+      left: 50%;
+      display: flex;
+      width: min(600px, calc(100vw - 32px));
+      transform: translateX(-50%);
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      --life: 5000ms;
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 26px;
+      align-items: center;
+      width: max-content;
+      min-width: 332px;
+      max-width: 100%;
+      min-height: 41px;
+      overflow: hidden;
+      padding: 7px 7px 7px 19px;
+      border: 1px solid var(--danger-edge);
+      border-radius: 999px;
+      background: var(--danger);
+      box-shadow: 0 10px 26px var(--danger-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      color: #fff;
+      pointer-events: auto;
+      animation: toast-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+
+    .toast.is-leaving {
+      animation: toast-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+    }
+
+    .toast-message {
+      position: relative;
+      z-index: 1;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    .toast-close {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.82);
+      cursor: pointer;
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .toast-close:hover {
+      background: rgba(255, 255, 255, 0.13);
+      color: #fff;
+    }
+
+    .toast-timer-shade {
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      transform-origin: left;
+      background: linear-gradient(
+        90deg,
+        rgba(238, 241, 245, 0.13) 0%,
+        rgba(238, 241, 245, 0.13) 92%,
+        rgba(238, 241, 245, 0.28) 100%
+      );
+      pointer-events: none;
+      animation: countdown-surface var(--life) linear forwards;
+    }
+
+    .prototype-controls {
+      position: fixed;
+      z-index: 1100;
+      right: 18px;
+      bottom: 18px;
+      display: flex;
+      gap: 8px;
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(248, 249, 251, 0.96);
+      box-shadow: 0 12px 32px rgba(51, 65, 85, 0.18);
+    }
+
+    .prototype-controls button {
+      height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .prototype-controls button:hover { background: var(--panel-muted); }
+    .prototype-controls button.primary { border-color: var(--danger); background: var(--danger); color: #fff; }
+    .prototype-controls button.primary:hover { background: var(--danger-dark); }
+
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(-14px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes toast-out {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(-18px) scale(0.98); }
+    }
+
+    @keyframes countdown-surface {
+      from { transform: scaleX(1); }
+      to { transform: scaleX(0); }
+    }
+
+    @media (max-width: 900px) {
+      .workspace { grid-template-columns: 220px minmax(0, 1fr); }
+      .right { display: none; }
+      .toast { min-width: min(332px, calc(100vw - 32px)); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .toast,
+      .toast.is-leaving,
+      .toast-timer-shade {
+        animation-duration: 1ms;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">DP</span>Dasi PPT Agent</div>
+      <div class="tab">季度业务复盘</div>
+    </header>
+
+    <section class="workspace" aria-label="PPT 工作台原型">
+      <aside class="left">
+        <div class="panel-heading">
+          <div><h2>目录</h2><p>1 页</p></div>
+          <button class="icon-button" type="button" aria-label="新增章节"><span class="folder-plus"></span></button>
+        </div>
+        <div class="lock-notice">任务运行中，目录暂不可编辑</div>
+        <div class="outline">
+          <div class="section-row">
+            <div class="section-title"><span class="chevron"></span><span>业务概览</span></div>
+            <div class="slide-row"><span>1</span><span>季度业务复盘</span></div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="center">
+        <div class="toolbar">
+          <div class="tool-group">
+            <button class="tool active" aria-label="概览视图">▦</button>
+            <button class="tool" aria-label="全屏放映">▶</button>
+          </div>
+          <span>1 / 1</span>
+        </div>
+        <div class="canvas-wrap">
+          <article class="slide">
+            <div class="slide-band"></div>
+            <div class="slide-copy">
+              <small>2026 Q2</small>
+              <h1>季度业务复盘</h1>
+              <p>聚焦核心增长指标、关键项目进展与下一阶段行动。</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <aside class="right">
+        <div class="agent-head">Agent</div>
+        <div class="agent-body">
+          <div class="message">正在根据你的要求调整演示文稿结构。</div>
+          <div class="composer">告诉 Agent 你想修改什么</div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <section id="toastViewport" class="toast-viewport" aria-label="系统错误通知" aria-live="assertive" aria-atomic="false"></section>
+
+  <div class="prototype-controls" aria-label="原型控制">
+    <button id="stackButton" type="button">叠加 3 条</button>
+    <button id="triggerButton" class="primary" type="button">模拟后端错误</button>
+  </div>
+
+  <script>
+    const viewport = document.getElementById("toastViewport");
+    const messages = [
+      "目录更新失败：页面结构已发生变化，请重试。",
+      "项目保存失败：服务器暂时无法完成请求。",
+      "素材上传失败：文件大小超过服务端限制。",
+      "网络连接失败，请检查网络后重试。"
+    ];
+    let messageIndex = 0;
+
+    function dismissToast(toast) {
+      if (!toast || toast.classList.contains("is-leaving")) return;
+      window.clearTimeout(Number(toast.dataset.timer));
+      toast.classList.add("is-leaving");
+      toast.addEventListener("animationend", () => toast.remove(), { once: true });
+    }
+
+    function showToast(message) {
+      const toast = document.createElement("article");
+      toast.className = "toast";
+      toast.setAttribute("role", "alert");
+      toast.innerHTML = `
+        <div class="toast-timer-shade" aria-hidden="true"></div>
+        <div class="toast-message"></div>
+        <button class="toast-close" type="button" aria-label="关闭错误通知">×</button>
+      `;
+      toast.querySelector(".toast-message").textContent = message;
+      toast.querySelector(".toast-close").addEventListener("click", () => dismissToast(toast));
+      viewport.appendChild(toast);
+      toast.dataset.timer = String(window.setTimeout(() => dismissToast(toast), 5000));
+    }
+
+    document.getElementById("triggerButton").addEventListener("click", () => {
+      showToast(messages[messageIndex % messages.length]);
+      messageIndex += 1;
+    });
+
+    document.getElementById("stackButton").addEventListener("click", () => {
+      messages.slice(0, 3).forEach((message, index) => {
+        window.setTimeout(() => showToast(message), index * 350);
+      });
+    });
+
+    showToast("目录更新失败：页面结构已发生变化，请重试。");
+    window.setTimeout(() => showToast("项目保存失败：服务器暂时无法完成请求。"), 500);
+  </script>
+</body>
+</html>

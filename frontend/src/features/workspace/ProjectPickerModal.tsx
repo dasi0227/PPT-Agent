@@ -17,12 +17,10 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
   const [mode, setMode] = React.useState<'choose' | 'create'>('choose');
   const [title, setTitle] = React.useState('');
   const [isCreating, setIsCreating] = React.useState(false);
-  const [createError, setCreateError] = React.useState('');
 
   const reset = () => {
     setMode('choose');
     setTitle('');
-    setCreateError('');
     setIsCreating(false);
   };
 
@@ -37,15 +35,14 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
     if (!projectTitle || isCreating) return;
 
     setIsCreating(true);
-    setCreateError('');
     try {
       const project = await createProject(projectTitle, '', 10, 'zh-CN');
       openProject(project.id);
       navigate(projectRoute(project.id));
       reset();
       onOpenChange(false);
-    } catch (error) {
-      setCreateError(error instanceof Error ? error.message : '创建项目失败，请重试');
+    } catch {
+      // The API client reports non-Agent backend errors through the global toast layer.
       setIsCreating(false);
     }
   };
@@ -100,12 +97,11 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
                 placeholder="例如：2026 品牌发布会"
                 className="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text-900 placeholder:text-text-400 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
               />
-              {createError && <p role="alert" className="text-xs text-danger">{createError}</p>}
             </div>
             <DialogFooter>
               <button
                 type="button"
-                onClick={() => { setCreateError(''); setMode('choose'); }}
+                onClick={() => setMode('choose')}
                 disabled={isCreating}
                 className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-border px-3 text-sm font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-50"
               >

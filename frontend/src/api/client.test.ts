@@ -6,11 +6,13 @@ import {
   RequestCanceledError,
   RequestTimeoutError,
 } from './client';
+import { useToastStore } from '../stores/toastStore';
 
 describe('fetchClient', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+    useToastStore.getState().clearErrors();
   });
 
   it('returns undefined for successful empty JSON responses', async () => {
@@ -41,6 +43,21 @@ describe('fetchClient', () => {
       requestId: 'req-123',
       retryable: false,
     });
+    expect(useToastStore.getState().errors).toEqual([
+      expect.objectContaining({ message: '当前状态不可执行' }),
+    ]);
+  });
+
+  it('keeps Agent request errors out of the global toast layer', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: { code: 'RUN_FAILED', message: '任务未能完成' },
+    }), {
+      status: 422,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    await expect(fetchClient('/runs/run-1', { reportError: false })).rejects.toBeInstanceOf(APIError);
+    expect(useToastStore.getState().errors).toEqual([]);
   });
 
   it('uses the API retryable field as the HTTP retry authority', async () => {
@@ -72,6 +89,7 @@ describe('fetchClient', () => {
     const request = fetchClient('/slow', { signal: controller.signal });
     controller.abort();
     await expect(request).rejects.toBeInstanceOf(RequestCanceledError);
+    expect(useToastStore.getState().errors).toEqual([]);
   });
 
   it('distinguishes a timeout', async () => {
@@ -83,10 +101,12 @@ describe('fetchClient', () => {
     const assertion = expect(request).rejects.toBeInstanceOf(RequestTimeoutError);
     await vi.advanceTimersByTimeAsync(50);
     await assertion;
+    expect(useToastStore.getState().errors[0]?.message).toContain('请求超过');
   });
 
   it('distinguishes a network failure', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline'); }));
     await expect(fetchClient('/offline')).rejects.toBeInstanceOf(NetworkError);
+    expect(useToastStore.getState().errors[0]?.message).toBe('网络连接失败，请检查网络后重试');
   });
 });
