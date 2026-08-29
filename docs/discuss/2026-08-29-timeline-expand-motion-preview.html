@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>工具调用时间线展开动效预览</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #eef1f5;
+      --panel: #ffffff;
+      --surface: #f8f9fb;
+      --surface-hover: #f2f4f7;
+      --border: #e2e6eb;
+      --border-strong: #cfd5dd;
+      --text-900: #17202b;
+      --text-600: #53606f;
+      --text-400: #8b96a5;
+      --accent: #4f46e5;
+      --accent-soft: #eef0ff;
+      --success: #2d8a5b;
+      --warning: #b7791f;
+      --danger: #c94a4a;
+      --purple: #7c3aed;
+      --shadow: 0 14px 40px rgb(23 32 43 / 9%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      background: var(--page);
+      color: var(--text-900);
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .page {
+      width: min(100% - 32px, 820px);
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    .prototype-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .mode-switch {
+      display: inline-flex;
+      min-width: 0;
+      padding: 3px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: rgb(255 255 255 / 76%);
+    }
+
+    .mode-button,
+    .icon-button {
+      border: 0;
+      border-radius: 5px;
+      color: var(--text-600);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .mode-button {
+      min-height: 30px;
+      padding: 0 11px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .mode-button[aria-pressed="true"] {
+      color: var(--text-900);
+      background: var(--panel);
+      box-shadow: 0 1px 3px rgb(23 32 43 / 12%);
+    }
+
+    .icon-button {
+      display: inline-grid;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      place-items: center;
+      border: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .icon-button:hover,
+    .mode-button:hover {
+      color: var(--text-900);
+      background: var(--surface-hover);
+    }
+
+    .icon-button svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.8;
+    }
+
+    .app-shell {
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .app-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      min-height: 60px;
+      gap: 16px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .app-title {
+      min-width: 0;
+    }
+
+    .app-title strong,
+    .app-title span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .app-title strong {
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .app-title span {
+      margin-top: 1px;
+      color: var(--text-400);
+      font-size: 11px;
+      line-height: 16px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--success);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .status::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      content: "";
+    }
+
+    .timeline {
+      padding: 18px 18px 22px;
+    }
+
+    .user-message {
+      max-width: 76%;
+      margin-left: auto;
+      padding: 9px 12px;
+      border-radius: 8px 8px 2px 8px;
+      background: var(--accent);
+      color: #ffffff;
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .run-block {
+      margin-top: 18px;
+    }
+
+    .summary-button {
+      display: grid;
+      width: 100%;
+      min-height: 38px;
+      grid-template-columns: 18px minmax(0, 1fr) auto 18px;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 6px;
+      border: 0;
+      border-radius: 6px;
+      color: var(--text-600);
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .summary-button:hover {
+      background: var(--surface-hover);
+    }
+
+    .summary-icon,
+    .row-icon {
+      display: inline-grid;
+      place-items: center;
+    }
+
+    .summary-icon svg,
+    .row-icon svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.8;
+    }
+
+    .summary-icon {
+      color: var(--success);
+    }
+
+    .summary-title {
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .summary-meta {
+      color: var(--text-400);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .summary-chevron {
+      display: inline-grid;
+      place-items: center;
+      color: var(--text-400);
+      transition: transform 280ms cubic-bezier(.22, .8, .24, 1);
+    }
+
+    .summary-chevron svg {
+      width: 15px;
+      height: 15px;
+      stroke-width: 1.8;
+    }
+
+    .run-block[data-open="true"] .summary-chevron {
+      transform: rotate(90deg);
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transition:
+        grid-template-rows 420ms cubic-bezier(.22, .8, .24, 1),
+        opacity 170ms ease-out;
+    }
+
+    .details-clip {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .details-content {
+      margin-top: 4px;
+      padding: 8px 0 7px;
+      border-top: 1px solid var(--border);
+      transform: translateY(-8px);
+      transform-origin: top;
+      clip-path: inset(0 0 100% 0);
+      transition:
+        clip-path 390ms cubic-bezier(.22, .8, .24, 1),
+        transform 390ms cubic-bezier(.22, .8, .24, 1);
+    }
+
+    .run-block[data-open="true"] .details-grid {
+      grid-template-rows: 1fr;
+      opacity: 1;
+    }
+
+    .run-block[data-open="true"] .details-content {
+      clip-path: inset(0);
+      transform: translateY(0);
+    }
+
+    .activity-row {
+      display: grid;
+      min-height: 34px;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      color: var(--text-600);
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .activity-row:hover {
+      background: var(--surface);
+    }
+
+    .activity-row strong {
+      color: var(--text-900);
+      font-weight: 520;
+    }
+
+    .activity-row small {
+      color: var(--text-400);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .activity-row[data-kind="plan"] .row-icon {
+      color: var(--purple);
+    }
+
+    .activity-row[data-kind="reasoning"] .row-icon {
+      color: var(--accent);
+    }
+
+    .activity-row[data-kind="tool"] .row-icon {
+      color: var(--success);
+    }
+
+    .activity-row[data-kind="lifecycle"] .row-icon {
+      color: var(--text-400);
+    }
+
+    .run-block[data-mode="spread"] .activity-row {
+      opacity: 0;
+      transform: translateY(-4px);
+      transition:
+        opacity 160ms ease-out,
+        transform 210ms cubic-bezier(.22, .8, .24, 1);
+    }
+
+    .run-block[data-mode="spread"][data-open="true"] .activity-row {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .run-block[data-mode="spread"][data-open="true"] .activity-row:nth-child(1) { transition-delay: 45ms; }
+    .run-block[data-mode="spread"][data-open="true"] .activity-row:nth-child(2) { transition-delay: 80ms; }
+    .run-block[data-mode="spread"][data-open="true"] .activity-row:nth-child(3) { transition-delay: 115ms; }
+    .run-block[data-mode="spread"][data-open="true"] .activity-row:nth-child(4) { transition-delay: 150ms; }
+    .run-block[data-mode="spread"][data-open="true"] .activity-row:nth-child(5) { transition-delay: 185ms; }
+    .run-block[data-mode="spread"][data-open="true"] .activity-row:nth-child(6) { transition-delay: 220ms; }
+    .run-block[data-mode="spread"][data-open="true"] .activity-row:nth-child(7) { transition-delay: 255ms; }
+
+    .run-block[data-mode="rows"] .details-grid {
+      transition-duration: 260ms, 120ms;
+    }
+
+    .run-block[data-mode="rows"] .details-content {
+      clip-path: inset(0);
+      transform: none;
+      transition: none;
+    }
+
+    .run-block[data-mode="rows"] .activity-row {
+      opacity: 0;
+      transform: translateY(7px);
+    }
+
+    .run-block[data-mode="rows"][data-open="true"] .activity-row {
+      animation: row-enter 230ms ease-out both;
+    }
+
+    .run-block[data-mode="rows"][data-open="true"] .activity-row:nth-child(1) { animation-delay: 40ms; }
+    .run-block[data-mode="rows"][data-open="true"] .activity-row:nth-child(2) { animation-delay: 105ms; }
+    .run-block[data-mode="rows"][data-open="true"] .activity-row:nth-child(3) { animation-delay: 170ms; }
+    .run-block[data-mode="rows"][data-open="true"] .activity-row:nth-child(4) { animation-delay: 235ms; }
+    .run-block[data-mode="rows"][data-open="true"] .activity-row:nth-child(5) { animation-delay: 300ms; }
+    .run-block[data-mode="rows"][data-open="true"] .activity-row:nth-child(6) { animation-delay: 365ms; }
+    .run-block[data-mode="rows"][data-open="true"] .activity-row:nth-child(7) { animation-delay: 430ms; }
+
+    .final-answer {
+      margin-top: 5px;
+      padding: 13px 6px 2px;
+      border-top: 1px solid var(--border);
+      color: var(--text-900);
+      font-size: 13px;
+      line-height: 21px;
+    }
+
+    @keyframes row-enter {
+      from {
+        opacity: 0;
+        transform: translateY(7px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 560px) {
+      .page {
+        width: min(100% - 20px, 820px);
+        padding-top: 18px;
+      }
+
+      .prototype-toolbar {
+        align-items: stretch;
+      }
+
+      .mode-switch {
+        display: grid;
+        flex: 1;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .mode-button {
+        padding: 0 7px;
+      }
+
+      .app-header,
+      .timeline {
+        padding-right: 13px;
+        padding-left: 13px;
+      }
+
+      .summary-button {
+        grid-template-columns: 18px minmax(0, 1fr) 18px;
+      }
+
+      .summary-meta {
+        display: none;
+      }
+
+      .user-message {
+        max-width: 90%;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 1ms !important;
+        animation-delay: 0ms !important;
+        transition-duration: 1ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="prototype-toolbar" aria-label="动效对照">
+      <div class="mode-switch" role="group" aria-label="展开动效">
+        <button class="mode-button" type="button" data-mode-button="spread" aria-pressed="true">整体铺开</button>
+        <button class="mode-button" type="button" data-mode-button="rows" aria-pressed="false">逐行进场</button>
+      </div>
+      <button class="icon-button" id="replay" type="button" title="重新播放" aria-label="重新播放">
+        <i data-lucide="rotate-ccw"></i>
+      </button>
+    </div>
+
+    <section class="app-shell" aria-label="工具调用时间线动效原型">
+      <header class="app-header">
+        <div class="app-title">
+          <strong>PPT Agent</strong>
+          <span>新能源汽车市场分析 · 当前会话</span>
+        </div>
+        <span class="status">执行完成</span>
+      </header>
+
+      <div class="timeline">
+        <div class="user-message">整理成一份 8 页的汇报，并补充市场规模数据。</div>
+
+        <section class="run-block" id="run-block" data-open="false" data-mode="spread">
+          <button class="summary-button" id="summary-button" type="button" aria-expanded="false">
+            <span class="summary-icon"><i data-lucide="circle-check"></i></span>
+            <span class="summary-title">执行完成</span>
+            <span class="summary-meta">7 项活动 · 18.4s</span>
+            <span class="summary-chevron"><i data-lucide="chevron-right"></i></span>
+          </button>
+
+          <div class="details-grid" aria-hidden="true">
+            <div class="details-clip">
+              <div class="details-content">
+                <div class="activity-row" data-kind="reasoning">
+                  <span class="row-icon"><i data-lucide="brain-circuit"></i></span>
+                  <strong>先核对现有目录与页面结构</strong>
+                  <small>0.8s</small>
+                </div>
+                <div class="activity-row" data-kind="plan">
+                  <span class="row-icon"><i data-lucide="flag"></i></span>
+                  <strong>确定数据页与结论页的编排计划</strong>
+                  <small>1.2s</small>
+                </div>
+                <div class="activity-row" data-kind="tool">
+                  <span class="row-icon"><i data-lucide="eye"></i></span>
+                  <strong>已读取演示内容</strong>
+                  <small>2.1s</small>
+                </div>
+                <div class="activity-row" data-kind="tool">
+                  <span class="row-icon"><i data-lucide="search"></i></span>
+                  <strong>已检索新能源汽车市场数据</strong>
+                  <small>4.7s</small>
+                </div>
+                <div class="activity-row" data-kind="tool">
+                  <span class="row-icon"><i data-lucide="sparkles"></i></span>
+                  <strong>已更新 3 个页面设计稿</strong>
+                  <small>5.6s</small>
+                </div>
+                <div class="activity-row" data-kind="tool">
+                  <span class="row-icon"><i data-lucide="circle-check"></i></span>
+                  <strong>已生成 3 张幻灯片</strong>
+                  <small>3.4s</small>
+                </div>
+                <div class="activity-row" data-kind="lifecycle">
+                  <span class="row-icon"><i data-lucide="rotate-ccw"></i></span>
+                  <strong>已完成布局检查与结果同步</strong>
+                  <small>0.6s</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="final-answer">
+            已补齐市场规模数据，并更新了目录结构、核心数据页和结论页。
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script>
+    const block = document.getElementById('run-block');
+    const summaryButton = document.getElementById('summary-button');
+    const details = block.querySelector('.details-grid');
+    const modeButtons = [...document.querySelectorAll('[data-mode-button]')];
+    const replayButton = document.getElementById('replay');
+
+    function setOpen(open) {
+      block.dataset.open = String(open);
+      summaryButton.setAttribute('aria-expanded', String(open));
+      details.setAttribute('aria-hidden', String(!open));
+    }
+
+    function replay() {
+      setOpen(false);
+      window.setTimeout(() => setOpen(true), 240);
+    }
+
+    summaryButton.addEventListener('click', () => {
+      setOpen(block.dataset.open !== 'true');
+    });
+
+    modeButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        block.dataset.mode = button.dataset.modeButton;
+        modeButtons.forEach((candidate) => {
+          candidate.setAttribute('aria-pressed', String(candidate === button));
+        });
+        replay();
+      });
+    });
+
+    replayButton.addEventListener('click', replay);
+
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+
+    window.setTimeout(() => setOpen(true), 420);
+  </script>
+</body>
+</html>

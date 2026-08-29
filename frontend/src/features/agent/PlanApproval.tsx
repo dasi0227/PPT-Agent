@@ -108,7 +108,7 @@ function AnsweredPlanApproval({ item, decision }: { item: PlanApprovalItem; deci
   const [expanded, setExpanded] = useState(false);
   const detailsId = `plan-approval-details-${item.interactionId}`;
   return (
-    <div className="rounded-lg motion-safe:animate-[timeline-enter_120ms_ease-out]">
+    <div className="rounded-lg">
       <button
         type="button"
         aria-expanded={expanded}

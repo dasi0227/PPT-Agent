@@ -27,6 +27,7 @@ import { presentUserText } from './runtimeLabels';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
+import { TimelineDisclosure } from './TimelineDisclosure';
 
 function safeReasoningMarkdown(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').trim();
@@ -153,7 +154,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
     <div
       {...interactive}
       className={cn(
-        'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900 motion-safe:animate-[timeline-enter_120ms_ease-out]',
+        'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900',
         showToggle && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
       )}
     >
@@ -171,7 +172,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
 };
 
 export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) => (
-  <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-600 motion-safe:animate-[timeline-enter_120ms_ease-out]">
+  <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-600">
     <RotateCcw className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
     <span className="min-w-0 flex-1 truncate font-medium">{item.text}</span>
   </div>
@@ -254,8 +255,8 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
           ? <ChevronDown className="h-3.5 w-3.5 text-text-400" />
           : <ChevronRight className="h-3.5 w-3.5 text-text-400" />)}
       </button>
-      {expanded && hasDetails && (
-        <div className="px-2 pb-2.5 pl-8 pt-px text-xs leading-5 text-text-600">
+      <TimelineDisclosure open={expanded && hasDetails}>
+        {expanded && hasDetails && <div className="px-2 pb-2.5 pl-8 pt-px text-xs leading-5 text-text-600">
           {item.command ? (
             <div className="rounded-md bg-[#EDF0F3] px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]">
               <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
@@ -304,8 +305,8 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
               </div>
             </div>
           )}
-        </div>
-      )}
+        </div>}
+      </TimelineDisclosure>
     </div>
   );
 };
@@ -359,11 +360,11 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
           ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />
           : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />}
       </button>
-      {expanded && (
-        <div>
+      <TimelineDisclosure open={expanded}>
+        {expanded && <div className="timeline-disclosure-rows">
           {items.map((item) => <ToolActivityRow key={item.id} item={item} />)}
-        </div>
-      )}
+        </div>}
+      </TimelineDisclosure>
     </div>
   );
 };

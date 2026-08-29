@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>左栏目录编号层级预览</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      background: #e9edf2;
+      color: #18212d;
+      font-synthesis: none;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-width: 980px;
+      min-height: 100vh;
+      margin: 0;
+      background: #e9edf2;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .review {
+      display: grid;
+      min-height: 100vh;
+      grid-template-columns: minmax(650px, 1fr) 330px;
+    }
+
+    .stage {
+      display: grid;
+      min-width: 0;
+      place-items: center;
+      padding: 36px;
+      border-right: 1px solid #d5dbe3;
+    }
+
+    .app-shell {
+      display: grid;
+      width: min(100%, 920px);
+      height: min(780px, calc(100vh - 72px));
+      min-height: 650px;
+      grid-template-columns: 360px minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid #cbd2dc;
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 18px 45px rgb(32 43 58 / 14%);
+    }
+
+    .navigator {
+      display: flex;
+      min-height: 0;
+      flex-direction: column;
+      border-right: 1px solid #d7dde5;
+      background: #f8f9fb;
+    }
+
+    .nav-header {
+      display: flex;
+      min-height: 68px;
+      flex: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #dde2e9;
+    }
+
+    .nav-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 680;
+      letter-spacing: 0;
+    }
+
+    .nav-meta {
+      margin: 3px 0 0;
+      color: #8a94a2;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      place-items: center;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #687483;
+      cursor: pointer;
+    }
+
+    .icon-button:hover {
+      background: #edf0f4;
+      color: #1e2936;
+    }
+
+    .icon-button svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.8;
+    }
+
+    .directory {
+      min-height: 0;
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 9px 28px;
+    }
+
+    .section {
+      padding-bottom: 7px;
+    }
+
+    .section + .section {
+      padding-top: 8px;
+      border-top: 1px solid #dde2e9;
+    }
+
+    .section-header {
+      display: grid;
+      min-height: 42px;
+      grid-template-columns: 20px 42px minmax(0, 1fr) 26px;
+      align-items: center;
+      gap: 2px;
+      padding: 3px 4px;
+      border-radius: 6px;
+    }
+
+    .section-header:hover {
+      background: #f0f2f5;
+    }
+
+    .chevron {
+      display: grid;
+      width: 20px;
+      height: 24px;
+      padding: 0;
+      place-items: center;
+      border: 0;
+      background: transparent;
+      color: #626e7d;
+      cursor: pointer;
+      transition: transform 170ms ease;
+    }
+
+    .chevron svg {
+      width: 15px;
+      height: 15px;
+      stroke-width: 2;
+    }
+
+    .section.collapsed .chevron {
+      transform: rotate(-90deg);
+    }
+
+    .section-kicker {
+      text-align: center;
+      color: #8b95a3;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .section-kicker strong {
+      color: #596575;
+      font-size: 13px;
+      font-weight: 750;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .section-title {
+      min-width: 0;
+      overflow: hidden;
+      padding-left: 8px;
+      font-size: 14px;
+      font-weight: 720;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .section-body {
+      display: grid;
+      grid-template-rows: 1fr;
+      opacity: 1;
+      transition: grid-template-rows 190ms ease, opacity 130ms ease;
+    }
+
+    .section.collapsed .section-body {
+      grid-template-rows: 0fr;
+      opacity: 0;
+    }
+
+    .section-body-inner {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .subsection {
+      display: grid;
+      min-height: 34px;
+      grid-template-columns: 20px 42px minmax(0, 1fr) 26px;
+      align-items: center;
+      gap: 2px;
+      padding: 8px 4px 3px;
+      color: #7d8896;
+    }
+
+    .subsection-kicker {
+      text-align: center;
+      font-size: 9px;
+      font-weight: 620;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .subsection-kicker strong {
+      color: #697584;
+      font-size: 11px;
+      font-weight: 720;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .subsection-title {
+      min-width: 0;
+      overflow: hidden;
+      padding-left: 8px;
+      font-size: 10px;
+      font-weight: 620;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .page {
+      position: relative;
+      display: grid;
+      min-height: 58px;
+      grid-template-columns: 20px minmax(0, 1fr) 26px;
+      align-items: center;
+      gap: 2px;
+      margin: 1px 0;
+      padding: 5px 4px 5px 3px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      color: #1f2936;
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease;
+    }
+
+    .page::before {
+      position: absolute;
+      top: 8px;
+      bottom: 8px;
+      left: 0;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: transparent;
+      content: "";
+    }
+
+    .page:hover {
+      background: #f0f2f5;
+    }
+
+    .page.selected {
+      border-color: #d7e1fb;
+      background: #eef3ff;
+    }
+
+    .page.selected::before {
+      background: #346cf4;
+    }
+
+    .grip {
+      display: grid;
+      width: 20px;
+      place-items: center;
+      color: #a5aeba;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    .page:hover .grip {
+      opacity: 1;
+    }
+
+    .grip svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .page-main {
+      display: grid;
+      min-width: 0;
+      grid-template-columns: 42px minmax(0, 1fr);
+      align-items: center;
+    }
+
+    .page-number {
+      display: block;
+      text-align: center;
+      color: #263240;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    .page-number strong {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 20px;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .page.selected .page-number strong {
+      color: #285edb;
+    }
+
+    .page-copy {
+      min-width: 0;
+      padding-left: 4px;
+    }
+
+    .page-title {
+      display: block;
+      overflow: hidden;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .page.selected .page-title {
+      color: #18212d;
+    }
+
+    .more {
+      opacity: 0;
+    }
+
+    .page:hover .more,
+    .page:focus-within .more,
+    .section-header:hover .more {
+      opacity: 1;
+    }
+
+    .workspace {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      background: #edf0f4;
+    }
+
+    .workspace-bar {
+      display: flex;
+      min-height: 52px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      border-bottom: 1px solid #d7dde5;
+      background: #fbfcfd;
+      color: #4f5b6a;
+      font-size: 12px;
+    }
+
+    .workspace-canvas {
+      display: grid;
+      min-height: 0;
+      flex: 1;
+      place-items: center;
+      padding: 42px;
+    }
+
+    .slide-paper {
+      position: relative;
+      width: min(100%, 520px);
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      border: 1px solid #d4d9e1;
+      background: #fff;
+      box-shadow: 0 16px 34px rgb(35 46 61 / 12%);
+    }
+
+    .slide-paper::before {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 12px;
+      background: #346cf4;
+      content: "";
+    }
+
+    .slide-content {
+      display: flex;
+      height: 100%;
+      flex-direction: column;
+      justify-content: center;
+      padding: 12%;
+    }
+
+    .slide-content small {
+      color: #687483;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .slide-content h2 {
+      margin: 12px 0 0;
+      max-width: 420px;
+      font-size: clamp(24px, 3vw, 38px);
+      font-weight: 720;
+      letter-spacing: 0;
+    }
+
+    .slide-content p {
+      margin: 14px 0 0;
+      color: #697586;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .notes {
+      display: flex;
+      min-height: 100vh;
+      flex-direction: column;
+      justify-content: center;
+      padding: 44px 34px;
+      background: #f7f8fa;
+    }
+
+    .notes-label {
+      margin: 0 0 10px;
+      color: #346cf4;
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .notes h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 720;
+      letter-spacing: 0;
+      line-height: 1.28;
+    }
+
+    .notes-intro {
+      margin: 14px 0 26px;
+      color: #637080;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .decision {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr);
+      gap: 12px;
+      padding: 16px 0;
+      border-top: 1px solid #dde2e9;
+    }
+
+    .decision-index {
+      color: #9aa4b1;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .decision strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+    }
+
+    .decision p {
+      margin: 0;
+      color: #6c7887;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid #dde2e9;
+      color: #747f8e;
+      font-size: 11px;
+    }
+
+    .legend-page {
+      color: #263240;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 20px;
+      font-weight: 760;
+    }
+
+    .legend-section {
+      color: #7e8997;
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .legend-subsection {
+      color: #8993a0;
+      font-size: 10px;
+      font-weight: 650;
+    }
+
+    @media (max-width: 1120px) {
+      .review {
+        grid-template-columns: 1fr;
+      }
+
+      .stage {
+        border-right: 0;
+      }
+
+      .notes {
+        min-height: auto;
+        padding: 36px max(34px, calc((100vw - 920px) / 2));
+        border-top: 1px solid #d5dbe3;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="review">
+    <section class="stage" aria-label="目录设计预览">
+      <div class="app-shell">
+        <aside class="navigator" aria-label="演示目录">
+          <header class="nav-header">
+            <div>
+              <h2 class="nav-title">目录</h2>
+              <p class="nav-meta">7 页 · 3 章节</p>
+            </div>
+            <button class="icon-button" type="button" aria-label="新增章节" title="新增章节">
+              <i data-lucide="folder-plus"></i>
+            </button>
+          </header>
+
+          <div class="directory" id="directory">
+            <section class="section" data-section>
+              <div class="section-header">
+                <button class="chevron" type="button" aria-label="折叠第一章" data-toggle>
+                  <i data-lucide="chevron-down"></i>
+                </button>
+                <span class="section-kicker">第 <strong>1</strong> 章</span>
+                <span class="section-title">开场与动机</span>
+                <button class="icon-button more" type="button" aria-label="章节操作" title="章节操作">
+                  <i data-lucide="ellipsis"></i>
+                </button>
+              </div>
+              <div class="section-body">
+                <div class="section-body-inner">
+                  <div class="page selected" tabindex="0" data-page data-title="如何写好一个 Skill">
+                    <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                    <span class="page-main">
+                      <span class="page-number"><strong>01</strong></span>
+                      <span class="page-copy"><span class="page-title">如何写好一个 Skill</span></span>
+                    </span>
+                    <button class="icon-button more" type="button" aria-label="页面操作" title="页面操作"><i data-lucide="ellipsis"></i></button>
+                  </div>
+                  <div class="page" tabindex="0" data-page data-title="为什么需要 Skill">
+                    <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                    <span class="page-main">
+                      <span class="page-number"><strong>02</strong></span>
+                      <span class="page-copy"><span class="page-title">为什么需要 Skill</span></span>
+                    </span>
+                    <button class="icon-button more" type="button" aria-label="页面操作" title="页面操作"><i data-lucide="ellipsis"></i></button>
+                  </div>
+                  <div class="page" tabindex="0" data-page data-title="Skill 的价值">
+                    <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                    <span class="page-main">
+                      <span class="page-number"><strong>03</strong></span>
+                      <span class="page-copy"><span class="page-title">Skill 的价值</span></span>
+                    </span>
+                    <button class="icon-button more" type="button" aria-label="页面操作" title="页面操作"><i data-lucide="ellipsis"></i></button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="section" data-section>
+              <div class="section-header">
+                <button class="chevron" type="button" aria-label="折叠第二章" data-toggle>
+                  <i data-lucide="chevron-down"></i>
+                </button>
+                <span class="section-kicker">第 <strong>2</strong> 章</span>
+                <span class="section-title">Skill 基础</span>
+                <button class="icon-button more" type="button" aria-label="章节操作" title="章节操作">
+                  <i data-lucide="ellipsis"></i>
+                </button>
+              </div>
+              <div class="section-body">
+                <div class="section-body-inner">
+                  <div class="subsection">
+                    <span></span>
+                    <span class="subsection-kicker">第 <strong>2.1</strong> 节</span>
+                    <span class="subsection-title">基本概念</span>
+                    <span></span>
+                  </div>
+                  <div class="page" tabindex="0" data-page data-title="Skill 是什么">
+                    <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                    <span class="page-main">
+                      <span class="page-number"><strong>04</strong></span>
+                      <span class="page-copy"><span class="page-title">Skill 是什么</span></span>
+                    </span>
+                    <button class="icon-button more" type="button" aria-label="页面操作" title="页面操作"><i data-lucide="ellipsis"></i></button>
+                  </div>
+                  <div class="subsection">
+                    <span></span>
+                    <span class="subsection-kicker">第 <strong>2.2</strong> 节</span>
+                    <span class="subsection-title">能力边界</span>
+                    <span></span>
+                  </div>
+                  <div class="page" tabindex="0" data-page data-title="Skill vs Prompt">
+                    <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                    <span class="page-main">
+                      <span class="page-number"><strong>05</strong></span>
+                      <span class="page-copy"><span class="page-title">Skill vs Prompt</span></span>
+                    </span>
+                    <button class="icon-button more" type="button" aria-label="页面操作" title="页面操作"><i data-lucide="ellipsis"></i></button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="section" data-section>
+              <div class="section-header">
+                <button class="chevron" type="button" aria-label="折叠第三章" data-toggle>
+                  <i data-lucide="chevron-down"></i>
+                </button>
+                <span class="section-kicker">第 <strong>3</strong> 章</span>
+                <span class="section-title">构建方法</span>
+                <button class="icon-button more" type="button" aria-label="章节操作" title="章节操作">
+                  <i data-lucide="ellipsis"></i>
+                </button>
+              </div>
+              <div class="section-body">
+                <div class="section-body-inner">
+                  <div class="page" tabindex="0" data-page data-title="明确目标与边界">
+                    <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                    <span class="page-main">
+                      <span class="page-number"><strong>06</strong></span>
+                      <span class="page-copy"><span class="page-title">明确目标与边界</span></span>
+                    </span>
+                    <button class="icon-button more" type="button" aria-label="页面操作" title="页面操作"><i data-lucide="ellipsis"></i></button>
+                  </div>
+                  <div class="page" tabindex="0" data-page data-title="写成可照做的步骤">
+                    <span class="grip"><i data-lucide="grip-vertical"></i></span>
+                    <span class="page-main">
+                      <span class="page-number"><strong>07</strong></span>
+                      <span class="page-copy"><span class="page-title">写成可照做的步骤</span></span>
+                    </span>
+                    <button class="icon-button more" type="button" aria-label="页面操作" title="页面操作"><i data-lucide="ellipsis"></i></button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </aside>
+
+        <section class="workspace" aria-label="页面画布">
+          <div class="workspace-bar">
+            <span id="workspace-title">如何写好一个 Skill</span>
+            <span>设计稿</span>
+          </div>
+          <div class="workspace-canvas">
+            <article class="slide-paper">
+              <div class="slide-content">
+                <small>SKILL DESIGN</small>
+                <h2 id="slide-title">如何写好一个 Skill</h2>
+                <p>让开发者系统掌握可复用、可执行的 Skill 编写方法。</p>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <aside class="notes">
+      <p class="notes-label">RECOMMENDED DIRECTION</p>
+      <h1>让页码成为定位锚点，而不是另一种章节号</h1>
+      <p class="notes-intro">现在的问题不是数字格式，而是三种数字共享同一套字号、字重和位置。这个方案直接拆开它们的视觉语法。</p>
+
+      <div class="decision">
+        <span class="decision-index">01</span>
+        <div>
+          <strong>结构编号增加语义</strong>
+          <p>章节使用“第 1 章”，子节使用“第 2.1 节”，字号更小、颜色更弱，一眼可知它们属于结构层。</p>
+        </div>
+      </div>
+      <div class="decision">
+        <span class="decision-index">02</span>
+        <div>
+          <strong>编号共享同一中轴</strong>
+          <p>章节、子节和页码使用同一条 42px 编号栏并居中，标题从编号栏右侧统一起排。</p>
+        </div>
+      </div>
+      <div class="decision">
+        <span class="decision-index">03</span>
+        <div>
+          <strong>选中态保持克制</strong>
+          <p>只让当前页数字变蓝，继续保留浅底与左侧定位条，不把整行标题加粗或染色。</p>
+        </div>
+      </div>
+
+      <div class="legend" aria-label="编号层级示例">
+        <span class="legend-section">第 1 章</span>
+        <span class="legend-subsection">第 2.1 节</span>
+        <span class="legend-page">01</span>
+        <span>页面</span>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    const directory = document.querySelector("#directory");
+    const workspaceTitle = document.querySelector("#workspace-title");
+    const slideTitle = document.querySelector("#slide-title");
+
+    directory.addEventListener("click", (event) => {
+      const toggle = event.target.closest("[data-toggle]");
+      if (toggle) {
+        toggle.closest("[data-section]").classList.toggle("collapsed");
+        return;
+      }
+
+      const page = event.target.closest("[data-page]");
+      if (!page || event.target.closest("button")) return;
+      directory.querySelectorAll("[data-page]").forEach((item) => item.classList.remove("selected"));
+      page.classList.add("selected");
+      workspaceTitle.textContent = page.dataset.title;
+      slideTitle.textContent = page.dataset.title;
+    });
+  </script>
+</body>
+</html>

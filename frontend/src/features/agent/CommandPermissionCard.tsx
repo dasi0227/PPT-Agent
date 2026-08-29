@@ -8,7 +8,7 @@ function AnsweredPermission({ answer }: { answer: 'allow_once' | 'deny' }) {
   const allowed = answer === 'allow_once';
   const Icon = allowed ? ShieldCheck : ShieldX;
   return (
-    <div className="grid min-h-[34px] grid-cols-[18px_minmax(0,1fr)] items-center gap-2 px-1.5 py-1 text-[13px] text-text-600 motion-safe:animate-[timeline-enter_120ms_ease-out]">
+    <div className="grid min-h-[34px] grid-cols-[18px_minmax(0,1fr)] items-center gap-2 px-1.5 py-1 text-[13px] text-text-600">
       <Icon
         className={`h-4 w-4 ${allowed ? 'text-success' : 'text-warning'}`}
         strokeWidth={1.75}
@@ -41,7 +41,7 @@ export function CommandPermissionCard({ item }: { item: CommandPermissionItem })
   };
 
   return (
-    <article className="overflow-hidden rounded-[9px] border border-[#E9C98F] bg-surface shadow-[0_2px_8px_rgb(58_46_25_/_7%)] motion-safe:animate-[timeline-enter_120ms_ease-out]">
+    <article className="overflow-hidden rounded-[9px] border border-[#E9C98F] bg-surface shadow-[0_2px_8px_rgb(58_46_25_/_7%)]">
       <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-[9px] px-3 pb-2.5 pt-3">
         <ShieldQuestion className="mt-px h-[18px] w-[18px] text-warning" strokeWidth={1.75} aria-hidden="true" />
         <div className="min-w-0">

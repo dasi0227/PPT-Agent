@@ -98,6 +98,69 @@
   animation: global-error-toast-countdown 5s linear forwards;
 }
 
+.timeline-disclosure {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    grid-template-rows 420ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    opacity 170ms ease-out;
+}
+
+.timeline-disclosure-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.timeline-disclosure-content {
+  transform-origin: top;
+}
+
+.timeline-disclosure[data-state='open'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.timeline-disclosure[data-state='open'] .timeline-disclosure-content {
+  animation: timeline-disclosure-reveal 390ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+}
+
+.timeline-disclosure[data-state='open'] .timeline-disclosure-rows > * {
+  animation: timeline-disclosure-row-enter 210ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+}
+
+.timeline-disclosure[data-state='open'] .timeline-disclosure-rows > :nth-child(1) { animation-delay: 45ms; }
+.timeline-disclosure[data-state='open'] .timeline-disclosure-rows > :nth-child(2) { animation-delay: 80ms; }
+.timeline-disclosure[data-state='open'] .timeline-disclosure-rows > :nth-child(3) { animation-delay: 115ms; }
+.timeline-disclosure[data-state='open'] .timeline-disclosure-rows > :nth-child(4) { animation-delay: 150ms; }
+.timeline-disclosure[data-state='open'] .timeline-disclosure-rows > :nth-child(5) { animation-delay: 185ms; }
+.timeline-disclosure[data-state='open'] .timeline-disclosure-rows > :nth-child(6) { animation-delay: 220ms; }
+.timeline-disclosure[data-state='open'] .timeline-disclosure-rows > :nth-child(n + 7) { animation-delay: 255ms; }
+
+@keyframes timeline-disclosure-reveal {
+  from {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-8px);
+  }
+  to {
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes timeline-disclosure-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes global-error-toast-in {
   from {
     opacity: 0;
@@ -156,6 +219,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .timeline-disclosure,
+  .timeline-disclosure-content,
+  .timeline-disclosure-rows > * {
+    transition-duration: 1ms;
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+  }
+
   .global-error-toast,
   .global-error-toast-leaving {
     animation-duration: 1ms;

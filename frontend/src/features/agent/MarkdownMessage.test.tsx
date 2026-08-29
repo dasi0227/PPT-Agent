@@ -34,4 +34,17 @@ describe('MarkdownMessage', () => {
     expect(container.querySelector('hr')).toBeInTheDocument();
     expect(container.querySelector('.prose')).toHaveClass('prose-hr:my-4', 'prose-hr:border-border');
   });
+
+  it('uses compact indentation for nested lists', () => {
+    const markdown = '1. 演示设定\n   - 标题\n   - 目标';
+    const { container } = render(<MarkdownMessage content={markdown} />);
+    const prose = container.querySelector('.prose');
+
+    expect(prose).toHaveClass(
+      'prose-ul:pl-3',
+      'prose-ol:pl-4',
+      '[&_li>ul]:pl-2',
+      '[&_li>ol]:pl-2',
+    );
+  });
 });

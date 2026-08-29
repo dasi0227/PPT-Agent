@@ -14,6 +14,7 @@ import { MessageMetaActions } from './MessageMetaActions';
 import type { TimelineItem } from './eventReducer';
 import { DisplayEntry, groupTimelineItems } from './timelineGrouping';
 import { PausedRunCard } from './PausedRunCard';
+import { TimelineDisclosure } from './TimelineDisclosure';
 import { CommandPermissionCard } from './CommandPermissionCard';
 
 function EmptyTimelineTitle() {
@@ -108,9 +109,9 @@ export const Timeline: React.FC = () => {
     setShowReturn(!nearBottom);
   };
 
-  const renderItem = (item: TimelineItem) => {
+  const renderItem = (item: TimelineItem, animateEntry = true) => {
     return (
-      <React.Fragment key={item.id}>
+      <div key={item.id} className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
         {item.type === 'user_turn' && (
           <div className="flex justify-end">
             <div className="group flex max-w-[88%] flex-col items-end">
@@ -148,18 +149,29 @@ export const Timeline: React.FC = () => {
         {item.type === 'command_permission' && <CommandPermissionCard item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
-      </React.Fragment>
+      </div>
     );
   };
 
-  const renderEntry = (entry: DisplayEntry) => {
+  const renderEntry = (entry: DisplayEntry, animateEntry = true): React.ReactNode => {
     if (entry.kind === 'tool_group') {
-      return <ToolGroupRow key={entry.id} items={entry.items} />;
+      return (
+        <div key={entry.id} className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
+          <ToolGroupRow items={entry.items} />
+        </div>
+      );
     }
     if (entry.kind === 'run_summary') {
-      return <RunSummaryBlock key={entry.id} entry={entry} renderEntry={renderEntry} />;
+      return (
+        <RunSummaryBlock
+          key={entry.id}
+          entry={entry}
+          animateEntry={animateEntry}
+          renderEntry={(child) => renderEntry(child, false)}
+        />
+      );
     }
-    return renderItem(entry.item);
+    return renderItem(entry.item, animateEntry);
   };
 
   return (
@@ -175,7 +187,7 @@ export const Timeline: React.FC = () => {
           </div>
         ) : (
           <>
-            {displayEntries.map(renderEntry)}
+            {displayEntries.map((entry) => renderEntry(entry))}
             {status === 'paused' && activeRunId && <PausedRunCard runId={activeRunId} />}
             {status !== 'waiting' && displayedProgress && (
               <LiveProgressRow progress={displayedProgress} />
@@ -199,9 +211,11 @@ export const Timeline: React.FC = () => {
 
 function RunSummaryBlock({
   entry,
+  animateEntry,
   renderEntry,
 }: {
   entry: Extract<DisplayEntry, { kind: 'run_summary' }>;
+  animateEntry: boolean;
   renderEntry: (entry: DisplayEntry) => React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -214,7 +228,7 @@ function RunSummaryBlock({
   const finalText = terminal.type === 'final' ? terminal.text : terminal.message;
 
   return (
-    <div className="motion-safe:animate-[timeline-enter_120ms_ease-out]">
+    <div className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
       <button
         type="button"
         aria-expanded={expanded}
@@ -224,15 +238,15 @@ function RunSummaryBlock({
         <RunStatusIcon status={superseded ? 'paused' : entry.status} />
         <span className="min-w-0 flex-1 truncate font-semibold">{label}</span>
         <ChevronRight
-          className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform duration-300 ease-out ${expanded ? 'rotate-90' : ''}`}
           strokeWidth={1.75}
         />
       </button>
-      {expanded && entry.processEntries.length > 0 && (
-        <div className="mt-1.5 border-t border-border pt-1.5">
+      <TimelineDisclosure open={expanded && entry.processEntries.length > 0}>
+        {expanded && entry.processEntries.length > 0 && <div className="timeline-disclosure-rows mt-1.5 border-t border-border pt-1.5">
           {entry.processEntries.map(renderEntry)}
-        </div>
-      )}
+        </div>}
+      </TimelineDisclosure>
       <div className="mt-1.5 border-t border-border pt-1.5">
         {terminal.type === 'final'
           ? <FinalMessage item={terminal} />

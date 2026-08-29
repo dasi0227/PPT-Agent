@@ -216,8 +216,8 @@ function SlideRow({
       tabIndex={0}
       aria-current={selected ? 'page' : undefined}
       className={cn(
-        'group/page relative mx-1 my-px grid cursor-pointer grid-cols-[14px_28px_minmax(0,1fr)_28px] items-center gap-1.5 rounded-md border border-transparent px-1.5 transition-colors',
-        view === 'outline' ? 'min-h-11 py-1' : 'min-h-[76px] py-1.5',
+        'group/page relative mx-1 my-px grid cursor-pointer grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md border border-transparent px-1 transition-colors',
+        view === 'outline' ? 'min-h-[58px] py-1' : 'min-h-[76px] py-1.5',
         selected ? 'border-accent/15 bg-accent-soft' : 'hover:bg-panel-muted',
       )}
     >
@@ -229,12 +229,15 @@ function SlideRow({
         className="h-3.5 w-3.5 text-text-400 opacity-0 transition-opacity group-hover/page:opacity-100"
         strokeWidth={1.7}
       />
-      <span className="text-[11px] font-semibold tabular-nums text-text-500">
+      <span className={cn(
+        'text-center font-mono text-xl font-[760] leading-none tabular-nums',
+        selected ? 'text-accent' : 'text-text-700',
+      )}>
         {String(ordinal).padStart(2, '0')}
       </span>
       {view === 'outline' ? (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-xs font-medium text-text-900">{node.label || '未命名页面'}</span>
+        <span className="flex min-w-0 items-center gap-2 pl-0.5">
+          <span className="truncate text-sm font-semibold leading-none text-text-900">{node.label || '未命名页面'}</span>
           {pending && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning" title="等待生成设计稿" />}
         </span>
       ) : (
@@ -398,10 +401,10 @@ export function DeckNavigator() {
                 key={section.id}
                 className={cn('pb-2', sectionIndex > 0 && 'border-t border-border/80 pt-2')}
               >
-                <div className="group/section grid min-h-10 grid-cols-[22px_24px_minmax(0,1fr)_28px] items-center gap-1 rounded-md px-1 hover:bg-panel-muted">
+                <div className="group/section mx-1 grid min-h-11 grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md px-1 hover:bg-panel-muted">
                   <button
                     type="button"
-                    className="grid h-6 w-6 place-items-center text-text-500"
+                    className="grid h-6 w-5 place-items-center text-text-500"
                     aria-label={`${sectionCollapsed ? '展开' : '折叠'}${section.title}`}
                     onClick={() => setCollapsed((state) => ({ ...state, [section.id]: !sectionCollapsed }))}
                   >
@@ -409,10 +412,12 @@ export function DeckNavigator() {
                       ? <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.8} />
                       : <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />}
                   </button>
-                  <span className="text-[11px] font-semibold tabular-nums text-text-500">{sectionIndex + 1}</span>
+                  <span className="whitespace-nowrap text-center text-[11px] font-semibold tabular-nums text-text-400">
+                    第 <strong className="text-[13px] font-bold text-text-600">{sectionIndex + 1}</strong> 章
+                  </span>
                   <button
                     type="button"
-                    className="min-w-0 truncate text-left text-xs font-semibold text-text-900"
+                    className="min-w-0 truncate pl-2 text-left text-sm font-[720] text-text-900"
                     onClick={() => setCollapsed((state) => ({ ...state, [section.id]: !sectionCollapsed }))}
                   >
                     {section.title}
@@ -492,11 +497,12 @@ export function DeckNavigator() {
 
                     {section.subsections.map((subsection, subsectionIndex) => (
                       <div key={subsection.id}>
-                        <div className="group/subsection grid min-h-8 grid-cols-[50px_minmax(0,1fr)_24px] items-center px-2 text-text-400">
-                          <span className="pl-5 text-[10px] font-semibold tabular-nums">
-                            {sectionIndex + 1}.{subsectionIndex + 1}
+                        <div className="group/subsection mx-1 grid min-h-[34px] grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 px-1 text-text-400">
+                          <span aria-hidden="true" />
+                          <span className="whitespace-nowrap text-center text-[9px] font-semibold tabular-nums">
+                            第 <strong className="text-[11px] font-[720] text-text-500">{sectionIndex + 1}.{subsectionIndex + 1}</strong> 节
                           </span>
-                          <span className="truncate text-[10px] font-medium">{subsection.title}</span>
+                          <span className="truncate pl-2 text-[10px] font-semibold">{subsection.title}</span>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <OverflowTrigger label={`${subsection.title}操作`} disabled={locked} />
