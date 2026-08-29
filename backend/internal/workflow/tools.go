@@ -162,6 +162,7 @@ type ToolResult struct {
 type CommandExecution struct {
 	Text            string
 	Status          string
+	Sensitive       bool
 	ExitCode        int
 	DurationMS      int64
 	OutputTruncated bool

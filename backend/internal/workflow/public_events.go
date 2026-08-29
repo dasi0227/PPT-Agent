@@ -237,12 +237,13 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 	if tool == "run_command" && result.Command != nil {
 		exitCode := result.Command.ExitCode
 		durationMS := result.Command.DurationMS
+		stdoutPreview, stderrPreview := publicCommandPreviews(result.Command)
 		payload.Command = &model.CommandProjection{
 			Text: sanitizePublicText(result.Command.Text, 4096), Status: result.Command.Status,
 			ExitCode: &exitCode, DurationMS: &durationMS,
 			OutputTruncated: result.Command.OutputTruncated,
-			StdoutPreview:   sanitizeCommandPreview(result.Command.Stdout, 8<<10),
-			StderrPreview:   sanitizeCommandPreview(result.Command.Stderr, 4<<10),
+			StdoutPreview:   stdoutPreview,
+			StderrPreview:   stderrPreview,
 		}
 		payload.Status = result.Command.Status
 	}
@@ -388,7 +389,8 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		if result.Command != nil {
 			switch result.Command.Status {
 			case "completed":
-				return "已执行 1 条命令", sanitizeCommandPreview(result.Command.Stdout, 8<<10), true
+				stdoutPreview, _ := publicCommandPreviews(result.Command)
+				return "已执行 1 条命令", stdoutPreview, true
 			case "blocked":
 				return "命令已被安全策略拦截", sanitizePublicText(result.Command.Reason, 300), true
 			default:
@@ -399,6 +401,23 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 	default:
 		return "", "", false
 	}
+}
+
+func publicCommandPreviews(command *CommandExecution) (string, string) {
+	if command == nil {
+		return "", ""
+	}
+	if command.Sensitive {
+		stdout, stderr := "", ""
+		if command.Stdout != "" {
+			stdout = "[REDACTED]"
+		}
+		if command.Stderr != "" {
+			stderr = "[REDACTED]"
+		}
+		return stdout, stderr
+	}
+	return sanitizeCommandPreview(command.Stdout, 8<<10), sanitizeCommandPreview(command.Stderr, 4<<10)
 }
 
 var terminalEscape = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)

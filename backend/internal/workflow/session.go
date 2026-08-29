@@ -50,11 +50,31 @@ type RunSession struct {
 	closed                bool
 }
 
+type RunSessionSnapshot struct {
+	RunID     string                    `json:"run_id"`
+	Artifacts []RunSessionArtifactState `json:"artifacts"`
+}
+
+type RunSessionArtifactState struct {
+	Ref           ArtifactRef `json:"ref"`
+	Source        string      `json:"source"`
+	Relative      string      `json:"relative"`
+	BeforeContent []byte      `json:"before_content"`
+	AfterContent  []byte      `json:"after_content"`
+	BeforeHash    string      `json:"before_hash"`
+	AfterHash     string      `json:"after_hash"`
+	Existed       bool        `json:"existed"`
+	Delete        bool        `json:"delete"`
+}
+
 // NewRunSession opens an isolated overlay rooted at the project directory.
 func NewRunSession(projectDir, runID string) (*RunSession, error) {
 	projectDir, err := filepath.Abs(projectDir)
 	if err != nil {
 		return nil, err
+	}
+	if existing := ActiveRunSession(projectDir); existing != nil && existing.runID == runID && !existing.closed {
+		return existing, nil
 	}
 	session := &RunSession{
 		projectDir: projectDir, runID: runID,
@@ -62,6 +82,65 @@ func NewRunSession(projectDir, runID string) (*RunSession, error) {
 	}
 	activeRunSessions.Store(projectDir, session)
 	return session, nil
+}
+
+func RestoreRunSession(projectDir, runID string, snapshot RunSessionSnapshot) (*RunSession, error) {
+	if snapshot.RunID != runID {
+		return nil, errors.New("run session snapshot belongs to another run")
+	}
+	session, err := NewRunSession(projectDir, runID)
+	if err != nil {
+		return nil, err
+	}
+	if len(session.artifacts) > 0 {
+		return session, nil
+	}
+	for _, item := range snapshot.Artifacts {
+		relative, resolveErr := session.resolveRelative(item.Ref)
+		if resolveErr != nil || relative != item.Relative {
+			session.Discard()
+			return nil, ErrInvalidArtifactPath
+		}
+		if hashBytes(item.BeforeContent) != item.BeforeHash || hashBytes(item.AfterContent) != item.AfterHash {
+			session.Discard()
+			return nil, errors.New("run session snapshot hash mismatch")
+		}
+		session.artifacts[relative] = sessionArtifact{
+			Ref: item.Ref, Source: item.Source, Relative: relative,
+			BeforeContent: append([]byte(nil), item.BeforeContent...),
+			AfterContent:  append([]byte(nil), item.AfterContent...),
+			BeforeHash:    item.BeforeHash, AfterHash: item.AfterHash,
+			Existed: item.Existed, Delete: item.Delete,
+		}
+	}
+	if err := session.ValidateBaselines(); err != nil {
+		session.Discard()
+		return nil, err
+	}
+	return session, nil
+}
+
+func (s *RunSession) Snapshot() *RunSessionSnapshot {
+	if s == nil || s.closed {
+		return nil
+	}
+	keys := make([]string, 0, len(s.artifacts))
+	for key := range s.artifacts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	snapshot := &RunSessionSnapshot{RunID: s.runID, Artifacts: make([]RunSessionArtifactState, 0, len(keys))}
+	for _, key := range keys {
+		entry := s.artifacts[key]
+		snapshot.Artifacts = append(snapshot.Artifacts, RunSessionArtifactState{
+			Ref: entry.Ref, Source: entry.Source, Relative: entry.Relative,
+			BeforeContent: append([]byte(nil), entry.BeforeContent...),
+			AfterContent:  append([]byte(nil), entry.AfterContent...),
+			BeforeHash:    entry.BeforeHash, AfterHash: entry.AfterHash,
+			Existed: entry.Existed, Delete: entry.Delete,
+		})
+	}
+	return snapshot
 }
 
 func ActiveRunSession(projectDir string) *RunSession {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -84,6 +85,10 @@ func TestPolicyDeniesDangerousFlagsAndPrograms(t *testing.T) {
 		"git checkout main",
 		"git -c core.pager=cat status",
 		"git diff --ext-diff",
+		"git diff --no-index notes.txt ../outside.txt",
+		"git diff HEAD",
+		"git log -p",
+		"git log --pretty=raw",
 		"rg --pre cat hello .",
 		"jq --rawfile secret notes.txt . data.json",
 		"find . -exec cat {} +",
@@ -117,6 +122,28 @@ func TestPolicyConfirmsSensitiveReadAndEdit(t *testing.T) {
 	}
 	if decision := policy.Evaluate(`sed -i '' 's/hello/goodbye/g' notes.txt`, false); decision.Outcome != Deny {
 		t.Fatalf("write must be denied outside execute mode: %#v", decision)
+	}
+	diff := policy.Evaluate("git diff -- .env", true)
+	if diff.Outcome != Confirm || diff.Mutates {
+		t.Fatalf("unexpected sensitive git diff decision: %#v", diff)
+	}
+}
+
+func TestPolicyRejectsGitRepositoryOutsideProjectRoot(t *testing.T) {
+	parent := t.TempDir()
+	if err := os.Mkdir(filepath.Join(parent, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(parent, "project")
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := NewPolicy(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision := policy.Evaluate("git status --short", true); decision.Outcome != Deny {
+		t.Fatalf("parent repository was accepted: %#v", decision)
 	}
 }
 
@@ -159,6 +186,28 @@ func TestExecutorPreservesPipelineAndAndSemantics(t *testing.T) {
 	}
 }
 
+func TestExecutorPipelineStopsUpstreamAfterDownstreamExits(t *testing.T) {
+	if _, err := os.Stat("/usr/bin/yes"); err != nil {
+		t.Skip("/usr/bin/yes is unavailable")
+	}
+	root := testProject(t)
+	executor, _ := NewExecutor(root)
+	executor.inventory["cat"] = "/usr/bin/yes"
+	executor.timeout = time.Second
+	result, err := executor.Execute(context.Background(), Graph{
+		Groups: []Pipeline{{Commands: []Command{
+			{Args: []string{"cat"}},
+			{Args: []string{"head", "-n", "1"}},
+		}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Stdout != "y\n" {
+		t.Fatalf("stdout=%q", result.Stdout)
+	}
+}
+
 func TestExecutorCancellation(t *testing.T) {
 	root := testProject(t)
 	executor, _ := NewExecutor(root)
@@ -167,6 +216,105 @@ func TestExecutorCancellation(t *testing.T) {
 	_, err := executor.Execute(ctx, Graph{Groups: []Pipeline{{Commands: []Command{{Args: []string{"find", ".", "-maxdepth", "8", "-print"}}}}}})
 	if err == nil {
 		t.Fatal("expected cancellation")
+	}
+}
+
+func TestExecutorStopsAtOutputLimit(t *testing.T) {
+	if _, err := os.Stat("/usr/bin/yes"); err != nil {
+		t.Skip("/usr/bin/yes is unavailable")
+	}
+	root := testProject(t)
+	executor, _ := NewExecutor(root)
+	executor.inventory["cat"] = "/usr/bin/yes"
+	started := time.Now()
+	result, err := executor.Execute(context.Background(), Graph{
+		Groups: []Pipeline{{Commands: []Command{{Args: []string{"cat"}}}}},
+	})
+	if ErrorCode(err) != CodeOutputLimit {
+		t.Fatalf("error=%v result=%+v", err, result)
+	}
+	if !result.OutputTruncated || len(result.Stdout) != stdoutLimit {
+		t.Fatalf("output was not capped: bytes=%d result=%+v", len(result.Stdout), result)
+	}
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("output limit did not stop the process promptly: %s", elapsed)
+	}
+}
+
+func TestExecutorTimeoutKillsProcess(t *testing.T) {
+	root := testProject(t)
+	executor, _ := NewExecutor(root)
+	tail := executor.inventory["tail"]
+	if tail == "" {
+		t.Skip("tail is unavailable")
+	}
+	executor.inventory["cat"] = tail
+	executor.timeout = 20 * time.Millisecond
+	result, err := executor.Execute(context.Background(), Graph{
+		Groups: []Pipeline{{Commands: []Command{{Args: []string{"cat", "-f", "notes.txt"}}}}},
+	})
+	if ErrorCode(err) != CodeTimeout || result.ExitCode != -1 {
+		t.Fatalf("error=%v result=%+v", err, result)
+	}
+}
+
+func TestExecutorRejectsMissingBinary(t *testing.T) {
+	root := testProject(t)
+	executor, _ := NewExecutor(root)
+	delete(executor.inventory, "cat")
+	_, err := executor.Execute(context.Background(), Graph{
+		Groups: []Pipeline{{Commands: []Command{{Args: []string{"cat", "notes.txt"}}}}},
+	})
+	if ErrorCode(err) != CodeNotAvailable {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestExecutorUsesMinimalEnvironmentAndAbsoluteInventory(t *testing.T) {
+	root := testProject(t)
+	executor, _ := NewExecutor(root)
+	home := t.TempDir()
+	env := executor.environment(home, "git")
+	for _, required := range []string{
+		"HOME=" + home,
+		"XDG_CONFIG_HOME=" + home,
+		"RIPGREP_CONFIG_PATH=",
+		"GIT_OPTIONAL_LOCKS=0",
+		"GIT_CONFIG_NOSYSTEM=1",
+	} {
+		if !slices.Contains(env, required) {
+			t.Fatalf("environment missing %q: %v", required, env)
+		}
+	}
+	for _, forbidden := range []string{"SSH_AUTH_SOCK=", "HTTP_PROXY=", "HTTPS_PROXY=", "GIT_CONFIG_COUNT="} {
+		for _, item := range env {
+			if strings.HasPrefix(item, forbidden) {
+				t.Fatalf("environment leaked %q in %v", forbidden, env)
+			}
+		}
+	}
+
+	shadow := filepath.Join(root, "cat")
+	if err := os.WriteFile(shadow, []byte("#!/bin/sh\nprintf shadowed\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	result, err := executor.Execute(context.Background(), Graph{
+		Groups: []Pipeline{{Commands: []Command{{Args: []string{"cat", "notes.txt"}}}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(result.Stdout, "shadowed") || !strings.Contains(result.Stdout, "hello") {
+		t.Fatalf("project-local binary shadowed inventory: %q", result.Stdout)
+	}
+	if !filepath.IsAbs(executor.inventory["cat"]) {
+		t.Fatalf("inventory path is not absolute: %q", executor.inventory["cat"])
+	}
+	pwd, err := executor.Execute(context.Background(), Graph{
+		Groups: []Pipeline{{Commands: []Command{{Args: []string{"pwd"}}}}},
+	})
+	if err != nil || pwd.Stdout != ".\n" {
+		t.Fatalf("project root leaked from pwd: stdout=%q err=%v", pwd.Stdout, err)
 	}
 }
 
@@ -195,6 +343,9 @@ func testProject(t *testing.T) string {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "data.json"), []byte(`{"ok":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	return root

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1134,6 +1136,37 @@ func (p *fakePrompter) Ask(_ context.Context, question model.QuestionAskedPayloa
 	}}}, "用户回答", nil
 }
 
+type commandPermissionPrompter struct {
+	decision string
+	err      error
+	clock    *manualRuntimeClock
+	wait     time.Duration
+	requests []model.CommandPermissionRequestedPayload
+}
+
+func (p *commandPermissionPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
+	return model.QuestionAnswer{}, "", errors.New("ordinary question was not expected")
+}
+
+func (p *commandPermissionPrompter) AskCommandPermission(
+	_ context.Context,
+	request model.CommandPermissionRequestedPayload,
+) (model.CommandPermissionAnswer, error) {
+	p.requests = append(p.requests, request)
+	if p.clock != nil {
+		p.clock.Advance(p.wait)
+	}
+	if p.err != nil {
+		return model.CommandPermissionAnswer{}, p.err
+	}
+	return model.CommandPermissionAnswer{
+		InteractionID: request.InteractionID,
+		CallID:        request.CallID,
+		CommandHash:   request.CommandHash,
+		Decision:      p.decision,
+	}, nil
+}
+
 type advancingQuestionPrompter struct {
 	clock  *manualRuntimeClock
 	wait   time.Duration
@@ -1800,6 +1833,359 @@ type traceRecorder struct {
 
 func (r *traceRecorder) Record(event TraceEvent) {
 	r.events = append(r.events, event)
+}
+
+func TestRunCommandAuditDoesNotRecordOutput(t *testing.T) {
+	dir := t.TempDir()
+	const secret = "command-output-must-not-enter-traces"
+	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte(secret+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	traces := &traceRecorder{}
+	events := &eventRecorder{}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("read-notes", "run_command", map[string]any{"command": "cat notes.txt"}),
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "command-audit", ProjectDir: dir,
+		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查项目文件"),
+		Emitter: events, Trace: traces,
+	})
+	if outcome.Status != StatusCompleted {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	raw, err := json.Marshal(traces.events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), secret) || strings.Contains(string(raw), `"stdout"`) || strings.Contains(string(raw), `"stderr"`) {
+		t.Fatalf("command output leaked into traces: %s", raw)
+	}
+	var audit *TraceEvent
+	for index := range traces.events {
+		if traces.events[index].Type == "command.audit" {
+			audit = &traces.events[index]
+			break
+		}
+	}
+	if audit == nil || audit.Payload["command_hash"] == "" || audit.Payload["policy_version"] == "" ||
+		audit.Payload["approval"] != "not_required" || audit.Payload["exit_code"] != 0 {
+		t.Fatalf("audit=%+v", audit)
+	}
+}
+
+func TestRunCommandBatchPreservesTimelineOrder(t *testing.T) {
+	dir := t.TempDir()
+	events := &eventRecorder{}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		{ToolCalls: []llm.ToolCall{
+			{ID: "command-1", Name: "run_command", Args: map[string]any{"command": "pwd"}},
+			{ID: "command-2", Name: "run_command", Args: map[string]any{"command": "pwd"}},
+			{ID: "command-3", Name: "run_command", Args: map[string]any{"command": "pwd"}},
+			{ID: "command-4", Name: "run_command", Args: map[string]any{"command": "pwd"}},
+		}},
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "command-order", ProjectDir: dir,
+		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查项目目录"),
+		Emitter: events,
+	})
+	if outcome.Status != StatusCompleted {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	started, completed := []string{}, []string{}
+	for _, event := range events.events {
+		switch event.kind {
+		case model.EventToolStarted:
+			started = append(started, event.payload.(model.ToolStartedPayload).CallID)
+		case model.EventToolCompleted:
+			completed = append(completed, event.payload.(model.ToolCompletedPayload).CallID)
+		}
+	}
+	want := []string{"command-1", "command-2", "command-3", "command-4"}
+	if !slices.Equal(started, want) || !slices.Equal(completed, want) {
+		t.Fatalf("started=%v completed=%v", started, completed)
+	}
+}
+
+func TestConcurrentBatchRespectsLimit(t *testing.T) {
+	var active atomic.Int32
+	var maximum atomic.Int32
+	started := make(chan struct{}, 4)
+	release := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		runConcurrentBatch(context.Background(), 4, 3, func(int) {
+			current := active.Add(1)
+			for {
+				observed := maximum.Load()
+				if current <= observed || maximum.CompareAndSwap(observed, current) {
+					break
+				}
+			}
+			started <- struct{}{}
+			<-release
+			active.Add(-1)
+		})
+		close(done)
+	}()
+	for index := 0; index < 3; index++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("three workers did not start")
+		}
+	}
+	select {
+	case <-started:
+		t.Fatal("fourth worker started before a concurrency slot was released")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("concurrent batch did not finish")
+	}
+	if maximum.Load() != 3 {
+		t.Fatalf("maximum concurrency=%d", maximum.Load())
+	}
+}
+
+func TestSensitiveRunCommandRequiresAllowOnceBeforeExecution(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	events := &eventRecorder{}
+	prompter := &commandPermissionPrompter{decision: "allow_once"}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "command-sensitive-allow", ProjectDir: dir,
+		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
+		Emitter: events, Prompter: prompter,
+	})
+	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
+		t.Fatalf("outcome=%+v requests=%+v", outcome, prompter.requests)
+	}
+	if events.count(model.EventToolStarted) != 1 || events.count(model.EventToolCompleted) != 1 {
+		t.Fatalf("events=%+v", events.events)
+	}
+}
+
+func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	events := &eventRecorder{}
+	prompter := &commandPermissionPrompter{decision: "deny"}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "command-sensitive-deny", ProjectDir: dir,
+		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
+		Emitter: events, Prompter: prompter,
+	})
+	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
+		t.Fatalf("outcome=%+v requests=%+v", outcome, prompter.requests)
+	}
+	if events.count(model.EventToolStarted) != 0 || events.count(model.EventToolCompleted) != 1 {
+		t.Fatalf("events=%+v", events.events)
+	}
+	for _, request := range agent.requests {
+		raw, _ := json.Marshal(request)
+		if strings.Contains(string(raw), "TOKEN=secret") {
+			t.Fatalf("denied command output reached the model: %s", raw)
+		}
+	}
+}
+
+func TestAllowedSedCommandCommitsOnlyAtSuccessfulCompletion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(path, []byte("hello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prompter := &commandPermissionPrompter{decision: "allow_once"}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("edit-notes", "run_command", map[string]any{
+			"command": `sed -i '' 's/hello/goodbye/g' notes.txt`,
+		}),
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "command-sed-commit", ProjectDir: dir,
+		Context:  testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改项目文件"),
+		Prompter: prompter,
+	})
+	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
+		t.Fatalf("outcome=%+v requests=%+v", outcome, prompter.requests)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || string(raw) != "goodbye\n" {
+		t.Fatalf("baseline=%q err=%v", raw, err)
+	}
+}
+
+func TestCanceledSedPermissionLeavesBaselineUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(path, []byte("hello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prompter := &commandPermissionPrompter{err: context.Canceled}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("edit-notes", "run_command", map[string]any{
+			"command": `sed -i '' 's/hello/goodbye/g' notes.txt`,
+		}),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "command-sed-cancel", ProjectDir: dir,
+		Context:  testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改项目文件"),
+		Prompter: prompter,
+	})
+	if outcome.Status != StatusFailed && outcome.Status != StatusCanceled {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || string(raw) != "hello\n" {
+		t.Fatalf("baseline=%q err=%v", raw, err)
+	}
+}
+
+func TestCommandPermissionWaitDoesNotConsumeActiveDuration(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clock := newManualRuntimeClock()
+	prompter := &commandPermissionPrompter{
+		decision: "deny",
+		clock:    clock,
+		wait:     3 * time.Hour,
+	}
+	events := &eventRecorder{}
+	checkpoints := &checkpointRecorder{}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
+		finishCall("finish"),
+	}}
+	runtime := NewRuntime(agent)
+	runtime.now = clock.Now
+	outcome := runtime.Run(context.Background(), RuntimeInput{
+		RunID: "command-permission-clock", ProjectDir: dir,
+		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
+		Emitter: events, Prompter: prompter, Checkpoint: checkpoints,
+		Budget: runtimeBudgetWithDuration(time.Hour),
+	})
+	if outcome.Status != StatusCompleted {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if got := finishedDuration(t, events); got != 0 {
+		t.Fatalf("command permission wait leaked into public duration: %dms", got)
+	}
+}
+
+func TestPendingCommandRecoveryRestoresExistingSessionOverlay(t *testing.T) {
+	dir := t.TempDir()
+	notesPath := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(notesPath, []byte("before\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const runID = "command-recovery"
+	session, err := NewRunSession(dir, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Write(projectFileRef("notes.txt"), "run_command", []byte("staged\n")); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := session.Snapshot()
+	session.Discard()
+
+	args := map[string]any{"command": "cat .env"}
+	decision := (projectCommandTool{}).Preflight(context.Background(), DomainToolInput{
+		Args: args, CallID: "read-env", ProjectDir: dir,
+		RunID: runID, Mode: model.ModeExecute, Phase: PhaseExecuting,
+	})
+	if decision.Outcome != "confirm" {
+		t.Fatalf("decision=%+v", decision)
+	}
+	checkpoint := &RuntimeCheckpoint{
+		RunID: runID, LoopID: "loop-recovery",
+		Phase: PhaseWaitingInput, ResumePhase: PhaseExecuting, Mode: model.ModeExecute,
+		PendingCommand: &PendingCommandApproval{
+			InteractionID: "cmdperm_read-env",
+			CallID:        "read-env",
+			Command:       decision.Command,
+			Args:          args,
+			CommandHash:   decision.CommandHash,
+			ReasonCode:    decision.ReasonCode,
+			Reason:        decision.PublicReason,
+			Mutates:       decision.Mutates,
+			TargetPaths:   decision.TargetPaths,
+			PreimageHash:  decision.PreimageHash,
+			ResumePhase:   PhaseExecuting,
+		},
+		Session: snapshot,
+	}
+	prompter := &commandPermissionPrompter{decision: "allow_once"}
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: runID, ProjectDir: dir,
+		Context:          testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "继续运行"),
+		Prompter:         prompter,
+		ResumeCheckpoint: checkpoint,
+	})
+	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
+		t.Fatalf("outcome=%+v requests=%+v", outcome, prompter.requests)
+	}
+	raw, err := os.ReadFile(notesPath)
+	if err != nil || string(raw) != "staged\n" {
+		t.Fatalf("restored overlay was not committed: raw=%q err=%v", raw, err)
+	}
+}
+
+func TestDeniedRunCommandNeverEmitsToolStarted(t *testing.T) {
+	dir := t.TempDir()
+	events := &eventRecorder{}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("denied", "run_command", map[string]any{"command": "curl https://example.com"}),
+		finishCall("finish"),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "command-denied", ProjectDir: dir,
+		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查项目文件"),
+		Emitter: events,
+	})
+	if outcome.Status != StatusCompleted {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if events.count(model.EventToolStarted) != 0 || events.count(model.EventToolCompleted) != 1 {
+		t.Fatalf("denied command lifecycle=%+v", events.events)
+	}
+	completed := events.events[0].payload
+	for _, event := range events.events {
+		if event.kind == model.EventToolCompleted {
+			completed = event.payload
+			break
+		}
+	}
+	payload, ok := completed.(model.ToolCompletedPayload)
+	if !ok || payload.Status != "blocked" || payload.Command == nil || payload.Command.Status != "blocked" {
+		t.Fatalf("completed payload=%+v", completed)
+	}
 }
 
 func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {

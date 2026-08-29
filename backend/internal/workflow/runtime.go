@@ -88,6 +88,7 @@ type RuntimeCheckpoint struct {
 	WaitingDurationMS    int64                         `json:"waiting_duration_ms"`
 	WaitingQuestionID    string                        `json:"waiting_question_id,omitempty"`
 	PendingCommand       *PendingCommandApproval       `json:"pending_command,omitempty"`
+	Session              *RunSessionSnapshot           `json:"session,omitempty"`
 	ProviderContinuation *ProviderContinuationSnapshot `json:"provider_continuation,omitempty"`
 	CompletionFailures   int                           `json:"completion_failures"`
 	CreatedAt            int64                         `json:"created_at"`
@@ -368,7 +369,13 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	if state.mode == model.ModeExecute {
 		// Typed tools write to an isolated RunSession overlay. Runtime commits
 		// the complete overlay only after the completion and commit checks pass.
-		session, err := NewRunSession(input.ProjectDir, input.RunID)
+		var session *RunSession
+		var err error
+		if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.Session != nil {
+			session, err = RestoreRunSession(input.ProjectDir, input.RunID, *input.ResumeCheckpoint.Session)
+		} else {
+			session, err = NewRunSession(input.ProjectDir, input.RunID)
+		}
 		if err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
@@ -592,6 +599,7 @@ func (r *Runtime) executeToolBatch(
 	replayed := make([]bool, len(calls))
 	emitTerminal := make([]bool, len(calls))
 	decisions := make([]*ToolDecision, len(calls))
+	approvals := make([]string, len(calls))
 	projector := ToolPublicProjector{ProjectDir: input.ProjectDir}
 	planStepID := currentPlanStepID(state.plan)
 	var lifecycleMu sync.Mutex
@@ -613,11 +621,22 @@ func (r *Runtime) executeToolBatch(
 			decision = &value
 		}
 		decisions[index] = decision
+		if call.Name == "run_command" {
+			approvals[index] = "not_required"
+			recordTrace(input.Trace, state.runID, "command.policy_decided", map[string]any{
+				"call_id": call.ID, "command_hash": decision.CommandHash,
+				"command": decision.Command, "policy_version": commandexec.PolicyVersion,
+				"outcome": decision.Outcome, "reason_code": decision.ReasonCode,
+				"target_paths": append([]string(nil), decision.TargetPaths...),
+				"mutates":      decision.Mutates,
+			})
+		}
 		switch decision.Outcome {
 		case "deny":
 			results[index] = blockedCommandResult(*decision)
 			emitTerminal[index] = true
 		case "confirm":
+			approvals[index] = "pending"
 			if confirmIndex >= 0 {
 				confirmIndex = -2
 			} else {
@@ -668,6 +687,7 @@ func (r *Runtime) executeToolBatch(
 					ReasonCode: decision.ReasonCode, Reason: decision.PublicReason,
 				})
 				if err != nil {
+					approvals[0] = "not_answered"
 					results[0] = failedToolResult(CodeCanceled, err.Error(), false)
 					emitTerminal[0] = true
 				} else {
@@ -676,29 +696,34 @@ func (r *Runtime) executeToolBatch(
 					state.pendingCommand = nil
 					_ = r.saveCheckpoint(ctx, input, state, checkpointAfterCommandPermission, "")
 					if answer.InteractionID != interactionID || answer.CallID != call.ID ||
-						answer.CommandHash != decision.CommandHash {
+						answer.CommandHash != decision.CommandHash ||
+						(answer.Decision != "allow_once" && answer.Decision != "deny") {
+						approvals[0] = "invalid"
 						results[0] = failedToolResult(CodeInvalidControlCall, "command permission answer does not match the pending command", false)
 						emitTerminal[0] = true
 					} else if answer.Decision == "deny" {
+						approvals[0] = "deny"
 						results[0] = blockedCommandResult(*decision)
 						results[0].Summary = "command permission denied"
 						results[0].Command.Reason = "用户拒绝了本次命令执行。"
 						emitTerminal[0] = true
+					} else {
+						approvals[0] = "allow_once"
 					}
 				}
 			}
 		}
 	}
-	execute := func(index int) {
+	prepare := func(index int) bool {
 		if emitTerminal[index] {
-			return
+			return false
 		}
 		call := calls[index]
 		replay, shouldExecute := r.acquireToolCall(ctx, input, state, call)
 		if !shouldExecute {
 			results[index] = replay
 			replayed[index] = replay.Code != CodeCanceled
-			return
+			return false
 		}
 		started[index] = true
 		lifecycleMu.Lock()
@@ -708,10 +733,21 @@ func (r *Runtime) executeToolBatch(
 				input.Emitter.Emit(model.EventToolStarted, event)
 			}
 		}
-		recordTrace(input.Trace, state.runID, "tool.called", map[string]any{
-			"loop_id": state.loopID, "call_id": call.ID, "tool": call.Name, "args": call.Args,
-		})
+		calledTrace := map[string]any{
+			"loop_id": state.loopID, "call_id": call.ID, "tool": call.Name,
+		}
+		if call.Name == "run_command" && decisions[index] != nil {
+			calledTrace["command_hash"] = decisions[index].CommandHash
+			calledTrace["command"] = decisions[index].Command
+		} else {
+			calledTrace["args"] = call.Args
+		}
+		recordTrace(input.Trace, state.runID, "tool.called", calledTrace)
 		lifecycleMu.Unlock()
+		return true
+	}
+	runPrepared := func(index int) {
+		call := calls[index]
 		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
 			Args: call.Args, CallID: call.ID, Context: state.pack, ProjectDir: input.ProjectDir, RunID: input.RunID,
 			Session: state.tx, Scope: state.scope, Phase: state.phase,
@@ -721,11 +757,24 @@ func (r *Runtime) executeToolBatch(
 			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
 		}
 	}
+	execute := func(index int) {
+		if prepare(index) {
+			runPrepared(index)
+		}
+	}
 	switch {
 	case batchIsIndependentReads(calls):
 		runConcurrentBatch(ctx, len(calls), 4, execute)
 	case batchIsAllowedCommands(calls, decisions, emitTerminal):
-		runConcurrentBatch(ctx, len(calls), 3, execute)
+		prepared := make([]bool, len(calls))
+		for index := range calls {
+			prepared[index] = prepare(index)
+		}
+		runConcurrentBatch(ctx, len(calls), 3, func(index int) {
+			if prepared[index] {
+				runPrepared(index)
+			}
+		})
 	case batchIsIndependentRenders(calls):
 		runConcurrentBatch(ctx, len(calls), 3, execute)
 	default:
@@ -765,12 +814,19 @@ func (r *Runtime) executeToolBatch(
 		if replayed[index] {
 			recordTrace(input.Trace, state.runID, "tool.replayed", map[string]any{"call_id": call.ID, "tool": call.Name})
 		}
-		recordTrace(input.Trace, state.runID, "tool.completed", map[string]any{
+		toolTrace := map[string]any{
 			"loop_id": state.loopID, "call_id": call.ID, "tool": call.Name,
-			"ok": result.OK, "summary": result.Summary, "data": result.Data,
+			"ok": result.OK, "summary": result.Summary,
 			"issues": result.Issues, "changed_targets": result.ChangedTargets,
 			"retryable": result.Retryable, "code": result.Code,
-		})
+		}
+		if call.Name != "run_command" {
+			toolTrace["data"] = result.Data
+		}
+		recordTrace(input.Trace, state.runID, "tool.completed", toolTrace)
+		if call.Name == "run_command" && decisions[index] != nil {
+			recordCommandAudit(input.Trace, state.runID, call.ID, *decisions[index], approvals[index], result)
+		}
 		state.latestToolResults = append(state.latestToolResults, checkpointToolResult(call, result))
 		if len(state.latestToolResults) > 12 {
 			state.latestToolResults = state.latestToolResults[len(state.latestToolResults)-12:]
@@ -938,6 +994,37 @@ func blockedCommandResult(decision ToolDecision) ToolResult {
 		Text: decision.Command, Status: "blocked", Reason: decision.PublicReason,
 	}
 	return result
+}
+
+func recordCommandAudit(
+	recorder TraceRecorder,
+	runID string,
+	callID string,
+	decision ToolDecision,
+	approval string,
+	result ToolResult,
+) {
+	exitCode := -1
+	durationMS := int64(0)
+	truncated := false
+	afterHash := ""
+	if result.Command != nil {
+		exitCode = result.Command.ExitCode
+		durationMS = result.Command.DurationMS
+		truncated = result.Command.OutputTruncated
+	}
+	if len(result.ChangedTargets) > 0 {
+		afterHash = result.ChangedTargets[0].Hash
+	}
+	recordTrace(recorder, runID, "command.audit", map[string]any{
+		"call_id": callID, "command_hash": decision.CommandHash,
+		"command": decision.Command, "policy_version": commandexec.PolicyVersion,
+		"outcome": decision.Outcome, "reason_code": decision.ReasonCode,
+		"target_paths": append([]string(nil), decision.TargetPaths...),
+		"approval":     approval, "duration_ms": durationMS, "exit_code": exitCode,
+		"timed_out": result.Code == commandexec.CodeTimeout, "truncated": truncated,
+		"before_hash": decision.PreimageHash, "after_hash": afterHash,
+	})
 }
 
 func batchIsIndependentRenders(calls []llm.ToolCall) bool {
@@ -1663,7 +1750,7 @@ func (state *RunState) checkpoint(questionID string, now time.Time) RuntimeCheck
 		ActiveDurationMS:  state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS: state.waitingDurationAt(now).Milliseconds(),
 		WaitingQuestionID: questionID, CompletionFailures: state.gateCount,
-		PendingCommand: state.pendingCommand,
+		PendingCommand: state.pendingCommand, Session: state.tx.Snapshot(),
 	}
 }
 

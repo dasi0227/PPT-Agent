@@ -20,3 +20,7 @@ Batching rules:
 - Independent read-only calls may be requested together when all calls are in scope.
 - Mutations must respect resource dependencies. Do not mix unrelated targets unless the disclosed tool semantics support a clear ordered batch.
 - mutate_ppt executes exactly one closed operation per call. Use Runtime-issued stable IDs and never create formal IDs in model output.
+- run_command is a restricted project-local inspection tool, not a general shell. Use only the commands and syntax stated in its disclosed schema; never attempt shell -c, redirection, interpreters, package managers, network access, arbitrary executables, or Git mutation.
+- Use read_ppt for PPT resources changed in the current Run. run_command reads project files from the project tree; its only write form is the exact single-file sed -i substitution accepted by Runtime in execute mode.
+- A command that requires authorization must be the only tool call in the response. Runtime owns classification and allow-once approval; never claim approval, request a broader permission, or retry a denied command unchanged.
+- Independent run_command reads may be batched. Keep approval-bound commands and every sed -i call separate from pipelines, && lists, and other tool calls.

@@ -140,6 +140,107 @@ func (r blockingRunner) Run(ctx context.Context, _ workflow.EventEmitter, _ run.
 	return workflow.StructuredOutcome{Status: workflow.StatusCanceled, Code: workflow.CodeCanceled}
 }
 
+type commandPermissionRunner struct {
+	runID string
+}
+
+func (r commandPermissionRunner) Run(
+	ctx context.Context,
+	_ workflow.EventEmitter,
+	_ run.Checkpointer,
+	prompter run.Prompter,
+) workflow.StructuredOutcome {
+	commandPrompter, ok := prompter.(interface {
+		AskCommandPermission(context.Context, model.CommandPermissionRequestedPayload) (model.CommandPermissionAnswer, error)
+	})
+	if !ok {
+		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "PROMPTER_MISSING"}
+	}
+	answer, err := commandPrompter.AskCommandPermission(ctx, model.CommandPermissionRequestedPayload{
+		PublicEventBase: model.NewPublicEventBase(r.runID),
+		InteractionID:   "cmdperm_http-call",
+		CallID:          "http-call",
+		Command:         "cat .env",
+		CommandHash:     "http-hash",
+		ReasonCode:      "COMMAND_SENSITIVE_READ",
+		Reason:          "sensitive file",
+	})
+	if err != nil || answer.Decision != "allow_once" {
+		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "COMMAND_PERMISSION_FAILED"}
+	}
+	return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
+}
+
+func TestCommandPermissionHTTPAuthority(t *testing.T) {
+	srv, _ := setupProjectThreadServerWithFactory(t, func(runModel model.Run, _ model.CreateRunParams, _ model.Project) run.Execution {
+		return commandPermissionRunner{runID: runModel.ID}
+	})
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Command permission","language":"zh-CN"}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
+	}
+	var project map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &project)
+	projectID := project["id"].(string)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/threads", `{"title":"Command permission"}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create thread: %d %s", resp.Code, resp.Body.String())
+	}
+	var thread map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &thread)
+	threadID := thread["id"].(string)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{
+		"client_request_id":"req-command-permission",
+		"scope":{"artifact":"spec","level":"deck"},
+		"mode":"execute",
+		"instruction":"检查敏感文件"
+	}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create run: %d %s", resp.Code, resp.Body.String())
+	}
+	var runModel map[string]any
+	_ = json.Unmarshal(resp.Body.Bytes(), &runModel)
+	runID := runModel["id"].(string)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/"+runID, "")
+		if strings.Contains(resp.Body.String(), `"status":"waiting"`) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !strings.Contains(resp.Body.String(), `"status":"waiting"`) {
+		t.Fatalf("run did not wait for permission: %s", resp.Body.String())
+	}
+
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/command-permission", `{`)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("malformed permission: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/command-permission",
+		`{"interaction_id":"cmdperm_http-call","call_id":"http-call","command_hash":"stale","decision":"allow_once"}`)
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "COMMAND_PERMISSION_REJECTED") {
+		t.Fatalf("stale permission: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/command-permission",
+		`{"interaction_id":"cmdperm_http-call","call_id":"http-call","command_hash":"http-hash","decision":"allow_once"}`)
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("valid permission: %d %s", resp.Code, resp.Body.String())
+	}
+
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/"+runID, "")
+		if strings.Contains(resp.Body.String(), `"status":"done"`) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !strings.Contains(resp.Body.String(), `"status":"done"`) {
+		t.Fatalf("authorized run did not complete: %d %s", resp.Code, resp.Body.String())
+	}
+}
+
 func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 	started := make(chan struct{}, 1)
 	srv, _ := setupProjectThreadServerWithFactory(t, func(model.Run, model.CreateRunParams, model.Project) run.Execution {

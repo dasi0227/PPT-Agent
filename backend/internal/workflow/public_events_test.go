@@ -107,3 +107,20 @@ func TestSanitizePublicTextRedactsInternalTerms(t *testing.T) {
 		})
 	}
 }
+
+func TestSensitiveCommandPreviewsAreRedacted(t *testing.T) {
+	stdout, stderr := publicCommandPreviews(&CommandExecution{
+		Sensitive: true,
+		Stdout:    "TOKEN=secret\n",
+		Stderr:    "private diagnostic",
+	})
+	if stdout != "[REDACTED]" || stderr != "[REDACTED]" {
+		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
+	}
+	stdout, stderr = publicCommandPreviews(&CommandExecution{
+		Stdout: "\x1b[31mvisible\x1b[0m",
+	})
+	if stdout != "visible" || stderr != "" {
+		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
+	}
+}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,6 +66,8 @@ func (e *Executor) Execute(ctx context.Context, graph Graph) (Result, error) {
 	truncated := false
 	for _, pipeline := range graph.Groups {
 		result, err := e.executePipeline(ctx, pipeline)
+		result.Stdout = e.sanitizeOutput(result.Stdout)
+		result.Stderr = e.sanitizeOutput(result.Stderr)
 		combinedOut.WriteString(result.Stdout)
 		combinedErr.WriteString(result.Stderr)
 		exitCode = result.ExitCode
@@ -123,27 +124,38 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 	var stdout, stderr cappedBuffer
 	stdout.limit = stdoutLimit
 	stderr.limit = stderrLimit
+	outputLimitReached := make(chan struct{})
+	var outputLimitOnce sync.Once
+	onOutputLimit := func() {
+		outputLimitOnce.Do(func() { close(outputLimitReached) })
+	}
+	stdout.onLimit = onOutputLimit
+	stderr.onLimit = onOutputLimit
 	commands := make([]*exec.Cmd, len(pipeline.Commands))
-	pipes := make([]*io.PipeWriter, 0, len(pipeline.Commands)-1)
-	var previousReader *io.PipeReader
+	pipeEnds := make([]*os.File, 0, (len(pipeline.Commands)-1)*2)
+	var previousReader *os.File
 	for index, command := range pipeline.Commands {
 		binary := e.inventory[command.Args[0]]
 		if binary == "" {
+			closePipeEnds(pipeEnds)
 			return Result{}, commandError(CodeNotAvailable, command.Args[0]+" is not available on this host")
 		}
 		cmd := exec.Command(binary, command.Args[1:]...)
 		cmd.Dir = e.root
 		cmd.Env = e.environment(home, command.Args[0])
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		if previousReader != nil {
 			cmd.Stdin = previousReader
 		}
 		if index == len(pipeline.Commands)-1 {
 			cmd.Stdout = &stdout
 		} else {
-			reader, writer := io.Pipe()
+			reader, writer, pipeErr := os.Pipe()
+			if pipeErr != nil {
+				closePipeEnds(pipeEnds)
+				return Result{}, commandError(CodeExecFailed, pipeErr.Error())
+			}
 			cmd.Stdout = writer
-			pipes = append(pipes, writer)
+			pipeEnds = append(pipeEnds, reader, writer)
 			previousReader = reader
 		}
 		cmd.Stderr = &stderr
@@ -153,19 +165,24 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 	started := time.Now()
 	startedCommands := []*exec.Cmd{}
 	for index, cmd := range commands {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if index > 0 {
+			cmd.SysProcAttr.Pgid = commands[0].Process.Pid
+		}
 		if err := cmd.Start(); err != nil {
 			killCommands(startedCommands)
+			closePipeEnds(pipeEnds)
 			return Result{Duration: time.Since(started)}, commandError(CodeExecFailed, err.Error())
 		}
 		startedCommands = append(startedCommands, cmd)
-		if index > 0 {
-			_ = syscall.Setpgid(cmd.Process.Pid, commands[0].Process.Pid)
-		}
 	}
+	closePipeEnds(pipeEnds)
 	done := make(chan struct{})
 	go func() {
 		select {
 		case <-ctx.Done():
+			killCommands(startedCommands)
+		case <-outputLimitReached:
 			killCommands(startedCommands)
 		case <-done:
 		}
@@ -174,9 +191,6 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 	waitErrors := make([]error, len(commands))
 	for index, cmd := range commands {
 		waitErrors[index] = cmd.Wait()
-		if index < len(pipes) {
-			_ = pipes[index].Close()
-		}
 	}
 	close(done)
 	result := Result{
@@ -195,10 +209,7 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 		result.ExitCode = -1
 		return result, commandError(CodeOutputLimit, "command output exceeded the configured limit")
 	}
-	for _, waitErr := range waitErrors {
-		if waitErr == nil {
-			continue
-		}
+	if waitErr := waitErrors[len(waitErrors)-1]; waitErr != nil {
 		var exitErr *exec.ExitError
 		if errors.As(waitErr, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
@@ -207,6 +218,16 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 		return result, commandError(CodeExecFailed, waitErr.Error())
 	}
 	return result, nil
+}
+
+func (e *Executor) sanitizeOutput(value string) string {
+	return strings.ReplaceAll(value, e.root, ".")
+}
+
+func closePipeEnds(pipeEnds []*os.File) {
+	for _, pipe := range pipeEnds {
+		_ = pipe.Close()
+	}
 }
 
 func (e *Executor) environment(home, command string) []string {
@@ -253,6 +274,7 @@ type cappedBuffer struct {
 	data      bytes.Buffer
 	limit     int
 	truncated bool
+	onLimit   func()
 }
 
 func (b *cappedBuffer) Write(value []byte) (int, error) {
@@ -266,7 +288,12 @@ func (b *cappedBuffer) Write(value []byte) (int, error) {
 		_, _ = b.data.Write(value[:remaining])
 	}
 	if remaining < len(value) {
-		b.truncated = true
+		if !b.truncated {
+			b.truncated = true
+			if b.onLimit != nil {
+				b.onLimit()
+			}
+		}
 	}
 	return len(value), nil
 }

@@ -70,3 +70,40 @@ func TestPlanApprovalReplyIsIdempotentOnlyForIdenticalSubmission(t *testing.T) {
 		t.Fatal("conflicting replay was accepted")
 	}
 }
+
+func TestCommandPermissionReplyRequiresExactMatchAndIsIdempotent(t *testing.T) {
+	queue := NewInputQueue()
+	queue.MarkCommandPermission(model.CommandPermissionRequestedPayload{
+		InteractionID: "command-1",
+		CallID:        "call-1",
+		Command:       "cat .env",
+		CommandHash:   "hash-1",
+	})
+	answer := model.CommandPermissionAnswer{
+		InteractionID: "command-1",
+		CallID:        "call-1",
+		CommandHash:   "hash-1",
+		Decision:      "allow_once",
+	}
+	mismatch := answer
+	mismatch.CommandHash = "hash-2"
+	if queue.ReplyCommandPermission(mismatch) {
+		t.Fatal("accepted a mismatched command hash")
+	}
+	invalid := answer
+	invalid.Decision = "allow_always"
+	if queue.ReplyCommandPermission(invalid) {
+		t.Fatal("accepted an unsupported command decision")
+	}
+	if !queue.ReplyCommandPermission(answer) {
+		t.Fatal("first command permission answer was rejected")
+	}
+	if !queue.ReplyCommandPermission(answer) {
+		t.Fatal("identical command permission replay was not idempotent")
+	}
+	changed := answer
+	changed.Decision = "deny"
+	if queue.ReplyCommandPermission(changed) {
+		t.Fatal("conflicting command permission replay was accepted")
+	}
+}

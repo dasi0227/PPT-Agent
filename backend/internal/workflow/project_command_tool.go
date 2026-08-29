@@ -140,6 +140,7 @@ func commandResultData(result commandexec.Result) map[string]any {
 func publicCommandExecution(decision commandexec.Decision, result commandexec.Result, status, reason string) *CommandExecution {
 	return &CommandExecution{
 		Text: decision.Display, Status: status, ExitCode: result.ExitCode,
+		Sensitive:  decision.ReasonCode == "SENSITIVE_PROJECT_READ",
 		DurationMS: result.DurationMS(), OutputTruncated: result.OutputTruncated,
 		Stdout: result.Stdout, Stderr: result.Stderr, Reason: reason,
 	}

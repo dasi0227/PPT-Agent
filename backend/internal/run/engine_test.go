@@ -718,6 +718,69 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	}
 }
 
+func TestSchedulerCommandPermissionAuthority(t *testing.T) {
+	store := newMemStore()
+	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	asking := make(chan struct{})
+	execution := scriptRunner(func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
+		commandPrompter, ok := prompter.(interface {
+			AskCommandPermission(context.Context, model.CommandPermissionRequestedPayload) (model.CommandPermissionAnswer, error)
+		})
+		if !ok {
+			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "PROMPTER_MISSING"}
+		}
+		close(asking)
+		answer, err := commandPrompter.AskCommandPermission(ctx, model.CommandPermissionRequestedPayload{
+			PublicEventBase: model.NewPublicEventBase("command-permission"),
+			InteractionID:   "cmdperm_call-1",
+			CallID:          "call-1",
+			Command:         "cat .env",
+			CommandHash:     "hash-1",
+			ReasonCode:      "COMMAND_SENSITIVE_READ",
+			Reason:          "sensitive file",
+		})
+		if err != nil || answer.Decision != "allow_once" {
+			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_PERMISSION"}
+		}
+		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
+			PublicEventBase: model.NewPublicEventBase("command-permission"), MessageID: "m1", Text: "done",
+		})
+		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("command-permission", 10, nil, nil))
+		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
+	})
+	if _, err := engine.Start(context.Background(), testRun("command-permission"), execution); err != nil {
+		t.Fatal(err)
+	}
+	<-asking
+	waitRunStatus(t, store, "command-permission", model.RunWaiting)
+	mismatch := model.CommandPermissionAnswer{
+		InteractionID: "cmdperm_call-1", CallID: "call-1",
+		CommandHash: "stale-hash", Decision: "allow_once",
+	}
+	if err := engine.SubmitCommandPermission(context.Background(), "command-permission", mismatch); !errors.Is(err, ErrReplyMismatch) {
+		t.Fatalf("stale command permission err=%v", err)
+	}
+	answer := mismatch
+	answer.CommandHash = "hash-1"
+	if err := engine.SubmitCommandPermission(context.Background(), "command-permission", answer); err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, store, "command-permission", model.RunDone)
+	events, _ := store.EventsSince(context.Background(), "command-permission", 0)
+	requestedIndex, answeredIndex := -1, -1
+	for index, event := range events {
+		switch event.Type {
+		case model.EventCommandPermissionRequested:
+			requestedIndex = index
+		case model.EventCommandPermissionAnswered:
+			answeredIndex = index
+		}
+	}
+	if requestedIndex < 0 || answeredIndex <= requestedIndex {
+		t.Fatalf("command permission events are missing or unordered: %+v", events)
+	}
+}
+
 func testRun(id string) model.Run {
 	return model.Run{
 		ID: id, ThreadID: "t1", ProjectID: "p1",

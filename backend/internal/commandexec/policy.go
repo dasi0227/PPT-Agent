@@ -401,6 +401,11 @@ func (p *Policy) validateGit(command *Command) ([]string, bool, bool, string, er
 	if len(command.Args) < 2 || !oneOf(command.Args[1], "status", "diff", "log") {
 		return nil, false, false, "", commandError(CodeNotAllowed, "only git status, git diff, and git log are supported")
 	}
+	gitDir := filepath.Join(p.guard.Root(), ".git")
+	gitInfo, err := os.Lstat(gitDir)
+	if err != nil || !gitInfo.IsDir() || gitInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, false, false, "", commandError(CodePathInvalid, "Git commands require a repository rooted inside the project")
+	}
 	for _, arg := range command.Args[2:] {
 		if arg == "-c" || strings.HasPrefix(arg, "-c=") || strings.HasPrefix(arg, "--config-env") ||
 			strings.HasPrefix(arg, "--exec-path") || strings.HasPrefix(arg, "--git-dir") ||
@@ -421,11 +426,49 @@ func (p *Policy) validateGit(command *Command) ([]string, bool, bool, string, er
 			command.Args = append(command.Args, "--porcelain=v1")
 		}
 	case "diff":
+		paths := []string{}
+		sensitive := false
+		afterSeparator := false
+		for _, arg := range command.Args[2:] {
+			if arg == "--" {
+				if afterSeparator {
+					return nil, false, false, "", commandError(CodeFlagDenied, "git diff accepts one path separator")
+				}
+				afterSeparator = true
+				continue
+			}
+			if !afterSeparator {
+				if !oneOf(arg,
+					"--cached", "--staged", "--stat", "--shortstat", "--numstat",
+					"--name-only", "--name-status", "--check", "--color=never",
+				) {
+					return nil, false, false, "", commandError(CodeFlagDenied, "unsupported git diff option "+arg)
+				}
+				continue
+			}
+			path, pathErr := p.guard.Validate(arg, false)
+			if pathErr != nil {
+				return nil, false, false, "", pathErr
+			}
+			paths = append(paths, path)
+			sensitive = sensitive || IsSensitivePath(path)
+		}
 		command.Args = append(command.Args[:2], append([]string{"--no-ext-diff", "--no-textconv"}, command.Args[2:]...)...)
+		if !afterSeparator {
+			command.Args = append(command.Args,
+				"--", ".",
+				":(exclude)**/.env*", ":(exclude)**/*.key", ":(exclude)**/*.pem",
+			)
+		}
+		return paths, sensitive, false, "", nil
 	case "log":
 		for _, arg := range command.Args[2:] {
 			if strings.HasPrefix(arg, "--format") || strings.HasPrefix(arg, "--pretty") || strings.HasPrefix(arg, "--max-count") || arg == "-n" {
 				return nil, false, false, "", commandError(CodeFlagDenied, "git log output and count are Runtime-controlled")
+			}
+			if !oneOf(arg, "--all", "--branches", "--tags", "--first-parent", "--merges", "--no-merges", "--reverse") &&
+				!strings.HasPrefix(arg, "--since=") && !strings.HasPrefix(arg, "--until=") {
+				return nil, false, false, "", commandError(CodeFlagDenied, "unsupported git log option "+arg)
 			}
 		}
 		command.Args = append(command.Args[:2], append([]string{"--max-count=50", "--format=%h %s"}, command.Args[2:]...)...)
