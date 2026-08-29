@@ -25,13 +25,17 @@ function hasString(data: Record<string, unknown>, key: string): boolean {
 }
 
 export function parseSSEEvent(eventName: string, raw: string, id?: string): SSEEvent | null {
-  if (!SSE_EVENT_NAMES.includes(eventName as SSEEventName)) return null;
   let data: unknown;
   try {
     data = JSON.parse(raw) as unknown;
   } catch {
     return null;
   }
+  return parsePublicEvent(eventName, data, id);
+}
+
+export function parsePublicEvent(eventName: string, data: unknown, id?: string): SSEEvent | null {
+  if (!SSE_EVENT_NAMES.includes(eventName as SSEEventName)) return null;
   if (!isRecord(data)) return null;
   if (!validBase(data) || containsForbiddenField(data) || !validPayload(eventName as SSEEventName, data)) return null;
   return { id, event: eventName as SSEEventName, data } as unknown as SSEEvent;
@@ -154,7 +158,7 @@ function validPublicTarget(value: unknown): boolean {
       && validOptionalNonNegativeInteger(value.deletions)
       && validOptionalSafeString(value.local_path)
       && validOptionalSafeString(value.open_url)
-      && ['outline', 'design'].includes(String(value.part));
+      && ['deck', 'outline', 'design'].includes(String(value.part));
   }
   return value.type === 'slide'
     && hasString(value, 'slide_id')

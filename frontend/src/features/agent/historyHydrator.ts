@@ -2,9 +2,8 @@ import type {
   PlanState,
   RunMode,
   RunScope,
-  SSEEvent,
-  SSEEventName,
 } from '../../api/types';
+import { parsePublicEvent } from '../../api/sse';
 import { reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
 
 export interface HistoryEntry {
@@ -30,25 +29,6 @@ export interface HistorySessionState {
   mode?: RunMode;
   pendingQuestion: { id: string; prompt: string } | null;
 }
-
-const publicHistoryEvents = new Set<SSEEventName>([
-  'plan.updated',
-  'plan.approval_requested',
-  'plan.approval_answered',
-  'run.mode_changed',
-  'run.resumed',
-  'message.reasoning',
-  'message.milestone',
-  'message.final',
-  'tool.started',
-  'tool.completed',
-  'question.asked',
-  'question.answered',
-  'run.completed',
-  'run.failed',
-  'run.error',
-  'run.canceled',
-]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -126,13 +106,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       });
       continue;
     }
-    if (!publicHistoryEvents.has(entry.type as SSEEventName)) continue;
-    if (entry.data.schema_version !== 3) continue;
-    const event = {
-      id: String(entry.seq),
-      event: entry.type as SSEEventName,
-      data: entry.data,
-    } as SSEEvent;
+    const event = parsePublicEvent(entry.type, entry.data, String(entry.seq));
+    if (!event) continue;
     items = reduceSSEEvent(items, event);
     plan = reducePlan(plan, event);
     if (entry.run_id !== session.activeRunId) {

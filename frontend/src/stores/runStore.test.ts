@@ -18,20 +18,24 @@ const connections: Array<{
   lastEventId?: string;
   closed: boolean;
 }> = [];
-vi.mock('../api/sse', () => ({
-  subscribeRunEvents: (runId: string, options: any) => {
-    const connection = {
-      runId,
-      onMessage: options.onMessage,
-      onError: options.onError,
-      onStatus: options.onStatus,
-      lastEventId: options.lastEventId,
-      closed: false,
-    };
-    connections.push(connection);
-    return () => { connection.closed = true; };
-  },
-}));
+vi.mock('../api/sse', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/sse')>();
+  return {
+    ...actual,
+    subscribeRunEvents: (runId: string, options: any) => {
+      const connection = {
+        runId,
+        onMessage: options.onMessage,
+        onError: options.onError,
+        onStatus: options.onStatus,
+        lastEventId: options.lastEventId,
+        closed: false,
+      };
+      connections.push(connection);
+      return () => { connection.closed = true; };
+    },
+  };
+});
 
 let createMode: 'resolve' | 'pending' | 'reject' = 'resolve';
 let resolveCreate: ((value: any) => void) | null = null;
@@ -44,6 +48,7 @@ const getRequests: string[] = [];
 const createRequests: any[] = [];
 const steeringRequests: any[] = [];
 const cancelRequests: any[] = [];
+let historyEntries: any[] = [];
 vi.mock('../api/runs', () => ({
   runsApi: {
     create: (threadId: string, payload: any) => {
@@ -82,7 +87,7 @@ vi.mock('../api/runs', () => ({
   },
 }));
 vi.mock('../api/threads', () => ({
-  threadsApi: { history: async () => [] },
+  threadsApi: { history: async () => historyEntries },
 }));
 
 import { useRunStore } from './runStore';
@@ -120,6 +125,7 @@ function reset() {
   createRequests.length = 0;
   steeringRequests.length = 0;
   cancelRequests.length = 0;
+  historyEntries = [];
   sessionStorage.clear();
   useComposerStore.setState({ modelProfileName: null });
   useRunStore.setState({ sessions: {} });
@@ -360,9 +366,12 @@ describe('runStore public event sessions', () => {
     await useRunStore.getState().cancelRun('t1', 'run_1');
 
     expect(useRunStore.getState().sessions.t1.status).toBe(expectedStatus);
-    expect(connections).toHaveLength(2);
-    expect(useRunStore.getState().sessions.t1.timelineItems)
-      .not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice' })]));
+    expect(connections).toHaveLength(1);
+    expect(connections[0].closed).toBe(true);
+    await vi.waitFor(() => {
+      const items = useRunStore.getState().sessions.t1.timelineItems;
+      expect(items.some((item) => item.type === 'terminal_notice' || item.type === 'final')).toBe(true);
+    });
   });
 
   test('reconciles cancellation after 3s, then 5s, then 10s and resumes SSE from the cursor', async () => {
@@ -395,16 +404,12 @@ describe('runStore public event sessions', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(getRequests).toHaveLength(3);
     expect(useRunStore.getState().sessions.t1.status).toBe('canceled');
-    expect(connections[1]).toMatchObject({ runId: 'run_1', lastEventId: '7' });
-    expect(useRunStore.getState().sessions.t1.timelineItems)
-      .not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice' })]));
-
-    connections[1].onMessage({
-      id: '8', event: 'run.canceled',
-      data: terminal(),
+    expect(connections).toHaveLength(1);
+    expect(connections[0].closed).toBe(true);
+    await vi.waitFor(() => {
+      expect(useRunStore.getState().sessions.t1.timelineItems)
+        .toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice', status: 'canceled' })]));
     });
-    expect(useRunStore.getState().sessions.t1.timelineItems)
-      .toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice', status: 'canceled' })]));
   });
 
   test('stops cancellation reconciliation after terminal SSE, run replacement, or session cleanup', async () => {
@@ -570,6 +575,51 @@ describe('runStore public event sessions', () => {
         }),
       ]),
     });
+  });
+
+  test('closes a failed stream and restores its terminal event without reconnecting', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    recoveredRun = authoritativeRun('failed');
+    historyEntries = [
+      {
+        seq: 1,
+        ts: 1,
+        run_id: 'run_1',
+        turn: 'user',
+        type: 'user_turn',
+        data: { text: 'go', scope: request('').scope, mode: 'execute' },
+      },
+      {
+        seq: 2,
+        ts: 2,
+        run_id: 'run_1',
+        turn: 'agent',
+        type: 'run.error',
+        data: terminal({
+          affected_targets: [{ type: 'deck', part: 'deck' }],
+          error: { code: 'COMMIT_FAILED', message: '修改未能安全保存，请重新发起任务。', retryable: true },
+        }),
+      },
+    ];
+
+    connections[0].onError?.(new Event('error'));
+    await vi.waitFor(() => {
+      expect(useRunStore.getState().sessions.t1.timelineItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          type: 'terminal_notice',
+          message: '修改未能安全保存，请重新发起任务。',
+        }),
+      ]));
+    });
+
+    expect(useRunStore.getState().sessions.t1).toMatchObject({
+      status: 'error',
+      streamStatus: 'closed',
+      lastEventId: '2',
+    });
+    expect(connections).toHaveLength(1);
+    expect(connections[0].closed).toBe(true);
+    expect(slideLoads).toEqual(['p1']);
   });
 
   test('reconciles an open stream to paused after the backend restarts', async () => {

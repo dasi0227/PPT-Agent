@@ -184,6 +184,53 @@ function isTerminalRunStatus(status: string): status is 'done' | 'failed' | 'can
   return status === 'done' || status === 'failed' || status === 'canceled';
 }
 
+function mergeAuthoritativeTimeline(current: TimelineItem[], authoritative: TimelineItem[]): TimelineItem[] {
+  const authoritativeById = new Map(authoritative.map((item) => [item.id, item]));
+  const currentIds = new Set(current.map((item) => item.id));
+  return [
+    ...current.map((item) => authoritativeById.get(item.id) ?? item),
+    ...authoritative.filter((item) => !currentIds.has(item.id)),
+  ];
+}
+
+function ensureTerminalTimelineItem(
+  items: TimelineItem[],
+  runId: string,
+  status: 'done' | 'failed' | 'canceled',
+): TimelineItem[] {
+  const hasTerminal = items.some((item) =>
+    item.runId === runId && (item.type === 'final' || item.type === 'terminal_notice'));
+  if (hasTerminal) return items;
+  const occurredAt = new Date().toISOString();
+  if (status === 'done') {
+    return reduceSSEEvent(items, {
+      event: 'message.final',
+      data: {
+        schema_version: 3,
+        run_id: runId,
+        occurred_at: occurredAt,
+        message_id: `${runId}:reconciled-final`,
+        text: '任务已完成。',
+      },
+    });
+  }
+  return reduceSSEEvent(items, {
+    event: status === 'canceled' ? 'run.canceled' : 'run.error',
+    data: {
+      schema_version: 3,
+      run_id: runId,
+      occurred_at: occurredAt,
+      duration_ms: 0,
+      affected_targets: [],
+      error: status === 'failed'
+        ? { code: 'RUN_FAILED', message: '任务未能完成，请重试。', retryable: true }
+        : null,
+      trace_id: runId,
+      ...(status === 'canceled' ? { reason: 'user_requested' as const } : {}),
+    },
+  });
+}
+
 function requestFromTimeline(
   items: TimelineItem[],
   runId?: string | null,
@@ -289,14 +336,38 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       return;
     }
     stopCancelReconciliation(threadId, runId);
+    session.eventSourceClose?.();
     removePersistedRun(threadId);
-    patchSession(threadId, { status: terminalStatus(status), progress: null, pendingQuestion: null });
-    get().subscribeRun(
-      threadId,
-      runId,
-      session.lastEventId,
-      projectId ?? session.projectId ?? undefined,
-    );
+    patchSession(threadId, {
+      status: terminalStatus(status),
+      streamStatus: 'closed',
+      progress: null,
+      pendingQuestion: null,
+      eventSourceClose: null,
+    });
+    const resolvedProjectId = projectId ?? session.projectId ?? undefined;
+    if (resolvedProjectId) void useProjectStore.getState().loadProjectContent(resolvedProjectId);
+    void threadsApi.history(threadId)
+      .then((history) => {
+        const current = get().sessions[threadId];
+        if (!current || current.activeRunId !== runId) return;
+        const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
+        const authoritativeItems = hydrated.items.filter((item) => item.runId === runId);
+        updateSession(threadId, (prev) => ({
+          timelineItems: ensureTerminalTimelineItem(
+            mergeAuthoritativeTimeline(prev.timelineItems, authoritativeItems),
+            runId,
+            status,
+          ),
+          plan: hydrated.session.activeRunId === runId ? hydrated.plan : prev.plan,
+          lastEventId: hydrated.session.activeRunId === runId ? hydrated.lastEventId : prev.lastEventId,
+        }));
+      })
+      .catch(() => {
+        updateSession(threadId, (prev) => ({
+          timelineItems: ensureTerminalTimelineItem(prev.timelineItems, runId, status),
+        }));
+      });
   };
 
   const startCancelReconciliation = (threadId: string, runId: string) => {

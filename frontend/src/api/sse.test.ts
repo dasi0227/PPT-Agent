@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSSEEvent, SSE_EVENT_NAMES } from './sse';
+import { parsePublicEvent, parseSSEEvent, SSE_EVENT_NAMES } from './sse';
 
 const base = {
   schema_version: 3,
@@ -159,5 +159,23 @@ describe('SSE parser', () => {
     }), '3');
 
     expect(completedEvent).not.toBeNull();
+  });
+
+  it('accepts deck snapshots through both live and structured event parsers', () => {
+    const payload = {
+      ...terminal,
+      affected_targets: [{ type: 'deck', part: 'deck' }],
+      error: { code: 'COMMIT_FAILED', message: '修改未能安全保存，请重新发起任务。', retryable: true },
+    };
+
+    expect(parseSSEEvent('run.error', JSON.stringify(payload), '82')).toMatchObject({
+      id: '82',
+      event: 'run.error',
+      data: { affected_targets: [{ type: 'deck', part: 'deck' }] },
+    });
+    expect(parsePublicEvent('run.error', payload, '82')).toMatchObject({
+      id: '82',
+      event: 'run.error',
+    });
   });
 });

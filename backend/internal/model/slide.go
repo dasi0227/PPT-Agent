@@ -12,7 +12,7 @@ type Slide struct {
 // Version 是一次可回滚快照的登记（DATA-VERSION）。
 type Version struct {
 	ID           string
-	TargetType   string // outline | slide_spec | slide_html | design | asset
+	TargetType   string // deck | outline | slide_spec | slide_html | design | asset
 	TargetID     string
 	VersionNo    int
 	SnapshotPath string

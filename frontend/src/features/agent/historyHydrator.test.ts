@@ -19,7 +19,18 @@ describe('history hydrator', () => {
   it('reuses public reducers for tools, plan, question, final, and terminal', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', { text: '生成 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
-      entry(2, 'plan.updated', { ...base, plan: { plan_id: 'p1', revision: 1, explanation: '开始', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] } }),
+      entry(2, 'plan.updated', {
+        ...base,
+        plan: {
+          plan_id: 'p1',
+          revision: 1,
+          title: '执行计划',
+          content: '## 完整计划',
+          status: 'active',
+          explanation: '开始',
+          steps: [{ id: 's1', title: '生成', status: 'in_progress' }],
+        },
+      }),
       entry(3, 'tool.started', { ...base, call_id: 'c1', tool: 'mutate_ppt', display: { label: '生成页面' } }),
       entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'mutate_ppt', status: 'completed', display: { label: '已生成页面' } }),
       entry(5, 'question.asked', { ...base, question_id: 'q1', prompt: '选择风格', selection: 'single', options: [{ id: 'tech', label: '科技' }], allow_custom: false }),
@@ -75,6 +86,32 @@ describe('history hydrator', () => {
     ]);
     expect(hydrated.items).toEqual([]);
     expect(hydrated.session.status).toBe('idle');
+  });
+
+  it('uses the live event contract for deck terminal history', () => {
+    const valid = hydrateRunFromHistory([
+      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
+      entry(2, 'run.error', terminal('r1', {
+        affected_targets: [{ type: 'deck', part: 'deck' }],
+        error: { code: 'COMMIT_FAILED', message: '保存失败', retryable: true },
+      })),
+    ]);
+    expect(valid.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'terminal_notice', message: '保存失败' }),
+    ]));
+    expect(valid.session.status).toBe('error');
+
+    const invalid = hydrateRunFromHistory([
+      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
+      entry(2, 'run.error', terminal('r1', {
+        affected_targets: [{ type: 'deck', part: 'html' }],
+        error: { code: 'COMMIT_FAILED', message: '不应展示', retryable: true },
+      })),
+    ]);
+    expect(invalid.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'terminal_notice' }),
+    ]));
+    expect(invalid.session.status).toBe('running');
   });
 
   it('restores accepted and rejected steering messages from thread history', () => {
