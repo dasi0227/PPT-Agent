@@ -15,6 +15,8 @@ import (
 // 编译期断言：sqlite.Store 满足 run.Store（run_events 持久化 + run 状态机所需）。
 var _ run.Store = (*Store)(nil)
 
+const interruptedIdempotencyResult = `{"code":"RUN_INTERRUPTED"}`
+
 func (s *Store) CreateProject(ctx context.Context, m model.Project) error {
 	return s.db.WithContext(ctx).Create(projectToPO(m)).Error
 }
@@ -152,14 +154,19 @@ func (s *Store) PauseNonTerminalRuns(ctx context.Context, reason string, pausedA
 		if err := tx.Where("status IN ?", statuses).Order("created_at ASC").Find(&rows).Error; err != nil {
 			return err
 		}
+		if len(rows) > 0 {
+			if err := tx.Model(&runPO{}).Where("status IN ?", statuses).Updates(map[string]any{
+				"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
+				"paused_at": pausedAt, "updated_at": pausedAt,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		if err := interruptPausedRunIdempotency(tx, pausedAt); err != nil {
+			return err
+		}
 		if len(rows) == 0 {
 			return nil
-		}
-		if err := tx.Model(&runPO{}).Where("status IN ?", statuses).Updates(map[string]any{
-			"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
-			"paused_at": pausedAt, "updated_at": pausedAt,
-		}).Error; err != nil {
-			return err
 		}
 		out = make([]model.Run, 0, len(rows))
 		for _, row := range rows {
@@ -196,6 +203,9 @@ func (s *Store) PauseRun(ctx context.Context, id, ownerInstanceID, reason string
 		}).Error; err != nil {
 			return err
 		}
+		if err := interruptRunIdempotency(tx, []string{id}, pausedAt); err != nil {
+			return err
+		}
 		out = row.toModel()
 		out.Status, out.OwnerInstanceID, out.PauseReason, out.PausedAt = model.RunPaused, "", reason, pausedAt
 		return nil
@@ -221,19 +231,21 @@ func (s *Store) ClaimPausedRun(ctx context.Context, id, ownerInstanceID string) 
 }
 
 func (s *Store) ReleaseRecoveringRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) error {
-	result := s.db.WithContext(ctx).Model(&runPO{}).
-		Where("id = ? AND status = ? AND owner_instance_id = ?", id, string(model.RunRecovering), ownerInstanceID).
-		Updates(map[string]any{
-			"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
-			"paused_at": pausedAt, "updated_at": pausedAt,
-		})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected != 1 {
-		return run.ErrRunNotRunning
-	}
-	return nil
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&runPO{}).
+			Where("id = ? AND status = ? AND owner_instance_id = ?", id, string(model.RunRecovering), ownerInstanceID).
+			Updates(map[string]any{
+				"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
+				"paused_at": pausedAt, "updated_at": pausedAt,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return run.ErrRunNotRunning
+		}
+		return interruptRunIdempotency(tx, []string{id}, pausedAt)
+	})
 }
 
 func (s *Store) CancelPausedRun(ctx context.Context, id string, canceledAt int64) (model.Run, error) {
@@ -321,10 +333,41 @@ func (s *Store) AcquireIdempotency(ctx context.Context, record model.Idempotency
 		if err := tx.First(&po, "scope = ? AND owner_id = ? AND key = ?", record.Scope, record.OwnerID, record.Key).Error; err != nil {
 			return err
 		}
+		if !created && po.Status == "failed" && po.ResultJSON == interruptedIdempotencyResult && po.RequestHash == record.RequestHash {
+			reclaimed := tx.Model(&idempotencyPO{}).
+				Where("scope = ? AND owner_id = ? AND key = ? AND status = ? AND result_json = ?",
+					record.Scope, record.OwnerID, record.Key, "failed", interruptedIdempotencyResult).
+				Updates(map[string]any{"status": "in_progress", "result_json": "", "updated_at": now})
+			if reclaimed.Error != nil {
+				return reclaimed.Error
+			}
+			created = reclaimed.RowsAffected == 1
+			if created {
+				po.Status = "in_progress"
+				po.ResultJSON = ""
+				po.UpdatedAt = now
+			}
+		}
 		out = po.toModel()
 		return nil
 	})
 	return out, created, err
+}
+
+func interruptPausedRunIdempotency(tx *gorm.DB, at int64) error {
+	pausedRunIDs := tx.Model(&runPO{}).Select("id").Where("status = ?", string(model.RunPaused))
+	return tx.Model(&idempotencyPO{}).
+		Where("scope IN ? AND status = ? AND owner_id IN (?)", []string{"tool_call", "commit"}, "in_progress", pausedRunIDs).
+		Updates(map[string]any{"status": "failed", "result_json": interruptedIdempotencyResult, "updated_at": at}).Error
+}
+
+func interruptRunIdempotency(tx *gorm.DB, runIDs []string, at int64) error {
+	if len(runIDs) == 0 {
+		return nil
+	}
+	return tx.Model(&idempotencyPO{}).
+		Where("scope IN ? AND status = ? AND owner_id IN ?", []string{"tool_call", "commit"}, "in_progress", runIDs).
+		Updates(map[string]any{"status": "failed", "result_json": interruptedIdempotencyResult, "updated_at": at}).Error
 }
 
 func (s *Store) CompleteIdempotency(ctx context.Context, scope, ownerID, key, status, resultJSON string) error {

@@ -330,14 +330,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		"budget_tokens": manifest.BudgetTokens, "segments": len(manifest.Segments),
 		"refs": len(manifest.Refs), "warnings": manifest.Warnings, "read_only": manifest.ReadOnly,
 	})
-	state.contextIndex = NewContextIndexFromPack(state.pack, state.scope, r.Embedder)
-	state.contextIndexRef = state.contextIndex.ID
-	if input.ContextIndexStore != nil {
-		if id, err := input.ContextIndexStore.SaveContextIndex(ctx, state.contextIndex); err == nil && id != "" {
-			state.contextIndexRef = id
-		} else if err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
-		}
+	if err := r.initializeContextIndex(ctx, input, state); err != nil {
+		return r.fail(input, state, CodeAgentFailed, err)
 	}
 	r.changePhase(input.Emitter, state, initialPhase, "run mode initialized")
 	if err := r.saveCheckpoint(ctx, input, state, checkpointRuntimeInitialized, ""); err != nil {
@@ -483,6 +477,38 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeConsecutiveErrors, errors.New("consecutive tool failures exhausted the runtime budget"))
 		}
 	}
+}
+
+func (r *Runtime) initializeContextIndex(ctx context.Context, input RuntimeInput, state *RunState) error {
+	if input.ResumeCheckpoint != nil &&
+		input.ResumeCheckpoint.ContextIndexRef != "" &&
+		input.ContextIndexStore != nil {
+		existing, err := input.ContextIndexStore.GetContextIndex(ctx, input.ResumeCheckpoint.ContextIndexRef)
+		if err == nil &&
+			existing.RunID == state.runID &&
+			existing.PackHash == state.pack.Manifest.PackHash {
+			state.contextIndex = existing
+			state.contextIndexRef = existing.ID
+			recordTrace(input.Trace, state.runID, "context.index_reused", map[string]any{
+				"loop_id": state.loopID, "context_index_ref": existing.ID,
+			})
+			return nil
+		}
+	}
+
+	state.contextIndex = NewContextIndexFromPack(state.pack, state.scope, r.Embedder)
+	state.contextIndexRef = state.contextIndex.ID
+	if input.ContextIndexStore == nil {
+		return nil
+	}
+	id, err := input.ContextIndexStore.SaveContextIndex(ctx, state.contextIndex)
+	if err != nil {
+		return err
+	}
+	if id != "" {
+		state.contextIndexRef = id
+	}
+	return nil
 }
 
 // CAPABILITY_DENIED after a tool was disclosed is a Runtime configuration

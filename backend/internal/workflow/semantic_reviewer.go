@@ -217,10 +217,11 @@ func (r *Runtime) runReviewCompletion(
 	}
 	raw, _ := json.Marshal(result)
 	if input.SemanticReviewStore != nil {
+		inputHash := hashCheckpointValue(reviewInput)
 		_ = input.SemanticReviewStore.SaveSemanticReview(ctx, StoredSemanticReview{
-			ID:    "semrev_" + hashBytes([]byte(state.runID + "\x00" + callID + "\x00" + string(raw)))[:24],
+			ID:    "semrev_" + hashBytes([]byte(state.runID + "\x00" + callID + "\x00" + inputHash + "\x00" + string(raw)))[:24],
 			RunID: state.runID, FinishCallID: callID, Accepted: result.Passed(),
-			Confidence: 0, InputHash: hashCheckpointValue(reviewInput),
+			Confidence: 0, InputHash: inputHash,
 			OutputJSON: string(raw), PromptManifestJSON: semanticReviewerPromptManifest(),
 		})
 	}

@@ -114,6 +114,32 @@ func TestVersionNoMonotonic(t *testing.T) {
 	}
 }
 
+func TestCommitWorkflowRetryReusesVersionRows(t *testing.T) {
+	s := newTestStore(t)
+	seedProject(t, s)
+	ctx := context.Background()
+	commit := model.ArtifactCommit{
+		ProjectID: "p1",
+		Versions: []model.Version{{
+			ID: "run-version", TargetType: "outline", TargetID: "p1",
+			VersionNo: 0, SnapshotPath: "versions/spec-deck/v0.json", RunID: "run", CreatedAt: 1,
+		}},
+	}
+	if err := s.CommitWorkflow(ctx, commit); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CommitWorkflow(ctx, commit); err != nil {
+		t.Fatalf("commit retry must be idempotent: %v", err)
+	}
+	versions, err := s.ListVersions(ctx, "outline", "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 1 || versions[0].ID != "run-version" {
+		t.Fatalf("versions=%+v", versions)
+	}
+}
+
 func TestSetProjectStatus(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)

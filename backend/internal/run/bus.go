@@ -270,6 +270,16 @@ func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
 	switch evt {
 	case model.EventRunStarted:
 		b.started = true
+	case model.EventRunResumed:
+		// A resume event starts a new process attempt. Tool calls left open by
+		// the interrupted process are abandoned. Forget their active identity
+		// so a provider may safely replay the same call_id from the checkpoint.
+		for callID, completed := range b.toolCalls {
+			if !completed {
+				delete(b.toolCalls, callID)
+				delete(b.toolNames, callID)
+			}
+		}
 	case model.EventPlanUpdated:
 		plan, _ := data["plan"].(map[string]any)
 		revision, _ := plan["revision"].(float64)

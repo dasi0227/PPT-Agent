@@ -90,7 +90,27 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		}
 		restoreMaterializations()
 	}
+	findRunVersion := func(targetType, targetID string) (model.Version, bool, error) {
+		versionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(c.runID+"|"+targetType+"|"+targetID)).String()
+		existing, err := c.store.ListVersions(ctx, targetType, targetID)
+		if err != nil {
+			return model.Version{}, false, err
+		}
+		for _, version := range existing {
+			if version.ID == versionID {
+				return version, true, nil
+			}
+		}
+		return model.Version{ID: versionID}, false, nil
+	}
 	addVersion := func(targetType, targetID, path string, content []byte) (int, error) {
+		version, exists, err := findRunVersion(targetType, targetID)
+		if err != nil {
+			return 0, err
+		}
+		if exists {
+			return version.VersionNo, nil
+		}
 		number, err := c.store.NextVersionNo(ctx, targetType, targetID)
 		if err != nil {
 			return 0, err
@@ -100,7 +120,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		}
 		snapshotPaths = append(snapshotPaths, path)
 		versions = append(versions, model.Version{
-			ID:         uuid.NewSHA1(uuid.NameSpaceOID, []byte(c.runID+"|"+targetType+"|"+targetID)).String(),
+			ID:         version.ID,
 			TargetType: targetType, TargetID: targetID,
 			VersionNo: number, SnapshotPath: path, RunID: c.runID, CreatedAt: time.Now().Unix(),
 		})
@@ -197,22 +217,30 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		}
 		if htmlChanged {
 			target := model.SlideHTMLVersionTarget(c.project.ID, id)
-			number, versionErr := c.store.NextVersionNo(ctx, "slide_html", target)
+			version, exists, versionErr := findRunVersion("slide_html", target)
 			if versionErr != nil {
 				cleanup()
 				return versionErr
 			}
-			path := model.SlideHTMLVersionSnapshot(id, number)
-			if err := atomicWrite(filepath.Join(c.project.WorkDir, filepath.FromSlash(path)), htmlRaw); err != nil {
-				cleanup()
-				return err
+			number := version.VersionNo
+			if !exists {
+				number, versionErr = c.store.NextVersionNo(ctx, "slide_html", target)
+				if versionErr != nil {
+					cleanup()
+					return versionErr
+				}
+				path := model.SlideHTMLVersionSnapshot(id, number)
+				if err := atomicWrite(filepath.Join(c.project.WorkDir, filepath.FromSlash(path)), htmlRaw); err != nil {
+					cleanup()
+					return err
+				}
+				snapshotPaths = append(snapshotPaths, path)
+				versions = append(versions, model.Version{
+					ID:         version.ID,
+					TargetType: "slide_html", TargetID: target,
+					VersionNo: number, SnapshotPath: path, RunID: c.runID, CreatedAt: time.Now().Unix(),
+				})
 			}
-			snapshotPaths = append(snapshotPaths, path)
-			versions = append(versions, model.Version{
-				ID:         uuid.NewSHA1(uuid.NameSpaceOID, []byte(c.runID+"|slide_html|"+target)).String(),
-				TargetType: "slide_html", TargetID: target,
-				VersionNo: number, SnapshotPath: path, RunID: c.runID, CreatedAt: time.Now().Unix(),
-			})
 			meta.CurrentVersion = number
 		}
 		if hasProof {

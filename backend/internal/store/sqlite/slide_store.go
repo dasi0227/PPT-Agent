@@ -51,7 +51,10 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 		}
 		for _, version := range commit.Versions {
 			po := versionToPO(version)
-			if err := tx.Create(&po).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "id"}},
+				DoNothing: true,
+			}).Create(&po).Error; err != nil {
 				return err
 			}
 		}

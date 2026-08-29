@@ -10,6 +10,7 @@ import (
 func optionalContextIndexStore(s store.Store) workflow.ContextIndexStore {
 	if value, ok := s.(interface {
 		SaveContextIndex(context.Context, workflow.ContextIndex) (string, error)
+		GetContextIndex(context.Context, string) (workflow.ContextIndex, error)
 		LatestContextIndex(context.Context, string) (workflow.ContextIndex, error)
 	}); ok {
 		return value

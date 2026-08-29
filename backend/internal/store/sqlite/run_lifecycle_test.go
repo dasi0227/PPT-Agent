@@ -25,6 +25,13 @@ func TestRunPauseLifecycleIsDurableAndAtomic(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	for _, scope := range []string{"tool_call", "commit"} {
+		if _, created, err := store.AcquireIdempotency(ctx, model.IdempotencyRecord{
+			Scope: scope, OwnerID: "run", Key: scope + "-key", RequestHash: "stable-hash",
+		}); err != nil || !created {
+			t.Fatalf("seed %s idempotency: created=%v err=%v", scope, created, err)
+		}
+	}
 
 	paused, err := store.PauseNonTerminalRuns(ctx, "server_restarted", 10)
 	if err != nil || len(paused) != 1 {
@@ -40,6 +47,7 @@ func TestRunPauseLifecycleIsDurableAndAtomic(t *testing.T) {
 	if active, err := store.HasActiveRun(ctx, "p1"); err != nil || !active {
 		t.Fatalf("paused run must keep project locked: active=%v err=%v", active, err)
 	}
+	assertInterruptedIdempotencyReclaimed(t, store, ctx)
 
 	claimed, err := store.ClaimPausedRun(ctx, "run", "new-process")
 	if err != nil {
@@ -54,6 +62,7 @@ func TestRunPauseLifecycleIsDurableAndAtomic(t *testing.T) {
 	if err := store.ReleaseRecoveringRun(ctx, "run", "new-process", "resume_failed", 20); err != nil {
 		t.Fatal(err)
 	}
+	assertInterruptedIdempotencyReclaimed(t, store, ctx)
 	canceled, err := store.CancelPausedRun(ctx, "run", 30)
 	if err != nil {
 		t.Fatal(err)
@@ -63,5 +72,17 @@ func TestRunPauseLifecycleIsDurableAndAtomic(t *testing.T) {
 	}
 	if _, err := store.GetActiveRunForThread(ctx, "thread"); !errors.Is(err, run.ErrRunNotFound) {
 		t.Fatalf("terminal run must not be discoverable as active, got %v", err)
+	}
+}
+
+func assertInterruptedIdempotencyReclaimed(t *testing.T, store *Store, ctx context.Context) {
+	t.Helper()
+	for _, scope := range []string{"tool_call", "commit"} {
+		record, reclaimed, err := store.AcquireIdempotency(ctx, model.IdempotencyRecord{
+			Scope: scope, OwnerID: "run", Key: scope + "-key", RequestHash: "stable-hash",
+		})
+		if err != nil || !reclaimed || record.Status != "in_progress" {
+			t.Fatalf("reclaim %s idempotency: record=%+v reclaimed=%v err=%v", scope, record, reclaimed, err)
+		}
 	}
 }

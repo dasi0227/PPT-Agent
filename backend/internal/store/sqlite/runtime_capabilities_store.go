@@ -148,17 +148,54 @@ func (s *Store) SaveContextIndex(ctx context.Context, index workflow.ContextInde
 		index.BuiltAt = time.Now().UnixNano()
 	}
 	if index.ID == "" {
-		index.ID = "ctxidx_" + workflowHash(index.RunID, index.PackHash, index.BuiltAt)
+		index.ID = workflow.ContextIndexSnapshotID(index)
 	}
-	raw, err := json.Marshal(index)
-	if err != nil {
-		return "", err
+	contentHash := workflow.ContextIndexContentHash(index)
+	for attempt := 0; attempt < 2; attempt++ {
+		raw, err := json.Marshal(index)
+		if err != nil {
+			return "", err
+		}
+		result := s.db.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "id"}},
+			DoNothing: true,
+		}).Create(&contextIndexSnapshotPO{
+			ID: index.ID, RunID: index.RunID, PackHash: index.PackHash,
+			IndexJSON: string(raw), CreatedAt: index.BuiltAt,
+		})
+		if result.Error != nil {
+			return "", result.Error
+		}
+		if result.RowsAffected == 1 {
+			return index.ID, nil
+		}
+
+		existing, err := s.GetContextIndex(ctx, index.ID)
+		if err != nil {
+			return "", err
+		}
+		if workflow.ContextIndexContentHash(existing) == contentHash {
+			return existing.ID, nil
+		}
+		versionID := workflow.ContextIndexSnapshotID(index)
+		if versionID == index.ID {
+			return "", errors.New("context index id collision")
+		}
+		index.ID = versionID
 	}
-	err = s.db.WithContext(ctx).Create(&contextIndexSnapshotPO{
-		ID: index.ID, RunID: index.RunID, PackHash: index.PackHash,
-		IndexJSON: string(raw), CreatedAt: index.BuiltAt,
-	}).Error
-	return index.ID, err
+	return "", errors.New("context index version collision")
+}
+
+func (s *Store) GetContextIndex(ctx context.Context, id string) (workflow.ContextIndex, error) {
+	var po contextIndexSnapshotPO
+	if err := s.db.WithContext(ctx).First(&po, "id = ?", id).Error; err != nil {
+		return workflow.ContextIndex{}, mapErr(err)
+	}
+	var index workflow.ContextIndex
+	if err := json.Unmarshal([]byte(po.IndexJSON), &index); err != nil {
+		return workflow.ContextIndex{}, err
+	}
+	return index, nil
 }
 
 func (s *Store) LatestContextIndex(ctx context.Context, runID string) (workflow.ContextIndex, error) {
@@ -182,7 +219,10 @@ func (s *Store) SaveSemanticReview(ctx context.Context, review workflow.StoredSe
 	if review.Accepted {
 		accepted = 1
 	}
-	return s.db.WithContext(ctx).Create(&semanticReviewPO{
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoNothing: true,
+	}).Create(&semanticReviewPO{
 		ID: review.ID, RunID: review.RunID, FinishCallID: review.FinishCallID,
 		Accepted: accepted, Confidence: review.Confidence, InputHash: review.InputHash,
 		OutputJSON: review.OutputJSON, PromptManifestJSON: review.PromptManifestJSON,

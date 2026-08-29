@@ -165,6 +165,21 @@ function upsertById(state: TimelineItem[], item: TimelineItem): TimelineItem[] {
   return copy;
 }
 
+function settleInterruptedTools(state: TimelineItem[], runId: string): TimelineItem[] {
+  return state.map((candidate): TimelineItem =>
+    candidate.type === 'tool' && candidate.runId === runId && candidate.status === 'running'
+      ? {
+          ...candidate,
+          status: 'failed',
+          error: {
+            code: 'RUN_INTERRUPTED',
+            message: '任务中断时，此操作尚未完成。',
+            retryable: false,
+          },
+        }
+      : candidate);
+}
+
 function normalizeQuestions(event: Extract<SSEEvent, { event: 'question.asked' }>): { questions: QuestionField[]; grouped: boolean } {
   if (event.data.questions && event.data.questions.length > 0) {
     return { questions: event.data.questions, grouped: true };
@@ -201,7 +216,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         text: '已从中断处恢复，继续执行',
         timestamp,
       };
-      return upsertById(state, item);
+      return upsertById(settleInterruptedTools(state, runId), item);
     }
 
 	case 'plan.approval_requested': {
@@ -374,20 +389,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         reason: event.data.reason,
         timestamp,
       };
-      const settledState = event.data.reason === 'superseded'
-        ? state.map((candidate): TimelineItem =>
-            candidate.type === 'tool' && candidate.runId === runId && candidate.status === 'running'
-              ? {
-                  ...candidate,
-                  status: 'failed',
-                  error: {
-                    code: 'RUN_INTERRUPTED',
-                    message: '任务中断时，此操作尚未完成。',
-                    retryable: false,
-                  },
-                }
-              : candidate)
-        : state;
+      const settledState = event.data.reason === 'superseded' ? settleInterruptedTools(state, runId) : state;
       return upsertById(settledState, item);
     }
   }

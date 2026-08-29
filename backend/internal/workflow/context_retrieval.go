@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"sort"
 	"strings"
@@ -48,7 +49,25 @@ type ContextIndexItem struct {
 
 type ContextIndexStore interface {
 	SaveContextIndex(context.Context, ContextIndex) (string, error)
+	GetContextIndex(context.Context, string) (ContextIndex, error)
 	LatestContextIndex(context.Context, string) (ContextIndex, error)
+}
+
+// ContextIndexContentHash excludes snapshot identity and timestamps so retries
+// of the same logical index resolve to one durable snapshot.
+func ContextIndexContentHash(index ContextIndex) string {
+	index.ID = ""
+	index.BuiltAt = 0
+	index.Items = append([]ContextIndexItem(nil), index.Items...)
+	for i := range index.Items {
+		index.Items[i].UpdatedAt = 0
+	}
+	raw, _ := json.Marshal(index)
+	return hashBytes(raw)
+}
+
+func ContextIndexSnapshotID(index ContextIndex) string {
+	return "ctxidx_" + hashBytes([]byte(index.RunID + "\x00" + index.PackHash + "\x00" + ContextIndexContentHash(index)))[:24]
 }
 
 type EmbeddingProvider interface {
@@ -142,7 +161,6 @@ type HybridContextRetriever struct {
 
 func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScope, embedder EmbeddingProvider) ContextIndex {
 	index := ContextIndex{
-		ID:    "ctxidx_" + hashBytes([]byte(pack.Manifest.ContextID + "\x00" + pack.Manifest.PackHash))[:24],
 		RunID: pack.Manifest.RunID, ThreadID: pack.Manifest.ThreadID, ProjectID: pack.Manifest.ProjectID,
 		PackHash: pack.Manifest.PackHash, BuiltAt: time.Now().UnixNano(), Items: []ContextIndexItem{},
 	}
@@ -218,6 +236,7 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScop
 			}
 		}
 	}
+	index.ID = ContextIndexSnapshotID(index)
 	return index
 }
 

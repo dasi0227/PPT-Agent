@@ -2,11 +2,66 @@ package sqlite
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
+
+func TestSaveContextIndexConcurrentRetryHasOneSnapshot(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, model.Project{ID: "p", Title: "p", WorkDir: t.TempDir(), Status: "draft", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p", HistoryPath: "threads/t.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateRun(ctx, model.Run{
+		ID: "r", ThreadID: "t", ProjectID: "p",
+		Command: model.RunCommand{Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck}, Mode: model.ModeExecute},
+		Status:  model.RunRunning, CreatedAt: 1, UpdatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	base := workflow.ContextIndex{ID: "idx", RunID: "r", PackHash: "pack", Items: []workflow.ContextIndexItem{{
+		RefID: "ref", Kind: "deck", Source: "project", Hash: "hash", Summary: "summary",
+	}}}
+	const workers = 12
+	start := make(chan struct{})
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(builtAt int64) {
+			defer wg.Done()
+			<-start
+			index := base
+			index.BuiltAt = builtAt
+			index.Items = append([]workflow.ContextIndexItem(nil), base.Items...)
+			index.Items[0].UpdatedAt = builtAt
+			_, err := s.SaveContextIndex(ctx, index)
+			errs <- err
+		}(int64(i + 1))
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	var count int64
+	if err := s.db.Model(&contextIndexSnapshotPO{}).Where("run_id = ?", "r").Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("concurrent retries created %d snapshots", count)
+	}
+}
 
 func TestRuntimeCapabilityStoresRoundTrip(t *testing.T) {
 	s := newTestStore(t)
@@ -44,8 +99,8 @@ func TestRuntimeCapabilityStoresRoundTrip(t *testing.T) {
 		latest.Requirements.Items[0].ID != "req_01" {
 		t.Fatalf("checkpoint=%+v", latest)
 	}
-	index := workflow.ContextIndex{ID: "idx", RunID: "r", PackHash: "pack", Items: []workflow.ContextIndexItem{{
-		RefID: "ref", Kind: "slide_html", Source: "context_index", Hash: "hash", Summary: "summary",
+	index := workflow.ContextIndex{ID: "idx", RunID: "r", PackHash: "pack", BuiltAt: 1, Items: []workflow.ContextIndexItem{{
+		RefID: "ref", Kind: "slide_html", Source: "context_index", Hash: "hash", Summary: "summary", UpdatedAt: 1,
 	}}}
 	id, err := s.SaveContextIndex(ctx, index)
 	if err != nil {
@@ -58,11 +113,58 @@ func TestRuntimeCapabilityStoresRoundTrip(t *testing.T) {
 	if id != "idx" || loadedIndex.Items[0].RefID != "ref" {
 		t.Fatalf("index id=%s loaded=%+v", id, loadedIndex)
 	}
+	retry := index
+	retry.BuiltAt = 2
+	retry.Items = append([]workflow.ContextIndexItem(nil), index.Items...)
+	retry.Items[0].UpdatedAt = 2
+	reusedID, err := s.SaveContextIndex(ctx, retry)
+	if err != nil || reusedID != id {
+		t.Fatalf("same logical index must be reused: id=%s err=%v", reusedID, err)
+	}
+	var snapshotCount int64
+	if err := s.db.Model(&contextIndexSnapshotPO{}).Where("run_id = ?", "r").Count(&snapshotCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if snapshotCount != 1 {
+		t.Fatalf("same logical index created %d snapshots", snapshotCount)
+	}
+	changed := retry
+	changed.BuiltAt = 3
+	changed.Items = append([]workflow.ContextIndexItem(nil), retry.Items...)
+	changed.Items[0].Summary = "changed summary"
+	changed.Items[0].UpdatedAt = 3
+	changedID, err := s.SaveContextIndex(ctx, changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changedID == id {
+		t.Fatalf("changed logical index reused stale id %s", changedID)
+	}
+	if err := s.db.Model(&contextIndexSnapshotPO{}).Where("run_id = ?", "r").Count(&snapshotCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if snapshotCount != 2 {
+		t.Fatalf("changed logical index snapshots=%d", snapshotCount)
+	}
+	loadedVersion, err := s.GetContextIndex(ctx, changedID)
+	if err != nil || loadedVersion.Items[0].Summary != "changed summary" {
+		t.Fatalf("versioned index=%+v err=%v", loadedVersion, err)
+	}
+	latestVersion, err := s.LatestContextIndex(ctx, "r")
+	if err != nil || latestVersion.ID != changedID {
+		t.Fatalf("latest index=%+v err=%v", latestVersion, err)
+	}
 	if err := s.SaveSemanticReview(ctx, workflow.StoredSemanticReview{
 		ID: "sem", RunID: "r", FinishCallID: "finish", Accepted: true,
 		Confidence: 1, InputHash: "input", OutputJSON: `{"accepted":true}`, PromptManifestJSON: `{}`,
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if err := s.SaveSemanticReview(ctx, workflow.StoredSemanticReview{
+		ID: "sem", RunID: "r", FinishCallID: "finish", Accepted: true,
+		Confidence: 1, InputHash: "input", OutputJSON: `{"accepted":true}`, PromptManifestJSON: `{}`,
+	}); err != nil {
+		t.Fatalf("semantic review retry must be idempotent: %v", err)
 	}
 	var count int64
 	if err := s.db.Raw("SELECT COUNT(*) FROM semantic_reviews WHERE run_id = ?", "r").Scan(&count).Error; err != nil {

@@ -1391,6 +1391,82 @@ func (r *checkpointRecorder) SaveCheckpoint(_ context.Context, checkpoint Runtim
 	return nil
 }
 
+type recordingContextIndexStore struct {
+	indexes map[string]ContextIndex
+	saves   int
+}
+
+func newRecordingContextIndexStore() *recordingContextIndexStore {
+	return &recordingContextIndexStore{indexes: map[string]ContextIndex{}}
+}
+
+func (s *recordingContextIndexStore) SaveContextIndex(_ context.Context, index ContextIndex) (string, error) {
+	s.saves++
+	s.indexes[index.ID] = index
+	return index.ID, nil
+}
+
+func (s *recordingContextIndexStore) GetContextIndex(_ context.Context, id string) (ContextIndex, error) {
+	index, ok := s.indexes[id]
+	if !ok {
+		return ContextIndex{}, errors.New("context index not found")
+	}
+	return index, nil
+}
+
+func (s *recordingContextIndexStore) LatestContextIndex(_ context.Context, runID string) (ContextIndex, error) {
+	for _, index := range s.indexes {
+		if index.RunID == runID {
+			return index, nil
+		}
+	}
+	return ContextIndex{}, errors.New("context index not found")
+}
+
+func TestResumeReusesCheckpointContextIndexAcrossRepeatedRecovery(t *testing.T) {
+	runtime := NewRuntime(&scriptedAgent{})
+	store := newRecordingContextIndexStore()
+	pack := testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "resume")
+
+	first := &RunState{runID: pack.Manifest.RunID, loopID: "loop", scope: pack.Command.Scope, pack: pack}
+	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{ContextIndexStore: store}, first); err != nil {
+		t.Fatal(err)
+	}
+	if store.saves != 1 || first.contextIndexRef == "" {
+		t.Fatalf("first initialization saves=%d ref=%q", store.saves, first.contextIndexRef)
+	}
+
+	checkpoint := &RuntimeCheckpoint{RunID: first.runID, LoopID: "loop", ContextIndexRef: first.contextIndexRef}
+	for attempt := 0; attempt < 2; attempt++ {
+		resumed := &RunState{runID: first.runID, loopID: "loop", scope: pack.Command.Scope, pack: pack}
+		if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{
+			ContextIndexStore: store,
+			ResumeCheckpoint:  checkpoint,
+		}, resumed); err != nil {
+			t.Fatal(err)
+		}
+		if resumed.contextIndexRef != first.contextIndexRef {
+			t.Fatalf("resume %d index ref=%q want=%q", attempt+1, resumed.contextIndexRef, first.contextIndexRef)
+		}
+	}
+	if store.saves != 1 {
+		t.Fatalf("repeated recovery persisted %d context indexes", store.saves)
+	}
+
+	changedPack := pack
+	changedPack.Manifest.PackHash = "changed-pack"
+	changed := &RunState{runID: first.runID, loopID: "loop", scope: changedPack.Command.Scope, pack: changedPack}
+	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{
+		ContextIndexStore: store,
+		ResumeCheckpoint:  checkpoint,
+	}, changed); err != nil {
+		t.Fatal(err)
+	}
+	if store.saves != 2 || changed.contextIndexRef == first.contextIndexRef {
+		t.Fatalf("changed context must create a new snapshot: saves=%d ref=%q", store.saves, changed.contextIndexRef)
+	}
+}
+
 type postCommitFailingCheckpoint struct {
 	failures int
 }

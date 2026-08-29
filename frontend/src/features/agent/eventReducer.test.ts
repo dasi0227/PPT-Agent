@@ -57,8 +57,18 @@ describe('public event reducer', () => {
   });
 
   it('records a resumed run as a compact lifecycle row', () => {
-    const state = reduceSSEEvent([], event('run.resumed', {}));
+    const running = reduceSSEEvent([], event('tool.started', {
+      call_id: 'interrupted',
+      tool: 'search_refs',
+      display: { label: '正在检索参考资料' },
+    }));
+    const state = reduceSSEEvent(running, event('run.resumed', {}, '2'));
     expect(state).toEqual([
+      expect.objectContaining({
+        type: 'tool',
+        status: 'failed',
+        error: expect.objectContaining({ code: 'RUN_INTERRUPTED' }),
+      }),
       expect.objectContaining({
         id: 'r1:resumed',
         type: 'run_lifecycle',

@@ -260,6 +260,81 @@ func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 	}
 }
 
+func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
+	store := newMemStore()
+	blockingExecution := func(callID string, started chan<- struct{}) scriptRunner {
+		return func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
+			emitter.Emit(model.EventToolStarted, model.ToolStartedPayload{
+				PublicEventBase: model.NewPublicEventBase("repeated-resume"),
+				CallID:          callID,
+				Tool:            "search_refs",
+				Display:         model.PublicDisplay{Label: "正在检索参考资料"},
+			})
+			close(started)
+			<-ctx.Done()
+			return workflow.StructuredOutcome{Status: workflow.StatusCanceled}
+		}
+	}
+
+	first := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	firstStarted := make(chan struct{})
+	created, err := first.Start(context.Background(), testRun("repeated-resume"), blockingExecution("first-tool", firstStarted))
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-firstStarted
+	if err := first.PauseAll(context.Background(), "first_restart"); err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, store, created.ID, model.RunPaused)
+
+	second := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	secondStarted := make(chan struct{})
+	paused, _ := store.GetRun(context.Background(), created.ID)
+	if _, err := second.Resume(context.Background(), paused, blockingExecution("first-tool", secondStarted)); err != nil {
+		t.Fatal(err)
+	}
+	<-secondStarted
+	if _, err := second.Resume(context.Background(), paused, blockingExecution("duplicate-tool", make(chan struct{}))); !errors.Is(err, ErrRunNotRunning) {
+		t.Fatalf("duplicate resume must be rejected, got %v", err)
+	}
+	if err := second.PauseAll(context.Background(), "second_restart"); err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, store, created.ID, model.RunPaused)
+
+	third := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	paused, _ = store.GetRun(context.Background(), created.ID)
+	if _, err := third.Resume(context.Background(), paused, scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
+		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
+			PublicEventBase: model.NewPublicEventBase(created.ID),
+			MessageID:       "recovered-final",
+			Text:            "恢复完成。",
+		})
+		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
+	})); err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, store, created.ID, model.RunDone)
+
+	events, err := store.EventsSince(context.Background(), created.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumedEvents := 0
+	for _, event := range events {
+		if event.Type == model.EventRunResumed {
+			resumedEvents++
+		}
+	}
+	if resumedEvents != 2 {
+		t.Fatalf("run.resumed count=%d events=%+v", resumedEvents, events)
+	}
+	if events[len(events)-1].Type != model.EventRunCompleted {
+		t.Fatalf("recovered run did not persist terminal event: %+v", events)
+	}
+}
+
 func TestSupersedingPausedRunPersistsCancellationReason(t *testing.T) {
 	store := newMemStore()
 	first := NewEngine(store, NewLockManager(), nil, zap.NewNop())
