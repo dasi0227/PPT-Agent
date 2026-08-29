@@ -1100,9 +1100,8 @@ func (r *Runtime) executeControl(
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "ask_user requires an interactive prompter", false))
 			return StructuredOutcome{}, false
 		}
-		question := stringValue(call.Args["question"])
 		questions, _ := call.Args["questions"].([]any)
-		if question == "" && len(questions) == 0 {
+		if len(questions) == 0 {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "questions are required", true))
 			return StructuredOutcome{}, false
 		}
@@ -1126,8 +1125,7 @@ func (r *Runtime) executeControl(
 		r.changePhase(input.Emitter, state, state.resumePhase, "user input received")
 		result := SuccessfulToolResult("user answered")
 		result.Data = map[string]any{
-			"selected_option_ids": answer.SelectedOptionIDs,
-			"custom_text":         answer.CustomText, "answers": answer.Answers, "display_text": displayText,
+			"answers": answer.Answers, "display_text": displayText,
 		}
 		r.appendControlObservation(state, call, assistantText, result)
 		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterUserAnswer, ""); err != nil {
@@ -1832,7 +1830,7 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	allowAsk := mode == model.ModeAsk || mode == model.ModePlan || (mode == model.ModeExecute && phase != PhaseCompletionCheck)
 	if allowAsk && phase != PhaseWaitingInput && phase != PhaseCommitting && phase != PhaseTerminal {
 		out = append(out, ToolSchema{
-			Name: "ask_user", Description: "Ask one blocking group of atomic user questions and pause this same loop until the user answers. Use questions[] for all new calls. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
+			Name: "ask_user", Description: "Ask one blocking group of atomic user questions and pause this same loop until the user answers. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
 			Parameters: objectSchema([]string{"questions"}, map[string]any{
 				"questions": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"id", "title"}, map[string]any{
 					"id":          map[string]any{"type": "string"},
@@ -1843,9 +1841,6 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 					})},
 					"allow_custom": map[string]any{"type": "boolean"},
 				})},
-				"question":     map[string]any{"type": "string", "description": "Legacy single-question fallback. Prefer questions[]."},
-				"options":      map[string]any{"type": "array", "maxItems": 3, "items": map[string]any{"type": "object"}},
-				"allow_custom": map[string]any{"type": "boolean"},
 			}),
 		})
 	}

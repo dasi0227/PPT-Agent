@@ -31,8 +31,8 @@ const payloads: Record<string, unknown> = {
   'message.final': { ...base, message_id: 'm3', text: '已完成。' },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_ppt', display: { label: '读取全局蓝图' } },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_ppt', status: 'completed', display: { label: '已读取全局设计' } },
-  'question.asked': { ...base, question_id: 'q1', prompt: '选择风格', selection: 'single', options: [], allow_custom: true },
-  'question.answered': { ...base, question_id: 'q1', answer: { selected_option_ids: [], custom_text: '克制' }, display_text: '克制' },
+  'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', options: [], allow_custom: true }] },
+  'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
 };
 
 describe('SSE parser', () => {
@@ -179,7 +179,7 @@ describe('SSE parser', () => {
     });
   });
 
-  it('normalizes legacy deck content targets before validation', () => {
+  it('rejects legacy deck content targets', () => {
     const event = parsePublicEvent('run.completed', {
       ...terminal,
       affected_targets: [{
@@ -190,15 +190,24 @@ describe('SSE parser', () => {
       }],
     }, '83');
 
-    expect(event).toMatchObject({
-      data: {
-        affected_targets: [{
-          type: 'deck',
-          part: 'manifest',
-          local_path: '/tmp/project/manifest.json',
-          open_url: 'vscode://file/tmp/project/manifest.json',
-        }],
+    expect(event).toBeNull();
+  });
+
+  it('rejects legacy question fields even when canonical arrays are present', () => {
+    expect(parsePublicEvent('question.asked', {
+      ...base,
+      question_id: 'q1',
+      questions: [{ id: 'style', title: '选择风格', options: [], allow_custom: true }],
+      prompt: '旧问题',
+    })).toBeNull();
+    expect(parsePublicEvent('question.answered', {
+      ...base,
+      question_id: 'q1',
+      answer: {
+        answers: [{ question_id: 'style', custom_text: '克制' }],
+        custom_text: '旧答案',
       },
-    });
+      display_text: '克制',
+    })).toBeNull();
   });
 });

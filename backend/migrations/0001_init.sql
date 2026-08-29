@@ -65,8 +65,11 @@ CREATE TABLE IF NOT EXISTS runs (
     model_name          TEXT,
     model_url           TEXT,
     cancel_requested_at INTEGER,
+    owner_instance_id   TEXT NOT NULL DEFAULT '',
+    pause_reason        TEXT NOT NULL DEFAULT '',
+    paused_at           INTEGER,
     status              TEXT NOT NULL DEFAULT 'pending'
-                           CHECK (status IN ('pending','running','waiting','done','failed','canceled')),
+                           CHECK (status IN ('pending','running','waiting','paused','recovering','done','failed','canceled')),
     created_at          INTEGER NOT NULL,
     updated_at          INTEGER NOT NULL,
     FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE,

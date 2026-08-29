@@ -114,12 +114,14 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 			PublicEventBase: base(), CallID: "c1", Tool: "read_ppt", Status: "completed", Display: model.PublicDisplay{Label: "已读取 PPT"},
 		}},
 		{model.EventQuestionAsked, model.QuestionAskedPayload{
-			PublicEventBase: base(), QuestionID: "q1", Prompt: "选择风格", Selection: "single",
-			Options: []model.QuestionOption{{ID: "tech", Label: "科技"}}, AllowCustom: true,
+			PublicEventBase: base(), QuestionID: "q1", Questions: []model.QuestionField{{
+				ID: "style", Title: "选择风格",
+				Options: []model.QuestionOption{{ID: "tech", Label: "科技"}}, AllowCustom: true,
+			}},
 		}},
 		{model.EventQuestionAnswered, model.QuestionAnsweredPayload{
 			PublicEventBase: base(), QuestionID: "q1",
-			Answer: model.QuestionAnswer{SelectedOptionIDs: []string{"tech"}}, DisplayText: "科技",
+			Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "style", SelectedOptionID: "tech"}}}, DisplayText: "科技",
 		}},
 		{model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: base(), MessageID: "m2", Text: "已完成。"}},
 		{model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 10, nil, nil)},
@@ -216,7 +218,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}
 	if err := bus.Emit(ctx, model.EventQuestionAnswered, model.QuestionAnsweredPayload{
 		PublicEventBase: base(), QuestionID: "missing",
-		Answer: model.QuestionAnswer{CustomText: "x"}, DisplayText: "x",
+		Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "detail", CustomText: "x"}}}, DisplayText: "x",
 	}); err == nil {
 		t.Fatal("accepted unmatched question.answered")
 	}

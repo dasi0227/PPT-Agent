@@ -1,10 +1,7 @@
 package sqlite
 
 import (
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"go.uber.org/zap"
@@ -52,9 +49,6 @@ func Migrate(db *gorm.DB, log *zap.Logger) error {
 					return fmt.Errorf("apply %s: %w", name, err)
 				}
 			}
-			if err := applyFileMigration(tx, name); err != nil {
-				return fmt.Errorf("apply %s file migration: %w", name, err)
-			}
 			return tx.Exec("INSERT INTO schema_migrations(name, applied_at) VALUES (?, ?)", name, nowUnix()).Error
 		})
 		if foreignKeysDisabled {
@@ -73,29 +67,6 @@ func Migrate(db *gorm.DB, log *zap.Logger) error {
 	}
 	if incompatible > 0 {
 		return fmt.Errorf("existing development database is not canonical v%d; remove it instead of migrating it", currentProjectLayoutVersion)
-	}
-	return nil
-}
-
-func applyFileMigration(tx *gorm.DB, name string) error {
-	if name != "0003_migrate_deck_content_to_manifest.sql" {
-		return nil
-	}
-	var workDirs []string
-	if err := tx.Raw("SELECT work_dir FROM projects").Scan(&workDirs).Error; err != nil {
-		return err
-	}
-	for _, workDir := range workDirs {
-		manifestPath := filepath.Join(workDir, "manifest.json")
-		if _, err := os.Stat(manifestPath); err == nil {
-			continue
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		deckPath := filepath.Join(workDir, "deck.json")
-		if err := os.Rename(deckPath, manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("rename %s: %w", deckPath, err)
-		}
 	}
 	return nil
 }

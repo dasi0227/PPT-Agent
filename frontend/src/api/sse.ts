@@ -37,36 +37,8 @@ export function parseSSEEvent(eventName: string, raw: string, id?: string): SSEE
 export function parsePublicEvent(eventName: string, data: unknown, id?: string): SSEEvent | null {
   if (!SSE_EVENT_NAMES.includes(eventName as SSEEventName)) return null;
   if (!isRecord(data)) return null;
-  const normalized = normalizeLegacyTargets(data);
-  if (!validBase(normalized) || containsForbiddenField(normalized) || !validPayload(eventName as SSEEventName, normalized)) return null;
-  return { id, event: eventName as SSEEventName, data: normalized } as unknown as SSEEvent;
-}
-
-function normalizeLegacyTargets(data: Record<string, unknown>): Record<string, unknown> {
-  const normalizedTarget = normalizeLegacyTarget(data.target);
-  let normalizedTargets = data.affected_targets;
-  if (Array.isArray(data.affected_targets)) {
-    const targets = data.affected_targets;
-    const mapped = targets.map(normalizeLegacyTarget);
-    if (mapped.some((target, index) => target !== targets[index])) normalizedTargets = mapped;
-  }
-  if (normalizedTarget === data.target && normalizedTargets === data.affected_targets) return data;
-  return { ...data, target: normalizedTarget, affected_targets: normalizedTargets };
-}
-
-function normalizeLegacyTarget(value: unknown): unknown {
-  if (!isRecord(value) || value.type !== 'deck' || value.part !== 'deck') return value;
-  return {
-    ...value,
-    part: 'manifest',
-    local_path: normalizeLegacyManifestPath(value.local_path),
-    open_url: normalizeLegacyManifestPath(value.open_url),
-  };
-}
-
-function normalizeLegacyManifestPath(value: unknown): unknown {
-  if (typeof value !== 'string') return value;
-  return value.replace(/([/\\])deck\.json(?=$|[?#])/g, '$1manifest.json');
+  if (!validBase(data) || containsForbiddenField(data) || !validPayload(eventName as SSEEventName, data)) return null;
+  return { id, event: eventName as SSEEventName, data } as unknown as SSEEvent;
 }
 
 const progressStages = new Set(['thinking', 'planning', 'reading', 'writing', 'rendering', 'finalizing']);
@@ -143,12 +115,9 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && validPreview(data.preview, String(data.run_id));
     case 'question.asked':
       return hasString(data, 'question_id')
-        && hasSafeString(data, 'prompt')
+        && !['prompt', 'selection', 'options', 'allow_custom'].some((field) => field in data)
         && (data.header === undefined || (typeof data.header === 'string' && !rawHTMLPattern.test(data.header)))
-        && ['single', 'multiple'].includes(String(data.selection))
-        && typeof data.allow_custom === 'boolean'
-        && validQuestionOptions(data.options, data.allow_custom)
-        && validOptionalQuestionFields(data.questions);
+        && validQuestionFields(data.questions);
     case 'question.answered':
       return hasString(data, 'question_id')
         && validAnswer(data.answer)
@@ -290,8 +259,7 @@ function validQuestionOptions(value: unknown, allowCustom: unknown): boolean {
   });
 }
 
-function validOptionalQuestionFields(value: unknown): boolean {
-  if (value === undefined) return true;
+function validQuestionFields(value: unknown): boolean {
   if (!Array.isArray(value) || value.length === 0) return false;
   const ids = new Set<string>();
   return value.every((rawQuestion) => {
@@ -310,13 +278,13 @@ function validOptionalQuestionFields(value: unknown): boolean {
 
 function validAnswer(value: unknown): boolean {
   return isRecord(value)
-    && validUniqueStringArray(value.selected_option_ids, true)
-    && typeof value.custom_text === 'string'
-    && (value.answers === undefined || validQuestionAnswers(value.answers));
+    && !('selected_option_ids' in value)
+    && !('custom_text' in value)
+    && validQuestionAnswers(value.answers);
 }
 
 function validQuestionAnswers(value: unknown): boolean {
-  if (!Array.isArray(value)) return false;
+  if (!Array.isArray(value) || value.length === 0) return false;
   const ids = new Set<string>();
   return value.every((rawAnswer) => {
     if (!isRecord(rawAnswer)
@@ -325,7 +293,9 @@ function validQuestionAnswers(value: unknown): boolean {
       || (rawAnswer.selected_option_id !== undefined && typeof rawAnswer.selected_option_id !== 'string')
       || (rawAnswer.custom_text !== undefined && typeof rawAnswer.custom_text !== 'string')) return false;
     ids.add(String(rawAnswer.question_id));
-    return rawAnswer.selected_option_id !== undefined || rawAnswer.custom_text !== undefined;
+    const selected = typeof rawAnswer.selected_option_id === 'string' && rawAnswer.selected_option_id.trim() !== '';
+    const custom = typeof rawAnswer.custom_text === 'string' && rawAnswer.custom_text.trim() !== '';
+    return selected !== custom;
   });
 }
 

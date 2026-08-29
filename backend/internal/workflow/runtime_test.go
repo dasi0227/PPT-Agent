@@ -1129,7 +1129,9 @@ func (p *fakePrompter) Ask(_ context.Context, question model.QuestionAskedPayloa
 	if question.QuestionID == "" {
 		return model.QuestionAnswer{}, "", errors.New("missing question id")
 	}
-	return model.QuestionAnswer{CustomText: "用户回答"}, "用户回答", nil
+	return model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{
+		QuestionID: question.Questions[0].ID, CustomText: "用户回答",
+	}}}, "用户回答", nil
 }
 
 type advancingQuestionPrompter struct {
@@ -1148,7 +1150,9 @@ func (p *advancingQuestionPrompter) Ask(_ context.Context, question model.Questi
 	if question.QuestionID == "" {
 		return model.QuestionAnswer{}, "", errors.New("missing question id")
 	}
-	return model.QuestionAnswer{CustomText: "用户回答"}, "用户回答", nil
+	return model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{
+		QuestionID: question.Questions[0].ID, CustomText: "用户回答",
+	}}}, "用户回答", nil
 }
 
 type advancingApprovalPrompter struct {
@@ -1505,7 +1509,9 @@ func TestPostCommitCheckpointFailureDoesNotReportCommittedRunAsFailed(t *testing
 func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("question", "ask_user", map[string]any{"question": "选择方向？"}), finishCall("finish"),
+		toolCall("question", "ask_user", map[string]any{"questions": []any{
+			map[string]any{"id": "direction", "title": "选择方向？"},
+		}}), finishCall("finish"),
 	}}
 	prompter, checkpoints := &fakePrompter{}, &checkpointRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
@@ -1530,8 +1536,12 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 func TestQuestionWaitsDoNotConsumeActiveDurationBudget(t *testing.T) {
 	clock := newManualRuntimeClock()
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("question-1", "ask_user", map[string]any{"question": "选择方向？"}),
-		toolCall("question-2", "ask_user", map[string]any{"question": "确认范围？"}),
+		toolCall("question-1", "ask_user", map[string]any{"questions": []any{
+			map[string]any{"id": "direction", "title": "选择方向？"},
+		}}),
+		toolCall("question-2", "ask_user", map[string]any{"questions": []any{
+			map[string]any{"id": "scope", "title": "确认范围？"},
+		}}),
 		finishCall("finish"),
 	}}
 	prompter := &advancingQuestionPrompter{clock: clock, wait: 3 * time.Hour}
@@ -1568,7 +1578,9 @@ func TestQuestionWaitsDoNotConsumeActiveDurationBudget(t *testing.T) {
 func TestCanceledQuestionWaitKeepsActiveDurationFrozen(t *testing.T) {
 	clock := newManualRuntimeClock()
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("question-cancel", "ask_user", map[string]any{"question": "继续吗？"}),
+		toolCall("question-cancel", "ask_user", map[string]any{"questions": []any{
+			map[string]any{"id": "continue", "title": "继续吗？"},
+		}}),
 	}}
 	prompter := &advancingQuestionPrompter{clock: clock, wait: 5 * time.Hour, cancel: true}
 	events := &eventRecorder{}

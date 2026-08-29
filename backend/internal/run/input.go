@@ -2,6 +2,7 @@ package run
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 	"sync"
 
@@ -132,42 +133,18 @@ func (q *InputQueue) ReplySignal() <-chan AcceptedReply {
 
 func validateQuestionAnswer(question model.QuestionAskedPayload, content string) (model.QuestionAnswer, string, bool) {
 	var answer model.QuestionAnswer
-	if err := json.Unmarshal([]byte(content), &answer); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(content))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&answer); err != nil {
 		return model.QuestionAnswer{}, "", false
 	}
-	if len(question.Questions) > 0 {
-		return validateGroupedQuestionAnswer(question, answer)
-	}
-	labels := map[string]string{}
-	for _, option := range question.Options {
-		labels[option.ID] = option.Label
-	}
-	seen := map[string]bool{}
-	display := []string{}
-	for _, id := range answer.SelectedOptionIDs {
-		if labels[id] == "" || seen[id] {
-			return model.QuestionAnswer{}, "", false
-		}
-		seen[id] = true
-		display = append(display, labels[id])
-	}
-	if question.Selection == "single" && len(answer.SelectedOptionIDs) > 1 {
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return model.QuestionAnswer{}, "", false
 	}
-	answer.CustomText = strings.TrimSpace(answer.CustomText)
-	if answer.CustomText != "" {
-		if !question.AllowCustom {
-			return model.QuestionAnswer{}, "", false
-		}
-		display = append(display, answer.CustomText)
-	}
-	if len(display) == 0 {
-		return model.QuestionAnswer{}, "", false
-	}
-	return answer, strings.Join(display, "；"), true
+	return validateQuestionAnswers(question, answer)
 }
 
-func validateGroupedQuestionAnswer(question model.QuestionAskedPayload, answer model.QuestionAnswer) (model.QuestionAnswer, string, bool) {
+func validateQuestionAnswers(question model.QuestionAskedPayload, answer model.QuestionAnswer) (model.QuestionAnswer, string, bool) {
 	if len(answer.Answers) != len(question.Questions) {
 		return model.QuestionAnswer{}, "", false
 	}

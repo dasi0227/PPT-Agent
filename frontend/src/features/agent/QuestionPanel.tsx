@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, MessageCircleQuestion } from 'lucide-react';
 import { useRunStore } from '../../stores/runStore';
 import { cn } from '../../lib/utils';
@@ -29,16 +29,9 @@ function hasAnswer(question: QuestionField, draft: DraftAnswer | undefined): boo
   return Boolean(draft.selectedOptionId);
 }
 
-function answerText(question: QuestionField, answer: QuestionFieldAnswer | undefined, legacy: QuestionItem): string {
-  if (answer) {
-    return answer.custom_text?.trim() || optionLabel(question.options, answer.selected_option_id);
-  }
-  if (!legacy.answer) return '';
-  const labels = legacy.answer.selected_option_ids
-    .map((id) => optionLabel(question.options, id))
-    .filter(Boolean);
-  if (legacy.answer.custom_text) labels.push(legacy.answer.custom_text);
-  return labels.join('；');
+function answerText(question: QuestionField, answer: QuestionFieldAnswer | undefined): string {
+  if (!answer) return '';
+  return answer.custom_text?.trim() || optionLabel(question.options, answer.selected_option_id);
 }
 
 function QuestionSlide({
@@ -227,12 +220,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   const threadId = useActiveThreadId();
   const { activeRunId, pendingQuestion } = useActiveSession();
   const answerQuestion = useRunStore((state) => state.answerQuestion);
-  const questions = useMemo(() => item.questions.length > 0 ? item.questions : [{
-    id: 'question-1',
-    title: item.prompt,
-    options: item.options,
-    allow_custom: item.allowCustom,
-  }], [item.allowCustom, item.options, item.prompt, item.questions]);
+  const questions = item.questions;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, DraftAnswer>>(() => initialDrafts(questions));
   const [submitting, setSubmitting] = useState(false);
@@ -270,7 +258,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   }, [currentIndex, drafts, item.answer, questions]);
 
   if (item.answer) {
-    const groupedAnswers = item.answer.answers ?? [];
+    const groupedAnswers = item.answer.answers;
     if (questions.length > 1) {
       return (
         <div className="rounded-lg transition-colors duration-150">
@@ -292,7 +280,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
                 <SubmittedQuestionDetailRow
                   key={question.id}
                   question={question}
-                  value={answerText(question, groupedAnswers.find((answer) => answer.question_id === question.id), item)}
+                  value={answerText(question, groupedAnswers.find((answer) => answer.question_id === question.id))}
                 />
               ))}
             </div>
@@ -306,7 +294,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
           <SubmittedQuestionRow
             key={question.id}
             question={question}
-            value={answerText(question, groupedAnswers.find((answer) => answer.question_id === question.id), item)}
+            value={answerText(question, groupedAnswers.find((answer) => answer.question_id === question.id))}
           />
         ))}
       </div>
@@ -322,25 +310,15 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
 
   const submit = async () => {
     if (!threadId || !activeRunId || !pending || submitting || !complete) return;
-    const groupedAnswers: QuestionFieldAnswer[] = questions.map((question) => {
+    const answers: QuestionFieldAnswer[] = questions.map((question) => {
       const draft = drafts[question.id] ?? { customText: '' };
       if (question.options.length === 0 || draft.selectedOptionId === CUSTOM_OPTION_ID) {
         return { question_id: question.id, custom_text: draft.customText.trim() };
       }
       return { question_id: question.id, selected_option_id: draft.selectedOptionId };
     });
-    const first = groupedAnswers[0];
-    const legacyAnswer = !item.grouped && first
-      ? {
-          selected_option_ids: first.selected_option_id ? [first.selected_option_id] : [],
-          custom_text: first.custom_text ?? '',
-        }
-      : { selected_option_ids: [], custom_text: '' };
-    const answer = item.grouped
-      ? { selected_option_ids: [], custom_text: '', answers: groupedAnswers }
-      : legacyAnswer;
     setSubmitting(true);
-    await answerQuestion(threadId, activeRunId, item.questionId, JSON.stringify(answer));
+    await answerQuestion(threadId, activeRunId, item.questionId, JSON.stringify({ answers }));
     setSubmitting(false);
   };
 

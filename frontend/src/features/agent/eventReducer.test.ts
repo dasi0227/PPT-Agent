@@ -34,12 +34,12 @@ describe('public event reducer', () => {
 
   it('upserts authoritative question answer and survives replay', () => {
     let state = reduceSSEEvent([], event('question.asked', {
-      question_id: 'q1', prompt: '选择风格', selection: 'single',
-      options: [{ id: 'tech', label: '克制科技' }], allow_custom: true,
+      question_id: 'q1',
+      questions: [{ id: 'style', title: '选择风格', options: [{ id: 'tech', label: '克制科技' }], allow_custom: true }],
     }));
     state = reduceSSEEvent(state, event('question.answered', {
       question_id: 'q1',
-      answer: { selected_option_ids: ['tech'], custom_text: '' },
+      answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] },
       display_text: '克制科技',
     }, '2'));
     expect(state).toHaveLength(1);

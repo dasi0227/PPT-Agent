@@ -573,8 +573,9 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 		close(asking)
 		_, _, err := prompter.Ask(ctx, model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("cancel-question"),
-			QuestionID:      "q-cancel", Prompt: "choose", Selection: "single",
-			Options: []model.QuestionOption{{ID: "a", Label: "A"}},
+			QuestionID:      "q-cancel", Questions: []model.QuestionField{{
+				ID: "choice", Title: "choose", Options: []model.QuestionOption{{ID: "a", Label: "A"}},
+			}},
 		})
 		if !errors.Is(err, context.Canceled) {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_ANSWER"}
@@ -670,11 +671,12 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		close(asking)
 		answer, display, err := prompter.Ask(ctx, model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("question"),
-			QuestionID:      "q1", Prompt: "选择方向", Selection: "single",
-			Options:     []model.QuestionOption{{ID: "tech", Label: "克制科技"}},
-			AllowCustom: true,
+			QuestionID:      "q1", Questions: []model.QuestionField{{
+				ID: "direction", Title: "选择方向",
+				Options: []model.QuestionOption{{ID: "tech", Label: "克制科技"}}, AllowCustom: true,
+			}},
 		})
-		if err != nil || len(answer.SelectedOptionIDs) != 1 || display != "克制科技" {
+		if err != nil || len(answer.Answers) != 1 || display != "Q：选择方向\nA：克制科技" {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_ANSWER", Message: "answer failed"}
 		}
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
@@ -694,10 +696,10 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	if err := engine.InjectInput(context.Background(), "question", `{"selected_option_ids":["missing"],"custom_text":""}`, "q1"); !errors.Is(err, ErrReplyMismatch) {
+	if err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"missing"}]}`, "q1"); !errors.Is(err, ErrReplyMismatch) {
 		t.Fatalf("invalid answer err=%v", err)
 	}
-	if err := engine.InjectInput(context.Background(), "question", `{"selected_option_ids":["tech"],"custom_text":""}`, "q1"); err != nil {
+	if err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"tech"}]}`, "q1"); err != nil {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, store, "question", model.RunDone)

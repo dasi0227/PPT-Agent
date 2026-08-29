@@ -12,7 +12,7 @@
 
 项目根目录使用 `manifest.json`、`outline.json`、`design.json`。Manifest 保存标题、目标、受众、语言、要求、禁忌、画布和页码规则。资源 Schema、Mutation、版本类型、快照目录、公共事件、项目内容 API 和 Agent 上下文使用同一命名。
 
-启动迁移会将旧项目根目录的 `deck.json` 原子重命名为 `manifest.json`，并将版本表中的 `deck` 目标一次性转换为 `manifest`。旧历史事件中的 `deck:deck` 在公共事件解析边界归一化为 `deck:manifest`；核心业务不保留双写或旧契约分支。
+项目处于开发阶段，只接受 `manifest.json`、`manifest` 版本目标和 `deck:manifest` 公共目标。前后端不读取、归一化或双写旧 `deck.json`、`deck` 版本目标和 `deck:deck` 事件。
 
 `scope.level: deck` 保持不变，因为它表示操作范围是整份演示文稿，而不是 Manifest 文件。
 

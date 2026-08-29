@@ -6,7 +6,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestValidateGroupedQuestionAnswer(t *testing.T) {
+func TestValidateQuestionAnswer(t *testing.T) {
 	question := model.QuestionAskedPayload{
 		QuestionID: "q1",
 		Questions: []model.QuestionField{
@@ -21,7 +21,7 @@ func TestValidateGroupedQuestionAnswer(t *testing.T) {
 			{ID: "note", Title: "补充说明", AllowCustom: true},
 		},
 	}
-	answer, display, ok := validateQuestionAnswer(question, `{"selected_option_ids":[],"custom_text":"","answers":[{"question_id":"type","selected_option_id":"single"},{"question_id":"icon","custom_text":"自定义图标"},{"question_id":"note","custom_text":"保持简洁"}]}`)
+	answer, display, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","selected_option_id":"single"},{"question_id":"icon","custom_text":"自定义图标"},{"question_id":"note","custom_text":"保持简洁"}]}`)
 	if !ok {
 		t.Fatal("answer rejected")
 	}
@@ -30,7 +30,7 @@ func TestValidateGroupedQuestionAnswer(t *testing.T) {
 	}
 }
 
-func TestValidateGroupedQuestionAnswerRejectsIncompleteOrInvalidCustom(t *testing.T) {
+func TestValidateQuestionAnswerRejectsIncompleteOrInvalidCustom(t *testing.T) {
 	question := model.QuestionAskedPayload{
 		QuestionID: "q1",
 		Questions: []model.QuestionField{{
@@ -38,11 +38,14 @@ func TestValidateGroupedQuestionAnswerRejectsIncompleteOrInvalidCustom(t *testin
 			Options: []model.QuestionOption{{ID: "single", Label: "单选"}},
 		}},
 	}
-	if _, _, ok := validateQuestionAnswer(question, `{"selected_option_ids":[],"custom_text":"","answers":[]}`); ok {
+	if _, _, ok := validateQuestionAnswer(question, `{"answers":[]}`); ok {
 		t.Fatal("accepted incomplete answer")
 	}
-	if _, _, ok := validateQuestionAnswer(question, `{"selected_option_ids":[],"custom_text":"","answers":[{"question_id":"type","custom_text":"自定义"}]}`); ok {
-		t.Fatal("accepted custom answer without allow_custom")
+	if _, _, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","custom_text":"自定义"}]}`); ok {
+		t.Fatal("accepted custom answer when allow_custom is false")
+	}
+	if _, _, ok := validateQuestionAnswer(question, `{"selected_option_ids":[],"answers":[{"question_id":"type","selected_option_id":"a"}]}`); ok {
+		t.Fatal("accepted legacy answer fields")
 	}
 }
 

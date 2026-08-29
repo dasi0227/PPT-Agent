@@ -143,28 +143,22 @@ function localizedErrorMessage(message: string, fallback: string): string {
 function parseQuestionAnswer(content: string): QuestionAnswer | null {
   try {
     const parsed = JSON.parse(content) as Partial<QuestionAnswer>;
-    if (!parsed || typeof parsed !== 'object') return null;
-    const answers = Array.isArray(parsed.answers)
-      ? parsed.answers
-          .map((answer): QuestionFieldAnswer | null => {
-            if (!answer || typeof answer !== 'object') return null;
-            const candidate = answer as Partial<QuestionFieldAnswer>;
-            if (typeof candidate.question_id !== 'string') return null;
-            return {
-              question_id: candidate.question_id,
-              ...(typeof candidate.selected_option_id === 'string' ? { selected_option_id: candidate.selected_option_id } : {}),
-              ...(typeof candidate.custom_text === 'string' ? { custom_text: candidate.custom_text } : {}),
-            };
-          })
-          .filter((answer): answer is QuestionFieldAnswer => Boolean(answer))
-      : undefined;
-    return {
-      selected_option_ids: Array.isArray(parsed.selected_option_ids)
-        ? parsed.selected_option_ids.filter((id): id is string => typeof id === 'string')
-        : [],
-      custom_text: typeof parsed.custom_text === 'string' ? parsed.custom_text : '',
-      ...(answers && answers.length > 0 ? { answers } : {}),
-    };
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.answers)) return null;
+    if (Object.keys(parsed).some((key) => key !== 'answers')) return null;
+    const answers = parsed.answers
+      .map((answer): QuestionFieldAnswer | null => {
+        if (!answer || typeof answer !== 'object') return null;
+        const candidate = answer as Partial<QuestionFieldAnswer>;
+        if (typeof candidate.question_id !== 'string') return null;
+        if (Object.keys(candidate).some((key) => !['question_id', 'selected_option_id', 'custom_text'].includes(key))) return null;
+        return {
+          question_id: candidate.question_id,
+          ...(typeof candidate.selected_option_id === 'string' ? { selected_option_id: candidate.selected_option_id } : {}),
+          ...(typeof candidate.custom_text === 'string' ? { custom_text: candidate.custom_text } : {}),
+        };
+      })
+      .filter((answer): answer is QuestionFieldAnswer => Boolean(answer));
+    return answers.length > 0 ? { answers } : null;
   } catch {
     return null;
   }
@@ -520,7 +514,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
             if (event.event === 'question.asked') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
-              pendingQuestion = { id: event.data.question_id, prompt: event.data.questions?.[0]?.title ?? event.data.prompt };
+              pendingQuestion = { id: event.data.question_id, prompt: event.data.questions[0].title };
               progress = null;
             } else if (event.event === 'question.answered') {
               status = prev.status === 'canceling' ? 'canceling' : 'running';
@@ -675,7 +669,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             timelineItems: prev.timelineItems.length > 0 ? prev.timelineItems : hydratedItems,
             plan: prev.plan ?? hydratedPlan,
             pendingQuestion: status === 'waiting' && pending?.type === 'question'
-              ? { id: pending.questionId, prompt: pending.prompt }
+              ? { id: pending.questionId, prompt: pending.questions[0].title }
               : null,
             originalRequest: prev.originalRequest ?? requestFromTimeline(hydratedItems, run.id, run.model),
           }));

@@ -6,7 +6,6 @@ import {
   PublicTarget,
   QuestionAnswer,
   QuestionField,
-  QuestionOption,
   SSEEvent,
   ToolPreview,
 } from '../../api/types';
@@ -83,12 +82,7 @@ export interface QuestionItem extends BaseTimelineItem {
   type: 'question';
   questionId: string;
   header?: string;
-  prompt: string;
-  selection: 'single' | 'multiple';
-  options: QuestionOption[];
-  allowCustom: boolean;
   questions: QuestionField[];
-  grouped: boolean;
   answer?: QuestionAnswer;
   displayText?: string;
 }
@@ -178,22 +172,6 @@ function settleInterruptedTools(state: TimelineItem[], runId: string): TimelineI
           },
         }
       : candidate);
-}
-
-function normalizeQuestions(event: Extract<SSEEvent, { event: 'question.asked' }>): { questions: QuestionField[]; grouped: boolean } {
-  if (event.data.questions && event.data.questions.length > 0) {
-    return { questions: event.data.questions, grouped: true };
-  }
-  return {
-    grouped: false,
-    questions: [{
-      id: 'question-1',
-      title: event.data.prompt,
-      description: event.data.header,
-      options: event.data.options,
-      allow_custom: event.data.allow_custom,
-    }],
-  };
 }
 
 export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): TimelineItem[] {
@@ -318,19 +296,13 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       const id = `${runId}:question:${event.data.question_id}`;
       const existing = state.find((item): item is QuestionItem =>
         item.type === 'question' && item.id === id);
-      const { questions, grouped } = normalizeQuestions(event);
       const item: QuestionItem = {
         id,
         type: 'question',
         runId,
         questionId: event.data.question_id,
         header: event.data.header,
-        prompt: event.data.prompt,
-        selection: event.data.selection,
-        options: event.data.options,
-        allowCustom: event.data.allow_custom,
-        questions,
-        grouped,
+        questions: event.data.questions,
         answer: existing?.answer,
         displayText: existing?.displayText,
         timestamp: existing?.timestamp ?? timestamp,

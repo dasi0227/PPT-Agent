@@ -516,19 +516,9 @@ func newMessageID() string {
 
 func publicQuestion(runID, questionID string, args map[string]any) model.QuestionAskedPayload {
 	questions := publicQuestionFields(args)
-	if len(questions) == 0 {
-		questions = []model.QuestionField{legacyQuestionField(args, "question-1")}
-	}
-	first := questions[0]
-	prompt := first.Title
-	if prompt == "" {
-		prompt = sanitizePublicText(stringValue(args["question"]), 240)
-	}
 	return model.QuestionAskedPayload{
 		PublicEventBase: publicBase(runID), QuestionID: questionID,
-		Header: sanitizePublicText(stringValue(args["header"]), 24), Prompt: prompt,
-		Selection: "single", Options: first.Options, AllowCustom: first.AllowCustom,
-		Questions: questions,
+		Header: sanitizePublicText(stringValue(args["header"]), 24), Questions: questions,
 	}
 }
 
@@ -546,7 +536,7 @@ func publicQuestionFields(args map[string]any) []model.QuestionField {
 			id = fmt.Sprintf("%s-%d", id, index+1)
 		}
 		seen[id] = true
-		field := legacyQuestionField(question, id)
+		field := publicQuestionField(question, id)
 		if field.Title == "" {
 			continue
 		}
@@ -555,20 +545,14 @@ func publicQuestionFields(args map[string]any) []model.QuestionField {
 	return questions
 }
 
-func legacyQuestionField(args map[string]any, fallbackID string) model.QuestionField {
+func publicQuestionField(args map[string]any, fallbackID string) model.QuestionField {
 	options := publicQuestionOptions(args)
 	allowCustom, _ := args["allow_custom"].(bool)
 	if len(options) == 0 {
 		allowCustom = true
 	}
 	title := sanitizePublicText(stringValue(args["title"]), 120)
-	if title == "" {
-		title = sanitizePublicText(stringValue(args["question"]), 120)
-	}
 	description := sanitizePublicText(stringValue(args["description"]), 260)
-	if description == "" && title == "" {
-		title = sanitizePublicText(stringValue(args["prompt"]), 120)
-	}
 	return model.QuestionField{
 		ID: fallbackID, Title: title, Description: description,
 		Options: options, AllowCustom: allowCustom,

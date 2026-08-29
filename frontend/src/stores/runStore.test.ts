@@ -217,12 +217,12 @@ describe('runStore public event sessions', () => {
     const connection = connections[0];
     connection.onMessage({
       id: '1', event: 'question.asked',
-      data: { ...base, question_id: 'q1', prompt: '选择风格', selection: 'single', options: [], allow_custom: true },
+      data: { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', options: [], allow_custom: true }] },
     });
     expect(useRunStore.getState().sessions.t1.status).toBe('waiting');
     await useRunStore.getState().answerQuestion(
       't1', 'run_1', 'q1',
-      JSON.stringify({ selected_option_ids: [], custom_text: '克制' }),
+      JSON.stringify({ answers: [{ question_id: 'style', custom_text: '克制' }] }),
     );
     expect(useRunStore.getState().sessions.t1).toMatchObject({
       status: 'running',
@@ -233,12 +233,12 @@ describe('runStore public event sessions', () => {
       .toEqual(expect.arrayContaining([
         expect.objectContaining({
           type: 'question',
-          answer: { selected_option_ids: [], custom_text: '克制' },
+          answer: { answers: [{ question_id: 'style', custom_text: '克制' }] },
         }),
       ]));
     connection.onMessage({
       id: '2', event: 'question.answered',
-      data: { ...base, question_id: 'q1', answer: { selected_option_ids: [], custom_text: '克制' }, display_text: '克制' },
+      data: { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
     });
     expect(useRunStore.getState().sessions.t1.status).toBe('running');
     expect(useRunStore.getState().sessions.t1.pendingQuestion).toBeNull();

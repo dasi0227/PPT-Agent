@@ -33,8 +33,8 @@ describe('history hydrator', () => {
       }),
       entry(3, 'tool.started', { ...base, call_id: 'c1', tool: 'mutate_ppt', display: { label: '生成页面' } }),
       entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'mutate_ppt', status: 'completed', display: { label: '已生成页面' } }),
-      entry(5, 'question.asked', { ...base, question_id: 'q1', prompt: '选择风格', selection: 'single', options: [{ id: 'tech', label: '科技' }], allow_custom: false }),
-      entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { selected_option_ids: ['tech'], custom_text: '' }, display_text: '科技' }),
+      entry(5, 'question.asked', { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', options: [{ id: 'tech', label: '科技' }], allow_custom: false }] }),
+      entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] }, display_text: '科技' }),
       entry(7, 'message.final', { ...base, message_id: 'm1', text: '已完成' }),
       entry(8, 'run.completed', terminal()),
     ]);
@@ -88,11 +88,11 @@ describe('history hydrator', () => {
     expect(hydrated.session.status).toBe('idle');
   });
 
-  it('uses the live event contract and restores legacy deck terminal history', () => {
+  it('accepts canonical targets and rejects legacy deck targets', () => {
     const valid = hydrateRunFromHistory([
       entry(1, 'user_turn', { text: '修改整份 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
       entry(2, 'run.error', terminal('r1', {
-        affected_targets: [{ type: 'deck', part: 'deck' }],
+        affected_targets: [{ type: 'deck', part: 'manifest' }],
         error: { code: 'COMMIT_FAILED', message: '保存失败', retryable: true },
       })),
     ]);
@@ -101,17 +101,17 @@ describe('history hydrator', () => {
     ]));
     expect(valid.session.status).toBe('error');
 
-    const invalid = hydrateRunFromHistory([
+    const legacy = hydrateRunFromHistory([
       entry(1, 'user_turn', { text: '修改整份 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
       entry(2, 'run.error', terminal('r1', {
-        affected_targets: [{ type: 'deck', part: 'html' }],
+        affected_targets: [{ type: 'deck', part: 'deck' }],
         error: { code: 'COMMIT_FAILED', message: '不应展示', retryable: true },
       })),
     ]);
-    expect(invalid.items).not.toEqual(expect.arrayContaining([
+    expect(legacy.items).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'terminal_notice' }),
     ]));
-    expect(invalid.session.status).toBe('running');
+    expect(legacy.session.status).toBe('running');
   });
 
   it('restores accepted and rejected steering messages from thread history', () => {
@@ -186,10 +186,7 @@ describe('history hydrator', () => {
         ...base,
         run_id: 'new',
         question_id: 'q2',
-        prompt: '请选择方向',
-        selection: 'single',
-        options: [{ id: 'a', label: '方向 A' }],
-        allow_custom: false,
+        questions: [{ id: 'direction', title: '请选择方向', options: [{ id: 'a', label: '方向 A' }], allow_custom: false }],
       }, 'new'),
     ]);
     expect(hydrated.items.filter((item) => item.type === 'user_turn').map((item) => item.text))

@@ -233,13 +233,9 @@ type QuestionField struct {
 
 type QuestionAskedPayload struct {
 	PublicEventBase
-	QuestionID  string           `json:"question_id"`
-	Header      string           `json:"header,omitempty"`
-	Prompt      string           `json:"prompt"`
-	Selection   string           `json:"selection"`
-	Options     []QuestionOption `json:"options"`
-	AllowCustom bool             `json:"allow_custom"`
-	Questions   []QuestionField  `json:"questions,omitempty"`
+	QuestionID string          `json:"question_id"`
+	Header     string          `json:"header,omitempty"`
+	Questions  []QuestionField `json:"questions"`
 }
 
 type QuestionFieldAnswer struct {
@@ -249,9 +245,7 @@ type QuestionFieldAnswer struct {
 }
 
 type QuestionAnswer struct {
-	SelectedOptionIDs []string              `json:"selected_option_ids"`
-	CustomText        string                `json:"custom_text"`
-	Answers           []QuestionFieldAnswer `json:"answers,omitempty"`
+	Answers []QuestionFieldAnswer `json:"answers"`
 }
 
 type QuestionAnsweredPayload struct {
@@ -442,19 +436,16 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := requireString(data, "question_id"); err != nil {
 			return err
 		}
-		if questions, ok := data["questions"].([]any); ok && len(questions) > 0 {
-			if err := validateQuestionFields(questions); err != nil {
-				return err
+		for _, field := range []string{"prompt", "selection", "options", "allow_custom"} {
+			if _, exists := data[field]; exists {
+				return fmt.Errorf("legacy question field %s is not allowed", field)
 			}
-			break
 		}
-		if err := requireString(data, "prompt", "selection"); err != nil {
-			return err
+		questions, ok := data["questions"].([]any)
+		if !ok || len(questions) == 0 {
+			return errors.New("questions are required")
 		}
-		if !oneOf(stringValue(data["selection"]), "single", "multiple") {
-			return errors.New("invalid question selection")
-		}
-		if err := validateQuestionOptions(data); err != nil {
+		if err := validateQuestionFields(questions); err != nil {
 			return err
 		}
 	case EventQuestionAnswered:
@@ -465,15 +456,17 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return errors.New("answer is required")
 		}
 		answer := data["answer"].(map[string]any)
-		selected, ok := answer["selected_option_ids"].([]any)
-		if !ok {
-			return errors.New("selected_option_ids must be an array")
+		for _, field := range []string{"selected_option_ids", "custom_text"} {
+			if _, exists := answer[field]; exists {
+				return fmt.Errorf("legacy answer field %s is not allowed", field)
+			}
 		}
-		if err := validateStringIDs(selected, "selected_option_ids"); err != nil {
+		answers, ok := answer["answers"].([]any)
+		if !ok || len(answers) == 0 {
+			return errors.New("answer.answers are required")
+		}
+		if err := validateQuestionAnswerFields(answers); err != nil {
 			return err
-		}
-		if _, ok := answer["custom_text"].(string); !ok {
-			return errors.New("custom_text must be a string")
 		}
 	}
 	return nil
@@ -555,6 +548,30 @@ func validateQuestionFields(questions []any) error {
 				return errors.New("question option ids must be unique")
 			}
 			seenOptions[optionID] = true
+		}
+	}
+	return nil
+}
+
+func validateQuestionAnswerFields(answers []any) error {
+	seen := map[string]bool{}
+	for _, raw := range answers {
+		answer, ok := raw.(map[string]any)
+		if !ok {
+			return errors.New("invalid question answer")
+		}
+		if err := requireString(answer, "question_id"); err != nil {
+			return err
+		}
+		id := stringValue(answer["question_id"])
+		if seen[id] {
+			return errors.New("question answer ids must be unique")
+		}
+		seen[id] = true
+		selected, hasSelected := answer["selected_option_id"].(string)
+		custom, hasCustom := answer["custom_text"].(string)
+		if (hasSelected && strings.TrimSpace(selected) != "") == (hasCustom && strings.TrimSpace(custom) != "") {
+			return errors.New("question answer requires exactly one selected option or custom text")
 		}
 	}
 	return nil

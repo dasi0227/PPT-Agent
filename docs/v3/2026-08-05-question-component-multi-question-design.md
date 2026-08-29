@@ -6,7 +6,7 @@
 
 ## 协议
 
-`question.asked` 新增 `questions[]`，每个元素是一个原子问题：
+`question.asked` 只使用 `questions[]`，每个元素是一个原子问题：
 
 - `id`: 题目 ID，组内唯一。
 - `title`: 必填，问题标题。
@@ -14,21 +14,21 @@
 - `options`: 可选，最多 3 个给定选项。
 - `allow_custom`: 可选；有选项时默认 `false`，无选项时强制为填空题。
 
-兼容旧字段 `prompt/selection/options/allow_custom`，历史事件仍可回放。新工具调用优先使用 `questions[]`。
+顶层 `prompt/selection/options/allow_custom` 不属于当前公共事件契约，解析时直接拒绝。
 
-`question.answered.answer` 新增 `answers[]`：
+`question.answered.answer` 只使用 `answers[]`：
 
 - 单选题：提交 `question_id + selected_option_id`。
 - 增强单选：若选“自定义回答”，提交 `question_id + custom_text`，与选项二选一。
 - 填空题：提交 `question_id + custom_text`。
 
-保留旧 `selected_option_ids/custom_text` 以兼容旧链路。
+顶层 `selected_option_ids/custom_text` 不属于当前答案契约。
 
 ## 后端
 
-- `QuestionAskedPayload` 增加 `Questions`，`QuestionAnswer` 增加 `Answers`。
-- `publicQuestion` 从工具参数解析 `questions[]`，并限制选项数最多 3；旧参数自动转换为单题。
-- `ValidatePublicEvent` 校验新旧两种 payload，阻止 HTML 文本和非法题型。
+- `QuestionAskedPayload` 只暴露 `Questions`，`QuestionAnswer` 只暴露 `Answers`。
+- `publicQuestion` 从工具参数解析 `questions[]`，并限制选项数最多 3。
+- `ValidatePublicEvent` 只校验当前 payload，阻止 HTML 文本和非法题型。
 - `InputQueue` 校验所有问题必须回答；选项题不能多选；自定义回答只在 `allow_custom=true` 时接受。
 - `ask_user` 工具 schema 和系统提示词明确：多问题必须拆成原子题，有选项就是单选，最多 3 个给定选项，无法枚举才用填空题。
 
