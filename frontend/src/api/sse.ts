@@ -10,7 +10,7 @@ export interface SSEOptions {
 }
 
 export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
-  'run.started', 'run.progress', 'run.completed', 'run.failed', 'run.error', 'run.canceled',
+  'run.started', 'run.progress', 'run.resumed', 'run.completed', 'run.failed', 'run.error', 'run.canceled',
   'plan.updated', 'plan.approval_requested', 'plan.approval_answered', 'run.mode_changed',
   'message.reasoning', 'message.milestone', 'message.final',
   'tool.started', 'tool.completed', 'question.asked', 'question.answered',
@@ -61,6 +61,8 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && hasSafeString(data, 'text')
         && validOptionalPublicTarget(data.target)
         && validProgress(data.progress);
+    case 'run.resumed':
+      return true;
     case 'run.completed':
     case 'run.failed':
     case 'run.error':
@@ -70,6 +72,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && validTargets(data.affected_targets)
         && (data.error === null || validOptionalError(data.error))
         && hasString(data, 'trace_id')
+        && (data.reason === undefined || ['user_requested', 'superseded'].includes(String(data.reason)))
         && (!['run.failed', 'run.error'].includes(eventName) || isRecord(data.error));
     case 'plan.updated':
       return validPlan(data.plan);

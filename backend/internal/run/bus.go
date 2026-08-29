@@ -78,7 +78,7 @@ func (b *Bus) Restore(events []model.Event) error {
 // run event store for Last-Event-ID replay but is modeionally transient here.
 func isWhitelistedForHistory(evt model.EventType) bool {
 	switch evt {
-	case model.EventRunStarted, model.EventPlanUpdated,
+	case model.EventRunStarted, model.EventRunResumed, model.EventPlanUpdated,
 		model.EventPlanApprovalRequested, model.EventPlanApprovalAnswered, model.EventRunModeChanged,
 		model.EventMessageReasoning, model.EventMessageMilestone, model.EventMessageFinal,
 		model.EventToolStarted, model.EventToolCompleted,
@@ -249,9 +249,13 @@ func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 		if evt == model.EventRunCompleted && b.finalCount != 1 {
 			return errors.New("completed run requires exactly one prior message.final")
 		}
-		for _, completed := range b.toolCalls {
-			if !completed {
-				return errors.New("terminal run event requires every started tool to complete")
+		allowInterruptedTools := evt == model.EventRunCanceled &&
+			data["reason"] == string(model.RunCancelSuperseded)
+		if !allowInterruptedTools {
+			for _, completed := range b.toolCalls {
+				if !completed {
+					return errors.New("terminal run event requires every started tool to complete")
+				}
 			}
 		}
 	case model.EventRunError:

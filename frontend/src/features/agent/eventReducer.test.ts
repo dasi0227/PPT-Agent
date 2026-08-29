@@ -56,6 +56,18 @@ describe('public event reducer', () => {
     expect(reducePlan(null, planEvent)).toMatchObject({ id: 'p1', revision: 1 });
   });
 
+  it('records a resumed run as a compact lifecycle row', () => {
+    const state = reduceSSEEvent([], event('run.resumed', {}));
+    expect(state).toEqual([
+      expect.objectContaining({
+        id: 'r1:resumed',
+        type: 'run_lifecycle',
+        state: 'resumed',
+        text: '已从中断处恢复，继续执行',
+      }),
+    ]);
+  });
+
   it('ignores stale plan revisions', () => {
     const revision2 = event('plan.updated', {
 	  plan: { plan_id: 'p1', revision: 2, title: '新', content: '完整计划', status: 'active', steps: [{ id: 's1', title: '生成', status: 'completed' }] },
@@ -100,6 +112,26 @@ describe('public event reducer', () => {
       status: 'error',
       affectedTargets: [{ type: 'slide', slide_id: 's1', part: 'html' }],
       traceId: 'r1',
+    });
+  });
+
+  it('uses paused copy when a paused run is superseded by a new request', () => {
+    const running = reduceSSEEvent([], event('tool.started', {
+      call_id: 'c1',
+      tool: 'search_refs',
+      display: { label: '正在检索参考资料' },
+    }));
+    const state = reduceSSEEvent(running, event('run.canceled', terminal({ reason: 'superseded' }), '2'));
+    expect(state[0]).toMatchObject({
+      type: 'tool',
+      status: 'failed',
+      error: { code: 'RUN_INTERRUPTED' },
+    });
+    expect(state[1]).toMatchObject({
+      type: 'terminal_notice',
+      status: 'canceled',
+      reason: 'superseded',
+      message: '此前任务因服务中断而暂停，已停止执行。',
     });
   });
 });

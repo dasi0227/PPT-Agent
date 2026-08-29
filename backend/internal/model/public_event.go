@@ -19,6 +19,7 @@ var PublicEventTypes = [...]EventType{
 	EventRunFailed,
 	EventRunError,
 	EventRunCanceled,
+	EventRunResumed,
 	EventPlanUpdated,
 	EventPlanApprovalRequested,
 	EventPlanApprovalAnswered,
@@ -91,14 +92,19 @@ type RunProgressPayload struct {
 
 type RunTerminalPayload struct {
 	PublicEventBase
-	DurationMS      int64          `json:"duration_ms"`
-	AffectedTargets []PublicTarget `json:"affected_targets"`
-	Error           *PublicError   `json:"error"`
-	TraceID         string         `json:"trace_id"`
+	DurationMS      int64           `json:"duration_ms"`
+	AffectedTargets []PublicTarget  `json:"affected_targets"`
+	Error           *PublicError    `json:"error"`
+	TraceID         string          `json:"trace_id"`
+	Reason          RunCancelReason `json:"reason,omitempty"`
 }
 
 func NewRunTerminalPayload(runID string, durationMS int64, affectedTargets []PublicTarget, publicError *PublicError) RunTerminalPayload {
 	return NewRunTerminalPayloadFromBase(NewPublicEventBase(runID), durationMS, affectedTargets, publicError)
+}
+
+type RunResumedPayload struct {
+	PublicEventBase
 }
 
 func NewRunTerminalPayloadFromBase(base PublicEventBase, durationMS int64, affectedTargets []PublicTarget, publicError *PublicError) RunTerminalPayload {
@@ -341,6 +347,11 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := validateTargets(data["affected_targets"]); err != nil {
 			return err
 		}
+		if reason := stringValue(data["reason"]); reason != "" &&
+			!oneOf(reason, string(RunCancelUserRequested), string(RunCancelSuperseded)) {
+			return errors.New("invalid run cancellation reason")
+		}
+	case EventRunResumed:
 	case EventPlanUpdated:
 		return validatePlan(data["plan"])
 	case EventPlanApprovalRequested:

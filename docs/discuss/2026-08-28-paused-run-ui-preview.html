@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>暂停任务交互预览</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #17202b;
+      background: #e9edf2;
+      font-synthesis: none;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .preview-shell {
+      width: min(100%, 520px);
+    }
+
+    .preview-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      color: #657184;
+      font-size: 12px;
+    }
+
+    .reset {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 8px;
+      color: #526071;
+      background: transparent;
+      border-radius: 6px;
+    }
+
+    .reset:hover { background: rgba(255,255,255,.7); }
+
+    .panel {
+      height: min(780px, calc(100vh - 82px));
+      min-height: 620px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #f8fafc;
+      border: 1px solid #d5dce5;
+      border-radius: 10px;
+      box-shadow: 0 18px 44px rgba(27, 39, 54, .12);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 42px;
+      flex: none;
+      padding: 0 14px;
+      background: #fff;
+      border-bottom: 1px solid #e0e5eb;
+    }
+
+    .panel-title {
+      font-size: 13px;
+      font-weight: 650;
+      color: #303b49;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #9aa5b4;
+    }
+
+    .timeline {
+      min-height: 0;
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 14px 22px;
+    }
+
+    .user-wrap {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 18px;
+    }
+
+    .user-bubble {
+      max-width: 88%;
+      padding: 10px 12px;
+      font-size: 14px;
+      line-height: 1.55;
+      background: #f0f3f7;
+      border: 1px solid #d6dde6;
+      border-radius: 10px;
+    }
+
+    .activity-row,
+    .resume-row,
+    .summary-row {
+      min-height: 32px;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) 18px;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 6px;
+      color: #5f6b7a;
+      font-size: 13px;
+    }
+
+    .activity-row + .activity-row { margin-top: 1px; }
+
+    .activity-row svg,
+    .resume-row svg,
+    .summary-row svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.75;
+    }
+
+    .success { color: #25876b; }
+    .accent { color: #2f67f6; }
+    .muted-icon { color: #8c98a8; }
+
+    .pause-card {
+      margin-top: 12px;
+      padding: 12px;
+      background: #fff;
+      border: 1px solid #d6dde6;
+      border-radius: 8px;
+      box-shadow: 0 2px 7px rgba(23, 32, 43, .045);
+    }
+
+    .pause-main {
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr);
+      gap: 9px;
+    }
+
+    .pause-main > svg {
+      width: 18px;
+      height: 18px;
+      margin-top: 1px;
+      color: #687588;
+      stroke-width: 1.75;
+    }
+
+    .pause-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 20px;
+      color: #293544;
+    }
+
+    .pause-copy {
+      margin: 3px 0 0;
+      color: #6a7686;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .pause-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 11px;
+    }
+
+    .resume-button {
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 11px;
+      color: #fff;
+      background: #2f67f6;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .resume-button:hover { background: #2859d7; }
+
+    .resume-button svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2;
+    }
+
+    .resume-row {
+      margin-top: 10px;
+      color: #4f5c6d;
+      animation: enter 150ms ease-out both;
+    }
+
+    .resume-row .copy {
+      font-weight: 560;
+    }
+
+    .loading-row {
+      display: none;
+      min-height: 32px;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 6px;
+      color: #5f6b7a;
+      font-size: 12px;
+      animation: enter 150ms ease-out both;
+    }
+
+    .loading-row.visible { display: flex; }
+
+    .orb {
+      width: 16px;
+      height: 16px;
+      position: relative;
+      flex: none;
+    }
+
+    .orb i {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      left: 6px;
+      top: 6px;
+      border-radius: 50%;
+      background: #2f67f6;
+      transform: rotate(calc(var(--n) * 120deg)) translateY(-5px);
+      opacity: calc(1 - var(--n) * .22);
+    }
+
+    .summary-block {
+      margin-top: 10px;
+      animation: enter 150ms ease-out both;
+    }
+
+    .summary-row {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+    }
+
+    .summary-copy {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 650;
+    }
+
+    .chevron {
+      color: #9aa5b4;
+      transition: transform 150ms ease;
+    }
+
+    .summary-row[aria-expanded="true"] .chevron {
+      transform: rotate(90deg);
+    }
+
+    .folded-tools {
+      display: none;
+      padding: 4px 0 7px 32px;
+      color: #768294;
+      font-size: 12px;
+      line-height: 1.8;
+      border-top: 1px solid #e0e5eb;
+    }
+
+    .summary-row[aria-expanded="true"] + .folded-tools { display: block; }
+
+    .terminal-copy {
+      margin: 2px 6px 0;
+      padding: 12px 0 4px;
+      color: #26313e;
+      font-size: 13px;
+      line-height: 1.6;
+      border-top: 1px solid #e0e5eb;
+    }
+
+    .composer-zone {
+      flex: none;
+      padding: 8px 12px 12px;
+      background: #f8fafc;
+    }
+
+    .composer {
+      background: #fff;
+      border: 1px solid #d5dce5;
+      border-radius: 18px;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, .06);
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 64px;
+      max-height: 110px;
+      display: block;
+      resize: none;
+      padding: 12px 13px 7px;
+      color: #17202b;
+      background: transparent;
+      border: 0;
+      outline: 0;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    textarea::placeholder { color: #a0aaba; }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 9px 8px;
+    }
+
+    .control-group {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .control {
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 8px;
+      color: #778395;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .control:hover {
+      color: #3f4b5b;
+      background: #f0f3f7;
+    }
+
+    .control svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 1.75;
+    }
+
+    .send {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      flex: none;
+      color: #fff;
+      background: #2f67f6;
+      border-radius: 6px;
+    }
+
+    .send:disabled {
+      cursor: default;
+      background: #a6afbc;
+      opacity: .55;
+    }
+
+    .send svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.9;
+    }
+
+    @keyframes enter {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 480px) {
+      body { padding: 0; }
+      .preview-shell { width: 100%; }
+      .preview-bar { display: none; }
+      .panel {
+        height: 100vh;
+        min-height: 560px;
+        border: 0;
+        border-radius: 0;
+      }
+      .control .label { display: none; }
+      .control { width: 28px; justify-content: center; padding: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="preview-shell">
+    <div class="preview-bar">
+      <span>暂停任务交互预览</span>
+      <button class="reset" id="reset" type="button">
+        <i data-lucide="rotate-ccw"></i>
+        重置
+      </button>
+    </div>
+
+    <section class="panel" aria-label="Agent 时间线预览">
+      <header class="panel-head">
+        <span class="panel-title">Dasi PPT Agent</span>
+        <span class="status-dot" aria-label="任务已暂停"></span>
+      </header>
+
+      <div class="timeline" id="timeline">
+        <div class="user-wrap">
+          <div class="user-bubble">帮我整理一份关于 Agent 工作流设计的演示结构</div>
+        </div>
+
+        <div id="active-run">
+          <div class="activity-row">
+            <i class="success" data-lucide="search"></i>
+            <span>已完成参考检索</span>
+            <span></span>
+          </div>
+          <div class="activity-row">
+            <i class="success" data-lucide="eye"></i>
+            <span>已读取当前演示结构</span>
+            <span></span>
+          </div>
+
+          <div class="pause-card" id="pause-card">
+            <div class="pause-main">
+              <i data-lucide="pause-circle"></i>
+              <div>
+                <p class="pause-title">任务已暂停</p>
+                <p class="pause-copy">服务中断后，此任务没有继续运行。你可以从中断处恢复，或直接发送新消息开始新的任务。</p>
+              </div>
+            </div>
+            <div class="pause-actions">
+              <button class="resume-button" id="resume" type="button">
+                <i data-lucide="play"></i>
+                继续任务
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="resume-row" id="resume-row" hidden>
+          <i class="accent" data-lucide="rotate-ccw"></i>
+          <span class="copy">已从中断处恢复，继续执行</span>
+          <span></span>
+        </div>
+
+        <div class="loading-row" id="loading-row">
+          <span class="orb" aria-hidden="true">
+            <i style="--n:0"></i><i style="--n:1"></i><i style="--n:2"></i>
+          </span>
+          <span>正在恢复任务上下文</span>
+        </div>
+      </div>
+
+      <footer class="composer-zone">
+        <div class="composer">
+          <textarea id="message" rows="2" placeholder="输入你的想法与目标"></textarea>
+          <div class="controls">
+            <div class="control-group">
+              <button class="control" type="button">
+                <i data-lucide="message-circle"></i><span class="label">讨论</span>
+              </button>
+              <button class="control" type="button">
+                <i data-lucide="list-checks"></i><span class="label">计划</span>
+              </button>
+            </div>
+            <div class="control-group">
+              <button class="control" type="button" title="整份设计稿">
+                <i data-lucide="crosshair"></i><span class="label">整份设计稿</span>
+              </button>
+              <button class="send" id="send" type="button" disabled aria-label="发送">
+                <i data-lucide="send"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <template id="ended-template">
+    <div class="summary-block">
+      <button class="summary-row" type="button" aria-expanded="false">
+        <i class="muted-icon" data-lucide="pause-circle"></i>
+        <span class="summary-copy">执行中断，任务已暂停</span>
+        <i class="chevron" data-lucide="chevron-right"></i>
+      </button>
+      <div class="folded-tools">
+        <div>已完成参考检索</div>
+        <div>已读取当前演示结构</div>
+      </div>
+      <p class="terminal-copy">此前任务因服务中断而暂停，已停止执行。</p>
+    </div>
+  </template>
+
+  <script>
+    const timeline = document.querySelector('#timeline');
+    const activeRun = document.querySelector('#active-run');
+    const pauseCard = document.querySelector('#pause-card');
+    const resumeRow = document.querySelector('#resume-row');
+    const loadingRow = document.querySelector('#loading-row');
+    const message = document.querySelector('#message');
+    const send = document.querySelector('#send');
+    const reset = document.querySelector('#reset');
+    const endedTemplate = document.querySelector('#ended-template');
+    const initialTimeline = timeline.innerHTML;
+
+    function drawIcons() {
+      if (window.lucide) window.lucide.createIcons({ attrs: { 'aria-hidden': 'true' } });
+    }
+
+    function scrollLatest() {
+      requestAnimationFrame(() => { timeline.scrollTop = timeline.scrollHeight; });
+    }
+
+    document.querySelector('#resume').addEventListener('click', () => {
+      pauseCard.remove();
+      resumeRow.hidden = false;
+      drawIcons();
+      scrollLatest();
+      window.setTimeout(() => {
+        loadingRow.classList.add('visible');
+        scrollLatest();
+      }, 450);
+    });
+
+    message.addEventListener('input', () => {
+      send.disabled = message.value.trim() === '';
+    });
+
+    send.addEventListener('click', () => {
+      const text = message.value.trim();
+      if (!text) return;
+      activeRun.replaceChildren(endedTemplate.content.cloneNode(true));
+      resumeRow.hidden = true;
+      loadingRow.classList.remove('visible');
+
+      const wrap = document.createElement('div');
+      wrap.className = 'user-wrap';
+      const bubble = document.createElement('div');
+      bubble.className = 'user-bubble';
+      bubble.textContent = text;
+      wrap.appendChild(bubble);
+      timeline.appendChild(wrap);
+
+      message.value = '';
+      send.disabled = true;
+      drawIcons();
+      scrollLatest();
+    });
+
+    timeline.addEventListener('click', (event) => {
+      const row = event.target.closest('.summary-row');
+      if (!row) return;
+      row.setAttribute('aria-expanded', String(row.getAttribute('aria-expanded') !== 'true'));
+    });
+
+    reset.addEventListener('click', () => window.location.reload());
+    drawIcons();
+  </script>
+</body>
+</html>

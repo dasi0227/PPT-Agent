@@ -1,5 +1,5 @@
 import { fetchClient } from './client';
-import { CancelRunResponse, Run, CreateRunRequest, RunInputPayload, PlanApprovalRequest, SteerRunRequest, SteerRunResponse } from './types';
+import { CancelRunResponse, Run, CreateRunRequest, RunCancelReason, RunInputPayload, PlanApprovalRequest, SteerRunRequest, SteerRunResponse } from './types';
 
 export const runsApi = {
   get: (runId: string) => fetchClient<Run>(`/runs/${runId}`),
@@ -22,7 +22,8 @@ export const runsApi = {
   resume: (runId: string) => fetchClient<Run>(`/runs/${runId}/resume`, {
     method: 'POST'
   }),
-  cancel: (runId: string) => fetchClient<CancelRunResponse>(`/runs/${runId}`, {
+  cancel: (runId: string, reason: RunCancelReason = 'user_requested') =>
+    fetchClient<CancelRunResponse>(`/runs/${runId}?reason=${encodeURIComponent(reason)}`, {
     method: 'DELETE'
   }),
 };

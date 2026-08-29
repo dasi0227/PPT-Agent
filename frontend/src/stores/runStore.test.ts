@@ -43,6 +43,7 @@ const reconciledRuns: any[] = [];
 const getRequests: string[] = [];
 const createRequests: any[] = [];
 const steeringRequests: any[] = [];
+const cancelRequests: any[] = [];
 vi.mock('../api/runs', () => ({
   runsApi: {
     create: (threadId: string, payload: any) => {
@@ -62,7 +63,10 @@ vi.mock('../api/runs', () => ({
       return Promise.resolve(run);
     },
     submitInput: async () => ({}),
-    cancel: async () => cancelResponse,
+    cancel: async (runId: string, reason: string) => {
+      cancelRequests.push({ runId, reason });
+      return cancelResponse;
+    },
     resume: async () => resumeResponse,
     steer: async (runId: string, payload: any) => {
       steeringRequests.push({ runId, payload });
@@ -115,6 +119,7 @@ function reset() {
   getRequests.length = 0;
   createRequests.length = 0;
   steeringRequests.length = 0;
+  cancelRequests.length = 0;
   sessionStorage.clear();
   useComposerStore.setState({ modelProfileName: null });
   useRunStore.setState({ sessions: {} });
@@ -532,8 +537,39 @@ describe('runStore public event sessions', () => {
 
     resumeResponse = authoritativeRun('recovering');
     expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(true);
-    expect(useRunStore.getState().sessions.t1.status).toBe('recovering');
+    expect(useRunStore.getState().sessions.t1).toMatchObject({
+      status: 'recovering',
+      progress: null,
+      timelineItems: expect.arrayContaining([
+        expect.objectContaining({ type: 'run_lifecycle', state: 'resumed' }),
+      ]),
+    });
     expect(connections[0]).toMatchObject({ runId: 'run_1', lastEventId: '17' });
+  });
+
+  test('ends a paused run with superseded copy before a new request', async () => {
+    await useRunStore.getState().createRun('t1', request('old request'), 'p1');
+    useRunStore.setState((state) => ({
+      sessions: {
+        ...state.sessions,
+        t1: { ...state.sessions.t1, status: 'paused', streamStatus: 'closed', progress: null },
+      },
+    }));
+    cancelResponse = { status: 'canceled', run_id: 'run_1' };
+
+    expect(await useRunStore.getState().cancelRun('t1', 'run_1', 'superseded')).toBe(true);
+    expect(cancelRequests).toEqual([{ runId: 'run_1', reason: 'superseded' }]);
+    expect(useRunStore.getState().sessions.t1).toMatchObject({
+      activeRunId: null,
+      status: 'canceled',
+      timelineItems: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'terminal_notice',
+          reason: 'superseded',
+          message: '此前任务因服务中断而暂停，已停止执行。',
+        }),
+      ]),
+    });
   });
 
   test('reconciles an open stream to paused after the backend restarts', async () => {

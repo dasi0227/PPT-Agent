@@ -245,6 +245,70 @@ func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 		t.Fatalf("resume status=%s", resumed.Status)
 	}
 	waitRunStatus(t, store, created.ID, model.RunDone)
+	events, err = store.EventsSince(context.Background(), created.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumedEvents := 0
+	for _, event := range events {
+		if event.Type == model.EventRunResumed {
+			resumedEvents++
+		}
+	}
+	if resumedEvents != 1 {
+		t.Fatalf("run.resumed count=%d events=%+v", resumedEvents, events)
+	}
+}
+
+func TestSupersedingPausedRunPersistsCancellationReason(t *testing.T) {
+	store := newMemStore()
+	first := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	started := make(chan struct{})
+	created, err := first.Start(context.Background(), testRun("superseded"), scriptRunner(
+		func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
+			emitter.Emit(model.EventToolStarted, model.ToolStartedPayload{
+				PublicEventBase: model.NewPublicEventBase("superseded"),
+				CallID:          "interrupted-tool",
+				Tool:            "search_refs",
+				Display:         model.PublicDisplay{Label: "正在检索参考资料"},
+			})
+			close(started)
+			<-ctx.Done()
+			return workflow.StructuredOutcome{Status: workflow.StatusCanceled}
+		},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	waitRunStatus(t, store, created.ID, model.RunRunning)
+	if err := first.PauseAll(context.Background(), "server_shutdown"); err != nil {
+		t.Fatal(err)
+	}
+	waitRunStatus(t, store, created.ID, model.RunPaused)
+
+	second := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	if _, err := second.RequestCancelWithReason(context.Background(), created.ID, model.RunCancelSuperseded); err != nil {
+		t.Fatal(err)
+	}
+	events, err := store.EventsSince(context.Background(), created.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range events {
+		if event.Type != model.EventRunCanceled {
+			continue
+		}
+		var payload model.RunTerminalPayload
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Reason != model.RunCancelSuperseded {
+			t.Fatalf("cancel reason=%s", payload.Reason)
+		}
+		return
+	}
+	t.Fatalf("run.canceled was not emitted: %+v", events)
 }
 
 func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {

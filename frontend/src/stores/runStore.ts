@@ -10,6 +10,7 @@ import {
   QuestionAnswer,
   QuestionFieldAnswer,
   Run,
+  RunCancelReason,
   RunMode,
   RunProgressStage,
   RunScope,
@@ -212,7 +213,7 @@ interface RunStoreV2 {
   reconcileRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => Promise<void>;
   resumeRun: (threadId: string, runId: string) => Promise<boolean>;
   answerQuestion: (threadId: string, runId: string, replyTo: string, content: string) => Promise<boolean>;
-  cancelRun: (threadId: string, runId: string) => Promise<void>;
+  cancelRun: (threadId: string, runId: string, reason?: RunCancelReason) => Promise<boolean>;
   steerRun: (threadId: string, runId: string, content: string, clientMessageId: string) => Promise<boolean>;
   retryRun: (threadId: string) => Promise<boolean>;
   clearRun: (threadId: string) => void;
@@ -234,6 +235,22 @@ function continuingProgress(): NonNullable<RunSession['progress']> {
 
 function hasRunningTool(items: TimelineItem[], runId: string): boolean {
   return items.some((item) => item.type === 'tool' && item.runId === runId && item.status === 'running');
+}
+
+function endPausedRun(items: TimelineItem[], runId: string): TimelineItem[] {
+  return reduceSSEEvent(items, {
+    event: 'run.canceled',
+    data: {
+      schema_version: 3,
+      run_id: runId,
+      occurred_at: new Date().toISOString(),
+      duration_ms: 0,
+      affected_targets: [],
+      error: null,
+      trace_id: runId,
+      reason: 'superseded',
+    },
+  });
 }
 
 export const useRunStore = create<RunStoreV2>((set, get) => {
@@ -456,6 +473,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
                   };
                 }
               }
+            } else if (event.event === 'run.resumed') {
+              if (prev.status !== 'canceling') status = 'recovering';
+              progress = null;
             } else if (event.event === 'run.progress') {
               if (prev.status !== 'canceling') status = 'running';
               progress = {
@@ -654,12 +674,20 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       if (!session || session.activeRunId !== runId || session.status !== 'paused') return false;
       try {
         const resumed = await runsApi.resume(runId);
-        patchSession(threadId, {
+        updateSession(threadId, (prev) => ({
           status: terminalStatus(resumed.status),
           streamStatus: 'connecting',
-          progress: { stage: 'thinking', text: '正在恢复任务' },
+          progress: null,
           pendingQuestion: null,
-        });
+          timelineItems: reduceSSEEvent(prev.timelineItems, {
+            event: 'run.resumed',
+            data: {
+              schema_version: 3,
+              run_id: runId,
+              occurred_at: new Date().toISOString(),
+            },
+          }),
+        }));
         writePersistedRun({
           runId,
           threadId,
@@ -737,15 +765,31 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       }
     },
 
-    cancelRun: async (threadId, runId) => {
+    cancelRun: async (threadId, runId, reason = 'user_requested') => {
       try {
-        const response = await runsApi.cancel(runId);
+        const response = await runsApi.cancel(runId, reason);
         if (isTerminalRunStatus(response.status)) {
+          if (reason === 'superseded' && response.status === 'canceled') {
+            stopCancelReconciliation(threadId, runId);
+            removePersistedRun(threadId);
+            get().sessions[threadId]?.eventSourceClose?.();
+            updateSession(threadId, (prev) => ({
+              activeRunId: null,
+              status: 'canceled',
+              streamStatus: 'closed',
+              progress: null,
+              pendingQuestion: null,
+              eventSourceClose: null,
+              timelineItems: endPausedRun(prev.timelineItems, runId),
+            }));
+            return true;
+          }
           replayAuthoritativeTerminal(threadId, runId, response.status);
-          return;
+          return true;
         }
+        if (reason === 'superseded') return false;
         const session = get().sessions[threadId];
-        if (!session || session.activeRunId !== runId) return;
+        if (!session || session.activeRunId !== runId) return false;
         patchSession(threadId, { status: 'canceling' });
         if (session.projectId) {
           writePersistedRun({
@@ -757,6 +801,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           });
         }
         startCancelReconciliation(threadId, runId);
+        return true;
       } catch (error) {
         const detail = errorMessage(error);
         updateSession(threadId, (prev) => ({
@@ -773,6 +818,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             timestamp: Date.now(),
           }],
         }));
+        return false;
       }
     },
 

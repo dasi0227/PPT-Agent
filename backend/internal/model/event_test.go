@@ -9,11 +9,12 @@ import (
 func TestPublicEventTypeSetContainsAllEvents(t *testing.T) {
 	want := []EventType{
 		EventRunStarted, EventRunProgress, EventRunCompleted, EventRunFailed, EventRunError, EventRunCanceled,
+		EventRunResumed,
 		EventPlanUpdated, EventPlanApprovalRequested, EventPlanApprovalAnswered, EventRunModeChanged,
 		EventMessageReasoning, EventMessageMilestone, EventMessageFinal,
 		EventToolStarted, EventToolCompleted, EventQuestionAsked, EventQuestionAnswered,
 	}
-	if len(PublicEventTypes) != 17 {
+	if len(PublicEventTypes) != 18 {
 		t.Fatalf("public event count=%d", len(PublicEventTypes))
 	}
 	for index, event := range want {
@@ -85,5 +86,22 @@ func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 		if strings.Contains(value, legacy) {
 			t.Fatalf("run.started contains legacy field %s: %s", legacy, value)
 		}
+	}
+}
+
+func TestRunLifecyclePayloadsValidate(t *testing.T) {
+	if err := ValidatePublicEvent(EventRunResumed, RunResumedPayload{
+		PublicEventBase: NewPublicEventBase("r1"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	canceled := NewRunTerminalPayload("r1", 10, nil, nil)
+	canceled.Reason = RunCancelSuperseded
+	if err := ValidatePublicEvent(EventRunCanceled, canceled); err != nil {
+		t.Fatal(err)
+	}
+	canceled.Reason = "unexpected"
+	if err := ValidatePublicEvent(EventRunCanceled, canceled); err == nil {
+		t.Fatal("invalid cancellation reason was accepted")
 	}
 }

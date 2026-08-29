@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDown, CheckCircle2, ChevronRight, StopCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowDown, CheckCircle2, ChevronRight, PauseCircle, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
 import { targetLabel } from './runtimeLabels';
 import { useActiveSession } from './useActiveSession';
@@ -7,12 +7,13 @@ import { FinalMessage } from './FinalMessage';
 import { LiveProgressRow } from './LiveProgressRow';
 import { MarkdownMessage } from './MarkdownMessage';
 import { QuestionPanel } from './QuestionPanel';
-import { ReasoningRow, MilestoneRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
+import { ReasoningRow, MilestoneRow, RunLifecycleRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 import { TerminalNotice } from './TerminalNotice';
 import { PlanApproval } from './PlanApproval';
 import { MessageMetaActions } from './MessageMetaActions';
 import type { TimelineItem } from './eventReducer';
 import { DisplayEntry, groupTimelineItems } from './timelineGrouping';
+import { PausedRunCard } from './PausedRunCard';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -37,15 +38,16 @@ const runSummaryLabel = {
 function fallbackProgress(status: ReturnType<typeof useActiveSession>['status']) {
   if (status === 'creating') return { stage: 'thinking' as const, text: '分析请求中' };
   if (status === 'running') return { stage: 'thinking' as const, text: '分析任务需求中' };
-  if (status === 'paused') return { stage: 'thinking' as const, text: '任务因服务关闭而暂停，请选择继续或终止' };
-  if (status === 'recovering') return { stage: 'thinking' as const, text: '正在从检查点恢复任务' };
   if (status === 'canceling') return { stage: 'thinking' as const, text: '取消任务中' };
   return null;
 }
 
-function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 'canceled' }) {
+function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 'canceled' | 'paused' }) {
   if (status === 'completed') {
     return <CheckCircle2 className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />;
+  }
+  if (status === 'paused') {
+    return <PauseCircle className="h-4 w-4 shrink-0 text-text-400" strokeWidth={1.75} />;
   }
   if (status === 'canceled') {
     return <StopCircle className="h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
@@ -58,7 +60,7 @@ function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 
 
 export const Timeline: React.FC = () => {
   const session = useActiveSession();
-  const { timelineItems, status, plan, progress } = session;
+  const { activeRunId, timelineItems, status, plan, progress } = session;
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const containerRef = useRef<HTMLDivElement>(null);
   const followingRef = useRef(true);
@@ -136,6 +138,7 @@ export const Timeline: React.FC = () => {
             </div>
           </div>
         )}
+        {item.type === 'run_lifecycle' && <RunLifecycleRow item={item} />}
         {item.type === 'reasoning' && <ReasoningRow item={item} />}
         {item.type === 'milestone' && <MilestoneRow item={item} />}
         {item.type === 'tool' && <ToolActivityRow item={item} />}
@@ -171,6 +174,7 @@ export const Timeline: React.FC = () => {
         ) : (
           <>
             {displayEntries.map(renderEntry)}
+            {status === 'paused' && activeRunId && <PausedRunCard runId={activeRunId} />}
             {status !== 'waiting' && displayedProgress && (
               <LiveProgressRow progress={displayedProgress} />
             )}
@@ -201,7 +205,10 @@ function RunSummaryBlock({
   const [expanded, setExpanded] = useState(false);
   const terminal = entry.terminalItem;
   const duration = formatDuration(terminal.durationMs);
-  const label = `${runSummaryLabel[entry.status]}，耗时 ${duration}`;
+  const superseded = terminal.type === 'terminal_notice' && terminal.reason === 'superseded';
+  const label = superseded
+    ? '执行中断，任务已暂停'
+    : `${runSummaryLabel[entry.status]}，耗时 ${duration}`;
   const finalText = terminal.type === 'final' ? terminal.text : terminal.message;
 
   return (
@@ -212,7 +219,7 @@ function RunSummaryBlock({
         onClick={() => setExpanded((value) => !value)}
         className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-600"
       >
-        <RunStatusIcon status={entry.status} />
+        <RunStatusIcon status={superseded ? 'paused' : entry.status} />
         <span className="min-w-0 flex-1 truncate font-semibold">{label}</span>
         <ChevronRight
           className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform ${expanded ? 'rotate-90' : ''}`}

@@ -13,6 +13,7 @@ import {
 
 export type TimelineItemType =
   | 'user_turn'
+  | 'run_lifecycle'
   | 'reasoning'
   | 'milestone'
   | 'final'
@@ -41,6 +42,12 @@ export interface UserTurnItem extends BaseTimelineItem {
 export interface ReasoningItem extends BaseTimelineItem {
   type: 'reasoning';
   messageId: string;
+  text: string;
+}
+
+export interface RunLifecycleItem extends BaseTimelineItem {
+  type: 'run_lifecycle';
+  state: 'resumed';
   text: string;
 }
 
@@ -102,10 +109,12 @@ export interface TerminalNoticeItem extends BaseTimelineItem {
   technicalMessage?: string;
   requestId?: string;
   retryable?: boolean;
+  reason?: 'user_requested' | 'superseded';
 }
 
 export type TimelineItem =
   | UserTurnItem
+  | RunLifecycleItem
   | ReasoningItem
   | MilestoneItem
   | FinalMessageItem
@@ -182,6 +191,18 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
 	case 'plan.updated':
 	case 'run.mode_changed':
 		return state;
+
+    case 'run.resumed': {
+      const item: RunLifecycleItem = {
+        id: `${runId}:resumed`,
+        type: 'run_lifecycle',
+        runId,
+        state: 'resumed',
+        text: '已从中断处恢复，继续执行',
+        timestamp,
+      };
+      return upsertById(state, item);
+    }
 
 	case 'plan.approval_requested': {
 		const plan = reducePlan(null, event)!;
@@ -343,14 +364,31 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         affectedTargets: event.data.affected_targets,
         traceId: event.data.trace_id,
         message: status === 'canceled'
-          ? '运行已取消'
+          ? event.data.reason === 'superseded'
+            ? '此前任务因服务中断而暂停，已停止执行。'
+            : '运行已取消'
           : status === 'error'
             ? (error?.message ?? '系统运行异常，请稍后重试。')
           : (error?.message ?? '运行未能完成，请稍后重试。'),
         durationMs: event.data.duration_ms,
+        reason: event.data.reason,
         timestamp,
       };
-      return upsertById(state, item);
+      const settledState = event.data.reason === 'superseded'
+        ? state.map((candidate): TimelineItem =>
+            candidate.type === 'tool' && candidate.runId === runId && candidate.status === 'running'
+              ? {
+                  ...candidate,
+                  status: 'failed',
+                  error: {
+                    code: 'RUN_INTERRUPTED',
+                    message: '任务中断时，此操作尚未完成。',
+                    retryable: false,
+                  },
+                }
+              : candidate)
+        : state;
+      return upsertById(settledState, item);
     }
   }
 }

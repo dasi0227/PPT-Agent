@@ -10,6 +10,7 @@ const (
 	EventRunFailed             EventType = "run.failed"
 	EventRunError              EventType = "run.error"
 	EventRunCanceled           EventType = "run.canceled"
+	EventRunResumed            EventType = "run.resumed"
 	EventPlanUpdated           EventType = "plan.updated"
 	EventPlanApprovalRequested EventType = "plan.approval_requested"
 	EventPlanApprovalAnswered  EventType = "plan.approval_answered"

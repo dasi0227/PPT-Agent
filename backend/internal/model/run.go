@@ -15,6 +15,13 @@ const (
 	RunCanceled   RunStatus = "canceled"
 )
 
+type RunCancelReason string
+
+const (
+	RunCancelUserRequested RunCancelReason = "user_requested"
+	RunCancelSuperseded    RunCancelReason = "superseded"
+)
+
 // Terminal 报告状态是否为终态（不可再注入输入 API-RUN-001）。
 func (s RunStatus) Terminal() bool {
 	switch s {

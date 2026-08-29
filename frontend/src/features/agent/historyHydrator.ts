@@ -36,6 +36,7 @@ const publicHistoryEvents = new Set<SSEEventName>([
   'plan.approval_requested',
   'plan.approval_answered',
   'run.mode_changed',
+  'run.resumed',
   'message.reasoning',
   'message.milestone',
   'message.final',
@@ -151,6 +152,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       session = { ...session, status: 'running', pendingQuestion: null };
     } else if (event.event === 'run.mode_changed') {
       session = { ...session, status: 'running', mode: event.data.mode, pendingQuestion: null };
+    } else if (event.event === 'run.resumed') {
+      session = { ...session, status: 'running', pendingQuestion: null };
     } else if (event.event === 'run.completed') {
       session = {
         ...session,

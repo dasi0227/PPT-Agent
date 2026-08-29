@@ -86,6 +86,9 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	if err := bus.Restore(events); err != nil {
 		return model.Run{}, err
 	}
+	if err := ensureRunStarted(ctx, bus, r); err != nil {
+		return model.Run{}, err
+	}
 	queue := NewInputQueue()
 	runCtx, cancel := context.WithCancel(context.Background())
 
@@ -115,11 +118,31 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 		cancel()
 		return model.Run{}, err
 	}
+	if err := bus.Emit(ctx, model.EventRunResumed, model.RunResumedPayload{
+		PublicEventBase: model.NewPublicEventBase(r.ID),
+	}); err != nil {
+		_ = lifecycle.ReleaseRecoveringRun(ctx, r.ID, e.instanceID, "resume_event_failed", time.Now().Unix())
+		e.mu.Unlock()
+		cancel()
+		return model.Run{}, err
+	}
 	a := &active{run: claimed, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{}), resumed: true}
 	e.actives[r.ID] = a
 	e.mu.Unlock()
 	go e.execute(runCtx, a, execution)
 	return claimed, nil
+}
+
+func ensureRunStarted(ctx context.Context, bus *Bus, run model.Run) error {
+	if bus.started {
+		return nil
+	}
+	return bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
+		PublicEventBase: model.NewPublicEventBase(run.ID),
+		Scope:           run.Command.Scope,
+		Mode:            run.Command.Mode,
+		UserInput:       run.Command.Instruction,
+	})
 }
 
 // StartWithContext atomically establishes the Run row and its auditable ContextManifest
@@ -366,6 +389,10 @@ func (e *Engine) Cancel(ctx context.Context, id string) error {
 }
 
 func (e *Engine) RequestCancel(ctx context.Context, id string) (model.Run, error) {
+	return e.RequestCancelWithReason(ctx, id, model.RunCancelUserRequested)
+}
+
+func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason model.RunCancelReason) (model.Run, error) {
 	requestedAt := time.Now().UnixNano()
 	stored, getErr := e.store.GetRun(ctx, id)
 	if getErr != nil {
@@ -382,9 +409,13 @@ func (e *Engine) RequestCancel(ctx context.Context, id string) (model.Run, error
 		}
 		bus := NewBus(canceled.ID, canceled.ThreadID, e.store, e.hw)
 		if events, eventErr := e.store.EventsSince(ctx, id, 0); eventErr == nil && bus.Restore(events) == nil {
-			_ = bus.Emit(ctx, model.EventRunCanceled, model.NewRunTerminalPayload(
-				id, time.Since(time.Unix(canceled.CreatedAt, 0)).Milliseconds(), nil, nil,
-			))
+			if ensureRunStarted(ctx, bus, canceled) == nil {
+				payload := model.NewRunTerminalPayload(
+					id, time.Since(time.Unix(canceled.CreatedAt, 0)).Milliseconds(), nil, nil,
+				)
+				payload.Reason = reason
+				_ = bus.Emit(ctx, model.EventRunCanceled, payload)
+			}
 			bus.Close()
 		}
 		return canceled, nil

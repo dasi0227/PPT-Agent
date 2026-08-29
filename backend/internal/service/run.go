@@ -465,8 +465,10 @@ func (svc *RunService) Cancel(ctx context.Context, runID string) error {
 	return svc.engine.Cancel(ctx, runID)
 }
 
-func (svc *RunService) RequestCancel(ctx context.Context, runID string) (model.Run, error) {
-	requestHash, _ := idempotency.CanonicalHash(map[string]string{"run_id": runID, "action": "cancel"})
+func (svc *RunService) RequestCancel(ctx context.Context, runID string, reason model.RunCancelReason) (model.Run, error) {
+	requestHash, _ := idempotency.CanonicalHash(map[string]string{
+		"run_id": runID, "action": "cancel", "reason": string(reason),
+	})
 	record, created, err := svc.store.AcquireIdempotency(ctx, model.IdempotencyRecord{
 		Scope: "cancel", OwnerID: runID, Key: "cancel", RequestHash: requestHash, Status: "in_progress",
 	})
@@ -490,7 +492,7 @@ func (svc *RunService) RequestCancel(ctx context.Context, runID string) (model.R
 		}
 		return svc.store.GetRun(ctx, runID)
 	}
-	current, err := svc.engine.RequestCancel(ctx, runID)
+	current, err := svc.engine.RequestCancelWithReason(ctx, runID, reason)
 	if err != nil {
 		_ = svc.store.CompleteIdempotency(ctx, "cancel", runID, "cancel", "failed", `{"error_code":"RUN_NOT_FOUND"}`)
 		return model.Run{}, err

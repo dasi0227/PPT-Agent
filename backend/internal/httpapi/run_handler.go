@@ -285,7 +285,12 @@ func (h *RunHandler) PlanApproval(c *gin.Context) {
 // Cancel DELETE /runs/{id}
 func (h *RunHandler) Cancel(c *gin.Context) {
 	runID := c.Param("id")
-	current, err := h.svc.RequestCancel(c.Request.Context(), runID)
+	reason := model.RunCancelReason(c.DefaultQuery("reason", string(model.RunCancelUserRequested)))
+	if reason != model.RunCancelUserRequested && reason != model.RunCancelSuperseded {
+		AbortWithError(c, ErrBadRequest("invalid cancellation reason"))
+		return
+	}
+	current, err := h.svc.RequestCancel(c.Request.Context(), runID, reason)
 	if err != nil {
 		if errors.Is(err, run.ErrRunNotFound) {
 			AbortWithError(c, ProjectAgentError(model.NewAgentError("RUN_NOT_FOUND", "cancel_run", err), "RUN_NOT_FOUND", "cancel_run"))

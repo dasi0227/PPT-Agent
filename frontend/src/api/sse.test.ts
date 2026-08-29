@@ -17,6 +17,7 @@ const terminal = {
 const payloads: Record<string, unknown> = {
   'run.started': { ...base, scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute', user_input: '生成 PPT' },
   'run.progress': { ...base, stage: 'thinking', text: '正在分析' },
+  'run.resumed': base,
   'run.completed': terminal,
   'run.failed': { ...terminal, error: { code: 'RUN_FAILED', message: '任务未能完成。', retryable: false } },
   'run.error': { ...terminal, error: { code: 'INTERNAL', message: '服务暂时无法完成请求。', retryable: false } },
@@ -35,8 +36,8 @@ const payloads: Record<string, unknown> = {
 };
 
 describe('SSE parser', () => {
-  it('registers and parses all 17 public events', () => {
-	  expect(SSE_EVENT_NAMES).toHaveLength(17);
+  it('registers and parses all 18 public events', () => {
+	  expect(SSE_EVENT_NAMES).toHaveLength(18);
     for (const eventName of SSE_EVENT_NAMES) {
       expect(parseSSEEvent(eventName, JSON.stringify(payloads[eventName]), '12')).toMatchObject({
         id: '12',

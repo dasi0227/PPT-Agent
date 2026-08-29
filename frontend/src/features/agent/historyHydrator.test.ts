@@ -42,6 +42,26 @@ describe('history hydrator', () => {
     expect(hydrated.items).toEqual([]);
   });
 
+  it('restores resume history and a superseded paused terminal', () => {
+    const hydrated = hydrateRunFromHistory([
+      entry(1, 'user_turn', {
+        text: '继续生成', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute',
+      }),
+      entry(2, 'run.resumed', base),
+      entry(3, 'run.canceled', terminal('r1', { reason: 'superseded' })),
+    ]);
+
+    expect(hydrated.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'run_lifecycle', state: 'resumed' }),
+      expect.objectContaining({
+        type: 'terminal_notice',
+        reason: 'superseded',
+        message: '此前任务因服务中断而暂停，已停止执行。',
+      }),
+    ]));
+    expect(hydrated.session.status).toBe('canceled');
+  });
+
   it('ignores legacy command and public event shapes', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {

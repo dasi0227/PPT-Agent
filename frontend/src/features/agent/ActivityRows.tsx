@@ -9,12 +9,14 @@ import {
   ExternalLink,
   Flag,
   Loader2,
+  RotateCcw,
   Search,
   Sparkles,
 } from 'lucide-react';
 import type {
   MilestoneItem,
   ReasoningItem,
+  RunLifecycleItem,
   ToolActivityItem,
 } from './eventReducer';
 import type { PublicTarget, Slide } from '../../api/types';
@@ -166,6 +168,13 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
     </div>
   );
 };
+
+export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) => (
+  <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-600 motion-safe:animate-[timeline-enter_120ms_ease-out]">
+    <RotateCcw className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
+    <span className="min-w-0 flex-1 truncate font-medium">{item.text}</span>
+  </div>
+);
 
 // 图标字形按工具区分（读取=eye，创建=sparkles，搜索=search），颜色由状态决定：
 // 成功=success 绿、失败=danger 红。兜底工具（render）成功用勾、失败用三角。

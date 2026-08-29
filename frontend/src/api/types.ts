@@ -180,6 +180,8 @@ export interface CancelRunResponse {
   run_id: string;
 }
 
+export type RunCancelReason = 'user_requested' | 'superseded';
+
 export interface ProjectContentSnapshot {
   deck: Deck;
   outline: Outline;
@@ -243,6 +245,7 @@ export type JsonRecord = Record<string, unknown>;
 export type SSEEventName =
   | 'run.started'
   | 'run.progress'
+  | 'run.resumed'
   | 'run.completed'
   | 'run.failed'
   | 'run.error'
@@ -311,6 +314,7 @@ export interface RunTerminalPayload extends PublicEventBase {
   affected_targets: PublicTarget[];
   error: PublicError | null;
   trace_id: string;
+  reason?: RunCancelReason;
 }
 
 export interface ToolPreview {
@@ -371,6 +375,7 @@ export type SSEEvent =
       target?: PublicTarget;
       progress?: { current: number; total: number; unit: string };
     }>
+  | SSEEventBase<'run.resumed', PublicEventBase>
   | SSEEventBase<'run.completed', RunTerminalPayload>
   | SSEEventBase<'run.failed', RunTerminalPayload>
   | SSEEventBase<'run.error', RunTerminalPayload>

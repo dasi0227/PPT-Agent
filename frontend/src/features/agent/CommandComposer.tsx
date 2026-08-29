@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Play, Send, Sparkles, StopCircle } from 'lucide-react';
+import { Send, Sparkles, StopCircle } from 'lucide-react';
 import { llmApi } from '../../api/llm';
 import { polishApi } from '../../api/polish';
 import type { CreateRunRequest, LLMProfile } from '../../api/types';
@@ -165,25 +165,23 @@ export const CommandComposer: React.FC = () => {
   const { activeProjectId, contentByProjectId } = useProjectStore();
   const { currentSlideId } = useDeckStore();
   const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
-  const { cancelRun, createRun, resumeRun, steerRun } = useRunStore();
+  const { cancelRun, createRun, steerRun } = useRunStore();
   const { status: runStatus, activeRunId, plan } = useActiveSession();
   const composer = useComposerStore();
   const applyContextDefault = composer.applyContextDefault;
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef(activeProjectId);
   const steering = runStatus === 'running' && Boolean(activeRunId);
-  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
+  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling';
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
   const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
   const showCancelButton = Boolean(activeRunId)
-    && (runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling')
+    && (runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling')
     && text.trim() === '';
   const disabledPlaceholder = runStatus === 'waiting'
     ? '请先回答上方问题'
-    : runStatus === 'paused'
-      ? '任务已暂停，请继续或终止'
-      : runStatus === 'recovering'
-        ? '正在恢复当前任务'
+    : runStatus === 'recovering'
+      ? '正在恢复当前任务'
     : runStatus === 'canceling'
       ? '正在取消当前任务'
       : runStatus === 'creating'
@@ -333,6 +331,13 @@ export const CommandComposer: React.FC = () => {
     }
 
     try {
+      if (runStatus === 'paused' && activeRunId) {
+        const ended = await cancelRun(threadId, activeRunId, 'superseded');
+        if (!ended) {
+          setSubmitError('此前任务未能结束，暂时无法发送新消息');
+          return;
+        }
+      }
       const created = await createRun(threadId, request, projectId);
       if (created) setText('');
       else setSubmitError('运行创建失败，请检查时间线中的错误后重试');
@@ -345,12 +350,6 @@ export const CommandComposer: React.FC = () => {
     if (!activeThreadId || !activeRunId || runStatus === 'canceling') return;
     setSubmitError('');
     await cancelRun(activeThreadId, activeRunId);
-  };
-
-  const resumeActiveRun = async () => {
-    if (!activeThreadId || !activeRunId || runStatus !== 'paused') return;
-    setSubmitError('');
-    await resumeRun(activeThreadId, activeRunId);
   };
 
   const requiresVision = composer.mode === 'execute' && composer.artifact === 'ppt';
@@ -512,28 +511,7 @@ export const CommandComposer: React.FC = () => {
               disabled={disabled || steering}
               onChange={composer.setModelProfileName}
             />
-            {runStatus === 'paused' && activeRunId ? (
-              <>
-                <button
-                  onClick={() => void resumeActiveRun()}
-                  disabled={!activeThreadId}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white transition-colors hover:bg-accent/90 disabled:bg-text-400 disabled:opacity-50"
-                  aria-label="继续运行"
-                  title="继续运行"
-                >
-                  <Play className="h-4 w-4" strokeWidth={1.75} />
-                </button>
-                <button
-                  onClick={() => void cancelActiveRun()}
-                  disabled={!activeThreadId}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-danger transition-colors hover:bg-danger-soft disabled:bg-panel-muted disabled:text-text-400 disabled:opacity-60"
-                  aria-label="终止暂停的任务"
-                  title="终止暂停的任务"
-                >
-                  <StopCircle className="h-4 w-4" strokeWidth={1.75} />
-                </button>
-              </>
-            ) : showCancelButton ? (
+            {showCancelButton ? (
               <button
                 onClick={() => void cancelActiveRun()}
                 disabled={!activeThreadId || runStatus === 'canceling'}
