@@ -88,11 +88,11 @@ describe('history hydrator', () => {
     expect(hydrated.session.status).toBe('idle');
   });
 
-  it('uses the live event contract for deck terminal history', () => {
+  it('uses the live event contract and restores legacy deck terminal history', () => {
     const valid = hydrateRunFromHistory([
       entry(1, 'user_turn', { text: '修改整份 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
       entry(2, 'run.error', terminal('r1', {
-        affected_targets: [{ type: 'deck', part: 'manifest' }],
+        affected_targets: [{ type: 'deck', part: 'deck' }],
         error: { code: 'COMMIT_FAILED', message: '保存失败', retryable: true },
       })),
     ]);

@@ -37,8 +37,36 @@ export function parseSSEEvent(eventName: string, raw: string, id?: string): SSEE
 export function parsePublicEvent(eventName: string, data: unknown, id?: string): SSEEvent | null {
   if (!SSE_EVENT_NAMES.includes(eventName as SSEEventName)) return null;
   if (!isRecord(data)) return null;
-  if (!validBase(data) || containsForbiddenField(data) || !validPayload(eventName as SSEEventName, data)) return null;
-  return { id, event: eventName as SSEEventName, data } as unknown as SSEEvent;
+  const normalized = normalizeLegacyTargets(data);
+  if (!validBase(normalized) || containsForbiddenField(normalized) || !validPayload(eventName as SSEEventName, normalized)) return null;
+  return { id, event: eventName as SSEEventName, data: normalized } as unknown as SSEEvent;
+}
+
+function normalizeLegacyTargets(data: Record<string, unknown>): Record<string, unknown> {
+  const normalizedTarget = normalizeLegacyTarget(data.target);
+  let normalizedTargets = data.affected_targets;
+  if (Array.isArray(data.affected_targets)) {
+    const targets = data.affected_targets;
+    const mapped = targets.map(normalizeLegacyTarget);
+    if (mapped.some((target, index) => target !== targets[index])) normalizedTargets = mapped;
+  }
+  if (normalizedTarget === data.target && normalizedTargets === data.affected_targets) return data;
+  return { ...data, target: normalizedTarget, affected_targets: normalizedTargets };
+}
+
+function normalizeLegacyTarget(value: unknown): unknown {
+  if (!isRecord(value) || value.type !== 'deck' || value.part !== 'deck') return value;
+  return {
+    ...value,
+    part: 'manifest',
+    local_path: normalizeLegacyManifestPath(value.local_path),
+    open_url: normalizeLegacyManifestPath(value.open_url),
+  };
+}
+
+function normalizeLegacyManifestPath(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  return value.replace(/([/\\])deck\.json(?=$|[?#])/g, '$1manifest.json');
 }
 
 const progressStages = new Set(['thinking', 'planning', 'reading', 'writing', 'rendering', 'finalizing']);

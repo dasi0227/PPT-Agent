@@ -178,4 +178,27 @@ describe('SSE parser', () => {
       event: 'run.error',
     });
   });
+
+  it('normalizes legacy deck content targets before validation', () => {
+    const event = parsePublicEvent('run.completed', {
+      ...terminal,
+      affected_targets: [{
+        type: 'deck',
+        part: 'deck',
+        local_path: '/tmp/project/deck.json',
+        open_url: 'vscode://file/tmp/project/deck.json',
+      }],
+    }, '83');
+
+    expect(event).toMatchObject({
+      data: {
+        affected_targets: [{
+          type: 'deck',
+          part: 'manifest',
+          local_path: '/tmp/project/manifest.json',
+          open_url: 'vscode://file/tmp/project/manifest.json',
+        }],
+      },
+    });
+  });
 });

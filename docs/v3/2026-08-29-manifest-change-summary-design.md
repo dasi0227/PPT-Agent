@@ -10,7 +10,9 @@
 - `slide:<id>:spec`：单页设计稿
 - `slide:<id>:html`：单页幻灯片
 
-项目根目录使用 `manifest.json`、`outline.json`、`design.json`。Manifest 保存标题、目标、受众、语言、要求、禁忌、画布和页码规则。资源 Schema、Mutation、版本类型、快照目录、公共事件、项目内容 API 和 Agent 上下文使用同一命名，不保留 `deck.json` 或 `deck:deck` 兼容分支。
+项目根目录使用 `manifest.json`、`outline.json`、`design.json`。Manifest 保存标题、目标、受众、语言、要求、禁忌、画布和页码规则。资源 Schema、Mutation、版本类型、快照目录、公共事件、项目内容 API 和 Agent 上下文使用同一命名。
+
+启动迁移会将旧项目根目录的 `deck.json` 原子重命名为 `manifest.json`，并将版本表中的 `deck` 目标一次性转换为 `manifest`。旧历史事件中的 `deck:deck` 在公共事件解析边界归一化为 `deck:manifest`；核心业务不保留双写或旧契约分支。
 
 `scope.level: deck` 保持不变，因为它表示操作范围是整份演示文稿，而不是 Manifest 文件。
 

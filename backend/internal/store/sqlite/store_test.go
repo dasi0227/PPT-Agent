@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -103,6 +104,74 @@ func TestMigrateIdempotent(t *testing.T) {
 	}
 	if err := Migrate(db, zap.NewNop()); err != nil {
 		t.Fatalf("second migrate (should be idempotent): %v", err)
+	}
+}
+
+func TestMigrateLegacyDeckProjectToManifest(t *testing.T) {
+	root := t.TempDir()
+	workDir := filepath.Join(root, "project")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "deck.json"), []byte(`{"version":"4.0","revision":2}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{DBPath: filepath.Join(root, "legacy.db")}
+	db, cleanup, err := Open(cfg, zap.NewNop())
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(cleanup)
+	for _, statement := range []string{
+		`CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`,
+		`INSERT INTO schema_migrations(name, applied_at) VALUES
+			('0001_init.sql', 1),
+			('0002_run_pause_lifecycle.sql', 1),
+			('0003_add_deck_version_target.sql', 1)`,
+		`CREATE TABLE projects (
+			id TEXT PRIMARY KEY,
+			work_dir TEXT NOT NULL,
+			layout_version INTEGER NOT NULL
+		)`,
+		`INSERT INTO projects(id, work_dir, layout_version) VALUES ('p1', '` + workDir + `', 6)`,
+		`CREATE TABLE versions (
+			id TEXT PRIMARY KEY,
+			target_type TEXT NOT NULL CHECK (target_type IN ('deck','outline','slide_spec','slide_html','design','asset')),
+			target_id TEXT NOT NULL,
+			version_no INTEGER NOT NULL,
+			snapshot_path TEXT NOT NULL,
+			run_id TEXT,
+			created_at INTEGER NOT NULL,
+			UNIQUE (target_type, target_id, version_no)
+		)`,
+		`CREATE INDEX idx_versions_target ON versions(target_type, target_id)`,
+		`CREATE UNIQUE INDEX idx_versions_run_target ON versions(run_id, target_type, target_id) WHERE run_id IS NOT NULL`,
+		`INSERT INTO versions(id, target_type, target_id, version_no, snapshot_path, created_at)
+			VALUES ('v1', 'deck', 'p1', 1, 'versions/deck/v1.json', 1)`,
+	} {
+		if err := db.Exec(statement).Error; err != nil {
+			t.Fatalf("prepare legacy database: %v", err)
+		}
+	}
+
+	if err := Migrate(db, zap.NewNop()); err != nil {
+		t.Fatalf("migrate legacy database: %v", err)
+	}
+	var targetType string
+	if err := db.Raw("SELECT target_type FROM versions WHERE id = 'v1'").Scan(&targetType).Error; err != nil {
+		t.Fatal(err)
+	}
+	if targetType != "manifest" {
+		t.Fatalf("target_type=%q want manifest", targetType)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "manifest.json")); err != nil {
+		t.Fatalf("manifest.json was not migrated: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, "deck.json")); !os.IsNotExist(err) {
+		t.Fatalf("deck.json still exists after migration: %v", err)
+	}
+	if err := Migrate(db, zap.NewNop()); err != nil {
+		t.Fatalf("repeat migration: %v", err)
 	}
 }
 
