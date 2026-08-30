@@ -26,6 +26,25 @@ function Harness() {
 }
 
 describe('SkillSelector', () => {
+  it('keeps the menu available and shows an empty state when there are no skills', () => {
+    render(
+      <SkillSelector
+        skills={[]}
+        selectedIds={[]}
+        loading={false}
+        onToggle={() => undefined}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', { name: '技能' });
+    expect(trigger).toBeEnabled();
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+
+    expect(screen.getByText('暂无技能')).toBeInTheDocument();
+    expect(screen.getByRole('menu')).toHaveClass('w-[220px]');
+  });
+
   it('shows only names and descriptions and limits selection to three skills', () => {
     render(<Harness />);
     const trigger = screen.getByRole('button', { name: '技能' });
@@ -38,6 +57,7 @@ describe('SkillSelector', () => {
     }
 
     expect(trigger).toHaveTextContent('技能 3');
+    expect(screen.getByRole('menu')).toHaveClass('w-[370px]');
     expect(screen.getByRole('menuitemcheckbox', { name: '技能：技能四' })).toHaveAttribute('data-disabled');
     expect(screen.getByText('第一个技能')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/搜索/)).toBeNull();

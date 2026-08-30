@@ -40,7 +40,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
           <button
             type="button"
             aria-label="技能"
-            disabled={disabled || loading || skills.length === 0}
+            disabled={disabled || loading}
             className={[
               'composer-skill-button inline-flex h-7 min-w-0 max-w-[88px] shrink-0 items-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45',
               count > 0
@@ -55,8 +55,16 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
         <DropdownMenuContent
           side="top"
           align="end"
-          className="max-h-72 w-[min(370px,calc(100vw-24px))] overflow-y-auto p-1"
+          className={[
+            'max-h-72 max-w-[calc(100vw-24px)] overflow-y-auto p-1',
+            skills.length === 0 ? 'w-[220px]' : 'w-[370px]',
+          ].join(' ')}
         >
+          {skills.length === 0 && (
+            <div className="flex min-h-16 items-center justify-center px-4 py-3 text-xs text-text-400">
+              暂无技能
+            </div>
+          )}
           {skills.map((skill) => {
             const active = selected.has(skill.id);
             const optionDisabled = !active && count >= MAX_SELECTED_SKILLS;
