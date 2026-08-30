@@ -69,6 +69,10 @@ func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 		Scope:           RunScope{Artifact: ArtifactPPT, Level: ScopeSlide, SlideID: "s1"},
 		Mode:            ModeExecute,
 		UserInput:       "revise",
+		Skills: []PublicSkill{{
+			ID: "story", Name: "演示叙事", Description: "梳理页面叙事。",
+			LocalPath: "/tmp/skills/story/SKILL.md", OpenURL: "vscode://file/tmp/skills/story/SKILL.md",
+		}},
 	}
 	if err := ValidatePublicEvent(EventRunStarted, payload); err != nil {
 		t.Fatal(err)

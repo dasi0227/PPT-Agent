@@ -37,15 +37,17 @@ type RunService struct {
 	assembler *contextengine.ContextAssembler
 	renderer  workflow.SlideRenderer
 	registry  *llm.Registry
+	skills    *SkillService
 }
 
-func NewRunService(s store.Store, engine *run.Engine, registry *llm.Registry, _ WorkRoot, renderer *workflow.NodeSlideRenderer) *RunService {
+func NewRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot WorkRoot, renderer *workflow.NodeSlideRenderer) *RunService {
 	refRegistry := contextengine.NewRefRegistry()
 	return &RunService{
 		store: s, engine: engine,
 		assembler: contextengine.NewContextAssembler(s, refRegistry),
 		renderer:  renderer,
 		registry:  registry,
+		skills:    NewSkillService(workRoot),
 	}
 }
 
@@ -157,6 +159,15 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 	command := p.Command
+	if len(p.SkillIDs) > 0 {
+		if svc.skills == nil {
+			return model.Run{}, model.NewAgentError("SKILL_NOT_FOUND", "create_run", nil)
+		}
+		command.Skills, err = svc.skills.Resolve(p.SkillIDs)
+		if err != nil {
+			return model.Run{}, err
+		}
+	}
 	if err := command.Validate(); err != nil {
 		return model.Run{}, err
 	}
@@ -208,7 +219,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
 		"instruction": command.Instruction, "scope": command.Scope,
-		"mode": command.Mode, "options": command.Options, "model": p.Model,
+		"mode": command.Mode, "options": command.Options, "skills": command.Skills, "model": p.Model,
 	})
 	if err != nil {
 		return model.Run{}, err
@@ -309,6 +320,24 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	svc.completeCreateSuccess(ctx, thread.ID, p.ClientRequestID, createdRun.ID)
 	return createdRun, nil
+}
+
+func (svc *RunService) ListSkills() ([]model.PublicSkill, error) {
+	if svc.skills == nil {
+		return []model.PublicSkill{}, nil
+	}
+	skills, err := svc.skills.List()
+	if err != nil {
+		return nil, err
+	}
+	public := make([]model.PublicSkill, 0, len(skills))
+	for _, skill := range skills {
+		public = append(public, model.PublicSkill{
+			ID: skill.ID, Name: skill.Name, Description: skill.Description,
+			LocalPath: skill.LocalPath, OpenURL: skill.OpenURL,
+		})
+	}
+	return public, nil
 }
 
 func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, error) {

@@ -73,9 +73,10 @@ type PublicError struct {
 
 type RunStartedPayload struct {
 	PublicEventBase
-	Scope     RunScope `json:"scope"`
-	Mode      RunMode  `json:"mode"`
-	UserInput string   `json:"user_input"`
+	Scope     RunScope      `json:"scope"`
+	Mode      RunMode       `json:"mode"`
+	UserInput string        `json:"user_input"`
+	Skills    []PublicSkill `json:"skills,omitempty"`
 }
 
 type ProgressValue struct {
@@ -336,7 +337,10 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			Mode:        RunMode(stringValue(data["mode"])),
 			Instruction: stringValue(data["user_input"]),
 		}
-		return command.Validate()
+		if err := command.Validate(); err != nil {
+			return err
+		}
+		return validatePublicSkills(data["skills"])
 	case EventRunProgress:
 		if !oneOf(stringValue(data["stage"]), "thinking", "planning", "reading", "writing", "rendering", "finalizing") {
 			return errors.New("invalid progress stage")
@@ -530,6 +534,32 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := validateQuestionAnswerFields(answers); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func validatePublicSkills(value any) error {
+	if value == nil {
+		return nil
+	}
+	skills, ok := value.([]any)
+	if !ok || len(skills) > MaxRunSkills {
+		return errors.New("skills must be an array with at most three items")
+	}
+	seen := map[string]bool{}
+	for _, raw := range skills {
+		skill, ok := raw.(map[string]any)
+		if !ok {
+			return errors.New("skill must be an object")
+		}
+		id := strings.TrimSpace(stringValue(skill["id"]))
+		if id == "" || seen[id] {
+			return errors.New("skill ids must be present and unique")
+		}
+		if err := requireString(skill, "name", "description"); err != nil {
+			return err
+		}
+		seen[id] = true
 	}
 	return nil
 }

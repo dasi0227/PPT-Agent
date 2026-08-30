@@ -32,6 +32,7 @@ type createRunBody struct {
 	Scope           model.RunScope   `json:"scope"`
 	Mode            model.RunMode    `json:"mode"`
 	Options         model.RunOptions `json:"options"`
+	SkillIDs        []string         `json:"skill_ids"`
 }
 
 type runResponse struct {
@@ -43,6 +44,7 @@ type runResponse struct {
 	Scope       model.RunScope `json:"scope"`
 	Mode        model.RunMode  `json:"mode"`
 	Model       *string        `json:"model"`
+	Skills      []model.PublicSkill `json:"skills"`
 	PauseReason string         `json:"pause_reason,omitempty"`
 	PausedAt    int64          `json:"paused_at,omitempty"`
 }
@@ -57,7 +59,7 @@ func toRunResponse(r model.Run) runResponse {
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
 		Scope: r.Command.Scope, Mode: r.Command.Mode,
-		Model: profileName, PauseReason: r.PauseReason, PausedAt: r.PausedAt,
+		Model: profileName, Skills: r.Command.PublicSkills(), PauseReason: r.PauseReason, PausedAt: r.PausedAt,
 	}
 }
 
@@ -80,6 +82,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 	params := model.CreateRunParams{
 		ClientRequestID: body.ClientRequestID,
 		Model:           body.Model,
+		SkillIDs:        body.SkillIDs,
 		Instruction:     body.Instruction,
 		Command: model.RunCommand{
 			Scope: body.Scope, Mode: body.Mode,
@@ -93,6 +96,15 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, toRunResponse(r))
+}
+
+func (h *RunHandler) ListSkills(c *gin.Context) {
+	skills, err := h.svc.ListSkills()
+	if err != nil {
+		AbortWithError(c, ErrInternal(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"skills": skills})
 }
 
 // GetRun GET /runs/{id}

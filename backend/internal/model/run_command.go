@@ -56,11 +56,31 @@ type RunOptions struct {
 	Range    SlideRange  `json:"range,omitempty"`
 }
 
+const MaxRunSkills = 3
+
+type RunSkill struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Content     string `json:"content"`
+	LocalPath   string `json:"local_path,omitempty"`
+	OpenURL     string `json:"open_url,omitempty"`
+}
+
+type PublicSkill struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	LocalPath   string `json:"local_path,omitempty"`
+	OpenURL     string `json:"open_url,omitempty"`
+}
+
 type RunCommand struct {
 	Scope       RunScope   `json:"scope"`
 	Mode        RunMode    `json:"mode"`
 	Instruction string     `json:"instruction"`
 	Options     RunOptions `json:"options,omitempty"`
+	Skills      []RunSkill `json:"skills,omitempty"`
 }
 
 var ErrInvalidRunCommand = errors.New("invalid run command")
@@ -102,7 +122,35 @@ func (c RunCommand) Validate() error {
 	if c.Options.Range != "" && c.Scope.Level != ScopeDeck {
 		return fmt.Errorf("%w: range is only valid for deck scope", ErrInvalidRunCommand)
 	}
+	if len(c.Skills) > MaxRunSkills {
+		return fmt.Errorf("%w: at most %d skills may be selected", ErrInvalidRunCommand, MaxRunSkills)
+	}
+	seenSkills := map[string]bool{}
+	for _, skill := range c.Skills {
+		if strings.TrimSpace(skill.ID) == "" || strings.TrimSpace(skill.Name) == "" ||
+			strings.TrimSpace(skill.Description) == "" || strings.TrimSpace(skill.Content) == "" {
+			return fmt.Errorf("%w: selected skills must be complete", ErrInvalidRunCommand)
+		}
+		if seenSkills[skill.ID] {
+			return fmt.Errorf("%w: selected skills must be unique", ErrInvalidRunCommand)
+		}
+		seenSkills[skill.ID] = true
+	}
 	return nil
+}
+
+func (c RunCommand) PublicSkills() []PublicSkill {
+	if len(c.Skills) == 0 {
+		return nil
+	}
+	skills := make([]PublicSkill, 0, len(c.Skills))
+	for _, skill := range c.Skills {
+		skills = append(skills, PublicSkill{
+			ID: skill.ID, Name: skill.Name, Description: skill.Description,
+			LocalPath: skill.LocalPath, OpenURL: skill.OpenURL,
+		})
+	}
+	return skills
 }
 
 func (r SlideRange) Contains(count int) bool {

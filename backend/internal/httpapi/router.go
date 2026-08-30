@@ -40,6 +40,7 @@ func (r *Router) register() {
 	if r.llm != nil {
 		v1.GET("/llm/profiles", r.llm.Profiles)
 	}
+	v1.GET("/skills", r.run.ListSkills)
 
 	// Project / Thread：API 契约入口，前端不需要绕过 HTTP 直接造数据。
 	v1.GET("/projects", r.project.List)

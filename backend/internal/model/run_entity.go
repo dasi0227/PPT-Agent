@@ -30,6 +30,7 @@ type ModelSelection struct {
 type CreateRunParams struct {
 	ClientRequestID string
 	Model           string
+	SkillIDs        []string
 	ThreadID        string
 	ProjectID       string
 	PageIndex       *int

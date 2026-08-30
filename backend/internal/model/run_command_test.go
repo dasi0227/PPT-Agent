@@ -44,6 +44,32 @@ func TestRunCommandValidationAcceptsPlanIntentAndOptions(t *testing.T) {
 	}
 }
 
+func TestRunCommandValidationAcceptsAtMostThreeCompleteUniqueSkills(t *testing.T) {
+	command := RunCommand{
+		Scope: RunScope{Artifact: ArtifactPPT, Level: ScopeDeck},
+		Mode:  ModeExecute, Instruction: "build",
+		Skills: []RunSkill{
+			{ID: "one", Name: "One", Description: "First", Content: "Use one."},
+			{ID: "two", Name: "Two", Description: "Second", Content: "Use two."},
+			{ID: "three", Name: "Three", Description: "Third", Content: "Use three."},
+		},
+	}
+	if err := command.Validate(); err != nil {
+		t.Fatalf("valid skills rejected: %v", err)
+	}
+	command.Skills = append(command.Skills, RunSkill{ID: "four", Name: "Four", Description: "Fourth", Content: "Use four."})
+	if err := command.Validate(); err == nil {
+		t.Fatal("four selected skills should fail")
+	}
+	command.Skills = []RunSkill{
+		{ID: "one", Name: "One", Description: "First", Content: "Use one."},
+		{ID: "one", Name: "Duplicate", Description: "Duplicate", Content: "Duplicate."},
+	}
+	if err := command.Validate(); err == nil {
+		t.Fatal("duplicate selected skills should fail")
+	}
+}
+
 func TestSlideRangeContains(t *testing.T) {
 	cases := []struct {
 		value SlideRange
