@@ -1,12 +1,12 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
+	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -14,9 +14,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const maxSkillFileBytes = 64 << 10
+const (
+	maxSkillFileBytes       = maxRepositoryFileSize
+	maxDynamicSkillsPerCall = 8
+	maxDynamicSkillBytes    = 192 << 10
+)
 
-var skillIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
+var skillIDPattern = repositoryIDPattern
 
 type SkillService struct {
 	root string
@@ -27,89 +31,193 @@ type skillFrontmatter struct {
 	Description string `yaml:"description"`
 }
 
+type skillRegistry struct {
+	Disabled []string `json:"disabled"`
+}
+
 func NewSkillService(workRoot WorkRoot) *SkillService {
 	return &SkillService{root: filepath.Join(string(workRoot), "skills")}
 }
 
-func (s *SkillService) List() ([]model.RunSkill, error) {
-	entries, err := os.ReadDir(s.root)
-	if errors.Is(err, os.ErrNotExist) {
-		return []model.RunSkill{}, nil
-	}
+func (s *SkillService) List() ([]model.RepositorySkill, error) {
+	disabled, err := s.readRegistry()
 	if err != nil {
 		return nil, err
 	}
-	skills := make([]model.RunSkill, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || !skillIDPattern.MatchString(entry.Name()) {
-			continue
-		}
-		skill, err := s.read(entry.Name())
-		if err == nil {
-			skills = append(skills, skill)
+	ids, err := repositoryIDs(s.root)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.RepositorySkill, 0, len(ids))
+	for _, id := range ids {
+		skill, readErr := s.read(id)
+		if readErr == nil {
+			skill.Disabled = disabled[id]
+			skill.Content = ""
+			out = append(out, skill)
 		}
 	}
-	sort.Slice(skills, func(i, j int) bool {
-		if skills[i].Name == skills[j].Name {
-			return skills[i].ID < skills[j].ID
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name == out[j].Name {
+			return out[i].ID < out[j].ID
 		}
-		return skills[i].Name < skills[j].Name
+		return out[i].Name < out[j].Name
 	})
-	return skills, nil
+	return out, nil
+}
+
+func (s *SkillService) Get(id string) (model.RepositorySkill, error) {
+	disabled, err := s.readRegistry()
+	if err != nil {
+		return model.RepositorySkill{}, err
+	}
+	skill, err := s.read(id)
+	if err != nil {
+		return model.RepositorySkill{}, err
+	}
+	skill.Disabled = disabled[id]
+	return skill, nil
 }
 
 func (s *SkillService) Resolve(ids []string) ([]model.RunSkill, error) {
-	if len(ids) > model.MaxRunSkills {
-		return nil, model.NewAgentError("SKILL_SELECTION_INVALID", "create_run", fmt.Errorf("at most %d skills may be selected", model.MaxRunSkills))
+	return s.resolve(ids, model.MaxRunSkills, 0)
+}
+
+func (s *SkillService) ResolveDynamic(ids []string) ([]model.RunSkill, error) {
+	return s.resolve(ids, maxDynamicSkillsPerCall, maxDynamicSkillBytes)
+}
+
+func (s *SkillService) resolve(ids []string, maxCount, maxBytes int) ([]model.RunSkill, error) {
+	if len(ids) > maxCount {
+		return nil, model.NewAgentError("SKILL_SELECTION_INVALID", "load_skill", fmt.Errorf("at most %d skills may be selected", maxCount))
 	}
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	available, err := s.List()
+	disabled, err := s.readRegistry()
 	if err != nil {
 		return nil, err
 	}
-	byID := make(map[string]model.RunSkill, len(available))
-	for _, skill := range available {
-		byID[skill.ID] = skill
-	}
-	seen := make(map[string]bool, len(ids))
-	selected := make([]model.RunSkill, 0, len(ids))
+	seen := map[string]bool{}
+	out := make([]model.RunSkill, 0, len(ids))
+	total := 0
 	for _, id := range ids {
-		if !skillIDPattern.MatchString(id) || seen[id] {
-			return nil, model.NewAgentError("SKILL_SELECTION_INVALID", "create_run", errors.New("skill ids must be valid and unique"))
+		if !validRepositoryID(id) || seen[id] {
+			return nil, model.NewAgentError("SKILL_SELECTION_INVALID", "load_skill", errors.New("skill ids must be valid and unique"))
 		}
-		skill, ok := byID[id]
-		if !ok {
-			agentErr := model.NewAgentError("SKILL_NOT_FOUND", "create_run", nil)
-			agentErr.Details["skill_id"] = id
-			return nil, agentErr
+		if disabled[id] {
+			return nil, model.NewAgentError("SKILL_DISABLED", "load_skill", errors.New("disabled skills cannot be loaded"))
+		}
+		skill, readErr := s.read(id)
+		if readErr != nil {
+			return nil, model.NewAgentError("SKILL_NOT_FOUND", "load_skill", readErr)
+		}
+		total += len(skill.Content)
+		if maxBytes > 0 && total > maxBytes {
+			return nil, model.NewAgentError("CONTEXT_BUDGET_EXCEEDED", "load_skill", errors.New("skill content exceeds the dynamic context budget"))
 		}
 		seen[id] = true
-		selected = append(selected, skill)
+		out = append(out, model.RunSkill{
+			ID: skill.ID, Name: skill.Name, Description: skill.Description, Content: skill.Content,
+			LocalPath: skill.LocalPath, OpenURL: skill.OpenURL,
+		})
 	}
-	return selected, nil
+	return out, nil
 }
 
-func (s *SkillService) read(id string) (model.RunSkill, error) {
-	path := filepath.Join(s.root, id, "SKILL.md")
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() > maxSkillFileBytes {
-		return model.RunSkill{}, errors.New("invalid skill file")
-	}
-	raw, err := os.ReadFile(path)
+func (s *SkillService) SetDisabled(id string, disabled bool) (model.RepositorySkill, error) {
+	skill, err := s.read(id)
 	if err != nil {
-		return model.RunSkill{}, err
+		return model.RepositorySkill{}, err
+	}
+	registry, err := s.readRegistry()
+	if err != nil {
+		return model.RepositorySkill{}, err
+	}
+	if disabled {
+		registry[id] = true
+	} else {
+		delete(registry, id)
+	}
+	values := make([]string, 0, len(registry))
+	for value := range registry {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+	raw, err := json.MarshalIndent(skillRegistry{Disabled: values}, "", "  ")
+	if err != nil {
+		return model.RepositorySkill{}, err
+	}
+	if err := os.MkdirAll(s.root, 0o755); err != nil {
+		return model.RepositorySkill{}, err
+	}
+	temp, err := os.CreateTemp(s.root, ".registry-*.json")
+	if err != nil {
+		return model.RepositorySkill{}, err
+	}
+	tempPath := temp.Name()
+	defer os.Remove(tempPath)
+	if _, err = temp.Write(append(raw, '\n')); err == nil {
+		err = temp.Sync()
+	}
+	if closeErr := temp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(tempPath, filepath.Join(s.root, "registry.json"))
+	}
+	if err != nil {
+		return model.RepositorySkill{}, err
+	}
+	skill.Disabled = disabled
+	return skill, nil
+}
+
+func (s *SkillService) read(id string) (model.RepositorySkill, error) {
+	raw, path, err := readRepositoryFile(s.root, id, "SKILL.md", maxSkillFileBytes)
+	if err != nil {
+		return model.RepositorySkill{}, repositoryReadError("skill", id, err)
 	}
 	meta, body, err := parseSkillMarkdown(raw)
 	if err != nil {
-		return model.RunSkill{}, err
+		return model.RepositorySkill{}, repositoryReadError("skill", id, err)
 	}
-	openURL := (&url.URL{Scheme: "vscode", Host: "file", Path: path}).String()
-	return model.RunSkill{
+	return model.RepositorySkill{
 		ID: id, Name: meta.Name, Description: meta.Description, Content: body,
-		LocalPath: path, OpenURL: openURL,
+		LocalPath: path, OpenURL: repositoryOpenURL(path),
 	}, nil
+}
+
+func (s *SkillService) readRegistry() (map[string]bool, error) {
+	path := filepath.Join(s.root, "registry.json")
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return map[string]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() > maxRepositoryFileSize {
+		return nil, ErrRepositoryCorrupt
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.DisallowUnknownFields()
+	var registry skillRegistry
+	if err := decoder.Decode(&registry); err != nil {
+		return nil, fmt.Errorf("skill registry: %w", ErrRepositoryCorrupt)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("skill registry: %w", ErrRepositoryCorrupt)
+	}
+	out := make(map[string]bool, len(registry.Disabled))
+	for _, id := range registry.Disabled {
+		if !validRepositoryID(id) || out[id] {
+			return nil, fmt.Errorf("skill registry: %w", ErrRepositoryCorrupt)
+		}
+		out[id] = true
+	}
+	return out, nil
 }
 
 func parseSkillMarkdown(raw []byte) (skillFrontmatter, string, error) {

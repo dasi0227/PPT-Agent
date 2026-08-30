@@ -31,23 +31,29 @@ type WorkRoot string
 type ExecutionFactory func(r model.Run, p model.CreateRunParams, proj model.Project) run.Execution
 
 type RunService struct {
-	store     store.Store
-	engine    *run.Engine
-	factory   ExecutionFactory
-	assembler *contextengine.ContextAssembler
-	renderer  workflow.SlideRenderer
-	registry  *llm.Registry
-	skills    *SkillService
+	store      store.Store
+	engine     *run.Engine
+	factory    ExecutionFactory
+	assembler  *contextengine.ContextAssembler
+	renderer   workflow.SlideRenderer
+	registry   *llm.Registry
+	skills     *SkillService
+	components *ComponentService
+	themes     *ThemeService
 }
 
 func NewRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot WorkRoot, renderer *workflow.NodeSlideRenderer) *RunService {
 	refRegistry := contextengine.NewRefRegistry()
+	components := NewComponentService(workRoot)
+	themes := NewThemeService(workRoot)
 	return &RunService{
 		store: s, engine: engine,
-		assembler: contextengine.NewContextAssembler(s, refRegistry),
-		renderer:  renderer,
-		registry:  registry,
-		skills:    NewSkillService(workRoot),
+		assembler:  contextengine.NewContextAssembler(s, refRegistry).WithComponentLoader(components),
+		renderer:   renderer,
+		registry:   registry,
+		skills:     NewSkillService(workRoot),
+		components: components,
+		themes:     themes,
 	}
 }
 
@@ -72,6 +78,9 @@ type workflowExecution struct {
 	store            store.Store
 	runID            string
 	renderer         workflow.SlideRenderer
+	components       *ComponentService
+	skills           *SkillService
+	themes           *ThemeService
 	imageResolver    llm.ImageRefResolver
 	semanticReviewer workflow.SemanticReviewer
 	resumeCheckpoint *workflow.RuntimeCheckpoint
@@ -115,7 +124,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		Logger:         zap.L().Named("ppt-runtime"),
 		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
 		DomainToolsForContext: func(pack contextengine.ContextPack) workflow.DomainToolProvider {
-			return workflow.DefaultDomainToolProvider{Pack: pack, Renderer: r.renderer}
+			return workflow.DefaultDomainToolProvider{Pack: pack, Renderer: r.renderer, Components: r.components, Skills: r.skills, Themes: r.themes}
 		},
 		ImageResolver:       r.imageResolver,
 		Lifecycle:           checkpoint,
@@ -306,7 +315,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	execution := &workflowExecution{
 		runtime: workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()}),
 		pack:    pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
-		renderer:         svc.renderer,
+		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
 		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
 		semanticReviewer: workflow.LLMSemanticReviewer{Provider: selectedProfile.Adapter()},
 	}
@@ -334,7 +343,7 @@ func (svc *RunService) ListSkills() ([]model.PublicSkill, error) {
 	for _, skill := range skills {
 		public = append(public, model.PublicSkill{
 			ID: skill.ID, Name: skill.Name, Description: skill.Description,
-			LocalPath: skill.LocalPath, OpenURL: skill.OpenURL,
+			Disabled: skill.Disabled, LocalPath: skill.LocalPath, OpenURL: skill.OpenURL,
 		})
 	}
 	return public, nil
@@ -384,7 +393,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: provider})
 	execution := &workflowExecution{
 		runtime: runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
-		renderer:         svc.renderer,
+		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
 		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
 		semanticReviewer: workflow.LLMSemanticReviewer{Provider: provider},
 		reconciliation:   reconciled,

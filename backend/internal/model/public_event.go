@@ -235,16 +235,24 @@ type ToolPreview struct {
 	Warnings []string `json:"warnings"`
 }
 
+type PublicLoadedResource struct {
+	Kind    string `json:"kind"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	OpenURL string `json:"open_url,omitempty"`
+}
+
 type ToolCompletedPayload struct {
 	PublicEventBase
-	CallID  string             `json:"call_id"`
-	Tool    string             `json:"tool"`
-	Status  string             `json:"status"`
-	Target  *PublicTarget      `json:"target,omitempty"`
-	Display PublicDisplay      `json:"display"`
-	Preview *ToolPreview       `json:"preview,omitempty"`
-	Error   *PublicError       `json:"error,omitempty"`
-	Command *CommandProjection `json:"command,omitempty"`
+	CallID    string                 `json:"call_id"`
+	Tool      string                 `json:"tool"`
+	Status    string                 `json:"status"`
+	Target    *PublicTarget          `json:"target,omitempty"`
+	Display   PublicDisplay          `json:"display"`
+	Preview   *ToolPreview           `json:"preview,omitempty"`
+	Error     *PublicError           `json:"error,omitempty"`
+	Command   *CommandProjection     `json:"command,omitempty"`
+	Resources []PublicLoadedResource `json:"resources,omitempty"`
 }
 
 type CommandProjection struct {
@@ -478,6 +486,21 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := validateCommandProjection(data["command"], true); err != nil {
 			return err
 		}
+		if resources, exists := data["resources"]; exists {
+			values, ok := resources.([]any)
+			if !ok {
+				return errors.New("resources must be an array")
+			}
+			for _, raw := range values {
+				resource, ok := raw.(map[string]any)
+				if !ok || !oneOf(stringValue(resource["kind"]), "component", "skill") {
+					return errors.New("invalid loaded resource")
+				}
+				if err := requireString(resource, "id", "name"); err != nil {
+					return err
+				}
+			}
+		}
 		if rawPreview, exists := data["preview"]; exists {
 			preview, ok := rawPreview.(map[string]any)
 			if !ok {
@@ -679,7 +702,7 @@ func isPublicEventType(event EventType) bool {
 }
 
 func isBusinessTool(name string) bool {
-	return oneOf(name, "read_ppt", "mutate_ppt", "render_slide", "run_command")
+	return oneOf(name, "read_ppt", "mutate_ppt", "render_slide", "run_command", "load_component", "load_skill")
 }
 
 func forbiddenPublicField(value any) bool {

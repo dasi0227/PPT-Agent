@@ -97,17 +97,17 @@ var patchPathRules = map[string]map[string][]PatchPathRule{
 	},
 	"design.patch": {
 		"add": {
-			{Pattern: `^/(?:theme|direction|density|chrome)$`, Description: "design author fields"},
+			{Pattern: `^/(?:direction|density|chrome)$`, Description: "agent-owned design fields"},
 			{Pattern: `^/chrome/(?:-|0|[1-9][0-9]*)$`, Description: "chrome item or append position"},
 			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)/(?:type|placement|style)$`, Description: "chrome item fields"},
 		},
 		"remove": {
-			{Pattern: `^/(?:theme|direction|density|chrome)$`, Description: "design author fields"},
+			{Pattern: `^/(?:direction|density|chrome)$`, Description: "agent-owned design fields"},
 			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)$`, Description: "existing chrome item"},
 			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)/(?:type|placement|style)$`, Description: "chrome item fields"},
 		},
 		"replace": {
-			{Pattern: `^/(?:theme|direction|density|chrome)$`, Description: "design author fields"},
+			{Pattern: `^/(?:direction|density|chrome)$`, Description: "agent-owned design fields"},
 			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)$`, Description: "existing chrome item"},
 			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)/(?:type|placement|style)$`, Description: "chrome item fields"},
 		},

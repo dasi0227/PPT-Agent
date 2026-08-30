@@ -1,5 +1,4 @@
-// Package seed 内嵌出厂预置资产源（themes/layouts/components/fx）与公共层基座（common/）。
-// go:embed 只能引用本目录树下的文件，故内嵌置于此包；asset 包经 FS() 消费（DS-SEED-001）。
+// Package seed embeds the factory Theme and Component repositories and Runtime base CSS.
 package seed
 
 import (

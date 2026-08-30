@@ -29,7 +29,7 @@ const (
 	SegmentRelated              SegmentKind = "related_slides"
 	SegmentDesign               SegmentKind = "design"
 	SegmentSlideHTML            SegmentKind = "slide_html"
-	SegmentAssets               SegmentKind = "assets"
+	SegmentComponents           SegmentKind = "components"
 	SegmentMemory               SegmentKind = "thread_memory"
 	SegmentRecentTurns          SegmentKind = "recent_turns"
 )
@@ -53,7 +53,7 @@ func DefaultBudget() TokenBudget {
 	return TokenBudget{ContextWindow: 32768, InputLimit: 20000, OutputReserve: 8000, SegmentCaps: map[SegmentKind]int{
 		SegmentPolicy: 3000, SegmentRunCommand: 1200, SegmentPresentationManifest: 1600, SegmentOutline: 3000, SegmentTarget: 6000,
 		SegmentRelated: 2400, SegmentDesign: 3000, SegmentSlideHTML: 6000,
-		SegmentAssets: 1800, SegmentMemory: 2000, SegmentRecentTurns: 1200,
+		SegmentComponents: 1800, SegmentMemory: 2000, SegmentRecentTurns: 1200,
 	}}
 }
 
@@ -108,10 +108,9 @@ type SlideHTMLContext struct {
 	Summaries map[string]HTMLSummary `json:"summaries"`
 }
 
-type AssetCandidate struct {
+type ComponentCandidate struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
-	Kind        string   `json:"kind"`
 	Description string   `json:"description,omitempty"`
 	Tags        []string `json:"tags"`
 }
@@ -143,7 +142,7 @@ type ContextPack struct {
 	RelatedSlides        []SlideSummary              `json:"related_slides"`
 	Design               DesignContext               `json:"design"`
 	SlideHTML            SlideHTMLContext            `json:"slide_html"`
-	Assets               []AssetCandidate            `json:"assets"`
+	Components           []ComponentCandidate        `json:"components"`
 	Memory               ThreadMemory                `json:"memory"`
 	RecentTurns          []RecentTurn                `json:"recent_turns"`
 	Revisions            RevisionRefs                `json:"revisions"`

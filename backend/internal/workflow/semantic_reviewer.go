@@ -181,9 +181,11 @@ func (r *Runtime) runReviewCompletion(
 		Evidence: state.ledger, Context: state.pack, Plan: state.plan,
 		Requirements: state.requirements, FinishMessage: candidateMessage, Canceled: ctx.Err() != nil,
 	})
+	reviewCommand := state.pack.Command
+	reviewCommand.Skills = nil
 	reviewInput := SemanticReviewInput{
 		RunID: state.runID, FinishCallID: callID,
-		Command: state.pack.Command, RequirementLedger: state.requirements, Plan: state.plan,
+		Command: reviewCommand, RequirementLedger: state.requirements, Plan: state.plan,
 		Changes: state.changeSet(), GateResult: gate,
 		Evidence: state.ledger.Entries(state.changeSet()), LatestIssues: state.issues,
 		ContextBriefing: state.contextBriefing, RetrievedContext: reviewContextItems(state.retrievedContext),

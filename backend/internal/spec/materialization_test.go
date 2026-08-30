@@ -15,8 +15,8 @@ func TestRuntimeFrameAndMaterializationFreshnessAreIndependent(t *testing.T) {
 	}
 
 	artifactHash, sourceHash := ContentHash([]byte("html")), ContentHash([]byte("source"))
-	record := &MaterializationRecord{SchemaVersion: SchemaVersion, Artifact: MaterializationArtifact{Revision: 1, Hash: artifactHash}, Source: MaterializationSource{ManifestRevision: 1, OutlineNodeHash: SemanticSlideNodeHash(outline, "sli_bbbbbb"), SpecRevision: 1, DesignRevision: 1, Hash: sourceHash}, Frame: MaterializationFrame{ContextHash: FrameContextHash(deck, outline, design, "sli_bbbbbb")}, RenderedAt: 1}
-	if state := DeriveMaterializationState(true, record, 1, record.Source.OutlineNodeHash, 1, 1, artifactHash, sourceHash, record.Frame.ContextHash); state != "fresh" {
+	record := &MaterializationRecord{SchemaVersion: SchemaVersion, Artifact: MaterializationArtifact{Revision: 1, Hash: artifactHash}, Source: MaterializationSource{ManifestRevision: 1, OutlineNodeHash: SemanticSlideNodeHash(outline, "sli_bbbbbb"), SpecRevision: 1, DesignContentHash: DesignContentHash(design), Hash: sourceHash}, Frame: MaterializationFrame{ContextHash: FrameContextHash(deck, outline, design, "sli_bbbbbb")}, RenderedAt: 1}
+	if state := DeriveMaterializationState(true, record, 1, record.Source.OutlineNodeHash, 1, DesignContentHash(design), artifactHash, sourceHash, record.Frame.ContextHash); state != "fresh" {
 		t.Fatalf("state=%s", state)
 	}
 	reordered := outline
@@ -24,7 +24,21 @@ func TestRuntimeFrameAndMaterializationFreshnessAreIndependent(t *testing.T) {
 	if SemanticSlideNodeHash(reordered, "sli_bbbbbb") != record.Source.OutlineNodeHash {
 		t.Fatal("reorder changed semantic node hash")
 	}
-	if state := DeriveMaterializationState(true, record, 1, record.Source.OutlineNodeHash, 1, 1, artifactHash, sourceHash, FrameContextHash(deck, reordered, design, "sli_bbbbbb")); state != "frame_stale" {
+	if state := DeriveMaterializationState(true, record, 1, record.Source.OutlineNodeHash, 1, DesignContentHash(design), artifactHash, sourceHash, FrameContextHash(deck, reordered, design, "sli_bbbbbb")); state != "frame_stale" {
 		t.Fatalf("state=%s", state)
+	}
+}
+
+func TestDesignContentHashExcludesTheme(t *testing.T) {
+	left := Design{Theme: "swiss-modern", Direction: "clear", Density: "medium", Chrome: []ChromeItem{}}
+	right := left
+	right.Theme = "tokyo-night"
+	right.Revision = 99
+	if DesignContentHash(left) != DesignContentHash(right) {
+		t.Fatal("theme or revision changed the HTML freshness hash")
+	}
+	right.Direction = "editorial"
+	if DesignContentHash(left) == DesignContentHash(right) {
+		t.Fatal("agent-owned design content did not change the freshness hash")
 	}
 }

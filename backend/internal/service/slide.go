@@ -17,9 +17,16 @@ var ErrVersionNotFound = errors.New("service: target version not found")
 
 // SlideService 提供单页读取与版本回滚（DATA-VERSION-004）。
 type SlideService struct {
-	store store.Store
-	clock func() int64
-	newID func() string
+	store  store.Store
+	clock  func() int64
+	newID  func() string
+	themes *ThemeService
+}
+
+func NewSlideServiceWithThemes(s store.Store, themes *ThemeService) *SlideService {
+	service := NewSlideService(s)
+	service.themes = themes
+	return service
 }
 
 func NewSlideService(s store.Store) *SlideService {

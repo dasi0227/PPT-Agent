@@ -1,9 +1,9 @@
 {
-  "name": "editorial-serif",
-  "version": "1.0.0",
-  "kind": "theme",
-  "source": "preset",
+  "name": "Editorial Serif",
   "description": "杂志衬线：浅色衬线编辑感，适合内容与观点表达",
-  "tags": ["light", "serif", "editorial"],
-  "assets": { "tokens": "tokens.css" }
+  "tags": [
+    "light",
+    "serif",
+    "editorial"
+  ]
 }

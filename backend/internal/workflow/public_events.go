@@ -259,6 +259,16 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 	if tool == "render_slide" {
 		payload.Preview = publicRenderPreview(runID, args, result)
 	}
+	for _, resource := range result.LoadedResources {
+		if (resource.Kind != "component" && resource.Kind != "skill") ||
+			resource.ID == "" || resource.Name == "" {
+			continue
+		}
+		payload.Resources = append(payload.Resources, model.PublicLoadedResource{
+			Kind: resource.Kind, ID: resource.ID, Name: sanitizePublicText(resource.Name, 200),
+			OpenURL: sanitizePublicText(resource.OpenURL, 2048),
+		})
+	}
 	return payload, true
 }
 
@@ -392,6 +402,22 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			}
 		}
 		return "命令执行失败", publicToolError(result), true
+	case "load_component":
+		if started {
+			return "加载组件", "", true
+		}
+		if result.OK {
+			return fmt.Sprintf("已加载 %d 个组件", len(result.LoadedResources)), "", true
+		}
+		return "组件加载失败", publicToolError(result), true
+	case "load_skill":
+		if started {
+			return "加载技能", "", true
+		}
+		if result.OK {
+			return fmt.Sprintf("已加载 %d 个技能", len(result.LoadedResources)), "", true
+		}
+		return "技能加载失败", publicToolError(result), true
 	default:
 		return "", "", false
 	}

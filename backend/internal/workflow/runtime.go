@@ -82,6 +82,7 @@ type RuntimeCheckpoint struct {
 	ContextBriefing      string                        `json:"context_briefing,omitempty"`
 	MessageSummary       []CheckpointMessage           `json:"message_summary,omitempty"`
 	LatestToolResults    []CheckpointToolResult        `json:"latest_tool_results,omitempty"`
+	ActiveSkills         []model.RunSkill              `json:"active_skills,omitempty"`
 	Turns                int                           `json:"turns"`
 	ToolCalls            int                           `json:"tool_calls"`
 	ActiveDurationMS     int64                         `json:"active_duration_ms"`
@@ -119,6 +120,7 @@ type AgentRequest struct {
 	Evidence        []Evidence
 	Requirements    *RequirementLedger
 	ContextBriefing string
+	ActiveSkills    []model.RunSkill
 	Messages        []llm.Message
 	Tools           []ToolSchema
 	ImageResolver   llm.ImageRefResolver
@@ -147,6 +149,10 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	}
 	system, user := contextengine.CompileForRunner(&req.Context,
 		runtimeSystemPromptForRequest(req), runtimeTaskStateForRequest(req))
+	if len(req.ActiveSkills) > 0 {
+		raw, _ := json.Marshal(skillContext(req.ActiveSkills))
+		user += "\n\n<active_run_skills source=\"run_snapshot\">\n" + string(raw) + "\n</active_run_skills>"
+	}
 	messages := append([]llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(system)},
 		{Role: llm.RoleUser, Content: llm.TextContent(user)},
@@ -284,6 +290,7 @@ type RunState struct {
 	lastCheckpointAt        time.Time
 	tools                   *ToolRegistry
 	pendingCommand          *PendingCommandApproval
+	activeSkills            ActiveSkillSet
 }
 
 func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome {
@@ -296,6 +303,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		scope: input.Context.Command.Scope, mode: input.Context.Command.Mode, pack: input.Context, ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
+		activeSkills: ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...)},
 	}
 	defer func() {
 		if state.tx != nil && !state.committed {
@@ -327,6 +335,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.gateCount = input.ResumeCheckpoint.CompletionFailures
 		state.pendingCommand = input.ResumeCheckpoint.PendingCommand
+		if input.ResumeCheckpoint.ActiveSkills != nil {
+			state.activeSkills.Skills = append([]model.RunSkill{}, input.ResumeCheckpoint.ActiveSkills...)
+		}
 		state.contextIndexRef = input.ResumeCheckpoint.ContextIndexRef
 		recordTrace(input.Trace, input.RunID, "checkpoint.loaded", map[string]any{
 			"loop_id": state.loopID, "phase": state.phase, "boundary": input.ResumeCheckpoint.Boundary,
@@ -433,6 +444,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			Context: state.pack, Mode: state.mode, Plan: state.plan, Changes: state.changeSet(),
 			Evidence: state.ledger.Entries(state.changeSet()), Requirements: state.requirements,
 			ContextBriefing: state.contextBriefing,
+			ActiveSkills:    append([]model.RunSkill{}, state.activeSkills.Skills...),
 			Messages:        append([]llm.Message{}, state.messages...),
 			Tools:           schemas,
 			ImageResolver:   input.ImageResolver,
@@ -617,7 +629,7 @@ func (r *Runtime) executeToolBatch(
 			value := preflight.Preflight(ctx, DomainToolInput{
 				Args: call.Args, CallID: call.ID, Context: state.pack,
 				ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
-				Scope: state.scope, Phase: state.phase, Mode: state.mode,
+				Scope: state.scope, Phase: state.phase, Mode: state.mode, ActiveSkills: &state.activeSkills,
 			})
 			decision = &value
 		}
@@ -752,7 +764,7 @@ func (r *Runtime) executeToolBatch(
 		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
 			Args: call.Args, CallID: call.ID, Context: state.pack, ProjectDir: input.ProjectDir, RunID: input.RunID,
 			Session: state.tx, Scope: state.scope, Phase: state.phase,
-			Mode: state.mode, Decision: decisions[index],
+			Mode: state.mode, Decision: decisions[index], ActiveSkills: &state.activeSkills,
 		})
 		if ctx.Err() != nil {
 			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
@@ -851,6 +863,9 @@ func (r *Runtime) executeToolBatch(
 			}
 			if call.Name == "render_slide" {
 				_ = r.saveCheckpoint(context.Background(), input, state, checkpointAfterRender, "")
+			}
+			if call.Name == "load_skill" {
+				_ = r.saveCheckpoint(context.Background(), input, state, checkpointPeriodic, "")
 			}
 		}
 	}
@@ -1255,7 +1270,7 @@ func (r *Runtime) resumePendingCommand(
 	decision := preflight.Preflight(ctx, DomainToolInput{
 		Args: pending.Args, CallID: pending.CallID, Context: state.pack,
 		ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
-		Scope: state.scope, Phase: resumePhase, Mode: state.mode,
+		Scope: state.scope, Phase: resumePhase, Mode: state.mode, ActiveSkills: &state.activeSkills,
 	})
 	if decision.CommandHash != pending.CommandHash || decision.PreimageHash != pending.PreimageHash ||
 		decision.Outcome != "confirm" {

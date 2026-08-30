@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +21,9 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	"github.com/dasi0227/PPT-Agent/backend/seed"
 )
 
 const (
@@ -73,6 +76,9 @@ type RenderRequest struct {
 	ViewportHeight int                      `json:"viewport_height"`
 	TimeoutMS      int                      `json:"timeout_ms"`
 	Frame          spec.RuntimeFrameContext `json:"frame"`
+	BaseCSS        string                   `json:"base_css"`
+	ThemeID        string                   `json:"theme_id"`
+	ThemeCSS       string                   `json:"theme_css"`
 }
 
 type RenderDiagnostics struct {
@@ -358,6 +364,7 @@ func envOr(key, fallback string) string {
 type slideRenderTool struct {
 	pack     contextengine.ContextPack
 	renderer SlideRenderer
+	themes   ThemeLoader
 }
 
 func (slideRenderTool) Schema() ToolSchema {
@@ -402,6 +409,22 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		agentErr := classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable))
 		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
+	design, designErr := currentDesignForRender(t.pack, input.ProjectDir, input.Session)
+	if designErr != nil || t.themes == nil {
+		return failedToolResult(CodeRenderFailed, "theme runtime is unavailable", true)
+	}
+	theme, themeErr := t.themes.Get(design.Theme)
+	if themeErr != nil {
+		return failedToolResult(CodeRenderFailed, "theme is unavailable", false)
+	}
+	baseCSS, baseErr := fs.ReadFile(seed.FS(), "common/base.css")
+	if baseErr != nil {
+		return failedToolResult(CodeRenderFailed, baseErr.Error(), true)
+	}
+	normalizedHTML, normalizeErr := runtimehtml.Normalize(html, theme.ID)
+	if normalizeErr != nil {
+		return failedToolResult(CodeRenderFailed, normalizeErr.Error(), false)
+	}
 	screenshotID := "shot_" + uuid.NewString()
 	runID := input.RunID
 	if runID == "" {
@@ -414,10 +437,10 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	screenshotPath := filepath.Join(screenshotDir, screenshotID+".png")
 	request := RenderRequest{
-		RunID: runID, ProjectDir: input.ProjectDir, SlideID: slideID, HTML: string(html),
+		RunID: runID, ProjectDir: input.ProjectDir, SlideID: slideID, HTML: string(normalizedHTML),
 		ScreenshotPath: screenshotPath, ViewportWidth: renderViewportWidth,
 		ViewportHeight: renderViewportHeight, TimeoutMS: 15000,
-		Frame: frame,
+		Frame: frame, BaseCSS: string(baseCSS), ThemeID: theme.ID, ThemeCSS: theme.CSS,
 	}
 	started := time.Now()
 	diagnostics, err := t.renderer.Render(ctx, request)
@@ -441,7 +464,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		))
 		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
-	sourceHash, err := renderHashWithoutSession(t.pack, input, slideID)
+	sourceHash, err := renderHashWithoutSession(t.pack, input, slideID, theme.CSS)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, err.Error(), true)
@@ -524,12 +547,24 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	return frame, nil
 }
 
-func renderHashWithoutSession(pack contextengine.ContextPack, input DomainToolInput, slideID string) (string, error) {
+func currentDesignForRender(pack contextengine.ContextPack, projectDir string, session *RunSession) (spec.Design, error) {
+	raw, _, err := readArtifact(projectDir, session, designRef(pack))
+	if err != nil {
+		return spec.Design{}, err
+	}
+	var design spec.Design
+	if err := json.Unmarshal(raw, &design); err != nil {
+		return spec.Design{}, err
+	}
+	return design, nil
+}
+
+func renderHashWithoutSession(pack contextengine.ContextPack, input DomainToolInput, slideID, themeCSS string) (string, error) {
 	htmlRaw, _, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
 	if err != nil {
 		return "", err
 	}
-	return hashBytes(htmlRaw), nil
+	return hashBytes(append(append([]byte{}, htmlRaw...), []byte(themeCSS)...)), nil
 }
 
 func presentationRevision(pack contextengine.ContextPack, input DomainToolInput, slideID string) int {

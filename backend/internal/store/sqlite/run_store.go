@@ -60,6 +60,11 @@ func (s *Store) UpdateProjectTitle(ctx context.Context, id, title string, update
 	return mapErr(err)
 }
 
+func (s *Store) UpdateProjectTheme(ctx context.Context, id, theme string, updatedAt int64) error {
+	return s.db.WithContext(ctx).Model(&projectPO{}).Where("id = ?", id).
+		Updates(map[string]any{"theme": theme, "updated_at": updatedAt}).Error
+}
+
 func (s *Store) UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error {
 	err := s.db.WithContext(ctx).Model(&threadPO{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"title":      title,

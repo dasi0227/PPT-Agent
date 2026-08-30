@@ -1,9 +1,9 @@
 {
-  "name": "warm-pastel",
-  "version": "1.0.0",
-  "kind": "theme",
-  "source": "preset",
+  "name": "Warm Pastel",
   "description": "暖柔马卡龙：浅色柔和高饱和，适合教育与图文亲和场景",
-  "tags": ["light", "pastel", "education"],
-  "assets": { "tokens": "tokens.css" }
+  "tags": [
+    "light",
+    "pastel",
+    "education"
+  ]
 }

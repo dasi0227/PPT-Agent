@@ -48,17 +48,6 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule(modePolicyID(input.Mode)),
 		loadPromptModule(playbookID(input.Context)),
 	}
-	for _, skill := range input.Context.Command.Skills {
-		modules = append(modules, PromptModule{
-			ID:      "skill/" + skill.ID,
-			Version: "run-snapshot",
-			Path:    "skill://" + skill.ID,
-			Body: fmt.Sprintf(
-				"# Active Skill: %s\n\n%s\n\n%s",
-				skill.Name, skill.Description, skill.Content,
-			),
-		})
-	}
 	switch input.Mode {
 	case model.ModeTalk, model.ModeAsk:
 		modules = append(modules, loadPromptModule("finish_contract"))

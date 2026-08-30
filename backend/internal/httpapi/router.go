@@ -10,26 +10,26 @@ import (
 
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
-	engine    *gin.Engine
-	cfg       *config.Config
-	log       *zap.Logger
-	health    *HealthHandler
-	run       *RunHandler
-	project   *ProjectHandler
-	thread    *ThreadHandler
-	slide     *SlideHandler
-	asset     *AssetHandler
-	llm       *LLMHandler
-	polish    *PolishHandler
-	gitCommit *GitCommitHandler
+	engine     *gin.Engine
+	cfg        *config.Config
+	log        *zap.Logger
+	health     *HealthHandler
+	run        *RunHandler
+	project    *ProjectHandler
+	thread     *ThreadHandler
+	slide      *SlideHandler
+	repository *RepositoryHandler
+	llm        *LLMHandler
+	polish     *PolishHandler
+	gitCommit  *GitCommitHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, assetH *AssetHandler, llmH *LLMHandler, polishH *PolishHandler, gitCommitH *GitCommitHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, gitCommitH *GitCommitHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, asset: assetH, llm: llmH, polish: polishH, gitCommit: gitCommitH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, gitCommit: gitCommitH}
 	r.register()
 	return r
 }
@@ -40,7 +40,15 @@ func (r *Router) register() {
 	if r.llm != nil {
 		v1.GET("/llm/profiles", r.llm.Profiles)
 	}
-	v1.GET("/skills", r.run.ListSkills)
+	v1.GET("/runtime/base.css", r.repository.RuntimeBaseCSS)
+	v1.GET("/themes", r.repository.ListThemes)
+	v1.GET("/themes/:id", r.repository.GetTheme)
+	v1.GET("/themes/:id/css", r.repository.ThemeCSS)
+	v1.GET("/components", r.repository.ListComponents)
+	v1.GET("/components/:id", r.repository.GetComponent)
+	v1.GET("/skills", r.repository.ListSkills)
+	v1.GET("/skills/:id", r.repository.GetSkill)
+	v1.PATCH("/skills/:id", r.repository.PatchSkill)
 
 	// Project / Thread：API 契约入口，前端不需要绕过 HTTP 直接造数据。
 	v1.GET("/projects", r.project.List)
@@ -53,6 +61,7 @@ func (r *Router) register() {
 	}
 	v1.GET("/projects/:id/content", r.project.Content)
 	v1.POST("/projects/:id/mutations", r.project.Mutate)
+	v1.PATCH("/projects/:id/theme", r.project.SetTheme)
 	if r.gitCommit != nil {
 		v1.POST("/projects/:id/git-commits", r.gitCommit.Create)
 		v1.GET("/git-commits/:id", r.gitCommit.Get)
@@ -83,12 +92,6 @@ func (r *Router) register() {
 	v1.GET("/slides/:id/versions", r.slide.ListVersions)
 	v1.POST("/slides/:id/rollback", r.slide.Rollback)
 
-	v1.GET("/assets", r.asset.List)
-	v1.POST("/assets", r.asset.Create)
-	v1.GET("/assets/:id", r.asset.Get)
-	v1.PATCH("/assets/:id", r.asset.Patch)
-	v1.DELETE("/assets/:id", r.asset.Delete)
-	v1.POST("/assets/:id/rollback", r.asset.Rollback)
 }
 
 // Engine 暴露底层 gin 引擎供 server 启动使用。

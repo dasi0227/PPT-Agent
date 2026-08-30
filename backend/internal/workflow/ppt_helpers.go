@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
-	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	nethtml "golang.org/x/net/html"
@@ -29,9 +28,6 @@ func outlineRef(pack contextengine.ContextPack) ArtifactRef {
 }
 func designRef(pack contextengine.ContextPack) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactDesign, ID: pack.Project.ID, Path: "design.json", Project: pack.Project.ID}
-}
-func designTokensRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactDerived, ID: pack.Project.ID + ":design-tokens", Path: "common/tokens.css", Project: pack.Project.ID}
 }
 func specSlideRef(id string) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactSlideSpec, ID: id, Path: model.SlideSpecPath(id)}
@@ -131,10 +127,8 @@ func validateHTML(raw []byte) ([]Issue, error) {
 	if _, err := nethtml.Parse(strings.NewReader(string(raw))); err != nil {
 		issues = append(issues, Issue{Code: "HTML_PARSE", Severity: SeverityError, Summary: err.Error()})
 	}
-	for _, check := range designsystem.LintSlide(raw) {
-		if !check.OK {
-			issues = append(issues, Issue{Code: check.ID, Severity: SeverityError, Summary: check.Reason})
-		}
+	if !strings.Contains(string(raw), "slide-stage") {
+		issues = append(issues, Issue{Code: "stage-16-9", Severity: SeverityError, Summary: "slide HTML must contain a slide-stage element"})
 	}
 	if strings.Contains(string(raw), "data-page-number") || strings.Contains(string(raw), "data-runtime-page-number") {
 		issues = append(issues, Issue{Code: "STATIC_PAGE_NUMBER", Severity: SeverityError, Summary: "page numbers belong to the runtime frame"})
@@ -253,7 +247,7 @@ func currentMaterializationProof(pack contextengine.ContextPack, projectDir stri
 	if revision < 1 {
 		revision = 1
 	}
-	return MaterializationProof{SlideID: slideID, HTMLRevision: revision, ManifestRevision: deck.Revision, OutlineNodeHash: nodeHash, SpecRevision: slide.Revision, DesignRevision: design.Revision, ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID)}, nil
+	return MaterializationProof{SlideID: slideID, HTMLRevision: revision, ManifestRevision: deck.Revision, OutlineNodeHash: nodeHash, SpecRevision: slide.Revision, DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID)}, nil
 }
 func renderSourceHash(pack contextengine.ContextPack, tx *RunSession, slideID string) (string, error) {
 	html, _, err := readArtifact(tx.ProjectDir(), tx, slideHTMLRef(slideID))

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
-	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
@@ -26,6 +26,15 @@ type ProjectService struct {
 	clock    func() int64
 	newID    func() string
 	git      *gitcommit.Executor
+	locks    *run.LockManager
+	themes   *ThemeService
+}
+
+func NewProjectServiceWithRepositories(s store.Store, workRoot WorkRoot, locks *run.LockManager, themes *ThemeService) *ProjectService {
+	service := NewProjectService(s, workRoot)
+	service.locks = locks
+	service.themes = themes
+	return service
 }
 
 type CreateProjectParams struct {
@@ -154,13 +163,68 @@ func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {
 	return os.RemoveAll(proj.WorkDir)
 }
 
+func (svc *ProjectService) SetTheme(ctx context.Context, id, themeID string) (model.Project, error) {
+	if svc.themes == nil || !svc.themes.Exists(themeID) {
+		return model.Project{}, ErrThemeNotFound
+	}
+	project, err := svc.store.GetProject(ctx, id)
+	if err != nil {
+		return model.Project{}, err
+	}
+	release := func() {}
+	if svc.locks != nil {
+		release, err = svc.locks.Acquire(ctx, id, 5*time.Second)
+		if err != nil {
+			return model.Project{}, ErrRunActive
+		}
+	}
+	defer release()
+	path := filepath.Join(project.WorkDir, "design.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return model.Project{}, err
+	}
+	var design spec.Design
+	if err := json.Unmarshal(raw, &design); err != nil {
+		return model.Project{}, err
+	}
+	design.Theme = themeID
+	design.Revision++
+	design.UpdatedAt = svc.clock()
+	next := mustJSON(design)
+	temp, err := os.CreateTemp(project.WorkDir, ".design-*.json")
+	if err != nil {
+		return model.Project{}, err
+	}
+	tempPath := temp.Name()
+	defer os.Remove(tempPath)
+	if _, err = temp.Write(next); err == nil {
+		err = temp.Sync()
+	}
+	if closeErr := temp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(tempPath, path)
+	}
+	if err != nil {
+		return model.Project{}, err
+	}
+	if err = svc.store.UpdateProjectTheme(ctx, id, themeID, design.UpdatedAt); err != nil {
+		_ = os.WriteFile(path, raw, 0o644)
+		return model.Project{}, err
+	}
+	project.Theme, project.DesignRevision, project.UpdatedAt = themeID, design.Revision, design.UpdatedAt
+	return project, nil
+}
+
 func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams) error {
 	sb, err := artifactfs.NewSandbox(svc.workRoot)
 	if err != nil {
 		return err
 	}
 	projectRel := filepath.Join("projects", proj.ID)
-	for _, rel := range []string{projectRel, filepath.Join(projectRel, "threads"), filepath.Join(projectRel, "common"), filepath.Join(projectRel, "slides")} {
+	for _, rel := range []string{projectRel, filepath.Join(projectRel, "threads"), filepath.Join(projectRel, "slides")} {
 		abs, err := sb.Resolve(rel)
 		if err != nil {
 			return err
@@ -203,12 +267,5 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err := sb.Write(filepath.Join(projectRel, "design.json"), mustJSON(design)); err != nil {
 		return err
 	}
-	baseCSS, err := asset.ReadSeedFile("common/base.css")
-	if err != nil {
-		return err
-	}
-	if err := sb.Write(filepath.Join(projectRel, "common", "base.css"), baseCSS); err != nil {
-		return err
-	}
-	return sb.Write(filepath.Join(projectRel, "common", "tokens.css"), spec.DesignTokensCSS(design))
+	return nil
 }

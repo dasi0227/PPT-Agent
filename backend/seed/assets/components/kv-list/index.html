@@ -1,0 +1,41 @@
+<script type="application/json" id="meta">
+{
+  "name": "键值列表",
+  "description": "键值列表：成对的键与值",
+  "tags": [
+    "kv",
+    "list",
+    "definition"
+  ],
+  "kind": "content"
+}
+</script>
+<style>
+/* component: kv-list —— 键值列表。 */
+.kv-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.kv-list__row {
+  display: flex;
+  gap: var(--space-6);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-muted);
+}
+.kv-list__key {
+  color: var(--color-primary);
+  font-size: var(--text-body);
+  min-width: 200px;
+  margin: 0;
+}
+.kv-list__val {
+  color: var(--color-fg);
+  font-size: var(--text-body);
+  margin: 0;
+}
+</style>
+<dl class="kv-list">
+  <div class="kv-list__row"><dt class="kv-list__key">关键指标</dt><dd class="kv-list__val">42%</dd></div>
+</dl>

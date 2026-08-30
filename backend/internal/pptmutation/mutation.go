@@ -337,6 +337,10 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 			return out, invalid(err)
 		}
 	}
+	next.Theme = current.Theme
+	if next.Theme == "" {
+		next.Theme = "swiss-modern"
+	}
 	next.SchemaVersion = spec.SchemaVersion
 	next.ProjectID = s.ProjectID
 	next.Revision = max(current.Revision+1, 1)

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
-	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -41,26 +40,10 @@ func (s *PPTMutationService) Apply(ctx context.Context, projectID string, req pp
 		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err
 	}
 	buffer := pptmutation.NewBuffer(sandbox)
-	engine := pptmutation.Service{Workspace: buffer, ProjectID: projectID, ValidateHTML: func(raw []byte) error {
-		if ok, reason := designsystem.LintSlideResult(raw); !ok {
-			return errors.New(reason)
-		}
-		return nil
-	}}
+	engine := pptmutation.Service{Workspace: buffer, ProjectID: projectID}
 	result, err := engine.Apply(req)
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, result, err
-	}
-	if req.Op == "design.write" || req.Op == "design.patch" {
-		var design spec.Design
-		raw, readErr := buffer.Read("design.json")
-		if readErr != nil {
-			return spec.ProjectContentSnapshot{}, result, readErr
-		}
-		if err = jsonUnmarshal(raw, &design); err != nil {
-			return spec.ProjectContentSnapshot{}, result, err
-		}
-		_ = buffer.Write("common/tokens.css", spec.DesignTokensCSS(design))
 	}
 	if err = buffer.Commit(); err != nil {
 		return spec.ProjectContentSnapshot{}, result, err
@@ -122,7 +105,7 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 		}
 		if content.SpecState == "ready" {
 			nodeHash := spec.SemanticSlideNodeHash(outline, id)
-			content.HTMLState = spec.DeriveMaterializationState(htmlErr == nil, recordPtr, manifest.Revision, nodeHash, slide.Revision, design.Revision, spec.ContentHash(htmlRaw), spec.SourceHash(manifestRaw, nodeHash, specRaw, designRaw), spec.FrameContextHash(manifest, outline, design, id))
+			content.HTMLState = spec.DeriveMaterializationState(htmlErr == nil, recordPtr, manifest.Revision, nodeHash, slide.Revision, spec.DesignContentHash(design), spec.ContentHash(htmlRaw), spec.SourceHash(manifestRaw, nodeHash, specRaw, designRaw), spec.FrameContextHash(manifest, outline, design, id))
 		} else if htmlErr == nil {
 			content.HTMLState = "unknown"
 		}
@@ -156,6 +139,3 @@ func (s *PPTMutationService) syncSlideIdentities(ctx context.Context, projectID,
 	}
 	return s.store.ReplaceSlides(ctx, projectID, next)
 }
-
-// Kept local to avoid exposing encoding details from the mutation package.
-func jsonUnmarshal(raw []byte, out any) error { return json.Unmarshal(raw, out) }

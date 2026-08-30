@@ -14,9 +14,7 @@ import (
 )
 
 type fakeStore struct {
-	slides   map[string]model.Slide
-	assets   []model.Asset
-	assetErr error
+	slides map[string]model.Slide
 }
 
 func (s *fakeStore) GetSlide(_ context.Context, id string) (model.Slide, error) {
@@ -26,10 +24,6 @@ func (s *fakeStore) GetSlide(_ context.Context, id string) (model.Slide, error) 
 	}
 	return v, nil
 }
-func (s *fakeStore) ListAssets(context.Context, string) ([]model.Asset, error) {
-	return s.assets, s.assetErr
-}
-
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := t.TempDir()
@@ -66,7 +60,7 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 		}
 		slides[id] = model.Slide{ID: id, ProjectID: "p1", CurrentVersion: 4}
 	}
-	return model.Project{ID: "p1", Title: "Deck", WorkDir: dir}, &fakeStore{slides: slides, assets: []model.Asset{{ID: "a1", Name: "Growth chart", Kind: "component", Tags: []string{"growth"}}}}
+	return model.Project{ID: "p1", Title: "Deck", WorkDir: dir}, &fakeStore{slides: slides}
 }
 
 func writeJSON(t *testing.T, path string, v any) {
@@ -254,7 +248,7 @@ func TestRefStaleAfterRevisionChange(t *testing.T) {
 		},
 		Source: pptspec.MaterializationSource{
 			ManifestRevision: 2, OutlineNodeHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-			SpecRevision: 2, DesignRevision: 1,
+			SpecRevision: 2, DesignContentHash: pptspec.DesignContentHash(pptspec.Design{Direction: "test", Density: "medium"}),
 			Hash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 		Frame:      pptspec.MaterializationFrame{ContextHash: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
@@ -375,18 +369,6 @@ func TestCompileForRunnerKeepsRuntimeStateOutOfSystemPrompt(t *testing.T) {
 		if !strings.Contains(user, expected) {
 			t.Fatalf("user runtime input missing %q: %s", expected, user)
 		}
-	}
-}
-
-func TestOptionalAssetLoaderFailureDoesNotBlock(t *testing.T) {
-	project, store := fixture(t)
-	store.assetErr = errors.New("offline")
-	pack, err := NewContextAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ArtifactPPT, model.ScopeDeck), Budget: DefaultBudget()}, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pack.Manifest.Warnings) == 0 {
-		t.Fatal("missing optional loader warning")
 	}
 }
 

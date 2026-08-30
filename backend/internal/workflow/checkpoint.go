@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 type CheckpointMessage struct {
@@ -18,13 +19,14 @@ type CheckpointMessage struct {
 }
 
 type CheckpointToolResult struct {
-	CallID         string          `json:"call_id"`
-	Tool           string          `json:"tool"`
-	OK             bool            `json:"ok"`
-	Code           string          `json:"code,omitempty"`
-	Summary        string          `json:"summary"`
-	ChangedTargets []ChangedTarget `json:"changed_targets,omitempty"`
-	EvidenceIDs    []string        `json:"evidence_ids,omitempty"`
+	CallID          string           `json:"call_id"`
+	Tool            string           `json:"tool"`
+	OK              bool             `json:"ok"`
+	Code            string           `json:"code,omitempty"`
+	Summary         string           `json:"summary"`
+	ChangedTargets  []ChangedTarget  `json:"changed_targets,omitempty"`
+	EvidenceIDs     []string         `json:"evidence_ids,omitempty"`
+	LoadedResources []LoadedResource `json:"loaded_resources,omitempty"`
 }
 
 type ProviderContinuationSnapshot struct {
@@ -79,6 +81,7 @@ func (r *Runtime) checkpointForBoundary(state *RunState, boundary checkpointBoun
 	cp.ContextBriefing = state.contextBriefing
 	cp.ContextIndexRef = state.contextIndexRef
 	cp.LatestToolResults = append([]CheckpointToolResult{}, state.latestToolResults...)
+	cp.ActiveSkills = append([]model.RunSkill{}, state.activeSkills.Skills...)
 	cp.MessageSummary = summarizeCheckpointMessages(state.messages)
 	cp.ProviderContinuation = safeContinuationSnapshot(state.continuation)
 	if cp.CreatedAt == 0 {
@@ -146,7 +149,7 @@ func checkpointToolResult(call llm.ToolCall, result ToolResult) CheckpointToolRe
 	return CheckpointToolResult{
 		CallID: call.ID, Tool: call.Name, OK: result.OK, Code: result.Code,
 		Summary: result.Summary, ChangedTargets: append([]ChangedTarget{}, result.ChangedTargets...),
-		EvidenceIDs: ids,
+		EvidenceIDs: ids, LoadedResources: append([]LoadedResource{}, result.LoadedResources...),
 	}
 }
 

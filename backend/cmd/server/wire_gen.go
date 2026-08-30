@@ -64,15 +64,17 @@ func initApp() (*App, func(), error) {
 	}
 	runService := service.NewRunService(store, engine, registry, workRoot, nodeSlideRenderer)
 	runHandler := httpapi.NewRunHandler(runService)
-	projectService := service.NewProjectService(store, workRoot)
+	themeService := service.NewThemeService(workRoot)
+	projectService := provideProjectService(store, workRoot, lockManager, themeService)
 	pptMutationService := service.NewPPTMutationService(store)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
 	threadService := service.NewThreadService(store)
 	threadHandler := httpapi.NewThreadHandler(threadService)
-	slideService := service.NewSlideService(store)
+	slideService := provideSlideService(store, themeService)
 	slideHandler := httpapi.NewSlideHandler(slideService)
-	assetService := provideAssetService(store, workRoot)
-	assetHandler := httpapi.NewAssetHandler(assetService)
+	componentService := service.NewComponentService(workRoot)
+	skillService := service.NewSkillService(workRoot)
+	repositoryHandler := httpapi.NewRepositoryHandler(themeService, componentService, skillService)
 	llmHandler := httpapi.NewLLMHandler(registry)
 	polishService := service.NewPolishService(store, registry)
 	polishHandler := httpapi.NewPolishHandler(polishService)
@@ -84,10 +86,10 @@ func initApp() (*App, func(), error) {
 		return nil, nil, err
 	}
 	gitCommitHandler := httpapi.NewGitCommitHandler(gitCommitService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, assetHandler, llmHandler, polishHandler, gitCommitHandler)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, gitCommitHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
-	mainSeedDone, err := provideSeed(configConfig, store, zapLogger)
+	mainSeedDone, err := provideSeed(configConfig, zapLogger)
 	if err != nil {
 		cleanup3()
 		cleanup2()
@@ -108,10 +110,10 @@ func initApp() (*App, func(), error) {
 var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMRegistry,
 	provideLockManager,
 	provideWorkRoot,
-	provideAssetService,
 	provideEngine,
 	provideHistoryWriter,
-	provideRenderWorker, service.NewHealthService, service.NewProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, provideGitCommitService, service.NewSlideService, service.NewPPTMutationService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewAssetHandler, httpapi.NewRouter, engineFromRouter,
+	provideRenderWorker, service.NewHealthService, provideProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, provideGitCommitService,
+	provideSlideService, service.NewPPTMutationService, service.NewThemeService, service.NewComponentService, service.NewSkillService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideSeed,
 	provideApp,

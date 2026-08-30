@@ -1,0 +1,36 @@
+<script type="application/json" id="meta">
+{
+  "name": "观点引用",
+  "description": "引用块：突出引文与出处",
+  "tags": [
+    "quote",
+    "citation"
+  ],
+  "kind": "content"
+}
+</script>
+<style>
+/* component: quote-block —— 引用块。 */
+.quote-block {
+  margin: 0;
+  padding: var(--space-6);
+  border-left: 4px solid var(--color-accent);
+  background: var(--color-muted);
+  border-radius: var(--radius-md);
+}
+.quote-block__text {
+  font-family: var(--font-serif);
+  font-size: var(--text-h1);
+  color: var(--color-fg);
+  margin: 0;
+}
+.quote-block__cite {
+  margin-top: var(--space-4);
+  font-size: var(--text-caption);
+  color: var(--color-primary);
+}
+</style>
+<blockquote class="quote-block">
+  <p class="quote-block__text">先统一表达，再扩大创作自由。</p>
+  <footer class="quote-block__cite">—— 产品设计原则</footer>
+</blockquote>

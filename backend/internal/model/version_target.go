@@ -19,12 +19,5 @@ func ManifestVersionTarget(projectID string) string {
 	return fmt.Sprintf("project/%s/manifest", projectID)
 }
 
-// DesignVersionTarget returns the project-scoped version target for common/tokens.css.
-func DesignVersionTarget(projectID string) string {
-	return fmt.Sprintf("project/%s/design", projectID)
-}
-
-// AssetVersionTarget returns the global asset version target.
-func AssetVersionTarget(assetID string) string {
-	return "asset-" + assetID
-}
+// DesignVersionTarget returns the project-scoped design version target.
+func DesignVersionTarget(projectID string) string { return projectID + ":design" }

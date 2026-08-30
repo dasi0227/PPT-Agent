@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_slides_project ON slides(project_id);
 CREATE TABLE IF NOT EXISTS versions (
     id            TEXT PRIMARY KEY,
     target_type   TEXT NOT NULL
-                      CHECK (target_type IN ('manifest','outline','slide_spec','slide_html','design','asset')),
+                      CHECK (target_type IN ('manifest','outline','slide_spec','slide_html','design')),
     target_id     TEXT NOT NULL,
     version_no    INTEGER NOT NULL,
     snapshot_path TEXT NOT NULL,
@@ -103,23 +103,6 @@ CREATE TABLE IF NOT EXISTS run_contexts (
     created_at       INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_run_contexts_context_id ON run_contexts(context_id);
-
-CREATE TABLE IF NOT EXISTS assets (
-    id            TEXT PRIMARY KEY,
-    name          TEXT NOT NULL,
-    kind          TEXT NOT NULL CHECK (kind IN ('layout','component','theme','fx')),
-    version       TEXT NOT NULL DEFAULT '1.0.0',
-    source        TEXT NOT NULL DEFAULT 'user' CHECK (source IN ('preset','user')),
-    description   TEXT NOT NULL DEFAULT '',
-    tags          TEXT NOT NULL DEFAULT '[]',
-    manifest_path TEXT NOT NULL,
-    dir           TEXT NOT NULL,
-    created_at    INTEGER NOT NULL,
-    updated_at    INTEGER NOT NULL,
-    UNIQUE (name, kind)
-);
-CREATE INDEX IF NOT EXISTS idx_assets_kind ON assets(kind);
-CREATE INDEX IF NOT EXISTS idx_assets_source ON assets(source);
 
 CREATE TABLE IF NOT EXISTS idempotency_records (
     scope        TEXT NOT NULL,

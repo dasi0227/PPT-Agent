@@ -1,6 +1,6 @@
-/* common/base.css —— 主题无关的共享基座（16:9 舞台 + 基础排版）。
-   只引用 var(--token)，不含任何主题色/字号取值；换肤只改 tokens.css（DS-TOKENS-003）。
-   出厂 seed 源，生成时原样拷入每个 project 的 common/base.css。 */
+/* Runtime Base: theme-neutral structure for the 16:9 stage and core typography.
+   Values come from the selected theme; this file is served by the runtime and is
+   never copied into a project. */
 
 *,
 *::before,
@@ -23,9 +23,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 16:9 舞台：1920×1080 基准（--stage-w/--stage-h 为无单位数值）。
-   .slide-stage 是固定基准盒；.slide-scaler 负责居中。等比缩放到视口由预览运行时
-   （common/runtime.js，M7）计算并写入 --stage-scale；静态打开时默认 1（居中不白屏，DS-HTML-002）。 */
+/* 16:9 stage. The preview runtime writes --stage-scale for viewport fitting. */
 .slide-scaler {
   position: fixed;
   inset: 0;
@@ -46,7 +44,7 @@ body {
   transform-origin: center center;
 }
 
-/* 页内统一留白容器。 */
+/* Shared slide content inset. */
 .slide-content {
   position: absolute;
   inset: 0;
@@ -55,7 +53,7 @@ body {
   flex-direction: column;
 }
 
-/* 标题层级：取值全部来自 token。 */
+/* Typography values come from the selected theme. */
 .slide-title {
   font-size: var(--text-title);
   font-weight: 700;
@@ -74,7 +72,7 @@ body {
   color: var(--color-fg);
 }
 
-/* 卡片基元：圆角/阴影/背景走 token。 */
+/* Shared card primitive. */
 .card {
   background: var(--color-muted);
   border-radius: var(--radius-md);
@@ -86,7 +84,7 @@ a {
   color: var(--color-primary);
 }
 
-/* 减弱动效降级（DS-ANIM-005）：尊重系统偏好，动效即时呈现。 */
+/* Respect reduced-motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

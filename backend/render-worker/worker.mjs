@@ -126,7 +126,9 @@ async function injectRuntimeFrame(page, frame) {
 async function render(input, browser, handles = new Map()) {
   const started = Date.now();
   if (!input || typeof input.html !== 'string' || typeof input.project_dir !== 'string' ||
-      typeof input.slide_id !== 'string' || typeof input.screenshot_path !== 'string') {
+      typeof input.slide_id !== 'string' || typeof input.screenshot_path !== 'string' ||
+      typeof input.base_css !== 'string' || typeof input.theme_id !== 'string' ||
+      typeof input.theme_css !== 'string') {
     throw new Error('invalid render request');
   }
   const width = input.viewport_width === 1600 ? 1600 : 1600;
@@ -155,6 +157,16 @@ async function render(input, browser, handles = new Map()) {
           'cache-control': 'no-store',
         });
         response.end(input.html);
+        return;
+      }
+      if (path === '/api/v1/runtime/base.css') {
+        response.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'no-store' });
+        response.end(input.base_css);
+        return;
+      }
+      if (path === `/api/v1/themes/${encodeURIComponent(input.theme_id)}/css`) {
+        response.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'no-store' });
+        response.end(input.theme_css);
         return;
       }
       let absolute;

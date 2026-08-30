@@ -8,7 +8,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestRuntimeSystemPromptIncludesSelectedSkillSnapshots(t *testing.T) {
+func TestRuntimeSystemPromptExcludesSelectedSkillSnapshots(t *testing.T) {
 	prompt := buildRuntimeSystemPrompt(runtimePromptInput{
 		Phase: PhaseChat,
 		Mode:  model.ModeTalk,
@@ -20,14 +20,15 @@ func TestRuntimeSystemPromptIncludesSelectedSkillSnapshots(t *testing.T) {
 			}},
 		}},
 	})
-	for _, expected := range []string{
-		`id="skill/story"`,
-		`path="skill://story"`,
-		"# Active Skill: 演示叙事",
-		"Always lead with the conclusion.",
-	} {
-		if !strings.Contains(prompt, expected) {
-			t.Fatalf("prompt does not contain %q:\n%s", expected, prompt)
+	for _, forbidden := range []string{"skill/story", "演示叙事", "Always lead with the conclusion."} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("stable system prompt contains dynamic skill %q:\n%s", forbidden, prompt)
 		}
+	}
+	context := skillContext([]model.RunSkill{{
+		ID: "story", Name: "演示叙事", Description: "梳理页面叙事。", Content: "Always lead with the conclusion.",
+	}})
+	if len(context) != 1 || !strings.Contains(context[0]["content"], "Always lead with the conclusion.") {
+		t.Fatal("dynamic skill context omitted snapshot content")
 	}
 }

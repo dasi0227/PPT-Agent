@@ -1,0 +1,34 @@
+<script type="application/json" id="meta">
+{
+  "name": "能力卡片",
+  "description": "特性卡片：标题 + 描述的功能点卡片",
+  "tags": [
+    "feature",
+    "card"
+  ],
+  "kind": "content"
+}
+</script>
+<style>
+/* component: feature-card —— 特性卡片。 */
+.feature-card {
+  padding: var(--space-6);
+  background: var(--color-muted);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+.feature-card__title {
+  font-size: var(--text-h1);
+  color: var(--color-primary);
+  margin: 0 0 var(--space-4);
+}
+.feature-card__desc {
+  font-size: var(--text-body);
+  color: var(--color-fg);
+  margin: 0;
+}
+</style>
+<div class="feature-card">
+  <h3 class="feature-card__title">能力标题</h3>
+  <p class="feature-card__desc">描述能力如何支持当前叙事。</p>
+</div>

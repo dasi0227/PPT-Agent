@@ -141,8 +141,6 @@ func refForPath(pack contextengine.ContextPack, path string) ArtifactRef {
 		return outlineRef(pack)
 	case "design.json":
 		return designRef(pack)
-	case "common/tokens.css":
-		return designTokensRef(pack)
 	}
 	if strings.HasPrefix(path, "slides/") {
 		parts := strings.Split(path, "/")
@@ -229,7 +227,7 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	changes := objectSchema(nil, map[string]any{"title": text(160), "purpose": text(400), "role": role})
 	changes["minProperties"] = 1
 	chrome := objectSchema([]string{"type", "placement", "style"}, map[string]any{"type": map[string]any{"enum": []string{"page_number", "section_marker", "key_message", "deck_title"}}, "placement": map[string]any{"enum": []string{"top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right", "left-edge", "right-edge"}}, "style": text(160)})
-	design := objectSchema([]string{"theme", "direction", "density", "chrome"}, map[string]any{"theme": text(80), "direction": text(600), "density": map[string]any{"enum": []string{"sparse", "medium", "dense"}}, "chrome": map[string]any{"type": "array", "maxItems": 12, "items": chrome}})
+	design := objectSchema([]string{"direction", "density", "chrome"}, map[string]any{"direction": text(600), "density": map[string]any{"enum": []string{"sparse", "medium", "dense"}}, "chrome": map[string]any{"type": "array", "maxItems": 12, "items": chrome}})
 	element := objectSchema([]string{"type", "intent"}, map[string]any{"type": map[string]any{"enum": []string{"text", "list", "metric", "quote", "table", "chart", "diagram", "code", "asset"}}, "intent": text(1200)})
 	slideSpec := objectSchema([]string{"key_message", "elements"}, map[string]any{"key_message": text(500), "elements": map[string]any{"type": "array", "items": element}, "layout": text(80)})
 	edits := map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{"old_text": text(maxPPTContentBytes), "new_text": map[string]any{"type": "string", "maxLength": maxPPTContentBytes}})}

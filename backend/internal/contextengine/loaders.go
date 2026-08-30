@@ -70,12 +70,6 @@ func (SlideHTMLSummaryLoader) Load(path string) (HTMLSummary, []byte, error) {
 	return summary, raw, err
 }
 
-type AssetCandidateLoader struct{}
-
-func (AssetCandidateLoader) Select(assets []model.Asset, target *pptspec.SlideSpec) []AssetCandidate {
-	return selectAssets(assets, target)
-}
-
 type ThreadMemoryLoader struct{ Store ThreadMemoryStore }
 
 func (l ThreadMemoryLoader) Load(workDir, threadID string) (ThreadMemory, []string, error) {

@@ -109,16 +109,41 @@ type PreflightTool interface {
 }
 
 type DomainToolInput struct {
-	Args       map[string]any
-	CallID     string
-	Context    contextengine.ContextPack
-	ProjectDir string
-	RunID      string
-	Session    *RunSession
-	Scope      model.RunScope
-	Phase      RunPhase
-	Mode       model.RunMode
-	Decision   *ToolDecision
+	Args         map[string]any
+	CallID       string
+	Context      contextengine.ContextPack
+	ProjectDir   string
+	RunID        string
+	Session      *RunSession
+	Scope        model.RunScope
+	Phase        RunPhase
+	Mode         model.RunMode
+	Decision     *ToolDecision
+	ActiveSkills *ActiveSkillSet
+}
+
+type ActiveSkillSet struct {
+	Skills []model.RunSkill `json:"skills"`
+}
+
+func (s *ActiveSkillSet) Add(values []model.RunSkill) []model.RunSkill {
+	if s == nil {
+		return nil
+	}
+	seen := make(map[string]bool, len(s.Skills))
+	for _, skill := range s.Skills {
+		seen[skill.ID] = true
+	}
+	added := make([]model.RunSkill, 0, len(values))
+	for _, skill := range values {
+		if seen[skill.ID] {
+			continue
+		}
+		seen[skill.ID] = true
+		s.Skills = append(s.Skills, skill)
+		added = append(added, skill)
+	}
+	return added
 }
 
 // ChangedTarget is deliberately domain-shaped. Model-visible results never
@@ -151,10 +176,19 @@ type ToolResult struct {
 	Observation      string            `json:"-"`
 	ObservationParts []llm.ContentPart `json:"-"`
 	Command          *CommandExecution `json:"-"`
+	LoadedResources  []LoadedResource  `json:"-"`
 	// Evidence and invalidation are runtime-internal. They are recorded in the
 	// Evidence Ledger and SSE but are not duplicated in model observations.
 	Evidence           []Evidence `json:"-"`
 	InvalidatedTargets []Resource `json:"-"`
+}
+
+type LoadedResource struct {
+	Kind      string `json:"kind"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	LocalPath string `json:"-"`
+	OpenURL   string `json:"open_url,omitempty"`
 }
 
 type CommandExecution struct {

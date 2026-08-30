@@ -71,6 +71,7 @@ type PublicSkill struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Disabled    bool   `json:"disabled,omitempty"`
 	LocalPath   string `json:"local_path,omitempty"`
 	OpenURL     string `json:"open_url,omitempty"`
 }

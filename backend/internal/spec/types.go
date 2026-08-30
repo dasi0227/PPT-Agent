@@ -177,7 +177,7 @@ type MaterializationSource struct {
 	ManifestRevision int    `json:"manifest_revision"`
 	OutlineNodeHash  string `json:"outline_node_hash"`
 	SpecRevision     int    `json:"spec_revision"`
-	DesignRevision   int    `json:"design_revision"`
+	DesignContentHash string `json:"design_content_hash"`
 	Hash             string `json:"hash"`
 }
 type MaterializationFrame struct {

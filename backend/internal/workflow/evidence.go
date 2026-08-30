@@ -20,15 +20,15 @@ type Evidence struct {
 // MaterializationProof is runtime-only evidence that a successful render used
 // exactly these persisted inputs. It is never projected into public events.
 type MaterializationProof struct {
-	SlideID          string
-	HTMLRevision     int
-	ManifestRevision int
-	OutlineNodeHash  string
-	SpecRevision     int
-	DesignRevision   int
-	ArtifactHash     string
-	SourceHash       string
-	FrameContextHash string
+	SlideID           string
+	HTMLRevision      int
+	ManifestRevision  int
+	OutlineNodeHash   string
+	SpecRevision      int
+	DesignContentHash string
+	ArtifactHash      string
+	SourceHash        string
+	FrameContextHash  string
 }
 
 type EvidenceLedger struct {

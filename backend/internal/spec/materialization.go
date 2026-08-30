@@ -60,6 +60,9 @@ func ContentHash(raw []byte) string {
 }
 
 func SourceHash(manifestRaw []byte, outlineNodeHash string, specRaw, designRaw []byte) string {
+	var design Design
+	_ = json.Unmarshal(designRaw, &design)
+	designRaw = designContentBytes(design)
 	size := len(manifestRaw) + len(outlineNodeHash) + len(specRaw) + len(designRaw) + 48
 	combined := make([]byte, 0, size)
 	for _, item := range []struct {
@@ -77,6 +80,21 @@ func SourceHash(manifestRaw []byte, outlineNodeHash string, specRaw, designRaw [
 		combined = append(combined, 0)
 	}
 	return ContentHash(combined)
+}
+
+func DesignContentHash(design Design) string {
+	return ContentHash(designContentBytes(design))
+}
+
+func designContentBytes(design Design) []byte {
+	raw, _ := json.Marshal(struct {
+		Direction string       `json:"direction"`
+		Density   string       `json:"density"`
+		Chrome    []ChromeItem `json:"chrome"`
+	}{
+		Direction: design.Direction, Density: design.Density, Chrome: design.Chrome,
+	})
+	return raw
 }
 
 func ReadMaterialization(path string) (MaterializationRecord, error) {
@@ -97,7 +115,7 @@ func ReadMaterialization(path string) (MaterializationRecord, error) {
 func DeriveMaterializationState(
 	hasHTML bool,
 	record *MaterializationRecord,
-	currentManifest int, currentOutlineNodeHash string, currentSpec, currentDesign int,
+	currentManifest int, currentOutlineNodeHash string, currentSpec int, currentDesignHash string,
 	artifactHash, sourceHash, frameHash string,
 ) string {
 	if !hasHTML {
@@ -108,14 +126,13 @@ func DeriveMaterializationState(
 	}
 	if record.Artifact.Hash != artifactHash ||
 		record.Source.ManifestRevision > currentManifest ||
-		record.Source.SpecRevision > currentSpec ||
-		record.Source.DesignRevision > currentDesign {
+		record.Source.SpecRevision > currentSpec {
 		return "unknown"
 	}
 	if record.Source.ManifestRevision < currentManifest || record.Source.OutlineNodeHash != currentOutlineNodeHash || record.Source.SpecRevision < currentSpec {
 		return "spec_stale"
 	}
-	if record.Source.DesignRevision < currentDesign {
+	if record.Source.DesignContentHash != currentDesignHash {
 		return "design_stale"
 	}
 	if record.Source.Hash != sourceHash {

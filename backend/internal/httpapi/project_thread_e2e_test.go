@@ -60,6 +60,9 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
 	runSvc := service.NewRunServiceWithExecutionFactoryAndRegistry(st, engine, factory, registry)
 	projectSvc := service.NewProjectService(st, service.WorkRoot(root))
+	themes := service.NewThemeService(service.WorkRoot(root))
+	components := service.NewComponentService(service.WorkRoot(root))
+	skills := service.NewSkillService(service.WorkRoot(root))
 	threadSvc := service.NewThreadService(st)
 	var polishHandler *httpapi.PolishHandler
 	if registry != nil {
@@ -73,7 +76,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 		httpapi.NewProjectHandler(projectSvc, service.NewPPTMutationService(st)),
 		httpapi.NewThreadHandler(threadSvc),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
-		httpapi.NewAssetHandler(service.NewAssetService(st, root)),
+		httpapi.NewRepositoryHandler(themes, components, skills),
 		func() *httpapi.LLMHandler {
 			if registry == nil {
 				return nil

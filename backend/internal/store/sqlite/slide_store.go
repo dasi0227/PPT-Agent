@@ -98,6 +98,12 @@ func (s *Store) DeleteSlideByID(ctx context.Context, slideID string) error {
 	return s.db.WithContext(ctx).Where("id = ?", slideID).Delete(&slidePO{}).Error
 }
 
+func (s *Store) SetSlideVersion(ctx context.Context, slideID string, versionNo int) error {
+	return s.db.WithContext(ctx).Model(&slidePO{}).
+		Where("id = ?", slideID).
+		Update("current_version", versionNo).Error
+}
+
 // SetProjectStatus 更新 project 状态游标（draft/generating/ready）。
 func (s *Store) SetProjectStatus(ctx context.Context, id, status string) error {
 	return s.db.WithContext(ctx).Model(&projectPO{}).

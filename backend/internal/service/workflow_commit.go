@@ -210,7 +210,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 				proof.SourceHash != sourceHash ||
 				proof.HTMLRevision != expectedHTMLRevision ||
 				proof.ManifestRevision != manifest.Revision || proof.OutlineNodeHash != nodeHash ||
-				proof.SpecRevision != semantic.Revision || proof.DesignRevision != design.Revision || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id) {
+				proof.SpecRevision != semantic.Revision || proof.DesignContentHash != spec.DesignContentHash(design) || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id) {
 				cleanup()
 				return fmt.Errorf("stale materialization proof for %s", id)
 			}
@@ -252,7 +252,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 				},
 				Source: spec.MaterializationSource{
 					ManifestRevision: proof.ManifestRevision, OutlineNodeHash: proof.OutlineNodeHash,
-					SpecRevision: proof.SpecRevision, DesignRevision: proof.DesignRevision, Hash: proof.SourceHash,
+					SpecRevision: proof.SpecRevision, DesignContentHash: proof.DesignContentHash, Hash: proof.SourceHash,
 				},
 				Frame:      spec.MaterializationFrame{ContextHash: proof.FrameContextHash},
 				RenderedAt: time.Now().Unix(),

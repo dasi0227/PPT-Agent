@@ -159,6 +159,30 @@ func (h *ProjectHandler) Mutate(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"mutation": result, "content": snapshot})
 }
+
+func (h *ProjectHandler) SetTheme(c *gin.Context) {
+	var request struct {
+		Theme string `json:"theme"`
+	}
+	if c.ShouldBindJSON(&request) != nil || strings.TrimSpace(request.Theme) == "" {
+		AbortWithError(c, ErrBadRequest("theme is required"))
+		return
+	}
+	project, err := h.svc.SetTheme(c.Request.Context(), c.Param("id"), request.Theme)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrThemeNotFound):
+			AbortWithError(c, ErrNotFound("theme not found"))
+		case errors.Is(err, service.ErrRunActive):
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project is currently locked"})
+		default:
+			AbortWithError(c, ErrInternal(err.Error()))
+		}
+		return
+	}
+	c.JSON(http.StatusOK, toProjectResponse(project))
+}
+
 func toProjectResponse(p model.Project) projectResponse {
 	return projectResponse{ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, Status: p.Status, DesignPath: "design.json", OutlinePath: "outline.json", OutlineRevision: p.OutlineRevision, DesignRevision: p.DesignRevision, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }

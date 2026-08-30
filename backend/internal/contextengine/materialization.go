@@ -17,7 +17,7 @@ func loadMaterializationState(workDir, slideID string, deck pptspec.Manifest, ou
 	if err != nil {
 		return string(model.MaterializationUnknown), model.MaterializationRevisions{}
 	}
-	revisions := model.MaterializationRevisions{SlideHTML: record.Artifact.Revision, Outline: outline.Revision, SlideSpec: record.Source.SpecRevision, Design: record.Source.DesignRevision}
+	revisions := model.MaterializationRevisions{SlideHTML: record.Artifact.Revision, Outline: outline.Revision, SlideSpec: record.Source.SpecRevision, Design: design.Revision}
 	deckRaw, deckErr := os.ReadFile(filepath.Join(workDir, "manifest.json"))
 	specRaw, specErr := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideSpecPath(slideID))))
 	designRaw, designErr := os.ReadFile(filepath.Join(workDir, "design.json"))
@@ -25,6 +25,6 @@ func loadMaterializationState(workDir, slideID string, deck pptspec.Manifest, ou
 		return string(model.MaterializationUnknown), revisions
 	}
 	nodeHash := pptspec.SemanticSlideNodeHash(outline, slideID)
-	return pptspec.DeriveMaterializationState(true, &record, deck.Revision, nodeHash, slide.Revision, design.Revision,
+	return pptspec.DeriveMaterializationState(true, &record, deck.Revision, nodeHash, slide.Revision, pptspec.DesignContentHash(design),
 		pptspec.ContentHash(htmlRaw), pptspec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), pptspec.FrameContextHash(deck, outline, design, slideID)), revisions
 }

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -20,40 +19,33 @@ var (
 	ErrRequiredMissing = errors.New("CONTEXT_REQUIRED_MISSING")
 )
 
-type AssetIndexLoader interface {
-	LoadAssets(context.Context) ([]model.Asset, error)
+type ComponentIndexLoader interface {
+	LoadComponents(context.Context) ([]model.Component, error)
 }
 
 type ContextStore interface {
 	GetSlide(context.Context, string) (model.Slide, error)
-	ListAssets(context.Context, string) ([]model.Asset, error)
-}
-
-type storeAssetLoader struct{ store ContextStore }
-
-func (l storeAssetLoader) LoadAssets(ctx context.Context) ([]model.Asset, error) {
-	return l.store.ListAssets(ctx, "")
 }
 
 type ContextAssembler struct {
-	store     ContextStore
-	assets    AssetIndexLoader
-	estimator TokenEstimator
-	profiles  ContextProfileResolver
-	memory    ThreadMemoryStore
-	registry  *RefRegistry
+	store      ContextStore
+	components ComponentIndexLoader
+	estimator  TokenEstimator
+	profiles   ContextProfileResolver
+	memory     ThreadMemoryStore
+	registry   *RefRegistry
 }
 
 func NewContextAssembler(s ContextStore, registry *RefRegistry) *ContextAssembler {
 	if registry == nil {
 		registry = NewRefRegistry()
 	}
-	return &ContextAssembler{store: s, assets: storeAssetLoader{store: s}, estimator: StableTokenEstimator{},
+	return &ContextAssembler{store: s, estimator: StableTokenEstimator{},
 		profiles: ContextProfileResolver{}, memory: ThreadMemoryStore{}, registry: registry}
 }
 
-func (a *ContextAssembler) WithAssetLoader(loader AssetIndexLoader) *ContextAssembler {
-	a.assets = loader
+func (a *ContextAssembler) WithComponentLoader(loader ComponentIndexLoader) *ContextAssembler {
+	a.components = loader
 	return a
 }
 
@@ -95,8 +87,8 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		PresentationManifest: PresentationManifestContext{Manifest: deck},
 		Outline:              OutlineContext{Outline: outline, Summaries: []SlideSummary{}},
 		RelatedSlides:        []SlideSummary{}, Design: DesignContext{Design: &design},
-		SlideHTML: SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
-		Assets:    []AssetCandidate{}, Memory: memory, RecentTurns: []RecentTurn{},
+		SlideHTML:  SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
+		Components: []ComponentCandidate{}, Memory: memory, RecentTurns: []RecentTurn{},
 		Revisions: (RevisionLoader{}).From(deck, outline, design, slides, memory),
 	}
 	for _, location := range pptspec.FlattenOutline(outline) {
@@ -172,17 +164,19 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 
 	if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
 		a.loadSlideHTML(project, req, slides, &pack, &manifest, addSegment, limit)
-		assets, assetErr := a.assets.LoadAssets(ctx)
-		if assetErr != nil {
-			manifest.Warnings = append(manifest.Warnings, "optional asset loader failed: "+assetErr.Error())
-		} else {
-			pack.Assets = (AssetCandidateLoader{}).Select(assets, pack.Target.SlideSpec)
-			if cap := budget.SegmentCaps[SegmentAssets]; cap > 0 && a.estimator.Estimate(pack.Assets) > cap {
-				manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentAssets), Reason: "segment cap exceeded"})
-				pack.Assets = []AssetCandidate{}
-			}
-			if len(pack.Assets) > 0 {
-				addSegment(SegmentAssets, "assets://index", 0, 20, "asset query keyword match", false, DetailSummary, pack.Assets)
+		if a.components != nil {
+			components, componentErr := a.components.LoadComponents(ctx)
+			if componentErr != nil {
+				manifest.Warnings = append(manifest.Warnings, "component repository unavailable: "+componentErr.Error())
+			} else {
+				pack.Components = componentCandidates(components)
+				if cap := budget.SegmentCaps[SegmentComponents]; cap > 0 && a.estimator.Estimate(pack.Components) > cap {
+					manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentComponents), Reason: "segment cap exceeded"})
+					pack.Components = []ComponentCandidate{}
+				}
+				if len(pack.Components) > 0 {
+					addSegment(SegmentComponents, "components://index", 0, 20, "available component reference catalog", false, DetailSummary, pack.Components)
+				}
 			}
 		}
 	}
@@ -308,14 +302,14 @@ type BudgetAllocator struct{}
 func (BudgetAllocator) Allocate(pack *ContextPack, manifest *ContextManifest, limit int) {
 	for sumTokens(manifest.Segments) > limit {
 		dropped := false
-		for _, kind := range []SegmentKind{SegmentAssets, SegmentRelated, SegmentSlideHTML, SegmentRecentTurns} {
+		for _, kind := range []SegmentKind{SegmentComponents, SegmentRelated, SegmentSlideHTML, SegmentRecentTurns} {
 			for i, s := range manifest.Segments {
 				if s.Kind == kind && !s.Required {
 					manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: s.ID, Reason: "input budget exceeded"})
 					manifest.Segments = append(manifest.Segments[:i], manifest.Segments[i+1:]...)
 					switch kind {
-					case SegmentAssets:
-						pack.Assets = []AssetCandidate{}
+					case SegmentComponents:
+						pack.Components = []ComponentCandidate{}
 					case SegmentRelated:
 						pack.RelatedSlides = []SlideSummary{}
 					case SegmentSlideHTML:
@@ -387,33 +381,13 @@ func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec,
 	return out
 }
 
-func selectAssets(assets []model.Asset, target *pptspec.SlideSpec) []AssetCandidate {
-	queries := []string{}
-	if target != nil {
-		for _, element := range target.Elements {
-			if element.Type == "asset" {
-				queries = append(queries, element.Intent)
-			}
-		}
-	}
-	out := []AssetCandidate{}
-	for _, a := range assets {
-		hay := strings.ToLower(a.Name + " " + a.Description + " " + strings.Join(a.Tags, " "))
-		match := len(queries) == 0
-		for _, q := range queries {
-			for _, word := range strings.Fields(strings.ToLower(q)) {
-				if len(word) > 2 && strings.Contains(hay, word) {
-					match = true
-				}
-			}
-		}
-		if match {
-			out = append(out, AssetCandidate{ID: a.ID, Name: a.Name, Kind: a.Kind, Description: a.Description, Tags: append([]string{}, a.Tags...)})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	if len(out) > 12 {
-		out = out[:12]
+func componentCandidates(components []model.Component) []ComponentCandidate {
+	out := make([]ComponentCandidate, 0, len(components))
+	for _, component := range components {
+		out = append(out, ComponentCandidate{
+			ID: component.ID, Name: component.Name, Description: component.Description,
+			Tags: append([]string{}, component.Tags...),
+		})
 	}
 	return out
 }

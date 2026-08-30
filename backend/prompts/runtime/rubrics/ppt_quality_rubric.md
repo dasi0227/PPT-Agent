@@ -24,7 +24,7 @@ Visual consistency:
 
 Implementation quality:
 - Slide HTML uses a 1600x900 .slide-stage.
-- HTML links ../../common/tokens.css and ../../common/base.css.
+- Slide HTML leaves the runtime-owned base-link and theme-link nodes untouched; the runtime injects both stylesheets.
 - CSS avoids heavy runtime dependencies and browser-unsafe assumptions.
 - Resources are project-local, data or blob references only.
 - Slide HTML contains no static page number, total page count, ordinal-dependent copy, or section number. Runtime frame injects numbering and shared chrome.

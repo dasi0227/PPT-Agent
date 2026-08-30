@@ -8,10 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/asset"
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/repository"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -29,16 +29,14 @@ func provideApp(server *http.Server, engine *run.Engine, log *zap.Logger, _ seed
 	return &App{server: server, engine: engine, log: log}
 }
 
-// seedDone 是冷启动 seeding 完成的哨兵：provideApp 依赖它，保证服务启动前 seed 就绪（DS-SEED-001）。
+// seedDone ensures repository seeds exist before the server starts.
 type seedDone struct{}
 
-// provideSeed 首启把 seed 资产载入 work_root 的 _assets/ 并 upsert SQLite（幂等）。
-func provideSeed(cfg *config.Config, s store.Store, log *zap.Logger) (seedDone, error) {
-	seeder := asset.NewSeeder(s, cfg.WorkRoot, nil, nil)
-	if err := seeder.Seed(context.Background()); err != nil {
+func provideSeed(cfg *config.Config, log *zap.Logger) (seedDone, error) {
+	if err := (repository.Initializer{WorkRoot: cfg.WorkRoot}).Initialize(); err != nil {
 		return seedDone{}, err
 	}
-	log.Info("seed assets loaded", zap.String("work_root", cfg.WorkRoot))
+	log.Info("repository seeds initialized", zap.String("work_root", cfg.WorkRoot))
 	return seedDone{}, nil
 }
 
@@ -68,8 +66,12 @@ func provideGitCommitService(s store.Store, registry *llm.Registry, locks *run.L
 // provideWorkRoot 从配置暴露全局 work_root（供 /repo 资产操作）。
 func provideWorkRoot(cfg *config.Config) service.WorkRoot { return service.WorkRoot(cfg.WorkRoot) }
 
-func provideAssetService(s store.Store, workRoot service.WorkRoot) *service.AssetService {
-	return service.NewAssetService(s, string(workRoot))
+func provideProjectService(s store.Store, workRoot service.WorkRoot, locks *run.LockManager, themes *service.ThemeService) *service.ProjectService {
+	return service.NewProjectServiceWithRepositories(s, workRoot, locks, themes)
+}
+
+func provideSlideService(s store.Store, themes *service.ThemeService) *service.SlideService {
+	return service.NewSlideServiceWithThemes(s, themes)
 }
 
 func provideEngine(rs run.Store, locks *run.LockManager, hw run.HistoryWriter, log *zap.Logger) (*run.Engine, error) {
