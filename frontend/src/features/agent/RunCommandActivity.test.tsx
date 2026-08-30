@@ -108,4 +108,27 @@ describe('run command activity', () => {
     render(<ToolGroupRow items={items} />);
     expect(screen.getByText('已执行 3 条命令')).toBeInTheDocument();
   });
+
+  it('expands loaded resources as names with ExternalLink actions only', () => {
+    render(<ToolActivityRow item={commandItem({
+      tool: 'load_component',
+      label: '已加载 2 个组件',
+      status: 'completed',
+      command: undefined,
+      resources: [
+        { kind: 'component', id: 'feature-card', name: 'Feature Card', open_url: 'vscode://file/components/feature-card/index.html' },
+        { kind: 'component', id: 'quote-block', name: 'Quote Block', open_url: 'vscode://file/components/quote-block/index.html' },
+      ],
+    })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /已加载 2 个组件/ }));
+    expect(screen.getByRole('link', { name: 'Feature Card' })).toHaveAttribute(
+      'href',
+      'vscode://file/components/feature-card/index.html',
+    );
+    expect(screen.getByRole('link', { name: 'Quote Block' })).toBeInTheDocument();
+    expect(screen.queryByText('component')).not.toBeInTheDocument();
+    expect(screen.queryByText(/components\/feature-card/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
 });

@@ -103,6 +103,34 @@ describe('SSE parser', () => {
     })).toBeNull();
   });
 
+  it('accepts safe loaded resources and rejects private resource fields', () => {
+    const completed = {
+      ...base,
+      call_id: 'c-load',
+      tool: 'load_component',
+      status: 'completed',
+      display: { label: '已加载 1 个组件' },
+      resources: [{
+        kind: 'component',
+        id: 'feature-card',
+        name: 'Feature Card',
+        open_url: 'vscode://file/components/feature-card/index.html',
+      }],
+    };
+
+    expect(parsePublicEvent('tool.completed', completed)).toMatchObject({
+      data: {
+        resources: [{ kind: 'component', id: 'feature-card', name: 'Feature Card' }],
+      },
+    });
+    for (const privateField of ['local_path', 'html', 'content', 'preview']) {
+      expect(parsePublicEvent('tool.completed', {
+        ...completed,
+        resources: [{ ...completed.resources[0], [privateField]: 'private' }],
+      })).toBeNull();
+    }
+  });
+
   it('ignores unknown, malformed, incomplete, and unsafe payloads', () => {
     expect(parseSSEEvent('context.assembled', JSON.stringify(base))).toBeNull();
     expect(parseSSEEvent('run.started', '{')).toBeNull();
