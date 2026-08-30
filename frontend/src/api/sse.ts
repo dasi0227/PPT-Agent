@@ -43,7 +43,7 @@ export function parsePublicEvent(eventName: string, data: unknown, id?: string):
 }
 
 const progressStages = new Set(['thinking', 'planning', 'reading', 'writing', 'rendering', 'finalizing']);
-const businessTools = new Set(['read_ppt', 'mutate_ppt', 'render_slide', 'run_command']);
+const businessTools = new Set(['read_ppt', 'mutate_ppt', 'render_slide', 'run_command', 'load_component', 'load_skill']);
 const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
@@ -128,6 +128,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && validOptionalError(data.error)
         && (data.status !== 'failed' || isRecord(data.error))
         && validPreview(data.preview, String(data.run_id))
+        && validLoadedResources(data.resources)
         && validCommandProjection(data.command, true, data.tool === 'run_command');
     case 'question.asked':
       return hasString(data, 'question_id')
@@ -139,6 +140,20 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && validAnswer(data.answer)
         && hasSafeString(data, 'display_text');
   }
+}
+
+function validLoadedResources(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value)) return false;
+  return value.every((entry) => isRecord(entry)
+    && ['component', 'skill'].includes(String(entry.kind))
+    && hasString(entry, 'id')
+    && hasSafeString(entry, 'name')
+    && validOptionalSafeString(entry.open_url)
+    && !('local_path' in entry)
+    && !('html' in entry)
+    && !('content' in entry)
+    && !('preview' in entry));
 }
 
 function validSkills(value: unknown): boolean {

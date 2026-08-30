@@ -437,7 +437,6 @@
 
   body {
     @apply m-0 bg-workspace text-ink antialiased;
-    min-width: 1024px;
   }
 
   button,

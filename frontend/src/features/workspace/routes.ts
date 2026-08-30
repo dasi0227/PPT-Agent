@@ -1,4 +1,9 @@
 export const homeRoute = '/';
+export type RepositorySection = 'theme' | 'component' | 'skill';
+
+export function repositoryRoute(section: RepositorySection): string {
+  return `/warehouse/${section}`;
+}
 
 export function projectRoute(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}`;

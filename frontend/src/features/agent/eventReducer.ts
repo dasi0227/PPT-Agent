@@ -4,6 +4,7 @@ import {
   PlanStep,
   PlanStepStatus,
   PublicError,
+  PublicLoadedResource,
   PublicTarget,
   QuestionAnswer,
   QuestionField,
@@ -82,6 +83,7 @@ export interface ToolActivityItem extends BaseTimelineItem {
   preview?: ToolPreview;
   error?: PublicError;
   command?: CommandProjection;
+  resources?: PublicLoadedResource[];
 }
 
 export interface QuestionItem extends BaseTimelineItem {
@@ -326,6 +328,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         preview: existing?.preview,
         error: existing?.error,
         command: event.data.command ?? existing?.command,
+        resources: existing?.resources,
         timestamp: existing?.timestamp ?? timestamp,
       };
       return upsertById(state, item);
@@ -349,6 +352,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         preview: event.data.preview,
         error: event.data.error,
         command: event.data.command ?? existing?.command,
+        resources: event.data.resources,
         timestamp: existing?.timestamp ?? timestamp,
       };
       return upsertById(state, item);

@@ -14,5 +14,9 @@ export const projectsApi = {
   get: (id: string) => fetchClient<Project>(`/projects/${id}`),
   getContent: (id: string) => fetchClient<ProjectContentSnapshot>(`/projects/${id}/content`),
   mutate: (id: string, mutation: PPTMutation) => fetchClient<MutationResponse>(`/projects/${id}/mutations`, { method: 'POST', body: JSON.stringify(mutation) }),
+  setTheme: (id: string, theme: string) => fetchClient<Project>(`/projects/${id}/theme`, {
+    method: 'PATCH',
+    body: JSON.stringify({ theme }),
+  }),
   delete: (id: string) => fetchClient<void>(`/projects/${id}`, { method: 'DELETE' }),
 };

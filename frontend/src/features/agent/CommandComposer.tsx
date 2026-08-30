@@ -246,8 +246,9 @@ export const CommandComposer: React.FC = () => {
     void skillsApi.list()
       .then((response) => {
         if (!current) return;
-        setSkills(response.skills);
-        useComposerStore.getState().reconcileSkills(response.skills.map((skill) => skill.id));
+        const enabledSkills = response.skills.filter((skill) => !skill.disabled);
+        setSkills(enabledSkills);
+        useComposerStore.getState().reconcileSkills(enabledSkills.map((skill) => skill.id));
       })
       .catch(() => {
         if (!current) return;

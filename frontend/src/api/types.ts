@@ -81,7 +81,7 @@ export interface Design {
 export type MaterializationState = 'pending' | 'not_materialized' | 'fresh' | 'spec_stale' | 'design_stale' | 'frame_stale' | 'unknown';
 export interface Materialization {
   state: MaterializationState;
-  revisions: { slide_html: number; source_outline: number; source_spec: number; source_design: number };
+  revisions: { slide_html: number; source_outline: number; source_spec: number; source_design: string };
 }
 
 export interface Slide {
@@ -150,6 +150,8 @@ export interface Skill {
   id: string;
   name: string;
   description: string;
+  content?: string;
+  disabled?: boolean;
   local_path?: string;
   open_url?: string;
 }
@@ -157,6 +159,29 @@ export interface Skill {
 export interface SkillsResponse {
   skills: Skill[];
 }
+
+export interface Theme {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  css?: string;
+  css_url: string;
+  open_url: string;
+}
+
+export interface ComponentReference {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  kind?: string;
+  html?: string;
+  open_url: string;
+}
+
+export interface ThemesResponse { themes: Theme[] }
+export interface ComponentsResponse { components: ComponentReference[] }
 
 export interface LLMProfileCapabilities {
   vision: boolean;
@@ -265,7 +290,7 @@ export interface ProjectContentSnapshot {
 
 export interface MaterializationRecord {
   version: '4.0'; artifact: { revision: number; hash: string };
-  source: { manifest_revision: number; outline_node_hash: string; spec_revision: number; design_revision: number; hash: string };
+  source: { manifest_revision: number; outline_node_hash: string; spec_revision: number; design_content_hash: string; hash: string };
   frame: { context_hash: string }; rendered_at: number;
 }
 
@@ -403,6 +428,13 @@ export interface ToolPreview {
   warnings: string[];
 }
 
+export interface PublicLoadedResource {
+  kind: 'component' | 'skill';
+  id: string;
+  name: string;
+  open_url?: string;
+}
+
 export interface CommandProjection {
   text: string;
   status?: 'completed' | 'blocked' | 'failed';
@@ -512,6 +544,7 @@ export type SSEEvent =
       preview?: ToolPreview;
       error?: PublicError;
       command?: CommandProjection;
+      resources?: PublicLoadedResource[];
     }>
   | SSEEventBase<'question.asked', PublicEventBase & {
       question_id: string;

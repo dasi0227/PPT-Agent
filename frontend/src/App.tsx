@@ -5,6 +5,9 @@ import { GlobalModals } from './features/workspace/GlobalModals';
 import { UnknownRouteRedirect, WorkspaceRoute } from './features/workspace/WorkspaceRoute';
 import { useRunStore } from './stores/runStore';
 import { useGitCommitStore } from './stores/gitCommitStore';
+import { ThemeRepositoryPage } from './features/repository/ThemeRepositoryPage';
+import { ComponentRepositoryPage } from './features/repository/ComponentRepositoryPage';
+import { SkillRepositoryPage } from './features/repository/SkillRepositoryPage';
 
 export function App() {
   useEffect(() => {
@@ -22,6 +25,9 @@ export function App() {
       <Routes>
         <Route path="/" element={<WorkspaceRoute />} />
         <Route path="/projects/:projectId" element={<WorkspaceRoute />} />
+        <Route path="/warehouse/theme" element={<ThemeRepositoryPage />} />
+        <Route path="/warehouse/component" element={<ComponentRepositoryPage />} />
+        <Route path="/warehouse/skill" element={<SkillRepositoryPage />} />
         <Route path="*" element={<UnknownRouteRedirect />} />
       </Routes>
       <GlobalModals />

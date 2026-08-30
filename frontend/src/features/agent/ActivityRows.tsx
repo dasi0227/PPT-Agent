@@ -13,6 +13,8 @@ import {
   Search,
   SquareTerminal,
   Sparkles,
+  Component as ComponentIcon,
+  Blocks,
 } from 'lucide-react';
 import type {
   MilestoneItem,
@@ -191,6 +193,8 @@ function toolStatusIcon(tool: string, failed: boolean) {
   const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
   if (tool === 'read_ppt') return <Eye className={className} strokeWidth={1.75} />;
   if (tool === 'mutate_ppt') return <Sparkles className={className} strokeWidth={1.75} />;
+  if (tool === 'load_component') return <ComponentIcon className={className} strokeWidth={1.75} />;
+  if (tool === 'load_skill') return <Blocks className={className} strokeWidth={1.75} />;
   if (tool === 'search_reference' || tool.startsWith('search') || tool.includes('reference')) {
     return <Search className={className} strokeWidth={1.75} />;
   }
@@ -208,7 +212,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
   const slides = orderedSlides(snapshot);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
-  const hasDetails = Boolean(item.detail || item.error || item.preview || item.command);
+  const hasDetails = Boolean(item.detail || item.error || item.preview || item.command || item.resources?.length);
   const detailText = item.error?.message ?? item.detail;
   const commandOutput = [
     item.command?.stdout_preview,
@@ -293,6 +297,20 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
             ) : <p>{presentActivityText(detailText, item.target, slides)}</p>
           )}
           {item.error?.retryable && <p>Agent 可以调整后继续尝试。</p>}
+          {item.resources && item.resources.length > 0 && (
+            <ul className="space-y-0.5">
+              {item.resources.map((resource) => (
+                <li key={`${resource.kind}:${resource.id}`} className="flex min-h-5 items-center">
+                  {resource.open_url ? (
+                    <a href={resource.open_url} title="查看文件" className="inline-flex min-w-0 items-center gap-1 rounded px-1 hover:bg-accent-soft hover:text-text-900">
+                      <span className="truncate">{resource.name}</span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                    </a>
+                  ) : <span className="truncate px-1">{resource.name}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
           {item.preview && (
             <div className="overflow-hidden rounded-lg border border-border bg-surface">
               <button

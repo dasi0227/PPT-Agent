@@ -3,9 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { cn } from '../../lib/utils';
-import { Loader2, Plus, MoreHorizontal } from 'lucide-react';
+import { BookOpenText, Component, Loader2, Palette, Plus, MoreHorizontal, Warehouse } from 'lucide-react';
 import { ProjectMenu } from './ProjectMenu';
-import { projectRoute } from './routes';
+import { projectRoute, repositoryRoute } from './routes';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 
 export const ProjectTabs: React.FC = () => {
   const { projects, activeProjectId, selectProject, loadingProjects, loadProjects } = useProjectStore();
@@ -98,6 +105,26 @@ export const ProjectTabs: React.FC = () => {
           </div>
         )}
       </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="ml-2 grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900" title="个人仓库" aria-label="个人仓库">
+            <Warehouse className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64 p-1">
+          <DropdownMenuLabel>个人仓库</DropdownMenuLabel>
+          {[
+            { id: 'theme' as const, label: '主题', description: '选择演示文稿的整体样式', Icon: Palette },
+            { id: 'component' as const, label: '组件', description: '浏览供 Agent 参考的片段', Icon: Component },
+            { id: 'skill' as const, label: '技能', description: '管理 Run 可使用的技能', Icon: BookOpenText },
+          ].map(({ id, label, description, Icon }) => (
+            <DropdownMenuItem key={id} onSelect={() => navigate(repositoryRoute(id))} className="flex min-h-12 items-start gap-2 rounded-md px-2 py-2">
+              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-text-500" />
+              <span><b className="block text-xs text-text-900">{label}</b><small className="block text-[11px] text-text-500">{description}</small></span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 };
