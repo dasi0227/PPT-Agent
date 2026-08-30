@@ -315,7 +315,7 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 	if targetType == "slide" {
 		slideID := stringValue(target["slide_id"])
 		out := &model.PublicTarget{
-			Type: "slide", SlideID: slideID, Part: stringValue(target["part"]), DisplayName: slideDisplayName(slideID),
+			Type: "slide", SlideID: slideID, Part: stringValue(target["part"]), DisplayName: runtimeSlideDisplayName(projectDir, slideID),
 		}
 		attachLocalOpenTarget(projectDir, out)
 		return out

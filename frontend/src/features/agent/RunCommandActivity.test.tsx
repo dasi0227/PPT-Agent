@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Slide } from '../../api/types';
 import type { ToolActivityItem } from './eventReducer';
-import { ToolActivityRow, ToolGroupRow } from './ActivityRows';
+import { presentActivityText, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 
 function commandItem(overrides: Partial<ToolActivityItem> = {}): ToolActivityItem {
   return {
@@ -23,6 +24,15 @@ afterEach(() => {
 });
 
 describe('run command activity', () => {
+  it('resolves generic and stale slide labels from the current outline order', () => {
+    const slides = [{ id: 'sli_first' }, { id: 'sli_random4' }] as Slide[];
+    const target = { type: 'slide', slide_id: 'sli_random4', part: 'spec', display_name: '页面' } as const;
+
+    expect(presentActivityText('已读取页面设计稿', target, slides)).toBe('已读取第 2 页设计稿');
+    expect(presentActivityText('已读取第 4 页设计稿', { ...target, display_name: '第 4 页' }, slides))
+      .toBe('已读取第 2 页设计稿');
+  });
+
   it('delays only the running command row for 300 ms', () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -78,6 +79,24 @@ func TestPublicToolTargetAttachesLinksForDeckResources(t *testing.T) {
 		if target.OpenURL == "" {
 			t.Fatalf("%s open URL is empty", test.name)
 		}
+	}
+}
+
+func TestPublicToolTargetResolvesReadSlideOrdinalFromOutline(t *testing.T) {
+	projectDir := t.TempDir()
+	outline := `{"sections":[{"slides":[{"slide_id":"sli_first"},{"slide_id":"sli_random4"}],"subsections":[]}]}`
+	if err := os.WriteFile(filepath.Join(projectDir, "outline.json"), []byte(outline), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	target := publicToolTarget(projectDir, "read_ppt", map[string]any{
+		"resource": map[string]any{"kind": "slide", "slide_id": "sli_random4", "part": "spec"},
+	})
+	if target == nil {
+		t.Fatal("read slide target is nil")
+	}
+	if target.DisplayName != "第 2 页" {
+		t.Fatalf("display name = %q, want 第 2 页", target.DisplayName)
 	}
 }
 

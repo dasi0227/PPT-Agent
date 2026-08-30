@@ -8,7 +8,6 @@ import { cn } from '../../lib/utils';
 import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
 import { MessageMetaActions } from './MessageMetaActions';
-import { targetFileLabel } from './targetFileLabel';
 
 function targetKey(target: PublicTarget): string {
   return `${target.type}:${target.slide_id ?? ''}:${target.part}`;
@@ -117,7 +116,7 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
               className="grid min-h-10 grid-cols-[24px_minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border px-3 py-2 text-[13px] text-text-900 last:border-b-0"
             >
               <Sparkle className="h-4 w-4 text-success" strokeWidth={1.75} />
-              <span className="truncate font-medium">{targetFileLabel(target) ?? targetLabel(target)}</span>
+              <span className="truncate font-medium">{targetLabel(target)}</span>
               {(target.insertions || target.deletions) ? (
                 <span className="font-mono text-xs">
                   <span className="text-success">+{target.insertions ?? 0}</span>{' '}

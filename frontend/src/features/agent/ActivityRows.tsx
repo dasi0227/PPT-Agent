@@ -39,13 +39,19 @@ function pageName(slideId: string, slides: Slide[]): string {
   return index >= 0 ? `第 ${index + 1} 页` : `页面 ${slideId}`;
 }
 
-function presentActivityText(text: string, target: PublicTarget | undefined, slides: Slide[]): string {
+export function presentActivityText(text: string, target: PublicTarget | undefined, slides: Slide[]): string {
   const presented = presentUserText(text);
   if (!target || target.type !== 'slide' || !target.slide_id) return presented;
   const index = slides.findIndex((slide) => slide.id === target.slide_id);
   // 页码随 outline 顺序实时换算；新页尚未进入有序列表时，使用后端给出的安全展示名，避免泄露 slide_id。
   const replacement = index >= 0 ? `第 ${index + 1} 页` : target.display_name || '页面';
-  return presented.split(`页面 ${target.slide_id}`).join(replacement);
+  const candidates = [`页面 ${target.slide_id}`, target.display_name].filter(
+    (candidate): candidate is string => Boolean(candidate && candidate !== replacement),
+  );
+  for (const candidate of candidates) {
+    if (presented.includes(candidate)) return presented.replace(candidate, replacement);
+  }
+  return presented;
 }
 
 export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
