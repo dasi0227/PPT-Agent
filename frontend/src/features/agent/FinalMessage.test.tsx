@@ -79,13 +79,13 @@ describe('FinalChangeSummary', () => {
 
     const text = container.textContent ?? '';
     const labels = [
-      '演示内容',
-      '目录结构',
-      '视觉设计',
-      '第 1 页设计稿',
-      '第 2 页设计稿',
-      '第 1 页幻灯片',
-      '第 2 页幻灯片',
+      'manifest.json',
+      'outline.json',
+      'design.json',
+      'slide-first/spec.json',
+      'slide-second/spec.json',
+      'slide-first/index.html',
+      'slide-second/index.html',
     ];
     const positions = labels.map((label) => text.indexOf(label));
 

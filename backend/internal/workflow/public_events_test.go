@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -44,6 +45,39 @@ func TestSafeFinalMessageKeepsLocalPathsAndHTMLAsText(t *testing.T) {
 	}
 	if strings.Contains(got, "\r") {
 		t.Fatalf("final message should normalize CRLF to LF: %q", got)
+	}
+}
+
+func TestPublicToolTargetAttachesLinksForDeckResources(t *testing.T) {
+	projectDir := filepath.Join(string(filepath.Separator), "tmp", "project")
+	for _, test := range []struct {
+		name string
+		tool string
+		args map[string]any
+		part string
+		file string
+	}{
+		{name: "read manifest", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "manifest"}}, part: "manifest", file: "manifest.json"},
+		{name: "read outline", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "outline"}}, part: "outline", file: "outline.json"},
+		{name: "read design", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "design"}}, part: "design", file: "design.json"},
+		{name: "mutate manifest", tool: "mutate_ppt", args: map[string]any{"op": "manifest.patch"}, part: "manifest", file: "manifest.json"},
+		{name: "mutate outline", tool: "mutate_ppt", args: map[string]any{"op": "outline.patch"}, part: "outline", file: "outline.json"},
+		{name: "mutate design", tool: "mutate_ppt", args: map[string]any{"op": "design.patch"}, part: "design", file: "design.json"},
+	} {
+		target := publicToolTarget(projectDir, test.tool, test.args)
+		if target == nil {
+			t.Fatalf("%s target is nil", test.name)
+		}
+		if target.Part != test.part {
+			t.Fatalf("%s part = %q, want %q", test.name, target.Part, test.part)
+		}
+		wantPath := filepath.Join(projectDir, test.file)
+		if target.LocalPath != wantPath {
+			t.Fatalf("%s local path = %q, want %q", test.name, target.LocalPath, wantPath)
+		}
+		if target.OpenURL == "" {
+			t.Fatalf("%s open URL is empty", test.name)
+		}
 	}
 }
 

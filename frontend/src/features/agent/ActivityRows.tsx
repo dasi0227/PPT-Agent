@@ -28,6 +28,7 @@ import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
 import { TimelineDisclosure } from './TimelineDisclosure';
+import { targetFileLabel } from './targetFileLabel';
 
 function safeReasoningMarkdown(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').trim();
@@ -245,7 +246,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
         type="button"
         disabled={!hasDetails}
         onClick={() => setExpanded((value) => !value)}
-        className="grid min-h-9 w-full grid-cols-[18px_minmax(0,1fr)_16px] items-center gap-2 bg-transparent p-1.5 text-left disabled:cursor-default"
+        className="grid min-h-8 w-full grid-cols-[16px_minmax(0,1fr)_16px] items-center gap-2 bg-transparent px-1.5 py-1 text-left disabled:cursor-default"
       >
         {icon}
         <span className="min-w-0 truncate text-[13px] font-normal text-text-900">
@@ -256,7 +257,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
           : <ChevronRight className="h-3.5 w-3.5 text-text-400" />)}
       </button>
       <TimelineDisclosure open={expanded && hasDetails}>
-        {expanded && hasDetails && <div className="px-2 pb-2.5 pl-8 pt-px text-xs leading-5 text-text-600">
+        {expanded && hasDetails && <div className="pb-1.5 pl-[30px] pr-2 pt-px text-xs leading-5 text-text-600">
           {item.command ? (
             <div className="rounded-md bg-[#EDF0F3] px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]">
               <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
@@ -278,7 +279,9 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
                 className="inline-flex max-w-full items-center gap-1 text-text-600 underline decoration-border underline-offset-2 hover:text-text-900"
                 title={item.target.local_path ?? detailText}
               >
-                <span className="truncate">{presentActivityText(detailText, item.target, slides)}</span>
+                <span className="truncate">
+                  {targetFileLabel(item.target) ?? presentActivityText(detailText, item.target, slides)}
+                </span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
               </a>
             ) : <p>{presentActivityText(detailText, item.target, slides)}</p>

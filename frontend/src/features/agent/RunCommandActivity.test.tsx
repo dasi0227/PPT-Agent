@@ -54,6 +54,30 @@ describe('run command activity', () => {
     expect(screen.queryByText('结果')).toBeNull();
   });
 
+  it('shows a stable relative file name for linked PPT targets', () => {
+    render(<ToolActivityRow item={commandItem({
+      tool: 'mutate_ppt',
+      label: '已更新演示内容',
+      detail: '/Users/test/project/manifest.json',
+      status: 'completed',
+      command: undefined,
+      target: {
+        type: 'deck',
+        part: 'manifest',
+        local_path: '/Users/test/project/manifest.json',
+        open_url: 'vscode://file/Users/test/project/manifest.json',
+      },
+    })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /已更新演示内容/ }));
+
+    expect(screen.getByRole('link', { name: /manifest.json/ })).toHaveAttribute(
+      'href',
+      'vscode://file/Users/test/project/manifest.json',
+    );
+    expect(screen.queryByText('/Users/test/project/manifest.json')).toBeNull();
+  });
+
   it('uses the confirmed command-count title for grouped rows', () => {
     const items = ['1', '2', '3'].map((id) => commandItem({
       id: `r1:tool:${id}`,
