@@ -38,6 +38,7 @@ describe('timeline disclosure motion', () => {
     const { container } = render(<MilestoneRow item={item} />);
 
     expect(container.firstChild).not.toHaveClass('motion-safe:animate-[timeline-enter_120ms_ease-out]');
+    expect(screen.getByText('完成页面编排计划')).toHaveClass('font-semibold', 'text-text-900');
   });
 
   it('opens grouped tool rows through the shared disclosure', () => {

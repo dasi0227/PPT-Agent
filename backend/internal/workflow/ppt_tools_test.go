@@ -110,7 +110,7 @@ func TestSpecDeckScopeNeverDisclosesOrExecutesHTMLMutation(t *testing.T) {
 
 func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
 	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
-	nonEmpty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Label: "Cover", Role: "cover"}}}}, CreatedAt: 1, UpdatedAt: 1}
+	nonEmpty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}}}}, CreatedAt: 1, UpdatedAt: 1}
 	plan := &Plan{ID: "plan_1", Revision: 1, Status: PlanActive}
 
 	for _, outline := range []spec.Outline{empty, nonEmpty} {
@@ -288,7 +288,7 @@ func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := map[string]any{
-		"op": "outline.init", "structure": []any{map[string]any{"client_ref": "opening", "title": "Opening", "purpose": "Start", "slides": []any{map[string]any{"client_ref": "cover", "label": "Cover", "role": "cover"}}, "subsections": []any{}}},
+		"op": "outline.init", "structure": []any{map[string]any{"client_ref": "opening", "title": "Opening", "purpose": "Start", "slides": []any{map[string]any{"client_ref": "cover", "title": "Cover", "role": "cover"}}, "subsections": []any{}}},
 	}
 	result := registry.Execute(context.Background(), map[string]bool{"mutate_ppt": true}, "mutate_ppt", args, DomainToolInput{Args: args, RunID: "run_1", ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Phase: PhaseExecuting, Mode: model.ModeExecute})
 	if !result.OK {
@@ -345,7 +345,7 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	dir := t.TempDir()
 	projectID := "pro_aaaaaa"
 	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
-	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Label: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Label: "Body", Role: "content"}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Title: "Body", Role: "content"}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
 	design := spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Density: "medium", Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}, CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
 		raw, _ := json.Marshal(value)

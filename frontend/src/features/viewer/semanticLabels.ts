@@ -6,18 +6,19 @@ import type { Design } from '../../api/types';
 
 type ChromeItem = Design['chrome'][number];
 
-// 幻灯片语义角色（slide spec 的 role 字段）。
+// 幻灯片语义角色（outline slide node 的 role 字段）。
 const SLIDE_ROLE_LABELS: Record<string, string> = {
   cover: '封面',
+  agenda: '目录',
   context: '背景',
+  content: '内容',
   definition: '定义',
   evidence: '论据',
   comparison: '对比',
-  examples: '案例',
+  example: '案例',
   'how-to': '操作指引',
-  summary: '总结',
-  agenda: '目录',
   transition: '过渡',
+  summary: '总结',
   conclusion: '结论',
 };
 

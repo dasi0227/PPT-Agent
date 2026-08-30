@@ -114,7 +114,7 @@ function AnsweredPlanApproval({ item, decision }: { item: PlanApprovalItem; deci
         aria-expanded={expanded}
         aria-controls={detailsId}
         onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] leading-5 text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] font-normal leading-5 text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <ListChecks className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
         <span className="min-w-0 flex-1 truncate">{answeredEventText[decision]}</span>

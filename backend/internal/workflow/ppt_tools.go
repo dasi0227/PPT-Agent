@@ -213,20 +213,25 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	text := func(max int) map[string]any {
 		return map[string]any{"type": "string", "minLength": 1, "maxLength": max}
 	}
-	draftSlide := objectSchema([]string{"client_ref", "label", "role"}, map[string]any{"client_ref": text(120), "label": text(200), "role": text(80)})
-	draftSubsection := objectSchema([]string{"client_ref", "title", "slides"}, map[string]any{"client_ref": text(120), "title": text(200), "slides": map[string]any{"type": "array", "items": draftSlide}})
-	draftSection := objectSchema([]string{"client_ref", "title", "purpose", "slides", "subsections"}, map[string]any{"client_ref": text(120), "title": text(200), "purpose": text(600), "slides": map[string]any{"type": "array", "items": draftSlide}, "subsections": map[string]any{"type": "array", "items": draftSubsection}})
+	roles := make([]string, 0, len(spec.SlideRoleValues()))
+	for _, role := range spec.SlideRoleValues() {
+		roles = append(roles, string(role))
+	}
+	role := map[string]any{"enum": roles}
+	draftSlide := objectSchema([]string{"client_ref", "title", "role"}, map[string]any{"client_ref": text(120), "title": text(160), "role": role})
+	draftSubsection := objectSchema([]string{"client_ref", "title", "purpose", "slides"}, map[string]any{"client_ref": text(120), "title": text(160), "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}})
+	draftSection := objectSchema([]string{"client_ref", "title", "purpose", "slides", "subsections"}, map[string]any{"client_ref": text(120), "title": text(160), "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}, "subsections": map[string]any{"type": "array", "items": draftSubsection}})
 	draftNode := map[string]any{"oneOf": []any{
-		objectSchema([]string{"kind", "client_ref", "title", "purpose", "slides", "subsections"}, map[string]any{"kind": map[string]any{"const": "section"}, "client_ref": text(120), "title": text(200), "purpose": text(600), "slides": map[string]any{"type": "array", "items": draftSlide}, "subsections": map[string]any{"type": "array", "items": draftSubsection}}),
-		objectSchema([]string{"kind", "client_ref", "title"}, map[string]any{"kind": map[string]any{"const": "subsection"}, "client_ref": text(120), "title": text(200)}),
-		objectSchema([]string{"kind", "client_ref", "label", "role"}, map[string]any{"kind": map[string]any{"const": "slide"}, "client_ref": text(120), "label": text(200), "role": text(80)}),
+		objectSchema([]string{"kind", "client_ref", "title", "purpose", "slides", "subsections"}, map[string]any{"kind": map[string]any{"const": "section"}, "client_ref": text(120), "title": text(160), "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}, "subsections": map[string]any{"type": "array", "items": draftSubsection}}),
+		objectSchema([]string{"kind", "client_ref", "title", "purpose"}, map[string]any{"kind": map[string]any{"const": "subsection"}, "client_ref": text(120), "title": text(160), "purpose": text(400)}),
+		objectSchema([]string{"kind", "client_ref", "title", "role"}, map[string]any{"kind": map[string]any{"const": "slide"}, "client_ref": text(120), "title": text(160), "role": role}),
 	}}
-	changes := objectSchema(nil, map[string]any{"title": text(200), "purpose": text(600), "label": text(200), "role": text(80)})
+	changes := objectSchema(nil, map[string]any{"title": text(160), "purpose": text(400), "role": role})
 	changes["minProperties"] = 1
 	chrome := objectSchema([]string{"type", "placement", "style"}, map[string]any{"type": map[string]any{"enum": []string{"page_number", "section_marker", "key_message", "deck_title"}}, "placement": map[string]any{"enum": []string{"top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right", "left-edge", "right-edge"}}, "style": text(160)})
 	design := objectSchema([]string{"theme", "direction", "density", "chrome"}, map[string]any{"theme": text(80), "direction": text(600), "density": map[string]any{"enum": []string{"sparse", "medium", "dense"}}, "chrome": map[string]any{"type": "array", "maxItems": 12, "items": chrome}})
-	element := objectSchema([]string{"type", "intent"}, map[string]any{"type": map[string]any{"enum": []string{"text", "list", "metric", "quote", "table", "chart", "diagram", "code", "asset"}}, "intent": text(1000)})
-	slideSpec := objectSchema([]string{"title", "key_message", "elements"}, map[string]any{"title": text(200), "key_message": text(1000), "elements": map[string]any{"type": "array", "items": element}, "layout": text(120)})
+	element := objectSchema([]string{"type", "intent"}, map[string]any{"type": map[string]any{"enum": []string{"text", "list", "metric", "quote", "table", "chart", "diagram", "code", "asset"}}, "intent": text(1200)})
+	slideSpec := objectSchema([]string{"key_message", "elements"}, map[string]any{"key_message": text(500), "elements": map[string]any{"type": "array", "items": element}, "layout": text(80)})
 	edits := map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{"old_text": text(maxPPTContentBytes), "new_text": map[string]any{"type": "string", "maxLength": maxPPTContentBytes}})}
 	variants := []any{
 		variant("manifest.patch", []string{"patch"}, map[string]any{"patch": patch("manifest.patch")}),

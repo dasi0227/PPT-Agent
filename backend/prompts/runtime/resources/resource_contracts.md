@@ -4,8 +4,8 @@ Resource ownership:
 - Manifest owns presentation intent, audience, language, requirements, prohibitions, canvas, and numbering policy.
 - Outline owns the strict section/subsection tree and is the only owner of slide order.
 - Design owns the deck-wide theme, direction, density and shared visual system.
-- An outline slide node owns the stable slide identity reference, directory label, and semantic role.
-- Slide Spec owns one page's title, primary message, ordered element intents, and optional layout direction. It never stores section, subsection, role, placement, ordinal, or page number.
+- An outline slide node owns the stable slide identity reference, canonical page title, and semantic role.
+- Slide Spec owns one page's primary message, ordered element intents, and optional layout direction. It never stores title, section, subsection, role, placement, ordinal, or page number.
 - Slide HTML is the Agent-authored page body. Runtime owns the surrounding frame, shared chrome, ordinal, total, and page-number rendering.
 
 Runtime owns schema version, revision, project identity, slide identity and timestamps. Never manually supply Runtime-managed fields.

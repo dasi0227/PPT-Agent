@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { MarkdownMessage } from './MarkdownMessage';
+import { MarkdownMessage, normalizeMarkdownSectionSpacing } from './MarkdownMessage';
 
 describe('MarkdownMessage', () => {
   it('renders tables', () => {
@@ -46,5 +46,22 @@ describe('MarkdownMessage', () => {
       '[&_li>ul]:pl-2',
       '[&_li>ol]:pl-2',
     );
+  });
+
+  it('separates numbered bold section titles from following prose', () => {
+    const markdown = '**1. 主题与定位**\n正文内容\n\n**2. 页面结构**\n- 第一页';
+    render(<MarkdownMessage content={markdown} />);
+
+    const titleParagraph = screen.getByText('1. 主题与定位').closest('p');
+    const bodyParagraph = screen.getByText('正文内容').closest('p');
+    expect(titleParagraph).not.toBe(bodyParagraph);
+    expect(screen.getByText('2. 页面结构').closest('p')).not.toBeNull();
+    expect(screen.getByText('第一页').closest('li')).not.toBeNull();
+  });
+
+  it('does not normalize heading-like text inside fenced code blocks', () => {
+    const markdown = '```md\n**1. 主题与定位**\n正文内容\n```';
+
+    expect(normalizeMarkdownSectionSpacing(markdown)).toBe(markdown);
   });
 });

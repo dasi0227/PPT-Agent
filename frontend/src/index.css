@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+.deck-navigator-scroll {
+  direction: rtl;
+}
+
+.deck-navigator-scroll > * {
+  direction: ltr;
+}
+
 @keyframes timeline-enter {
   from {
     opacity: 0;

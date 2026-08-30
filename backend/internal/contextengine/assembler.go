@@ -341,12 +341,11 @@ func (BudgetAllocator) Allocate(pack *ContextPack, manifest *ContextManifest, li
 }
 
 func slideSummary(loc pptspec.SlideLocation, s pptspec.SlideSpec, ready bool) SlideSummary {
-	summary := SlideSummary{ID: loc.Slide.SlideID, Ordinal: loc.Ordinal, Section: loc.Section.ID, Role: loc.Slide.Role, Title: loc.Slide.Label}
+	summary := SlideSummary{ID: loc.Slide.SlideID, Ordinal: loc.Ordinal, Section: loc.Section.ID, Role: string(loc.Slide.Role), Title: loc.Slide.Title}
 	if loc.Subsection != nil {
 		summary.Subsection = loc.Subsection.ID
 	}
 	if ready {
-		summary.Title = s.Title
 		summary.KeyMessage = s.KeyMessage
 	}
 	return summary

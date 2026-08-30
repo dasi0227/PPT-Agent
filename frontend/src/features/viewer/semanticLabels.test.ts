@@ -6,6 +6,8 @@ describe('semanticLabels', () => {
     expect(slideRoleLabel('cover')).toBe('封面');
     expect(slideRoleLabel('EVIDENCE')).toBe('论据');
     expect(slideRoleLabel('how-to')).toBe('操作指引');
+    expect(slideRoleLabel('example')).toBe('案例');
+    expect(slideRoleLabel('conclusion')).toBe('结论');
     expect(slideRoleLabel('mystery-role')).toBe('mystery-role');
   });
 

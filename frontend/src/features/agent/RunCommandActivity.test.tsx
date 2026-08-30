@@ -45,6 +45,15 @@ describe('run command activity', () => {
     expect(screen.getByText('正在执行命令')).toBeInTheDocument();
   });
 
+  it('renders tool results as normal-weight black text', () => {
+    render(<ToolActivityRow item={commandItem({ label: '已读取演示内容', status: 'completed' })} />);
+
+    expect(screen.getByText('已读取演示内容')).toHaveClass(
+      'font-normal',
+      'text-text-900',
+    );
+  });
+
   it('renders completed command details in one collapsed box', () => {
     render(<ToolActivityRow item={commandItem({
       label: '已确认当前仓库状态',

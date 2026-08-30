@@ -8,6 +8,37 @@ interface MarkdownMessageProps {
   className?: string;
 }
 
+const numberedStrongHeading = /^\s*\*\*(?:\d+[.)、．]?|[一二三四五六七八九十]+[、.．])\s*.+\*\*\s*$/;
+
+export function normalizeMarkdownSectionSpacing(content: string): string {
+  const lines = content.split('\n');
+  const normalized: string[] = [];
+  let fenceMarker: '`' | '~' | null = null;
+
+  lines.forEach((line, index) => {
+    const fence = line.match(/^\s*(`{3,}|~{3,})/);
+    if (fence) {
+      const marker = fence[1][0] as '`' | '~';
+      fenceMarker = fenceMarker === marker ? null : fenceMarker ?? marker;
+      normalized.push(line);
+      return;
+    }
+
+    normalized.push(line);
+    const nextLine = lines[index + 1];
+    if (
+      !fenceMarker
+      && numberedStrongHeading.test(line)
+      && nextLine !== undefined
+      && nextLine.trim() !== ''
+    ) {
+      normalized.push('');
+    }
+  });
+
+  return normalized.join('\n');
+}
+
 export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, className }) => {
   return (
     <div className={cn(
@@ -25,7 +56,7 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, class
           )
         }}
       >
-        {content}
+        {normalizeMarkdownSectionSpacing(content)}
       </ReactMarkdown>
     </div>
   );

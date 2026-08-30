@@ -66,6 +66,12 @@ type DeleteTarget =
   | { kind: 'page'; id: string; title: string };
 
 type NewSubsectionTarget = { section: OutlineSection };
+type NewSubsectionForm = { title: string; purpose: string };
+
+const newSubsectionInitialValue: NewSubsectionForm = {
+  title: '新子节',
+  purpose: '',
+};
 
 const OverflowTrigger = forwardRef<
   HTMLButtonElement,
@@ -144,7 +150,7 @@ function SlideThumbnail({
           slides={[{ id: slide.id, html, frame }]}
           index={0}
           className="pointer-events-none h-[400%] w-[400%] origin-top-left scale-25 border-0 bg-white"
-          title={`${slide.title || slide.label || '页面'}缩略图`}
+          title={`${slide.title || '页面'}缩略图`}
         />
       ) : (
         <div className="flex h-full items-center justify-center bg-panel-muted text-[10px] text-text-400">
@@ -237,7 +243,7 @@ function SlideRow({
       </span>
       {view === 'outline' ? (
         <span className="flex min-w-0 items-center gap-2 pl-0.5">
-          <span className="truncate text-sm font-semibold leading-none text-text-900">{node.label || '未命名页面'}</span>
+          <span className="truncate text-sm font-semibold leading-none text-text-900">{node.title || '未命名页面'}</span>
           {pending && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning" title="等待生成设计稿" />}
         </span>
       ) : (
@@ -245,7 +251,7 @@ function SlideRow({
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <OverflowTrigger label={`${node.label || '页面'}操作`} disabled={locked} />
+          <OverflowTrigger label={`${node.title || '页面'}操作`} disabled={locked} />
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="start" sideOffset={6}>
           <DropdownMenuItem onSelect={onRename}>
@@ -308,7 +314,7 @@ export function DeckNavigator() {
   const insertPage = (parentId: string) => mutate({
     op: 'outline.insert',
     expected_revision: outlineRevision,
-    node: { kind: 'slide', client_ref: clientRef('slide'), label: '新页面', role: 'content' },
+    node: { kind: 'slide', client_ref: clientRef('slide'), title: '新页面', role: 'content' },
     position: { parent_id: parentId },
   });
 
@@ -387,7 +393,10 @@ export function DeckNavigator() {
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-8 pt-2">
+        <div
+          data-testid="deck-navigator-scroll"
+          className="deck-navigator-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-8 pt-2"
+        >
           {snapshot.outline.sections.length === 0 ? (
             <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-xs text-text-400">
               <FilePlus2 className="h-5 w-5" strokeWidth={1.7} />
@@ -486,8 +495,8 @@ export function DeckNavigator() {
                           state={getState(slide)}
                           load={() => load(slide, 'prefetch')}
                           onSelect={() => setCurrentSlideId(node.slide_id)}
-                          onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.label })}
-                          onRemove={() => setDeleteTarget({ kind: 'page', id: node.slide_id, title: node.label })}
+                          onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title })}
+                          onRemove={() => setDeleteTarget({ kind: 'page', id: node.slide_id, title: node.title })}
                           onMove={(delta) => moveSlide(node.slide_id, section.id, section.slides, index + delta)}
                           onDrag={() => setDraggedSlideId(node.slide_id)}
                           onDrop={() => draggedSlideId && moveSlide(draggedSlideId, section.id, section.slides, index)}
@@ -547,8 +556,8 @@ export function DeckNavigator() {
                               state={getState(slide)}
                               load={() => load(slide, 'prefetch')}
                               onSelect={() => setCurrentSlideId(node.slide_id)}
-                              onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.label })}
-                              onRemove={() => setDeleteTarget({ kind: 'page', id: node.slide_id, title: node.label })}
+                              onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title })}
+                              onRemove={() => setDeleteTarget({ kind: 'page', id: node.slide_id, title: node.title })}
                               onMove={(delta) => moveSlide(node.slide_id, subsection.id, subsection.slides, index + delta)}
                               onDrag={() => setDraggedSlideId(node.slide_id)}
                               onDrop={() => draggedSlideId && moveSlide(draggedSlideId, subsection.id, subsection.slides, index)}
@@ -582,7 +591,7 @@ export function DeckNavigator() {
             op: 'outline.update',
             expected_revision: outlineRevision,
             node_id: editTarget.id,
-            changes: { [editTarget.kind === 'page' ? 'label' : 'title']: value.trim() },
+            changes: { title: value.trim() },
           });
         }}
         renderField={(value, setValue, error) => (
@@ -599,15 +608,16 @@ export function DeckNavigator() {
         )}
       />
 
-      <FormModal<string>
+      <FormModal<NewSubsectionForm>
         open={newSubsectionTarget !== null}
         onOpenChange={(open) => !open && setNewSubsectionTarget(null)}
         title="新增子节"
-        initialValue="新子节"
+        initialValue={newSubsectionInitialValue}
         validate={(value) => {
-          const next = value.trim();
-          if (!next) return '名称不能为空';
-          if ([...next].length > 60) return '名称不能超过 60 个字符';
+          if (!value.title.trim()) return '名称不能为空';
+          if ([...value.title.trim()].length > 60) return '名称不能超过 60 个字符';
+          if (!value.purpose.trim()) return '目的不能为空';
+          if ([...value.purpose.trim()].length > 200) return '目的不能超过 200 个字符';
           return null;
         }}
         onSubmit={async (value) => {
@@ -616,20 +626,37 @@ export function DeckNavigator() {
           await commitMutation({
             op: 'outline.insert',
             expected_revision: outlineRevision,
-            node: { kind: 'subsection', client_ref: clientRef('subsection'), title: value.trim() },
+            node: {
+              kind: 'subsection',
+              client_ref: clientRef('subsection'),
+              title: value.title.trim(),
+              purpose: value.purpose.trim(),
+            },
             position: { parent_id: section.id },
             ...(section.slides.length > 0 ? { direct_slides_policy: 'move_into_new_subsection' as const } : {}),
           });
         }}
         renderField={(value, setValue, error) => (
-          <div>
-            <input
-              autoFocus
-              type="text"
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:border-accent focus:outline-none"
-            />
+          <div className="space-y-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-text-600">名称</span>
+              <input
+                autoFocus
+                type="text"
+                value={value.title}
+                onChange={(event) => setValue({ ...value, title: event.target.value })}
+                className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:border-accent focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-text-600">目的</span>
+              <textarea
+                rows={3}
+                value={value.purpose}
+                onChange={(event) => setValue({ ...value, purpose: event.target.value })}
+                className="w-full resize-none rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:border-accent focus:outline-none"
+              />
+            </label>
             {newSubsectionTarget && newSubsectionTarget.section.slides.length > 0 && (
               <p className="mt-2 text-xs text-text-400">
                 现有 {newSubsectionTarget.section.slides.length} 页将移入这个子节。

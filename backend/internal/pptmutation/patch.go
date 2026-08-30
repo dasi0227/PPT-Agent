@@ -114,17 +114,17 @@ var patchPathRules = map[string]map[string][]PatchPathRule{
 	},
 	"slide.spec.patch": {
 		"add": {
-			{Pattern: `^/(?:title|key_message|elements|layout)$`, Description: "slide spec author fields"},
+			{Pattern: `^/(?:key_message|elements|layout)$`, Description: "slide spec author fields"},
 			{Pattern: `^/elements/(?:-|0|[1-9][0-9]*)$`, Description: "slide element or append position"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},
 		"remove": {
-			{Pattern: `^/(?:title|key_message|elements|layout)$`, Description: "slide spec author fields"},
+			{Pattern: `^/(?:key_message|elements|layout)$`, Description: "slide spec author fields"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)$`, Description: "existing slide element"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},
 		"replace": {
-			{Pattern: `^/(?:title|key_message|elements|layout)$`, Description: "slide spec author fields"},
+			{Pattern: `^/(?:key_message|elements|layout)$`, Description: "slide spec author fields"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)$`, Description: "existing slide element"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},

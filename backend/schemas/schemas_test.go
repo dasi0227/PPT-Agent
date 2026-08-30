@@ -64,7 +64,7 @@ func TestSlideSpecAgentContractExcludesOutlinePlacement(t *testing.T) {
 			t.Fatalf("managed field %q leaked into slide agent contract", field)
 		}
 	}
-	for _, field := range []string{"section" + "_id", "subsection" + "_id", "role"} {
+	for _, field := range []string{"section" + "_id", "subsection" + "_id", "role", "title"} {
 		if containsString(contract.Fields, field) {
 			t.Fatalf("outline-owned field %q leaked into slide agent contract", field)
 		}

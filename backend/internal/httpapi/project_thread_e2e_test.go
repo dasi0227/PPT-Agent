@@ -102,7 +102,7 @@ func TestCanonicalMutationHTTPReturnsAuthoritativeSnapshot(t *testing.T) {
 		t.Fatalf("agent supplied id accepted: %d %s", resp.Code, resp.Body.String())
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.init","structure":[{"client_ref":"opening","title":"开场","purpose":"建立主题","slides":[{"client_ref":"cover","label":"封面","role":"cover"}],"subsections":[]}]}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.init","structure":[{"client_ref":"opening","title":"开场","purpose":"建立主题","slides":[{"client_ref":"cover","title":"封面","role":"cover"}],"subsections":[]}]}`)
 	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"spec_state":"pending"`) {
 		t.Fatalf("init outline: %d %s", resp.Code, resp.Body.String())
 	}

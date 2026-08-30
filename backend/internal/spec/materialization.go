@@ -41,13 +41,13 @@ func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideI
 	}
 	visible := manifest.Numbering.Enabled
 	for _, role := range manifest.Numbering.HiddenRoles {
-		if role == loc.Slide.Role {
+		if role == string(loc.Slide.Role) {
 			visible = false
 			break
 		}
 	}
 	return RuntimeFrameContext{
-		SlideID: slideID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: loc.Slide.Role,
+		SlideID: slideID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: string(loc.Slide.Role),
 		Section:    RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
 		Subsection: subsection, Numbering: RuntimeFrameNumbering{Visible: visible, Format: manifest.Numbering.Format},
 		Chrome: append([]ChromeItem(nil), design.Chrome...),

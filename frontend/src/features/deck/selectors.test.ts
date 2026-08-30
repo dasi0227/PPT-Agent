@@ -6,12 +6,12 @@ const outline: Outline = {
   version: '4.0', revision: 3, project_id: 'pro_1', created_at: 1, updated_at: 2,
   sections: [
     { id: 'sec_a', title: '开场', purpose: '建立主题', slides: [
-      { slide_id: 'sli_1', label: '封面', role: 'cover' },
-      { slide_id: 'sli_2', label: '议程', role: 'agenda' },
+      { slide_id: 'sli_1', title: '封面', role: 'cover' },
+      { slide_id: 'sli_2', title: '议程', role: 'agenda' },
     ], subsections: [] },
     { id: 'sec_b', title: '主体', purpose: '展开论证', slides: [], subsections: [
-      { id: 'sub_b1', title: '原则', slides: [{ slide_id: 'sli_3', label: '原则一', role: 'content' }] },
-      { id: 'sub_b2', title: '案例', slides: [{ slide_id: 'sli_4', label: '案例', role: 'evidence' }] },
+      { id: 'sub_b1', title: '原则', purpose: '解释原则', slides: [{ slide_id: 'sli_3', title: '原则一', role: 'content' }] },
+      { id: 'sub_b2', title: '案例', purpose: '提供论据', slides: [{ slide_id: 'sli_4', title: '案例', role: 'evidence' }] },
     ] },
   ],
 };

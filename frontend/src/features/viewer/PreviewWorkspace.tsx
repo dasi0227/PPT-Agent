@@ -136,7 +136,7 @@ function OverviewSlide({
   }, [slide, view]);
 
   const html = view === 'html' && state.status === 'ready' ? state.data : undefined;
-  const title = spec?.title || slide.title || '未命名页面';
+  const title = slide.title || '未命名页面';
   return (
     <button
       ref={ref}
@@ -397,6 +397,7 @@ export const PreviewWorkspace: React.FC = () => {
               </div>
             ) : currentSlide.spec ? (
               <SlideSpecCard
+                title={currentSlide.title}
                 spec={currentSlide.spec}
                 role={currentSlide.role ?? 'content'}
                 state={currentSlide.materialization?.state ?? 'unknown'}

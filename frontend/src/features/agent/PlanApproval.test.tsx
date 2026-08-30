@@ -142,6 +142,9 @@ describe('PlanApproval', () => {
   ] as const)('uses the timeline event copy for %s', (decision, label) => {
     render(<PlanApproval item={{ ...item, answer: { decision } }} />);
 
-    expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: label })).toHaveClass(
+      'font-normal',
+      'text-text-900',
+    );
   });
 });

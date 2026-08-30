@@ -1,12 +1,13 @@
 import { Eye, MessageSquareText } from 'lucide-react';
-import type { MaterializationState, SlideSpec } from '../../api/types';
+import type { MaterializationState, SlideRole, SlideSpec } from '../../api/types';
 import { MaterializationBadge } from './MaterializationBadge';
 import { slideRoleLabel } from './semanticLabels';
 
-export function SlideSpecCard({ spec, state, role }: {
+export function SlideSpecCard({ title, spec, state, role }: {
+  title: string;
   spec: SlideSpec;
   state: MaterializationState;
-  role: string;
+  role: SlideRole;
 }) {
   return (
     <article className="h-full w-full overflow-y-auto rounded-xl border border-border bg-surface p-7 shadow-sm">
@@ -16,7 +17,7 @@ export function SlideSpecCard({ spec, state, role }: {
         </span>
         <MaterializationBadge state={state} />
       </div>
-      <h2 className="mt-5 text-2xl font-semibold text-text-900">{spec.title}</h2>
+      <h2 className="mt-5 text-2xl font-semibold text-text-900">{title}</h2>
       <div className="mt-4 flex gap-2 rounded-lg bg-accent-soft/70 p-3 text-base text-text-900">
         <MessageSquareText className="h-4 w-4 shrink-0 text-accent" />
         <strong>{spec.key_message}</strong>

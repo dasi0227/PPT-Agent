@@ -36,7 +36,7 @@ function snapshot(): ProjectContentSnapshot {
           id: 'sec_direct',
           title: '开场',
           purpose: '',
-          slides: [{ slide_id: 'slide_1', label: '问题与目标', role: 'cover' }],
+          slides: [{ slide_id: 'slide_1', title: '问题与目标', role: 'cover' }],
           subsections: [],
         },
         {
@@ -48,12 +48,14 @@ function snapshot(): ProjectContentSnapshot {
             {
               id: 'sub_basics',
               title: '基本概念',
-              slides: [{ slide_id: 'slide_2', label: '核心定义', role: 'content' }],
+              purpose: '解释基本概念',
+              slides: [{ slide_id: 'slide_2', title: '核心定义', role: 'content' }],
             },
             {
               id: 'sub_examples',
               title: '案例',
-              slides: [{ slide_id: 'slide_3', label: '实际案例', role: 'content' }],
+              purpose: '展示实际案例',
+              slides: [{ slide_id: 'slide_3', title: '实际案例', role: 'content' }],
             },
           ],
         },
@@ -100,6 +102,7 @@ describe('DeckNavigator', () => {
   it('shows page titles in design view and removes the footer create action', () => {
     render(<DeckNavigator />);
 
+    expect(screen.getByTestId('deck-navigator-scroll')).toHaveClass('deck-navigator-scroll');
     expect(screen.getByText('问题与目标')).toBeInTheDocument();
     expect(screen.getByText('核心定义')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新增页面' })).not.toBeInTheDocument();
@@ -124,7 +127,7 @@ describe('DeckNavigator', () => {
       op: 'outline.insert',
       expected_revision: 4,
       position: { parent_id: 'sec_direct' },
-      node: expect.objectContaining({ kind: 'slide', label: '新页面' }),
+      node: expect.objectContaining({ kind: 'slide', title: '新页面' }),
     }));
   });
 
@@ -153,13 +156,14 @@ describe('DeckNavigator', () => {
 
     await user.click(screen.getByRole('button', { name: '开场操作' }));
     await user.click(await screen.findByText('新增子节'));
+    await user.type(screen.getByLabelText('目的'), '组织开场内容');
     await user.click(screen.getByRole('button', { name: '确认' }));
 
     expect(mutateProject).toHaveBeenCalledWith('pro_1', expect.objectContaining({
       op: 'outline.insert',
       position: { parent_id: 'sec_direct' },
       direct_slides_policy: 'move_into_new_subsection',
-      node: expect.objectContaining({ kind: 'subsection', title: '新子节' }),
+      node: expect.objectContaining({ kind: 'subsection', title: '新子节', purpose: '组织开场内容' }),
     }));
   });
 

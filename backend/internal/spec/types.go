@@ -2,6 +2,40 @@ package spec
 
 const SchemaVersion = "4.0"
 
+type SlideRole string
+
+const (
+	SlideRoleCover      SlideRole = "cover"
+	SlideRoleAgenda     SlideRole = "agenda"
+	SlideRoleContext    SlideRole = "context"
+	SlideRoleContent    SlideRole = "content"
+	SlideRoleDefinition SlideRole = "definition"
+	SlideRoleEvidence   SlideRole = "evidence"
+	SlideRoleComparison SlideRole = "comparison"
+	SlideRoleExample    SlideRole = "example"
+	SlideRoleHowTo      SlideRole = "how-to"
+	SlideRoleTransition SlideRole = "transition"
+	SlideRoleSummary    SlideRole = "summary"
+	SlideRoleConclusion SlideRole = "conclusion"
+)
+
+func SlideRoleValues() []SlideRole {
+	return []SlideRole{
+		SlideRoleCover,
+		SlideRoleAgenda,
+		SlideRoleContext,
+		SlideRoleContent,
+		SlideRoleDefinition,
+		SlideRoleEvidence,
+		SlideRoleComparison,
+		SlideRoleExample,
+		SlideRoleHowTo,
+		SlideRoleTransition,
+		SlideRoleSummary,
+		SlideRoleConclusion,
+	}
+}
+
 type Manifest struct {
 	SchemaVersion string          `json:"version"`
 	Revision      int             `json:"revision"`
@@ -43,14 +77,15 @@ type Section struct {
 	Subsections []Subsection `json:"subsections"`
 }
 type Subsection struct {
-	ID     string      `json:"id"`
-	Title  string      `json:"title"`
-	Slides []SlideNode `json:"slides"`
+	ID      string      `json:"id"`
+	Title   string      `json:"title"`
+	Purpose string      `json:"purpose"`
+	Slides  []SlideNode `json:"slides"`
 }
 type SlideNode struct {
-	SlideID string `json:"slide_id"`
-	Label   string `json:"label"`
-	Role    string `json:"role"`
+	SlideID string    `json:"slide_id"`
+	Title   string    `json:"title"`
+	Role    SlideRole `json:"role"`
 }
 
 type SlideSpec struct {
@@ -58,7 +93,6 @@ type SlideSpec struct {
 	Revision      int       `json:"revision"`
 	ProjectID     string    `json:"project_id"`
 	SlideID       string    `json:"slide_id"`
-	Title         string    `json:"title"`
 	KeyMessage    string    `json:"key_message"`
 	Elements      []Element `json:"elements"`
 	Layout        string    `json:"layout,omitempty"`

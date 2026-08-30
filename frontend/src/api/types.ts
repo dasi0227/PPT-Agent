@@ -17,7 +17,6 @@ export interface SlideSpec {
   revision: number;
   project_id: string;
   slide_id: string;
-  title: string;
   key_message: string;
   elements: Array<{
     type: 'text' | 'list' | 'metric' | 'quote' | 'table' | 'chart' | 'diagram' | 'code' | 'asset';
@@ -28,6 +27,20 @@ export interface SlideSpec {
   updated_at: number;
 }
 
+export type SlideRole =
+  | 'cover'
+  | 'agenda'
+  | 'context'
+  | 'content'
+  | 'definition'
+  | 'evidence'
+  | 'comparison'
+  | 'example'
+  | 'how-to'
+  | 'transition'
+  | 'summary'
+  | 'conclusion';
+
 export interface Outline {
   version: '4.0';
   revision: number;
@@ -37,15 +50,15 @@ export interface Outline {
   updated_at: number;
 }
 
-export interface OutlineSlideNode { slide_id: string; label: string; role: string }
-export interface OutlineSubsection { id: string; title: string; slides: OutlineSlideNode[] }
+export interface OutlineSlideNode { slide_id: string; title: string; role: SlideRole }
+export interface OutlineSubsection { id: string; title: string; purpose: string; slides: OutlineSlideNode[] }
 export interface OutlineSection { id: string; title: string; purpose: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
 
 export interface Manifest {
   version: '4.0'; revision: number; project_id: string; title: string; goal: string;
   audience: string; language: string; positioning?: string; requirements: string[]; prohibitions: string[];
   canvas: { aspect_ratio: '16:9' | '4:3' };
-  numbering: { enabled: boolean; hidden_roles: string[]; format: 'number' };
+  numbering: { enabled: boolean; hidden_roles: SlideRole[]; format: 'number' };
   created_at: number; updated_at: number;
 }
 
@@ -86,8 +99,7 @@ export interface Slide {
   source_design_revision?: number;
   spec?: SlideSpec;
   materialization?: Materialization;
-  role?: string;
-  label?: string;
+  role?: SlideRole;
   sectionId?: string;
   subsectionId?: string;
 }
@@ -247,14 +259,14 @@ export type RestrictedPatch =
   | { op: 'add'; path: string; value: unknown }
   | { op: 'remove'; path: string }
   | { op: 'replace'; path: string; value: unknown };
-export interface DraftSlide { client_ref: string; label: string; role: string }
-export interface DraftSubsection { client_ref: string; title: string; slides: DraftSlide[] }
+export interface DraftSlide { client_ref: string; title: string; role: SlideRole }
+export interface DraftSubsection { client_ref: string; title: string; purpose: string; slides: DraftSlide[] }
 export interface DraftSection { client_ref: string; title: string; purpose: string; slides: DraftSlide[]; subsections: DraftSubsection[] }
 export type DraftOutlineNode =
   | ({ kind: 'section' } & DraftSection)
-  | { kind: 'subsection'; client_ref: string; title: string }
+  | { kind: 'subsection'; client_ref: string; title: string; purpose: string }
   | ({ kind: 'slide' } & DraftSlide);
-export type OutlineNodeChanges = { title?: string; purpose?: string; label?: string; role?: string };
+export type OutlineNodeChanges = { title?: string; purpose?: string; role?: SlideRole };
 export type PPTMutation =
   | { op: 'manifest.patch'; expected_revision?: number; patch: RestrictedPatch[] }
   | { op: 'outline.init'; expected_revision?: number; structure: DraftSection[] }

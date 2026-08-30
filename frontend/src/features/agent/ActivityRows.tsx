@@ -161,12 +161,12 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
     <div
       {...interactive}
       className={cn(
-        'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900',
+        'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5',
         showToggle && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
       )}
     >
       <Flag className="mt-0.5 h-4 w-4 shrink-0 text-[#7C3AED]" strokeWidth={1.75} />
-      <span ref={textRef} className={cn('min-w-0 flex-1', !expanded && 'line-clamp-1')}>{item.text}</span>
+      <span ref={textRef} className={cn('min-w-0 flex-1 font-semibold text-text-900', !expanded && 'line-clamp-1')}>{item.text}</span>
       {showToggle && (
         <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
           {expanded
@@ -179,9 +179,9 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
 };
 
 export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) => (
-  <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-600">
+  <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-900">
     <RotateCcw className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
-    <span className="min-w-0 flex-1 truncate font-medium">{item.text}</span>
+    <span className="min-w-0 flex-1 truncate font-semibold">{item.text}</span>
   </div>
 );
 
@@ -355,7 +355,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-900"
+        className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] font-normal text-text-900"
       >
         {items[0].tool === 'run_command'
           ? <SquareTerminal className="h-4 w-4 text-success" strokeWidth={1.75} />

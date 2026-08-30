@@ -43,13 +43,14 @@ type Position struct {
 	AfterID  string `json:"after_id,omitempty"`
 }
 type DraftSlide struct {
-	ClientRef string `json:"client_ref"`
-	Label     string `json:"label"`
-	Role      string `json:"role"`
+	ClientRef string         `json:"client_ref"`
+	Title     string         `json:"title"`
+	Role      spec.SlideRole `json:"role"`
 }
 type DraftSubsection struct {
 	ClientRef string       `json:"client_ref"`
 	Title     string       `json:"title"`
+	Purpose   string       `json:"purpose"`
 	Slides    []DraftSlide `json:"slides"`
 }
 type DraftSection struct {
@@ -64,8 +65,7 @@ type DraftNode struct {
 	ClientRef   string            `json:"client_ref"`
 	Title       string            `json:"title,omitempty"`
 	Purpose     string            `json:"purpose,omitempty"`
-	Label       string            `json:"label,omitempty"`
-	Role        string            `json:"role,omitempty"`
+	Role        spec.SlideRole    `json:"role,omitempty"`
 	Slides      []DraftSlide      `json:"slides,omitempty"`
 	Subsections []DraftSubsection `json:"subsections,omitempty"`
 }
@@ -244,7 +244,7 @@ func (s Service) makeSection(d DraftSection, refs map[string]bool, created map[s
 		}
 		subID := s.NewID("sub")
 		created[sub.ClientRef] = subID
-		next := spec.Subsection{ID: subID, Title: sub.Title, Slides: []spec.SlideNode{}}
+		next := spec.Subsection{ID: subID, Title: sub.Title, Purpose: sub.Purpose, Slides: []spec.SlideNode{}}
 		for _, sl := range sub.Slides {
 			node, err := s.makeSlide(sl, refs, created)
 			if err != nil {
@@ -262,7 +262,7 @@ func (s Service) makeSlide(d DraftSlide, refs map[string]bool, created map[strin
 	}
 	id := s.NewID("sli")
 	created[d.ClientRef] = id
-	return spec.SlideNode{SlideID: id, Label: d.Label, Role: d.Role}, nil
+	return spec.SlideNode{SlideID: id, Title: d.Title, Role: d.Role}, nil
 }
 
 func (s Service) insertNode(outline *spec.Outline, req Request, created map[string]string) error {
@@ -291,7 +291,7 @@ func (s Service) insertNode(outline *spec.Outline, req Request, created map[stri
 		}
 		id := s.NewID("sub")
 		created[req.Node.ClientRef] = id
-		sub := spec.Subsection{ID: id, Title: req.Node.Title, Slides: []spec.SlideNode{}}
+		sub := spec.Subsection{ID: id, Title: req.Node.Title, Purpose: req.Node.Purpose, Slides: []spec.SlideNode{}}
 		if len(section.Slides) > 0 {
 			sub.Slides = section.Slides
 			section.Slides = []spec.SlideNode{}
@@ -303,7 +303,7 @@ func (s Service) insertNode(outline *spec.Outline, req Request, created map[stri
 			return invalid(errors.New("slide parent must be a section or subsection"))
 		}
 		_ = parent
-		node, err := s.makeSlide(DraftSlide{ClientRef: req.Node.ClientRef, Label: req.Node.Label, Role: req.Node.Role}, refs, created)
+		node, err := s.makeSlide(DraftSlide{ClientRef: req.Node.ClientRef, Title: req.Node.Title, Role: req.Node.Role}, refs, created)
 		if err != nil {
 			return err
 		}
@@ -703,10 +703,14 @@ func updateNode(o *spec.Outline, id string, changes map[string]any) error {
 			sub := &s.Subsections[subi]
 			if sub.ID == id {
 				for k, v := range changes {
-					if k != "title" {
+					switch k {
+					case "title":
+						sub.Title = fmt.Sprint(v)
+					case "purpose":
+						sub.Purpose = fmt.Sprint(v)
+					default:
 						return invalid(errors.New("invalid subsection change"))
 					}
-					sub.Title = fmt.Sprint(v)
 				}
 				return nil
 			}
@@ -729,10 +733,10 @@ func updateNode(o *spec.Outline, id string, changes map[string]any) error {
 func updateSlide(slide *spec.SlideNode, changes map[string]any) error {
 	for k, v := range changes {
 		switch k {
-		case "label":
-			slide.Label = fmt.Sprint(v)
+		case "title":
+			slide.Title = fmt.Sprint(v)
 		case "role":
-			slide.Role = fmt.Sprint(v)
+			slide.Role = spec.SlideRole(fmt.Sprint(v))
 		default:
 			return invalid(errors.New("invalid slide change"))
 		}

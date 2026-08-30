@@ -2298,7 +2298,7 @@ func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
 }
 
 func testPack(mode model.RunMode, artifact model.Artifact, level model.ScopeLevel, empty bool, instruction string) contextengine.ContextPack {
-	sections := []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{SlideID: "s1", Label: "Old", Role: "content"}}, Subsections: []spec.Subsection{}}}
+	sections := []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{SlideID: "s1", Title: "Old", Role: "content"}}, Subsections: []spec.Subsection{}}}
 	summaries := []contextengine.SlideSummary{{ID: "s1", Title: "Old", State: string(model.MaterializationFresh)}}
 	if empty {
 		sections, summaries = []spec.Section{}, []contextengine.SlideSummary{}
