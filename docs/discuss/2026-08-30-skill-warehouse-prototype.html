@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skill 仓库原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --workspace:#e9edf2; --panel:#f8f9fb; --panel-muted:#f0f3f7; --canvas:#dfe5ec;
+      --surface:#fff; --ink:#17202b; --muted:#5f6b7a; --subtle:#95a0ae;
+      --border:#d5dbe3; --border-strong:#bcc5d0; --accent:#2f67f6; --accent-soft:#e8efff;
+      --success:#2f7d65; --success-soft:#e7f3ee; --danger:#c84953; --shadow:0 12px 32px rgba(51,65,85,.16);
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:1080px; min-height:100vh; overflow:hidden; background:var(--workspace); color:var(--ink); font:14px/1.5 Aptos,Inter,-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; letter-spacing:0; }
+    button,input { font:inherit; } button { color:inherit; }
+    button:focus-visible,input:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+    [data-lucide] { width:16px; height:16px; stroke-width:1.75; }
+    .app { display:grid; grid-template-rows:48px minmax(0,1fr); height:100vh; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; padding:0 12px; border-bottom:1px solid var(--border-strong); background:var(--panel); }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:700; }
+    .brand-mark { display:grid; width:28px; height:28px; place-items:center; border-radius:6px; background:var(--ink); color:#fff; }
+    .icon-button { display:inline-grid; width:32px; height:32px; place-items:center; border:0; border-radius:6px; background:transparent; color:var(--muted); text-decoration:none; cursor:pointer; }
+    .icon-button:hover { background:var(--panel-muted); color:var(--ink); }
+    .shell { display:grid; grid-template-columns:208px minmax(0,1fr); min-height:0; }
+    .nav { display:flex; min-height:0; flex-direction:column; padding:14px 10px; border-right:1px solid var(--border); background:var(--panel); }
+    .nav-title { padding:4px 10px 13px; font-size:18px; font-weight:700; }
+    .nav-item { display:grid; grid-template-columns:20px minmax(0,1fr) auto; align-items:center; min-height:36px; gap:8px; padding:0 10px; border:0; border-radius:6px; background:transparent; color:var(--muted); text-align:left; cursor:pointer; }
+    .nav-item:hover:not(.active) { background:var(--panel-muted); color:var(--ink); }
+    .nav-item.active { background:var(--accent-soft); color:var(--accent); font-weight:650; }
+    .count { color:var(--subtle); font-size:12px; }
+    .content { display:grid; grid-template-rows:64px minmax(0,1fr); min-width:0; min-height:0; }
+    .page-head { display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid var(--border); background:var(--surface); }
+    .page-title { font-size:18px; font-weight:700; }
+    .search { display:grid; grid-template-columns:18px 220px; align-items:center; gap:6px; height:32px; padding:0 9px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:var(--subtle); }
+    .search input { width:100%; border:0; outline:0; background:transparent; color:var(--ink); font-size:13px; }
+    .workspace { display:grid; grid-template-columns:390px minmax(0,1fr); min-height:0; }
+    .list-pane { display:grid; grid-template-rows:42px minmax(0,1fr); min-height:0; border-right:1px solid var(--border); background:var(--panel); }
+    .list-tools { display:flex; align-items:center; padding:0 12px; border-bottom:1px solid var(--border); color:var(--muted); font-size:12px; }
+    .filter { display:flex; gap:4px; }
+    .filter button { height:26px; padding:0 8px; border:0; border-radius:5px; background:transparent; color:var(--muted); font-size:12px; cursor:pointer; }
+    .filter button.active { background:var(--surface); color:var(--ink); box-shadow:0 0 0 1px var(--border); }
+    .skill-list { overflow:auto; padding:6px; }
+    .skill-row { width:100%; display:grid; grid-template-columns:14px minmax(0,1fr) auto; align-items:start; gap:8px; padding:10px 9px; border:1px solid transparent; border-radius:7px; background:transparent; text-align:left; cursor:pointer; }
+    .skill-row:hover { background:var(--panel-muted); }
+    .skill-row.active { border-color:rgba(47,103,246,.3); background:var(--accent-soft); }
+    .status-dot { width:8px; height:8px; margin:5px 0 0 2px; border-radius:50%; background:var(--success); box-shadow:0 0 0 3px rgba(47,125,101,.10); }
+    .skill-row.disabled .status-dot { background:#aab3bf; box-shadow:none; }
+    .skill-row.disabled .skill-name,
+    .skill-row.disabled .skill-desc { color:var(--subtle); }
+    .skill-name { display:block; font-size:13px; font-weight:650; }
+    .skill-desc { display:block; margin-top:2px; color:var(--muted); font-size:11px; line-height:1.4; }
+    .chevron { margin-top:8px; color:var(--subtle); }
+    .detail-pane { display:grid; grid-template-rows:58px minmax(0,1fr); min-height:0; background:var(--surface); }
+    .detail-head { display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid var(--border); }
+    .detail-identity { display:flex; align-items:center; gap:5px; }
+    .detail-name { font-weight:700; }
+    .source-link { width:24px; height:24px; }
+    .toggle-wrap { display:flex; align-items:center; gap:9px; color:var(--muted); font-size:12px; }
+    .switch { position:relative; width:34px; height:20px; border:0; border-radius:999px; background:var(--border-strong); cursor:pointer; transition:background .15s; }
+    .switch::after { content:""; position:absolute; left:2px; top:2px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(23,32,43,.2); transition:transform .15s; }
+    .switch.on { background:var(--success); } .switch.on::after { transform:translateX(14px); }
+    .document { overflow:auto; padding:28px 34px 48px; background:#fbfcfd; }
+    .doc { max-width:780px; margin:0 auto; }
+    .doc-kicker { display:flex; align-items:center; gap:7px; color:var(--subtle); font-size:11px; font-weight:650; }
+    .doc h1 { margin:10px 0 6px; font-size:26px; line-height:1.2; }
+    .lead { max-width:64ch; margin:0 0 24px; color:var(--muted); font-size:14px; }
+    .rule { height:1px; margin:0 0 24px; background:var(--border); }
+    .doc h2 { margin:24px 0 9px; font-size:15px; }
+    .doc p { margin:0 0 10px; color:#354150; }
+    .doc ul { margin:0; padding-left:20px; color:#354150; }
+    .doc li { margin:6px 0; }
+    .callout { margin:18px 0; padding:12px 14px; border-left:3px solid var(--accent); background:var(--accent-soft); color:#294b92; }
+    .steps { display:grid; grid-template-columns:repeat(3,1fr); margin:13px 0 20px; border:1px solid var(--border); border-radius:7px; background:var(--surface); }
+    .step { min-height:92px; padding:13px; border-right:1px solid var(--border); }
+    .step:last-child { border-right:0; }
+    .step small { color:var(--subtle); font-size:10px; font-weight:700; }
+    .step b { display:block; margin:4px 0; font-size:13px; }
+    .step span { color:var(--muted); font-size:11px; }
+    .empty { display:grid; min-height:240px; place-items:center; color:var(--muted); }
+    @media(prefers-reduced-motion:reduce){ *{transition-duration:.01ms!important;} }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark"><i data-lucide="presentation"></i></span>Dasi PPT Agent</div>
+      <div><button class="icon-button" title="刷新仓库"><i data-lucide="refresh-cw"></i></button><a class="icon-button" href="./2026-08-30-warehouse-main-integration-prototype.html" title="返回首页" aria-label="返回首页"><i data-lucide="home"></i></a></div>
+    </header>
+    <div class="shell">
+      <aside class="nav">
+        <div class="nav-title">个人仓库</div>
+        <button class="nav-item"><i data-lucide="palette"></i><span>主题</span><span class="count">4</span></button>
+        <button class="nav-item"><i data-lucide="component"></i><span>组件</span><span class="count">12</span></button>
+        <button class="nav-item active"><i data-lucide="book-open-text"></i><span>技能</span><span class="count">5</span></button>
+      </aside>
+      <section class="content">
+        <header class="page-head">
+          <div><span class="page-title">技能</span></div>
+          <label class="search"><i data-lucide="search"></i><input id="search" aria-label="搜索技能" placeholder="搜索技能" /></label>
+        </header>
+        <div class="workspace">
+          <aside class="list-pane">
+            <div class="list-tools">
+              <div class="filter"><button class="active" data-filter="all">全部</button><button data-filter="enabled">已启用</button><button data-filter="disabled">已关闭</button></div>
+            </div>
+            <div class="skill-list" id="skillList"></div>
+          </aside>
+          <section class="detail-pane">
+            <header class="detail-head">
+              <div class="detail-identity"><span class="detail-name" id="detailName"></span><a class="icon-button source-link" id="sourceLink" target="_blank" title="查看文件" aria-label="查看文件"><i data-lucide="external-link"></i></a></div>
+              <div class="toggle-wrap"><button class="switch on" id="toggle" aria-label="切换技能状态" aria-checked="true"></button></div>
+            </header>
+            <div class="document"><article class="doc" id="document"></article></div>
+          </section>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const skills=[
+      {id:'narrative-architect',name:'演示叙事架构',desc:'组织章节节奏、页面职责与关键信息。',enabled:true,lead:'把零散材料整理为具有推进关系的演示结构，确保每一页承担清晰的叙事职责。',use:['从空白需求生成完整大纲','重组已有页面的章节逻辑','检查结论与证据是否匹配']},
+      {id:'executive-summary',name:'高管摘要',desc:'将复杂内容压缩为决策者可快速理解的表达。',enabled:true,lead:'面向管理层提炼结论、依据和行动建议，减少铺垫，保留判断所需的信息。',use:['董事会汇报','季度经营复盘','项目决策材料']},
+      {id:'data-storytelling',name:'数据叙事',desc:'把指标、趋势和差异转化为清晰结论。',enabled:true,lead:'优先呈现数据背后的变化、原因与影响，而不是堆叠图表和数字。',use:['经营指标分析','实验结果复盘','行业研究报告']},
+      {id:'visual-polish',name:'视觉精修',desc:'统一页面节奏、层级、间距与组件质感。',enabled:true,lead:'在不改变内容结构的前提下，提升整套演示的视觉一致性和完成度。',use:['交付前统一检查','多来源页面整合','主题样式适配']},
+      {id:'legacy-brand',name:'旧品牌规范',desc:'历史品牌色与版式规则，仅用于旧项目。',enabled:false,lead:'为历史项目保留的品牌规则，不应出现在新 Run 的技能选择或动态加载目录中。',use:['历史演示维护','旧模板兼容']}
+    ];
+    let active='narrative-architect',filter='all',query='';
+    const list=document.getElementById('skillList');
+    let sourceUrl='';
+    function visible(){return skills.filter(s=>(filter==='all'||(filter==='enabled'&&s.enabled)||(filter==='disabled'&&!s.enabled))&&(`${s.name}${s.desc}`.includes(query)));}
+    function renderList(){
+      const rows=visible(); list.innerHTML=rows.length?rows.map(s=>`<button class="skill-row ${s.id===active?'active':''} ${s.enabled?'':'disabled'}" data-id="${s.id}">
+        <span class="status-dot" aria-label="${s.enabled?'已启用':'已关闭'}"></span><span><span class="skill-name">${s.name}</span><span class="skill-desc">${s.desc}</span></span><i class="chevron" data-lucide="chevron-right"></i>
+      </button>`).join(''):'<div class="empty">没有匹配的技能</div>';
+      list.querySelectorAll('.skill-row').forEach(row=>row.onclick=()=>select(row.dataset.id)); lucide.createIcons();
+    }
+    function renderDoc(s){
+      document.getElementById('detailName').textContent=s.name;
+      document.getElementById('toggle').classList.toggle('on',s.enabled);
+      document.getElementById('toggle').setAttribute('aria-checked',String(s.enabled));
+      if(sourceUrl) URL.revokeObjectURL(sourceUrl);
+      const markdown=`# ${s.name}\n\n${s.lead}\n\n## 适用场景\n${s.use.map(item=>`- ${item}`).join('\n')}\n\n## 执行原则\n\n1. 识别目标\n2. 建立结构\n3. 验证闭环\n`;
+      sourceUrl=URL.createObjectURL(new Blob([markdown],{type:'text/markdown;charset=utf-8'}));
+      document.getElementById('sourceLink').href=sourceUrl;
+      document.getElementById('document').innerHTML=`
+        <div class="doc-kicker"><i data-lucide="shield-check"></i><span>只读技能说明</span></div>
+        <h1>${s.name}</h1><p class="lead">${s.lead}</p><div class="rule"></div>
+        <h2>适用场景</h2><ul>${s.use.map(x=>`<li>${x}</li>`).join('')}</ul>
+        <h2>执行原则</h2><div class="steps"><div class="step"><small>输入</small><b>识别目标</b><span>明确受众、场景和决策需求</span></div><div class="step"><small>组织</small><b>建立结构</b><span>按叙事职责安排章节和页面</span></div><div class="step"><small>检查</small><b>验证闭环</b><span>确保结论有证据、行动可执行</span></div></div>
+        <div class="callout">技能内容只在当前 Run 中生效，不会修改项目文件或主题。</div>
+        <h2>输出要求</h2><p>使用清晰、可扫描的结构表达结果。保留必要上下文，避免重复解释已确认的信息。</p>`;
+      lucide.createIcons();
+    }
+    function select(id){active=id;renderList();renderDoc(skills.find(s=>s.id===id));}
+    document.getElementById('toggle').onclick=()=>{const s=skills.find(x=>x.id===active);s.enabled=!s.enabled;select(active)};
+    document.getElementById('search').oninput=e=>{query=e.target.value;renderList()};
+    document.querySelectorAll('.filter button').forEach(btn=>btn.onclick=()=>{filter=btn.dataset.filter;document.querySelectorAll('.filter button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');renderList()});
+    select(active);
+  </script>
+</body>
+</html>

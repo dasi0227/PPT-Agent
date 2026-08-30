@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Theme 仓库原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --workspace: #e9edf2;
+      --panel: #f8f9fb;
+      --panel-muted: #f0f3f7;
+      --canvas: #dfe5ec;
+      --surface: #ffffff;
+      --ink: #17202b;
+      --muted: #5f6b7a;
+      --subtle: #95a0ae;
+      --border: #d5dbe3;
+      --border-strong: #bcc5d0;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      --success: #2f7d65;
+      --shadow: 0 12px 32px rgba(51, 65, 85, 0.16);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1080px;
+      min-height: 100vh;
+      overflow: hidden;
+      background: var(--workspace);
+      color: var(--ink);
+      font: 14px/1.45 Aptos, Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+      letter-spacing: 0;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    .app { display: grid; grid-template-rows: 48px minmax(0, 1fr); height: 100vh; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border-strong); background: var(--panel); padding: 0 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+    .brand-mark {
+      display: grid; width: 28px; height: 28px; place-items: center;
+      border-radius: 6px; background: var(--ink); color: white;
+    }
+    .top-actions, .inline { display: flex; align-items: center; gap: 6px; }
+    .icon-button {
+      display: inline-grid; width: 32px; height: 32px; place-items: center;
+      border: 0; border-radius: 6px; background: transparent; color: var(--muted); text-decoration: none; cursor: pointer;
+    }
+    .icon-button:hover { background: var(--panel-muted); color: var(--ink); }
+    [data-lucide] { width: 16px; height: 16px; stroke-width: 1.75; }
+    .shell { display: grid; grid-template-columns: 208px minmax(0, 1fr); min-height: 0; }
+    .nav {
+      border-right: 1px solid var(--border); background: var(--panel);
+      padding: 14px 10px; display: flex; flex-direction: column; min-height: 0;
+    }
+    .nav-title { padding: 4px 10px 13px; font-size: 18px; font-weight: 700; }
+    .nav-item {
+      display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center;
+      min-height: 36px; gap: 8px; padding: 0 10px; border: 0; border-radius: 6px;
+      background: transparent; color: var(--muted); text-align: left; cursor: pointer;
+    }
+    .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+    .nav-item:hover:not(.active) { background: var(--panel-muted); color: var(--ink); }
+    .count { color: var(--subtle); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .content { display: grid; grid-template-rows: 64px minmax(0, 1fr); min-width: 0; min-height: 0; }
+    .page-head {
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border); background: var(--surface); padding: 0 20px;
+    }
+    .page-title { font-size: 18px; font-weight: 700; }
+    .search {
+      display: grid; grid-template-columns: 18px 210px; align-items: center; gap: 6px;
+      height: 32px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+      color: var(--subtle);
+    }
+    .search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 13px; }
+    .body { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 0; }
+    .theme-list {
+      overflow: auto; border-right: 1px solid var(--border); background: var(--panel);
+      padding: 10px;
+    }
+    .theme-row {
+      width: 100%; display: grid; grid-template-columns: 94px minmax(0, 1fr); gap: 10px;
+      margin: 0 0 6px; padding: 8px; border: 1px solid transparent; border-radius: 7px;
+      background: transparent; text-align: left; cursor: pointer;
+    }
+    .theme-row:hover { background: var(--panel-muted); }
+    .theme-row.active { border-color: rgba(47,103,246,.42); background: var(--accent-soft); }
+    .mini {
+      position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 4px;
+      background: var(--t-bg); color: var(--t-fg); box-shadow: inset 0 0 0 1px rgba(120,130,145,.22);
+    }
+    .mini::before { content: ""; position: absolute; left: 8px; top: 8px; width: 34px; height: 4px; border-radius: 2px; background: var(--t-primary); }
+    .mini::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 8px; height: 16px; border-radius: var(--t-radius); background: var(--t-surface); box-shadow: var(--t-shadow); }
+    .mini-bars { position: absolute; inset: 20px 8px 28px; display: flex; align-items: end; gap: 3px; }
+    .mini-bars i { display: block; flex: 1; border-radius: 2px 2px 0 0; background: var(--t-accent); opacity: .86; }
+    .mini-bars i:nth-child(1) { height: 42%; } .mini-bars i:nth-child(2) { height: 76%; } .mini-bars i:nth-child(3) { height: 56%; } .mini-bars i:nth-child(4) { height: 88%; }
+    .theme-name { display:block; margin: 1px 0 3px; font-size: 13px; font-weight: 650; }
+    .theme-desc { display:block; color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .swatches { display: flex; gap: 4px; margin-top: 8px; }
+    .swatches i { width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(23,32,43,.12); }
+    .preview-pane { display: grid; grid-template-rows: 72px minmax(0, 1fr); min-width: 0; min-height: 0; background: var(--canvas); }
+    .preview-toolbar {
+      position: relative; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 14px 0 16px;
+      border-bottom: 1px solid var(--border); background: var(--panel);
+    }
+    .theme-summary { min-width: 0; }
+    .theme-title-line { display: flex; align-items: center; gap: 5px; min-width: 0; }
+    .selected-title { font-weight: 650; }
+    .source-link { width: 24px; height: 24px; color: var(--muted); text-decoration: none; }
+    .theme-metadata { display: flex; align-items: center; gap: 14px; margin-top: 6px; color: var(--muted); font-size: 11px; }
+    .meta-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+    .meta-label { color: var(--subtle); }
+    .tags { color: var(--muted); }
+    .palette { display: flex; gap: 4px; }
+    .palette i { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(23,32,43,.12); }
+    .font-value { color: var(--ink); font-weight: 550; }
+    .segmented { display: flex; align-items: center; padding: 2px; border-radius: 999px; background: var(--panel-muted); }
+    .segment {
+      height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: transparent;
+      color: var(--subtle); font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .segment.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(51,65,85,.13); }
+    .stage-wrap { display: flex; align-items: center; justify-content: center; min-height: 0; padding: 24px; overflow: auto; }
+    .stage {
+      position: relative; width: min(960px, 100%); aspect-ratio: 16 / 9; overflow: hidden;
+      border-radius: 6px; background: var(--t-bg); color: var(--t-fg); box-shadow: var(--shadow);
+      font-family: var(--t-font); transition: background-color .22s ease, color .22s ease;
+    }
+    .stage-inner { position: absolute; inset: 0; display: grid; grid-template-columns: 1.14fr .86fr; gap: 5%; padding: 7% 7.5% 6.5%; }
+    .stage[data-view="cover"] .stage-inner { grid-template-columns: 1fr; align-items: center; padding-right: 20%; }
+    .stage[data-view="cover"] .showcase-card,
+    .stage[data-view="cover"] .metric-line { display: none; }
+    .stage[data-view="cover"] h1 { max-width: 13ch; font-size: clamp(34px, 5vw, 70px); }
+    .stage[data-view="data"] .stage-inner { grid-template-columns: .72fr 1.28fr; gap: 4%; }
+    .stage[data-view="data"] h1 { font-size: clamp(24px, 3vw, 44px); }
+    .stage[data-view="data"] .metric-line { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 12%; }
+    .stage-kicker { color: var(--t-primary); font-size: clamp(10px, 1.1vw, 15px); font-weight: 750; }
+    .stage h1 { max-width: 12ch; margin: 4% 0 3%; font-size: clamp(26px, 4vw, 58px); line-height: 1.02; letter-spacing: 0; }
+    .stage-copy { max-width: 38ch; margin: 0; color: var(--t-muted); font-size: clamp(10px, 1.35vw, 18px); }
+    .metric-line { display: flex; gap: 7%; margin-top: 10%; }
+    .metric strong { display: block; color: var(--t-primary); font-size: clamp(20px, 3vw, 42px); line-height: 1; }
+    .metric span { display: block; margin-top: 6px; color: var(--t-muted); font-size: clamp(8px, 1vw, 13px); }
+    .showcase-card {
+      align-self: center; padding: 8%; border: 1px solid var(--t-border); border-radius: var(--t-radius);
+      background: var(--t-surface); box-shadow: var(--t-shadow);
+    }
+    .card-title { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: clamp(11px, 1.2vw, 16px); }
+    .card-title i { display: block; width: 7px; height: 7px; border-radius: 50%; background: var(--t-accent); }
+    .chart { display: flex; align-items: end; gap: 7%; height: 170px; margin: 8% 0; border-bottom: 1px solid var(--t-border); }
+    .chart i { flex: 1; border-radius: 4px 4px 0 0; background: var(--t-primary); }
+    .chart i:nth-child(1) { height: 34%; opacity: .38; } .chart i:nth-child(2) { height: 58%; opacity: .55; }
+    .chart i:nth-child(3) { height: 46%; opacity: .7; } .chart i:nth-child(4) { height: 82%; }
+    .quote { border-left: 3px solid var(--t-accent); padding-left: 10px; color: var(--t-muted); font-size: clamp(9px, 1vw, 13px); }
+    [data-theme="swiss"] { --t-bg:#f5f6f8; --t-surface:#fff; --t-fg:#101820; --t-muted:#59636f; --t-primary:#1769e0; --t-accent:#ea4e3d; --t-border:#d8dee6; --t-radius:4px; --t-shadow:0 12px 28px rgba(32,48,64,.11); --t-font:Aptos,Arial,sans-serif; }
+    [data-theme="tokyo"] { --t-bg:#171a2b; --t-surface:#22263c; --t-fg:#d9e0ff; --t-muted:#8993bd; --t-primary:#7aa2f7; --t-accent:#bb9af7; --t-border:#343b5c; --t-radius:8px; --t-shadow:0 15px 36px rgba(0,0,0,.35); --t-font:Aptos,Arial,sans-serif; }
+    [data-theme="signal"] { --t-bg:#fff8e8; --t-surface:#fffdf7; --t-fg:#171717; --t-muted:#625e55; --t-primary:#ed3b2f; --t-accent:#1264e8; --t-border:#1c1c1c; --t-radius:2px; --t-shadow:6px 6px 0 #171717; --t-font:Aptos,Arial,sans-serif; }
+    [data-theme="editorial"] { --t-bg:#edf0f4; --t-surface:#f9fafb; --t-fg:#19212a; --t-muted:#687380; --t-primary:#203e66; --t-accent:#bd3d51; --t-border:#bbc4ce; --t-radius:1px; --t-shadow:0 12px 30px rgba(48,60,76,.12); --t-font:Georgia,\"Times New Roman\",serif; }
+    @media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="presentation" class="lucide lucide-presentation"><path d="M2 3h20"></path><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"></path><path d="m7 21 5-5 5 5"></path></svg></span>Dasi PPT Agent</div>
+      <div class="top-actions">
+        <button class="icon-button" title="刷新仓库" aria-label="刷新仓库"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="refresh-cw" class="lucide lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></button>
+        <a class="icon-button" href="./2026-08-30-warehouse-main-integration-prototype.html" title="返回首页" aria-label="返回首页"><i data-lucide="home"></i></a>
+      </div>
+    </header>
+    <div class="shell">
+      <aside class="nav">
+        <div class="nav-title">个人仓库</div>
+        <button class="nav-item active"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="palette" class="lucide lucide-palette"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg><span>主题</span><span class="count">4</span></button>
+        <button class="nav-item"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="component" class="lucide lucide-component"><path d="M15.536 11.293a1 1 0 0 0 0 1.414l2.376 2.377a1 1 0 0 0 1.414 0l2.377-2.377a1 1 0 0 0 0-1.414l-2.377-2.377a1 1 0 0 0-1.414 0z"></path><path d="M2.297 11.293a1 1 0 0 0 0 1.414l2.377 2.377a1 1 0 0 0 1.414 0l2.377-2.377a1 1 0 0 0 0-1.414L6.088 8.916a1 1 0 0 0-1.414 0z"></path><path d="M8.916 17.912a1 1 0 0 0 0 1.415l2.377 2.376a1 1 0 0 0 1.414 0l2.377-2.376a1 1 0 0 0 0-1.415l-2.377-2.376a1 1 0 0 0-1.414 0z"></path><path d="M8.916 4.674a1 1 0 0 0 0 1.414l2.377 2.376a1 1 0 0 0 1.414 0l2.377-2.376a1 1 0 0 0 0-1.414l-2.377-2.377a1 1 0 0 0-1.414 0z"></path></svg><span>组件</span><span class="count">12</span></button>
+        <button class="nav-item"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="book-open-text" class="lucide lucide-book-open-text"><path d="M12 7v14"></path><path d="M16 12h2"></path><path d="M16 8h2"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path><path d="M6 12h2"></path><path d="M6 8h2"></path></svg><span>技能</span><span class="count">8</span></button>
+      </aside>
+      <section class="content">
+        <header class="page-head">
+          <div><span class="page-title">主题</span></div>
+          <label class="search"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="search" class="lucide lucide-search"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input id="search" aria-label="搜索主题" placeholder="搜索主题"></label>
+        </header>
+        <div class="body">
+          <aside class="theme-list" id="themeList"><button class="theme-row active" data-id="swiss">
+        <span class="mini" data-theme="swiss"><span class="mini-bars"><i></i><i></i><i></i><i></i></span></span>
+        <span><span class="theme-name">Swiss Modern</span><span class="theme-desc">清晰的网格、克制的蓝红强调</span>
+        <span class="swatches"><i style="background:#f5f6f8"></i><i style="background:#101820"></i><i style="background:#1769e0"></i><i style="background:#ea4e3d"></i></span></span>
+      </button><button class="theme-row " data-id="tokyo">
+        <span class="mini" data-theme="tokyo"><span class="mini-bars"><i></i><i></i><i></i><i></i></span></span>
+        <span><span class="theme-name">Tokyo Night</span><span class="theme-desc">深色冷调，适合技术与产品分享</span>
+        <span class="swatches"><i style="background:#171a2b"></i><i style="background:#d9e0ff"></i><i style="background:#7aa2f7"></i><i style="background:#bb9af7"></i></span></span>
+      </button><button class="theme-row " data-id="signal">
+        <span class="mini" data-theme="signal"><span class="mini-bars"><i></i><i></i><i></i><i></i></span></span>
+        <span><span class="theme-name">Bold Signal</span><span class="theme-desc">高对比、强结论、硬朗边界</span>
+        <span class="swatches"><i style="background:#fff8e8"></i><i style="background:#171717"></i><i style="background:#ed3b2f"></i><i style="background:#1264e8"></i></span></span>
+      </button><button class="theme-row " data-id="editorial">
+        <span class="mini" data-theme="editorial"><span class="mini-bars"><i></i><i></i><i></i><i></i></span></span>
+        <span><span class="theme-name">Editorial Slate</span><span class="theme-desc">冷灰纸张与编辑式排版节奏</span>
+        <span class="swatches"><i style="background:#edf0f4"></i><i style="background:#19212a"></i><i style="background:#203e66"></i><i style="background:#bd3d51"></i></span></span>
+      </button></aside>
+          <section class="preview-pane">
+            <div class="preview-toolbar">
+              <div class="theme-summary">
+                <div class="theme-title-line">
+                  <span class="selected-title" id="selectedName">Swiss Modern</span>
+                  <a class="icon-button source-link" id="sourceLink" href="../../backend/seed/assets/themes/swiss-modern/tokens.css" target="_blank" title="查看文件" aria-label="查看文件"><i data-lucide="external-link"></i></a>
+                </div>
+                <div class="theme-metadata">
+                  <span class="meta-item"><span class="meta-label">标签</span><span class="tags" id="selectedTags">明亮｜理性｜通用</span></span>
+                  <span class="meta-item"><span class="meta-label">色板</span><span class="palette" id="palette"><i style="background:#f5f6f8" title="#f5f6f8"></i><i style="background:#101820" title="#101820"></i><i style="background:#1769e0" title="#1769e0"></i><i style="background:#ea4e3d" title="#ea4e3d"></i></span></span>
+                  <span class="meta-item"><span class="meta-label">字体</span><span class="font-value" id="fontValue">Aptos / System Sans</span></span>
+                </div>
+              </div>
+              <div class="segmented" aria-label="预览内容">
+                <button class="segment active" data-view="overview">综合页</button><button class="segment" data-view="cover">封面</button><button class="segment" data-view="data">数据页</button>
+              </div>
+            </div>
+            <div class="stage-wrap">
+              <article class="stage" id="stage" data-theme="swiss" data-view="overview">
+                <div class="stage-inner">
+                  <section>
+                    <div class="stage-kicker">QUARTERLY REVIEW</div>
+                    <h1>从信号到清晰决策</h1>
+                    <p class="stage-copy">统一的视觉语言，让观点、数据和结论在每一页保持清晰。</p>
+                    <div class="metric-line">
+                      <div class="metric"><strong>36%</strong><span>效率提升</span></div>
+                      <div class="metric"><strong>4.8×</strong><span>内容复用</span></div>
+                    </div>
+                  </section>
+                  <section class="showcase-card">
+                    <div class="card-title"><span>季度增长</span><i></i></div>
+                    <div class="chart"><i></i><i></i><i></i><i></i></div>
+                    <div class="quote">主题同时覆盖文字、层级、容器和数据表达。</div>
+                  </section>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const themes = [
+      { id:'swiss', name:'Swiss Modern', desc:'清晰的网格、克制的蓝红强调', tags:'明亮｜理性｜通用', colors:['#f5f6f8','#101820','#1769e0','#ea4e3d'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/swiss-modern/tokens.css' },
+      { id:'tokyo', name:'Tokyo Night', desc:'深色冷调，适合技术与产品分享', tags:'深色｜技术｜霓虹', colors:['#171a2b','#d9e0ff','#7aa2f7','#bb9af7'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/tokyo-night/tokens.css' },
+      { id:'signal', name:'Bold Signal', desc:'高对比、强结论、硬朗边界', tags:'高对比｜发布｜观点', colors:['#fff8e8','#171717','#ed3b2f','#1264e8'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/bold-signal/tokens.css' },
+      { id:'editorial', name:'Editorial Slate', desc:'冷灰纸张与编辑式排版节奏', tags:'编辑｜报告｜叙事', colors:['#edf0f4','#19212a','#203e66','#bd3d51'], font:'Georgia / Serif', source:'../../backend/seed/assets/themes/editorial-serif/tokens.css' }
+    ];
+    const list = document.getElementById('themeList');
+    const stage = document.getElementById('stage');
+    let query = '';
+    function renderList(selected) {
+      const visible = themes.filter(t => `${t.name}${t.desc}${t.tags}`.toLowerCase().includes(query.toLowerCase()));
+      list.innerHTML = visible.map(t => `<button class="theme-row ${t.id===selected?'active':''}" data-id="${t.id}">
+        <span class="mini" data-theme="${t.id}"><span class="mini-bars"><i></i><i></i><i></i><i></i></span></span>
+        <span><span class="theme-name">${t.name}</span><span class="theme-desc">${t.desc}</span>
+        <span class="swatches">${t.colors.map(c=>`<i style="background:${c}"></i>`).join('')}</span></span>
+      </button>`).join('') || '<div style="padding:24px 12px;color:var(--muted);font-size:12px;text-align:center">没有匹配的主题</div>';
+      list.querySelectorAll('.theme-row').forEach(btn => btn.addEventListener('click', () => selectTheme(btn.dataset.id)));
+    }
+    function selectTheme(id) {
+const theme = themes.find(t => t.id === id);
+      stage.dataset.theme = id;
+      document.getElementById('selectedName').textContent = theme.name;
+      document.getElementById('selectedTags').textContent = theme.tags;
+      document.getElementById('fontValue').textContent = theme.font;
+      document.getElementById('sourceLink').href = theme.source;
+      document.getElementById('palette').innerHTML = theme.colors.map(c=>`<i style="background:${c}" title="${c}"></i>`).join('');
+      renderList(id);
+    }
+    document.getElementById('search').addEventListener('input', event => { query = event.target.value; renderList(stage.dataset.theme); });
+    document.querySelectorAll('.segment').forEach(button => button.addEventListener('click', () => {
+      document.querySelectorAll('.segment').forEach(item => item.classList.remove('active'));
+      button.classList.add('active');
+      stage.dataset.view = button.dataset.view;
+    }));
+    selectTheme('swiss');
+    lucide.createIcons();
+  </script>
+
+
+</body></html>

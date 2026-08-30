@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>仓库入口与 load_component 原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --workspace:#e9edf2; --panel:#f8f9fb; --panel-muted:#f0f3f7; --canvas:#dfe5ec;
+      --surface:#fff; --ink:#17202b; --muted:#5f6b7a; --subtle:#95a0ae;
+      --border:#d5dbe3; --border-strong:#bcc5d0; --accent:#2f67f6; --accent-soft:#e8efff;
+      --success:#2f7d65; --success-soft:#e7f3ee; --warning:#b96d1f; --warning-soft:#fff3df;
+      --shadow:0 12px 32px rgba(51,65,85,.18);
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:1120px; height:100vh; overflow:hidden; background:var(--workspace); color:var(--ink); font:14px/1.45 Aptos,Inter,-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; letter-spacing:0; }
+    button,textarea { font:inherit; } button { color:inherit; }
+    button:focus-visible,textarea:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+    [data-lucide] { width:16px; height:16px; stroke-width:1.75; }
+    .app { display:grid; grid-template-rows:48px minmax(0,1fr); height:100vh; }
+    .project-bar { position:relative; display:flex; align-items:center; gap:8px; padding:0 8px; border-bottom:1px solid var(--border-strong); background:var(--panel); }
+    .brand { display:flex; flex:none; align-items:center; gap:8px; margin-right:8px; padding:0 8px; font-weight:700; }
+    .brand-mark { display:grid; width:28px; height:28px; place-items:center; border-radius:6px; background:var(--ink); color:#fff; }
+    .tabs { display:flex; min-width:0; flex:1; align-self:stretch; align-items:end; gap:4px; overflow:hidden; }
+    .tab { display:flex; height:40px; max-width:210px; align-items:center; gap:7px; padding:0 14px; border:1px solid transparent; border-bottom:0; border-radius:6px 6px 0 0; background:transparent; color:var(--muted); cursor:pointer; }
+    .tab.active { position:relative; top:1px; border-color:var(--border-strong); background:var(--panel); color:var(--ink); font-weight:650; }
+    .tab span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .top-actions { display:flex; flex:none; align-items:center; gap:2px; }
+    .icon-button { display:inline-grid; width:32px; height:32px; place-items:center; border:0; border-radius:6px; background:transparent; color:var(--muted); cursor:pointer; }
+    .icon-button:hover,.icon-button.active { background:var(--accent-soft); color:var(--accent); }
+    .repo-menu { position:absolute; z-index:10; top:42px; right:8px; width:260px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface); box-shadow:var(--shadow); transform-origin:top right; }
+    .repo-menu[hidden] { display:none; }
+    .menu-title { padding:7px 9px 5px; color:var(--subtle); font-size:11px; font-weight:650; }
+    .menu-item { display:grid; width:100%; grid-template-columns:28px minmax(0,1fr) auto; align-items:center; gap:8px; min-height:48px; padding:6px 8px; border:0; border-radius:6px; background:transparent; color:inherit; text-align:left; text-decoration:none; cursor:pointer; }
+    .menu-item:hover { background:var(--panel-muted); }
+    .menu-icon { display:grid; width:28px; height:28px; place-items:center; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:var(--accent); }
+    .menu-item b { display:block; font-size:12px; } .menu-item small { display:block; color:var(--muted); font-size:10px; }
+    .menu-count { color:var(--subtle); font-size:11px; }
+    .workspace { display:grid; grid-template-columns:235px minmax(0,1fr) 386px; min-height:0; }
+    .deck { display:grid; grid-template-rows:58px minmax(0,1fr); min-height:0; border-right:1px solid var(--border); background:var(--panel); }
+    .deck-head,.agent-head,.canvas-head { display:flex; align-items:center; justify-content:space-between; padding:0 12px; border-bottom:1px solid var(--border); }
+    .deck-head { min-height:58px; } .panel-title { font-weight:650; }
+    .slides { overflow:auto; padding:10px; }
+    .slide-row { display:grid; grid-template-columns:30px minmax(0,1fr); min-height:58px; gap:8px; margin-bottom:5px; padding:8px; border:1px solid transparent; border-radius:7px; }
+    .slide-row.active { border-color:rgba(47,103,246,.35); background:var(--accent-soft); }
+    .slide-no { color:var(--subtle); font-size:18px; font-variant-numeric:tabular-nums; }
+    .slide-row.active .slide-no { color:var(--accent); }
+    .slide-row b { display:block; font-size:12px; } .slide-row small { color:var(--muted); font-size:10px; }
+    .canvas { display:grid; grid-template-rows:48px minmax(0,1fr); min-width:0; min-height:0; background:var(--canvas); }
+    .canvas-head { background:var(--panel); }
+    .canvas-controls { display:flex; align-items:center; gap:3px; }
+    .page-count { min-width:58px; text-align:center; color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
+    .stage-wrap { display:flex; min-height:0; align-items:center; justify-content:center; overflow:hidden; padding:24px; }
+    .slide { position:relative; width:min(840px,94%); aspect-ratio:16/9; overflow:hidden; border-radius:4px; background:#f6f8fb; box-shadow:0 8px 24px rgba(71,85,105,.14); color:#152333; }
+    .slide-inner { position:absolute; inset:0; display:grid; grid-template-columns:1fr 1fr; gap:6%; padding:8%; }
+    .slide-kicker { color:#2f67f6; font-size:12px; font-weight:750; }
+    .slide h1 { margin:9px 0 12px; max-width:12ch; font-size:42px; line-height:1.04; }
+    .slide p { color:#647181; font-size:15px; }
+    .compare { display:grid; grid-template-columns:1fr 1fr; gap:9px; align-self:center; }
+    .compare div { padding:18px; border:1px solid #d7dee7; border-radius:7px; background:#fff; box-shadow:0 8px 20px rgba(52,69,88,.1); }
+    .compare b { font-size:12px; } .compare strong { display:block; margin:20px 0 4px; color:#2f67f6; font-size:28px; } .compare small { color:#7a8695; }
+    .agent { display:grid; grid-template-rows:48px 38px minmax(0,1fr) 118px; min-height:0; border-left:1px solid var(--border); background:var(--panel); }
+    .agent-head { height:48px; }
+    .agent-title { display:flex; align-items:center; gap:8px; font-weight:650; }
+    .agent-title [data-lucide] { color:var(--accent); }
+    .thread-tabs { display:flex; align-items:end; gap:3px; padding:0 9px; border-bottom:1px solid var(--border); }
+    .thread-tab { height:32px; padding:0 9px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--muted); font-size:12px; }
+    .thread-tab.active { border-bottom-color:var(--accent); color:var(--ink); font-weight:650; }
+    .timeline { overflow:auto; padding:14px 12px 18px; }
+    .message { margin-bottom:14px; padding:10px 11px; border-radius:7px; background:var(--accent-soft); color:#294b92; font-size:13px; }
+    .activity { margin:2px 0; overflow:hidden; border-radius:7px; }
+    .activity-row { display:grid; width:100%; min-height:32px; grid-template-columns:16px minmax(0,1fr) 16px; align-items:center; gap:8px; padding:4px 6px; border:0; background:transparent; text-align:left; cursor:pointer; }
+    .activity-row:hover { background:var(--panel-muted); }
+    .activity-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+    .success { color:var(--success); } .thought { color:var(--accent); } .subtle { color:var(--subtle); }
+    .activity-detail { margin-left:30px; padding:2px 8px 9px 0; color:var(--muted); font-size:12px; }
+    .activity-detail[hidden] { display:none; }
+    .resource-list { margin:0; padding:1px 0 1px 16px; }
+    .resource-list li { padding-left:1px; color:var(--accent); }
+    .resource-list a { display:flex; min-height:22px; align-items:center; justify-content:flex-start; gap:5px; padding:1px 5px; border-radius:5px; color:var(--muted); text-decoration:none; }
+    .resource-list a:hover { background:var(--accent-soft); color:var(--ink); }
+    .resource-list a span { min-width:0; max-width:calc(100% - 20px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .result { margin-top:12px; color:var(--ink); font-size:13px; font-weight:650; }
+    .composer { padding:10px; border-top:1px solid var(--border); background:var(--surface); }
+    .composer-box { display:grid; grid-template-rows:minmax(44px,1fr) 30px; height:98px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface); }
+    textarea { width:100%; resize:none; border:0; outline:0; padding:10px 11px; background:transparent; color:var(--ink); font-size:13px; }
+    .composer-tools { display:flex; align-items:center; justify-content:space-between; padding:0 6px 5px; }
+    .tiny { display:flex; align-items:center; gap:4px; }
+    .send { display:grid; width:28px; height:28px; place-items:center; border:0; border-radius:6px; background:var(--accent); color:white; }
+    @media(prefers-reduced-motion:reduce){ *{transition-duration:.01ms!important;} }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="project-bar">
+      <div class="brand"><span class="brand-mark"><i data-lucide="presentation"></i></span>Dasi PPT Agent</div>
+      <div class="tabs">
+        <button class="tab active"><span>AI 产品季度复盘</span><i data-lucide="more-horizontal"></i></button>
+        <button class="tab"><span>品牌升级提案</span></button>
+        <button class="icon-button" title="新建或打开项目"><i data-lucide="plus"></i></button>
+      </div>
+      <div class="top-actions">
+        <button class="icon-button" id="repoButton" title="个人仓库" aria-label="个人仓库" aria-expanded="false"><i data-lucide="warehouse"></i></button>
+      </div>
+      <div class="repo-menu" id="repoMenu" hidden>
+        <div class="menu-title">个人仓库</div>
+        <a class="menu-item" href="./2026-08-30-theme-warehouse-prototype.html"><span class="menu-icon"><i data-lucide="palette"></i></span><span><b>主题</b><small>选择演示文稿的整体样式</small></span><span class="menu-count">4</span></a>
+        <a class="menu-item" href="./2026-08-30-component-warehouse-prototype.html"><span class="menu-icon"><i data-lucide="component"></i></span><span><b>组件</b><small>浏览可供 Agent 参考的片段</small></span><span class="menu-count">12</span></a>
+        <a class="menu-item" href="./2026-08-30-skill-warehouse-prototype.html"><span class="menu-icon"><i data-lucide="book-open-text"></i></span><span><b>技能</b><small>管理 Run 可使用的技能</small></span><span class="menu-count">8</span></a>
+      </div>
+    </header>
+    <div class="workspace">
+      <aside class="deck">
+        <header class="deck-head"><span class="panel-title">目录</span><button class="icon-button" title="添加章节"><i data-lucide="plus"></i></button></header>
+        <div class="slides">
+          <div class="slide-row"><span class="slide-no">01</span><span><b>季度概览</b><small>封面</small></span></div>
+          <div class="slide-row"><span class="slide-no">02</span><span><b>核心指标</b><small>数据概览</small></span></div>
+          <div class="slide-row active"><span class="slide-no">03</span><span><b>效率变化</b><small>方案对比</small></span></div>
+          <div class="slide-row"><span class="slide-no">04</span><span><b>用户反馈</b><small>关键证据</small></span></div>
+          <div class="slide-row"><span class="slide-no">05</span><span><b>下季度计划</b><small>行动方案</small></span></div>
+        </div>
+      </aside>
+      <section class="canvas">
+        <header class="canvas-head">
+          <div class="canvas-controls"><button class="icon-button" title="概览"><i data-lucide="layout-grid"></i></button><button class="icon-button" title="放映"><i data-lucide="monitor-play"></i></button></div>
+          <div class="canvas-controls"><button class="icon-button" title="上一页"><i data-lucide="chevron-left"></i></button><span class="page-count">3 / 5</span><button class="icon-button" title="下一页"><i data-lucide="chevron-right"></i></button></div>
+        </header>
+        <div class="stage-wrap">
+          <article class="slide">
+            <div class="slide-inner">
+              <section><div class="slide-kicker">效率变化</div><h1>把等待时间还给创作</h1><p>组件参考让 Agent 从成熟表达出发，同时保留针对内容的适配空间。</p></section>
+              <section class="compare"><div><b>传统制作</b><strong>4.2 h</strong><small>平均单页时间</small></div><div><b>Agent 工作流</b><strong>38 min</strong><small>平均单页时间</small></div></section>
+            </div>
+          </article>
+        </div>
+      </section>
+      <aside class="agent">
+        <header class="agent-head"><span class="agent-title"><i data-lucide="bot"></i>智能体</span><div><button class="icon-button" title="提交项目版本"><i data-lucide="git-commit-horizontal"></i></button><button class="icon-button" title="隐藏右侧对话"><i data-lucide="panel-right-close"></i></button></div></header>
+        <div class="thread-tabs"><button class="thread-tab active">当前对话</button><button class="thread-tab">历史</button></div>
+        <div class="timeline">
+          <div class="message">把第 3 页改成更清晰的方案对比，数据要更突出。</div>
+          <div class="activity"><button class="activity-row"><i class="thought" data-lucide="brain-circuit"></i><span class="activity-label" style="color:var(--muted)">先寻找适合的对比组件作为视觉参考</span><span></span></button></div>
+          <div class="activity">
+            <button class="activity-row" id="componentRow" aria-expanded="true">
+              <i class="success" data-lucide="component"></i>
+              <span class="activity-label">已加载 1 个组件</span>
+              <i class="subtle" id="componentChevron" data-lucide="chevron-down"></i>
+            </button>
+            <div class="activity-detail" id="componentDetail">
+              <ul class="resource-list">
+                <li><a href="../../backend/seed/assets/components/kv-list/template.html" target="_blank" title="查看文件"><span>双项对比</span><i data-lucide="external-link"></i></a></li>
+              </ul>
+            </div>
+          </div>
+          <div class="activity"><button class="activity-row"><i class="success" data-lucide="sparkles"></i><span class="activity-label">已更新第 3 页幻灯片</span><i class="subtle" data-lucide="chevron-right"></i></button></div>
+          <div class="activity"><button class="activity-row"><i class="success" data-lucide="check-circle-2"></i><span class="activity-label">已完成布局检查</span><span></span></button></div>
+          <div class="result">第 3 页已改为双项对比结构，并强化了关键数字。</div>
+        </div>
+        <footer class="composer">
+          <div class="composer-box"><textarea aria-label="输入消息" placeholder="继续修改演示文稿…"></textarea><div class="composer-tools"><div class="tiny"><button class="icon-button" title="技能"><i data-lucide="blocks"></i></button><button class="icon-button" title="作用范围"><i data-lucide="crosshair"></i></button></div><button class="send" title="发送"><i data-lucide="send"></i></button></div></div>
+        </footer>
+      </aside>
+    </div>
+  </main>
+  <script>
+    const repoButton=document.getElementById('repoButton'),repoMenu=document.getElementById('repoMenu');
+    repoButton.onclick=()=>{const open=repoMenu.hidden;repoMenu.hidden=!open;repoButton.classList.toggle('active',open);repoButton.setAttribute('aria-expanded',String(open));};
+    document.addEventListener('click',e=>{if(!repoMenu.contains(e.target)&&!repoButton.contains(e.target)){repoMenu.hidden=true;repoButton.classList.remove('active');repoButton.setAttribute('aria-expanded','false')}});
+    const row=document.getElementById('componentRow'),detail=document.getElementById('componentDetail'),chevron=document.getElementById('componentChevron');
+    row.onclick=()=>{const open=detail.hidden;detail.hidden=!open;row.setAttribute('aria-expanded',String(open));chevron.setAttribute('data-lucide',open?'chevron-down':'chevron-right');lucide.createIcons();};
+    lucide.createIcons();
+  </script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Component 仓库原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --workspace:#e9edf2; --panel:#f8f9fb; --panel-muted:#f0f3f7; --canvas:#dfe5ec;
+      --surface:#fff; --ink:#17202b; --muted:#5f6b7a; --subtle:#95a0ae;
+      --border:#d5dbe3; --border-strong:#bcc5d0; --accent:#2f67f6; --accent-soft:#e8efff;
+      --success:#2f7d65; --success-soft:#e7f3ee; --warning:#b96d1f;
+      --shadow:0 12px 32px rgba(51,65,85,.16);
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; min-width:1120px; min-height:100vh; overflow:hidden; background:var(--workspace); color:var(--ink);
+      font:14px/1.45 Aptos,Inter,-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; letter-spacing:0;
+    }
+    button,input { font:inherit; } button { color:inherit; }
+    button:focus-visible,input:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+    [data-lucide] { width:16px; height:16px; stroke-width:1.75; }
+    .app { display:grid; grid-template-rows:48px minmax(0,1fr); height:100vh; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; padding:0 12px; border-bottom:1px solid var(--border-strong); background:var(--panel); }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:700; }
+    .brand-mark { display:grid; width:28px; height:28px; place-items:center; border-radius:6px; background:var(--ink); color:white; }
+    .icon-button { display:inline-grid; width:32px; height:32px; place-items:center; border:0; border-radius:6px; background:transparent; color:var(--muted); text-decoration:none; cursor:pointer; }
+    .icon-button:hover { background:var(--panel-muted); color:var(--ink); }
+    .shell { display:grid; grid-template-columns:208px minmax(0,1fr); min-height:0; }
+    .nav { display:flex; min-height:0; flex-direction:column; padding:14px 10px; border-right:1px solid var(--border); background:var(--panel); }
+    .nav-title { padding:4px 10px 13px; font-size:18px; font-weight:700; }
+    .nav-item { display:grid; grid-template-columns:20px minmax(0,1fr) auto; align-items:center; min-height:36px; gap:8px; padding:0 10px; border:0; border-radius:6px; background:transparent; color:var(--muted); text-align:left; cursor:pointer; }
+    .nav-item:hover:not(.active) { background:var(--panel-muted); color:var(--ink); }
+    .nav-item.active { background:var(--accent-soft); color:var(--accent); font-weight:650; }
+    .count { color:var(--subtle); font-size:12px; font-variant-numeric:tabular-nums; }
+    .content { display:grid; grid-template-rows:64px 44px minmax(0,1fr); min-width:0; min-height:0; }
+    .page-head { display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid var(--border); background:var(--surface); }
+    .page-title { font-size:18px; font-weight:700; }
+    .search { display:grid; grid-template-columns:18px 220px; align-items:center; gap:6px; height:32px; padding:0 9px; border:1px solid var(--border); border-radius:6px; background:var(--panel); color:var(--subtle); }
+    .search input { width:100%; border:0; outline:0; background:transparent; color:var(--ink); font-size:13px; }
+    .filters { display:flex; align-items:center; padding:0 16px; border-bottom:1px solid var(--border); background:var(--panel); }
+    .filter-group { display:flex; align-items:center; gap:4px; }
+    .filter { height:28px; padding:0 10px; border:0; border-radius:6px; background:transparent; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; }
+    .filter:hover { background:var(--panel-muted); color:var(--ink); }
+    .filter.active { background:var(--surface); color:var(--accent); box-shadow:0 0 0 1px var(--border),0 1px 2px rgba(51,65,85,.08); }
+    .workspace { display:grid; grid-template-columns:minmax(0,1fr) 328px; min-height:0; }
+    .gallery { overflow:auto; padding:16px; background:var(--canvas); }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(220px,1fr)); gap:12px; }
+    .component-tile { overflow:hidden; border:1px solid var(--border); border-radius:7px; background:var(--surface); cursor:pointer; transition:border-color .15s,box-shadow .15s,transform .15s; }
+    .component-tile:hover { border-color:var(--border-strong); box-shadow:0 6px 16px rgba(71,85,105,.10); transform:translateY(-1px); }
+    .component-tile.active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent),0 8px 20px rgba(47,103,246,.12); }
+    .render-zone { display:flex; height:160px; align-items:center; justify-content:center; overflow:hidden; padding:18px; border-bottom:1px solid var(--border); background:#eef1f5; }
+    .tile-meta { padding:10px 12px; }
+    .tile-name { font-size:13px; font-weight:650; }
+    .tile-desc { margin-top:2px; color:var(--muted); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .inspector { display:grid; grid-template-rows:72px minmax(0,1fr); min-height:0; border-left:1px solid var(--border); background:var(--panel); }
+    .inspector-head { display:flex; align-items:center; padding:0 14px; border-bottom:1px solid var(--border); }
+    .inspector-summary { min-width:0; }
+    .inspector-title-line { display:flex; align-items:center; gap:5px; }
+    .inspector-title { font-weight:650; }
+    .source-link { width:24px; height:24px; }
+    .large-preview { display:flex; align-items:center; justify-content:center; overflow:hidden; padding:24px; background:var(--canvas); }
+    .large-preview .component-render { transform:scale(1.22); }
+    .tags { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; }
+    .tag { padding:3px 7px; border:1px solid var(--border); border-radius:999px; background:var(--surface); color:var(--muted); font-size:11px; }
+    .component-render { width:190px; color:#18212c; font-family:Aptos,Arial,sans-serif; }
+    .metric-card { padding:15px; border-radius:8px; background:#fff; box-shadow:0 8px 22px rgba(48,65,82,.14); }
+    .metric-card small { color:#768293; font-size:10px; } .metric-card strong { display:block; margin:4px 0 2px; font-size:28px; line-height:1; } .up { color:#2f7d65; font-size:10px; font-weight:700; }
+    .quote-card { padding:17px; border-left:4px solid #2f67f6; background:#fff; box-shadow:0 7px 18px rgba(48,65,82,.11); }
+    .quote-card p { margin:0 0 10px; font-size:13px; font-weight:650; line-height:1.35; } .quote-card small { color:#768293; }
+    .comparison { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+    .comparison div { padding:12px; border-radius:7px; background:#fff; box-shadow:0 6px 16px rgba(48,65,82,.10); }
+    .comparison b { display:block; white-space:nowrap; font-size:10px; } .comparison strong { display:block; margin-top:11px; color:#2f67f6; font-size:22px; } .comparison small { color:#768293; }
+    .process { display:flex; align-items:center; gap:5px; }
+    .process div { display:grid; width:44px; height:44px; place-items:center; border:1px solid #cbd3dd; border-radius:50%; background:#fff; color:#2f67f6; font-size:11px; font-weight:700; }
+    .process i { width:17px; height:1px; background:#9ba7b5; }
+    .feature-list { padding:12px; border-radius:7px; background:#fff; box-shadow:0 7px 18px rgba(48,65,82,.11); }
+    .feature-list div { display:grid; grid-template-columns:16px 1fr; gap:7px; align-items:center; min-height:25px; font-size:11px; }
+    .feature-list span:first-child { display:grid; width:15px; height:15px; place-items:center; border-radius:4px; background:#e8efff; color:#2f67f6; font-size:9px; }
+    .timeline { display:grid; gap:8px; }
+    .timeline div { display:grid; grid-template-columns:8px 1fr; gap:8px; align-items:start; font-size:11px; }
+    .timeline i { width:8px; height:8px; margin-top:4px; border-radius:50%; background:#2f67f6; box-shadow:0 0 0 3px #dfe8ff; }
+    .timeline b { display:block; } .timeline small { color:#768293; }
+    .empty { grid-column:1/-1; display:grid; min-height:240px; place-items:center; color:var(--muted); }
+    @media(max-width:1280px){ .grid{grid-template-columns:repeat(2,minmax(220px,1fr));} }
+    @media(prefers-reduced-motion:reduce){ *{transition-duration:.01ms!important;} }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark"><i data-lucide="presentation"></i></span>Dasi PPT Agent</div>
+      <div><button class="icon-button" title="刷新仓库"><i data-lucide="refresh-cw"></i></button><a class="icon-button" href="./2026-08-30-warehouse-main-integration-prototype.html" title="返回首页" aria-label="返回首页"><i data-lucide="home"></i></a></div>
+    </header>
+    <div class="shell">
+      <aside class="nav">
+        <div class="nav-title">个人仓库</div>
+        <button class="nav-item"><i data-lucide="palette"></i><span>主题</span><span class="count">4</span></button>
+        <button class="nav-item active"><i data-lucide="component"></i><span>组件</span><span class="count">6</span></button>
+        <button class="nav-item"><i data-lucide="book-open-text"></i><span>技能</span><span class="count">8</span></button>
+      </aside>
+      <section class="content">
+        <header class="page-head">
+          <div><span class="page-title">组件</span></div>
+          <label class="search"><i data-lucide="search"></i><input id="search" aria-label="搜索组件" placeholder="搜索名称、用途或标签" /></label>
+        </header>
+        <div class="filters">
+          <div class="filter-group" id="filters">
+            <button class="filter active" data-filter="all">全部</button>
+            <button class="filter" data-filter="data">数据</button>
+            <button class="filter" data-filter="content">内容</button>
+            <button class="filter" data-filter="flow">流程</button>
+          </div>
+        </div>
+        <div class="workspace">
+          <section class="gallery"><div class="grid" id="grid"></div></section>
+          <aside class="inspector">
+            <header class="inspector-head">
+              <div class="inspector-summary">
+                <div class="inspector-title-line">
+                  <span class="inspector-title" id="detailName">关键指标</span>
+                  <a class="icon-button source-link" id="sourceLink" href="../../backend/seed/assets/components/stat-badge/template.html" target="_blank" title="查看文件" aria-label="查看文件"><i data-lucide="external-link"></i></a>
+                </div>
+                <div class="tags" id="detailTags"></div>
+              </div>
+            </header>
+            <div class="large-preview" id="largePreview"></div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const components = [
+      {id:'metric',name:'关键指标',desc:'突出单个核心数字和变化趋势',tags:['data','metric','summary'],kind:'data',source:'../../backend/seed/assets/components/stat-badge/template.html',html:'<div class="component-render metric-card"><small>季度经常性收入</small><strong>¥ 8.42M</strong><span class="up">↑ 18.6% 较上季度</span></div>'},
+      {id:'comparison',name:'双项对比',desc:'并列呈现两种方案的核心差异',tags:['data','comparison'],kind:'data',source:'../../backend/seed/assets/components/kv-list/template.html',html:'<div class="component-render comparison"><div><b>当前方案</b><strong>4.2 h</strong><small>平均制作时间</small></div><div><b>Agent 工作流</b><strong>38 min</strong><small>平均制作时间</small></div></div>'},
+      {id:'quote',name:'观点引用',desc:'强调关键判断与来源信息',tags:['content','quote'],kind:'content',source:'../../backend/seed/assets/components/quote-block/template.html',html:'<div class="component-render quote-card"><p>“先统一表达，再扩大创作自由。”</p><small>产品设计原则</small></div>'},
+      {id:'features',name:'能力清单',desc:'紧凑呈现三到五项能力',tags:['content','list'],kind:'content',source:'../../backend/seed/assets/components/feature-card/template.html',html:'<div class="component-render feature-list"><div><span>✓</span><b>理解演示目标</b></div><div><span>✓</span><b>组织叙事结构</b></div><div><span>✓</span><b>生成可编辑页面</b></div></div>'},
+      {id:'process',name:'三步流程',desc:'表达短链路、线性步骤和阶段关系',tags:['flow','process'],kind:'flow',source:'../../backend/seed/assets/components/kv-list/template.html',html:'<div class="component-render process"><div>理解</div><i></i><div>设计</div><i></i><div>交付</div></div>'},
+      {id:'timeline',name:'事件时间线',desc:'按时间组织里程碑和状态变化',tags:['flow','timeline'],kind:'flow',source:'../../backend/seed/assets/components/svg-bar/template.html',html:'<div class="component-render timeline"><div><i></i><span><b>需求确认</b><small>明确受众与目标</small></span></div><div><i></i><span><b>视觉定稿</b><small>统一主题与组件</small></span></div><div><i></i><span><b>正式交付</b><small>检查并导出</small></span></div></div>'}
+    ];
+    let active='metric', filter='all', query='';
+    const grid=document.getElementById('grid');
+    function visible(){return components.filter(c=>(filter==='all'||c.kind===filter)&&(`${c.name}${c.desc}${c.tags.join('')}`.toLowerCase().includes(query.toLowerCase())));}
+    function render(){
+      const items=visible();
+      grid.innerHTML=items.length?items.map(c=>`<article class="component-tile ${c.id===active?'active':''}" tabindex="0" data-id="${c.id}">
+        <div class="render-zone">${c.html}</div><div class="tile-meta"><div class="tile-name">${c.name}</div><div class="tile-desc">${c.desc}</div></div>
+      </article>`).join(''):'<div class="empty">没有匹配的组件</div>';
+      grid.querySelectorAll('.component-tile').forEach(tile=>{tile.onclick=()=>select(tile.dataset.id);tile.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(tile.dataset.id)}}});
+      lucide.createIcons();
+    }
+    function select(id){
+      active=id; const c=components.find(x=>x.id===id);
+      document.getElementById('largePreview').innerHTML=c.html;
+      document.getElementById('detailName').textContent=c.name;
+      document.getElementById('detailTags').innerHTML=c.tags.map(t=>`<span class="tag">${t}</span>`).join('');
+      document.getElementById('sourceLink').href=c.source;
+      render();
+    }
+    document.getElementById('search').addEventListener('input',e=>{query=e.target.value;render()});
+    document.querySelectorAll('.filter').forEach(btn=>btn.onclick=()=>{filter=btn.dataset.filter;document.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));btn.classList.add('active');render()});
+    select(active);
+  </script>
+</body>
+</html>
