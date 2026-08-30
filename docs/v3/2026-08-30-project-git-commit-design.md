@@ -161,7 +161,7 @@ Commit 开始后：
 当前项目没有可提交的变更
 ```
 
-该 Toast 使用中性样式，不使用错误红色，也不持久化到 Thread。
+该 Toast 使用 warning 黄色样式，不使用错误红色，也不持久化到 Thread。
 
 ### 4.4 成功
 
@@ -211,6 +211,8 @@ fix: 优化增长图表标签布局
 ### 4.6 Toast 定位
 
 所有 Toast 使用现有应用级 Toast 容器或 portal，定位基于整个 viewport，不相对于右侧 Agent 面板。讨论阶段的右栏独立 HTML 仅用于聚焦交互，不代表最终定位容器。
+
+全局 Toast 基础组件统一支持 `neutral`、`success`、`warning`、`error` 四种语义 tone，并由组件集中映射图标、边框、背景、文字、关闭按钮和倒计时条样式。业务调用方只选择 tone，不自行拼装颜色。
 
 ## 5. 操作状态机
 
@@ -924,7 +926,7 @@ UI 统一显示安全文案。详细错误只进入后端日志，日志必须�
 4. `staging`、`analyzing`、`committing` 只在真实后端边界触发，前端不模拟阶段。
 5. 模型必须通过唯一 `git_commit` tool call 返回标题和 items，非法输出最多尝试三次。
 6. 任意失败不损坏工作区或真实 index，不产生重复 Commit。
-7. 无变更只显示应用级中性 Toast，不产生 Timeline 项。
+7. 无变更只显示应用级 warning Toast，不产生 Timeline 项。
 8. 成功项显示 `日期时间 | branch + hash | 文件数 +增 -删`，展开后只显示 items。
 9. 失败项使用同一 Commit 图标的红色变体，只显示日期、统一失败提示和右侧重试按钮。
 10. active Commit 与 Run、steering 和 Project mutation 后端互斥；textarea 仍可编辑。

@@ -14,7 +14,7 @@ import type {
 import type { GitCommitTimelineItem } from '../features/agent/eventReducer';
 import { newClientIdentity } from '../lib/clientIdentity';
 import { IDLE_SESSION, useRunStore } from './runStore';
-import { showGlobalNotice } from './toastStore';
+import { showGlobalWarning } from './toastStore';
 
 const STORAGE_KEY = 'ppt-agent-active-git-commits-v1';
 
@@ -134,7 +134,7 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
         operation.error?.retryable === true,
       ));
     } else if (operation.status === 'empty') {
-      showGlobalNotice('当前项目没有可提交的变更');
+      showGlobalWarning('当前项目没有可提交的变更');
     }
     writePersisted(null, projectId);
     patch(projectId, {
@@ -172,7 +172,7 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
         appendTimelineItem(threadId, failedItem(operationId, event.data.occurred_at, event.data.error.retryable));
         patch(projectId, { status: 'failed', phase: null, streamClose: null, lastEventId: event.id });
       } else {
-        showGlobalNotice('当前项目没有可提交的变更');
+        showGlobalWarning('当前项目没有可提交的变更');
         patch(projectId, { status: 'empty', phase: null, streamClose: null, lastEventId: event.id });
       }
     };

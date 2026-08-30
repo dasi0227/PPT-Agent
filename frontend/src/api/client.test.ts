@@ -12,7 +12,7 @@ describe('fetchClient', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
-    useToastStore.getState().clearErrors();
+    useToastStore.getState().clearToasts();
   });
 
   it('returns undefined for successful empty JSON responses', async () => {
@@ -43,7 +43,7 @@ describe('fetchClient', () => {
       requestId: 'req-123',
       retryable: false,
     });
-    expect(useToastStore.getState().errors).toEqual([
+    expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({ message: '当前状态不可执行' }),
     ]);
   });
@@ -57,7 +57,7 @@ describe('fetchClient', () => {
     })));
 
     await expect(fetchClient('/runs/run-1', { reportError: false })).rejects.toBeInstanceOf(APIError);
-    expect(useToastStore.getState().errors).toEqual([]);
+    expect(useToastStore.getState().toasts).toEqual([]);
   });
 
   it('uses the API retryable field as the HTTP retry authority', async () => {
@@ -89,7 +89,7 @@ describe('fetchClient', () => {
     const request = fetchClient('/slow', { signal: controller.signal });
     controller.abort();
     await expect(request).rejects.toBeInstanceOf(RequestCanceledError);
-    expect(useToastStore.getState().errors).toEqual([]);
+    expect(useToastStore.getState().toasts).toEqual([]);
   });
 
   it('distinguishes a timeout', async () => {
@@ -101,12 +101,12 @@ describe('fetchClient', () => {
     const assertion = expect(request).rejects.toBeInstanceOf(RequestTimeoutError);
     await vi.advanceTimersByTimeAsync(50);
     await assertion;
-    expect(useToastStore.getState().errors[0]?.message).toContain('请求超过');
+    expect(useToastStore.getState().toasts[0]?.message).toContain('请求超过');
   });
 
   it('distinguishes a network failure', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline'); }));
     await expect(fetchClient('/offline')).rejects.toBeInstanceOf(NetworkError);
-    expect(useToastStore.getState().errors[0]?.message).toBe('网络连接失败，请检查网络后重试');
+    expect(useToastStore.getState().toasts[0]?.message).toBe('网络连接失败，请检查网络后重试');
   });
 });

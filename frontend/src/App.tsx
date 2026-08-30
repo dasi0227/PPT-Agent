@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import { GlobalErrorToasts } from './components/ui/GlobalErrorToasts';
+import { GlobalToasts } from './components/ui/GlobalToasts';
 import { GlobalModals } from './features/workspace/GlobalModals';
 import { UnknownRouteRedirect, WorkspaceRoute } from './features/workspace/WorkspaceRoute';
 import { useRunStore } from './stores/runStore';
@@ -25,7 +25,7 @@ export function App() {
         <Route path="*" element={<UnknownRouteRedirect />} />
       </Routes>
       <GlobalModals />
-      <GlobalErrorToasts />
+      <GlobalToasts />
     </BrowserRouter>
   );
 }

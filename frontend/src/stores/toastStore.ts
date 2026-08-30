@@ -1,45 +1,48 @@
 import { create } from 'zustand';
 
-export interface ErrorToast {
+export type ToastTone = 'neutral' | 'success' | 'warning' | 'error';
+
+export interface ToastItem {
   id: string;
   message: string;
-  tone: 'error' | 'neutral';
+  tone: ToastTone;
 }
 
 interface ToastState {
-  errors: ErrorToast[];
-  pushError: (message: string) => string;
-  pushNeutral: (message: string) => string;
-  removeError: (id: string) => void;
-  clearErrors: () => void;
+  toasts: ToastItem[];
+  pushToast: (message: string, tone?: ToastTone) => string;
+  removeToast: (id: string) => void;
+  clearToasts: () => void;
 }
 
 let nextToastId = 0;
 
 export const useToastStore = create<ToastState>((set) => ({
-  errors: [],
-  pushError: (message) => {
+  toasts: [],
+  pushToast: (message, tone = 'neutral') => {
     nextToastId += 1;
-    const id = `error-toast-${nextToastId}`;
-    set((state) => ({ errors: [...state.errors, { id, message, tone: 'error' }] }));
+    const id = `toast-${nextToastId}`;
+    set((state) => ({ toasts: [...state.toasts, { id, message, tone }] }));
     return id;
   },
-  pushNeutral: (message) => {
-    nextToastId += 1;
-    const id = `neutral-toast-${nextToastId}`;
-    set((state) => ({ errors: [...state.errors, { id, message, tone: 'neutral' }] }));
-    return id;
+  removeToast: (id) => {
+    set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) }));
   },
-  removeError: (id) => {
-    set((state) => ({ errors: state.errors.filter((toast) => toast.id !== id) }));
-  },
-  clearErrors: () => set({ errors: [] }),
+  clearToasts: () => set({ toasts: [] }),
 }));
 
 export function showGlobalError(message: string): string {
-  return useToastStore.getState().pushError(message);
+  return useToastStore.getState().pushToast(message, 'error');
 }
 
 export function showGlobalNotice(message: string): string {
-  return useToastStore.getState().pushNeutral(message);
+  return useToastStore.getState().pushToast(message, 'neutral');
+}
+
+export function showGlobalWarning(message: string): string {
+  return useToastStore.getState().pushToast(message, 'warning');
+}
+
+export function showGlobalSuccess(message: string): string {
+  return useToastStore.getState().pushToast(message, 'success');
 }
