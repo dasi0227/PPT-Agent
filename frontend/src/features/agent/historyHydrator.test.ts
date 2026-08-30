@@ -18,7 +18,18 @@ const terminal = (runId = 'r1', data: Record<string, unknown> = {}) => ({
 describe('history hydrator', () => {
   it('reuses public reducers for tools, plan, question, final, and terminal', () => {
     const hydrated = hydrateRunFromHistory([
-      entry(1, 'user_turn', { text: '生成 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
+      entry(1, 'user_turn', {
+        text: '生成 PPT',
+        scope: { artifact: 'ppt', level: 'deck' },
+        mode: 'execute',
+        skills: [{
+          id: 'story',
+          name: '演示叙事',
+          description: '梳理页面叙事。',
+          local_path: '/tmp/skills/story/SKILL.md',
+          open_url: 'vscode://file/tmp/skills/story/SKILL.md',
+        }],
+      }),
       entry(2, 'plan.updated', {
         ...base,
         plan: {
@@ -40,6 +51,10 @@ describe('history hydrator', () => {
     ]);
     expect(hydrated.plan).toMatchObject({ id: 'p1', revision: 1 });
     expect(hydrated.items.map((item) => item.type)).toEqual(['user_turn', 'tool', 'question', 'final']);
+    expect(hydrated.items[0]).toMatchObject({
+      type: 'user_turn',
+      skills: [{ id: 'story', name: '演示叙事' }],
+    });
     expect(hydrated.items.find((item) => item.type === 'question')).toMatchObject({ displayText: '科技' });
     expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'done', pendingQuestion: null });
   });

@@ -60,7 +60,8 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
     case 'run.started':
       return validRunScope(data.scope)
         && ['talk', 'ask', 'plan', 'execute'].includes(String(data.mode))
-        && hasString(data, 'user_input');
+        && hasString(data, 'user_input')
+        && validSkills(data.skills);
     case 'run.progress':
       return progressStages.has(String(data.stage))
         && hasSafeString(data, 'text')
@@ -138,6 +139,18 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && validAnswer(data.answer)
         && hasSafeString(data, 'display_text');
   }
+}
+
+function validSkills(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length > 3) return false;
+  const ids = new Set<string>();
+  return value.every((entry) => {
+    if (!isRecord(entry) || !hasString(entry, 'id') || !hasSafeString(entry, 'name') ||
+      !hasSafeString(entry, 'description') || ids.has(String(entry.id))) return false;
+    ids.add(String(entry.id));
+    return validOptionalSafeString(entry.local_path) && validOptionalSafeString(entry.open_url);
+  });
 }
 
 function validDisplay(value: unknown): boolean {

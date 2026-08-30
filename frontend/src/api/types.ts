@@ -123,6 +123,7 @@ export interface Run {
   mode: RunMode;
   events_url: string;
   model: string | null;
+  skills?: Skill[];
   pause_reason?: string;
   paused_at?: number;
 }
@@ -141,7 +142,20 @@ export interface CreateRunRequest {
   scope: RunScope;
   mode: RunMode;
   instruction: string;
+  skill_ids?: string[];
   options?: { language?: RunLanguage; range?: SlideRange };
+}
+
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  local_path?: string;
+  open_url?: string;
+}
+
+export interface SkillsResponse {
+  skills: Skill[];
 }
 
 export interface LLMProfileCapabilities {
@@ -442,6 +456,7 @@ export type SSEEvent =
       scope: RunScope;
       mode: RunMode;
       user_input: string;
+      skills?: Skill[];
     }>
   | SSEEventBase<'run.progress', PublicEventBase & {
       stage: RunProgressStage;

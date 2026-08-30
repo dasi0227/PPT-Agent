@@ -17,6 +17,7 @@ import { PausedRunCard } from './PausedRunCard';
 import { TimelineDisclosure } from './TimelineDisclosure';
 import { CommandPermissionCard } from './CommandPermissionCard';
 import { GitCommitEvent, GitCommitProgress } from './GitCommitActivity';
+import { SkillActivity } from './SkillActivity';
 import { useProjectStore } from '../../stores/projectStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 
@@ -121,32 +122,39 @@ export const Timeline: React.FC = () => {
     return (
       <div key={item.id} className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
         {item.type === 'user_turn' && (
-          <div className="flex justify-end">
-            <div className="group flex max-w-[88%] flex-col items-end">
-              <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
-                <MarkdownMessage content={item.text} />
-                {item.deliveryStatus && (
-                  <div className={`mt-1 text-[10px] ${
-                    item.deliveryStatus === 'rejected' ? 'text-danger' : 'text-text-400'
-                  }`}>
-                    {item.deliveryStatus === 'sending'
-                      ? '发送中'
-                      : item.deliveryStatus === 'accepted'
-                        ? '已接收'
-                        : '未能加入当前任务'}
-                  </div>
-                )}
+          <>
+            <div className="flex justify-end">
+              <div className="group flex max-w-[88%] flex-col items-end">
+                <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
+                  <MarkdownMessage content={item.text} />
+                  {item.deliveryStatus && (
+                    <div className={`mt-1 text-[10px] ${
+                      item.deliveryStatus === 'rejected' ? 'text-danger' : 'text-text-400'
+                    }`}>
+                      {item.deliveryStatus === 'sending'
+                        ? '发送中'
+                        : item.deliveryStatus === 'accepted'
+                          ? '已接收'
+                          : '未能加入当前任务'}
+                    </div>
+                  )}
+                </div>
+                <MessageMetaActions
+                  text={item.text}
+                  timestamp={item.timestamp}
+                  label="复制用户消息"
+                  scopeLabel={item.scope
+                    ? targetLabel(item.scope.artifact as 'spec' | 'ppt', item.scope.level as 'slide' | 'deck')
+                    : undefined}
+                />
               </div>
-              <MessageMetaActions
-                text={item.text}
-                timestamp={item.timestamp}
-                label="复制用户消息"
-                scopeLabel={item.scope
-                  ? targetLabel(item.scope.artifact as 'spec' | 'ppt', item.scope.level as 'slide' | 'deck')
-                  : undefined}
-              />
             </div>
-          </div>
+            {item.skills && item.skills.length > 0 && (
+              <div className="mt-1">
+                <SkillActivity skills={item.skills} />
+              </div>
+            )}
+          </>
         )}
         {item.type === 'run_lifecycle' && <RunLifecycleRow item={item} />}
         {item.type === 'reasoning' && <ReasoningRow item={item} />}

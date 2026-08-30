@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Artifact, RunMode, ScopeLevel } from '../api/types';
 
 const RECENT_MODEL_KEY = 'ppt-agent-recent-model-profile-v1';
+export const MAX_SELECTED_SKILLS = 3;
 
 function initialModelProfile(): string | null {
   if (typeof localStorage === 'undefined') return null;
@@ -13,11 +14,14 @@ interface ComposerState {
   level: ScopeLevel;
   mode: RunMode;
   modelProfileName: string | null;
+  selectedSkillIds: string[];
   userTouchedTarget: boolean;
   setArtifact: (artifact: Artifact) => void;
   setLevel: (level: ScopeLevel) => void;
   setIntent: (mode: RunMode) => void;
   setModelProfileName: (name: string) => void;
+  toggleSkill: (id: string) => void;
+  reconcileSkills: (validIds: string[]) => void;
   applyContextDefault: (hasSlides: boolean) => void;
   resetForProject: () => void;
 }
@@ -27,6 +31,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   level: 'slide',
   mode: 'execute',
   modelProfileName: initialModelProfile(),
+  selectedSkillIds: [],
   userTouchedTarget: false,
   setArtifact: (artifact) => set({ artifact, userTouchedTarget: true }),
   setLevel: (level) => set({ level, userTouchedTarget: true }),
@@ -35,6 +40,21 @@ export const useComposerStore = create<ComposerState>((set) => ({
     if (typeof localStorage !== 'undefined') localStorage.setItem(RECENT_MODEL_KEY, name);
     set({ modelProfileName: name });
   },
+  toggleSkill: (id) => set((state) => {
+    if (state.selectedSkillIds.includes(id)) {
+      return { selectedSkillIds: state.selectedSkillIds.filter((selected) => selected !== id) };
+    }
+    if (state.selectedSkillIds.length >= MAX_SELECTED_SKILLS) return state;
+    return { selectedSkillIds: [...state.selectedSkillIds, id] };
+  }),
+  reconcileSkills: (validIds) => set((state) => {
+    const valid = new Set(validIds);
+    const selectedSkillIds = state.selectedSkillIds.filter((id) => valid.has(id)).slice(0, MAX_SELECTED_SKILLS);
+    return selectedSkillIds.length === state.selectedSkillIds.length &&
+      selectedSkillIds.every((id, index) => id === state.selectedSkillIds[index])
+      ? state
+      : { selectedSkillIds };
+  }),
   applyContextDefault: (hasSlides) => set((state) => {
     if (state.userTouchedTarget) return state;
     const artifact = hasSlides ? 'ppt' : 'spec';
@@ -45,6 +65,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     artifact: 'ppt',
     level: 'slide',
     mode: 'execute',
+    selectedSkillIds: [],
     userTouchedTarget: false,
   }),
 }));

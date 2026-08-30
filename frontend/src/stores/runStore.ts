@@ -243,6 +243,7 @@ function requestFromTimeline(
     scope: original.scope as RunScope,
     mode: original.mode as RunMode,
     instruction: original.text,
+    ...(original.skills?.length ? { skill_ids: original.skills.map((skill) => skill.id) } : {}),
   };
 }
 
@@ -435,6 +436,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         text: payload.instruction,
         scope: payload.scope,
         mode: payload.mode,
+        skills: payload.skill_ids?.map((id) => ({ id, name: id, description: '' })) ?? [],
         timestamp: Date.now(),
       };
       updateSession(threadId, (prev) => ({
@@ -465,6 +467,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             ...(payload.model || !run.model ? {} : { model: run.model }),
           },
         });
+        updateSession(threadId, (prev) => ({
+          timelineItems: prev.timelineItems.map((item) => (
+            item.id === userItem.id && item.type === 'user_turn'
+              ? { ...item, runId: run.id, skills: run.skills ?? item.skills }
+              : item
+          )),
+        }));
         if (run.model) useComposerStore.getState().setModelProfileName(run.model);
         writePersistedRun({ runId: run.id, threadId, projectId: run.project_id });
         get().subscribeRun(threadId, run.id, undefined, run.project_id);

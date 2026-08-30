@@ -15,7 +15,13 @@ const terminal = {
 };
 
 const payloads: Record<string, unknown> = {
-  'run.started': { ...base, scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute', user_input: '生成 PPT' },
+  'run.started': {
+    ...base,
+    scope: { artifact: 'ppt', level: 'deck' },
+    mode: 'execute',
+    user_input: '生成 PPT',
+    skills: [{ id: 'story', name: '演示叙事', description: '梳理页面叙事。' }],
+  },
   'run.progress': { ...base, stage: 'thinking', text: '正在分析' },
   'run.resumed': base,
   'run.completed': terminal,
@@ -46,6 +52,22 @@ describe('SSE parser', () => {
         event: eventName,
       });
     }
+  });
+
+  it('rejects invalid run Skill projections', () => {
+    const started = payloads['run.started'] as Record<string, unknown>;
+    expect(parsePublicEvent('run.started', {
+      ...started,
+      skills: Array.from({ length: 4 }, (_, index) => ({
+        id: `skill-${index}`,
+        name: `Skill ${index}`,
+        description: 'description',
+      })),
+    })).toBeNull();
+    expect(parsePublicEvent('run.started', {
+      ...started,
+      skills: [{ id: 'duplicate', name: 'One', description: 'first' }, { id: 'duplicate', name: 'Two', description: 'second' }],
+    })).toBeNull();
   });
 
   it('validates command lifecycle projections and project file targets', () => {

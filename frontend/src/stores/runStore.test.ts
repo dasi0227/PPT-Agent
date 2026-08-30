@@ -62,6 +62,12 @@ vi.mock('../api/runs', () => ({
         mode: payload.mode,
         events_url: '',
         model: payload.model ?? 'Kimi K3',
+        skills: (payload.skill_ids ?? []).map((id: string) => ({
+          id,
+          name: id === 'story' ? '演示叙事' : id,
+          description: 'description',
+          open_url: `vscode://file/tmp/skills/${id}/SKILL.md`,
+        })),
       };
       if (createMode === 'pending') return new Promise((resolve) => { resolveCreate = resolve; });
       if (createMode === 'reject') return Promise.reject(new Error('offline'));
@@ -158,6 +164,19 @@ describe('runStore public event sessions', () => {
       scope: request('').scope, mode: request('').mode, events_url: '',
     });
     await pending;
+  });
+
+  test('stores selected Skill metadata on the user turn and reuses ids for retry', async () => {
+    await useRunStore.getState().createRun('t1', {
+      ...request('use a skill'),
+      skill_ids: ['story'],
+    }, 'p1');
+    expect(useRunStore.getState().sessions.t1.timelineItems[0]).toMatchObject({
+      type: 'user_turn',
+      skills: [{ id: 'story', name: '演示叙事' }],
+    });
+    expect(await useRunStore.getState().retryRun('t1')).toBe(true);
+    expect(createRequests[1]).toMatchObject({ skill_ids: ['story'] });
   });
 
   test('preserves the instruction and adds a compact local failure notice', async () => {

@@ -448,6 +448,7 @@
 
 .composer-control-bar.composer-controls-left-compact .composer-mode-button,
 .composer-control-bar.composer-controls-left-compact .composer-plan-button,
+.composer-control-bar.composer-controls-right-compact .composer-skill-button,
 .composer-control-bar.composer-controls-right-compact .composer-target-button,
 .composer-control-bar.composer-controls-right-compact .composer-model-button {
   width: auto;
@@ -462,6 +463,7 @@
 
 .composer-control-bar.composer-controls-left-compact .composer-mode-label,
 .composer-control-bar.composer-controls-left-compact .composer-plan-label,
+.composer-control-bar.composer-controls-right-compact .composer-skill-label,
 .composer-control-bar.composer-controls-right-compact .composer-target-label,
 .composer-control-bar.composer-controls-right-compact .composer-model-label {
   display: inline-block;
@@ -484,6 +486,8 @@
 }
 
 .composer-control-bar.composer-controls-right-compact
+  .composer-skill-button:is(:hover, :focus-visible, [data-state='open']),
+.composer-control-bar.composer-controls-right-compact
   .composer-target-button:is(:hover, :focus-visible, [data-state='open']),
 .composer-control-bar.composer-controls-right-compact
   .composer-model-button:is(:hover, :focus-visible, [data-state='open']) {
@@ -496,6 +500,13 @@
 .composer-control-bar.composer-controls-left-compact
   .composer-plan-button:is(:hover, :focus-visible, [data-state='open'], [aria-pressed='true']) .composer-plan-label {
   max-width: 3rem;
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.composer-control-bar.composer-controls-right-compact
+  .composer-skill-button:is(:hover, :focus-visible, [data-state='open']) .composer-skill-label {
+  max-width: 5rem;
   opacity: 1;
   transform: translateX(0);
 }

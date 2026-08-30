@@ -2,6 +2,7 @@ import type {
   PlanState,
   RunMode,
   RunScope,
+  Skill,
 } from '../../api/types';
 import { parsePublicEvent } from '../../api/sse';
 import { reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
@@ -54,6 +55,21 @@ function readHistoryIntent(data: Record<string, unknown>): RunMode | undefined {
     : undefined;
 }
 
+function readHistorySkills(data: Record<string, unknown>): Skill[] {
+  if (!Array.isArray(data.skills)) return [];
+  return data.skills.slice(0, 3).flatMap((value) => {
+    if (!isRecord(value) || typeof value.id !== 'string' || typeof value.name !== 'string' ||
+      typeof value.description !== 'string') return [];
+    return [{
+      id: value.id,
+      name: value.name,
+      description: value.description,
+      ...(typeof value.local_path === 'string' ? { local_path: value.local_path } : {}),
+      ...(typeof value.open_url === 'string' ? { open_url: value.open_url } : {}),
+    }];
+  });
+}
+
 export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): HydratedRunView {
   const emptySession: HistorySessionState = {
     activeRunId: null,
@@ -89,6 +105,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         timestamp: (entry.ts || 0) * 1000,
         scope,
         mode,
+        skills: readHistorySkills(entry.data),
       });
       continue;
     }

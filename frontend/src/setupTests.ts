@@ -42,6 +42,20 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
       text: async () => JSON.stringify(body),
     } as unknown as Response;
   }
+  if (url.includes('/api/v1/skills')) {
+    const body = {
+      skills: [
+        { id: 'story', name: '演示叙事', description: '梳理页面叙事。' },
+        { id: 'visual', name: '视觉层级', description: '优化页面信息层级。' },
+      ],
+    };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    } as unknown as Response;
+  }
   if (/\/api\/v1\/slides\/[^/]+\/render$/.test(url)) {
     return {
       ok: true,

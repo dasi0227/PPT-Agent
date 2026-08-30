@@ -2,7 +2,8 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Send, Sparkles, StopCircle } from 'lucide-react';
 import { llmApi } from '../../api/llm';
 import { polishApi } from '../../api/polish';
-import type { CreateRunRequest, LLMProfile } from '../../api/types';
+import { skillsApi } from '../../api/skills';
+import type { CreateRunRequest, LLMProfile, Skill } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
@@ -14,6 +15,7 @@ import { isMac } from '../../lib/platform';
 import { newClientIdentity } from '../../lib/clientIdentity';
 import { InteractionModeButtons } from './InteractionModeButtons';
 import { ModelSelector } from './ModelSelector';
+import { SkillSelector } from './SkillSelector';
 import { PlanIndicator } from './PlanIndicator';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
@@ -57,7 +59,7 @@ function readControlWidths(element: HTMLElement): ComposerControlWidths | null {
     end: elementWidth(end),
     startButtons: Array.from(start.querySelectorAll<HTMLElement>('.composer-mode-button, .composer-plan-button'))
       .map(elementWidth),
-    endButtons: Array.from(end.querySelectorAll<HTMLElement>('.composer-target-button, .composer-model-button'))
+    endButtons: Array.from(end.querySelectorAll<HTMLElement>('.composer-skill-button, .composer-target-button, .composer-model-button'))
       .map(elementWidth),
     gap: Number.parseFloat(styles.columnGap) || 0,
   };
@@ -157,6 +159,9 @@ export const CommandComposer: React.FC = () => {
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState('');
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [skillsError, setSkillsError] = useState('');
   const [controlsDensity, setControlsDensity] = useState<ComposerControlsDensity>('full');
   const [polishing, setPolishing] = useState(false);
   const controlBarRef = useRef<HTMLDivElement>(null);
@@ -234,6 +239,27 @@ export const CommandComposer: React.FC = () => {
       });
     return () => { current = false; };
   }, []);
+  useEffect(() => {
+    let current = true;
+    setSkillsLoading(true);
+    setSkillsError('');
+    void skillsApi.list()
+      .then((response) => {
+        if (!current) return;
+        setSkills(response.skills);
+        useComposerStore.getState().reconcileSkills(response.skills.map((skill) => skill.id));
+      })
+      .catch(() => {
+        if (!current) return;
+        setSkills([]);
+        setSkillsError('技能列表加载失败');
+        useComposerStore.getState().reconcileSkills([]);
+      })
+      .finally(() => {
+        if (current) setSkillsLoading(false);
+      });
+    return () => { current = false; };
+  }, []);
 
   useEffect(() => {
     polishRequestRef.current += 1;
@@ -279,9 +305,12 @@ export const CommandComposer: React.FC = () => {
     composer.artifact,
     composer.level,
     composer.modelProfileName,
+    composer.selectedSkillIds.length,
     isEmptyProject,
     profiles.length,
     profilesLoading,
+    skills.length,
+    skillsLoading,
     showCancelButton,
   ]);
 
@@ -318,6 +347,7 @@ export const CommandComposer: React.FC = () => {
       scope,
       mode: composer.mode,
       instruction: raw,
+      ...(composer.selectedSkillIds.length > 0 ? { skill_ids: composer.selectedSkillIds } : {}),
     };
     request = applyShortcut(raw, request);
     if (request.scope.level === 'slide' && !request.scope.slide_id) {
@@ -438,6 +468,11 @@ export const CommandComposer: React.FC = () => {
           {profilesError}
         </div>
       )}
+      {!submitError && !profilesError && skillsError && (
+        <div role="alert" className="mb-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-xs text-warning">
+          {skillsError}
+        </div>
+      )}
       <div className="relative rounded-[22px] border border-border/80 bg-panel shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
         <div className="relative overflow-hidden rounded-t-[22px]">
           <textarea
@@ -498,6 +533,13 @@ export const CommandComposer: React.FC = () => {
             />
           </div>
           <div data-composer-control-group="end" className="flex min-w-0 shrink-0 items-center gap-0.5">
+            <SkillSelector
+              skills={skills}
+              selectedIds={composer.selectedSkillIds}
+              loading={skillsLoading}
+              disabled={disabled || steering}
+              onToggle={composer.toggleSkill}
+            />
             <TargetSelector
               artifact={composer.artifact}
               level={composer.level}
