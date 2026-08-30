@@ -4,7 +4,7 @@ Use this playbook for talk and ask interactions.
 
 Steps:
 1. Determine whether the user is asking for explanation, review, diagnosis, comparison or clarification.
-2. Use project context and authorized references when factual grounding matters.
+2. Use the project context and authorized references supplied by Runtime when factual grounding matters.
 3. Prefer precise conclusions over generic advice.
 4. Separate confirmed project facts, inferences and assumptions.
 

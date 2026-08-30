@@ -276,6 +276,7 @@ type RunState struct {
 	contextIndex            ContextIndex
 	contextIndexRef         string
 	retrievedContext        []RetrievedContextItem
+	lastRetrievalKey        string
 	contextBriefing         string
 	latestToolResults       []CheckpointToolResult
 	lastCheckpointTurn      int
@@ -968,7 +969,7 @@ func batchIsIndependentReads(calls []llm.ToolCall) bool {
 		return false
 	}
 	for _, call := range calls {
-		if call.Name != "read_ppt" && call.Name != "search_refs" {
+		if call.Name != "read_ppt" {
 			return false
 		}
 	}
@@ -1104,6 +1105,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	candidate.contextIndex = NewContextIndexFromPack(candidate.pack, candidate.scope, r.Embedder)
 	candidate.contextIndexRef = candidate.contextIndex.ID
 	candidate.retrievedContext = nil
+	candidate.lastRetrievalKey = ""
 	candidate.contextBriefing = BuildContextBriefing(candidate.pack, &candidate)
 	tools, err := buildDomainToolRegistry(input, candidate.pack)
 	if err != nil {
@@ -1905,8 +1907,6 @@ func (r *Runtime) emitToolProgress(emitter EventEmitter, state *RunState, call l
 	switch call.Name {
 	case "read_ppt":
 		stage, text = "reading", "读取页面中"
-	case "search_refs":
-		stage, text = "reading", "查找资料中"
 	case "mutate_ppt":
 		stage, text = "writing", "更新页面中"
 		if strings.HasSuffix(stringValue(call.Args["op"]), ".write") || stringValue(call.Args["op"]) == "outline.init" || stringValue(call.Args["op"]) == "outline.insert" {

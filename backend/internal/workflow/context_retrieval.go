@@ -439,6 +439,28 @@ func uniqueKeywords(text string) []string {
 	return out
 }
 
+func relevanceScore(query, text string) int {
+	query, text = strings.ToLower(query), strings.ToLower(text)
+	if strings.Contains(text, query) {
+		return 100 + len([]rune(query))
+	}
+	score := 0
+	for _, term := range strings.Fields(query) {
+		if len([]rune(term)) > 1 && strings.Contains(text, term) {
+			score += 10
+		}
+	}
+	return score
+}
+
+func compactSnippet(value string, limit int) string {
+	value = strings.Join(strings.Fields(value), " ")
+	if len([]rune(value)) <= limit {
+		return value
+	}
+	return string([]rune(value)[:limit]) + "…"
+}
+
 func normalizeVector(vec []float32) {
 	sum := 0.0
 	for _, value := range vec {

@@ -267,8 +267,8 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 			emitter.Emit(model.EventToolStarted, model.ToolStartedPayload{
 				PublicEventBase: model.NewPublicEventBase("repeated-resume"),
 				CallID:          callID,
-				Tool:            "search_refs",
-				Display:         model.PublicDisplay{Label: "正在检索参考资料"},
+				Tool:            "read_ppt",
+				Display:         model.PublicDisplay{Label: "正在读取演示内容"},
 			})
 			close(started)
 			<-ctx.Done()
@@ -344,8 +344,8 @@ func TestSupersedingPausedRunPersistsCancellationReason(t *testing.T) {
 			emitter.Emit(model.EventToolStarted, model.ToolStartedPayload{
 				PublicEventBase: model.NewPublicEventBase("superseded"),
 				CallID:          "interrupted-tool",
-				Tool:            "search_refs",
-				Display:         model.PublicDisplay{Label: "正在检索参考资料"},
+				Tool:            "read_ppt",
+				Display:         model.PublicDisplay{Label: "正在读取演示内容"},
 			})
 			close(started)
 			<-ctx.Done()

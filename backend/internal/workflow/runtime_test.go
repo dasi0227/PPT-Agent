@@ -239,7 +239,7 @@ func (blockingReadProvider) RegisterDomainTools(registry *ToolRegistry) error {
 type blockingReadTool struct{}
 
 func (blockingReadTool) Schema() ToolSchema {
-	return ToolSchema{Name: "search_refs", Description: "blocking cancellation test", Parameters: objectSchema(nil, map[string]any{})}
+	return ToolSchema{Name: "read_ppt", Description: "blocking cancellation test", Parameters: objectSchema(nil, map[string]any{})}
 }
 
 func (blockingReadTool) Execute(ctx context.Context, _ DomainToolInput) ToolResult {
@@ -1793,7 +1793,7 @@ func TestCancellationPairsEveryStartedToolBeforeCanceledTerminal(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	emitter := &cancelOnToolStartedEmitter{cancel: cancel}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("blocking-call", "search_refs", map[string]any{"query": "x"}),
+		toolCall("blocking-call", "read_ppt", map[string]any{}),
 	}}
 	outcome := NewRuntime(agent).Run(ctx, RuntimeInput{
 		RunID: "cancel-tool", ProjectDir: t.TempDir(),

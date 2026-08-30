@@ -42,7 +42,6 @@ const (
 	CapabilityPPTRead            ToolCapability = "ppt.read"
 	CapabilityPPTMutate          ToolCapability = "ppt.mutate"
 	CapabilityPPTRender          ToolCapability = "ppt.render"
-	CapabilityContextSearch      ToolCapability = "context.search"
 	CapabilityProjectCommandRead ToolCapability = "project.command.read"
 	CapabilityProjectCommandEdit ToolCapability = "project.command.edit"
 )
@@ -58,7 +57,6 @@ var capabilityPolicies = map[ToolCapability]capabilityPolicy{
 	CapabilityPPTRead:            {ReadOnly: true, Risk: RiskLow},
 	CapabilityPPTMutate:          {ReadOnly: false, Risk: RiskMedium},
 	CapabilityPPTRender:          {ReadOnly: true, Risk: RiskLow},
-	CapabilityContextSearch:      {ReadOnly: true, Risk: RiskLow},
 	CapabilityProjectCommandRead: {ReadOnly: true, Risk: RiskLow},
 	CapabilityProjectCommandEdit: {ReadOnly: false, Risk: RiskHigh},
 }

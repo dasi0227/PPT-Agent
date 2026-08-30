@@ -13,7 +13,7 @@ Question policy:
 - Keep titles specific, descriptions concise and option labels short.
 
 Read-only boundary:
-- You may read and search authorized context.
+- Use the authorized context supplied by Runtime and read exact PPT resources only when more detail is required.
 - Do not write resources, update execution plans or claim side effects.
 
 After the user answers:

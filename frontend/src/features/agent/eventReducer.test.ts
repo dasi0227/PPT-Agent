@@ -103,8 +103,8 @@ describe('public event reducer', () => {
   it('records a resumed run as a compact lifecycle row', () => {
     const running = reduceSSEEvent([], event('tool.started', {
       call_id: 'interrupted',
-      tool: 'search_refs',
-      display: { label: '正在检索参考资料' },
+      tool: 'read_ppt',
+      display: { label: '正在读取演示内容' },
     }));
     const state = reduceSSEEvent(running, event('run.resumed', {}, '2'));
     expect(state).toEqual([
@@ -172,8 +172,8 @@ describe('public event reducer', () => {
   it('uses paused copy when a paused run is superseded by a new request', () => {
     const running = reduceSSEEvent([], event('tool.started', {
       call_id: 'c1',
-      tool: 'search_refs',
-      display: { label: '正在检索参考资料' },
+      tool: 'read_ppt',
+      display: { label: '正在读取演示内容' },
     }));
     const state = reduceSSEEvent(running, event('run.canceled', terminal({ reason: 'superseded' }), '2'));
     expect(state[0]).toMatchObject({

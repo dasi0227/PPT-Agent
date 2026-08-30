@@ -58,24 +58,22 @@ func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testin
 	var mu sync.Mutex
 	order := []string{}
 	active, peak := 0, 0
-	for _, name := range []string{"read_ppt", "search_refs"} {
-		if err := registry.Register(
-			timedBatchTool{name: name, delay: 80 * time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
-			true, "ppt.read", RiskLow, PhaseExecuting,
-		); err != nil {
-			t.Fatal(err)
-		}
+	if err := registry.Register(
+		timedBatchTool{name: "read_ppt", delay: 80 * time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
+		true, "ppt.read", RiskLow, PhaseExecuting,
+	); err != nil {
+		t.Fatal(err)
 	}
 	events := &eventRecorder{}
 	state := batchState(pack)
 	calls := []llm.ToolCall{
 		{ID: "r1", Name: "read_ppt", Args: map[string]any{"id": "one"}},
-		{ID: "r2", Name: "search_refs", Args: map[string]any{"id": "two"}},
+		{ID: "r2", Name: "read_ppt", Args: map[string]any{"id": "two"}},
 	}
 	started := time.Now()
 	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 		RunID: "batch-read", ProjectDir: dir, Context: pack, Emitter: events,
-	}, state, registry, map[string]bool{"read_ppt": true, "search_refs": true}, calls)
+	}, state, registry, map[string]bool{"read_ppt": true}, calls)
 	if elapsed := time.Since(started); elapsed >= 150*time.Millisecond {
 		t.Fatalf("independent reads did not overlap: %s order=%v", elapsed, order)
 	}

@@ -28,18 +28,25 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 	if state == nil {
 		return nil
 	}
+	queryText := retrievalQueryText(state.pack, state)
+	retrievalKey := hashBytes([]byte(state.contextIndex.ID + "\x00" + string(state.phase) + "\x00" + queryText))
+	if retrievalKey == state.lastRetrievalKey {
+		state.contextBriefing = BuildContextBriefing(state.pack, state)
+		return nil
+	}
 	retriever := HybridContextRetriever{
 		Index: state.contextIndex, Embedder: r.Embedder, Scope: state.scope,
 	}
 	result, err := retriever.Retrieve(ctx, RetrievalQuery{
 		RunID: state.runID, Command: state.pack.Command, RequirementLedger: state.requirements,
 		LatestIssues: state.issues, Phase: state.phase,
-		QueryText: retrievalQueryText(state.pack, state), Limit: 5, DetailBudget: 1200,
+		QueryText: queryText, Limit: 5, DetailBudget: 1200,
 	})
 	if err != nil {
 		return err
 	}
 	state.retrievedContext = result.Results
+	state.lastRetrievalKey = retrievalKey
 	state.contextIndexRef = result.IndexRef
 	state.contextBriefing = BuildContextBriefing(state.pack, state)
 	recordTrace(input.Trace, state.runID, "context.retrieved", map[string]any{
@@ -72,10 +79,14 @@ func retrievedContextBrief(items []RetrievedContextItem) string {
 		if item.Target.Type == "" {
 			target = "global"
 		}
-		lines = append(lines, fmt.Sprintf(
+		line := fmt.Sprintf(
 			"- %s kind=%s target=%s rev=%d hash=%s score=%.2f reason=%s",
 			item.RefID, item.Kind, target, item.Revision, shortHash(item.Hash), item.Score, item.SelectionReason,
-		))
+		)
+		if item.Snippet != "" {
+			line += "\n  summary: " + item.Snippet
+		}
+		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n")
 }

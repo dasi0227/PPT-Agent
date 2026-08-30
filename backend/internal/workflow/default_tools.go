@@ -23,7 +23,6 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 	}{
 		{pptReadTool{pack: p.Pack}, true, CapabilityPPTRead, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 		{mutatePPTTool{pack: p.Pack}, false, CapabilityPPTMutate, RiskMedium, []RunPhase{PhaseExecuting}},
-		{referenceSearchTool{pack: p.Pack}, true, CapabilityContextSearch, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 		{slideRenderTool{pack: p.Pack, renderer: renderer}, true, CapabilityPPTRender, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 	}
 	for _, item := range tools {

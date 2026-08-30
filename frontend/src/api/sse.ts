@@ -43,7 +43,7 @@ export function parsePublicEvent(eventName: string, data: unknown, id?: string):
 }
 
 const progressStages = new Set(['thinking', 'planning', 'reading', 'writing', 'rendering', 'finalizing']);
-const businessTools = new Set(['read_ppt', 'mutate_ppt', 'search_refs', 'render_slide', 'run_command']);
+const businessTools = new Set(['read_ppt', 'mutate_ppt', 'render_slide', 'run_command']);
 const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 

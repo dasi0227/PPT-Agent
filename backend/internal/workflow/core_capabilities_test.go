@@ -7,8 +7,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
+
+type countingEmbeddingProvider struct {
+	calls int
+}
+
+func (p *countingEmbeddingProvider) Embed(_ context.Context, input []string) ([][]float32, error) {
+	p.calls++
+	return make([][]float32, len(input)), nil
+}
 
 func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
 	scope := model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "s1"}
@@ -54,6 +64,46 @@ func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
 	}
 	if result.Results[0].Score <= 0 || !strings.Contains(result.Results[0].SelectionReason, "current revision") {
 		t.Fatalf("missing score/reason: %+v", result.Results[0])
+	}
+}
+
+func TestTurnContextRetrievalReusesStableQueryAndInjectsSummary(t *testing.T) {
+	embedder := &countingEmbeddingProvider{}
+	runtime := NewRuntime(nil)
+	runtime.Embedder = embedder
+	state := &RunState{
+		runID: "r", loopID: "loop", phase: PhaseChat,
+		scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+		pack: contextengine.ContextPack{
+			Command: model.RunCommand{Instruction: "pricing roadmap"},
+		},
+		contextIndex: ContextIndex{ID: "idx", Items: []ContextIndexItem{{
+			RefID: "ref", Kind: "history", Source: "current_thread_history",
+			Summary: "pricing roadmap and launch story", Freshness: "current",
+			Hash: "hash", TokenCost: map[DetailLevel]int{DetailSummary: 20},
+		}}},
+		ledger: NewEvidenceLedger(),
+	}
+
+	if err := runtime.retrieveTurnContext(context.Background(), RuntimeInput{}, state); err != nil {
+		t.Fatal(err)
+	}
+	if embedder.calls != 1 || !strings.Contains(state.contextBriefing, "summary: pricing roadmap and launch story") {
+		t.Fatalf("calls=%d briefing=%q", embedder.calls, state.contextBriefing)
+	}
+	if err := runtime.retrieveTurnContext(context.Background(), RuntimeInput{}, state); err != nil {
+		t.Fatal(err)
+	}
+	if embedder.calls != 1 {
+		t.Fatalf("stable retrieval query executed again: calls=%d", embedder.calls)
+	}
+
+	state.issues = append(state.issues, Issue{Code: "NEEDS_REVIEW", Summary: "verify launch story"})
+	if err := runtime.retrieveTurnContext(context.Background(), RuntimeInput{}, state); err != nil {
+		t.Fatal(err)
+	}
+	if embedder.calls != 2 {
+		t.Fatalf("changed retrieval query was not executed: calls=%d", embedder.calls)
 	}
 }
 

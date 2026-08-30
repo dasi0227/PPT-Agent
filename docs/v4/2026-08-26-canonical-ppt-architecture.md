@@ -40,13 +40,14 @@ The execution input must carry the identical mode and scope from its `RunCommand
 | Tool | Capability / risk | Availability |
 | --- | --- | --- |
 | `read_ppt` | `ppt.read` / low, read-only | All Runtime modes in their supported read phases; resource schema is scope-filtered. |
-| `search_refs` | `context.search` / low, read-only | All Runtime modes in their supported read phases. |
 | `render_slide` | `ppt.render` / low, read-only | Execute mode for `ppt` scopes only; slide schema is scope-filtered. |
 | `mutate_ppt` | `ppt.mutate` / medium, write | Execute mode, executing phase, and a `spec` or `ppt` scope only; operation schema is scope-filtered. |
 
 Runtime control actions (`create_plan`, `update_plan`, `ask_user`, `review_completion`, `finish`) are separately disclosed by the current phase and plan state. They must be the sole call in a model response.
 
 The model receives only names, descriptions and parameter schemas. Capability labels and risk levels are Runtime-internal and must not be duplicated in prompts as a second authorization system. If an already disclosed domain tool is ever denied by Runtime policy, Runtime terminates the run immediately because another model turn cannot repair a server-policy inconsistency.
+
+Context retrieval is Runtime-internal context engineering, not a model-visible tool. Runtime selects authorized, in-scope context and injects useful summaries into the dynamic task state; the model uses `read_ppt` when exact PPT resource content is required.
 
 ## Runtime presentation
 

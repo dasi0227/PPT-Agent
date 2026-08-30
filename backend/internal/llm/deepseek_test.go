@@ -66,7 +66,7 @@ func TestDeepSeekGeneratePreservesMultipleToolCallsAndReasoningContinuation(t *t
 		if len(requests) == 1 {
 			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"checking","reasoning_content":"private-state","tool_calls":[
 				{"id":"call-1","type":"function","function":{"name":"read_ppt","arguments":"{\"resource\":{\"type\":\"deck\",\"part\":\"outline\"}}"}},
-				{"id":"call-2","type":"function","function":{"name":"search_refs","arguments":"{\"query\":\"market\"}"}}
+					{"id":"call-2","type":"function","function":{"name":"render_slide","arguments":"{\"slide_id\":\"sli_aaaaaa\"}"}}
 			]}}],"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14}}`))
 			return
 		}
@@ -78,7 +78,7 @@ func TestDeepSeekGeneratePreservesMultipleToolCallsAndReasoningContinuation(t *t
 	})
 	first, err := adapter.Generate(context.Background(), GenerateRequest{
 		Messages: []Message{{Role: RoleUser, Content: TextContent("inspect")}},
-		Tools:    []ToolSchema{{Name: "read_ppt"}, {Name: "search_refs"}},
+		Tools:    []ToolSchema{{Name: "read_ppt"}, {Name: "render_slide"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -96,9 +96,9 @@ func TestDeepSeekGeneratePreservesMultipleToolCallsAndReasoningContinuation(t *t
 			{Role: RoleUser, Content: TextContent("inspect")},
 			{Role: RoleAssistant, Content: TextContent("checking"), ToolCalls: first.ToolCalls},
 			{Role: RoleTool, ToolCallID: "call-1", Content: TextContent("outline")},
-			{Role: RoleTool, ToolCallID: "call-2", Content: TextContent("refs")},
+			{Role: RoleTool, ToolCallID: "call-2", Content: TextContent("rendered")},
 		},
-		Tools:        []ToolSchema{{Name: "read_ppt"}, {Name: "search_refs"}},
+		Tools:        []ToolSchema{{Name: "read_ppt"}, {Name: "render_slide"}},
 		Continuation: first.Continuation,
 	})
 	if err != nil {

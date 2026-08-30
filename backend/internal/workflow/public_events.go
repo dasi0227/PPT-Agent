@@ -173,7 +173,6 @@ var internalTermReplacements = []struct {
 	{regexp.MustCompile(`(?i)\bdeck:design\b`), "视觉设计"},
 	// Tool and control action identifiers.
 	{regexp.MustCompile(`\b(?:read_ppt|mutate_ppt)\b`), "PPT 内容操作"},
-	{regexp.MustCompile(`\bsearch_refs\b`), "参考检索"},
 	{regexp.MustCompile(`\brender_slide\b`), "页面渲染检查"},
 	{regexp.MustCompile(`\b(?:create_plan|update_plan)\b`), "计划"},
 	{regexp.MustCompile(`\breview_completion\b`), "完成检查"},
@@ -291,7 +290,9 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 		if strings.HasPrefix(op, "design.") {
 			part = "design"
 		}
-		return &model.PublicTarget{Type: "deck", Part: part}
+		out := &model.PublicTarget{Type: "deck", Part: part}
+		attachLocalOpenTarget(projectDir, out)
+		return out
 	}
 	if tool == "run_command" {
 		return nil
@@ -302,7 +303,9 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 		targetType = stringValue(target["type"])
 	}
 	if targetType == "manifest" || targetType == "outline" || targetType == "design" {
-		return &model.PublicTarget{Type: "deck", Part: targetType}
+		out := &model.PublicTarget{Type: "deck", Part: targetType}
+		attachLocalOpenTarget(projectDir, out)
+		return out
 	}
 	if targetType == "deck" {
 		out := &model.PublicTarget{Type: "deck", Part: stringValue(target["part"])}
@@ -365,15 +368,6 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "已更新" + targetName, targetDetail(target, "修改已完成"), true
 		}
 		return targetName + "操作失败", publicToolError(result), true
-	case "search_refs":
-		query := sanitizePublicText(stringValue(args["query"]), 48)
-		if query == "" {
-			query = "相关设计参考"
-		}
-		if started {
-			return "查找" + query, "", true
-		}
-		return "已完成参考检索", safeToolDetail(result, "已获得相关参考"), true
 	case "render_slide":
 		if started {
 			return "检查" + targetName + "布局", "", true

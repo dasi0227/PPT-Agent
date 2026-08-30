@@ -182,19 +182,19 @@ describe('runStore public event sessions', () => {
   test('returns to generic running feedback after the last tool finishes', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     const connection = connections[0];
-    connection.onMessage({ id: '1', event: 'run.progress', data: { ...base, stage: 'reading', text: '查找资料中' } });
+    connection.onMessage({ id: '1', event: 'run.progress', data: { ...base, stage: 'reading', text: '读取页面中' } });
     connection.onMessage({
       id: '2',
       event: 'tool.started',
       data: {
         ...base,
         call_id: 'c1',
-        tool: 'search_refs',
-        display: { label: '查找相关参考' },
+        tool: 'read_ppt',
+        display: { label: '读取整份结构' },
       },
     });
     expect(useRunStore.getState().sessions.t1.progress).toMatchObject({
-      stage: 'reading', text: '查找资料中',
+      stage: 'reading', text: '读取页面中',
     });
     connection.onMessage({
       id: '3',
@@ -202,9 +202,9 @@ describe('runStore public event sessions', () => {
       data: {
         ...base,
         call_id: 'c1',
-        tool: 'search_refs',
+        tool: 'read_ppt',
         status: 'completed',
-        display: { label: '已查找相关参考' },
+        display: { label: '已读取整份结构' },
       },
     });
     expect(useRunStore.getState().sessions.t1.progress).toMatchObject({

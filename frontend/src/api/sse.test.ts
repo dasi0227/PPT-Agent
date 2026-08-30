@@ -95,6 +95,7 @@ describe('SSE parser', () => {
       user_input: 'legacy',
     }))).toBeNull();
     expect(parseSSEEvent('tool.started', JSON.stringify({ ...base, call_id: 'c1', tool: 'finish', display: { label: '完成' } }))).toBeNull();
+    expect(parseSSEEvent('tool.started', JSON.stringify({ ...base, call_id: 'c1', tool: 'search_refs', display: { label: '检索参考' } }))).toBeNull();
     expect(parseSSEEvent('tool.completed', JSON.stringify({
       ...(payloads['tool.completed'] as Record<string, unknown>),
       observation: { html: '<section />' },
