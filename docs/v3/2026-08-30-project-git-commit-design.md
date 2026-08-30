@@ -62,9 +62,11 @@ Git 根目录固定为 Project 的权威 `work_dir`：
 
 ```text
 git init --initial-branch=main
+git add -A
+git commit -m "chore: init project"
 ```
 
-创建 Project 时不自动生成初始 Commit。第一次用户 Commit 会提交当前全部项目内容。
+创建 Project 时自动提交系统生成的项目脚手架，固定标题为 `chore: init project`。该初始化提交不调用 LLM、不创建 Git Commit Operation，也不进入 Thread Timeline。用户首次手动 Commit 只处理初始化完成后的真实创作变更；若没有变更则进入 `empty` 终态。
 
 Git identity 通过子进程环境或命令级参数提供，不写用户全局/本地 Git config：
 
@@ -822,7 +824,8 @@ UI 统一显示安全文案。详细错误只进入后端日志，日志必须�
 
 ### 11.1 后端单元测试
 
-- 新 Project 初始化为独立 `main` 仓库，父仓库不会被使用。
+- 新 Project 初始化为独立 `main` 仓库，并以固定 `chore: init project` 创建脚手架基线提交，父仓库不会被使用。
+- 初始化提交不调用 LLM、不创建 Operation、不进入 Thread Timeline；创建后无修改的首次手动 Commit 返回 `empty`。
 - bootstrap 幂等补齐 ignore 条目且不覆盖已有 `.gitignore`。
 - `threads/` 变化不会使 Project 仓库变脏。
 - `StageAll` 包含 tracked、deleted、renamed 和 untracked 文件。

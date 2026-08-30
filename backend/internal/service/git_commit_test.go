@@ -154,3 +154,96 @@ complete:
 		t.Fatalf("unexpected recovery events: %+v err=%v", recoveredEvents, err)
 	}
 }
+
+func TestGitCommitServiceReturnsEmptyAfterProjectInitialization(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	db, cleanupDB, err := sqlitestore.Open(&config.Config{
+		DBPath:   filepath.Join(root, "commit.db"),
+		WorkRoot: root,
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanupDB)
+	st, err := sqlitestore.NewStore(db, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := NewProjectService(st, WorkRoot(root)).CreateProject(ctx, CreateProjectParams{
+		Topic: "Empty after initialization", Language: "zh-CN",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thread := model.Thread{
+		ID: "t-empty", ProjectID: project.ID, HistoryPath: "threads/t-empty.jsonl",
+		Status: "active", CreatedAt: 1, UpdatedAt: 1,
+	}
+	if err := st.CreateThread(ctx, thread); err != nil {
+		t.Fatal(err)
+	}
+
+	provider := &llmtest.FakeProvider{
+		ProviderName: "fake",
+		ModelName:    "commit-model",
+		Caps:         llm.Capabilities{ToolCalls: true},
+	}
+	registry, err := llm.NewRegistryWithProfiles("Commit", []llm.Profile{
+		llm.NewTestProfile("Commit", "https://example.invalid", provider),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewGitCommitService(st, registry, run.NewLockManager())
+	operation, err := svc.Start(ctx, project.ID, GitCommitParams{
+		ThreadID: thread.ID, Model: "Commit", ClientRequestID: "req-empty",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, stop, err := svc.Subscribe(ctx, operation.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+
+	var names []model.GitCommitEventType
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				t.Fatalf("stream closed before empty event: %v", names)
+			}
+			names = append(names, event.Type)
+			if event.Type.Terminal() {
+				goto complete
+			}
+		case <-timer.C:
+			t.Fatal("timed out waiting for empty Git commit")
+		}
+	}
+
+complete:
+	expected := []model.GitCommitEventType{model.EventGitCommitProgress, model.EventGitCommitEmpty}
+	if len(names) != len(expected) {
+		t.Fatalf("unexpected events: %v", names)
+	}
+	for i := range names {
+		if names[i] != expected[i] {
+			t.Fatalf("unexpected events: %v", names)
+		}
+	}
+	stored, err := st.GetGitCommitOperation(ctx, operation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != model.GitCommitEmpty {
+		t.Fatalf("unexpected operation: %+v", stored)
+	}
+	if requests := provider.Requests(); len(requests) != 0 {
+		t.Fatalf("empty commit called the model: %+v", requests)
+	}
+}

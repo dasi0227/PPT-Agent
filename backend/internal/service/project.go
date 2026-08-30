@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,8 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
+
+const initialProjectCommitTitle = "chore: init project"
 
 // ProjectService 管理 Project 生命周期与 work_dir 初始化。
 type ProjectService struct {
@@ -63,7 +66,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	if err := svc.initWorkDir(proj, p); err != nil {
 		return model.Project{}, err
 	}
-	if err := svc.git.Bootstrap(ctx, workDir); err != nil {
+	if err := svc.initializeRepository(ctx, workDir); err != nil {
 		_ = os.RemoveAll(workDir)
 		return model.Project{}, err
 	}
@@ -72,6 +75,22 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 		return model.Project{}, err
 	}
 	return proj, nil
+}
+
+func (svc *ProjectService) initializeRepository(ctx context.Context, workDir string) error {
+	if err := svc.git.Bootstrap(ctx, workDir); err != nil {
+		return err
+	}
+	changes, cleanup, err := svc.git.StageAll(ctx, workDir, "initial")
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	if changes.FilesChanged == 0 {
+		return errors.New("project initialization produced no files")
+	}
+	_, err = svc.git.Commit(ctx, workDir, changes, gitcommit.Message{Title: initialProjectCommitTitle})
+	return err
 }
 
 func (svc *ProjectService) RenameProject(ctx context.Context, id, title string) (model.Project, error) {
