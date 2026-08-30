@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>单个 Skill 图标 8 选 1</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #eef1f5;
+      --surface: #fff;
+      --ink: #17202b;
+      --text: #657181;
+      --subtle: #96a0ad;
+      --border: #d5dbe3;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      min-width: 760px;
+      min-height: 100%;
+      margin: 0;
+      background: var(--workspace);
+      color: var(--ink);
+    }
+
+    body { padding: 32px; }
+    button { font: inherit; }
+
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    main {
+      width: min(960px, calc(100vw - 64px));
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 5px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    header p,
+    .selection {
+      margin: 0;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .selection strong { color: var(--accent); }
+
+    .fixed-entry {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      padding: 0 2px 16px;
+    }
+
+    .fixed-entry-label {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .trigger {
+      display: inline-flex;
+      height: 30px;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid rgb(47 103 246 / 30%);
+      border-radius: 6px;
+      background: var(--accent-soft);
+      padding: 0 8px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .trigger svg,
+    .skill-row > svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.8;
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .option {
+      display: grid;
+      min-height: 102px;
+      grid-template-rows: auto 1fr;
+      gap: 9px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      padding: 12px;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .option:hover {
+      border-color: #b7c0cb;
+      box-shadow: 0 5px 15px rgb(51 65 85 / 7%);
+    }
+
+    .option[aria-pressed="true"] {
+      border-color: rgb(47 103 246 / 55%);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .option-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .option-name {
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .option-note {
+      color: var(--subtle);
+      font-size: 11px;
+    }
+
+    .radio {
+      display: grid;
+      width: 17px;
+      height: 17px;
+      flex: none;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+    }
+
+    .radio::after {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      content: "";
+      opacity: 0;
+    }
+
+    .option[aria-pressed="true"] .radio {
+      border-color: var(--accent);
+    }
+
+    .option[aria-pressed="true"] .radio::after {
+      opacity: 1;
+    }
+
+    .skill-row {
+      display: grid;
+      min-height: 48px;
+      grid-template-columns: 22px minmax(0, 1fr);
+      align-items: start;
+      gap: 9px;
+      border: 1px solid #e0e5eb;
+      border-radius: 6px;
+      padding: 8px 9px;
+      background: #fbfcfd;
+    }
+
+    .skill-row > svg {
+      margin-top: 1px;
+      color: var(--accent);
+    }
+
+    .skill-copy {
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .skill-name {
+      margin-right: 6px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .skill-desc { color: var(--text); }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>单个 Skill 图标</h1>
+        <p>8 个方案均按实际菜单尺寸展示。</p>
+      </div>
+      <div class="selection">当前选择：<strong id="selected-name">Sparkles</strong></div>
+    </header>
+
+    <div class="fixed-entry">
+      <span class="fixed-entry-label">已确认的集合入口</span>
+      <span class="trigger"><i data-lucide="blocks"></i>技能 2</span>
+    </div>
+
+    <section class="options" aria-label="单个 Skill 图标方案">
+      <button class="option" type="button" aria-pressed="true" data-name="Sparkles">
+        <span class="option-head">
+          <span><span class="option-name">1. Sparkles</span> <span class="option-note">轻量智能能力</span></span>
+          <span class="radio"></span>
+        </span>
+        <span class="skill-row">
+          <i data-lucide="sparkles"></i>
+          <span class="skill-copy"><span class="skill-name">演示叙事</span><span class="skill-desc">梳理章节推进、页面职责与核心结论。</span></span>
+        </span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="Badge">
+        <span class="option-head">
+          <span><span class="option-name">2. Badge</span> <span class="option-note">已具备的技能</span></span>
+          <span class="radio"></span>
+        </span>
+        <span class="skill-row">
+          <i data-lucide="badge"></i>
+          <span class="skill-copy"><span class="skill-name">演示叙事</span><span class="skill-desc">梳理章节推进、页面职责与核心结论。</span></span>
+        </span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="Brain Circuit">
+        <span class="option-head">
+          <span><span class="option-name">3. Brain Circuit</span> <span class="option-note">专业认知能力</span></span>
+          <span class="radio"></span>
+        </span>
+        <span class="skill-row">
+          <i data-lucide="brain-circuit"></i>
+          <span class="skill-copy"><span class="skill-name">演示叙事</span><span class="skill-desc">梳理章节推进、页面职责与核心结论。</span></span>
+        </span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="Book Open Text">
+        <span class="option-head">
+          <span><span class="option-name">4. Book Open Text</span> <span class="option-note">方法与指导</span></span>
+          <span class="radio"></span>
+        </span>
+        <span class="skill-row">
+          <i data-lucide="book-open-text"></i>
+          <span class="skill-copy"><span class="skill-name">演示叙事</span><span class="skill-desc">梳理章节推进、页面职责与核心结论。</span></span>
+        </span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="Wand Sparkles">
+        <span class="option-head">
+          <span><span class="option-name">5. Wand Sparkles</span> <span class="option-note">增强与施加能力</span></span>
+          <span class="radio"></span>
+        </span>
+        <span class="skill-row">
+          <i data-lucide="wand-sparkles"></i>
+          <span class="skill-copy"><span class="skill-name">演示叙事</span><span class="skill-desc">梳理章节推进、页面职责与核心结论。</span></span>
+        </span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="Workflow">
+        <span class="option-head">
+          <span><span class="option-name">6. Workflow</span> <span class="option-note">流程化方法</span></span>
+          <span class="radio"></span>
+        </span>
+        <span class="skill-row">
+          <i data-lucide="workflow"></i>
+          <span class="skill-copy"><span class="skill-name">演示叙事</span><span class="skill-desc">梳理章节推进、页面职责与核心结论。</span></span>
+        </span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="Zap">
+        <span class="option-head">
+          <span><span class="option-name">7. Zap</span> <span class="option-note">即时启用能力</span></span>
+          <span class="radio"></span>
+        </span>
+        <span class="skill-row">
+          <i data-lucide="zap"></i>
+          <span class="skill-copy"><span class="skill-name">演示叙事</span><span class="skill-desc">梳理章节推进、页面职责与核心结论。</span></span>
+        </span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="Gem">
+        <span class="option-head">
+          <span><span class="option-name">8. Gem</span> <span class="option-note">精选专业能力</span></span>
+          <span class="radio"></span>
+        </span>
+        <span class="skill-row">
+          <i data-lucide="gem"></i>
+          <span class="skill-copy"><span class="skill-name">演示叙事</span><span class="skill-desc">梳理章节推进、页面职责与核心结论。</span></span>
+        </span>
+      </button>
+    </section>
+  </main>
+
+  <script>
+    const options = [...document.querySelectorAll('.option')];
+    const selectedName = document.getElementById('selected-name');
+
+    options.forEach((option) => {
+      option.addEventListener('click', () => {
+        options.forEach((item) => item.setAttribute('aria-pressed', 'false'));
+        option.setAttribute('aria-pressed', 'true');
+        selectedName.textContent = option.dataset.name;
+      });
+    });
+
+    if (window.lucide) window.lucide.createIcons();
+  </script>
+</body>
+</html>

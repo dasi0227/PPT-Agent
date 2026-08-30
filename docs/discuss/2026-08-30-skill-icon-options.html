@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skill 图标方案</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #eef1f5;
+      --surface: #ffffff;
+      --ink: #17202b;
+      --text: #647080;
+      --subtle: #97a1ae;
+      --border: #d5dbe3;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      min-width: 720px;
+      min-height: 100%;
+      margin: 0;
+      background: var(--workspace);
+      color: var(--ink);
+    }
+
+    body {
+      padding: 36px;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    main {
+      width: min(940px, calc(100vw - 72px));
+      margin: 0 auto;
+    }
+
+    .page-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 5px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .page-head p {
+      margin: 0;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .selected-summary {
+      flex: none;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .selected-summary strong {
+      color: var(--accent);
+    }
+
+    .comparison-head,
+    .option {
+      display: grid;
+      grid-template-columns: 148px 170px minmax(310px, 1fr) 26px;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .comparison-head {
+      padding: 0 14px 8px;
+      color: var(--subtle);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .option {
+      width: 100%;
+      min-height: 86px;
+      margin-bottom: 8px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      padding: 12px 14px;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .option:hover {
+      border-color: #b7c0cb;
+      box-shadow: 0 5px 16px rgb(51 65 85 / 8%);
+    }
+
+    .option[aria-pressed="true"] {
+      border-color: rgb(47 103 246 / 52%);
+      background: #fbfdff;
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    .option-title {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 4px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .tag {
+      border-radius: 4px;
+      background: var(--accent-soft);
+      padding: 2px 5px;
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 650;
+    }
+
+    .option-note {
+      color: var(--text);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .trigger-preview {
+      display: inline-flex;
+      width: fit-content;
+      height: 30px;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid rgb(47 103 246 / 30%);
+      border-radius: 6px;
+      background: var(--accent-soft);
+      padding: 0 8px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .trigger-preview svg {
+      width: 15px;
+      height: 15px;
+      stroke-width: 1.8;
+    }
+
+    .menu-preview {
+      display: grid;
+      min-height: 52px;
+      grid-template-columns: 24px minmax(0, 1fr);
+      align-items: start;
+      gap: 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: var(--surface);
+    }
+
+    .menu-preview > svg {
+      width: 19px;
+      height: 19px;
+      margin-top: 1px;
+      color: var(--accent);
+      stroke-width: 1.75;
+    }
+
+    .menu-copy {
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .menu-name {
+      margin-right: 6px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .menu-desc {
+      color: var(--text);
+    }
+
+    .radio {
+      display: grid;
+      width: 18px;
+      height: 18px;
+      place-items: center;
+      justify-self: end;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+    }
+
+    .radio::after {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      content: "";
+      opacity: 0;
+    }
+
+    .option[aria-pressed="true"] .radio {
+      border-color: var(--accent);
+    }
+
+    .option[aria-pressed="true"] .radio::after {
+      opacity: 1;
+    }
+
+    .decision-note {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      gap: 8px;
+      margin-top: 14px;
+      border-top: 1px solid var(--border);
+      padding: 14px 4px 0;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .decision-note svg {
+      width: 16px;
+      height: 16px;
+      margin-top: 1px;
+      color: var(--accent);
+      stroke-width: 1.75;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="page-head">
+      <div>
+        <h1>Skill 图标方向</h1>
+        <p>每组同时展示 Composer 入口与菜单中的单个 Skill。</p>
+      </div>
+      <div class="selected-summary">当前选择：<strong id="selected-name">模块能力</strong></div>
+    </header>
+
+    <div class="comparison-head" aria-hidden="true">
+      <span>语义方向</span>
+      <span>选择 Skill 入口</span>
+      <span>单个 Skill</span>
+      <span></span>
+    </div>
+
+    <section aria-label="图标方案">
+      <button class="option" type="button" aria-pressed="true" data-name="模块能力">
+        <div>
+          <div class="option-title">模块能力 <span class="tag">推荐</span></div>
+          <div class="option-note">强调 Skill 是可组合、可启停的能力模块。</div>
+        </div>
+        <span class="trigger-preview">
+          <i data-lucide="blocks"></i>
+          技能 2
+        </span>
+        <span class="menu-preview">
+          <i data-lucide="puzzle"></i>
+          <span class="menu-copy">
+            <span class="menu-name">演示叙事</span>
+            <span class="menu-desc">梳理章节推进、页面职责与核心结论。</span>
+          </span>
+        </span>
+        <span class="radio"></span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="技能库">
+        <div>
+          <div class="option-title">技能库</div>
+          <div class="option-note">稳定、克制，但可能让人联想到知识或文档资源。</div>
+        </div>
+        <span class="trigger-preview">
+          <i data-lucide="library-big"></i>
+          技能 2
+        </span>
+        <span class="menu-preview">
+          <i data-lucide="book-open-text"></i>
+          <span class="menu-copy">
+            <span class="menu-name">演示叙事</span>
+            <span class="menu-desc">梳理章节推进、页面职责与核心结论。</span>
+          </span>
+        </span>
+        <span class="radio"></span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="智能增强">
+        <div>
+          <div class="option-title">智能增强</div>
+          <div class="option-note">易理解，但与通用 AI 能力和生成操作较难区分。</div>
+        </div>
+        <span class="trigger-preview">
+          <i data-lucide="sparkles"></i>
+          技能 2
+        </span>
+        <span class="menu-preview">
+          <i data-lucide="wand-sparkles"></i>
+          <span class="menu-copy">
+            <span class="menu-name">演示叙事</span>
+            <span class="menu-desc">梳理章节推进、页面职责与核心结论。</span>
+          </span>
+        </span>
+        <span class="radio"></span>
+      </button>
+
+      <button class="option" type="button" aria-pressed="false" data-name="工具集合">
+        <div>
+          <div class="option-title">工具集合</div>
+          <div class="option-note">操作感明确，但会弱化 Skill 中的方法与指导属性。</div>
+        </div>
+        <span class="trigger-preview">
+          <i data-lucide="briefcase-business"></i>
+          技能 2
+        </span>
+        <span class="menu-preview">
+          <i data-lucide="wrench"></i>
+          <span class="menu-copy">
+            <span class="menu-name">演示叙事</span>
+            <span class="menu-desc">梳理章节推进、页面职责与核心结论。</span>
+          </span>
+        </span>
+        <span class="radio"></span>
+      </button>
+    </section>
+
+    <div class="decision-note">
+      <i data-lucide="circle-help"></i>
+      <span>建议使用“模块能力”：入口用 Blocks 表达技能集合，菜单项用 Puzzle 表达单个可组合能力，集合与单项的语义区分最清楚。</span>
+    </div>
+  </main>
+
+  <script>
+    const options = [...document.querySelectorAll('.option')];
+    const selectedName = document.getElementById('selected-name');
+
+    options.forEach((option) => {
+      option.addEventListener('click', () => {
+        options.forEach((item) => item.setAttribute('aria-pressed', 'false'));
+        option.setAttribute('aria-pressed', 'true');
+        selectedName.textContent = option.dataset.name;
+      });
+    });
+
+    if (window.lucide) window.lucide.createIcons();
+  </script>
+</body>
+</html>

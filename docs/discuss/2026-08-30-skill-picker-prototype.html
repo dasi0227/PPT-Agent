@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>右侧对话栏 Skill 选择原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9edf2;
+      --panel: #f8f9fb;
+      --panel-muted: #f0f3f7;
+      --surface: #ffffff;
+      --ink: #17202b;
+      --text: #5f6b7a;
+      --subtle: #95a0ae;
+      --border: #d5dbe3;
+      --border-strong: #bcc5d0;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      --success: #2f7d65;
+      --shadow: 0 12px 32px rgb(51 65 85 / 18%);
+      font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 440px;
+      min-height: 100%;
+      margin: 0;
+      background: var(--workspace);
+      color: var(--ink);
+    }
+
+    body {
+      display: grid;
+      min-height: 100dvh;
+      place-items: center;
+      overflow: hidden;
+      padding: 24px;
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    textarea:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .agent-panel {
+      display: grid;
+      width: min(440px, calc(100vw - 48px));
+      height: min(780px, calc(100dvh - 48px));
+      min-height: 620px;
+      grid-template-rows: 48px 34px minmax(0, 1fr) auto;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      background: var(--panel);
+      box-shadow: 0 18px 48px rgb(29 41 57 / 14%);
+    }
+
+    .agent-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .agent-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .agent-title svg {
+      width: 16px;
+      height: 16px;
+      color: var(--accent);
+      stroke-width: 1.75;
+    }
+
+    .head-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .icon-button {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text);
+    }
+
+    .icon-button:hover {
+      background: var(--panel-muted);
+      color: var(--ink);
+    }
+
+    .icon-button svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.75;
+    }
+
+    .thread-bar {
+      display: flex;
+      align-items: flex-end;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .thread-tab {
+      height: 30px;
+      padding: 0 8px;
+      border-bottom: 2px solid var(--accent);
+      background: transparent;
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .timeline {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 14px 12px 24px;
+    }
+
+    .user-turn {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 12px;
+    }
+
+    .user-bubble {
+      max-width: 88%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-muted);
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
+    .activity {
+      overflow: hidden;
+      border-radius: 7px;
+    }
+
+    .activity-row {
+      display: grid;
+      width: 100%;
+      min-height: 32px;
+      grid-template-columns: 16px minmax(0, 1fr) 16px;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 6px;
+      background: transparent;
+      color: var(--ink);
+      text-align: left;
+    }
+
+    button.activity-row:hover {
+      background: var(--panel-muted);
+    }
+
+    .activity-row > svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.75;
+    }
+
+    .activity-label {
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 400;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .activity-label.strong {
+      font-weight: 650;
+    }
+
+    .accent { color: var(--accent); }
+    .success { color: var(--success); }
+    .muted { color: var(--subtle); }
+
+    .activity-detail {
+      display: none;
+      padding: 1px 8px 8px 30px;
+    }
+
+    .activity[data-expanded="true"] .activity-detail {
+      display: block;
+    }
+
+    .activity[data-expanded="true"] .chevron {
+      transform: rotate(90deg);
+    }
+
+    .chevron {
+      color: var(--subtle);
+      transition: transform 140ms ease-out;
+    }
+
+    .enabled-skills {
+      display: grid;
+      gap: 0;
+      margin: 0;
+      padding: 0;
+      color: var(--text);
+      list-style: none;
+    }
+
+    .enabled-skills li {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      padding-left: 12px;
+    }
+
+    .enabled-skills li::before {
+      position: absolute;
+      top: 50%;
+      left: 1px;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--accent);
+      content: "";
+      transform: translateY(-50%);
+    }
+
+    .skill-jump {
+      display: grid;
+      width: 100%;
+      min-height: 22px;
+      grid-template-columns: minmax(0, 1fr) 16px;
+      align-items: center;
+      gap: 5px;
+      padding: 1px 4px;
+      border-radius: 4px;
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .skill-jump:hover {
+      background: var(--accent-soft);
+      color: var(--ink);
+    }
+
+    .skill-jump span {
+      overflow: hidden;
+      font-size: 12px;
+      line-height: 1.3;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .skill-jump svg {
+      width: 14px;
+      height: 14px;
+      justify-self: end;
+      color: var(--text);
+      stroke-width: 1.75;
+    }
+
+    .skill-jump:hover svg {
+      color: var(--accent);
+    }
+
+    .composer-wrap {
+      padding: 4px 12px 12px;
+      background: var(--panel);
+    }
+
+    .composer {
+      position: relative;
+      border: 1px solid rgb(213 219 227 / 80%);
+      border-radius: 22px;
+      background: var(--panel);
+      box-shadow: 0 6px 20px rgb(15 23 42 / 6%);
+    }
+
+    .composer textarea {
+      display: block;
+      width: 100%;
+      min-height: 72px;
+      resize: none;
+      border: 0;
+      border-radius: 22px 22px 0 0;
+      background: transparent;
+      padding: 12px 14px;
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .composer textarea::placeholder {
+      color: var(--subtle);
+    }
+
+    .composer.menu-open textarea::placeholder {
+      color: transparent;
+    }
+
+    .composer-bar {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 12px 8px;
+    }
+
+    .control-group {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .control-button {
+      position: relative;
+      display: inline-flex;
+      height: 28px;
+      min-width: 0;
+      flex: none;
+      align-items: center;
+      gap: 3px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 6px;
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 550;
+      white-space: nowrap;
+    }
+
+    .control-button:hover,
+    .control-button[aria-expanded="true"] {
+      background: var(--panel-muted);
+      color: var(--ink);
+    }
+
+    .control-button.active {
+      border-color: rgb(47 103 246 / 30%);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .control-button svg {
+      width: 14px;
+      height: 14px;
+      flex: none;
+      stroke-width: 1.75;
+    }
+
+    .send-button {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      flex: none;
+      place-items: center;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .send-button svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 2;
+    }
+
+    .skill-menu {
+      position: absolute;
+      right: 8px;
+      bottom: 43px;
+      z-index: 10;
+      display: none;
+      width: calc(100% - 16px);
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      transform-origin: right bottom;
+    }
+
+    .skill-menu.open {
+      display: block;
+      animation: menu-enter 130ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+    }
+
+    .skill-option {
+      display: grid;
+      width: 100%;
+      min-height: 48px;
+      grid-template-columns: 22px minmax(0, 1fr);
+      align-items: start;
+      gap: 9px;
+      padding: 9px 10px;
+      border-bottom: 1px solid #e7ebf0;
+      background: var(--surface);
+      color: var(--ink);
+      text-align: left;
+    }
+
+    .skill-option:last-child {
+      border-bottom: 0;
+    }
+
+    .skill-option:hover {
+      background: var(--panel-muted);
+    }
+
+    .skill-option[aria-pressed="true"] {
+      background: var(--accent-soft);
+    }
+
+    .skill-option > svg {
+      width: 18px;
+      height: 18px;
+      margin-top: 1px;
+      color: var(--subtle);
+      stroke-width: 1.75;
+    }
+
+    .skill-option[aria-pressed="true"] > svg {
+      color: var(--accent);
+    }
+
+    .skill-option[aria-disabled="true"] {
+      cursor: not-allowed;
+      opacity: 0.44;
+    }
+
+    .skill-option[aria-disabled="true"]:hover {
+      background: var(--surface);
+    }
+
+    .skill-option-copy {
+      min-width: 0;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .skill-option-name {
+      margin-right: 6px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .skill-option-desc {
+      color: var(--text);
+    }
+
+    .tooltip {
+      position: fixed;
+      z-index: 30;
+      display: none;
+      padding: 5px 7px;
+      border-radius: 5px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 10px;
+      line-height: 1;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .tooltip.visible {
+      display: block;
+    }
+
+    .limit-toast {
+      position: absolute;
+      right: 8px;
+      bottom: 99px;
+      z-index: 20;
+      display: none;
+      padding: 6px 8px;
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      background: var(--ink);
+      color: #fff;
+      box-shadow: 0 6px 16px rgb(15 23 42 / 16%);
+      font-size: 11px;
+    }
+
+    .limit-toast.visible {
+      display: block;
+    }
+
+    @keyframes menu-enter {
+      from {
+        opacity: 0;
+        transform: translateY(4px) scale(0.985);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @media (max-height: 700px) {
+      body { padding: 12px; }
+      .agent-panel {
+        height: calc(100dvh - 24px);
+        min-height: 0;
+      }
+      .skill-menu { bottom: 41px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        transition-duration: 1ms !important;
+        animation-duration: 1ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <aside class="agent-panel" aria-label="智能体对话栏">
+    <header class="agent-head">
+      <div class="agent-title">
+        <i data-lucide="bot"></i>
+        智能体
+      </div>
+      <div class="head-actions">
+        <button class="icon-button" type="button" aria-label="提交项目版本" data-tooltip="提交项目版本">
+          <i data-lucide="git-commit-horizontal"></i>
+        </button>
+        <button class="icon-button" type="button" aria-label="隐藏右侧对话" data-tooltip="隐藏右侧对话">
+          <i data-lucide="panel-right-close"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="thread-bar">
+      <button class="thread-tab" type="button">主会话</button>
+    </div>
+
+    <div class="timeline">
+      <div class="user-turn">
+        <div class="user-bubble">重新梳理这一页的叙事重点，让结论更直接。</div>
+      </div>
+
+      <section class="activity" id="skill-activity" data-expanded="true">
+        <button class="activity-row" id="skill-activity-toggle" type="button" aria-expanded="true">
+          <i data-lucide="blocks" class="success"></i>
+          <span class="activity-label" id="skill-activity-label">已启用 2 个技能</span>
+          <i data-lucide="chevron-right" class="chevron"></i>
+        </button>
+        <div class="activity-detail">
+          <ul class="enabled-skills" id="enabled-skills"></ul>
+        </div>
+      </section>
+
+      <section class="activity">
+        <div class="activity-row">
+          <i data-lucide="brain-circuit" class="accent"></i>
+          <span class="activity-label">我会先检查当前页面的内容层级，再调整标题与关键论点。</span>
+          <span></span>
+        </div>
+      </section>
+
+      <section class="activity">
+        <button class="activity-row" type="button">
+          <i data-lucide="eye" class="success"></i>
+          <span class="activity-label">已读取第 2 页设计稿</span>
+          <i data-lucide="chevron-right" class="muted"></i>
+        </button>
+      </section>
+
+      <section class="activity">
+        <div class="activity-row">
+          <i data-lucide="flag" style="color:#7c3aed"></i>
+          <span class="activity-label strong">页面叙事重点已确认</span>
+          <span></span>
+        </div>
+      </section>
+    </div>
+
+    <div class="composer-wrap">
+      <div class="composer menu-open" id="composer">
+        <textarea aria-label="消息输入" placeholder="输入你的想法与目标"></textarea>
+
+        <div class="skill-menu open" id="skill-menu" role="menu" aria-label="选择技能"></div>
+        <div class="limit-toast" id="skill-limit-toast" role="status">最多选择 3 个技能</div>
+
+        <div class="composer-bar">
+          <div class="control-group">
+            <button class="control-button" type="button">
+              <i data-lucide="messages-square"></i>
+              <span>讨论</span>
+            </button>
+            <button class="control-button" type="button">
+              <i data-lucide="message-circle-question"></i>
+              <span>盘问</span>
+            </button>
+            <button class="control-button" type="button">
+              <i data-lucide="list-checks"></i>
+              <span>计划</span>
+            </button>
+          </div>
+
+          <div class="control-group">
+            <button
+              class="control-button active"
+              id="skill-trigger"
+              type="button"
+              aria-expanded="true"
+              aria-controls="skill-menu"
+              data-tooltip="选择技能，最多 3 个"
+            >
+              <i data-lucide="blocks"></i>
+              <span id="skill-trigger-label">技能 2</span>
+            </button>
+            <button class="control-button" type="button">
+              <i data-lucide="presentation"></i>
+              <span>整套 PPT</span>
+            </button>
+            <button class="control-button" type="button">
+              <i data-lucide="cpu"></i>
+              <span>Kimi K3</span>
+            </button>
+            <button class="send-button" type="button" aria-label="发送">
+              <i data-lucide="send"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="tooltip" id="tooltip" role="tooltip"></div>
+
+  <script>
+    const skills = [
+      {
+        id: 'slide-storytelling',
+        name: '演示叙事',
+        description: '梳理章节推进、页面职责与核心结论。',
+      },
+      {
+        id: 'visual-hierarchy',
+        name: '视觉层级',
+        description: '优化标题、正文、数据与辅助信息的层级关系。',
+      },
+      {
+        id: 'data-visualization',
+        name: '数据可视化',
+        description: '为业务数据选择恰当图表并控制标注密度。',
+      },
+      {
+        id: 'executive-summary',
+        name: '高管摘要',
+        description: '压缩信息并前置结论，突出决策建议。',
+      },
+    ];
+
+    const MAX_SKILLS = 3;
+    const selected = new Set(['slide-storytelling', 'visual-hierarchy']);
+    const composer = document.getElementById('composer');
+    const skillMenu = document.getElementById('skill-menu');
+    const skillTrigger = document.getElementById('skill-trigger');
+    const triggerLabel = document.getElementById('skill-trigger-label');
+    const activity = document.getElementById('skill-activity');
+    const activityToggle = document.getElementById('skill-activity-toggle');
+    const activityLabel = document.getElementById('skill-activity-label');
+    const enabledSkills = document.getElementById('enabled-skills');
+    const limitToast = document.getElementById('skill-limit-toast');
+    const tooltip = document.getElementById('tooltip');
+    let limitToastTimer;
+
+    function refreshIcons() {
+      if (window.lucide) window.lucide.createIcons();
+    }
+
+    function renderMenu() {
+      skillMenu.innerHTML = skills.map((skill) => `
+        <button
+          class="skill-option"
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked="${selected.has(skill.id)}"
+          aria-pressed="${selected.has(skill.id)}"
+          aria-disabled="${!selected.has(skill.id) && selected.size >= MAX_SKILLS}"
+          data-skill-id="${skill.id}"
+        >
+          <i data-lucide="book-open-text"></i>
+          <span class="skill-option-copy">
+            <span class="skill-option-name">${skill.name}</span>
+            <span class="skill-option-desc">${skill.description}</span>
+          </span>
+        </button>
+      `).join('');
+      refreshIcons();
+    }
+
+    function showLimitToast() {
+      window.clearTimeout(limitToastTimer);
+      limitToast.classList.add('visible');
+      limitToastTimer = window.setTimeout(() => {
+        limitToast.classList.remove('visible');
+      }, 1600);
+    }
+
+    function renderSelection() {
+      const chosen = skills.filter((skill) => selected.has(skill.id));
+      const count = chosen.length;
+      triggerLabel.textContent = count ? `技能 ${count}` : '技能';
+      skillTrigger.classList.toggle('active', count > 0);
+      activity.style.display = count ? 'block' : 'none';
+      activityLabel.textContent = `已启用 ${count} 个技能`;
+      enabledSkills.innerHTML = chosen.map((skill) => `
+        <li>
+          <a
+            class="skill-jump"
+            href="file:///Users/bytedance/.dasi/ppt/skills/${skill.id}/SKILL.md"
+            title="打开 ${skill.name}"
+          >
+            <span>${skill.name}</span>
+            <i data-lucide="forward"></i>
+          </a>
+        </li>
+      `).join('');
+      renderMenu();
+      refreshIcons();
+    }
+
+    function setMenuOpen(open) {
+      skillMenu.classList.toggle('open', open);
+      composer.classList.toggle('menu-open', open);
+      skillTrigger.setAttribute('aria-expanded', String(open));
+    }
+
+    skillTrigger.addEventListener('click', () => {
+      setMenuOpen(!skillMenu.classList.contains('open'));
+    });
+
+    skillMenu.addEventListener('click', (event) => {
+      const option = event.target.closest('.skill-option');
+      if (!option) return;
+      const id = option.dataset.skillId;
+      if (selected.has(id)) selected.delete(id);
+      else if (selected.size < MAX_SKILLS) selected.add(id);
+      else {
+        showLimitToast();
+        return;
+      }
+      renderSelection();
+    });
+
+    activityToggle.addEventListener('click', () => {
+      const expanded = activity.dataset.expanded !== 'true';
+      activity.dataset.expanded = String(expanded);
+      activityToggle.setAttribute('aria-expanded', String(expanded));
+    });
+
+    document.addEventListener('mousedown', (event) => {
+      if (!skillMenu.contains(event.target) && !skillTrigger.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+        skillTrigger.focus();
+      }
+    });
+
+    document.addEventListener('mouseover', (event) => {
+      const target = event.target.closest('[data-tooltip]');
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
+      tooltip.textContent = target.dataset.tooltip;
+      tooltip.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
+      tooltip.style.top = `${Math.round(rect.top - 7)}px`;
+      tooltip.style.transform = 'translate(-50%, -100%)';
+      tooltip.classList.add('visible');
+    });
+
+    document.addEventListener('mouseout', (event) => {
+      if (event.target.closest('[data-tooltip]')) tooltip.classList.remove('visible');
+    });
+
+    if (new URLSearchParams(window.location.search).get('menu') === 'closed') {
+      setMenuOpen(false);
+    }
+
+    renderSelection();
+    refreshIcons();
+  </script>
+</body>
+</html>
