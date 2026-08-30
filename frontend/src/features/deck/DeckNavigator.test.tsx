@@ -179,4 +179,12 @@ describe('DeckNavigator', () => {
       node: expect.objectContaining({ kind: 'section', slides: [], subsections: [] }),
     }));
   });
+
+  it('locks structure controls without flashing a warning banner during mutations', () => {
+    useProjectStore.setState({ mutationPendingByProjectId: { pro_1: true } });
+    render(<DeckNavigator />);
+
+    expect(screen.getByRole('button', { name: '新增章节' })).toBeDisabled();
+    expect(screen.queryByText('正在更新目录')).not.toBeInTheDocument();
+  });
 });

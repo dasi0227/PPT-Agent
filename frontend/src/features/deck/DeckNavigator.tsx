@@ -292,7 +292,8 @@ export function DeckNavigator() {
   const ordinalById = useMemo(() => Object.fromEntries(flat.map((item) => [item.node.slide_id, item.ordinal])), [flat]);
   const slideById = useMemo(() => Object.fromEntries(slides.map((slide) => [slide.id, slide])), [slides]);
   const { getState, load } = useSlideRenderCache(activeProjectId);
-  const locked = pendingMutation || ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(status);
+  const runLocked = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(status);
+  const locked = pendingMutation || runLocked;
   const outlineRevision = snapshot?.outline.revision;
 
   const commitMutation = async (request: PPTMutation) => {
@@ -387,9 +388,9 @@ export function DeckNavigator() {
           </button>
         </header>
 
-        {locked && (
+        {runLocked && (
           <div className="border-b border-border bg-warning-soft px-3 py-2 text-xs text-warning">
-            {pendingMutation ? '正在更新目录' : status === 'paused' ? '任务已暂停，目录暂不可编辑' : '任务运行中，目录暂不可编辑'}
+            {status === 'paused' ? '任务已暂停，目录暂不可编辑' : '任务运行中，目录暂不可编辑'}
           </div>
         )}
 
