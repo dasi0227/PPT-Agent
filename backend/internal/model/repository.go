@@ -39,7 +39,6 @@ type Component struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Tags        []ComponentTag `json:"tags"`
-	Kind        string         `json:"kind,omitempty"`
 	HTML        string         `json:"html,omitempty"`
 	LocalPath   string         `json:"-"`
 	OpenURL     string         `json:"open_url"`

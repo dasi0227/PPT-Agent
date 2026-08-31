@@ -136,14 +136,13 @@ describe('personal repository pages', () => {
     expect(screen.getByLabelText('location')).toHaveTextContent('/projects/project-7?slide=slide-2');
   });
 
-  it('filters component kinds and previews HTML only in sandboxed iframes', async () => {
+  it('filters components by tags and previews HTML only in sandboxed iframes', async () => {
     const components = [
       {
         id: 'feature-card',
         name: 'Feature Card',
         description: 'Feature summary',
         tags: ['card'],
-        kind: 'content',
         html: '<article><h2>Feature</h2><script>window.parent.bad=true</script></article>',
         open_url: 'vscode://file/components/feature-card/index.html',
       },
@@ -152,7 +151,6 @@ describe('personal repository pages', () => {
         name: 'Quote Block',
         description: 'Editorial quote',
         tags: ['quote'],
-        kind: 'editorial',
         html: '<blockquote>Quote</blockquote>',
         open_url: 'vscode://file/components/quote-block/index.html',
       },
@@ -176,8 +174,8 @@ describe('personal repository pages', () => {
     expect(detail.getAttribute('srcdoc')).toContain('--text-h1:36px');
     expect(detail.parentElement).toHaveClass('aspect-video');
     expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
-    expect(screen.getByText('卡片')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'editorial' }));
+    expect(screen.getByRole('button', { name: '卡片' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '引用' }));
     expect(screen.getByTitle('Quote Block 组件预览')).toHaveAttribute('sandbox', '');
     expect(screen.queryByTitle('Feature Card 组件预览')).not.toBeInTheDocument();
   });

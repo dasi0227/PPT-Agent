@@ -23,7 +23,6 @@ type componentMeta struct {
 	Name        string               `json:"name"`
 	Description string               `json:"description"`
 	Tags        []model.ComponentTag `json:"tags"`
-	Kind        string               `json:"kind,omitempty"`
 }
 
 func NewComponentService(workRoot WorkRoot) *ComponentService {
@@ -66,7 +65,7 @@ func (s *ComponentService) Get(id string) (model.Component, error) {
 		return model.Component{}, repositoryReadError("component", id, err)
 	}
 	return model.Component{
-		ID: id, Name: meta.Name, Description: meta.Description, Tags: meta.Tags, Kind: meta.Kind,
+		ID: id, Name: meta.Name, Description: meta.Description, Tags: meta.Tags,
 		HTML: string(raw), LocalPath: path, OpenURL: repositoryOpenURL(path),
 	}, nil
 }
@@ -119,7 +118,6 @@ func parseComponentMeta(raw []byte) (componentMeta, error) {
 	}
 	meta.Name = strings.TrimSpace(meta.Name)
 	meta.Description = strings.TrimSpace(meta.Description)
-	meta.Kind = strings.TrimSpace(meta.Kind)
 	if meta.Name == "" || meta.Description == "" {
 		return componentMeta{}, ErrRepositoryCorrupt
 	}

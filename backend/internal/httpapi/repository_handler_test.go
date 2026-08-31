@@ -61,7 +61,7 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	root := t.TempDir()
 	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/manifest.json", `{"name":"Swiss Modern","description":"Grid"}`)
 	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/theme.css", ":root{--color-bg:#fff}")
-	writeRepositoryFixture(t, root, "assets/components/feature-card/index.html", `<!doctype html><script id="meta" type="application/json">{"name":"Feature Card","description":"Summary","tags":["card"],"kind":"content"}</script><article>Feature</article>`)
+	writeRepositoryFixture(t, root, "assets/components/feature-card/index.html", `<!doctype html><script id="meta" type="application/json">{"name":"Feature Card","description":"Summary","tags":["card"]}</script><article>Feature</article>`)
 	writeRepositoryFixture(t, root, "assets/skills/story/SKILL.md", "---\nname: Story\ndescription: Narrative\n---\n# Story\n")
 
 	engine := repositoryTestRouter(root)
@@ -97,6 +97,9 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	}
 	if _, exists := componentBody["disabled"]; exists {
 		t.Fatalf("component DTO must be stateless: %#v", componentBody)
+	}
+	if _, exists := componentBody["kind"]; exists {
+		t.Fatalf("component DTO must not expose legacy kind: %#v", componentBody)
 	}
 
 	patched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/skills/story", `{"disabled":true}`)

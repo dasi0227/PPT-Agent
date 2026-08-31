@@ -98,19 +98,13 @@ function componentTagLabel(tag: ComponentTag): string {
   return componentTagLabels[tag];
 }
 
-function filterLabel(value: string): string {
-  if (value === 'all') return '全部';
-  if (value === 'data') return '数据';
-  if (value === 'content') return '内容';
-  if (value === 'flow') return '流程';
-  return value;
-}
+const componentTagOrder = Object.keys(componentTagLabels) as ComponentTag[];
 
 export function ComponentRepositoryPage() {
   const [components, setComponents] = useState<ComponentReference[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState<ComponentTag | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -131,9 +125,12 @@ export function ComponentRepositoryPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const filters = useMemo(() => ['all', ...new Set(components.map((component) => component.kind).filter(Boolean) as string[])], [components]);
+  const filters = useMemo(() => [
+    'all' as const,
+    ...componentTagOrder.filter((tag) => components.some((component) => component.tags.includes(tag))),
+  ], [components]);
   const visible = useMemo(() => components.filter((component) =>
-    (filter === 'all' || component.kind === filter) &&
+    (filter === 'all' || component.tags.includes(filter)) &&
     `${component.name} ${component.description} ${component.tags.flatMap((tag) => [tag, componentTagLabel(tag)]).join(' ')}`.toLowerCase().includes(query.toLowerCase())), [components, filter, query]);
   const selected = visible.find((component) => component.id === selectedId) ?? visible[0];
 
@@ -162,7 +159,7 @@ export function ComponentRepositoryPage() {
                   active={filter === value}
                   onClick={() => setFilter(value)}
                 >
-                  {filterLabel(value)}
+                  {value === 'all' ? '全部' : componentTagLabel(value)}
                 </RepositoryFilterButton>
               ))}
             >

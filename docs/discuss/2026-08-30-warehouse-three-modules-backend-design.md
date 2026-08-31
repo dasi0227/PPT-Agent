@@ -224,8 +224,7 @@ assets/components/<component-name>/
 {
   "name": "能力卡片",
   "description": "特性卡片：图标 + 标题 + 描述的功能点卡片，适合能力罗列",
-  "tags": ["card"],
-  "kind": "content"
+  "tags": ["card"]
 }
 </script>
 <style>
@@ -249,7 +248,7 @@ assets/components/<component-name>/
 - 目录名 `<component-name>` 为组件 ID（校验规则复用 skill 的 ID pattern 风格：`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`）。
 - `meta.name` 是人类可读展示名，不要求等于目录 ID；API 和工具参数使用 ID，UI 使用 name。
 - `meta.tags` 是多选枚举，只允许 `card/metric/comparison/quote/list/chart/process/timeline/other`；前端分别展示为卡片、指标、对比、引用、列表、图表、流程、时间线、其他。
-- `meta.kind` 继续使用 `content/data/flow` 做一级筛选，tags 不再重复 kind，也不存储 `svg/badge/number` 等实现细节。
+- `meta.tags` 同时用于左侧筛选和详情展示；不保留重复的一级 `kind` 分类，也不存储 `svg/badge/number` 等实现细节。
 - 内联 `<style>` 使用 `var(--token)`，以便套用当前主题（护栏同 §4.6，仅 Prompt 软约束）。
 - `index.html` 单文件上限固定为 64KB。
 - `meta` block 缺失或 name/description 为空的组件在列举时跳过（与 skill 校验策略一致）。
@@ -329,7 +328,7 @@ assets/components/<component-name>/
 | GET | `/api/v1/themes` | 列举主题（name/description/css_url/open_url） | 只读；UI 不展示路径 |
 | GET | `/api/v1/themes/:name` | 主题详情 + CSS 预览 + open_url | 只读 |
 | GET | `/api/v1/themes/:name/css` | 直接提供仓库真源 `theme.css` | `text/css`，只读，供 `theme-link` 使用 |
-| GET | `/api/v1/components` | 列举组件（name/description/tags/open_url） | 只读；无启停字段 |
+| GET | `/api/v1/components` | 列举组件（name/description/tags/open_url） | 只读；无启停或 kind 字段 |
 | GET | `/api/v1/components/:name` | 组件详情 + index.html 预览 + open_url | 只读 |
 | GET | `/api/v1/skills` | 列举技能（含 disabled/open_url） | 复用现有并扩展 |
 | GET | `/api/v1/skills/:id` | 技能正文预览 + disabled/open_url | 只读正文 |

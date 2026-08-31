@@ -185,7 +185,6 @@ export interface ComponentReference {
   name: string;
   description: string;
   tags: ComponentTag[];
-  kind?: string;
   html?: string;
   open_url: string;
 }

@@ -134,7 +134,7 @@
 ### 4. Component
 
 - 管理式网格，卡片不显示重复 Component 图标。
-- 过滤项按真实 tags/kind 设计，但不增加状态过滤。
+- 左侧过滤项按真实 tags 生成，但不增加状态过滤。
 - tags 固定为 `card/metric/comparison/quote/list/chart/process/timeline/other`，界面展示对应中文，不接受任意字符串或重复值。
 - 详情顶部显示名称、ExternalLink、标签；剩余区域全部用于安全预览。
 - 不显示适用场景、路径、底部打开按钮或最近使用。
