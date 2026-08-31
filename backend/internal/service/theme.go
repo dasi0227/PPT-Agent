@@ -84,6 +84,13 @@ func (s *ThemeService) Exists(id string) bool {
 	return err == nil
 }
 
+func (s *ThemeService) Delete(id string) error {
+	if _, err := s.Get(id); err != nil {
+		return err
+	}
+	return deleteRepositoryDirectory(s.root, id)
+}
+
 func themeNotFound(err error) bool {
 	return errors.Is(err, os.ErrNotExist)
 }

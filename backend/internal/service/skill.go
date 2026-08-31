@@ -136,6 +136,39 @@ func (s *SkillService) SetDisabled(id string, disabled bool) (model.RepositorySk
 	} else {
 		delete(registry, id)
 	}
+	if err := s.writeRegistry(registry); err != nil {
+		return model.RepositorySkill{}, err
+	}
+	skill.Disabled = disabled
+	return skill, nil
+}
+
+func (s *SkillService) Delete(id string) error {
+	if _, err := s.Get(id); err != nil {
+		return err
+	}
+	registry, err := s.readRegistry()
+	if err != nil {
+		return err
+	}
+	wasDisabled := registry[id]
+	if wasDisabled {
+		delete(registry, id)
+		if err := s.writeRegistry(registry); err != nil {
+			return err
+		}
+	}
+	if err := deleteRepositoryDirectory(s.root, id); err != nil {
+		if wasDisabled {
+			registry[id] = true
+			_ = s.writeRegistry(registry)
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *SkillService) writeRegistry(registry map[string]bool) error {
 	values := make([]string, 0, len(registry))
 	for value := range registry {
 		values = append(values, value)
@@ -143,14 +176,14 @@ func (s *SkillService) SetDisabled(id string, disabled bool) (model.RepositorySk
 	sort.Strings(values)
 	raw, err := json.MarshalIndent(skillRegistry{Disabled: values}, "", "  ")
 	if err != nil {
-		return model.RepositorySkill{}, err
+		return err
 	}
 	if err := os.MkdirAll(s.root, 0o755); err != nil {
-		return model.RepositorySkill{}, err
+		return err
 	}
 	temp, err := os.CreateTemp(s.root, ".registry-*.json")
 	if err != nil {
-		return model.RepositorySkill{}, err
+		return err
 	}
 	tempPath := temp.Name()
 	defer os.Remove(tempPath)
@@ -163,11 +196,7 @@ func (s *SkillService) SetDisabled(id string, disabled bool) (model.RepositorySk
 	if err == nil {
 		err = os.Rename(tempPath, filepath.Join(s.root, "registry.json"))
 	}
-	if err != nil {
-		return model.RepositorySkill{}, err
-	}
-	skill.Disabled = disabled
-	return skill, nil
+	return err
 }
 
 func (s *SkillService) read(id string) (model.RepositorySkill, error) {

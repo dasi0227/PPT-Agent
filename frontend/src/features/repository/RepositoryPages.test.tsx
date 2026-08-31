@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   getComponent: vi.fn(),
   getSkill: vi.fn(),
   setSkillDisabled: vi.fn(),
+  deleteTheme: vi.fn(),
+  deleteComponent: vi.fn(),
+  deleteSkill: vi.fn(),
   listSkills: vi.fn(),
   setTheme: vi.fn(),
 }));
@@ -25,6 +28,9 @@ vi.mock('../../api/repositories', () => ({
     getComponent: mocks.getComponent,
     getSkill: mocks.getSkill,
     setSkillDisabled: mocks.setSkillDisabled,
+    deleteTheme: mocks.deleteTheme,
+    deleteComponent: mocks.deleteComponent,
+    deleteSkill: mocks.deleteSkill,
   },
 }));
 
@@ -96,6 +102,8 @@ describe('personal repository pages', () => {
     expect(screen.getAllByText('Dasi')).toHaveLength(2);
     expect(screen.queryByText('Aa')).not.toBeInTheDocument();
     expect(screen.getAllByText('Clean grid')).toHaveLength(2);
+    expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
+    expect(screen.getByText('主题分类暂未定义')).toBeInTheDocument();
     expect(screen.queryByText('minimal')).not.toBeInTheDocument();
     expect(screen.getByText('仓库')).toBeInTheDocument();
     expect(screen.queryByText('个人仓库')).not.toBeInTheDocument();
@@ -167,6 +175,7 @@ describe('personal repository pages', () => {
     expect(detail.getAttribute('srcdoc')).toContain('.component-stage{display:grid;place-items:center');
     expect(detail.getAttribute('srcdoc')).toContain('--text-h1:36px');
     expect(detail.parentElement).toHaveClass('aspect-video');
+    expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
     expect(screen.getByText('卡片')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'editorial' }));
     expect(screen.getByTitle('Quote Block 组件预览')).toHaveAttribute('sandbox', '');
@@ -189,6 +198,8 @@ describe('personal repository pages', () => {
     renderPage(<SkillRepositoryPage />);
 
     const toggle = await screen.findByRole('switch', { name: '切换技能状态' });
+    expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
+    expect(screen.getByText('SKILL.md')).toBeInTheDocument();
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(toggle);
     await waitFor(() => expect(mocks.setSkillDisabled).toHaveBeenCalledWith('story', true));
@@ -196,5 +207,30 @@ describe('personal repository pages', () => {
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({ message: 'registry write failed', tone: 'error' }),
     ]);
+  });
+
+  it('confirms component deletion and removes it from the directory', async () => {
+    const component = {
+      id: 'feature-card',
+      name: 'Feature Card',
+      description: 'Feature summary',
+      tags: ['card'],
+      kind: 'content',
+      html: '<article><h2>Feature</h2></article>',
+      open_url: 'vscode://file/components/feature-card/index.html',
+    };
+    mocks.listComponents.mockResolvedValue({ components: [component] });
+    mocks.getComponent.mockResolvedValue(component);
+    mocks.deleteComponent.mockResolvedValue(undefined);
+
+    renderPage(<ComponentRepositoryPage />);
+
+    await screen.findByTitle('Feature Card 组件预览');
+    fireEvent.click(screen.getByRole('button', { name: '删除Feature Card' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('确定删除「Feature Card」吗？');
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+
+    await waitFor(() => expect(mocks.deleteComponent).toHaveBeenCalledWith('feature-card'));
+    await waitFor(() => expect(screen.queryByText('Feature Card')).not.toBeInTheDocument());
   });
 });

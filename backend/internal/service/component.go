@@ -71,6 +71,13 @@ func (s *ComponentService) Get(id string) (model.Component, error) {
 	}, nil
 }
 
+func (s *ComponentService) Delete(id string) error {
+	if _, err := s.Get(id); err != nil {
+		return err
+	}
+	return deleteRepositoryDirectory(s.root, id)
+}
+
 func parseComponentMeta(raw []byte) (componentMeta, error) {
 	doc, err := html.Parse(bytes.NewReader(raw))
 	if err != nil {

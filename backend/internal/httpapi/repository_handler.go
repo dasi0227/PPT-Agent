@@ -42,6 +42,14 @@ func (h *RepositoryHandler) GetTheme(c *gin.Context) {
 	c.JSON(http.StatusOK, value)
 }
 
+func (h *RepositoryHandler) DeleteTheme(c *gin.Context) {
+	if err := h.themes.Delete(c.Param("id")); err != nil {
+		h.repositoryError(c, err, "theme not found")
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (h *RepositoryHandler) ThemeCSS(c *gin.Context) {
 	raw, err := h.themes.CSS(c.Param("id"))
 	if err != nil {
@@ -70,6 +78,14 @@ func (h *RepositoryHandler) GetComponent(c *gin.Context) {
 	c.JSON(http.StatusOK, value)
 }
 
+func (h *RepositoryHandler) DeleteComponent(c *gin.Context) {
+	if err := h.components.Delete(c.Param("id")); err != nil {
+		h.repositoryError(c, err, "component not found")
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 func (h *RepositoryHandler) ListSkills(c *gin.Context) {
 	values, err := h.skills.List()
 	if err != nil {
@@ -86,6 +102,14 @@ func (h *RepositoryHandler) GetSkill(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, value)
+}
+
+func (h *RepositoryHandler) DeleteSkill(c *gin.Context) {
+	if err := h.skills.Delete(c.Param("id")); err != nil {
+		h.repositoryError(c, err, "skill not found")
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (h *RepositoryHandler) PatchSkill(c *gin.Context) {

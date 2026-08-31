@@ -36,11 +36,14 @@ func repositoryTestRouter(root string) *gin.Engine {
 	engine.GET("/api/v1/themes", handler.ListThemes)
 	engine.GET("/api/v1/themes/:id", handler.GetTheme)
 	engine.GET("/api/v1/themes/:id/css", handler.ThemeCSS)
+	engine.DELETE("/api/v1/themes/:id", handler.DeleteTheme)
 	engine.GET("/api/v1/components", handler.ListComponents)
 	engine.GET("/api/v1/components/:id", handler.GetComponent)
+	engine.DELETE("/api/v1/components/:id", handler.DeleteComponent)
 	engine.GET("/api/v1/skills", handler.ListSkills)
 	engine.GET("/api/v1/skills/:id", handler.GetSkill)
 	engine.PATCH("/api/v1/skills/:id", handler.PatchSkill)
+	engine.DELETE("/api/v1/skills/:id", handler.DeleteSkill)
 	return engine
 }
 
@@ -106,5 +109,22 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	}
 	if skillBody["id"] != "story" || skillBody["disabled"] != true || skillBody["open_url"] == "" {
 		t.Fatalf("unexpected skill DTO: %#v", skillBody)
+	}
+
+	for _, deletion := range []struct {
+		path string
+		dir  string
+	}{
+		{path: "/api/v1/themes/swiss-modern", dir: "assets/themes/swiss-modern"},
+		{path: "/api/v1/components/feature-card", dir: "assets/components/feature-card"},
+		{path: "/api/v1/skills/story", dir: "assets/skills/story"},
+	} {
+		response := performRepositoryRequest(t, engine, http.MethodDelete, deletion.path, "")
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("delete %s response = %d %s", deletion.path, response.Code, response.Body.String())
+		}
+		if _, err := os.Stat(filepath.Join(root, deletion.dir)); !os.IsNotExist(err) {
+			t.Fatalf("repository directory still exists after deleting %s: %v", deletion.path, err)
+		}
 	}
 }

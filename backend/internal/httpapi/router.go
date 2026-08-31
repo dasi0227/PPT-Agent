@@ -44,11 +44,14 @@ func (r *Router) register() {
 	v1.GET("/themes", r.repository.ListThemes)
 	v1.GET("/themes/:id", r.repository.GetTheme)
 	v1.GET("/themes/:id/css", r.repository.ThemeCSS)
+	v1.DELETE("/themes/:id", r.repository.DeleteTheme)
 	v1.GET("/components", r.repository.ListComponents)
 	v1.GET("/components/:id", r.repository.GetComponent)
+	v1.DELETE("/components/:id", r.repository.DeleteComponent)
 	v1.GET("/skills", r.repository.ListSkills)
 	v1.GET("/skills/:id", r.repository.GetSkill)
 	v1.PATCH("/skills/:id", r.repository.PatchSkill)
+	v1.DELETE("/skills/:id", r.repository.DeleteSkill)
 
 	// Project / Thread：API 契约入口，前端不需要绕过 HTTP 直接造数据。
 	v1.GET("/projects", r.project.List)

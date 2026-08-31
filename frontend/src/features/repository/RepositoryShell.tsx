@@ -55,7 +55,7 @@ export function RepositoryShell({
         </Link>
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <nav className="flex shrink-0 gap-1 border-b border-border bg-panel p-2 md:w-52 md:flex-col md:border-b-0 md:border-r md:p-3" aria-label="仓库目录">
+        <nav className="flex shrink-0 gap-1 border-b border-border bg-panel p-2 md:w-16 md:flex-col md:border-b-0 md:border-r md:p-3 xl:w-52" aria-label="仓库目录">
           {sections.map((item) => {
             const Icon = item.icon;
             return (
@@ -65,14 +65,14 @@ export function RepositoryShell({
                 state={repositoryLocationState}
                 aria-current={section === item.id ? 'page' : undefined}
                 className={cn(
-                  'flex h-10 flex-1 items-center justify-center gap-2.5 rounded-lg px-3 text-sm transition-colors active:translate-y-px md:flex-none md:justify-start',
+                  'flex h-10 flex-1 items-center justify-center gap-2.5 rounded-lg px-3 text-sm transition-colors active:translate-y-px md:flex-none xl:justify-start',
                   section === item.id
                     ? 'bg-accent-soft font-semibold text-accent shadow-[inset_0_0_0_1px_rgba(47,103,246,0.08)]'
                     : 'text-text-600 hover:bg-panel-muted hover:text-text-900',
                 )}
               >
                 <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />
-                <span>{item.label}</span>
+                <span className="md:hidden xl:inline">{item.label}</span>
               </Link>
             );
           })}

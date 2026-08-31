@@ -74,6 +74,40 @@ func readRepositoryFile(root, id, filename string, maxBytes int64) ([]byte, stri
 	return raw, resolvedPath, nil
 }
 
+func deleteRepositoryDirectory(root, id string) error {
+	if !validRepositoryID(id) || filepath.IsAbs(id) || strings.ContainsAny(id, `/\`) {
+		return ErrInvalidRepositoryID
+	}
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
+		return ErrUnsafeRepositoryPath
+	}
+	dir := filepath.Join(root, id)
+	dirInfo, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if !dirInfo.IsDir() || dirInfo.Mode()&os.ModeSymlink != 0 {
+		return ErrUnsafeRepositoryPath
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(resolvedRoot, resolvedDir)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return ErrUnsafeRepositoryPath
+	}
+	return os.RemoveAll(resolvedDir)
+}
+
 func repositoryIDs(root string) ([]string, error) {
 	entries, err := os.ReadDir(root)
 	if errors.Is(err, fs.ErrNotExist) {

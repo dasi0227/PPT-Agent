@@ -104,11 +104,17 @@ func TestRepositoryServicesRejectTraversalSymlinksAndOversizeFiles(t *testing.T)
 	if _, err := service.Get("../valid"); !errors.Is(err, ErrInvalidRepositoryID) {
 		t.Fatalf("traversal err=%v", err)
 	}
+	if err := service.Delete("../valid"); !errors.Is(err, ErrInvalidRepositoryID) {
+		t.Fatalf("delete traversal err=%v", err)
+	}
 	if err := os.Symlink(filepath.Join(themeRoot, "valid"), filepath.Join(themeRoot, "linked")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Get("linked"); !errors.Is(err, ErrUnsafeRepositoryPath) {
 		t.Fatalf("symlink err=%v", err)
+	}
+	if err := service.Delete("linked"); !errors.Is(err, ErrUnsafeRepositoryPath) {
+		t.Fatalf("delete symlink err=%v", err)
 	}
 	writeRepositoryFile(t, filepath.Join(themeRoot, "large/manifest.json"), `{"name":"Large","description":"Large theme"}`)
 	writeRepositoryFile(t, filepath.Join(themeRoot, "large/theme.css"), strings.Repeat("x", maxRepositoryFileSize+1))
@@ -131,6 +137,17 @@ func TestSkillRegistryMissingCorruptAndAtomicToggle(t *testing.T) {
 	}
 	if _, err := service.Resolve([]string{"s1"}); err == nil {
 		t.Fatal("disabled skill resolved")
+	}
+	if err := service.Delete("s1"); err != nil {
+		t.Fatalf("delete skill: %v", err)
+	}
+	skills, err = service.List()
+	if err != nil || len(skills) != 0 {
+		t.Fatalf("deleted skill remained listed: skills=%+v err=%v", skills, err)
+	}
+	registryRaw, err := os.ReadFile(filepath.Join(root, "assets/skills/registry.json"))
+	if err != nil || strings.Contains(string(registryRaw), "s1") {
+		t.Fatalf("deleted skill remained in registry: %q err=%v", registryRaw, err)
 	}
 	writeRepositoryFile(t, filepath.Join(root, "assets/skills/registry.json"), `{`)
 	if _, err := service.List(); !errors.Is(err, ErrRepositoryCorrupt) {

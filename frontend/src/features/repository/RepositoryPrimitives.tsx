@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
-import { AlertCircle, ExternalLink, Search } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
+import { AlertCircle, ChevronRight, ExternalLink, Search, Trash2 } from 'lucide-react';
+import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { cn } from '../../lib/utils';
 import { Skeleton } from '../../components/ui/primitives';
 
@@ -45,6 +46,184 @@ export function RepositoryFileLink({ href }: { href?: string }) {
   );
 }
 
+export function RepositoryWorkspace({ children }: { children: ReactNode }) {
+  return (
+    <div
+      data-repository-workspace
+      className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[320px_minmax(0,1fr)]"
+    >
+      {children}
+    </div>
+  );
+}
+
+export function RepositoryCatalog({
+  label,
+  controls,
+  children,
+}: {
+  label: string;
+  controls: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <aside
+      className="flex max-h-[340px] min-h-0 flex-col border-b border-border bg-panel md:max-h-none md:border-b-0 md:border-r"
+      aria-label={label}
+    >
+      <div className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-3">
+        {controls}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">{children}</div>
+    </aside>
+  );
+}
+
+export function RepositoryFilterButton({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'h-7 shrink-0 rounded-md px-2.5 text-xs font-semibold transition-all active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1',
+        active
+          ? 'bg-surface text-accent shadow-[0_1px_3px_rgba(51,65,85,0.12)] ring-1 ring-border'
+          : 'text-text-600 hover:bg-panel-muted hover:text-text-900',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function RepositoryDirectoryItem({
+  active,
+  disabled = false,
+  name,
+  description,
+  visual,
+  visualClassName,
+  onClick,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  name: string;
+  description: string;
+  visual: ReactNode;
+  visualClassName?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'group mb-1 grid min-h-[66px] w-full grid-cols-[58px_minmax(0,1fr)_18px] items-center gap-2.5 rounded-lg border p-2 text-left transition-all active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset',
+        active
+          ? 'border-accent/30 bg-accent-soft shadow-[0_2px_8px_rgba(47,103,246,0.07)]'
+          : 'border-transparent hover:border-border hover:bg-surface',
+        disabled && 'text-text-400',
+      )}
+    >
+      <span
+        className={cn(
+          'grid h-[42px] w-[58px] place-items-center overflow-hidden rounded-md border border-border bg-surface',
+          visualClassName,
+        )}
+        aria-hidden="true"
+      >
+        {visual}
+      </span>
+      <span className="min-w-0">
+        <span className={cn('block truncate text-[13px] font-bold', disabled ? 'text-text-400' : 'text-text-900')}>
+          {name}
+        </span>
+        <span className="mt-0.5 block line-clamp-2 text-[11px] leading-4 text-text-600">{description}</span>
+      </span>
+      <ChevronRight
+        className={cn(
+          'h-3.5 w-3.5 text-text-400 transition-transform group-hover:translate-x-0.5',
+          active && 'text-accent',
+        )}
+        strokeWidth={1.75}
+      />
+    </button>
+  );
+}
+
+export function RepositoryDetail({
+  label,
+  title,
+  description,
+  openUrl,
+  properties,
+  actions,
+  children,
+  contentClassName,
+  deleteNoun,
+  onDelete,
+}: {
+  label: string;
+  title: string;
+  description: string;
+  openUrl?: string;
+  properties?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+  contentClassName?: string;
+  deleteNoun: string;
+  onDelete: () => void | Promise<void>;
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  return (
+    <section className="flex min-h-[420px] min-w-0 flex-col bg-surface md:min-h-0" aria-label={label}>
+      <header className="flex min-h-[114px] shrink-0 flex-col items-start justify-between gap-3 border-b border-border bg-surface px-5 py-4 lg:flex-row lg:gap-6">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1">
+            <h2 className="truncate text-base font-bold leading-6 text-text-900">{title}</h2>
+            <RepositoryFileLink href={openUrl} />
+          </div>
+          <p className="mt-0.5 line-clamp-2 max-w-3xl text-xs font-medium leading-[18px] text-text-600">
+            {description}
+          </p>
+          {properties && <div className="mt-2 flex min-h-5 min-w-0 flex-wrap items-center gap-x-4 gap-y-1">{properties}</div>}
+        </div>
+        {actions && <div className="shrink-0">{actions}</div>}
+      </header>
+      <div className={cn('min-h-0 flex-1 overflow-auto bg-canvas/70', contentClassName)}>{children}</div>
+      <footer className="flex h-[46px] shrink-0 items-center justify-end border-t border-border bg-surface px-3">
+        <button
+          type="button"
+          onClick={() => setDeleteOpen(true)}
+          className="grid h-8 w-8 place-items-center rounded-md text-text-400 transition-colors hover:bg-danger-soft hover:text-danger active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+          title={`删除${deleteNoun}`}
+          aria-label={`删除${title}`}
+        >
+          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+      </footer>
+      <ConfirmModal
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={`删除${deleteNoun}`}
+        description={`确定删除「${title}」吗？该操作不可撤销。`}
+        confirmLabel="删除"
+        variant="danger"
+        onConfirm={onDelete}
+      />
+    </section>
+  );
+}
+
 export function RepositoryTagList({ tags, limit = 3 }: { tags: string[]; limit?: number }) {
   if (tags.length === 0) return null;
   return (
@@ -82,12 +261,12 @@ export function RepositoryState({
 
 export function RepositoryLoading({ aside = false }: { aside?: boolean }) {
   return (
-    <div role="status" aria-label="正在加载" className={cn('grid min-h-0 flex-1 gap-4 p-4', aside ? 'grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
+    <div role="status" aria-label="正在加载" className={cn('grid min-h-0 flex-1', aside ? 'grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)]' : 'grid-cols-1')}>
       {aside && (
-        <div className="space-y-3 rounded-lg border border-border bg-panel p-3">
+        <div className="space-y-3 border-b border-border bg-panel p-3 md:border-b-0 md:border-r">
           {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="flex gap-3 rounded-lg p-2">
-              <Skeleton className="h-14 w-24 shrink-0" />
+            <div key={index} className="flex gap-3 rounded-lg px-2 py-2.5">
+              <Skeleton className="h-[42px] w-[58px] shrink-0" />
               <div className="flex-1 space-y-2 py-1">
                 <Skeleton className="h-4 w-2/3" />
                 <Skeleton className="h-3 w-full" />
@@ -96,7 +275,7 @@ export function RepositoryLoading({ aside = false }: { aside?: boolean }) {
           ))}
         </div>
       )}
-      <div className="flex min-h-0 items-center justify-center rounded-lg border border-border bg-canvas/60 p-8">
+      <div className="flex min-h-0 items-center justify-center bg-canvas/60 p-8">
         <div className="aspect-video w-full max-w-4xl space-y-4 rounded-lg border border-border bg-surface p-8 shadow-canvas">
           <Skeleton className="h-5 w-28" />
           <Skeleton className="h-10 w-2/3" />
@@ -136,14 +315,6 @@ export function SegmentedControl<T extends string>({
           {option.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-export function RepositoryToolbar({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex min-h-[68px] shrink-0 items-center justify-between gap-4 border-b border-border bg-panel px-4 md:px-5">
-      {children}
     </div>
   );
 }

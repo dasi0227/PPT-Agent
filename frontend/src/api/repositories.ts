@@ -10,12 +10,24 @@ import type {
 export const repositoriesApi = {
   listThemes: () => fetchClient<ThemesResponse>('/themes', { reportError: false }),
   getTheme: (id: string) => fetchClient<Theme>(`/themes/${encodeURIComponent(id)}`, { reportError: false }),
+  deleteTheme: (id: string) => fetchClient<void>(`/themes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    reportError: false,
+  }),
   listComponents: () => fetchClient<ComponentsResponse>('/components', { reportError: false }),
   getComponent: (id: string) => fetchClient<ComponentReference>(`/components/${encodeURIComponent(id)}`, { reportError: false }),
+  deleteComponent: (id: string) => fetchClient<void>(`/components/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    reportError: false,
+  }),
   getSkill: (id: string) => fetchClient<Skill>(`/skills/${encodeURIComponent(id)}`, { reportError: false }),
   setSkillDisabled: (id: string, disabled: boolean) => fetchClient<Skill>(`/skills/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify({ disabled }),
+    reportError: false,
+  }),
+  deleteSkill: (id: string) => fetchClient<void>(`/skills/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
     reportError: false,
   }),
 };

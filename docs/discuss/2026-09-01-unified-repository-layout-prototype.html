@@ -1,0 +1,1401 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dasi 统一仓库布局原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --canvas: #f1f4f8;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --danger: #c94242;
+      --success: #2f7d65;
+      --radius: 8px;
+      --shadow-canvas: 0 18px 44px rgba(51, 65, 85, 0.16);
+      --font-sans: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 320px;
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      overflow: hidden;
+      background: var(--workspace);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      color: inherit;
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+      outline-offset: 2px;
+    }
+
+    .app {
+      display: grid;
+      width: 100%;
+      height: 100dvh;
+      grid-template-rows: 48px minmax(0, 1fr);
+    }
+
+    .app-bar {
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border-strong);
+      background: var(--surface);
+      padding: 0 12px;
+    }
+
+    .brand {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--text);
+      color: var(--surface);
+    }
+
+    .app-context {
+      display: flex;
+      min-width: 0;
+      flex: 1;
+      align-items: center;
+    }
+
+    .divider {
+      width: 1px;
+      height: 20px;
+      margin: 0 12px;
+      background: var(--border);
+    }
+
+    .context-label {
+      overflow: hidden;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      flex: 0 0 auto;
+      place-items: center;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-secondary);
+      transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+    }
+
+    .icon-button:hover {
+      background: var(--panel-muted);
+      color: var(--text);
+    }
+
+    .icon-button:active {
+      transform: translateY(1px);
+    }
+
+    .icon-button.danger:hover {
+      background: #fff0f0;
+      color: var(--danger);
+    }
+
+    .shell {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-columns: 208px minmax(0, 1fr);
+    }
+
+    .module-nav {
+      min-height: 0;
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+      padding: 12px;
+    }
+
+    .module-button {
+      display: flex;
+      width: 100%;
+      height: 40px;
+      align-items: center;
+      gap: 10px;
+      border-radius: var(--radius);
+      background: transparent;
+      padding: 0 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-align: left;
+      transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+    }
+
+    .module-button + .module-button {
+      margin-top: 4px;
+    }
+
+    .module-button:hover {
+      background: var(--panel-muted);
+      color: var(--text);
+    }
+
+    .module-button:active {
+      transform: translateY(1px);
+    }
+
+    .module-button.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 650;
+      box-shadow: inset 0 0 0 1px rgba(47, 103, 246, 0.08);
+    }
+
+    .content {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: 64px minmax(0, 1fr);
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 24px;
+    }
+
+    .page-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 750;
+      line-height: 1;
+    }
+
+    .search {
+      display: flex;
+      width: min(280px, 48vw);
+      height: 36px;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 0 12px;
+      color: var(--text-muted);
+      transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+    }
+
+    .search:focus-within {
+      border-color: var(--accent);
+      background: var(--surface);
+      box-shadow: 0 0 0 3px rgba(47, 103, 246, 0.08);
+    }
+
+    .search input {
+      min-width: 0;
+      flex: 1;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .search input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .workspace {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-columns: 320px minmax(0, 1fr);
+    }
+
+    .catalog {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: 48px minmax(0, 1fr);
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .filters {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--border);
+      padding: 0 12px;
+      scrollbar-width: none;
+    }
+
+    .filters::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter-button {
+      height: 28px;
+      flex: 0 0 auto;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 10px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .filter-button:hover {
+      background: var(--panel-muted);
+      color: var(--text);
+    }
+
+    .filter-button.active {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--accent);
+      box-shadow: 0 1px 3px rgba(51, 65, 85, 0.08);
+    }
+
+    .filter-placeholder {
+      overflow: hidden;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .directory {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .directory-item {
+      display: grid;
+      width: 100%;
+      min-height: 66px;
+      grid-template-columns: 58px minmax(0, 1fr) 18px;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      background: transparent;
+      padding: 8px;
+      text-align: left;
+      transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+    }
+
+    .directory-item + .directory-item {
+      margin-top: 4px;
+    }
+
+    .directory-item:hover {
+      border-color: var(--border);
+      background: var(--surface);
+    }
+
+    .directory-item:active {
+      transform: translateY(1px);
+    }
+
+    .directory-item.active {
+      border-color: rgba(47, 103, 246, 0.28);
+      background: var(--accent-soft);
+    }
+
+    .item-visual {
+      display: grid;
+      width: 58px;
+      height: 42px;
+      place-items: center;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--accent);
+    }
+
+    .item-visual.skill-status {
+      width: 34px;
+      height: 34px;
+      border: 0;
+      border-radius: 50%;
+      background: color-mix(in srgb, var(--success) 10%, var(--surface));
+      color: var(--success);
+    }
+
+    .item-visual.skill-status.disabled {
+      background: var(--panel-muted);
+      color: var(--text-muted);
+    }
+
+    .theme-mini {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #f4f1ea;
+    }
+
+    .theme-mini::before {
+      position: absolute;
+      top: 9px;
+      left: 8px;
+      width: 28px;
+      height: 5px;
+      background: #23344b;
+      content: "";
+    }
+
+    .theme-mini::after {
+      position: absolute;
+      right: 7px;
+      bottom: 7px;
+      width: 12px;
+      height: 12px;
+      background: #d24f59;
+      content: "";
+    }
+
+    .theme-mini.dark {
+      background: #17202b;
+    }
+
+    .theme-mini.dark::before {
+      background: #f7f9fc;
+    }
+
+    .theme-mini.blue {
+      background: #e9f1ff;
+    }
+
+    .theme-mini.blue::before {
+      background: #2f67f6;
+    }
+
+    .component-mini {
+      width: 38px;
+      height: 22px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--surface);
+      box-shadow: 0 3px 8px rgba(51, 65, 85, 0.12);
+    }
+
+    .component-mini.metric::before {
+      display: block;
+      margin: 5px 5px 3px;
+      color: var(--text);
+      content: "84%";
+      font-size: 7px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .component-mini.metric::after {
+      display: block;
+      width: 22px;
+      height: 2px;
+      margin-left: 5px;
+      background: var(--accent);
+      content: "";
+    }
+
+    .item-copy {
+      min-width: 0;
+    }
+
+    .item-name {
+      display: block;
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 18px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .item-description {
+      display: -webkit-box;
+      overflow: hidden;
+      margin-top: 3px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      line-height: 16px;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .item-chevron {
+      color: var(--text-muted);
+    }
+
+    .directory-item.active .item-chevron {
+      color: var(--accent);
+    }
+
+    .detail {
+      position: relative;
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: auto minmax(0, 1fr) 46px;
+      background: var(--canvas);
+    }
+
+    .detail-header {
+      display: flex;
+      min-width: 0;
+      min-height: 94px;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 16px 20px 14px;
+    }
+
+    .detail-copy {
+      min-width: 0;
+    }
+
+    .detail-title-row {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .detail-title {
+      overflow: hidden;
+      margin: 0;
+      font-size: 16px;
+      font-weight: 750;
+      line-height: 24px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .detail-description {
+      max-width: 720px;
+      margin: 3px 0 0;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    .properties {
+      display: flex;
+      min-height: 22px;
+      align-items: center;
+      gap: 12px;
+      margin-top: 9px;
+    }
+
+    .property {
+      display: inline-flex;
+      min-width: 0;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .property-label {
+      color: var(--text-muted);
+    }
+
+    .swatches {
+      display: flex;
+      gap: 4px;
+    }
+
+    .swatch {
+      width: 16px;
+      height: 16px;
+      border: 1px solid rgba(23, 32, 43, 0.12);
+      border-radius: 4px;
+    }
+
+    .tag {
+      display: inline-flex;
+      height: 22px;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      padding: 0 7px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .detail-actions {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .segmented {
+      display: flex;
+      align-items: center;
+      border-radius: var(--radius);
+      background: var(--panel-muted);
+      padding: 2px;
+    }
+
+    .segment {
+      height: 28px;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 11px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .segment.active {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(51, 65, 85, 0.1);
+    }
+
+    .switch-group {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--success);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      background: var(--success);
+      transition: background 120ms ease;
+    }
+
+    .switch::after {
+      position: absolute;
+      top: 2px;
+      left: 18px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(23, 32, 43, 0.25);
+      content: "";
+      transition: transform 120ms ease;
+    }
+
+    .switch.off {
+      background: var(--border-strong);
+    }
+
+    .switch.off::after {
+      transform: translateX(-16px);
+    }
+
+    .detail-main {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      place-items: center;
+      overflow: auto;
+      padding: 28px;
+    }
+
+    .preview-frame {
+      display: grid;
+      width: min(100%, 1040px);
+      max-height: 100%;
+      aspect-ratio: 16 / 9;
+      place-items: center;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow-canvas);
+    }
+
+    .theme-showcase {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #f4f1ea;
+      padding: 8.5% 8%;
+    }
+
+    .theme-showcase .kicker {
+      color: #2f67f6;
+      font-size: clamp(10px, 1.1vw, 16px);
+      font-weight: 750;
+    }
+
+    .theme-showcase h3 {
+      max-width: 72%;
+      margin: 4% 0 0;
+      color: #17202b;
+      font-size: clamp(24px, 4vw, 62px);
+      line-height: 1.02;
+    }
+
+    .theme-showcase p {
+      max-width: 52%;
+      margin: 3% 0 0;
+      color: #536171;
+      font-size: clamp(10px, 1.25vw, 18px);
+      line-height: 1.55;
+    }
+
+    .theme-showcase .accent-block {
+      position: absolute;
+      right: 7%;
+      bottom: 10%;
+      width: 18%;
+      aspect-ratio: 1;
+      background: #d24f59;
+    }
+
+    .theme-showcase .bottom-line {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 3.5%;
+      background: #2f67f6;
+    }
+
+    .component-stage {
+      display: grid;
+      width: 100%;
+      height: 100%;
+      place-items: center;
+      background: #f3f6fa;
+      padding: 8%;
+    }
+
+    .metric-card {
+      width: min(72%, 620px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: clamp(18px, 4vw, 42px);
+      box-shadow: 0 14px 36px rgba(51, 65, 85, 0.12);
+    }
+
+    .metric-head,
+    .metric-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .metric-label,
+    .metric-foot {
+      color: var(--text-secondary);
+      font-size: clamp(9px, 1vw, 14px);
+      font-weight: 650;
+    }
+
+    .metric-delta {
+      border-radius: 999px;
+      background: var(--accent-soft);
+      padding: 4px 8px;
+      color: var(--accent);
+      font-size: clamp(9px, 1vw, 13px);
+      font-weight: 750;
+    }
+
+    .metric-value {
+      margin: 8% 0 5%;
+      font-size: clamp(44px, 8vw, 92px);
+      font-weight: 800;
+      line-height: 0.9;
+    }
+
+    .metric-line {
+      height: 7px;
+      margin-bottom: 5%;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--panel-muted);
+    }
+
+    .metric-line::after {
+      display: block;
+      width: 84%;
+      height: 100%;
+      background: var(--accent);
+      content: "";
+    }
+
+    .markdown-sheet {
+      width: min(100%, 820px);
+      min-height: min(100%, 520px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 36px 42px;
+      box-shadow: 0 12px 34px rgba(51, 65, 85, 0.08);
+    }
+
+    .markdown-sheet h3 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.25;
+    }
+
+    .markdown-sheet h4 {
+      margin: 30px 0 10px;
+      font-size: 15px;
+    }
+
+    .markdown-sheet p,
+    .markdown-sheet li {
+      color: #354150;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .markdown-sheet code {
+      border-radius: 4px;
+      background: var(--panel-muted);
+      padding: 2px 5px;
+      color: var(--text);
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .detail-footer {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 14px;
+    }
+
+    .delete-popover {
+      position: absolute;
+      right: 12px;
+      bottom: 42px;
+      display: none;
+      width: 244px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 14px;
+      box-shadow: 0 16px 40px rgba(51, 65, 85, 0.2);
+    }
+
+    .delete-popover.visible {
+      display: block;
+    }
+
+    .delete-popover strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .delete-popover p {
+      margin: 5px 0 12px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    .confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .small-button {
+      height: 28px;
+      border-radius: 6px;
+      padding: 0 10px;
+      background: var(--panel-muted);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .small-button.confirm {
+      background: var(--danger);
+      color: var(--surface);
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 64px minmax(0, 1fr);
+      }
+
+      .module-nav {
+        padding: 10px;
+      }
+
+      .module-button {
+        justify-content: center;
+        padding: 0;
+      }
+
+      .module-button span {
+        display: none;
+      }
+
+      .workspace {
+        grid-template-columns: 286px minmax(0, 1fr);
+      }
+
+      .detail-header {
+        gap: 12px;
+      }
+
+      .detail-description {
+        max-width: 440px;
+      }
+    }
+
+    @media (max-width: 760px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        min-height: 100dvh;
+        height: auto;
+      }
+
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .module-nav {
+        display: flex;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .module-button {
+        flex: 1;
+      }
+
+      .module-button + .module-button {
+        margin-top: 0;
+      }
+
+      .module-button span {
+        display: inline;
+      }
+
+      .content {
+        min-height: 900px;
+      }
+
+      .page-header {
+        padding: 0 16px;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: 300px minmax(560px, 1fr);
+      }
+
+      .catalog {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .detail-header {
+        flex-direction: column;
+      }
+
+      .detail-main {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="app-bar">
+      <div class="app-context">
+        <div class="brand">
+          <span class="brand-mark"><i data-lucide="boxes" width="16" height="16"></i></span>
+          <span>Dasi PPT Agent</span>
+        </div>
+        <span class="divider" aria-hidden="true"></span>
+        <span class="context-label">仓库布局方案</span>
+      </div>
+      <button class="icon-button" type="button" title="刷新仓库" aria-label="刷新仓库">
+        <i data-lucide="refresh-cw" width="16" height="16"></i>
+      </button>
+      <button class="icon-button" type="button" title="返回项目" aria-label="返回项目">
+        <i data-lucide="arrow-left" width="16" height="16"></i>
+      </button>
+    </header>
+
+    <div class="shell">
+      <nav class="module-nav" aria-label="仓库模块">
+        <button class="module-button active" type="button" data-module="theme">
+          <i data-lucide="palette" width="17" height="17"></i>
+          <span>主题</span>
+        </button>
+        <button class="module-button" type="button" data-module="component">
+          <i data-lucide="panels-top-left" width="17" height="17"></i>
+          <span>组件</span>
+        </button>
+        <button class="module-button" type="button" data-module="skill">
+          <i data-lucide="book-open-text" width="17" height="17"></i>
+          <span>技能</span>
+        </button>
+      </nav>
+
+      <section class="content">
+        <header class="page-header">
+          <h1 class="page-title" id="page-title">主题</h1>
+          <label class="search">
+            <i data-lucide="search" width="16" height="16"></i>
+            <input id="search-input" type="search" placeholder="搜索主题" aria-label="搜索仓库内容">
+          </label>
+        </header>
+
+        <div class="workspace">
+          <aside class="catalog">
+            <div class="filters" id="filters"></div>
+            <div class="directory" id="directory"></div>
+          </aside>
+
+          <section class="detail" aria-label="内容详情">
+            <header class="detail-header">
+              <div class="detail-copy">
+                <div class="detail-title-row">
+                  <h2 class="detail-title" id="detail-title"></h2>
+                  <button class="icon-button" type="button" title="查看文件" aria-label="查看文件">
+                    <i data-lucide="external-link" width="15" height="15"></i>
+                  </button>
+                </div>
+                <p class="detail-description" id="detail-description"></p>
+                <div class="properties" id="properties"></div>
+              </div>
+              <div class="detail-actions" id="detail-actions"></div>
+            </header>
+
+            <div class="detail-main" id="detail-main"></div>
+
+            <footer class="detail-footer">
+              <div class="delete-popover" id="delete-popover">
+                <strong id="delete-title">删除当前项目？</strong>
+                <p>该操作会从个人仓库中移除文件，无法撤销。</p>
+                <div class="confirm-actions">
+                  <button class="small-button" type="button" id="cancel-delete">取消</button>
+                  <button class="small-button confirm" type="button" id="confirm-delete">删除</button>
+                </div>
+              </div>
+              <button class="icon-button danger" type="button" id="delete-button" title="删除" aria-label="删除">
+                <i data-lucide="trash-2" width="16" height="16"></i>
+              </button>
+            </footer>
+          </section>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const modules = {
+      theme: {
+        title: "主题",
+        placeholder: "搜索主题",
+        filters: [],
+        filterPlaceholder: "主题分类暂未定义",
+        items: [
+          { id: "swiss", name: "Swiss Modern", description: "高对比、理性网格与克制色彩", visual: "theme-mini", colors: ["#f4f1ea", "#17202b", "#2f67f6", "#d24f59"], font: "Arial / Georgia" },
+          { id: "midnight", name: "Midnight Grid", description: "深色背景与清晰的数据层级", visual: "theme-mini dark", colors: ["#17202b", "#f7f9fc", "#6f8cff", "#65c7b5"], font: "Aptos / Menlo" },
+          { id: "studio", name: "Studio Blue", description: "明快蓝色与轻量内容排版", visual: "theme-mini blue", colors: ["#e9f1ff", "#17345f", "#2f67f6", "#e46d5f"], font: "Helvetica / Georgia" }
+        ]
+      },
+      component: {
+        title: "组件",
+        placeholder: "搜索组件",
+        filters: [
+          { value: "all", label: "全部" },
+          { value: "data", label: "数据" },
+          { value: "content", label: "内容" },
+          { value: "flow", label: "流程" }
+        ],
+        items: [
+          { id: "metric", name: "关键指标", description: "突出单个核心数字、变化幅度与目标进度", kind: "data", tags: ["指标", "数据"], visual: "component-mini metric" },
+          { id: "bar", name: "柱状图", description: "展示分类数据差异，并突出关键数据项", kind: "data", tags: ["图表", "数据"], visual: "component-mini metric" },
+          { id: "feature", name: "能力卡片", description: "聚焦一项核心能力及其带来的结果", kind: "content", tags: ["卡片", "内容"], visual: "component-mini" },
+          { id: "quote", name: "观点引用", description: "强调核心判断，并保留清晰的观点来源", kind: "content", tags: ["引用", "内容"], visual: "component-mini" },
+          { id: "list", name: "键值列表", description: "清晰呈现多组名称、数值与状态信息", kind: "content", tags: ["列表", "内容"], visual: "component-mini" }
+        ]
+      },
+      skill: {
+        title: "技能",
+        placeholder: "搜索技能",
+        filters: [
+          { value: "all", label: "全部" },
+          { value: "enabled", label: "已启用" },
+          { value: "disabled", label: "已关闭" }
+        ],
+        items: [
+          { id: "story", name: "演示叙事", description: "梳理页面叙事、章节关系与内容节奏", enabled: true },
+          { id: "visual", name: "视觉层级检查", description: "检查标题、正文、数据和留白的层级", enabled: true },
+          { id: "executive", name: "高管摘要", description: "将长内容压缩为决策者可快速阅读的版本", enabled: false }
+        ]
+      }
+    };
+
+    const state = {
+      module: "theme",
+      selected: { theme: "swiss", component: "metric", skill: "story" },
+      filter: { theme: "all", component: "all", skill: "all" },
+      query: ""
+    };
+    const initialModule = window.location.hash.slice(1);
+    if (modules[initialModule]) state.module = initialModule;
+
+    const pageTitle = document.querySelector("#page-title");
+    const searchInput = document.querySelector("#search-input");
+    const filters = document.querySelector("#filters");
+    const directory = document.querySelector("#directory");
+    const detailTitle = document.querySelector("#detail-title");
+    const detailDescription = document.querySelector("#detail-description");
+    const properties = document.querySelector("#properties");
+    const detailActions = document.querySelector("#detail-actions");
+    const detailMain = document.querySelector("#detail-main");
+    const deleteButton = document.querySelector("#delete-button");
+    const deletePopover = document.querySelector("#delete-popover");
+    const deleteTitle = document.querySelector("#delete-title");
+
+    function icon(name, size = 15) {
+      return `<i data-lucide="${name}" width="${size}" height="${size}"></i>`;
+    }
+
+    function visibleItems() {
+      const current = modules[state.module];
+      const query = state.query.trim().toLowerCase();
+      return current.items.filter((item) => {
+        const matchesQuery = `${item.name} ${item.description}`.toLowerCase().includes(query);
+        if (!matchesQuery) return false;
+        if (state.module === "component" && state.filter.component !== "all") {
+          return item.kind === state.filter.component;
+        }
+        if (state.module === "skill" && state.filter.skill !== "all") {
+          return state.filter.skill === "enabled" ? item.enabled : !item.enabled;
+        }
+        return true;
+      });
+    }
+
+    function selectedItem() {
+      const items = visibleItems();
+      return items.find((item) => item.id === state.selected[state.module]) || items[0];
+    }
+
+    function renderFilters() {
+      const current = modules[state.module];
+      if (current.filters.length === 0) {
+        filters.innerHTML = `<span class="filter-placeholder">${current.filterPlaceholder}</span>`;
+        return;
+      }
+      filters.innerHTML = current.filters.map((filter) => `
+        <button
+          class="filter-button ${state.filter[state.module] === filter.value ? "active" : ""}"
+          type="button"
+          data-filter="${filter.value}"
+        >${filter.label}</button>
+      `).join("");
+    }
+
+    function itemVisual(item) {
+      if (state.module === "theme") {
+        return `<span class="item-visual"><span class="${item.visual}"></span></span>`;
+      }
+      if (state.module === "component") {
+        return `<span class="item-visual"><span class="${item.visual}"></span></span>`;
+      }
+      return `
+        <span class="item-visual skill-status ${item.enabled ? "" : "disabled"}">
+          ${icon(item.enabled ? "check" : "pause", 15)}
+        </span>
+      `;
+    }
+
+    function renderDirectory() {
+      const items = visibleItems();
+      if (items.length === 0) {
+        directory.innerHTML = `<div class="filter-placeholder" style="padding:28px 12px;text-align:center">没有匹配内容</div>`;
+        return;
+      }
+      if (!items.some((item) => item.id === state.selected[state.module])) {
+        state.selected[state.module] = items[0].id;
+      }
+      directory.innerHTML = items.map((item) => `
+        <button
+          class="directory-item ${state.selected[state.module] === item.id ? "active" : ""}"
+          type="button"
+          data-item="${item.id}"
+        >
+          ${itemVisual(item)}
+          <span class="item-copy">
+            <span class="item-name">${item.name}</span>
+            <span class="item-description">${item.description}</span>
+          </span>
+          <span class="item-chevron">${icon("chevron-right", 15)}</span>
+        </button>
+      `).join("");
+    }
+
+    function renderProperties(item) {
+      if (state.module === "theme") {
+        properties.innerHTML = `
+          <span class="property">
+            <span class="property-label">色板</span>
+            <span class="swatches">
+              ${item.colors.map((color) => `<i class="swatch" style="background:${color}" title="${color}"></i>`).join("")}
+            </span>
+          </span>
+          <span class="property"><span class="property-label">字体</span>${item.font}</span>
+        `;
+        return;
+      }
+      if (state.module === "component") {
+        properties.innerHTML = item.tags.map((tag) => `<span class="tag">${tag}</span>`).join("");
+        return;
+      }
+      properties.innerHTML = `<span class="property"><span class="property-label">文件</span>SKILL.md</span>`;
+    }
+
+    function renderActions(item) {
+      if (state.module === "theme") {
+        detailActions.innerHTML = `
+          <div class="segmented" aria-label="预览页面">
+            <button class="segment active" type="button">封面</button>
+            <button class="segment" type="button">内容页</button>
+            <button class="segment" type="button">数据页</button>
+          </div>
+        `;
+        return;
+      }
+      if (state.module === "skill") {
+        detailActions.innerHTML = `
+          <div class="switch-group">
+            <span id="switch-label">${item.enabled ? "已启用" : "已关闭"}</span>
+            <button class="switch ${item.enabled ? "" : "off"}" type="button" role="switch" aria-checked="${item.enabled}" aria-label="切换技能状态"></button>
+          </div>
+        `;
+        return;
+      }
+      detailActions.innerHTML = "";
+    }
+
+    function renderMain() {
+      if (state.module === "theme") {
+        detailMain.innerHTML = `
+          <div class="preview-frame">
+            <div class="theme-showcase">
+              <span class="kicker">DASI PRESENTATION SYSTEM</span>
+              <h3>让内容结构先于装饰发生</h3>
+              <p>以明确的层级、稳定的网格和有限的强调色组织每一页表达。</p>
+              <span class="accent-block"></span>
+              <span class="bottom-line"></span>
+            </div>
+          </div>
+        `;
+        return;
+      }
+      if (state.module === "component") {
+        detailMain.innerHTML = `
+          <div class="preview-frame">
+            <div class="component-stage">
+              <article class="metric-card">
+                <header class="metric-head">
+                  <span class="metric-label">页面交付率</span>
+                  <span class="metric-delta">+8.4%</span>
+                </header>
+                <div class="metric-value">84%</div>
+                <div class="metric-line"></div>
+                <footer class="metric-foot"><span>本月已交付 <strong>42 页</strong></span><span>目标 50 页</span></footer>
+              </article>
+            </div>
+          </div>
+        `;
+        return;
+      }
+      detailMain.innerHTML = `
+        <article class="markdown-sheet">
+          <h3>演示叙事</h3>
+          <p>在生成页面之前，先确定整份演示的核心结论、章节关系与阅读节奏。</p>
+          <h4>工作原则</h4>
+          <ul>
+            <li>每一页只承担一个明确的表达任务。</li>
+            <li>章节之间必须存在可以被复述的逻辑关系。</li>
+            <li>先组织信息，再决定版式和视觉形式。</li>
+          </ul>
+          <h4>输出要求</h4>
+          <p>使用 <code>outline.json</code> 固化结构，并让页面标题能够独立构成完整叙事。</p>
+        </article>
+      `;
+    }
+
+    function bindDetailActions(item) {
+      detailActions.querySelectorAll(".segment").forEach((button) => {
+        button.addEventListener("click", () => {
+          detailActions.querySelectorAll(".segment").forEach((target) => target.classList.remove("active"));
+          button.classList.add("active");
+        });
+      });
+      const switchButton = detailActions.querySelector(".switch");
+      if (switchButton) {
+        switchButton.addEventListener("click", () => {
+          item.enabled = !item.enabled;
+          render();
+        });
+      }
+    }
+
+    function renderDetail() {
+      const item = selectedItem();
+      if (!item) {
+        detailTitle.textContent = "没有匹配内容";
+        detailDescription.textContent = "";
+        properties.innerHTML = "";
+        detailActions.innerHTML = "";
+        detailMain.innerHTML = "";
+        return;
+      }
+      detailTitle.textContent = item.name;
+      detailDescription.textContent = item.description;
+      deleteTitle.textContent = `删除“${item.name}”？`;
+      renderProperties(item);
+      renderActions(item);
+      renderMain();
+      bindDetailActions(item);
+    }
+
+    function render() {
+      const current = modules[state.module];
+      pageTitle.textContent = current.title;
+      searchInput.placeholder = current.placeholder;
+      document.querySelectorAll(".module-button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.module === state.module);
+      });
+      renderFilters();
+      renderDirectory();
+      renderDetail();
+      deletePopover.classList.remove("visible");
+      lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
+    }
+
+    document.querySelectorAll(".module-button").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.module = button.dataset.module;
+        window.history.replaceState(null, "", `#${state.module}`);
+        state.query = "";
+        searchInput.value = "";
+        render();
+      });
+    });
+
+    filters.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-filter]");
+      if (!button) return;
+      state.filter[state.module] = button.dataset.filter;
+      render();
+    });
+
+    directory.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-item]");
+      if (!button) return;
+      state.selected[state.module] = button.dataset.item;
+      render();
+    });
+
+    searchInput.addEventListener("input", () => {
+      state.query = searchInput.value;
+      render();
+    });
+
+    deleteButton.addEventListener("click", () => {
+      deletePopover.classList.toggle("visible");
+    });
+
+    document.querySelector("#cancel-delete").addEventListener("click", () => {
+      deletePopover.classList.remove("visible");
+    });
+
+    document.querySelector("#confirm-delete").addEventListener("click", () => {
+      deletePopover.classList.remove("visible");
+    });
+
+    render();
+  </script>
+</body>
+</html>
