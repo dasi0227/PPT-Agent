@@ -41,4 +41,19 @@ describe('ProjectPickerModal', () => {
     expect(openProject).toHaveBeenCalledWith('project-1');
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it('returns from project creation through the title action', () => {
+    render(
+      <MemoryRouter>
+        <ProjectPickerModal open onOpenChange={onOpenChange} onOpenExisting={onOpenExisting} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '创建全新项目' }));
+    fireEvent.click(screen.getByRole('button', { name: '返回项目操作' }));
+
+    expect(screen.getByRole('button', { name: '创建全新项目' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '打开已有项目' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '返回' })).not.toBeInTheDocument();
+  });
 });

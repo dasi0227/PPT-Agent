@@ -39,4 +39,31 @@ describe('PickerModal', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onPick).toHaveBeenCalledWith(items[1]);
   });
+
+  it('waits for confirmation when a confirmation label is provided', () => {
+    const onPick = vi.fn();
+    render(
+      <PickerModal
+        open
+        onOpenChange={() => {}}
+        title="Pick an Item"
+        confirmationLabel="Open Item"
+        items={items}
+        keyOf={i => i.id}
+        searchOf={i => i.name}
+        renderItem={i => <span>{i.name}</span>}
+        onPick={onPick}
+      />,
+    );
+
+    const confirm = screen.getByRole('button', { name: 'Open Item' });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Item 2' }));
+    expect(onPick).not.toHaveBeenCalled();
+    expect(confirm).toBeEnabled();
+
+    fireEvent.click(confirm);
+    expect(onPick).toHaveBeenCalledWith(items[1]);
+  });
 });

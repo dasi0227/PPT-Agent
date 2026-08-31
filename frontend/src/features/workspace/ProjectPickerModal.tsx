@@ -54,7 +54,19 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
           <DialogTitle className="sr-only">项目操作</DialogTitle>
         ) : (
           <DialogHeader>
-            <DialogTitle>创建全新项目</DialogTitle>
+            <div className="flex items-center gap-2 pr-8">
+              <button
+                type="button"
+                onClick={() => setMode('choose')}
+                disabled={isCreating}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="返回项目操作"
+                title="返回项目操作"
+              >
+                <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+              </button>
+              <DialogTitle>创建全新项目</DialogTitle>
+            </div>
           </DialogHeader>
         )}
         {mode === 'choose' ? (
@@ -99,14 +111,6 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
               />
             </div>
             <DialogFooter>
-              <button
-                type="button"
-                onClick={() => setMode('choose')}
-                disabled={isCreating}
-                className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-border px-3 text-sm font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> 返回
-              </button>
               <button
                 type="submit"
                 disabled={!title.trim() || isCreating}

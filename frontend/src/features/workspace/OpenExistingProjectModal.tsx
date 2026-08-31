@@ -42,19 +42,25 @@ export const OpenExistingProjectModal: React.FC<OpenExistingProjectModalProps> =
       open={open}
       onOpenChange={onOpenChange}
       title="打开已有项目"
+      leadingAction={
+        <button
+          type="button"
+          onClick={onBack}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          aria-label="返回项目操作"
+          title="返回项目操作"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+      }
+      confirmationLabel="打开项目"
       items={sortedProjects}
       keyOf={(p) => p.id}
       searchOf={(p) => p.title}
       onPick={handlePick}
       emptyState={
         <div className="p-8 text-center flex flex-col items-center justify-center text-text-400">
-          <p className="mb-4">还没有历史项目，去新建一个</p>
-          <button
-            onClick={onBack}
-            className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-border px-3 text-sm font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900"
-          >
-            <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> 返回
-          </button>
+          <p>还没有历史项目</p>
         </div>
       }
       renderItem={(p) => (
