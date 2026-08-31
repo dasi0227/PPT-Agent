@@ -195,7 +195,7 @@ export function RepositoryDetail({
           <p className="mt-0.5 line-clamp-2 max-w-3xl text-xs font-medium leading-[18px] text-text-600">
             {description}
           </p>
-          {properties && <div className="mt-2 flex min-h-5 min-w-0 flex-wrap items-center gap-x-4 gap-y-1">{properties}</div>}
+          {properties && <div className="mt-2 min-w-0">{properties}</div>}
         </div>
         {actions && <div className="shrink-0">{actions}</div>}
       </header>
@@ -224,12 +224,12 @@ export function RepositoryDetail({
   );
 }
 
-export function RepositoryTagList({ tags, limit = 3 }: { tags: string[]; limit?: number }) {
+export function RepositoryTagList({ tags }: { tags: string[] }) {
   if (tags.length === 0) return null;
   return (
-    <div className="flex min-w-0 flex-wrap gap-1.5" aria-label="标签">
-      {tags.slice(0, limit).map((tag) => (
-        <span key={tag} className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-[11px] font-medium text-text-600">
+    <div className="flex w-full min-w-0 max-w-full flex-nowrap gap-1.5 overflow-x-auto pb-1" aria-label="标签">
+      {tags.map((tag) => (
+        <span key={tag} className="shrink-0 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[11px] font-medium text-text-600">
           {tag}
         </span>
       ))}

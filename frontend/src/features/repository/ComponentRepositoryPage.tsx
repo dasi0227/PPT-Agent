@@ -191,7 +191,7 @@ export function ComponentRepositoryPage() {
                 title={selected.name}
                 description={selected.description}
                 openUrl={selected.open_url}
-                properties={<RepositoryTagList tags={selected.tags.map(componentTagLabel)} limit={4} />}
+                properties={<RepositoryTagList tags={selected.tags.map(componentTagLabel)} />}
                 contentClassName="flex items-center justify-center overflow-hidden p-5 md:p-7"
                 deleteNoun="组件"
                 onDelete={() => deleteComponent(selected)}

@@ -212,8 +212,7 @@ describe('personal repository pages', () => {
       id: 'feature-card',
       name: 'Feature Card',
       description: 'Feature summary',
-      tags: ['card'],
-      kind: 'content',
+      tags: ['card', 'metric', 'comparison', 'quote', 'list'],
       html: '<article><h2>Feature</h2></article>',
       open_url: 'vscode://file/components/feature-card/index.html',
     };
@@ -224,6 +223,8 @@ describe('personal repository pages', () => {
     renderPage(<ComponentRepositoryPage />);
 
     await screen.findByTitle('Feature Card 组件预览');
+    expect(screen.getByLabelText('标签')).toHaveClass('flex-nowrap', 'overflow-x-auto');
+    expect(screen.getByLabelText('标签').children).toHaveLength(5);
     fireEvent.click(screen.getByRole('button', { name: '删除Feature Card' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('确定删除「Feature Card」吗？');
     fireEvent.click(screen.getByRole('button', { name: '删除' }));
