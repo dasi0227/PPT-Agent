@@ -20,10 +20,10 @@ type ComponentService struct {
 }
 
 type componentMeta struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Kind        string   `json:"kind,omitempty"`
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Tags        []model.ComponentTag `json:"tags"`
+	Kind        string               `json:"kind,omitempty"`
 }
 
 func NewComponentService(workRoot WorkRoot) *ComponentService {
@@ -116,8 +116,16 @@ func parseComponentMeta(raw []byte) (componentMeta, error) {
 	if meta.Name == "" || meta.Description == "" {
 		return componentMeta{}, ErrRepositoryCorrupt
 	}
+	seenTags := make(map[model.ComponentTag]struct{}, len(meta.Tags))
 	for index := range meta.Tags {
-		meta.Tags[index] = strings.TrimSpace(meta.Tags[index])
+		meta.Tags[index] = model.ComponentTag(strings.TrimSpace(string(meta.Tags[index])))
+		if !meta.Tags[index].Valid() {
+			return componentMeta{}, ErrRepositoryCorrupt
+		}
+		if _, exists := seenTags[meta.Tags[index]]; exists {
+			return componentMeta{}, ErrRepositoryCorrupt
+		}
+		seenTags[meta.Tags[index]] = struct{}{}
 	}
 	return meta, nil
 }

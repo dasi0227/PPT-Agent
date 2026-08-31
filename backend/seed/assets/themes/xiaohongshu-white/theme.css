@@ -1,0 +1,45 @@
+/* theme: xiaohongshu-white - adapted from the html-ppt system preset. */
+:root {
+  --color-bg: #fffdfb;
+  --color-fg: #1a1210;
+  --color-primary: #ff2742;
+  --color-accent: #ff7a90;
+  --color-muted: #fff1ea;
+  --color-surface: #ffffff;
+  --color-border: rgba(60, 30, 20, 0.12);
+  --color-good: #3ba55c;
+  --color-warn: #f5a524;
+  --color-bad: #ff2742;
+  --font-sans: "Noto Sans SC", "Inter", system-ui, sans-serif;
+  --font-serif: "Noto Serif SC", "Songti SC", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+  --font-display: "Noto Serif SC", "Songti SC", Georgia, serif;
+  --text-title: 88px;
+  --text-h1: 62px;
+  --text-body: 32px;
+  --text-caption: 22px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 18px;
+  --space-6: 28px;
+  --space-8: 44px;
+  --radius-sm: 14px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+  --shadow-card: 0 12px 30px rgba(255, 39, 66, 0.08);
+  --shadow-pop: 0 24px 60px rgba(255, 39, 66, 0.14);
+  --theme-background: linear-gradient(145deg, #fffdfb 0%, #fff8f4 100%);
+  --stage-w: 1920;
+  --stage-h: 1080;
+}
+
+.slide-title,
+.title {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.card {
+  border: 1px solid var(--color-border);
+}

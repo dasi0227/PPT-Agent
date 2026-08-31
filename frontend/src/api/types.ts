@@ -164,17 +164,27 @@ export interface Theme {
   id: string;
   name: string;
   description: string;
-  tags: string[];
   css?: string;
   css_url: string;
   open_url: string;
 }
 
+export type ComponentTag =
+  | 'card'
+  | 'metric'
+  | 'comparison'
+  | 'quote'
+  | 'list'
+  | 'chart'
+  | 'process'
+  | 'timeline'
+  | 'other';
+
 export interface ComponentReference {
   id: string;
   name: string;
   description: string;
-  tags: string[];
+  tags: ComponentTag[];
   kind?: string;
   html?: string;
   open_url: string;

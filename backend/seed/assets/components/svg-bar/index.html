@@ -1,43 +1,89 @@
 <script type="application/json" id="meta">
 {
   "name": "柱状图",
-  "description": "静态柱状图：纯 SVG 柱状图，配色随主题 token 换肤",
-  "tags": [
-    "chart",
-    "bar",
-    "svg"
-  ],
+  "description": "展示分类数据差异，并突出关键数据项",
+  "tags": ["chart"],
   "kind": "data"
 }
 </script>
 <style>
-/* component: svg-bar —— 静态柱状图（纯 SVG）。
-   配色全部走 token（DS-CHARTS-001 / AC-CHARTS-001）：切主题时柱色随 --color-primary/--color-accent 变化。 */
 .svg-bar {
+  width: min(100%, 760px);
   margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border, color-mix(in srgb, var(--color-fg) 14%, transparent));
+  border-radius: var(--radius-lg);
+  background: var(--color-surface, var(--color-bg));
+  box-shadow: var(--shadow-card);
 }
-.svg-bar__caption {
-  font-size: var(--text-caption);
-  color: var(--color-fg);
+.svg-bar__head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-4);
   margin-bottom: var(--space-2);
 }
+.svg-bar__kicker {
+  display: block;
+  margin-bottom: calc(var(--space-2) * .35);
+  color: var(--color-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+.svg-bar__title {
+  color: var(--color-fg);
+  font-size: var(--text-body);
+  font-weight: 800;
+}
+.svg-bar__legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: color-mix(in srgb, var(--color-fg) 58%, transparent);
+  font-size: var(--text-caption);
+}
+.svg-bar__legend::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  background: var(--color-accent);
+}
 .svg-bar__svg {
+  display: block;
   width: 100%;
   height: auto;
 }
+.svg-bar__grid {
+  stroke: var(--color-border, color-mix(in srgb, var(--color-fg) 13%, transparent));
+  stroke-width: 1;
+}
 .svg-bar__bar {
   fill: var(--color-primary);
+  opacity: .72;
 }
 .svg-bar__bar--accent {
   fill: var(--color-accent);
+  opacity: 1;
+}
+.svg-bar__axis,
+.svg-bar__value {
+  fill: color-mix(in srgb, var(--color-fg) 58%, transparent);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+.svg-bar__value {
+  fill: var(--color-fg);
+  font-weight: 700;
 }
 </style>
 <figure class="svg-bar">
-  <figcaption class="svg-bar__caption">季度趋势</figcaption>
-  <svg class="svg-bar__svg" viewBox="0 0 400 200" role="img" aria-label="季度趋势">
-    <rect class="svg-bar__bar" x="20" y="80" width="60" height="120" />
-    <rect class="svg-bar__bar" x="110" y="40" width="60" height="160" />
-    <rect class="svg-bar__bar svg-bar__bar--accent" x="200" y="120" width="60" height="80" />
-    <rect class="svg-bar__bar" x="290" y="60" width="60" height="140" />
+  <figcaption class="svg-bar__head"><span><small class="svg-bar__kicker">MONTHLY OUTPUT</small><strong class="svg-bar__title">页面交付趋势</strong></span><span class="svg-bar__legend">本期重点</span></figcaption>
+  <svg class="svg-bar__svg" viewBox="0 0 560 250" role="img" aria-label="1 月至 6 月页面交付趋势">
+    <g class="svg-bar__grid"><line x1="48" y1="42" x2="540" y2="42"/><line x1="48" y1="94" x2="540" y2="94"/><line x1="48" y1="146" x2="540" y2="146"/><line x1="48" y1="198" x2="540" y2="198"/></g>
+    <g><rect class="svg-bar__bar" x="72" y="146" width="48" height="52" rx="5"/><rect class="svg-bar__bar" x="150" y="126" width="48" height="72" rx="5"/><rect class="svg-bar__bar" x="228" y="110" width="48" height="88" rx="5"/><rect class="svg-bar__bar" x="306" y="88" width="48" height="110" rx="5"/><rect class="svg-bar__bar" x="384" y="68" width="48" height="130" rx="5"/><rect class="svg-bar__bar svg-bar__bar--accent" x="462" y="42" width="48" height="156" rx="5"/></g>
+    <g class="svg-bar__value" text-anchor="middle"><text x="96" y="138">24</text><text x="174" y="118">31</text><text x="252" y="102">38</text><text x="330" y="80">46</text><text x="408" y="60">54</text><text x="486" y="34">64</text></g>
+    <g class="svg-bar__axis" text-anchor="middle"><text x="96" y="224">1月</text><text x="174" y="224">2月</text><text x="252" y="224">3月</text><text x="330" y="224">4月</text><text x="408" y="224">5月</text><text x="486" y="224">6月</text></g>
   </svg>
 </figure>

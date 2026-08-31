@@ -118,7 +118,6 @@
     .theme-metadata { display: flex; align-items: center; gap: 14px; margin-top: 6px; color: var(--muted); font-size: 11px; }
     .meta-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
     .meta-label { color: var(--subtle); }
-    .tags { color: var(--muted); }
     .palette { display: flex; gap: 4px; }
     .palette i { width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(23,32,43,.12); }
     .font-value { color: var(--ink); font-weight: 550; }
@@ -213,7 +212,6 @@
                   <a class="icon-button source-link" id="sourceLink" href="../../backend/seed/assets/themes/swiss-modern/tokens.css" target="_blank" title="查看文件" aria-label="查看文件"><i data-lucide="external-link"></i></a>
                 </div>
                 <div class="theme-metadata">
-                  <span class="meta-item"><span class="meta-label">标签</span><span class="tags" id="selectedTags">明亮｜理性｜通用</span></span>
                   <span class="meta-item"><span class="meta-label">色板</span><span class="palette" id="palette"><i style="background:#f5f6f8" title="#f5f6f8"></i><i style="background:#101820" title="#101820"></i><i style="background:#1769e0" title="#1769e0"></i><i style="background:#ea4e3d" title="#ea4e3d"></i></span></span>
                   <span class="meta-item"><span class="meta-label">字体</span><span class="font-value" id="fontValue">Aptos / System Sans</span></span>
                 </div>
@@ -249,16 +247,16 @@
   </main>
   <script>
     const themes = [
-      { id:'swiss', name:'Swiss Modern', desc:'清晰的网格、克制的蓝红强调', tags:'明亮｜理性｜通用', colors:['#f5f6f8','#101820','#1769e0','#ea4e3d'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/swiss-modern/tokens.css' },
-      { id:'tokyo', name:'Tokyo Night', desc:'深色冷调，适合技术与产品分享', tags:'深色｜技术｜霓虹', colors:['#171a2b','#d9e0ff','#7aa2f7','#bb9af7'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/tokyo-night/tokens.css' },
-      { id:'signal', name:'Bold Signal', desc:'高对比、强结论、硬朗边界', tags:'高对比｜发布｜观点', colors:['#fff8e8','#171717','#ed3b2f','#1264e8'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/bold-signal/tokens.css' },
-      { id:'editorial', name:'Editorial Slate', desc:'冷灰纸张与编辑式排版节奏', tags:'编辑｜报告｜叙事', colors:['#edf0f4','#19212a','#203e66','#bd3d51'], font:'Georgia / Serif', source:'../../backend/seed/assets/themes/editorial-serif/tokens.css' }
+      { id:'swiss', name:'Swiss Modern', desc:'清晰的网格、克制的蓝红强调', colors:['#f5f6f8','#101820','#1769e0','#ea4e3d'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/swiss-modern/tokens.css' },
+      { id:'tokyo', name:'Tokyo Night', desc:'深色冷调，适合技术与产品分享', colors:['#171a2b','#d9e0ff','#7aa2f7','#bb9af7'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/tokyo-night/tokens.css' },
+      { id:'signal', name:'Bold Signal', desc:'高对比、强结论、硬朗边界', colors:['#fff8e8','#171717','#ed3b2f','#1264e8'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/bold-signal/tokens.css' },
+      { id:'editorial', name:'Editorial Slate', desc:'冷灰纸张与编辑式排版节奏', colors:['#edf0f4','#19212a','#203e66','#bd3d51'], font:'Georgia / Serif', source:'../../backend/seed/assets/themes/editorial-serif/tokens.css' }
     ];
     const list = document.getElementById('themeList');
     const stage = document.getElementById('stage');
     let query = '';
     function renderList(selected) {
-      const visible = themes.filter(t => `${t.name}${t.desc}${t.tags}`.toLowerCase().includes(query.toLowerCase()));
+      const visible = themes.filter(t => `${t.name}${t.desc}`.toLowerCase().includes(query.toLowerCase()));
       list.innerHTML = visible.map(t => `<button class="theme-row ${t.id===selected?'active':''}" data-id="${t.id}">
         <span class="mini" data-theme="${t.id}"><span class="mini-bars"><i></i><i></i><i></i><i></i></span></span>
         <span><span class="theme-name">${t.name}</span><span class="theme-desc">${t.desc}</span>
@@ -270,7 +268,6 @@
 const theme = themes.find(t => t.id === id);
       stage.dataset.theme = id;
       document.getElementById('selectedName').textContent = theme.name;
-      document.getElementById('selectedTags').textContent = theme.tags;
       document.getElementById('fontValue').textContent = theme.font;
       document.getElementById('sourceLink').href = theme.source;
       document.getElementById('palette').innerHTML = theme.colors.map(c=>`<i style="background:${c}" title="${c}"></i>`).join('');

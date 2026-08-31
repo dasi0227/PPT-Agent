@@ -20,13 +20,13 @@ func writeRepositoryFile(t *testing.T, path, content string) {
 
 func TestRepositoryServicesParseIndependentProtocols(t *testing.T) {
 	root := t.TempDir()
-	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/manifest.json"), `{"name":"Theme One","description":"Clear theme","tags":["light"]}`)
+	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/manifest.json"), `{"name":"Theme One","description":"分类：Clear theme"}`)
 	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/theme.css"), `:root{--color-bg:#fff}`)
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), `<script type="application/json" id="meta">{"name":"Metric","description":"One metric","tags":["data"],"kind":"data"}</script><style>.metric{color:var(--color-primary)}</style><div class="metric">42%</div>`)
+	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), `<script type="application/json" id="meta">{"name":"Metric","description":"One metric","tags":["metric"],"kind":"data"}</script><style>.metric{color:var(--color-primary)}</style><div class="metric">42%</div>`)
 	writeRepositoryFile(t, filepath.Join(root, "skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead with the conclusion.")
 
 	theme, err := NewThemeService(WorkRoot(root)).Get("t1")
-	if err != nil || theme.ID != "t1" || theme.Name != "Theme One" || !strings.Contains(theme.CSS, "--color-bg") {
+	if err != nil || theme.ID != "t1" || theme.Name != "Theme One" || theme.Description != "Clear theme" || !strings.Contains(theme.CSS, "--color-bg") {
 		t.Fatalf("theme=%+v err=%v", theme, err)
 	}
 	component, err := NewComponentService(WorkRoot(root)).Get("c1")
@@ -39,10 +39,49 @@ func TestRepositoryServicesParseIndependentProtocols(t *testing.T) {
 	}
 }
 
+func TestComponentTagsRejectUnknownAndDuplicateValues(t *testing.T) {
+	for name, tags := range map[string]string{
+		"unknown":   `["badge"]`,
+		"duplicate": `["card","card"]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			raw := []byte(`<script type="application/json" id="meta">{"name":"Card","description":"Card reference","tags":` + tags + `}</script><div>Card</div>`)
+			if _, err := parseComponentMeta(raw); !errors.Is(err, ErrRepositoryCorrupt) {
+				t.Fatalf("tags %s err=%v", tags, err)
+			}
+		})
+	}
+}
+
+func TestComponentTagsAcceptTheCompleteEnum(t *testing.T) {
+	raw := []byte(`<script type="application/json" id="meta">{"name":"Catalog","description":"All supported tags","tags":["card","metric","comparison","quote","list","chart","process","timeline","other"]}</script><div>Catalog</div>`)
+	meta, err := parseComponentMeta(raw)
+	if err != nil || len(meta.Tags) != 9 {
+		t.Fatalf("meta=%+v err=%v", meta, err)
+	}
+}
+
+func TestFactoryComponentsFollowTheComponentContract(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("..", "..", "seed", "assets", "components", "*", "index.html"))
+	if err != nil || len(paths) != 5 {
+		t.Fatalf("factory component paths=%v err=%v", paths, err)
+	}
+	for _, path := range paths {
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read %s: %v", path, readErr)
+		}
+		meta, parseErr := parseComponentMeta(raw)
+		if parseErr != nil || len(meta.Tags) == 0 || meta.Kind == "" {
+			t.Fatalf("factory component %s meta=%+v err=%v", path, meta, parseErr)
+		}
+	}
+}
+
 func TestRepositoryServicesRejectTraversalSymlinksAndOversizeFiles(t *testing.T) {
 	root := t.TempDir()
 	themeRoot := filepath.Join(root, "assets/themes")
-	writeRepositoryFile(t, filepath.Join(themeRoot, "valid/manifest.json"), `{"name":"Valid","description":"Valid theme","tags":[]}`)
+	writeRepositoryFile(t, filepath.Join(themeRoot, "valid/manifest.json"), `{"name":"Valid","description":"Valid theme"}`)
 	writeRepositoryFile(t, filepath.Join(themeRoot, "valid/theme.css"), `:root{}`)
 	service := NewThemeService(WorkRoot(root))
 	if _, err := service.Get("../valid"); !errors.Is(err, ErrInvalidRepositoryID) {
@@ -54,7 +93,7 @@ func TestRepositoryServicesRejectTraversalSymlinksAndOversizeFiles(t *testing.T)
 	if _, err := service.Get("linked"); !errors.Is(err, ErrUnsafeRepositoryPath) {
 		t.Fatalf("symlink err=%v", err)
 	}
-	writeRepositoryFile(t, filepath.Join(themeRoot, "large/manifest.json"), `{"name":"Large","description":"Large theme","tags":[]}`)
+	writeRepositoryFile(t, filepath.Join(themeRoot, "large/manifest.json"), `{"name":"Large","description":"Large theme"}`)
 	writeRepositoryFile(t, filepath.Join(themeRoot, "large/theme.css"), strings.Repeat("x", maxRepositoryFileSize+1))
 	if _, err := service.Get("large"); !errors.Is(err, ErrRepositoryFileTooLarge) {
 		t.Fatalf("size err=%v", err)

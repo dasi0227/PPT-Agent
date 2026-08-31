@@ -133,16 +133,17 @@
   </main>
   <script>
     const components = [
-      {id:'metric',name:'关键指标',desc:'突出单个核心数字和变化趋势',tags:['data','metric','summary'],kind:'data',source:'../../backend/seed/assets/components/stat-badge/template.html',html:'<div class="component-render metric-card"><small>季度经常性收入</small><strong>¥ 8.42M</strong><span class="up">↑ 18.6% 较上季度</span></div>'},
-      {id:'comparison',name:'双项对比',desc:'并列呈现两种方案的核心差异',tags:['data','comparison'],kind:'data',source:'../../backend/seed/assets/components/kv-list/template.html',html:'<div class="component-render comparison"><div><b>当前方案</b><strong>4.2 h</strong><small>平均制作时间</small></div><div><b>Agent 工作流</b><strong>38 min</strong><small>平均制作时间</small></div></div>'},
-      {id:'quote',name:'观点引用',desc:'强调关键判断与来源信息',tags:['content','quote'],kind:'content',source:'../../backend/seed/assets/components/quote-block/template.html',html:'<div class="component-render quote-card"><p>“先统一表达，再扩大创作自由。”</p><small>产品设计原则</small></div>'},
-      {id:'features',name:'能力清单',desc:'紧凑呈现三到五项能力',tags:['content','list'],kind:'content',source:'../../backend/seed/assets/components/feature-card/template.html',html:'<div class="component-render feature-list"><div><span>✓</span><b>理解演示目标</b></div><div><span>✓</span><b>组织叙事结构</b></div><div><span>✓</span><b>生成可编辑页面</b></div></div>'},
-      {id:'process',name:'三步流程',desc:'表达短链路、线性步骤和阶段关系',tags:['flow','process'],kind:'flow',source:'../../backend/seed/assets/components/kv-list/template.html',html:'<div class="component-render process"><div>理解</div><i></i><div>设计</div><i></i><div>交付</div></div>'},
-      {id:'timeline',name:'事件时间线',desc:'按时间组织里程碑和状态变化',tags:['flow','timeline'],kind:'flow',source:'../../backend/seed/assets/components/svg-bar/template.html',html:'<div class="component-render timeline"><div><i></i><span><b>需求确认</b><small>明确受众与目标</small></span></div><div><i></i><span><b>视觉定稿</b><small>统一主题与组件</small></span></div><div><i></i><span><b>正式交付</b><small>检查并导出</small></span></div></div>'}
+      {id:'metric',name:'关键指标',desc:'突出单个核心数字和变化趋势',tags:['metric'],kind:'data',source:'../../backend/seed/assets/components/stat-badge/template.html',html:'<div class="component-render metric-card"><small>季度经常性收入</small><strong>¥ 8.42M</strong><span class="up">↑ 18.6% 较上季度</span></div>'},
+      {id:'comparison',name:'双项对比',desc:'并列呈现两种方案的核心差异',tags:['comparison'],kind:'data',source:'../../backend/seed/assets/components/kv-list/template.html',html:'<div class="component-render comparison"><div><b>当前方案</b><strong>4.2 h</strong><small>平均制作时间</small></div><div><b>Agent 工作流</b><strong>38 min</strong><small>平均制作时间</small></div></div>'},
+      {id:'quote',name:'观点引用',desc:'强调关键判断与来源信息',tags:['quote'],kind:'content',source:'../../backend/seed/assets/components/quote-block/template.html',html:'<div class="component-render quote-card"><p>“先统一表达，再扩大创作自由。”</p><small>产品设计原则</small></div>'},
+      {id:'features',name:'能力清单',desc:'紧凑呈现三到五项能力',tags:['list'],kind:'content',source:'../../backend/seed/assets/components/feature-card/template.html',html:'<div class="component-render feature-list"><div><span>✓</span><b>理解演示目标</b></div><div><span>✓</span><b>组织叙事结构</b></div><div><span>✓</span><b>生成可编辑页面</b></div></div>'},
+      {id:'process',name:'三步流程',desc:'表达短链路、线性步骤和阶段关系',tags:['process'],kind:'flow',source:'../../backend/seed/assets/components/kv-list/template.html',html:'<div class="component-render process"><div>理解</div><i></i><div>设计</div><i></i><div>交付</div></div>'},
+      {id:'timeline',name:'事件时间线',desc:'按时间组织里程碑和状态变化',tags:['timeline'],kind:'flow',source:'../../backend/seed/assets/components/svg-bar/template.html',html:'<div class="component-render timeline"><div><i></i><span><b>需求确认</b><small>明确受众与目标</small></span></div><div><i></i><span><b>视觉定稿</b><small>统一主题与组件</small></span></div><div><i></i><span><b>正式交付</b><small>检查并导出</small></span></div></div>'}
     ];
+    const tagLabels={card:'卡片',metric:'指标',comparison:'对比',quote:'引用',list:'列表',chart:'图表',process:'流程',timeline:'时间线',other:'其他'};
     let active='metric', filter='all', query='';
     const grid=document.getElementById('grid');
-    function visible(){return components.filter(c=>(filter==='all'||c.kind===filter)&&(`${c.name}${c.desc}${c.tags.join('')}`.toLowerCase().includes(query.toLowerCase())));}
+    function visible(){return components.filter(c=>(filter==='all'||c.kind===filter)&&(`${c.name}${c.desc}${c.tags.join('')}${c.tags.map(t=>tagLabels[t]).join('')}`.toLowerCase().includes(query.toLowerCase())));}
     function render(){
       const items=visible();
       grid.innerHTML=items.length?items.map(c=>`<article class="component-tile ${c.id===active?'active':''}" tabindex="0" data-id="${c.id}">
@@ -155,7 +156,7 @@
       active=id; const c=components.find(x=>x.id===id);
       document.getElementById('largePreview').innerHTML=c.html;
       document.getElementById('detailName').textContent=c.name;
-      document.getElementById('detailTags').innerHTML=c.tags.map(t=>`<span class="tag">${t}</span>`).join('');
+      document.getElementById('detailTags').innerHTML=c.tags.map(t=>`<span class="tag">${tagLabels[t]}</span>`).join('');
       document.getElementById('sourceLink').href=c.source;
       render();
     }

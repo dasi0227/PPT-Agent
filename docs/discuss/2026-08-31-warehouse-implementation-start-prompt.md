@@ -58,7 +58,7 @@
   - `~/.dasi/ppt/skills/registry.json`
   - `~/.dasi/ppt/skills/<id>/SKILL.md`
 - 目录名是稳定 ID，元数据 `name` 是人类可读展示名，前端不得互相推导。
-- Theme manifest 仅包含 `name/description/tags`，不保留 version。
+- Theme manifest 仅包含 `name/description`，不保留 version 与 tags。
 - Component `index.html` 内联 `script#meta`、style 和结构，单文件上限 64KB。
 - Skill 延续 frontmatter + Markdown，增加中央 `registry.json` disabled 列表。
 - 启动初始化只补写缺失的 seed 装配文件，绝不覆盖用户文件，不写 SQLite。
@@ -127,7 +127,7 @@
 
 ### 3. Theme
 
-- 左侧主题清单，右侧顶部显示名称、ExternalLink、标签、色板、字体。
+- 左侧主题清单，右侧顶部显示名称、ExternalLink、色板、字体。
 - 右侧剩余区域全部用于综合页/封面/数据页预览。
 - 切换主题调用项目换肤接口，并刷新真实预览。
 
@@ -135,6 +135,7 @@
 
 - 管理式网格，卡片不显示重复 Component 图标。
 - 过滤项按真实 tags/kind 设计，但不增加状态过滤。
+- tags 固定为 `card/metric/comparison/quote/list/chart/process/timeline/other`，界面展示对应中文，不接受任意字符串或重复值。
 - 详情顶部显示名称、ExternalLink、标签；剩余区域全部用于安全预览。
 - 不显示适用场景、路径、底部打开按钮或最近使用。
 - 组件 HTML 必须在 sandboxed iframe/srcdoc 中预览，不能直接注入 React DOM。

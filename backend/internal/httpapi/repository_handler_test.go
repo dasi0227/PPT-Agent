@@ -56,7 +56,7 @@ func performRepositoryRequest(t *testing.T, engine http.Handler, method, path, b
 func TestRepositoryHandlerContracts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	root := t.TempDir()
-	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/manifest.json", `{"name":"Swiss Modern","description":"Grid","tags":["minimal"]}`)
+	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/manifest.json", `{"name":"Swiss Modern","description":"Grid"}`)
 	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/theme.css", ":root{--color-bg:#fff}")
 	writeRepositoryFixture(t, root, "assets/components/feature-card/index.html", `<!doctype html><script id="meta" type="application/json">{"name":"Feature Card","description":"Summary","tags":["card"],"kind":"content"}</script><article>Feature</article>`)
 	writeRepositoryFixture(t, root, "skills/story/SKILL.md", "---\nname: Story\ndescription: Narrative\n---\n# Story\n")
@@ -71,6 +71,14 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	themeCSS := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/themes/swiss-modern/css", "")
 	if themeCSS.Code != http.StatusOK || !strings.HasPrefix(themeCSS.Header().Get("Content-Type"), "text/css") {
 		t.Fatalf("theme CSS response = %d %q", themeCSS.Code, themeCSS.Header().Get("Content-Type"))
+	}
+	theme := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/themes/swiss-modern", "")
+	var themeBody map[string]any
+	if theme.Code != http.StatusOK || json.Unmarshal(theme.Body.Bytes(), &themeBody) != nil {
+		t.Fatalf("theme response = %d %s", theme.Code, theme.Body.String())
+	}
+	if _, exists := themeBody["tags"]; exists {
+		t.Fatalf("theme DTO must not expose tags: %#v", themeBody)
 	}
 
 	component := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/components/feature-card", "")

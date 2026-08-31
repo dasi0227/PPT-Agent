@@ -224,7 +224,8 @@ assets/components/<component-name>/
 {
   "name": "能力卡片",
   "description": "特性卡片：图标 + 标题 + 描述的功能点卡片，适合能力罗列",
-  "tags": ["feature", "card", "grid"]
+  "tags": ["card"],
+  "kind": "content"
 }
 </script>
 <style>
@@ -247,6 +248,8 @@ assets/components/<component-name>/
 
 - 目录名 `<component-name>` 为组件 ID（校验规则复用 skill 的 ID pattern 风格：`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`）。
 - `meta.name` 是人类可读展示名，不要求等于目录 ID；API 和工具参数使用 ID，UI 使用 name。
+- `meta.tags` 是多选枚举，只允许 `card/metric/comparison/quote/list/chart/process/timeline/other`；前端分别展示为卡片、指标、对比、引用、列表、图表、流程、时间线、其他。
+- `meta.kind` 继续使用 `content/data/flow` 做一级筛选，tags 不再重复 kind，也不存储 `svg/badge/number` 等实现细节。
 - 内联 `<style>` 使用 `var(--token)`，以便套用当前主题（护栏同 §4.6，仅 Prompt 软约束）。
 - `index.html` 单文件上限固定为 64KB。
 - `meta` block 缺失或 name/description 为空的组件在列举时跳过（与 skill 校验策略一致）。
@@ -323,7 +326,7 @@ assets/components/<component-name>/
 | 方法 | 路径 | 用途 | 备注 |
 |---|---|---|---|
 | GET | `/api/v1/runtime/base.css` | 提供 Runtime 主题无关结构层 | `text/css`，只读 |
-| GET | `/api/v1/themes` | 列举主题（name/description/tags/css_url/open_url） | 只读；UI 不展示路径 |
+| GET | `/api/v1/themes` | 列举主题（name/description/css_url/open_url） | 只读；UI 不展示路径 |
 | GET | `/api/v1/themes/:name` | 主题详情 + CSS 预览 + open_url | 只读 |
 | GET | `/api/v1/themes/:name/css` | 直接提供仓库真源 `theme.css` | `text/css`，只读，供 `theme-link` 使用 |
 | GET | `/api/v1/components` | 列举组件（name/description/tags/open_url） | 只读；无启停字段 |
@@ -482,7 +485,7 @@ type LoadedResource struct {
 - **Component 文件上限**：64KB。
 - **首启预置策略**：内嵌 seed 仅补写缺失装配文件，绝不覆盖用户文件，不写数据库。
 - **公共基座层**：保留 Runtime Base；通过只读 HTTP 端点与隔离渲染器本地路由提供，不复制到项目。
-- **Theme manifest**：不保留 `version`；仅包含 `name`、`description`、`tags`。
+- **Theme manifest**：不保留 `version` 与 `tags`；仅包含 `name`、`description`。
 - **B2 契约**：必需 token 与允许的主题选择器以 §4.6 为准。
 - **Component 状态**：无状态，合法即启用。
 - **工具结果媒体**：Component/Skill 加载活动不返回或展示预览图片。
@@ -494,7 +497,7 @@ type LoadedResource struct {
 ```text
 ~/.dasi/ppt/
 ├── assets/
-│   ├── themes/<name>/manifest.json          # {name, description, tags}
+│   ├── themes/<name>/manifest.json          # {name, description}
 │   ├── themes/<name>/theme.css              # :root token + 白名单选择器（B2）
 │   └── components/<name>/index.html         # <script id=meta> + <style> + 结构（自包含）
 └── skills/

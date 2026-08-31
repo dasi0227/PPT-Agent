@@ -1,0 +1,446 @@
+<meta charset="utf-8"><style>/* theme: swiss-modern —— 瑞士现代：极简、网格、无衬线、浅色。
+   提供 design-tokens.md 必需 token 全集（DS-THEMES-001）。 */
+:root {
+  /* 颜色 */
+  --color-bg: #ffffff;
+  --color-fg: #111418;
+  --color-primary: #d0021b;
+  --color-accent: #1c1c1c;
+  --color-muted: #f2f3f5;
+  /* 字体（含中文回退，DS-THEMES-004） */
+  --font-sans: "Inter", "Helvetica Neue", "Noto Sans SC", system-ui, sans-serif;
+  --font-serif: "Noto Serif SC", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+  /* 字号 */
+  --text-title: 84px;
+  --text-h1: 60px;
+  --text-body: 32px;
+  --text-caption: 22px;
+  /* 间距 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 40px;
+  /* 圆角 */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  /* 阴影 */
+  --shadow-card: 0 1px 3px rgba(17, 20, 24, 0.12);
+  --shadow-pop: 0 8px 24px rgba(17, 20, 24, 0.18);
+  /* 舞台（16:9 基准，无单位数值） */
+  --stage-w: 1920;
+  --stage-h: 1080;
+}
+
+*{box-sizing:border-box}body{margin:0;padding:48px;background:var(--color-bg);color:var(--color-fg);font-family:var(--font-sans);display:grid;gap:56px}section{display:grid;gap:20px}section>h2{margin:0;color:color-mix(in srgb,var(--color-fg) 45%,transparent);font:600 12px/1 var(--font-sans);text-transform:uppercase} @media(max-width:700px){body{padding:24px}}</style><section><h2>feature-card</h2><script type="application/json" id="meta">
+{
+  "name": "能力卡片",
+  "description": "聚焦一项核心能力及其带来的结果",
+  "tags": ["card"],
+  "kind": "content"
+}
+</script>
+<style>
+.feature-card {
+  display: grid;
+  width: min(100%, 720px);
+  grid-template-columns: clamp(84px, 16%, 124px) minmax(0, 1fr);
+  gap: clamp(var(--space-4), 4vw, var(--space-6));
+}
+.feature-card__mark {
+  padding-top: var(--space-3);
+  border-top: 4px solid var(--color-primary);
+  color: color-mix(in srgb, var(--color-fg) 58%, transparent);
+  font-size: var(--text-caption);
+  font-weight: 700;
+}
+.feature-card__content {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border, color-mix(in srgb, var(--color-fg) 16%, transparent));
+}
+.feature-card__context {
+  margin: 0 0 var(--space-3);
+  color: color-mix(in srgb, var(--color-fg) 56%, transparent);
+  font-size: var(--text-caption);
+}
+.feature-card__title {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: var(--text-h1);
+  line-height: 1.12;
+}
+.feature-card__desc {
+  max-width: 32em;
+  margin: var(--space-3) 0 0;
+  color: color-mix(in srgb, var(--color-fg) 68%, transparent);
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+@media (max-width: 560px) {
+  .feature-card {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+  .feature-card__mark {
+    width: 72px;
+  }
+}
+</style>
+<article class="feature-card">
+  <div class="feature-card__mark">能力 01</div>
+  <div class="feature-card__content">
+    <p class="feature-card__context">输入需求 · 输出可编辑页面</p>
+    <h3 class="feature-card__title">从一句需求到完整表达</h3>
+    <p class="feature-card__desc">理解目标、组织叙事，并生成可以继续编辑的页面。</p>
+  </div>
+</article>
+</section><section><h2>quote-block</h2><script type="application/json" id="meta">
+{
+  "name": "观点引用",
+  "description": "用克制的版式突出观点正文与来源",
+  "tags": ["quote"],
+  "kind": "content"
+}
+</script>
+<style>
+.quote-block {
+  width: min(100%, 760px);
+  margin: 0;
+  padding: var(--space-2) 0 var(--space-2) clamp(var(--space-4), 4vw, var(--space-6));
+  border-left: 3px solid var(--color-primary);
+}
+.quote-block__text {
+  max-width: 24em;
+  margin: 0;
+  color: var(--color-fg);
+  font-family: var(--font-serif);
+  font-size: var(--text-h1);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.quote-block__text strong {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+.quote-block__cite {
+  display: grid;
+  grid-template-columns: auto minmax(24px, 72px) auto;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  color: color-mix(in srgb, var(--color-fg) 62%, transparent);
+  font-size: var(--text-caption);
+  font-style: normal;
+}
+.quote-block__rule {
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: var(--color-border, color-mix(in srgb, var(--color-fg) 18%, transparent));
+}
+.quote-block__source {
+  color: var(--color-fg);
+  font-weight: 700;
+}
+.quote-block__cite cite {
+  font-style: normal;
+}
+@media (max-width: 560px) {
+  .quote-block__cite {
+    grid-template-columns: auto 1fr;
+  }
+  .quote-block__rule {
+    display: none;
+  }
+  .quote-block__source {
+    grid-column: 1 / -1;
+  }
+}
+</style>
+<blockquote class="quote-block">
+  <p class="quote-block__text">先建立<strong>清晰的表达秩序</strong>，再扩大创作自由。</p>
+  <footer class="quote-block__cite">
+    <span class="quote-block__source">Dasi</span>
+    <span class="quote-block__rule" aria-hidden="true"></span>
+    <cite>产品设计原则</cite>
+  </footer>
+</blockquote>
+</section><section><h2>stat-badge</h2><script type="application/json" id="meta">
+{
+  "name": "关键指标",
+  "description": "突出单个核心数字、变化幅度与目标进度",
+  "tags": ["metric"],
+  "kind": "data"
+}
+</script>
+<style>
+.stat-badge {
+  display: grid;
+  width: min(100%, 760px);
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: clamp(var(--space-4), 4vw, var(--space-6));
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--color-border, color-mix(in srgb, var(--color-fg) 16%, transparent));
+  border-bottom: 1px solid var(--color-border, color-mix(in srgb, var(--color-fg) 16%, transparent));
+}
+.stat-badge__value {
+  display: flex;
+  align-items: baseline;
+  color: var(--color-fg);
+  font-weight: 800;
+  line-height: 1;
+}
+.stat-badge__number {
+  font-size: calc(var(--text-h1) * 1.7);
+}
+.stat-badge__unit {
+  margin-left: var(--space-2);
+  color: var(--color-primary);
+  font-size: var(--text-body);
+}
+.stat-badge__label,
+.stat-badge__context,
+.stat-badge__delta-label {
+  margin: 0;
+}
+.stat-badge__label {
+  color: var(--color-fg);
+  font-size: var(--text-body);
+  font-weight: 750;
+}
+.stat-badge__context,
+.stat-badge__delta-label {
+  margin-top: var(--space-2);
+  color: color-mix(in srgb, var(--color-fg) 56%, transparent);
+  font-size: var(--text-caption);
+}
+.stat-badge__delta {
+  text-align: right;
+}
+.stat-badge__delta strong {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--color-primary);
+  font-size: var(--text-body);
+}
+.stat-badge__progress {
+  grid-column: 1 / -1;
+  height: 3px;
+  background: var(--color-muted);
+}
+.stat-badge__progress span {
+  display: block;
+  width: 84%;
+  height: 100%;
+  background: var(--color-primary);
+}
+@media (max-width: 560px) {
+  .stat-badge {
+    grid-template-columns: auto 1fr;
+  }
+  .stat-badge__delta {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    text-align: left;
+  }
+}
+</style>
+<article class="stat-badge">
+  <div class="stat-badge__value"><span class="stat-badge__number">84</span><span class="stat-badge__unit">%</span></div>
+  <div>
+    <p class="stat-badge__label">页面交付率</p>
+    <p class="stat-badge__context">本月已交付 42 页，目标 50 页</p>
+  </div>
+  <div class="stat-badge__delta">
+    <span class="stat-badge__delta-label">较上月</span>
+    <strong>+8.4%</strong>
+  </div>
+  <div class="stat-badge__progress" aria-hidden="true"><span></span></div>
+</article>
+</section><section><h2>kv-list</h2><script type="application/json" id="meta">
+{
+  "name": "键值列表",
+  "description": "清晰呈现多组名称、数值与状态信息",
+  "tags": ["list"],
+  "kind": "content"
+}
+</script>
+<style>
+.kv-list {
+  width: min(100%, 760px);
+  margin: 0;
+  border-top: 1px solid var(--color-fg);
+}
+.kv-list__row {
+  display: grid;
+  grid-template-columns: minmax(120px, .8fr) minmax(160px, 1fr) minmax(76px, auto);
+  align-items: center;
+  gap: clamp(var(--space-3), 3vw, var(--space-6));
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-border, color-mix(in srgb, var(--color-fg) 15%, transparent));
+}
+.kv-list__key,
+.kv-list__val,
+.kv-list__note {
+  margin: 0;
+}
+.kv-list__key {
+  color: color-mix(in srgb, var(--color-fg) 64%, transparent);
+  font-size: var(--text-caption);
+  font-weight: 650;
+}
+.kv-list__val {
+  color: var(--color-fg);
+  font-size: var(--text-body);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.kv-list__note {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  color: color-mix(in srgb, var(--color-fg) 60%, transparent);
+  font-size: var(--text-caption);
+  text-align: right;
+}
+.kv-list__note::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+@media (max-width: 560px) {
+  .kv-list__row {
+    grid-template-columns: 1fr auto;
+  }
+  .kv-list__val {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .kv-list__note {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+</style>
+<dl class="kv-list">
+  <div class="kv-list__row"><dt class="kv-list__key">项目阶段</dt><dd class="kv-list__val">视觉定稿</dd><dd class="kv-list__note">进行中</dd></div>
+  <div class="kv-list__row"><dt class="kv-list__key">页面数量</dt><dd class="kv-list__val">18 页</dd><dd class="kv-list__note">已确认</dd></div>
+  <div class="kv-list__row"><dt class="kv-list__key">交付时间</dt><dd class="kv-list__val">周五 18:00</dd><dd class="kv-list__note">按计划</dd></div>
+</dl>
+</section><section><h2>svg-bar</h2><script type="application/json" id="meta">
+{
+  "name": "柱状图",
+  "description": "展示分类数据差异，并突出关键数据项",
+  "tags": ["chart"],
+  "kind": "data"
+}
+</script>
+<style>
+.svg-bar {
+  width: min(100%, 760px);
+  margin: 0;
+}
+.svg-bar__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-6);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border, color-mix(in srgb, var(--color-fg) 16%, transparent));
+}
+.svg-bar__title {
+  display: block;
+  color: var(--color-fg);
+  font-size: var(--text-body);
+  font-weight: 800;
+}
+.svg-bar__subtitle {
+  display: block;
+  margin-top: var(--space-2);
+  color: color-mix(in srgb, var(--color-fg) 58%, transparent);
+  font-size: var(--text-caption);
+}
+.svg-bar__summary {
+  text-align: right;
+}
+.svg-bar__summary strong,
+.svg-bar__summary span {
+  display: block;
+}
+.svg-bar__summary strong {
+  color: var(--color-primary);
+  font-size: var(--text-h2);
+  line-height: 1;
+}
+.svg-bar__summary span {
+  margin-top: var(--space-2);
+  color: color-mix(in srgb, var(--color-fg) 58%, transparent);
+  font-size: var(--text-caption);
+}
+.svg-bar__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: var(--space-3);
+}
+.svg-bar__grid {
+  stroke: var(--color-border, color-mix(in srgb, var(--color-fg) 13%, transparent));
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+.svg-bar__bar {
+  fill: var(--color-primary);
+  opacity: .34;
+}
+.svg-bar__bar--accent {
+  fill: var(--color-primary);
+  opacity: 1;
+}
+.svg-bar__axis,
+.svg-bar__value {
+  fill: color-mix(in srgb, var(--color-fg) 58%, transparent);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+.svg-bar__value {
+  fill: var(--color-fg);
+  font-weight: 700;
+}
+@media (max-width: 560px) {
+  .svg-bar__head {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+  .svg-bar__summary {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    text-align: left;
+  }
+  .svg-bar__summary span {
+    margin-top: 0;
+  }
+}
+</style>
+<figure class="svg-bar">
+  <figcaption class="svg-bar__head">
+    <span><strong class="svg-bar__title">页面交付趋势</strong><small class="svg-bar__subtitle">近六个月完成页面数</small></span>
+    <span class="svg-bar__summary"><strong>64</strong><span>6 月 · 本期最高</span></span>
+  </figcaption>
+  <svg class="svg-bar__svg" viewBox="0 0 560 250" role="img" aria-label="1 月至 6 月页面交付趋势">
+    <g class="svg-bar__grid"><line x1="48" y1="42" x2="540" y2="42"/><line x1="48" y1="94" x2="540" y2="94"/><line x1="48" y1="146" x2="540" y2="146"/><line x1="48" y1="198" x2="540" y2="198"/></g>
+    <g><rect class="svg-bar__bar" x="72" y="146" width="48" height="52"/><rect class="svg-bar__bar" x="150" y="126" width="48" height="72"/><rect class="svg-bar__bar" x="228" y="110" width="48" height="88"/><rect class="svg-bar__bar" x="306" y="88" width="48" height="110"/><rect class="svg-bar__bar" x="384" y="68" width="48" height="130"/><rect class="svg-bar__bar svg-bar__bar--accent" x="462" y="42" width="48" height="156"/></g>
+    <g class="svg-bar__value" text-anchor="middle"><text x="96" y="138">24</text><text x="174" y="118">31</text><text x="252" y="102">38</text><text x="330" y="80">46</text><text x="408" y="60">54</text><text x="486" y="34">64</text></g>
+    <g class="svg-bar__axis" text-anchor="middle"><text x="96" y="224">1月</text><text x="174" y="224">2月</text><text x="252" y="224">3月</text><text x="330" y="224">4月</text><text x="408" y="224">5月</text><text x="486" y="224">6月</text></g>
+  </svg>
+</figure>
+</section>

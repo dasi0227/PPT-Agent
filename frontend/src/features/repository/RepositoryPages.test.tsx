@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useToastStore } from '../../stores/toastStore';
 import { ComponentRepositoryPage } from './ComponentRepositoryPage';
@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getSkill: vi.fn(),
   setSkillDisabled: vi.fn(),
   listSkills: vi.fn(),
+  setTheme: vi.fn(),
 }));
 
 vi.mock('../../api/repositories', () => ({
@@ -39,13 +40,18 @@ vi.mock('../../api/projects', () => ({
     get: vi.fn(),
     getContent: vi.fn(),
     mutate: vi.fn(),
-    setTheme: vi.fn(),
+    setTheme: mocks.setTheme,
     delete: vi.fn(),
   },
 }));
 
-function renderPage(page: React.ReactNode) {
-  return render(<MemoryRouter>{page}</MemoryRouter>);
+function LocationProbe() {
+  const location = useLocation();
+  return <output aria-label="location">{location.pathname}{location.search}</output>;
+}
+
+function renderPage(page: React.ReactNode, initialEntry: string | { pathname: string; state?: unknown } = '/warehouse/theme') {
+  return render(<MemoryRouter initialEntries={[initialEntry]}>{page}<LocationProbe /></MemoryRouter>);
 }
 
 describe('personal repository pages', () => {
@@ -60,8 +66,7 @@ describe('personal repository pages', () => {
         id: 'swiss-modern',
         name: 'Swiss Modern',
         description: 'Clean grid',
-        tags: ['minimal'],
-        css: ':root{--color-bg:#fff;--font-sans:Aptos}',
+        css: ':root{--color-bg:#fff;--color-fg:#111;--color-primary:#d0021b;--color-accent:#1c1c1c;--font-sans:Aptos;--font-serif:Georgia}',
         css_url: '/api/v1/themes/swiss-modern/css',
         open_url: 'vscode://file/themes/swiss-modern/theme.css',
       },
@@ -69,8 +74,7 @@ describe('personal repository pages', () => {
         id: 'tokyo-night',
         name: 'Tokyo Night',
         description: 'Dark presentation',
-        tags: ['dark'],
-        css: ':root{--color-bg:#111;--font-sans:Inter}',
+        css: ':root{--color-bg:#111;--color-fg:#eee;--color-primary:#7aa2f7;--color-accent:#bb9af7;--font-sans:Inter;--font-serif:Georgia}',
         css_url: '/api/v1/themes/tokyo-night/css',
         open_url: 'vscode://file/themes/tokyo-night/theme.css',
       },
@@ -80,11 +84,48 @@ describe('personal repository pages', () => {
 
     renderPage(<ThemeRepositoryPage />);
 
-    expect(await screen.findByTitle('Swiss Modern 主题预览')).toHaveAttribute('sandbox', '');
+    const preview = await screen.findByTitle('Swiss Modern 主题预览');
+    expect(preview).toHaveAttribute('sandbox', '');
+    expect(preview.getAttribute('srcdoc')).toContain('IDEA<br>TO<br>SLIDES');
+    expect(preview.getAttribute('srcdoc')).toContain('class="specimen-word">Dasi');
+    expect(preview.getAttribute('srcdoc')).not.toContain('>Aa<');
+    expect(screen.getByRole('main')).toHaveClass('h-[100dvh]', 'overflow-hidden');
+    expect(screen.getByText('Aptos')).toBeInTheDocument();
+    expect(screen.getByText('色板')).toBeInTheDocument();
+    expect(screen.getByText('字体')).toBeInTheDocument();
+    expect(screen.getAllByText('Dasi')).toHaveLength(2);
+    expect(screen.queryByText('Aa')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Clean grid')).toHaveLength(2);
+    expect(screen.queryByText('minimal')).not.toBeInTheDocument();
+    expect(screen.getByText('仓库')).toBeInTheDocument();
+    expect(screen.queryByText('个人仓库')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '组件' })).toHaveAttribute('href', '/warehouse/component');
+    fireEvent.click(screen.getByRole('button', { name: /Tokyo Night/ }));
+    expect(mocks.setTheme).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: '内容页' }));
+    expect(screen.getByTitle('Tokyo Night 主题预览').getAttribute('srcdoc')).toContain('好页面先回答一个问题');
+    expect(screen.getByTitle('Tokyo Night 主题预览').getAttribute('srcdoc')).not.toContain('<main class="showcase chart-page">');
+    fireEvent.click(screen.getByRole('button', { name: '图表页' }));
+    expect(screen.getByTitle('Tokyo Night 主题预览').getAttribute('srcdoc')).toContain('交付节奏持续提升');
+    expect(screen.getByTitle('Tokyo Night 主题预览').getAttribute('srcdoc')).toContain('accent-bar');
     fireEvent.change(screen.getByLabelText('搜索主题'), { target: { value: 'dark' } });
     expect(screen.getByTitle('Tokyo Night 主题预览')).toBeInTheDocument();
     expect(screen.queryByTitle('Swiss Modern 主题预览')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('搜索主题'), { target: { value: 'minimal' } });
+    expect(screen.getByText('没有匹配的主题')).toBeInTheDocument();
+  });
+
+  it('returns to the project route used to enter the warehouse', async () => {
+    mocks.listThemes.mockResolvedValue({ themes: [] });
+    renderPage(<ThemeRepositoryPage />, {
+      pathname: '/warehouse/theme',
+      state: { returnTo: '/projects/project-7?slide=slide-2' },
+    });
+
+    await screen.findByText('没有匹配的主题');
+    fireEvent.click(screen.getByRole('link', { name: '返回项目' }));
+    expect(screen.getByLabelText('location')).toHaveTextContent('/projects/project-7?slide=slide-2');
   });
 
   it('filters component kinds and previews HTML only in sandboxed iframes', async () => {
@@ -114,8 +155,11 @@ describe('personal repository pages', () => {
     renderPage(<ComponentRepositoryPage />);
 
     const detail = await screen.findByTitle('Feature Card 组件预览');
+    expect(screen.getByPlaceholderText('搜索组件')).toBeInTheDocument();
     expect(detail).toHaveAttribute('sandbox', '');
     expect(detail.getAttribute('srcdoc')).toContain('<script>window.parent.bad=true</script>');
+    expect(detail.getAttribute('srcdoc')).toContain('.component-stage{display:grid;place-items:center');
+    expect(screen.getByText('卡片')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'editorial' }));
     expect(screen.getByTitle('Quote Block 组件预览')).toHaveAttribute('sandbox', '');
     expect(screen.queryByTitle('Feature Card 组件预览')).not.toBeInTheDocument();

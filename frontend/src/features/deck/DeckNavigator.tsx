@@ -16,7 +16,7 @@ import {
   FilePlus2,
   FolderPlus,
   GripVertical,
-  ListTree,
+  List,
   PanelLeftClose,
   Pencil,
   Plus,
@@ -121,7 +121,7 @@ function DeckNavigatorChrome({
         className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3"
       >
         <div className="flex items-center text-sm font-semibold text-text-900">
-          <ListTree className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} aria-hidden="true" />
+          <List className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} aria-hidden="true" />
           <h2>目录</h2>
         </div>
         <IconButton label="隐藏左侧目录" onClick={toggleLeftPanel}>

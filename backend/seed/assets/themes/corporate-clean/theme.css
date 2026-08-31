@@ -1,0 +1,46 @@
+/* theme: corporate-clean - adapted from the html-ppt system preset. */
+:root {
+  --color-bg: #ffffff;
+  --color-fg: #0a2540;
+  --color-primary: #0a2540;
+  --color-accent: #1d4ed8;
+  --color-muted: #f0f3f7;
+  --color-surface: #ffffff;
+  --color-border: rgba(10, 37, 64, 0.14);
+  --color-good: #0e9f6e;
+  --color-warn: #d97706;
+  --color-bad: #dc2626;
+  --font-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --font-serif: "Noto Serif SC", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
+  --font-display: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --text-title: 82px;
+  --text-h1: 58px;
+  --text-body: 30px;
+  --text-caption: 21px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 40px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --shadow-card: 0 1px 3px rgba(10, 37, 64, 0.08), 0 4px 12px rgba(10, 37, 64, 0.05);
+  --shadow-pop: 0 4px 12px rgba(10, 37, 64, 0.1), 0 16px 40px rgba(10, 37, 64, 0.08);
+  --theme-background: #ffffff;
+  --stage-w: 1920;
+  --stage-h: 1080;
+}
+
+.slide-title,
+.title {
+  color: var(--color-primary);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.card {
+  border: 1px solid var(--color-border);
+}

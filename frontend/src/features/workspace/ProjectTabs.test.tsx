@@ -17,7 +17,7 @@ function LocationProbe() {
   return <output aria-label="location">{useLocation().pathname}</output>;
 }
 
-describe('ProjectTabs warehouse menu', () => {
+describe('ProjectTabs warehouse entry', () => {
   beforeEach(() => {
     useProjectStore.setState({
       projects: [],
@@ -28,21 +28,19 @@ describe('ProjectTabs warehouse menu', () => {
     });
   });
 
-  it('opens the compact menu and navigates to all repository sections', async () => {
+  it('navigates directly to the warehouse and preserves the project route', async () => {
     const user = userEvent.setup();
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/projects/project-7?slide=slide-2']}>
         <ProjectTabs />
         <LocationProbe />
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole('button', { name: '个人仓库' }));
-    expect(screen.getByText('选择演示文稿的整体样式')).toBeInTheDocument();
-    expect(screen.getByText('浏览供 Agent 参考的片段')).toBeInTheDocument();
-    expect(screen.getByText('管理 Run 可使用的技能')).toBeInTheDocument();
-
-    await user.click(screen.getByText('组件'));
-    expect(screen.getByLabelText('location')).toHaveTextContent('/warehouse/component');
+    const repositoryButton = screen.getByRole('button', { name: '仓库' });
+    expect(repositoryButton).toHaveTextContent('仓库');
+    await user.click(repositoryButton);
+    expect(screen.getByLabelText('location')).toHaveTextContent('/warehouse/theme');
+    expect(screen.queryByText('选择演示文稿的整体样式')).not.toBeInTheDocument();
   });
 });

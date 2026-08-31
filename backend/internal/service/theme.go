@@ -16,9 +16,8 @@ type ThemeService struct {
 }
 
 type themeManifest struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 func NewThemeService(workRoot WorkRoot) *ThemeService {
@@ -62,14 +61,14 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 	}
 	manifest.Name = strings.TrimSpace(manifest.Name)
 	manifest.Description = strings.TrimSpace(manifest.Description)
+	if _, description, found := strings.Cut(manifest.Description, "："); found {
+		manifest.Description = strings.TrimSpace(description)
+	}
 	if manifest.Name == "" || manifest.Description == "" {
 		return model.Theme{}, repositoryReadError("theme", id, ErrRepositoryCorrupt)
 	}
-	for index := range manifest.Tags {
-		manifest.Tags[index] = strings.TrimSpace(manifest.Tags[index])
-	}
 	return model.Theme{
-		ID: id, Name: manifest.Name, Description: manifest.Description, Tags: manifest.Tags,
+		ID: id, Name: manifest.Name, Description: manifest.Description,
 		CSS: string(cssRaw), CSSURL: "/api/v1/themes/" + id + "/css",
 		LocalPath: cssPath, OpenURL: repositoryOpenURL(cssPath),
 	}, nil

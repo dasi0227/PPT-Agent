@@ -1,0 +1,48 @@
+/* theme: blueprint - adapted from the html-ppt system preset. */
+:root {
+  --color-bg: #0b3a6f;
+  --color-fg: #e8f3ff;
+  --color-primary: #aee1ff;
+  --color-accent: #ffd27a;
+  --color-muted: rgba(255, 255, 255, 0.06);
+  --color-surface: rgba(255, 255, 255, 0.045);
+  --color-border: rgba(190, 220, 255, 0.38);
+  --color-good: #8ef0a6;
+  --color-warn: #ffd27a;
+  --color-bad: #ff8a96;
+  --font-sans: "JetBrains Mono", "IBM Plex Mono", monospace;
+  --font-serif: "Noto Serif SC", Georgia, serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
+  --font-display: "JetBrains Mono", "IBM Plex Mono", monospace;
+  --text-title: 76px;
+  --text-h1: 54px;
+  --text-body: 28px;
+  --text-caption: 20px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 40px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 4px;
+  --shadow-card: none;
+  --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.3);
+  --theme-background:
+    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px) 0 0 / 40px 40px,
+    #0b3a6f;
+  --stage-w: 1920;
+  --stage-h: 1080;
+}
+
+.slide-stage,
+.slide {
+  background: var(--theme-background);
+}
+
+.card {
+  border: 1px dashed var(--color-border);
+  box-shadow: none;
+}

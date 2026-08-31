@@ -1,34 +1,73 @@
 <script type="application/json" id="meta">
 {
   "name": "能力卡片",
-  "description": "特性卡片：标题 + 描述的功能点卡片",
-  "tags": [
-    "feature",
-    "card"
-  ],
+  "description": "聚焦一项核心能力及其带来的结果",
+  "tags": ["card"],
   "kind": "content"
 }
 </script>
 <style>
-/* component: feature-card —— 特性卡片。 */
 .feature-card {
+  position: relative;
+  display: grid;
+  width: min(100%, 720px);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-4);
+  overflow: hidden;
   padding: var(--space-6);
-  background: var(--color-muted);
+  border: 1px solid var(--color-border, color-mix(in srgb, var(--color-fg) 14%, transparent));
   border-radius: var(--radius-lg);
+  background: var(--color-surface, var(--color-bg));
   box-shadow: var(--shadow-card);
 }
+.feature-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 32%;
+  height: 4px;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+}
+.feature-card__mark {
+  display: grid;
+  width: clamp(34px, 5vw, 54px);
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-bg);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-caption);
+  font-weight: 800;
+}
+.feature-card__eyebrow {
+  margin: 0 0 var(--space-2);
+  color: var(--color-accent);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-caption);
+  font-weight: 700;
+  letter-spacing: .08em;
+}
 .feature-card__title {
+  margin: 0;
+  color: var(--color-fg);
   font-size: var(--text-h1);
-  color: var(--color-primary);
-  margin: 0 0 var(--space-4);
+  line-height: 1.08;
 }
 .feature-card__desc {
+  max-width: 34em;
+  margin: var(--space-2) 0 0;
+  color: color-mix(in srgb, var(--color-fg) 70%, transparent);
   font-size: var(--text-body);
-  color: var(--color-fg);
-  margin: 0;
+  line-height: 1.45;
 }
 </style>
-<div class="feature-card">
-  <h3 class="feature-card__title">能力标题</h3>
-  <p class="feature-card__desc">描述能力如何支持当前叙事。</p>
-</div>
+<article class="feature-card">
+  <div class="feature-card__mark">AI</div>
+  <div>
+    <p class="feature-card__eyebrow">核心能力</p>
+    <h3 class="feature-card__title">从一句需求到完整表达</h3>
+    <p class="feature-card__desc">理解目标、组织叙事，并生成可以继续编辑的页面。</p>
+  </div>
+</article>

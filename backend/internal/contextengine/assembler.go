@@ -384,9 +384,13 @@ func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec,
 func componentCandidates(components []model.Component) []ComponentCandidate {
 	out := make([]ComponentCandidate, 0, len(components))
 	for _, component := range components {
+		tags := make([]string, len(component.Tags))
+		for index, tag := range component.Tags {
+			tags[index] = string(tag)
+		}
 		out = append(out, ComponentCandidate{
 			ID: component.ID, Name: component.Name, Description: component.Description,
-			Tags: append([]string{}, component.Tags...),
+			Tags: tags,
 		})
 	}
 	return out
