@@ -11,7 +11,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
-	"github.com/dasi0227/PPT-Agent/backend/internal/repository"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -25,19 +24,8 @@ func provideHTTPServer(cfg *config.Config, engine *gin.Engine) *http.Server {
 	}
 }
 
-func provideApp(server *http.Server, engine *run.Engine, log *zap.Logger, _ seedDone) *App {
+func provideApp(server *http.Server, engine *run.Engine, log *zap.Logger) *App {
 	return &App{server: server, engine: engine, log: log}
-}
-
-// seedDone ensures repository seeds exist before the server starts.
-type seedDone struct{}
-
-func provideSeed(cfg *config.Config, log *zap.Logger) (seedDone, error) {
-	if err := (repository.Initializer{WorkRoot: cfg.WorkRoot}).Initialize(); err != nil {
-		return seedDone{}, err
-	}
-	log.Info("repository seeds initialized", zap.String("work_root", cfg.WorkRoot))
-	return seedDone{}, nil
 }
 
 func engineFromRouter(r *httpapi.Router) *gin.Engine { return r.Engine() }

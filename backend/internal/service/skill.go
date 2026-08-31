@@ -36,7 +36,7 @@ type skillRegistry struct {
 }
 
 func NewSkillService(workRoot WorkRoot) *SkillService {
-	return &SkillService{root: filepath.Join(string(workRoot), "skills")}
+	return &SkillService{root: filepath.Join(string(workRoot), "assets", "skills")}
 }
 
 func (s *SkillService) List() ([]model.RepositorySkill, error) {

@@ -55,13 +55,13 @@
   - `~/.dasi/ppt/assets/themes/<id>/manifest.json`
   - `~/.dasi/ppt/assets/themes/<id>/theme.css`
   - `~/.dasi/ppt/assets/components/<id>/index.html`
-  - `~/.dasi/ppt/skills/registry.json`
-  - `~/.dasi/ppt/skills/<id>/SKILL.md`
+  - `~/.dasi/ppt/assets/skills/registry.json`
+  - `~/.dasi/ppt/assets/skills/<id>/SKILL.md`
 - 目录名是稳定 ID，元数据 `name` 是人类可读展示名，前端不得互相推导。
 - Theme manifest 仅包含 `name/description`，不保留 version 与 tags。
 - Component `index.html` 内联 `script#meta`、style 和结构，单文件上限 64KB。
 - Skill 延续 frontmatter + Markdown，增加中央 `registry.json` disabled 列表。
-- 启动初始化只补写缺失的 seed 装配文件，绝不覆盖用户文件，不写 SQLite。
+- 根目录初始化脚本只补写缺失的 `seed/assets` 文件，绝不覆盖用户文件，不写 SQLite；后端启动不负责 seed 安装。
 - registry 缺失等价于空 disabled；registry 损坏必须明确报错并停止 Skill 披露。
 - 所有模块拒绝符号链接、目录穿越、绝对路径注入和非普通文件。
 

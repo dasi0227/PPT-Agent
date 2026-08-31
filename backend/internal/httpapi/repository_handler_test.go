@@ -59,7 +59,7 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/manifest.json", `{"name":"Swiss Modern","description":"Grid"}`)
 	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/theme.css", ":root{--color-bg:#fff}")
 	writeRepositoryFixture(t, root, "assets/components/feature-card/index.html", `<!doctype html><script id="meta" type="application/json">{"name":"Feature Card","description":"Summary","tags":["card"],"kind":"content"}</script><article>Feature</article>`)
-	writeRepositoryFixture(t, root, "skills/story/SKILL.md", "---\nname: Story\ndescription: Narrative\n---\n# Story\n")
+	writeRepositoryFixture(t, root, "assets/skills/story/SKILL.md", "---\nname: Story\ndescription: Narrative\n---\n# Story\n")
 
 	engine := repositoryTestRouter(root)
 

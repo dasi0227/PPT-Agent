@@ -23,7 +23,7 @@ func TestRepositoryServicesParseIndependentProtocols(t *testing.T) {
 	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/manifest.json"), `{"name":"Theme One","description":"分类：Clear theme"}`)
 	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/theme.css"), `:root{--color-bg:#fff}`)
 	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), `<script type="application/json" id="meta">{"name":"Metric","description":"One metric","tags":["metric"],"kind":"data"}</script><style>.metric{color:var(--color-primary)}</style><div class="metric">42%</div>`)
-	writeRepositoryFile(t, filepath.Join(root, "skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead with the conclusion.")
+	writeRepositoryFile(t, filepath.Join(root, "assets/skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead with the conclusion.")
 
 	theme, err := NewThemeService(WorkRoot(root)).Get("t1")
 	if err != nil || theme.ID != "t1" || theme.Name != "Theme One" || theme.Description != "Clear theme" || !strings.Contains(theme.CSS, "--color-bg") {
@@ -62,7 +62,7 @@ func TestComponentTagsAcceptTheCompleteEnum(t *testing.T) {
 }
 
 func TestFactoryComponentsFollowTheComponentContract(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("..", "..", "seed", "assets", "components", "*", "index.html"))
+	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "seed", "assets", "components", "*", "index.html"))
 	if err != nil || len(paths) != 5 {
 		t.Fatalf("factory component paths=%v err=%v", paths, err)
 	}
@@ -74,6 +74,23 @@ func TestFactoryComponentsFollowTheComponentContract(t *testing.T) {
 		meta, parseErr := parseComponentMeta(raw)
 		if parseErr != nil || len(meta.Tags) == 0 || meta.Kind == "" {
 			t.Fatalf("factory component %s meta=%+v err=%v", path, meta, parseErr)
+		}
+	}
+}
+
+func TestFactorySkillsFollowTheSkillContract(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "seed", "assets", "skills", "*", "SKILL.md"))
+	if err != nil || len(paths) != 3 {
+		t.Fatalf("factory skill paths=%v err=%v", paths, err)
+	}
+	for _, path := range paths {
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read %s: %v", path, readErr)
+		}
+		meta, body, parseErr := parseSkillMarkdown(raw)
+		if parseErr != nil || meta.Name == "" || meta.Description == "" || body == "" {
+			t.Fatalf("factory skill %s meta=%+v err=%v", path, meta, parseErr)
 		}
 	}
 }
@@ -102,7 +119,7 @@ func TestRepositoryServicesRejectTraversalSymlinksAndOversizeFiles(t *testing.T)
 
 func TestSkillRegistryMissingCorruptAndAtomicToggle(t *testing.T) {
 	root := t.TempDir()
-	writeRepositoryFile(t, filepath.Join(root, "skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead.")
+	writeRepositoryFile(t, filepath.Join(root, "assets/skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead.")
 	service := NewSkillService(WorkRoot(root))
 	skills, err := service.List()
 	if err != nil || len(skills) != 1 || skills[0].Disabled {
@@ -115,7 +132,7 @@ func TestSkillRegistryMissingCorruptAndAtomicToggle(t *testing.T) {
 	if _, err := service.Resolve([]string{"s1"}); err == nil {
 		t.Fatal("disabled skill resolved")
 	}
-	writeRepositoryFile(t, filepath.Join(root, "skills/registry.json"), `{`)
+	writeRepositoryFile(t, filepath.Join(root, "assets/skills/registry.json"), `{`)
 	if _, err := service.List(); !errors.Is(err, ErrRepositoryCorrupt) {
 		t.Fatalf("corrupt registry err=%v", err)
 	}

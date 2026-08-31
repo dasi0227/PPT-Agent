@@ -1,0 +1,36 @@
+<script type="application/json" id="meta">
+{
+  "name": "观点引用",
+  "description": "强调核心判断，并保留清晰的观点来源",
+  "tags": ["quote"],
+  "kind": "content"
+}
+</script>
+<style>
+.quote-block {
+  display: grid;
+  width: min(100%, 760px);
+  gap: var(--space-6);
+  margin: 0;
+  padding: var(--space-4) 0;
+}
+.quote-block__text {
+  max-width: 18em;
+  margin: 0;
+  color: var(--color-fg);
+  font-family: var(--font-serif);
+  font-size: min(var(--text-h1), 42px);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.quote-block__cite {
+  margin: 0;
+  color: color-mix(in srgb, var(--color-fg) 62%, transparent);
+  font-size: var(--text-caption);
+  font-style: normal;
+}
+</style>
+<blockquote class="quote-block">
+  <p class="quote-block__text">先统一表达，再扩大创作自由。</p>
+  <footer class="quote-block__cite">Dasi 产品设计原则</footer>
+</blockquote>

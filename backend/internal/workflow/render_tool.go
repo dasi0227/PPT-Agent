@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,9 +20,9 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
-	"github.com/dasi0227/PPT-Agent/backend/seed"
 )
 
 const (
@@ -417,10 +416,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if themeErr != nil {
 		return failedToolResult(CodeRenderFailed, "theme is unavailable", false)
 	}
-	baseCSS, baseErr := fs.ReadFile(seed.FS(), "common/base.css")
-	if baseErr != nil {
-		return failedToolResult(CodeRenderFailed, baseErr.Error(), true)
-	}
+	baseCSS := runtimeassets.BaseCSS()
 	normalizedHTML, normalizeErr := runtimehtml.Normalize(html, theme.ID)
 	if normalizeErr != nil {
 		return failedToolResult(CodeRenderFailed, normalizeErr.Error(), false)

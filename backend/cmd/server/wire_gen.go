@@ -89,14 +89,7 @@ func initApp() (*App, func(), error) {
 	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, gitCommitHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
-	mainSeedDone, err := provideSeed(configConfig, zapLogger)
-	if err != nil {
-		cleanup3()
-		cleanup2()
-		cleanup()
-		return nil, nil, err
-	}
-	app := provideApp(server, engine, zapLogger, mainSeedDone)
+	app := provideApp(server, engine, zapLogger)
 	return app, func() {
 		cleanup3()
 		cleanup2()
@@ -115,6 +108,5 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideRenderWorker, service.NewHealthService, provideProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, provideGitCommitService,
 	provideSlideService, service.NewPPTMutationService, service.NewThemeService, service.NewComponentService, service.NewSkillService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
-	provideSeed,
 	provideApp,
 )

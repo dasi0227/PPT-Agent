@@ -2,11 +2,10 @@ package httpapi
 
 import (
 	"errors"
-	"io/fs"
 	"net/http"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
-	"github.com/dasi0227/PPT-Agent/backend/seed"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,13 +20,8 @@ func NewRepositoryHandler(themes *service.ThemeService, components *service.Comp
 }
 
 func (h *RepositoryHandler) RuntimeBaseCSS(c *gin.Context) {
-	raw, err := fs.ReadFile(seed.FS(), "common/base.css")
-	if err != nil {
-		AbortWithError(c, ErrInternal(err.Error()))
-		return
-	}
 	c.Header("Cache-Control", "no-cache")
-	c.Data(http.StatusOK, "text/css; charset=utf-8", raw)
+	c.Data(http.StatusOK, "text/css; charset=utf-8", runtimeassets.BaseCSS())
 }
 
 func (h *RepositoryHandler) ListThemes(c *gin.Context) {

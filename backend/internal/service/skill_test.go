@@ -57,7 +57,7 @@ func TestSkillServiceRejectsInvalidSelections(t *testing.T) {
 
 func writeSkillFixture(t *testing.T, root, id, name, description, body string) {
 	t.Helper()
-	dir := filepath.Join(root, "skills", id)
+	dir := filepath.Join(root, "assets", "skills", id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

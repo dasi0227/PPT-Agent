@@ -8,26 +8,15 @@
 </script>
 <style>
 .feature-card {
-  position: relative;
   display: grid;
   width: min(100%, 720px);
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-4);
-  overflow: hidden;
   padding: var(--space-6);
   border: 1px solid var(--color-border, color-mix(in srgb, var(--color-fg) 14%, transparent));
   border-radius: var(--radius-lg);
   background: var(--color-surface, var(--color-bg));
   box-shadow: var(--shadow-card);
-}
-.feature-card::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 32%;
-  height: 4px;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
 }
 .feature-card__mark {
   display: grid;

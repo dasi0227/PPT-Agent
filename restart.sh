@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# restart.sh - 清理旧进程、初始化数据、启动前后端并打开浏览器。
-# 用法：./restart.sh              （交互式：会询问是否初始化数据）
-#       ./restart.sh --reset      （强制初始化 WORK_ROOT）
-#       ./restart.sh --no-reset   （保留数据）
+# restart.sh - 清理旧进程、初始化工作目录、启动前后端并打开浏览器。
+# 用法：./restart.sh              （交互式：会询问是否重置数据）
+#       ./restart.sh --reset      （清空 WORK_ROOT 后重新初始化）
+#       ./restart.sh --no-reset   （保留数据并补齐缺失的预置资源）
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +17,7 @@ mkdir -p "$LOG_DIR"
 
 RESULT_COLUMN=36
 STEP_1="【1/6】关闭可能在运行的前后端进程"
-STEP_2="【2/6】是否初始化数据？[y/n]"
+STEP_2="【2/6】是否重置数据？[y/n]"
 STEP_3="【3/6】启动 Chromium 渲染"
 STEP_4="【4/6】启动后端 port=8787 pid=xxxx"
 STEP_5="【5/6】启动前端 port=5173 pid=xxxx"
@@ -121,14 +121,14 @@ if [ "$RESET_MODE" = "yes" ] && ! rm -rf "$WORK_ROOT"; then
   print_result_tail "$STEP_2" "初始化失败 ❌：无法清空 $WORK_ROOT"
   exit 1
 fi
-if ! mkdir -p "$WORK_ROOT/db" "$WORK_ROOT/projects" "$WORK_ROOT/_assets"; then
-  print_result_tail "$STEP_2" "初始化失败 ❌：无法创建数据目录 $WORK_ROOT"
+if ! "$ROOT_DIR/scripts/init-workroot.sh" "$WORK_ROOT"; then
+  print_result_tail "$STEP_2" "初始化失败 ❌：无法初始化 $WORK_ROOT"
   exit 1
 fi
 if [ "$RESET_MODE" = "yes" ]; then
-  print_result_tail "$STEP_2" "初始化成功 ✅"
+  print_result_tail "$STEP_2" "重置并初始化成功 ✅"
 else
-  print_result_tail "$STEP_2" "跳过初始化 ✅"
+  print_result_tail "$STEP_2" "保留数据并补齐预置资源 ✅"
 fi
 
 if (
