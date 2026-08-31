@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { repositoriesApi } from '../../api/repositories';
 import type { ComponentReference, ComponentTag } from '../../api/types';
 import { cn } from '../../lib/utils';
@@ -11,15 +11,70 @@ import {
 } from './RepositoryPrimitives';
 import { RepositoryShell } from './RepositoryShell';
 
-function componentPreview(html: string, compact = false): string {
-  const h1 = compact ? '20px' : '36px';
-  const body = compact ? '12px' : '19px';
-  const caption = compact ? '9px' : '13px';
-  const padding = compact ? '10px' : '38px';
-  const space2 = compact ? '4px' : '8px';
-  const space4 = compact ? '8px' : '16px';
-  const space6 = compact ? '12px' : '24px';
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>:root{--color-bg:#fff;--color-fg:#17202b;--color-primary:#2f67f6;--color-accent:#c84953;--color-muted:#e9edf2;--color-surface:#fff;--color-border:#d9e0e8;--font-sans:Aptos,Arial,sans-serif;--font-serif:Georgia,serif;--font-mono:"SFMono-Regular",Consolas,monospace;--text-h1:${h1};--text-body:${body};--text-caption:${caption};--space-2:${space2};--space-4:${space4};--space-6:${space6};--radius-md:7px;--radius-lg:10px;--shadow-card:0 10px 28px rgba(51,65,85,.12)}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{display:grid;place-items:center;padding:${padding};font-family:var(--font-sans);color:var(--color-fg);background:linear-gradient(145deg,#f8fafc,#edf1f6)}.component-stage{display:grid;place-items:center;width:100%;max-width:${compact ? '300px' : '700px'}}.component-stage>*:not(style):not(script){max-width:100%}.component-stage>figure,.component-stage>dl{width:100%;justify-self:stretch}</style></head><body><div class="component-stage">${html}</div></body></html>`;
+const COMPONENT_PREVIEW_WIDTH = 960;
+const COMPONENT_PREVIEW_HEIGHT = 540;
+
+function componentPreview(html: string): string {
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>:root{--color-bg:#fff;--color-fg:#17202b;--color-primary:#2f67f6;--color-accent:#c84953;--color-muted:#e9edf2;--color-surface:#fff;--color-border:#d9e0e8;--font-sans:Aptos,Arial,sans-serif;--font-serif:Georgia,serif;--font-mono:"SFMono-Regular",Consolas,monospace;--text-h1:36px;--text-body:19px;--text-caption:13px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--radius-md:7px;--radius-lg:10px;--shadow-card:0 10px 28px rgba(51,65,85,.12)}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{display:grid;place-items:center;padding:38px;font-family:var(--font-sans);color:var(--color-fg);background:linear-gradient(145deg,#f8fafc,#edf1f6)}.component-stage{display:grid;place-items:center;width:100%;max-width:880px}.component-stage>*:not(style):not(script){max-width:100%}.component-stage>figure,.component-stage>dl{width:100%;justify-self:stretch}</style></head><body><div class="component-stage">${html}</div></body></html>`;
+}
+
+function ScaledComponentPreview({
+  html,
+  title,
+  className,
+}: {
+  html: string;
+  title: string;
+  className?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    const measure = () => {
+      const { width, height } = container.getBoundingClientRect();
+      if (width <= 0 || height <= 0) return;
+      const nextScale = Math.min(
+        width / COMPONENT_PREVIEW_WIDTH,
+        height / COMPONENT_PREVIEW_HEIGHT,
+      );
+      setScale((current) => Math.abs(current - nextScale) < 0.001 ? current : nextScale);
+    };
+
+    measure();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} className={cn('relative overflow-hidden', className)}>
+      <iframe
+        title={title}
+        sandbox=""
+        srcDoc={componentPreview(html)}
+        width={COMPONENT_PREVIEW_WIDTH}
+        height={COMPONENT_PREVIEW_HEIGHT}
+        className="pointer-events-none absolute left-1/2 top-1/2 border-0 bg-white"
+        style={{
+          width: COMPONENT_PREVIEW_WIDTH,
+          height: COMPONENT_PREVIEW_HEIGHT,
+          marginLeft: -(COMPONENT_PREVIEW_WIDTH / 2),
+          marginTop: -(COMPONENT_PREVIEW_HEIGHT / 2),
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+        }}
+      />
+    </div>
+  );
 }
 
 const componentTagLabels: Record<ComponentTag, string> = {
@@ -133,7 +188,11 @@ export function ComponentRepositoryPage() {
                       )}
                     >
                       <div className="aspect-video overflow-hidden border-b border-border bg-panel-muted">
-                        <iframe title={`${component.name} 缩略预览`} sandbox="" srcDoc={componentPreview(component.html ?? '', true)} className="pointer-events-none h-full w-full border-0" />
+                        <ScaledComponentPreview
+                          title={`${component.name} 缩略预览`}
+                          html={component.html ?? ''}
+                          className="h-full w-full"
+                        />
                       </div>
                       <div className="px-2.5 py-2">
                         <span className="block truncate text-[13px] font-bold text-text-900">{component.name}</span>
@@ -156,11 +215,10 @@ export function ComponentRepositoryPage() {
                   </div>
                 </RepositoryToolbar>
                 <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-canvas/70 p-5">
-                  <iframe
+                  <ScaledComponentPreview
                     title={`${selected.name} 组件预览`}
-                    sandbox=""
-                    srcDoc={componentPreview(selected.html ?? '')}
-                    className="aspect-[4/3] max-h-full w-full rounded-lg border border-border-strong bg-white shadow-[0_14px_34px_rgba(51,65,85,0.16)]"
+                    html={selected.html ?? ''}
+                    className="aspect-video max-h-full w-full rounded-lg border border-border-strong bg-white shadow-[0_14px_34px_rgba(51,65,85,0.16)]"
                   />
                 </div>
               </aside>

@@ -155,10 +155,18 @@ describe('personal repository pages', () => {
     renderPage(<ComponentRepositoryPage />);
 
     const detail = await screen.findByTitle('Feature Card 组件预览');
+    const thumbnail = screen.getByTitle('Feature Card 缩略预览');
     expect(screen.getByPlaceholderText('搜索组件')).toBeInTheDocument();
     expect(detail).toHaveAttribute('sandbox', '');
+    expect(detail).toHaveAttribute('width', '960');
+    expect(detail).toHaveAttribute('height', '540');
+    expect(thumbnail).toHaveAttribute('width', '960');
+    expect(thumbnail).toHaveAttribute('height', '540');
+    expect(thumbnail.getAttribute('srcdoc')).toBe(detail.getAttribute('srcdoc'));
     expect(detail.getAttribute('srcdoc')).toContain('<script>window.parent.bad=true</script>');
     expect(detail.getAttribute('srcdoc')).toContain('.component-stage{display:grid;place-items:center');
+    expect(detail.getAttribute('srcdoc')).toContain('--text-h1:36px');
+    expect(detail.parentElement).toHaveClass('aspect-video');
     expect(screen.getByText('卡片')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'editorial' }));
     expect(screen.getByTitle('Quote Block 组件预览')).toHaveAttribute('sandbox', '');
