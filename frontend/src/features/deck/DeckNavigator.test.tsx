@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PPTMutation, ProjectContentSnapshot } from '../../api/types';
@@ -83,6 +83,13 @@ function snapshot(): ProjectContentSnapshot {
   };
 }
 
+function emptySnapshot(): ProjectContentSnapshot {
+  const value = snapshot();
+  value.outline.sections = [];
+  value.slides_by_id = {};
+  return value;
+}
+
 describe('DeckNavigator', () => {
   const mutateProject = vi.fn<(projectId: string, mutation: PPTMutation) => Promise<ProjectContentSnapshot>>();
 
@@ -106,20 +113,24 @@ describe('DeckNavigator', () => {
     render(<DeckNavigator />);
 
     expect(screen.getByTestId('deck-navigator-title-row')).toHaveClass('h-12');
-    expect(screen.getByTestId('deck-navigator-summary-row')).toHaveClass('h-9');
-    expect(screen.getByText('2 章节 · 3 页')).toBeInTheDocument();
+    const summaryRow = screen.getByTestId('deck-navigator-summary-row');
+    expect(summaryRow).toHaveClass('h-9');
+    expect(within(summaryRow).getByText('2 章 · 3 页')).toBeInTheDocument();
+    expect(within(summaryRow).queryByRole('button')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '隐藏左侧目录' }));
     expect(useUIStore.getState().leftPanelHidden).toBe(true);
   });
 
-  it('shows page titles in design view and removes the footer create action', () => {
+  it('shows page titles and keeps the create action below all sections', () => {
     render(<DeckNavigator />);
 
-    expect(screen.getByTestId('deck-navigator-scroll')).toHaveClass('deck-navigator-scroll');
+    const scrollRegion = screen.getByTestId('deck-navigator-scroll');
+    expect(scrollRegion).toHaveClass('deck-navigator-scroll');
     expect(screen.getByText('问题与目标')).toBeInTheDocument();
     expect(screen.getByText('核心定义')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新增页面' })).not.toBeInTheDocument();
+    expect(scrollRegion.lastElementChild).toBe(within(scrollRegion).getByRole('button', { name: '新增章节' }));
   });
 
   it('shows rendered-page placeholders instead of titles in slide view', () => {
@@ -181,12 +192,30 @@ describe('DeckNavigator', () => {
     }));
   });
 
-  it('adds an empty section at the end from the header action', async () => {
+  it('adds an empty section from the action below existing sections', async () => {
     const user = userEvent.setup();
     render(<DeckNavigator />);
 
     await user.click(screen.getByRole('button', { name: '新增章节' }));
 
+    expect(mutateProject).toHaveBeenCalledWith('pro_1', expect.objectContaining({
+      op: 'outline.insert',
+      position: {},
+      node: expect.objectContaining({ kind: 'section', slides: [], subsections: [] }),
+    }));
+  });
+
+  it('centers a clickable create action when the directory is empty', async () => {
+    const user = userEvent.setup();
+    const empty = emptySnapshot();
+    useProjectStore.setState({ contentByProjectId: { pro_1: empty } });
+    render(<DeckNavigator />);
+
+    const emptyState = screen.getByTestId('deck-navigator-empty');
+    expect(emptyState).toHaveClass('flex-1', 'justify-center');
+    expect(screen.getByText('目录为空，先新增章节')).toBeInTheDocument();
+
+    await user.click(within(emptyState).getByRole('button', { name: '新增章节' }));
     expect(mutateProject).toHaveBeenCalledWith('pro_1', expect.objectContaining({
       op: 'outline.insert',
       position: {},

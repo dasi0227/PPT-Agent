@@ -108,13 +108,9 @@ function MenuIcon({ children }: { children: ReactNode }) {
 function DeckNavigatorChrome({
   pageCount,
   sectionCount,
-  addDisabled,
-  onAddSection,
 }: {
   pageCount: number;
   sectionCount: number;
-  addDisabled: boolean;
-  onAddSection: () => void;
 }) {
   const toggleLeftPanel = useUIStore((state) => state.toggleLeftPanel);
 
@@ -135,19 +131,11 @@ function DeckNavigatorChrome({
 
       <div
         data-testid="deck-navigator-summary-row"
-        className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-surface px-3"
+        className="flex h-9 shrink-0 items-center border-b border-border bg-surface px-3"
       >
         <span className="text-xs tabular-nums text-text-400">
-          {sectionCount} 章节 · {pageCount} 页
+          {sectionCount} 章 · {pageCount} 页
         </span>
-        <IconButton
-          label="新增章节"
-          onClick={onAddSection}
-          disabled={addDisabled}
-          className="h-7 w-7"
-        >
-          <FolderPlus className="h-4 w-4" strokeWidth={1.8} />
-        </IconButton>
       </div>
     </>
   );
@@ -418,8 +406,6 @@ export function DeckNavigator() {
         <DeckNavigatorChrome
           pageCount={0}
           sectionCount={0}
-          addDisabled
-          onAddSection={() => {}}
         />
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-xs text-text-400">
           目录加载中
@@ -434,13 +420,11 @@ export function DeckNavigator() {
         <DeckNavigatorChrome
           pageCount={slides.length}
           sectionCount={snapshot.outline.sections.length}
-          addDisabled={locked}
-          onAddSection={() => void insertSection()}
         />
 
         <div
           data-testid="deck-navigator-scroll"
-          className="deck-navigator-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-8 pt-2"
+          className="deck-navigator-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-8 pt-2"
         >
           {runLocked && (
             <div className="mx-1 mb-2 rounded-md bg-warning-soft px-3 py-2 text-xs text-warning">
@@ -448,14 +432,26 @@ export function DeckNavigator() {
             </div>
           )}
           {snapshot.outline.sections.length === 0 ? (
-            <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-xs text-text-400">
-              <FilePlus2 className="h-5 w-5" strokeWidth={1.7} />
+            <div
+              data-testid="deck-navigator-empty"
+              className="flex min-h-32 flex-1 flex-col items-center justify-center gap-3 text-center text-xs text-text-400"
+            >
+              <IconButton
+                label="新增章节"
+                onClick={() => void insertSection()}
+                disabled={locked}
+                className="h-10 w-10"
+              >
+                <FolderPlus className="h-5 w-5" strokeWidth={1.7} />
+              </IconButton>
               <span>目录为空，先新增章节</span>
             </div>
-          ) : snapshot.outline.sections.map((section, sectionIndex) => {
-            const sectionCollapsed = collapsed[section.id];
-            const isEmpty = section.slides.length === 0 && section.subsections.length === 0;
-            return (
+          ) : (
+            <>
+              {snapshot.outline.sections.map((section, sectionIndex) => {
+                const sectionCollapsed = collapsed[section.id];
+                const isEmpty = section.slides.length === 0 && section.subsections.length === 0;
+                return (
               <section
                 key={section.id}
                 className={cn('pb-2', sectionIndex > 0 && 'border-t border-border/80 pt-2')}
@@ -619,8 +615,19 @@ export function DeckNavigator() {
                   </div>
                 )}
               </section>
-            );
-          })}
+                );
+              })}
+              <button
+                type="button"
+                disabled={locked}
+                className="mx-1 mt-1 flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-dashed border-border-strong text-xs font-medium text-text-500 transition-colors hover:border-accent hover:bg-accent-soft hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => void insertSection()}
+              >
+                <FolderPlus className="h-4 w-4" strokeWidth={1.8} />
+                <span>新增章节</span>
+              </button>
+            </>
+          )}
         </div>
       </aside>
 
