@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PPTMutation, ProjectContentSnapshot } from '../../api/types';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useUIStore } from '../../stores/uiStore';
 import { DeckNavigator } from './DeckNavigator';
 
 vi.mock('../viewer/IsolatedSlidePreview', () => ({
@@ -97,6 +98,19 @@ describe('DeckNavigator', () => {
       mutateProject,
     });
     useDeckStore.setState({ currentSlideId: 'slide_1', globalView: 'outline' });
+    useUIStore.setState({ leftPanelHidden: false });
+  });
+
+  it('uses aligned title and summary rows and restores the collapse control', async () => {
+    const user = userEvent.setup();
+    render(<DeckNavigator />);
+
+    expect(screen.getByTestId('deck-navigator-title-row')).toHaveClass('h-12');
+    expect(screen.getByTestId('deck-navigator-summary-row')).toHaveClass('h-9');
+    expect(screen.getByText('2 章节 · 3 页')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '隐藏左侧目录' }));
+    expect(useUIStore.getState().leftPanelHidden).toBe(true);
   });
 
   it('shows page titles in design view and removes the footer create action', () => {

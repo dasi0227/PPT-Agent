@@ -16,6 +16,8 @@ import {
   FilePlus2,
   FolderPlus,
   GripVertical,
+  ListTree,
+  PanelLeftClose,
   Pencil,
   Plus,
   Trash2,
@@ -40,9 +42,11 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { FormModal } from '../../components/ui/modal-form';
+import { IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useUIStore } from '../../stores/uiStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
 import { buildRuntimeFrame } from '../viewer/runtimeFrame';
@@ -99,6 +103,54 @@ OverflowTrigger.displayName = 'OverflowTrigger';
 
 function MenuIcon({ children }: { children: ReactNode }) {
   return <span className="mr-2 inline-flex h-4 w-4 items-center justify-center text-text-400">{children}</span>;
+}
+
+function DeckNavigatorChrome({
+  pageCount,
+  sectionCount,
+  addDisabled,
+  onAddSection,
+}: {
+  pageCount: number;
+  sectionCount: number;
+  addDisabled: boolean;
+  onAddSection: () => void;
+}) {
+  const toggleLeftPanel = useUIStore((state) => state.toggleLeftPanel);
+
+  return (
+    <>
+      <header
+        data-testid="deck-navigator-title-row"
+        className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3"
+      >
+        <div className="flex items-center text-sm font-semibold text-text-900">
+          <ListTree className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} aria-hidden="true" />
+          <h2>目录</h2>
+        </div>
+        <IconButton label="隐藏左侧目录" onClick={toggleLeftPanel}>
+          <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
+        </IconButton>
+      </header>
+
+      <div
+        data-testid="deck-navigator-summary-row"
+        className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-surface px-3"
+      >
+        <span className="text-xs tabular-nums text-text-400">
+          {sectionCount} 章节 · {pageCount} 页
+        </span>
+        <IconButton
+          label="新增章节"
+          onClick={onAddSection}
+          disabled={addDisabled}
+          className="h-7 w-7"
+        >
+          <FolderPlus className="h-4 w-4" strokeWidth={1.8} />
+        </IconButton>
+      </div>
+    </>
+  );
 }
 
 function SlideThumbnail({
@@ -319,6 +371,20 @@ export function DeckNavigator() {
     position: { parent_id: parentId },
   });
 
+  const insertSection = () => mutate({
+    op: 'outline.insert',
+    expected_revision: outlineRevision,
+    node: {
+      kind: 'section',
+      client_ref: clientRef('section'),
+      title: '新章节',
+      purpose: '待补充章节目的',
+      slides: [],
+      subsections: [],
+    },
+    position: {},
+  });
+
   const moveSlide = (slideId: string, parentId: string, siblings: OutlineSlideNode[], targetIndex: number) => {
     const without = siblings.filter((item) => item.slide_id !== slideId).map((item) => item.slide_id);
     const clamped = Math.max(0, Math.min(targetIndex, without.length));
@@ -348,8 +414,16 @@ export function DeckNavigator() {
 
   if (!snapshot) {
     return (
-      <aside className="flex h-full items-center justify-center border-r border-border bg-panel p-4 text-xs text-text-400">
-        目录加载中
+      <aside className="flex h-full min-h-0 flex-col border-r border-border-strong bg-panel" aria-label="演示目录">
+        <DeckNavigatorChrome
+          pageCount={0}
+          sectionCount={0}
+          addDisabled
+          onAddSection={() => {}}
+        />
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-xs text-text-400">
+          目录加载中
+        </div>
       </aside>
     );
   }
@@ -357,47 +431,22 @@ export function DeckNavigator() {
   return (
     <>
       <aside className="flex h-full min-h-0 flex-col border-r border-border-strong bg-panel" aria-label="演示目录">
-        <header className="flex min-h-[68px] shrink-0 items-center justify-between border-b border-border px-4 py-3">
-          <div>
-            <h2 className="text-base font-semibold text-text-900">目录</h2>
-            <p className="mt-0.5 text-[11px] tabular-nums text-text-400">
-              {slides.length} 页 · {snapshot.outline.sections.length} 章节
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={locked}
-            className="grid h-8 w-8 place-items-center rounded-md text-text-600 transition-colors hover:bg-surface hover:text-text-900 disabled:opacity-40"
-            aria-label="新增章节"
-            title="新增章节"
-            onClick={() => void mutate({
-              op: 'outline.insert',
-              expected_revision: outlineRevision,
-              node: {
-                kind: 'section',
-                client_ref: clientRef('section'),
-                title: '新章节',
-                purpose: '待补充章节目的',
-                slides: [],
-                subsections: [],
-              },
-              position: {},
-            })}
-          >
-            <FolderPlus className="h-4 w-4" strokeWidth={1.8} />
-          </button>
-        </header>
-
-        {runLocked && (
-          <div className="border-b border-border bg-warning-soft px-3 py-2 text-xs text-warning">
-            {status === 'paused' ? '任务已暂停，目录暂不可编辑' : '任务运行中，目录暂不可编辑'}
-          </div>
-        )}
+        <DeckNavigatorChrome
+          pageCount={slides.length}
+          sectionCount={snapshot.outline.sections.length}
+          addDisabled={locked}
+          onAddSection={() => void insertSection()}
+        />
 
         <div
           data-testid="deck-navigator-scroll"
           className="deck-navigator-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-8 pt-2"
         >
+          {runLocked && (
+            <div className="mx-1 mb-2 rounded-md bg-warning-soft px-3 py-2 text-xs text-warning">
+              {status === 'paused' ? '任务已暂停，目录暂不可编辑' : '任务运行中，目录暂不可编辑'}
+            </div>
+          )}
           {snapshot.outline.sections.length === 0 ? (
             <div className="flex h-32 flex-col items-center justify-center gap-2 text-center text-xs text-text-400">
               <FilePlus2 className="h-5 w-5" strokeWidth={1.7} />

@@ -117,7 +117,7 @@ export function PickerModal<T>({
                     key={itemKey}
                     type="button"
                     aria-pressed={confirmationLabel ? isActive : undefined}
-                    className={`text-left p-3 rounded-md transition-colors ${isActive ? 'bg-black/5 ring-1 ring-border-strong' : 'hover:bg-black/5'}`}
+                    className={`text-left p-3 rounded-md transition-colors ${isActive ? 'bg-accent-soft ring-1 ring-accent' : 'hover:bg-black/5'}`}
                     onClick={() => {
                       if (confirmationLabel) {
                         setActiveIndex(index);

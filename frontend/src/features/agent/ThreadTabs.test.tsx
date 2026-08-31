@@ -19,6 +19,7 @@ describe('ThreadTabs keyboard access', () => {
       errorByProjectId: {},
     });
     render(<ThreadTabs />);
+    expect(screen.getByTestId('thread-tabs-row')).toHaveClass('h-9');
     const first = screen.getByRole('tab', { name: /会话一/ });
     const second = screen.getByRole('tab', { name: /会话二/ });
     expect(first).toHaveAttribute('aria-selected', 'true');

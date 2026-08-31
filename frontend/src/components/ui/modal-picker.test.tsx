@@ -59,8 +59,11 @@ describe('PickerModal', () => {
     const confirm = screen.getByRole('button', { name: 'Open Item' });
     expect(confirm).toBeDisabled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Item 2' }));
+    const selectedItem = screen.getByRole('button', { name: 'Item 2' });
+    fireEvent.click(selectedItem);
     expect(onPick).not.toHaveBeenCalled();
+    expect(selectedItem).toHaveAttribute('aria-pressed', 'true');
+    expect(selectedItem).toHaveClass('bg-accent-soft', 'ring-accent');
     expect(confirm).toBeEnabled();
 
     fireEvent.click(confirm);
