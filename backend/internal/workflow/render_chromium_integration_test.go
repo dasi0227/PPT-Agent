@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,7 @@ import (
 
 const (
 	validToolHTML = `<!doctype html><html lang="zh"><head><link id="base-link" rel="stylesheet" href="/api/v1/runtime/base.css"><link id="theme-link" rel="stylesheet" href="/api/v1/themes/swiss-modern/css"></head><body><section class="slide-stage"><h1>Original</h1></section></body></html>`
-	testBaseCSS   = `.slide-stage{width:1600px;height:900px;overflow:hidden}`
+	testBaseCSS   = `.slide-stage{width:1920px;height:1080px;overflow:hidden}`
 	testThemeCSS  = `:root{--theme-proof:37px}`
 )
 
@@ -43,11 +44,20 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	_, invalidViewportErr := renderer.Render(context.Background(), RenderRequest{
+		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: validToolHTML,
+		ScreenshotPath: filepath.Join(dir, "invalid-viewport.png"),
+		ViewportWidth:  1600, ViewportHeight: 900, TimeoutMS: 15000, Frame: testRenderFrame(),
+		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
+	})
+	if invalidViewportErr == nil || !strings.Contains(invalidViewportErr.Error(), "render viewport must be 1920x1080") {
+		t.Fatalf("non-canonical viewport accepted: %v", invalidViewportErr)
+	}
 	screenshot := filepath.Join(dir, "shot.png")
 	diagnostics, err := renderer.Render(context.Background(), RenderRequest{
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01",
 		HTML:           strings.Replace(validToolHTML, "</body>", `<script>localStorage.setItem('leak','yes')</script></body>`, 1),
-		ScreenshotPath: screenshot, ViewportWidth: 1600, ViewportHeight: 900, TimeoutMS: 15000, Frame: testRenderFrame(),
+		ScreenshotPath: screenshot, ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
 	})
 	if err != nil {
@@ -56,18 +66,34 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	if diagnostics.ScreenshotBytes <= 0 || diagnostics.FontStatus != "loaded" {
 		t.Fatalf("diagnostics=%+v", diagnostics)
 	}
+	if diagnostics.ContentSize["width"] != 1920 || diagnostics.ContentSize["height"] != 1080 ||
+		diagnostics.Overflow["horizontal"] || diagnostics.Overflow["vertical"] {
+		t.Fatalf("canonical stage diagnostics=%+v", diagnostics)
+	}
 	if strings.Join(diagnostics.RuntimeChrome, ",") != "page_number,section_marker,deck_title" {
 		t.Fatalf("runtime chrome was not injected: %#v", diagnostics.RuntimeChrome)
 	}
 	if _, err := os.Stat(screenshot); err != nil {
 		t.Fatal(err)
 	}
+	file, err := os.Open(screenshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := png.DecodeConfig(file)
+	_ = file.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Width != 1920 || config.Height != 1080 {
+		t.Fatalf("screenshot size=%dx%d", config.Width, config.Height)
+	}
 
 	secondScreenshot := filepath.Join(dir, "shot-2.png")
 	secondHTML := `<!doctype html><html><body><section class="slide-stage"><h1>Second</h1><script>if(localStorage.getItem('leak'))console.error('context leaked')</script></section></body></html>`
 	diagnostics, err = renderer.Render(context.Background(), RenderRequest{
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: secondHTML,
-		ScreenshotPath: secondScreenshot, ViewportWidth: 1600, ViewportHeight: 900, TimeoutMS: 15000, Frame: testRenderFrame(),
+		ScreenshotPath: secondScreenshot, ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
 	})
 	if err != nil || len(diagnostics.ConsoleErrors) != 0 {
@@ -82,7 +108,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	runtimeCSSHTML := `<!doctype html><html><head><link id="base-link" rel="stylesheet" href="/api/v1/runtime/base.css"><link id="theme-link" rel="stylesheet" href="/api/v1/themes/swiss-modern/css"></head><body><section class="slide-stage"><div id="proof" style="width:var(--theme-proof)">Runtime CSS</div></section><script>if(getComputedStyle(document.querySelector('#proof')).width!=='37px')console.error('runtime css missing')</script></body></html>`
 	runtimeCSSDiagnostics, runtimeCSSErr := renderer.Render(context.Background(), RenderRequest{
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: runtimeCSSHTML,
-		ScreenshotPath: filepath.Join(dir, "overlay.png"), ViewportWidth: 1600, ViewportHeight: 900, TimeoutMS: 15000, Frame: testRenderFrame(),
+		ScreenshotPath: filepath.Join(dir, "overlay.png"), ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
 	})
 	if runtimeCSSErr != nil || len(runtimeCSSDiagnostics.ConsoleErrors) != 0 {
@@ -93,7 +119,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	_, timeoutErr := renderer.Render(timeoutCtx, RenderRequest{
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01",
 		HTML:           `<html><body><section class="slide-stage"><script>while(true){}</script></section></body></html>`,
-		ScreenshotPath: filepath.Join(dir, "timeout.png"), ViewportWidth: 1600, ViewportHeight: 900, TimeoutMS: 1000, Frame: testRenderFrame(),
+		ScreenshotPath: filepath.Join(dir, "timeout.png"), ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 1000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
 	})
 	cancel()
@@ -103,7 +129,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	postCancelScreenshot := filepath.Join(dir, "post-cancel.png")
 	if _, err := renderer.Render(context.Background(), RenderRequest{
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: validToolHTML,
-		ScreenshotPath: postCancelScreenshot, ViewportWidth: 1600, ViewportHeight: 900, TimeoutMS: 15000, Frame: testRenderFrame(),
+		ScreenshotPath: postCancelScreenshot, ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
 	}); err != nil {
 		t.Fatalf("shared browser worker was not usable after canceling one render request: %v", err)
@@ -134,7 +160,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	recoveryScreenshot := filepath.Join(dir, "shot-recovered.png")
 	if _, err := renderer.Render(context.Background(), RenderRequest{
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: validToolHTML,
-		ScreenshotPath: recoveryScreenshot, ViewportWidth: 1600, ViewportHeight: 900, TimeoutMS: 15000, Frame: testRenderFrame(),
+		ScreenshotPath: recoveryScreenshot, ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
 	}); err != nil {
 		t.Fatalf("worker did not restart after crash: %v", err)

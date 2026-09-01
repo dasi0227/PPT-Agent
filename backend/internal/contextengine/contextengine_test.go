@@ -17,6 +17,24 @@ type fakeStore struct {
 	slides map[string]model.Slide
 }
 
+type fakeThemeLoader struct {
+	themes    map[string]model.Theme
+	err       error
+	requested []string
+}
+
+func (l *fakeThemeLoader) Get(id string) (model.Theme, error) {
+	l.requested = append(l.requested, id)
+	if l.err != nil {
+		return model.Theme{}, l.err
+	}
+	theme, ok := l.themes[id]
+	if !ok {
+		return model.Theme{}, errors.New("missing theme")
+	}
+	return theme, nil
+}
+
 func (s *fakeStore) GetSlide(_ context.Context, id string) (model.Slide, error) {
 	v, ok := s.slides[id]
 	if !ok {
@@ -24,6 +42,16 @@ func (s *fakeStore) GetSlide(_ context.Context, id string) (model.Slide, error) 
 	}
 	return v, nil
 }
+
+func testAssembler(store ContextStore, registry *RefRegistry) *ContextAssembler {
+	return NewContextAssembler(store, registry).WithThemeLoader(&fakeThemeLoader{themes: map[string]model.Theme{
+		"swiss-modern": {
+			ID: "swiss-modern", Name: "Swiss Modern", Description: "Grid-led modern theme",
+			CSS: `:root{--color-bg:#fff;--color-fg:#111;--font-sans:Inter,sans-serif;--stage-w:1920;--stage-h:1080;}`,
+		},
+	}})
+}
+
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := t.TempDir()
@@ -87,7 +115,7 @@ func spec(artifact model.Artifact, level model.ScopeLevel) model.RunCommand {
 
 func TestFourProfilesIsolationAndStableHash(t *testing.T) {
 	project, store := fixture(t)
-	assembler := NewContextAssembler(store, nil)
+	assembler := testAssembler(store, nil)
 	cases := []struct {
 		artifact model.Artifact
 		level    model.ScopeLevel
@@ -122,6 +150,12 @@ func TestFourProfilesIsolationAndStableHash(t *testing.T) {
 			if tc.artifact == model.ArtifactSpec && (len(pack.SlideHTML.Summaries) > 0 || len(pack.Manifest.Refs) > 0) {
 				t.Fatal("spec profile received presentation")
 			}
+			if tc.artifact == model.ArtifactPPT && pack.Theme == nil {
+				t.Fatal("ppt profile missing required theme context")
+			}
+			if tc.artifact == model.ArtifactSpec && pack.Theme != nil {
+				t.Fatal("spec profile received theme context")
+			}
 			again, err := assembler.Assemble(context.Background(), req, project)
 			if err != nil {
 				t.Fatal(err)
@@ -141,9 +175,87 @@ func TestFourProfilesIsolationAndStableHash(t *testing.T) {
 	}
 }
 
+func TestPPTContextLoadsCurrentThemeContract(t *testing.T) {
+	project, store := fixture(t)
+	loader := &fakeThemeLoader{themes: map[string]model.Theme{
+		"swiss-modern": {
+			ID: "swiss-modern", Name: "Swiss Modern", Description: "Grid-led modern theme",
+			CSS:       `:root{--color-bg:#fff;--color-primary:#d0021b;--stage-w:1920;--stage-h:1080;}`,
+			LocalPath: "/private/theme.css", OpenURL: "file:///private/theme.css",
+		},
+	}}
+	pack, err := NewContextAssembler(store, nil).WithThemeLoader(loader).Assemble(
+		context.Background(),
+		ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ArtifactPPT, model.ScopeSlide), Budget: DefaultBudget()},
+		project,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(loader.requested, ",") != "swiss-modern" {
+		t.Fatalf("requested themes=%v", loader.requested)
+	}
+	if pack.Theme == nil || pack.Theme.ID != "swiss-modern" || pack.Theme.Name != "Swiss Modern" ||
+		pack.Theme.Source != "theme_repository" || pack.Theme.Trust != "untrusted_read_only_reference" {
+		t.Fatalf("theme context=%+v", pack.Theme)
+	}
+	tokenValues := map[string]string{}
+	for _, token := range pack.Theme.Tokens {
+		tokenValues[token.Name] = token.Value
+	}
+	if tokenValues["--color-primary"] != "#d0021b" || tokenValues["--stage-w"] != "1920" || tokenValues["--stage-h"] != "1080" {
+		t.Fatalf("theme tokens=%v", tokenValues)
+	}
+	if strings.Join(pack.Theme.AllowedSelectors, ",") != "html,body,.slide-scaler,.slide-stage,.slide-content,.slide-title,.slide-subtitle,.slide-body,.card,.kicker,.metric,.metric-value,.metric-label,.quote,.data-table,a" {
+		t.Fatalf("allowed selectors=%v", pack.Theme.AllowedSelectors)
+	}
+	foundThemeSegment := false
+	for _, segment := range pack.Manifest.Segments {
+		if segment.Kind == SegmentTheme {
+			foundThemeSegment = segment.Required && segment.SourceRef == "theme://swiss-modern/contract"
+		}
+	}
+	if !foundThemeSegment {
+		t.Fatalf("required theme segment missing: %+v", pack.Manifest.Segments)
+	}
+	raw, _ := json.Marshal(pack.Theme)
+	if strings.Contains(string(raw), "/private/") || strings.Contains(string(raw), "open_url") {
+		t.Fatalf("theme context leaked repository location: %s", raw)
+	}
+}
+
+func TestSpecContextDoesNotLoadTheme(t *testing.T) {
+	project, store := fixture(t)
+	loader := &fakeThemeLoader{err: errors.New("must not be called")}
+	pack, err := NewContextAssembler(store, nil).WithThemeLoader(loader).Assemble(
+		context.Background(),
+		ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ArtifactSpec, model.ScopeDeck), Budget: DefaultBudget()},
+		project,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loader.requested) != 0 || pack.Theme != nil {
+		t.Fatalf("spec profile loaded theme: requested=%v theme=%+v", loader.requested, pack.Theme)
+	}
+}
+
+func TestPPTContextFailsClearlyWhenThemeCannotLoad(t *testing.T) {
+	project, store := fixture(t)
+	_, err := NewContextAssembler(store, nil).
+		WithThemeLoader(&fakeThemeLoader{err: errors.New("repository offline")}).
+		Assemble(context.Background(), ContextRequest{
+			RunID: "r1", ThreadID: "t1", ProjectID: "p1",
+			Command: spec(model.ArtifactPPT, model.ScopeDeck), Budget: DefaultBudget(),
+		}, project)
+	if !errors.Is(err, ErrRequiredMissing) || !strings.Contains(err.Error(), `theme "swiss-modern"`) {
+		t.Fatalf("theme load error=%v", err)
+	}
+}
+
 func TestRevisionChangeChangesPackHash(t *testing.T) {
 	project, store := fixture(t)
-	assembler := NewContextAssembler(store, nil)
+	assembler := testAssembler(store, nil)
 	req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ArtifactSpec, model.ScopeSlide), Budget: DefaultBudget()}
 	before, err := assembler.Assemble(context.Background(), req, project)
 	if err != nil {
@@ -185,7 +297,7 @@ func TestLargeHTMLDowngradesToRefAndRefIsRunBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry := NewRefRegistry()
-	assembler := NewContextAssembler(store, registry)
+	assembler := testAssembler(store, registry)
 	budget := DefaultBudget()
 	budget.InputLimit = 5000
 	budget.ContextWindow = 9000
@@ -214,7 +326,7 @@ func TestBudgetDropsOptionalSegmentsBeforeRequiredTarget(t *testing.T) {
 	for kind := range budget.SegmentCaps {
 		budget.SegmentCaps[kind] = 100000
 	}
-	pack, err := NewContextAssembler(store, nil).Assemble(context.Background(), ContextRequest{
+	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
 		RunID: "r", ThreadID: "t", ProjectID: "p1",
 		Command: spec(model.ArtifactPPT, model.ScopeSlide), Budget: budget,
 	}, project)
@@ -223,6 +335,18 @@ func TestBudgetDropsOptionalSegmentsBeforeRequiredTarget(t *testing.T) {
 	}
 	if pack.Target.SlideSpec == nil || pack.Command.Instruction == "" {
 		t.Fatal("required target or RunCommand was cropped")
+	}
+	if pack.Theme == nil || pack.Theme.ID != "swiss-modern" {
+		t.Fatal("required theme context was dropped")
+	}
+	themeSegmentFound := false
+	for _, segment := range pack.Manifest.Segments {
+		if segment.Kind == SegmentTheme {
+			themeSegmentFound = segment.Required
+		}
+	}
+	if !themeSegmentFound {
+		t.Fatal("required theme segment was dropped")
 	}
 	if len(pack.Manifest.Dropped) == 0 || len(pack.Manifest.Warnings) == 0 {
 		t.Fatalf("manifest lacks budget diagnosis: %+v", pack.Manifest)
@@ -236,7 +360,7 @@ func TestBudgetDropsOptionalSegmentsBeforeRequiredTarget(t *testing.T) {
 func TestRefStaleAfterRevisionChange(t *testing.T) {
 	project, store := fixture(t)
 	registry := NewRefRegistry()
-	pack, err := NewContextAssembler(store, registry).Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ArtifactPPT, model.ScopeSlide), Budget: DefaultBudget()}, project)
+	pack, err := testAssembler(store, registry).Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ArtifactPPT, model.ScopeSlide), Budget: DefaultBudget()}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,6 +434,41 @@ func TestPromptCompilerSnapshotSeparatesUserInstruction(t *testing.T) {
 	}
 }
 
+func TestPromptCompilerIncludesThemeContractOnlyInUserContext(t *testing.T) {
+	p := ContextPack{
+		SchemaVersion: SchemaVersion,
+		Command:       spec(model.ArtifactPPT, model.ScopeSlide),
+		Project:       ProjectContext{ID: "p1"},
+		Theme: &ThemeContext{
+			ID: "swiss-modern", Name: "Swiss Modern", Description: "Grid-led",
+			Tokens:           []ThemeToken{{Name: "--color-primary", Value: "#d0021b"}},
+			AllowedSelectors: []string{".slide-stage", ".card"},
+			Source:           "theme_repository", Trust: "untrusted_read_only_reference",
+		},
+	}
+	got, err := (PromptCompiler{}).Compile(p, "SYSTEM POLICY")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"<theme_context>",
+		`"id":"swiss-modern"`,
+		`"name":"--color-primary"`,
+		`"allowed_selectors":[".slide-stage",".card"]`,
+		"Do not select, replace, or modify the theme or design.theme.",
+		"Prefer the current theme's var(--token) values",
+		"Prefer the allowed theme selectors",
+		`"trust":"untrusted_read_only_reference"`,
+	} {
+		if !strings.Contains(got.User, expected) {
+			t.Fatalf("compiled user context missing %q: %s", expected, got.User)
+		}
+	}
+	if got.System != "SYSTEM POLICY" || strings.Contains(got.System, "swiss-modern") || strings.Contains(got.System, "theme_context") {
+		t.Fatalf("theme context entered system policy: %q", got.System)
+	}
+}
+
 func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
 	project, store := fixture(t)
 	threadDir := filepath.Join(project.WorkDir, "threads")
@@ -376,13 +535,13 @@ func TestMissingTargetAndCorruptSourcesFail(t *testing.T) {
 	project, store := fixture(t)
 	bad := spec(model.ArtifactSpec, model.ScopeSlide)
 	bad.Scope.SlideID = "missing"
-	if _, err := NewContextAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: bad, Budget: DefaultBudget()}, project); err == nil {
+	if _, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: bad, Budget: DefaultBudget()}, project); err == nil {
 		t.Fatal("missing target accepted")
 	}
 	if err := os.WriteFile(filepath.Join(project.WorkDir, "outline.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewContextAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: spec(model.ArtifactSpec, model.ScopeDeck), Budget: DefaultBudget()}, project); !errors.Is(err, ErrRequiredMissing) {
+	if _, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: spec(model.ArtifactSpec, model.ScopeDeck), Budget: DefaultBudget()}, project); !errors.Is(err, ErrRequiredMissing) {
 		t.Fatalf("err=%v", err)
 	}
 }
@@ -392,7 +551,7 @@ func TestMissingHTMLIsDiagnosedForMaterialization(t *testing.T) {
 	if err := os.Remove(filepath.Join(project.WorkDir, "slides", "sli_bbbbbb", "index.html")); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := NewContextAssembler(store, nil).Assemble(context.Background(), ContextRequest{
+	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
 		RunID: "r", ThreadID: "t", ProjectID: "p1",
 		Command: spec(model.ArtifactPPT, model.ScopeSlide), Budget: DefaultBudget(),
 	}, project)

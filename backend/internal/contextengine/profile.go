@@ -34,6 +34,9 @@ func (ContextProfileResolver) Resolve(command model.RunCommand) (ContextProfile,
 	}, Forbidden: map[SegmentKind]bool{}}
 	if id == ProfileSpecDeck || id == ProfileSpecSlide {
 		p.Forbidden[SegmentSlideHTML] = true
+		p.Forbidden[SegmentTheme] = true
+	} else {
+		p.Required[SegmentTheme] = true
 	}
 	return p, nil
 }

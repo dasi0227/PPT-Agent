@@ -17,6 +17,7 @@ export const projectsApi = {
   setTheme: (id: string, theme: string) => fetchClient<Project>(`/projects/${id}/theme`, {
     method: 'PATCH',
     body: JSON.stringify({ theme }),
+    reportError: false,
   }),
   delete: (id: string) => fetchClient<void>(`/projects/${id}`, { method: 'DELETE' }),
 };

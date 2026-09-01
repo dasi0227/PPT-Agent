@@ -203,6 +203,23 @@ func TestDefaultToolDisclosureUsesTheSamePolicyAsExecution(t *testing.T) {
 	}
 }
 
+func TestMutationSchemaDoesNotExposeThemeWrites(t *testing.T) {
+	raw, err := json.Marshal(mutationSchema(mutationPack("pro_aaaaaa", spec.Outline{})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"theme"`) {
+		t.Fatalf("mutate_ppt exposed theme write access: %s", raw)
+	}
+	for _, patchOp := range []string{"add", "remove", "replace"} {
+		for _, rule := range pptmutation.PatchPathRules("design.patch", patchOp) {
+			if strings.Contains(rule.Pattern, "theme") {
+				t.Fatalf("design.patch %s permits theme writes: %+v", patchOp, rule)
+			}
+		}
+	}
+}
+
 func TestToolRegistryRejectsIncoherentCapabilityPolicy(t *testing.T) {
 	registry := NewToolRegistry()
 	tool := mutatePPTTool{pack: mutationPack("pro_aaaaaa", spec.Outline{})}

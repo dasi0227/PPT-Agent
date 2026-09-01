@@ -7,6 +7,8 @@ import { chromium } from 'playwright-core';
 
 const MAX_INPUT_BYTES = 3 * 1024 * 1024;
 const MAX_CLIPPING_ITEMS = 50;
+const RENDER_VIEWPORT_WIDTH = 1920;
+const RENDER_VIEWPORT_HEIGHT = 1080;
 const CHROME_CANDIDATES = process.platform === 'darwin'
   ? [
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -131,8 +133,12 @@ async function render(input, browser, handles = new Map()) {
       typeof input.theme_css !== 'string') {
     throw new Error('invalid render request');
   }
-  const width = input.viewport_width === 1600 ? 1600 : 1600;
-  const height = input.viewport_height === 900 ? 900 : 900;
+  if (input.viewport_width !== RENDER_VIEWPORT_WIDTH ||
+      input.viewport_height !== RENDER_VIEWPORT_HEIGHT) {
+    throw new Error(`render viewport must be ${RENDER_VIEWPORT_WIDTH}x${RENDER_VIEWPORT_HEIGHT}`);
+  }
+  const width = RENDER_VIEWPORT_WIDTH;
+  const height = RENDER_VIEWPORT_HEIGHT;
   const timeout = Math.min(Math.max(Number(input.timeout_ms) || 15000, 1000), 20000);
   const slidePath = `/slides/${encodeURIComponent(input.slide_id)}/index.html`;
   const failedResources = [];

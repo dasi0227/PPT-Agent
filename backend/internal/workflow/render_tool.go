@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	renderViewportWidth  = 1600
-	renderViewportHeight = 900
+	renderViewportWidth  = 1920
+	renderViewportHeight = 1080
 	maxRenderOutputBytes = 1024 * 1024
 )
 

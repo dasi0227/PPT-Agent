@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Project, ProjectContentSnapshot, Theme } from '../../api/types';
+import { useProjectStore } from '../../stores/projectStore';
 import { useToastStore } from '../../stores/toastStore';
 import { ComponentRepositoryPage } from './ComponentRepositoryPage';
 import { SkillRepositoryPage } from './SkillRepositoryPage';
@@ -9,6 +11,7 @@ import { ThemeRepositoryPage } from './ThemeRepositoryPage';
 const mocks = vi.hoisted(() => ({
   listThemes: vi.fn(),
   getTheme: vi.fn(),
+  listProjects: vi.fn(),
   listComponents: vi.fn(),
   getComponent: vi.fn(),
   getSkill: vi.fn(),
@@ -40,7 +43,7 @@ vi.mock('../../api/skills', () => ({
 
 vi.mock('../../api/projects', () => ({
   projectsApi: {
-    list: vi.fn(),
+    list: mocks.listProjects,
     create: vi.fn(),
     patch: vi.fn(),
     get: vi.fn(),
@@ -60,31 +63,72 @@ function renderPage(page: React.ReactNode, initialEntry: string | { pathname: st
   return render(<MemoryRouter initialEntries={[initialEntry]}>{page}<LocationProbe /></MemoryRouter>);
 }
 
+function themeFixtures(): Theme[] {
+  return [
+    {
+      id: 'swiss-modern',
+      name: 'Swiss Modern',
+      description: 'Clean grid',
+      css: ':root{--color-bg:#fff;--color-fg:#111;--color-primary:#d0021b;--color-accent:#1c1c1c;--font-sans:Aptos;--font-serif:Georgia}',
+      css_url: '/api/v1/themes/swiss-modern/css',
+      open_url: 'vscode://file/themes/swiss-modern/theme.css',
+    },
+    {
+      id: 'tokyo-night',
+      name: 'Tokyo Night',
+      description: 'Dark presentation',
+      css: ':root{--color-bg:#111;--color-fg:#eee;--color-primary:#7aa2f7;--color-accent:#bb9af7;--font-sans:Inter;--font-serif:Georgia}',
+      css_url: '/api/v1/themes/tokyo-night/css',
+      open_url: 'vscode://file/themes/tokyo-night/theme.css',
+    },
+  ];
+}
+
+function project(theme: string): Project {
+  return {
+    id: 'project-7',
+    title: 'Project 7',
+    work_dir: '/projects/project-7',
+    theme,
+    status: 'ready',
+    design_path: 'design.json',
+    outline_path: 'outline.json',
+    outline_revision: 1,
+    design_revision: theme === 'swiss-modern' ? 1 : 2,
+    created_at: 1,
+    updated_at: theme === 'swiss-modern' ? 1 : 2,
+  };
+}
+
+function projectContent(theme: string): ProjectContentSnapshot {
+  return {
+    manifest: { version: '4.0', revision: 1, project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
+    outline: { version: '4.0', revision: 1, project_id: 'project-7', sections: [], created_at: 1, updated_at: 1 },
+    design: { version: '4.0', revision: theme === 'swiss-modern' ? 1 : 2, project_id: 'project-7', theme, direction: '', density: 'medium', chrome: [], created_at: 1, updated_at: theme === 'swiss-modern' ? 1 : 2 },
+    slides_by_id: {},
+  };
+}
+
 describe('personal repository pages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.listProjects.mockResolvedValue([]);
     useToastStore.getState().clearToasts();
+    useProjectStore.setState({
+      projects: [],
+      openProjectIds: [],
+      activeProjectId: null,
+      contentByProjectId: {},
+      contentLoadingByProjectId: {},
+      contentErrorByProjectId: {},
+      mutationPendingByProjectId: {},
+      loadingProjects: false,
+      projectError: null,
+    });
   });
 
   it('renders repository navigation and filters themes from API data', async () => {
-    const themes = [
-      {
-        id: 'swiss-modern',
-        name: 'Swiss Modern',
-        description: 'Clean grid',
-        css: ':root{--color-bg:#fff;--color-fg:#111;--color-primary:#d0021b;--color-accent:#1c1c1c;--font-sans:Aptos;--font-serif:Georgia}',
-        css_url: '/api/v1/themes/swiss-modern/css',
-        open_url: 'vscode://file/themes/swiss-modern/theme.css',
-      },
-      {
-        id: 'tokyo-night',
-        name: 'Tokyo Night',
-        description: 'Dark presentation',
-        css: ':root{--color-bg:#111;--color-fg:#eee;--color-primary:#7aa2f7;--color-accent:#bb9af7;--font-sans:Inter;--font-serif:Georgia}',
-        css_url: '/api/v1/themes/tokyo-night/css',
-        open_url: 'vscode://file/themes/tokyo-night/theme.css',
-      },
-    ];
+    const themes = themeFixtures();
     mocks.listThemes.mockResolvedValue({ themes });
     mocks.getTheme.mockImplementation(async (id: string) => themes.find((theme) => theme.id === id));
 
@@ -134,6 +178,81 @@ describe('personal repository pages', () => {
     expect(screen.queryByTitle('Swiss Modern 主题预览')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('搜索主题'), { target: { value: 'minimal' } });
     expect(screen.getByText('没有匹配的主题')).toBeInTheDocument();
+  });
+
+  it('applies the previewed theme to the active project and synchronizes project state', async () => {
+    const themes = themeFixtures();
+    mocks.listThemes.mockResolvedValue({ themes });
+    mocks.getTheme.mockImplementation(async (id: string) => themes.find((theme) => theme.id === id));
+    mocks.setTheme.mockResolvedValue(project('tokyo-night'));
+    useProjectStore.setState({
+      projects: [project('swiss-modern')],
+      openProjectIds: ['project-7'],
+      activeProjectId: null,
+      contentByProjectId: { 'project-7': projectContent('swiss-modern') },
+    });
+
+    renderPage(<ThemeRepositoryPage />, {
+      pathname: '/warehouse/theme',
+      state: { returnTo: '/projects/project-7?slide=slide-2' },
+    });
+
+    const currentButton = await screen.findByRole('button', { name: '当前主题' });
+    expect(currentButton).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /Tokyo Night/ }));
+    expect(mocks.setTheme).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '应用主题' }));
+
+    await waitFor(() => expect(mocks.setTheme).toHaveBeenCalledWith('project-7', 'tokyo-night'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '当前主题' })).toBeDisabled());
+    expect(useProjectStore.getState().projects[0]).toMatchObject({
+      id: 'project-7',
+      theme: 'tokyo-night',
+      design_revision: 2,
+    });
+    expect(useProjectStore.getState().contentByProjectId['project-7'].design).toMatchObject({
+      theme: 'tokyo-night',
+      revision: 2,
+    });
+    expect(useToastStore.getState().toasts).toEqual([
+      expect.objectContaining({ message: '已应用「Tokyo Night」主题', tone: 'success' }),
+    ]);
+  });
+
+  it('keeps the preview and original project theme when applying fails, and blocks duplicate submissions', async () => {
+    const themes = themeFixtures();
+    let rejectRequest: (reason: Error) => void = () => undefined;
+    const request = new Promise<Project>((_, reject) => { rejectRequest = reject; });
+    mocks.listThemes.mockResolvedValue({ themes });
+    mocks.getTheme.mockImplementation(async (id: string) => themes.find((theme) => theme.id === id));
+    mocks.setTheme.mockReturnValue(request);
+    useProjectStore.setState({
+      projects: [project('swiss-modern')],
+      openProjectIds: ['project-7'],
+      activeProjectId: 'project-7',
+      contentByProjectId: { 'project-7': projectContent('swiss-modern') },
+    });
+
+    renderPage(<ThemeRepositoryPage />);
+
+    await screen.findByRole('button', { name: '当前主题' });
+    fireEvent.click(screen.getByRole('button', { name: /Tokyo Night/ }));
+    const applyButton = screen.getByRole('button', { name: '应用主题' });
+    fireEvent.click(applyButton);
+    fireEvent.click(applyButton);
+
+    expect(mocks.setTheme).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '应用中' })).toBeDisabled();
+    rejectRequest(new Error('theme write failed'));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '应用主题' })).toBeEnabled());
+    expect(screen.getByTitle('Tokyo Night 主题预览')).toBeInTheDocument();
+    expect(useProjectStore.getState().projects[0].theme).toBe('swiss-modern');
+    expect(useProjectStore.getState().contentByProjectId['project-7'].design.theme).toBe('swiss-modern');
+    expect(useToastStore.getState().toasts).toEqual([
+      expect.objectContaining({ message: 'theme write failed', tone: 'error' }),
+    ]);
   });
 
   it('returns to the project route used to enter the warehouse', async () => {

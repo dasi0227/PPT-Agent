@@ -23,6 +23,10 @@ type ComponentIndexLoader interface {
 	LoadComponents(context.Context) ([]model.Component, error)
 }
 
+type ThemeLoader interface {
+	Get(string) (model.Theme, error)
+}
+
 type ContextStore interface {
 	GetSlide(context.Context, string) (model.Slide, error)
 }
@@ -30,6 +34,7 @@ type ContextStore interface {
 type ContextAssembler struct {
 	store      ContextStore
 	components ComponentIndexLoader
+	themes     ThemeLoader
 	estimator  TokenEstimator
 	profiles   ContextProfileResolver
 	memory     ThreadMemoryStore
@@ -46,6 +51,11 @@ func NewContextAssembler(s ContextStore, registry *RefRegistry) *ContextAssemble
 
 func (a *ContextAssembler) WithComponentLoader(loader ComponentIndexLoader) *ContextAssembler {
 	a.components = loader
+	return a
+}
+
+func (a *ContextAssembler) WithThemeLoader(loader ThemeLoader) *ContextAssembler {
+	a.themes = loader
 	return a
 }
 
@@ -90,6 +100,23 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		SlideHTML:  SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
 		Components: []ComponentCandidate{}, Memory: memory, RecentTurns: []RecentTurn{},
 		Revisions: (RevisionLoader{}).From(deck, outline, design, slides, memory),
+	}
+	if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
+		if a.themes == nil {
+			return ContextPack{}, fmt.Errorf("%w: theme loader is unavailable", ErrRequiredMissing)
+		}
+		theme, themeErr := a.themes.Get(design.Theme)
+		if themeErr != nil {
+			return ContextPack{}, fmt.Errorf("%w: theme %q: %v", ErrRequiredMissing, design.Theme, themeErr)
+		}
+		if theme.ID != design.Theme {
+			return ContextPack{}, fmt.Errorf("%w: loaded theme %q does not match design theme %q", ErrSourceInvalid, theme.ID, design.Theme)
+		}
+		themeContext, buildErr := buildThemeContext(theme)
+		if buildErr != nil {
+			return ContextPack{}, fmt.Errorf("%w: %v", ErrSourceInvalid, buildErr)
+		}
+		pack.Theme = &themeContext
 	}
 	for _, location := range pptspec.FlattenOutline(outline) {
 		id := location.Slide.SlideID
@@ -143,6 +170,9 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		addSegment(SegmentTarget, "slide://"+pack.Target.SlideSpec.SlideID+"/spec", pack.Target.SlideSpec.Revision, 100, "exact target artifact", true, DetailFull, pack.Target.SlideSpec)
 	}
 	addSegment(SegmentDesign, "project://"+project.ID+"/design", design.Revision, 85, "profile design contract", true, DetailFull, design)
+	if pack.Theme != nil {
+		addSegment(SegmentTheme, "theme://"+pack.Theme.ID+"/contract", 0, 88, "current theme metadata and CSS contract", true, DetailFull, pack.Theme)
+	}
 	addSegment(SegmentMemory, "thread://"+req.ThreadID+"/memory", memory.Revision, 75, "cross-run confirmed context", true, DetailFull, memory)
 	if len(pack.RelatedSlides) > 0 {
 		if cap := budget.SegmentCaps[SegmentRelated]; cap > 0 && a.estimator.Estimate(pack.RelatedSlides) > cap {

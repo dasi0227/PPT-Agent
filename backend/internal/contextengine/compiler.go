@@ -56,6 +56,16 @@ func (PromptCompiler) compile(pack ContextPack, systemPolicy, runtimeState strin
 	}
 	writeSection("related_context", pack.RelatedSlides)
 	writeSection("design_context", pack.Design)
+	if pack.Theme != nil {
+		writeSection("theme_context", map[string]any{
+			"theme": pack.Theme,
+			"usage_contract": []string{
+				"The current theme is read-only. Do not select, replace, or modify the theme or design.theme.",
+				"Prefer the current theme's var(--token) values when writing page CSS.",
+				"Prefer the allowed theme selectors when generating page structure.",
+			},
+		})
+	}
 	if pack.Memory.SchemaVersion != "" {
 		writeSection("memory", pack.Memory)
 	}

@@ -48,7 +48,9 @@ func NewRunService(s store.Store, engine *run.Engine, registry *llm.Registry, wo
 	themes := NewThemeService(workRoot)
 	return &RunService{
 		store: s, engine: engine,
-		assembler:  contextengine.NewContextAssembler(s, refRegistry).WithComponentLoader(components),
+		assembler: contextengine.NewContextAssembler(s, refRegistry).
+			WithComponentLoader(components).
+			WithThemeLoader(themes),
 		renderer:   renderer,
 		registry:   registry,
 		skills:     NewSkillService(workRoot),

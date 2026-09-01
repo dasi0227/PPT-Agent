@@ -23,7 +23,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 16:9 stage. The preview runtime writes --stage-scale for viewport fitting. */
+/* Canonical 16:9 stage. Runtime viewport and theme stage dimensions are 1920x1080. */
 .slide-scaler {
   position: fixed;
   inset: 0;
@@ -40,8 +40,6 @@ body {
   overflow: hidden;
   background: var(--color-bg);
   color: var(--color-fg);
-  transform: scale(var(--stage-scale, 1));
-  transform-origin: center center;
 }
 
 /* Shared slide content inset. */
