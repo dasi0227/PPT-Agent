@@ -35,15 +35,15 @@ export function RepositoryShell({
   const repositoryLocationState = { returnTo };
   return (
     <main className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 flex-col overflow-hidden bg-workspace text-text-900">
-      <header className="flex h-12 shrink-0 items-center border-b border-border-strong bg-surface px-3 shadow-[0_1px_0_rgba(255,255,255,0.75)]">
+      <header className="flex h-12 shrink-0 items-center border-b border-border-strong bg-surface px-2 shadow-[0_1px_0_rgba(255,255,255,0.75)]">
         <button
           type="button"
           onClick={() => navigate(returnTo)}
-          className="flex min-w-0 items-center gap-2 rounded-md pr-2 font-bold transition-colors hover:bg-panel-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="flex min-w-0 items-center gap-2 rounded-md px-2 text-base font-bold transition-colors hover:bg-panel-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           aria-label="返回项目"
         >
-          <img src="/logo.jpg" alt="" className="h-8 w-8 rounded-md object-cover" />
-          <span className="hidden truncate text-[15px] tracking-[-0.01em] sm:inline">Dasi PPT Agent</span>
+          <img src="/logo.jpg" alt="" className="h-10 w-10 rounded-sm object-cover" />
+          <span className="hidden truncate sm:inline">Dasi PPT Agent</span>
         </button>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-600">仓库</span>

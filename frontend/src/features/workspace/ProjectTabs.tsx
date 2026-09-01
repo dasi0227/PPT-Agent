@@ -8,14 +8,10 @@ import { ProjectMenu } from './ProjectMenu';
 import { projectRoute, repositoryRoute } from './routes';
 
 export const ProjectTabs: React.FC = () => {
-  const { projects, activeProjectId, selectProject, loadingProjects, loadProjects } = useProjectStore();
+  const { projects, activeProjectId, selectProject, loadingProjects } = useProjectStore();
   const { status: runStatus } = useActiveSession();
   const navigate = useNavigate();
   const location = useLocation();
-
-  React.useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
 
   const openProjectIds = useProjectStore((s) => s.openProjectIds);
   

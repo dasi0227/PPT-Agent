@@ -12,7 +12,7 @@ export const projectsApi = {
     body: JSON.stringify(patch)
   }),
   get: (id: string) => fetchClient<Project>(`/projects/${id}`),
-  getContent: (id: string) => fetchClient<ProjectContentSnapshot>(`/projects/${id}/content`),
+  getContent: (id: string) => fetchClient<ProjectContentSnapshot>(`/projects/${id}/content`, { reportError: false }),
   mutate: (id: string, mutation: PPTMutation) => fetchClient<MutationResponse>(`/projects/${id}/mutations`, { method: 'POST', body: JSON.stringify(mutation) }),
   setTheme: (id: string, theme: string) => fetchClient<Project>(`/projects/${id}/theme`, {
     method: 'PATCH',

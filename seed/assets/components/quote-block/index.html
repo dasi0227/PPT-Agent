@@ -8,28 +8,52 @@
 <style>
 .quote-block {
   display: grid;
-  width: min(100%, 760px);
-  gap: var(--space-6);
+  width: min(100%, 880px);
+  grid-template-columns: clamp(48px, 6vw, 76px) minmax(0, 1fr);
+  column-gap: var(--space-4);
+  row-gap: var(--space-4);
+  align-items: start;
   margin: 0;
-  padding: var(--space-4) 0;
+  padding: var(--space-6) 0;
+}
+.quote-block__mark {
+  grid-row: 1 / span 2;
+  color: var(--color-primary);
+  font-family: var(--font-serif);
+  font-size: clamp(72px, calc(var(--text-h1) * 1.35), 104px);
+  font-weight: 700;
+  line-height: .72;
+  text-align: center;
 }
 .quote-block__text {
-  max-width: 18em;
+  max-width: 15em;
   margin: 0;
   color: var(--color-fg);
   font-family: var(--font-serif);
-  font-size: min(var(--text-h1), 42px);
-  font-weight: 600;
-  line-height: 1.35;
+  font-size: min(var(--text-h1), 56px);
+  font-weight: 650;
+  line-height: 1.25;
 }
 .quote-block__cite {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   margin: 0;
   color: color-mix(in srgb, var(--color-fg) 62%, transparent);
   font-size: var(--text-caption);
   font-style: normal;
+  font-weight: 600;
+}
+.quote-block__cite::before {
+  content: "";
+  width: 32px;
+  height: 2px;
+  flex: 0 0 auto;
+  background: var(--color-accent);
 }
 </style>
 <blockquote class="quote-block">
+  <span class="quote-block__mark" aria-hidden="true">“</span>
   <p class="quote-block__text">先统一表达，再扩大创作自由。</p>
   <footer class="quote-block__cite">Dasi 产品设计原则</footer>
 </blockquote>

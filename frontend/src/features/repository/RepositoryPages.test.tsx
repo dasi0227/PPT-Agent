@@ -115,6 +115,9 @@ describe('personal repository pages', () => {
     expect(screen.queryByText('minimal')).not.toBeInTheDocument();
     expect(screen.getByText('仓库')).toBeInTheDocument();
     expect(screen.queryByText('个人仓库')).not.toBeInTheDocument();
+    const repositoryBrand = screen.getByRole('button', { name: '返回项目' });
+    expect(repositoryBrand).toHaveClass('px-2', 'text-base');
+    expect(repositoryBrand.querySelector('img')).toHaveClass('h-10', 'w-10', 'rounded-sm');
     expect(screen.getByRole('link', { name: '组件' })).toHaveAttribute('href', '/warehouse/component');
     fireEvent.click(screen.getByRole('button', { name: /Tokyo Night/ }));
     expect(mocks.setTheme).not.toHaveBeenCalled();

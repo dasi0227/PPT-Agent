@@ -1,7 +1,6 @@
 import React from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
-import { useThreadStore } from '../../stores/threadStore';
 import { AppShell } from './AppShell';
 import { homeRoute, projectRoute } from './routes';
 import { useWorkspaceUrlState } from './useWorkspaceUrlState';
@@ -25,10 +24,8 @@ export function WorkspaceRoute() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const loadProjects = useProjectStore((state) => state.loadProjects);
-  const loadProjectContent = useProjectStore((state) => state.loadProjectContent);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const openProjectIds = useProjectStore((state) => state.openProjectIds);
-  const loadThreads = useThreadStore((state) => state.loadThreads);
   useWorkspaceUrlState(projectId);
 
   React.useLayoutEffect(() => {
@@ -58,18 +55,14 @@ export function WorkspaceRoute() {
       const exists = state.projects.some((project) => project.id === projectId);
       if (!exists) {
         navigate(homeRoute, { replace: true });
-        return;
       }
-
-      void loadProjectContent(projectId);
-      void loadThreads(projectId);
     };
 
     void validateAndLoad();
     return () => {
       canceled = true;
     };
-  }, [loadProjectContent, loadProjects, loadThreads, navigate, projectId]);
+  }, [loadProjects, navigate, projectId]);
 
   return <AppShell />;
 }
