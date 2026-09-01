@@ -94,7 +94,7 @@ describe('personal repository pages', () => {
     expect(preview).toHaveAttribute('sandbox', '');
     expect(preview.getAttribute('srcdoc')).toContain('IDEA<br>TO<br>SLIDES');
     expect(preview.getAttribute('srcdoc')).toContain('class="specimen-word">Dasi');
-    expect(preview.getAttribute('srcdoc')).toContain('transform:translateY(-4%)');
+    expect(preview.getAttribute('srcdoc')).toContain('transform:translateY(-2%)');
     expect(preview.getAttribute('srcdoc')).not.toContain('>Aa<');
     expect(screen.getByRole('main')).toHaveClass('h-[100dvh]', 'overflow-hidden');
     expect(screen.getByText('Aptos')).toBeInTheDocument();
@@ -109,11 +109,12 @@ describe('personal repository pages', () => {
     expect(themeProperties).toContainElement(screen.getByText('字体'));
     expect(screen.getAllByText('Dasi')).toHaveLength(2);
     expect(screen.queryByText('Aa')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '封面页' })).toBeInTheDocument();
     expect(screen.getAllByText('Clean grid')).toHaveLength(2);
     expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
     expect(screen.getByText('主题分类暂未定义')).toBeInTheDocument();
     expect(screen.queryByText('minimal')).not.toBeInTheDocument();
-    expect(screen.getByText('仓库')).toBeInTheDocument();
+    expect(screen.getByText('仓库')).toHaveClass('text-base', 'font-bold', 'text-text-900');
     expect(screen.queryByText('个人仓库')).not.toBeInTheDocument();
     const repositoryBrand = screen.getByRole('button', { name: '返回项目' });
     expect(repositoryBrand).toHaveClass('px-2', 'text-base');

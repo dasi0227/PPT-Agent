@@ -46,7 +46,7 @@ export function RepositoryShell({
           <span className="hidden truncate sm:inline">Dasi PPT Agent</span>
         </button>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-600">仓库</span>
+        <span className="min-w-0 flex-1 truncate text-base font-bold text-text-900">仓库</span>
         <button type="button" onClick={onRefresh} className="grid h-8 w-8 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 active:translate-y-px" title="刷新仓库" aria-label="刷新仓库">
           <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
         </button>
