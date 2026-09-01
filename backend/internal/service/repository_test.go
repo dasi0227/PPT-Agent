@@ -4,8 +4,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 )
 
 func writeRepositoryFile(t *testing.T, path, content string) {
@@ -18,10 +21,20 @@ func writeRepositoryFile(t *testing.T, path, content string) {
 	}
 }
 
+func completeThemeCSS() string {
+	var css strings.Builder
+	css.WriteString(":root {\n")
+	for _, token := range designsystem.RequiredTokens() {
+		css.WriteString("  " + token + ": 1;\n")
+	}
+	css.WriteString("}\n")
+	return css.String()
+}
+
 func TestRepositoryServicesParseIndependentProtocols(t *testing.T) {
 	root := t.TempDir()
 	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/manifest.json"), `{"name":"Theme One","description":"分类：Clear theme"}`)
-	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/theme.css"), `:root{--color-bg:#fff}`)
+	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/theme.css"), completeThemeCSS())
 	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), `<script type="application/json" id="meta">{"name":"Metric","description":"One metric","tags":["metric"]}</script><style>.metric{color:var(--color-primary)}</style><div class="metric">42%</div>`)
 	writeRepositoryFile(t, filepath.Join(root, "assets/skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead with the conclusion.")
 
@@ -36,6 +49,82 @@ func TestRepositoryServicesParseIndependentProtocols(t *testing.T) {
 	skill, err := NewSkillService(WorkRoot(root)).Get("s1")
 	if err != nil || skill.Name != "Story" || skill.Disabled || skill.Content != "Lead with the conclusion." {
 		t.Fatalf("skill=%+v err=%v", skill, err)
+	}
+}
+
+func TestThemeServiceAcceptsThinAndThickThemes(t *testing.T) {
+	root := t.TempDir()
+	for id, css := range map[string]string{
+		"thin":  completeThemeCSS(),
+		"thick": completeThemeCSS() + "\n.slide-stage { background: var(--color-bg); }\n",
+	} {
+		writeRepositoryFile(t, filepath.Join(root, "assets/themes", id, "manifest.json"), `{"name":"Theme","description":"Valid theme"}`)
+		writeRepositoryFile(t, filepath.Join(root, "assets/themes", id, "theme.css"), css)
+	}
+	service := NewThemeService(WorkRoot(root))
+	for _, id := range []string{"thin", "thick"} {
+		if _, err := service.Get(id); err != nil {
+			t.Fatalf("valid %s theme rejected: %v", id, err)
+		}
+	}
+}
+
+func TestThemeServiceRejectsEveryMissingRequiredToken(t *testing.T) {
+	for _, omitted := range designsystem.RequiredTokens() {
+		t.Run(omitted, func(t *testing.T) {
+			root := t.TempDir()
+			var css strings.Builder
+			css.WriteString(":root {\n")
+			for _, token := range designsystem.RequiredTokens() {
+				if token != omitted {
+					css.WriteString("  " + token + ": 1;\n")
+				}
+			}
+			css.WriteString("}\n")
+			writeRepositoryFile(t, filepath.Join(root, "assets/themes/incomplete/manifest.json"), `{"name":"Incomplete","description":"Missing one token"}`)
+			writeRepositoryFile(t, filepath.Join(root, "assets/themes/incomplete/theme.css"), css.String())
+
+			service := NewThemeService(WorkRoot(root))
+			if _, err := service.Get("incomplete"); !errors.Is(err, ErrRepositoryCorrupt) || !strings.Contains(err.Error(), omitted) {
+				t.Fatalf("Get error = %v, want repository corruption naming %s", err, omitted)
+			}
+			if _, err := service.CSS("incomplete"); !errors.Is(err, ErrRepositoryCorrupt) || !strings.Contains(err.Error(), omitted) {
+				t.Fatalf("CSS error = %v, want repository corruption naming %s", err, omitted)
+			}
+		})
+	}
+}
+
+func TestThemeListSkipsThemesWithIncompleteTokens(t *testing.T) {
+	root := t.TempDir()
+	writeRepositoryFile(t, filepath.Join(root, "assets/themes/valid/manifest.json"), `{"name":"Valid","description":"Complete tokens"}`)
+	writeRepositoryFile(t, filepath.Join(root, "assets/themes/valid/theme.css"), completeThemeCSS())
+	writeRepositoryFile(t, filepath.Join(root, "assets/themes/invalid/manifest.json"), `{"name":"Invalid","description":"Incomplete tokens"}`)
+	writeRepositoryFile(t, filepath.Join(root, "assets/themes/invalid/theme.css"), `:root { --color-bg: #fff; }`)
+
+	themes, err := NewThemeService(WorkRoot(root)).List()
+	if err != nil || len(themes) != 1 || themes[0].ID != "valid" {
+		t.Fatalf("themes=%+v err=%v", themes, err)
+	}
+}
+
+func TestFactoryThemesFollowTokenAndSelectorContracts(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "seed", "assets", "themes", "*", "theme.css"))
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("factory theme paths=%v err=%v", paths, err)
+	}
+	legacySelector := regexp.MustCompile(`(?m)(^|[,{]\s*)\.(slide|title)(?:\s|[,>{:#.\[])`)
+	for _, path := range paths {
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read %s: %v", path, readErr)
+		}
+		if missing := designsystem.LintTokens(raw); len(missing) > 0 {
+			t.Errorf("factory theme %s missing tokens: %v", path, missing)
+		}
+		if match := legacySelector.Find(raw); match != nil {
+			t.Errorf("factory theme %s uses legacy selector %q", path, match)
+		}
 	}
 }
 
@@ -106,7 +195,7 @@ func TestRepositoryServicesRejectTraversalSymlinksAndOversizeFiles(t *testing.T)
 	root := t.TempDir()
 	themeRoot := filepath.Join(root, "assets/themes")
 	writeRepositoryFile(t, filepath.Join(themeRoot, "valid/manifest.json"), `{"name":"Valid","description":"Valid theme"}`)
-	writeRepositoryFile(t, filepath.Join(themeRoot, "valid/theme.css"), `:root{}`)
+	writeRepositoryFile(t, filepath.Join(themeRoot, "valid/theme.css"), completeThemeCSS())
 	service := NewThemeService(WorkRoot(root))
 	if _, err := service.Get("../valid"); !errors.Is(err, ErrInvalidRepositoryID) {
 		t.Fatalf("traversal err=%v", err)

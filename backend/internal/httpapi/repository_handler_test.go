@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +23,16 @@ func writeRepositoryFixture(t *testing.T, root, relative, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func completeThemeFixtureCSS() string {
+	var css strings.Builder
+	css.WriteString(":root {\n")
+	for _, token := range designsystem.RequiredTokens() {
+		css.WriteString("  " + token + ": 1;\n")
+	}
+	css.WriteString("}\n")
+	return css.String()
 }
 
 func repositoryTestRouter(root string) *gin.Engine {
@@ -60,7 +71,7 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	root := t.TempDir()
 	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/manifest.json", `{"name":"Swiss Modern","description":"Grid"}`)
-	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/theme.css", ":root{--color-bg:#fff}")
+	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/theme.css", completeThemeFixtureCSS())
 	writeRepositoryFixture(t, root, "assets/components/feature-card/index.html", `<!doctype html><script id="meta" type="application/json">{"name":"Feature Card","description":"Summary","tags":["card"]}</script><article>Feature</article>`)
 	writeRepositoryFixture(t, root, "assets/skills/story/SKILL.md", "---\nname: Story\ndescription: Narrative\n---\n# Story\n")
 
@@ -129,5 +140,18 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(root, deletion.dir)); !os.IsNotExist(err) {
 			t.Fatalf("repository directory still exists after deleting %s: %v", deletion.path, err)
 		}
+	}
+}
+
+func TestThemeHandlerRejectsIncompleteTokens(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	root := t.TempDir()
+	writeRepositoryFixture(t, root, "assets/themes/incomplete/manifest.json", `{"name":"Incomplete","description":"Missing tokens"}`)
+	writeRepositoryFixture(t, root, "assets/themes/incomplete/theme.css", `:root { --color-bg: #fff; }`)
+
+	engine := repositoryTestRouter(root)
+	response := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/themes/incomplete/css", "")
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "--color-fg") {
+		t.Fatalf("incomplete theme response = %d %s", response.Code, response.Body.String())
 	}
 }

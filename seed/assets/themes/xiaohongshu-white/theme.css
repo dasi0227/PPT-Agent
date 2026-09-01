@@ -34,8 +34,7 @@
   --stage-h: 1080;
 }
 
-.slide-title,
-.title {
+.slide-title {
   font-family: var(--font-display);
   font-weight: 700;
 }

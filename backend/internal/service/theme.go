@@ -3,11 +3,13 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
@@ -55,6 +57,9 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 	if err != nil {
 		return model.Theme{}, repositoryReadError("theme", id, err)
 	}
+	if err := validateThemeTokens(cssRaw); err != nil {
+		return model.Theme{}, repositoryReadError("theme", id, err)
+	}
 	var manifest themeManifest
 	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
 		return model.Theme{}, repositoryReadError("theme", id, ErrRepositoryCorrupt)
@@ -76,7 +81,13 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 
 func (s *ThemeService) CSS(id string) ([]byte, error) {
 	raw, _, err := readRepositoryFile(s.root, id, "theme.css", maxRepositoryFileSize)
-	return raw, err
+	if err != nil {
+		return nil, repositoryReadError("theme", id, err)
+	}
+	if err := validateThemeTokens(raw); err != nil {
+		return nil, repositoryReadError("theme", id, err)
+	}
+	return raw, nil
 }
 
 func (s *ThemeService) Exists(id string) bool {
@@ -93,4 +104,11 @@ func (s *ThemeService) Delete(id string) error {
 
 func themeNotFound(err error) bool {
 	return errors.Is(err, os.ErrNotExist)
+}
+
+func validateThemeTokens(css []byte) error {
+	if missing := designsystem.LintTokens(css); len(missing) > 0 {
+		return fmt.Errorf("%w: missing required theme tokens: %s", ErrRepositoryCorrupt, strings.Join(missing, ", "))
+	}
+	return nil
 }

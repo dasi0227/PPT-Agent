@@ -75,7 +75,7 @@ func TestSetThemePersistsThemeIDToProjectAndDesign(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeRepositoryFile(t, filepath.Join(root, "assets/themes/tokyo-night/manifest.json"), `{"name":"Tokyo Night","description":"Dark presentation"}`)
-	writeRepositoryFile(t, filepath.Join(root, "assets/themes/tokyo-night/theme.css"), `:root{--color-bg:#111}`)
+	writeRepositoryFile(t, filepath.Join(root, "assets/themes/tokyo-night/theme.css"), completeThemeCSS())
 	svc := NewProjectServiceWithRepositories(st, WorkRoot(root), nil, NewThemeService(WorkRoot(root)))
 	project, err := svc.CreateProject(ctx, CreateProjectParams{Topic: "Theme persistence", Language: "zh-CN"})
 	if err != nil {

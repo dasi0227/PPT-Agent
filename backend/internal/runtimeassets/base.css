@@ -78,6 +78,51 @@ body {
   padding: var(--space-4);
 }
 
+.kicker {
+  margin: 0 0 var(--space-4);
+  color: var(--color-primary);
+  font-size: calc(var(--text-body) * 0.75);
+  font-weight: 700;
+}
+
+.metric {
+  padding: var(--space-4);
+  background: var(--color-muted);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.metric-value {
+  color: var(--color-fg);
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.metric-label {
+  margin-top: var(--space-4);
+  color: var(--color-primary);
+  font-size: var(--text-body);
+}
+
+.quote {
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--color-muted);
+  color: var(--color-fg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-muted);
+  color: var(--color-fg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
 a {
   color: var(--color-primary);
 }

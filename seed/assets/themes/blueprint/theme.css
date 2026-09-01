@@ -37,8 +37,7 @@
   --stage-h: 1080;
 }
 
-.slide-stage,
-.slide {
+.slide-stage {
   background: var(--theme-background);
 }
 

@@ -23,4 +23,7 @@ func TestNormalizeOwnsBaseAndThemeLinks(t *testing.T) {
 	if strings.Contains(html, "/wrong.css") || strings.Contains(html, "../../common/base.css") {
 		t.Fatalf("legacy or agent-owned links remain: %s", html)
 	}
+	if baseIndex, themeIndex := strings.Index(html, `id="base-link"`), strings.Index(html, `id="theme-link"`); baseIndex < 0 || themeIndex < 0 || baseIndex >= themeIndex {
+		t.Fatalf("theme CSS must load after base CSS: %s", html)
+	}
 }
