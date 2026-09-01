@@ -85,6 +85,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 		}(),
 		polishHandler,
 		nil,
+		nil,
 	)
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)

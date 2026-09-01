@@ -22,14 +22,15 @@ type Router struct {
 	llm        *LLMHandler
 	polish     *PolishHandler
 	gitCommit  *GitCommitHandler
+	prompt     *PromptHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, gitCommitH *GitCommitHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, gitCommitH *GitCommitHandler, promptH *PromptHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, gitCommit: gitCommitH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, gitCommit: gitCommitH, prompt: promptH}
 	r.register()
 	return r
 }
@@ -52,6 +53,13 @@ func (r *Router) register() {
 	v1.GET("/skills/:id", r.repository.GetSkill)
 	v1.PATCH("/skills/:id", r.repository.PatchSkill)
 	v1.DELETE("/skills/:id", r.repository.DeleteSkill)
+	if r.prompt != nil {
+		v1.GET("/prompts", r.prompt.List)
+		v1.GET("/prompts/:id", r.prompt.Get)
+		v1.POST("/prompts", r.prompt.Create)
+		v1.PUT("/prompts/:id", r.prompt.Update)
+		v1.DELETE("/prompts/:id", r.prompt.Delete)
+	}
 
 	// Project / Thread：API 契约入口，前端不需要绕过 HTTP 直接造数据。
 	v1.GET("/projects", r.project.List)

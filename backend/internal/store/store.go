@@ -9,9 +9,22 @@ import (
 )
 
 var (
-	ErrRunActive       = errors.New("store: project has an active run")
-	ErrGitCommitActive = errors.New("store: project has an active Git commit")
+	ErrRunActive         = errors.New("store: project has an active run")
+	ErrGitCommitActive   = errors.New("store: project has an active Git commit")
+	ErrPromptKeyConflict = errors.New("store: prompt key conflict")
 )
+
+type PromptKeyConflictError struct {
+	Field string
+}
+
+func (e *PromptKeyConflictError) Error() string {
+	return "store: prompt " + e.Field + " conflicts with an existing prompt"
+}
+
+func (e *PromptKeyConflictError) Is(target error) bool {
+	return target == ErrPromptKeyConflict
+}
 
 // Store 是持久化层对外暴露的接口。随里程碑推进逐步扩展领域方法。
 type Store interface {
@@ -75,4 +88,10 @@ type Store interface {
 	SetSlideVersion(ctx context.Context, slideID string, versionNo int) error
 	CommitWorkflow(ctx context.Context, commit model.ArtifactCommit) error
 	UpdateProjectTheme(ctx context.Context, id, theme string, updatedAt int64) error
+
+	CreatePrompt(ctx context.Context, prompt model.Prompt, normalizedKeyEN string) error
+	GetPrompt(ctx context.Context, id string) (model.Prompt, error)
+	ListPrompts(ctx context.Context) ([]model.Prompt, error)
+	UpdatePrompt(ctx context.Context, prompt model.Prompt, normalizedKeyEN string) error
+	DeletePrompt(ctx context.Context, id string) error
 }

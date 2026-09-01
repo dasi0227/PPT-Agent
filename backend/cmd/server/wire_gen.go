@@ -75,6 +75,8 @@ func initApp() (*App, func(), error) {
 	componentService := service.NewComponentService(workRoot)
 	skillService := service.NewSkillService(workRoot)
 	repositoryHandler := httpapi.NewRepositoryHandler(themeService, componentService, skillService)
+	promptService := service.NewPromptService(store)
+	promptHandler := httpapi.NewPromptHandler(promptService)
 	llmHandler := httpapi.NewLLMHandler(registry)
 	polishService := service.NewPolishService(store, registry)
 	polishHandler := httpapi.NewPolishHandler(polishService)
@@ -86,7 +88,7 @@ func initApp() (*App, func(), error) {
 		return nil, nil, err
 	}
 	gitCommitHandler := httpapi.NewGitCommitHandler(gitCommitService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, gitCommitHandler)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, gitCommitHandler, promptHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	app := provideApp(server, engine, zapLogger)
@@ -106,7 +108,7 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideEngine,
 	provideHistoryWriter,
 	provideRenderWorker, service.NewHealthService, provideProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, provideGitCommitService,
-	provideSlideService, service.NewPPTMutationService, service.NewThemeService, service.NewComponentService, service.NewSkillService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewRouter, engineFromRouter,
+	provideSlideService, service.NewPPTMutationService, service.NewThemeService, service.NewComponentService, service.NewSkillService, service.NewPromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideApp,
 )

@@ -66,6 +66,12 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 	`, "paused-run", "pause-thread", "layout-v6", "ppt", "deck", "execute", `{}`, "paused", 2, 1, 2).Error; err != nil {
 		t.Fatalf("paused run status is not accepted: %v", err)
 	}
+	promptCols := tableColumns(t, db, "prompts")
+	for _, want := range []string{"id", "key_zh", "key_en", "normalized_key_en", "value", "tags_json", "created_at", "updated_at"} {
+		if !promptCols[want] {
+			t.Fatalf("prompts table missing column %q; got %v", want, promptCols)
+		}
+	}
 }
 
 // applyAllMigrations 执行 migrations/ 内全部 SQL（按 ; 切分，跳过注释/空白）。
