@@ -37,7 +37,7 @@ export function RepositoryFileLink({ href }: { href?: string }) {
   return (
     <a
       href={href}
-      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       title="查看文件"
       aria-label="查看文件"
     >
@@ -190,7 +190,18 @@ export function RepositoryDetail({
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1">
             <h2 className="truncate text-base font-bold leading-6 text-text-900">{title}</h2>
-            <RepositoryFileLink href={openUrl} />
+            <div className="flex shrink-0 items-center gap-0.5">
+              <RepositoryFileLink href={openUrl} />
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-danger-soft hover:text-danger active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+                title={`删除${deleteNoun}`}
+                aria-label={`删除${title}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </button>
+            </div>
           </div>
           <p className="mt-1.5 line-clamp-2 max-w-3xl text-xs font-medium leading-[18px] text-text-600">
             {description}
@@ -200,17 +211,6 @@ export function RepositoryDetail({
         {actions && <div className="shrink-0">{actions}</div>}
       </header>
       <div className={cn('min-h-0 flex-1 overflow-auto bg-canvas/70', contentClassName)}>{children}</div>
-      <footer className="flex h-[46px] shrink-0 items-center justify-end border-t border-border bg-surface px-3">
-        <button
-          type="button"
-          onClick={() => setDeleteOpen(true)}
-          className="grid h-8 w-8 place-items-center rounded-md text-text-400 transition-colors hover:bg-danger-soft hover:text-danger active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
-          title={`删除${deleteNoun}`}
-          aria-label={`删除${title}`}
-        >
-          <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-        </button>
-      </footer>
       <ConfirmModal
         open={deleteOpen}
         onOpenChange={setDeleteOpen}

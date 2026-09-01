@@ -94,11 +94,15 @@ describe('personal repository pages', () => {
     expect(preview).toHaveAttribute('sandbox', '');
     expect(preview.getAttribute('srcdoc')).toContain('IDEA<br>TO<br>SLIDES');
     expect(preview.getAttribute('srcdoc')).toContain('class="specimen-word">Dasi');
+    expect(preview.getAttribute('srcdoc')).toContain('transform:translateY(-4%)');
     expect(preview.getAttribute('srcdoc')).not.toContain('>Aa<');
     expect(screen.getByRole('main')).toHaveClass('h-[100dvh]', 'overflow-hidden');
     expect(screen.getByText('Aptos')).toBeInTheDocument();
     expect(screen.getByText('色板')).toBeInTheDocument();
     expect(screen.getByText('字体')).toBeInTheDocument();
+    const fileLink = screen.getByRole('link', { name: '查看文件' });
+    expect(fileLink.nextElementSibling).toBe(screen.getByRole('button', { name: '删除Swiss Modern' }));
+    expect(screen.getByRole('region', { name: '主题详情' }).querySelector('footer')).not.toBeInTheDocument();
     const themeProperties = screen.getByLabelText('主题属性');
     expect(themeProperties).toHaveClass('flex-nowrap');
     expect(themeProperties).toContainElement(screen.getByText('色板'));
