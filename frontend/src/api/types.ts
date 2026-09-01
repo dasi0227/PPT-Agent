@@ -160,6 +160,38 @@ export interface SkillsResponse {
   skills: Skill[];
 }
 
+export type PromptTag =
+  | 'structure'
+  | 'draft'
+  | 'rewrite'
+  | 'summarize'
+  | 'analysis'
+  | 'data'
+  | 'visual'
+  | 'review'
+  | 'other';
+
+export interface Prompt {
+  id: string;
+  key_zh: string;
+  key_en: string;
+  value: string;
+  tags: PromptTag[];
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PromptsResponse {
+  prompts: Prompt[];
+}
+
+export interface PromptWriteRequest {
+  key_zh: string;
+  key_en: string;
+  value: string;
+  tags: PromptTag[];
+}
+
 export interface Theme {
   id: string;
   name: string;

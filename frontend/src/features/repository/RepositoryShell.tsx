@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft, BookOpenText, Component, Palette, RefreshCw } from 'lucide-react';
+import { ArrowLeft, BookOpenText, Component, NotebookText, Palette, RefreshCw } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
@@ -13,6 +13,7 @@ const sections: Array<{
   { id: 'theme', label: '主题', icon: Palette },
   { id: 'component', label: '组件', icon: Component },
   { id: 'skill', label: '技能', icon: BookOpenText },
+  { id: 'prompt', label: '提示词', icon: NotebookText },
 ];
 
 export function RepositoryShell({

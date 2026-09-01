@@ -1,0 +1,22 @@
+.composer-prompt-editor {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.composer-prompt-editor[data-empty='true']::before {
+  color: #95a0ae;
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.composer-prompt-editor[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.composer-prompt-fragment {
+  background: rgb(47 103 246 / 7%);
+  color: #2f67f6;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}

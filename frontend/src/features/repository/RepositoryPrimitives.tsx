@@ -61,10 +61,12 @@ export function RepositoryCatalog({
   label,
   controls,
   children,
+  footer,
 }: {
   label: string;
   controls: ReactNode;
   children: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
     <aside
@@ -75,6 +77,7 @@ export function RepositoryCatalog({
         {controls}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">{children}</div>
+      {footer && <footer className="shrink-0 border-t border-border p-2.5">{footer}</footer>}
     </aside>
   );
 }
@@ -111,14 +114,16 @@ export function RepositoryDirectoryItem({
   description,
   visual,
   visualClassName,
+  visualBare = false,
   onClick,
 }: {
   active: boolean;
   disabled?: boolean;
-  name: string;
+  name: ReactNode;
   description: string;
   visual: ReactNode;
   visualClassName?: string;
+  visualBare?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -135,7 +140,8 @@ export function RepositoryDirectoryItem({
     >
       <span
         className={cn(
-          'grid h-[42px] w-[58px] place-items-center overflow-hidden rounded-md border border-border bg-surface',
+          'grid h-[42px] w-[58px] place-items-center overflow-hidden',
+          !visualBare && 'rounded-md border border-border bg-surface',
           visualClassName,
         )}
         aria-hidden="true"
@@ -143,7 +149,7 @@ export function RepositoryDirectoryItem({
         {visual}
       </span>
       <span className="min-w-0">
-        <span className={cn('block truncate text-[13px] font-bold', disabled ? 'text-text-400' : 'text-text-900')}>
+        <span className={cn('block min-w-0 truncate text-[13px] font-bold', disabled ? 'text-text-400' : 'text-text-900')}>
           {name}
         </span>
         <span className="mt-0.5 block line-clamp-2 text-[11px] leading-4 text-text-600">{description}</span>
@@ -173,7 +179,7 @@ export function RepositoryDetail({
 }: {
   label: string;
   title: string;
-  description: string;
+  description?: string;
   openUrl?: string;
   properties?: ReactNode;
   actions?: ReactNode;
@@ -203,9 +209,11 @@ export function RepositoryDetail({
               </button>
             </div>
           </div>
-          <p className="mt-1.5 line-clamp-2 max-w-3xl text-xs font-medium leading-[18px] text-text-600">
-            {description}
-          </p>
+          {description && (
+            <p className="mt-1.5 line-clamp-2 max-w-3xl text-xs font-medium leading-[18px] text-text-600">
+              {description}
+            </p>
+          )}
           {properties && <div className="mt-5 min-w-0">{properties}</div>}
         </div>
         {actions && <div className="shrink-0">{actions}</div>}

@@ -20,6 +20,7 @@ import { PlanIndicator } from './PlanIndicator';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
+import { PromptComposerEditor, type PromptComposerEditorHandle } from './PromptComposerEditor';
 
 const COMPOSER_CONTROLS_FIT_GUARD_PX = 2;
 const COMPOSER_CONTROLS_HYSTERESIS_PX = 12;
@@ -165,7 +166,7 @@ export const CommandComposer: React.FC = () => {
   const [controlsDensity, setControlsDensity] = useState<ComposerControlsDensity>('full');
   const [polishing, setPolishing] = useState(false);
   const controlBarRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<PromptComposerEditorHandle>(null);
   const polishAbortRef = useRef<AbortController | null>(null);
   const polishRequestRef = useRef(0);
   const { activeProjectId, contentByProjectId } = useProjectStore();
@@ -210,6 +211,8 @@ export const CommandComposer: React.FC = () => {
   useEffect(() => {
     if (previousProjectId.current === activeProjectId) return;
     previousProjectId.current = activeProjectId;
+    setText('');
+    editorRef.current?.setPlainText('');
     resetForProject();
   }, [activeProjectId, resetForProject]);
   useEffect(() => {
@@ -316,7 +319,7 @@ export const CommandComposer: React.FC = () => {
   ]);
 
   const submit = async () => {
-    const raw = text.trim();
+    const raw = (editorRef.current?.getPlainText() ?? text).trim();
     if (disabled || commitActive || polishing || !activeProjectId || !raw) return;
     setSubmitError('');
     const projectId = activeProjectId;
@@ -329,7 +332,10 @@ export const CommandComposer: React.FC = () => {
     }
     if (steering && activeRunId) {
       const accepted = await steerRun(threadId, activeRunId, raw, newClientIdentity('msg'));
-      if (accepted) setText('');
+      if (accepted) {
+        setText('');
+        editorRef.current?.setPlainText('');
+      }
       else setSubmitError('追加要求未能加入当前任务；文本已保留，可在任务结束后作为新请求发送');
       return;
     }
@@ -375,7 +381,10 @@ export const CommandComposer: React.FC = () => {
         }
       }
       const created = await createRun(threadId, request, projectId);
-      if (created) setText('');
+      if (created) {
+        setText('');
+        editorRef.current?.setPlainText('');
+      }
       else setSubmitError('运行创建失败，请检查时间线中的错误后重试');
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
@@ -394,15 +403,14 @@ export const CommandComposer: React.FC = () => {
   };
 
   const polishText = async () => {
-    const textarea = textareaRef.current;
-    const instruction = text.trim();
-    if (!textarea || disabled || commitActive || polishing || !activeProjectId || !instruction) return;
+    const editor = editorRef.current;
+    const instruction = editor?.getPlainText().trim() ?? '';
+    if (!editor || disabled || commitActive || polishing || !activeProjectId || !instruction) return;
     if (profilesError || profilesLoading || !composer.modelProfileName) {
       setSubmitError(profilesError || '模型列表仍在加载，请稍候');
       return;
     }
-    const selectionStart = textarea.selectionStart;
-    const selectionEnd = textarea.selectionEnd;
+    const selection = editor.captureSelection();
     const requestID = polishRequestRef.current + 1;
     polishRequestRef.current = requestID;
     const controller = new AbortController();
@@ -426,20 +434,14 @@ export const CommandComposer: React.FC = () => {
       if (polishRequestRef.current !== requestID || controller.signal.aborted) return;
       setText(result.polished_instruction);
       requestAnimationFrame(() => {
-        const current = textareaRef.current;
-        if (!current || current.disabled) return;
-        current.focus();
-        const end = result.polished_instruction.length;
-        current.setSelectionRange(end, end);
+        editorRef.current?.setPlainText(result.polished_instruction);
+        editorRef.current?.focusEnd();
       });
     } catch (error) {
       if (polishRequestRef.current !== requestID || controller.signal.aborted) return;
       setSubmitError(error instanceof Error ? error.message : '润色失败，请重试');
       requestAnimationFrame(() => {
-        const current = textareaRef.current;
-        if (!current || current.disabled) return;
-        current.focus();
-        current.setSelectionRange(selectionStart, selectionEnd);
+        editorRef.current?.restoreSelection(selection);
       });
     } finally {
       if (polishRequestRef.current === requestID) {
@@ -475,20 +477,16 @@ export const CommandComposer: React.FC = () => {
         </div>
       )}
       <div className="relative rounded-[22px] border border-border/80 bg-panel shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
-        <div className="relative overflow-hidden rounded-t-[22px]">
-          <textarea
-            ref={textareaRef}
+        <div className="relative rounded-t-[22px]">
+          <PromptComposerEditor
+            ref={editorRef}
             value={text}
-            onChange={(event) => setText(event.target.value)}
+            onChange={setText}
             onKeyDown={handleKeyDown}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
+            onCompositionChange={setIsComposing}
             placeholder={composerPlaceholder}
             disabled={disabled}
             readOnly={polishing}
-            aria-busy={polishing}
-            className="max-h-32 min-h-[60px] w-full resize-none bg-transparent py-3 pl-3 pr-12 text-sm text-text-900 placeholder:text-text-400 focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
-            rows={2}
           />
           {text.trim() !== '' && !disabled && (
             <button

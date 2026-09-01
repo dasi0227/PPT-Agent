@@ -8,6 +8,7 @@ import { useGitCommitStore } from './stores/gitCommitStore';
 import { ThemeRepositoryPage } from './features/repository/ThemeRepositoryPage';
 import { ComponentRepositoryPage } from './features/repository/ComponentRepositoryPage';
 import { SkillRepositoryPage } from './features/repository/SkillRepositoryPage';
+import { PromptRepositoryPage } from './features/repository/PromptRepositoryPage';
 
 export function App() {
   useEffect(() => {
@@ -28,6 +29,7 @@ export function App() {
         <Route path="/warehouse/theme" element={<ThemeRepositoryPage />} />
         <Route path="/warehouse/component" element={<ComponentRepositoryPage />} />
         <Route path="/warehouse/skill" element={<SkillRepositoryPage />} />
+        <Route path="/warehouse/prompt" element={<PromptRepositoryPage />} />
         <Route path="*" element={<UnknownRouteRedirect />} />
       </Routes>
       <GlobalModals />
