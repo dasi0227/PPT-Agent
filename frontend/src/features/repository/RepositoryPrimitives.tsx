@@ -186,16 +186,16 @@ export function RepositoryDetail({
 
   return (
     <section className="flex min-h-[420px] min-w-0 flex-col bg-surface md:min-h-0" aria-label={label}>
-      <header className="flex min-h-[114px] shrink-0 flex-col items-start justify-between gap-3 border-b border-border bg-surface px-5 py-4 lg:flex-row lg:gap-6">
+      <header className="flex min-h-[128px] shrink-0 flex-col items-start justify-between gap-3 border-b border-border bg-surface px-5 pb-3.5 pt-5 lg:flex-row lg:gap-6">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1">
             <h2 className="truncate text-base font-bold leading-6 text-text-900">{title}</h2>
             <RepositoryFileLink href={openUrl} />
           </div>
-          <p className="mt-0.5 line-clamp-2 max-w-3xl text-xs font-medium leading-[18px] text-text-600">
+          <p className="mt-1.5 line-clamp-2 max-w-3xl text-xs font-medium leading-[18px] text-text-600">
             {description}
           </p>
-          {properties && <div className="mt-2 min-w-0">{properties}</div>}
+          {properties && <div className="mt-5 min-w-0">{properties}</div>}
         </div>
         {actions && <div className="shrink-0">{actions}</div>}
       </header>

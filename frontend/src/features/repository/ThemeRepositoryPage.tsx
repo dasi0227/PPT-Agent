@@ -128,18 +128,18 @@ export function ThemeRepositoryPage() {
                 description={selected.description}
                 openUrl={selected.open_url}
                 properties={(
-                  <>
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex min-w-0 flex-nowrap items-center gap-4 overflow-x-auto pb-0.5" aria-label="主题属性">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <span className="text-[11px] font-semibold text-text-400">色板</span>
                       <span className="flex gap-1" aria-label="主题色板">
                         {colors.map((color, index) => <i key={`${color}-${index}`} className="h-4 w-4 rounded-[4px] border border-black/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={{ background: color }} title={color} />)}
                       </span>
                     </div>
-                    <div className="flex min-w-0 items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <span className="shrink-0 text-[11px] font-semibold text-text-400">字体</span>
-                      <span className="truncate text-xs font-semibold text-text-900" style={{ fontFamily: typography.displayStack }}>{typography.label}</span>
+                      <span className="text-xs font-semibold text-text-900" style={{ fontFamily: typography.displayStack }}>{typography.label}</span>
                     </div>
-                  </>
+                  </div>
                 )}
                 actions={<SegmentedControl value={mode} options={themeShowcaseModes} onChange={setMode} label="预览页面" />}
                 contentClassName="flex items-center justify-center p-5 md:p-7 xl:p-9"

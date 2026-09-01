@@ -137,12 +137,6 @@ export function SkillRepositoryPage() {
                 title={selected.name}
                 description={selected.description}
                 openUrl={selected.open_url}
-                properties={(
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold">
-                    <span className="text-text-400">文件</span>
-                    <span className="text-text-600">SKILL.md</span>
-                  </div>
-                )}
                 actions={(
                   <div className="flex items-center gap-2.5">
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>

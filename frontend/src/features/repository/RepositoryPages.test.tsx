@@ -99,6 +99,10 @@ describe('personal repository pages', () => {
     expect(screen.getByText('Aptos')).toBeInTheDocument();
     expect(screen.getByText('色板')).toBeInTheDocument();
     expect(screen.getByText('字体')).toBeInTheDocument();
+    const themeProperties = screen.getByLabelText('主题属性');
+    expect(themeProperties).toHaveClass('flex-nowrap');
+    expect(themeProperties).toContainElement(screen.getByText('色板'));
+    expect(themeProperties).toContainElement(screen.getByText('字体'));
     expect(screen.getAllByText('Dasi')).toHaveLength(2);
     expect(screen.queryByText('Aa')).not.toBeInTheDocument();
     expect(screen.getAllByText('Clean grid')).toHaveLength(2);
@@ -197,7 +201,7 @@ describe('personal repository pages', () => {
 
     const toggle = await screen.findByRole('switch', { name: '切换技能状态' });
     expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
-    expect(screen.getByText('SKILL.md')).toBeInTheDocument();
+    expect(screen.queryByText('SKILL.md')).not.toBeInTheDocument();
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(toggle);
     await waitFor(() => expect(mocks.setSkillDisabled).toHaveBeenCalledWith('story', true));
