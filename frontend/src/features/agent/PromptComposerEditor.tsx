@@ -9,19 +9,30 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { NotebookText } from 'lucide-react';
-import type { Prompt } from '../../api/types';
+import { Blocks, NotebookText } from 'lucide-react';
+import type { ComponentReference, Prompt } from '../../api/types';
+import { useComponentStore } from '../../stores/componentStore';
 import { usePromptStore } from '../../stores/promptStore';
-import { findPromptTrigger, matchPrompts, type PromptTrigger } from './promptMatching';
+import {
+  findComponentTrigger,
+  findPromptTrigger,
+  MAX_COMPONENT_MENTIONS,
+  matchComponents,
+  matchPrompts,
+  type PromptTrigger,
+} from './promptMatching';
 import './promptComposer.css';
 
 export interface PromptComposerEditorHandle {
   getPlainText: () => string;
+  getComponentNames: () => string[];
   setPlainText: (value: string) => void;
   focusEnd: () => void;
   captureSelection: () => Range | null;
   restoreSelection: (range: Range | null) => void;
 }
+
+type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' };
 
 interface PromptComposerEditorProps {
   value: string;
@@ -141,14 +152,19 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const menuRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
     const dismissedRef = useRef('');
-    const [trigger, setTrigger] = useState<PromptTrigger | null>(null);
+    const [trigger, setTrigger] = useState<ComposerTrigger | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const prompts = usePromptStore((state) => state.prompts);
     const recentIds = usePromptStore((state) => state.recentIds);
     const version = usePromptStore((state) => state.version);
     const loadPrompts = usePromptStore((state) => state.load);
     const recordRecent = usePromptStore((state) => state.recordRecent);
-    const candidates = trigger ? matchPrompts(prompts, trigger.query, recentIds) : [];
+    const components = useComponentStore((state) => state.components);
+    const componentVersion = useComponentStore((state) => state.version);
+    const loadComponents = useComponentStore((state) => state.load);
+    const promptCandidates = trigger?.kind === 'prompt' ? matchPrompts(prompts, trigger.query, recentIds) : [];
+    const componentCandidates = trigger?.kind === 'component' ? matchComponents(components, trigger.query) : [];
+    const candidateCount = trigger?.kind === 'component' ? componentCandidates.length : promptCandidates.length;
 
     const updateTrigger = useCallback(() => {
       const editor = editorRef.current;
@@ -161,8 +177,15 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         setTrigger(null);
         return;
       }
-      const next = findPromptTrigger(serializeComposerText(editor), offset);
-      const signature = next ? `${next.start}:${next.end}:${next.query}` : '';
+      const text = serializeComposerText(editor);
+      const promptTrigger = findPromptTrigger(text, offset);
+      const componentTrigger = findComponentTrigger(text, offset);
+      const next: ComposerTrigger | null = promptTrigger
+        ? { ...promptTrigger, kind: 'prompt' }
+        : componentTrigger
+          ? { ...componentTrigger, kind: 'component' }
+          : null;
+      const signature = next ? `${next.kind}:${next.start}:${next.end}:${next.query}` : '';
       if (!next || dismissedRef.current === signature) {
         setTrigger(null);
         return;
@@ -173,6 +196,20 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     useImperativeHandle(forwardedRef, () => ({
       getPlainText: () => editorRef.current ? serializeComposerText(editorRef.current) : '',
+      getComponentNames: () => {
+        const editor = editorRef.current;
+        if (!editor) return [];
+        const seen = new Set<string>();
+        const names: string[] = [];
+        editor.querySelectorAll<HTMLElement>('[data-component-name]').forEach((fragment) => {
+          const name = fragment.dataset.componentName?.trim() ?? '';
+          if (name && !seen.has(name) && names.length < MAX_COMPONENT_MENTIONS) {
+            seen.add(name);
+            names.push(name);
+          }
+        });
+        return names;
+      },
       setPlainText: (nextValue) => {
         const editor = editorRef.current;
         if (!editor) return;
@@ -218,10 +255,10 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     useEffect(() => {
       updateTrigger();
-    }, [updateTrigger, version]);
+    }, [componentVersion, updateTrigger, version]);
 
     useEffect(() => {
-      menuRef.current?.querySelector<HTMLElement>(`[data-prompt-index="${activeIndex}"]`)
+      menuRef.current?.querySelector<HTMLElement>(`[data-candidate-index="${activeIndex}"]`)
         ?.scrollIntoView({ block: 'nearest' });
     }, [activeIndex]);
 
@@ -263,6 +300,35 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       editor.focus();
     };
 
+    const applyComponent = (component: ComponentReference) => {
+      const editor = editorRef.current;
+      if (!editor || !trigger || trigger.kind !== 'component') return;
+      const start = pointAtOffset(editor, trigger.start);
+      const end = pointAtOffset(editor, trigger.end);
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      range.deleteContents();
+      const componentFragment = document.createElement('span');
+      componentFragment.className = 'composer-component-fragment';
+      componentFragment.dataset.componentName = component.name;
+      componentFragment.textContent = component.name;
+      const space = document.createTextNode(' ');
+      range.insertNode(space);
+      range.insertNode(componentFragment);
+      editor.normalize();
+      const selection = window.getSelection();
+      const next = document.createRange();
+      next.setStartAfter(space);
+      next.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(next);
+      dismissedRef.current = '';
+      setTrigger(null);
+      syncValue();
+      editor.focus();
+    };
+
     const handleInput = (_event: FormEvent<HTMLDivElement>) => {
       dismissedRef.current = '';
       syncValue();
@@ -271,20 +337,28 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const handleEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
       if (trigger && !event.nativeEvent.isComposing && !composingRef.current) {
-        if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && candidates.length > 0) {
+        if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && candidateCount > 0) {
           event.preventDefault();
           const direction = event.key === 'ArrowDown' ? 1 : -1;
-          setActiveIndex((current) => (current + direction + candidates.length) % candidates.length);
+          setActiveIndex((current) => (current + direction + candidateCount) % candidateCount);
           return;
         }
-        if (event.key === 'Enter' && !(event.metaKey || event.ctrlKey) && candidates[activeIndex]) {
+        if (event.key === 'Enter' && !(event.metaKey || event.ctrlKey)) {
+          const candidate = trigger.kind === 'component'
+            ? componentCandidates[activeIndex]
+            : promptCandidates[activeIndex];
+          if (!candidate) {
+            onKeyDown(event);
+            return;
+          }
           event.preventDefault();
-          applyPrompt(candidates[activeIndex]);
+          if (trigger.kind === 'component') applyComponent(candidate as ComponentReference);
+          else applyPrompt(candidate as Prompt);
           return;
         }
         if (event.key === 'Escape') {
           event.preventDefault();
-          dismissedRef.current = `${trigger.start}:${trigger.end}:${trigger.query}`;
+          dismissedRef.current = `${trigger.kind}:${trigger.start}:${trigger.end}:${trigger.query}`;
           setTrigger(null);
           return;
         }
@@ -306,23 +380,52 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             ref={menuRef}
             className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 max-h-[280px] overflow-y-auto rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="listbox"
-            aria-label="提示词候选"
+            aria-label={trigger.kind === 'component' ? '组件候选' : '提示词候选'}
           >
             <div className="px-2 pb-1 pt-1.5 text-[11px] font-semibold text-text-400">
-              {trigger.query ? '匹配提示词' : '最近使用'}
+              {trigger.kind === 'component'
+                ? (trigger.query ? '匹配组件' : '全部组件')
+                : (trigger.query ? '匹配提示词' : '最近使用')}
             </div>
-            {candidates.length === 0 ? (
+            {candidateCount === 0 ? (
               <div className="grid min-h-14 place-items-center px-3 text-xs text-text-400">
-                {trigger.query ? '没有匹配的提示词' : '暂无最近使用'}
+                {trigger.kind === 'component'
+                  ? (trigger.query ? '没有匹配的组件' : '暂无可用组件')
+                  : (trigger.query ? '没有匹配的提示词' : '暂无最近使用')}
               </div>
-            ) : candidates.map((prompt, index) => (
+            ) : trigger.kind === 'component' ? componentCandidates.map((component, index) => (
+              <button
+                key={component.id}
+                type="button"
+                role="option"
+                aria-selected={activeIndex === index}
+                data-component-option={component.id}
+                data-candidate-index={index}
+                onMouseEnter={() => setActiveIndex(index)}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  applyComponent(component);
+                }}
+                className={`grid min-h-[42px] w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-1 rounded-md px-2 py-1.5 text-left ${
+                  activeIndex === index ? 'bg-accent-soft' : 'hover:bg-panel-muted'
+                }`}
+              >
+                <span className="grid h-6 w-5 place-items-center text-accent" aria-hidden="true">
+                  <Blocks className="h-[15px] w-[15px]" strokeWidth={1.75} />
+                </span>
+                <span className="flex min-w-0 items-baseline gap-1.5">
+                  <span className="max-w-[48%] truncate text-xs font-bold text-text-900">{component.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-text-600">{component.description}</span>
+                </span>
+              </button>
+            )) : promptCandidates.map((prompt, index) => (
               <button
                 key={prompt.id}
                 type="button"
                 role="option"
                 aria-selected={activeIndex === index}
                 data-prompt-option={prompt.id}
-                data-prompt-index={index}
+                data-candidate-index={index}
                 onMouseEnter={() => setActiveIndex(index)}
                 onMouseDown={(event) => {
                   event.preventDefault();
@@ -357,6 +460,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
           spellCheck={false}
           onFocus={() => {
             void loadPrompts().catch(() => undefined);
+            void loadComponents().catch(() => undefined);
             updateTrigger();
           }}
           onBlur={() => setTrigger(null)}

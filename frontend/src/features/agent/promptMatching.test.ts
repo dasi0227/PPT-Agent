@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Prompt } from '../../api/types';
-import { findPromptTrigger, matchPrompts } from './promptMatching';
+import type { ComponentReference, Prompt } from '../../api/types';
+import { findComponentTrigger, findPromptTrigger, matchComponents, matchPrompts } from './promptMatching';
 
 const prompts: Prompt[] = [
   { id: 'value', name: '写作 / Draft', desc: '撰写页面', value: '生成高管摘要', tags: ['deliverable'], disabled: false, created_at: 1, updated_at: 4 },
@@ -32,5 +32,32 @@ describe('prompt matching', () => {
     const disabled = prompts.map((prompt) => prompt.id === 'desc' ? { ...prompt, disabled: true } : prompt);
     expect(matchPrompts(disabled, 'summary', []).map((prompt) => prompt.id)).toEqual([]);
     expect(matchPrompts(disabled, '', ['desc', 'name']).map((prompt) => prompt.id)).toEqual(['name']);
+  });
+});
+
+describe('component matching', () => {
+  const components: ComponentReference[] = [
+    { id: 'feature-card', name: '能力卡片', description: '展示核心能力', tags: ['card'], disabled: false, open_url: '' },
+    { id: 'trend-chart', name: '趋势图', description: '年度增长', tags: ['chart'], disabled: false, open_url: '' },
+    { id: 'disabled-card', name: '禁用卡片', description: '不可用', tags: ['card'], disabled: true, open_url: '' },
+  ];
+
+  it('detects # only at the start, after an ASCII space, or after a newline', () => {
+    expect(findComponentTrigger('#能力', 3)).toEqual({ start: 0, end: 3, query: '能力' });
+    expect(findComponentTrigger('参考 #card', 8)).toEqual({ start: 3, end: 8, query: 'card' });
+    expect(findComponentTrigger('正文\n#趋势', 6)).toEqual({ start: 3, end: 6, query: '趋势' });
+    expect(findComponentTrigger('word#card', 9)).toBeNull();
+    expect(findComponentTrigger('中文，#能力', 6)).toBeNull();
+    expect(findComponentTrigger('$能力', 3)).toBeNull();
+    expect(findPromptTrigger('#能力', 3)).toBeNull();
+  });
+
+  it('matches name, directory id, description and tags while excluding disabled components', () => {
+    expect(matchComponents(components, '能力').map((component) => component.id)).toEqual(['feature-card']);
+    expect(matchComponents(components, 'FEATURE').map((component) => component.id)).toEqual(['feature-card']);
+    expect(matchComponents(components, '年度').map((component) => component.id)).toEqual(['trend-chart']);
+    expect(matchComponents(components, 'chart').map((component) => component.id)).toEqual(['trend-chart']);
+    expect(matchComponents(components, '').map((component) => component.id)).toEqual(['feature-card', 'trend-chart']);
+    expect(matchComponents(components, '禁用')).toEqual([]);
   });
 });

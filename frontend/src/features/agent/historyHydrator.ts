@@ -1,5 +1,6 @@
 import type {
   PlanState,
+  PublicLoadedResource,
   RunMode,
   RunScope,
   Skill,
@@ -70,6 +71,20 @@ function readHistorySkills(data: Record<string, unknown>): Skill[] {
   });
 }
 
+function readHistoryComponents(data: Record<string, unknown>): PublicLoadedResource[] {
+  if (!Array.isArray(data.resources)) return [];
+  return data.resources.slice(0, 8).flatMap((value) => {
+    if (!isRecord(value) || value.kind !== 'component' ||
+      typeof value.id !== 'string' || typeof value.name !== 'string') return [];
+    return [{
+      kind: 'component' as const,
+      id: value.id,
+      name: value.name,
+      ...(typeof value.open_url === 'string' ? { open_url: value.open_url } : {}),
+    }];
+  });
+}
+
 export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): HydratedRunView {
   const emptySession: HistorySessionState = {
     activeRunId: null,
@@ -106,6 +121,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         scope,
         mode,
         skills: readHistorySkills(entry.data),
+        components: readHistoryComponents(entry.data),
       });
       continue;
     }

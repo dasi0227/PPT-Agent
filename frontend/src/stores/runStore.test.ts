@@ -68,6 +68,12 @@ vi.mock('../api/runs', () => ({
           description: 'description',
           open_url: `vscode://file/tmp/skills/${id}/SKILL.md`,
         })),
+        components: (payload.component_names ?? []).map((name: string) => ({
+          kind: 'component',
+          id: name === '能力卡片' ? 'feature-card' : name,
+          name,
+          open_url: 'vscode://file/tmp/components/feature-card/index.html',
+        })),
       };
       if (createMode === 'pending') return new Promise((resolve) => { resolveCreate = resolve; });
       if (createMode === 'reject') return Promise.reject(new Error('offline'));
@@ -177,6 +183,19 @@ describe('runStore public event sessions', () => {
     });
     expect(await useRunStore.getState().retryRun('t1')).toBe(true);
     expect(createRequests[1]).toMatchObject({ skill_ids: ['story'] });
+  });
+
+  test('stores referenced components on the user turn and reuses names for retry', async () => {
+    await useRunStore.getState().createRun('t1', {
+      ...request('参考能力卡片'),
+      component_names: ['能力卡片'],
+    }, 'p1');
+    expect(useRunStore.getState().sessions.t1.timelineItems[0]).toMatchObject({
+      type: 'user_turn',
+      components: [{ id: 'feature-card', name: '能力卡片', kind: 'component' }],
+    });
+    expect(await useRunStore.getState().retryRun('t1')).toBe(true);
+    expect(createRequests[1]).toMatchObject({ component_names: ['能力卡片'] });
   });
 
   test('preserves the instruction and adds a compact local failure notice', async () => {

@@ -29,6 +29,12 @@ describe('history hydrator', () => {
           local_path: '/tmp/skills/story/SKILL.md',
           open_url: 'vscode://file/tmp/skills/story/SKILL.md',
         }],
+        resources: [{
+          kind: 'component',
+          id: 'feature-card',
+          name: '能力卡片',
+          open_url: 'vscode://file/tmp/components/feature-card/index.html',
+        }],
       }),
       entry(2, 'plan.updated', {
         ...base,
@@ -54,6 +60,7 @@ describe('history hydrator', () => {
     expect(hydrated.items[0]).toMatchObject({
       type: 'user_turn',
       skills: [{ id: 'story', name: '演示叙事' }],
+      components: [{ id: 'feature-card', name: '能力卡片', kind: 'component' }],
     });
     expect(hydrated.items.find((item) => item.type === 'question')).toMatchObject({ displayText: '科技' });
     expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'done', pendingQuestion: null });

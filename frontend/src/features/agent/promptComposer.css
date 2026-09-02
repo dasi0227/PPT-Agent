@@ -14,7 +14,8 @@
   opacity: 0.5;
 }
 
-.composer-prompt-fragment {
+.composer-prompt-fragment,
+.composer-component-fragment {
   background: rgb(47 103 246 / 7%);
   color: #2f67f6;
   box-decoration-break: clone;

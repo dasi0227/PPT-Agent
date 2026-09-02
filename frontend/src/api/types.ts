@@ -124,6 +124,7 @@ export interface Run {
   events_url: string;
   model: string | null;
   skills?: Skill[];
+  components?: PublicLoadedResource[];
   pause_reason?: string;
   paused_at?: number;
 }
@@ -143,6 +144,7 @@ export interface CreateRunRequest {
   mode: RunMode;
   instruction: string;
   skill_ids?: string[];
+  component_names?: string[];
   options?: { language?: RunLanguage; range?: SlideRange };
 }
 
@@ -533,6 +535,7 @@ export type SSEEvent =
       mode: RunMode;
       user_input: string;
       skills?: Skill[];
+      resources?: PublicLoadedResource[];
     }>
   | SSEEventBase<'run.progress', PublicEventBase & {
       stage: RunProgressStage;

@@ -319,7 +319,9 @@ export const CommandComposer: React.FC = () => {
   ]);
 
   const submit = async () => {
-    const raw = (editorRef.current?.getPlainText() ?? text).trim();
+    const editor = editorRef.current;
+    const raw = (editor?.getPlainText() ?? text).trim();
+    const componentNames = editor?.getComponentNames() ?? [];
     if (disabled || commitActive || polishing || !activeProjectId || !raw) return;
     setSubmitError('');
     const projectId = activeProjectId;
@@ -355,6 +357,7 @@ export const CommandComposer: React.FC = () => {
       mode: composer.mode,
       instruction: raw,
       ...(composer.selectedSkillIds.length > 0 ? { skill_ids: composer.selectedSkillIds } : {}),
+      ...(componentNames.length > 0 ? { component_names: componentNames } : {}),
     };
     request = applyShortcut(raw, request);
     if (request.scope.level === 'slide' && !request.scope.slide_id) {

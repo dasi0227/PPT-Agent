@@ -39,6 +39,7 @@ export interface UserTurnItem extends BaseTimelineItem {
   scope?: { artifact: string; level: string; slide_id?: string };
   mode?: string;
   skills?: Skill[];
+  components?: PublicLoadedResource[];
   deliveryStatus?: 'sending' | 'accepted' | 'rejected';
   clientMessageId?: string;
   rejectionCode?: string;
