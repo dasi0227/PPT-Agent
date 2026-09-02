@@ -135,8 +135,6 @@ export function ThemeRepositoryPage() {
     `${theme.name} ${theme.description} ${theme.tags.flatMap((tag) => [tag, themeTagLabels[tag]]).join(' ')}`
       .toLowerCase().includes(query.toLowerCase())), [filter, query, themes]);
   const selected = visible.find((theme) => theme.id === selectedId) ?? visible[0];
-  const colors = selected ? themePalette(selected) : [];
-  const typography = selected ? themeTypography(selected) : null;
   const selectedIsCurrent = Boolean(selected && currentThemeId === selected.id);
 
   const applySelectedTheme = async () => {
@@ -205,27 +203,13 @@ export function ThemeRepositoryPage() {
                   );
                 })}
             </RepositoryCatalog>
-            {selected && typography && (
+            {selected && (
               <RepositoryDetail
                 label="主题详情"
                 title={selected.name}
                 description={selected.description}
                 openUrl={selected.open_url}
-                properties={(
-                  <div className="scrollbar-none flex min-w-0 flex-nowrap items-center gap-4 overflow-x-auto pb-0.5" aria-label="主题属性">
-                    <RepositoryTagList tags={selected.tags.map((tag) => themeTagLabels[tag])} />
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <span className="text-[11px] font-semibold text-text-400">色板</span>
-                      <span className="flex gap-1" aria-label="主题色板">
-                        {colors.map((color, index) => <i key={`${color}-${index}`} className="h-4 w-4 rounded-[4px] border border-black/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]" style={{ background: color }} title={color} />)}
-                      </span>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <span className="shrink-0 text-[11px] font-semibold text-text-400">字体</span>
-                      <span className="text-xs font-semibold text-text-900" style={{ fontFamily: typography.displayStack }}>{typography.label}</span>
-                    </div>
-                  </div>
-                )}
+                properties={<RepositoryTagList tags={selected.tags.map((tag) => themeTagLabels[tag])} />}
                 actions={(
                   <div className="flex items-center gap-2">
                     <SegmentedControl value={mode} options={themeShowcaseModes} onChange={setMode} label="预览页面" />
