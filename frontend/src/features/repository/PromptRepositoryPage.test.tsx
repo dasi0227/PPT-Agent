@@ -37,7 +37,6 @@ describe('PromptRepositoryPage', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     usePromptStore.setState({
       prompts: [first],
-      recentIds: [],
       loading: false,
       loaded: true,
       error: '',

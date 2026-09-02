@@ -81,7 +81,6 @@ describe('PromptComposerEditor', () => {
     localStorage.clear();
     usePromptStore.setState({
       prompts: [prompt],
-      recentIds: [],
       loading: false,
       loaded: true,
       error: '',
@@ -113,7 +112,6 @@ describe('PromptComposerEditor', () => {
     expect(fragment).toHaveClass('composer-prompt-fragment');
     expect(fragment).not.toHaveAttribute('contenteditable');
     expect(editor.textContent).toBe('生成高管摘要 ');
-    expect(usePromptStore.getState().recentIds[0]).toBe('p1');
   });
 
   it('does not trigger after punctuation and closes on Escape', async () => {
@@ -185,6 +183,49 @@ describe('PromptComposerEditor', () => {
     expect(editorRef.current?.getPlainText()).toBe('Page 2 · 融资历程 ');
     expect(editorRef.current?.getSubmitText()).toBe('Page 2 · 融资历程⟨sli_b⟩ ');
     expect(editorRef.current?.getMentionedSlideIds()).toEqual(['sli_b']);
+  });
+
+  it('opens page candidates when @ is the first character in an empty editor', async () => {
+    render(<Harness initial="" pages={[page]} />);
+    const editor = screen.getByRole('textbox');
+    editor.focus();
+    editor.append(document.createTextNode('@'));
+    placeCaretAtEnd(editor);
+    fireEvent.input(editor);
+
+    expect(await screen.findByRole('option', { name: /Page 2.*融资历程/ })).toBeInTheDocument();
+  });
+
+  it('preserves a leading newline and opens page candidates after it', async () => {
+    const editorRef = createRef<PromptComposerEditorHandle>();
+    render(<Harness initial="" editorRef={editorRef} pages={[page]} />);
+    const editor = screen.getByRole('textbox');
+    editor.focus();
+    editor.append(document.createTextNode('\n@'));
+    placeCaretAtEnd(editor);
+    fireEvent.input(editor);
+
+    expect(editorRef.current?.getPlainText()).toBe('\n@');
+    expect(await screen.findByRole('option', { name: /Page 2.*融资历程/ })).toBeInTheDocument();
+  });
+
+  it('opens an empty configuration menu for @, #, $, and ¥', async () => {
+    usePromptStore.setState({ prompts: [], loaded: true, version: 2 });
+    useComponentStore.setState({ components: [], loaded: true, version: 2 });
+
+    for (const [trigger, title] of [['@', '页面'], ['#', '组件'], ['$', '提示词'], ['¥', '提示词']]) {
+      const view = render(<Harness initial={trigger} pages={[]} />);
+      const editor = screen.getByRole('textbox');
+      editor.focus();
+      placeCaretAtEnd(editor);
+
+      const menu = await screen.findByRole('listbox');
+      expect(menu).toHaveClass('h-[230px]', 'overflow-hidden');
+      expect(menu.lastElementChild).toHaveClass('flex-1', 'overflow-y-auto', 'scrollbar-none');
+      expect(await screen.findByText(title)).toBeInTheDocument();
+      expect(await screen.findByText('暂无配置')).toBeInTheDocument();
+      view.unmount();
+    }
   });
 
   it('refreshes an unsent page fragment after reorder or rename and marks deletion invalid', async () => {

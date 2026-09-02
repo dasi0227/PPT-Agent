@@ -1,9 +1,13 @@
 .composer-prompt-editor {
+  position: relative;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .composer-prompt-editor[data-empty='true']::before {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
   color: #95a0ae;
   content: attr(data-placeholder);
   pointer-events: none;

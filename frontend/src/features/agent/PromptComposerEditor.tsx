@@ -66,7 +66,8 @@ function nodePlainText(node: Node): string {
 }
 
 function serializeComposerText(root: HTMLElement): string {
-  return nodePlainText(root).replace(/\n$/, '');
+  if (root.childNodes.length === 1 && root.firstChild instanceof HTMLBRElement) return '';
+  return nodePlainText(root);
 }
 
 function nodeSubmitText(node: Node): string {
@@ -85,15 +86,13 @@ function nodeSubmitText(node: Node): string {
 }
 
 function serializeSubmitText(root: HTMLElement): string {
-  return nodeSubmitText(root).replace(/\n$/, '');
+  if (root.childNodes.length === 1 && root.firstChild instanceof HTMLBRElement) return '';
+  return nodeSubmitText(root);
 }
 
 function setPlainTextContent(root: HTMLElement, value: string) {
   root.replaceChildren();
-  value.split('\n').forEach((line, index) => {
-    if (index > 0) root.append(document.createElement('br'));
-    if (line) root.append(document.createTextNode(line));
-  });
+  if (value) root.append(document.createTextNode(value));
 }
 
 function pointAtOffset(root: HTMLElement, target: number): { node: Node; offset: number } {
@@ -148,22 +147,13 @@ function insertPlainText(root: HTMLElement, value: string) {
   if (!selection?.rangeCount || !root.contains(selection.anchorNode)) return;
   const range = selection.getRangeAt(0);
   range.deleteContents();
-  const fragment = document.createDocumentFragment();
-  const nodes: Node[] = [];
-  value.split('\n').forEach((line, index) => {
-    if (index > 0) nodes.push(document.createElement('br'));
-    if (line) nodes.push(document.createTextNode(line));
-  });
-  nodes.forEach((node) => fragment.append(node));
-  const last = nodes[nodes.length - 1];
-  range.insertNode(fragment);
-  if (last) {
-    const next = document.createRange();
-    next.setStartAfter(last);
-    next.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(next);
-  }
+  const text = document.createTextNode(value);
+  range.insertNode(text);
+  const next = document.createRange();
+  next.setStart(text, value.length);
+  next.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(next);
 }
 
 function pageStatus(page: PageMentionCandidate) {
@@ -196,10 +186,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const [trigger, setTrigger] = useState<ComposerTrigger | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const prompts = usePromptStore((state) => state.prompts);
-    const recentIds = usePromptStore((state) => state.recentIds);
     const version = usePromptStore((state) => state.version);
     const loadPrompts = usePromptStore((state) => state.load);
-    const recordRecent = usePromptStore((state) => state.recordRecent);
     const components = useComponentStore((state) => state.components);
     const componentVersion = useComponentStore((state) => state.version);
     const loadComponents = useComponentStore((state) => state.load);
@@ -207,7 +195,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const pageSignature = pages.map((page) => (
       `${page.slideId}:${page.ordinal}:${page.title}:${page.specState}:${page.htmlState}`
     )).join('|');
-    const promptCandidates = trigger?.kind === 'prompt' ? matchPrompts(prompts, trigger.query, recentIds) : [];
+    const promptCandidates = trigger?.kind === 'prompt' ? matchPrompts(prompts, trigger.query) : [];
     const componentCandidates = trigger?.kind === 'component' ? matchComponents(components, trigger.query) : [];
     const pageCandidates = trigger?.kind === 'page' ? matchPages(pages, trigger.query) : [];
     const candidateCount = trigger?.kind === 'component'
@@ -215,6 +203,11 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       : trigger?.kind === 'page'
         ? pageCandidates.length
         : promptCandidates.length;
+    const hasConfiguredCandidates = trigger?.kind === 'component'
+      ? components.some((component) => !component.disabled)
+      : trigger?.kind === 'page'
+        ? pages.length > 0
+        : prompts.some((prompt) => !prompt.disabled);
 
     const updateTrigger = useCallback(() => {
       const editor = editorRef.current;
@@ -230,7 +223,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       const text = serializeComposerText(editor);
       const promptTrigger = findPromptTrigger(text, offset);
       const componentTrigger = findComponentTrigger(text, offset);
-      const pageTrigger = pages.length > 0 ? findPageTrigger(text, offset) : null;
+      const pageTrigger = findPageTrigger(text, offset);
       const next: ComposerTrigger | null = promptTrigger
         ? { ...promptTrigger, kind: 'prompt' }
         : componentTrigger
@@ -245,7 +238,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       }
       setActiveIndex(0);
       setTrigger(next);
-    }, [disabled, pages.length, readOnly]);
+    }, [disabled, readOnly]);
 
     useImperativeHandle(forwardedRef, () => ({
       getPlainText: () => editorRef.current ? serializeComposerText(editorRef.current) : '',
@@ -378,7 +371,6 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       next.collapse(true);
       selection?.removeAllRanges();
       selection?.addRange(next);
-      recordRecent(prompt.id);
       dismissedRef.current = '';
       setTrigger(null);
       syncValue();
@@ -496,26 +488,29 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         {trigger && (
           <div
             ref={menuRef}
-            className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 max-h-[280px] overflow-y-auto rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
+            className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="listbox"
             aria-label={trigger.kind === 'component' ? '组件候选' : trigger.kind === 'page' ? '页面候选' : '提示词候选'}
           >
-            <div className="px-2 pb-1 pt-1.5 text-[11px] font-semibold text-text-400">
+            <div className="shrink-0 px-2 pb-1 pt-1.5 text-[11px] font-semibold text-text-400">
               {trigger.kind === 'component'
-                ? (trigger.query ? '匹配组件' : '全部组件')
+                ? '组件'
                 : trigger.kind === 'page'
-                  ? (trigger.query ? '匹配页面' : '当前演示文稿')
-                  : (trigger.query ? '匹配提示词' : '最近使用')}
+                  ? '页面'
+                  : '提示词'}
             </div>
-            {candidateCount === 0 ? (
-              <div className="grid min-h-14 place-items-center px-3 text-xs text-text-400">
-                {trigger.kind === 'component'
-                  ? (trigger.query ? '没有匹配的组件' : '暂无可用组件')
-                  : trigger.kind === 'page'
-                    ? (trigger.query ? '没有匹配的页面' : '暂无可用页面')
-                    : (trigger.query ? '没有匹配的提示词' : '暂无最近使用')}
-              </div>
-            ) : trigger.kind === 'component' ? componentCandidates.map((component, index) => (
+            <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto">
+              {candidateCount === 0 ? (
+                <div className="grid h-full place-items-center px-3 text-xs text-text-400">
+                  {!hasConfiguredCandidates
+                    ? '暂无配置'
+                    : trigger.kind === 'component'
+                      ? '没有匹配的组件'
+                      : trigger.kind === 'page'
+                        ? '没有匹配的页面'
+                        : '没有匹配的提示词'}
+                </div>
+              ) : trigger.kind === 'component' ? componentCandidates.map((component, index) => (
               <button
                 key={component.id}
                 type="button"
@@ -615,7 +610,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-text-600">{prompt.desc}</span>
                 </span>
               </button>
-            ))}
+              ))}
+            </div>
           </div>
         )}
         <div

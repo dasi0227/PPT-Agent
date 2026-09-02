@@ -2,33 +2,8 @@ import { create } from 'zustand';
 import { promptsApi } from '../api/prompts';
 import type { Prompt, PromptWriteRequest } from '../api/types';
 
-export const PROMPT_RECENT_STORAGE_KEY = 'dasi.prompt-recent.v1';
-const MAX_RECENT_PROMPTS = 20;
-
-function readRecentIds(): string[] {
-  if (typeof localStorage === 'undefined') return [];
-  try {
-    const value = JSON.parse(localStorage.getItem(PROMPT_RECENT_STORAGE_KEY) ?? '[]');
-    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string').slice(0, MAX_RECENT_PROMPTS) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeRecentIds(ids: string[]) {
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(PROMPT_RECENT_STORAGE_KEY, JSON.stringify(ids));
-  }
-}
-
-function reconcileRecent(ids: string[], prompts: Prompt[]): string[] {
-  const valid = new Set(prompts.map((prompt) => prompt.id));
-  return ids.filter((id, index) => valid.has(id) && ids.indexOf(id) === index).slice(0, MAX_RECENT_PROMPTS);
-}
-
 interface PromptState {
   prompts: Prompt[];
-  recentIds: string[];
   loading: boolean;
   loaded: boolean;
   error: string;
@@ -38,14 +13,12 @@ interface PromptState {
   update: (id: string, request: PromptWriteRequest) => Promise<Prompt>;
   setDisabled: (id: string, disabled: boolean) => Promise<Prompt>;
   delete: (id: string) => Promise<void>;
-  recordRecent: (id: string) => void;
 }
 
 let loadPromise: Promise<Prompt[]> | null = null;
 
 export const usePromptStore = create<PromptState>((set, get) => ({
   prompts: [],
-  recentIds: readRecentIds(),
   loading: false,
   loaded: false,
   error: '',
@@ -56,11 +29,8 @@ export const usePromptStore = create<PromptState>((set, get) => ({
     set({ loading: true, error: '' });
     loadPromise = promptsApi.list()
       .then((response) => {
-        const recentIds = reconcileRecent(get().recentIds, response.prompts);
-        writeRecentIds(recentIds);
         set((state) => ({
           prompts: response.prompts,
-          recentIds,
           loading: false,
           loaded: true,
           error: '',
@@ -108,19 +78,9 @@ export const usePromptStore = create<PromptState>((set, get) => ({
   },
   delete: async (id) => {
     await promptsApi.delete(id);
-    const recentIds = get().recentIds.filter((value) => value !== id);
-    writeRecentIds(recentIds);
     set((state) => ({
       prompts: state.prompts.filter((prompt) => prompt.id !== id),
-      recentIds,
       version: state.version + 1,
     }));
   },
-  recordRecent: (id) => {
-    const recentIds = [id, ...get().recentIds.filter((value) => value !== id)].slice(0, MAX_RECENT_PROMPTS);
-    writeRecentIds(recentIds);
-    set({ recentIds });
-  },
 }));
-
-export const promptStoreInternals = { readRecentIds, reconcileRecent };

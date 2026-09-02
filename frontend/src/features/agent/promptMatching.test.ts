@@ -28,19 +28,19 @@ describe('prompt matching', () => {
   });
 
   it('matches non-prefix content and preserves field priority', () => {
-    expect(matchPrompts(prompts, '摘要', []).map((prompt) => prompt.id)).toEqual(['name', 'value']);
-    expect(matchPrompts(prompts, 'SUM', []).map((prompt) => prompt.id)).toEqual(['desc']);
-    expect(matchPrompts(prompts, '交付', []).map((prompt) => prompt.id)).toEqual(['value', 'tag']);
+    expect(matchPrompts(prompts, '摘要').map((prompt) => prompt.id)).toEqual(['name', 'value']);
+    expect(matchPrompts(prompts, 'SUM').map((prompt) => prompt.id)).toEqual(['desc']);
+    expect(matchPrompts(prompts, '交付').map((prompt) => prompt.id)).toEqual(['value', 'tag']);
   });
 
-  it('uses at most five valid recent prompts for an empty query', () => {
-    expect(matchPrompts(prompts, '', ['desc', 'missing', 'name']).map((prompt) => prompt.id)).toEqual(['desc', 'name']);
+  it('shows all enabled prompts in stable order for an empty query', () => {
+    expect(matchPrompts(prompts, '').map((prompt) => prompt.id)).toEqual(['value', 'tag', 'desc', 'name']);
   });
 
-  it('excludes disabled prompts from search and recent candidates', () => {
+  it('excludes disabled prompts from search and empty-query candidates', () => {
     const disabled = prompts.map((prompt) => prompt.id === 'desc' ? { ...prompt, disabled: true } : prompt);
-    expect(matchPrompts(disabled, 'summary', []).map((prompt) => prompt.id)).toEqual([]);
-    expect(matchPrompts(disabled, '', ['desc', 'name']).map((prompt) => prompt.id)).toEqual(['name']);
+    expect(matchPrompts(disabled, 'summary').map((prompt) => prompt.id)).toEqual([]);
+    expect(matchPrompts(disabled, '').map((prompt) => prompt.id)).toEqual(['value', 'tag', 'name']);
   });
 });
 

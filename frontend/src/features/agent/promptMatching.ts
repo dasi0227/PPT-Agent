@@ -72,19 +72,13 @@ function includes(value: string, query: string): boolean {
   return value.toLocaleLowerCase().includes(query.toLocaleLowerCase());
 }
 
-export function matchPrompts(prompts: Prompt[], query: string, recentIds: string[]): Prompt[] {
+export function matchPrompts(prompts: Prompt[], query: string): Prompt[] {
   const enabledPrompts = prompts.filter((prompt) => !prompt.disabled);
-  if (!query) {
-    const byId = new Map(enabledPrompts.map((prompt) => [prompt.id, prompt]));
-    return recentIds.flatMap((id) => {
-      const prompt = byId.get(id);
-      return prompt ? [prompt] : [];
-    }).slice(0, 5);
-  }
-  const recentOrder = new Map(recentIds.map((id, index) => [id, index]));
   return enabledPrompts
     .map((prompt) => {
-      const rank = includes(prompt.name, query)
+      const rank = !query
+        ? 0
+        : includes(prompt.name, query)
         ? 0
         : prompt.tags.some((tag) => includes(tag, query) || includes(promptTagLabels[tag], query))
           ? 1
@@ -98,8 +92,6 @@ export function matchPrompts(prompts: Prompt[], query: string, recentIds: string
     .filter(({ rank }) => rank < 4)
     .sort((left, right) => (
       left.rank - right.rank
-      || (recentOrder.get(left.prompt.id) ?? Number.MAX_SAFE_INTEGER)
-        - (recentOrder.get(right.prompt.id) ?? Number.MAX_SAFE_INTEGER)
       || right.prompt.updated_at - left.prompt.updated_at
       || left.prompt.name.localeCompare(right.prompt.name, 'zh-CN')
     ))

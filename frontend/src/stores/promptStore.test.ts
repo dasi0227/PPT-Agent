@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Prompt } from '../api/types';
-import { PROMPT_RECENT_STORAGE_KEY, usePromptStore } from './promptStore';
+import { usePromptStore } from './promptStore';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -29,7 +29,6 @@ describe('promptStore', () => {
     localStorage.clear();
     usePromptStore.setState({
       prompts: [],
-      recentIds: [],
       loading: false,
       loaded: false,
       error: '',
@@ -37,20 +36,16 @@ describe('promptStore', () => {
     });
   });
 
-  it('loads prompts and removes stale recent IDs', async () => {
-    localStorage.setItem(PROMPT_RECENT_STORAGE_KEY, JSON.stringify(['p2', 'missing', 'p1']));
-    usePromptStore.setState({ recentIds: ['p2', 'missing', 'p1'] });
+  it('loads prompts into the shared cache', async () => {
     mocks.list.mockResolvedValue({ prompts: [prompt('p1'), prompt('p2')] });
 
     await usePromptStore.getState().load();
 
     expect(usePromptStore.getState()).toMatchObject({
       prompts: [prompt('p1'), prompt('p2')],
-      recentIds: ['p2', 'p1'],
       loaded: true,
       loading: false,
     });
-    expect(JSON.parse(localStorage.getItem(PROMPT_RECENT_STORAGE_KEY) ?? '[]')).toEqual(['p2', 'p1']);
   });
 
   it('updates cache only after CRUD requests succeed', async () => {
@@ -71,13 +66,4 @@ describe('promptStore', () => {
     expect(usePromptStore.getState().prompts).toEqual([]);
   });
 
-  it('deduplicates and caps recent usage', () => {
-    for (let index = 0; index < 24; index += 1) {
-      usePromptStore.getState().recordRecent(`p${index}`);
-    }
-    usePromptStore.getState().recordRecent('p20');
-    expect(usePromptStore.getState().recentIds).toHaveLength(20);
-    expect(usePromptStore.getState().recentIds[0]).toBe('p20');
-    expect(usePromptStore.getState().recentIds.filter((id) => id === 'p20')).toHaveLength(1);
-  });
 });
