@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>提示词正文卡片 · 居中展示预览</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --canvas: #f1f4f8;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --success: #277a66;
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { width: 100%; min-width: 320px; height: 100%; margin: 0; }
+
+    body {
+      overflow: hidden;
+      background: var(--workspace);
+      color: var(--text);
+      font-family: var(--font);
+    }
+
+    button { font: inherit; }
+
+    button:focus-visible { outline: 2px solid rgba(47, 103, 246, .65); outline-offset: 2px; }
+
+    .app {
+      display: grid;
+      height: 100dvh;
+      grid-template-columns: 238px 396px minmax(0, 1fr);
+      grid-template-rows: 74px minmax(0, 1fr);
+    }
+
+    .masthead {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 32px;
+    }
+
+    .masthead h1 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+    .search {
+      width: 244px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 11px 14px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .nav {
+      border-right: 1px solid var(--border);
+      background: #f7f9fc;
+      padding: 18px 12px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      height: 46px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      padding: 0 12px;
+      color: #697788;
+      text-align: left;
+      font-size: 14px;
+      font-weight: 620;
+    }
+
+    .nav-item.active { background: var(--accent-soft); color: var(--accent); }
+    .nav-icon { width: 20px; text-align: center; font-size: 18px; }
+
+    .catalog {
+      min-height: 0;
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .filters {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      height: 60px;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+      padding: 0 14px;
+    }
+
+    .filter {
+      flex: 0 0 auto;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      padding: 7px 9px;
+      color: #657384;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .filter.active { background: var(--surface); box-shadow: inset 0 0 0 1px var(--border), 0 1px 3px rgba(51, 65, 85, .10); color: var(--accent); }
+
+    .prompt-list { padding: 10px; }
+    .prompt-row {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) 18px;
+      gap: 10px;
+      width: 100%;
+      min-height: 76px;
+      align-items: center;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      background: transparent;
+      padding: 10px;
+      color: inherit;
+      text-align: left;
+    }
+
+    .prompt-row:hover, .prompt-row.active { border-color: #aec7ff; background: var(--accent-soft); }
+    .prompt-symbol { display: grid; width: 34px; height: 34px; place-items: center; justify-self: center; color: var(--accent); font-size: 20px; }
+    .prompt-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 720; }
+    .prompt-desc { display: -webkit-box; margin-top: 5px; overflow: hidden; color: var(--text-secondary); font-size: 11px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .chevron { color: #9aa7b6; font-size: 20px; }
+
+    .detail {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: 158px minmax(0, 1fr);
+      background: var(--surface);
+    }
+
+    .detail-header { border-bottom: 1px solid var(--border); padding: 29px 34px; }
+    .detail-line { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .detail-header h2 { margin: 0; font-size: 18px; letter-spacing: -.025em; }
+    .state { color: var(--success); font-size: 13px; font-weight: 700; }
+    .detail-header p { margin: 10px 0 0; color: var(--text-secondary); font-size: 13px; }
+    .tag { display: inline-block; margin-top: 15px; border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; color: #657384; font-size: 11px; font-weight: 700; }
+
+    .value-stage {
+      position: relative;
+      display: grid;
+      min-height: 0;
+      place-items: center;
+      overflow: auto;
+      background:
+        radial-gradient(circle at 50% 47%, rgba(47, 103, 246, .075), transparent 29rem),
+        var(--canvas);
+      padding: clamp(28px, 6vw, 92px);
+    }
+
+    .value-card {
+      position: relative;
+      width: fit-content;
+      min-width: min(100%, 360px);
+      max-width: min(100%, 880px);
+      border: 1px solid #d5dfe9;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .96);
+      box-shadow: 0 18px 42px rgba(51, 65, 85, .11), 0 2px 5px rgba(51, 65, 85, .035);
+      padding: 39px 43px 37px;
+      transition: max-width .28s ease, padding .28s ease, transform .28s ease;
+    }
+
+    .value-card::before {
+      position: absolute;
+      top: 19px;
+      left: 23px;
+      width: 26px;
+      height: 3px;
+      border-radius: 99px;
+      background: var(--accent);
+      content: "";
+    }
+
+    .value-card p {
+      margin: 0;
+      color: #243142;
+      font-size: clamp(18px, 1.32vw, 22px);
+      font-weight: 680;
+      line-height: 1.72;
+      letter-spacing: .01em;
+      white-space: pre-wrap;
+    }
+
+    .stage-note {
+      position: absolute;
+      bottom: 20px;
+      left: 24px;
+      color: #94a0ae;
+      font-size: 11px;
+    }
+
+    .preview-switcher {
+      position: absolute;
+      right: 24px;
+      bottom: 18px;
+      display: flex;
+      gap: 7px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .9);
+      padding: 5px;
+      box-shadow: 0 5px 15px rgba(51, 65, 85, .08);
+    }
+
+    .sample {
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      padding: 7px 9px;
+      color: #667485;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .sample.active { background: var(--accent-soft); color: var(--accent); }
+
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 68px 292px minmax(0, 1fr); }
+      .nav-item span:last-child { display: none; }
+      .nav-item { justify-content: center; padding: 0; }
+      .masthead { padding: 0 18px; }
+      .search { width: 180px; }
+      .detail-header { padding: 25px 27px; }
+      .value-card { padding: 35px 34px 33px; }
+    }
+
+    @media (max-width: 680px) {
+      body { overflow: auto; }
+      .app { min-height: 100dvh; height: auto; grid-template-columns: 1fr; grid-template-rows: 64px auto auto minmax(500px, 1fr); }
+      .nav { display: flex; overflow: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px; }
+      .nav-item { flex: 0 0 98px; justify-content: center; }
+      .nav-item span:last-child { display: inline; }
+      .catalog { border-right: 0; border-bottom: 1px solid var(--border); }
+      .prompt-list { display: flex; overflow: auto; }
+      .prompt-row { flex: 0 0 220px; }
+      .value-stage { min-height: 500px; padding: 54px 20px 80px; }
+      .value-card { min-width: 0; width: 100%; padding: 34px 30px 31px; }
+      .stage-note { display: none; }
+      .preview-switcher { right: 14px; bottom: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="masthead">
+      <h1>提示词</h1>
+      <div class="search">⌕&nbsp;&nbsp;搜索提示词</div>
+    </header>
+
+    <nav class="nav" aria-label="仓库目录">
+      <button class="nav-item" type="button"><span class="nav-icon">◌</span><span>主题</span></button>
+      <button class="nav-item" type="button"><span class="nav-icon">⌘</span><span>组件</span></button>
+      <button class="nav-item" type="button"><span class="nav-icon">♧</span><span>技能</span></button>
+      <button class="nav-item active" type="button"><span class="nav-icon">▤</span><span>提示词</span></button>
+    </nav>
+
+    <aside class="catalog" aria-label="提示词列表">
+      <div class="filters"><button class="filter active">全部</button><button class="filter">身份</button><button class="filter">交付</button><button class="filter">约束</button><button class="filter">审查</button></div>
+      <div class="prompt-list">
+        <button class="prompt-row active" type="button"><span class="prompt-symbol">▤</span><span><span class="prompt-name">叙事大纲 / Storyline Outline</span><span class="prompt-desc">梳理整份演示的叙事主线与逐页表达任务。</span></span><span class="chevron">›</span></button>
+        <button class="prompt-row" type="button"><span class="prompt-symbol">▤</span><span><span class="prompt-name">视觉审查 / Visual Review</span><span class="prompt-desc">检查并修复页面的视觉层级与排版问题。</span></span><span class="chevron">›</span></button>
+        <button class="prompt-row" type="button"><span class="prompt-symbol">▤</span><span><span class="prompt-name">深度分析 / Deep Analysis</span><span class="prompt-desc">分析关键矛盾、因果关系、假设与风险。</span></span><span class="chevron">›</span></button>
+      </div>
+    </aside>
+
+    <section class="detail" aria-label="提示词详情">
+      <header class="detail-header">
+        <div class="detail-line"><h2>叙事大纲 / Storyline Outline</h2><span class="state">已启用</span></div>
+        <p>梳理整份演示的叙事主线与逐页表达任务。</p>
+        <span class="tag">交付</span>
+      </header>
+      <div class="value-stage">
+        <article class="value-card" id="value-card">
+          <p id="value-text">请先梳理整份演示的叙事主线，明确开场、论证、转折与结论，并给出逐页标题和每页唯一表达任务。</p>
+        </article>
+        <span class="stage-note">卡片宽度由内容自然撑开，超过阅读阈值后自动换行。</span>
+        <div class="preview-switcher" aria-label="内容长度预览">
+          <button class="sample" type="button" data-sample="short">短句</button>
+          <button class="sample active" type="button" data-sample="medium">当前</button>
+          <button class="sample" type="button" data-sample="long">多句</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script>
+    const samples = {
+      short: "用一句话概括这一页的核心结论。",
+      medium: "请先梳理整份演示的叙事主线，明确开场、论证、转折与结论，并给出逐页标题和每页唯一表达任务。",
+      long: "先提炼演示的核心命题，再把所有材料组织为一条可被听众复述的叙事线。\n\n每一页只承担一个清晰的表达任务：让开场建立问题，让中段完成论证，让转折带来新的判断，让结论收束为可执行的下一步。"
+    };
+    const text = document.querySelector('#value-text');
+    const buttons = document.querySelectorAll('.sample');
+    buttons.forEach((button) => button.addEventListener('click', () => {
+      text.textContent = samples[button.dataset.sample];
+      buttons.forEach((item) => item.classList.toggle('active', item === button));
+    }));
+  </script>
+</body>
+</html>

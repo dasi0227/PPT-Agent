@@ -458,13 +458,16 @@ export function PromptRepositoryPage() {
                     </button>
                   </div>
                 )}
-                contentClassName="px-5 py-7 md:px-8 md:py-9"
+                contentClassName="flex items-center justify-center p-5 md:p-8"
                 deleteNoun="提示词"
                 onEdit={beginEdit}
                 onDelete={() => remove(selected)}
               >
-                <article className="mx-auto min-h-[260px] w-full max-w-[920px] rounded-lg border border-border bg-surface px-7 py-7 shadow-[0_12px_34px_rgba(51,65,85,0.08)] md:px-8">
-                  <p className="m-0 whitespace-pre-wrap break-words text-sm leading-7 text-[#354150]">{selected.value}</p>
+                <article className="relative w-fit max-w-full rounded-xl border border-border bg-surface px-8 pb-8 pt-10 shadow-[0_18px_42px_rgba(51,65,85,0.11)] md:px-11 md:pb-10 md:pt-12">
+                  <span aria-hidden="true" className="absolute left-6 top-5 h-[3px] w-7 rounded-full bg-accent md:left-7 md:top-6" />
+                  <p className="m-0 whitespace-pre-wrap break-words text-lg font-semibold leading-8 tracking-[0.01em] text-[#243142] md:text-xl md:leading-9">
+                    {selected.value}
+                  </p>
                 </article>
               </RepositoryDetail>
             )}

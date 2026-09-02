@@ -53,7 +53,9 @@ describe('PromptRepositoryPage', () => {
     expect(screen.getAllByText('审查')).toHaveLength(2);
     expect(screen.queryByRole('link', { name: '查看文件' })).not.toBeInTheDocument();
     expect(screen.getAllByText(first.desc)).toHaveLength(2);
-    expect(screen.getByText(first.value)).toBeInTheDocument();
+    const promptValue = screen.getByText(first.value);
+    expect(promptValue).toHaveClass('text-lg', 'font-semibold');
+    expect(promptValue.closest('article')).toHaveClass('w-fit');
     expect(screen.getByRole('button', { name: `编辑${first.name}` }).nextElementSibling)
       .toBe(screen.getByRole('button', { name: `删除${first.name}` }));
   });
