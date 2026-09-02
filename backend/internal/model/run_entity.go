@@ -28,14 +28,15 @@ type ModelSelection struct {
 
 // CreateRunParams 是发起一次 Run 的入参（来自 API 层，已解析）。
 type CreateRunParams struct {
-	ClientRequestID string
-	Model           string
-	SkillIDs        []string
-	ComponentNames  []string
-	ThreadID        string
-	ProjectID       string
-	PageIndex       *int
-	Instruction     string
+	ClientRequestID   string
+	Model             string
+	SkillIDs          []string
+	ComponentNames    []string
+	MentionedSlideIDs []string
+	ThreadID          string
+	ProjectID         string
+	PageIndex         *int
+	Instruction       string
 	// Spec/PPT runner implementation options.
 	Brief      string
 	SlideCount int

@@ -743,6 +743,45 @@ func TestCognitiveAgentInjectsReferencedComponentHTMLWithTrustBoundary(t *testin
 	}
 }
 
+func TestCognitiveAgentInjectsMentionedPagePointersWithoutContent(t *testing.T) {
+	provider := &capturingProvider{}
+	pack := testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeDeck, false, "同步修改页面")
+	pack.Command.MentionedPages = []model.MentionedPage{{
+		Kind: "slide", SlideID: "sli_a", Ordinal: 3, Title: "融资历程",
+		SpecState: "ready", HTMLState: "spec_stale",
+	}}
+	_, err := (CognitiveAgent{Provider: provider}).Next(context.Background(), AgentRequest{
+		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := provider.request.Messages[1].Text()
+	start := strings.Index(user, `<mentioned_pages source="user_mention">`)
+	end := strings.Index(user, "</mentioned_pages>")
+	if start < 0 || end < start {
+		t.Fatalf("mentioned page block is missing:\n%s", user)
+	}
+	block := user[start : end+len("</mentioned_pages>")]
+	for _, expected := range []string{
+		`<mentioned_pages source="user_mention">`,
+		`"slide_id":"sli_a"`,
+		`"ordinal":3`,
+		`"spec_state":"ready"`,
+		`"html_state":"spec_stale"`,
+		"Read their spec/html on demand via read_ppt.",
+	} {
+		if !strings.Contains(block, expected) {
+			t.Fatalf("mentioned page context missing %q:\n%s", expected, block)
+		}
+	}
+	for _, forbidden := range []string{"key_message", "<html", "slide_spec"} {
+		if strings.Contains(block, forbidden) {
+			t.Fatalf("mentioned page pointer leaked content field %q:\n%s", forbidden, block)
+		}
+	}
+}
+
 func TestEveryApprovedExecuteTurnInjectsTheFullPlanContract(t *testing.T) {
 	pack := testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeSlide, false, "按批准计划执行")
 	for _, status := range []PlanStatus{PlanActive, PlanCompleted} {

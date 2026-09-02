@@ -26,29 +26,31 @@ func NewRunHandler(svc *service.RunService) *RunHandler {
 }
 
 type createRunBody struct {
-	ClientRequestID string           `json:"client_request_id"`
-	Model           string           `json:"model"`
-	Instruction     string           `json:"instruction"`
-	Scope           model.RunScope   `json:"scope"`
-	Mode            model.RunMode    `json:"mode"`
-	Options         model.RunOptions `json:"options"`
-	SkillIDs        []string         `json:"skill_ids"`
-	ComponentNames  []string         `json:"component_names"`
+	ClientRequestID   string           `json:"client_request_id"`
+	Model             string           `json:"model"`
+	Instruction       string           `json:"instruction"`
+	Scope             model.RunScope   `json:"scope"`
+	Mode              model.RunMode    `json:"mode"`
+	Options           model.RunOptions `json:"options"`
+	SkillIDs          []string         `json:"skill_ids"`
+	ComponentNames    []string         `json:"component_names"`
+	MentionedSlideIDs []string         `json:"mentioned_slide_ids"`
 }
 
 type runResponse struct {
-	ID          string                       `json:"id"`
-	ThreadID    string                       `json:"thread_id"`
-	ProjectID   string                       `json:"project_id"`
-	Status      string                       `json:"status"`
-	EventsURL   string                       `json:"events_url"`
-	Scope       model.RunScope               `json:"scope"`
-	Mode        model.RunMode                `json:"mode"`
-	Model       *string                      `json:"model"`
-	Skills      []model.PublicSkill          `json:"skills"`
-	Components  []model.PublicLoadedResource `json:"components,omitempty"`
-	PauseReason string                       `json:"pause_reason,omitempty"`
-	PausedAt    int64                        `json:"paused_at,omitempty"`
+	ID                       string                       `json:"id"`
+	ThreadID                 string                       `json:"thread_id"`
+	ProjectID                string                       `json:"project_id"`
+	Status                   string                       `json:"status"`
+	EventsURL                string                       `json:"events_url"`
+	Scope                    model.RunScope               `json:"scope"`
+	Mode                     model.RunMode                `json:"mode"`
+	Model                    *string                      `json:"model"`
+	Skills                   []model.PublicSkill          `json:"skills"`
+	Components               []model.PublicLoadedResource `json:"components,omitempty"`
+	DroppedMentionedSlideIDs []string                     `json:"dropped_mentioned_slide_ids,omitempty"`
+	PauseReason              string                       `json:"pause_reason,omitempty"`
+	PausedAt                 int64                        `json:"paused_at,omitempty"`
 }
 
 func toRunResponse(r model.Run) runResponse {
@@ -62,7 +64,8 @@ func toRunResponse(r model.Run) runResponse {
 		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
 		Scope: r.Command.Scope, Mode: r.Command.Mode,
 		Model: profileName, Skills: r.Command.PublicSkills(), Components: r.Command.PublicComponents(),
-		PauseReason: r.PauseReason, PausedAt: r.PausedAt,
+		DroppedMentionedSlideIDs: r.Command.DroppedMentionedSlideIDs,
+		PauseReason:              r.PauseReason, PausedAt: r.PausedAt,
 	}
 }
 
@@ -83,11 +86,12 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		return
 	}
 	params := model.CreateRunParams{
-		ClientRequestID: body.ClientRequestID,
-		Model:           body.Model,
-		SkillIDs:        body.SkillIDs,
-		ComponentNames:  body.ComponentNames,
-		Instruction:     body.Instruction,
+		ClientRequestID:   body.ClientRequestID,
+		Model:             body.Model,
+		SkillIDs:          body.SkillIDs,
+		ComponentNames:    body.ComponentNames,
+		MentionedSlideIDs: body.MentionedSlideIDs,
+		Instruction:       body.Instruction,
 		Command: model.RunCommand{
 			Scope: body.Scope, Mode: body.Mode,
 			Instruction: body.Instruction, Options: body.Options,

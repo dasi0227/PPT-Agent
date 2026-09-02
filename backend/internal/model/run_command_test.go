@@ -33,6 +33,36 @@ func TestRunCommandValidation(t *testing.T) {
 	}
 }
 
+func TestRunCommandValidationForMentionedPages(t *testing.T) {
+	valid := RunCommand{
+		Scope: RunScope{Artifact: ArtifactPPT, Level: ScopeDeck}, Mode: ModeExecute, Instruction: "sync",
+		MentionedPages: []MentionedPage{{
+			Kind: "slide", SlideID: "sli_a-1", Ordinal: 2, Title: "融资历程",
+			SpecState: "ready", HTMLState: "fresh",
+		}},
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid mentioned page rejected: %v", err)
+	}
+	cases := []RunCommand{
+		{Scope: RunScope{Artifact: ArtifactPPT, Level: ScopeSlide, SlideID: "sli_a"}, Mode: ModeExecute, Instruction: "x", MentionedPages: valid.MentionedPages},
+		{Scope: valid.Scope, Mode: valid.Mode, Instruction: "x", MentionedPages: []MentionedPage{{Kind: "section", SlideID: "sli_a"}}},
+		{Scope: valid.Scope, Mode: valid.Mode, Instruction: "x", MentionedPages: []MentionedPage{{Kind: "slide", SlideID: "current"}}},
+		{Scope: valid.Scope, Mode: valid.Mode, Instruction: "x", MentionedPages: []MentionedPage{{Kind: "slide", SlideID: "sli_a"}, {Kind: "slide", SlideID: "sli_a"}}},
+	}
+	tooMany := valid
+	tooMany.MentionedPages = make([]MentionedPage, MaxMentionedPages+1)
+	for i := range tooMany.MentionedPages {
+		tooMany.MentionedPages[i] = MentionedPage{Kind: "slide", SlideID: fmt.Sprintf("sli_%d", i)}
+	}
+	cases = append(cases, tooMany)
+	for i, command := range cases {
+		if err := command.Validate(); err == nil {
+			t.Errorf("case %d should fail", i)
+		}
+	}
+}
+
 func TestRunCommandValidationAcceptsPlanIntentAndOptions(t *testing.T) {
 	command := RunCommand{
 		Scope:       RunScope{Artifact: ArtifactSpec, Level: ScopeDeck},

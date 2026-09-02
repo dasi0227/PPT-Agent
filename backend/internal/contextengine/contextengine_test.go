@@ -175,6 +175,45 @@ func TestFourProfilesIsolationAndStableHash(t *testing.T) {
 	}
 }
 
+func TestMentionedPagesKeepSummarySegmentAndHTMLRefUnderTightBudget(t *testing.T) {
+	project, store := fixture(t)
+	command := spec(model.ArtifactPPT, model.ScopeDeck)
+	command.MentionedPages = []model.MentionedPage{{
+		Kind: "slide", SlideID: "sli_bbbbbb", Ordinal: 2, Title: "Two",
+		SpecState: "ready", HTMLState: "unknown",
+	}}
+	budget := DefaultBudget()
+	budget.InputLimit = 1
+	budget.SegmentCaps[SegmentRelated] = 1
+	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
+		RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: command, Budget: budget,
+	}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pack.RelatedSlides) != 1 || pack.RelatedSlides[0].ID != "sli_bbbbbb" {
+		t.Fatalf("mentioned summary was not retained: %#v", pack.RelatedSlides)
+	}
+	foundRequiredSegment := false
+	for _, segment := range pack.Manifest.Segments {
+		if segment.Kind == SegmentRelated && segment.Required && segment.Priority == 100 {
+			foundRequiredSegment = true
+		}
+	}
+	if !foundRequiredSegment {
+		t.Fatal("mentioned summary segment was not marked required")
+	}
+	foundRef := false
+	for _, ref := range pack.Manifest.Refs {
+		if ref.Kind == RefSlideHTML && ref.TargetID == "sli_bbbbbb" {
+			foundRef = true
+		}
+	}
+	if !foundRef {
+		t.Fatal("mentioned slide HTML ContextRef is unavailable")
+	}
+}
+
 func TestPPTContextLoadsCurrentThemeContract(t *testing.T) {
 	project, store := fixture(t)
 	loader := &fakeThemeLoader{themes: map[string]model.Theme{

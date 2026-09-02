@@ -188,6 +188,16 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, err
 		}
 	}
+	if len(p.MentionedSlideIDs) > 0 {
+		snapshot, snapshotErr := NewPPTMutationService(svc.store).Snapshot(ctx, project.ID)
+		if snapshotErr != nil {
+			return model.Run{}, snapshotErr
+		}
+		command.MentionedPages, command.DroppedMentionedSlideIDs, err = resolveMentionedPages(snapshot, p.MentionedSlideIDs)
+		if err != nil {
+			return model.Run{}, err
+		}
+	}
 	if err := command.Validate(); err != nil {
 		return model.Run{}, err
 	}
@@ -240,7 +250,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
 		"instruction": command.Instruction, "scope": command.Scope,
 		"mode": command.Mode, "options": command.Options, "skills": command.Skills,
-		"components": command.Components, "model": p.Model,
+		"components": command.Components, "mentioned_pages": command.MentionedPages,
+		"dropped_mentioned_slide_ids": command.DroppedMentionedSlideIDs, "model": p.Model,
 	})
 	if err != nil {
 		return model.Run{}, err

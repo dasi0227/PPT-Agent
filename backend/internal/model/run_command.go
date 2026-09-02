@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -57,9 +58,12 @@ type RunOptions struct {
 }
 
 const (
-	MaxRunSkills     = 3
-	MaxRunComponents = 8
+	MaxRunSkills      = 3
+	MaxRunComponents  = 8
+	MaxMentionedPages = 8
 )
+
+var slideIDPattern = regexp.MustCompile(`^sli_[A-Za-z0-9_-]+$`)
 
 type RunSkill struct {
 	ID          string `json:"id"`
@@ -88,13 +92,25 @@ type RunComponent struct {
 	OpenURL     string `json:"open_url,omitempty"`
 }
 
+// MentionedPage is a lightweight pointer to a slide explicitly named by the user.
+type MentionedPage struct {
+	Kind      string `json:"kind"`
+	SlideID   string `json:"slide_id"`
+	Ordinal   int    `json:"ordinal"`
+	Title     string `json:"title,omitempty"`
+	SpecState string `json:"spec_state"`
+	HTMLState string `json:"html_state"`
+}
+
 type RunCommand struct {
-	Scope       RunScope       `json:"scope"`
-	Mode        RunMode        `json:"mode"`
-	Instruction string         `json:"instruction"`
-	Options     RunOptions     `json:"options,omitempty"`
-	Skills      []RunSkill     `json:"skills,omitempty"`
-	Components  []RunComponent `json:"components,omitempty"`
+	Scope                    RunScope        `json:"scope"`
+	Mode                     RunMode         `json:"mode"`
+	Instruction              string          `json:"instruction"`
+	Options                  RunOptions      `json:"options,omitempty"`
+	Skills                   []RunSkill      `json:"skills,omitempty"`
+	Components               []RunComponent  `json:"components,omitempty"`
+	MentionedPages           []MentionedPage `json:"mentioned_pages,omitempty"`
+	DroppedMentionedSlideIDs []string        `json:"dropped_mentioned_slide_ids,omitempty"`
 }
 
 var ErrInvalidRunCommand = errors.New("invalid run command")
@@ -163,6 +179,25 @@ func (c RunCommand) Validate() error {
 			return fmt.Errorf("%w: referenced component names must be unique", ErrInvalidRunCommand)
 		}
 		seenComponents[name] = true
+	}
+	if len(c.MentionedPages) > MaxMentionedPages {
+		return fmt.Errorf("%w: at most %d pages may be mentioned", ErrInvalidRunCommand, MaxMentionedPages)
+	}
+	if len(c.MentionedPages) > 0 && c.Scope.Level != ScopeDeck {
+		return fmt.Errorf("%w: mentioned pages are only valid for deck scope", ErrInvalidRunCommand)
+	}
+	seenPages := map[string]bool{}
+	for _, page := range c.MentionedPages {
+		if page.Kind != "slide" {
+			return fmt.Errorf("%w: mentioned page kind must be slide", ErrInvalidRunCommand)
+		}
+		if !slideIDPattern.MatchString(page.SlideID) {
+			return fmt.Errorf("%w: mentioned page has invalid slide_id", ErrInvalidRunCommand)
+		}
+		if seenPages[page.SlideID] {
+			return fmt.Errorf("%w: mentioned pages must be unique", ErrInvalidRunCommand)
+		}
+		seenPages[page.SlideID] = true
 	}
 	return nil
 }

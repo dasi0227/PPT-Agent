@@ -130,6 +130,10 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		pack.Outline.Summaries = append(pack.Outline.Summaries, summary)
 		pack.Revisions.SlideSpecs[id] = s.Revision
 	}
+	mentionedIDs := make(map[string]bool, len(req.Command.MentionedPages))
+	for _, page := range req.Command.MentionedPages {
+		mentionedIDs[page.SlideID] = true
+	}
 	if req.Command.Scope.Level == model.ScopeSlide {
 		if _, exists := pptspec.FindSlide(outline, req.Command.Scope.SlideID); !exists {
 			return ContextPack{}, fmt.Errorf("%w: slide %s is not present in outline", ErrRequiredMissing, req.Command.Scope.SlideID)
@@ -142,6 +146,11 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		}
 	} else {
 		pack.Target = TargetContext{Artifact: req.Command.Scope.Artifact, Level: req.Command.Scope.Level}
+		for _, summary := range pack.Outline.Summaries {
+			if mentionedIDs[summary.ID] {
+				pack.RelatedSlides = append(pack.RelatedSlides, summary)
+			}
+		}
 	}
 
 	manifest := ContextManifest{
@@ -174,14 +183,21 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		addSegment(SegmentTheme, "theme://"+pack.Theme.ID+"/contract", 0, 88, "current theme metadata and CSS contract", true, DetailFull, pack.Theme)
 	}
 	addSegment(SegmentMemory, "thread://"+req.ThreadID+"/memory", memory.Revision, 75, "cross-run confirmed context", true, DetailFull, memory)
-	if len(pack.RelatedSlides) > 0 {
+	if len(pack.RelatedSlides) > 0 && len(mentionedIDs) == 0 {
 		if cap := budget.SegmentCaps[SegmentRelated]; cap > 0 && a.estimator.Estimate(pack.RelatedSlides) > cap {
 			manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentRelated), Reason: "segment cap exceeded"})
 			pack.RelatedSlides = []SlideSummary{}
 		}
 	}
 	if len(pack.RelatedSlides) > 0 {
-		addSegment(SegmentRelated, "project://"+project.ID+"/related-slides", outline.Revision, 55, "section and adjacency relevance", false, DetailSummary, pack.RelatedSlides)
+		required := len(mentionedIDs) > 0
+		reason := "section and adjacency relevance"
+		priority := 55
+		if required {
+			reason = "user-mentioned slide summaries"
+			priority = 100
+		}
+		addSegment(SegmentRelated, "project://"+project.ID+"/related-slides", outline.Revision, priority, reason, required, DetailSummary, pack.RelatedSlides)
 	}
 	pack.RecentTurns = loadRecentTurns(project.WorkDir, req.ThreadID, 8)
 	if cap := budget.SegmentCaps[SegmentRecentTurns]; cap > 0 && a.estimator.Estimate(pack.RecentTurns) > cap {
