@@ -67,9 +67,69 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 		t.Fatalf("paused run status is not accepted: %v", err)
 	}
 	promptCols := tableColumns(t, db, "prompts")
-	for _, want := range []string{"id", "key_zh", "key_en", "normalized_key_en", "value", "created_at", "updated_at"} {
+	for _, want := range []string{"id", "name", "normalized_name", "desc", "value", "created_at", "updated_at"} {
 		if !promptCols[want] {
 			t.Fatalf("prompts table missing column %q; got %v", want, promptCols)
+		}
+	}
+	for _, removed := range []string{"key_zh", "key_en", "normalized_key_en"} {
+		if promptCols[removed] {
+			t.Fatalf("legacy prompts column %q still exists", removed)
+		}
+	}
+}
+
+func TestPromptNameSchemaReplacesLegacyPromptData(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open in-memory: %v", err)
+	}
+	if err := applyMigrationFile(db, "0005_repository_metadata.sql"); err != nil {
+		t.Fatalf("apply repository metadata migration: %v", err)
+	}
+	if err := db.Exec(`
+		CREATE TABLE prompts (
+			id TEXT PRIMARY KEY,
+			key_zh TEXT NOT NULL UNIQUE,
+			key_en TEXT NOT NULL,
+			normalized_key_en TEXT NOT NULL UNIQUE,
+			value TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL
+		)
+	`).Error; err != nil {
+		t.Fatalf("create legacy prompts: %v", err)
+	}
+	if err := db.Exec(`
+		INSERT INTO prompts(id,key_zh,key_en,normalized_key_en,value,created_at,updated_at)
+		VALUES('legacy-prompt','旧提示','legacy','legacy','旧内容',1,1)
+	`).Error; err != nil {
+		t.Fatalf("insert legacy prompt: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO resource_tags(resource_type,resource_id,tag_id) VALUES('prompt','legacy-prompt','tag_prompt_other')`).Error; err != nil {
+		t.Fatalf("insert legacy prompt tag: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO resource_states(resource_type,resource_id,disabled,updated_at) VALUES('prompt','legacy-prompt',1,1)`).Error; err != nil {
+		t.Fatalf("insert legacy prompt state: %v", err)
+	}
+
+	if err := applyMigrationFile(db, "0006_prompt_name_schema.sql"); err != nil {
+		t.Fatalf("apply prompt name migration: %v", err)
+	}
+	cols := tableColumns(t, db, "prompts")
+	for _, want := range []string{"id", "name", "normalized_name", "desc", "value", "created_at", "updated_at"} {
+		if !cols[want] {
+			t.Fatalf("prompts table missing column %q; got %v", want, cols)
+		}
+	}
+	for table, query := range map[string]string{
+		"prompts":         "SELECT COUNT(*) FROM prompts",
+		"resource_tags":   "SELECT COUNT(*) FROM resource_tags WHERE resource_type = 'prompt'",
+		"resource_states": "SELECT COUNT(*) FROM resource_states WHERE resource_type = 'prompt'",
+	} {
+		var count int64
+		if err := db.Raw(query).Scan(&count).Error; err != nil || count != 0 {
+			t.Fatalf("%s legacy rows=%d err=%v", table, count, err)
 		}
 	}
 }

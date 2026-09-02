@@ -57,7 +57,7 @@ func promptRequest(t *testing.T, engine http.Handler, method, path string, body 
 func TestPromptHandlerCRUDAndErrors(t *testing.T) {
 	engine := promptTestEngine(t)
 	body := map[string]any{
-		"key_zh": "高管摘要", "key_en": "executive-summary",
+		"name": "高管摘要 / Executive Summary", "desc": "提炼核心结论",
 		"value": "生成摘要", "tags": []string{"deliverable"},
 	}
 	created := promptRequest(t, engine, http.MethodPost, "/api/v1/prompts", body)
@@ -65,10 +65,15 @@ func TestPromptHandlerCRUDAndErrors(t *testing.T) {
 		t.Fatalf("create status=%d body=%s", created.Code, created.Body.String())
 	}
 	var prompt struct {
-		ID string `json:"id"`
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Desc string `json:"desc"`
 	}
-	if err := json.Unmarshal(created.Body.Bytes(), &prompt); err != nil || prompt.ID == "" {
+	if err := json.Unmarshal(created.Body.Bytes(), &prompt); err != nil || prompt.ID == "" || prompt.Name != body["name"] || prompt.Desc != body["desc"] {
 		t.Fatalf("decode prompt: %v, %+v", err, prompt)
+	}
+	if bytes.Contains(created.Body.Bytes(), []byte(`"key_zh"`)) || bytes.Contains(created.Body.Bytes(), []byte(`"key_en"`)) {
+		t.Fatalf("create response exposes legacy keys: %s", created.Body.String())
 	}
 	disabled := promptRequest(t, engine, http.MethodPatch, "/api/v1/prompts/"+prompt.ID, map[string]any{"disabled": true})
 	if disabled.Code != http.StatusOK || !bytes.Contains(disabled.Body.Bytes(), []byte(`"disabled":true`)) {
@@ -76,16 +81,16 @@ func TestPromptHandlerCRUDAndErrors(t *testing.T) {
 	}
 
 	conflictBody := map[string]any{
-		"key_zh": "其他摘要", "key_en": "EXECUTIVE-SUMMARY",
+		"name": "高管摘要 / EXECUTIVE SUMMARY", "desc": "另一个摘要",
 		"value": "冲突", "tags": []string{},
 	}
 	conflict := promptRequest(t, engine, http.MethodPost, "/api/v1/prompts", conflictBody)
-	if conflict.Code != http.StatusConflict || !bytes.Contains(conflict.Body.Bytes(), []byte(`"field":"key_en"`)) {
+	if conflict.Code != http.StatusConflict || !bytes.Contains(conflict.Body.Bytes(), []byte(`"field":"name"`)) || !bytes.Contains(conflict.Body.Bytes(), []byte(`"code":"PROMPT_NAME_CONFLICT"`)) {
 		t.Fatalf("conflict status=%d body=%s", conflict.Code, conflict.Body.String())
 	}
 
 	invalid := promptRequest(t, engine, http.MethodPost, "/api/v1/prompts", map[string]any{
-		"key_zh": "english", "key_en": "valid", "value": "bad", "tags": []string{},
+		"name": "", "desc": "invalid", "value": "bad", "tags": []string{},
 	})
 	if invalid.Code != http.StatusBadRequest || !bytes.Contains(invalid.Body.Bytes(), []byte(`"code":"PROMPT_INVALID"`)) {
 		t.Fatalf("invalid status=%d body=%s", invalid.Code, invalid.Body.String())

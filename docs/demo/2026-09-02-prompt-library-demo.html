@@ -264,19 +264,10 @@
       gap: 6px;
     }
 
-    .option-head {
-      display: flex;
+    .option-name {
       min-width: 0;
-      max-width: 44%;
+      max-width: 48%;
       flex: 0 1 auto;
-      align-items: baseline;
-      gap: 4px;
-      overflow: hidden;
-    }
-
-    .option-key-zh,
-    .option-key-en {
-      min-width: 0;
       overflow: hidden;
       color: var(--text);
       font-size: 12px;
@@ -285,13 +276,7 @@
       white-space: nowrap;
     }
 
-    .option-key-separator {
-      color: var(--text-muted);
-      font-size: 11px;
-      font-weight: 500;
-    }
-
-    .option-value {
+    .option-desc {
       min-width: 0;
       flex: 1;
       overflow: hidden;
@@ -655,8 +640,7 @@
       min-width: 0;
     }
 
-    .item-name,
-    .item-key-en {
+    .item-name {
       min-width: 0;
       flex: 0 1 auto;
       overflow: hidden;
@@ -666,18 +650,6 @@
       line-height: 18px;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-
-    .item-key-row {
-      display: flex;
-      min-width: 0;
-      align-items: baseline;
-      gap: 6px;
-    }
-
-    .item-key-separator {
-      color: var(--text-muted);
-      font-size: 11px;
     }
 
     .item-description {
@@ -762,6 +734,13 @@
       line-height: 24px;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .detail-desc {
+      margin: 4px 0 0;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 18px;
     }
 
     .delete-button {
@@ -913,24 +892,6 @@
       min-height: 220px;
       resize: vertical;
       line-height: 1.7;
-    }
-
-    .key-input-wrap {
-      position: relative;
-    }
-
-    .key-prefix {
-      position: absolute;
-      top: 50%;
-      left: 11px;
-      color: var(--accent);
-      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-      font-size: 13px;
-      transform: translateY(-50%);
-    }
-
-    .key-input-wrap input {
-      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
     }
 
     .tag-editor {
@@ -1235,6 +1196,7 @@
                         <i data-lucide="trash-2" width="14" height="14"></i>
                       </button>
                     </div>
+                    <p class="detail-desc" id="detail-desc"></p>
                     <div class="tag-list" id="detail-tags"></div>
                   </div>
                   <div class="detail-actions" id="view-actions">
@@ -1259,13 +1221,13 @@
 
                   <form class="edit-form" id="edit-form">
                     <div class="form-grid">
-                      <div class="field">
-                        <label for="prompt-key-zh">中文 key</label>
-                        <input id="prompt-key-zh" autocomplete="off">
+                      <div class="field full">
+                        <label for="prompt-name">名称</label>
+                        <input id="prompt-name" autocomplete="off" placeholder="高管摘要 / Executive Summary">
                       </div>
-                      <div class="field">
-                        <label for="prompt-key-en">英文 key</label>
-                        <div class="key-input-wrap"><input id="prompt-key-en" autocomplete="off"></div>
+                      <div class="field full">
+                        <label for="prompt-desc">描述</label>
+                        <input id="prompt-desc" autocomplete="off">
                       </div>
                       <div class="field full">
                         <label>标签（最多 2 个）</label>
@@ -1299,36 +1261,36 @@
     const prompts = [
       {
         id: "executive",
-        keyZh: "高管摘要",
-        keyEn: "executive-summary",
+        name: "高管摘要 / Executive Summary",
+        desc: "提炼核心结论、关键数据、风险与下一步行动。",
         value: "请将以上内容整理为高管摘要，优先呈现核心结论、关键数据、主要风险与下一步行动。",
         tags: ["summarize", "rewrite"]
       },
       {
         id: "storyline",
-        keyZh: "叙事梳理",
-        keyEn: "story",
+        name: "叙事梳理 / Storyline",
+        desc: "梳理整份演示的叙事主线与逐页表达任务。",
         value: "请先梳理整份演示的叙事主线，确保每一页只承担一个表达任务，并让页面标题能够独立构成完整故事。",
         tags: ["structure", "analysis"]
       },
       {
         id: "review",
-        keyZh: "视觉审查",
-        keyEn: "visual-review",
+        name: "视觉审查 / Visual Review",
+        desc: "检查页面的视觉层级、网格、留白和内容密度。",
         value: "请审查当前页面的视觉层级、网格对齐、留白比例、文字换行和内容密度，并直接修复影响阅读的问题。",
         tags: ["visual", "review"]
       },
       {
         id: "chart",
-        keyZh: "图表表达",
-        keyEn: "chart-data",
+        name: "图表表达 / Chart Data",
+        desc: "根据数据关系选择最合适的图表表达。",
         value: "请根据数据关系选择合适的图表类型，突出最重要的差异或趋势，并避免无意义的装饰和重复标签。",
         tags: ["data", "visual"]
       },
       {
         id: "rewrite",
-        keyZh: "精简改写",
-        keyEn: "rewrite-short",
+        name: "精简改写 / Concise Rewrite",
+        desc: "删减重复和空泛表达，保留关键事实。",
         value: "请在不损失关键事实的前提下精简这段内容，删除重复信息和空泛修饰，使表达更直接。",
         tags: ["rewrite"]
       }
@@ -1361,14 +1323,15 @@
     const directory = document.querySelector("#directory");
     const detail = document.querySelector("#prompt-detail");
     const detailTitle = document.querySelector("#detail-title");
+    const detailDesc = document.querySelector("#detail-desc");
     const detailTags = document.querySelector("#detail-tags");
     const sheetContent = document.querySelector("#sheet-content");
     const viewActions = document.querySelector("#view-actions");
     const editActions = document.querySelector("#edit-actions");
     const deleteButton = document.querySelector("#delete-prompt");
     const form = document.querySelector("#edit-form");
-    const keyZhInput = document.querySelector("#prompt-key-zh");
-    const keyEnInput = document.querySelector("#prompt-key-en");
+    const nameInput = document.querySelector("#prompt-name");
+    const descInput = document.querySelector("#prompt-desc");
     const valueInput = document.querySelector("#prompt-value");
     const tagEditor = document.querySelector("#tag-editor");
     const tagFilters = document.querySelector("#tag-filters");
@@ -1439,11 +1402,11 @@
       const normalized = query.toLocaleLowerCase();
       return prompts
         .map((prompt, index) => {
-          const keyZhHit = prompt.keyZh.toLocaleLowerCase().includes(normalized);
-          const keyEnHit = prompt.keyEn.toLocaleLowerCase().includes(normalized);
+          const nameHit = prompt.name.toLocaleLowerCase().includes(normalized);
+          const descHit = prompt.desc.toLocaleLowerCase().includes(normalized);
           const tagHit = prompt.tags.some((tag) => tagNames[tag].includes(query));
           const valueHit = prompt.value.toLocaleLowerCase().includes(normalized);
-          return { prompt, index, rank: keyZhHit ? 0 : keyEnHit ? 1 : tagHit ? 2 : valueHit ? 3 : 9 };
+          return { prompt, index, rank: nameHit ? 0 : tagHit ? 1 : descHit ? 2 : valueHit ? 3 : 9 };
         })
         .filter((entry) => entry.rank < 9)
         .sort((left, right) => left.rank - right.rank || left.index - right.index)
@@ -1461,12 +1424,8 @@
             <button class="prompt-option ${index === activeOption ? "active" : ""}" type="button" role="option" aria-selected="${index === activeOption}" data-prompt-option="${index}">
               <span class="option-icon"><i data-lucide="notebook-text" width="15" height="15"></i></span>
               <span class="option-copy">
-                <span class="option-head">
-                  <span class="option-key-zh">${escapeHTML(prompt.keyZh)}</span>
-                  <span class="option-key-separator">/</span>
-                  <span class="option-key-en">${escapeHTML(prompt.keyEn)}</span>
-                </span>
-                <span class="option-value">${escapeHTML(prompt.value)}</span>
+                <span class="option-name">${escapeHTML(prompt.name)}</span>
+                <span class="option-desc">${escapeHTML(prompt.desc)}</span>
               </span>
             </button>
           `).join("")
@@ -1559,7 +1518,7 @@
       const query = searchInput.value.trim().toLocaleLowerCase();
       return prompts.filter((prompt) => {
         const matchesTag = selectedTag === "all" || prompt.tags.includes(selectedTag);
-        const searchable = `${prompt.keyZh} ${prompt.keyEn} ${prompt.value} ${prompt.tags.map((tag) => tagNames[tag]).join(" ")}`;
+        const searchable = `${prompt.name} ${prompt.desc} ${prompt.value} ${prompt.tags.map((tag) => tagNames[tag]).join(" ")}`;
         return matchesTag && searchable.toLocaleLowerCase().includes(query);
       });
     }
@@ -1579,12 +1538,8 @@
         <button class="directory-item ${prompt.id === selectedPromptId ? "active" : ""}" type="button" data-directory-id="${prompt.id}">
           <span class="prompt-mark"><i data-lucide="notebook-text" width="17" height="17"></i></span>
           <span class="item-copy">
-            <span class="item-key-row">
-              <span class="item-name">${escapeHTML(prompt.keyZh)}</span>
-              <span class="item-key-separator">/</span>
-              <span class="item-key-en">${escapeHTML(prompt.keyEn)}</span>
-            </span>
-            <span class="item-description">${escapeHTML(prompt.value)}</span>
+            <span class="item-name">${escapeHTML(prompt.name)}</span>
+            <span class="item-description">${escapeHTML(prompt.desc)}</span>
           </span>
           <i class="item-chevron" data-lucide="chevron-right" width="15" height="15"></i>
         </button>
@@ -1593,8 +1548,8 @@
     }
 
     function fillForm(prompt) {
-      keyZhInput.value = prompt?.keyZh || "";
-      keyEnInput.value = prompt?.keyEn || "";
+      nameInput.value = prompt?.name || "";
+      descInput.value = prompt?.desc || "";
       valueInput.value = prompt?.value || "";
       editingTags = [...(prompt?.tags || [])];
       renderTagEditor();
@@ -1616,12 +1571,14 @@
       const prompt = selectedPrompt();
       if (!prompt && !creating) {
         detailTitle.textContent = "";
+        detailDesc.textContent = "";
         detailTags.innerHTML = "";
         sheetContent.textContent = "";
         return;
       }
-      const title = creating ? "新建提示词" : `${prompt.keyZh} / ${prompt.keyEn}`;
+      const title = creating ? "新建提示词" : prompt.name;
       detailTitle.textContent = title;
+      detailDesc.textContent = creating ? "" : prompt.desc;
       detailTags.innerHTML = creating ? "" : prompt.tags.map((tag) => `<span class="tag">${tagNames[tag]}</span>`).join("");
       sheetContent.textContent = creating ? "" : prompt.value;
       detail.classList.toggle("editing", editing);
@@ -1652,13 +1609,13 @@
       editing = true;
       creating = false;
       renderDetail();
-      keyZhInput.focus();
+      nameInput.focus();
     });
     document.querySelector("#new-prompt").addEventListener("click", () => {
       editing = true;
       creating = true;
       renderDetail();
-      keyZhInput.focus();
+      nameInput.focus();
     });
     document.querySelector("#cancel-edit").addEventListener("click", () => {
       editing = false;
@@ -1669,8 +1626,8 @@
     document.querySelector("#save-prompt").addEventListener("click", () => {
       const next = {
         id: creating ? `prompt-${Date.now()}` : selectedPromptId,
-        keyZh: keyZhInput.value.trim() || "未命名提示词",
-        keyEn: keyEnInput.value.trim() || "new-key",
+        name: nameInput.value.trim() || "未命名提示词",
+        desc: descInput.value.trim() || "提示词描述",
         value: valueInput.value.trim() || "请输入提示词 value。",
         tags: [...editingTags]
       };
@@ -1689,7 +1646,7 @@
 
     deleteButton.addEventListener("click", () => {
       const prompt = selectedPrompt();
-      deleteCopy.textContent = `确定删除“${prompt.keyZh}”吗？该操作不可撤销。`;
+      deleteCopy.textContent = `确定删除“${prompt.name}”吗？该操作不可撤销。`;
       deleteConfirm.classList.add("visible");
     });
     document.querySelector("#delete-cancel").addEventListener("click", () => deleteConfirm.classList.remove("visible"));

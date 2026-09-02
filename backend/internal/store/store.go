@@ -9,22 +9,22 @@ import (
 )
 
 var (
-	ErrRunActive         = errors.New("store: project has an active run")
-	ErrGitCommitActive   = errors.New("store: project has an active Git commit")
-	ErrPromptKeyConflict = errors.New("store: prompt key conflict")
-	ErrTagNotFound       = errors.New("store: tag not found")
+	ErrRunActive          = errors.New("store: project has an active run")
+	ErrGitCommitActive    = errors.New("store: project has an active Git commit")
+	ErrPromptNameConflict = errors.New("store: prompt name conflict")
+	ErrTagNotFound        = errors.New("store: tag not found")
 )
 
-type PromptKeyConflictError struct {
+type PromptNameConflictError struct {
 	Field string
 }
 
-func (e *PromptKeyConflictError) Error() string {
+func (e *PromptNameConflictError) Error() string {
 	return "store: prompt " + e.Field + " conflicts with an existing prompt"
 }
 
-func (e *PromptKeyConflictError) Is(target error) bool {
-	return target == ErrPromptKeyConflict
+func (e *PromptNameConflictError) Is(target error) bool {
+	return target == ErrPromptNameConflict
 }
 
 // Store 是持久化层对外暴露的接口。随里程碑推进逐步扩展领域方法。
@@ -90,10 +90,10 @@ type Store interface {
 	CommitWorkflow(ctx context.Context, commit model.ArtifactCommit) error
 	UpdateProjectTheme(ctx context.Context, id, theme string, updatedAt int64) error
 
-	CreatePrompt(ctx context.Context, prompt model.Prompt, normalizedKeyEN string) error
+	CreatePrompt(ctx context.Context, prompt model.Prompt, normalizedName string) error
 	GetPrompt(ctx context.Context, id string) (model.Prompt, error)
 	ListPrompts(ctx context.Context) ([]model.Prompt, error)
-	UpdatePrompt(ctx context.Context, prompt model.Prompt, normalizedKeyEN string) error
+	UpdatePrompt(ctx context.Context, prompt model.Prompt, normalizedName string) error
 	SetPromptDisabled(ctx context.Context, id string, disabled bool, updatedAt int64) error
 	DeletePrompt(ctx context.Context, id string) error
 

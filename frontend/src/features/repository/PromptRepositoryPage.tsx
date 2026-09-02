@@ -26,32 +26,30 @@ import {
 } from './RepositoryPrimitives';
 import { RepositoryShell } from './RepositoryShell';
 
-const emptyDraft: PromptWriteRequest = { key_zh: '', key_en: '', value: '', tags: [] };
+const emptyDraft: PromptWriteRequest = { name: '', desc: '', value: '', tags: [] };
 
 type FieldErrors = Partial<Record<keyof PromptWriteRequest, string>>;
 
 function promptDraft(prompt: Prompt): PromptWriteRequest {
-  return { key_zh: prompt.key_zh, key_en: prompt.key_en, value: prompt.value, tags: [...prompt.tags] };
+  return { name: prompt.name, desc: prompt.desc, value: prompt.value, tags: [...prompt.tags] };
 }
 
 function sameDraft(left: PromptWriteRequest, right: PromptWriteRequest): boolean {
-  return left.key_zh === right.key_zh && left.key_en === right.key_en && left.value === right.value
+  return left.name === right.name && left.desc === right.desc && left.value === right.value
     && left.tags.join('|') === right.tags.join('|');
 }
 
 function validateDraft(draft: PromptWriteRequest): FieldErrors {
   const errors: FieldErrors = {};
-  const keyZH = draft.key_zh.trim();
-  const keyEN = draft.key_en.trim();
+  const name = draft.name.trim();
+  const desc = draft.desc.trim();
   const value = draft.value.trim();
-  if (!keyZH) errors.key_zh = '请输入中文 key';
-  else if ([...keyZH].length > 32 || !/^[\p{Script=Han}A-Za-z0-9_-]+$/u.test(keyZH) || !/\p{Script=Han}/u.test(keyZH)) {
-    errors.key_zh = '需包含中文，仅允许中英文、数字、- 和 _，最多 32 个字符';
+  if (!name) errors.name = '请输入提示词名称';
+  else if ([...name].length > 80 || /[\r\n\t]/.test(name)) {
+    errors.name = '名称最多 80 个字符，不能包含换行或制表符';
   }
-  if (!keyEN) errors.key_en = '请输入英文 key';
-  else if (keyEN.length > 64 || !/^[A-Za-z0-9_-]+$/.test(keyEN)) {
-    errors.key_en = '仅允许英文字母、数字、- 和 _，最多 64 个字符';
-  }
+  if (!desc) errors.desc = '请输入提示词描述';
+  else if ([...desc].length > 500) errors.desc = '提示词描述最多 500 个字符';
   if (!value) errors.value = '请输入提示词内容';
   else if (new TextEncoder().encode(value).length > 16 * 1024) errors.value = '提示词内容最多 16KB';
   if (draft.tags.length > 2) errors.tags = '最多选择 2 个标签';
@@ -80,28 +78,30 @@ function PromptForm({
   );
   return (
     <div className="mx-auto grid w-full max-w-[820px] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.7fr)]">
-      <label className="grid gap-1.5 text-xs font-semibold text-text-600">
-        中文 key
+      <label className="grid gap-1.5 text-xs font-semibold text-text-600 lg:col-span-2">
+        名称
         <input
           autoFocus
-          maxLength={32}
-          value={draft.key_zh}
-          onChange={(event) => onChange({ ...draft, key_zh: event.target.value })}
-          className={fieldClass('key_zh')}
-          aria-invalid={Boolean(errors.key_zh)}
+          maxLength={80}
+          value={draft.name}
+          placeholder="例如：高管摘要 / Executive Summary"
+          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          className={fieldClass('name')}
+          aria-invalid={Boolean(errors.name)}
         />
-        {errors.key_zh && <span className="font-medium text-danger">{errors.key_zh}</span>}
+        {errors.name && <span className="font-medium text-danger">{errors.name}</span>}
       </label>
-      <label className="grid gap-1.5 text-xs font-semibold text-text-600">
-        英文 key
-        <input
-          maxLength={64}
-          value={draft.key_en}
-          onChange={(event) => onChange({ ...draft, key_en: event.target.value })}
-          className={fieldClass('key_en')}
-          aria-invalid={Boolean(errors.key_en)}
+      <label className="grid gap-1.5 text-xs font-semibold text-text-600 lg:col-span-2">
+        描述
+        <textarea
+          maxLength={500}
+          rows={3}
+          value={draft.desc}
+          onChange={(event) => onChange({ ...draft, desc: event.target.value })}
+          className={cn(fieldClass('desc'), 'resize-none leading-5')}
+          aria-invalid={Boolean(errors.desc)}
         />
-        {errors.key_en && <span className="font-medium text-danger">{errors.key_en}</span>}
+        {errors.desc && <span className="font-medium text-danger">{errors.desc}</span>}
       </label>
       <fieldset className="grid gap-1.5 lg:col-span-2">
         <legend className="mb-1.5 text-xs font-semibold text-text-600">标签（最多 2 个）</legend>
@@ -220,7 +220,7 @@ export function PromptRepositoryPage() {
     return prompts.filter((prompt) => {
       if (filter !== 'all' && !prompt.tags.includes(filter)) return false;
       const searchable = [
-        prompt.key_zh, prompt.key_en, prompt.value,
+        prompt.name, prompt.desc, prompt.value,
         ...prompt.tags.flatMap((tag) => [tag, promptTagLabels[tag]]),
       ].join(' ').toLocaleLowerCase();
       return searchable.includes(normalized);
@@ -289,8 +289,8 @@ export function PromptRepositoryPage() {
   const save = async () => {
     if (saving) return;
     const next = {
-      key_zh: draft.key_zh.trim(),
-      key_en: draft.key_en.trim(),
+      name: draft.name.trim(),
+      desc: draft.desc.trim(),
       value: draft.value.trim(),
       tags: draft.tags,
     };
@@ -309,10 +309,10 @@ export function PromptRepositoryPage() {
       setEditOpen(false);
       setFieldErrors({});
     } catch (cause) {
-      if (cause instanceof APIError && cause.code === 'PROMPT_KEY_CONFLICT') {
+      if (cause instanceof APIError && cause.code === 'PROMPT_NAME_CONFLICT') {
         const field = (cause.details as { field?: unknown } | undefined)?.field;
-        if (field === 'key_zh' || field === 'key_en') {
-          setFieldErrors((current) => ({ ...current, [field]: '该 key 已存在' }));
+        if (field === 'name') {
+          setFieldErrors((current) => ({ ...current, name: '该名称已存在' }));
           return;
         }
       }
@@ -400,14 +400,8 @@ export function PromptRepositoryPage() {
                   key={prompt.id}
                   active={visibleSelected?.id === prompt.id}
                   disabled={prompt.disabled}
-                  name={(
-                    <span className="flex min-w-0 items-baseline gap-1.5">
-                      <span className="truncate">{prompt.key_zh}</span>
-                      <span className="font-medium text-text-400">/</span>
-                      <span className="truncate">{prompt.key_en}</span>
-                    </span>
-                  )}
-                  description={prompt.value}
+                  name={prompt.name}
+                  description={prompt.desc}
                   visual={<NotebookText className="h-[17px] w-[17px]" strokeWidth={1.75} />}
                   visualBare
                   visualClassName="text-accent"
@@ -428,7 +422,8 @@ export function PromptRepositoryPage() {
             ) : selected && (
               <RepositoryDetail
                 label="提示词详情"
-                title={`${selected.key_zh} / ${selected.key_en}`}
+                title={selected.name}
+                description={selected.desc}
                 properties={(
                   <div className="flex flex-wrap gap-2" aria-label="标签">
                     {selected.tags.map((tag) => (

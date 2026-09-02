@@ -1,4 +1,9 @@
-CREATE TABLE IF NOT EXISTS prompts (
+DELETE FROM resource_tags WHERE resource_type = 'prompt';
+DELETE FROM resource_states WHERE resource_type = 'prompt';
+
+DROP TABLE IF EXISTS prompts;
+
+CREATE TABLE prompts (
     id              TEXT PRIMARY KEY,
     name            TEXT NOT NULL,
     normalized_name TEXT NOT NULL UNIQUE,
@@ -8,5 +13,5 @@ CREATE TABLE IF NOT EXISTS prompts (
     updated_at      INTEGER NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_prompts_updated_at
+CREATE INDEX idx_prompts_updated_at
 ON prompts(updated_at DESC, id);

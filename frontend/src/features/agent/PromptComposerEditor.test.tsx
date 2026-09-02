@@ -7,8 +7,8 @@ import { PromptComposerEditor } from './PromptComposerEditor';
 
 const prompt: Prompt = {
   id: 'p1',
-  key_zh: '高管摘要',
-  key_en: 'executive-summary',
+  name: '高管摘要 / Executive Summary',
+  desc: '提炼核心结论',
   value: '生成高管摘要',
   tags: ['deliverable'],
   disabled: false,
@@ -65,6 +65,8 @@ describe('PromptComposerEditor', () => {
     placeCaretAtEnd(editor);
 
     const option = await screen.findByRole('option', { name: /高管摘要/ });
+    expect(option).toHaveTextContent(prompt.desc);
+    expect(option).not.toHaveTextContent(prompt.value);
     fireEvent.mouseDown(option);
 
     await waitFor(() => expect(changed).toHaveBeenLastCalledWith('生成高管摘要 '));

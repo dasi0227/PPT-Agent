@@ -45,11 +45,11 @@ export function matchPrompts(prompts: Prompt[], query: string, recentIds: string
   const recentOrder = new Map(recentIds.map((id, index) => [id, index]));
   return enabledPrompts
     .map((prompt) => {
-      const rank = includes(prompt.key_zh, query)
+      const rank = includes(prompt.name, query)
         ? 0
-        : includes(prompt.key_en, query)
+        : prompt.tags.some((tag) => includes(tag, query) || includes(promptTagLabels[tag], query))
           ? 1
-          : prompt.tags.some((tag) => includes(tag, query) || includes(promptTagLabels[tag], query))
+          : includes(prompt.desc, query)
             ? 2
             : includes(prompt.value, query)
               ? 3
@@ -62,7 +62,7 @@ export function matchPrompts(prompts: Prompt[], query: string, recentIds: string
       || (recentOrder.get(left.prompt.id) ?? Number.MAX_SAFE_INTEGER)
         - (recentOrder.get(right.prompt.id) ?? Number.MAX_SAFE_INTEGER)
       || right.prompt.updated_at - left.prompt.updated_at
-      || left.prompt.key_zh.localeCompare(right.prompt.key_zh, 'zh-CN')
+      || left.prompt.name.localeCompare(right.prompt.name, 'zh-CN')
     ))
     .slice(0, 8)
     .map(({ prompt }) => prompt);

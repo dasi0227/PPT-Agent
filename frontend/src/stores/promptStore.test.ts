@@ -14,8 +14,8 @@ vi.mock('../api/prompts', () => ({ promptsApi: mocks }));
 
 const prompt = (id: string): Prompt => ({
   id,
-  key_zh: `提示${id}`,
-  key_en: `prompt-${id}`,
+  name: `提示 ${id} / Prompt ${id}`,
+  desc: `description ${id}`,
   value: `value ${id}`,
   tags: ['deliverable'],
   disabled: false,
@@ -61,10 +61,10 @@ describe('promptStore', () => {
     mocks.delete.mockResolvedValue(undefined);
 
     await usePromptStore.getState().create({
-      key_zh: first.key_zh, key_en: first.key_en, value: first.value, tags: first.tags,
+      name: first.name, desc: first.desc, value: first.value, tags: first.tags,
     });
     await usePromptStore.getState().update(first.id, {
-      key_zh: updated.key_zh, key_en: updated.key_en, value: updated.value, tags: updated.tags,
+      name: updated.name, desc: updated.desc, value: updated.value, tags: updated.tags,
     });
     expect(usePromptStore.getState().prompts).toEqual([updated]);
     await usePromptStore.getState().delete(first.id);

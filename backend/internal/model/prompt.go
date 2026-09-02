@@ -13,8 +13,8 @@ const (
 
 type Prompt struct {
 	ID        string      `json:"id"`
-	KeyZH     string      `json:"key_zh"`
-	KeyEN     string      `json:"key_en"`
+	Name      string      `json:"name"`
+	Desc      string      `json:"desc"`
 	Value     string      `json:"value"`
 	Tags      []PromptTag `json:"tags"`
 	Disabled  bool        `json:"disabled"`

@@ -18,8 +18,8 @@ vi.mock('../../api/prompts', () => ({ promptsApi: mocks }));
 
 const first: Prompt = {
   id: 'p1',
-  key_zh: '高管摘要',
-  key_en: 'executive-summary',
+  name: '高管摘要 / Executive Summary',
+  desc: '提炼核心结论',
   value: '提炼核心结论。',
   tags: ['deliverable', 'review'],
   disabled: false,
@@ -45,16 +45,17 @@ describe('PromptRepositoryPage', () => {
     });
   });
 
-  it('renders the fourth repository with equal bilingual keys and no file link', () => {
+  it('renders prompts with a unified bilingual name and no file link', () => {
     renderPage();
     expect(screen.getByRole('link', { name: '提示词' })).toHaveAttribute('href', '/warehouse/prompt');
-    expect(screen.getByRole('heading', { name: '高管摘要 / executive-summary' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: first.name })).toBeInTheDocument();
     expect(screen.getAllByText('交付')).toHaveLength(2);
     expect(screen.getAllByText('审查')).toHaveLength(2);
     expect(screen.queryByRole('link', { name: '查看文件' })).not.toBeInTheDocument();
-    expect(screen.getAllByText('提炼核心结论。')).toHaveLength(2);
-    expect(screen.getByRole('button', { name: '编辑高管摘要 / executive-summary' }).nextElementSibling)
-      .toBe(screen.getByRole('button', { name: '删除高管摘要 / executive-summary' }));
+    expect(screen.getAllByText(first.desc)).toHaveLength(2);
+    expect(screen.getByText(first.value)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `编辑${first.name}` }).nextElementSibling)
+      .toBe(screen.getByRole('button', { name: `删除${first.name}` }));
   });
 
   it('edits in a dialog and updates the shared cache after saving', async () => {
@@ -62,19 +63,19 @@ describe('PromptRepositoryPage', () => {
     mocks.update.mockResolvedValue(updated);
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑高管摘要 / executive-summary' }));
+    fireEvent.click(screen.getByRole('button', { name: `编辑${first.name}` }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveTextContent('编辑提示词');
     fireEvent.change(within(dialog).getByLabelText('提示词 value'), { target: { value: updated.value } });
     fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
 
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith(first.id, {
-      key_zh: first.key_zh,
-      key_en: first.key_en,
+      name: first.name,
+      desc: first.desc,
       value: updated.value,
       tags: first.tags,
     }));
-    expect(await screen.findAllByText(updated.value)).toHaveLength(2);
+    expect(await screen.findByText(updated.value)).toBeInTheDocument();
     expect(usePromptStore.getState().prompts[0].value).toBe(updated.value);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -95,8 +96,8 @@ describe('PromptRepositoryPage', () => {
   it('filters by tag and creates prompts from the inline form', async () => {
     const created: Prompt = {
       id: 'p2',
-      key_zh: '数据分析',
-      key_en: 'data-analysis',
+      name: '数据分析 / Data Analysis',
+      desc: '分析数据并提炼洞察',
       value: '分析数据。',
       tags: ['identity'],
       disabled: false,
@@ -113,8 +114,8 @@ describe('PromptRepositoryPage', () => {
     expect(screen.getByText('没有匹配的提示词')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '全部' }));
     fireEvent.click(screen.getByRole('button', { name: '新建提示词' }));
-    fireEvent.change(screen.getByLabelText('中文 key'), { target: { value: created.key_zh } });
-    fireEvent.change(screen.getByLabelText('英文 key'), { target: { value: created.key_en } });
+    fireEvent.change(screen.getByLabelText('名称'), { target: { value: created.name } });
+    fireEvent.change(screen.getByLabelText('描述'), { target: { value: created.desc } });
     fireEvent.change(screen.getByLabelText('提示词 value'), { target: { value: created.value } });
     {
       const identityButtons = screen.getAllByRole('button', { name: '身份' });
@@ -123,11 +124,11 @@ describe('PromptRepositoryPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({
-      key_zh: created.key_zh,
-      key_en: created.key_en,
+      name: created.name,
+      desc: created.desc,
       value: created.value,
       tags: ['identity'],
     }));
-    expect(await screen.findByRole('heading', { name: '数据分析 / data-analysis' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: created.name })).toBeInTheDocument();
   });
 });

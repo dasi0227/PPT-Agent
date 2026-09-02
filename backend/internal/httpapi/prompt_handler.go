@@ -19,8 +19,8 @@ func NewPromptHandler(svc *service.PromptService) *PromptHandler {
 }
 
 type promptWriteRequest struct {
-	KeyZH string            `json:"key_zh"`
-	KeyEN string            `json:"key_en"`
+	Name  string            `json:"name"`
+	Desc  string            `json:"desc"`
 	Value string            `json:"value"`
 	Tags  []model.PromptTag `json:"tags"`
 }
@@ -115,7 +115,7 @@ func bindPromptRequest(c *gin.Context) (promptWriteRequest, bool) {
 }
 
 func (r promptWriteRequest) params() service.PromptWriteParams {
-	return service.PromptWriteParams{KeyZH: r.KeyZH, KeyEN: r.KeyEN, Value: r.Value, Tags: r.Tags}
+	return service.PromptWriteParams{Name: r.Name, Desc: r.Desc, Value: r.Value, Tags: r.Tags}
 }
 
 func (h *PromptHandler) writeError(c *gin.Context, err error) {
@@ -125,16 +125,16 @@ func (h *PromptHandler) writeError(c *gin.Context, err error) {
 			HTTPStatus: http.StatusNotFound, Code: "PROMPT_NOT_FOUND",
 			Message: "提示词不存在", Details: map[string]any{},
 		})
-	case errors.Is(err, service.ErrPromptKeyConflict):
-		var conflict *service.PromptKeyConflictError
+	case errors.Is(err, service.ErrPromptNameConflict):
+		var conflict *service.PromptNameConflictError
 		errors.As(err, &conflict)
-		field := "key"
+		field := "name"
 		if conflict != nil {
 			field = conflict.Field
 		}
 		AbortWithError(c, &APIError{
-			HTTPStatus: http.StatusConflict, Code: "PROMPT_KEY_CONFLICT",
-			Message: "提示词 key 已存在", Details: map[string]any{"field": field},
+			HTTPStatus: http.StatusConflict, Code: "PROMPT_NAME_CONFLICT",
+			Message: "提示词名称已存在", Details: map[string]any{"field": field},
 		})
 	case errors.Is(err, service.ErrPromptInvalid):
 		var invalid *service.PromptValidationError

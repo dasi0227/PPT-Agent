@@ -173,8 +173,8 @@ export type SkillTag = 'workflow' | 'methodology' | 'manual' | 'experience' | 'o
 
 export interface Prompt {
   id: string;
-  key_zh: string;
-  key_en: string;
+  name: string;
+  desc: string;
   value: string;
   tags: PromptTag[];
   disabled: boolean;
@@ -187,8 +187,8 @@ export interface PromptsResponse {
 }
 
 export interface PromptWriteRequest {
-  key_zh: string;
-  key_en: string;
+  name: string;
+  desc: string;
   value: string;
   tags: PromptTag[];
 }

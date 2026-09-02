@@ -336,12 +336,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   <NotebookText className="h-[15px] w-[15px]" strokeWidth={1.75} />
                 </span>
                 <span className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="flex max-w-[44%] min-w-0 items-baseline gap-1 overflow-hidden">
-                    <span className="truncate text-xs font-bold text-text-900">{prompt.key_zh}</span>
-                    <span className="text-[11px] font-medium text-text-400">/</span>
-                    <span className="truncate text-xs font-bold text-text-900">{prompt.key_en}</span>
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-text-600">{prompt.value}</span>
+                  <span className="max-w-[48%] truncate text-xs font-bold text-text-900">{prompt.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-text-600">{prompt.desc}</span>
                 </span>
               </button>
             ))}

@@ -24,7 +24,7 @@
 
 1. 用户在输入开头、普通空格后或换行后输入 `$` / `¥`。
 2. 输入框上方出现紧凑候选列表。
-3. 查询使用非前缀包含匹配，范围为 `key_zh + key_en + value + tags`。
+3. 查询使用非前缀包含匹配，范围为 `name + desc + value + tags`。
 4. `↑/↓` 切换候选，`Enter` 替换，`Esc` 关闭；鼠标点击同样可替换。
 5. 替换后的提示词正文是可继续编辑的蓝色文字，带极浅蓝底纹。
 6. 提示词片段之后自动补一个普通颜色空格，并将光标移动到空格后。
@@ -66,7 +66,7 @@ V1 不支持模板变量、参数填写、提示词组合语法、云同步或�
 
 匹配规则：
 
-- 对 `key_zh`、`key_en`、`value` 和标签名称做 `%query%` 包含匹配；
+- 对 `name`、`desc`、`value` 和标签名称做 `%query%` 包含匹配；
 
 - 英文字母不区分大小写；
 
@@ -78,13 +78,13 @@ V1 不支持模板变量、参数填写、提示词组合语法、云同步或�
 
 排序优先级：
 
-1. `key_zh` 命中；
-2. `key_en` 命中；
-3. 标签名称命中；
+1. `name` 命中；
+2. 标签名称命中；
+3. `desc` 命中；
 4. `value` 命中；
 5. 最近使用顺序；
 6. `updated_at` 降序；
-7. `key_zh` 稳定排序。
+7. `name` 稳定排序。
 
 ### 2.3 键盘规则
 
@@ -126,18 +126,18 @@ V1 不支持模板变量、参数填写、提示词组合语法、云同步或�
 
 ### 2.5 Prompt 字段
 
-| 字段                  | 规则                            |
-| ------------------- | ----------------------------- |
-| `id`                | 服务端生成、不可修改的稳定 ID              |
-| `key_zh`            | 必填、全库唯一、1–32 字符，至少包含一个中文字符    |
-| `key_en`            | 必填、全库唯一、1–64 字符               |
-| `normalized_key_en` | 服务端生成，仅用于英文 key 唯一约束，不出现在 API |
-| `value`             | 必填纯文本，最多 16KB                 |
+| 字段                | 规则                                      |
+| ------------------- | ----------------------------------------- |
+| `id`                | 服务端生成、不可修改的稳定 ID             |
+| `name`              | 必填、全库唯一、1–80 字符，不允许换行或制表符 |
+| `normalized_name`   | 服务端生成，用于名称大小写不敏感的唯一约束，不出现在 API |
+| `desc`              | 必填纯文本，最多 500 字符                 |
+| `value`             | 必填纯文本，最多 16KB                     |
 | `tags`              | 0–2 个受控枚举值，不允许重复              |
-| `created_at`        | 服务端时间                         |
-| `updated_at`        | 服务端时间                         |
+| `created_at`        | 服务端时间                                |
+| `updated_at`        | 服务端时间                                |
 
-`key_zh` 允许中文、英文字母、数字、`-`、`_`，不允许空格、换行或其他标点，并要求至少包含一个中文字符。`key_en` 只允许 ASCII 英文字母、数字、`-`、`_`。英文 key 使用小写归一化后判断唯一性；例如 `Summary` 与 `summary` 冲突。中文 key 在裁剪后按原字符唯一。
+`name` 是 Prompt 唯一的映射和检索名称，可以直接同时包含中英文，例如 `高管摘要 / Executive Summary`，不再拆分中文 key 和英文 key。名称裁剪首尾空白后以小写形式生成 `normalized_name` 并判断唯一性；`desc` 只承担简短说明，`value` 是选中 Prompt 后实际插入输入框的正文。
 
 ### 2.6 标签枚举
 
@@ -161,7 +161,7 @@ V1 不支持模板变量、参数填写、提示词组合语法、云同步或�
 
 ## 3. 为什么使用 SQLite
 
-Prompt 是产品内快捷短语，不需要外部 IDE 编辑、文件跳转或独立资源搬运。其核心需求是结构化 CRUD、双语唯一 key、原子更新和稳定排序，因此应归入应用数据。
+Prompt 是产品内快捷短语，不需要外部 IDE 编辑、文件跳转或独立资源搬运。其核心需求是结构化 CRUD、唯一名称映射、原子更新和稳定排序，因此应归入应用数据。
 
 不采用单一 JSON：
 
@@ -193,14 +193,13 @@ SQLite 已经是本项目的应用数据基础设施。Prompt 只需新增一张
 
 ```sql
 CREATE TABLE IF NOT EXISTS prompts (
-    id                TEXT PRIMARY KEY,
-    key_zh            TEXT NOT NULL UNIQUE,
-    key_en            TEXT NOT NULL,
-    normalized_key_en TEXT NOT NULL UNIQUE,
-    value             TEXT NOT NULL,
-    tags_json         TEXT NOT NULL DEFAULT '[]',
-    created_at        INTEGER NOT NULL,
-    updated_at        INTEGER NOT NULL
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    normalized_name TEXT NOT NULL UNIQUE,
+    "desc"          TEXT NOT NULL,
+    value           TEXT NOT NULL,
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_prompts_updated_at
@@ -209,9 +208,11 @@ ON prompts(updated_at DESC, id);
 
 说明：
 
-- `normalized_key_en` 由服务端根据裁剪后的 `key_en` 生成，禁止客户端提交。
+- `normalized_name` 由服务端根据裁剪后的 `name` 生成，禁止客户端提交。
 
-- `tags_json` 是最多两个枚举值的 JSON 数组，解析与枚举校验集中在 Service。
+- `tags` 继续通过统一的 `resource_tags` 关系表存储，不在 `prompts` 表重复保存。
+
+- `0006_prompt_name_schema.sql` 在开发期直接重建 Prompt 表并清除旧 Prompt 标签和启停关系，不保留双 key 兼容或历史数据迁移。
 
 - 不依赖 SQLite `NOCASE` 处理 Unicode；归一化逻辑集中在 Service。
 
@@ -232,8 +233,8 @@ ON prompts(updated_at DESC, id);
 ```go
 type Prompt struct {
     ID          string `json:"id"`
-    KeyZH       string `json:"key_zh"`
-    KeyEN       string `json:"key_en"`
+    Name        string `json:"name"`
+    Desc        string `json:"desc"`
     Value       string `json:"value"`
     Tags        []PromptTag `json:"tags"`
     CreatedAt   int64  `json:"created_at"`
@@ -241,25 +242,25 @@ type Prompt struct {
 }
 ```
 
-`PromptTag` 是 `structure/draft/rewrite/summarize/analysis/data/visual/review/other` 的受控枚举。API 不返回 `normalized_key_en` 或 `tags_json`。
+`PromptTag` 使用 Prompt 仓库当前受控枚举。API 不返回 `normalized_name`，标签与启停状态仍由统一仓库元数据表投影到响应。
 
 ### 5.2 Store
 
 在 `backend/internal/store/store.go` 增加：
 
 ```go
-CreatePrompt(ctx context.Context, prompt model.Prompt, normalizedKeyEN string) error
+CreatePrompt(ctx context.Context, prompt model.Prompt, normalizedName string) error
 GetPrompt(ctx context.Context, id string) (model.Prompt, error)
 ListPrompts(ctx context.Context) ([]model.Prompt, error)
-UpdatePrompt(ctx context.Context, prompt model.Prompt, normalizedKeyEN string) error
+UpdatePrompt(ctx context.Context, prompt model.Prompt, normalizedName string) error
 DeletePrompt(ctx context.Context, id string) error
 ```
 
 SQLite 实现在 `backend/internal/store/sqlite/prompt_store.go`：
 
-- Create/Update 依赖数据库唯一索引解决并发中英文 key 冲突。
+- Create/Update 依赖数据库唯一索引解决并发名称冲突。
 
-- 将唯一约束错误稳定映射为领域错误 `ErrPromptKeyConflict`。
+- 将唯一约束错误稳定映射为领域错误 `ErrPromptNameConflict`。
 
 - Update 必须先确认 ID 存在，不允许隐式 upsert。
 
@@ -271,9 +272,9 @@ SQLite 实现在 `backend/internal/store/sqlite/prompt_store.go`：
 
 - 字段裁剪与长度校验；
 
-- `key_zh` / `key_en` 字符集与唯一性校验；
+- `name` / `desc` 的必填、长度与名称唯一性校验；
 
-- `normalized_key_en` 生成；
+- `normalized_name` 生成；
 
 - 标签去重、数量与枚举校验；
 
@@ -287,7 +288,7 @@ SQLite 实现在 `backend/internal/store/sqlite/prompt_store.go`：
 
 ```text
 ErrPromptNotFound
-ErrPromptKeyConflict
+ErrPromptNameConflict
 ErrPromptInvalid
 ```
 
@@ -309,8 +310,8 @@ Service 不实现 `%LIKE%` 搜索。候选匹配是本地 UI 高频操作，前�
 
 ```json
 {
-  "key_zh": "高管摘要",
-  "key_en": "executive-summary",
+  "name": "高管摘要 / Executive Summary",
+  "desc": "提炼核心结论、关键数据、风险与下一步行动。",
   "value": "请将以上内容整理为高管摘要，突出结论、关键数据、风险与下一步行动。",
   "tags": ["summarize", "rewrite"]
 }
@@ -326,7 +327,7 @@ Service 不实现 `%LIKE%` 搜索。候选匹配是本地 UI 高频操作，前�
 
 - ID 不存在：`404 PROMPT_NOT_FOUND`。
 
-- 中文或英文 key 冲突：`409 PROMPT_KEY_CONFLICT`，错误 detail 指明冲突字段。
+- 名称冲突：`409 PROMPT_NAME_CONFLICT`，错误 detail 的字段为 `name`。
 
 - 字段非法：`400 PROMPT_INVALID`。
 
@@ -450,15 +451,13 @@ value: string[] // Prompt ID，最近使用在前，最多 20 个
 
 - 非空查询标题为“匹配提示词”；
 
-- 每项采用单行紧凑布局：图标、中文 key、`/`、英文 key、`value` 摘要依次排列；
+- 每项采用单行紧凑布局：图标、`name`、`desc` 摘要依次排列；
 
 - `NotebookText` 图标直接显示在行内，不增加独立方框、底色或描边容器；
 
-- 图标列宽约 20px，图标到双语 key 间隔 4px，双语 key 到 `value` 间隔 6px；
+- 图标列宽约 20px，图标到名称间隔 4px，名称到描述间隔 6px；
 
-- 中文 key 与英文 key 使用完全相同的字体、字号、字重和颜色，只用中性 `/` 分隔；
-
-- 两个 key 使用主文字色，`value` 使用次级灰色并在剩余空间内单行截断；
+- `name` 使用主文字色，`desc` 使用次级灰色并在剩余空间内单行截断；
 
 - 不显示 `$` / `¥`；
 
@@ -534,7 +533,7 @@ Prompt 仓库继续使用与 Theme / Component / Skill 一致的 `RepositoryShel
 
 - 右侧：固定详情头部与主内容区；
 
-- 删除按钮位于详情双语 key 右侧；
+- 删除按钮位于详情名称右侧；
 
 - 新建入口在有数据时固定于左侧目录底部，空状态时居中；
 
@@ -544,23 +543,23 @@ Prompt 仓库继续使用与 Theme / Component / Skill 一致的 `RepositoryShel
 
 - 左侧保留 58×42 的稳定对齐区域，`NotebookText` 直接显示，不增加独立方框、底色或描边；
 
-- 中间上行以相同视觉权重展示 `中文 key / 英文 key`；
+- 中间上行展示 `name`，中英文可由用户直接写在同一名称中；
 
-- 中间下行展示两行以内的 `value`；
+- 中间下行展示两行以内的 `desc`；
 
 - 右侧为 ChevronRight；
 
 - 选中态沿用现有浅蓝背景。
 
-筛选栏使用标签枚举，允许选择“全部”或一个标签。搜索范围与 Composer 一致：`key_zh + key_en + value + 标签名称` 包含匹配。
+筛选栏使用标签枚举，允许选择“全部”或一个标签。搜索范围与 Composer 一致：`name + desc + value + 标签名称` 包含匹配。
 
 ### 8.3 查看、编辑与新建
 
 默认查看态：
 
-- 头部以相同视觉权重展示 `中文 key / 英文 key`；
+- 头部展示 `name`，下方展示 `desc`；
 
-- 头部不显示 `value`，仅在 key 下方展示标签；
+- 头部不显示 `value`，描述下方展示标签；
 
 - 标签之间保持 8px 间距并允许换行；
 
@@ -568,15 +567,15 @@ Prompt 仓库继续使用与 Theme / Component / Skill 一致的 `RepositoryShel
 
 - 主区域使用唯一的文稿卡片直接展示完整 `value`，不增加“提示词 value”等重复标签；
 
-- 左侧目录中的 `value` 仅作为当前列表项摘要，右侧不在头部再次重复；
+- 左侧目录中的 `desc` 作为当前列表项摘要，右侧主区域只展示 `value`；
 
-- 删除按钮仍紧随双语 key 标题。
+- 删除按钮仍紧随名称标题。
 
 编辑态：
 
 - 使用原位表单，不打开 Modal；
 
-- 字段顺序为中文 key、英文 key、标签、提示词 value；
+- 字段顺序为 `name`、`desc`、标签、`value`；
 
 - 右上角显示“取消”和“保存”；
 
@@ -586,7 +585,7 @@ Prompt 仓库继续使用与 Theme / Component / Skill 一致的 `RepositoryShel
 
 - 保存成功回到查看态；
 
-- key 冲突时错误贴近对应的中文或英文 key 输入框显示；
+- 名称冲突时错误贴近 `name` 输入框显示；
 
 - 离开存在未保存修改的条目时弹出确认。
 
@@ -594,7 +593,7 @@ Prompt 仓库继续使用与 Theme / Component / Skill 一致的 `RepositoryShel
 
 - 左侧目录保持可见，右侧进入空表单；
 
-- 默认聚焦中文 key；
+- 默认聚焦 `name`；
 
 - 保存成功后选中新条目并进入查看态；
 
@@ -648,7 +647,7 @@ Prompt 仓库继续使用与 Theme / Component / Skill 一致的 `RepositoryShel
 
 - contenteditable 粘贴只接受 `text/plain`。
 
-- 中英文 key 唯一性由数据库最终保证，前端预校验仅用于即时反馈。
+- 名称唯一性由数据库最终保证，前端预校验仅用于即时反馈。
 
 - CRUD 更新使用完整 PUT，开发期不保留旧结构兼容层。
 
@@ -666,19 +665,19 @@ Prompt 仓库继续使用与 Theme / Component / Skill 一致的 `RepositoryShel
 
 - ID 稳定、时间更新；
 
-- 中英文 key 字符集与必填校验；
+- 名称和描述的必填与长度校验；
 
-- 中文 key 重复与英文 key 大小写冲突；
+- 名称大小写冲突；
 
 - 标签枚举、去重与最多 2 个校验；
 
-- key 更新冲突映射为 409 并标明字段；
+- 名称更新冲突映射为 409 并标明字段；
 
 - 字段裁剪、空值和长度边界；
 
 - 删除不存在资源返回 404；
 
-- 并发创建同 key 仅一个成功；
+- 并发创建同名 Prompt 仅一个成功；
 
 - Store 与 Handler 错误投影。
 
@@ -734,7 +733,7 @@ Prompt 仓库继续使用与 Theme / Component / Skill 一致的 `RepositoryShel
 
 - 新建、编辑、取消、保存；
 
-- key 冲突字段错误；
+- 名称冲突字段错误；
 
 - 未保存修改确认；
 
@@ -778,4 +777,3 @@ Prompt 仓库继续使用与 Theme / Component / Skill 一致的 `RepositoryShel
 - 使用频次服务端统计；
 
 - 将 Prompt 来源信息写入 Run 或历史消息。
-

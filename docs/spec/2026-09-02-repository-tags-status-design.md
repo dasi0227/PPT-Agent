@@ -104,7 +104,7 @@
 - 禁用 Prompt 不进入 Composer 快捷候选和最近使用候选。
 - Theme 仅使用标签筛选，不提供启停状态。
 - 详情标题右侧操作统一按“编辑、删除、外部查看”排列；无文件入口的 Prompt 仅显示编辑和删除。
-- 编辑使用 Dialog：Theme、Component、Skill 支持修改名称、描述和标签，Prompt 支持修改中英文 key、正文和标签。
+- 编辑使用 Dialog：Theme、Component、Skill 支持修改名称、描述和标签，Prompt 支持修改名称、描述、正文和标签。
 
 ## 5. SQLite 存储
 
@@ -146,7 +146,7 @@ resource_states
 - Component 使用 `index.html` 顶部的 HTML 注释 Frontmatter，不再使用 JSON `<script id="meta">`。
 - Skill 继续使用 `SKILL.md` 顶部的 Markdown Frontmatter。
 - 编辑名称或描述时原子改写对应资源文件，正文内容保持不变；标签仍写入 `resource_tags`。
-- Prompt 的中英文 key 和正文继续直接存储在 `prompts` 表。
+- Prompt 的 `name`、`desc` 和 `value` 继续直接存储在 `prompts` 表；`tags` 由统一关系表存储。
 
 ## 6. 当前阶段落地
 

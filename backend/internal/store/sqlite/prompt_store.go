@@ -10,21 +10,21 @@ import (
 )
 
 type promptPO struct {
-	ID              string `gorm:"column:id"`
-	KeyZH           string `gorm:"column:key_zh"`
-	KeyEN           string `gorm:"column:key_en"`
-	NormalizedKeyEN string `gorm:"column:normalized_key_en"`
-	Value           string `gorm:"column:value"`
-	CreatedAt       int64  `gorm:"column:created_at"`
-	UpdatedAt       int64  `gorm:"column:updated_at"`
+	ID             string `gorm:"column:id"`
+	Name           string `gorm:"column:name"`
+	NormalizedName string `gorm:"column:normalized_name"`
+	Desc           string `gorm:"column:desc"`
+	Value          string `gorm:"column:value"`
+	CreatedAt      int64  `gorm:"column:created_at"`
+	UpdatedAt      int64  `gorm:"column:updated_at"`
 }
 
 func (promptPO) TableName() string { return "prompts" }
 
-func promptToPO(prompt model.Prompt, normalizedKeyEN string) promptPO {
+func promptToPO(prompt model.Prompt, normalizedName string) promptPO {
 	return promptPO{
-		ID: prompt.ID, KeyZH: prompt.KeyZH, KeyEN: prompt.KeyEN,
-		NormalizedKeyEN: normalizedKeyEN, Value: prompt.Value,
+		ID: prompt.ID, Name: prompt.Name, NormalizedName: normalizedName,
+		Desc: prompt.Desc, Value: prompt.Value,
 		CreatedAt: prompt.CreatedAt, UpdatedAt: prompt.UpdatedAt,
 	}
 }
@@ -51,7 +51,7 @@ func (s *Store) promptToModel(ctx context.Context, po promptPO) (model.Prompt, e
 		return model.Prompt{}, err
 	}
 	return model.Prompt{
-		ID: po.ID, KeyZH: po.KeyZH, KeyEN: po.KeyEN, Value: po.Value,
+		ID: po.ID, Name: po.Name, Desc: po.Desc, Value: po.Value,
 		Tags: tags, Disabled: disabled, CreatedAt: po.CreatedAt, UpdatedAt: po.UpdatedAt,
 	}, nil
 }
@@ -60,18 +60,14 @@ func promptConstraintError(err error) error {
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
 		return err
 	}
-	field := "key"
-	switch {
-	case strings.Contains(err.Error(), "prompts.key_zh"):
-		field = "key_zh"
-	case strings.Contains(err.Error(), "prompts.normalized_key_en"):
-		field = "key_en"
+	if strings.Contains(err.Error(), "prompts.normalized_name") {
+		return &store.PromptNameConflictError{Field: "name"}
 	}
-	return &store.PromptKeyConflictError{Field: field}
+	return err
 }
 
-func (s *Store) CreatePrompt(ctx context.Context, prompt model.Prompt, normalizedKeyEN string) error {
-	po := promptToPO(prompt, normalizedKeyEN)
+func (s *Store) CreatePrompt(ctx context.Context, prompt model.Prompt, normalizedName string) error {
+	po := promptToPO(prompt, normalizedName)
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&po).Error; err != nil {
 			return err
@@ -112,11 +108,11 @@ func (s *Store) ListPrompts(ctx context.Context) ([]model.Prompt, error) {
 	return prompts, nil
 }
 
-func (s *Store) UpdatePrompt(ctx context.Context, prompt model.Prompt, normalizedKeyEN string) error {
-	po := promptToPO(prompt, normalizedKeyEN)
+func (s *Store) UpdatePrompt(ctx context.Context, prompt model.Prompt, normalizedName string) error {
+	po := promptToPO(prompt, normalizedName)
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&promptPO{}).Where("id = ?", prompt.ID).Updates(map[string]any{
-			"key_zh": po.KeyZH, "key_en": po.KeyEN, "normalized_key_en": po.NormalizedKeyEN,
+			"name": po.Name, "normalized_name": po.NormalizedName, "desc": po.Desc,
 			"value": po.Value, "updated_at": po.UpdatedAt,
 		})
 		if result.Error != nil {
