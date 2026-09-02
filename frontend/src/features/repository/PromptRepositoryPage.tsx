@@ -1,4 +1,4 @@
-import { Check, NotebookText, Plus, X } from 'lucide-react';
+import { Check, NotebookText, Pause, Plus, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { APIError } from '../../api/client';
 import type { Prompt, PromptTag, PromptWriteRequest } from '../../api/types';
@@ -402,9 +402,13 @@ export function PromptRepositoryPage() {
                   disabled={prompt.disabled}
                   name={prompt.name}
                   description={prompt.desc}
-                  visual={<NotebookText className="h-[17px] w-[17px]" strokeWidth={1.75} />}
-                  visualBare
-                  visualClassName="text-accent"
+                  visual={prompt.disabled
+                    ? <Pause className="h-4 w-4" strokeWidth={1.75} />
+                    : <NotebookText className="h-[17px] w-[17px]" strokeWidth={1.75} />}
+                  visualBare={!prompt.disabled}
+                  visualClassName={prompt.disabled
+                    ? 'h-9 w-9 rounded-full border-0 bg-panel-muted text-text-400'
+                    : 'text-accent'}
                   onClick={() => selectPrompt(prompt.id)}
                 />
               ))}

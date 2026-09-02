@@ -140,7 +140,7 @@ export function RepositoryDirectoryItem({
     >
       <span
         className={cn(
-          'grid h-[42px] w-[58px] place-items-center overflow-hidden',
+          'grid h-[42px] w-[58px] place-items-center justify-self-center overflow-hidden',
           !visualBare && 'rounded-md border border-border bg-surface',
           visualClassName,
         )}

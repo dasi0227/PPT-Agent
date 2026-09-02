@@ -86,11 +86,14 @@ describe('PromptRepositoryPage', () => {
     renderPage();
 
     const toggle = screen.getByRole('switch', { name: '切换提示词状态' });
+    const directoryItem = screen.getByRole('button', { name: `${first.name}${first.desc}` });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(directoryItem.querySelector('.lucide-notebook-text')).toBeInTheDocument();
     fireEvent.click(toggle);
 
     await waitFor(() => expect(mocks.setDisabled).toHaveBeenCalledWith(first.id, true));
     await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'));
+    expect(directoryItem.querySelector('.lucide-pause')).toBeInTheDocument();
   });
 
   it('filters by tag and creates prompts from the inline form', async () => {
