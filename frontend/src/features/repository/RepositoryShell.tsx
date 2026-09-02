@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft, BookOpenText, Component, NotebookText, Palette, RefreshCw } from 'lucide-react';
+import { BookOpenText, Component, Home, NotebookText, Palette, RefreshCw } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
@@ -51,8 +51,8 @@ export function RepositoryShell({
         <button type="button" onClick={onRefresh} className="grid h-8 w-8 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 active:translate-y-px" title="刷新仓库" aria-label="刷新仓库">
           <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
         </button>
-        <Link to={returnTo} className="ml-1 grid h-8 w-8 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 active:translate-y-px" title="返回项目" aria-label="返回项目">
-          <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+        <Link to={returnTo} className="ml-1 grid h-8 w-8 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 active:translate-y-px" title="返回主页" aria-label="返回主页">
+          <Home className="h-4 w-4" strokeWidth={1.75} />
         </Link>
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">

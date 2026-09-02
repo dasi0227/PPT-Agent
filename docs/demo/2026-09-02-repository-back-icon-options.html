@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>仓库返回图标 · 方案选型</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --panel: #fafbfc;
+    --panel-muted: #eef0f3;
+    --border: #e5e7eb;
+    --border-strong: #d9dde3;
+    --text-900: #111827;
+    --text-700: #374151;
+    --text-600: #4b5563;
+    --text-500: #6b7280;
+    --accent: #2f67f6;
+    --accent-soft: rgba(47, 103, 246, 0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text-900); font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .subtitle { color: var(--text-600); margin: 0 0 24px; }
+  .section { margin-top: 28px; }
+  .section-title { font-size: 13px; font-weight: 700; color: var(--text-700); margin: 0 0 8px; letter-spacing: 0.02em; text-transform: uppercase; }
+  .section-desc { color: var(--text-600); margin: 0 0 12px; font-size: 12.5px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .card-title { font-weight: 700; font-size: 13px; }
+  .card-tag { font-size: 11px; color: var(--text-500); padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); }
+  .card-desc { color: var(--text-600); font-size: 12px; margin: 0 0 10px; line-height: 1.5; }
+
+  /* header simulation */
+  .header {
+    display: flex; align-items: center; gap: 0;
+    height: 44px; padding: 0 6px;
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.75);
+  }
+  .brand { display: flex; align-items: center; gap: 6px; padding: 0 6px; height: 32px; border-radius: 6px; cursor: pointer; }
+  .brand:hover { background: var(--panel-muted); }
+  .brand-logo { width: 28px; height: 28px; border-radius: 4px; background: linear-gradient(135deg, #2f67f6, #7ea8ff); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 12px; }
+  .brand-name { font-weight: 700; font-size: 13px; }
+  .divider { width: 1px; height: 18px; background: var(--border); margin: 0 8px; }
+  .title { flex: 1; min-width: 0; font-weight: 700; font-size: 13px; }
+  .btn { display: inline-grid; place-items: center; height: 30px; min-width: 30px; padding: 0 8px; border-radius: 6px; color: var(--text-600); cursor: pointer; transition: background .15s, color .15s; border: none; background: transparent; }
+  .btn:hover { background: var(--panel-muted); color: var(--text-900); }
+  .btn svg { display: block; }
+  .btn.text { gap: 4px; display: inline-flex; align-items: center; font-size: 12.5px; }
+  .btn.text span { margin-left: 4px; }
+  .btn.pill { border: 1px solid var(--border); background: var(--panel); padding: 0 10px; font-size: 12px; }
+  .btn.pill:hover { background: var(--panel-muted); }
+  .btn.accent { color: var(--accent); }
+  .btn.accent:hover { background: var(--accent-soft); }
+
+  .row-gap { display: flex; align-items: center; gap: 4px; }
+  .divider-inline { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
+
+  .footer-note { color: var(--text-500); font-size: 12px; margin-top: 32px; }
+  .checkbox {
+    position: absolute; top: 10px; right: 10px;
+    width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border-strong); background: #fff;
+    display: grid; place-items: center; cursor: pointer;
+  }
+  .card { position: relative; transition: border-color .15s, box-shadow .15s; }
+  .card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .card.selected .checkbox { background: var(--accent); border-color: var(--accent); }
+  .card.selected .checkbox::after { content: ""; width: 6px; height: 10px; border: 2px solid #fff; border-top: 0; border-left: 0; transform: rotate(45deg) translate(-1px, -1px); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>仓库页 · 返回图标方案</h1>
+  <p class="subtitle">当前实现：右侧 <code>ArrowLeft</code>（←）+ 左侧 Logo 都跳回项目/主页。以下按语义分组给出候选，点击卡片可标记你的偏好。</p>
+
+  <!-- Group A -->
+  <div class="section">
+    <div class="section-title">A · 表意「主页」</div>
+    <p class="section-desc">强调回到应用主入口（首页 / 项目列表），语义最直白。</p>
+    <div class="grid">
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">A1 · Home（房子）</div><span class="card-tag">lucide/Home</span></div>
+        <p class="card-desc">最通用的"主页"图标，语义无歧义。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <button class="btn" title="返回项目">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7"/><path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">A2 · House（实心屋顶）</div><span class="card-tag">lucide/House</span></div>
+        <p class="card-desc">与 Home 视觉略不同，屋顶更平缓，风格更"现代"。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <button class="btn" title="返回主页">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">A3 · Home + "主页" 文本</div><span class="card-tag">图标 + 文本</span></div>
+        <p class="card-desc">语义最强，宽度较大；适合突出返回入口的重要性。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <button class="btn pill text" title="返回主页">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7"/><path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9"/></svg>
+            <span>主页</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Group B -->
+  <div class="section">
+    <div class="section-title">B · 表意「项目」</div>
+    <p class="section-desc">强调回到"当前项目"，与 PPT 创作场景更贴合。</p>
+    <div class="grid">
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">B1 · Presentation（幻灯片）</div><span class="card-tag">lucide/Presentation</span></div>
+        <p class="card-desc">带箭头的投影屏，最契合 PPT 项目语义。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <button class="btn" title="返回项目">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h20"/><path d="M21 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3"/><path d="m7 21 5-6 5 6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">B2 · FolderOpen（打开文件夹）</div><span class="card-tag">lucide/FolderOpen</span></div>
+        <p class="card-desc">复用"打开项目"入口的既有图标，语义一致。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <button class="btn" title="返回项目">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">B3 · LayoutDashboard（工作台）</div><span class="card-tag">lucide/LayoutDashboard</span></div>
+        <p class="card-desc">"项目主界面"意象，四格代表结构化的项目内容。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <button class="btn" title="返回项目">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">B4 · Presentation + 项目名</div><span class="card-tag">图标 + 上下文</span></div>
+        <p class="card-desc">明确"回到 ××× 项目"，上下文最强。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn pill text" title="返回项目">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h20"/><path d="M21 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3"/><path d="m7 21 5-6 5 6"/></svg>
+            <span>季度汇报</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Group C -->
+  <div class="section">
+    <div class="section-title">C · 表意「离开当前 / 返回」</div>
+    <p class="section-desc">保留"返回"含义，但比 ArrowLeft 更有辨识度或更贴近"返回上层"。</p>
+    <div class="grid">
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">C1 · ArrowLeft（当前）</div><span class="card-tag">lucide/ArrowLeft</span></div>
+        <p class="card-desc">当前实现，最通用的"返回"，但语义泛化。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <button class="btn" title="返回">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">C2 · CornerUpLeft（返回上层）</div><span class="card-tag">lucide/CornerUpLeft</span></div>
+        <p class="card-desc">"折返上一层"的意象，比水平箭头更有层级感。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <button class="btn" title="返回">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">C3 · LogOut（离开）</div><span class="card-tag">lucide/LogOut</span></div>
+        <p class="card-desc">"离开仓库"的意象，但可能与"退出登录"混淆。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <button class="btn" title="离开仓库">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Group D -->
+  <div class="section">
+    <div class="section-title">D · 组合与替代方案</div>
+    <p class="section-desc">通过左侧品牌区、面包屑或分段替换纯图标按钮。</p>
+    <div class="grid">
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">D1 · 面包屑替代</div><span class="card-tag">Brand · 项目 / 仓库</span></div>
+        <p class="card-desc">用面包屑显式展示层级，去掉右侧独立返回按钮。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div></div>
+          <div class="row-gap" style="flex:1; min-width:0;">
+            <a class="btn text accent" title="返回主页" style="height:28px;padding:0 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7"/><path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9"/></svg>
+              <span>Dasi PPT Agent</span>
+            </a>
+            <span style="color: var(--text-500)">/</span>
+            <a class="btn text" title="返回项目" style="height:28px;padding:0 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h20"/><path d="M21 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3"/><path d="m7 21 5-6 5 6"/></svg>
+              <span>季度汇报</span>
+            </a>
+            <span style="color: var(--text-500)">/</span>
+            <span style="font-weight:700; font-size:13px;">仓库</span>
+          </div>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+        </div>
+      </div>
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">D2 · 双按钮（主页 + 项目）</div><span class="card-tag">Home + Presentation</span></div>
+        <p class="card-desc">同时提供"回主页"和"回项目"两个入口，语义分明。</p>
+        <div class="header">
+          <div class="brand"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+          <span class="divider-inline"></span>
+          <button class="btn" title="返回项目">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h20"/><path d="M21 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3"/><path d="m7 21 5-6 5 6"/></svg>
+          </button>
+          <button class="btn" title="返回主页">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7"/><path d="M5 9v11a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card" onclick="toggleSelect(this)">
+        <div class="checkbox"></div>
+        <div class="card-head"><div class="card-title">D3 · Brand-only（去右侧按钮）</div><span class="card-tag">仅左侧 Logo</span></div>
+        <p class="card-desc">Logo 已承担返回入口，移除右侧独立按钮，页面更精简。</p>
+        <div class="header">
+          <div class="brand" title="返回项目"><div class="brand-logo">D</div><span class="brand-name">Dasi PPT Agent</span></div>
+          <span class="divider"></span>
+          <span class="title">仓库</span>
+          <button class="btn" title="刷新"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 21v-5h5"/></svg></button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <p class="footer-note">点击卡片可标记 / 取消选择。当前实现为 <b>C1 · ArrowLeft</b>；上一次约定为"仓库类页面返回主页使用 Home 图标而非叉号"（即 A 组方向）。</p>
+</div>
+
+<script>
+  function toggleSelect(el) { el.classList.toggle('selected'); }
+</script>
+</body>
+</html>

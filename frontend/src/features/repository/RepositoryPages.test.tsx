@@ -303,7 +303,7 @@ describe('personal repository pages', () => {
     });
 
     await screen.findByText('没有匹配的主题');
-    fireEvent.click(screen.getByRole('link', { name: '返回项目' }));
+    fireEvent.click(screen.getByRole('link', { name: '返回主页' }));
     expect(screen.getByLabelText('location')).toHaveTextContent('/projects/project-7?slide=slide-2');
   });
 
