@@ -1,0 +1,1733 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dasi 提示词库交互原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --canvas: #f1f4f8;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --accent-fragment: rgba(47, 103, 246, 0.07);
+      --danger: #c94242;
+      --danger-soft: #fff0f0;
+      --shadow: 0 14px 36px rgba(51, 65, 85, 0.14);
+      --shadow-menu: 0 18px 46px rgba(31, 42, 55, 0.2);
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 320px;
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      overflow: hidden;
+      background: var(--workspace);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    textarea {
+      color: inherit;
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible,
+    [contenteditable="true"]:focus-visible {
+      outline: 2px solid rgba(47, 103, 246, 0.55);
+      outline-offset: 2px;
+    }
+
+    .demo {
+      display: grid;
+      width: 100%;
+      height: 100dvh;
+      grid-template-rows: 48px minmax(0, 1fr);
+    }
+
+    .demo-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--border-strong);
+      background: var(--surface);
+      padding: 0 12px 0 16px;
+    }
+
+    .demo-title {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 9px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .demo-title svg {
+      color: var(--accent);
+    }
+
+    .view-switch {
+      display: flex;
+      border-radius: 8px;
+      background: var(--panel-muted);
+      padding: 2px;
+    }
+
+    .view-button {
+      display: inline-flex;
+      height: 30px;
+      align-items: center;
+      gap: 6px;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 11px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .view-button.active {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(51, 65, 85, 0.12);
+    }
+
+    .view {
+      display: none;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    /* Composer focus view */
+    .composer-view {
+      height: 100%;
+      overflow: auto;
+      background:
+        linear-gradient(90deg, var(--workspace) 0, var(--workspace) calc(100% - 720px), var(--panel) calc(100% - 720px), var(--panel) 100%);
+    }
+
+    .agent-column {
+      position: relative;
+      display: grid;
+      width: min(720px, 100%);
+      max-width: 100vw;
+      min-width: 0;
+      min-height: 100%;
+      margin-left: auto;
+      grid-template-rows: 44px minmax(300px, 1fr) auto;
+      border-left: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .agent-head {
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 14px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .timeline {
+      display: flex;
+      min-height: 0;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 12px;
+      overflow: hidden;
+      padding: 24px 22px 16px;
+    }
+
+    .message {
+      width: min(86%, 520px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 12px 14px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .message.agent {
+      align-self: flex-start;
+      border-left: 2px solid var(--accent);
+    }
+
+    .composer-area {
+      position: relative;
+      padding: 4px 12px 12px;
+    }
+
+    .prompt-menu {
+      position: absolute;
+      z-index: 20;
+      right: 12px;
+      bottom: calc(100% - 2px);
+      left: 12px;
+      display: none;
+      width: auto;
+      max-height: 280px;
+      overflow-y: auto;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 5px;
+      box-shadow: var(--shadow-menu);
+    }
+
+    .prompt-menu.visible {
+      display: block;
+    }
+
+    .menu-label {
+      padding: 7px 8px 5px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .prompt-option {
+      display: grid;
+      width: 100%;
+      min-height: 42px;
+      grid-template-columns: 20px minmax(0, 1fr);
+      align-items: center;
+      gap: 4px;
+      border-radius: 6px;
+      background: transparent;
+      padding: 6px 8px;
+      text-align: left;
+    }
+
+    .prompt-option.active,
+    .prompt-option:hover {
+      background: var(--accent-soft);
+    }
+
+    .option-icon {
+      display: grid;
+      width: 20px;
+      height: 24px;
+      place-items: center;
+      color: var(--accent);
+    }
+
+    .option-copy {
+      display: flex;
+      min-width: 0;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .option-head {
+      display: flex;
+      min-width: 0;
+      max-width: 44%;
+      flex: 0 1 auto;
+      align-items: baseline;
+      gap: 4px;
+      overflow: hidden;
+    }
+
+    .option-key-zh,
+    .option-key-en {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .option-key-separator {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .option-value {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      color: var(--text-secondary);
+      font-size: 11px;
+      line-height: 16px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .menu-empty {
+      display: grid;
+      min-height: 64px;
+      place-items: center;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .composer {
+      position: relative;
+      border: 1px solid rgba(196, 206, 218, 0.8);
+      border-radius: 20px;
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    .editor {
+      min-height: 78px;
+      max-height: 150px;
+      overflow-y: auto;
+      padding: 12px 42px 10px 12px;
+      font-size: 14px;
+      line-height: 22px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .editor:empty::before {
+      color: var(--text-muted);
+      content: attr(data-placeholder);
+      pointer-events: none;
+    }
+
+    .prompt-fragment {
+      background: var(--accent-fragment);
+      color: var(--accent);
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }
+
+    .polish-button {
+      position: absolute;
+      top: 9px;
+      right: 10px;
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--accent);
+    }
+
+    .composer-controls {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 10px 9px;
+    }
+
+    .control-group {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .control-button {
+      display: inline-flex;
+      height: 28px;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 8px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .control-button.active {
+      border-color: rgba(47, 103, 246, 0.3);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .send-button {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 6px;
+      background: var(--accent);
+      color: white;
+    }
+
+    /* Repository view */
+    .repository-view {
+      height: 100%;
+    }
+
+    .repository-app {
+      display: grid;
+      width: 100%;
+      height: 100%;
+      grid-template-rows: 48px minmax(0, 1fr);
+    }
+
+    .app-bar {
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border-strong);
+      background: var(--surface);
+      padding: 0 8px;
+    }
+
+    .brand {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 8px;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 8px;
+      font-size: 16px;
+      font-weight: 750;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 3px;
+      object-fit: cover;
+    }
+
+    .bar-divider {
+      width: 1px;
+      height: 20px;
+      margin: 0 8px;
+      background: var(--border);
+    }
+
+    .bar-title {
+      min-width: 0;
+      flex: 1;
+      font-size: 16px;
+      font-weight: 750;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-secondary);
+    }
+
+    .icon-button:hover {
+      background: var(--panel-muted);
+      color: var(--text);
+    }
+
+    .repo-shell {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-columns: 208px minmax(0, 1fr);
+    }
+
+    .module-nav {
+      min-height: 0;
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+      padding: 12px;
+    }
+
+    .module-button {
+      display: flex;
+      width: 100%;
+      height: 40px;
+      align-items: center;
+      gap: 10px;
+      border-radius: 8px;
+      background: transparent;
+      padding: 0 12px;
+      color: var(--text-secondary);
+      font-size: 14px;
+      text-align: left;
+    }
+
+    .module-button + .module-button {
+      margin-top: 4px;
+    }
+
+    .module-button.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      box-shadow: inset 0 0 0 1px rgba(47, 103, 246, 0.08);
+    }
+
+    .repo-content {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: 64px minmax(0, 1fr);
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 24px;
+    }
+
+    .page-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 750;
+    }
+
+    .search {
+      display: flex;
+      width: min(280px, 48vw);
+      height: 36px;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 0 12px;
+      color: var(--text-muted);
+    }
+
+    .search:focus-within {
+      border-color: var(--accent);
+      background: var(--surface);
+      box-shadow: 0 0 0 3px rgba(47, 103, 246, 0.08);
+    }
+
+    .search input {
+      min-width: 0;
+      flex: 1;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      font-size: 13px;
+    }
+
+    .repo-workspace {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      grid-template-columns: 320px minmax(0, 1fr);
+    }
+
+    .catalog {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: 48px minmax(0, 1fr) 52px;
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+    }
+
+    .catalog-head {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--border);
+      padding: 0 12px;
+      scrollbar-width: none;
+    }
+
+    .catalog-head::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter-button {
+      height: 28px;
+      flex: none;
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 10px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .filter-button.active {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--accent);
+      box-shadow: 0 1px 3px rgba(51, 65, 85, 0.1);
+    }
+
+    .directory {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .directory-item {
+      display: grid;
+      width: 100%;
+      min-height: 66px;
+      grid-template-columns: 58px minmax(0, 1fr) 18px;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      padding: 8px;
+      text-align: left;
+    }
+
+    .directory-item + .directory-item {
+      margin-top: 4px;
+    }
+
+    .directory-item:hover {
+      border-color: var(--border);
+      background: var(--surface);
+    }
+
+    .directory-item.active {
+      border-color: rgba(47, 103, 246, 0.28);
+      background: var(--accent-soft);
+    }
+
+    .prompt-mark {
+      display: grid;
+      width: 58px;
+      height: 42px;
+      place-items: center;
+      color: var(--accent);
+    }
+
+    .item-copy {
+      min-width: 0;
+    }
+
+    .item-name,
+    .item-key-en {
+      min-width: 0;
+      flex: 0 1 auto;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 750;
+      line-height: 18px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .item-key-row {
+      display: flex;
+      min-width: 0;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .item-key-separator {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    .item-description {
+      display: -webkit-box;
+      overflow: hidden;
+      margin-top: 2px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      line-height: 16px;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .item-chevron {
+      color: var(--text-muted);
+    }
+
+    .catalog-foot {
+      display: flex;
+      align-items: center;
+      border-top: 1px solid var(--border);
+      padding: 8px 10px;
+    }
+
+    .new-button {
+      display: inline-flex;
+      width: 100%;
+      height: 34px;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border: 1px dashed var(--border-strong);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .new-button:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .detail {
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: 128px minmax(0, 1fr);
+      background: var(--canvas);
+    }
+
+    .detail-header {
+      display: flex;
+      min-width: 0;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 20px 20px 14px;
+    }
+
+    .detail-copy {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .detail-title-row {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .detail-title {
+      overflow: hidden;
+      margin: 0;
+      font-size: 16px;
+      font-weight: 750;
+      line-height: 24px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .delete-button {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-muted);
+    }
+
+    .delete-button:hover {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .tag-list {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .tag {
+      display: inline-flex;
+      height: 22px;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      padding: 0 7px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .detail-actions {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .secondary-button,
+    .primary-button {
+      display: inline-flex;
+      height: 30px;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 6px;
+      padding: 0 11px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .secondary-button {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-secondary);
+    }
+
+    .primary-button {
+      background: var(--accent);
+      color: white;
+    }
+
+    .detail-main {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 30px;
+    }
+
+    .prompt-sheet {
+      width: min(100%, 920px);
+      min-height: 260px;
+      margin: 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 30px 34px;
+      box-shadow: 0 12px 34px rgba(51, 65, 85, 0.08);
+    }
+
+    .sheet-content {
+      margin: 0;
+      color: #354150;
+      font-size: 14px;
+      line-height: 1.85;
+      white-space: pre-wrap;
+    }
+
+    .edit-form {
+      display: none;
+      width: min(100%, 820px);
+      margin: 0 auto;
+    }
+
+    .detail.editing .edit-form {
+      display: block;
+    }
+
+    .detail.editing .prompt-sheet {
+      display: none;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr);
+      gap: 16px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    .field label {
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .field input,
+    .field textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 9px 11px;
+      outline: 0;
+      font-size: 13px;
+    }
+
+    .field input:focus,
+    .field textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(47, 103, 246, 0.08);
+    }
+
+    .field textarea {
+      min-height: 220px;
+      resize: vertical;
+      line-height: 1.7;
+    }
+
+    .key-input-wrap {
+      position: relative;
+    }
+
+    .key-prefix {
+      position: absolute;
+      top: 50%;
+      left: 11px;
+      color: var(--accent);
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 13px;
+      transform: translateY(-50%);
+    }
+
+    .key-input-wrap input {
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    }
+
+    .tag-editor {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag-choice {
+      height: 28px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      padding: 0 9px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .tag-choice.active {
+      border-color: rgba(47, 103, 246, 0.3);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .confirm-popover {
+      position: fixed;
+      z-index: 40;
+      top: 50%;
+      left: 50%;
+      display: none;
+      width: 300px;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 16px;
+      box-shadow: var(--shadow-menu);
+      transform: translate(-50%, -50%);
+    }
+
+    .confirm-popover.visible {
+      display: block;
+    }
+
+    .confirm-popover strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .confirm-popover p {
+      margin: 6px 0 14px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 18px;
+    }
+
+    .confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 7px;
+    }
+
+    .danger-button {
+      display: inline-flex;
+      height: 30px;
+      align-items: center;
+      border-radius: 6px;
+      background: var(--danger);
+      padding: 0 11px;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 980px) {
+      .repo-shell {
+        grid-template-columns: 64px minmax(0, 1fr);
+      }
+
+      .module-nav {
+        padding: 10px;
+      }
+
+      .module-button {
+        justify-content: center;
+        padding: 0;
+      }
+
+      .module-button span {
+        display: none;
+      }
+
+      .repo-workspace {
+        grid-template-columns: 286px minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 760px) {
+      body {
+        overflow: auto;
+      }
+
+      .demo {
+        min-height: 100dvh;
+        height: auto;
+      }
+
+      .demo-title span {
+        display: none;
+      }
+
+      .composer-view {
+        background: var(--panel);
+      }
+
+      .agent-column {
+        width: 100vw;
+      }
+
+      .prompt-menu {
+        right: 12px;
+        left: 12px;
+        width: auto;
+      }
+
+      .composer-controls {
+        gap: 6px;
+      }
+
+      .control-group {
+        gap: 2px;
+      }
+
+      .control-button {
+        padding: 0 6px;
+      }
+
+      .control-group:last-child .control-button:nth-child(2),
+      .control-group:last-child .control-button:nth-child(3) {
+        display: none;
+      }
+
+      .repo-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .module-nav {
+        display: flex;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .module-button {
+        flex: 1;
+      }
+
+      .module-button + .module-button {
+        margin-top: 0;
+      }
+
+      .module-button span {
+        display: inline;
+      }
+
+      .repo-content {
+        min-height: 900px;
+      }
+
+      .repo-workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: 300px minmax(560px, 1fr);
+      }
+
+      .catalog {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .detail-header {
+        gap: 12px;
+      }
+
+      .detail-main {
+        padding: 16px;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="demo">
+    <header class="demo-bar">
+      <div class="demo-title">
+        <i data-lucide="notebook-text" width="17" height="17"></i>
+        <span>提示词库交互原型</span>
+      </div>
+      <div class="view-switch" role="tablist" aria-label="原型页面">
+        <button class="view-button active" type="button" data-view="composer" role="tab" aria-selected="true">
+          <i data-lucide="message-square-text" width="14" height="14"></i>
+          输入框
+        </button>
+        <button class="view-button" type="button" data-view="repository" role="tab" aria-selected="false">
+          <i data-lucide="library" width="14" height="14"></i>
+          提示词仓库
+        </button>
+      </div>
+    </header>
+
+    <section class="view composer-view active" data-view-panel="composer">
+      <aside class="agent-column" aria-label="Agent 右栏">
+        <header class="agent-head">Agent</header>
+        <div class="timeline">
+          <div class="message agent">已读取当前演示文稿。你可以继续描述需要调整的内容。</div>
+        </div>
+        <div class="composer-area">
+          <div class="prompt-menu visible" id="prompt-menu" role="listbox" aria-label="提示词候选"></div>
+          <div class="composer">
+            <div
+              class="editor"
+              id="editor"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+              data-placeholder="输入你的想法与目标"
+              spellcheck="false"
+            >请根据以下材料， $</div>
+            <button class="polish-button" type="button" title="润色表达" aria-label="润色表达">
+              <i data-lucide="sparkles" width="14" height="14"></i>
+            </button>
+            <div class="composer-controls">
+              <div class="control-group">
+                <button class="control-button active" type="button"><i data-lucide="wand-sparkles" width="13" height="13"></i>执行</button>
+                <button class="control-button" type="button"><i data-lucide="list-checks" width="13" height="13"></i>计划</button>
+              </div>
+              <div class="control-group">
+                <button class="control-button" type="button"><i data-lucide="blocks" width="13" height="13"></i>技能</button>
+                <button class="control-button" type="button"><i data-lucide="presentation" width="13" height="13"></i>整份 PPT</button>
+                <button class="control-button" type="button"><i data-lucide="cpu" width="13" height="13"></i>默认模型</button>
+                <button class="send-button" type="button" aria-label="发送"><i data-lucide="send" width="15" height="15"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="view repository-view" data-view-panel="repository">
+      <div class="repository-app">
+        <header class="app-bar">
+          <button class="brand" type="button" aria-label="返回项目">
+            <img class="brand-logo" src="../../frontend/public/logo.jpg" alt="">
+            <span>Dasi PPT Agent</span>
+          </button>
+          <span class="bar-divider" aria-hidden="true"></span>
+          <span class="bar-title">仓库</span>
+          <button class="icon-button" type="button" title="刷新仓库" aria-label="刷新仓库">
+            <i data-lucide="refresh-cw" width="16" height="16"></i>
+          </button>
+          <button class="icon-button" type="button" title="返回项目" aria-label="返回项目">
+            <i data-lucide="arrow-left" width="16" height="16"></i>
+          </button>
+        </header>
+
+        <div class="repo-shell">
+          <nav class="module-nav" aria-label="仓库目录">
+            <button class="module-button" type="button"><i data-lucide="palette" width="17" height="17"></i><span>主题</span></button>
+            <button class="module-button" type="button"><i data-lucide="component" width="17" height="17"></i><span>组件</span></button>
+            <button class="module-button" type="button"><i data-lucide="book-open-text" width="17" height="17"></i><span>技能</span></button>
+            <button class="module-button active" type="button"><i data-lucide="notebook-text" width="17" height="17"></i><span>提示词</span></button>
+          </nav>
+
+          <section class="repo-content" id="repo-content">
+            <header class="page-header">
+              <h1 class="page-title">提示词</h1>
+              <label class="search">
+                <i data-lucide="search" width="16" height="16"></i>
+                <input id="repository-search" type="search" placeholder="搜索提示词" aria-label="搜索提示词">
+              </label>
+            </header>
+
+            <div class="repo-workspace" id="repo-workspace">
+              <aside class="catalog" aria-label="提示词列表">
+                <div class="catalog-head" id="tag-filters" aria-label="标签筛选"></div>
+                <div class="directory" id="directory"></div>
+                <footer class="catalog-foot">
+                  <button class="new-button" id="new-prompt" type="button">
+                    <i data-lucide="plus" width="15" height="15"></i>
+                    新建提示词
+                  </button>
+                </footer>
+              </aside>
+
+              <section class="detail" id="prompt-detail" aria-label="提示词详情">
+                <header class="detail-header">
+                  <div class="detail-copy">
+                    <div class="detail-title-row">
+                      <h2 class="detail-title" id="detail-title"></h2>
+                      <button class="delete-button" id="delete-prompt" type="button" title="删除提示词" aria-label="删除提示词">
+                        <i data-lucide="trash-2" width="14" height="14"></i>
+                      </button>
+                    </div>
+                    <div class="tag-list" id="detail-tags"></div>
+                  </div>
+                  <div class="detail-actions" id="view-actions">
+                    <button class="secondary-button" id="edit-prompt" type="button">
+                      <i data-lucide="pencil" width="14" height="14"></i>
+                      编辑
+                    </button>
+                  </div>
+                  <div class="detail-actions" id="edit-actions" hidden>
+                    <button class="secondary-button" id="cancel-edit" type="button">取消</button>
+                    <button class="primary-button" id="save-prompt" type="button">
+                      <i data-lucide="check" width="14" height="14"></i>
+                      保存
+                    </button>
+                  </div>
+                </header>
+
+                <div class="detail-main">
+                  <article class="prompt-sheet">
+                    <p class="sheet-content" id="sheet-content"></p>
+                  </article>
+
+                  <form class="edit-form" id="edit-form">
+                    <div class="form-grid">
+                      <div class="field">
+                        <label for="prompt-key-zh">中文 key</label>
+                        <input id="prompt-key-zh" autocomplete="off">
+                      </div>
+                      <div class="field">
+                        <label for="prompt-key-en">英文 key</label>
+                        <div class="key-input-wrap"><input id="prompt-key-en" autocomplete="off"></div>
+                      </div>
+                      <div class="field full">
+                        <label>标签（最多 2 个）</label>
+                        <div class="tag-editor" id="tag-editor"></div>
+                      </div>
+                      <div class="field full">
+                        <label for="prompt-value">提示词 value</label>
+                        <textarea id="prompt-value"></textarea>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <div class="confirm-popover" id="delete-confirm" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+      <strong id="delete-title">删除提示词</strong>
+      <p id="delete-copy"></p>
+      <div class="confirm-actions">
+        <button class="secondary-button" id="delete-cancel" type="button">取消</button>
+        <button class="danger-button" id="delete-confirm-button" type="button">删除</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const prompts = [
+      {
+        id: "executive",
+        keyZh: "高管摘要",
+        keyEn: "executive-summary",
+        value: "请将以上内容整理为高管摘要，优先呈现核心结论、关键数据、主要风险与下一步行动。",
+        tags: ["summarize", "rewrite"]
+      },
+      {
+        id: "storyline",
+        keyZh: "叙事梳理",
+        keyEn: "story",
+        value: "请先梳理整份演示的叙事主线，确保每一页只承担一个表达任务，并让页面标题能够独立构成完整故事。",
+        tags: ["structure", "analysis"]
+      },
+      {
+        id: "review",
+        keyZh: "视觉审查",
+        keyEn: "visual-review",
+        value: "请审查当前页面的视觉层级、网格对齐、留白比例、文字换行和内容密度，并直接修复影响阅读的问题。",
+        tags: ["visual", "review"]
+      },
+      {
+        id: "chart",
+        keyZh: "图表表达",
+        keyEn: "chart-data",
+        value: "请根据数据关系选择合适的图表类型，突出最重要的差异或趋势，并避免无意义的装饰和重复标签。",
+        tags: ["data", "visual"]
+      },
+      {
+        id: "rewrite",
+        keyZh: "精简改写",
+        keyEn: "rewrite-short",
+        value: "请在不损失关键事实的前提下精简这段内容，删除重复信息和空泛修饰，使表达更直接。",
+        tags: ["rewrite"]
+      }
+    ];
+
+    const promptTags = [
+      ["all", "全部"],
+      ["structure", "结构"],
+      ["draft", "撰写"],
+      ["rewrite", "改写"],
+      ["summarize", "总结"],
+      ["analysis", "分析"],
+      ["data", "数据"],
+      ["visual", "视觉"],
+      ["review", "审查"],
+      ["other", "其他"]
+    ];
+    const tagNames = Object.fromEntries(promptTags);
+    let activeView = "composer";
+    let selectedPromptId = "executive";
+    let selectedTag = "all";
+    let editingTags = [];
+    let activeOption = 0;
+    let currentMatches = [];
+    let editing = false;
+    let creating = false;
+
+    const editor = document.querySelector("#editor");
+    const promptMenu = document.querySelector("#prompt-menu");
+    const directory = document.querySelector("#directory");
+    const detail = document.querySelector("#prompt-detail");
+    const detailTitle = document.querySelector("#detail-title");
+    const detailTags = document.querySelector("#detail-tags");
+    const sheetContent = document.querySelector("#sheet-content");
+    const viewActions = document.querySelector("#view-actions");
+    const editActions = document.querySelector("#edit-actions");
+    const deleteButton = document.querySelector("#delete-prompt");
+    const form = document.querySelector("#edit-form");
+    const keyZhInput = document.querySelector("#prompt-key-zh");
+    const keyEnInput = document.querySelector("#prompt-key-en");
+    const valueInput = document.querySelector("#prompt-value");
+    const tagEditor = document.querySelector("#tag-editor");
+    const tagFilters = document.querySelector("#tag-filters");
+    const searchInput = document.querySelector("#repository-search");
+    const deleteConfirm = document.querySelector("#delete-confirm");
+    const deleteCopy = document.querySelector("#delete-copy");
+
+    function escapeHTML(value) {
+      return value.replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[character]);
+    }
+
+    function renderIcons() {
+      lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
+    }
+
+    function switchView(view) {
+      activeView = view;
+      document.querySelectorAll("[data-view]").forEach((button) => {
+        const active = button.dataset.view === view;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", String(active));
+      });
+      document.querySelectorAll("[data-view-panel]").forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.viewPanel === view);
+      });
+      if (view === "composer") {
+        requestAnimationFrame(() => {
+          placeCaretAtEnd(editor);
+          updatePromptMenu();
+        });
+      }
+    }
+
+    function placeCaretAtEnd(element) {
+      element.focus();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    function textBeforeCaret() {
+      const selection = window.getSelection();
+      if (!selection.rangeCount || !selection.isCollapsed || !editor.contains(selection.anchorNode)) return "";
+      const range = selection.getRangeAt(0).cloneRange();
+      range.selectNodeContents(editor);
+      range.setEnd(selection.anchorNode, selection.anchorOffset);
+      return range.toString();
+    }
+
+    function currentTrigger() {
+      const before = textBeforeCaret();
+      const match = before.match(/(?:^|[ \n])([$¥])([^ \n$¥]*)$/);
+      if (!match) return null;
+      return { query: match[2], length: match[1].length + match[2].length };
+    }
+
+    function matchingPrompts(query) {
+      if (!query) return prompts.slice(0, 5);
+      const normalized = query.toLocaleLowerCase();
+      return prompts
+        .map((prompt, index) => {
+          const keyZhHit = prompt.keyZh.toLocaleLowerCase().includes(normalized);
+          const keyEnHit = prompt.keyEn.toLocaleLowerCase().includes(normalized);
+          const tagHit = prompt.tags.some((tag) => tagNames[tag].includes(query));
+          const valueHit = prompt.value.toLocaleLowerCase().includes(normalized);
+          return { prompt, index, rank: keyZhHit ? 0 : keyEnHit ? 1 : tagHit ? 2 : valueHit ? 3 : 9 };
+        })
+        .filter((entry) => entry.rank < 9)
+        .sort((left, right) => left.rank - right.rank || left.index - right.index)
+        .slice(0, 8)
+        .map((entry) => entry.prompt);
+    }
+
+    function renderPromptMenu(query) {
+      currentMatches = matchingPrompts(query);
+      if (activeOption >= currentMatches.length) activeOption = 0;
+      const label = query ? "匹配提示词" : "最近使用";
+      promptMenu.innerHTML = `<div class="menu-label">${label}</div>` + (
+        currentMatches.length
+          ? currentMatches.map((prompt, index) => `
+            <button class="prompt-option ${index === activeOption ? "active" : ""}" type="button" role="option" aria-selected="${index === activeOption}" data-prompt-option="${index}">
+              <span class="option-icon"><i data-lucide="notebook-text" width="15" height="15"></i></span>
+              <span class="option-copy">
+                <span class="option-head">
+                  <span class="option-key-zh">${escapeHTML(prompt.keyZh)}</span>
+                  <span class="option-key-separator">/</span>
+                  <span class="option-key-en">${escapeHTML(prompt.keyEn)}</span>
+                </span>
+                <span class="option-value">${escapeHTML(prompt.value)}</span>
+              </span>
+            </button>
+          `).join("")
+          : `<div class="menu-empty">没有匹配的提示词</div>`
+      );
+      promptMenu.classList.add("visible");
+      renderIcons();
+    }
+
+    function updatePromptMenu() {
+      const trigger = currentTrigger();
+      if (!trigger || document.activeElement !== editor) {
+        promptMenu.classList.remove("visible");
+        return;
+      }
+      renderPromptMenu(trigger.query);
+    }
+
+    function pointAtTextOffset(root, targetOffset) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let remaining = targetOffset;
+      let node = walker.nextNode();
+      while (node) {
+        if (remaining <= node.data.length) return { node, offset: remaining };
+        remaining -= node.data.length;
+        node = walker.nextNode();
+      }
+      return { node: root, offset: root.childNodes.length };
+    }
+
+    function applyPrompt(prompt) {
+      const trigger = currentTrigger();
+      const selection = window.getSelection();
+      if (!trigger || !selection.rangeCount) return;
+      const before = textBeforeCaret();
+      const start = pointAtTextOffset(editor, before.length - trigger.length);
+      const range = selection.getRangeAt(0).cloneRange();
+      range.setStart(start.node, start.offset);
+      range.deleteContents();
+      const fragment = document.createElement("span");
+      fragment.className = "prompt-fragment";
+      fragment.dataset.promptId = prompt.id;
+      fragment.textContent = prompt.value;
+      const space = document.createTextNode(" ");
+      range.insertNode(space);
+      range.insertNode(fragment);
+      const nextRange = document.createRange();
+      nextRange.setStart(space, 1);
+      nextRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+      activeOption = 0;
+      promptMenu.classList.remove("visible");
+      editor.focus();
+    }
+
+    editor.addEventListener("focus", updatePromptMenu);
+    editor.addEventListener("input", updatePromptMenu);
+    editor.addEventListener("keyup", (event) => {
+      if (!["ArrowUp", "ArrowDown", "Enter", "Escape"].includes(event.key)) updatePromptMenu();
+    });
+    editor.addEventListener("paste", (event) => {
+      event.preventDefault();
+      document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+    });
+    editor.addEventListener("keydown", (event) => {
+      if (!promptMenu.classList.contains("visible")) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        activeOption = (activeOption + direction + currentMatches.length) % currentMatches.length;
+        const trigger = currentTrigger();
+        if (trigger) renderPromptMenu(trigger.query);
+      } else if (event.key === "Enter" && !(event.metaKey || event.ctrlKey) && currentMatches[activeOption]) {
+        event.preventDefault();
+        applyPrompt(currentMatches[activeOption]);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        promptMenu.classList.remove("visible");
+      }
+    });
+    promptMenu.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      const option = event.target.closest("[data-prompt-option]");
+      if (!option) return;
+      applyPrompt(currentMatches[Number(option.dataset.promptOption)]);
+    });
+
+    function visibleRepositoryPrompts() {
+      const query = searchInput.value.trim().toLocaleLowerCase();
+      return prompts.filter((prompt) => {
+        const matchesTag = selectedTag === "all" || prompt.tags.includes(selectedTag);
+        const searchable = `${prompt.keyZh} ${prompt.keyEn} ${prompt.value} ${prompt.tags.map((tag) => tagNames[tag]).join(" ")}`;
+        return matchesTag && searchable.toLocaleLowerCase().includes(query);
+      });
+    }
+
+    function selectedPrompt() {
+      return prompts.find((prompt) => prompt.id === selectedPromptId) || prompts[0];
+    }
+
+    function renderDirectory() {
+      const visible = visibleRepositoryPrompts();
+      if (!visible.length) {
+        directory.innerHTML = `<div class="menu-empty">没有匹配的提示词</div>`;
+        return;
+      }
+      if (!visible.some((prompt) => prompt.id === selectedPromptId)) selectedPromptId = visible[0].id;
+      directory.innerHTML = visible.map((prompt) => `
+        <button class="directory-item ${prompt.id === selectedPromptId ? "active" : ""}" type="button" data-directory-id="${prompt.id}">
+          <span class="prompt-mark"><i data-lucide="notebook-text" width="17" height="17"></i></span>
+          <span class="item-copy">
+            <span class="item-key-row">
+              <span class="item-name">${escapeHTML(prompt.keyZh)}</span>
+              <span class="item-key-separator">/</span>
+              <span class="item-key-en">${escapeHTML(prompt.keyEn)}</span>
+            </span>
+            <span class="item-description">${escapeHTML(prompt.value)}</span>
+          </span>
+          <i class="item-chevron" data-lucide="chevron-right" width="15" height="15"></i>
+        </button>
+      `).join("");
+      renderIcons();
+    }
+
+    function fillForm(prompt) {
+      keyZhInput.value = prompt?.keyZh || "";
+      keyEnInput.value = prompt?.keyEn || "";
+      valueInput.value = prompt?.value || "";
+      editingTags = [...(prompt?.tags || [])];
+      renderTagEditor();
+    }
+
+    function renderTagFilters() {
+      tagFilters.innerHTML = promptTags.map(([value, label]) => `
+        <button class="filter-button ${selectedTag === value ? "active" : ""}" type="button" data-tag-filter="${value}">${label}</button>
+      `).join("");
+    }
+
+    function renderTagEditor() {
+      tagEditor.innerHTML = promptTags.slice(1).map(([value, label]) => `
+        <button class="tag-choice ${editingTags.includes(value) ? "active" : ""}" type="button" data-tag-choice="${value}">${label}</button>
+      `).join("");
+    }
+
+    function renderDetail() {
+      const prompt = selectedPrompt();
+      if (!prompt && !creating) {
+        detailTitle.textContent = "";
+        detailTags.innerHTML = "";
+        sheetContent.textContent = "";
+        return;
+      }
+      const title = creating ? "新建提示词" : `${prompt.keyZh} / ${prompt.keyEn}`;
+      detailTitle.textContent = title;
+      detailTags.innerHTML = creating ? "" : prompt.tags.map((tag) => `<span class="tag">${tagNames[tag]}</span>`).join("");
+      sheetContent.textContent = creating ? "" : prompt.value;
+      detail.classList.toggle("editing", editing);
+      viewActions.hidden = editing;
+      editActions.hidden = !editing;
+      deleteButton.hidden = creating;
+      if (editing) fillForm(creating ? null : prompt);
+    }
+
+    function renderRepository() {
+      renderTagFilters();
+      renderDirectory();
+      renderDetail();
+      renderIcons();
+    }
+
+    directory.addEventListener("click", (event) => {
+      const item = event.target.closest("[data-directory-id]");
+      if (!item) return;
+      selectedPromptId = item.dataset.directoryId;
+      editing = false;
+      creating = false;
+      renderRepository();
+    });
+
+    searchInput.addEventListener("input", renderRepository);
+    document.querySelector("#edit-prompt").addEventListener("click", () => {
+      editing = true;
+      creating = false;
+      renderDetail();
+      keyZhInput.focus();
+    });
+    document.querySelector("#new-prompt").addEventListener("click", () => {
+      editing = true;
+      creating = true;
+      renderDetail();
+      keyZhInput.focus();
+    });
+    document.querySelector("#cancel-edit").addEventListener("click", () => {
+      editing = false;
+      creating = false;
+      renderDetail();
+    });
+    form.addEventListener("submit", (event) => event.preventDefault());
+    document.querySelector("#save-prompt").addEventListener("click", () => {
+      const next = {
+        id: creating ? `prompt-${Date.now()}` : selectedPromptId,
+        keyZh: keyZhInput.value.trim() || "未命名提示词",
+        keyEn: keyEnInput.value.trim() || "new-key",
+        value: valueInput.value.trim() || "请输入提示词 value。",
+        tags: [...editingTags]
+      };
+      if (creating) {
+        prompts.unshift(next);
+        selectedPromptId = next.id;
+      } else {
+        const index = prompts.findIndex((prompt) => prompt.id === selectedPromptId);
+        prompts[index] = next;
+      }
+      editing = false;
+      creating = false;
+      searchInput.value = "";
+      renderRepository();
+    });
+
+    deleteButton.addEventListener("click", () => {
+      const prompt = selectedPrompt();
+      deleteCopy.textContent = `确定删除“${prompt.keyZh}”吗？该操作不可撤销。`;
+      deleteConfirm.classList.add("visible");
+    });
+    document.querySelector("#delete-cancel").addEventListener("click", () => deleteConfirm.classList.remove("visible"));
+    document.querySelector("#delete-confirm-button").addEventListener("click", () => {
+      const index = prompts.findIndex((prompt) => prompt.id === selectedPromptId);
+      prompts.splice(index, 1);
+      selectedPromptId = prompts[Math.min(index, prompts.length - 1)]?.id || "";
+      deleteConfirm.classList.remove("visible");
+      renderRepository();
+    });
+
+    tagFilters.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-tag-filter]");
+      if (!button) return;
+      selectedTag = button.dataset.tagFilter;
+      renderRepository();
+    });
+
+    tagEditor.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-tag-choice]");
+      if (!button) return;
+      const tag = button.dataset.tagChoice;
+      if (editingTags.includes(tag)) {
+        editingTags = editingTags.filter((value) => value !== tag);
+      } else if (editingTags.length < 2) {
+        editingTags = [...editingTags, tag];
+      }
+      renderTagEditor();
+    });
+
+    document.querySelectorAll("[data-view]").forEach((button) => {
+      button.addEventListener("click", () => switchView(button.dataset.view));
+    });
+
+    renderRepository();
+    renderIcons();
+    const initialView = window.location.hash === "#repository" ? "repository" : "composer";
+    switchView(initialView);
+  </script>
+</body>
+</html>

@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dasi 提示词图标候选</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 320px;
+      min-height: 100%;
+      margin: 0;
+    }
+
+    body {
+      background: var(--workspace);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    button {
+      color: inherit;
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button:focus-visible {
+      outline: 2px solid rgba(47, 103, 246, 0.55);
+      outline-offset: 2px;
+    }
+
+    .page {
+      min-height: 100dvh;
+    }
+
+    .topbar {
+      display: flex;
+      height: 48px;
+      align-items: center;
+      border-bottom: 1px solid var(--border-strong);
+      background: var(--surface);
+      padding: 0 18px;
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    .content {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 30px 0 40px;
+    }
+
+    .heading {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 30px;
+    }
+
+    .subtitle {
+      margin: 5px 0 0;
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    .selection {
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .selection strong {
+      color: var(--accent);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .option {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 16px;
+      text-align: left;
+      transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+    }
+
+    .option:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-1px);
+    }
+
+    .option.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(47, 103, 246, 0.1);
+    }
+
+    .option-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .hero-icon {
+      display: grid;
+      width: 40px;
+      height: 40px;
+      flex: none;
+      place-items: center;
+      color: var(--accent);
+    }
+
+    .option.selected .hero-icon {
+      color: var(--accent);
+    }
+
+    .option-copy {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .option-name-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .option-name {
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .badge {
+      border-radius: 999px;
+      background: var(--accent-soft);
+      padding: 2px 6px;
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 750;
+    }
+
+    .icon-id {
+      margin-top: 2px;
+      color: var(--text-muted);
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+    }
+
+    .option-note {
+      min-height: 40px;
+      margin: 12px 0;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 20px;
+    }
+
+    .contexts {
+      display: grid;
+      gap: 7px;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+    }
+
+    .context-row {
+      display: grid;
+      min-width: 0;
+      grid-template-columns: 66px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+    }
+
+    .context-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .nav-sample,
+    .picker-sample,
+    .directory-sample {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 8px;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .nav-sample {
+      height: 32px;
+      background: var(--accent-soft);
+      padding: 0 9px;
+      color: var(--accent);
+    }
+
+    .picker-sample {
+      height: 36px;
+      border: 1px solid var(--border);
+      padding: 0 9px;
+    }
+
+    .picker-sample svg {
+      color: var(--accent);
+    }
+
+    .directory-sample {
+      height: 42px;
+      background: var(--panel);
+      padding: 0 9px;
+    }
+
+    .directory-sample svg {
+      color: var(--accent);
+    }
+
+    @media (max-width: 860px) {
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      .content {
+        width: min(100% - 24px, 420px);
+        padding-top: 22px;
+      }
+
+      .heading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">提示词图标候选</header>
+    <section class="content">
+      <div class="heading">
+        <div>
+          <h1>选择提示词图标</h1>
+          <p class="subtitle">每个方案均按仓库导航、输入候选和仓库目录的真实尺寸展示。</p>
+        </div>
+        <div class="selection">当前选择：<strong id="selected-name">F · 短语手册</strong></div>
+      </div>
+      <div class="grid" id="options"></div>
+    </section>
+  </main>
+
+  <script>
+    const options = [
+      {
+        code: "A",
+        icon: "text-cursor-input",
+        name: "文本光标",
+        note: "直接表达“向输入框插入文本”，与快捷提示词的核心动作最一致。"
+      },
+      {
+        code: "B",
+        icon: "text-quote",
+        name: "短语引用",
+        note: "强调可复用文本片段，识别清楚，但与引用类组件存在少量语义重叠。"
+      },
+      {
+        code: "C",
+        icon: "message-square-text",
+        name: "消息文本",
+        note: "与 Agent 输入场景联系紧密，但更容易被理解为普通聊天或消息。"
+      },
+      {
+        code: "D",
+        icon: "braces",
+        name: "文本片段",
+        note: "接近 snippet 与快捷展开语义，技术感较强，对非技术用户略抽象。"
+      },
+      {
+        code: "E",
+        icon: "command",
+        name: "快捷命令",
+        note: "能表达快捷调用，但容易让用户误以为 Prompt 是命令而非自然语言。"
+      },
+      {
+        code: "F",
+        icon: "notebook-text",
+        name: "短语手册",
+        note: "适合表达可沉淀内容，图形轮廓稳定，并与技能使用的展开书本保持区分。",
+        recommended: true
+      }
+    ];
+
+    let selected = "F";
+    const container = document.querySelector("#options");
+    const selectedName = document.querySelector("#selected-name");
+
+    function render() {
+      container.innerHTML = options.map((option) => `
+        <button class="option ${selected === option.code ? "selected" : ""}" type="button" data-option="${option.code}">
+          <span class="option-head">
+            <span class="hero-icon"><i data-lucide="${option.icon}" width="21" height="21"></i></span>
+            <span class="option-copy">
+              <span class="option-name-row">
+                <span class="option-name">${option.code} · ${option.name}</span>
+                ${option.recommended ? '<span class="badge">已选</span>' : ""}
+              </span>
+              <span class="icon-id">${option.icon}</span>
+            </span>
+          </span>
+          <span class="option-note">${option.note}</span>
+          <span class="contexts">
+            <span class="context-row">
+              <span class="context-label">仓库导航</span>
+              <span class="nav-sample"><i data-lucide="${option.icon}" width="17" height="17"></i>提示词</span>
+            </span>
+            <span class="context-row">
+              <span class="context-label">输入候选</span>
+              <span class="picker-sample"><i data-lucide="${option.icon}" width="15" height="15"></i>高管摘要</span>
+            </span>
+            <span class="context-row">
+              <span class="context-label">仓库目录</span>
+              <span class="directory-sample"><i data-lucide="${option.icon}" width="17" height="17"></i>叙事梳理</span>
+            </span>
+          </span>
+        </button>
+      `).join("");
+      const current = options.find((option) => option.code === selected);
+      selectedName.textContent = `${current.code} · ${current.name}`;
+      lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
+    }
+
+    container.addEventListener("click", (event) => {
+      const option = event.target.closest("[data-option]");
+      if (!option) return;
+      selected = option.dataset.option;
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
