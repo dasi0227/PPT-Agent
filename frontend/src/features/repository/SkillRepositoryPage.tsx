@@ -15,10 +15,10 @@ import {
   RepositoryLoading,
   RepositoryPageHeader,
   RepositoryState,
-  RepositoryTagEditor,
   RepositoryTagList,
   RepositoryWorkspace,
 } from './RepositoryPrimitives';
+import { RepositoryEditDialog } from './RepositoryEditDialog';
 import { RepositoryShell } from './RepositoryShell';
 
 const skillTagLabels: Record<SkillTag, string> = {
@@ -39,6 +39,7 @@ export function SkillRepositoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,13 +97,13 @@ export function SkillRepositoryPage() {
       throw cause;
     }
   };
-  const saveTags = async (tags: SkillTag[]) => {
+  const updateSkill = async (value: { name: string; description: string; tags: SkillTag[] }) => {
     if (!selected) return;
     try {
-      const updated = await repositoriesApi.setSkillTags(selected.id, tags);
+      const updated = await repositoriesApi.updateSkill(selected.id, value);
       setSkills((current) => current.map((skill) => skill.id === updated.id ? { ...skill, ...updated } : skill));
     } catch (cause) {
-      showGlobalError(cause instanceof Error ? cause.message : '技能标签更新失败');
+      showGlobalError(cause instanceof Error ? cause.message : '技能更新失败');
       throw cause;
     }
   };
@@ -155,11 +156,6 @@ export function SkillRepositoryPage() {
                 properties={<RepositoryTagList tags={(selected.tags ?? []).map((tag) => skillTagLabels[tag])} />}
                 actions={(
                   <div className="flex items-center gap-2.5">
-                    <RepositoryTagEditor
-                      value={selected.tags ?? []}
-                      options={skillTagOrder.map((tag) => ({ value: tag, label: skillTagLabels[tag] }))}
-                      onSave={saveTags}
-                    />
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
                       {selected.disabled ? '已关闭' : '已启用'}
                     </span>
@@ -181,6 +177,7 @@ export function SkillRepositoryPage() {
                 )}
                 contentClassName="px-5 py-7 md:px-8 md:py-9"
                 deleteNoun="技能"
+                onEdit={() => setEditOpen(true)}
                 onDelete={() => deleteSkill(selected)}
               >
                 <article className="prose prose-sm mx-auto max-w-3xl rounded-lg border border-border bg-surface px-7 py-8 text-text-900 shadow-[0_12px_34px_rgba(51,65,85,0.08)] prose-headings:font-bold prose-headings:tracking-[-0.015em] prose-headings:text-text-900 prose-h1:mb-3 prose-h1:text-2xl prose-h2:mb-3 prose-h2:mt-8 prose-h2:text-base prose-p:text-[13px] prose-p:leading-7 prose-p:text-[#354150] prose-li:text-[13px] prose-li:leading-6 prose-blockquote:border-accent prose-blockquote:bg-accent-soft/60 prose-blockquote:px-4 prose-blockquote:py-1 prose-blockquote:not-italic prose-code:rounded prose-code:bg-panel-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-[12px] prose-pre:border prose-pre:border-border prose-pre:bg-text-900">
@@ -192,6 +189,16 @@ export function SkillRepositoryPage() {
           </RepositoryWorkspace>
         )}
       </div>
+      {selected && (
+        <RepositoryEditDialog
+          open={editOpen}
+          title="编辑技能"
+          value={{ name: selected.name, description: selected.description, tags: selected.tags ?? [] }}
+          tagOptions={skillTagOrder.map((tag) => ({ value: tag, label: skillTagLabels[tag] }))}
+          onOpenChange={setEditOpen}
+          onSave={updateSkill}
+        />
+      )}
     </RepositoryShell>
   );
 }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Prompt } from '../../api/types';
@@ -53,16 +53,20 @@ describe('PromptRepositoryPage', () => {
     expect(screen.getAllByText('审查')).toHaveLength(2);
     expect(screen.queryByRole('link', { name: '查看文件' })).not.toBeInTheDocument();
     expect(screen.getAllByText('提炼核心结论。')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: '编辑高管摘要 / executive-summary' }).nextElementSibling)
+      .toBe(screen.getByRole('button', { name: '删除高管摘要 / executive-summary' }));
   });
 
-  it('edits in place and updates the shared cache after saving', async () => {
+  it('edits in a dialog and updates the shared cache after saving', async () => {
     const updated = { ...first, value: '更新后的提示词。', updated_at: 3 };
     mocks.update.mockResolvedValue(updated);
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
-    fireEvent.change(screen.getByLabelText('提示词 value'), { target: { value: updated.value } });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑高管摘要 / executive-summary' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('编辑提示词');
+    fireEvent.change(within(dialog).getByLabelText('提示词 value'), { target: { value: updated.value } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
 
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith(first.id, {
       key_zh: first.key_zh,
@@ -72,6 +76,7 @@ describe('PromptRepositoryPage', () => {
     }));
     expect(await screen.findAllByText(updated.value)).toHaveLength(2);
     expect(usePromptStore.getState().prompts[0].value).toBe(updated.value);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('toggles prompt availability from the detail header', async () => {

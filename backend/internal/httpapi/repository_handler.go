@@ -45,13 +45,15 @@ func (h *RepositoryHandler) GetTheme(c *gin.Context) {
 
 func (h *RepositoryHandler) PatchTheme(c *gin.Context) {
 	var request struct {
-		Tags *[]model.ThemeTag `json:"tags"`
+		Name        *string           `json:"name"`
+		Description *string           `json:"description"`
+		Tags        *[]model.ThemeTag `json:"tags"`
 	}
-	if c.ShouldBindJSON(&request) != nil || request.Tags == nil {
-		AbortWithError(c, ErrBadRequest("tags is required"))
+	if c.ShouldBindJSON(&request) != nil || request.Name == nil || request.Description == nil || request.Tags == nil {
+		AbortWithError(c, ErrBadRequest("name, description, and tags are required"))
 		return
 	}
-	value, err := h.themes.SetTags(c.Param("id"), *request.Tags)
+	value, err := h.themes.UpdateMetadata(c.Param("id"), *request.Name, *request.Description, *request.Tags)
 	if err != nil {
 		h.repositoryError(c, err, "theme not found")
 		return
@@ -97,16 +99,27 @@ func (h *RepositoryHandler) GetComponent(c *gin.Context) {
 
 func (h *RepositoryHandler) PatchComponent(c *gin.Context) {
 	var request struct {
-		Disabled *bool                 `json:"disabled"`
-		Tags     *[]model.ComponentTag `json:"tags"`
+		Disabled    *bool                 `json:"disabled"`
+		Name        *string               `json:"name"`
+		Description *string               `json:"description"`
+		Tags        *[]model.ComponentTag `json:"tags"`
 	}
-	if c.ShouldBindJSON(&request) != nil || (request.Disabled == nil && request.Tags == nil) {
-		AbortWithError(c, ErrBadRequest("disabled or tags is required"))
+	if c.ShouldBindJSON(&request) != nil {
+		AbortWithError(c, ErrBadRequest("request body is invalid"))
+		return
+	}
+	metadataUpdate := request.Name != nil || request.Description != nil || request.Tags != nil
+	if request.Disabled == nil && !metadataUpdate {
+		AbortWithError(c, ErrBadRequest("disabled or metadata is required"))
+		return
+	}
+	if metadataUpdate && (request.Name == nil || request.Description == nil || request.Tags == nil) {
+		AbortWithError(c, ErrBadRequest("name, description, and tags are required"))
 		return
 	}
 	value, err := h.components.Get(c.Param("id"))
-	if err == nil && request.Tags != nil {
-		value, err = h.components.SetTags(c.Param("id"), *request.Tags)
+	if err == nil && metadataUpdate {
+		value, err = h.components.UpdateMetadata(c.Param("id"), *request.Name, *request.Description, *request.Tags)
 	}
 	if err == nil && request.Disabled != nil {
 		value, err = h.components.SetDisabled(c.Param("id"), *request.Disabled)
@@ -154,16 +167,27 @@ func (h *RepositoryHandler) DeleteSkill(c *gin.Context) {
 
 func (h *RepositoryHandler) PatchSkill(c *gin.Context) {
 	var request struct {
-		Disabled *bool             `json:"disabled"`
-		Tags     *[]model.SkillTag `json:"tags"`
+		Disabled    *bool             `json:"disabled"`
+		Name        *string           `json:"name"`
+		Description *string           `json:"description"`
+		Tags        *[]model.SkillTag `json:"tags"`
 	}
-	if c.ShouldBindJSON(&request) != nil || (request.Disabled == nil && request.Tags == nil) {
-		AbortWithError(c, ErrBadRequest("disabled or tags is required"))
+	if c.ShouldBindJSON(&request) != nil {
+		AbortWithError(c, ErrBadRequest("request body is invalid"))
+		return
+	}
+	metadataUpdate := request.Name != nil || request.Description != nil || request.Tags != nil
+	if request.Disabled == nil && !metadataUpdate {
+		AbortWithError(c, ErrBadRequest("disabled or metadata is required"))
+		return
+	}
+	if metadataUpdate && (request.Name == nil || request.Description == nil || request.Tags == nil) {
+		AbortWithError(c, ErrBadRequest("name, description, and tags are required"))
 		return
 	}
 	value, err := h.skills.Get(c.Param("id"))
-	if err == nil && request.Tags != nil {
-		value, err = h.skills.SetTags(c.Param("id"), *request.Tags)
+	if err == nil && metadataUpdate {
+		value, err = h.skills.UpdateMetadata(c.Param("id"), *request.Name, *request.Description, *request.Tags)
 	}
 	if err == nil && request.Disabled != nil {
 		value, err = h.skills.SetDisabled(c.Param("id"), *request.Disabled)

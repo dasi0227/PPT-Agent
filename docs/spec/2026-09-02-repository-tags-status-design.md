@@ -96,12 +96,15 @@
 ## 4. 筛选与启停
 
 - 四个模块左侧顶部统一使用标签筛选，支持“全部 + 当前模块标签”。
+- 标签筛选和详情标签保持单行横向滚动，并隐藏滚动条视觉。
 - 标签筛选不隐式排除禁用对象；禁用状态通过目录项和详情页状态展示。
 - Component、Skill、Prompt 详情页提供启停开关。
 - 禁用 Component 不进入 Agent 组件目录，`load_component` 拒绝加载。
 - 禁用 Skill 不进入固定选择列表，`load_skill` 拒绝加载。
 - 禁用 Prompt 不进入 Composer 快捷候选和最近使用候选。
 - Theme 仅使用标签筛选，不提供启停状态。
+- 详情标题右侧操作统一按“编辑、删除、外部查看”排列；无文件入口的 Prompt 仅显示编辑和删除。
+- 编辑使用 Dialog：Theme、Component、Skill 支持修改名称、描述和标签，Prompt 支持修改中英文 key、正文和标签。
 
 ## 5. SQLite 存储
 
@@ -138,12 +141,19 @@ resource_states
 - 标签重命名只修改标签记录，对象关联通过稳定 `tag_id` 保持不变。
 - 不增加 `user_id`、`owner_id` 或账户作用域；当前数据库就是本地仓库唯一作用域。
 - `registry.json`、Prompt `tags_json` 与 Prompt 表内 `disabled` 字段全部删除，不保留双重事实来源。
+- Theme、Component、Skill 的名称和描述只存放在资源文件 Frontmatter，SQLite 不保存覆盖值。
+- Theme 使用 `theme.css` 顶部的 CSS 注释 Frontmatter，不再使用 `manifest.json`。
+- Component 使用 `index.html` 顶部的 HTML 注释 Frontmatter，不再使用 JSON `<script id="meta">`。
+- Skill 继续使用 `SKILL.md` 顶部的 Markdown Frontmatter。
+- 编辑名称或描述时原子改写对应资源文件，正文内容保持不变；标签仍写入 `resource_tags`。
+- Prompt 的中英文 key 和正文继续直接存储在 `prompts` 表。
 
 ## 6. 当前阶段落地
 
 - 本轮切换系统预设枚举、标签筛选和 Component / Prompt 启停。
 - Theme、Component、Skill、Prompt 的标签关联统一写入 `resource_tags`。
 - Component、Skill、Prompt 的启停状态统一写入 `resource_states`。
+- Theme、Component、Skill 的名称和描述统一写入各自资源文件 Frontmatter。
 - 系统标签由 migration 初始化并标记为 `is_system = 1`，不提供重命名或删除入口。
 - 后续自定义标签 CRUD 直接复用 `tags` 表，不再调整资源存储协议。
 - 不为旧标签值保留兼容分支。

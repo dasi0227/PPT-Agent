@@ -13,9 +13,9 @@ import type {
 export const repositoriesApi = {
   listThemes: () => fetchClient<ThemesResponse>('/themes', { reportError: false }),
   getTheme: (id: string) => fetchClient<Theme>(`/themes/${encodeURIComponent(id)}`, { reportError: false }),
-  setThemeTags: (id: string, tags: ThemeTag[]) => fetchClient<Theme>(`/themes/${encodeURIComponent(id)}`, {
+  updateTheme: (id: string, request: { name: string; description: string; tags: ThemeTag[] }) => fetchClient<Theme>(`/themes/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ tags }),
+    body: JSON.stringify(request),
     reportError: false,
   }),
   deleteTheme: (id: string) => fetchClient<void>(`/themes/${encodeURIComponent(id)}`, {
@@ -29,9 +29,9 @@ export const repositoriesApi = {
     body: JSON.stringify({ disabled }),
     reportError: false,
   }),
-  setComponentTags: (id: string, tags: ComponentTag[]) => fetchClient<ComponentReference>(`/components/${encodeURIComponent(id)}`, {
+  updateComponent: (id: string, request: { name: string; description: string; tags: ComponentTag[] }) => fetchClient<ComponentReference>(`/components/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ tags }),
+    body: JSON.stringify(request),
     reportError: false,
   }),
   deleteComponent: (id: string) => fetchClient<void>(`/components/${encodeURIComponent(id)}`, {
@@ -44,9 +44,9 @@ export const repositoriesApi = {
     body: JSON.stringify({ disabled }),
     reportError: false,
   }),
-  setSkillTags: (id: string, tags: SkillTag[]) => fetchClient<Skill>(`/skills/${encodeURIComponent(id)}`, {
+  updateSkill: (id: string, request: { name: string; description: string; tags: SkillTag[] }) => fetchClient<Skill>(`/skills/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({ tags }),
+    body: JSON.stringify(request),
     reportError: false,
   }),
   deleteSkill: (id: string) => fetchClient<void>(`/skills/${encodeURIComponent(id)}`, {

@@ -1,7 +1,14 @@
-import { Check, NotebookText, Pencil, Plus, X } from 'lucide-react';
+import { Check, NotebookText, Plus, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { APIError } from '../../api/client';
 import type { Prompt, PromptTag, PromptWriteRequest } from '../../api/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 import { Button } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { usePromptStore } from '../../stores/promptStore';
@@ -72,7 +79,7 @@ function PromptForm({
     errors[field] ? 'border-danger' : 'border-border',
   );
   return (
-    <form className="mx-auto grid w-full max-w-[820px] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.7fr)]" onSubmit={(event) => event.preventDefault()}>
+    <div className="mx-auto grid w-full max-w-[820px] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.7fr)]">
       <label className="grid gap-1.5 text-xs font-semibold text-text-600">
         中文 key
         <input
@@ -130,7 +137,52 @@ function PromptForm({
         />
         {errors.value && <span className="font-medium text-danger">{errors.value}</span>}
       </label>
-    </form>
+    </div>
+  );
+}
+
+function PromptEditDialog({
+  open,
+  draft,
+  errors,
+  saving,
+  onOpenChange,
+  onChange,
+  onSave,
+}: {
+  open: boolean;
+  draft: PromptWriteRequest;
+  errors: FieldErrors;
+  saving: boolean;
+  onOpenChange: (open: boolean) => void;
+  onChange: (draft: PromptWriteRequest) => void;
+  onSave: () => Promise<void>;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
+      <DialogContent className="gap-0 p-0 sm:max-w-[720px]">
+        <DialogHeader className="border-b border-border px-5 py-4">
+          <DialogTitle>编辑提示词</DialogTitle>
+        </DialogHeader>
+        <form
+          className="max-h-[75vh] overflow-y-auto px-5 py-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void onSave();
+          }}
+        >
+          <PromptForm draft={draft} errors={errors} onChange={onChange} />
+          <DialogFooter className="mt-5 border-t border-border pt-4">
+            <Button type="button" variant="secondary" disabled={saving} onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+            <Button type="submit" variant="primary" disabled={saving}>
+              {saving ? '保存中' : '保存'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -147,7 +199,8 @@ export function PromptRepositoryPage() {
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<PromptTag | 'all'>('all');
-  const [mode, setMode] = useState<'view' | 'edit' | 'create'>('view');
+  const [mode, setMode] = useState<'view' | 'create'>('view');
+  const [editOpen, setEditOpen] = useState(false);
   const [draft, setDraft] = useState<PromptWriteRequest>(emptyDraft);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
@@ -185,7 +238,7 @@ export function PromptRepositoryPage() {
   }, [mode, selectedId, visibleSelected]);
 
   const baseDraft = mode === 'create' ? emptyDraft : selected ? promptDraft(selected) : emptyDraft;
-  const dirty = mode !== 'view' && !sameDraft(draft, baseDraft);
+  const dirty = (mode === 'create' || editOpen) && !sameDraft(draft, baseDraft);
   const confirmDiscard = useCallback(() => !dirty || window.confirm('当前修改尚未保存，确定放弃吗？'), [dirty]);
 
   useEffect(() => {
@@ -200,6 +253,7 @@ export function PromptRepositoryPage() {
   const selectPrompt = (id: string) => {
     if (!confirmDiscard()) return;
     setMode('view');
+    setEditOpen(false);
     setFieldErrors({});
     setSelectedId(id);
   };
@@ -214,16 +268,22 @@ export function PromptRepositoryPage() {
 
   const beginEdit = () => {
     if (!selected) return;
-    setMode('edit');
     setDraft(promptDraft(selected));
+    setFieldErrors({});
+    setEditOpen(true);
+  };
+
+  const cancelCreate = () => {
+    if (!confirmDiscard()) return;
+    setMode('view');
+    setSelectedId(previousSelectedId);
     setFieldErrors({});
   };
 
-  const cancelEdit = () => {
-    if (!confirmDiscard()) return;
-    setMode('view');
-    setSelectedId(mode === 'create' ? previousSelectedId : selectedId);
-    setFieldErrors({});
+  const changeEditOpen = (open: boolean) => {
+    if (!open && !confirmDiscard()) return;
+    setEditOpen(open);
+    if (!open) setFieldErrors({});
   };
 
   const save = async () => {
@@ -246,6 +306,7 @@ export function PromptRepositoryPage() {
       setQuery('');
       setFilter('all');
       setMode('view');
+      setEditOpen(false);
       setFieldErrors({});
     } catch (cause) {
       if (cause instanceof APIError && cause.code === 'PROMPT_KEY_CONFLICT') {
@@ -286,9 +347,9 @@ export function PromptRepositoryPage() {
     }
   };
 
-  const editActions = (
+  const createActions = (
     <div className="flex items-center gap-1.5">
-      <Button type="button" variant="secondary" onClick={cancelEdit} disabled={saving} className="h-7 px-2.5 text-xs">
+      <Button type="button" variant="secondary" onClick={cancelCreate} disabled={saving} className="h-7 px-2.5 text-xs">
         <X className="h-3.5 w-3.5" />
         取消
       </Button>
@@ -303,6 +364,7 @@ export function PromptRepositoryPage() {
     <RepositoryShell section="prompt" onRefresh={() => {
       if (confirmDiscard()) {
         setMode('view');
+        setEditOpen(false);
         void load(true).catch(() => undefined);
       }
     }}>
@@ -357,7 +419,7 @@ export function PromptRepositoryPage() {
               <section className="flex min-h-[420px] min-w-0 flex-col bg-surface" aria-label="新建提示词">
                 <header className="flex min-h-[128px] shrink-0 items-start justify-between gap-6 border-b border-border px-5 pb-3.5 pt-5">
                   <h2 className="text-base font-bold leading-6 text-text-900">新建提示词</h2>
-                  {editActions}
+                  {createActions}
                 </header>
                 <div className="min-h-0 flex-1 overflow-auto bg-canvas/70 px-5 py-7 md:px-8 md:py-9">
                   <PromptForm draft={draft} errors={fieldErrors} onChange={setDraft} />
@@ -376,7 +438,7 @@ export function PromptRepositoryPage() {
                     ))}
                   </div>
                 )}
-                actions={mode === 'edit' ? editActions : (
+                actions={(
                   <div className="flex items-center gap-2.5">
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
                       {selected.disabled ? '已关闭' : '已启用'}
@@ -395,23 +457,16 @@ export function PromptRepositoryPage() {
                     >
                       <span className={cn('block h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(23,32,43,0.25)] transition-transform', !selected.disabled && 'translate-x-4')} />
                     </button>
-                    <Button type="button" variant="secondary" onClick={beginEdit} className="h-7 px-2.5 text-xs">
-                      <Pencil className="h-3.5 w-3.5" />
-                      编辑
-                    </Button>
                   </div>
                 )}
                 contentClassName="px-5 py-7 md:px-8 md:py-9"
                 deleteNoun="提示词"
+                onEdit={beginEdit}
                 onDelete={() => remove(selected)}
               >
-                {mode === 'edit' ? (
-                  <PromptForm draft={draft} errors={fieldErrors} onChange={setDraft} />
-                ) : (
-                  <article className="mx-auto min-h-[260px] w-full max-w-[920px] rounded-lg border border-border bg-surface px-7 py-7 shadow-[0_12px_34px_rgba(51,65,85,0.08)] md:px-8">
-                    <p className="m-0 whitespace-pre-wrap break-words text-sm leading-7 text-[#354150]">{selected.value}</p>
-                  </article>
-                )}
+                <article className="mx-auto min-h-[260px] w-full max-w-[920px] rounded-lg border border-border bg-surface px-7 py-7 shadow-[0_12px_34px_rgba(51,65,85,0.08)] md:px-8">
+                  <p className="m-0 whitespace-pre-wrap break-words text-sm leading-7 text-[#354150]">{selected.value}</p>
+                </article>
               </RepositoryDetail>
             )}
             {mode === 'view' && !selected && prompts.length > 0 && (
@@ -420,6 +475,15 @@ export function PromptRepositoryPage() {
           </RepositoryWorkspace>
         )}
       </div>
+      <PromptEditDialog
+        open={editOpen}
+        draft={draft}
+        errors={fieldErrors}
+        saving={saving}
+        onOpenChange={changeEditOpen}
+        onChange={setDraft}
+        onSave={save}
+      />
     </RepositoryShell>
   );
 }

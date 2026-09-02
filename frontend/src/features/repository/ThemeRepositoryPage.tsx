@@ -16,11 +16,11 @@ import {
   RepositoryLoading,
   RepositoryPageHeader,
   RepositoryState,
-  RepositoryTagEditor,
   RepositoryTagList,
   RepositoryWorkspace,
   SegmentedControl,
 } from './RepositoryPrimitives';
+import { RepositoryEditDialog } from './RepositoryEditDialog';
 import { RepositoryShell } from './RepositoryShell';
 import {
   buildThemeShowcase,
@@ -98,6 +98,7 @@ export function ThemeRepositoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [applyingThemeId, setApplyingThemeId] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
   const applyingRef = useRef(false);
   const requestedProjectIds = useRef(new Set<string>());
   const projectId = activeProjectId ?? projectIdFromReturnTo(location.state?.returnTo);
@@ -163,13 +164,13 @@ export function ThemeRepositoryPage() {
       throw cause;
     }
   };
-  const saveTags = async (tags: ThemeTag[]) => {
+  const updateTheme = async (value: { name: string; description: string; tags: ThemeTag[] }) => {
     if (!selected) return;
     try {
-      const updated = await repositoriesApi.setThemeTags(selected.id, tags);
+      const updated = await repositoriesApi.updateTheme(selected.id, value);
       setThemes((current) => current.map((theme) => theme.id === updated.id ? { ...theme, ...updated } : theme));
     } catch (cause) {
-      showGlobalError(cause instanceof Error ? cause.message : '主题标签更新失败');
+      showGlobalError(cause instanceof Error ? cause.message : '主题更新失败');
       throw cause;
     }
   };
@@ -211,7 +212,7 @@ export function ThemeRepositoryPage() {
                 description={selected.description}
                 openUrl={selected.open_url}
                 properties={(
-                  <div className="flex min-w-0 flex-nowrap items-center gap-4 overflow-x-auto pb-0.5" aria-label="主题属性">
+                  <div className="scrollbar-none flex min-w-0 flex-nowrap items-center gap-4 overflow-x-auto pb-0.5" aria-label="主题属性">
                     <RepositoryTagList tags={selected.tags.map((tag) => themeTagLabels[tag])} />
                     <div className="flex shrink-0 items-center gap-1.5">
                       <span className="text-[11px] font-semibold text-text-400">色板</span>
@@ -227,11 +228,6 @@ export function ThemeRepositoryPage() {
                 )}
                 actions={(
                   <div className="flex items-center gap-2">
-                    <RepositoryTagEditor
-                      value={selected.tags}
-                      options={themeTagOrder.map((tag) => ({ value: tag, label: themeTagLabels[tag] }))}
-                      onSave={saveTags}
-                    />
                     <SegmentedControl value={mode} options={themeShowcaseModes} onChange={setMode} label="预览页面" />
                     <Button
                       type="button"
@@ -267,6 +263,7 @@ export function ThemeRepositoryPage() {
                 )}
                 contentClassName="flex items-center justify-center p-5 md:p-7 xl:p-9"
                 deleteNoun="主题"
+                onEdit={() => setEditOpen(true)}
                 onDelete={() => deleteTheme(selected)}
               >
                 <iframe
@@ -281,6 +278,16 @@ export function ThemeRepositoryPage() {
           </RepositoryWorkspace>
         )}
       </div>
+      {selected && (
+        <RepositoryEditDialog
+          open={editOpen}
+          title="编辑主题"
+          value={{ name: selected.name, description: selected.description, tags: selected.tags }}
+          tagOptions={themeTagOrder.map((tag) => ({ value: tag, label: themeTagLabels[tag] }))}
+          onOpenChange={setEditOpen}
+          onSave={updateTheme}
+        />
+      )}
     </RepositoryShell>
   );
 }

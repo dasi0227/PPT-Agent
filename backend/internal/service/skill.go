@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -118,9 +117,21 @@ func (s *SkillService) SetDisabled(id string, disabled bool) (model.RepositorySk
 	return skill, nil
 }
 
-func (s *SkillService) SetTags(id string, values []model.SkillTag) (model.RepositorySkill, error) {
-	if _, err := s.Get(id); err != nil {
+func (s *SkillService) UpdateMetadata(id, name, description string, values []model.SkillTag) (model.RepositorySkill, error) {
+	name, description, err := validateRepositoryMetadata(name, description)
+	if err != nil {
 		return model.RepositorySkill{}, err
+	}
+	original, path, err := readRepositoryFile(s.root, id, "SKILL.md", maxSkillFileBytes)
+	if err != nil {
+		return model.RepositorySkill{}, repositoryReadError("skill", id, err)
+	}
+	_, body, err := parseRepositoryFrontmatter(original, mdFrontmatterStyle)
+	if err != nil {
+		return model.RepositorySkill{}, repositoryReadError("skill", id, err)
+	}
+	if strings.TrimSpace(body) == "" {
+		return model.RepositorySkill{}, repositoryReadError("skill", id, fmt.Errorf("%w: skill body is required", ErrRepositoryCorrupt))
 	}
 	raw := make([]string, len(values))
 	for index, tag := range values {
@@ -134,7 +145,16 @@ func (s *SkillService) SetTags(id string, values []model.SkillTag) (model.Reposi
 	for _, tag := range tags {
 		raw = append(raw, string(tag))
 	}
-	if err := s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeSkill, id, raw); err != nil {
+	if err := replaceRepositoryFileMetadata(
+		path,
+		original,
+		body,
+		mdFrontmatterStyle,
+		repositoryFileMetadata{Name: name, Description: description},
+		func() error {
+			return s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeSkill, id, raw)
+		},
+	); err != nil {
 		return model.RepositorySkill{}, err
 	}
 	return s.Get(id)
@@ -199,23 +219,13 @@ func (s *SkillService) read(id string) (model.RepositorySkill, error) {
 }
 
 func parseSkillMarkdown(raw []byte) (skillFrontmatter, string, error) {
-	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	if !strings.HasPrefix(text, "---\n") {
-		return skillFrontmatter{}, "", errors.New("skill frontmatter is required")
-	}
-	end := strings.Index(text[4:], "\n---\n")
-	if end < 0 {
-		return skillFrontmatter{}, "", errors.New("skill frontmatter is not terminated")
-	}
-	var meta skillFrontmatter
-	if err := yaml.Unmarshal([]byte(text[4:4+end]), &meta); err != nil {
+	metadata, body, err := parseRepositoryFrontmatter(raw, mdFrontmatterStyle)
+	if err != nil {
 		return skillFrontmatter{}, "", err
 	}
-	meta.Name = strings.TrimSpace(meta.Name)
-	meta.Description = strings.TrimSpace(meta.Description)
-	body := strings.TrimSpace(text[4+end+5:])
-	if meta.Name == "" || meta.Description == "" || body == "" {
-		return skillFrontmatter{}, "", errors.New("skill name, description, and body are required")
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return skillFrontmatter{}, "", fmt.Errorf("%w: skill body is required", ErrRepositoryCorrupt)
 	}
-	return meta, body, nil
+	return skillFrontmatter{Name: metadata.Name, Description: metadata.Description}, body, nil
 }

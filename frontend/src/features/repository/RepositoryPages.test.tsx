@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project, ProjectContentSnapshot, Theme } from '../../api/types';
@@ -15,13 +15,16 @@ const mocks = vi.hoisted(() => ({
   listComponents: vi.fn(),
   getComponent: vi.fn(),
   setComponentDisabled: vi.fn(),
+  updateComponent: vi.fn(),
   getSkill: vi.fn(),
   setSkillDisabled: vi.fn(),
+  updateSkill: vi.fn(),
   deleteTheme: vi.fn(),
   deleteComponent: vi.fn(),
   deleteSkill: vi.fn(),
   listSkills: vi.fn(),
   setTheme: vi.fn(),
+  updateTheme: vi.fn(),
 }));
 
 vi.mock('../../api/repositories', () => ({
@@ -31,11 +34,14 @@ vi.mock('../../api/repositories', () => ({
     listComponents: mocks.listComponents,
     getComponent: mocks.getComponent,
     setComponentDisabled: mocks.setComponentDisabled,
+    updateComponent: mocks.updateComponent,
     getSkill: mocks.getSkill,
     setSkillDisabled: mocks.setSkillDisabled,
+    updateSkill: mocks.updateSkill,
     deleteTheme: mocks.deleteTheme,
     deleteComponent: mocks.deleteComponent,
     deleteSkill: mocks.deleteSkill,
+    updateTheme: mocks.updateTheme,
   },
 }));
 
@@ -148,11 +154,14 @@ describe('personal repository pages', () => {
     expect(screen.getByText('Aptos')).toBeInTheDocument();
     expect(screen.getByText('色板')).toBeInTheDocument();
     expect(screen.getByText('字体')).toBeInTheDocument();
+    const editButton = screen.getByRole('button', { name: '编辑Swiss Modern' });
+    const deleteButton = screen.getByRole('button', { name: '删除Swiss Modern' });
     const fileLink = screen.getByRole('link', { name: '查看文件' });
-    expect(fileLink.nextElementSibling).toBe(screen.getByRole('button', { name: '删除Swiss Modern' }));
+    expect(editButton.nextElementSibling).toBe(deleteButton);
+    expect(deleteButton.nextElementSibling).toBe(fileLink);
     expect(screen.getByRole('region', { name: '主题详情' }).querySelector('footer')).not.toBeInTheDocument();
     const themeProperties = screen.getByLabelText('主题属性');
-    expect(themeProperties).toHaveClass('flex-nowrap');
+    expect(themeProperties).toHaveClass('flex-nowrap', 'overflow-x-auto', 'scrollbar-none');
     expect(themeProperties).toContainElement(screen.getByText('色板'));
     expect(themeProperties).toContainElement(screen.getByText('字体'));
     expect(screen.getAllByText('Dasi')).toHaveLength(2);
@@ -160,7 +169,8 @@ describe('personal repository pages', () => {
     expect(screen.getByRole('button', { name: '封面页' })).toBeInTheDocument();
     expect(screen.getAllByText('Clean grid')).toHaveLength(2);
     expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '极简' })).toBeInTheDocument();
+    const minimalFilter = screen.getByRole('button', { name: '极简' });
+    expect(minimalFilter.parentElement).toHaveClass('overflow-x-auto', 'scrollbar-none');
     expect(screen.getByText('仓库')).toHaveClass('text-base', 'font-bold', 'text-text-900');
     expect(screen.queryByText('个人仓库')).not.toBeInTheDocument();
     const repositoryBrand = screen.getByRole('button', { name: '返回项目' });
@@ -221,6 +231,37 @@ describe('personal repository pages', () => {
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({ message: '已应用「Tokyo Night」主题', tone: 'success' }),
     ]);
+  });
+
+  it('edits theme metadata and tags in a dialog', async () => {
+    const themes = themeFixtures();
+    const updated = {
+      ...themes[0],
+      name: 'Swiss Compact',
+      description: 'Tighter presentation grid',
+      tags: ['minimal', 'business'] as Theme['tags'],
+    };
+    mocks.listThemes.mockResolvedValue({ themes });
+    mocks.getTheme.mockImplementation(async (id: string) => themes.find((theme) => theme.id === id));
+    mocks.updateTheme.mockResolvedValue(updated);
+
+    renderPage(<ThemeRepositoryPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '编辑Swiss Modern' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('编辑主题');
+    fireEvent.change(within(dialog).getByLabelText('名称'), { target: { value: updated.name } });
+    fireEvent.change(within(dialog).getByLabelText('描述'), { target: { value: updated.description } });
+    fireEvent.click(within(dialog).getByRole('button', { name: '商务' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
+
+    await waitFor(() => expect(mocks.updateTheme).toHaveBeenCalledWith('swiss-modern', {
+      name: updated.name,
+      description: updated.description,
+      tags: updated.tags,
+    }));
+    expect(await screen.findByRole('heading', { name: updated.name })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('keeps the preview and original project theme when applying fails, and blocks duplicate submissions', async () => {
@@ -361,7 +402,7 @@ describe('personal repository pages', () => {
     renderPage(<ComponentRepositoryPage />);
 
     await screen.findByTitle('Feature Card 组件预览');
-    expect(screen.getByLabelText('标签')).toHaveClass('flex-nowrap', 'overflow-x-auto');
+    expect(screen.getByLabelText('标签')).toHaveClass('flex-nowrap', 'overflow-x-auto', 'scrollbar-none');
     expect(screen.getByLabelText('标签').children).toHaveLength(5);
     fireEvent.click(screen.getByRole('button', { name: '删除Feature Card' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('确定删除「Feature Card」吗？');

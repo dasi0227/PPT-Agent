@@ -12,10 +12,10 @@ import {
   RepositoryLoading,
   RepositoryPageHeader,
   RepositoryState,
-  RepositoryTagEditor,
   RepositoryTagList,
   RepositoryWorkspace,
 } from './RepositoryPrimitives';
+import { RepositoryEditDialog } from './RepositoryEditDialog';
 import { RepositoryShell } from './RepositoryShell';
 
 const COMPONENT_PREVIEW_WIDTH = 960;
@@ -108,6 +108,7 @@ export function ComponentRepositoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -160,13 +161,13 @@ export function ComponentRepositoryPage() {
       setPending(null);
     }
   };
-  const saveTags = async (tags: ComponentTag[]) => {
+  const updateComponent = async (value: { name: string; description: string; tags: ComponentTag[] }) => {
     if (!selected) return;
     try {
-      const updated = await repositoriesApi.setComponentTags(selected.id, tags);
+      const updated = await repositoriesApi.updateComponent(selected.id, value);
       setComponents((current) => current.map((component) => component.id === updated.id ? { ...component, ...updated } : component));
     } catch (cause) {
-      showGlobalError(cause instanceof Error ? cause.message : '组件标签更新失败');
+      showGlobalError(cause instanceof Error ? cause.message : '组件更新失败');
       throw cause;
     }
   };
@@ -224,11 +225,6 @@ export function ComponentRepositoryPage() {
                 properties={<RepositoryTagList tags={selected.tags.map(componentTagLabel)} />}
                 actions={(
                   <div className="flex items-center gap-2.5">
-                    <RepositoryTagEditor
-                      value={selected.tags}
-                      options={componentTagOrder.map((tag) => ({ value: tag, label: componentTagLabels[tag] }))}
-                      onSave={saveTags}
-                    />
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
                       {selected.disabled ? '已关闭' : '已启用'}
                     </span>
@@ -250,6 +246,7 @@ export function ComponentRepositoryPage() {
                 )}
                 contentClassName="flex items-center justify-center overflow-hidden p-5 md:p-7"
                 deleteNoun="组件"
+                onEdit={() => setEditOpen(true)}
                 onDelete={() => deleteComponent(selected)}
               >
                 <ScaledComponentPreview
@@ -263,6 +260,16 @@ export function ComponentRepositoryPage() {
           </RepositoryWorkspace>
         )}
       </div>
+      {selected && (
+        <RepositoryEditDialog
+          open={editOpen}
+          title="编辑组件"
+          value={{ name: selected.name, description: selected.description, tags: selected.tags }}
+          tagOptions={componentTagOrder.map((tag) => ({ value: tag, label: componentTagLabels[tag] }))}
+          onOpenChange={setEditOpen}
+          onSave={updateComponent}
+        />
+      )}
     </RepositoryShell>
   );
 }

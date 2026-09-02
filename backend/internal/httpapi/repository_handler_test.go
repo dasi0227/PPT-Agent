@@ -28,6 +28,19 @@ func writeRepositoryFixture(t *testing.T, root, relative, content string) {
 	}
 }
 
+func assertRepositoryFileContains(t *testing.T, root, relative string, values ...string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(root, relative))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range values {
+		if !strings.Contains(string(raw), value) {
+			t.Fatalf("%s does not contain %q:\n%s", relative, value, raw)
+		}
+	}
+}
+
 func completeThemeFixtureCSS() string {
 	var css strings.Builder
 	css.WriteString(":root {\n")
@@ -85,9 +98,8 @@ func performRepositoryRequest(t *testing.T, engine http.Handler, method, path, b
 func TestRepositoryHandlerContracts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	root := t.TempDir()
-	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/manifest.json", `{"name":"Swiss Modern","description":"Grid"}`)
-	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/theme.css", completeThemeFixtureCSS())
-	writeRepositoryFixture(t, root, "assets/components/feature-card/index.html", `<!doctype html><script id="meta" type="application/json">{"name":"Feature Card","description":"Summary"}</script><article>Feature</article>`)
+	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/theme.css", "/*\n---\nname: Swiss Modern\ndescription: Grid\n---\n*/\n"+completeThemeFixtureCSS())
+	writeRepositoryFixture(t, root, "assets/components/feature-card/index.html", "<!--\n---\nname: Feature Card\ndescription: Summary\n---\n-->\n<article>Feature</article>")
 	writeRepositoryFixture(t, root, "assets/skills/story-architect/SKILL.md", "---\nname: Story\ndescription: Narrative\n---\n# Story\n")
 
 	engine := repositoryTestRouter(t, root)
@@ -109,10 +121,11 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	if tags, exists := themeBody["tags"].([]any); !exists || len(tags) != 1 || tags[0] != "minimal" {
 		t.Fatalf("theme DTO tags = %#v", themeBody["tags"])
 	}
-	themePatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/themes/swiss-modern", `{"tags":["business"]}`)
-	if themePatched.Code != http.StatusOK || !strings.Contains(themePatched.Body.String(), `"business"`) {
+	themePatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/themes/swiss-modern", `{"name":"Swiss Edited","description":"Edited theme","tags":["business"]}`)
+	if themePatched.Code != http.StatusOK || !strings.Contains(themePatched.Body.String(), `"business"`) || !strings.Contains(themePatched.Body.String(), `"Swiss Edited"`) {
 		t.Fatalf("theme patch response = %d %s", themePatched.Code, themePatched.Body.String())
 	}
+	assertRepositoryFileContains(t, root, "assets/themes/swiss-modern/theme.css", "name: Swiss Edited", "description: Edited theme", "--color-bg")
 
 	component := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/components/feature-card", "")
 	if component.Code != http.StatusOK {
@@ -135,10 +148,11 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	if componentPatched.Code != http.StatusOK || !strings.Contains(componentPatched.Body.String(), `"disabled":true`) {
 		t.Fatalf("component patch response = %d %s", componentPatched.Code, componentPatched.Body.String())
 	}
-	componentTagsPatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/components/feature-card", `{"tags":["list"]}`)
-	if componentTagsPatched.Code != http.StatusOK || !strings.Contains(componentTagsPatched.Body.String(), `"list"`) {
+	componentTagsPatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/components/feature-card", `{"name":"Feature Edited","description":"Edited component","tags":["list"]}`)
+	if componentTagsPatched.Code != http.StatusOK || !strings.Contains(componentTagsPatched.Body.String(), `"list"`) || !strings.Contains(componentTagsPatched.Body.String(), `"Feature Edited"`) {
 		t.Fatalf("component tags patch response = %d %s", componentTagsPatched.Code, componentTagsPatched.Body.String())
 	}
+	assertRepositoryFileContains(t, root, "assets/components/feature-card/index.html", "name: Feature Edited", "description: Edited component", "<article>Feature</article>")
 
 	patched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/skills/story-architect", `{"disabled":true}`)
 	if patched.Code != http.StatusOK {
@@ -151,10 +165,11 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	if skillBody["id"] != "story-architect" || skillBody["disabled"] != true || skillBody["open_url"] == "" {
 		t.Fatalf("unexpected skill DTO: %#v", skillBody)
 	}
-	skillTagsPatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/skills/story-architect", `{"tags":["workflow"]}`)
-	if skillTagsPatched.Code != http.StatusOK || !strings.Contains(skillTagsPatched.Body.String(), `"workflow"`) {
+	skillTagsPatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/skills/story-architect", `{"name":"Story Edited","description":"Edited skill","tags":["workflow"]}`)
+	if skillTagsPatched.Code != http.StatusOK || !strings.Contains(skillTagsPatched.Body.String(), `"workflow"`) || !strings.Contains(skillTagsPatched.Body.String(), `"Story Edited"`) {
 		t.Fatalf("skill tags patch response = %d %s", skillTagsPatched.Code, skillTagsPatched.Body.String())
 	}
+	assertRepositoryFileContains(t, root, "assets/skills/story-architect/SKILL.md", "name: Story Edited", "description: Edited skill", "# Story")
 
 	for _, deletion := range []struct {
 		path string
@@ -177,8 +192,7 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 func TestThemeHandlerRejectsIncompleteTokens(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	root := t.TempDir()
-	writeRepositoryFixture(t, root, "assets/themes/incomplete/manifest.json", `{"name":"Incomplete","description":"Missing tokens"}`)
-	writeRepositoryFixture(t, root, "assets/themes/incomplete/theme.css", `:root { --color-bg: #fff; }`)
+	writeRepositoryFixture(t, root, "assets/themes/incomplete/theme.css", "/*\n---\nname: Incomplete\ndescription: Missing tokens\n---\n*/\n:root { --color-bg: #fff; }")
 
 	engine := repositoryTestRouter(t, root)
 	response := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/themes/incomplete/css", "")

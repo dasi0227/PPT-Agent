@@ -1,18 +1,14 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"golang.org/x/net/html"
 )
 
 type ComponentService struct {
@@ -21,8 +17,8 @@ type ComponentService struct {
 }
 
 type componentMeta struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string
+	Description string
 }
 
 func NewComponentService(workRoot WorkRoot, stores ...repositoryMetadataStore) *ComponentService {
@@ -96,9 +92,18 @@ func (s *ComponentService) Get(id string) (model.Component, error) {
 	}, nil
 }
 
-func (s *ComponentService) SetTags(id string, values []model.ComponentTag) (model.Component, error) {
-	if _, err := s.Get(id); err != nil {
+func (s *ComponentService) UpdateMetadata(id, name, description string, values []model.ComponentTag) (model.Component, error) {
+	name, description, err := validateRepositoryMetadata(name, description)
+	if err != nil {
 		return model.Component{}, err
+	}
+	original, path, err := readRepositoryFile(s.root, id, "index.html", maxRepositoryFileSize)
+	if err != nil {
+		return model.Component{}, repositoryReadError("component", id, err)
+	}
+	_, body, err := parseRepositoryFrontmatter(original, htmlFrontmatterStyle)
+	if err != nil {
+		return model.Component{}, repositoryReadError("component", id, err)
 	}
 	raw := make([]string, len(values))
 	for index, tag := range values {
@@ -112,7 +117,16 @@ func (s *ComponentService) SetTags(id string, values []model.ComponentTag) (mode
 	for _, tag := range tags {
 		raw = append(raw, string(tag))
 	}
-	if err := s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeComponent, id, raw); err != nil {
+	if err := replaceRepositoryFileMetadata(
+		path,
+		original,
+		body,
+		htmlFrontmatterStyle,
+		repositoryFileMetadata{Name: name, Description: description},
+		func() error {
+			return s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeComponent, id, raw)
+		},
+	); err != nil {
 		return model.Component{}, err
 	}
 	return s.Get(id)
@@ -161,50 +175,11 @@ func (s *ComponentService) Delete(id string) error {
 }
 
 func parseComponentMeta(raw []byte) (componentMeta, error) {
-	doc, err := html.Parse(bytes.NewReader(raw))
+	metadata, _, err := parseRepositoryFrontmatter(raw, htmlFrontmatterStyle)
 	if err != nil {
 		return componentMeta{}, ErrRepositoryCorrupt
 	}
-	var metaRaw string
-	var walk func(*html.Node)
-	walk = func(node *html.Node) {
-		if metaRaw == "" && node.Type == html.ElementNode && node.Data == "script" {
-			id, contentType := "", ""
-			for _, attr := range node.Attr {
-				switch strings.ToLower(attr.Key) {
-				case "id":
-					id = attr.Val
-				case "type":
-					contentType = attr.Val
-				}
-			}
-			if id == "meta" && contentType == "application/json" && node.FirstChild != nil {
-				metaRaw = node.FirstChild.Data
-			}
-		}
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			walk(child)
-		}
-	}
-	walk(doc)
-	if strings.TrimSpace(metaRaw) == "" {
-		return componentMeta{}, ErrRepositoryCorrupt
-	}
-	decoder := json.NewDecoder(strings.NewReader(metaRaw))
-	decoder.DisallowUnknownFields()
-	var meta componentMeta
-	if err := decoder.Decode(&meta); err != nil {
-		return componentMeta{}, ErrRepositoryCorrupt
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return componentMeta{}, ErrRepositoryCorrupt
-	}
-	meta.Name = strings.TrimSpace(meta.Name)
-	meta.Description = strings.TrimSpace(meta.Description)
-	if meta.Name == "" || meta.Description == "" {
-		return componentMeta{}, ErrRepositoryCorrupt
-	}
-	return meta, nil
+	return componentMeta{Name: metadata.Name, Description: metadata.Description}, nil
 }
 
 func componentNotFound(err error) bool {

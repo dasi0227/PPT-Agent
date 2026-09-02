@@ -80,18 +80,18 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
                   if (!optionDisabled) onToggle(skill.id);
                 }}
                 className={[
-                  'flex min-h-12 items-start gap-2 rounded-sm px-2 py-2 text-xs',
+                  'flex min-h-12 items-center gap-2 rounded-sm px-2 py-2 text-xs',
                   active ? 'bg-accent-soft text-text-900' : 'text-text-600',
                   optionDisabled ? 'cursor-not-allowed opacity-45' : '',
                 ].join(' ')}
               >
                 <BookOpenText
-                  className={`mt-0.5 h-4 w-4 shrink-0 ${active ? 'text-accent' : 'text-text-400'}`}
+                  className={`h-4 w-4 shrink-0 ${active ? 'text-accent' : 'text-text-400'}`}
                   strokeWidth={1.75}
                 />
-                <span className="min-w-0 leading-[1.45]">
-                  <span className="mr-1.5 font-semibold text-text-900">{skill.name}</span>
-                  <span>{skill.description}</span>
+                <span className="flex min-w-0 flex-1 items-baseline leading-[1.45]">
+                  <span className="mr-1.5 shrink-0 font-semibold text-text-900">{skill.name}</span>
+                  <span className="min-w-0 truncate" title={skill.description}>{skill.description}</span>
                 </span>
               </DropdownMenuItem>
             );

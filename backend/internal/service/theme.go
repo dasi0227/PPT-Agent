@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -17,11 +16,6 @@ import (
 type ThemeService struct {
 	root     string
 	metadata repositoryMetadataStore
-}
-
-type themeManifest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
 }
 
 func NewThemeService(workRoot WorkRoot, stores ...repositoryMetadataStore) *ThemeService {
@@ -54,10 +48,6 @@ func (s *ThemeService) List() ([]model.Theme, error) {
 }
 
 func (s *ThemeService) Get(id string) (model.Theme, error) {
-	manifestRaw, _, err := readRepositoryFile(s.root, id, "manifest.json", maxRepositoryFileSize)
-	if err != nil {
-		return model.Theme{}, repositoryReadError("theme", id, err)
-	}
 	cssRaw, cssPath, err := readRepositoryFile(s.root, id, "theme.css", maxRepositoryFileSize)
 	if err != nil {
 		return model.Theme{}, repositoryReadError("theme", id, err)
@@ -65,17 +55,9 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 	if err := validateThemeTokens(cssRaw); err != nil {
 		return model.Theme{}, repositoryReadError("theme", id, err)
 	}
-	var manifest themeManifest
-	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
-		return model.Theme{}, repositoryReadError("theme", id, ErrRepositoryCorrupt)
-	}
-	manifest.Name = strings.TrimSpace(manifest.Name)
-	manifest.Description = strings.TrimSpace(manifest.Description)
-	if _, description, found := strings.Cut(manifest.Description, "："); found {
-		manifest.Description = strings.TrimSpace(description)
-	}
-	if manifest.Name == "" || manifest.Description == "" {
-		return model.Theme{}, repositoryReadError("theme", id, ErrRepositoryCorrupt)
+	metadata, _, err := parseRepositoryFrontmatter(cssRaw, cssFrontmatterStyle)
+	if err != nil {
+		return model.Theme{}, repositoryReadError("theme", id, err)
 	}
 	tagKeys, err := s.metadata.ListResourceTagKeys(context.Background(), resourceTypeTheme, id)
 	if err != nil {
@@ -86,16 +68,28 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 		return model.Theme{}, repositoryReadError("theme", id, err)
 	}
 	return model.Theme{
-		ID: id, Name: manifest.Name, Description: manifest.Description,
+		ID: id, Name: metadata.Name, Description: metadata.Description,
 		Tags: tags,
 		CSS:  string(cssRaw), CSSURL: "/api/v1/themes/" + id + "/css",
 		LocalPath: cssPath, OpenURL: repositoryOpenURL(cssPath),
 	}, nil
 }
 
-func (s *ThemeService) SetTags(id string, values []model.ThemeTag) (model.Theme, error) {
-	if _, err := s.Get(id); err != nil {
+func (s *ThemeService) UpdateMetadata(id, name, description string, values []model.ThemeTag) (model.Theme, error) {
+	name, description, err := validateRepositoryMetadata(name, description)
+	if err != nil {
 		return model.Theme{}, err
+	}
+	original, path, err := readRepositoryFile(s.root, id, "theme.css", maxRepositoryFileSize)
+	if err != nil {
+		return model.Theme{}, repositoryReadError("theme", id, err)
+	}
+	_, body, err := parseRepositoryFrontmatter(original, cssFrontmatterStyle)
+	if err != nil {
+		return model.Theme{}, repositoryReadError("theme", id, err)
+	}
+	if err := validateThemeTokens(original); err != nil {
+		return model.Theme{}, repositoryReadError("theme", id, err)
 	}
 	raw := make([]string, len(values))
 	for index, tag := range values {
@@ -110,7 +104,16 @@ func (s *ThemeService) SetTags(id string, values []model.ThemeTag) (model.Theme,
 	for _, tag := range values {
 		raw = append(raw, string(tag))
 	}
-	if err := s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeTheme, id, raw); err != nil {
+	if err := replaceRepositoryFileMetadata(
+		path,
+		original,
+		body,
+		cssFrontmatterStyle,
+		repositoryFileMetadata{Name: name, Description: description},
+		func() error {
+			return s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeTheme, id, raw)
+		},
+	); err != nil {
 		return model.Theme{}, err
 	}
 	return s.Get(id)
