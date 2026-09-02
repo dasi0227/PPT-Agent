@@ -125,6 +125,7 @@ export interface Run {
   model: string | null;
   skills?: Skill[];
   components?: PublicLoadedResource[];
+  dropped_mentioned_slide_ids?: string[];
   pause_reason?: string;
   paused_at?: number;
 }
@@ -145,6 +146,7 @@ export interface CreateRunRequest {
   instruction: string;
   skill_ids?: string[];
   component_names?: string[];
+  mentioned_slide_ids?: string[];
   options?: { language?: RunLanguage; range?: SlideRange };
 }
 

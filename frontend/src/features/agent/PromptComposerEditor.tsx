@@ -3,36 +3,44 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { Blocks, NotebookText } from 'lucide-react';
+import { Blocks, GalleryThumbnails, NotebookText } from 'lucide-react';
 import type { ComponentReference, Prompt } from '../../api/types';
 import { useComponentStore } from '../../stores/componentStore';
 import { usePromptStore } from '../../stores/promptStore';
 import {
   findComponentTrigger,
+  findPageTrigger,
   findPromptTrigger,
   MAX_COMPONENT_MENTIONS,
+  MAX_PAGE_MENTIONS,
   matchComponents,
+  matchPages,
   matchPrompts,
+  pageDisplayName,
+  type PageMentionCandidate,
   type PromptTrigger,
 } from './promptMatching';
 import './promptComposer.css';
 
 export interface PromptComposerEditorHandle {
   getPlainText: () => string;
+  getSubmitText: () => string;
   getComponentNames: () => string[];
+  getMentionedSlideIds: () => string[];
   setPlainText: (value: string) => void;
   focusEnd: () => void;
   captureSelection: () => Range | null;
   restoreSelection: (range: Range | null) => void;
 }
 
-type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' };
+type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' | 'page' };
 
 interface PromptComposerEditorProps {
   value: string;
@@ -42,6 +50,7 @@ interface PromptComposerEditorProps {
   placeholder: string;
   disabled: boolean;
   readOnly: boolean;
+  pages?: PageMentionCandidate[];
 }
 
 function nodePlainText(node: Node): string {
@@ -58,6 +67,25 @@ function nodePlainText(node: Node): string {
 
 function serializeComposerText(root: HTMLElement): string {
   return nodePlainText(root).replace(/\n$/, '');
+}
+
+function nodeSubmitText(node: Node): string {
+  if (node instanceof HTMLElement && node.dataset.slideId) {
+    return `${node.textContent ?? ''}⟨${node.dataset.slideId}⟩`;
+  }
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
+  if (node instanceof HTMLBRElement) return '\n';
+  let result = '';
+  node.childNodes.forEach((child) => {
+    const block = child instanceof HTMLDivElement || child instanceof HTMLParagraphElement;
+    if (block && result && !result.endsWith('\n')) result += '\n';
+    result += nodeSubmitText(child);
+  });
+  return result;
+}
+
+function serializeSubmitText(root: HTMLElement): string {
+  return nodeSubmitText(root).replace(/\n$/, '');
 }
 
 function setPlainTextContent(root: HTMLElement, value: string) {
@@ -138,6 +166,18 @@ function insertPlainText(root: HTMLElement, value: string) {
   }
 }
 
+function pageStatus(page: PageMentionCandidate) {
+  const spec = page.specState === 'ready'
+    ? { label: '设计稿已就绪', dot: 'bg-success' }
+    : { label: '设计稿未生成', dot: 'bg-danger' };
+  const html = page.htmlState === 'fresh'
+    ? { label: '幻灯片已就绪', dot: 'bg-success' }
+    : page.htmlState === 'not_materialized'
+      ? { label: '幻灯片未生成', dot: 'bg-danger' }
+      : { label: '幻灯片待更新', dot: 'bg-warning' };
+  return { spec, html };
+}
+
 export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, PromptComposerEditorProps>(
   function PromptComposerEditor({
     value,
@@ -147,6 +187,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     placeholder,
     disabled,
     readOnly,
+    pages = [],
   }, forwardedRef) {
     const editorRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -162,9 +203,18 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const components = useComponentStore((state) => state.components);
     const componentVersion = useComponentStore((state) => state.version);
     const loadComponents = useComponentStore((state) => state.load);
+    const pagesById = useMemo(() => new Map(pages.map((page) => [page.slideId, page])), [pages]);
+    const pageSignature = pages.map((page) => (
+      `${page.slideId}:${page.ordinal}:${page.title}:${page.specState}:${page.htmlState}`
+    )).join('|');
     const promptCandidates = trigger?.kind === 'prompt' ? matchPrompts(prompts, trigger.query, recentIds) : [];
     const componentCandidates = trigger?.kind === 'component' ? matchComponents(components, trigger.query) : [];
-    const candidateCount = trigger?.kind === 'component' ? componentCandidates.length : promptCandidates.length;
+    const pageCandidates = trigger?.kind === 'page' ? matchPages(pages, trigger.query) : [];
+    const candidateCount = trigger?.kind === 'component'
+      ? componentCandidates.length
+      : trigger?.kind === 'page'
+        ? pageCandidates.length
+        : promptCandidates.length;
 
     const updateTrigger = useCallback(() => {
       const editor = editorRef.current;
@@ -180,11 +230,14 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       const text = serializeComposerText(editor);
       const promptTrigger = findPromptTrigger(text, offset);
       const componentTrigger = findComponentTrigger(text, offset);
+      const pageTrigger = pages.length > 0 ? findPageTrigger(text, offset) : null;
       const next: ComposerTrigger | null = promptTrigger
         ? { ...promptTrigger, kind: 'prompt' }
         : componentTrigger
           ? { ...componentTrigger, kind: 'component' }
-          : null;
+          : pageTrigger
+            ? { ...pageTrigger, kind: 'page' }
+            : null;
       const signature = next ? `${next.kind}:${next.start}:${next.end}:${next.query}` : '';
       if (!next || dismissedRef.current === signature) {
         setTrigger(null);
@@ -192,10 +245,11 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       }
       setActiveIndex(0);
       setTrigger(next);
-    }, [disabled, readOnly]);
+    }, [disabled, pages.length, readOnly]);
 
     useImperativeHandle(forwardedRef, () => ({
       getPlainText: () => editorRef.current ? serializeComposerText(editorRef.current) : '',
+      getSubmitText: () => editorRef.current ? serializeSubmitText(editorRef.current) : '',
       getComponentNames: () => {
         const editor = editorRef.current;
         if (!editor) return [];
@@ -209,6 +263,20 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
           }
         });
         return names;
+      },
+      getMentionedSlideIds: () => {
+        const editor = editorRef.current;
+        if (!editor) return [];
+        const seen = new Set<string>();
+        const ids: string[] = [];
+        editor.querySelectorAll<HTMLElement>('[data-slide-id]').forEach((fragment) => {
+          const id = fragment.dataset.slideId?.trim() ?? '';
+          if (id && !seen.has(id) && ids.length < MAX_PAGE_MENTIONS) {
+            seen.add(id);
+            ids.push(id);
+          }
+        });
+        return ids;
       },
       setPlainText: (nextValue) => {
         const editor = editorRef.current;
@@ -256,6 +324,23 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     useEffect(() => {
       updateTrigger();
     }, [componentVersion, updateTrigger, version]);
+
+    useEffect(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      let changed = false;
+      editor.querySelectorAll<HTMLElement>('[data-slide-id]').forEach((fragment) => {
+        const page = pagesById.get(fragment.dataset.slideId ?? '');
+        fragment.classList.toggle('composer-page-fragment-invalid', !page);
+        if (!page) return;
+        const displayName = pageDisplayName(page);
+        if (fragment.textContent !== displayName) {
+          fragment.textContent = displayName;
+          changed = true;
+        }
+      });
+      if (changed) onChange(serializeComposerText(editor));
+    }, [onChange, pageSignature, pagesById]);
 
     useEffect(() => {
       menuRef.current?.querySelector<HTMLElement>(`[data-candidate-index="${activeIndex}"]`)
@@ -329,6 +414,36 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       editor.focus();
     };
 
+    const applyPage = (page: PageMentionCandidate) => {
+      const editor = editorRef.current;
+      if (!editor || !trigger || trigger.kind !== 'page') return;
+      const start = pointAtOffset(editor, trigger.start);
+      const end = pointAtOffset(editor, trigger.end);
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      range.deleteContents();
+      const pageFragment = document.createElement('span');
+      pageFragment.className = 'composer-page-fragment';
+      pageFragment.dataset.slideId = page.slideId;
+      pageFragment.contentEditable = 'false';
+      pageFragment.textContent = pageDisplayName(page);
+      const space = document.createTextNode(' ');
+      range.insertNode(space);
+      range.insertNode(pageFragment);
+      editor.normalize();
+      const selection = window.getSelection();
+      const next = document.createRange();
+      next.setStartAfter(space);
+      next.collapse(true);
+      selection?.removeAllRanges();
+      selection?.addRange(next);
+      dismissedRef.current = '';
+      setTrigger(null);
+      syncValue();
+      editor.focus();
+    };
+
     const handleInput = (_event: FormEvent<HTMLDivElement>) => {
       dismissedRef.current = '';
       syncValue();
@@ -346,13 +461,16 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         if (event.key === 'Enter' && !(event.metaKey || event.ctrlKey)) {
           const candidate = trigger.kind === 'component'
             ? componentCandidates[activeIndex]
-            : promptCandidates[activeIndex];
+            : trigger.kind === 'page'
+              ? pageCandidates[activeIndex]
+              : promptCandidates[activeIndex];
           if (!candidate) {
             onKeyDown(event);
             return;
           }
           event.preventDefault();
           if (trigger.kind === 'component') applyComponent(candidate as ComponentReference);
+          else if (trigger.kind === 'page') applyPage(candidate as PageMentionCandidate);
           else applyPrompt(candidate as Prompt);
           return;
         }
@@ -380,18 +498,22 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             ref={menuRef}
             className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 max-h-[280px] overflow-y-auto rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="listbox"
-            aria-label={trigger.kind === 'component' ? '组件候选' : '提示词候选'}
+            aria-label={trigger.kind === 'component' ? '组件候选' : trigger.kind === 'page' ? '页面候选' : '提示词候选'}
           >
             <div className="px-2 pb-1 pt-1.5 text-[11px] font-semibold text-text-400">
               {trigger.kind === 'component'
                 ? (trigger.query ? '匹配组件' : '全部组件')
-                : (trigger.query ? '匹配提示词' : '最近使用')}
+                : trigger.kind === 'page'
+                  ? (trigger.query ? '匹配页面' : '当前演示文稿')
+                  : (trigger.query ? '匹配提示词' : '最近使用')}
             </div>
             {candidateCount === 0 ? (
               <div className="grid min-h-14 place-items-center px-3 text-xs text-text-400">
                 {trigger.kind === 'component'
                   ? (trigger.query ? '没有匹配的组件' : '暂无可用组件')
-                  : (trigger.query ? '没有匹配的提示词' : '暂无最近使用')}
+                  : trigger.kind === 'page'
+                    ? (trigger.query ? '没有匹配的页面' : '暂无可用页面')
+                    : (trigger.query ? '没有匹配的提示词' : '暂无最近使用')}
               </div>
             ) : trigger.kind === 'component' ? componentCandidates.map((component, index) => (
               <button
@@ -418,7 +540,57 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-text-600">{component.description}</span>
                 </span>
               </button>
-            )) : promptCandidates.map((prompt, index) => (
+            )) : trigger.kind === 'page' ? pageCandidates.map((page, index) => {
+              const status = pageStatus(page);
+              return (
+                <button
+                  key={page.slideId}
+                  type="button"
+                  role="option"
+                  aria-selected={activeIndex === index}
+                  data-page-option={page.slideId}
+                  data-candidate-index={index}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    applyPage(page);
+                  }}
+                  className={`grid min-h-[50px] w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-1 rounded-md px-2 py-1.5 text-left ${
+                    activeIndex === index ? 'bg-accent-soft' : 'hover:bg-panel-muted'
+                  }`}
+                >
+                  <span className="grid h-6 w-5 place-items-center text-accent" aria-hidden="true">
+                    <GalleryThumbnails className="h-[15px] w-[15px]" strokeWidth={1.75} />
+                  </span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="flex min-w-0 items-baseline">
+                      <span className="shrink-0 text-xs font-bold text-accent">Page {page.ordinal}</span>
+                      {page.title.trim() && (
+                        <>
+                          <span className="mx-1 shrink-0 text-text-400">·</span>
+                          <span className="min-w-0 truncate text-xs font-bold text-text-900">{page.title.trim()}</span>
+                        </>
+                      )}
+                      {page.keyMessage.trim() && (
+                        <span className="ml-2 min-w-0 flex-1 truncate text-[11px] font-normal text-text-400">
+                          {page.keyMessage.trim()}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex min-w-0 items-center gap-2.5 truncate text-[11px] leading-4 text-text-400">
+                      <span className="inline-flex items-center gap-1">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.spec.dot}`} />
+                        {status.spec.label}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.html.dot}`} />
+                        {status.html.label}
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              );
+            }) : promptCandidates.map((prompt, index) => (
               <button
                 key={prompt.id}
                 type="button"

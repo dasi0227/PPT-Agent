@@ -25,7 +25,7 @@ import {
 import { useProjectStore } from './projectStore';
 import { useComposerStore } from './composerStore';
 import { newClientIdentity } from '../lib/clientIdentity';
-import { showGlobalError } from './toastStore';
+import { showGlobalError, showGlobalWarning } from './toastStore';
 
 export type { PlanState } from '../api/types';
 
@@ -462,6 +462,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
       try {
         const run = await runsApi.create(threadId, payload);
+        if (run.dropped_mentioned_slide_ids?.length) {
+          showGlobalWarning(
+            run.dropped_mentioned_slide_ids.length === payload.mentioned_slide_ids?.length
+              ? '所点页面均不存在，已按未点名页面继续执行'
+              : `已忽略 ${run.dropped_mentioned_slide_ids.length} 个不存在的页面，其余页面继续执行`,
+          );
+        }
         patchSession(threadId, {
           activeRunId: run.id,
           projectId: run.project_id,

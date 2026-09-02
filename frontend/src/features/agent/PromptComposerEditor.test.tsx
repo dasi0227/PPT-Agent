@@ -5,6 +5,7 @@ import type { ComponentReference, Prompt } from '../../api/types';
 import { useComponentStore } from '../../stores/componentStore';
 import { usePromptStore } from '../../stores/promptStore';
 import { PromptComposerEditor, type PromptComposerEditorHandle } from './PromptComposerEditor';
+import type { PageMentionCandidate } from './promptMatching';
 
 const prompt: Prompt = {
   id: 'p1',
@@ -26,6 +27,15 @@ const component: ComponentReference = {
   open_url: 'vscode://file/component',
 };
 
+const page: PageMentionCandidate = {
+  slideId: 'sli_b',
+  ordinal: 2,
+  title: '融资历程',
+  keyMessage: '三轮融资累计 2.4 亿',
+  specState: 'ready',
+  htmlState: 'spec_stale',
+};
+
 function placeCaretAtEnd(element: HTMLElement) {
   const range = document.createRange();
   range.selectNodeContents(element);
@@ -40,10 +50,12 @@ function Harness({
   initial = '$sum',
   changed = vi.fn(),
   editorRef,
+  pages = [],
 }: {
   initial?: string;
   changed?: (value: string) => void;
   editorRef?: RefObject<PromptComposerEditorHandle>;
+  pages?: PageMentionCandidate[];
 }) {
   const [value, setValue] = useState(initial);
   return (
@@ -59,6 +71,7 @@ function Harness({
       placeholder="输入"
       disabled={false}
       readOnly={false}
+      pages={pages}
     />
   );
 }
@@ -153,5 +166,40 @@ describe('PromptComposerEditor', () => {
     });
 
     expect(editorRef.current?.getComponentNames()).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
+  });
+
+  it('inserts page fragments with statuses and serializes stable slide ids', async () => {
+    const editorRef = createRef<PromptComposerEditorHandle>();
+    render(<Harness initial="@融" editorRef={editorRef} pages={[page]} />);
+    const editor = screen.getByRole('textbox');
+    editor.focus();
+    placeCaretAtEnd(editor);
+
+    const option = await screen.findByRole('option', { name: /Page 2.*融资历程/ });
+    expect(option).toHaveTextContent(page.keyMessage);
+    expect(option).toHaveTextContent('设计稿已就绪');
+    expect(option).toHaveTextContent('幻灯片待更新');
+    fireEvent.mouseDown(option);
+
+    expect(editor.querySelector('[data-slide-id="sli_b"]')).toHaveTextContent('Page 2 · 融资历程');
+    expect(editorRef.current?.getPlainText()).toBe('Page 2 · 融资历程 ');
+    expect(editorRef.current?.getSubmitText()).toBe('Page 2 · 融资历程⟨sli_b⟩ ');
+    expect(editorRef.current?.getMentionedSlideIds()).toEqual(['sli_b']);
+  });
+
+  it('refreshes an unsent page fragment after reorder or rename and marks deletion invalid', async () => {
+    const editorRef = createRef<PromptComposerEditorHandle>();
+    const { rerender } = render(<Harness initial="@融" editorRef={editorRef} pages={[page]} />);
+    const editor = screen.getByRole('textbox');
+    editor.focus();
+    placeCaretAtEnd(editor);
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /Page 2.*融资历程/ }));
+
+    rerender(<Harness initial="@融" editorRef={editorRef} pages={[{ ...page, ordinal: 4, title: '融资进展' }]} />);
+    await waitFor(() => expect(editor.querySelector('[data-slide-id="sli_b"]')).toHaveTextContent('Page 4 · 融资进展'));
+
+    rerender(<Harness initial="@融" editorRef={editorRef} pages={[]} />);
+    await waitFor(() => expect(editor.querySelector('[data-slide-id="sli_b"]')).toHaveClass('composer-page-fragment-invalid'));
+    expect(editorRef.current?.getMentionedSlideIds()).toEqual(['sli_b']);
   });
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Send, Sparkles, StopCircle } from 'lucide-react';
 import { llmApi } from '../../api/llm';
 import { polishApi } from '../../api/polish';
@@ -204,7 +204,16 @@ export const CommandComposer: React.FC = () => {
       ? '追加对当前任务的要求'
       : '输入你的想法与目标';
 
-  const slides = orderedSlides(activeProjectId ? contentByProjectId[activeProjectId] : undefined);
+  const activeSnapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
+  const slides = useMemo(() => orderedSlides(activeSnapshot), [activeSnapshot]);
+  const pageCandidates = useMemo(() => slides.map((slide, index) => ({
+    slideId: slide.id,
+    ordinal: index + 1,
+    title: slide.title,
+    keyMessage: slide.spec?.key_message ?? '',
+    specState: slide.spec ? 'ready' as const : 'pending' as const,
+    htmlState: slide.materialization?.state ?? 'not_materialized' as const,
+  })), [slides]);
   const currentSlide = slides.find((slide) => slide.id === currentSlideId);
   const isEmptyProject = Boolean(activeProjectId) && slides.length === 0;
 
@@ -320,8 +329,9 @@ export const CommandComposer: React.FC = () => {
 
   const submit = async () => {
     const editor = editorRef.current;
-    const raw = (editor?.getPlainText() ?? text).trim();
+    const raw = (editor?.getSubmitText() ?? text).trim();
     const componentNames = editor?.getComponentNames() ?? [];
+    const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
     if (disabled || commitActive || polishing || !activeProjectId || !raw) return;
     setSubmitError('');
     const projectId = activeProjectId;
@@ -347,8 +357,10 @@ export const CommandComposer: React.FC = () => {
     }
     const scope = {
       artifact: composer.artifact,
-      level: composer.level === 'slide' && !currentSlide ? 'deck' as const : composer.level,
-      ...(composer.level === 'slide' && currentSlide ? { slide_id: currentSlide.id } : {}),
+      level: mentionedSlideIds.length > 0 || (composer.level === 'slide' && !currentSlide)
+        ? 'deck' as const
+        : composer.level,
+      ...(mentionedSlideIds.length === 0 && composer.level === 'slide' && currentSlide ? { slide_id: currentSlide.id } : {}),
     };
     let request: CreateRunRequest = {
       client_request_id: newClientIdentity('req'),
@@ -358,6 +370,7 @@ export const CommandComposer: React.FC = () => {
       instruction: raw,
       ...(composer.selectedSkillIds.length > 0 ? { skill_ids: composer.selectedSkillIds } : {}),
       ...(componentNames.length > 0 ? { component_names: componentNames } : {}),
+      ...(mentionedSlideIds.length > 0 ? { mentioned_slide_ids: mentionedSlideIds } : {}),
     };
     request = applyShortcut(raw, request);
     if (request.scope.level === 'slide' && !request.scope.slide_id) {
@@ -490,6 +503,7 @@ export const CommandComposer: React.FC = () => {
             placeholder={composerPlaceholder}
             disabled={disabled}
             readOnly={polishing}
+            pages={steering ? [] : pageCandidates}
           />
           {text.trim() !== '' && !disabled && (
             <button

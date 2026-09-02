@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { ComponentReference, Prompt } from '../../api/types';
-import { findComponentTrigger, findPromptTrigger, matchComponents, matchPrompts } from './promptMatching';
+import {
+  findComponentTrigger,
+  findPageTrigger,
+  findPromptTrigger,
+  matchComponents,
+  matchPages,
+  matchPrompts,
+  pageDisplayName,
+  type PageMentionCandidate,
+} from './promptMatching';
 
 const prompts: Prompt[] = [
   { id: 'value', name: '写作 / Draft', desc: '撰写页面', value: '生成高管摘要', tags: ['deliverable'], disabled: false, created_at: 1, updated_at: 4 },
@@ -59,5 +68,36 @@ describe('component matching', () => {
     expect(matchComponents(components, 'chart').map((component) => component.id)).toEqual(['trend-chart']);
     expect(matchComponents(components, '').map((component) => component.id)).toEqual(['feature-card', 'trend-chart']);
     expect(matchComponents(components, '禁用')).toEqual([]);
+  });
+});
+
+describe('page matching', () => {
+  const pages: PageMentionCandidate[] = [
+    { slideId: 'sli_a', ordinal: 1, title: '封面', keyMessage: '开场', specState: 'ready', htmlState: 'fresh' },
+    { slideId: 'sli_b', ordinal: 2, title: '融资历程', keyMessage: '融资三轮', specState: 'ready', htmlState: 'spec_stale' },
+    { slideId: 'sli_c', ordinal: 3, title: '', keyMessage: '', specState: 'pending', htmlState: 'not_materialized' },
+  ];
+
+  it('detects @ independently at valid boundaries', () => {
+    expect(findPageTrigger('@融资', 3)).toEqual({ start: 0, end: 3, query: '融资' });
+    expect(findPageTrigger('修改 @3', 5)).toEqual({ start: 3, end: 5, query: '3' });
+    expect(findPageTrigger('正文\n@Page', 8)).toEqual({ start: 3, end: 8, query: 'Page' });
+    expect(findPageTrigger('mail@example', 12)).toBeNull();
+    expect(findPageTrigger('中文，@融资', 6)).toBeNull();
+    expect(findPromptTrigger('@融资', 3)).toBeNull();
+    expect(findComponentTrigger('@融资', 3)).toBeNull();
+  });
+
+  it('matches title and ordinal without searching key messages', () => {
+    expect(matchPages(pages, '融资').map((page) => page.slideId)).toEqual(['sli_b']);
+    expect(matchPages(pages, '2').map((page) => page.slideId)).toEqual(['sli_b']);
+    expect(matchPages(pages, 'PAGE 3').map((page) => page.slideId)).toEqual(['sli_c']);
+    expect(matchPages(pages, '三轮')).toEqual([]);
+    expect(matchPages(pages, '').map((page) => page.slideId)).toEqual(['sli_a', 'sli_b', 'sli_c']);
+  });
+
+  it('formats titled and untitled pages without a placeholder', () => {
+    expect(pageDisplayName(pages[1])).toBe('Page 2 · 融资历程');
+    expect(pageDisplayName(pages[2])).toBe('Page 3');
   });
 });
