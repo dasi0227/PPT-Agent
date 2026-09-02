@@ -46,7 +46,10 @@ describe('AppShell layout contract', () => {
     render(<AppShell />);
     expect(screen.queryByTestId('project-tabs')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Dasi PPT Agent' })).toBeInTheDocument();
-    expect(screen.getByText('AI 时代下的 PPT 交给 Agent 就好了')).toBeInTheDocument();
+    expect(screen.getByText('Agent')).toBeInTheDocument();
+    expect(screen.getByText('PPT')).toBeInTheDocument();
+    expect(screen.getByText('Dasi')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新建 / 打开项目' })).toBeInTheDocument();
     expect(screen.queryByTestId('lucide-layers')).not.toBeInTheDocument();
   });
 

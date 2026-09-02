@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dasi PPT Agent 首页 Slogan 方案</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9edf2;
+      --panel: #f8f9fb;
+      --surface: #ffffff;
+      --ink: #17202b;
+      --muted: #5f6b7a;
+      --subtle: #95a0ae;
+      --border: #d5dbe3;
+      --border-strong: #bcc5d0;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      --ppt: #2f67f6;
+      --ppt-soft: #e8efff;
+      --font: Aptos, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-width: 320px;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--workspace);
+      color: var(--ink);
+      font-family: var(--font);
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .demo-toolbar {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      display: flex;
+      gap: 3px;
+      padding: 4px;
+      border: 1px solid rgba(188, 197, 208, 0.9);
+      border-radius: 8px;
+      background: rgba(248, 249, 251, 0.92);
+      box-shadow: 0 8px 24px rgba(71, 85, 105, 0.12);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    .demo-tab {
+      height: 30px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+      transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+
+    .demo-tab:hover {
+      color: var(--ink);
+      background: #eef1f5;
+    }
+
+    .demo-tab[aria-selected="true"] {
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 1px 4px rgba(71, 85, 105, 0.12);
+    }
+
+    .demo-tab:active,
+    .primary-button:active {
+      transform: translateY(1px);
+    }
+
+    .demo-tab:focus-visible,
+    .primary-button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .option {
+      position: absolute;
+      inset: 0;
+      display: none;
+      min-height: 100dvh;
+      overflow: hidden;
+      background: var(--workspace);
+    }
+
+    .option.is-active {
+      display: grid;
+      animation: option-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    .brand {
+      position: absolute;
+      top: 52px;
+      left: 50%;
+      z-index: 2;
+      margin: 0;
+      transform: translateX(-50%);
+      font-size: 54px;
+      font-weight: 900;
+      font-style: italic;
+      line-height: 1;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .brand-lockup {
+      position: absolute;
+      top: 44px;
+      left: 50%;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 0;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+
+    .brand-lockup-name {
+      font-size: 58px;
+      font-weight: 900;
+      font-style: italic;
+      line-height: 0.9;
+      letter-spacing: 0;
+    }
+
+    .brand-lockup-divider {
+      width: 2px;
+      height: 42px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    .brand-lockup-role {
+      display: flex;
+      flex-direction: column;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 750;
+      line-height: 0.95;
+      letter-spacing: 0;
+      text-align: left;
+    }
+
+    .primary-button {
+      display: inline-flex;
+      height: 46px;
+      align-items: center;
+      justify-content: center;
+      padding: 0 22px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1;
+      box-shadow: 0 8px 18px rgba(71, 85, 105, 0.11);
+      transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    .primary-button:hover {
+      border-color: #9da8b5;
+      background: var(--panel);
+    }
+
+    .ppt-word {
+      color: var(--ppt);
+    }
+
+    .agent-word {
+      color: var(--accent);
+    }
+
+    .dasi-word {
+      color: var(--accent);
+    }
+
+    /* D: balanced product composition */
+    .option-d {
+      grid-template-columns: minmax(640px, 760px) 520px;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      padding: 128px 18px 52px 64px;
+    }
+
+    .d-copy {
+      z-index: 1;
+      align-self: center;
+      min-width: 0;
+    }
+
+    .d-slogan {
+      margin: 0 0 36px;
+      font-size: 74px;
+      font-weight: 850;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .d-slogan-line {
+      display: block;
+      white-space: nowrap;
+    }
+
+    .d-slogan .ppt-word {
+      display: inline-block;
+      transform-origin: center bottom;
+      animation: ppt-jitter 2s ease-in-out infinite;
+    }
+
+    .d-slogan .dasi-word {
+      position: relative;
+      display: inline-block;
+    }
+
+    .d-slogan .dasi-word::after {
+      position: absolute;
+      right: 0;
+      bottom: -0.12em;
+      left: 0;
+      height: 0.07em;
+      border-radius: 99px;
+      background: currentColor;
+      content: "";
+      transform: scaleX(0.24);
+      transform-origin: left;
+      animation: dasi-underline 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    }
+
+    .d-slogan .agent-word {
+      position: relative;
+      display: inline-block;
+    }
+
+    @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+      .d-slogan .agent-word::after {
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(
+          100deg,
+          transparent 0%,
+          transparent 38%,
+          #9bb9ff 50%,
+          transparent 62%,
+          transparent 100%
+        );
+        background-size: 300% 100%;
+        background-position: 130% 0;
+        background-repeat: no-repeat;
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        content: attr(data-text);
+        opacity: 0;
+        pointer-events: none;
+        -webkit-text-fill-color: transparent;
+        animation: agent-sweep 2s ease-in-out infinite;
+      }
+    }
+
+    .slide-planes {
+      position: relative;
+      width: 570px;
+      aspect-ratio: 16 / 11;
+      justify-self: end;
+      transform: translateX(2%);
+      perspective: 1000px;
+    }
+
+    .slide-plane {
+      position: absolute;
+      width: 78%;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      background: var(--surface);
+      box-shadow: 0 20px 50px rgba(71, 85, 105, 0.16);
+      transform-origin: center;
+    }
+
+    .plane-back {
+      top: 2%;
+      right: 2%;
+      opacity: 0.58;
+      background: #f8fafc;
+      transform: rotate(8deg) translate3d(8%, 2%, -80px);
+    }
+
+    .plane-mid {
+      top: 13%;
+      right: 10%;
+      opacity: 0.8;
+      background: #fbfcfd;
+      transform: rotate(2deg) translate3d(3%, 1%, -30px);
+    }
+
+    .plane-front {
+      top: 25%;
+      right: 18%;
+      transform: rotate(-4deg);
+      animation: plane-float 4.2s ease-in-out infinite;
+    }
+
+    .slide-title {
+      position: absolute;
+      top: 16%;
+      left: 10%;
+      width: 48%;
+      height: 12%;
+      border-radius: 3px;
+      background: var(--ink);
+    }
+
+    .slide-subtitle {
+      position: absolute;
+      top: 34%;
+      left: 10%;
+      width: 44%;
+      height: 5%;
+      border-radius: 2px;
+      background: var(--border-strong);
+    }
+
+    .slide-circle {
+      position: absolute;
+      top: 13%;
+      right: 11%;
+      width: 14%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: var(--ppt);
+    }
+
+    .slide-block {
+      position: absolute;
+      right: 10%;
+      bottom: 14%;
+      width: 26%;
+      height: 40%;
+      border: 1px solid rgba(47, 103, 246, 0.24);
+      border-radius: 4px;
+      background: var(--accent-soft);
+    }
+
+    .mini-chart {
+      position: absolute;
+      bottom: 14%;
+      left: 10%;
+      display: flex;
+      width: 47%;
+      height: 32%;
+      align-items: end;
+      gap: 7%;
+      padding: 0 4% 0;
+      border-bottom: 1px solid var(--border-strong);
+    }
+
+    .mini-chart span {
+      flex: 1;
+      border-radius: 2px 2px 0 0;
+      background: var(--ink);
+    }
+
+    .mini-chart span:nth-child(1) {
+      height: 38%;
+      background: var(--border-strong);
+    }
+
+    .mini-chart span:nth-child(2) {
+      height: 65%;
+      background: var(--ppt);
+    }
+
+    .mini-chart span:nth-child(3) {
+      height: 48%;
+      background: #8292a1;
+    }
+
+    .mini-chart span:nth-child(4) {
+      height: 88%;
+      background: var(--accent);
+    }
+
+    .plane-mid .slide-title {
+      width: 36%;
+      height: 9%;
+      background: var(--ppt);
+    }
+
+    .plane-mid .slide-subtitle {
+      top: 31%;
+      width: 30%;
+      background: var(--border);
+    }
+
+    .plane-mid .slide-circle {
+      top: 14%;
+      width: 12%;
+      background: var(--accent);
+    }
+
+    .plane-mid .slide-block {
+      right: 9%;
+      bottom: 13%;
+      width: 34%;
+      height: 34%;
+      border-color: var(--border);
+      background: var(--ppt-soft);
+    }
+
+    .plane-mid .mini-chart {
+      width: 42%;
+      height: 27%;
+    }
+
+    .plane-back .slide-title {
+      top: 14%;
+      width: 30%;
+      height: 8%;
+      background: var(--ink);
+    }
+
+    .plane-back .slide-subtitle {
+      top: 27%;
+      width: 38%;
+      background: var(--border);
+    }
+
+    .plane-back .slide-circle {
+      top: 12%;
+      right: 10%;
+      width: 18%;
+      background: var(--ppt);
+    }
+
+    .plane-back .slide-block {
+      right: 10%;
+      bottom: 13%;
+      width: 22%;
+      height: 30%;
+      border-color: var(--border);
+      background: var(--accent-soft);
+    }
+
+    .plane-back .mini-chart {
+      width: 50%;
+      height: 25%;
+    }
+
+    /* B: a more expressive type-led alternative */
+    .option-b {
+      place-items: center;
+      padding: 126px 40px 48px;
+    }
+
+    .b-composition {
+      position: relative;
+      display: grid;
+      width: min(1180px, 90vw);
+      grid-template-columns: 1fr auto 1fr;
+      grid-template-rows: auto auto;
+      align-items: center;
+      row-gap: 8px;
+    }
+
+    .b-keyword {
+      margin: 0;
+      font-size: 154px;
+      font-weight: 900;
+      line-height: 0.9;
+      letter-spacing: 0;
+    }
+
+    .b-ppt {
+      justify-self: end;
+      color: var(--ppt);
+    }
+
+    .b-agent {
+      justify-self: start;
+      color: var(--accent);
+    }
+
+    .handoff {
+      position: relative;
+      width: 140px;
+      height: 2px;
+      margin: 0 30px;
+      background: var(--border-strong);
+    }
+
+    .handoff::after {
+      position: absolute;
+      top: 50%;
+      right: -1px;
+      width: 12px;
+      height: 12px;
+      transform: translateY(-50%) rotate(45deg);
+      border-top: 2px solid var(--accent);
+      border-right: 2px solid var(--accent);
+      content: "";
+    }
+
+    .handoff-dot {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 10px;
+      height: 10px;
+      transform: translateY(-50%);
+      border-radius: 50%;
+      background: var(--ppt);
+      animation: handoff 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    }
+
+    .b-copy {
+      grid-column: 1 / -1;
+      justify-self: center;
+      margin: 28px 0 34px;
+      font-size: 34px;
+      font-weight: 760;
+      line-height: 1.22;
+      letter-spacing: 0;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .b-copy span {
+      display: block;
+    }
+
+    .b-action {
+      grid-column: 1 / -1;
+      justify-self: center;
+    }
+
+    @keyframes option-enter {
+      from {
+        opacity: 0;
+        transform: scale(0.994);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes dasi-underline {
+      0%,
+      18% {
+        transform: scaleX(0.24);
+      }
+      32%,
+      52% {
+        transform: scaleX(1);
+      }
+      60%,
+      100% {
+        transform: scaleX(0.24);
+      }
+    }
+
+    @keyframes agent-sweep {
+      0%,
+      18% {
+        background-position: 130% 0;
+        opacity: 0;
+      }
+      20% {
+        opacity: 1;
+      }
+      56% {
+        background-position: -130% 0;
+        opacity: 1;
+      }
+      60%,
+      100% {
+        background-position: -130% 0;
+        opacity: 0;
+      }
+    }
+
+    @keyframes ppt-jitter {
+      0%,
+      18% {
+        transform: translateX(0) rotate(0);
+      }
+      20% {
+        transform: translateX(-1px) rotate(-1deg);
+      }
+      28% {
+        transform: translateX(1px) rotate(0.8deg);
+      }
+      36% {
+        transform: translateX(-1px) rotate(-0.6deg);
+      }
+      44% {
+        transform: translateX(1px) rotate(0.4deg);
+      }
+      52% {
+        transform: translateX(-1px) rotate(-0.3deg);
+      }
+      60%,
+      100% {
+        transform: translateX(0) rotate(0);
+      }
+    }
+
+    @keyframes plane-float {
+      0%,
+      100% {
+        transform: rotate(-4deg) translateY(0);
+      }
+      50% {
+        transform: rotate(-3deg) translateY(-10px);
+      }
+    }
+
+    @keyframes handoff {
+      0%,
+      16% {
+        opacity: 0;
+        transform: translate(0, -50%) scale(0.7);
+      }
+      28% {
+        opacity: 1;
+      }
+      76% {
+        opacity: 1;
+        transform: translate(126px, -50%) scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(126px, -50%) scale(0.7);
+      }
+    }
+
+    @media (max-width: 1200px) {
+      .brand {
+        top: 50px;
+        font-size: 46px;
+      }
+
+      .option-d {
+        grid-template-columns: minmax(520px, 1fr) 440px;
+        gap: 0;
+        padding-left: 44px;
+      }
+
+      .d-slogan {
+        font-size: 58px;
+      }
+
+      .slide-planes {
+        width: 490px;
+        transform: translateX(2%);
+      }
+
+      .b-keyword {
+        font-size: 122px;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .demo-toolbar {
+        top: 10px;
+        left: 10px;
+      }
+
+      .brand {
+        top: 64px;
+        font-size: 38px;
+      }
+
+      .brand-lockup {
+        top: 62px;
+        gap: 12px;
+      }
+
+      .brand-lockup-name {
+        font-size: 42px;
+      }
+
+      .brand-lockup-divider {
+        height: 32px;
+      }
+
+      .brand-lockup-role {
+        font-size: 14px;
+      }
+
+      .option-d {
+        grid-template-columns: 1fr;
+        align-content: center;
+        padding: 126px 20px 34px;
+      }
+
+      .d-copy {
+        justify-self: center;
+        text-align: center;
+      }
+
+      .d-slogan {
+        margin-bottom: 26px;
+        font-size: 38px;
+      }
+
+      .slide-planes {
+        width: min(490px, 86vw);
+        margin-top: 18px;
+        justify-self: center;
+        transform: translateX(3%);
+      }
+
+      .option-b {
+        padding: 130px 20px 36px;
+      }
+
+      .b-composition {
+        width: 100%;
+        grid-template-columns: 1fr;
+        justify-items: center;
+        row-gap: 12px;
+      }
+
+      .b-keyword {
+        justify-self: center;
+        font-size: 88px;
+      }
+
+      .handoff {
+        width: 2px;
+        height: 58px;
+        margin: 10px 0;
+      }
+
+      .handoff::after {
+        top: auto;
+        right: auto;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%) rotate(135deg);
+      }
+
+      .handoff-dot {
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, 0);
+        animation: none;
+      }
+
+      .b-copy {
+        margin: 16px 0 24px;
+        font-size: 28px;
+        white-space: normal;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .brand {
+        font-size: 32px;
+      }
+
+      .brand-lockup-name {
+        font-size: 36px;
+      }
+
+      .d-slogan {
+        font-size: 30px;
+      }
+
+      .b-keyword {
+        font-size: 72px;
+      }
+
+      .b-copy {
+        font-size: 24px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .option.is-active,
+      .d-slogan .ppt-word,
+      .d-slogan .dasi-word::after,
+      .d-slogan .agent-word::after,
+      .plane-front,
+      .handoff-dot {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="demo-toolbar" aria-label="首页 Slogan 方案切换">
+    <button class="demo-tab" type="button" role="tab" aria-selected="true" data-option="d">D 画布构图</button>
+    <button class="demo-tab" type="button" role="tab" aria-selected="false" data-option="b">B 交接排版</button>
+  </nav>
+
+  <main>
+    <section class="option option-d is-active" data-panel="d" aria-label="方案 D 画布构图">
+      <h1 class="brand-lockup" aria-label="Dasi PPT Agent">
+        <span class="brand-lockup-name">Dasi</span>
+        <span class="brand-lockup-divider" aria-hidden="true"></span>
+        <span class="brand-lockup-role"><span>PPT</span><span>Agent</span></span>
+      </h1>
+      <div class="d-copy">
+        <p class="d-slogan">
+          <span class="d-slogan-line"><span class="agent-word" data-text="Agent">Agent</span> 时代下的 <span class="ppt-word">PPT</span></span>
+          <span class="d-slogan-line">交给 <span class="dasi-word">Dasi</span> 就好了</span>
+        </p>
+        <button class="primary-button" type="button">新建 / 打开项目</button>
+      </div>
+
+      <div class="slide-planes" aria-hidden="true">
+        <div class="slide-plane plane-back">
+          <span class="slide-title"></span>
+          <span class="slide-subtitle"></span>
+          <span class="slide-circle"></span>
+          <span class="slide-block"></span>
+          <span class="mini-chart">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </div>
+        <div class="slide-plane plane-mid">
+          <span class="slide-title"></span>
+          <span class="slide-subtitle"></span>
+          <span class="slide-circle"></span>
+          <span class="slide-block"></span>
+          <span class="mini-chart">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </div>
+        <div class="slide-plane plane-front">
+          <span class="slide-title"></span>
+          <span class="slide-subtitle"></span>
+          <span class="slide-circle"></span>
+          <span class="slide-block"></span>
+          <span class="mini-chart">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section class="option option-b" data-panel="b" aria-label="方案 B 交接排版">
+      <h1 class="brand">Dasi PPT Agent</h1>
+      <div class="b-composition">
+        <p class="b-keyword b-ppt">PPT</p>
+        <span class="handoff" aria-hidden="true"><span class="handoff-dot"></span></span>
+        <p class="b-keyword b-agent">Agent</p>
+        <p class="b-copy">
+          <span>Agent 时代下的 PPT</span>
+          <span>交给 <span class="dasi-word">Dasi</span> 就好了</span>
+        </p>
+        <button class="primary-button b-action" type="button">新建 / 打开项目</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll(".demo-tab"));
+    const panels = Array.from(document.querySelectorAll(".option"));
+
+    function showOption(option) {
+      tabs.forEach((tab) => {
+        tab.setAttribute("aria-selected", String(tab.dataset.option === option));
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("is-active", panel.dataset.panel === option);
+      });
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => showOption(tab.dataset.option));
+    });
+
+    const initialOption = new URLSearchParams(window.location.search).get("option");
+    if (tabs.some((tab) => tab.dataset.option === initialOption)) {
+      showOption(initialOption);
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "1") showOption("d");
+      if (event.key === "2") showOption("b");
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        const current = tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
+        showOption(tabs[(current + 1) % tabs.length].dataset.option);
+      }
+    });
+  </script>
+</body>
+</html>

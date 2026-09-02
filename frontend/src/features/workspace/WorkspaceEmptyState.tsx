@@ -1,22 +1,48 @@
+const slideLayers = ['back', 'mid', 'front'] as const;
+
 export const WorkspaceEmptyState = () => {
   return (
-    <div className="flex h-full w-full flex-1 flex-col items-center justify-center bg-background text-text-900">
-      <h1 className="mb-4 max-w-[94vw] text-center text-[clamp(3rem,8vw,8rem)] font-black italic leading-none tracking-[-0.07em] text-text-900">
-        Dasi PPT Agent
-      </h1>
-      <div className="mb-10 flex items-center gap-4 text-text-400">
-        <span aria-hidden="true" className="h-px w-16 bg-border sm:w-28" />
-        <p className="whitespace-nowrap text-base font-medium">AI 时代下的 PPT 交给 Agent 就好了</p>
-        <span aria-hidden="true" className="h-px w-16 bg-border sm:w-28" />
+    <div className="workspace-home">
+      <h1 className="workspace-home-brand">Dasi PPT Agent</h1>
+
+      <div className="workspace-home-copy">
+        <p className="workspace-home-slogan">
+          <span className="workspace-home-slogan-line">
+            <span className="workspace-home-agent" data-text="Agent">Agent</span>
+            {' '}时代下的 <span className="workspace-home-ppt">PPT</span>
+          </span>
+          <span className="workspace-home-slogan-line">
+            交给 <span className="workspace-home-dasi">Dasi</span> 就好了
+          </span>
+        </p>
+
+        <button
+          className="workspace-home-action"
+          type="button"
+          onClick={() => {
+            document.dispatchEvent(new CustomEvent('open-project-picker'));
+          }}
+        >
+          新建 / 打开项目
+        </button>
       </div>
-      <button 
-        className="h-10 rounded-md bg-accent px-5 text-base font-semibold text-white hover:bg-accent/90"
-        onClick={() => {
-          document.dispatchEvent(new CustomEvent('open-project-picker'));
-        }}
-      >
-        + 新建 / 打开项目
-      </button>
+
+      <div className="workspace-home-slides" aria-hidden="true">
+        {slideLayers.map((layer) => (
+          <div key={layer} className={`workspace-home-slide workspace-home-slide-${layer}`}>
+            <span className="workspace-home-slide-title" />
+            <span className="workspace-home-slide-subtitle" />
+            <span className="workspace-home-slide-circle" />
+            <span className="workspace-home-slide-block" />
+            <span className="workspace-home-chart">
+              <span />
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
