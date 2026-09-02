@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -67,6 +68,35 @@ func TestRunCommandValidationAcceptsAtMostThreeCompleteUniqueSkills(t *testing.T
 	}
 	if err := command.Validate(); err == nil {
 		t.Fatal("duplicate selected skills should fail")
+	}
+}
+
+func TestRunCommandValidationRequiresAtMostEightCompleteUniqueComponentNames(t *testing.T) {
+	command := RunCommand{
+		Scope: RunScope{Artifact: ArtifactPPT, Level: ScopeDeck},
+		Mode:  ModeExecute, Instruction: "build",
+	}
+	for index := 0; index < MaxRunComponents; index++ {
+		command.Components = append(command.Components, RunComponent{
+			ID: "component", Name: fmt.Sprintf("Component %d", index), HTML: "<div>reference</div>",
+		})
+	}
+	if err := command.Validate(); err != nil {
+		t.Fatalf("valid components rejected: %v", err)
+	}
+	command.Components = append(command.Components, RunComponent{Name: "Ninth", HTML: "<div />"})
+	if err := command.Validate(); err == nil {
+		t.Fatal("nine referenced components should fail")
+	}
+	command.Components = []RunComponent{{Name: "Card", HTML: "<div />"}, {Name: " Card ", HTML: "<section />"}}
+	if err := command.Validate(); err == nil {
+		t.Fatal("duplicate trimmed component names should fail")
+	}
+	for _, component := range []RunComponent{{Name: "", HTML: "<div />"}, {Name: "Card", HTML: " "}} {
+		command.Components = []RunComponent{component}
+		if err := command.Validate(); err == nil {
+			t.Fatalf("incomplete component should fail: %+v", component)
+		}
 	}
 }
 

@@ -143,6 +143,7 @@ func ensureRunStarted(ctx context.Context, bus *Bus, run model.Run) error {
 		Mode:            run.Command.Mode,
 		UserInput:       run.Command.Instruction,
 		Skills:          run.Command.PublicSkills(),
+		Resources:       run.Command.PublicComponents(),
 	})
 }
 
@@ -232,7 +233,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 			PublicEventBase: model.NewPublicEventBase(a.run.ID),
 			Scope:           a.run.Command.Scope, Mode: a.run.Command.Mode,
 			UserInput: a.run.Command.Instruction,
-			Skills:    a.run.Command.PublicSkills(),
+			Skills:    a.run.Command.PublicSkills(), Resources: a.run.Command.PublicComponents(),
 		}); err != nil {
 			e.setStatus(context.Background(), a.run.ID, model.RunFailed)
 			return

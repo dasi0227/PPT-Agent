@@ -73,6 +73,10 @@ func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 			ID: "story", Name: "演示叙事", Description: "梳理页面叙事。",
 			LocalPath: "/tmp/skills/story/SKILL.md", OpenURL: "vscode://file/tmp/skills/story/SKILL.md",
 		}},
+		Resources: []PublicLoadedResource{{
+			Kind: "component", ID: "feature-card", Name: "能力卡片",
+			OpenURL: "vscode://file/tmp/components/feature-card/index.html",
+		}},
 	}
 	if err := ValidatePublicEvent(EventRunStarted, payload); err != nil {
 		t.Fatal(err)
@@ -86,6 +90,9 @@ func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 		if !strings.Contains(value, want) {
 			t.Fatalf("run.started missing %s: %s", want, value)
 		}
+	}
+	if !strings.Contains(value, `"kind":"component"`) || strings.Contains(value, `"html"`) {
+		t.Fatalf("run.started component projection is unsafe: %s", value)
 	}
 	for _, legacy := range []string{`"target":`, `"interaction":`, `"presentation"`} {
 		if strings.Contains(value, legacy) {

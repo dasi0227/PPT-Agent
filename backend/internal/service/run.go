@@ -179,6 +179,15 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, err
 		}
 	}
+	if len(p.ComponentNames) > 0 {
+		if svc.components == nil {
+			return model.Run{}, model.NewAgentError("COMPONENT_NOT_FOUND", "create_run", nil)
+		}
+		command.Components, err = svc.components.ResolveByNames(p.ComponentNames)
+		if err != nil {
+			return model.Run{}, err
+		}
+	}
 	if err := command.Validate(); err != nil {
 		return model.Run{}, err
 	}
@@ -230,7 +239,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
 		"instruction": command.Instruction, "scope": command.Scope,
-		"mode": command.Mode, "options": command.Options, "skills": command.Skills, "model": p.Model,
+		"mode": command.Mode, "options": command.Options, "skills": command.Skills,
+		"components": command.Components, "model": p.Model,
 	})
 	if err != nil {
 		return model.Run{}, err

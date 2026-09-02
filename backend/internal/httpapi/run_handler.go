@@ -33,20 +33,22 @@ type createRunBody struct {
 	Mode            model.RunMode    `json:"mode"`
 	Options         model.RunOptions `json:"options"`
 	SkillIDs        []string         `json:"skill_ids"`
+	ComponentNames  []string         `json:"component_names"`
 }
 
 type runResponse struct {
-	ID          string         `json:"id"`
-	ThreadID    string         `json:"thread_id"`
-	ProjectID   string         `json:"project_id"`
-	Status      string         `json:"status"`
-	EventsURL   string         `json:"events_url"`
-	Scope       model.RunScope `json:"scope"`
-	Mode        model.RunMode  `json:"mode"`
-	Model       *string        `json:"model"`
-	Skills      []model.PublicSkill `json:"skills"`
-	PauseReason string         `json:"pause_reason,omitempty"`
-	PausedAt    int64          `json:"paused_at,omitempty"`
+	ID          string                       `json:"id"`
+	ThreadID    string                       `json:"thread_id"`
+	ProjectID   string                       `json:"project_id"`
+	Status      string                       `json:"status"`
+	EventsURL   string                       `json:"events_url"`
+	Scope       model.RunScope               `json:"scope"`
+	Mode        model.RunMode                `json:"mode"`
+	Model       *string                      `json:"model"`
+	Skills      []model.PublicSkill          `json:"skills"`
+	Components  []model.PublicLoadedResource `json:"components,omitempty"`
+	PauseReason string                       `json:"pause_reason,omitempty"`
+	PausedAt    int64                        `json:"paused_at,omitempty"`
 }
 
 func toRunResponse(r model.Run) runResponse {
@@ -59,7 +61,8 @@ func toRunResponse(r model.Run) runResponse {
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
 		Scope: r.Command.Scope, Mode: r.Command.Mode,
-		Model: profileName, Skills: r.Command.PublicSkills(), PauseReason: r.PauseReason, PausedAt: r.PausedAt,
+		Model: profileName, Skills: r.Command.PublicSkills(), Components: r.Command.PublicComponents(),
+		PauseReason: r.PauseReason, PausedAt: r.PausedAt,
 	}
 }
 
@@ -83,6 +86,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		ClientRequestID: body.ClientRequestID,
 		Model:           body.Model,
 		SkillIDs:        body.SkillIDs,
+		ComponentNames:  body.ComponentNames,
 		Instruction:     body.Instruction,
 		Command: model.RunCommand{
 			Scope: body.Scope, Mode: body.Mode,

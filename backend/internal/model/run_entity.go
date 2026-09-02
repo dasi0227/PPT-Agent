@@ -31,6 +31,7 @@ type CreateRunParams struct {
 	ClientRequestID string
 	Model           string
 	SkillIDs        []string
+	ComponentNames  []string
 	ThreadID        string
 	ProjectID       string
 	PageIndex       *int

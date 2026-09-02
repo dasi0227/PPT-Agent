@@ -56,7 +56,10 @@ type RunOptions struct {
 	Range    SlideRange  `json:"range,omitempty"`
 }
 
-const MaxRunSkills = 3
+const (
+	MaxRunSkills     = 3
+	MaxRunComponents = 8
+)
 
 type RunSkill struct {
 	ID          string `json:"id"`
@@ -76,12 +79,22 @@ type PublicSkill struct {
 	OpenURL     string `json:"open_url,omitempty"`
 }
 
+type RunComponent struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	HTML        string `json:"html"`
+	LocalPath   string `json:"-"`
+	OpenURL     string `json:"open_url,omitempty"`
+}
+
 type RunCommand struct {
-	Scope       RunScope   `json:"scope"`
-	Mode        RunMode    `json:"mode"`
-	Instruction string     `json:"instruction"`
-	Options     RunOptions `json:"options,omitempty"`
-	Skills      []RunSkill `json:"skills,omitempty"`
+	Scope       RunScope       `json:"scope"`
+	Mode        RunMode        `json:"mode"`
+	Instruction string         `json:"instruction"`
+	Options     RunOptions     `json:"options,omitempty"`
+	Skills      []RunSkill     `json:"skills,omitempty"`
+	Components  []RunComponent `json:"components,omitempty"`
 }
 
 var ErrInvalidRunCommand = errors.New("invalid run command")
@@ -137,6 +150,20 @@ func (c RunCommand) Validate() error {
 		}
 		seenSkills[skill.ID] = true
 	}
+	if len(c.Components) > MaxRunComponents {
+		return fmt.Errorf("%w: at most %d components may be referenced", ErrInvalidRunCommand, MaxRunComponents)
+	}
+	seenComponents := map[string]bool{}
+	for _, component := range c.Components {
+		name := strings.TrimSpace(component.Name)
+		if name == "" || strings.TrimSpace(component.HTML) == "" {
+			return fmt.Errorf("%w: referenced components must include name and html", ErrInvalidRunCommand)
+		}
+		if seenComponents[name] {
+			return fmt.Errorf("%w: referenced component names must be unique", ErrInvalidRunCommand)
+		}
+		seenComponents[name] = true
+	}
 	return nil
 }
 
@@ -152,6 +179,19 @@ func (c RunCommand) PublicSkills() []PublicSkill {
 		})
 	}
 	return skills
+}
+
+func (c RunCommand) PublicComponents() []PublicLoadedResource {
+	if len(c.Components) == 0 {
+		return nil
+	}
+	components := make([]PublicLoadedResource, 0, len(c.Components))
+	for _, component := range c.Components {
+		components = append(components, PublicLoadedResource{
+			Kind: "component", ID: component.ID, Name: component.Name, OpenURL: component.OpenURL,
+		})
+	}
+	return components
 }
 
 func (r SlideRange) Contains(count int) bool {

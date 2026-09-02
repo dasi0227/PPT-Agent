@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
+
+const maxReferencedComponentBytes = 192 << 10
 
 type ComponentService struct {
 	root     string
@@ -90,6 +93,98 @@ func (s *ComponentService) Get(id string) (model.Component, error) {
 		HTML: string(raw), LocalPath: path, OpenURL: repositoryOpenURL(path),
 		Disabled: disabled,
 	}, nil
+}
+
+func (s *ComponentService) ResolveByNames(names []string) ([]model.RunComponent, error) {
+	if len(names) > model.MaxRunComponents {
+		return nil, componentResolveError(
+			"COMPONENT_SELECTION_INVALID",
+			fmt.Errorf("at most %d components may be referenced", model.MaxRunComponents),
+			"",
+		)
+	}
+
+	components, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	enabledByName := make(map[string][]model.Component, len(components))
+	disabledByName := make(map[string]bool, len(components))
+	for _, component := range components {
+		name := strings.TrimSpace(component.Name)
+		if component.Disabled {
+			disabledByName[name] = true
+			continue
+		}
+		enabledByName[name] = append(enabledByName[name], component)
+	}
+
+	seen := make(map[string]bool, len(names))
+	out := make([]model.RunComponent, 0, len(names))
+	totalBytes := 0
+	for _, requested := range names {
+		name := strings.TrimSpace(requested)
+		if name == "" {
+			return nil, componentResolveError(
+				"COMPONENT_SELECTION_INVALID",
+				errors.New("component names must be non-empty"),
+				name,
+			)
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+
+		matches := enabledByName[name]
+		switch {
+		case len(matches) > 1:
+			return nil, componentResolveError(
+				"COMPONENT_NAME_AMBIGUOUS",
+				fmt.Errorf("multiple enabled components use name %q; rename them in the repository", name),
+				name,
+			)
+		case len(matches) == 0 && disabledByName[name]:
+			return nil, componentResolveError(
+				"COMPONENT_DISABLED",
+				fmt.Errorf("component %q is disabled", name),
+				name,
+			)
+		case len(matches) == 0:
+			return nil, componentResolveError(
+				"COMPONENT_NOT_FOUND",
+				fmt.Errorf("component %q was not found", name),
+				name,
+			)
+		}
+
+		component, readErr := s.Get(matches[0].ID)
+		if readErr != nil {
+			return nil, componentResolveError("COMPONENT_NOT_FOUND", readErr, name)
+		}
+		totalBytes += len(component.HTML)
+		if totalBytes > maxReferencedComponentBytes {
+			return nil, componentResolveError(
+				"CONTEXT_BUDGET_EXCEEDED",
+				errors.New("referenced component HTML exceeds the context budget"),
+				name,
+			)
+		}
+		out = append(out, model.RunComponent{
+			ID: component.ID, Name: strings.TrimSpace(component.Name),
+			Description: component.Description, HTML: component.HTML,
+			LocalPath: component.LocalPath, OpenURL: component.OpenURL,
+		})
+	}
+	return out, nil
+}
+
+func componentResolveError(code string, cause error, name string) *model.AgentError {
+	err := model.NewAgentError(code, "resolve_components", cause)
+	if name != "" {
+		err.Details["component_name"] = name
+	}
+	return err
 }
 
 func (s *ComponentService) UpdateMetadata(id, name, description string, values []model.ComponentTag) (model.Component, error) {
