@@ -36,6 +36,7 @@ interface PromptState {
   load: (force?: boolean) => Promise<Prompt[]>;
   create: (request: PromptWriteRequest) => Promise<Prompt>;
   update: (id: string, request: PromptWriteRequest) => Promise<Prompt>;
+  setDisabled: (id: string, disabled: boolean) => Promise<Prompt>;
   delete: (id: string) => Promise<void>;
   recordRecent: (id: string) => void;
 }
@@ -91,6 +92,15 @@ export const usePromptStore = create<PromptState>((set, get) => ({
     const prompt = await promptsApi.update(id, request);
     set((state) => ({
       prompts: [prompt, ...state.prompts.filter((value) => value.id !== id)],
+      error: '',
+      version: state.version + 1,
+    }));
+    return prompt;
+  },
+  setDisabled: async (id, disabled) => {
+    const prompt = await promptsApi.setDisabled(id, disabled);
+    set((state) => ({
+      prompts: state.prompts.map((value) => value.id === id ? prompt : value),
       error: '',
       version: state.version + 1,
     }));

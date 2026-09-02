@@ -14,6 +14,11 @@ export const promptsApi = {
     body: JSON.stringify(request),
     reportError: false,
   }),
+  setDisabled: (id: string, disabled: boolean) => fetchClient<Prompt>(`/prompts/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ disabled }),
+    reportError: false,
+  }),
   delete: (id: string) => fetchClient<void>(`/prompts/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     reportError: false,

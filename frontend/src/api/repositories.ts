@@ -3,19 +3,37 @@ import type {
   ComponentReference,
   ComponentsResponse,
   Skill,
+  SkillTag,
   ThemesResponse,
   Theme,
+  ThemeTag,
+  ComponentTag,
 } from './types';
 
 export const repositoriesApi = {
   listThemes: () => fetchClient<ThemesResponse>('/themes', { reportError: false }),
   getTheme: (id: string) => fetchClient<Theme>(`/themes/${encodeURIComponent(id)}`, { reportError: false }),
+  setThemeTags: (id: string, tags: ThemeTag[]) => fetchClient<Theme>(`/themes/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tags }),
+    reportError: false,
+  }),
   deleteTheme: (id: string) => fetchClient<void>(`/themes/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     reportError: false,
   }),
   listComponents: () => fetchClient<ComponentsResponse>('/components', { reportError: false }),
   getComponent: (id: string) => fetchClient<ComponentReference>(`/components/${encodeURIComponent(id)}`, { reportError: false }),
+  setComponentDisabled: (id: string, disabled: boolean) => fetchClient<ComponentReference>(`/components/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ disabled }),
+    reportError: false,
+  }),
+  setComponentTags: (id: string, tags: ComponentTag[]) => fetchClient<ComponentReference>(`/components/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tags }),
+    reportError: false,
+  }),
   deleteComponent: (id: string) => fetchClient<void>(`/components/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     reportError: false,
@@ -24,6 +42,11 @@ export const repositoriesApi = {
   setSkillDisabled: (id: string, disabled: boolean) => fetchClient<Skill>(`/skills/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify({ disabled }),
+    reportError: false,
+  }),
+  setSkillTags: (id: string, tags: SkillTag[]) => fetchClient<Skill>(`/skills/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tags }),
     reportError: false,
   }),
   deleteSkill: (id: string) => fetchClient<void>(`/skills/${encodeURIComponent(id)}`, {

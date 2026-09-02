@@ -127,8 +127,10 @@ if ! "$ROOT_DIR/scripts/init-workroot.sh" "$WORK_ROOT"; then
 fi
 if [ "$RESET_MODE" = "yes" ]; then
   print_result_tail "$STEP_2" "重置并初始化成功 ✅"
+  SEED_DEFAULT_PROMPTS="1"
 else
   print_result_tail "$STEP_2" "保留数据并补齐预置资源 ✅"
+  SEED_DEFAULT_PROMPTS="0"
 fi
 
 if (
@@ -144,7 +146,10 @@ fi
 
 if (
   cd "$BACKEND_DIR"
-  LLM_CONFIG_PATH="$ROOT_DIR/config.yaml" nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
+  WORK_ROOT="$WORK_ROOT" \
+    DASI_SEED_DEFAULT_PROMPTS="$SEED_DEFAULT_PROMPTS" \
+    LLM_CONFIG_PATH="$ROOT_DIR/config.yaml" \
+    nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
   echo $! >"$LOG_DIR/backend.pid"
 ); then
   backend_pid="$(<"$LOG_DIR/backend.pid")"

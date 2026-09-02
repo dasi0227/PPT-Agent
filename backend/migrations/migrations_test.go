@@ -67,7 +67,7 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 		t.Fatalf("paused run status is not accepted: %v", err)
 	}
 	promptCols := tableColumns(t, db, "prompts")
-	for _, want := range []string{"id", "key_zh", "key_en", "normalized_key_en", "value", "tags_json", "created_at", "updated_at"} {
+	for _, want := range []string{"id", "key_zh", "key_en", "normalized_key_en", "value", "created_at", "updated_at"} {
 		if !promptCols[want] {
 			t.Fatalf("prompts table missing column %q; got %v", want, promptCols)
 		}

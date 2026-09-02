@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -35,7 +36,7 @@ func TestRepositoryServicesParseIndependentProtocols(t *testing.T) {
 	root := t.TempDir()
 	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/manifest.json"), `{"name":"Theme One","description":"分类：Clear theme"}`)
 	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/theme.css"), completeThemeCSS())
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), `<script type="application/json" id="meta">{"name":"Metric","description":"One metric","tags":["metric"]}</script><style>.metric{color:var(--color-primary)}</style><div class="metric">42%</div>`)
+	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), `<script type="application/json" id="meta">{"name":"Metric","description":"One metric"}</script><style>.metric{color:var(--color-primary)}</style><div class="metric">42%</div>`)
 	writeRepositoryFile(t, filepath.Join(root, "assets/skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead with the conclusion.")
 
 	theme, err := NewThemeService(WorkRoot(root)).Get("t1")
@@ -128,31 +129,24 @@ func TestFactoryThemesFollowTokenAndSelectorContracts(t *testing.T) {
 	}
 }
 
-func TestComponentTagsRejectUnknownAndDuplicateValues(t *testing.T) {
-	for name, tags := range map[string]string{
-		"unknown":   `["badge"]`,
-		"duplicate": `["card","card"]`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			raw := []byte(`<script type="application/json" id="meta">{"name":"Card","description":"Card reference","tags":` + tags + `}</script><div>Card</div>`)
-			if _, err := parseComponentMeta(raw); !errors.Is(err, ErrRepositoryCorrupt) {
-				t.Fatalf("tags %s err=%v", tags, err)
-			}
-		})
+func TestComponentMetadataRejectsFileTags(t *testing.T) {
+	raw := []byte(`<script type="application/json" id="meta">{"name":"Card","description":"Card reference","tags":["card"]}</script><div>Card</div>`)
+	if _, err := parseComponentMeta(raw); !errors.Is(err, ErrRepositoryCorrupt) {
+		t.Fatalf("legacy file tags err=%v", err)
 	}
 }
 
 func TestComponentMetadataRejectsLegacyKind(t *testing.T) {
-	raw := []byte(`<script type="application/json" id="meta">{"name":"Card","description":"Card reference","tags":["card"],"kind":"content"}</script><div>Card</div>`)
+	raw := []byte(`<script type="application/json" id="meta">{"name":"Card","description":"Card reference","kind":"content"}</script><div>Card</div>`)
 	if _, err := parseComponentMeta(raw); !errors.Is(err, ErrRepositoryCorrupt) {
 		t.Fatalf("legacy kind err=%v", err)
 	}
 }
 
-func TestComponentTagsAcceptTheCompleteEnum(t *testing.T) {
-	raw := []byte(`<script type="application/json" id="meta">{"name":"Catalog","description":"All supported tags","tags":["card","metric","comparison","quote","list","chart","process","timeline","other"]}</script><div>Catalog</div>`)
+func TestComponentMetadataAcceptsContentFieldsOnly(t *testing.T) {
+	raw := []byte(`<script type="application/json" id="meta">{"name":"Catalog","description":"Component metadata"}</script><div>Catalog</div>`)
 	meta, err := parseComponentMeta(raw)
-	if err != nil || len(meta.Tags) != 9 {
+	if err != nil || meta.Name != "Catalog" {
 		t.Fatalf("meta=%+v err=%v", meta, err)
 	}
 }
@@ -168,7 +162,7 @@ func TestFactoryComponentsFollowTheComponentContract(t *testing.T) {
 			t.Fatalf("read %s: %v", path, readErr)
 		}
 		meta, parseErr := parseComponentMeta(raw)
-		if parseErr != nil || len(meta.Tags) == 0 {
+		if parseErr != nil || meta.Name == "" {
 			t.Fatalf("factory component %s meta=%+v err=%v", path, meta, parseErr)
 		}
 	}
@@ -219,7 +213,7 @@ func TestRepositoryServicesRejectTraversalSymlinksAndOversizeFiles(t *testing.T)
 	}
 }
 
-func TestSkillRegistryMissingCorruptAndAtomicToggle(t *testing.T) {
+func TestSkillMetadataStateToggle(t *testing.T) {
 	root := t.TempDir()
 	writeRepositoryFile(t, filepath.Join(root, "assets/skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead.")
 	service := NewSkillService(WorkRoot(root))
@@ -241,24 +235,18 @@ func TestSkillRegistryMissingCorruptAndAtomicToggle(t *testing.T) {
 	if err != nil || len(skills) != 0 {
 		t.Fatalf("deleted skill remained listed: skills=%+v err=%v", skills, err)
 	}
-	registryRaw, err := os.ReadFile(filepath.Join(root, "assets/skills/registry.json"))
-	if err != nil || strings.Contains(string(registryRaw), "s1") {
-		t.Fatalf("deleted skill remained in registry: %q err=%v", registryRaw, err)
-	}
-	writeRepositoryFile(t, filepath.Join(root, "assets/skills/registry.json"), `{`)
-	if _, err := service.List(); !errors.Is(err, ErrRepositoryCorrupt) {
-		t.Fatalf("corrupt registry err=%v", err)
-	}
 }
 
-func TestComponentContractHasNoDisabledState(t *testing.T) {
+func TestComponentRegistryControlsDisabledState(t *testing.T) {
 	root := t.TempDir()
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), `<script type="application/json" id="meta">{"name":"Card","description":"Card reference","tags":[]}</script><div>Card</div>`)
-	component, err := NewComponentService(WorkRoot(root)).Get("c1")
-	if err != nil {
-		t.Fatal(err)
+	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), `<script type="application/json" id="meta">{"name":"Card","description":"Card reference"}</script><div>Card</div>`)
+	service := NewComponentService(WorkRoot(root))
+	component, err := service.SetDisabled("c1", true)
+	if err != nil || !component.Disabled {
+		t.Fatalf("disable component: %+v, %v", component, err)
 	}
-	if strings.Contains(strings.ToLower(component.HTML), `"disabled"`) {
-		t.Fatal("component unexpectedly contains state")
+	components, err := service.LoadComponents(context.Background())
+	if err != nil || len(components) != 0 {
+		t.Fatalf("disabled component exposed to agent: %+v, %v", components, err)
 	}
 }

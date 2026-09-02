@@ -44,10 +44,12 @@ func (r *Router) register() {
 	v1.GET("/runtime/base.css", r.repository.RuntimeBaseCSS)
 	v1.GET("/themes", r.repository.ListThemes)
 	v1.GET("/themes/:id", r.repository.GetTheme)
+	v1.PATCH("/themes/:id", r.repository.PatchTheme)
 	v1.GET("/themes/:id/css", r.repository.ThemeCSS)
 	v1.DELETE("/themes/:id", r.repository.DeleteTheme)
 	v1.GET("/components", r.repository.ListComponents)
 	v1.GET("/components/:id", r.repository.GetComponent)
+	v1.PATCH("/components/:id", r.repository.PatchComponent)
 	v1.DELETE("/components/:id", r.repository.DeleteComponent)
 	v1.GET("/skills", r.repository.ListSkills)
 	v1.GET("/skills/:id", r.repository.GetSkill)
@@ -58,6 +60,7 @@ func (r *Router) register() {
 		v1.GET("/prompts/:id", r.prompt.Get)
 		v1.POST("/prompts", r.prompt.Create)
 		v1.PUT("/prompts/:id", r.prompt.Update)
+		v1.PATCH("/prompts/:id", r.prompt.Patch)
 		v1.DELETE("/prompts/:id", r.prompt.Delete)
 	}
 

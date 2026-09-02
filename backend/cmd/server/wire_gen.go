@@ -64,7 +64,7 @@ func initApp() (*App, func(), error) {
 	}
 	runService := service.NewRunService(store, engine, registry, workRoot, nodeSlideRenderer)
 	runHandler := httpapi.NewRunHandler(runService)
-	themeService := service.NewThemeService(workRoot)
+	themeService := provideThemeService(store, workRoot)
 	projectService := provideProjectService(store, workRoot, lockManager, themeService)
 	pptMutationService := service.NewPPTMutationService(store)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
@@ -72,11 +72,9 @@ func initApp() (*App, func(), error) {
 	threadHandler := httpapi.NewThreadHandler(threadService)
 	slideService := provideSlideService(store, themeService)
 	slideHandler := httpapi.NewSlideHandler(slideService)
-	componentService := service.NewComponentService(workRoot)
-	skillService := service.NewSkillService(workRoot)
+	componentService := provideComponentService(store, workRoot)
+	skillService := provideSkillService(store, workRoot)
 	repositoryHandler := httpapi.NewRepositoryHandler(themeService, componentService, skillService)
-	promptService := service.NewPromptService(store)
-	promptHandler := httpapi.NewPromptHandler(promptService)
 	llmHandler := httpapi.NewLLMHandler(registry)
 	polishService := service.NewPolishService(store, registry)
 	polishHandler := httpapi.NewPolishHandler(polishService)
@@ -88,6 +86,14 @@ func initApp() (*App, func(), error) {
 		return nil, nil, err
 	}
 	gitCommitHandler := httpapi.NewGitCommitHandler(gitCommitService)
+	promptService, err := providePromptService(store)
+	if err != nil {
+		cleanup3()
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	promptHandler := httpapi.NewPromptHandler(promptService)
 	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, gitCommitHandler, promptHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
@@ -108,7 +114,10 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideEngine,
 	provideHistoryWriter,
 	provideRenderWorker, service.NewHealthService, provideProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, provideGitCommitService,
-	provideSlideService, service.NewPPTMutationService, service.NewThemeService, service.NewComponentService, service.NewSkillService, service.NewPromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
+	provideSlideService, service.NewPPTMutationService, provideThemeService,
+	provideComponentService,
+	provideSkillService,
+	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideApp,
 )

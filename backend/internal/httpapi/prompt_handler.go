@@ -69,6 +69,27 @@ func (h *PromptHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, prompt)
 }
 
+func (h *PromptHandler) Patch(c *gin.Context) {
+	var request struct {
+		Disabled *bool `json:"disabled"`
+	}
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&request) != nil || request.Disabled == nil {
+		AbortWithError(c, &APIError{
+			HTTPStatus: http.StatusBadRequest, Code: "PROMPT_INVALID",
+			Message: "disabled 字段不能为空", Details: map[string]any{"field": "disabled"},
+		})
+		return
+	}
+	prompt, err := h.svc.SetDisabled(c.Request.Context(), c.Param("id"), *request.Disabled)
+	if err != nil {
+		h.writeError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, prompt)
+}
+
 func (h *PromptHandler) Delete(c *gin.Context) {
 	if err := h.svc.Delete(c.Request.Context(), c.Param("id")); err != nil {
 		h.writeError(c, err)

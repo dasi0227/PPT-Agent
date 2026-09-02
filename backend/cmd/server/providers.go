@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -54,12 +55,34 @@ func provideGitCommitService(s store.Store, registry *llm.Registry, locks *run.L
 // provideWorkRoot 从配置暴露全局 work_root（供 /repo 资产操作）。
 func provideWorkRoot(cfg *config.Config) service.WorkRoot { return service.WorkRoot(cfg.WorkRoot) }
 
+func provideThemeService(s store.Store, workRoot service.WorkRoot) *service.ThemeService {
+	return service.NewThemeService(workRoot, s)
+}
+
+func provideComponentService(s store.Store, workRoot service.WorkRoot) *service.ComponentService {
+	return service.NewComponentService(workRoot, s)
+}
+
+func provideSkillService(s store.Store, workRoot service.WorkRoot) *service.SkillService {
+	return service.NewSkillService(workRoot, s)
+}
+
 func provideProjectService(s store.Store, workRoot service.WorkRoot, locks *run.LockManager, themes *service.ThemeService) *service.ProjectService {
 	return service.NewProjectServiceWithRepositories(s, workRoot, locks, themes)
 }
 
 func provideSlideService(s store.Store, themes *service.ThemeService) *service.SlideService {
 	return service.NewSlideServiceWithThemes(s, themes)
+}
+
+func providePromptService(s store.Store) (*service.PromptService, error) {
+	svc := service.NewPromptService(s)
+	if os.Getenv("DASI_SEED_DEFAULT_PROMPTS") == "1" {
+		if _, err := svc.SeedDefaults(context.Background()); err != nil {
+			return nil, err
+		}
+	}
+	return svc, nil
 }
 
 func provideEngine(rs run.Store, locks *run.LockManager, hw run.HistoryWriter, log *zap.Logger) (*run.Engine, error) {

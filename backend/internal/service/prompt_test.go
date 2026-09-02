@@ -69,12 +69,53 @@ func TestPromptServiceConcurrentKeyConflict(t *testing.T) {
 	}
 }
 
+func TestPromptServiceSeedsDefaultsIdempotently(t *testing.T) {
+	svc := newPromptServiceForTest(t)
+	ctx := context.Background()
+
+	created, err := svc.SeedDefaults(ctx)
+	if err != nil {
+		t.Fatalf("seed defaults: %v", err)
+	}
+	if created != len(defaultPromptSeeds) {
+		t.Fatalf("created=%d want=%d", created, len(defaultPromptSeeds))
+	}
+	created, err = svc.SeedDefaults(ctx)
+	if err != nil {
+		t.Fatalf("seed defaults again: %v", err)
+	}
+	if created != 0 {
+		t.Fatalf("second seed created %d prompts", created)
+	}
+
+	prompts, err := svc.List(ctx)
+	if err != nil {
+		t.Fatalf("list seeded prompts: %v", err)
+	}
+	if len(prompts) != len(defaultPromptSeeds) {
+		t.Fatalf("seeded prompts=%d want=%d", len(prompts), len(defaultPromptSeeds))
+	}
+	covered := map[model.PromptTag]bool{}
+	for _, prompt := range prompts {
+		for _, tag := range prompt.Tags {
+			covered[tag] = true
+		}
+	}
+	for _, tag := range []model.PromptTag{
+		model.PromptTagDeliverable, model.PromptTagReview,
+	} {
+		if !covered[tag] {
+			t.Errorf("default prompts do not cover tag %q", tag)
+		}
+	}
+}
+
 func TestPromptServiceCRUDAndNormalization(t *testing.T) {
 	svc := newPromptServiceForTest(t)
 	ctx := context.Background()
 	created, err := svc.Create(ctx, PromptWriteParams{
 		KeyZH: " 高管摘要 ", KeyEN: "Executive-Summary", Value: " 生成高管摘要。 ",
-		Tags: []model.PromptTag{model.PromptTagSummarize, model.PromptTagRewrite},
+		Tags: []model.PromptTag{model.PromptTagDeliverable, model.PromptTagReview},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -91,13 +132,17 @@ func TestPromptServiceCRUDAndNormalization(t *testing.T) {
 	svc.clock = func() int64 { return 20 }
 	updated, err := svc.Update(ctx, created.ID, PromptWriteParams{
 		KeyZH: "摘要改写", KeyEN: "summary-rewrite", Value: "更新后的内容",
-		Tags: []model.PromptTag{model.PromptTagRewrite},
+		Tags: []model.PromptTag{model.PromptTagDeliverable},
 	})
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	if updated.CreatedAt != 10 || updated.UpdatedAt != 20 {
 		t.Fatalf("timestamps changed incorrectly: %+v", updated)
+	}
+	disabled, err := svc.SetDisabled(ctx, created.ID, true)
+	if err != nil || !disabled.Disabled {
+		t.Fatalf("disable prompt: %+v, %v", disabled, err)
 	}
 	list, err := svc.List(ctx)
 	if err != nil || len(list) != 1 || list[0].KeyZH != "摘要改写" {
@@ -119,8 +164,8 @@ func TestPromptServiceValidation(t *testing.T) {
 		{KeyZH: "中文", KeyEN: "bad key", Value: "value"},
 		{KeyZH: "中文", KeyEN: "valid", Value: ""},
 		{KeyZH: "中文", KeyEN: "valid", Value: "value", Tags: []model.PromptTag{"unknown"}},
-		{KeyZH: "中文", KeyEN: "valid", Value: "value", Tags: []model.PromptTag{model.PromptTagData, model.PromptTagData}},
-		{KeyZH: "中文", KeyEN: "valid", Value: "value", Tags: []model.PromptTag{model.PromptTagData, model.PromptTagVisual, model.PromptTagReview}},
+		{KeyZH: "中文", KeyEN: "valid", Value: "value", Tags: []model.PromptTag{model.PromptTagIdentity, model.PromptTagIdentity}},
+		{KeyZH: "中文", KeyEN: "valid", Value: "value", Tags: []model.PromptTag{model.PromptTagIdentity, model.PromptTagConstraint, model.PromptTagReview}},
 	}
 	for index, params := range tests {
 		if _, err := svc.Create(context.Background(), params); !errors.Is(err, ErrPromptInvalid) {

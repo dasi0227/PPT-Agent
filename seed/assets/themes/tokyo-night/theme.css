@@ -2,11 +2,13 @@
    提供 design-tokens.md 必需 token 全集（DS-THEMES-001）。 */
 :root {
   /* 颜色 */
-  --color-bg: #1a1b26;
-  --color-fg: #c0caf5;
-  --color-primary: #7aa2f7;
-  --color-accent: #bb9af7;
-  --color-muted: #24283b;
+  --color-bg: #151722;
+  --color-fg: #d7e1f5;
+  --color-primary: #89b4fa;
+  --color-accent: #73daca;
+  --color-muted: #222738;
+  --color-surface: #1c2030;
+  --color-border: rgba(137, 180, 250, 0.2);
   /* 字体（含中文回退，DS-THEMES-004） */
   --font-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
   --font-serif: "Noto Serif SC", Georgia, serif;
@@ -25,12 +27,17 @@
   --space-8: 40px;
   /* 圆角 */
   --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 16px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
   /* 阴影 */
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4);
   --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55);
   /* 舞台（16:9 基准，无单位数值） */
   --stage-w: 1920;
   --stage-h: 1080;
+}
+
+.card {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
 }

@@ -32,6 +32,7 @@ func promptTestEngine(t *testing.T) *gin.Engine {
 	engine.GET("/api/v1/prompts/:id", handler.Get)
 	engine.POST("/api/v1/prompts", handler.Create)
 	engine.PUT("/api/v1/prompts/:id", handler.Update)
+	engine.PATCH("/api/v1/prompts/:id", handler.Patch)
 	engine.DELETE("/api/v1/prompts/:id", handler.Delete)
 	return engine
 }
@@ -57,7 +58,7 @@ func TestPromptHandlerCRUDAndErrors(t *testing.T) {
 	engine := promptTestEngine(t)
 	body := map[string]any{
 		"key_zh": "高管摘要", "key_en": "executive-summary",
-		"value": "生成摘要", "tags": []string{"summarize"},
+		"value": "生成摘要", "tags": []string{"deliverable"},
 	}
 	created := promptRequest(t, engine, http.MethodPost, "/api/v1/prompts", body)
 	if created.Code != http.StatusCreated {
@@ -68,6 +69,10 @@ func TestPromptHandlerCRUDAndErrors(t *testing.T) {
 	}
 	if err := json.Unmarshal(created.Body.Bytes(), &prompt); err != nil || prompt.ID == "" {
 		t.Fatalf("decode prompt: %v, %+v", err, prompt)
+	}
+	disabled := promptRequest(t, engine, http.MethodPatch, "/api/v1/prompts/"+prompt.ID, map[string]any{"disabled": true})
+	if disabled.Code != http.StatusOK || !bytes.Contains(disabled.Body.Bytes(), []byte(`"disabled":true`)) {
+		t.Fatalf("disable status=%d body=%s", disabled.Code, disabled.Body.String())
 	}
 
 	conflictBody := map[string]any{

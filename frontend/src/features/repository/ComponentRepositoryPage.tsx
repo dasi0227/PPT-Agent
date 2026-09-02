@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Pause } from 'lucide-react';
 import { repositoriesApi } from '../../api/repositories';
 import type { ComponentReference, ComponentTag } from '../../api/types';
 import { cn } from '../../lib/utils';
@@ -11,6 +12,7 @@ import {
   RepositoryLoading,
   RepositoryPageHeader,
   RepositoryState,
+  RepositoryTagEditor,
   RepositoryTagList,
   RepositoryWorkspace,
 } from './RepositoryPrimitives';
@@ -84,14 +86,12 @@ function ScaledComponentPreview({
 
 const componentTagLabels: Record<ComponentTag, string> = {
   card: '卡片',
-  metric: '指标',
-  comparison: '对比',
-  quote: '引用',
+  chart: '统计图',
+  table: '表格',
   list: '列表',
-  chart: '图表',
   process: '流程',
-  timeline: '时间线',
-  other: '其他',
+  metric: '指标',
+  other: '其它',
 };
 
 function componentTagLabel(tag: ComponentTag): string {
@@ -107,6 +107,7 @@ export function ComponentRepositoryPage() {
   const [filter, setFilter] = useState<ComponentTag | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [pending, setPending] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -145,6 +146,31 @@ export function ComponentRepositoryPage() {
     }
   };
 
+  const toggle = async (component: ComponentReference) => {
+    const disabled = !component.disabled;
+    setPending(component.id);
+    setComponents((current) => current.map((value) => value.id === component.id ? { ...value, disabled } : value));
+    try {
+      const updated = await repositoriesApi.setComponentDisabled(component.id, disabled);
+      setComponents((current) => current.map((value) => value.id === component.id ? { ...value, ...updated } : value));
+    } catch (cause) {
+      setComponents((current) => current.map((value) => value.id === component.id ? { ...value, disabled: component.disabled } : value));
+      showGlobalError(cause instanceof Error ? cause.message : '组件状态更新失败');
+    } finally {
+      setPending(null);
+    }
+  };
+  const saveTags = async (tags: ComponentTag[]) => {
+    if (!selected) return;
+    try {
+      const updated = await repositoriesApi.setComponentTags(selected.id, tags);
+      setComponents((current) => current.map((component) => component.id === updated.id ? { ...component, ...updated } : component));
+    } catch (cause) {
+      showGlobalError(cause instanceof Error ? cause.message : '组件标签更新失败');
+      throw cause;
+    }
+  };
+
   return (
     <RepositoryShell section="component" onRefresh={() => void load()}>
       <div className="flex h-full min-h-0 flex-col">
@@ -171,15 +197,19 @@ export function ComponentRepositoryPage() {
                     <RepositoryDirectoryItem
                       key={component.id}
                       active={active}
+                      disabled={component.disabled}
                       name={component.name}
                       description={component.description}
-                      visual={(
+                      visual={component.disabled ? (
+                        <Pause className="h-4 w-4" strokeWidth={1.75} />
+                      ) : (
                         <ScaledComponentPreview
                           title={`${component.name} 缩略预览`}
                           html={component.html ?? ''}
                           className="h-full w-full"
                         />
                       )}
+                      visualClassName={component.disabled ? 'h-9 w-9 rounded-full border-0 bg-panel-muted text-text-400' : undefined}
                       onClick={() => setSelectedId(component.id)}
                     />
                   );
@@ -192,6 +222,32 @@ export function ComponentRepositoryPage() {
                 description={selected.description}
                 openUrl={selected.open_url}
                 properties={<RepositoryTagList tags={selected.tags.map(componentTagLabel)} />}
+                actions={(
+                  <div className="flex items-center gap-2.5">
+                    <RepositoryTagEditor
+                      value={selected.tags}
+                      options={componentTagOrder.map((tag) => ({ value: tag, label: componentTagLabels[tag] }))}
+                      onSave={saveTags}
+                    />
+                    <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
+                      {selected.disabled ? '已关闭' : '已启用'}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!selected.disabled}
+                      aria-label="切换组件状态"
+                      disabled={pending === selected.id}
+                      onClick={() => void toggle(selected)}
+                      className={cn(
+                        'h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-50',
+                        selected.disabled ? 'bg-border-strong' : 'bg-success',
+                      )}
+                    >
+                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(23,32,43,0.25)] transition-transform', !selected.disabled && 'translate-x-4')} />
+                    </button>
+                  </div>
+                )}
                 contentClassName="flex items-center justify-center overflow-hidden p-5 md:p-7"
                 deleteNoun="组件"
                 onDelete={() => deleteComponent(selected)}

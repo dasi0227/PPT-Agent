@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, Paintbrush } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { repositoriesApi } from '../../api/repositories';
-import type { Theme } from '../../api/types';
+import type { Theme, ThemeTag } from '../../api/types';
 import { Button } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
@@ -12,9 +12,12 @@ import {
   RepositoryCatalog,
   RepositoryDetail,
   RepositoryDirectoryItem,
+  RepositoryFilterButton,
   RepositoryLoading,
   RepositoryPageHeader,
   RepositoryState,
+  RepositoryTagEditor,
+  RepositoryTagList,
   RepositoryWorkspace,
   SegmentedControl,
 } from './RepositoryPrimitives';
@@ -26,6 +29,17 @@ import {
   themeTypography,
   type ThemeShowcaseMode,
 } from './themeShowcase';
+
+const themeTagLabels: Record<ThemeTag, string> = {
+  minimal: '极简',
+  business: '商务',
+  technology: '科技',
+  cool: '清冷',
+  warm: '温暖',
+  other: '其它',
+};
+
+const themeTagOrder = Object.keys(themeTagLabels) as ThemeTag[];
 
 function projectIdFromReturnTo(returnTo: unknown): string | null {
   if (typeof returnTo !== 'string') return null;
@@ -79,6 +93,7 @@ export function ThemeRepositoryPage() {
   const [themes, setThemes] = useState<Theme[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<ThemeTag | 'all'>('all');
   const [mode, setMode] = useState<ThemeShowcaseMode>('cover');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -115,7 +130,9 @@ export function ThemeRepositoryPage() {
   }, [currentProject, loadProjects, projectId]);
 
   const visible = useMemo(() => themes.filter((theme) =>
-    `${theme.name} ${theme.description}`.toLowerCase().includes(query.toLowerCase())), [query, themes]);
+    (filter === 'all' || theme.tags.includes(filter)) &&
+    `${theme.name} ${theme.description} ${theme.tags.flatMap((tag) => [tag, themeTagLabels[tag]]).join(' ')}`
+      .toLowerCase().includes(query.toLowerCase())), [filter, query, themes]);
   const selected = visible.find((theme) => theme.id === selectedId) ?? visible[0];
   const colors = selected ? themePalette(selected) : [];
   const typography = selected ? themeTypography(selected) : null;
@@ -146,6 +163,16 @@ export function ThemeRepositoryPage() {
       throw cause;
     }
   };
+  const saveTags = async (tags: ThemeTag[]) => {
+    if (!selected) return;
+    try {
+      const updated = await repositoriesApi.setThemeTags(selected.id, tags);
+      setThemes((current) => current.map((theme) => theme.id === updated.id ? { ...theme, ...updated } : theme));
+    } catch (cause) {
+      showGlobalError(cause instanceof Error ? cause.message : '主题标签更新失败');
+      throw cause;
+    }
+  };
 
   return (
     <RepositoryShell section="theme" onRefresh={() => void load()}>
@@ -155,7 +182,11 @@ export function ThemeRepositoryPage() {
           <RepositoryWorkspace>
             <RepositoryCatalog
               label="主题列表"
-              controls={<span className="truncate text-xs font-semibold text-text-400">主题分类暂未定义</span>}
+              controls={(['all', ...themeTagOrder] as const).map((tag) => (
+                <RepositoryFilterButton key={tag} active={filter === tag} onClick={() => setFilter(tag)}>
+                  {tag === 'all' ? '全部' : themeTagLabels[tag]}
+                </RepositoryFilterButton>
+              ))}
             >
               {visible.length === 0
                 ? <RepositoryState text="没有匹配的主题" className="min-h-40" />
@@ -181,6 +212,7 @@ export function ThemeRepositoryPage() {
                 openUrl={selected.open_url}
                 properties={(
                   <div className="flex min-w-0 flex-nowrap items-center gap-4 overflow-x-auto pb-0.5" aria-label="主题属性">
+                    <RepositoryTagList tags={selected.tags.map((tag) => themeTagLabels[tag])} />
                     <div className="flex shrink-0 items-center gap-1.5">
                       <span className="text-[11px] font-semibold text-text-400">色板</span>
                       <span className="flex gap-1" aria-label="主题色板">
@@ -195,6 +227,11 @@ export function ThemeRepositoryPage() {
                 )}
                 actions={(
                   <div className="flex items-center gap-2">
+                    <RepositoryTagEditor
+                      value={selected.tags}
+                      options={themeTagOrder.map((tag) => ({ value: tag, label: themeTagLabels[tag] }))}
+                      onSave={saveTags}
+                    />
                     <SegmentedControl value={mode} options={themeShowcaseModes} onChange={setMode} label="预览页面" />
                     <Button
                       type="button"

@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS prompts (
     key_en            TEXT NOT NULL,
     normalized_key_en TEXT NOT NULL UNIQUE,
     value             TEXT NOT NULL,
-    tags_json         TEXT NOT NULL DEFAULT '[]',
     created_at        INTEGER NOT NULL,
     updated_at        INTEGER NOT NULL
 );

@@ -1,15 +1,15 @@
 /* theme: xiaohongshu-white - adapted from the html-ppt system preset. */
 :root {
-  --color-bg: #fffdfb;
+  --color-bg: #fffaf6;
   --color-fg: #1a1210;
-  --color-primary: #ff2742;
-  --color-accent: #ff7a90;
-  --color-muted: #fff1ea;
+  --color-primary: #ef4d5b;
+  --color-accent: #ff9278;
+  --color-muted: #ffede4;
   --color-surface: #ffffff;
   --color-border: rgba(60, 30, 20, 0.12);
   --color-good: #3ba55c;
   --color-warn: #f5a524;
-  --color-bad: #ff2742;
+  --color-bad: #ef4d5b;
   --font-sans: "Noto Sans SC", "Inter", system-ui, sans-serif;
   --font-serif: "Noto Serif SC", "Songti SC", Georgia, serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", monospace;
@@ -27,9 +27,9 @@
   --radius-sm: 14px;
   --radius-md: 20px;
   --radius-lg: 28px;
-  --shadow-card: 0 12px 30px rgba(255, 39, 66, 0.08);
-  --shadow-pop: 0 24px 60px rgba(255, 39, 66, 0.14);
-  --theme-background: linear-gradient(145deg, #fffdfb 0%, #fff8f4 100%);
+  --shadow-card: 0 12px 30px rgba(239, 77, 91, 0.08);
+  --shadow-pop: 0 24px 60px rgba(239, 77, 91, 0.14);
+  --theme-background: linear-gradient(145deg, #fffaf6 0%, #fff2ea 100%);
   --stage-w: 1920;
   --stage-h: 1080;
 }

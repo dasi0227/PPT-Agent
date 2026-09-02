@@ -6,7 +6,7 @@
 - `scripts/init-workroot.sh` 将缺失的预置文件复制到 `WORK_ROOT/assets/`，不覆盖用户已有文件。
 - `restart.sh` 在启动后端前调用初始化脚本；`--reset` 先清空工作目录，`--no-reset` 保留数据并补齐缺失文件。
 - 后端启动过程不再创建或复制 seed 资源。
-- Skill 真源统一为 `WORK_ROOT/assets/skills/`，停用状态存储在同目录的 `registry.json`。
+- Skill 真源统一为 `WORK_ROOT/assets/skills/`；资源标签与 Component、Skill、Prompt 停用状态统一存储在 SQLite。
 
 ## Runtime CSS
 

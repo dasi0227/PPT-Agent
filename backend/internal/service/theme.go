@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +15,8 @@ import (
 )
 
 type ThemeService struct {
-	root string
+	root     string
+	metadata repositoryMetadataStore
 }
 
 type themeManifest struct {
@@ -22,8 +24,11 @@ type themeManifest struct {
 	Description string `json:"description"`
 }
 
-func NewThemeService(workRoot WorkRoot) *ThemeService {
-	return &ThemeService{root: filepath.Join(string(workRoot), "assets", "themes")}
+func NewThemeService(workRoot WorkRoot, stores ...repositoryMetadataStore) *ThemeService {
+	return &ThemeService{
+		root:     filepath.Join(string(workRoot), "assets", "themes"),
+		metadata: repositoryMetadataOrMemory(stores),
+	}
 }
 
 func (s *ThemeService) List() ([]model.Theme, error) {
@@ -72,11 +77,63 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 	if manifest.Name == "" || manifest.Description == "" {
 		return model.Theme{}, repositoryReadError("theme", id, ErrRepositoryCorrupt)
 	}
+	tagKeys, err := s.metadata.ListResourceTagKeys(context.Background(), resourceTypeTheme, id)
+	if err != nil {
+		return model.Theme{}, err
+	}
+	tags, err := validateThemeTags(tagKeys)
+	if err != nil {
+		return model.Theme{}, repositoryReadError("theme", id, err)
+	}
 	return model.Theme{
 		ID: id, Name: manifest.Name, Description: manifest.Description,
-		CSS: string(cssRaw), CSSURL: "/api/v1/themes/" + id + "/css",
+		Tags: tags,
+		CSS:  string(cssRaw), CSSURL: "/api/v1/themes/" + id + "/css",
 		LocalPath: cssPath, OpenURL: repositoryOpenURL(cssPath),
 	}, nil
+}
+
+func (s *ThemeService) SetTags(id string, values []model.ThemeTag) (model.Theme, error) {
+	if _, err := s.Get(id); err != nil {
+		return model.Theme{}, err
+	}
+	raw := make([]string, len(values))
+	for index, tag := range values {
+		raw[index] = string(tag)
+	}
+	tags, err := validateThemeTags(raw)
+	if err != nil {
+		return model.Theme{}, err
+	}
+	values = tags
+	raw = raw[:0]
+	for _, tag := range values {
+		raw = append(raw, string(tag))
+	}
+	if err := s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeTheme, id, raw); err != nil {
+		return model.Theme{}, err
+	}
+	return s.Get(id)
+}
+
+func validateThemeTags(values []string) ([]model.ThemeTag, error) {
+	if len(values) > 2 {
+		return nil, ErrRepositoryCorrupt
+	}
+	tags := make([]model.ThemeTag, len(values))
+	seen := make(map[model.ThemeTag]struct{}, len(values))
+	for index, value := range values {
+		tag := model.ThemeTag(strings.TrimSpace(value))
+		if !tag.Valid() {
+			return nil, ErrRepositoryCorrupt
+		}
+		if _, exists := seen[tag]; exists {
+			return nil, ErrRepositoryCorrupt
+		}
+		seen[tag] = struct{}{}
+		tags[index] = tag
+	}
+	return tags, nil
 }
 
 func (s *ThemeService) CSS(id string) ([]byte, error) {
@@ -99,7 +156,10 @@ func (s *ThemeService) Delete(id string) error {
 	if _, err := s.Get(id); err != nil {
 		return err
 	}
-	return deleteRepositoryDirectory(s.root, id)
+	if err := deleteRepositoryDirectory(s.root, id); err != nil {
+		return err
+	}
+	return s.metadata.DeleteResourceMetadata(context.Background(), resourceTypeTheme, id)
 }
 
 func themeNotFound(err error) bool {

@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { repositoriesApi } from '../../api/repositories';
 import { skillsApi } from '../../api/skills';
-import type { Skill } from '../../api/types';
+import type { Skill, SkillTag } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { showGlobalError } from '../../stores/toastStore';
 import {
@@ -15,23 +15,27 @@ import {
   RepositoryLoading,
   RepositoryPageHeader,
   RepositoryState,
+  RepositoryTagEditor,
+  RepositoryTagList,
   RepositoryWorkspace,
 } from './RepositoryPrimitives';
 import { RepositoryShell } from './RepositoryShell';
 
-type SkillFilter = 'all' | 'enabled' | 'disabled';
+const skillTagLabels: Record<SkillTag, string> = {
+  workflow: '工作流',
+  methodology: '方法论',
+  manual: '操作手册',
+  experience: '开发经验',
+  other: '其它',
+};
 
-const skillFilters: Array<{ value: SkillFilter; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'enabled', label: '已启用' },
-  { value: 'disabled', label: '已关闭' },
-];
+const skillTagOrder = Object.keys(skillTagLabels) as SkillTag[];
 
 export function SkillRepositoryPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<SkillFilter>('all');
+  const [filter, setFilter] = useState<SkillTag | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<string | null>(null);
@@ -53,9 +57,10 @@ export function SkillRepositoryPage() {
   useEffect(() => { void load(); }, [load]);
 
   const visible = useMemo(() => skills.filter((skill) => {
-    const enabled = !skill.disabled;
-    return (filter === 'all' || (filter === 'enabled' && enabled) || (filter === 'disabled' && !enabled)) &&
-      `${skill.name} ${skill.description}`.toLowerCase().includes(query.toLowerCase());
+    const tags = skill.tags ?? [];
+    return (filter === 'all' || tags.includes(filter)) &&
+      `${skill.name} ${skill.description} ${tags.flatMap((tag) => [tag, skillTagLabels[tag]]).join(' ')}`
+        .toLowerCase().includes(query.toLowerCase());
   }), [filter, query, skills]);
   const selected = visible.find((skill) => skill.id === selectedId) ?? visible[0];
 
@@ -91,6 +96,16 @@ export function SkillRepositoryPage() {
       throw cause;
     }
   };
+  const saveTags = async (tags: SkillTag[]) => {
+    if (!selected) return;
+    try {
+      const updated = await repositoriesApi.setSkillTags(selected.id, tags);
+      setSkills((current) => current.map((skill) => skill.id === updated.id ? { ...skill, ...updated } : skill));
+    } catch (cause) {
+      showGlobalError(cause instanceof Error ? cause.message : '技能标签更新失败');
+      throw cause;
+    }
+  };
 
   return (
     <RepositoryShell section="skill" onRefresh={() => void load()}>
@@ -100,13 +115,13 @@ export function SkillRepositoryPage() {
           <RepositoryWorkspace>
             <RepositoryCatalog
               label="技能列表"
-              controls={skillFilters.map((item) => (
+              controls={(['all', ...skillTagOrder] as const).map((tag) => (
                   <RepositoryFilterButton
-                    key={item.value}
-                    active={filter === item.value}
-                    onClick={() => setFilter(item.value)}
+                    key={tag}
+                    active={filter === tag}
+                    onClick={() => setFilter(tag)}
                   >
-                    {item.label}
+                    {tag === 'all' ? '全部' : skillTagLabels[tag]}
                   </RepositoryFilterButton>
                 ))}
             >
@@ -137,8 +152,14 @@ export function SkillRepositoryPage() {
                 title={selected.name}
                 description={selected.description}
                 openUrl={selected.open_url}
+                properties={<RepositoryTagList tags={(selected.tags ?? []).map((tag) => skillTagLabels[tag])} />}
                 actions={(
                   <div className="flex items-center gap-2.5">
+                    <RepositoryTagEditor
+                      value={selected.tags ?? []}
+                      options={skillTagOrder.map((tag) => ({ value: tag, label: skillTagLabels[tag] }))}
+                      onSave={saveTags}
+                    />
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
                       {selected.disabled ? '已关闭' : '已启用'}
                     </span>

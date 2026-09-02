@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   listProjects: vi.fn(),
   listComponents: vi.fn(),
   getComponent: vi.fn(),
+  setComponentDisabled: vi.fn(),
   getSkill: vi.fn(),
   setSkillDisabled: vi.fn(),
   deleteTheme: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('../../api/repositories', () => ({
     getTheme: mocks.getTheme,
     listComponents: mocks.listComponents,
     getComponent: mocks.getComponent,
+    setComponentDisabled: mocks.setComponentDisabled,
     getSkill: mocks.getSkill,
     setSkillDisabled: mocks.setSkillDisabled,
     deleteTheme: mocks.deleteTheme,
@@ -69,6 +71,7 @@ function themeFixtures(): Theme[] {
       id: 'swiss-modern',
       name: 'Swiss Modern',
       description: 'Clean grid',
+      tags: ['minimal'],
       css: ':root{--color-bg:#fff;--color-fg:#111;--color-primary:#d0021b;--color-accent:#1c1c1c;--font-sans:Aptos;--font-serif:Georgia}',
       css_url: '/api/v1/themes/swiss-modern/css',
       open_url: 'vscode://file/themes/swiss-modern/theme.css',
@@ -77,6 +80,7 @@ function themeFixtures(): Theme[] {
       id: 'tokyo-night',
       name: 'Tokyo Night',
       description: 'Dark presentation',
+      tags: ['cool'],
       css: ':root{--color-bg:#111;--color-fg:#eee;--color-primary:#7aa2f7;--color-accent:#bb9af7;--font-sans:Inter;--font-serif:Georgia}',
       css_url: '/api/v1/themes/tokyo-night/css',
       open_url: 'vscode://file/themes/tokyo-night/theme.css',
@@ -156,8 +160,7 @@ describe('personal repository pages', () => {
     expect(screen.getByRole('button', { name: '封面页' })).toBeInTheDocument();
     expect(screen.getAllByText('Clean grid')).toHaveLength(2);
     expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
-    expect(screen.getByText('主题分类暂未定义')).toBeInTheDocument();
-    expect(screen.queryByText('minimal')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '极简' })).toBeInTheDocument();
     expect(screen.getByText('仓库')).toHaveClass('text-base', 'font-bold', 'text-text-900');
     expect(screen.queryByText('个人仓库')).not.toBeInTheDocument();
     const repositoryBrand = screen.getByRole('button', { name: '返回项目' });
@@ -177,7 +180,7 @@ describe('personal repository pages', () => {
     expect(screen.getByTitle('Tokyo Night 主题预览')).toBeInTheDocument();
     expect(screen.queryByTitle('Swiss Modern 主题预览')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('搜索主题'), { target: { value: 'minimal' } });
-    expect(screen.getByText('没有匹配的主题')).toBeInTheDocument();
+    expect(screen.getByTitle('Swiss Modern 主题预览')).toBeInTheDocument();
   });
 
   it('applies the previewed theme to the active project and synchronizes project state', async () => {
@@ -274,6 +277,7 @@ describe('personal repository pages', () => {
         name: 'Feature Card',
         description: 'Feature summary',
         tags: ['card'],
+        disabled: false,
         html: '<article><h2>Feature</h2><script>window.parent.bad=true</script></article>',
         open_url: 'vscode://file/components/feature-card/index.html',
       },
@@ -281,7 +285,8 @@ describe('personal repository pages', () => {
         id: 'quote-block',
         name: 'Quote Block',
         description: 'Editorial quote',
-        tags: ['quote'],
+        tags: ['other'],
+        disabled: false,
         html: '<blockquote>Quote</blockquote>',
         open_url: 'vscode://file/components/quote-block/index.html',
       },
@@ -306,7 +311,7 @@ describe('personal repository pages', () => {
     expect(detail.parentElement).toHaveClass('aspect-video');
     expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '卡片' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '引用' }));
+    fireEvent.click(screen.getByRole('button', { name: '其它' }));
     expect(screen.getByTitle('Quote Block 组件预览')).toHaveAttribute('sandbox', '');
     expect(screen.queryByTitle('Feature Card 组件预览')).not.toBeInTheDocument();
   });
@@ -317,6 +322,7 @@ describe('personal repository pages', () => {
       name: '演示叙事',
       description: '梳理页面叙事。',
       content: '# 演示叙事',
+      tags: ['methodology'],
       disabled: false,
       open_url: 'vscode://file/skills/story/SKILL.md',
     };
@@ -343,7 +349,8 @@ describe('personal repository pages', () => {
       id: 'feature-card',
       name: 'Feature Card',
       description: 'Feature summary',
-      tags: ['card', 'metric', 'comparison', 'quote', 'list'],
+      tags: ['card', 'metric', 'chart', 'table', 'list'],
+      disabled: false,
       html: '<article><h2>Feature</h2></article>',
       open_url: 'vscode://file/components/feature-card/index.html',
     };

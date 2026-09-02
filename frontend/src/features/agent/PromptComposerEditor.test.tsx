@@ -10,7 +10,8 @@ const prompt: Prompt = {
   key_zh: '高管摘要',
   key_en: 'executive-summary',
   value: '生成高管摘要',
-  tags: ['summarize'],
+  tags: ['deliverable'],
+  disabled: false,
   created_at: 1,
   updated_at: 1,
 };

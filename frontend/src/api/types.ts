@@ -150,6 +150,7 @@ export interface Skill {
   id: string;
   name: string;
   description: string;
+  tags?: SkillTag[];
   content?: string;
   disabled?: boolean;
   local_path?: string;
@@ -161,15 +162,14 @@ export interface SkillsResponse {
 }
 
 export type PromptTag =
-  | 'structure'
-  | 'draft'
-  | 'rewrite'
-  | 'summarize'
-  | 'analysis'
-  | 'data'
-  | 'visual'
+  | 'identity'
+  | 'deliverable'
+  | 'constraint'
+  | 'git'
   | 'review'
   | 'other';
+
+export type SkillTag = 'workflow' | 'methodology' | 'manual' | 'experience' | 'other';
 
 export interface Prompt {
   id: string;
@@ -177,6 +177,7 @@ export interface Prompt {
   key_en: string;
   value: string;
   tags: PromptTag[];
+  disabled: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -196,20 +197,21 @@ export interface Theme {
   id: string;
   name: string;
   description: string;
+  tags: ThemeTag[];
   css?: string;
   css_url: string;
   open_url: string;
 }
 
+export type ThemeTag = 'minimal' | 'business' | 'technology' | 'cool' | 'warm' | 'other';
+
 export type ComponentTag =
   | 'card'
-  | 'metric'
-  | 'comparison'
-  | 'quote'
-  | 'list'
   | 'chart'
+  | 'table'
+  | 'list'
   | 'process'
-  | 'timeline'
+  | 'metric'
   | 'other';
 
 export interface ComponentReference {
@@ -218,6 +220,7 @@ export interface ComponentReference {
   description: string;
   tags: ComponentTag[];
   html?: string;
+  disabled: boolean;
   open_url: string;
 }
 

@@ -44,8 +44,8 @@ type RunService struct {
 
 func NewRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot WorkRoot, renderer *workflow.NodeSlideRenderer) *RunService {
 	refRegistry := contextengine.NewRefRegistry()
-	components := NewComponentService(workRoot)
-	themes := NewThemeService(workRoot)
+	components := NewComponentService(workRoot, s)
+	themes := NewThemeService(workRoot, s)
 	return &RunService{
 		store: s, engine: engine,
 		assembler: contextengine.NewContextAssembler(s, refRegistry).
@@ -53,7 +53,7 @@ func NewRunService(s store.Store, engine *run.Engine, registry *llm.Registry, wo
 			WithThemeLoader(themes),
 		renderer:   renderer,
 		registry:   registry,
-		skills:     NewSkillService(workRoot),
+		skills:     NewSkillService(workRoot, s),
 		components: components,
 		themes:     themes,
 	}

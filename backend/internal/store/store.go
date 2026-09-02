@@ -12,6 +12,7 @@ var (
 	ErrRunActive         = errors.New("store: project has an active run")
 	ErrGitCommitActive   = errors.New("store: project has an active Git commit")
 	ErrPromptKeyConflict = errors.New("store: prompt key conflict")
+	ErrTagNotFound       = errors.New("store: tag not found")
 )
 
 type PromptKeyConflictError struct {
@@ -93,5 +94,12 @@ type Store interface {
 	GetPrompt(ctx context.Context, id string) (model.Prompt, error)
 	ListPrompts(ctx context.Context) ([]model.Prompt, error)
 	UpdatePrompt(ctx context.Context, prompt model.Prompt, normalizedKeyEN string) error
+	SetPromptDisabled(ctx context.Context, id string, disabled bool, updatedAt int64) error
 	DeletePrompt(ctx context.Context, id string) error
+
+	ListResourceTagKeys(ctx context.Context, resourceType, resourceID string) ([]string, error)
+	ReplaceResourceTagKeys(ctx context.Context, resourceType, resourceID string, tagKeys []string) error
+	GetResourceDisabled(ctx context.Context, resourceType, resourceID string) (bool, error)
+	SetResourceDisabled(ctx context.Context, resourceType, resourceID string, disabled bool, updatedAt int64) error
+	DeleteResourceMetadata(ctx context.Context, resourceType, resourceID string) error
 }

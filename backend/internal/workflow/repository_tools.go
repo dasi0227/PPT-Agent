@@ -44,6 +44,9 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 	if err != nil {
 		return failedToolResult(CodeResourceNotFound, "component was not found", false)
 	}
+	if component.Disabled {
+		return failedToolResult(CodeResourceNotFound, "component is disabled", false)
+	}
 	result := SuccessfulToolResult("component loaded")
 	result.LoadedResources = []LoadedResource{{
 		Kind: "component", ID: component.ID, Name: component.Name,

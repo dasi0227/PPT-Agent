@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  setDisabled: vi.fn(),
   delete: vi.fn(),
 }));
 
@@ -16,7 +17,8 @@ const prompt = (id: string): Prompt => ({
   key_zh: `提示${id}`,
   key_en: `prompt-${id}`,
   value: `value ${id}`,
-  tags: ['draft'],
+  tags: ['deliverable'],
+  disabled: false,
   created_at: 1,
   updated_at: 1,
 });

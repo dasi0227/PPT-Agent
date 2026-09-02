@@ -1,11 +1,9 @@
 package service
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -23,7 +21,8 @@ const (
 var skillIDPattern = repositoryIDPattern
 
 type SkillService struct {
-	root string
+	root     string
+	metadata repositoryMetadataStore
 }
 
 type skillFrontmatter struct {
@@ -31,19 +30,14 @@ type skillFrontmatter struct {
 	Description string `yaml:"description"`
 }
 
-type skillRegistry struct {
-	Disabled []string `json:"disabled"`
-}
-
-func NewSkillService(workRoot WorkRoot) *SkillService {
-	return &SkillService{root: filepath.Join(string(workRoot), "assets", "skills")}
+func NewSkillService(workRoot WorkRoot, stores ...repositoryMetadataStore) *SkillService {
+	return &SkillService{
+		root:     filepath.Join(string(workRoot), "assets", "skills"),
+		metadata: repositoryMetadataOrMemory(stores),
+	}
 }
 
 func (s *SkillService) List() ([]model.RepositorySkill, error) {
-	disabled, err := s.readRegistry()
-	if err != nil {
-		return nil, err
-	}
 	ids, err := repositoryIDs(s.root)
 	if err != nil {
 		return nil, err
@@ -52,7 +46,6 @@ func (s *SkillService) List() ([]model.RepositorySkill, error) {
 	for _, id := range ids {
 		skill, readErr := s.read(id)
 		if readErr == nil {
-			skill.Disabled = disabled[id]
 			skill.Content = ""
 			out = append(out, skill)
 		}
@@ -67,15 +60,10 @@ func (s *SkillService) List() ([]model.RepositorySkill, error) {
 }
 
 func (s *SkillService) Get(id string) (model.RepositorySkill, error) {
-	disabled, err := s.readRegistry()
-	if err != nil {
-		return model.RepositorySkill{}, err
-	}
 	skill, err := s.read(id)
 	if err != nil {
 		return model.RepositorySkill{}, err
 	}
-	skill.Disabled = disabled[id]
 	return skill, nil
 }
 
@@ -91,10 +79,6 @@ func (s *SkillService) resolve(ids []string, maxCount, maxBytes int) ([]model.Ru
 	if len(ids) > maxCount {
 		return nil, model.NewAgentError("SKILL_SELECTION_INVALID", "load_skill", fmt.Errorf("at most %d skills may be selected", maxCount))
 	}
-	disabled, err := s.readRegistry()
-	if err != nil {
-		return nil, err
-	}
 	seen := map[string]bool{}
 	out := make([]model.RunSkill, 0, len(ids))
 	total := 0
@@ -102,12 +86,12 @@ func (s *SkillService) resolve(ids []string, maxCount, maxBytes int) ([]model.Ru
 		if !validRepositoryID(id) || seen[id] {
 			return nil, model.NewAgentError("SKILL_SELECTION_INVALID", "load_skill", errors.New("skill ids must be valid and unique"))
 		}
-		if disabled[id] {
-			return nil, model.NewAgentError("SKILL_DISABLED", "load_skill", errors.New("disabled skills cannot be loaded"))
-		}
 		skill, readErr := s.read(id)
 		if readErr != nil {
 			return nil, model.NewAgentError("SKILL_NOT_FOUND", "load_skill", readErr)
+		}
+		if skill.Disabled {
+			return nil, model.NewAgentError("SKILL_DISABLED", "load_skill", errors.New("disabled skills cannot be loaded"))
 		}
 		total += len(skill.Content)
 		if maxBytes > 0 && total > maxBytes {
@@ -127,76 +111,63 @@ func (s *SkillService) SetDisabled(id string, disabled bool) (model.RepositorySk
 	if err != nil {
 		return model.RepositorySkill{}, err
 	}
-	registry, err := s.readRegistry()
-	if err != nil {
-		return model.RepositorySkill{}, err
-	}
-	if disabled {
-		registry[id] = true
-	} else {
-		delete(registry, id)
-	}
-	if err := s.writeRegistry(registry); err != nil {
+	if err := s.metadata.SetResourceDisabled(context.Background(), resourceTypeSkill, id, disabled, repositoryStateTimestamp()); err != nil {
 		return model.RepositorySkill{}, err
 	}
 	skill.Disabled = disabled
 	return skill, nil
 }
 
+func (s *SkillService) SetTags(id string, values []model.SkillTag) (model.RepositorySkill, error) {
+	if _, err := s.Get(id); err != nil {
+		return model.RepositorySkill{}, err
+	}
+	raw := make([]string, len(values))
+	for index, tag := range values {
+		raw[index] = string(tag)
+	}
+	tags, err := validateSkillTags(raw)
+	if err != nil {
+		return model.RepositorySkill{}, err
+	}
+	raw = raw[:0]
+	for _, tag := range tags {
+		raw = append(raw, string(tag))
+	}
+	if err := s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeSkill, id, raw); err != nil {
+		return model.RepositorySkill{}, err
+	}
+	return s.Get(id)
+}
+
+func validateSkillTags(values []string) ([]model.SkillTag, error) {
+	if len(values) > 2 {
+		return nil, ErrRepositoryCorrupt
+	}
+	tags := make([]model.SkillTag, len(values))
+	seen := make(map[model.SkillTag]struct{}, len(values))
+	for index, value := range values {
+		tag := model.SkillTag(strings.TrimSpace(value))
+		if !tag.Valid() {
+			return nil, ErrRepositoryCorrupt
+		}
+		if _, exists := seen[tag]; exists {
+			return nil, ErrRepositoryCorrupt
+		}
+		seen[tag] = struct{}{}
+		tags[index] = tag
+	}
+	return tags, nil
+}
+
 func (s *SkillService) Delete(id string) error {
 	if _, err := s.Get(id); err != nil {
 		return err
 	}
-	registry, err := s.readRegistry()
-	if err != nil {
-		return err
-	}
-	wasDisabled := registry[id]
-	if wasDisabled {
-		delete(registry, id)
-		if err := s.writeRegistry(registry); err != nil {
-			return err
-		}
-	}
 	if err := deleteRepositoryDirectory(s.root, id); err != nil {
-		if wasDisabled {
-			registry[id] = true
-			_ = s.writeRegistry(registry)
-		}
 		return err
 	}
-	return nil
-}
-
-func (s *SkillService) writeRegistry(registry map[string]bool) error {
-	values := make([]string, 0, len(registry))
-	for value := range registry {
-		values = append(values, value)
-	}
-	sort.Strings(values)
-	raw, err := json.MarshalIndent(skillRegistry{Disabled: values}, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(s.root, 0o755); err != nil {
-		return err
-	}
-	temp, err := os.CreateTemp(s.root, ".registry-*.json")
-	if err != nil {
-		return err
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath)
-	if _, err = temp.Write(append(raw, '\n')); err == nil {
-		err = temp.Sync()
-	}
-	if closeErr := temp.Close(); err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = os.Rename(tempPath, filepath.Join(s.root, "registry.json"))
-	}
-	return err
+	return s.metadata.DeleteResourceMetadata(context.Background(), resourceTypeSkill, id)
 }
 
 func (s *SkillService) read(id string) (model.RepositorySkill, error) {
@@ -208,45 +179,23 @@ func (s *SkillService) read(id string) (model.RepositorySkill, error) {
 	if err != nil {
 		return model.RepositorySkill{}, repositoryReadError("skill", id, err)
 	}
+	tagKeys, err := s.metadata.ListResourceTagKeys(context.Background(), resourceTypeSkill, id)
+	if err != nil {
+		return model.RepositorySkill{}, err
+	}
+	tags, err := validateSkillTags(tagKeys)
+	if err != nil {
+		return model.RepositorySkill{}, repositoryReadError("skill", id, err)
+	}
+	disabled, err := s.metadata.GetResourceDisabled(context.Background(), resourceTypeSkill, id)
+	if err != nil {
+		return model.RepositorySkill{}, err
+	}
 	return model.RepositorySkill{
-		ID: id, Name: meta.Name, Description: meta.Description, Content: body,
+		ID: id, Name: meta.Name, Description: meta.Description, Tags: tags, Content: body,
+		Disabled:  disabled,
 		LocalPath: path, OpenURL: repositoryOpenURL(path),
 	}, nil
-}
-
-func (s *SkillService) readRegistry() (map[string]bool, error) {
-	path := filepath.Join(s.root, "registry.json")
-	info, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return map[string]bool{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() > maxRepositoryFileSize {
-		return nil, ErrRepositoryCorrupt
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.DisallowUnknownFields()
-	var registry skillRegistry
-	if err := decoder.Decode(&registry); err != nil {
-		return nil, fmt.Errorf("skill registry: %w", ErrRepositoryCorrupt)
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("skill registry: %w", ErrRepositoryCorrupt)
-	}
-	out := make(map[string]bool, len(registry.Disabled))
-	for _, id := range registry.Disabled {
-		if !validRepositoryID(id) || out[id] {
-			return nil, fmt.Errorf("skill registry: %w", ErrRepositoryCorrupt)
-		}
-		out[id] = true
-	}
-	return out, nil
 }
 
 func parseSkillMarkdown(raw []byte) (skillFrontmatter, string, error) {

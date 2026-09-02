@@ -142,6 +142,7 @@ export function PromptRepositoryPage() {
   const load = usePromptStore((state) => state.load);
   const createPrompt = usePromptStore((state) => state.create);
   const updatePrompt = usePromptStore((state) => state.update);
+  const setPromptDisabled = usePromptStore((state) => state.setDisabled);
   const deletePrompt = usePromptStore((state) => state.delete);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
@@ -150,6 +151,7 @@ export function PromptRepositoryPage() {
   const [draft, setDraft] = useState<PromptWriteRequest>(emptyDraft);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
+  const [statusPending, setStatusPending] = useState(false);
   const [previousSelectedId, setPreviousSelectedId] = useState('');
 
   useEffect(() => {
@@ -272,6 +274,18 @@ export function PromptRepositoryPage() {
     }
   };
 
+  const toggleDisabled = async (prompt: Prompt) => {
+    if (statusPending) return;
+    setStatusPending(true);
+    try {
+      await setPromptDisabled(prompt.id, !prompt.disabled);
+    } catch (cause) {
+      showGlobalError(cause instanceof Error ? cause.message : '提示词状态更新失败');
+    } finally {
+      setStatusPending(false);
+    }
+  };
+
   const editActions = (
     <div className="flex items-center gap-1.5">
       <Button type="button" variant="secondary" onClick={cancelEdit} disabled={saving} className="h-7 px-2.5 text-xs">
@@ -323,6 +337,7 @@ export function PromptRepositoryPage() {
                 <RepositoryDirectoryItem
                   key={prompt.id}
                   active={visibleSelected?.id === prompt.id}
+                  disabled={prompt.disabled}
                   name={(
                     <span className="flex min-w-0 items-baseline gap-1.5">
                       <span className="truncate">{prompt.key_zh}</span>
@@ -362,10 +377,29 @@ export function PromptRepositoryPage() {
                   </div>
                 )}
                 actions={mode === 'edit' ? editActions : (
-                  <Button type="button" variant="secondary" onClick={beginEdit} className="h-7 px-2.5 text-xs">
-                    <Pencil className="h-3.5 w-3.5" />
-                    编辑
-                  </Button>
+                  <div className="flex items-center gap-2.5">
+                    <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
+                      {selected.disabled ? '已关闭' : '已启用'}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!selected.disabled}
+                      aria-label="切换提示词状态"
+                      disabled={statusPending}
+                      onClick={() => void toggleDisabled(selected)}
+                      className={cn(
+                        'h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-50',
+                        selected.disabled ? 'bg-border-strong' : 'bg-success',
+                      )}
+                    >
+                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(23,32,43,0.25)] transition-transform', !selected.disabled && 'translate-x-4')} />
+                    </button>
+                    <Button type="button" variant="secondary" onClick={beginEdit} className="h-7 px-2.5 text-xs">
+                      <Pencil className="h-3.5 w-3.5" />
+                      编辑
+                    </Button>
+                  </div>
                 )}
                 contentClassName="px-5 py-7 md:px-8 md:py-9"
                 deleteNoun="提示词"

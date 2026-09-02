@@ -16,21 +16,34 @@ import (
 )
 
 type ComponentService struct {
-	root string
+	root     string
+	metadata repositoryMetadataStore
 }
 
 type componentMeta struct {
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
-	Tags        []model.ComponentTag `json:"tags"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
-func NewComponentService(workRoot WorkRoot) *ComponentService {
-	return &ComponentService{root: filepath.Join(string(workRoot), "assets", "components")}
+func NewComponentService(workRoot WorkRoot, stores ...repositoryMetadataStore) *ComponentService {
+	return &ComponentService{
+		root:     filepath.Join(string(workRoot), "assets", "components"),
+		metadata: repositoryMetadataOrMemory(stores),
+	}
 }
 
 func (s *ComponentService) LoadComponents(context.Context) ([]model.Component, error) {
-	return s.List()
+	components, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	enabled := make([]model.Component, 0, len(components))
+	for _, component := range components {
+		if !component.Disabled {
+			enabled = append(enabled, component)
+		}
+	}
+	return enabled, nil
 }
 
 func (s *ComponentService) List() ([]model.Component, error) {
@@ -64,17 +77,87 @@ func (s *ComponentService) Get(id string) (model.Component, error) {
 	if err != nil {
 		return model.Component{}, repositoryReadError("component", id, err)
 	}
+	tagKeys, err := s.metadata.ListResourceTagKeys(context.Background(), resourceTypeComponent, id)
+	if err != nil {
+		return model.Component{}, err
+	}
+	tags, err := validateComponentTags(tagKeys)
+	if err != nil {
+		return model.Component{}, repositoryReadError("component", id, err)
+	}
+	disabled, err := s.metadata.GetResourceDisabled(context.Background(), resourceTypeComponent, id)
+	if err != nil {
+		return model.Component{}, err
+	}
 	return model.Component{
-		ID: id, Name: meta.Name, Description: meta.Description, Tags: meta.Tags,
+		ID: id, Name: meta.Name, Description: meta.Description, Tags: tags,
 		HTML: string(raw), LocalPath: path, OpenURL: repositoryOpenURL(path),
+		Disabled: disabled,
 	}, nil
+}
+
+func (s *ComponentService) SetTags(id string, values []model.ComponentTag) (model.Component, error) {
+	if _, err := s.Get(id); err != nil {
+		return model.Component{}, err
+	}
+	raw := make([]string, len(values))
+	for index, tag := range values {
+		raw[index] = string(tag)
+	}
+	tags, err := validateComponentTags(raw)
+	if err != nil {
+		return model.Component{}, err
+	}
+	raw = raw[:0]
+	for _, tag := range tags {
+		raw = append(raw, string(tag))
+	}
+	if err := s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeComponent, id, raw); err != nil {
+		return model.Component{}, err
+	}
+	return s.Get(id)
+}
+
+func validateComponentTags(values []string) ([]model.ComponentTag, error) {
+	if len(values) > 2 {
+		return nil, ErrRepositoryCorrupt
+	}
+	tags := make([]model.ComponentTag, len(values))
+	seen := make(map[model.ComponentTag]struct{}, len(values))
+	for index, value := range values {
+		tag := model.ComponentTag(strings.TrimSpace(value))
+		if !tag.Valid() {
+			return nil, ErrRepositoryCorrupt
+		}
+		if _, exists := seen[tag]; exists {
+			return nil, ErrRepositoryCorrupt
+		}
+		seen[tag] = struct{}{}
+		tags[index] = tag
+	}
+	return tags, nil
+}
+
+func (s *ComponentService) SetDisabled(id string, disabled bool) (model.Component, error) {
+	component, err := s.Get(id)
+	if err != nil {
+		return model.Component{}, err
+	}
+	if err := s.metadata.SetResourceDisabled(context.Background(), resourceTypeComponent, id, disabled, repositoryStateTimestamp()); err != nil {
+		return model.Component{}, err
+	}
+	component.Disabled = disabled
+	return component, nil
 }
 
 func (s *ComponentService) Delete(id string) error {
 	if _, err := s.Get(id); err != nil {
 		return err
 	}
-	return deleteRepositoryDirectory(s.root, id)
+	if err := deleteRepositoryDirectory(s.root, id); err != nil {
+		return err
+	}
+	return s.metadata.DeleteResourceMetadata(context.Background(), resourceTypeComponent, id)
 }
 
 func parseComponentMeta(raw []byte) (componentMeta, error) {
@@ -120,17 +203,6 @@ func parseComponentMeta(raw []byte) (componentMeta, error) {
 	meta.Description = strings.TrimSpace(meta.Description)
 	if meta.Name == "" || meta.Description == "" {
 		return componentMeta{}, ErrRepositoryCorrupt
-	}
-	seenTags := make(map[model.ComponentTag]struct{}, len(meta.Tags))
-	for index := range meta.Tags {
-		meta.Tags[index] = model.ComponentTag(strings.TrimSpace(string(meta.Tags[index])))
-		if !meta.Tags[index].Valid() {
-			return componentMeta{}, ErrRepositoryCorrupt
-		}
-		if _, exists := seenTags[meta.Tags[index]]; exists {
-			return componentMeta{}, ErrRepositoryCorrupt
-		}
-		seenTags[meta.Tags[index]] = struct{}{}
 	}
 	return meta, nil
 }

@@ -1,15 +1,12 @@
 import type { Prompt, PromptTag } from '../../api/types';
 
 export const promptTagLabels: Record<PromptTag, string> = {
-  structure: '结构',
-  draft: '撰写',
-  rewrite: '改写',
-  summarize: '总结',
-  analysis: '分析',
-  data: '数据',
-  visual: '视觉',
+  identity: '身份',
+  deliverable: '交付',
+  constraint: '约束',
+  git: 'Git',
   review: '审查',
-  other: '其他',
+  other: '其它',
 };
 
 export const promptTagOrder = Object.keys(promptTagLabels) as PromptTag[];
@@ -37,15 +34,16 @@ function includes(value: string, query: string): boolean {
 }
 
 export function matchPrompts(prompts: Prompt[], query: string, recentIds: string[]): Prompt[] {
+  const enabledPrompts = prompts.filter((prompt) => !prompt.disabled);
   if (!query) {
-    const byId = new Map(prompts.map((prompt) => [prompt.id, prompt]));
+    const byId = new Map(enabledPrompts.map((prompt) => [prompt.id, prompt]));
     return recentIds.flatMap((id) => {
       const prompt = byId.get(id);
       return prompt ? [prompt] : [];
     }).slice(0, 5);
   }
   const recentOrder = new Map(recentIds.map((id, index) => [id, index]));
-  return prompts
+  return enabledPrompts
     .map((prompt) => {
       const rank = includes(prompt.key_zh, query)
         ? 0

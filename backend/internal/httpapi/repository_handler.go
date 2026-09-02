@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,22 @@ func (h *RepositoryHandler) ListThemes(c *gin.Context) {
 
 func (h *RepositoryHandler) GetTheme(c *gin.Context) {
 	value, err := h.themes.Get(c.Param("id"))
+	if err != nil {
+		h.repositoryError(c, err, "theme not found")
+		return
+	}
+	c.JSON(http.StatusOK, value)
+}
+
+func (h *RepositoryHandler) PatchTheme(c *gin.Context) {
+	var request struct {
+		Tags *[]model.ThemeTag `json:"tags"`
+	}
+	if c.ShouldBindJSON(&request) != nil || request.Tags == nil {
+		AbortWithError(c, ErrBadRequest("tags is required"))
+		return
+	}
+	value, err := h.themes.SetTags(c.Param("id"), *request.Tags)
 	if err != nil {
 		h.repositoryError(c, err, "theme not found")
 		return
@@ -78,6 +95,29 @@ func (h *RepositoryHandler) GetComponent(c *gin.Context) {
 	c.JSON(http.StatusOK, value)
 }
 
+func (h *RepositoryHandler) PatchComponent(c *gin.Context) {
+	var request struct {
+		Disabled *bool                 `json:"disabled"`
+		Tags     *[]model.ComponentTag `json:"tags"`
+	}
+	if c.ShouldBindJSON(&request) != nil || (request.Disabled == nil && request.Tags == nil) {
+		AbortWithError(c, ErrBadRequest("disabled or tags is required"))
+		return
+	}
+	value, err := h.components.Get(c.Param("id"))
+	if err == nil && request.Tags != nil {
+		value, err = h.components.SetTags(c.Param("id"), *request.Tags)
+	}
+	if err == nil && request.Disabled != nil {
+		value, err = h.components.SetDisabled(c.Param("id"), *request.Disabled)
+	}
+	if err != nil {
+		h.repositoryError(c, err, "component not found")
+		return
+	}
+	c.JSON(http.StatusOK, value)
+}
+
 func (h *RepositoryHandler) DeleteComponent(c *gin.Context) {
 	if err := h.components.Delete(c.Param("id")); err != nil {
 		h.repositoryError(c, err, "component not found")
@@ -114,13 +154,20 @@ func (h *RepositoryHandler) DeleteSkill(c *gin.Context) {
 
 func (h *RepositoryHandler) PatchSkill(c *gin.Context) {
 	var request struct {
-		Disabled *bool `json:"disabled"`
+		Disabled *bool             `json:"disabled"`
+		Tags     *[]model.SkillTag `json:"tags"`
 	}
-	if c.ShouldBindJSON(&request) != nil || request.Disabled == nil {
-		AbortWithError(c, ErrBadRequest("disabled is required"))
+	if c.ShouldBindJSON(&request) != nil || (request.Disabled == nil && request.Tags == nil) {
+		AbortWithError(c, ErrBadRequest("disabled or tags is required"))
 		return
 	}
-	value, err := h.skills.SetDisabled(c.Param("id"), *request.Disabled)
+	value, err := h.skills.Get(c.Param("id"))
+	if err == nil && request.Tags != nil {
+		value, err = h.skills.SetTags(c.Param("id"), *request.Tags)
+	}
+	if err == nil && request.Disabled != nil {
+		value, err = h.skills.SetDisabled(c.Param("id"), *request.Disabled)
+	}
 	if err != nil {
 		h.repositoryError(c, err, "skill not found")
 		return

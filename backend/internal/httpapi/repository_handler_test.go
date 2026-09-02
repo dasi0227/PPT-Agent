@@ -9,9 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func writeRepositoryFixture(t *testing.T, root, relative, content string) {
@@ -35,21 +38,33 @@ func completeThemeFixtureCSS() string {
 	return css.String()
 }
 
-func repositoryTestRouter(root string) *gin.Engine {
+func repositoryTestRouter(t *testing.T, root string) *gin.Engine {
+	t.Helper()
 	workRoot := service.WorkRoot(root)
+	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "repository.db")}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	metadata, err := sqlitestore.NewStore(db, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler := NewRepositoryHandler(
-		service.NewThemeService(workRoot),
-		service.NewComponentService(workRoot),
-		service.NewSkillService(workRoot),
+		service.NewThemeService(workRoot, metadata),
+		service.NewComponentService(workRoot, metadata),
+		service.NewSkillService(workRoot, metadata),
 	)
 	engine := gin.New()
 	engine.GET("/api/v1/runtime/base.css", handler.RuntimeBaseCSS)
 	engine.GET("/api/v1/themes", handler.ListThemes)
 	engine.GET("/api/v1/themes/:id", handler.GetTheme)
+	engine.PATCH("/api/v1/themes/:id", handler.PatchTheme)
 	engine.GET("/api/v1/themes/:id/css", handler.ThemeCSS)
 	engine.DELETE("/api/v1/themes/:id", handler.DeleteTheme)
 	engine.GET("/api/v1/components", handler.ListComponents)
 	engine.GET("/api/v1/components/:id", handler.GetComponent)
+	engine.PATCH("/api/v1/components/:id", handler.PatchComponent)
 	engine.DELETE("/api/v1/components/:id", handler.DeleteComponent)
 	engine.GET("/api/v1/skills", handler.ListSkills)
 	engine.GET("/api/v1/skills/:id", handler.GetSkill)
@@ -72,10 +87,10 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	root := t.TempDir()
 	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/manifest.json", `{"name":"Swiss Modern","description":"Grid"}`)
 	writeRepositoryFixture(t, root, "assets/themes/swiss-modern/theme.css", completeThemeFixtureCSS())
-	writeRepositoryFixture(t, root, "assets/components/feature-card/index.html", `<!doctype html><script id="meta" type="application/json">{"name":"Feature Card","description":"Summary","tags":["card"]}</script><article>Feature</article>`)
-	writeRepositoryFixture(t, root, "assets/skills/story/SKILL.md", "---\nname: Story\ndescription: Narrative\n---\n# Story\n")
+	writeRepositoryFixture(t, root, "assets/components/feature-card/index.html", `<!doctype html><script id="meta" type="application/json">{"name":"Feature Card","description":"Summary"}</script><article>Feature</article>`)
+	writeRepositoryFixture(t, root, "assets/skills/story-architect/SKILL.md", "---\nname: Story\ndescription: Narrative\n---\n# Story\n")
 
-	engine := repositoryTestRouter(root)
+	engine := repositoryTestRouter(t, root)
 
 	base := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/runtime/base.css", "")
 	if base.Code != http.StatusOK || !strings.HasPrefix(base.Header().Get("Content-Type"), "text/css") {
@@ -91,8 +106,12 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	if theme.Code != http.StatusOK || json.Unmarshal(theme.Body.Bytes(), &themeBody) != nil {
 		t.Fatalf("theme response = %d %s", theme.Code, theme.Body.String())
 	}
-	if _, exists := themeBody["tags"]; exists {
-		t.Fatalf("theme DTO must not expose tags: %#v", themeBody)
+	if tags, exists := themeBody["tags"].([]any); !exists || len(tags) != 1 || tags[0] != "minimal" {
+		t.Fatalf("theme DTO tags = %#v", themeBody["tags"])
+	}
+	themePatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/themes/swiss-modern", `{"tags":["business"]}`)
+	if themePatched.Code != http.StatusOK || !strings.Contains(themePatched.Body.String(), `"business"`) {
+		t.Fatalf("theme patch response = %d %s", themePatched.Code, themePatched.Body.String())
 	}
 
 	component := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/components/feature-card", "")
@@ -106,14 +125,22 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	if componentBody["id"] != "feature-card" || componentBody["name"] != "Feature Card" || componentBody["open_url"] == "" {
 		t.Fatalf("unexpected component DTO: %#v", componentBody)
 	}
-	if _, exists := componentBody["disabled"]; exists {
-		t.Fatalf("component DTO must be stateless: %#v", componentBody)
+	if componentBody["disabled"] != false {
+		t.Fatalf("component must default to enabled: %#v", componentBody)
 	}
 	if _, exists := componentBody["kind"]; exists {
 		t.Fatalf("component DTO must not expose legacy kind: %#v", componentBody)
 	}
+	componentPatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/components/feature-card", `{"disabled":true}`)
+	if componentPatched.Code != http.StatusOK || !strings.Contains(componentPatched.Body.String(), `"disabled":true`) {
+		t.Fatalf("component patch response = %d %s", componentPatched.Code, componentPatched.Body.String())
+	}
+	componentTagsPatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/components/feature-card", `{"tags":["list"]}`)
+	if componentTagsPatched.Code != http.StatusOK || !strings.Contains(componentTagsPatched.Body.String(), `"list"`) {
+		t.Fatalf("component tags patch response = %d %s", componentTagsPatched.Code, componentTagsPatched.Body.String())
+	}
 
-	patched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/skills/story", `{"disabled":true}`)
+	patched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/skills/story-architect", `{"disabled":true}`)
 	if patched.Code != http.StatusOK {
 		t.Fatalf("skill patch response = %d %s", patched.Code, patched.Body.String())
 	}
@@ -121,8 +148,12 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	if err := json.Unmarshal(patched.Body.Bytes(), &skillBody); err != nil {
 		t.Fatal(err)
 	}
-	if skillBody["id"] != "story" || skillBody["disabled"] != true || skillBody["open_url"] == "" {
+	if skillBody["id"] != "story-architect" || skillBody["disabled"] != true || skillBody["open_url"] == "" {
 		t.Fatalf("unexpected skill DTO: %#v", skillBody)
+	}
+	skillTagsPatched := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/skills/story-architect", `{"tags":["workflow"]}`)
+	if skillTagsPatched.Code != http.StatusOK || !strings.Contains(skillTagsPatched.Body.String(), `"workflow"`) {
+		t.Fatalf("skill tags patch response = %d %s", skillTagsPatched.Code, skillTagsPatched.Body.String())
 	}
 
 	for _, deletion := range []struct {
@@ -131,7 +162,7 @@ func TestRepositoryHandlerContracts(t *testing.T) {
 	}{
 		{path: "/api/v1/themes/swiss-modern", dir: "assets/themes/swiss-modern"},
 		{path: "/api/v1/components/feature-card", dir: "assets/components/feature-card"},
-		{path: "/api/v1/skills/story", dir: "assets/skills/story"},
+		{path: "/api/v1/skills/story-architect", dir: "assets/skills/story-architect"},
 	} {
 		response := performRepositoryRequest(t, engine, http.MethodDelete, deletion.path, "")
 		if response.Code != http.StatusNoContent {
@@ -149,7 +180,7 @@ func TestThemeHandlerRejectsIncompleteTokens(t *testing.T) {
 	writeRepositoryFixture(t, root, "assets/themes/incomplete/manifest.json", `{"name":"Incomplete","description":"Missing tokens"}`)
 	writeRepositoryFixture(t, root, "assets/themes/incomplete/theme.css", `:root { --color-bg: #fff; }`)
 
-	engine := repositoryTestRouter(root)
+	engine := repositoryTestRouter(t, root)
 	response := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/themes/incomplete/css", "")
 	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "--color-fg") {
 		t.Fatalf("incomplete theme response = %d %s", response.Code, response.Body.String())
