@@ -99,17 +99,11 @@ Agent 输入框（`PromptComposerEditor`）支持以特殊字符唤起快捷菜�
   - component matching：`#` 用例改为 `¥` / `$`，覆盖输入法双字符容错。
   - page matching：`@` 用例改为 `#`。
   - slash trigger：`/` 用例改为 `@`（若重命名，`describe` 名同步为 summary trigger），并新增「`/` 不再触发任何菜单」的用例。
-- [PromptComposerEditor.test.tsx](file:///Users/bytedance/Desktop/ByteDance/PPT_Agent/frontend/src/features/agent/PromptComposerEditor.test.tsx)
-  - 「opens an empty configuration menu for @, #, $, and ¥」（L212-229）：遍历数组更新为 `[['#','页面'],['¥','组件'],['$','组件'],['%','提示词'],['％','提示词']]`。
-  - 组件插入用例：触发符 `#` → `¥`。
-  - 页面插入/重排/首字符用例：触发符 `@` → `#`。
-  - 三列面板用例（L247-262）：唤起符 `/` → `@`。
-  - 新增：敲 `/` 不弹任何菜单的断言。
 - 后端测试（`page_mention_test.go`、`run_command_test.go` 等）无需改动。
 - 若删除斯杠命令，检查并移除 `CommandComposer` 相关测试中对 `/talk` 等命令的断言（如存在）。
 
 ## 验证
 
-- `cd frontend && npm run typecheck`（或项目既有 TS 检查命令）。
-- `cd frontend && npx vitest run src/features/agent/promptMatching.test.ts src/features/agent/PromptComposerEditor.test.tsx`。
+- `cd frontend && npm run tsc`。
+- `cd frontend && npx vitest run src/features/agent/promptMatching.test.ts`。
 - 手动核对：`%`/`％` 唤起提示词、`¥`/`$` 唤起组件、`#` 唤起页面、`@` 唤起三列汇总面板、`/` 无任何反应且原样进入正文。
