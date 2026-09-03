@@ -1,0 +1,1085 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>@ 页面定位 · 输入框交互原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --canvas: #f1f4f8;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --accent-fragment: rgba(47, 103, 246, 0.09);
+      --danger: #c94242;
+      --danger-soft: #fff0f0;
+      --warn: #b7791f;
+      --warn-soft: #fdf5e6;
+      --ok: #2f855a;
+      --ok-soft: #e9f6ee;
+      --shadow-menu: 0 18px 46px rgba(31, 42, 55, 0.2);
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html, body { width: 100%; min-width: 320px; height: 100%; margin: 0; }
+
+    body {
+      overflow: hidden;
+      background: var(--workspace);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+    }
+
+    button, input, textarea { color: inherit; font: inherit; }
+    button { border: 0; cursor: pointer; }
+
+    button:focus-visible,
+    [contenteditable="true"]:focus-visible {
+      outline: 2px solid rgba(47, 103, 246, 0.55);
+      outline-offset: 2px;
+    }
+
+    .demo {
+      display: grid;
+      width: 100%;
+      height: 100dvh;
+      grid-template-rows: 48px minmax(0, 1fr);
+    }
+
+    .demo-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--border-strong);
+      background: var(--surface);
+      padding: 0 14px 0 16px;
+    }
+
+    .demo-title {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .demo-title svg { color: var(--accent); }
+
+    .scenario {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .scenario-button {
+      display: inline-flex;
+      height: 30px;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      padding: 0 10px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .scenario-button:hover { border-color: var(--border-strong); background: var(--panel); }
+    .scenario-button.active {
+      border-color: rgba(47, 103, 246, 0.35);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .stage {
+      display: grid;
+      min-height: 0;
+      grid-template-columns: minmax(0, 1fr) 360px;
+    }
+
+    /* ------- Composer column ------- */
+    .agent-column {
+      position: relative;
+      display: grid;
+      min-width: 0;
+      min-height: 0;
+      grid-template-rows: 44px minmax(0, 1fr) auto;
+      background: var(--panel);
+    }
+
+    .agent-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 16px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .agent-head svg { color: var(--accent); }
+
+    .timeline {
+      display: flex;
+      min-height: 0;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 12px;
+      overflow: hidden;
+      padding: 24px 22px 8px;
+    }
+
+    .message {
+      align-self: flex-start;
+      width: min(86%, 540px);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--accent);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 12px 14px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .message code {
+      border-radius: 4px;
+      background: var(--panel-muted);
+      padding: 1px 5px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+    }
+
+    .composer-area { position: relative; padding: 6px 22px 22px; }
+
+    .composer-hint {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 4px 8px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .composer-hint b { color: var(--accent); font-weight: 700; }
+
+    .page-menu {
+      position: absolute;
+      z-index: 20;
+      right: 22px;
+      bottom: calc(100% - 6px);
+      left: 22px;
+      display: none;
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      background: var(--surface);
+      padding: 5px;
+      box-shadow: var(--shadow-menu);
+      scrollbar-width: none;
+    }
+
+    .page-menu::-webkit-scrollbar { display: none; }
+    .page-menu.visible { display: block; }
+
+    .menu-label {
+      padding: 7px 8px 5px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .page-option {
+      display: grid;
+      width: 100%;
+      grid-template-columns: 24px minmax(0, 1fr);
+      align-items: center;
+      gap: 9px;
+      border-radius: 7px;
+      background: transparent;
+      padding: 7px 8px;
+      text-align: left;
+    }
+
+    .page-option.active, .page-option:hover { background: var(--accent-soft); }
+
+    .option-thumb {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      color: var(--accent);
+    }
+
+    .option-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+
+    .option-name {
+      display: flex;
+      align-items: baseline;
+      min-width: 0;
+      color: var(--text);
+      font-size: 12.5px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .option-name .ord { flex: none; color: var(--accent); font-weight: 700; }
+    .option-name .sep { flex: none; margin: 0 5px; color: var(--text-muted); font-weight: 500; }
+    .option-name .title-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .option-name .fallback { color: var(--text-muted); font-weight: 600; }
+
+    /* key_message 灰字：置于标题右侧，空间不足时先于标题被截断（title 优先可读） */
+    .option-desc {
+      flex: 1 1000 auto;
+      min-width: 0;
+      margin-left: 8px;
+      overflow: hidden;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-overflow: ellipsis;
+    }
+
+    .option-state {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 11px;
+      line-height: 15px;
+    }
+
+    .state-seg { display: inline-flex; align-items: center; gap: 5px; }
+
+    .state-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+    .state-dot.ready { background: var(--ok); }      /* 幻灯片已就绪 → 绿点 */
+    .state-dot.missing { background: var(--danger); } /* 幻灯片未生成 → 红点 */
+    .state-dot.stale { background: var(--warn); }    /* 幻灯片待更新 → 黄点 */
+
+    .menu-empty {
+      display: grid;
+      min-height: 60px;
+      place-items: center;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .composer {
+      position: relative;
+      border: 1px solid rgba(196, 206, 218, 0.85);
+      border-radius: 20px;
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    .editor {
+      min-height: 92px;
+      max-height: 200px;
+      overflow-y: auto;
+      padding: 14px 44px 10px 14px;
+      font-size: 14px;
+      line-height: 24px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .editor:empty::before {
+      color: var(--text-muted);
+      content: attr(data-placeholder);
+      pointer-events: none;
+    }
+
+    .page-fragment {
+      border-radius: 5px;
+      background: var(--accent-fragment);
+      padding: 1px 2px;
+      color: var(--accent);
+      font-weight: 600;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }
+
+    .page-fragment.dropped {
+      background: var(--danger-soft);
+      color: var(--danger);
+      text-decoration: line-through;
+      text-decoration-thickness: 1.5px;
+    }
+
+    .composer-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 10px 10px;
+    }
+
+    .control-group { display: flex; align-items: center; gap: 4px; }
+
+    .control-button {
+      display: inline-flex;
+      height: 28px;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 9px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .control-button.active {
+      border-color: rgba(47, 103, 246, 0.3);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .send-button {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* ------- Side inspector ------- */
+    .side {
+      display: grid;
+      min-height: 0;
+      grid-template-rows: minmax(0, 1fr) minmax(0, 1.05fr);
+      border-left: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .side-block { display: grid; min-height: 0; grid-template-rows: 40px minmax(0, 1fr); }
+    .side-block + .side-block { border-top: 1px solid var(--border); }
+
+    .side-head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      padding: 0 14px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    .side-head svg { color: var(--accent); }
+    .side-head .hint { margin-left: auto; color: var(--text-muted); font-weight: 500; font-size: 11px; }
+
+    .side-body { min-height: 0; overflow-y: auto; padding: 10px; scrollbar-width: none; }
+    .side-body::-webkit-scrollbar { display: none; }
+
+    /* Outline list */
+    .outline-item {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 7px 8px;
+    }
+
+    .outline-item + .outline-item { margin-top: 3px; }
+    .outline-item:hover { border-color: var(--border); background: var(--panel); }
+    .outline-item.mentioned { border-color: rgba(47, 103, 246, 0.28); background: var(--accent-soft); }
+
+    .outline-ord {
+      display: grid;
+      height: 22px;
+      place-items: center;
+      border-radius: 5px;
+      background: var(--panel-muted);
+      color: var(--text-secondary);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .outline-item.mentioned .outline-ord { background: rgba(47, 103, 246, 0.16); color: var(--accent); }
+
+    .outline-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
+    .outline-title {
+      min-width: 0;
+      overflow: hidden;
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 12.5px;
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .outline-title:focus { outline: 0; background: var(--accent-soft); box-shadow: 0 0 0 2px rgba(47,103,246,.25); }
+    .outline-title.empty { color: var(--text-muted); font-weight: 500; font-style: italic; }
+
+    .outline-meta { display: flex; align-items: center; gap: 9px; color: var(--text-muted); font-size: 10.5px; }
+    .outline-id { font-family: var(--mono); }
+
+    .outline-ops { display: flex; align-items: center; gap: 1px; }
+
+    .mini-button {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text-muted);
+    }
+
+    .mini-button:hover { background: var(--panel-muted); color: var(--text); }
+    .mini-button.danger:hover { background: var(--danger-soft); color: var(--danger); }
+    .mini-button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .outline-empty {
+      display: grid;
+      min-height: 120px;
+      place-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* Payload */
+    .payload-group + .payload-group { margin-top: 12px; }
+
+    .payload-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 5px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .payload-label .tag {
+      border-radius: 4px;
+      background: var(--panel-muted);
+      padding: 1px 6px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .code {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 9px 11px;
+      color: #354150;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .code .id { color: var(--accent); }
+    .code .k { color: var(--text-muted); }
+    .code .s-ready { color: var(--ok); }
+    .code .s-warn { color: var(--warn); }
+    .code .s-muted { color: var(--text-muted); }
+
+    .dropped-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      margin-top: 8px;
+      border: 1px solid rgba(183, 121, 31, 0.3);
+      border-radius: 8px;
+      background: var(--warn-soft);
+      padding: 8px 10px;
+      color: var(--warn);
+      font-size: 11.5px;
+      line-height: 1.55;
+    }
+
+    .dropped-note svg { flex: none; margin-top: 1px; }
+    .dropped-note b { font-family: var(--mono); }
+
+    @media (max-width: 900px) {
+      .stage { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 0.9fr); }
+      .side { border-left: 0; border-top: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+  <main class="demo">
+    <header class="demo-bar">
+      <div class="demo-title">
+        <i data-lucide="at-sign" width="17" height="17"></i>
+        <span>@ 页面定位 · 输入框交互原型</span>
+      </div>
+      <div class="scenario">
+        <button class="scenario-button" id="scenario-reset" type="button">
+          <i data-lucide="rotate-ccw" width="13" height="13"></i>重置
+        </button>
+        <button class="scenario-button" id="scenario-noproject" type="button">
+          <i data-lucide="folder-x" width="13" height="13"></i>无项目态
+        </button>
+      </div>
+    </header>
+
+    <section class="stage">
+      <div class="agent-column">
+        <header class="agent-head">
+          <i data-lucide="sparkles" width="15" height="15"></i>Agent
+        </header>
+        <div class="timeline">
+          <div class="message">
+            已读取当前演示文稿。输入 <code>@</code> 可点名某一页作为本次修改目标，支持一次点多页同步修改。
+          </div>
+        </div>
+        <div class="composer-area">
+          <div class="composer-hint">
+            <i data-lucide="lightbulb" width="13" height="13"></i>
+            在行首或空格 / 换行后输入 <b>@</b>，再试试 <b>@融</b>（按标题）或 <b>@3</b>（按页码）。
+          </div>
+          <div class="page-menu" id="page-menu" role="listbox" aria-label="页面候选"></div>
+          <div class="composer">
+            <div
+              class="editor"
+              id="editor"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+              data-placeholder="输入你的想法与目标，@ 点名页面"
+              spellcheck="false"
+            ></div>
+            <div class="composer-controls">
+              <div class="control-group">
+                <button class="control-button active" type="button"><i data-lucide="wand-sparkles" width="13" height="13"></i>执行</button>
+                <button class="control-button" type="button"><i data-lucide="list-checks" width="13" height="13"></i>计划</button>
+              </div>
+              <div class="control-group">
+                <button class="control-button" type="button"><i data-lucide="blocks" width="13" height="13"></i>技能</button>
+                <button class="control-button" type="button"><i data-lucide="cpu" width="13" height="13"></i>默认模型</button>
+                <button class="send-button" type="button" aria-label="发送"><i data-lucide="send" width="15" height="15"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="side-block">
+          <div class="side-head">
+            <i data-lucide="layout-list" width="14" height="14"></i>
+            当前大纲
+            <span class="hint">改名 / 重排 → 片段实时刷新</span>
+          </div>
+          <div class="side-body" id="outline"></div>
+        </div>
+        <div class="side-block">
+          <div class="side-head">
+            <i data-lucide="braces" width="14" height="14"></i>
+            发送负载预览
+            <span class="hint">锚 slide_id</span>
+          </div>
+          <div class="side-body" id="payload"></div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    // ---- Mock 当前项目大纲（唯一事实来源，前端复用主视图内存态）----
+    // key: spec.key_message（仅 spec ready 页有值；pending 页为空）
+    const seedSlides = () => ([
+      { id: "sli_a1b2c3", title: "封面", key: "AI 驱动的下一代创作平台", spec: "ready", html: "ready" },
+      { id: "sli_d4e5f6", title: "融资历程", key: "三轮融资累计 2.4 亿，估值三年翻 6 倍", spec: "ready", html: "ready" },
+      { id: "sli_g7h8i9", title: "团队介绍", key: "核心团队来自头部大厂，平均 10 年经验", spec: "ready", html: "missing" },
+      { id: "sli_j1k2l3", title: "", key: "", spec: "pending", html: "missing" },
+      { id: "sli_m4n5o6", title: "融资历程", key: "本轮资金主要投入研发与海外扩张", spec: "ready", html: "stale" },
+      { id: "sli_p7q8r9", title: "市场分析", key: "目标市场规模 800 亿，年增速 25%", spec: "ready", html: "ready" }
+    ]);
+
+    const state = { slides: seedSlides(), noProject: false };
+
+    let activeOption = 0;
+    let currentMatches = [];
+
+    const editor = document.querySelector("#editor");
+    const pageMenu = document.querySelector("#page-menu");
+    const outlineEl = document.querySelector("#outline");
+    const payloadEl = document.querySelector("#payload");
+
+    const escapeHTML = (v) => v.replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+    })[c]);
+
+    const renderIcons = () => lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
+
+    // ---- 显示名规则（决策 4 / 5）：统一 `Page N · 标题`，空标题只显示 `Page N` ----
+    function ordinalOf(id) { return state.slides.findIndex((s) => s.id === id) + 1; }
+
+    // 返回 { text, ordinal, title }，title 为空时 text 只含 Page N
+    function displayNameByIndex(index) {
+      const slide = state.slides[index];
+      const title = slide.title.trim();
+      const ordinal = index + 1;
+      return { text: title ? `Page ${ordinal} · ${title}` : `Page ${ordinal}`, ordinal, title };
+    }
+
+    function displayNameById(id) {
+      const index = state.slides.findIndex((s) => s.id === id);
+      if (index < 0) return { text: null, kind: "dropped" };
+      return displayNameByIndex(index);
+    }
+
+    // ---- 物化状态摘要（决策 8）----
+    // 设计稿：已就绪（绿）/ 未生成（红）。幻灯片：已就绪（绿）/ 未生成（红）/ 待更新（黄）。
+    // spec 与 html 各自前置一枚状态点，两段之间以间距分隔，不再用 · 连接。
+    function stateSummary(slide) {
+      const spec = slide.spec === "ready" ? "设计稿已就绪" : "设计稿未生成";
+      const specDot = slide.spec === "ready" ? "ready" : "missing";
+      const htmlMap = { ready: "幻灯片已就绪", missing: "幻灯片未生成" };
+      const dotMap = { ready: "ready", missing: "missing" };
+      // fresh 之外的一切非缺失态（spec_stale / design_stale / frame_stale / unknown）统一收敛为「待更新」黄点
+      return {
+        spec,
+        specDot,
+        html: htmlMap[slide.html] || "幻灯片待更新",
+        htmlDot: dotMap[slide.html] || "stale"
+      };
+    }
+
+    // ---- @ 触发（决策 4 / 9）----
+    function textBeforeCaret() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount || !sel.isCollapsed || !editor.contains(sel.anchorNode)) return "";
+      const range = sel.getRangeAt(0).cloneRange();
+      range.selectNodeContents(editor);
+      range.setEnd(sel.anchorNode, sel.anchorOffset);
+      return range.toString();
+    }
+
+    function currentTrigger() {
+      if (state.noProject) return null; // 无项目态：@ 当普通字符，不触发
+      const before = textBeforeCaret();
+      const match = before.match(/(?:^|[ \n])(@)([^ \n@]*)$/);
+      if (!match) return null;
+      return { query: match[2], length: match[1].length + match[2].length };
+    }
+
+    // ---- 页码 + 标题双通道匹配（决策 4）----
+    function matchingPages(query) {
+      const all = state.slides.map((s, i) => ({ s, i }));
+      if (!query) return all.slice(0, 8);
+      const q = query.toLocaleLowerCase();
+      return all.filter(({ s, i }) => {
+        const title = s.title.trim().toLocaleLowerCase();
+        const name = displayNameByIndex(i).text.toLocaleLowerCase();
+        const ord = String(i + 1);
+        return title.includes(q) || name.includes(q) || ord === q || `page ${i + 1}`.includes(q);
+      }).slice(0, 8);
+    }
+
+    function renderPageMenu(query) {
+      currentMatches = matchingPages(query);
+      if (activeOption >= currentMatches.length) activeOption = 0;
+      const label = query ? "匹配页面" : "当前演示文稿";
+      let body;
+      if (!currentMatches.length) {
+        body = `<div class="menu-empty">没有匹配的页面</div>`;
+      } else {
+        body = currentMatches.map(({ s, i }, idx) => {
+          const title = s.title.trim();
+          const nameHTML = title
+            ? `<span class="ord">Page ${i + 1}</span><span class="sep">·</span><span class="title-text">${escapeHTML(title)}</span>`
+            : `<span class="ord">Page ${i + 1}</span>`;
+          const key = s.key && s.key.trim();
+          const descHTML = key ? `<span class="option-desc">${escapeHTML(key)}</span>` : "";
+          const st = stateSummary(s);
+          return `
+            <button class="page-option ${idx === activeOption ? "active" : ""}" type="button" role="option"
+                    aria-selected="${idx === activeOption}" data-option="${idx}">
+              <span class="option-thumb"><i data-lucide="gallery-thumbnails" width="15" height="15"></i></span>
+              <span class="option-copy">
+                <span class="option-name">${nameHTML}${descHTML}</span>
+                <span class="option-state">
+                  <span class="state-seg"><span class="state-dot ${st.specDot}"></span>${st.spec}</span>
+                  <span class="state-seg"><span class="state-dot ${st.htmlDot}"></span>${st.html}</span>
+                </span>
+              </span>
+            </button>`;
+        }).join("");
+      }
+      pageMenu.innerHTML = `<div class="menu-label">${label}</div>${body}`;
+      pageMenu.classList.add("visible");
+      renderIcons();
+    }
+
+    function updatePageMenu() {
+      const trigger = currentTrigger();
+      if (!trigger || document.activeElement !== editor) {
+        pageMenu.classList.remove("visible");
+        return;
+      }
+      renderPageMenu(trigger.query);
+    }
+
+    function pointAtTextOffset(root, targetOffset) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let remaining = targetOffset;
+      let node = walker.nextNode();
+      while (node) {
+        if (remaining <= node.data.length) return { node, offset: remaining };
+        remaining -= node.data.length;
+        node = walker.nextNode();
+      }
+      return { node: root, offset: root.childNodes.length };
+    }
+
+    // ---- 插入彩色片段（锚 slide_id，决策 4 / 6）----
+    function applyPage(entry) {
+      const trigger = currentTrigger();
+      const sel = window.getSelection();
+      if (!trigger || !sel.rangeCount) return;
+      const before = textBeforeCaret();
+      const start = pointAtTextOffset(editor, before.length - trigger.length);
+      const range = sel.getRangeAt(0).cloneRange();
+      range.setStart(start.node, start.offset);
+      range.deleteContents();
+
+      const fragment = document.createElement("span");
+      fragment.className = "page-fragment";
+      fragment.dataset.slideId = entry.s.id;
+      fragment.contentEditable = "false";
+      fragment.textContent = displayNameById(entry.s.id).text;
+
+      const space = document.createTextNode(" ");
+      range.insertNode(space);
+      range.insertNode(fragment);
+
+      const next = document.createRange();
+      next.setStart(space, 1);
+      next.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(next);
+
+      activeOption = 0;
+      pageMenu.classList.remove("visible");
+      editor.focus();
+      refreshFragments();
+      updatePayload();
+    }
+
+    // ---- 片段随大纲实时刷新（决策 4）----
+    function refreshFragments() {
+      editor.querySelectorAll(".page-fragment").forEach((el) => {
+        const name = displayNameById(el.dataset.slideId);
+        if (name.kind === "dropped") {
+          el.classList.add("dropped");
+          if (!el.dataset.original) el.dataset.original = el.textContent;
+          el.textContent = el.dataset.original;
+        } else {
+          el.classList.remove("dropped");
+          el.textContent = name.text;
+          delete el.dataset.original;
+        }
+      });
+    }
+
+    // ---- 序列化 + 负载预览（决策 3 / 6 / 8 / 10）----
+    function mentionedIds() {
+      const ids = [];
+      editor.querySelectorAll(".page-fragment").forEach((el) => {
+        if (!ids.includes(el.dataset.slideId)) ids.push(el.dataset.slideId);
+      });
+      return ids;
+    }
+
+    function serializeInstruction() {
+      let out = "";
+      editor.childNodes.forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) out += node.data;
+        else if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.dataset && node.dataset.slideId) out += `${node.textContent}⟨${node.dataset.slideId}⟩`;
+          else out += node.textContent;
+        }
+      });
+      return out.replace(/(^|[ \n])@[^ \n@]*$/, "$1").replace(/\s+$/, "");
+    }
+
+    function updatePayload() {
+      const ids = mentionedIds();
+      const valid = ids.filter((id) => state.slides.some((s) => s.id === id));
+      const dropped = ids.filter((id) => !state.slides.some((s) => s.id === id));
+
+      const instruction = serializeInstruction();
+      const instructionHTML = escapeHTML(instruction).replace(/⟨(sli_[a-z0-9]+)⟩/g, '<span class="id">⟨$1⟩</span>') || '<span class="s-muted">（空）</span>';
+
+      const idsHTML = valid.length
+        ? "[\n" + valid.map((id) => `  <span class="id">"${id}"</span>`).join(",\n") + "\n]"
+        : '<span class="s-muted">[]</span>';
+
+      let pagesHTML;
+      if (!valid.length) {
+        pagesHTML = '<span class="s-muted">// 无点名页面 → 普通 deck 级 run</span>';
+      } else {
+        pagesHTML = valid.map((id) => {
+          const idx = state.slides.findIndex((s) => s.id === id);
+          const s = state.slides[idx];
+          const title = s.title.trim() || `Page ${idx + 1}`;
+          const specCls = s.spec === "ready" ? "s-ready" : "s-warn";
+          const htmlCls = s.html === "ready" ? "s-ready" : "s-warn";
+          return `  { <span class="k">"kind"</span>: "slide", <span class="k">"slide_id"</span>: <span class="id">"${id}"</span>, <span class="k">"ordinal"</span>: ${idx + 1}, <span class="k">"title"</span>: "${escapeHTML(title)}", <span class="k">"spec_state"</span>: <span class="${specCls}">"${s.spec}"</span>, <span class="k">"html_state"</span>: <span class="${htmlCls}">"${s.html}"</span> }`;
+        }).join(",\n");
+        pagesHTML = "[\n" + pagesHTML + "\n]";
+      }
+
+      const droppedHTML = dropped.length
+        ? `<div class="dropped-note">
+             <i data-lucide="triangle-alert" width="14" height="14"></i>
+             <span>已剔除失效引用 <b>${dropped.map(escapeHTML).join("、")}</b>（页面已删除），其余照常处理并显式告知。</span>
+           </div>`
+        : "";
+
+      const noProjectNote = state.noProject
+        ? `<div class="dropped-note"><i data-lucide="info" width="14" height="14"></i><span>无项目态：<b>@</b> 不触发候选，当普通字符输入。</span></div>`
+        : "";
+
+      payloadEl.innerHTML = `
+        <div class="payload-group">
+          <div class="payload-label">instruction<span class="tag">纯文本 · title⟨slide_id⟩</span></div>
+          <div class="code">${instructionHTML}</div>
+        </div>
+        <div class="payload-group">
+          <div class="payload-label">mentioned_slide_ids<span class="tag">string[]</span></div>
+          <div class="code">${idsHTML}</div>
+        </div>
+        <div class="payload-group">
+          <div class="payload-label">&lt;mentioned_pages&gt;<span class="tag">仅指针 + 状态</span></div>
+          <div class="code">${pagesHTML}</div>
+        </div>
+        ${droppedHTML}
+        ${noProjectNote}`;
+      renderIcons();
+      renderOutline();
+    }
+
+    // ---- 大纲面板（可改名 / 重排 / 删除，驱动实时刷新）----
+    function renderOutline() {
+      if (state.noProject) {
+        outlineEl.innerHTML = `<div class="outline-empty"><i data-lucide="folder-x" width="22" height="22"></i>当前没有打开的项目<br>没有可引用的页面</div>`;
+        renderIcons();
+        return;
+      }
+      const mentioned = new Set(mentionedIds());
+      outlineEl.innerHTML = state.slides.map((s, i) => {
+        const st = stateSummary(s);
+        const emptyTitle = !s.title.trim();
+        return `
+          <div class="outline-item ${mentioned.has(s.id) ? "mentioned" : ""}" data-slide="${s.id}">
+            <span class="outline-ord">${i + 1}</span>
+            <span class="outline-main">
+              <span class="outline-title ${emptyTitle ? "empty" : ""}" contenteditable="true"
+                    spellcheck="false" data-placeholder="Page ${i + 1}">${escapeHTML(s.title)}</span>
+              <span class="outline-meta">
+                <span class="outline-id">${s.id}</span>
+                <span class="state-seg"><span class="state-dot ${st.specDot}"></span>${st.spec}</span>
+                <span class="state-seg"><span class="state-dot ${st.htmlDot}"></span>${st.html}</span>
+              </span>
+            </span>
+            <span class="outline-ops">
+              <button class="mini-button" data-move="up" title="上移" ${i === 0 ? "disabled" : ""}><i data-lucide="chevron-up" width="14" height="14"></i></button>
+              <button class="mini-button" data-move="down" title="下移" ${i === state.slides.length - 1 ? "disabled" : ""}><i data-lucide="chevron-down" width="14" height="14"></i></button>
+              <button class="mini-button danger" data-remove="1" title="删除页面"><i data-lucide="trash-2" width="13" height="13"></i></button>
+            </span>
+          </div>`;
+      }).join("");
+      renderIcons();
+    }
+
+    // ---- 事件 ----
+    editor.addEventListener("focus", updatePageMenu);
+    editor.addEventListener("input", () => { updatePageMenu(); updatePayload(); });
+    editor.addEventListener("keyup", (e) => {
+      if (!["ArrowUp", "ArrowDown", "Enter", "Escape"].includes(e.key)) updatePageMenu();
+    });
+    editor.addEventListener("paste", (e) => {
+      e.preventDefault();
+      document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
+    });
+    editor.addEventListener("keydown", (e) => {
+      if (!pageMenu.classList.contains("visible")) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const dir = e.key === "ArrowDown" ? 1 : -1;
+        activeOption = (activeOption + dir + currentMatches.length) % currentMatches.length;
+        const trigger = currentTrigger();
+        if (trigger) renderPageMenu(trigger.query);
+      } else if (e.key === "Enter" && !(e.metaKey || e.ctrlKey) && currentMatches[activeOption]) {
+        e.preventDefault();
+        applyPage(currentMatches[activeOption]);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        pageMenu.classList.remove("visible");
+      }
+    });
+
+    pageMenu.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const option = e.target.closest("[data-option]");
+      if (option) applyPage(currentMatches[Number(option.dataset.option)]);
+    });
+
+    // 大纲：改名（实时刷新片段 + 负载）
+    outlineEl.addEventListener("input", (e) => {
+      const titleEl = e.target.closest(".outline-title");
+      if (!titleEl) return;
+      const id = e.target.closest("[data-slide]").dataset.slide;
+      const slide = state.slides.find((s) => s.id === id);
+      slide.title = titleEl.textContent;
+      titleEl.classList.toggle("empty", !slide.title.trim());
+      refreshFragments();
+      updatePayloadKeepOutlineFocus();
+    });
+
+    // 改名时不整体重渲染大纲，避免丢失输入焦点
+    function updatePayloadKeepOutlineFocus() {
+      const active = document.activeElement;
+      const isOutlineTitle = active && active.classList && active.classList.contains("outline-title");
+      const ids = mentionedIds();
+      const valid = ids.filter((id) => state.slides.some((s) => s.id === id));
+      // 只更新负载区，不动大纲 DOM
+      const savedOutline = isOutlineTitle;
+      renderPayloadOnly(ids, valid);
+      // 同步大纲高亮
+      document.querySelectorAll(".outline-item").forEach((item) => {
+        item.classList.toggle("mentioned", valid.includes(item.dataset.slide));
+        const metaId = item.dataset.slide;
+        const slide = state.slides.find((s) => s.id === metaId);
+        const meta = item.querySelector(".outline-meta");
+        const st = stateSummary(slide);
+        if (meta) meta.innerHTML = `<span class="outline-id">${slide.id}</span>` +
+          `<span class="state-seg"><span class="state-dot ${st.specDot}"></span>${st.spec}</span>` +
+          `<span class="state-seg"><span class="state-dot ${st.htmlDot}"></span>${st.html}</span>`;
+      });
+      if (savedOutline) active.focus();
+    }
+
+    function renderPayloadOnly(ids, valid) {
+      const dropped = ids.filter((id) => !state.slides.some((s) => s.id === id));
+      const instruction = serializeInstruction();
+      const instructionHTML = escapeHTML(instruction).replace(/⟨(sli_[a-z0-9]+)⟩/g, '<span class="id">⟨$1⟩</span>') || '<span class="s-muted">（空）</span>';
+      const idsHTML = valid.length ? "[\n" + valid.map((id) => `  <span class="id">"${id}"</span>`).join(",\n") + "\n]" : '<span class="s-muted">[]</span>';
+      let pagesHTML;
+      if (!valid.length) pagesHTML = '<span class="s-muted">// 无点名页面 → 普通 deck 级 run</span>';
+      else {
+        pagesHTML = "[\n" + valid.map((id) => {
+          const idx = state.slides.findIndex((s) => s.id === id);
+          const s = state.slides[idx];
+          const title = s.title.trim() || `Page ${idx + 1}`;
+          const specCls = s.spec === "ready" ? "s-ready" : "s-warn";
+          const htmlCls = s.html === "ready" ? "s-ready" : "s-warn";
+          return `  { <span class="k">"kind"</span>: "slide", <span class="k">"slide_id"</span>: <span class="id">"${id}"</span>, <span class="k">"ordinal"</span>: ${idx + 1}, <span class="k">"title"</span>: "${escapeHTML(title)}", <span class="k">"spec_state"</span>: <span class="${specCls}">"${s.spec}"</span>, <span class="k">"html_state"</span>: <span class="${htmlCls}">"${s.html}"</span> }`;
+        }).join(",\n") + "\n]";
+      }
+      const droppedHTML = dropped.length ? `<div class="dropped-note"><i data-lucide="triangle-alert" width="14" height="14"></i><span>已剔除失效引用 <b>${dropped.map(escapeHTML).join("、")}</b>（页面已删除），其余照常处理并显式告知。</span></div>` : "";
+      payloadEl.innerHTML = `
+        <div class="payload-group"><div class="payload-label">instruction<span class="tag">纯文本 · title⟨slide_id⟩</span></div><div class="code">${instructionHTML}</div></div>
+        <div class="payload-group"><div class="payload-label">mentioned_slide_ids<span class="tag">string[]</span></div><div class="code">${idsHTML}</div></div>
+        <div class="payload-group"><div class="payload-label">&lt;mentioned_pages&gt;<span class="tag">仅指针 + 状态</span></div><div class="code">${pagesHTML}</div></div>
+        ${droppedHTML}`;
+      renderIcons();
+    }
+
+    // 大纲：重排 / 删除
+    outlineEl.addEventListener("click", (e) => {
+      const moveBtn = e.target.closest("[data-move]");
+      const removeBtn = e.target.closest("[data-remove]");
+      const host = e.target.closest("[data-slide]");
+      if (!host) return;
+      const id = host.dataset.slide;
+      const index = state.slides.findIndex((s) => s.id === id);
+      if (moveBtn) {
+        const target = moveBtn.dataset.move === "up" ? index - 1 : index + 1;
+        if (target < 0 || target >= state.slides.length) return;
+        [state.slides[index], state.slides[target]] = [state.slides[target], state.slides[index]];
+      } else if (removeBtn) {
+        state.slides.splice(index, 1);
+      } else {
+        return;
+      }
+      refreshFragments();
+      updatePayload();
+    });
+
+    // 场景切换
+    document.querySelector("#scenario-reset").addEventListener("click", () => {
+      state.slides = seedSlides();
+      state.noProject = false;
+      document.querySelector("#scenario-noproject").classList.remove("active");
+      seedEditor();
+      updatePayload();
+    });
+
+    document.querySelector("#scenario-noproject").addEventListener("click", (e) => {
+      state.noProject = !state.noProject;
+      e.currentTarget.classList.toggle("active", state.noProject);
+      pageMenu.classList.remove("visible");
+      refreshFragments();
+      updatePayload();
+    });
+
+    // ---- 初始化：预置一句含两个 @ 片段的指令 ----
+    function makeFragment(id) {
+      const el = document.createElement("span");
+      el.className = "page-fragment";
+      el.dataset.slideId = id;
+      el.contentEditable = "false";
+      el.textContent = displayNameById(id).text;
+      return el;
+    }
+
+    function seedEditor() {
+      editor.innerHTML = "";
+      editor.append(document.createTextNode("把 "));
+      editor.append(makeFragment("sli_d4e5f6"));
+      editor.append(document.createTextNode(" 和 "));
+      editor.append(makeFragment("sli_g7h8i9"));
+      editor.append(document.createTextNode(" 的图表配色统一成主色。"));
+      refreshFragments();
+    }
+
+    seedEditor();
+    renderOutline();
+    updatePayload();
+    renderIcons();
+  </script>
+</body>
+</html>
