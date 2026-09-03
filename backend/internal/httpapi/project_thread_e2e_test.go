@@ -57,7 +57,8 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	engine := run.NewEngine(st, run.NewLockManager(), nil, zap.NewNop())
+	locks := run.NewLockManager()
+	engine := run.NewEngine(st, locks, nil, zap.NewNop())
 	runSvc := service.NewRunServiceWithExecutionFactoryAndRegistry(st, engine, factory, registry)
 	projectSvc := service.NewProjectService(st, service.WorkRoot(root))
 	themes := service.NewThemeService(service.WorkRoot(root))
@@ -67,6 +68,13 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	var polishHandler *httpapi.PolishHandler
 	if registry != nil {
 		polishHandler = httpapi.NewPolishHandler(service.NewPolishService(st, registry))
+	}
+	var briefingHandler *httpapi.BriefingHandler
+	if registry != nil {
+		briefingHandler = httpapi.NewBriefingHandler(
+			service.NewKickoffService(st, registry, locks),
+			service.NewHandoffService(st, registry, locks),
+		)
 	}
 	router := httpapi.NewRouter(
 		cfg,
@@ -84,6 +92,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 			return httpapi.NewLLMHandler(registry)
 		}(),
 		polishHandler,
+		briefingHandler,
 		nil,
 		nil,
 	)

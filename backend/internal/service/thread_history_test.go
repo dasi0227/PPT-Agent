@@ -102,6 +102,75 @@ func TestHistoryEmptyFileReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestHistoryMergesBriefingGroupWithoutWritingJSONL(t *testing.T) {
+	ctx := context.Background()
+	work := t.TempDir()
+	workDir := filepath.Join(work, "p1")
+	if err := os.MkdirAll(filepath.Join(workDir, "threads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	historyPath := filepath.Join(workDir, "threads/t1.jsonl")
+	initial := strings.Join([]string{
+		`{"seq":1,"ts":100,"run_id":"r1","turn":"user","type":"user_turn","data":{"text":"first"}}`,
+		`{"seq":1,"ts":300,"run_id":"r2","turn":"user","type":"user_turn","data":{"text":"second"}}`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(historyPath, []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(work, "t.db")}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	st, err := sqlitestore.NewStore(db, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateProject(ctx, model.Project{
+		ID: "p1", WorkDir: workDir, Title: "t", Theme: "d",
+		Status: "ready", CreatedAt: 1, UpdatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateThread(ctx, model.Thread{
+		ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl",
+		Status: "active", CreatedAt: 1, UpdatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for versionNo, content := range []string{"v1", "v2"} {
+		if err := st.AppendBriefingVersion(ctx, model.BriefingVersion{
+			BriefingID: "b1", ThreadID: "t1", ProjectID: "p1",
+			Kind: model.BriefingHandoff, VersionNo: versionNo + 1,
+			Content: content, CreatedAt: int64(199 + versionNo),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := service.NewThreadService(st).History(ctx, "t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 3 || out[1]["type"] != "briefing" {
+		t.Fatalf("briefing was not merged by timestamp: %+v", out)
+	}
+	data, ok := out[1]["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("briefing data missing: %+v", out[1])
+	}
+	versions, ok := data["versions"].([]model.BriefingVersion)
+	if !ok || len(versions) != 2 {
+		t.Fatalf("briefing versions missing: %+v", data)
+	}
+	after, err := os.ReadFile(historyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != initial || strings.Contains(string(after), "briefing") {
+		t.Fatalf("History wrote briefing into jsonl: %s", after)
+	}
+}
+
 func getFloat(m map[string]any, k string) float64 {
 	if v, ok := m[k].(float64); ok {
 		return v

@@ -21,16 +21,17 @@ type Router struct {
 	repository *RepositoryHandler
 	llm        *LLMHandler
 	polish     *PolishHandler
+	briefing   *BriefingHandler
 	gitCommit  *GitCommitHandler
 	prompt     *PromptHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, gitCommitH *GitCommitHandler, promptH *PromptHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, promptH *PromptHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, gitCommit: gitCommitH, prompt: promptH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, prompt: promptH}
 	r.register()
 	return r
 }
@@ -72,6 +73,10 @@ func (r *Router) register() {
 	v1.DELETE("/projects/:id", r.project.Delete)
 	if r.polish != nil {
 		v1.POST("/projects/:id/polish", r.polish.Polish)
+	}
+	if r.briefing != nil {
+		v1.POST("/projects/:id/kickoff", r.briefing.Kickoff)
+		v1.POST("/projects/:id/handoff", r.briefing.Handoff)
 	}
 	v1.GET("/projects/:id/content", r.project.Content)
 	v1.POST("/projects/:id/mutations", r.project.Mutate)

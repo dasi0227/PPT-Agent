@@ -185,6 +185,22 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 			out[insertAt] = entry
 		}
 	}
+	briefings, briefingErr := svc.store.ListThreadBriefings(ctx, id)
+	if briefingErr == nil {
+		for _, briefing := range briefings {
+			entry := briefingHistoryEntry(briefing)
+			insertAt := len(out)
+			for index, existing := range out {
+				if historyTimestamp(existing) > briefing.UpdatedAt {
+					insertAt = index
+					break
+				}
+			}
+			out = append(out, nil)
+			copy(out[insertAt+1:], out[insertAt:])
+			out[insertAt] = entry
+		}
+	}
 	runOrder := map[string]int{}
 	for _, entry := range out {
 		runID := fmt.Sprint(entry["run_id"])
@@ -228,6 +244,21 @@ func gitCommitHistoryEntry(operation model.GitCommitOperation) map[string]any {
 	return map[string]any{
 		"seq": 1, "ts": operation.UpdatedAt, "run_id": operation.ID,
 		"turn": "agent", "type": entryType, "data": base,
+	}
+}
+
+func briefingHistoryEntry(briefing model.Briefing) map[string]any {
+	return map[string]any{
+		"seq": 1, "ts": briefing.UpdatedAt, "run_id": briefing.BriefingID,
+		"turn": "agent", "type": "briefing",
+		"data": map[string]any{
+			"briefing_id": briefing.BriefingID,
+			"project_id":  briefing.ProjectID,
+			"thread_id":   briefing.ThreadID,
+			"kind":        briefing.Kind,
+			"versions":    briefing.Versions,
+			"updated_at":  briefing.UpdatedAt,
+		},
 	}
 }
 

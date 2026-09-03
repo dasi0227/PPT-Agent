@@ -78,6 +78,9 @@ func initApp() (*App, func(), error) {
 	llmHandler := httpapi.NewLLMHandler(registry)
 	polishService := service.NewPolishService(store, registry)
 	polishHandler := httpapi.NewPolishHandler(polishService)
+	kickoffService := service.NewKickoffService(store, registry, lockManager)
+	handoffService := service.NewHandoffService(store, registry, lockManager)
+	briefingHandler := httpapi.NewBriefingHandler(kickoffService, handoffService)
 	gitCommitService, err := provideGitCommitService(store, registry, lockManager)
 	if err != nil {
 		cleanup3()
@@ -94,7 +97,7 @@ func initApp() (*App, func(), error) {
 		return nil, nil, err
 	}
 	promptHandler := httpapi.NewPromptHandler(promptService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, gitCommitHandler, promptHandler)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	app := provideApp(server, engine, zapLogger)
@@ -113,11 +116,11 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideWorkRoot,
 	provideEngine,
 	provideHistoryWriter,
-	provideRenderWorker, service.NewHealthService, provideProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, provideGitCommitService,
+	provideRenderWorker, service.NewHealthService, provideProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
 	provideSlideService, service.NewPPTMutationService, provideThemeService,
 	provideComponentService,
 	provideSkillService,
-	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
+	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideApp,
 )
