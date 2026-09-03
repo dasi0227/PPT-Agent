@@ -22,7 +22,7 @@ export interface PromptTrigger {
 
 export type ComponentTrigger = PromptTrigger;
 export type PageTrigger = PromptTrigger;
-export type SlashTrigger = PromptTrigger;
+export type SummaryTrigger = PromptTrigger;
 
 export interface PageMentionCandidate {
   slideId: string;
@@ -36,7 +36,7 @@ export interface PageMentionCandidate {
 export function findPromptTrigger(text: string, caret: number): PromptTrigger | null {
   if (caret < 0 || caret > text.length) return null;
   const before = text.slice(0, caret);
-  const match = before.match(/(?:^|[ \n])([$¥])([^ \n$¥]*)$/);
+  const match = before.match(/(?:^|[ \n])([%％])([^ \n%％]*)$/);
   if (!match) return null;
   return {
     start: caret - match[1].length - match[2].length,
@@ -48,7 +48,7 @@ export function findPromptTrigger(text: string, caret: number): PromptTrigger | 
 export function findComponentTrigger(text: string, caret: number): ComponentTrigger | null {
   if (caret < 0 || caret > text.length) return null;
   const before = text.slice(0, caret);
-  const match = before.match(/(?:^|[ \n])(#)([^ \n#]*)$/);
+  const match = before.match(/(?:^|[ \n])([¥$])([^ \n¥$]*)$/);
   if (!match) return null;
   return {
     start: caret - match[1].length - match[2].length,
@@ -60,7 +60,7 @@ export function findComponentTrigger(text: string, caret: number): ComponentTrig
 export function findPageTrigger(text: string, caret: number): PageTrigger | null {
   if (caret < 0 || caret > text.length) return null;
   const before = text.slice(0, caret);
-  const match = before.match(/(?:^|[ \n])(@)([^ \n@]*)$/);
+  const match = before.match(/(?:^|[ \n])(#)([^ \n#]*)$/);
   if (!match) return null;
   return {
     start: caret - match[1].length - match[2].length,
@@ -69,10 +69,10 @@ export function findPageTrigger(text: string, caret: number): PageTrigger | null
   };
 }
 
-export function findSlashTrigger(text: string, caret: number): SlashTrigger | null {
+export function findSummaryTrigger(text: string, caret: number): SummaryTrigger | null {
   if (caret < 0 || caret > text.length) return null;
   const before = text.slice(0, caret);
-  const match = before.match(/(?:^|[ \n])(\/)([^ \n/]*)$/);
+  const match = before.match(/(?:^|[ \n])(@)([^ \n@]*)$/);
   if (!match) return null;
   return {
     start: caret - match[1].length - match[2].length,

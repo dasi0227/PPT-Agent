@@ -133,26 +133,6 @@ function resolveControlsDensity(
   return current;
 }
 
-function applyShortcut(raw: string, request: CreateRunRequest): CreateRunRequest {
-  if (!raw.startsWith('/')) return request;
-  const [command, ...rest] = raw.split(/\s+/);
-  const instruction = rest.join(' ').trim() || raw;
-  switch (command) {
-    case '/talk':
-      return { ...request, instruction, mode: 'talk' };
-    case '/ask':
-      return { ...request, instruction, mode: 'ask' };
-    case '/plan':
-      return { ...request, instruction, mode: 'plan' };
-    case '/overview':
-      return { ...request, instruction, scope: { artifact: 'ppt', level: 'deck' } };
-    case '/current':
-      return { ...request, instruction, scope: { ...request.scope, level: 'slide' } };
-    default:
-      return request;
-  }
-}
-
 export const CommandComposer: React.FC = () => {
   const [text, setText] = useState('');
   const [submitError, setSubmitError] = useState('');
@@ -372,7 +352,6 @@ export const CommandComposer: React.FC = () => {
       ...(componentNames.length > 0 ? { component_names: componentNames } : {}),
       ...(mentionedSlideIds.length > 0 ? { mentioned_slide_ids: mentionedSlideIds } : {}),
     };
-    request = applyShortcut(raw, request);
     if (request.scope.level === 'slide' && !request.scope.slide_id) {
       request.scope = { artifact: request.scope.artifact, level: 'deck' };
     }

@@ -18,7 +18,7 @@ import {
   findComponentTrigger,
   findPageTrigger,
   findPromptTrigger,
-  findSlashTrigger,
+  findSummaryTrigger,
   MAX_COMPONENT_MENTIONS,
   MAX_PAGE_MENTIONS,
   matchComponents,
@@ -41,9 +41,9 @@ export interface PromptComposerEditorHandle {
   restoreSelection: (range: Range | null) => void;
 }
 
-type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' | 'page' | 'slash' };
+type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' | 'page' | 'summary' };
 
-const SLASH_COLUMNS = [
+const SUMMARY_COLUMNS = [
   { kind: 'page' as const, label: '页面' },
   { kind: 'component' as const, label: '组件' },
   { kind: 'prompt' as const, label: '提示词' },
@@ -192,8 +192,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const dismissedRef = useRef('');
     const [trigger, setTrigger] = useState<ComposerTrigger | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
-    const [slashCol, setSlashCol] = useState(0);
-    const [slashRow, setSlashRow] = useState(0);
+    const [summaryCol, setSummaryCol] = useState(0);
+    const [summaryRow, setSummaryRow] = useState(0);
     const prompts = usePromptStore((state) => state.prompts);
     const version = usePromptStore((state) => state.version);
     const loadPrompts = usePromptStore((state) => state.load);
@@ -204,13 +204,13 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const pageSignature = pages.map((page) => (
       `${page.slideId}:${page.ordinal}:${page.title}:${page.specState}:${page.htmlState}`
     )).join('|');
-    const isSlash = trigger?.kind === 'slash';
-    const promptCandidates = trigger && (trigger.kind === 'prompt' || isSlash) ? matchPrompts(prompts, trigger.query) : [];
-    const componentCandidates = trigger && (trigger.kind === 'component' || isSlash) ? matchComponents(components, trigger.query) : [];
-    const pageCandidates = trigger && (trigger.kind === 'page' || isSlash) ? matchPages(pages, trigger.query) : [];
+    const isSummary = trigger?.kind === 'summary';
+    const promptCandidates = trigger && (trigger.kind === 'prompt' || isSummary) ? matchPrompts(prompts, trigger.query) : [];
+    const componentCandidates = trigger && (trigger.kind === 'component' || isSummary) ? matchComponents(components, trigger.query) : [];
+    const pageCandidates = trigger && (trigger.kind === 'page' || isSummary) ? matchPages(pages, trigger.query) : [];
     // 汇总面板三列（页面 · 组件 · 提示词），列内候选沿用各自匹配规则
-    const slashColumns = [pageCandidates, componentCandidates, promptCandidates];
-    const clampSlashRow = (length: number) => (length ? Math.max(0, Math.min(slashRow, length - 1)) : -1);
+    const summaryColumns = [pageCandidates, componentCandidates, promptCandidates];
+    const clampSummaryRow = (length: number) => (length ? Math.max(0, Math.min(summaryRow, length - 1)) : -1);
     const candidateCount = trigger?.kind === 'component'
       ? componentCandidates.length
       : trigger?.kind === 'page'
@@ -237,15 +237,15 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       const promptTrigger = findPromptTrigger(text, offset);
       const componentTrigger = findComponentTrigger(text, offset);
       const pageTrigger = findPageTrigger(text, offset);
-      const slashTrigger = findSlashTrigger(text, offset);
+      const summaryTrigger = findSummaryTrigger(text, offset);
       const next: ComposerTrigger | null = promptTrigger
         ? { ...promptTrigger, kind: 'prompt' }
         : componentTrigger
           ? { ...componentTrigger, kind: 'component' }
           : pageTrigger
             ? { ...pageTrigger, kind: 'page' }
-            : slashTrigger
-              ? { ...slashTrigger, kind: 'slash' }
+            : summaryTrigger
+              ? { ...summaryTrigger, kind: 'summary' }
               : null;
       const signature = next ? `${next.kind}:${next.start}:${next.end}:${next.query}` : '';
       if (!next || dismissedRef.current === signature) {
@@ -254,15 +254,15 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       }
       setActiveIndex(0);
       // 首次进入汇总面板：高亮第一个非空列的首项
-      if (next.kind === 'slash' && trigger?.kind !== 'slash') {
+      if (next.kind === 'summary' && trigger?.kind !== 'summary') {
         const cols = [
           matchPages(pages, next.query).length,
           matchComponents(components, next.query).length,
           matchPrompts(prompts, next.query).length,
         ];
         const firstNonEmpty = cols.findIndex((length) => length > 0);
-        setSlashCol(firstNonEmpty < 0 ? 0 : firstNonEmpty);
-        setSlashRow(0);
+        setSummaryCol(firstNonEmpty < 0 ? 0 : firstNonEmpty);
+        setSummaryRow(0);
       }
       setTrigger(next);
     }, [components, disabled, pages, prompts, readOnly, trigger]);
@@ -363,14 +363,14 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     }, [onChange, pageSignature, pagesById]);
 
     useEffect(() => {
-      if (isSlash) {
-        menuRef.current?.querySelector<HTMLElement>(`[data-slash-cell="${slashCol}:${clampSlashRow(slashColumns[slashCol].length)}"]`)
+      if (isSummary) {
+        menuRef.current?.querySelector<HTMLElement>(`[data-summary-cell="${summaryCol}:${clampSummaryRow(summaryColumns[summaryCol].length)}"]`)
           ?.scrollIntoView({ block: 'nearest' });
         return;
       }
       menuRef.current?.querySelector<HTMLElement>(`[data-candidate-index="${activeIndex}"]`)
         ?.scrollIntoView({ block: 'nearest' });
-    }, [activeIndex, isSlash, slashCol, slashRow, slashColumns]);
+    }, [activeIndex, isSummary, summaryCol, summaryRow, summaryColumns]);
 
     const syncValue = () => {
       const editor = editorRef.current;
@@ -411,7 +411,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const applyComponent = (component: ComponentReference) => {
       const editor = editorRef.current;
-      if (!editor || !trigger || (trigger.kind !== 'component' && trigger.kind !== 'slash')) return;
+      if (!editor || !trigger || (trigger.kind !== 'component' && trigger.kind !== 'summary')) return;
       const start = pointAtOffset(editor, trigger.start);
       const end = pointAtOffset(editor, trigger.end);
       const range = document.createRange();
@@ -440,7 +440,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const applyPage = (page: PageMentionCandidate) => {
       const editor = editorRef.current;
-      if (!editor || !trigger || (trigger.kind !== 'page' && trigger.kind !== 'slash')) return;
+      if (!editor || !trigger || (trigger.kind !== 'page' && trigger.kind !== 'summary')) return;
       const start = pointAtOffset(editor, trigger.start);
       const end = pointAtOffset(editor, trigger.end);
       const range = document.createRange();
@@ -469,11 +469,11 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     };
 
     // 汇总面板选中：按当前列分派到对应的插入逻辑
-    const applySlashActive = () => {
-      const column = slashColumns[slashCol];
-      const row = clampSlashRow(column.length);
+    const applySummaryActive = () => {
+      const column = summaryColumns[summaryCol];
+      const row = clampSummaryRow(column.length);
       if (row < 0) return; // 空列：Enter 无效
-      const kind = SLASH_COLUMNS[slashCol].kind;
+      const kind = SUMMARY_COLUMNS[summaryCol].kind;
       if (kind === 'page') applyPage(column[row] as PageMentionCandidate);
       else if (kind === 'component') applyComponent(column[row] as ComponentReference);
       else applyPrompt(column[row] as Prompt);
@@ -487,31 +487,31 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const handleEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
       if (trigger && !event.nativeEvent.isComposing && !composingRef.current) {
-        if (trigger.kind === 'slash') {
+        if (trigger.kind === 'summary') {
           if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
             event.preventDefault();
             const direction = event.key === 'ArrowRight' ? 1 : -1;
-            setSlashCol((current) => (current + direction + 3) % 3); // 跨列环绕；空列也可落位
+            setSummaryCol((current) => (current + direction + 3) % 3); // 跨列环绕；空列也可落位
             return;
           }
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
-            const length = slashColumns[slashCol].length;
+            const length = summaryColumns[summaryCol].length;
             if (length > 0) {
               const direction = event.key === 'ArrowDown' ? 1 : -1;
-              const current = clampSlashRow(length);
-              setSlashRow((current + direction + length) % length); // 列内环绕
+              const current = clampSummaryRow(length);
+              setSummaryRow((current + direction + length) % length); // 列内环绕
             }
             return;
           }
           if (event.key === 'Enter' && !(event.metaKey || event.ctrlKey)) {
-            const column = slashColumns[slashCol];
-            if (clampSlashRow(column.length) < 0) {
+            const column = summaryColumns[summaryCol];
+            if (clampSummaryRow(column.length) < 0) {
               onKeyDown(event);
               return;
             }
             event.preventDefault();
-            applySlashActive();
+            applySummaryActive();
             return;
           }
           if (event.key === 'Escape') {
@@ -562,8 +562,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       requestAnimationFrame(updateTrigger);
     };
 
-    const slashCellData = (colIndex: number, item: PageMentionCandidate | ComponentReference | Prompt) => {
-      const kind = SLASH_COLUMNS[colIndex].kind;
+    const summaryCellData = (colIndex: number, item: PageMentionCandidate | ComponentReference | Prompt) => {
+      const kind = SUMMARY_COLUMNS[colIndex].kind;
       if (kind === 'page') {
         const page = item as PageMentionCandidate;
         return { key: page.slideId, name: pageDisplayName(page), desc: page.keyMessage.trim() };
@@ -576,8 +576,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       return { key: prompt.id, name: prompt.name, desc: prompt.desc };
     };
 
-    const slashColumnEmptyText = (colIndex: number) => {
-      const kind = SLASH_COLUMNS[colIndex].kind;
+    const summaryColumnEmptyText = (colIndex: number) => {
+      const kind = SUMMARY_COLUMNS[colIndex].kind;
       const configured = kind === 'component'
         ? components.some((component) => !component.disabled)
         : kind === 'page'
@@ -587,25 +587,25 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       return kind === 'component' ? '没有匹配的组件' : kind === 'page' ? '没有匹配的页面' : '没有匹配的提示词';
     };
 
-    const SlashColumnIcon = ({ colIndex }: { colIndex: number }) => {
-      const kind = SLASH_COLUMNS[colIndex].kind;
+    const SummaryColumnIcon = ({ colIndex }: { colIndex: number }) => {
+      const kind = SUMMARY_COLUMNS[colIndex].kind;
       const Icon = kind === 'page' ? GalleryThumbnails : kind === 'component' ? Blocks : NotebookText;
       return <Icon className="h-[15px] w-[15px]" strokeWidth={1.75} />;
     };
 
     return (
       <>
-        {trigger && trigger.kind === 'slash' && (
+        {trigger && trigger.kind === 'summary' && (
           <div
             ref={menuRef}
             className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 grid grid-cols-3 overflow-hidden rounded-lg border border-border-strong bg-surface shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="grid"
             aria-label="汇总检索候选"
           >
-            {SLASH_COLUMNS.map((column, colIndex) => {
-              const items = slashColumns[colIndex];
-              const active = colIndex === slashCol;
-              const activeRow = active ? clampSlashRow(items.length) : -1;
+            {SUMMARY_COLUMNS.map((column, colIndex) => {
+              const items = summaryColumns[colIndex];
+              const active = colIndex === summaryCol;
+              const activeRow = active ? clampSummaryRow(items.length) : -1;
               return (
                 <div
                   key={column.kind}
@@ -615,7 +615,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   <div className={`flex shrink-0 items-center gap-1.5 border-b px-2.5 pb-1.5 pt-2 text-[11px] font-semibold ${
                     active ? 'border-accent/30 bg-accent/[0.04] text-accent' : 'border-panel-muted text-text-400'
                   }`}>
-                    <SlashColumnIcon colIndex={colIndex} />
+                    <SummaryColumnIcon colIndex={colIndex} />
                     {column.label}
                     <span className={`ml-auto min-w-[18px] rounded-full px-1.5 text-center font-mono text-[10.5px] ${
                       active ? 'bg-accent-soft text-accent' : 'bg-panel-muted text-text-600'
@@ -626,19 +626,19 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto p-1">
                     {items.length === 0 ? (
                       <div className="grid h-full place-items-center px-2 text-center text-[11.5px] leading-6 text-text-400">
-                        {slashColumnEmptyText(colIndex)}
+                        {summaryColumnEmptyText(colIndex)}
                       </div>
                     ) : items.map((item, rowIndex) => {
-                      const cell = slashCellData(colIndex, item);
-                      const isActiveCell = colIndex === slashCol && rowIndex === activeRow;
+                      const cell = summaryCellData(colIndex, item);
+                      const isActiveCell = colIndex === summaryCol && rowIndex === activeRow;
                       return (
                         <button
                           key={cell.key}
                           type="button"
                           role="gridcell"
                           aria-selected={isActiveCell}
-                          data-slash-cell={`${colIndex}:${rowIndex}`}
-                          onMouseEnter={() => { setSlashCol(colIndex); setSlashRow(rowIndex); }}
+                          data-summary-cell={`${colIndex}:${rowIndex}`}
+                          onMouseEnter={() => { setSummaryCol(colIndex); setSummaryRow(rowIndex); }}
                           onMouseDown={(event) => {
                             event.preventDefault();
                             if (column.kind === 'page') applyPage(item as PageMentionCandidate);
@@ -650,7 +650,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                           }`}
                         >
                           <span className="grid h-6 w-5 place-items-center text-accent" aria-hidden="true">
-                            <SlashColumnIcon colIndex={colIndex} />
+                            <SummaryColumnIcon colIndex={colIndex} />
                           </span>
                           <span className="flex min-w-0 flex-col gap-0.5">
                             <span className="min-w-0 truncate text-xs font-bold text-text-900">{cell.name}</span>
@@ -669,7 +669,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             })}
           </div>
         )}
-        {trigger && trigger.kind !== 'slash' && (
+        {trigger && trigger.kind !== 'summary' && (
           <div
             ref={menuRef}
             className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"

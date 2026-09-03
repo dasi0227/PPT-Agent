@@ -4,7 +4,7 @@ import {
   findComponentTrigger,
   findPageTrigger,
   findPromptTrigger,
-  findSlashTrigger,
+  findSummaryTrigger,
   matchComponents,
   matchPages,
   matchPrompts,
@@ -21,11 +21,12 @@ const prompts: Prompt[] = [
 
 describe('prompt matching', () => {
   it('detects triggers only at the start, after ASCII space, or after a newline', () => {
-    expect(findPromptTrigger('$sum', 4)).toEqual({ start: 0, end: 4, query: 'sum' });
-    expect(findPromptTrigger('正文 ¥摘要', 6)).toEqual({ start: 3, end: 6, query: '摘要' });
-    expect(findPromptTrigger('正文\n$draft', 9)).toEqual({ start: 3, end: 9, query: 'draft' });
-    expect(findPromptTrigger('price$20', 8)).toBeNull();
-    expect(findPromptTrigger('中文，$摘要', 6)).toBeNull();
+    expect(findPromptTrigger('%sum', 4)).toEqual({ start: 0, end: 4, query: 'sum' });
+    expect(findPromptTrigger('正文 ％摘要', 6)).toEqual({ start: 3, end: 6, query: '摘要' });
+    expect(findPromptTrigger('正文\n%draft', 9)).toEqual({ start: 3, end: 9, query: 'draft' });
+    expect(findPromptTrigger('rate%20', 7)).toBeNull();
+    expect(findPromptTrigger('中文，%摘要', 6)).toBeNull();
+    expect(findPromptTrigger('%%摘要', 4)).toBeNull();
   });
 
   it('matches non-prefix content and preserves field priority', () => {
@@ -52,14 +53,14 @@ describe('component matching', () => {
     { id: 'disabled-card', name: '禁用卡片', description: '不可用', tags: ['card'], disabled: true, open_url: '' },
   ];
 
-  it('detects # only at the start, after an ASCII space, or after a newline', () => {
-    expect(findComponentTrigger('#能力', 3)).toEqual({ start: 0, end: 3, query: '能力' });
-    expect(findComponentTrigger('参考 #card', 8)).toEqual({ start: 3, end: 8, query: 'card' });
-    expect(findComponentTrigger('正文\n#趋势', 6)).toEqual({ start: 3, end: 6, query: '趋势' });
-    expect(findComponentTrigger('word#card', 9)).toBeNull();
-    expect(findComponentTrigger('中文，#能力', 6)).toBeNull();
-    expect(findComponentTrigger('$能力', 3)).toBeNull();
-    expect(findPromptTrigger('#能力', 3)).toBeNull();
+  it('detects ¥ and $ only at the start, after an ASCII space, or after a newline', () => {
+    expect(findComponentTrigger('¥能力', 3)).toEqual({ start: 0, end: 3, query: '能力' });
+    expect(findComponentTrigger('参考 $card', 8)).toEqual({ start: 3, end: 8, query: 'card' });
+    expect(findComponentTrigger('正文\n¥趋势', 6)).toEqual({ start: 3, end: 6, query: '趋势' });
+    expect(findComponentTrigger('word$card', 9)).toBeNull();
+    expect(findComponentTrigger('中文，¥能力', 6)).toBeNull();
+    expect(findComponentTrigger('$$能力', 4)).toBeNull();
+    expect(findPromptTrigger('¥能力', 3)).toBeNull();
   });
 
   it('matches name, directory id, description and tags while excluding disabled components', () => {
@@ -79,14 +80,15 @@ describe('page matching', () => {
     { slideId: 'sli_c', ordinal: 3, title: '', keyMessage: '', specState: 'pending', htmlState: 'not_materialized' },
   ];
 
-  it('detects @ independently at valid boundaries', () => {
-    expect(findPageTrigger('@融资', 3)).toEqual({ start: 0, end: 3, query: '融资' });
-    expect(findPageTrigger('修改 @3', 5)).toEqual({ start: 3, end: 5, query: '3' });
-    expect(findPageTrigger('正文\n@Page', 8)).toEqual({ start: 3, end: 8, query: 'Page' });
-    expect(findPageTrigger('mail@example', 12)).toBeNull();
-    expect(findPageTrigger('中文，@融资', 6)).toBeNull();
-    expect(findPromptTrigger('@融资', 3)).toBeNull();
-    expect(findComponentTrigger('@融资', 3)).toBeNull();
+  it('detects # independently at valid boundaries', () => {
+    expect(findPageTrigger('#融资', 3)).toEqual({ start: 0, end: 3, query: '融资' });
+    expect(findPageTrigger('修改 #3', 5)).toEqual({ start: 3, end: 5, query: '3' });
+    expect(findPageTrigger('正文\n#Page', 8)).toEqual({ start: 3, end: 8, query: 'Page' });
+    expect(findPageTrigger('word#page', 9)).toBeNull();
+    expect(findPageTrigger('中文，#融资', 6)).toBeNull();
+    expect(findPageTrigger('##融资', 4)).toBeNull();
+    expect(findPromptTrigger('#融资', 3)).toBeNull();
+    expect(findComponentTrigger('#融资', 3)).toBeNull();
   });
 
   it('matches title and ordinal without searching key messages', () => {
@@ -103,18 +105,22 @@ describe('page matching', () => {
   });
 });
 
-describe('slash trigger', () => {
-  it('detects / at the start, after an ASCII space, or after a newline', () => {
-    expect(findSlashTrigger('/融', 2)).toEqual({ start: 0, end: 2, query: '融' });
-    expect(findSlashTrigger('修改 /卡', 5)).toEqual({ start: 3, end: 5, query: '卡' });
-    expect(findSlashTrigger('正文\n/page', 8)).toEqual({ start: 3, end: 8, query: 'page' });
-    expect(findSlashTrigger('/', 1)).toEqual({ start: 0, end: 1, query: '' });
+describe('summary trigger', () => {
+  it('detects @ at the start, after an ASCII space, or after a newline', () => {
+    expect(findSummaryTrigger('@融', 2)).toEqual({ start: 0, end: 2, query: '融' });
+    expect(findSummaryTrigger('修改 @卡', 5)).toEqual({ start: 3, end: 5, query: '卡' });
+    expect(findSummaryTrigger('正文\n@page', 8)).toEqual({ start: 3, end: 8, query: 'page' });
+    expect(findSummaryTrigger('@', 1)).toEqual({ start: 0, end: 1, query: '' });
   });
 
-  it('ignores / that is glued to a preceding word or another slash', () => {
-    expect(findSlashTrigger('http://x', 8)).toBeNull();
-    expect(findSlashTrigger('a/b', 3)).toBeNull();
-    expect(findSlashTrigger('/融/资', 4)).toBeNull();
+  it('ignores @ that is glued to a preceding word or another @', () => {
+    expect(findSummaryTrigger('mail@example', 12)).toBeNull();
+    expect(findSummaryTrigger('a@b', 3)).toBeNull();
+    expect(findSummaryTrigger('@融@资', 4)).toBeNull();
+  });
+
+  it('keeps / silent for every finder', () => {
+    expect(findSummaryTrigger('/融', 2)).toBeNull();
     expect(findPromptTrigger('/融', 2)).toBeNull();
     expect(findComponentTrigger('/融', 2)).toBeNull();
     expect(findPageTrigger('/融', 2)).toBeNull();

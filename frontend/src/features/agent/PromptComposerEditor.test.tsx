@@ -47,7 +47,7 @@ function placeCaretAtEnd(element: HTMLElement) {
 }
 
 function Harness({
-  initial = '$sum',
+  initial = '%sum',
   changed = vi.fn(),
   editorRef,
   pages = [],
@@ -115,13 +115,13 @@ describe('PromptComposerEditor', () => {
   });
 
   it('does not trigger after punctuation and closes on Escape', async () => {
-    const { rerender } = render(<Harness initial="正文，$sum" />);
+    const { rerender } = render(<Harness initial="正文，%sum" />);
     const editor = screen.getByRole('textbox');
     editor.focus();
     placeCaretAtEnd(editor);
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
 
-    rerender(<Harness key="valid" initial="$sum" />);
+    rerender(<Harness key="valid" initial="%sum" />);
     const nextEditor = screen.getByRole('textbox');
     nextEditor.focus();
     placeCaretAtEnd(nextEditor);
@@ -130,10 +130,10 @@ describe('PromptComposerEditor', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 
-  it('opens # candidates and inserts a component name fragment plus a plain space', async () => {
+  it('opens ¥ candidates and inserts a component name fragment plus a plain space', async () => {
     const changed = vi.fn();
     const editorRef = createRef<PromptComposerEditorHandle>();
-    render(<Harness initial="#能力" changed={changed} editorRef={editorRef} />);
+    render(<Harness initial="¥能力" changed={changed} editorRef={editorRef} />);
     const editor = screen.getByRole('textbox');
     editor.focus();
     placeCaretAtEnd(editor);
@@ -168,7 +168,7 @@ describe('PromptComposerEditor', () => {
 
   it('inserts page fragments with statuses and serializes stable slide ids', async () => {
     const editorRef = createRef<PromptComposerEditorHandle>();
-    render(<Harness initial="@融" editorRef={editorRef} pages={[page]} />);
+    render(<Harness initial="#融" editorRef={editorRef} pages={[page]} />);
     const editor = screen.getByRole('textbox');
     editor.focus();
     placeCaretAtEnd(editor);
@@ -185,11 +185,11 @@ describe('PromptComposerEditor', () => {
     expect(editorRef.current?.getMentionedSlideIds()).toEqual(['sli_b']);
   });
 
-  it('opens page candidates when @ is the first character in an empty editor', async () => {
+  it('opens page candidates when # is the first character in an empty editor', async () => {
     render(<Harness initial="" pages={[page]} />);
     const editor = screen.getByRole('textbox');
     editor.focus();
-    editor.append(document.createTextNode('@'));
+    editor.append(document.createTextNode('#'));
     placeCaretAtEnd(editor);
     fireEvent.input(editor);
 
@@ -201,19 +201,19 @@ describe('PromptComposerEditor', () => {
     render(<Harness initial="" editorRef={editorRef} pages={[page]} />);
     const editor = screen.getByRole('textbox');
     editor.focus();
-    editor.append(document.createTextNode('\n@'));
+    editor.append(document.createTextNode('\n#'));
     placeCaretAtEnd(editor);
     fireEvent.input(editor);
 
-    expect(editorRef.current?.getPlainText()).toBe('\n@');
+    expect(editorRef.current?.getPlainText()).toBe('\n#');
     expect(await screen.findByRole('option', { name: /Page 2.*融资历程/ })).toBeInTheDocument();
   });
 
-  it('opens an empty configuration menu for @, #, $, and ¥', async () => {
+  it('opens an empty configuration menu for #, ¥, $, %, and ％', async () => {
     usePromptStore.setState({ prompts: [], loaded: true, version: 2 });
     useComponentStore.setState({ components: [], loaded: true, version: 2 });
 
-    for (const [trigger, title] of [['@', '页面'], ['#', '组件'], ['$', '提示词'], ['¥', '提示词']]) {
+    for (const [trigger, title] of [['#', '页面'], ['¥', '组件'], ['$', '组件'], ['%', '提示词'], ['％', '提示词']]) {
       const view = render(<Harness initial={trigger} pages={[]} />);
       const editor = screen.getByRole('textbox');
       editor.focus();
@@ -230,22 +230,22 @@ describe('PromptComposerEditor', () => {
 
   it('refreshes an unsent page fragment after reorder or rename and marks deletion invalid', async () => {
     const editorRef = createRef<PromptComposerEditorHandle>();
-    const { rerender } = render(<Harness initial="@融" editorRef={editorRef} pages={[page]} />);
+    const { rerender } = render(<Harness initial="#融" editorRef={editorRef} pages={[page]} />);
     const editor = screen.getByRole('textbox');
     editor.focus();
     placeCaretAtEnd(editor);
     fireEvent.mouseDown(await screen.findByRole('option', { name: /Page 2.*融资历程/ }));
 
-    rerender(<Harness initial="@融" editorRef={editorRef} pages={[{ ...page, ordinal: 4, title: '融资进展' }]} />);
+    rerender(<Harness initial="#融" editorRef={editorRef} pages={[{ ...page, ordinal: 4, title: '融资进展' }]} />);
     await waitFor(() => expect(editor.querySelector('[data-slide-id="sli_b"]')).toHaveTextContent('Page 4 · 融资进展'));
 
-    rerender(<Harness initial="@融" editorRef={editorRef} pages={[]} />);
+    rerender(<Harness initial="#融" editorRef={editorRef} pages={[]} />);
     await waitFor(() => expect(editor.querySelector('[data-slide-id="sli_b"]')).toHaveClass('composer-page-fragment-invalid'));
     expect(editorRef.current?.getMentionedSlideIds()).toEqual(['sli_b']);
   });
 
-  it('opens a three-column panel for / and pre-selects the first non-empty column', async () => {
-    render(<Harness initial="/" pages={[page]} />);
+  it('opens a three-column panel for @ and pre-selects the first non-empty column', async () => {
+    render(<Harness initial="@" pages={[page]} />);
     const editor = screen.getByRole('textbox');
     editor.focus();
     placeCaretAtEnd(editor);
@@ -255,24 +255,36 @@ describe('PromptComposerEditor', () => {
     expect(within(grid).getByText(component.name)).toBeInTheDocument();
     expect(within(grid).getByText(prompt.name)).toBeInTheDocument();
 
-    const pageCell = grid.querySelector('[data-slash-cell="0:0"]');
+    const pageCell = grid.querySelector('[data-summary-cell="0:0"]');
     expect(pageCell).toHaveAttribute('aria-selected', 'true');
   });
 
   it('navigates columns with arrows and inserts the active cell on Enter', async () => {
     const changed = vi.fn();
-    render(<Harness initial="/" changed={changed} pages={[page]} />);
+    render(<Harness initial="@" changed={changed} pages={[page]} />);
     const editor = screen.getByRole('textbox');
     editor.focus();
     placeCaretAtEnd(editor);
 
     const grid = await screen.findByRole('grid', { name: '汇总检索候选' });
     fireEvent.keyDown(editor, { key: 'ArrowRight' });
-    await waitFor(() => expect(grid.querySelector('[data-slash-cell="1:0"]')).toHaveAttribute('aria-selected', 'true'));
+    await waitFor(() => expect(grid.querySelector('[data-summary-cell="1:0"]')).toHaveAttribute('aria-selected', 'true'));
 
     fireEvent.keyDown(editor, { key: 'Enter' });
     await waitFor(() => expect(changed).toHaveBeenLastCalledWith('能力卡片 '));
     expect(editor.querySelector('[data-component-name="能力卡片"]')).toHaveClass('composer-component-fragment');
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
+  });
+
+  it('keeps / silent without opening a candidate menu', async () => {
+    render(<Harness initial="/" pages={[page]} />);
+    const editor = screen.getByRole('textbox');
+    editor.focus();
+    placeCaretAtEnd(editor);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(screen.queryByRole('grid')).not.toBeInTheDocument();
+    });
   });
 });
