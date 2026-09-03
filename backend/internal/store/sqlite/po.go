@@ -272,6 +272,35 @@ func gitCommitEventToPO(m model.GitCommitEvent) gitCommitEventPO {
 	}
 }
 
+type briefingVersionPO struct {
+	BriefingID string `gorm:"column:briefing_id;primaryKey"`
+	ThreadID   string `gorm:"column:thread_id"`
+	ProjectID  string `gorm:"column:project_id"`
+	Kind       string `gorm:"column:kind"`
+	VersionNo  int    `gorm:"column:version_no;primaryKey"`
+	Content    string `gorm:"column:content"`
+	Feedback   string `gorm:"column:feedback"`
+	CreatedAt  int64  `gorm:"column:created_at"`
+}
+
+func (briefingVersionPO) TableName() string { return "briefing_versions" }
+
+func (p briefingVersionPO) toModel() model.BriefingVersion {
+	return model.BriefingVersion{
+		BriefingID: p.BriefingID, ThreadID: p.ThreadID, ProjectID: p.ProjectID,
+		Kind: model.BriefingKind(p.Kind), VersionNo: p.VersionNo,
+		Content: p.Content, Feedback: p.Feedback, CreatedAt: p.CreatedAt,
+	}
+}
+
+func briefingVersionToPO(m model.BriefingVersion) briefingVersionPO {
+	return briefingVersionPO{
+		BriefingID: m.BriefingID, ThreadID: m.ThreadID, ProjectID: m.ProjectID,
+		Kind: string(m.Kind), VersionNo: m.VersionNo,
+		Content: m.Content, Feedback: m.Feedback, CreatedAt: m.CreatedAt,
+	}
+}
+
 type runContextPO struct {
 	RunID           string `gorm:"column:run_id;primaryKey"`
 	ContextID       string `gorm:"column:context_id;uniqueIndex"`

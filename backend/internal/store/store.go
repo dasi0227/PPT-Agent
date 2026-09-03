@@ -76,6 +76,10 @@ type Store interface {
 	GitCommitEventsSince(ctx context.Context, operationID string, afterSeq int64) ([]model.GitCommitEvent, error)
 	ListThreadGitCommits(ctx context.Context, threadID string) ([]model.GitCommitOperation, error)
 
+	AppendBriefingVersion(ctx context.Context, version model.BriefingVersion) error
+	ListThreadBriefings(ctx context.Context, threadID string) ([]model.Briefing, error)
+	GetBriefingVersions(ctx context.Context, briefingID string, limit int) ([]model.BriefingVersion, error)
+
 	SetProjectStatus(ctx context.Context, id, status string) error
 	ReplaceSlides(ctx context.Context, projectID string, slides []model.Slide) error
 	ListSlides(ctx context.Context, projectID string) ([]model.Slide, error)
