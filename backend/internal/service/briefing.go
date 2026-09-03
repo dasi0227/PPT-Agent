@@ -224,9 +224,8 @@ func (svc *briefingGenerator) loadRevisionHistory(
 }
 
 type briefingRevisionContext struct {
-	RecentVersions  []briefingRevisionVersion `json:"recent_versions"`
-	Feedback        []string                  `json:"feedback"`
-	CurrentFeedback string                    `json:"current_feedback"`
+	RecentVersions []briefingRevisionVersion `json:"recent_versions"`
+	Feedback       []string                  `json:"feedback"`
 }
 
 type briefingRevisionVersion struct {
@@ -247,9 +246,8 @@ func briefingUserMessage(kind model.BriefingKind, versions []model.BriefingVersi
 		start = 0
 	}
 	revision := briefingRevisionContext{
-		RecentVersions:  make([]briefingRevisionVersion, 0, len(versions)-start),
-		Feedback:        []string{},
-		CurrentFeedback: currentFeedback,
+		RecentVersions: make([]briefingRevisionVersion, 0, len(versions)-start),
+		Feedback:       []string{},
 	}
 	for _, version := range versions[start:] {
 		revision.RecentVersions = append(revision.RecentVersions, briefingRevisionVersion{
