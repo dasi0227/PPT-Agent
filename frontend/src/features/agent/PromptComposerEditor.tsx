@@ -18,6 +18,7 @@ import {
   findComponentTrigger,
   findPageTrigger,
   findPromptTrigger,
+  findSlashTrigger,
   MAX_COMPONENT_MENTIONS,
   MAX_PAGE_MENTIONS,
   matchComponents,
@@ -40,7 +41,13 @@ export interface PromptComposerEditorHandle {
   restoreSelection: (range: Range | null) => void;
 }
 
-type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' | 'page' };
+type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' | 'page' | 'slash' };
+
+const SLASH_COLUMNS = [
+  { kind: 'page' as const, label: '页面' },
+  { kind: 'component' as const, label: '组件' },
+  { kind: 'prompt' as const, label: '提示词' },
+];
 
 interface PromptComposerEditorProps {
   value: string;
@@ -185,6 +192,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const dismissedRef = useRef('');
     const [trigger, setTrigger] = useState<ComposerTrigger | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
+    const [slashCol, setSlashCol] = useState(0);
+    const [slashRow, setSlashRow] = useState(0);
     const prompts = usePromptStore((state) => state.prompts);
     const version = usePromptStore((state) => state.version);
     const loadPrompts = usePromptStore((state) => state.load);
@@ -195,9 +204,13 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const pageSignature = pages.map((page) => (
       `${page.slideId}:${page.ordinal}:${page.title}:${page.specState}:${page.htmlState}`
     )).join('|');
-    const promptCandidates = trigger?.kind === 'prompt' ? matchPrompts(prompts, trigger.query) : [];
-    const componentCandidates = trigger?.kind === 'component' ? matchComponents(components, trigger.query) : [];
-    const pageCandidates = trigger?.kind === 'page' ? matchPages(pages, trigger.query) : [];
+    const isSlash = trigger?.kind === 'slash';
+    const promptCandidates = trigger && (trigger.kind === 'prompt' || isSlash) ? matchPrompts(prompts, trigger.query) : [];
+    const componentCandidates = trigger && (trigger.kind === 'component' || isSlash) ? matchComponents(components, trigger.query) : [];
+    const pageCandidates = trigger && (trigger.kind === 'page' || isSlash) ? matchPages(pages, trigger.query) : [];
+    // 汇总面板三列（页面 · 组件 · 提示词），列内候选沿用各自匹配规则
+    const slashColumns = [pageCandidates, componentCandidates, promptCandidates];
+    const clampSlashRow = (length: number) => (length ? Math.max(0, Math.min(slashRow, length - 1)) : -1);
     const candidateCount = trigger?.kind === 'component'
       ? componentCandidates.length
       : trigger?.kind === 'page'
@@ -224,21 +237,35 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       const promptTrigger = findPromptTrigger(text, offset);
       const componentTrigger = findComponentTrigger(text, offset);
       const pageTrigger = findPageTrigger(text, offset);
+      const slashTrigger = findSlashTrigger(text, offset);
       const next: ComposerTrigger | null = promptTrigger
         ? { ...promptTrigger, kind: 'prompt' }
         : componentTrigger
           ? { ...componentTrigger, kind: 'component' }
           : pageTrigger
             ? { ...pageTrigger, kind: 'page' }
-            : null;
+            : slashTrigger
+              ? { ...slashTrigger, kind: 'slash' }
+              : null;
       const signature = next ? `${next.kind}:${next.start}:${next.end}:${next.query}` : '';
       if (!next || dismissedRef.current === signature) {
         setTrigger(null);
         return;
       }
       setActiveIndex(0);
+      // 首次进入汇总面板：高亮第一个非空列的首项
+      if (next.kind === 'slash' && trigger?.kind !== 'slash') {
+        const cols = [
+          matchPages(pages, next.query).length,
+          matchComponents(components, next.query).length,
+          matchPrompts(prompts, next.query).length,
+        ];
+        const firstNonEmpty = cols.findIndex((length) => length > 0);
+        setSlashCol(firstNonEmpty < 0 ? 0 : firstNonEmpty);
+        setSlashRow(0);
+      }
       setTrigger(next);
-    }, [disabled, readOnly]);
+    }, [components, disabled, pages, prompts, readOnly, trigger]);
 
     useImperativeHandle(forwardedRef, () => ({
       getPlainText: () => editorRef.current ? serializeComposerText(editorRef.current) : '',
@@ -336,9 +363,14 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     }, [onChange, pageSignature, pagesById]);
 
     useEffect(() => {
+      if (isSlash) {
+        menuRef.current?.querySelector<HTMLElement>(`[data-slash-cell="${slashCol}:${clampSlashRow(slashColumns[slashCol].length)}"]`)
+          ?.scrollIntoView({ block: 'nearest' });
+        return;
+      }
       menuRef.current?.querySelector<HTMLElement>(`[data-candidate-index="${activeIndex}"]`)
         ?.scrollIntoView({ block: 'nearest' });
-    }, [activeIndex]);
+    }, [activeIndex, isSlash, slashCol, slashRow, slashColumns]);
 
     const syncValue = () => {
       const editor = editorRef.current;
@@ -379,7 +411,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const applyComponent = (component: ComponentReference) => {
       const editor = editorRef.current;
-      if (!editor || !trigger || trigger.kind !== 'component') return;
+      if (!editor || !trigger || (trigger.kind !== 'component' && trigger.kind !== 'slash')) return;
       const start = pointAtOffset(editor, trigger.start);
       const end = pointAtOffset(editor, trigger.end);
       const range = document.createRange();
@@ -408,7 +440,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const applyPage = (page: PageMentionCandidate) => {
       const editor = editorRef.current;
-      if (!editor || !trigger || trigger.kind !== 'page') return;
+      if (!editor || !trigger || (trigger.kind !== 'page' && trigger.kind !== 'slash')) return;
       const start = pointAtOffset(editor, trigger.start);
       const end = pointAtOffset(editor, trigger.end);
       const range = document.createRange();
@@ -436,6 +468,17 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       editor.focus();
     };
 
+    // 汇总面板选中：按当前列分派到对应的插入逻辑
+    const applySlashActive = () => {
+      const column = slashColumns[slashCol];
+      const row = clampSlashRow(column.length);
+      if (row < 0) return; // 空列：Enter 无效
+      const kind = SLASH_COLUMNS[slashCol].kind;
+      if (kind === 'page') applyPage(column[row] as PageMentionCandidate);
+      else if (kind === 'component') applyComponent(column[row] as ComponentReference);
+      else applyPrompt(column[row] as Prompt);
+    };
+
     const handleInput = (_event: FormEvent<HTMLDivElement>) => {
       dismissedRef.current = '';
       syncValue();
@@ -444,6 +487,42 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const handleEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
       if (trigger && !event.nativeEvent.isComposing && !composingRef.current) {
+        if (trigger.kind === 'slash') {
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault();
+            const direction = event.key === 'ArrowRight' ? 1 : -1;
+            setSlashCol((current) => (current + direction + 3) % 3); // 跨列环绕；空列也可落位
+            return;
+          }
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const length = slashColumns[slashCol].length;
+            if (length > 0) {
+              const direction = event.key === 'ArrowDown' ? 1 : -1;
+              const current = clampSlashRow(length);
+              setSlashRow((current + direction + length) % length); // 列内环绕
+            }
+            return;
+          }
+          if (event.key === 'Enter' && !(event.metaKey || event.ctrlKey)) {
+            const column = slashColumns[slashCol];
+            if (clampSlashRow(column.length) < 0) {
+              onKeyDown(event);
+              return;
+            }
+            event.preventDefault();
+            applySlashActive();
+            return;
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            dismissedRef.current = `${trigger.kind}:${trigger.start}:${trigger.end}:${trigger.query}`;
+            setTrigger(null);
+            return;
+          }
+          onKeyDown(event);
+          return;
+        }
         if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && candidateCount > 0) {
           event.preventDefault();
           const direction = event.key === 'ArrowDown' ? 1 : -1;
@@ -483,9 +562,114 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       requestAnimationFrame(updateTrigger);
     };
 
+    const slashCellData = (colIndex: number, item: PageMentionCandidate | ComponentReference | Prompt) => {
+      const kind = SLASH_COLUMNS[colIndex].kind;
+      if (kind === 'page') {
+        const page = item as PageMentionCandidate;
+        return { key: page.slideId, name: pageDisplayName(page), desc: page.keyMessage.trim() };
+      }
+      if (kind === 'component') {
+        const component = item as ComponentReference;
+        return { key: component.id, name: component.name, desc: component.description };
+      }
+      const prompt = item as Prompt;
+      return { key: prompt.id, name: prompt.name, desc: prompt.desc };
+    };
+
+    const slashColumnEmptyText = (colIndex: number) => {
+      const kind = SLASH_COLUMNS[colIndex].kind;
+      const configured = kind === 'component'
+        ? components.some((component) => !component.disabled)
+        : kind === 'page'
+          ? pages.length > 0
+          : prompts.some((prompt) => !prompt.disabled);
+      if (!configured) return '暂无配置';
+      return kind === 'component' ? '没有匹配的组件' : kind === 'page' ? '没有匹配的页面' : '没有匹配的提示词';
+    };
+
+    const SlashColumnIcon = ({ colIndex }: { colIndex: number }) => {
+      const kind = SLASH_COLUMNS[colIndex].kind;
+      const Icon = kind === 'page' ? GalleryThumbnails : kind === 'component' ? Blocks : NotebookText;
+      return <Icon className="h-[15px] w-[15px]" strokeWidth={1.75} />;
+    };
+
     return (
       <>
-        {trigger && (
+        {trigger && trigger.kind === 'slash' && (
+          <div
+            ref={menuRef}
+            className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 grid grid-cols-3 overflow-hidden rounded-lg border border-border-strong bg-surface shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
+            role="grid"
+            aria-label="汇总检索候选"
+          >
+            {SLASH_COLUMNS.map((column, colIndex) => {
+              const items = slashColumns[colIndex];
+              const active = colIndex === slashCol;
+              const activeRow = active ? clampSlashRow(items.length) : -1;
+              return (
+                <div
+                  key={column.kind}
+                  role="columnheader"
+                  className={`flex h-[248px] min-w-0 flex-col ${colIndex > 0 ? 'border-l border-border' : ''}`}
+                >
+                  <div className={`flex shrink-0 items-center gap-1.5 border-b px-2.5 pb-1.5 pt-2 text-[11px] font-semibold ${
+                    active ? 'border-accent/30 bg-accent/[0.04] text-accent' : 'border-panel-muted text-text-400'
+                  }`}>
+                    <SlashColumnIcon colIndex={colIndex} />
+                    {column.label}
+                    <span className={`ml-auto min-w-[18px] rounded-full px-1.5 text-center font-mono text-[10.5px] ${
+                      active ? 'bg-accent-soft text-accent' : 'bg-panel-muted text-text-600'
+                    }`}>
+                      {items.length}
+                    </span>
+                  </div>
+                  <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto p-1">
+                    {items.length === 0 ? (
+                      <div className="grid h-full place-items-center px-2 text-center text-[11.5px] leading-6 text-text-400">
+                        {slashColumnEmptyText(colIndex)}
+                      </div>
+                    ) : items.map((item, rowIndex) => {
+                      const cell = slashCellData(colIndex, item);
+                      const isActiveCell = colIndex === slashCol && rowIndex === activeRow;
+                      return (
+                        <button
+                          key={cell.key}
+                          type="button"
+                          role="gridcell"
+                          aria-selected={isActiveCell}
+                          data-slash-cell={`${colIndex}:${rowIndex}`}
+                          onMouseEnter={() => { setSlashCol(colIndex); setSlashRow(rowIndex); }}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            if (column.kind === 'page') applyPage(item as PageMentionCandidate);
+                            else if (column.kind === 'component') applyComponent(item as ComponentReference);
+                            else applyPrompt(item as Prompt);
+                          }}
+                          className={`grid w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1.5 text-left ${
+                            isActiveCell ? 'bg-accent-soft' : 'hover:bg-panel-muted'
+                          }`}
+                        >
+                          <span className="grid h-6 w-5 place-items-center text-accent" aria-hidden="true">
+                            <SlashColumnIcon colIndex={colIndex} />
+                          </span>
+                          <span className="flex min-w-0 flex-col gap-0.5">
+                            <span className="min-w-0 truncate text-xs font-bold text-text-900">{cell.name}</span>
+                            {cell.desc && (
+                              <span className="min-w-0 truncate text-[11px] leading-4 text-text-400" title={cell.desc}>
+                                {cell.desc}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {trigger && trigger.kind !== 'slash' && (
           <div
             ref={menuRef}
             className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createRef, useState, type RefObject } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentReference, Prompt } from '../../api/types';
@@ -242,5 +242,37 @@ describe('PromptComposerEditor', () => {
     rerender(<Harness initial="@融" editorRef={editorRef} pages={[]} />);
     await waitFor(() => expect(editor.querySelector('[data-slide-id="sli_b"]')).toHaveClass('composer-page-fragment-invalid'));
     expect(editorRef.current?.getMentionedSlideIds()).toEqual(['sli_b']);
+  });
+
+  it('opens a three-column panel for / and pre-selects the first non-empty column', async () => {
+    render(<Harness initial="/" pages={[page]} />);
+    const editor = screen.getByRole('textbox');
+    editor.focus();
+    placeCaretAtEnd(editor);
+
+    const grid = await screen.findByRole('grid', { name: '汇总检索候选' });
+    expect(within(grid).getByText('Page 2 · 融资历程')).toBeInTheDocument();
+    expect(within(grid).getByText(component.name)).toBeInTheDocument();
+    expect(within(grid).getByText(prompt.name)).toBeInTheDocument();
+
+    const pageCell = grid.querySelector('[data-slash-cell="0:0"]');
+    expect(pageCell).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('navigates columns with arrows and inserts the active cell on Enter', async () => {
+    const changed = vi.fn();
+    render(<Harness initial="/" changed={changed} pages={[page]} />);
+    const editor = screen.getByRole('textbox');
+    editor.focus();
+    placeCaretAtEnd(editor);
+
+    const grid = await screen.findByRole('grid', { name: '汇总检索候选' });
+    fireEvent.keyDown(editor, { key: 'ArrowRight' });
+    await waitFor(() => expect(grid.querySelector('[data-slash-cell="1:0"]')).toHaveAttribute('aria-selected', 'true'));
+
+    fireEvent.keyDown(editor, { key: 'Enter' });
+    await waitFor(() => expect(changed).toHaveBeenLastCalledWith('能力卡片 '));
+    expect(editor.querySelector('[data-component-name="能力卡片"]')).toHaveClass('composer-component-fragment');
+    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
   });
 });

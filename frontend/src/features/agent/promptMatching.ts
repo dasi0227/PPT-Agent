@@ -22,6 +22,7 @@ export interface PromptTrigger {
 
 export type ComponentTrigger = PromptTrigger;
 export type PageTrigger = PromptTrigger;
+export type SlashTrigger = PromptTrigger;
 
 export interface PageMentionCandidate {
   slideId: string;
@@ -60,6 +61,18 @@ export function findPageTrigger(text: string, caret: number): PageTrigger | null
   if (caret < 0 || caret > text.length) return null;
   const before = text.slice(0, caret);
   const match = before.match(/(?:^|[ \n])(@)([^ \n@]*)$/);
+  if (!match) return null;
+  return {
+    start: caret - match[1].length - match[2].length,
+    end: caret,
+    query: match[2],
+  };
+}
+
+export function findSlashTrigger(text: string, caret: number): SlashTrigger | null {
+  if (caret < 0 || caret > text.length) return null;
+  const before = text.slice(0, caret);
+  const match = before.match(/(?:^|[ \n])(\/)([^ \n/]*)$/);
   if (!match) return null;
   return {
     start: caret - match[1].length - match[2].length,

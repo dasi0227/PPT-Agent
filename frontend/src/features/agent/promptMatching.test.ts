@@ -4,6 +4,7 @@ import {
   findComponentTrigger,
   findPageTrigger,
   findPromptTrigger,
+  findSlashTrigger,
   matchComponents,
   matchPages,
   matchPrompts,
@@ -99,5 +100,23 @@ describe('page matching', () => {
   it('formats titled and untitled pages without a placeholder', () => {
     expect(pageDisplayName(pages[1])).toBe('Page 2 · 融资历程');
     expect(pageDisplayName(pages[2])).toBe('Page 3');
+  });
+});
+
+describe('slash trigger', () => {
+  it('detects / at the start, after an ASCII space, or after a newline', () => {
+    expect(findSlashTrigger('/融', 2)).toEqual({ start: 0, end: 2, query: '融' });
+    expect(findSlashTrigger('修改 /卡', 5)).toEqual({ start: 3, end: 5, query: '卡' });
+    expect(findSlashTrigger('正文\n/page', 8)).toEqual({ start: 3, end: 8, query: 'page' });
+    expect(findSlashTrigger('/', 1)).toEqual({ start: 0, end: 1, query: '' });
+  });
+
+  it('ignores / that is glued to a preceding word or another slash', () => {
+    expect(findSlashTrigger('http://x', 8)).toBeNull();
+    expect(findSlashTrigger('a/b', 3)).toBeNull();
+    expect(findSlashTrigger('/融/资', 4)).toBeNull();
+    expect(findPromptTrigger('/融', 2)).toBeNull();
+    expect(findComponentTrigger('/融', 2)).toBeNull();
+    expect(findPageTrigger('/融', 2)).toBeNull();
   });
 });

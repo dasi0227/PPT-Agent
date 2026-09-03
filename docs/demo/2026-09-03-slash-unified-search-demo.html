@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>/ 汇总检索 · 输入框交互原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --accent-fragment: rgba(47, 103, 246, 0.09);
+      --ok: #2f855a;
+      --danger: #c94242;
+      --warn: #b7791f;
+      --shadow-menu: 0 18px 46px rgba(31, 42, 55, 0.2);
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { width: 100%; min-width: 320px; height: 100%; margin: 0; }
+
+    body {
+      display: grid;
+      place-items: center;
+      min-height: 100dvh;
+      padding: 40px 20px;
+      background: var(--workspace);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+    }
+
+    button, input, textarea { color: inherit; font: inherit; }
+    button { border: 0; cursor: pointer; }
+
+    [contenteditable="true"]:focus-visible { outline: none; }
+
+    .frame {
+      width: min(760px, 100%);
+      display: grid;
+      gap: 14px;
+    }
+
+    .frame-head {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .frame-head svg { color: var(--accent); }
+    .frame-head .tag {
+      margin-left: auto;
+      border-radius: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .hint {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 2px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .hint b { color: var(--accent); font-weight: 700; }
+    .hint kbd {
+      border: 1px solid var(--border-strong);
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      background: var(--surface);
+      padding: 1px 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* ---------- Composer ---------- */
+    .composer-area { position: relative; }
+
+    .composer {
+      position: relative;
+      border: 1px solid rgba(196, 206, 218, 0.9);
+      border-radius: 20px;
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+    }
+    .composer.focus { border-color: rgba(47, 103, 246, 0.5); box-shadow: 0 6px 22px rgba(47, 103, 246, 0.12); }
+
+    .editor {
+      min-height: 96px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding: 14px 44px 10px 16px;
+      font-size: 14px;
+      line-height: 24px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      scrollbar-width: none;
+    }
+    .editor::-webkit-scrollbar { display: none; }
+    .editor:empty::before {
+      color: var(--text-muted);
+      content: attr(data-placeholder);
+      pointer-events: none;
+    }
+
+    .composer-fragment {
+      border-radius: 5px;
+      background: var(--accent-fragment);
+      padding: 1px 3px;
+      color: var(--accent);
+      font-weight: 600;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }
+
+    .composer-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 10px 10px;
+    }
+    .control-group { display: flex; align-items: center; gap: 4px; }
+    .control-button {
+      display: inline-flex;
+      height: 28px;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      padding: 0 9px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 650;
+    }
+    .control-button.active {
+      border-color: rgba(47, 103, 246, 0.3);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .slash-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+    .slash-chip code {
+      border-radius: 4px;
+      background: var(--panel-muted);
+      padding: 1px 6px;
+      font-family: var(--mono);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .send-button {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* ---------- / 汇总面板 ---------- */
+    .slash-menu {
+      position: absolute;
+      z-index: 20;
+      right: 0;
+      left: 0;
+      bottom: calc(100% + 8px);
+      display: none;
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: var(--shadow-menu);
+      overflow: hidden;
+    }
+    .slash-menu.visible { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    .slash-col { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; }
+    .slash-col + .slash-col { border-left: 1px solid var(--border); }
+
+    .slash-col-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 11px 7px;
+      border-bottom: 1px solid var(--panel-muted);
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .slash-col-head svg { width: 13px; height: 13px; }
+    .slash-col.active .slash-col-head {
+      color: var(--accent);
+      border-bottom-color: rgba(47, 103, 246, 0.28);
+      background: rgba(47, 103, 246, 0.04);
+    }
+    .slash-col-head .count {
+      margin-left: auto;
+      min-width: 18px;
+      text-align: center;
+      border-radius: 999px;
+      background: var(--panel-muted);
+      padding: 1px 6px;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .slash-col.active .slash-col-head .count { background: rgba(47, 103, 246, 0.16); color: var(--accent); }
+
+    .slash-col-body {
+      max-height: 288px;
+      overflow-y: auto;
+      padding: 5px;
+      scrollbar-width: none;
+    }
+    .slash-col-body::-webkit-scrollbar { display: none; }
+
+    .slash-cell {
+      display: grid;
+      width: 100%;
+      grid-template-columns: 22px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      border-radius: 8px;
+      background: transparent;
+      padding: 7px 8px;
+      text-align: left;
+    }
+    .slash-cell + .slash-cell { margin-top: 2px; }
+    .slash-cell:hover { background: var(--panel); }
+    .slash-cell.active { background: var(--accent-soft); }
+
+    .slash-cell-icon { display: grid; place-items: center; color: var(--accent); }
+
+    .slash-cell-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+    .slash-cell-name {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 12.5px;
+      font-weight: 650;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .slash-cell-desc {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text-muted);
+      font-size: 11px;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .slash-empty {
+      display: grid;
+      min-height: 96px;
+      place-items: center;
+      padding: 8px;
+      color: var(--text-muted);
+      font-size: 11.5px;
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* ---------- 序列化预览 ---------- */
+    .preview {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      padding: 10px 12px;
+    }
+    .preview-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .preview-label svg { color: var(--accent); }
+    .preview-code {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      line-height: 1.7;
+      color: #354150;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .preview-code .id { color: var(--accent); }
+    .preview-code .muted { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <main class="frame">
+    <div class="frame-head">
+      <i data-lucide="search" width="18" height="18"></i>
+      <span>/ 汇总检索 · 输入框交互原型</span>
+      <span class="tag">页面 · 组件 · 提示词</span>
+    </div>
+
+    <div class="hint">
+      <i data-lucide="lightbulb" width="13" height="13"></i>
+      <span>
+        行首或空格后输入 <b>/</b> 打开汇总面板，一次检索三类内容。试试 <b>/融</b> 或 <b>/卡</b>。
+        &nbsp;·&nbsp; <kbd>←</kbd><kbd>→</kbd> 切换列 &nbsp;<kbd>↑</kbd><kbd>↓</kbd> 列内移动 &nbsp;<kbd>Enter</kbd> 选中 &nbsp;<kbd>Esc</kbd> 关闭
+      </span>
+    </div>
+
+    <div class="composer-area">
+      <div class="slash-menu" id="slash-menu" role="grid" aria-label="汇总检索候选"></div>
+
+      <div class="composer" id="composer">
+        <div
+          class="editor"
+          id="editor"
+          contenteditable="true"
+          role="textbox"
+          aria-multiline="true"
+          data-placeholder="描述你的想法，输入 / 汇总检索页面 / 组件 / 提示词"
+          spellcheck="false"
+        ></div>
+        <div class="composer-controls">
+          <div class="control-group">
+            <button class="control-button active" type="button"><i data-lucide="wand-sparkles" width="13" height="13"></i>执行</button>
+            <button class="control-button" type="button"><i data-lucide="list-checks" width="13" height="13"></i>计划</button>
+          </div>
+          <div class="control-group">
+            <span class="slash-chip"><code>/</code> 汇总检索</span>
+            <button class="send-button" type="button" aria-label="发送"><i data-lucide="send" width="15" height="15"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview">
+      <div class="preview-label"><i data-lucide="braces" width="13" height="13"></i>发送文本预览（片段序列化）</div>
+      <div class="preview-code" id="preview"></div>
+    </div>
+  </main>
+
+  <script>
+    // ============ Mock 数据（页面 / 组件 / 提示词）============
+    const pages = [
+      { id: "sli_a1b2c3", title: "封面",     key: "AI 驱动的下一代创作平台" },
+      { id: "sli_d4e5f6", title: "融资历程", key: "三轮融资累计 2.4 亿，估值三年翻 6 倍" },
+      { id: "sli_g7h8i9", title: "团队介绍", key: "核心团队来自头部大厂，平均 10 年经验" },
+      { id: "sli_j1k2l3", title: "",         key: "" },
+      { id: "sli_m4n5o6", title: "融资用途", key: "本轮资金主要投入研发与海外扩张" },
+      { id: "sli_p7q8r9", title: "市场分析", key: "目标市场规模 800 亿，年增速 25%" },
+      { id: "sli_s1t2u3", title: "产品路线", key: "未来 18 个月的四大版本节奏" },
+    ];
+
+    const components = [
+      { id: "cmp_card",    name: "指标卡片",   desc: "突出单个核心数字，含同比环比与趋势箭头" },
+      { id: "cmp_bar",     name: "柱状图",     desc: "对比多个类目的数值，支持分组与堆叠" },
+      { id: "cmp_kv",      name: "键值列表",   desc: "左标题右数值的成组信息，用于要点罗列" },
+      { id: "cmp_quote",   name: "引用块",     desc: "带引号的高亮语句，用于客户证言或金句" },
+      { id: "cmp_process", name: "流程步骤",   desc: "横向节点串联的分步流程，含序号连接线" },
+      { id: "cmp_feature", name: "特性卡组",   desc: "三到四张并排的图标 + 标题 + 描述卡片" },
+      { id: "cmp_stat",    name: "数据徽章",   desc: "一排关键数据的紧凑徽章，适合置于顶部" },
+    ];
+
+    const prompts = [
+      { id: "prm_polish",   name: "润色措辞",   desc: "在不改变含义的前提下让文案更专业凝练", value: "请在保持原意的前提下，让这一页的文案更专业、凝练、有节奏。" },
+      { id: "prm_shorten",  name: "精简篇幅",   desc: "压缩冗余，突出关键信息", value: "请精简这一页的内容，删去冗余表达，只保留最关键的信息。" },
+      { id: "prm_visual",   name: "强化视觉",   desc: "把大段文字改造为图表 / 卡片式表达", value: "请把这一页的大段文字改造为图表或卡片式的视觉化表达。" },
+      { id: "prm_tone",     name: "统一语气",   desc: "让全篇语气一致、更具说服力", value: "请统一全篇的语气，使表达更一致、更具说服力。" },
+      { id: "prm_data",     name: "补充数据",   desc: "为论点补充可信的数据支撑", value: "请为这一页的核心论点补充可信、具体的数据支撑。" },
+      { id: "prm_translate",name: "翻译英文",   desc: "将当前页翻译为地道的英文表达", value: "请把这一页的内容翻译为地道、专业的英文。" },
+    ];
+
+    // ============ 常量 / 工具 ============
+    const CAP = 8; // 每列上限，与真实实现 MAX_*_MENTIONS 对齐
+    const KIND = { PAGE: 0, COMPONENT: 1, PROMPT: 2 };
+    const COL_META = [
+      { icon: "gallery-thumbnails", label: "页面",   frag: "page" },
+      { icon: "blocks",             label: "组件",   frag: "component" },
+      { icon: "notebook-text",      label: "提示词", frag: "prompt" },
+    ];
+
+    const editor = document.querySelector("#editor");
+    const composer = document.querySelector("#composer");
+    const menu = document.querySelector("#slash-menu");
+    const previewEl = document.querySelector("#preview");
+
+    const escapeHTML = (v) => v.replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+    })[c]);
+    const renderIcons = () => lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
+
+    // 二维选择状态：activeCol 当前列，desiredRow 记忆行（跨列切换时被 clamp）
+    const state = { activeCol: 0, desiredRow: 0, open: false, cols: [[], [], []] };
+
+    function pageName(p, i) {
+      const t = p.title.trim();
+      return t ? `Page ${i + 1} · ${t}` : `Page ${i + 1}`;
+    }
+
+    // ============ 触发检测（行首或空格 / 换行后的 /）============
+    function textBeforeCaret() {
+      const sel = window.getSelection();
+      if (!sel.rangeCount || !sel.isCollapsed || !editor.contains(sel.anchorNode)) return "";
+      const range = sel.getRangeAt(0).cloneRange();
+      range.selectNodeContents(editor);
+      range.setEnd(sel.anchorNode, sel.anchorOffset);
+      return range.toString();
+    }
+
+    function currentTrigger() {
+      const before = textBeforeCaret();
+      const match = before.match(/(?:^|[ \n])(\/)([^ \n\/]*)$/);
+      if (!match) return null;
+      return { query: match[2], length: match[1].length + match[2].length };
+    }
+
+    // ============ 共享 query 过滤三列 ============
+    function matchPages(q) {
+      const all = pages.map((p, i) => ({ kind: KIND.PAGE, id: p.id, name: pageName(p, i), desc: p.key }));
+      if (!q) return all.slice(0, CAP);
+      const s = q.toLocaleLowerCase();
+      return all.filter((it, idx) =>
+        it.name.toLocaleLowerCase().includes(s) ||
+        String(idx + 1) === q ||
+        `page ${idx + 1}`.includes(s)
+      ).slice(0, CAP);
+    }
+
+    function matchComponents(q) {
+      const all = components.map((c) => ({ kind: KIND.COMPONENT, id: c.id, name: c.name, desc: c.desc }));
+      if (!q) return all.slice(0, CAP);
+      const s = q.toLocaleLowerCase();
+      return all.filter((it) =>
+        it.name.toLocaleLowerCase().includes(s) || it.desc.toLocaleLowerCase().includes(s)
+      ).slice(0, CAP);
+    }
+
+    function matchPrompts(q) {
+      const all = prompts.map((p) => ({ kind: KIND.PROMPT, id: p.id, name: p.name, desc: p.desc, value: p.value }));
+      if (!q) return all.slice(0, CAP);
+      const s = q.toLocaleLowerCase();
+      return all.filter((it) =>
+        it.name.toLocaleLowerCase().includes(s) ||
+        it.desc.toLocaleLowerCase().includes(s) ||
+        it.value.toLocaleLowerCase().includes(s)
+      ).slice(0, CAP);
+    }
+
+    function computeCols(q) {
+      return [matchPages(q), matchComponents(q), matchPrompts(q)];
+    }
+
+    // 记忆行 clamp：空列返回 -1（无选中）
+    function clampRow(len) {
+      if (!len) return -1;
+      return Math.max(0, Math.min(state.desiredRow, len - 1));
+    }
+
+    // ============ 渲染 ============
+    function render() {
+      const cols = state.cols;
+      menu.innerHTML = cols.map((items, col) => {
+        const meta = COL_META[col];
+        const activeRow = col === state.activeCol ? clampRow(items.length) : -1;
+        const head = `
+          <div class="slash-col-head">
+            <i data-lucide="${meta.icon}"></i>${meta.label}
+            <span class="count">${items.length}</span>
+          </div>`;
+        let body;
+        if (!items.length) {
+          body = `<div class="slash-empty">没有匹配的${meta.label}</div>`;
+        } else {
+          body = items.map((it, idx) => `
+            <button class="slash-cell ${idx === activeRow ? "active" : ""}" type="button" role="gridcell"
+                    aria-selected="${idx === activeRow}" data-col="${col}" data-row="${idx}">
+              <span class="slash-cell-icon"><i data-lucide="${meta.icon}" width="15" height="15"></i></span>
+              <span class="slash-cell-copy">
+                <span class="slash-cell-name">${escapeHTML(it.name)}</span>
+                ${it.desc ? `<span class="slash-cell-desc" title="${escapeHTML(it.desc)}">${escapeHTML(it.desc)}</span>` : ""}
+              </span>
+            </button>`).join("");
+          body = `<div class="slash-col-body">${body}</div>`;
+        }
+        return `<div class="slash-col ${col === state.activeCol ? "active" : ""}">${head}${body}</div>`;
+      }).join("");
+      menu.classList.add("visible");
+      renderIcons();
+      scrollActiveIntoView();
+    }
+
+    function scrollActiveIntoView() {
+      const activeCell = menu.querySelector(".slash-cell.active");
+      if (activeCell) activeCell.scrollIntoView({ block: "nearest" });
+    }
+
+    function hide() {
+      menu.classList.remove("visible");
+      state.open = false;
+    }
+
+    function updateMenu() {
+      const trigger = currentTrigger();
+      if (!trigger || document.activeElement !== editor) { hide(); return; }
+      state.cols = computeCols(trigger.query);
+      if (!state.open) {
+        // 打开时：高亮第一个非空列的首项
+        const firstNonEmpty = state.cols.findIndex((c) => c.length > 0);
+        state.activeCol = firstNonEmpty < 0 ? 0 : firstNonEmpty;
+        state.desiredRow = 0;
+        state.open = true;
+      }
+      render();
+    }
+
+    // ============ 选中插入彩色片段 ============
+    function pointAtTextOffset(root, targetOffset) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let remaining = targetOffset;
+      let node = walker.nextNode();
+      while (node) {
+        if (remaining <= node.data.length) return { node, offset: remaining };
+        remaining -= node.data.length;
+        node = walker.nextNode();
+      }
+      return { node: root, offset: root.childNodes.length };
+    }
+
+    function apply(item) {
+      const trigger = currentTrigger();
+      const sel = window.getSelection();
+      if (!trigger || !sel.rangeCount) return;
+      const before = textBeforeCaret();
+      const start = pointAtTextOffset(editor, before.length - trigger.length);
+      const range = sel.getRangeAt(0).cloneRange();
+      range.setStart(start.node, start.offset);
+      range.deleteContents();
+
+      const frag = document.createElement("span");
+      frag.className = "composer-fragment composer-" + COL_META[item.kind].frag + "-fragment";
+      frag.contentEditable = "false";
+      if (item.kind === KIND.PAGE) { frag.dataset.slideId = item.id; frag.textContent = item.name; }
+      else if (item.kind === KIND.COMPONENT) { frag.dataset.componentName = item.name; frag.textContent = item.name; }
+      else { frag.dataset.promptId = item.id; frag.textContent = item.value; } // 提示词展开完整 value
+
+      const space = document.createTextNode(" ");
+      range.insertNode(space);
+      range.insertNode(frag);
+
+      const next = document.createRange();
+      next.setStart(space, 1);
+      next.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(next);
+
+      hide();
+      editor.focus();
+      updatePreview();
+    }
+
+    // ============ 序列化预览 ============
+    function serialize() {
+      let out = "";
+      editor.childNodes.forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) out += node.data;
+        else if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.dataset && node.dataset.slideId) out += `${node.textContent}⟨${node.dataset.slideId}⟩`;
+          else out += node.textContent;
+        }
+      });
+      return out.replace(/(^|[ \n])\/[^ \n\/]*$/, "$1").replace(/\s+$/, "");
+    }
+
+    function updatePreview() {
+      const text = serialize();
+      const html = escapeHTML(text).replace(/⟨(sli_[a-z0-9]+)⟩/g, '<span class="id">⟨$1⟩</span>');
+      previewEl.innerHTML = html || '<span class="muted">（空）</span>';
+    }
+
+    // ============ 事件 ============
+    editor.addEventListener("focus", () => { composer.classList.add("focus"); updateMenu(); });
+    editor.addEventListener("blur", () => composer.classList.remove("focus"));
+    editor.addEventListener("input", () => { updateMenu(); updatePreview(); });
+    editor.addEventListener("keyup", (e) => {
+      if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Escape"].includes(e.key)) updateMenu();
+    });
+    editor.addEventListener("paste", (e) => {
+      e.preventDefault();
+      document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
+    });
+
+    editor.addEventListener("keydown", (e) => {
+      if (!state.open) return; // 面板关闭：交给正常输入 / 发送
+      const cols = state.cols;
+
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        const dir = e.key === "ArrowRight" ? 1 : -1;
+        state.activeCol = (state.activeCol + dir + 3) % 3; // 跨列环绕；空列也可落位
+        render();
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const col = cols[state.activeCol];
+        if (col.length) {
+          const cur = clampRow(col.length);
+          const dir = e.key === "ArrowDown" ? 1 : -1;
+          state.desiredRow = (cur + dir + col.length) % col.length; // 列内环绕
+          render();
+        }
+      } else if (e.key === "Enter" && !(e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        const col = cols[state.activeCol];
+        const row = clampRow(col.length);
+        if (row >= 0 && col[row]) apply(col[row]); // 空列：Enter 无效
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        hide();
+      }
+      // Tab 不特殊处理
+    });
+
+    menu.addEventListener("mousemove", (e) => {
+      const cell = e.target.closest("[data-col]");
+      if (!cell) return;
+      const col = Number(cell.dataset.col);
+      const row = Number(cell.dataset.row);
+      if (col === state.activeCol && row === clampRow(state.cols[col].length)) return;
+      state.activeCol = col;
+      state.desiredRow = row;
+      render();
+    });
+
+    menu.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const cell = e.target.closest("[data-col]");
+      if (!cell) return;
+      const col = Number(cell.dataset.col);
+      const row = Number(cell.dataset.row);
+      const item = state.cols[col][row];
+      if (item) apply(item);
+    });
+
+    document.addEventListener("mousedown", (e) => {
+      if (!menu.contains(e.target) && e.target !== editor && !editor.contains(e.target)) hide();
+    });
+
+    // ============ 初始化：预置一句含多个片段的指令 ============
+    function makeFrag(kind, opts) {
+      const el = document.createElement("span");
+      el.className = "composer-fragment composer-" + COL_META[kind].frag + "-fragment";
+      el.contentEditable = "false";
+      if (kind === KIND.PAGE) { el.dataset.slideId = opts.id; el.textContent = opts.name; }
+      else if (kind === KIND.COMPONENT) { el.dataset.componentName = opts.name; el.textContent = opts.name; }
+      else { el.dataset.promptId = opts.id; el.textContent = opts.value; }
+      return el;
+    }
+
+    editor.append(document.createTextNode("把 "));
+    editor.append(makeFrag(KIND.PAGE, { id: "sli_d4e5f6", name: pageName(pages[1], 1) }));
+    editor.append(document.createTextNode(" 改用 "));
+    editor.append(makeFrag(KIND.COMPONENT, { name: "柱状图" }));
+    editor.append(document.createTextNode(" 展示，并 "));
+    editor.append(makeFrag(KIND.PROMPT, { id: "prm_visual", value: prompts[2].value }));
+    updatePreview();
+    renderIcons();
+  </script>
+</body>
+</html>
