@@ -9,6 +9,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useComposerStore } from '../../stores/composerStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
+import { useBriefingStore } from '../../stores/briefingStore';
 import { useActiveSession } from './useActiveSession';
 
 export const AgentPanel: React.FC = () => {
@@ -16,14 +17,18 @@ export const AgentPanel: React.FC = () => {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const ensureActiveThread = useThreadStore((state) => state.ensureActiveThread);
   const model = useComposerStore((state) => state.modelProfileName);
+  const polishing = useComposerStore((state) => state.polishing);
   const startCommit = useGitCommitStore((state) => state.start);
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
   const { status: runStatus } = useActiveSession();
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
+  const briefingActive = useBriefingStore((state) => (
+    activeProjectId ? state.sessions[activeProjectId]?.status === 'generating' : false
+  ));
   const runActive = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(runStatus);
-  const commitDisabled = !activeProjectId || !model || commitActive || runActive;
+  const commitDisabled = !activeProjectId || !model || commitActive || briefingActive || polishing || runActive;
   const commit = async () => {
     if (!activeProjectId || !model || commitDisabled) return;
     const threadId = await ensureActiveThread(activeProjectId);

@@ -1,5 +1,7 @@
 import type {
   PlanState,
+  BriefingKind,
+  BriefingVersion,
   PublicLoadedResource,
   RunMode,
   RunScope,
@@ -81,6 +83,31 @@ function readHistoryComponents(data: Record<string, unknown>): PublicLoadedResou
       id: value.id,
       name: value.name,
       ...(typeof value.open_url === 'string' ? { open_url: value.open_url } : {}),
+    }];
+  });
+}
+
+function readBriefingVersions(data: Record<string, unknown>): BriefingVersion[] {
+  if (!Array.isArray(data.versions)) return [];
+  return data.versions.flatMap((value) => {
+    if (!isRecord(value) ||
+      typeof value.briefing_id !== 'string' ||
+      typeof value.thread_id !== 'string' ||
+      typeof value.project_id !== 'string' ||
+      (value.kind !== 'kickoff' && value.kind !== 'handoff') ||
+      typeof value.version_no !== 'number' ||
+      typeof value.content !== 'string' ||
+      typeof value.feedback !== 'string' ||
+      typeof value.created_at !== 'number') return [];
+    return [{
+      briefing_id: value.briefing_id,
+      thread_id: value.thread_id,
+      project_id: value.project_id,
+      kind: value.kind as BriefingKind,
+      version_no: value.version_no,
+      content: value.content,
+      feedback: value.feedback,
+      created_at: value.created_at,
     }];
   });
 }
@@ -167,6 +194,23 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         status: 'failed',
         retryable: error?.retryable === true,
         timestamp: Date.parse(String(entry.data.occurred_at ?? '')) || (entry.ts || 0) * 1000,
+      });
+      continue;
+    }
+    if (entry.type === 'briefing') {
+      const kind = entry.data.kind;
+      const briefingId = entry.data.briefing_id;
+      const versions = readBriefingVersions(entry.data);
+      if ((kind !== 'kickoff' && kind !== 'handoff') ||
+        typeof briefingId !== 'string' || versions.length === 0) continue;
+      items.push({
+        id: `briefing:${briefingId}`,
+        type: 'briefing',
+        briefingId,
+        kind,
+        status: 'completed',
+        versions,
+        timestamp: Number(entry.data.updated_at ?? entry.ts ?? 0) * 1000,
       });
       continue;
     }

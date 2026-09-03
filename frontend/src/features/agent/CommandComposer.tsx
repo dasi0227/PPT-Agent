@@ -20,7 +20,13 @@ import { PlanIndicator } from './PlanIndicator';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
-import { PromptComposerEditor, type PromptComposerEditorHandle } from './PromptComposerEditor';
+import { useBriefingStore } from '../../stores/briefingStore';
+import {
+  PromptComposerEditor,
+  type PromptComposerEditorHandle,
+  type SlashMenuOption,
+} from './PromptComposerEditor';
+import { resolveSlashCommands, type SlashCommandId } from './promptMatching';
 
 const COMPOSER_CONTROLS_FIT_GUARD_PX = 2;
 const COMPOSER_CONTROLS_HYSTERESIS_PX = 12;
@@ -144,7 +150,6 @@ export const CommandComposer: React.FC = () => {
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [skillsError, setSkillsError] = useState('');
   const [controlsDensity, setControlsDensity] = useState<ComposerControlsDensity>('full');
-  const [polishing, setPolishing] = useState(false);
   const controlBarRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<PromptComposerEditorHandle>(null);
   const polishAbortRef = useRef<AbortController | null>(null);
@@ -157,8 +162,16 @@ export const CommandComposer: React.FC = () => {
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
+  const startCommit = useGitCommitStore((state) => state.start);
+  const briefingSession = useBriefingStore((state) => (
+    activeProjectId ? state.sessions[activeProjectId] : undefined
+  ));
+  const generateBriefing = useBriefingStore((state) => state.generate);
+  const briefingActive = briefingSession?.status === 'generating';
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const composer = useComposerStore();
+  const polishing = composer.polishing;
+  const setPolishing = composer.setPolishing;
   const applyContextDefault = composer.applyContextDefault;
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef(activeProjectId);
@@ -183,6 +196,7 @@ export const CommandComposer: React.FC = () => {
     : steering
       ? '追加对当前任务的要求'
       : '输入你的想法与目标';
+  const requiresVision = composer.mode === 'execute' && composer.artifact === 'ppt';
 
   const activeSnapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const slides = useMemo(() => orderedSlides(activeSnapshot), [activeSnapshot]);
@@ -196,6 +210,25 @@ export const CommandComposer: React.FC = () => {
   })), [slides]);
   const currentSlide = slides.find((slide) => slide.id === currentSlideId);
   const isEmptyProject = Boolean(activeProjectId) && slides.length === 0;
+  const slashCommands = useMemo(() => resolveSlashCommands({
+    runActive,
+    emptyProject: isEmptyProject,
+    operationBusy: commitActive || polishing || briefingActive,
+    hasPolishText: text.replace(/(?:^|[ \n])\/[^ \n/]*$/, '').trim().length > 0,
+  }), [briefingActive, commitActive, isEmptyProject, polishing, runActive, text]);
+  const modelOptions = useMemo<SlashMenuOption[]>(() => profiles.map((profile) => ({
+    id: profile.name,
+    label: profile.name,
+    description: profile.model,
+    selected: profile.name === composer.modelProfileName,
+    disabled: requiresVision && !profile.capabilities.vision,
+  })), [composer.modelProfileName, profiles, requiresVision]);
+  const targetOptions = useMemo<SlashMenuOption[]>(() => [
+    { id: 'slide:spec', label: '单页设计稿', selected: composer.level === 'slide' && composer.artifact === 'spec' },
+    { id: 'slide:ppt', label: '单页幻灯片', selected: composer.level === 'slide' && composer.artifact === 'ppt' },
+    { id: 'deck:spec', label: '整份设计稿', selected: composer.level === 'deck' && composer.artifact === 'spec' },
+    { id: 'deck:ppt', label: '整份幻灯片', selected: composer.level === 'deck' && composer.artifact === 'ppt' },
+  ], [composer.artifact, composer.level]);
 
   useEffect(() => {
     if (previousProjectId.current === activeProjectId) return;
@@ -264,7 +297,7 @@ export const CommandComposer: React.FC = () => {
       polishAbortRef.current?.abort();
       polishAbortRef.current = null;
     };
-  }, [activeProjectId]);
+  }, [activeProjectId, setPolishing]);
 
   useLayoutEffect(() => {
     const bar = controlBarRef.current;
@@ -312,7 +345,7 @@ export const CommandComposer: React.FC = () => {
     const raw = (editor?.getSubmitText() ?? text).trim();
     const componentNames = editor?.getComponentNames() ?? [];
     const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
-    if (disabled || commitActive || polishing || !activeProjectId || !raw) return;
+    if (disabled || commitActive || polishing || briefingActive || !activeProjectId || !raw) return;
     setSubmitError('');
     const projectId = activeProjectId;
     let threadId: string;
@@ -342,7 +375,7 @@ export const CommandComposer: React.FC = () => {
         : composer.level,
       ...(mentionedSlideIds.length === 0 && composer.level === 'slide' && currentSlide ? { slide_id: currentSlide.id } : {}),
     };
-    let request: CreateRunRequest = {
+    const request: CreateRunRequest = {
       client_request_id: newClientIdentity('req'),
       model: composer.modelProfileName,
       scope,
@@ -392,7 +425,6 @@ export const CommandComposer: React.FC = () => {
     await cancelRun(activeThreadId, activeRunId);
   };
 
-  const requiresVision = composer.mode === 'execute' && composer.artifact === 'ppt';
   const togglePlanIntent = () => {
     composer.setIntent(composer.mode === 'plan' ? 'execute' : 'plan');
   };
@@ -400,7 +432,7 @@ export const CommandComposer: React.FC = () => {
   const polishText = async () => {
     const editor = editorRef.current;
     const instruction = editor?.getPlainText().trim() ?? '';
-    if (!editor || disabled || commitActive || polishing || !activeProjectId || !instruction) return;
+    if (!editor || disabled || commitActive || polishing || briefingActive || !activeProjectId || !instruction) return;
     if (profilesError || profilesLoading || !composer.modelProfileName) {
       setSubmitError(profilesError || '模型列表仍在加载，请稍候');
       return;
@@ -446,8 +478,42 @@ export const CommandComposer: React.FC = () => {
     }
   };
 
+  const executeSlashCommand = async (command: SlashCommandId) => {
+    setSubmitError('');
+    if (command === 'plan' || command === 'ask' || command === 'talk') {
+      composer.setIntent(command);
+      return;
+    }
+    if (command === 'polish') {
+      await polishText();
+      return;
+    }
+    if (!activeProjectId || !composer.modelProfileName) return;
+    let threadId: string;
+    try {
+      threadId = await ensureActiveThread(activeProjectId);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+      return;
+    }
+    if (command === 'commit') {
+      await startCommit(activeProjectId, threadId, composer.modelProfileName);
+      return;
+    }
+    if (command === 'kickoff' || command === 'handoff') {
+      await generateBriefing(activeProjectId, threadId, composer.modelProfileName, command);
+    }
+  };
+
+  const selectTargetOption = (id: string) => {
+    const [level, artifact] = id.split(':');
+    if ((level !== 'slide' && level !== 'deck') || (artifact !== 'spec' && artifact !== 'ppt')) return;
+    composer.setLevel(level);
+    composer.setArtifact(artifact);
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.nativeEvent.isComposing || isComposing || polishing || commitActive) return;
+    if (event.nativeEvent.isComposing || isComposing || polishing || commitActive || briefingActive) return;
     if (event.key === 'Enter' && (isMac() ? event.metaKey : event.ctrlKey)) {
       event.preventDefault();
       void submit();
@@ -483,12 +549,18 @@ export const CommandComposer: React.FC = () => {
             disabled={disabled}
             readOnly={polishing}
             pages={steering ? [] : pageCandidates}
+            slashCommands={slashCommands}
+            modelOptions={modelOptions}
+            targetOptions={targetOptions}
+            onSlashCommand={(command) => { void executeSlashCommand(command); }}
+            onModelOption={composer.setModelProfileName}
+            onTargetOption={selectTargetOption}
           />
           {text.trim() !== '' && !disabled && (
             <button
               type="button"
               onClick={() => void polishText()}
-              disabled={polishing || commitActive}
+              disabled={polishing || commitActive || briefingActive}
               aria-label={polishing ? '正在润色表达' : '润色表达'}
               title={polishing ? '正在润色表达' : '润色表达'}
               className="absolute right-2.5 top-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 bg-surface/90 text-accent shadow-sm backdrop-blur-sm hover:bg-accent-soft disabled:cursor-wait disabled:opacity-100"
@@ -566,7 +638,7 @@ export const CommandComposer: React.FC = () => {
             ) : (
               <button
                 onClick={() => void submit()}
-                disabled={!text.trim() || disabled || commitActive || polishing || (!steering && (profilesLoading || Boolean(profilesError)))}
+                disabled={!text.trim() || disabled || commitActive || polishing || briefingActive || (!steering && (profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:bg-text-400 disabled:opacity-50"
                 aria-label="发送"
               >

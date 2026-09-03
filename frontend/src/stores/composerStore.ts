@@ -14,12 +14,14 @@ interface ComposerState {
   level: ScopeLevel;
   mode: RunMode;
   modelProfileName: string | null;
+  polishing: boolean;
   selectedSkillIds: string[];
   userTouchedTarget: boolean;
   setArtifact: (artifact: Artifact) => void;
   setLevel: (level: ScopeLevel) => void;
   setIntent: (mode: RunMode) => void;
   setModelProfileName: (name: string) => void;
+  setPolishing: (value: boolean) => void;
   toggleSkill: (id: string) => void;
   reconcileSkills: (validIds: string[]) => void;
   applyContextDefault: (hasSlides: boolean) => void;
@@ -31,6 +33,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   level: 'slide',
   mode: 'execute',
   modelProfileName: initialModelProfile(),
+  polishing: false,
   selectedSkillIds: [],
   userTouchedTarget: false,
   setArtifact: (artifact) => set({ artifact, userTouchedTarget: true }),
@@ -40,6 +43,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     if (typeof localStorage !== 'undefined') localStorage.setItem(RECENT_MODEL_KEY, name);
     set({ modelProfileName: name });
   },
+  setPolishing: (polishing) => set({ polishing }),
   toggleSkill: (id) => set((state) => {
     if (state.selectedSkillIds.includes(id)) {
       return { selectedSkillIds: state.selectedSkillIds.filter((selected) => selected !== id) };
@@ -65,6 +69,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     artifact: 'ppt',
     level: 'slide',
     mode: 'execute',
+    polishing: false,
     selectedSkillIds: [],
     userTouchedTarget: false,
   }),

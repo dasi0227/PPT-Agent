@@ -262,6 +262,40 @@ export interface PolishResponse {
   prompt_version: string;
 }
 
+export type BriefingKind = 'kickoff' | 'handoff';
+
+export interface BriefingVersion {
+  briefing_id: string;
+  thread_id: string;
+  project_id: string;
+  kind: BriefingKind;
+  version_no: number;
+  content: string;
+  feedback: string;
+  created_at: number;
+}
+
+export interface Briefing {
+  briefing_id: string;
+  thread_id: string;
+  project_id: string;
+  kind: BriefingKind;
+  versions: BriefingVersion[];
+  updated_at: number;
+}
+
+export interface BriefingRequest {
+  thread_id: string;
+  model_profile_name: string;
+  briefing_id?: string;
+  feedback?: string;
+}
+
+export interface BriefingResponse {
+  briefing: Briefing;
+  prompt_version: string;
+}
+
 export type GitCommitStatus = 'accepted' | 'running' | 'empty' | 'completed' | 'failed';
 export type GitCommitPhase = 'staging' | 'analyzing' | 'committing';
 

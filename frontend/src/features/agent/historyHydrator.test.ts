@@ -293,4 +293,35 @@ describe('history hydrator', () => {
     ]);
     expect(hydrated.session.status).toBe('idle');
   });
+
+  it('restores a briefing group as one versioned timeline item', () => {
+    const hydrated = hydrateRunFromHistory([
+      entry(1, 'briefing', {
+        briefing_id: 'brf_1',
+        project_id: 'p1',
+        thread_id: 't1',
+        kind: 'handoff',
+        updated_at: 20,
+        versions: [
+          {
+            briefing_id: 'brf_1', project_id: 'p1', thread_id: 't1',
+            kind: 'handoff', version_no: 1, content: 'first', feedback: '', created_at: 10,
+          },
+          {
+            briefing_id: 'brf_1', project_id: 'p1', thread_id: 't1',
+            kind: 'handoff', version_no: 2, content: 'second', feedback: 'expand', created_at: 20,
+          },
+        ],
+      }, 'brf_1'),
+    ]);
+    expect(hydrated.items).toHaveLength(1);
+    expect(hydrated.items[0]).toMatchObject({
+      type: 'briefing',
+      briefingId: 'brf_1',
+      kind: 'handoff',
+      status: 'completed',
+      versions: [{ version_no: 1 }, { version_no: 2 }],
+    });
+    expect(hydrated.session.status).toBe('idle');
+  });
 });

@@ -23,6 +23,60 @@ export interface PromptTrigger {
 export type ComponentTrigger = PromptTrigger;
 export type PageTrigger = PromptTrigger;
 export type SummaryTrigger = PromptTrigger;
+export type CommandTrigger = PromptTrigger;
+
+export type SlashCommandId =
+  | 'plan'
+  | 'ask'
+  | 'talk'
+  | 'kickoff'
+  | 'handoff'
+  | 'commit'
+  | 'polish'
+  | 'model'
+  | 'target';
+
+export type SlashCommandGroup = '模式' | '操作' | '设置';
+export type CommandMenuLevel = 'root' | 'model' | 'target';
+
+export interface SlashCommand {
+  id: SlashCommandId;
+  name: string;
+  ariaLabel: string;
+  description: string;
+  group: SlashCommandGroup;
+  submenu?: 'model' | 'target';
+}
+
+export interface ResolvedSlashCommand extends SlashCommand {
+  disabled: boolean;
+  disabledReason?: string;
+}
+
+export interface SlashCommandAvailability {
+  runActive: boolean;
+  emptyProject: boolean;
+  operationBusy: boolean;
+  hasPolishText: boolean;
+}
+
+export interface CommandMenuKeyResult {
+  level: CommandMenuLevel;
+  activeIndex: number;
+  action: 'none' | 'select' | 'close';
+}
+
+export const slashCommands: SlashCommand[] = [
+  { id: 'plan', name: 'plan', ariaLabel: '计划模式', description: '切换到计划模式', group: '模式' },
+  { id: 'ask', name: 'ask', ariaLabel: '审问模式', description: '切换到审问模式', group: '模式' },
+  { id: 'talk', name: 'talk', ariaLabel: '聊天模式', description: '切换到聊天模式', group: '模式' },
+  { id: 'kickoff', name: 'kickoff', ariaLabel: '启动简报', description: '生成交给新 Agent 的启动 prompt', group: '操作' },
+  { id: 'handoff', name: 'handoff', ariaLabel: '交接简报', description: '生成上下文交接 prompt', group: '操作' },
+  { id: 'commit', name: 'commit', ariaLabel: '提交', description: '执行一次 Git 提交', group: '操作' },
+  { id: 'polish', name: 'polish', ariaLabel: '润色', description: '润色当前输入内容', group: '操作' },
+  { id: 'model', name: 'model', ariaLabel: '切换模型', description: '选择对话使用的模型', group: '设置', submenu: 'model' },
+  { id: 'target', name: 'target', ariaLabel: '切换目标', description: '选择生成目标范围与对象', group: '设置', submenu: 'target' },
+];
 
 export interface PageMentionCandidate {
   slideId: string;
@@ -78,6 +132,77 @@ export function findSummaryTrigger(text: string, caret: number): SummaryTrigger 
     start: caret - match[1].length - match[2].length,
     end: caret,
     query: match[2],
+  };
+}
+
+export function findCommandTrigger(text: string, caret: number): CommandTrigger | null {
+  if (caret < 0 || caret > text.length) return null;
+  const before = text.slice(0, caret);
+  const match = before.match(/(?:^|[ \n])(\/)([^ \n/]*)$/);
+  if (!match) return null;
+  return {
+    start: caret - match[1].length - match[2].length,
+    end: caret,
+    query: match[2],
+  };
+}
+
+export function resolveSlashCommands(availability: SlashCommandAvailability): ResolvedSlashCommand[] {
+  return slashCommands.map((command) => {
+    if (!['kickoff', 'handoff', 'commit', 'polish'].includes(command.id)) {
+      return { ...command, disabled: false };
+    }
+    const disabledReason = availability.runActive
+      ? '任务运行中'
+      : availability.emptyProject
+        ? '当前为空项目'
+        : availability.operationBusy
+          ? '其他操作进行中'
+          : command.id === 'polish' && !availability.hasPolishText
+            ? '请输入需要润色的内容'
+            : undefined;
+    return { ...command, disabled: Boolean(disabledReason), disabledReason };
+  });
+}
+
+export function matchSlashCommands(commands: ResolvedSlashCommand[], query: string): ResolvedSlashCommand[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return commands;
+  return commands.filter((command) => {
+    const name = command.name.toLocaleLowerCase();
+    if (name.startsWith(normalized)) return true;
+    let cursor = 0;
+    for (const character of normalized) {
+      cursor = name.indexOf(character, cursor);
+      if (cursor < 0) return false;
+      cursor += 1;
+    }
+    return true;
+  });
+}
+
+export function navigateCommandMenu(
+  level: CommandMenuLevel,
+  activeIndex: number,
+  key: 'ArrowUp' | 'ArrowDown' | 'Enter' | 'Escape',
+  candidateCount: number,
+): CommandMenuKeyResult {
+  if (key === 'Escape') {
+    return level === 'root'
+      ? { level, activeIndex, action: 'close' }
+      : { level: 'root', activeIndex: 0, action: 'none' };
+  }
+  if (key === 'Enter') {
+    return { level, activeIndex, action: candidateCount > 0 ? 'select' : 'none' };
+  }
+  if (candidateCount <= 0) {
+    return { level, activeIndex: 0, action: 'none' };
+  }
+  const direction = key === 'ArrowDown' ? 1 : -1;
+  return {
+    level,
+    activeIndex: (activeIndex + direction + candidateCount) % candidateCount,
+    action: 'none',
   };
 }
 

@@ -4,6 +4,8 @@ import {
   PlanStep,
   PlanStepStatus,
   PublicError,
+  BriefingKind,
+  BriefingVersion,
   PublicLoadedResource,
   PublicTarget,
   QuestionAnswer,
@@ -24,6 +26,7 @@ export type TimelineItemType =
   | 'plan_approval'
   | 'command_permission'
   | 'git_commit'
+  | 'briefing'
   | 'terminal_notice';
 
 export interface BaseTimelineItem {
@@ -140,6 +143,15 @@ export interface GitCommitTimelineItem extends BaseTimelineItem {
   retryable?: boolean;
 }
 
+export interface BriefingTimelineItem extends BaseTimelineItem {
+  type: 'briefing';
+  briefingId: string;
+  kind: BriefingKind;
+  status: 'loading' | 'completed';
+  versions: BriefingVersion[];
+  loadingStartedAt?: number;
+}
+
 export type TimelineItem =
   | UserTurnItem
   | RunLifecycleItem
@@ -151,6 +163,7 @@ export type TimelineItem =
   | PlanApprovalItem
   | CommandPermissionItem
   | GitCommitTimelineItem
+  | BriefingTimelineItem
   | TerminalNoticeItem;
 
 function normalizeStepStatus(status: unknown): PlanStepStatus {

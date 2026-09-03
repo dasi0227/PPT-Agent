@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { ComponentReference, Prompt } from '../../api/types';
 import {
   findComponentTrigger,
+  findCommandTrigger,
   findPageTrigger,
   findPromptTrigger,
   findSummaryTrigger,
   matchComponents,
   matchPages,
   matchPrompts,
+  matchSlashCommands,
+  navigateCommandMenu,
   pageDisplayName,
+  resolveSlashCommands,
   type PageMentionCandidate,
 } from './promptMatching';
 
@@ -119,10 +123,58 @@ describe('summary trigger', () => {
     expect(findSummaryTrigger('@融@资', 4)).toBeNull();
   });
 
-  it('keeps / silent for every finder', () => {
+  it('keeps / independent from reference finders', () => {
     expect(findSummaryTrigger('/融', 2)).toBeNull();
     expect(findPromptTrigger('/融', 2)).toBeNull();
     expect(findComponentTrigger('/融', 2)).toBeNull();
     expect(findPageTrigger('/融', 2)).toBeNull();
+  });
+});
+
+describe('slash commands', () => {
+  const commands = resolveSlashCommands({
+    runActive: false,
+    emptyProject: false,
+    operationBusy: false,
+    hasPolishText: true,
+  });
+
+  it('detects slash commands only at valid boundaries', () => {
+    expect(findCommandTrigger('/kick', 5)).toEqual({ start: 0, end: 5, query: 'kick' });
+    expect(findCommandTrigger('正文 /pl', 6)).toEqual({ start: 3, end: 6, query: 'pl' });
+    expect(findCommandTrigger('正文\n/model', 9)).toEqual({ start: 3, end: 9, query: 'model' });
+    expect(findCommandTrigger('path/to', 7)).toBeNull();
+    expect(findCommandTrigger('//talk', 6)).toBeNull();
+  });
+
+  it('filters commands by command-name prefix and keeps disabled matches', () => {
+    expect(matchSlashCommands(commands, 'pl').map((command) => command.id)).toEqual(['plan', 'polish']);
+    expect(matchSlashCommands(commands, 'ha').map((command) => command.id)).toEqual(['handoff']);
+    expect(matchSlashCommands(commands, '')).toHaveLength(9);
+    const disabled = resolveSlashCommands({
+      runActive: true,
+      emptyProject: false,
+      operationBusy: false,
+      hasPolishText: true,
+    });
+    expect(matchSlashCommands(disabled, 'kickoff')[0]).toMatchObject({
+      id: 'kickoff',
+      disabled: true,
+      disabledReason: '任务运行中',
+    });
+  });
+
+  it('navigates secondary menus with wrapping, select, and root escape', () => {
+    expect(navigateCommandMenu('model', 0, 'ArrowUp', 3)).toEqual({
+      level: 'model', activeIndex: 2, action: 'none',
+    });
+    expect(navigateCommandMenu('target', 3, 'ArrowDown', 4)).toEqual({
+      level: 'target', activeIndex: 0, action: 'none',
+    });
+    expect(navigateCommandMenu('model', 1, 'Enter', 3).action).toBe('select');
+    expect(navigateCommandMenu('model', 1, 'Escape', 3)).toEqual({
+      level: 'root', activeIndex: 0, action: 'none',
+    });
+    expect(navigateCommandMenu('root', 1, 'Escape', 9).action).toBe('close');
   });
 });

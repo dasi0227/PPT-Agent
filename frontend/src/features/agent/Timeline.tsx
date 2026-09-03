@@ -20,6 +20,7 @@ import { GitCommitEvent, GitCommitProgress } from './GitCommitActivity';
 import { ComponentActivity, SkillActivity } from './SkillActivity';
 import { useProjectStore } from '../../stores/projectStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
+import { BriefingActivity } from './BriefingActivity';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -171,6 +172,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
         {item.type === 'git_commit' && <GitCommitEvent item={item} />}
+        {item.type === 'briefing' && <BriefingActivity item={item} />}
       </div>
     );
   };

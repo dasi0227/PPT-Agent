@@ -10,23 +10,45 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { Blocks, GalleryThumbnails, NotebookText } from 'lucide-react';
+import {
+  ArrowLeft,
+  Blocks,
+  Check,
+  ChevronRight,
+  CircleHelp,
+  Cpu,
+  Crosshair,
+  GalleryThumbnails,
+  GitCommitHorizontal,
+  MessagesSquare,
+  NotebookText,
+  PackageOpen,
+  Rocket,
+  Sparkles,
+  Workflow,
+} from 'lucide-react';
 import type { ComponentReference, Prompt } from '../../api/types';
 import { useComponentStore } from '../../stores/componentStore';
 import { usePromptStore } from '../../stores/promptStore';
 import {
   findComponentTrigger,
+  findCommandTrigger,
   findPageTrigger,
   findPromptTrigger,
   findSummaryTrigger,
   MAX_COMPONENT_MENTIONS,
   MAX_PAGE_MENTIONS,
   matchComponents,
+  matchSlashCommands,
   matchPages,
   matchPrompts,
   pageDisplayName,
+  navigateCommandMenu,
+  type CommandMenuLevel,
   type PageMentionCandidate,
   type PromptTrigger,
+  type ResolvedSlashCommand,
+  type SlashCommandId,
 } from './promptMatching';
 import './promptComposer.css';
 
@@ -41,7 +63,15 @@ export interface PromptComposerEditorHandle {
   restoreSelection: (range: Range | null) => void;
 }
 
-type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' | 'page' | 'summary' };
+type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' | 'page' | 'summary' | 'command' };
+
+export interface SlashMenuOption {
+  id: string;
+  label: string;
+  description?: string;
+  selected?: boolean;
+  disabled?: boolean;
+}
 
 const SUMMARY_COLUMNS = [
   { kind: 'page' as const, label: '页面' },
@@ -58,6 +88,12 @@ interface PromptComposerEditorProps {
   disabled: boolean;
   readOnly: boolean;
   pages?: PageMentionCandidate[];
+  slashCommands?: ResolvedSlashCommand[];
+  modelOptions?: SlashMenuOption[];
+  targetOptions?: SlashMenuOption[];
+  onSlashCommand?: (command: SlashCommandId) => void;
+  onModelOption?: (id: string) => void;
+  onTargetOption?: (id: string) => void;
 }
 
 function nodePlainText(node: Node): string {
@@ -185,6 +221,12 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     disabled,
     readOnly,
     pages = [],
+    slashCommands = [],
+    modelOptions = [],
+    targetOptions = [],
+    onSlashCommand,
+    onModelOption,
+    onTargetOption,
   }, forwardedRef) {
     const editorRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -194,6 +236,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const [activeIndex, setActiveIndex] = useState(0);
     const [summaryCol, setSummaryCol] = useState(0);
     const [summaryRow, setSummaryRow] = useState(0);
+    const [commandLevel, setCommandLevel] = useState<CommandMenuLevel>('root');
     const prompts = usePromptStore((state) => state.prompts);
     const version = usePromptStore((state) => state.version);
     const loadPrompts = usePromptStore((state) => state.load);
@@ -208,15 +251,25 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const promptCandidates = trigger && (trigger.kind === 'prompt' || isSummary) ? matchPrompts(prompts, trigger.query) : [];
     const componentCandidates = trigger && (trigger.kind === 'component' || isSummary) ? matchComponents(components, trigger.query) : [];
     const pageCandidates = trigger && (trigger.kind === 'page' || isSummary) ? matchPages(pages, trigger.query) : [];
+    const commandCandidates = trigger?.kind === 'command' ? matchSlashCommands(slashCommands, trigger.query) : [];
+    const commandOptions = commandLevel === 'model' ? modelOptions : targetOptions;
     // 汇总面板三列（页面 · 组件 · 提示词），列内候选沿用各自匹配规则
     const summaryColumns = [pageCandidates, componentCandidates, promptCandidates];
-    const clampSummaryRow = (length: number) => (length ? Math.max(0, Math.min(summaryRow, length - 1)) : -1);
-    const candidateCount = trigger?.kind === 'component'
+    const clampSummaryRow = useCallback(
+      (length: number) => (length ? Math.max(0, Math.min(summaryRow, length - 1)) : -1),
+      [summaryRow],
+    );
+    const activeSummaryRow = clampSummaryRow(summaryColumns[summaryCol].length);
+    const candidateCount = trigger?.kind === 'command'
+      ? commandLevel === 'root' ? commandCandidates.length : commandOptions.length
+      : trigger?.kind === 'component'
       ? componentCandidates.length
       : trigger?.kind === 'page'
         ? pageCandidates.length
         : promptCandidates.length;
-    const hasConfiguredCandidates = trigger?.kind === 'component'
+    const hasConfiguredCandidates = trigger?.kind === 'command'
+      ? commandLevel === 'root' || commandOptions.length > 0
+      : trigger?.kind === 'component'
       ? components.some((component) => !component.disabled)
       : trigger?.kind === 'page'
         ? pages.length > 0
@@ -238,9 +291,12 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       const componentTrigger = findComponentTrigger(text, offset);
       const pageTrigger = findPageTrigger(text, offset);
       const summaryTrigger = findSummaryTrigger(text, offset);
-      const next: ComposerTrigger | null = promptTrigger
-        ? { ...promptTrigger, kind: 'prompt' }
-        : componentTrigger
+      const commandTrigger = findCommandTrigger(text, offset);
+      const next: ComposerTrigger | null = commandTrigger
+        ? { ...commandTrigger, kind: 'command' }
+        : promptTrigger
+          ? { ...promptTrigger, kind: 'prompt' }
+          : componentTrigger
           ? { ...componentTrigger, kind: 'component' }
           : pageTrigger
             ? { ...pageTrigger, kind: 'page' }
@@ -253,6 +309,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         return;
       }
       setActiveIndex(0);
+      if (next.kind === 'command' && trigger?.kind !== 'command') {
+        setCommandLevel('root');
+      }
       // 首次进入汇总面板：高亮第一个非空列的首项
       if (next.kind === 'summary' && trigger?.kind !== 'summary') {
         const cols = [
@@ -364,13 +423,13 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     useEffect(() => {
       if (isSummary) {
-        menuRef.current?.querySelector<HTMLElement>(`[data-summary-cell="${summaryCol}:${clampSummaryRow(summaryColumns[summaryCol].length)}"]`)
+        menuRef.current?.querySelector<HTMLElement>(`[data-summary-cell="${summaryCol}:${activeSummaryRow}"]`)
           ?.scrollIntoView({ block: 'nearest' });
         return;
       }
       menuRef.current?.querySelector<HTMLElement>(`[data-candidate-index="${activeIndex}"]`)
         ?.scrollIntoView({ block: 'nearest' });
-    }, [activeIndex, isSummary, summaryCol, summaryRow, summaryColumns]);
+    }, [activeIndex, activeSummaryRow, isSummary, summaryCol]);
 
     const syncValue = () => {
       const editor = editorRef.current;
@@ -468,6 +527,44 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       editor.focus();
     };
 
+    const clearCommandTrigger = () => {
+      const editor = editorRef.current;
+      if (!editor || !trigger || trigger.kind !== 'command') return false;
+      const start = pointAtOffset(editor, trigger.start);
+      const end = pointAtOffset(editor, trigger.end);
+      const range = document.createRange();
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
+      range.deleteContents();
+      range.collapse(true);
+      editor.normalize();
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      dismissedRef.current = '';
+      setTrigger(null);
+      setCommandLevel('root');
+      syncValue();
+      editor.focus();
+      return true;
+    };
+
+    const applyCommand = (command: ResolvedSlashCommand) => {
+      if (command.disabled) return;
+      if (command.submenu) {
+        setCommandLevel(command.submenu);
+        setActiveIndex(0);
+        return;
+      }
+      if (clearCommandTrigger()) onSlashCommand?.(command.id);
+    };
+
+    const applyCommandOption = (option: SlashMenuOption) => {
+      if (option.disabled || !clearCommandTrigger()) return;
+      if (commandLevel === 'model') onModelOption?.(option.id);
+      else onTargetOption?.(option.id);
+    };
+
     // 汇总面板选中：按当前列分派到对应的插入逻辑
     const applySummaryActive = () => {
       const column = summaryColumns[summaryCol];
@@ -487,6 +584,37 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const handleEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
       if (trigger && !event.nativeEvent.isComposing && !composingRef.current) {
+        if (trigger.kind === 'command' && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) {
+          const result = navigateCommandMenu(
+            commandLevel,
+            activeIndex,
+            event.key as 'ArrowUp' | 'ArrowDown' | 'Enter' | 'Escape',
+            candidateCount,
+          );
+          event.preventDefault();
+          if (result.action === 'close') {
+            dismissedRef.current = `${trigger.kind}:${trigger.start}:${trigger.end}:${trigger.query}`;
+            setTrigger(null);
+            return;
+          }
+          if (result.level !== commandLevel) {
+            setCommandLevel(result.level);
+            setActiveIndex(result.activeIndex);
+            return;
+          }
+          if (result.action === 'select') {
+            if (commandLevel === 'root') {
+              const command = commandCandidates[activeIndex];
+              if (command) applyCommand(command);
+            } else {
+              const option = commandOptions[activeIndex];
+              if (option) applyCommandOption(option);
+            }
+            return;
+          }
+          setActiveIndex(result.activeIndex);
+          return;
+        }
         if (trigger.kind === 'summary') {
           if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
             event.preventDefault();
@@ -593,6 +721,27 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       return <Icon className="h-[15px] w-[15px]" strokeWidth={1.75} />;
     };
 
+    const CommandIcon = ({ id }: { id: SlashCommandId }) => {
+      const Icon = id === 'plan'
+        ? Workflow
+        : id === 'ask'
+          ? CircleHelp
+          : id === 'talk'
+            ? MessagesSquare
+            : id === 'kickoff'
+              ? Rocket
+              : id === 'handoff'
+                ? PackageOpen
+                : id === 'commit'
+                  ? GitCommitHorizontal
+                  : id === 'polish'
+                    ? Sparkles
+                    : id === 'model'
+                      ? Cpu
+                      : Crosshair;
+      return <Icon className="h-[15px] w-[15px]" strokeWidth={1.75} />;
+    };
+
     return (
       <>
         {trigger && trigger.kind === 'summary' && (
@@ -669,7 +818,114 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             })}
           </div>
         )}
-        {trigger && trigger.kind !== 'summary' && (
+        {trigger && trigger.kind === 'command' && (
+          <div
+            ref={menuRef}
+            className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 flex max-h-[286px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
+            role="listbox"
+            aria-label={commandLevel === 'root' ? '命令' : commandLevel === 'model' ? '选择模型' : '选择目标'}
+          >
+            {commandLevel !== 'root' && (
+              <button
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  setCommandLevel('root');
+                  setActiveIndex(0);
+                }}
+                className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border px-2 text-left text-xs font-semibold text-text-700 hover:bg-panel-muted"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+                {commandLevel === 'model' ? '选择模型' : '选择目标'}
+              </button>
+            )}
+            <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto">
+              {candidateCount === 0 ? (
+                <div className="grid h-24 place-items-center px-3 text-xs text-text-400">
+                  {commandLevel === 'root' ? '无匹配命令' : '暂无可用选项'}
+                </div>
+              ) : commandLevel === 'root' ? (
+                (['模式', '操作', '设置'] as const).map((group) => {
+                  const groupCommands = commandCandidates.filter((command) => command.group === group);
+                  if (groupCommands.length === 0) return null;
+                  return (
+                    <div key={group}>
+                      <div className="px-2 pb-1 pt-2 text-[10px] font-semibold text-text-400">{group}</div>
+                      {groupCommands.map((command) => {
+                        const index = commandCandidates.indexOf(command);
+                        const active = index === activeIndex;
+                        return (
+                          <button
+                            key={command.id}
+                            type="button"
+                            role="option"
+                            aria-label={command.ariaLabel}
+                            aria-selected={active}
+                            aria-disabled={command.disabled}
+                            data-candidate-index={index}
+                            onMouseEnter={() => setActiveIndex(index)}
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                              applyCommand(command);
+                            }}
+                            className={`grid min-h-9 w-full grid-cols-[20px_minmax(0,1fr)_16px] items-center gap-1.5 rounded-md px-2 py-1 text-left ${
+                              command.disabled
+                                ? 'cursor-not-allowed text-text-400 opacity-55'
+                                : active
+                                  ? 'bg-accent-soft text-text-900'
+                                  : 'text-text-700 hover:bg-panel-muted'
+                            }`}
+                          >
+                            <span className={command.disabled ? 'text-text-400' : 'text-accent'} aria-hidden="true">
+                              <CommandIcon id={command.id} />
+                            </span>
+                            <span className="flex min-w-0 items-baseline gap-2">
+                              <span className="shrink-0 font-mono text-xs font-semibold">{command.name}</span>
+                              <span className="min-w-0 flex-1 truncate text-[11px] text-text-400">
+                                {command.disabledReason ?? command.description}
+                              </span>
+                            </span>
+                            {command.submenu && <ChevronRight className="h-3.5 w-3.5 text-text-400" strokeWidth={1.75} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })
+              ) : commandOptions.map((option, index) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="option"
+                  aria-selected={activeIndex === index}
+                  aria-disabled={option.disabled}
+                  data-candidate-index={index}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    applyCommandOption(option);
+                  }}
+                  className={`grid min-h-9 w-full grid-cols-[minmax(0,1fr)_16px] items-center gap-2 rounded-md px-2 py-1.5 text-left ${
+                    option.disabled
+                      ? 'cursor-not-allowed text-text-400 opacity-55'
+                      : activeIndex === index
+                        ? 'bg-accent-soft text-text-900'
+                        : 'text-text-700 hover:bg-panel-muted'
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold">{option.label}</span>
+                    {option.description && (
+                      <span className="block truncate text-[10px] text-text-400">{option.description}</span>
+                    )}
+                  </span>
+                  {option.selected && <Check className="h-3.5 w-3.5 text-accent" strokeWidth={2} />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {trigger && trigger.kind !== 'summary' && trigger.kind !== 'command' && (
           <div
             ref={menuRef}
             className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
