@@ -43,9 +43,10 @@ func (p Profile) String() string {
 func (p Profile) GoString() string { return p.String() }
 
 type PublicCapabilities struct {
-	Vision            bool `json:"vision"`
-	ToolCalls         bool `json:"tool_calls"`
-	MultipleToolCalls bool `json:"multiple_tool_calls"`
+	Vision              bool `json:"vision"`
+	ToolCalls           bool `json:"tool_calls"`
+	MultipleToolCalls   bool `json:"multiple_tool_calls"`
+	ContextWindowTokens int  `json:"context_window_tokens"`
 }
 
 type PublicProfile struct {
@@ -176,7 +177,8 @@ func (r *Registry) Public() PublicProfiles {
 			Name: profile.name, Model: profile.model,
 			Capabilities: PublicCapabilities{
 				Vision: capabilities.Vision, ToolCalls: capabilities.ToolCalls,
-				MultipleToolCalls: capabilities.MultipleToolCalls,
+				MultipleToolCalls:   capabilities.MultipleToolCalls,
+				ContextWindowTokens: capabilities.ContextWindowTokens,
 			},
 		})
 	}
@@ -189,13 +191,14 @@ func capabilitiesFor(provider, model string) Capabilities {
 	case ProviderDeepSeek:
 		switch {
 		case model == "deepseek-chat":
-			return Capabilities{ToolCalls: true, MultipleToolCalls: true}
+			return Capabilities{ToolCalls: true, MultipleToolCalls: true, ContextWindowTokens: 65536}
 		case model == "deepseek-reasoner",
 			strings.HasPrefix(model, "deepseek-v4-pro"),
 			strings.HasPrefix(model, "deepseek-v4-flash"):
 			return Capabilities{
 				ToolCalls: true, MultipleToolCalls: true, Reasoning: true,
 				RequiresReasoningReplay: true,
+				ContextWindowTokens:     65536,
 			}
 		}
 	case ProviderKimi:
@@ -203,11 +206,12 @@ func capabilitiesFor(provider, model string) Capabilities {
 		case strings.HasPrefix(model, "kimi-k3"), strings.HasPrefix(model, "kimi-k2.6"):
 			return Capabilities{
 				Vision: true, ToolCalls: true, MultipleToolCalls: true, Reasoning: true,
-				ImageInputMIMEs: []string{"image/png", "image/jpeg", "image/webp"},
-				MaxImageBytes:   defaultMaxImageBytes,
+				ImageInputMIMEs:     []string{"image/png", "image/jpeg", "image/webp"},
+				MaxImageBytes:       defaultMaxImageBytes,
+				ContextWindowTokens: 262144,
 			}
 		case strings.HasPrefix(model, "kimi-k2"):
-			return Capabilities{ToolCalls: true, MultipleToolCalls: true, Reasoning: true}
+			return Capabilities{ToolCalls: true, MultipleToolCalls: true, Reasoning: true, ContextWindowTokens: 131072}
 		}
 	case ProviderOpenAI:
 		switch {
@@ -218,14 +222,28 @@ func capabilitiesFor(provider, model string) Capabilities {
 			strings.HasPrefix(model, "o4"):
 			return Capabilities{
 				Vision: true, ToolCalls: true, MultipleToolCalls: true, Reasoning: true,
-				ImageInputMIMEs: []string{"image/png", "image/jpeg", "image/webp"},
-				MaxImageBytes:   defaultMaxImageBytes,
+				ImageInputMIMEs:     []string{"image/png", "image/jpeg", "image/webp"},
+				MaxImageBytes:       defaultMaxImageBytes,
+				ContextWindowTokens: openAIContextWindow(model),
 			}
 		}
 	}
 	// Unknown models fail closed. In particular, a YAML entry cannot invent
 	// vision or tool support with configuration flags.
 	return Capabilities{}
+}
+
+func openAIContextWindow(model string) int {
+	switch {
+	case strings.HasPrefix(model, "gpt-4.1"):
+		return 1047576
+	case strings.HasPrefix(model, "gpt-5"):
+		return 400000
+	case strings.HasPrefix(model, "o3"), strings.HasPrefix(model, "o4"):
+		return 200000
+	default:
+		return 128000
+	}
 }
 
 func cloneCapabilities(value Capabilities) Capabilities {

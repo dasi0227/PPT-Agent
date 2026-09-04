@@ -2405,7 +2405,6 @@ func testPack(mode model.RunMode, artifact model.Artifact, level model.ScopeLeve
 		},
 		SlideHTML:  contextengine.SlideHTMLContext{Summaries: map[string]contextengine.HTMLSummary{}},
 		Components: []contextengine.ComponentCandidate{}, RelatedSlides: []contextengine.SlideSummary{},
-		RecentTurns: []contextengine.RecentTurn{},
 		Revisions: contextengine.RevisionRefs{
 			SlideSpecs: map[string]int{"s1": 1}, SlideHTML: map[string]int{"s1": 1},
 		},

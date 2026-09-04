@@ -301,6 +301,41 @@ func briefingVersionToPO(m model.BriefingVersion) briefingVersionPO {
 	}
 }
 
+type contextCompactionPO struct {
+	ID           string `gorm:"column:id;primaryKey"`
+	ThreadID     string `gorm:"column:thread_id"`
+	ProjectID    string `gorm:"column:project_id"`
+	RunID        string `gorm:"column:run_id"`
+	Trigger      string `gorm:"column:trigger"`
+	Summary      string `gorm:"column:summary"`
+	BeforeTokens int    `gorm:"column:before_tokens"`
+	AfterTokens  int    `gorm:"column:after_tokens"`
+	MaxTokens    int    `gorm:"column:max_tokens"`
+	Reclaimed    int    `gorm:"column:reclaimed_tokens"`
+	DurationMS   int64  `gorm:"column:duration_ms"`
+	CreatedAt    int64  `gorm:"column:created_at"`
+}
+
+func (contextCompactionPO) TableName() string { return "context_compactions" }
+
+func (p contextCompactionPO) toModel() model.ContextCompaction {
+	return model.ContextCompaction{
+		ID: p.ID, ThreadID: p.ThreadID, ProjectID: p.ProjectID, RunID: p.RunID,
+		Trigger: model.ContextCompactionTrigger(p.Trigger), Summary: p.Summary,
+		BeforeTokens: p.BeforeTokens, AfterTokens: p.AfterTokens, MaxTokens: p.MaxTokens,
+		Reclaimed: p.Reclaimed, DurationMS: p.DurationMS, CreatedAt: p.CreatedAt,
+	}
+}
+
+func contextCompactionToPO(m model.ContextCompaction) contextCompactionPO {
+	return contextCompactionPO{
+		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID, RunID: m.RunID,
+		Trigger: string(m.Trigger), Summary: m.Summary,
+		BeforeTokens: m.BeforeTokens, AfterTokens: m.AfterTokens, MaxTokens: m.MaxTokens,
+		Reclaimed: m.Reclaimed, DurationMS: m.DurationMS, CreatedAt: m.CreatedAt,
+	}
+}
+
 type runContextPO struct {
 	RunID           string `gorm:"column:run_id;primaryKey"`
 	ContextID       string `gorm:"column:context_id;uniqueIndex"`

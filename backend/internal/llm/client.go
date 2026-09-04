@@ -57,6 +57,7 @@ type Capabilities struct {
 	MultipleToolCalls       bool
 	Reasoning               bool
 	RequiresReasoningReplay bool
+	ContextWindowTokens     int
 	ImageInputMIMEs         []string
 	MaxImageBytes           int
 }

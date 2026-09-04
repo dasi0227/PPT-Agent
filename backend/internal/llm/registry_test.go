@@ -73,7 +73,23 @@ func TestPublicRegistryProjectionContainsOnlySafeFields(t *testing.T) {
 	got := public.Profiles[0]
 	if got.Name != "Safe Name" || got.Model != "kimi-k3" ||
 		!got.Capabilities.Vision || !got.Capabilities.ToolCalls ||
-		!got.Capabilities.MultipleToolCalls {
+		!got.Capabilities.MultipleToolCalls || got.Capabilities.ContextWindowTokens != 0 {
 		t.Fatalf("safe projection is wrong: %+v", got)
+	}
+}
+
+func TestKnownModelsDeclareContextWindows(t *testing.T) {
+	cases := []struct {
+		provider string
+		model    string
+	}{
+		{ProviderDeepSeek, "deepseek-chat"},
+		{ProviderKimi, "kimi-k3"},
+		{ProviderOpenAI, "gpt-5"},
+	}
+	for _, tc := range cases {
+		if got := capabilitiesFor(tc.provider, tc.model).ContextWindowTokens; got <= 0 {
+			t.Fatalf("%s/%s context window=%d", tc.provider, tc.model, got)
+		}
 	}
 }

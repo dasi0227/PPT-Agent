@@ -147,12 +147,20 @@ func TestHistoryMergesBriefingGroupWithoutWritingJSONL(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := st.CreateContextCompaction(ctx, model.ContextCompaction{
+		ID: "cmp_1", ThreadID: "t1", ProjectID: "p1",
+		Trigger: model.ContextCompactionManual, Summary: "summary",
+		BeforeTokens: 56000, AfterTokens: 30000, MaxTokens: 65536,
+		Reclaimed: 26000, DurationMS: 3600, CreatedAt: 201,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	out, err := service.NewThreadService(st).History(ctx, "t1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out) != 3 || out[1]["type"] != "briefing" {
-		t.Fatalf("briefing was not merged by timestamp: %+v", out)
+	if len(out) != 4 || out[1]["type"] != "briefing" || out[2]["type"] != "context_compaction" {
+		t.Fatalf("sidecar events were not merged by timestamp: %+v", out)
 	}
 	data, ok := out[1]["data"].(map[string]any)
 	if !ok {

@@ -219,12 +219,6 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScop
 	for _, item := range pack.Memory.ConfirmedDecisions {
 		appendItem(memoryIndexItem("memory", "confirmed_decision", pack, item))
 	}
-	for _, turn := range pack.RecentTurns {
-		appendItem(ContextIndexItem{
-			Kind: "history", Source: "current_thread_history", Revision: pack.Revisions.ThreadMemory,
-			Summary: turn.Type + ": " + turn.Text, Freshness: "recent",
-		})
-	}
 	if embedder != nil {
 		texts := make([]string, len(index.Items))
 		for i := range index.Items {

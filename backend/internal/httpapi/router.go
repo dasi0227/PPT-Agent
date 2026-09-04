@@ -10,28 +10,29 @@ import (
 
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
-	engine     *gin.Engine
-	cfg        *config.Config
-	log        *zap.Logger
-	health     *HealthHandler
-	run        *RunHandler
-	project    *ProjectHandler
-	thread     *ThreadHandler
-	slide      *SlideHandler
-	repository *RepositoryHandler
-	llm        *LLMHandler
-	polish     *PolishHandler
-	briefing   *BriefingHandler
-	gitCommit  *GitCommitHandler
-	prompt     *PromptHandler
+	engine        *gin.Engine
+	cfg           *config.Config
+	log           *zap.Logger
+	health        *HealthHandler
+	run           *RunHandler
+	project       *ProjectHandler
+	thread        *ThreadHandler
+	slide         *SlideHandler
+	repository    *RepositoryHandler
+	llm           *LLMHandler
+	polish        *PolishHandler
+	briefing      *BriefingHandler
+	gitCommit     *GitCommitHandler
+	prompt        *PromptHandler
+	contextWindow *ContextWindowHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, promptH *PromptHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, promptH *PromptHandler, contextWindowH *ContextWindowHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, prompt: promptH}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, prompt: promptH, contextWindow: contextWindowH}
 	r.register()
 	return r
 }
@@ -92,6 +93,10 @@ func (r *Router) register() {
 	v1.GET("/threads/:id", r.thread.Get)
 	v1.DELETE("/threads/:id", r.thread.Delete)
 	v1.GET("/threads/:id/history", r.thread.History)
+	if r.contextWindow != nil {
+		v1.GET("/threads/:id/context-window", r.contextWindow.Get)
+		v1.POST("/threads/:id/compact", r.contextWindow.Compact)
+	}
 
 	// Run：创建 / SSE 订阅 / HITL 输入 / 取消（40-api/rest-endpoints）。
 	v1.POST("/threads/:id/runs", r.run.CreateRun)

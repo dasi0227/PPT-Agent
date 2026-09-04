@@ -159,11 +159,19 @@ type RuntimeBudget struct {
 	ContextCompactionThreshold int
 }
 
-func DefaultRuntimeBudget() RuntimeBudget {
+func DefaultRuntimeBudget(contextWindow ...int) RuntimeBudget {
+	window := 0
+	if len(contextWindow) > 0 {
+		window = contextWindow[0]
+	}
+	threshold := 24000
+	if window > 0 {
+		threshold = window * 85 / 100
+	}
 	return RuntimeBudget{
 		MaxTurns: 128, MaxDuration: time.Hour,
 		MaxConsecutiveToolFailures: 5, MaxIdenticalGateRejections: 3,
-		ContextCompactionThreshold: 24000,
+		ContextCompactionThreshold: threshold,
 	}
 }
 

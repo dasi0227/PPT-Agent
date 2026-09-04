@@ -69,7 +69,6 @@ func (PromptCompiler) compile(pack ContextPack, systemPolicy, runtimeState strin
 	if pack.Memory.SchemaVersion != "" {
 		writeSection("memory", pack.Memory)
 	}
-	writeSection("recent_turns", pack.RecentTurns)
 	writeSection("available_context_refs", pack.Manifest.Refs)
 
 	var user strings.Builder

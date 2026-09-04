@@ -134,7 +134,7 @@ func (a *ContextAssembler) AssemblePolish(
 		}
 		pack.Warnings = append(pack.Warnings, warnings...)
 		pack.Memory = projectPolishMemory(memory)
-		for _, turn := range loadRecentTurns(project.WorkDir, req.ThreadID, 4) {
+		for _, turn := range loadTranscriptTurns(project.WorkDir, req.ThreadID, 4) {
 			if turn.Turn != "user" {
 				continue
 			}

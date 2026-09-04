@@ -62,13 +62,15 @@ func initApp() (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	runService := service.NewRunService(store, engine, registry, workRoot, nodeSlideRenderer)
+	fsTranscriptStore := provideTranscriptStore()
+	calibrationStore := provideCalibrationStore()
+	runService := service.NewRunService(store, engine, registry, workRoot, nodeSlideRenderer, fsTranscriptStore, calibrationStore)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
 	projectService := provideProjectService(store, workRoot, lockManager, themeService)
 	pptMutationService := service.NewPPTMutationService(store)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
-	threadService := service.NewThreadService(store)
+	threadService := provideThreadService(store, fsTranscriptStore)
 	threadHandler := httpapi.NewThreadHandler(threadService)
 	slideService := provideSlideService(store, themeService)
 	slideHandler := httpapi.NewSlideHandler(slideService)
@@ -97,7 +99,9 @@ func initApp() (*App, func(), error) {
 		return nil, nil, err
 	}
 	promptHandler := httpapi.NewPromptHandler(promptService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler)
+	contextWindowService := service.NewContextWindowService(store, registry, lockManager, fsTranscriptStore, calibrationStore)
+	contextWindowHandler := httpapi.NewContextWindowHandler(contextWindowService)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler, contextWindowHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	app := provideApp(server, engine, zapLogger)
@@ -113,14 +117,17 @@ func initApp() (*App, func(), error) {
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
 var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMRegistry,
 	provideLockManager,
+	provideTranscriptStore,
+	provideCalibrationStore,
 	provideWorkRoot,
 	provideEngine,
 	provideHistoryWriter,
-	provideRenderWorker, service.NewHealthService, provideProjectService, service.NewThreadService, service.NewRunService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
+	provideRenderWorker, service.NewHealthService, provideProjectService,
+	provideThreadService, service.NewRunService, service.NewContextWindowService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
 	provideSlideService, service.NewPPTMutationService, provideThemeService,
 	provideComponentService,
 	provideSkillService,
-	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
+	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewContextWindowHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideApp,
 )

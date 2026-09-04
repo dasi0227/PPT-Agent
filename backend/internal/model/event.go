@@ -24,6 +24,8 @@ const (
 	EventToolCompleted              EventType = "tool.completed"
 	EventQuestionAsked              EventType = "question.asked"
 	EventQuestionAnswered           EventType = "question.answered"
+	EventContextWindowUpdated       EventType = "context.window.updated"
+	EventContextCompacted           EventType = "context.compacted"
 )
 
 // Terminal 报告事件是否为终态事件（done/error，API-SSE-002）。

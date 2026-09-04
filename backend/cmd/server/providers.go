@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -43,6 +44,18 @@ func provideLLMRegistry(cfg *config.Config) (*llm.Registry, error) {
 }
 
 func provideLockManager() *run.LockManager { return run.NewLockManager() }
+
+func provideTranscriptStore() *contextengine.FSTranscriptStore {
+	return contextengine.NewFSTranscriptStore()
+}
+
+func provideCalibrationStore() *contextengine.CalibrationStore {
+	return contextengine.NewCalibrationStore()
+}
+
+func provideThreadService(s store.Store, transcripts *contextengine.FSTranscriptStore) *service.ThreadService {
+	return service.NewThreadServiceWithTranscript(s, transcripts)
+}
 
 func provideGitCommitService(s store.Store, registry *llm.Registry, locks *run.LockManager) (*service.GitCommitService, error) {
 	svc := service.NewGitCommitService(s, registry, locks)

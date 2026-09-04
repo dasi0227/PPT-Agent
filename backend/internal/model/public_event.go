@@ -33,6 +33,8 @@ var PublicEventTypes = [...]EventType{
 	EventToolCompleted,
 	EventQuestionAsked,
 	EventQuestionAnswered,
+	EventContextWindowUpdated,
+	EventContextCompacted,
 }
 
 type PublicEventBase struct {
@@ -304,6 +306,28 @@ type QuestionAnsweredPayload struct {
 	DisplayText string         `json:"display_text"`
 }
 
+type ContextWindowBucketDetail struct {
+	Name   string `json:"name"`
+	Source string `json:"source"`
+	Layer  string `json:"layer"`
+	Tokens int    `json:"tokens"`
+}
+
+type ContextWindowUpdatedPayload struct {
+	PublicEventBase
+	Total   int                                    `json:"total"`
+	Max     int                                    `json:"max"`
+	Ratio   float64                                `json:"ratio"`
+	Status  string                                 `json:"status"`
+	Buckets map[string]int                         `json:"buckets"`
+	Details map[string][]ContextWindowBucketDetail `json:"details"`
+}
+
+type ContextCompactedPayload struct {
+	PublicEventBase
+	Compaction ContextCompaction `json:"compaction"`
+}
+
 func ValidatePublicEvent(event EventType, payload any) error {
 	if !isPublicEventType(event) {
 		return fmt.Errorf("event %q is not public", event)
@@ -548,6 +572,34 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		}
 		if err := validateQuestionAnswerFields(answers); err != nil {
 			return err
+		}
+	case EventContextWindowUpdated:
+		if !isInteger(data["total"]) || !isInteger(data["max"]) ||
+			intValue(data["total"]) < 0 || intValue(data["max"]) <= 0 {
+			return errors.New("invalid context window totals")
+		}
+		ratio, ok := data["ratio"].(float64)
+		if !ok || ratio < 0 {
+			return errors.New("invalid context window ratio")
+		}
+		if !oneOf(stringValue(data["status"]), "running", "warning", "compacting", "idle") {
+			return errors.New("invalid context window status")
+		}
+		buckets, ok := data["buckets"].(map[string]any)
+		if !ok {
+			return errors.New("context window buckets are required")
+		}
+		for _, key := range []string{"read_ppt", "run_command", "system_prompt", "user_prompt", "chat_history", "other"} {
+			if !isInteger(buckets[key]) || intValue(buckets[key]) < 0 {
+				return errors.New("invalid context window bucket " + key)
+			}
+		}
+	case EventContextCompacted:
+		compaction, ok := data["compaction"].(map[string]any)
+		if !ok || strings.TrimSpace(stringValue(compaction["id"])) == "" ||
+			!oneOf(stringValue(compaction["trigger"]), "auto", "manual") ||
+			strings.TrimSpace(stringValue(compaction["summary"])) == "" {
+			return errors.New("invalid context compaction")
 		}
 	}
 	return nil

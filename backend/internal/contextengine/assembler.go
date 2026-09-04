@@ -3,7 +3,6 @@ package contextengine
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -98,7 +97,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		Outline:              OutlineContext{Outline: outline, Summaries: []SlideSummary{}},
 		RelatedSlides:        []SlideSummary{}, Design: DesignContext{Design: &design},
 		SlideHTML:  SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
-		Components: []ComponentCandidate{}, Memory: memory, RecentTurns: []RecentTurn{},
+		Components: []ComponentCandidate{}, Memory: memory,
 		Revisions: (RevisionLoader{}).From(deck, outline, design, slides, memory),
 	}
 	if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
@@ -199,15 +198,6 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		}
 		addSegment(SegmentRelated, "project://"+project.ID+"/related-slides", outline.Revision, priority, reason, required, DetailSummary, pack.RelatedSlides)
 	}
-	pack.RecentTurns = loadRecentTurns(project.WorkDir, req.ThreadID, 8)
-	if cap := budget.SegmentCaps[SegmentRecentTurns]; cap > 0 && a.estimator.Estimate(pack.RecentTurns) > cap {
-		manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentRecentTurns), Reason: "segment cap exceeded"})
-		pack.RecentTurns = []RecentTurn{}
-	}
-	if len(pack.RecentTurns) > 0 {
-		addSegment(SegmentRecentTurns, "thread://"+req.ThreadID+"/recent-turns", memory.Revision, 45, "recent visible conversation evidence", false, DetailSummary, pack.RecentTurns)
-	}
-
 	if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
 		a.loadSlideHTML(project, req, slides, &pack, &manifest, addSegment, limit)
 		if a.components != nil {
@@ -348,7 +338,7 @@ type BudgetAllocator struct{}
 func (BudgetAllocator) Allocate(pack *ContextPack, manifest *ContextManifest, limit int) {
 	for sumTokens(manifest.Segments) > limit {
 		dropped := false
-		for _, kind := range []SegmentKind{SegmentComponents, SegmentRelated, SegmentSlideHTML, SegmentRecentTurns} {
+		for _, kind := range []SegmentKind{SegmentComponents, SegmentRelated, SegmentSlideHTML} {
 			for i, s := range manifest.Segments {
 				if s.Kind == kind && !s.Required {
 					manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: s.ID, Reason: "input budget exceeded"})
@@ -360,8 +350,6 @@ func (BudgetAllocator) Allocate(pack *ContextPack, manifest *ContextManifest, li
 						pack.RelatedSlides = []SlideSummary{}
 					case SegmentSlideHTML:
 						pack.Target.SlideHTML = ""
-					case SegmentRecentTurns:
-						pack.RecentTurns = []RecentTurn{}
 					}
 					dropped = true
 					break
@@ -450,41 +438,6 @@ func sumTokens(segments []ContextSegment) int {
 	return n
 }
 
-func loadRecentTurns(workDir, threadID string, limit int) []RecentTurn {
-	raw, err := os.ReadFile(filepath.Join(workDir, "threads", threadID+".jsonl"))
-	if err != nil {
-		return []RecentTurn{}
-	}
-	out := []RecentTurn{}
-	for _, line := range strings.Split(string(raw), "\n") {
-		var entry struct {
-			RunID string         `json:"run_id"`
-			Turn  string         `json:"turn"`
-			Type  string         `json:"type"`
-			Data  map[string]any `json:"data"`
-		}
-		if json.Unmarshal([]byte(line), &entry) != nil {
-			continue
-		}
-		if entry.Type != "user_turn" && entry.Type != "markdown" && entry.Type != "final_result" {
-			continue
-		}
-		text, _ := entry.Data["text"].(string)
-		if entry.Type == "final_result" {
-			if result, ok := entry.Data["result"].(map[string]any); ok {
-				text, _ = result["summary"].(string)
-			}
-		}
-		text = compactText(text, 500)
-		if text != "" {
-			out = append(out, RecentTurn{Turn: entry.Turn, Type: entry.Type, Text: text, RunID: entry.RunID})
-		}
-	}
-	if len(out) > limit {
-		out = out[len(out)-limit:]
-	}
-	return out
-}
 func opaqueID(prefix string, parts ...string) string {
 	h := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return fmt.Sprintf("%s_%x", prefix, h[:12])

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -520,8 +521,9 @@ func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
 	if err := (ThreadMemoryStore{}).Save(project.WorkDir, "t1", memory); err != nil {
 		t.Fatal(err)
 	}
-	history := `{"run_id":"r1","turn":"user","type":"user_turn","data":{"text":"保持整体克制"}}` + "\n"
-	if err := os.WriteFile(filepath.Join(threadDir, "t1.jsonl"), []byte(history), 0o644); err != nil {
+	if err := NewFSTranscriptStore().Replace(project.WorkDir, "t1", []llm.Message{
+		{Role: llm.RoleUser, Content: llm.TextContent("保持整体克制")},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	pack, err := NewContextAssembler(store, NewRefRegistry()).AssemblePolish(context.Background(), PolishContextRequest{

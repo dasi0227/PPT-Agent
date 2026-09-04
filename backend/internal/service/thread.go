@@ -14,15 +14,17 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
 // ThreadService 管理一个 project 下的对话线程与 history jsonl。
 type ThreadService struct {
-	store store.Store
-	clock func() int64
-	newID func() string
+	store       store.Store
+	clock       func() int64
+	newID       func() string
+	transcripts *contextengine.FSTranscriptStore
 }
 
 type CreateThreadParams struct {
@@ -30,7 +32,17 @@ type CreateThreadParams struct {
 }
 
 func NewThreadService(s store.Store) *ThreadService {
-	return &ThreadService{store: s, clock: func() int64 { return time.Now().Unix() }, newID: uuid.NewString}
+	return NewThreadServiceWithTranscript(s, contextengine.NewFSTranscriptStore())
+}
+
+func NewThreadServiceWithTranscript(s store.Store, transcripts *contextengine.FSTranscriptStore) *ThreadService {
+	if transcripts == nil {
+		transcripts = contextengine.NewFSTranscriptStore()
+	}
+	return &ThreadService{
+		store: s, clock: func() int64 { return time.Now().Unix() }, newID: uuid.NewString,
+		transcripts: transcripts,
+	}
 }
 
 func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p CreateThreadParams) (model.Thread, error) {
@@ -52,8 +64,13 @@ func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p 
 	if err := writeEmptyHistory(proj.WorkDir, th.HistoryPath); err != nil {
 		return model.Thread{}, err
 	}
+	if err := svc.transcripts.Create(proj.WorkDir, th.ID); err != nil {
+		_ = removeHistory(proj.WorkDir, th.HistoryPath)
+		return model.Thread{}, err
+	}
 	if err := svc.store.CreateThread(ctx, th); err != nil {
 		_ = removeHistory(proj.WorkDir, th.HistoryPath)
+		_ = svc.transcripts.Remove(proj.WorkDir, th.ID)
 		return model.Thread{}, err
 	}
 	return th, nil
@@ -95,7 +112,10 @@ func (svc *ThreadService) DeleteThread(ctx context.Context, id string) error {
 	if err := svc.store.DeleteThread(ctx, id); err != nil {
 		return err
 	}
-	return removeHistory(proj.WorkDir, th.HistoryPath)
+	if err := removeHistory(proj.WorkDir, th.HistoryPath); err != nil {
+		return err
+	}
+	return svc.transcripts.Remove(proj.WorkDir, th.ID)
 }
 
 func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]any, error) {
@@ -201,6 +221,21 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 			out[insertAt] = entry
 		}
 	}
+	if compactions, compactionErr := listThreadContextCompactions(ctx, svc.store, id); compactionErr == nil {
+		for _, compaction := range compactions {
+			entry := contextCompactionHistoryEntry(compaction)
+			insertAt := len(out)
+			for index, existing := range out {
+				if historyTimestamp(existing) > compaction.CreatedAt {
+					insertAt = index
+					break
+				}
+			}
+			out = append(out, nil)
+			copy(out[insertAt+1:], out[insertAt:])
+			out[insertAt] = entry
+		}
+	}
 	runOrder := map[string]int{}
 	for _, entry := range out {
 		runID := fmt.Sprint(entry["run_id"])
@@ -258,6 +293,41 @@ func briefingHistoryEntry(briefing model.Briefing) map[string]any {
 			"kind":        briefing.Kind,
 			"versions":    briefing.Versions,
 			"updated_at":  briefing.UpdatedAt,
+		},
+	}
+}
+
+type contextCompactionReader interface {
+	ListThreadContextCompactions(context.Context, string) ([]model.ContextCompaction, error)
+}
+
+func listThreadContextCompactions(
+	ctx context.Context,
+	value any,
+	threadID string,
+) ([]model.ContextCompaction, error) {
+	reader, ok := value.(contextCompactionReader)
+	if !ok {
+		return []model.ContextCompaction{}, nil
+	}
+	return reader.ListThreadContextCompactions(ctx, threadID)
+}
+
+func contextCompactionHistoryEntry(compaction model.ContextCompaction) map[string]any {
+	runID := compaction.RunID
+	if runID == "" {
+		runID = compaction.ID
+	}
+	return map[string]any{
+		"seq": 1, "ts": compaction.CreatedAt, "run_id": runID,
+		"turn": "agent", "type": "context_compaction",
+		"data": map[string]any{
+			"id": compaction.ID, "thread_id": compaction.ThreadID,
+			"project_id": compaction.ProjectID, "run_id": compaction.RunID,
+			"trigger": compaction.Trigger, "summary": compaction.Summary,
+			"before_tokens": compaction.BeforeTokens, "after_tokens": compaction.AfterTokens,
+			"max_tokens": compaction.MaxTokens, "reclaimed_tokens": compaction.Reclaimed,
+			"duration_ms": compaction.DurationMS, "created_at": compaction.CreatedAt,
 		},
 	}
 }
