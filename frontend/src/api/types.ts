@@ -132,7 +132,7 @@ export interface Run {
 
 export type Artifact = 'spec' | 'ppt';
 export type ScopeLevel = 'slide' | 'deck';
-export type RunMode = 'talk' | 'ask' | 'plan' | 'execute';
+export type RunMode = 'chat' | 'grill' | 'plan' | 'execute';
 export type RunLanguage = 'zh-CN' | 'en-US';
 export type SlideRange = '5-8' | '9-15' | '16-25' | '26+';
 

@@ -724,9 +724,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const CommandIcon = ({ id }: { id: SlashCommandId }) => {
       const Icon = id === 'plan'
         ? Workflow
-        : id === 'ask'
+        : id === 'grill'
           ? CircleHelp
-          : id === 'talk'
+          : id === 'chat'
             ? MessagesSquare
             : id === 'kickoff'
               ? Rocket

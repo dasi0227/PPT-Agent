@@ -123,7 +123,7 @@ func TestCreateRunRejectsMissingProfileAndCapabilityMismatch(t *testing.T) {
 		"client_request_id":"req-model-missing",
 		"model":"Removed Profile",
 		"scope":{"artifact":"spec","level":"deck"},
-		"mode":"talk",
+		"mode":"chat",
 		"instruction":"inspect"
 	}`
 	response := apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", missing)

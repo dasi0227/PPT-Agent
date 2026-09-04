@@ -24,8 +24,8 @@ const (
 type RunMode string
 
 const (
-	ModeTalk    RunMode = "talk"
-	ModeAsk     RunMode = "ask"
+	ModeChat    RunMode = "chat"
+	ModeGrill   RunMode = "grill"
 	ModePlan    RunMode = "plan"
 	ModeExecute RunMode = "execute"
 )
@@ -132,7 +132,7 @@ func (c RunCommand) Validate() error {
 		return fmt.Errorf("%w: current must be resolved to a stable slide_id", ErrInvalidRunCommand)
 	}
 	switch c.Mode {
-	case ModeTalk, ModeAsk, ModePlan, ModeExecute:
+	case ModeChat, ModeGrill, ModePlan, ModeExecute:
 	default:
 		return fmt.Errorf("%w: unsupported mode %q", ErrInvalidRunCommand, c.Mode)
 	}

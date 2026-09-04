@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS runs (
     scope_artifact      TEXT NOT NULL CHECK (scope_artifact IN ('spec','ppt')),
     scope_level         TEXT NOT NULL CHECK (scope_level IN ('slide','deck')),
     scope_slide_id      TEXT,
-    mode                TEXT NOT NULL CHECK (mode IN ('talk','ask','plan','execute')),
+    mode                TEXT NOT NULL CHECK (mode IN ('chat','grill','plan','execute')),
     run_command_json    TEXT NOT NULL,
     client_request_id   TEXT DEFAULT '',
     model_profile_name  TEXT,

@@ -480,7 +480,7 @@ export const CommandComposer: React.FC = () => {
 
   const executeSlashCommand = async (command: SlashCommandId) => {
     setSubmitError('');
-    if (command === 'plan' || command === 'ask' || command === 'talk') {
+    if (command === 'plan' || command === 'grill' || command === 'chat') {
       composer.setIntent(command);
       return;
     }

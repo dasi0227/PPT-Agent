@@ -18,7 +18,7 @@ describe('createTargetedRun', () => {
 
   it('falls back to deck when no page exists', () => {
     expect(createTargetedRun({
-      artifact: 'spec', level: 'slide', mode: 'talk', instruction: 'advise',
+      artifact: 'spec', level: 'slide', mode: 'chat', instruction: 'advise',
       slides: [], currentSlideId: null,
     }).scope).toEqual({ artifact: 'spec', level: 'deck' });
   });

@@ -25,8 +25,8 @@ const Version = "2026-08-28.v3"
 var modulePaths = map[string]string{
 	"core_runtime_policy":              "core/core_runtime_policy.md",
 	"user_facing_output":               "core/user_facing_output.md",
-	"mode_policy_talk":                 "modes/talk.md",
-	"mode_policy_ask":                  "modes/ask.md",
+	"mode_policy_chat":                 "modes/chat.md",
+	"mode_policy_grill":                "modes/grill.md",
 	"mode_policy_plan":                 "modes/plan.md",
 	"mode_policy_execute":              "modes/execute.md",
 	"playbook_read_only_planning":      "playbooks/read_only_planning.md",

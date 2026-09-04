@@ -59,7 +59,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
   switch (eventName) {
     case 'run.started':
       return validRunScope(data.scope)
-        && ['talk', 'ask', 'plan', 'execute'].includes(String(data.mode))
+        && ['chat', 'grill', 'plan', 'execute'].includes(String(data.mode))
         && hasString(data, 'user_input')
         && validSkills(data.skills);
     case 'run.progress':
@@ -101,8 +101,8 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && hasString(data, 'command_hash')
         && ['allow_once', 'deny'].includes(String(data.decision));
     case 'run.mode_changed':
-      return ['talk', 'ask', 'plan', 'execute'].includes(String(data.previous_mode))
-        && ['talk', 'ask', 'plan', 'execute'].includes(String(data.mode));
+      return ['chat', 'grill', 'plan', 'execute'].includes(String(data.previous_mode))
+        && ['chat', 'grill', 'plan', 'execute'].includes(String(data.mode));
     case 'message.reasoning':
     case 'message.final':
       return hasString(data, 'message_id')

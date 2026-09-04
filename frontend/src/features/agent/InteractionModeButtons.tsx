@@ -14,15 +14,15 @@ export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
   onIntentChange,
   disabled,
 }) => {
-  const isTalk = mode === 'talk';
-  const isAsk = mode === 'ask';
+  const isChat = mode === 'chat';
+  const isGrill = mode === 'grill';
 
-  const toggleTalk = () => {
-    onIntentChange(isTalk ? 'execute' : 'talk');
+  const toggleChat = () => {
+    onIntentChange(isChat ? 'execute' : 'chat');
   };
 
-  const toggleAsk = () => {
-    onIntentChange(isAsk ? 'execute' : 'ask');
+  const toggleGrill = () => {
+    onIntentChange(isGrill ? 'execute' : 'grill');
   };
 
   const buttonClass = (selected: boolean) => cn(
@@ -37,11 +37,11 @@ export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
       <button
         type="button"
         aria-label="讨论"
-        aria-pressed={isTalk}
+        aria-pressed={isChat}
         title="只分析和交流，不修改项目内容"
         disabled={disabled}
-        onClick={toggleTalk}
-        className={buttonClass(isTalk)}
+        onClick={toggleChat}
+        className={buttonClass(isChat)}
       >
         <MessagesSquare className="h-3.5 w-3.5" strokeWidth={1.75} />
         <span className="composer-mode-label">讨论</span>
@@ -49,11 +49,11 @@ export const InteractionModeButtons: React.FC<InteractionModeButtonsProps> = ({
       <button
         type="button"
         aria-label="盘问"
-        aria-pressed={isAsk}
+        aria-pressed={isGrill}
         title="只读探索，并允许 Agent 在需要时向你提问"
         disabled={disabled}
-        onClick={toggleAsk}
-        className={buttonClass(isAsk)}
+        onClick={toggleGrill}
+        className={buttonClass(isGrill)}
       >
         <MessageCircleQuestion className="h-3.5 w-3.5" strokeWidth={1.75} />
         <span className="composer-mode-label">盘问</span>

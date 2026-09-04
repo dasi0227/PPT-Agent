@@ -53,7 +53,7 @@ function readHistoryScope(data: Record<string, unknown>): RunScope | undefined {
 
 function readHistoryIntent(data: Record<string, unknown>): RunMode | undefined {
   const mode = data.mode;
-  return mode === 'talk' || mode === 'ask' || mode === 'plan' || mode === 'execute'
+  return mode === 'chat' || mode === 'grill' || mode === 'plan' || mode === 'execute'
     ? mode
     : undefined;
 }

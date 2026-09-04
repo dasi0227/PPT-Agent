@@ -378,7 +378,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	initialPhase := PhaseChat
 	switch state.mode {
-	case model.ModeTalk, model.ModeAsk:
+	case model.ModeChat, model.ModeGrill:
 		initialPhase = PhaseChat
 	case model.ModePlan:
 		initialPhase = PhasePlanning
@@ -2146,7 +2146,7 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 			})
 		}
 	}
-	allowAsk := mode == model.ModeAsk || mode == model.ModePlan || (mode == model.ModeExecute && phase != PhaseCompletionCheck)
+	allowAsk := mode == model.ModeGrill || mode == model.ModePlan || (mode == model.ModeExecute && phase != PhaseCompletionCheck)
 	if allowAsk && phase != PhaseWaitingInput && phase != PhaseCommitting && phase != PhaseTerminal {
 		out = append(out, ToolSchema{
 			Name: "ask_user", Description: "Ask one blocking group of atomic user questions and pause this same loop until the user answers. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
@@ -2187,10 +2187,10 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 			}),
 		})
 	}
-	if (phase == PhaseChat && (mode == model.ModeTalk || mode == model.ModeAsk)) ||
+	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeGrill)) ||
 		(phase == PhaseExecuting && mode == model.ModeExecute) {
 		out = append(out, ToolSchema{
-			Name: "finish", Description: "Submit the complete final user-facing response for the current talk, ask, or execute run. Ordinary assistant text is not a completion signal. The Completion Gate checks the message before the run may complete.",
+			Name: "finish", Description: "Submit the complete final user-facing response for the current chat, grill, or execute run. Ordinary assistant text is not a completion signal. The Completion Gate checks the message before the run may complete.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{
 				"message": map[string]any{"type": "string"},
 			}),

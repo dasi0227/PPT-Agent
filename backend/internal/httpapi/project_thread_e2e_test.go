@@ -360,7 +360,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	body := `{
 		"client_request_id":"req-artifact-1",
 		"scope":{"artifact":"spec","level":"deck"},
-		"mode":"talk",
+		"mode":"chat",
 		"instruction":"评估当前叙事结构"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", body)
@@ -370,7 +370,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	var created map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &created)
 	scope := created["scope"].(map[string]any)
-	if scope["artifact"] != "spec" || scope["level"] != "deck" || created["mode"] != "talk" {
+	if scope["artifact"] != "spec" || scope["level"] != "deck" || created["mode"] != "chat" {
 		t.Fatalf("new protocol was not preserved: %s", resp.Body.String())
 	}
 	runID := created["id"].(string)
@@ -406,7 +406,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	legacy := `{
 		"client_request_id":"req-artifact-legacy",
 		"target":{"artifact":"presentation","level":"deck"},
-		"interaction":{"mode":"talk"},
+		"interaction":{"mode":"chat"},
 		"instruction":"legacy"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", legacy)
@@ -441,7 +441,7 @@ func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+thread["id"].(string)+"/runs", `{
 		"client_request_id":"req-screenshot-1",
 		"scope":{"artifact":"ppt","level":"deck"},
-		"mode":"talk",
+		"mode":"chat",
 		"instruction":"查看当前演示"
 	}`)
 	if resp.Code != http.StatusCreated {

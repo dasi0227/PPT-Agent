@@ -238,7 +238,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', {
         text: '第二轮',
         scope: { artifact: 'ppt', level: 'slide', slide_id: 's2' },
-        mode: 'ask',
+        mode: 'grill',
       }, 'new'),
       entry(2, 'question.asked', {
         ...base,

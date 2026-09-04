@@ -20,9 +20,9 @@
 
 - `/plan`：开启计划模式
 
-- `/ask`：开启审问模式
+- `/grill`：开启审问模式
 
-- `/talk`：开启聊天模式
+- `/chat`：开启聊天模式
 
 **B. 动作命令**
 
@@ -54,7 +54,7 @@
 
 | 命令                     | 映射                          | 是否需要新后端 |
 | ---------------------- | --------------------------- | ------- |
-| `/plan` `/ask` `/talk` | composer `setIntent(mode)`  | 否       |
+| `/plan` `/grill` `/chat` | composer `setIntent(mode)`  | 否       |
 | `/model` `/target`     | composer store setter（二级菜单） | 否       |
 | `/commit`              | 现有 git-commit 异步 SSE 流程     | 否（复用）   |
 | `/polish`              | 现有 polish 同步 endpoint       | 否（复用）   |
@@ -220,13 +220,13 @@ kickoff / handoff 两者皆不满足：
 
 - **选中命令即执行动作 + 清除** **`/xxx`** **触发文本**（命令是动作非内容，执行完从输入框消失，不污染下次要发送的正文；保留用户在 `/xxx` 之前已输入的正文）。
 
-- **单行展示**：每个命令一行——**主文案为不带斜杠的命令名**（如 `talk` `handoff`，等宽字体高亮），紧跟灰色描述；不再展示「计划模式」这类中文菜单名（中文名降级为文档 / aria label 用途，UI 一级列表不渲染）。触发匹配仍按 `/xxx` 识别，仅展示去掉斜杠。
+- **单行展示**：每个命令一行——**主文案为不带斜杠的命令名**（如 `chat` `handoff`，等宽字体高亮），紧跟灰色描述；不再展示「计划模式」这类中文菜单名（中文名降级为文档 / aria label 用途，UI 一级列表不渲染）。触发匹配仍按 `/xxx` 识别，仅展示去掉斜杠。
 
 - **前缀过滤**：`/pl` 只显示匹配项（`/plan` `/polish`）；无匹配显示「无匹配命令」。
 
 - **空 query**（刚敲下 `/`）：显示全部命令。
 
-- **分组**：按三组加分组标题——**模式**（plan / ask / talk）、**操作**（kickoff / handoff / commit / polish）、**设置**（model / target）。
+- **分组**：按三组加分组标题——**模式**（plan / grill / chat）、**操作**（kickoff / handoff / commit / polish）、**设置**（model / target）。
 
 - **二级命令标记**：`/model` `/target` 右侧加 `›`。
 
@@ -253,8 +253,8 @@ kickoff / handoff 两者皆不满足：
 | 命令         | 分组 | 菜单名（文档/aria） | 描述                     |
 | ---------- | -- | ------------ | ---------------------- |
 | `/plan`    | 模式 | 计划模式         | 切换到计划模式                |
-| `/ask`     | 模式 | 审问模式         | 切换到审问模式                |
-| `/talk`    | 模式 | 聊天模式         | 切换到聊天模式                |
+| `/grill`   | 模式 | 审问模式         | 切换到审问模式                |
+| `/chat`    | 模式 | 聊天模式         | 切换到聊天模式                |
 | `/kickoff` | 操作 | 启动简报         | 生成交给新 Agent 的启动 prompt |
 | `/handoff` | 操作 | 交接简报         | 生成上下文交接 prompt         |
 | `/commit`  | 操作 | 提交           | 执行一次 Git 提交            |
@@ -268,7 +268,7 @@ kickoff / handoff 两者皆不满足：
 
 - **`/`** **当前静默**：触发符迁移后汇总面板改由 `@` 唤起，`/` 无任何绑定。见 `frontend/src/features/agent/promptMatching.ts`。
 
-- **模式**：`RunMode`（`talk` / `ask` / `plan` / `execute`）定义于 `backend/internal/model/run_command.go`；前端靠 `frontend/src/stores/composerStore.ts` 的 `setIntent` 切换。
+- **模式**：`RunMode`（`chat` / `grill` / `plan` / `execute`）定义于 `backend/internal/model/run_command.go`；前端靠 `frontend/src/stores/composerStore.ts` 的 `setIntent` 切换。
 
 - **Polish**：同步 POST `/projects/:id/polish`（`backend/internal/service/polish.go`，12s 超时、单次 LLM、无工具），产出回填输入框；上下文由 `contextengine/polish.go` 的 `AssemblePolish` 组装（`memory.Load` + `loadRecentTurns`，仅 `turn == "user"`）；handler 见 `backend/internal/httpapi/polish_handler.go`。
 
@@ -379,7 +379,7 @@ kickoff / handoff 两者皆不满足：
 
 - 每个命令绑定一个「执行动作」回调，选中即执行并清除 `/xxx` 触发文本：
 
-  - `/plan` `/ask` `/talk` → `composer.setIntent(...)`。
+  - `/plan` `/grill` `/chat` → `composer.setIntent(...)`。
 
   - `/commit` → 触发现有 commit 流程（等价点击 header 按钮）。
 

@@ -16,7 +16,7 @@ func TestProjectCommandPreflightClassifiesReadsAndWrites(t *testing.T) {
 	}
 	tool := projectCommandTool{}
 	read := tool.Preflight(context.Background(), DomainToolInput{
-		ProjectDir: dir, Mode: model.ModeTalk, Phase: PhaseChat,
+		ProjectDir: dir, Mode: model.ModeChat, Phase: PhaseChat,
 		Args: map[string]any{"command": "cat notes.txt"},
 	})
 	if read.Outcome != "allow" || read.Mutates {

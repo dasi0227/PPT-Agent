@@ -1,6 +1,6 @@
 Task playbook: read-only collaboration.
 
-Use this playbook for talk and ask interactions.
+Use this playbook for chat and grill interactions.
 
 Steps:
 1. Determine whether the user is asking for explanation, review, diagnosis, comparison or clarification.

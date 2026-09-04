@@ -180,7 +180,7 @@ func TestDefaultToolDisclosureUsesTheSamePolicyAsExecution(t *testing.T) {
 		scope model.RunScope
 		want  []string
 	}{
-		{"talk", PhaseChat, model.ModeTalk, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "run_command"}},
+		{"chat", PhaseChat, model.ModeChat, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "run_command"}},
 		{"plan", PhasePlanning, model.ModePlan, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "run_command"}},
 		{"execute spec deck", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck}, []string{"mutate_ppt", "read_ppt", "run_command"}},
 		{"execute ppt slide", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "sli_aaaaaa"}, []string{"mutate_ppt", "read_ppt", "render_slide", "run_command"}},

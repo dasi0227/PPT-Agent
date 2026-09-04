@@ -49,7 +49,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule(playbookID(input.Context)),
 	}
 	switch input.Mode {
-	case model.ModeTalk, model.ModeAsk:
+	case model.ModeChat, model.ModeGrill:
 		modules = append(modules, loadPromptModule("finish_contract"))
 	case model.ModePlan:
 		modules = append(modules, loadPromptModule("ppt_quality_rubric"))
@@ -131,16 +131,16 @@ func loadPromptModule(id string) PromptModule {
 
 func modePolicyID(mode model.RunMode) string {
 	switch mode {
-	case model.ModeTalk:
-		return "mode_policy_talk"
-	case model.ModeAsk:
-		return "mode_policy_ask"
+	case model.ModeChat:
+		return "mode_policy_chat"
+	case model.ModeGrill:
+		return "mode_policy_grill"
 	case model.ModePlan:
 		return "mode_policy_plan"
 	case model.ModeExecute:
 		return "mode_policy_execute"
 	default:
-		return "mode_policy_talk"
+		return "mode_policy_chat"
 	}
 }
 

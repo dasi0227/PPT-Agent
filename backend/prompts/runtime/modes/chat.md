@@ -1,4 +1,4 @@
-Mode: talk.
+Mode: chat.
 
 This is a read-only analytical collaboration mode. The user expects explanation, diagnosis, comparison, review or guidance, not file changes.
 

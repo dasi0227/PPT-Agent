@@ -427,7 +427,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return errors.New("invalid command permission decision")
 		}
 	case EventRunModeChanged:
-		if !oneOf(stringValue(data["previous_mode"]), "talk", "ask", "plan", "execute") || !oneOf(stringValue(data["mode"]), "talk", "ask", "plan", "execute") {
+		if !oneOf(stringValue(data["previous_mode"]), "chat", "grill", "plan", "execute") || !oneOf(stringValue(data["mode"]), "chat", "grill", "plan", "execute") {
 			return errors.New("invalid run mode transition")
 		}
 	case EventMessageReasoning, EventMessageMilestone, EventMessageFinal:

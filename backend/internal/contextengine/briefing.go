@@ -21,7 +21,7 @@ func (a *ContextAssembler) AssembleBriefing(
 		ThreadID: req.ThreadID,
 		Command: model.RunCommand{
 			Scope:       model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
-			Mode:        model.ModeTalk,
+			Mode:        model.ModeChat,
 			Instruction: "Generate a project briefing.",
 		},
 	}, project)

@@ -757,7 +757,7 @@ type RestrictedJsonPatch =
 
 ### 8.5 Scope 裁剪
 
-- Talk/Ask/Plan：不披露 `mutate_ppt`。
+- Chat/Grill/Plan：不披露 `mutate_ppt`。
 - Execute + Spec + slide scope：只披露绑定当前 slide ID 的 `slide.spec.write/patch`。
 - Execute + PPT + slide scope：只披露绑定当前 slide ID 的 `slide.spec.*`、`slide.html.*`。
 - Execute + PPT + deck scope：披露全部 operation。

@@ -12,7 +12,7 @@ Rules:
 - If you accidentally wrote the final answer outside finish.message, call finish again with the full answer in message.
 
 Mode-specific expectations:
-- talk and ask: answer the user directly and ground conclusions in available context.
+- chat and grill: answer the user directly and ground conclusions in available context.
 - execute: summarize what changed, what was checked, and any remaining user-visible risk.
 
 Runtime may reject finish if assistant text appears to contain the real final delivery while finish.message is incomplete.

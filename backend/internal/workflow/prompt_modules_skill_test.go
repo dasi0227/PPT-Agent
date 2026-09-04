@@ -11,9 +11,9 @@ import (
 func TestRuntimeSystemPromptExcludesSelectedSkillSnapshots(t *testing.T) {
 	prompt := buildRuntimeSystemPrompt(runtimePromptInput{
 		Phase: PhaseChat,
-		Mode:  model.ModeTalk,
+		Mode:  model.ModeChat,
 		Context: contextengine.ContextPack{Command: model.RunCommand{
-			Mode: model.ModeTalk,
+			Mode: model.ModeChat,
 			Skills: []model.RunSkill{{
 				ID: "story", Name: "演示叙事", Description: "梳理页面叙事。",
 				Content: "Always lead with the conclusion.",

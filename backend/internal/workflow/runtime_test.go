@@ -368,7 +368,7 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "chat-explicit-finish", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "分析当前页"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "分析当前页"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
@@ -385,7 +385,7 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 		messages[0].Text() != "这是尚未通过 finish 提交的分析。" {
 		t.Fatalf("assistant text was not retained: %+v", messages[0])
 	}
-	if messages[1].Role != llm.RoleUser || messages[1].Text() != noToolCallGuidance(model.ModeTalk) {
+	if messages[1].Role != llm.RoleUser || messages[1].Text() != noToolCallGuidance(model.ModeChat) {
 		t.Fatalf("explicit finish guidance missing: %+v", messages[1])
 	}
 	if events.count(model.EventMessageFinal) != 1 || events.count(model.EventRunCompleted) != 1 {
@@ -413,7 +413,7 @@ func TestRuntimePassesOpaqueProviderContinuationWithoutParsingIt(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "opaque-continuation", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "inspect"),
+		Context:     testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "inspect"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
@@ -438,7 +438,7 @@ func TestSteeringInjectsIndependentUserMessagesInAcceptanceOrderBeforeFirstNext(
 	}}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "steer-initial", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "review"),
+		Context:     testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "review"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Steering: steering,
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 1 {
@@ -543,7 +543,7 @@ func TestContextCompactionDropsOnlySupersededSlideImages(t *testing.T) {
 
 func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 	for _, mode := range []model.RunMode{
-		model.ModeTalk, model.ModeAsk, model.ModePlan, model.ModeExecute,
+		model.ModeChat, model.ModeGrill, model.ModePlan, model.ModeExecute,
 	} {
 		phase := PhaseChat
 		if mode == model.ModePlan {
@@ -566,7 +566,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		hasRepair := strings.Contains(prompt, `id="completion_repair_guide"`)
 		hasContracts := strings.Contains(prompt, `id="resource_contracts"`)
 		switch mode {
-		case model.ModeTalk, model.ModeAsk:
+		case model.ModeChat, model.ModeGrill:
 			if !hasFinish || hasQuality || hasRepair || hasContracts {
 				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
 			}
@@ -580,7 +580,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			}
 		}
 	}
-	schemas := controlSchemas(PhaseChat, model.ModeTalk, nil)
+	schemas := controlSchemas(PhaseChat, model.ModeChat, nil)
 	var finishDescription string
 	var finishParameters map[string]any
 	for _, schema := range schemas {
@@ -872,7 +872,7 @@ func TestAgentRequestCarriesContextBriefingAndRequirementLedger(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "briefing", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "分析当前页结构"),
+		Context:     testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "分析当前页结构"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 1 {
@@ -895,7 +895,7 @@ func TestFinishMessageEmptyRejectsEmptyMessage(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "strict-finish", ProjectDir: t.TempDir(),
-		Context:         testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "给出完整分析"),
+		Context:         testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "给出完整分析"),
 		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
 		SemanticReviews: acceptingReviewer{},
 	})
@@ -1628,7 +1628,7 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 	prompter, checkpoints := &fakePrompter{}, &checkpointRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "ask", ProjectDir: dir,
-		Context:  testPack(model.ModeAsk, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
+		Context:  testPack(model.ModeGrill, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
 		Prompter: prompter, Checkpoint: checkpoints, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || prompter.calls != 1 || len(checkpoints.checkpoints) == 0 {
@@ -1663,7 +1663,7 @@ func TestQuestionWaitsDoNotConsumeActiveDurationBudget(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "question-active-clock", ProjectDir: t.TempDir(),
-		Context:  testPack(model.ModeAsk, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
+		Context:  testPack(model.ModeGrill, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
 		Prompter: prompter, Emitter: events, Checkpoint: checkpoints,
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -1700,7 +1700,7 @@ func TestCanceledQuestionWaitKeepsActiveDurationFrozen(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "question-canceled-clock", ProjectDir: t.TempDir(),
-		Context:  testPack(model.ModeAsk, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
+		Context:  testPack(model.ModeGrill, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
 		Prompter: prompter, Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -1720,7 +1720,7 @@ func TestActiveExecutionStillConsumesDurationBudget(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "active-budget", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "继续分析"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "继续分析"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -1741,11 +1741,11 @@ func TestCheckpointRestoresActiveDurationBudget(t *testing.T) {
 	activeBeforeRestart := 90 * time.Minute
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "restored-active-budget", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "继续分析"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "继续分析"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 		ResumeCheckpoint: &RuntimeCheckpoint{
-			RunID: "restored-active-budget", LoopID: "restored-loop", Mode: model.ModeTalk,
+			RunID: "restored-active-budget", LoopID: "restored-loop", Mode: model.ModeChat,
 			Phase: PhaseChat, ResumePhase: PhaseChat, ActiveDurationMS: activeBeforeRestart.Milliseconds(),
 		},
 	})
@@ -1841,7 +1841,7 @@ func TestProviderUnavailableUsesAuthoritativeTransientProjection(t *testing.T) {
 	agent := &scriptedAgent{err: fmt.Errorf("%w: %s", llm.ErrUnavailable, cause)}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "provider-unavailable", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "review"),
+		Context:     testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "review"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Emitter: events,
 	})
 	if outcome.Status != StatusFailed || outcome.Code != "PROVIDER_UNAVAILABLE" {
@@ -1876,7 +1876,7 @@ func TestCancellationPairsEveryStartedToolBeforeCanceledTerminal(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(ctx, RuntimeInput{
 		RunID: "cancel-tool", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeSlide, false, "search"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "search"),
 		Emitter: emitter, DomainTools: blockingReadProvider{},
 	})
 	if outcome.Status != StatusCanceled || outcome.Code != CodeCanceled {
@@ -1928,7 +1928,7 @@ func TestRunCommandAuditDoesNotRecordOutput(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-audit", ProjectDir: dir,
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查项目文件"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查项目文件"),
 		Emitter: events, Trace: traces,
 	})
 	if outcome.Status != StatusCompleted {
@@ -1968,7 +1968,7 @@ func TestRunCommandBatchPreservesTimelineOrder(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-order", ProjectDir: dir,
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查项目目录"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查项目目录"),
 		Emitter: events,
 	})
 	if outcome.Status != StatusCompleted {
@@ -2046,7 +2046,7 @@ func TestSensitiveRunCommandRequiresAllowOnceBeforeExecution(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sensitive-allow", ProjectDir: dir,
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2070,7 +2070,7 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sensitive-deny", ProjectDir: dir,
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2161,7 +2161,7 @@ func TestCommandPermissionWaitDoesNotConsumeActiveDuration(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "command-permission-clock", ProjectDir: dir,
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter, Checkpoint: checkpoints,
 		Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -2245,7 +2245,7 @@ func TestDeniedRunCommandNeverEmitsToolStarted(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-denied", ProjectDir: dir,
-		Context: testPack(model.ModeTalk, model.ArtifactSpec, model.ScopeDeck, false, "检查项目文件"),
+		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查项目文件"),
 		Emitter: events,
 	})
 	if outcome.Status != StatusCompleted {

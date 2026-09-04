@@ -144,12 +144,12 @@ describe('slash commands', () => {
     expect(findCommandTrigger('正文 /pl', 6)).toEqual({ start: 3, end: 6, query: 'pl' });
     expect(findCommandTrigger('正文\n/model', 9)).toEqual({ start: 3, end: 9, query: 'model' });
     expect(findCommandTrigger('path/to', 7)).toBeNull();
-    expect(findCommandTrigger('//talk', 6)).toBeNull();
+    expect(findCommandTrigger('//chat', 6)).toBeNull();
   });
 
   it('filters commands by command-name prefix and keeps disabled matches', () => {
     expect(matchSlashCommands(commands, 'pl').map((command) => command.id)).toEqual(['plan', 'polish']);
-    expect(matchSlashCommands(commands, 'ha').map((command) => command.id)).toEqual(['handoff']);
+    expect(matchSlashCommands(commands, 'ha').map((command) => command.id)).toEqual(['chat', 'handoff']);
     expect(matchSlashCommands(commands, '')).toHaveLength(9);
     const disabled = resolveSlashCommands({
       runActive: true,

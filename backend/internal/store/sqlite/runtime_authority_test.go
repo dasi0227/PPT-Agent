@@ -54,7 +54,7 @@ func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
 		},
 		Command: model.RunCommand{
 			Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
-			Mode:  model.ModeTalk, Instruction: "inspect",
+			Mode:  model.ModeChat, Instruction: "inspect",
 		},
 		Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1,
 	}
