@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kickoff / handoff 生成中占位态 · 原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --ok: #2f855a;
+      --danger: #c94242;
+      --kickoff: #7c3aed;
+      --kickoff-soft: #f2ecfe;
+      --shadow-card: 0 10px 30px rgba(31, 42, 55, 0.1);
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { width: 100%; min-width: 320px; margin: 0; }
+    body {
+      display: grid; place-items: start center; min-height: 100dvh; padding: 40px 20px;
+      background: var(--workspace); color: var(--text); font-family: var(--font); font-size: 14px;
+    }
+    button { border: 0; cursor: pointer; background: transparent; color: inherit; font: inherit; }
+
+    .frame { width: min(720px, 100%); display: grid; gap: 16px; }
+    .frame-head { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; }
+    .frame-head svg { color: var(--accent); }
+    .frame-head .tag { margin-left: auto; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); padding: 3px 8px; color: var(--text-muted); font-size: 11px; font-weight: 600; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+    .controls button {
+      display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface); padding: 6px 12px; font-size: 12px; font-weight: 650; color: var(--text-secondary);
+    }
+    .controls button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .controls button svg { width: 13px; height: 13px; }
+    .hint { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+
+    /* Loading card */
+    .card {
+      border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface);
+      box-shadow: var(--shadow-card); overflow: hidden;
+    }
+    .card-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--panel-muted); }
+    .card-badge {
+      display: inline-flex; align-items: center; gap: 6px; border-radius: 7px; padding: 4px 9px;
+      font-size: 11.5px; font-weight: 700; background: var(--kickoff-soft); color: var(--kickoff);
+    }
+    .card-badge svg { width: 14px; height: 14px; }
+    .card-status {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary);
+      font-size: 11.5px; font-weight: 600;
+    }
+    .spin { width: 13px; height: 13px; color: var(--accent); animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .card-body { padding: 14px; }
+
+    /* elapsed + progress */
+    .elapsed-row { display: flex; align-items: baseline; gap: 8px; }
+    .elapsed { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+    .elapsed-unit { color: var(--text-muted); font-size: 12px; }
+    .elapsed-cap { margin-left: auto; color: var(--text-muted); font-size: 11px; }
+    .bar { margin-top: 10px; height: 5px; border-radius: 999px; background: var(--panel-muted); overflow: hidden; }
+    .bar-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--kickoff)); transition: width .3s linear; }
+    .phase { margin-top: 12px; display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; }
+    .phase svg { width: 15px; height: 15px; color: var(--accent); }
+    .phase .dots::after { content: ''; animation: dots 1.4s steps(4, end) infinite; }
+    @keyframes dots { 0%{content:'';} 25%{content:'·';} 50%{content:'··';} 75%{content:'···';} 100%{content:'';} }
+
+    /* skeleton */
+    .skeleton { margin-top: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 14px; }
+    .sk-line { height: 11px; border-radius: 5px; margin-bottom: 9px; background: linear-gradient(90deg, #e7edf4 25%, #f2f6fa 37%, #e7edf4 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+    .sk-line:last-child { margin-bottom: 0; }
+    @keyframes shimmer { 0%{background-position:100% 0;} 100%{background-position:0 0;} }
+
+    .card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; }
+    .foot-hint { color: var(--text-muted); font-size: 11px; }
+    .cancel-btn {
+      display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px;
+      padding: 6px 13px; font-size: 12px; font-weight: 650; color: var(--text-secondary);
+    }
+    .cancel-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* success / error */
+    .result { padding: 20px 14px; text-align: center; }
+    .result .ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; margin: 0 auto 10px; }
+    .result.ok .ico { background: rgba(47,133,90,0.12); color: var(--ok); }
+    .result.err .ico { background: rgba(201,66,66,0.12); color: var(--danger); }
+    .result h3 { margin: 0 0 4px; font-size: 14px; }
+    .result p { margin: 0; color: var(--text-muted); font-size: 12px; }
+    .result .retry { margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 650; }
+    .result .retry:hover { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="frame-head">
+      <i data-lucide="loader-circle"></i>
+      <span>生成中占位态</span>
+      <span class="tag">Demo 3 · 同步 45s 无流式</span>
+    </div>
+    <p class="hint">§2.4 定为同步返回、无 token 流。生成期间（最长 45s）无逐字反馈，由这张 loading 卡片占位。下方可模拟三种收尾。</p>
+
+    <div class="controls">
+      <button class="primary" id="start"><i data-lucide="play"></i>开始生成（模拟 6s 完成）</button>
+      <button id="startSlow"><i data-lucide="clock"></i>模拟接近超时</button>
+      <button id="startErr"><i data-lucide="triangle-alert"></i>模拟失败</button>
+    </div>
+
+    <div id="slot"></div>
+  </div>
+
+  <script>
+    const CAP = 45;
+    const slot = document.getElementById('slot');
+    let timer = null, t0 = 0, mode = 'normal';
+
+    const PHASES = [
+      { at: 0,  icon: 'file-search', label: '正在读取上下文与交互历史' },
+      { at: 25, icon: 'brain',       label: '正在蒸馏意图与关键约束' },
+      { at: 60, icon: 'pen-line',    label: '正在起草启动 prompt' },
+      { at: 85, icon: 'check-check', label: '正在自检与润色' },
+    ];
+
+    function loadingCard() {
+      slot.innerHTML = `
+        <div class="card">
+          <div class="card-head">
+            <span class="card-badge"><i data-lucide="rocket"></i>启动简报 · Kickoff Prompt</span>
+            <span class="card-status"><i data-lucide="loader-circle" class="spin"></i><span id="statusText">生成中</span></span>
+          </div>
+          <div class="card-body">
+            <div class="elapsed-row">
+              <span class="elapsed" id="elapsed">0.0</span><span class="elapsed-unit">s</span>
+              <span class="elapsed-cap">最长等待 ${CAP}s</span>
+            </div>
+            <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+            <div class="phase"><i data-lucide="file-search" id="phaseIcon"></i><span id="phaseLabel">正在读取上下文与交互历史</span><span class="dots"></span></div>
+            <div class="skeleton">
+              <div class="sk-line" style="width:92%"></div>
+              <div class="sk-line" style="width:78%"></div>
+              <div class="sk-line" style="width:85%"></div>
+              <div class="sk-line" style="width:60%"></div>
+              <div class="sk-line" style="width:72%"></div>
+            </div>
+            <div class="card-foot">
+              <span class="foot-hint">生成期间 kickoff / handoff / polish / commit 均不可用</span>
+              <button class="cancel-btn" id="cancel"><i data-lucide="x"></i>取消</button>
+            </div>
+          </div>
+        </div>`;
+      lucide.createIcons();
+      document.getElementById('cancel').addEventListener('click', stopAll);
+    }
+
+    function tick() {
+      const el = (Date.now() - t0) / 1000;
+      const shown = Math.min(el, CAP);
+      const pct = Math.min((el / (mode === 'slow' ? 44 : 6)) * 100, mode === 'slow' ? 96 : 100);
+      const eEl = document.getElementById('elapsed'); if (!eEl) return;
+      eEl.textContent = shown.toFixed(1);
+      document.getElementById('barFill').style.width = pct + '%';
+      let ph = PHASES[0];
+      for (const p of PHASES) if (pct >= p.at) ph = p;
+      const pi = document.getElementById('phaseIcon');
+      pi.setAttribute('data-lucide', ph.icon);
+      document.getElementById('phaseLabel').textContent = ph.label;
+      lucide.createIcons();
+      if (el >= CAP) { stopTimer(); showResult('err', '生成超时', `已达到 ${CAP}s 上限，本次未落库。可重试。`); }
+    }
+
+    function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+    function stopAll() { stopTimer(); slot.innerHTML = ''; }
+
+    function begin(m) {
+      mode = m; t0 = Date.now(); loadingCard(); stopTimer();
+      timer = setInterval(tick, 100);
+      if (m === 'normal') setTimeout(() => { stopTimer(); showResult('ok', '启动简报已生成', '卡片已入对话流并持久化 · 详见 Demo 2'); }, 6000);
+      if (m === 'err') setTimeout(() => { stopTimer(); showResult('err', '生成失败', 'LLM 调用出错，本次未落库。可重试。'); }, 3500);
+      // slow: 交由 45s cap 触发超时（或用户取消）
+    }
+
+    function showResult(type, title, desc) {
+      const okBody = type === 'ok'
+        ? `<div class="ico"><i data-lucide="check"></i></div><h3>${title}</h3><p>${desc}</p>`
+        : `<div class="ico"><i data-lucide="triangle-alert"></i></div><h3>${title}</h3><p>${desc}</p><button class="retry" id="retry"><i data-lucide="refresh-cw"></i>重试</button>`;
+      slot.innerHTML = `<div class="card"><div class="result ${type === 'ok' ? 'ok' : 'err'}">${okBody}</div></div>`;
+      lucide.createIcons();
+      const r = document.getElementById('retry');
+      if (r) r.addEventListener('click', () => begin('normal'));
+    }
+
+    document.getElementById('start').addEventListener('click', () => begin('normal'));
+    document.getElementById('startSlow').addEventListener('click', () => begin('slow'));
+    document.getElementById('startErr').addEventListener('click', () => begin('err'));
+    lucide.createIcons();
+  </script>
+</body>
+</html>

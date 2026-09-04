@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kickoff / handoff 富卡片 · 原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --ok: #2f855a;
+      --danger: #c94242;
+      --kickoff: #7c3aed;
+      --kickoff-soft: #f2ecfe;
+      --handoff: #0d9488;
+      --handoff-soft: #e6f6f4;
+      --shadow-card: 0 10px 30px rgba(31, 42, 55, 0.1);
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { width: 100%; min-width: 320px; margin: 0; }
+    body {
+      display: grid; place-items: start center; min-height: 100dvh; padding: 40px 20px;
+      background: var(--workspace); color: var(--text); font-family: var(--font); font-size: 14px;
+    }
+    button { border: 0; cursor: pointer; background: transparent; color: inherit; font: inherit; }
+    textarea { color: inherit; font: inherit; }
+
+    .frame { width: min(720px, 100%); display: grid; gap: 16px; }
+    .frame-head { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; }
+    .frame-head svg { color: var(--accent); }
+    .frame-head .tag { margin-left: auto; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); padding: 3px 8px; color: var(--text-muted); font-size: 11px; font-weight: 600; }
+    .switcher { display: flex; gap: 8px; }
+    .switcher button {
+      border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 6px 12px;
+      font-size: 12px; font-weight: 650; color: var(--text-secondary);
+    }
+    .switcher button.on { border-color: rgba(47,103,246,0.4); background: var(--accent-soft); color: var(--accent); }
+
+    /* Timeline card */
+    .card {
+      border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface);
+      box-shadow: var(--shadow-card); overflow: hidden;
+    }
+    .card-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--panel-muted); }
+    .card-badge {
+      display: inline-flex; align-items: center; gap: 6px; border-radius: 7px; padding: 4px 9px;
+      font-size: 11.5px; font-weight: 700;
+    }
+    .card.kickoff .card-badge { background: var(--kickoff-soft); color: var(--kickoff); }
+    .card.handoff .card-badge { background: var(--handoff-soft); color: var(--handoff); }
+    .card-badge svg { width: 14px; height: 14px; }
+    .card-title { font-size: 13.5px; font-weight: 700; }
+    .card-sub { color: var(--text-muted); font-size: 11px; font-weight: 500; }
+    .card-ver {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 2px; border-radius: 999px;
+      background: var(--panel-muted); padding: 2px 4px; font-size: 11px; font-weight: 650; color: var(--text-secondary);
+    }
+    .ver-arrow { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; color: var(--text-secondary); }
+    .ver-arrow:hover:not(:disabled) { background: var(--surface); color: var(--accent); }
+    .ver-arrow:disabled { opacity: .3; cursor: default; }
+    .ver-arrow svg { width: 14px; height: 14px; }
+    .ver-num { min-width: 34px; text-align: center; font-family: var(--mono); font-size: 11px; }
+
+    .card-body { padding: 6px 14px 14px; }
+    .prompt-box {
+      position: relative; margin-top: 8px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--panel); padding: 14px 14px 12px;
+    }
+    .prompt-text {
+      font-family: var(--mono); font-size: 12px; line-height: 1.75; color: #2c3644; white-space: pre-wrap;
+      word-break: break-word; max-height: 300px; overflow: hidden; transition: max-height .28s ease;
+    }
+    .prompt-box.expanded .prompt-text { max-height: 4000px; }
+    .prompt-box.no-clamp .prompt-text { max-height: none; }
+    .prompt-fade {
+      position: absolute; left: 0; right: 0; bottom: 0; height: 88px; pointer-events: none;
+      background: linear-gradient(180deg, rgba(248,250,252,0), var(--panel) 78%);
+    }
+    .prompt-box.expanded .prompt-fade { display: none; }
+    .float-toggle {
+      position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+      display: inline-flex; align-items: center; gap: 5px; z-index: 2;
+      border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+      padding: 4px 13px; font-size: 11.5px; font-weight: 700; color: var(--accent);
+      box-shadow: 0 2px 8px rgba(15,23,42,0.1);
+    }
+    .float-toggle:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .float-toggle svg { width: 13px; height: 13px; }
+    .prompt-box.expanded .float-toggle { position: static; transform: none; margin: 8px auto 0; display: flex; }
+    .prompt-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .p-btn {
+      display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 7px;
+      background: var(--surface); padding: 5px 11px; font-size: 11.5px; font-weight: 650; color: var(--text-secondary);
+    }
+    .p-btn:hover { border-color: var(--border-strong); }
+    .p-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+    .p-btn.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+    .p-btn svg { width: 13px; height: 13px; }
+    .p-btn.copied { border-color: var(--ok); color: var(--ok); }
+    .p-spacer { margin-left: auto; }
+
+    /* 重新生成面板 */
+    .regen-panel {
+      margin-top: 12px; border: 1px solid rgba(47,103,246,0.4); border-radius: 10px; background: var(--surface);
+      padding: 10px 12px; animation: slideDown .18s ease;
+    }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    .fb-textarea { width: 100%; min-height: 44px; max-height: 140px; border: 0; resize: none; outline: none; background: transparent; font-size: 12.5px; line-height: 1.6; }
+    .regen-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; gap: 10px; }
+    .fb-hint { color: var(--text-muted); font-size: 10.5px; }
+    .regen-btns { display: flex; align-items: center; gap: 8px; }
+    .regen-submit {
+      display: inline-flex; align-items: center; gap: 6px; border-radius: 7px; padding: 6px 14px;
+      font-size: 12px; font-weight: 700; background: var(--accent); color: #fff;
+    }
+    .regen-submit:disabled { opacity: .45; cursor: not-allowed; }
+    .regen-submit svg { width: 13px; height: 13px; }
+    .note { min-height: 18px; color: var(--ok); font-size: 12px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="frame-head">
+      <i data-lucide="scroll-text"></i>
+      <span>kickoff / handoff 富卡片</span>
+      <span class="tag">Demo 2 · 全文 / 复制 / 版本切换 / 重新生成</span>
+    </div>
+    <div class="switcher">
+      <button id="sw-kickoff" class="on"><i data-lucide="rocket"></i> 启动简报 kickoff</button>
+      <button id="sw-handoff"><i data-lucide="git-pull-request-arrow"></i> 交接简报 handoff</button>
+    </div>
+
+    <div id="card-slot"></div>
+    <div class="note" id="note"></div>
+  </div>
+
+  <script>
+    const SAMPLE = {
+      kickoff: {
+        badge: '启动简报 · Kickoff Prompt',
+        icon: 'rocket',
+        versions: [
+          { fb: null, text:
+`# 项目启动指令（Kickoff）
+
+## 角色
+你是本 PPT 项目的开发 Agent，负责将下方需求落地为可交付的 HTML 幻灯片。
+
+## 背景
+产品目标是模拟 PowerPoint 的创作体验，由 Agent 理解需求、组织内容、规划设计并生成 HTML 形式的 PPT。
+
+## 本次目标
+- 制作一份「2026 年度技术复盘」演示，共 12 页。
+- 风格：极简、高信息密度、深色主题。
+- 首页需含标题、副标题、日期。
+
+## 约束
+- 严格遵循 AGENTS.md 与既有实现约定。
+- 间距偏紧凑（4–6px 微观间距），滚动条视觉隐藏。
+
+## 交付
+完成后调用 finish 交付，并附每页要点。` },
+          { fb: '首页再加一句 slogan，风格更克制一些', text:
+`# 项目启动指令（Kickoff · v2）
+
+## 角色
+你是本 PPT 项目的开发 Agent，负责将下方需求落地为可交付的 HTML 幻灯片。
+
+## 背景
+产品目标是模拟 PowerPoint 的创作体验，由 Agent 理解需求、组织内容、规划设计并生成 HTML 形式的 PPT。
+
+## 本次目标
+- 制作一份「2026 年度技术复盘」演示，共 12 页。
+- 风格：极简克制、高信息密度、深色主题，避免任何装饰性冗余。
+- 首页需含标题、副标题、日期，并加一句克制的 slogan。
+
+## 约束
+- 严格遵循 AGENTS.md 与既有实现约定。
+- 间距偏紧凑（4–6px 微观间距），滚动条视觉隐藏。
+
+## 交付
+完成后调用 finish 交付，并附每页要点。` },
+        ],
+      },
+      handoff: {
+        badge: '交接简报 · Handoff Prompt',
+        icon: 'git-pull-request-arrow',
+        versions: [
+          { fb: null, text:
+`# 项目交接说明（Handoff）
+
+## 业务背景
+PPT 创作产品，Agent 生成 HTML 幻灯片。当前处于开发期。
+
+## 已完成
+- 输入框触发符体系：@ 汇总、# 页面、¥ 组件、% 提示词。
+- / 命令系统设计文档已定稿（本次）。
+
+## 进行中
+- kickoff / handoff 后端 service（独立表 + 版本链）尚未开工。
+
+## 当前状态 / 下一步
+- 待实现：briefing 独立表、两个 endpoint、History 合流。
+- 注意：严禁写入 jsonl、严禁进落盘白名单（上下文卫生硬约束）。
+
+## 坑位
+- JSDOM 大用例编辑器集成测试有 OOM 风险，逻辑测试放 promptMatching.test.ts。` },
+        ],
+      },
+    };
+
+    let kind = 'kickoff';
+    let curVer = {};       // kind -> index of displayed version
+    let regenOpen = false; // 重新生成输入框是否展开
+    let expanded = false;  // 全文是否内联展开
+    const slot = document.getElementById('card-slot');
+    const note = document.getElementById('note');
+
+    function data() { return SAMPLE[kind]; }
+    function verIndex() { return curVer[kind] ?? (data().versions.length - 1); }
+
+    function render() {
+      const d = data();
+      const total = d.versions.length;
+      const idx = Math.min(verIndex(), total - 1);
+      const v = d.versions[idx];
+      const isLatest = idx === total - 1;
+
+      const verNav = total > 1 ? `
+        <span class="card-ver">
+          <button class="ver-arrow" id="verPrev" ${idx === 0 ? 'disabled' : ''}><i data-lucide="chevron-left"></i></button>
+          <span class="ver-num">${idx + 1} / ${total}</span>
+          <button class="ver-arrow" id="verNext" ${idx === total - 1 ? 'disabled' : ''}><i data-lucide="chevron-right"></i></button>
+        </span>` : '';
+
+      const regenBtn = isLatest ? `
+        <button class="p-btn ${regenOpen ? 'active' : ''}" id="regenToggle"><i data-lucide="refresh-cw"></i>重新生成</button>` : '';
+
+      const regenPanel = (isLatest && regenOpen) ? `
+        <div class="regen-panel">
+          <textarea class="fb-textarea" id="fbText" placeholder="说说要改什么，将基于当前版本重新生成…例如：语气更正式、补充测试计划、缩短到 200 字…"></textarea>
+          <div class="regen-foot">
+            <span class="fb-hint">回喂给模型：最近 2 版全文 + 全部反馈</span>
+            <div class="regen-btns">
+              <button class="p-btn" id="regenCancel">取消</button>
+              <button class="regen-submit" id="regenSubmit" disabled><i data-lucide="send"></i>提交</button>
+            </div>
+          </div>
+        </div>` : '';
+
+      slot.innerHTML = `
+        <div class="card ${kind}">
+          <div class="card-head">
+            <span class="card-badge"><i data-lucide="${d.icon}"></i>${d.badge}</span>
+            ${verNav}
+          </div>
+          <div class="card-body">
+            <div class="prompt-box ${expanded ? 'expanded' : ''}" id="pbox">
+              <div class="prompt-text">${escapeHtml(v.text)}</div>
+            </div>
+            <div class="prompt-actions">
+              ${regenBtn}
+              <button class="p-btn primary p-spacer" id="copy"><i data-lucide="copy"></i>复制全文</button>
+            </div>
+            ${regenPanel}
+          </div>
+        </div>`;
+      if (window.lucide) lucide.createIcons();
+      applyClamp();
+      bind();
+    }
+
+    // 折叠高度（px）。基于渲染后的实际高度判定是否需要折叠，比字符数更准确。
+    const CLAMP_PX = 300;
+
+    // 测量正文实际高度：超过折叠高度才注入渐隐 + 悬浮展开按钮
+    function applyClamp() {
+      const box = document.getElementById('pbox');
+      if (!box) return;
+      const textEl = box.querySelector('.prompt-text');
+      const overflow = textEl.scrollHeight > CLAMP_PX + 8;
+      if (!overflow) { box.classList.add('no-clamp'); return; }
+      const fade = document.createElement('div'); fade.className = 'prompt-fade';
+      const btn = document.createElement('button'); btn.className = 'float-toggle'; btn.id = 'inlineToggle';
+      btn.innerHTML = `<i data-lucide="${expanded ? 'chevrons-down-up' : 'chevrons-up-down'}"></i>${expanded ? '收起' : '展开全文'}`;
+      box.appendChild(fade); box.appendChild(btn);
+      if (window.lucide) lucide.createIcons();
+      btn.addEventListener('click', () => { expanded = !expanded; render(); });
+    }
+
+    function bind() {
+      const d = data();
+      const total = d.versions.length;
+
+      // 版本切换
+      const prev = document.getElementById('verPrev');
+      const next = document.getElementById('verNext');
+      if (prev) prev.addEventListener('click', () => { const i = Math.max(0, verIndex() - 1); curVer[kind] = i; regenOpen = false; expanded = false; render(); });
+      if (next) next.addEventListener('click', () => { const i = Math.min(total - 1, verIndex() + 1); curVer[kind] = i; regenOpen = false; expanded = false; render(); });
+
+      // 复制
+      document.getElementById('copy').addEventListener('click', (e) => {
+        const btn = e.currentTarget;
+        navigator.clipboard?.writeText(d.versions[verIndex()].text).catch(()=>{});
+        btn.classList.add('copied'); btn.innerHTML = '<i data-lucide="check"></i>已复制';
+        lucide.createIcons();
+        setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '<i data-lucide="copy"></i>复制全文'; lucide.createIcons(); }, 1500);
+      });
+
+      // 重新生成开合
+      const regenToggle = document.getElementById('regenToggle');
+      if (regenToggle) regenToggle.addEventListener('click', () => { regenOpen = !regenOpen; render(); });
+      const regenCancel = document.getElementById('regenCancel');
+      if (regenCancel) regenCancel.addEventListener('click', () => { regenOpen = false; render(); });
+
+      const ta = document.getElementById('fbText');
+      const submit = document.getElementById('regenSubmit');
+      if (ta && submit) {
+        ta.focus();
+        ta.addEventListener('input', () => { submit.disabled = !ta.value.trim(); });
+        submit.addEventListener('click', () => {
+          const fb = ta.value.trim();
+          if (!fb) return;
+          const base = d.versions[d.versions.length - 1].text;
+          const newText = base.replace(/（Kickoff.*?）|（Handoff）/, '') + `\n\n> [根据反馈 v${d.versions.length + 1} 调整]：${fb}`;
+          d.versions.push({ fb, text: newText });
+          curVer[kind] = d.versions.length - 1;
+          regenOpen = false; expanded = false;
+          note.textContent = `✓ 已基于反馈生成 v${d.versions.length}（旧版本已完整保留在后端，可用右上角箭头回看）`;
+          render();
+        });
+      }
+    }
+
+    function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    document.getElementById('sw-kickoff').addEventListener('click', () => switchKind('kickoff'));
+    document.getElementById('sw-handoff').addEventListener('click', () => switchKind('handoff'));
+    function switchKind(k) {
+      kind = k;
+      regenOpen = false; expanded = false;
+      document.getElementById('sw-kickoff').classList.toggle('on', k === 'kickoff');
+      document.getElementById('sw-handoff').classList.toggle('on', k === 'handoff');
+      note.textContent = '';
+      render();
+    }
+
+    render();
+  </script>
+</body>
+</html>

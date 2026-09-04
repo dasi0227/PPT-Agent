@@ -764,7 +764,6 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   <div className={`flex shrink-0 items-center gap-1.5 border-b px-2.5 pb-1.5 pt-2 text-[11px] font-semibold ${
                     active ? 'border-accent/30 bg-accent/[0.04] text-accent' : 'border-panel-muted text-text-400'
                   }`}>
-                    <SummaryColumnIcon colIndex={colIndex} />
                     {column.label}
                     <span className={`ml-auto min-w-[18px] rounded-full px-1.5 text-center font-mono text-[10.5px] ${
                       active ? 'bg-accent-soft text-accent' : 'bg-panel-muted text-text-600'

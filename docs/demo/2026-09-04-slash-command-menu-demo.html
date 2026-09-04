@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>/ 命令菜单 · 输入框交互原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --ok: #2f855a;
+      --danger: #c94242;
+      --disabled: #aeb8c4;
+      --shadow-menu: 0 18px 46px rgba(31, 42, 55, 0.2);
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { width: 100%; min-width: 320px; height: 100%; margin: 0; }
+    body {
+      display: grid;
+      place-items: center;
+      min-height: 100dvh;
+      padding: 40px 20px;
+      background: var(--workspace);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+    }
+    button, input, textarea { color: inherit; font: inherit; }
+    button { border: 0; cursor: pointer; background: transparent; }
+    [contenteditable="true"]:focus-visible { outline: none; }
+
+    .frame { width: min(680px, 100%); display: grid; gap: 14px; }
+    .frame-head { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; }
+    .frame-head svg { color: var(--accent); }
+    .frame-head .tag {
+      margin-left: auto; border-radius: 6px; background: var(--surface);
+      border: 1px solid var(--border); padding: 3px 8px; color: var(--text-muted);
+      font-size: 11px; font-weight: 600;
+    }
+    .hint { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 2px; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+    .hint b { color: var(--accent); font-weight: 700; }
+    .hint kbd {
+      border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 5px;
+      background: var(--surface); padding: 1px 6px; font-family: var(--mono); font-size: 11px; color: var(--text-secondary);
+    }
+    .toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+    .toggle {
+      display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border);
+      border-radius: 7px; background: var(--surface); padding: 5px 10px; font-size: 11.5px;
+      font-weight: 600; color: var(--text-secondary);
+    }
+    .toggle.on { border-color: rgba(47,103,246,0.4); background: var(--accent-soft); color: var(--accent); }
+    .toggle svg { width: 13px; height: 13px; }
+
+    /* Composer */
+    .composer-area { position: relative; }
+    .composer {
+      position: relative; border: 1px solid rgba(196, 206, 218, 0.9); border-radius: 20px;
+      background: var(--surface); box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+    }
+    .composer.focus { border-color: rgba(47, 103, 246, 0.5); box-shadow: 0 6px 22px rgba(47, 103, 246, 0.12); }
+    .editor {
+      min-height: 88px; max-height: 220px; overflow-y: auto; padding: 14px 44px 10px 16px;
+      font-size: 14px; line-height: 24px; white-space: pre-wrap; word-break: break-word; scrollbar-width: none;
+    }
+    .editor::-webkit-scrollbar { display: none; }
+    .editor:empty::before { color: var(--text-muted); content: attr(data-placeholder); pointer-events: none; }
+    .slash-token { color: var(--accent); font-weight: 650; }
+    .composer-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 10px 10px; }
+    .control-group { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; }
+    .control-group code { border-radius: 4px; background: var(--panel-muted); padding: 1px 6px; font-family: var(--mono); color: var(--accent); font-weight: 600; }
+    .send-button { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 7px; background: var(--accent); color: #fff; }
+
+    /* Command menu */
+    .cmd-menu {
+      position: absolute; z-index: 20; right: 0; left: 0; bottom: calc(100% + 8px);
+      display: none; border: 1px solid var(--border-strong); border-radius: 12px;
+      background: var(--surface); box-shadow: var(--shadow-menu); overflow: hidden;
+    }
+    .cmd-menu.visible { display: block; }
+    .cmd-body { max-height: 360px; overflow-y: auto; padding: 6px; scrollbar-width: none; }
+    .cmd-body::-webkit-scrollbar { display: none; }
+
+    .cmd-group-head {
+      padding: 8px 10px 5px; color: var(--text-muted); font-size: 10.5px; font-weight: 700;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .cmd-cell {
+      display: grid; width: 100%; grid-template-columns: 24px minmax(0,1fr) auto; align-items: center;
+      gap: 9px; border-radius: 8px; padding: 8px 9px; text-align: left;
+    }
+    .cmd-cell + .cmd-cell { margin-top: 1px; }
+    .cmd-cell:hover:not(.disabled) { background: var(--panel); }
+    .cmd-cell.active:not(.disabled) { background: var(--accent-soft); }
+    .cmd-cell.disabled { cursor: not-allowed; }
+    .cmd-cell.disabled .cmd-name, .cmd-cell.disabled .cmd-icon { color: var(--disabled); }
+    .cmd-cell.disabled .cmd-desc { color: var(--disabled); }
+    .cmd-icon { display: grid; place-items: center; color: var(--accent); }
+    .cmd-cell.mode-on .cmd-icon { color: var(--ok); }
+    .cmd-copy { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
+    .cmd-name { flex-shrink: 0; font-family: var(--mono); font-size: 12.5px; font-weight: 650; color: var(--text); }
+    .cmd-name.plain { font-family: var(--font); font-size: 13px; }
+    .cmd-cell.active .cmd-name { color: var(--accent); }
+    .cmd-desc { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 11.5px; white-space: nowrap; text-overflow: ellipsis; }
+    .cmd-right { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+    .cmd-badge { border-radius: 5px; background: var(--panel-muted); padding: 1px 6px; font-size: 10px; font-weight: 600; }
+    .cmd-badge.on { background: rgba(47,133,90,0.14); color: var(--ok); }
+    .cmd-chev { width: 15px; height: 15px; color: var(--text-muted); }
+    .cmd-enter { font-family: var(--mono); font-size: 10px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+
+    .cmd-empty { display: grid; min-height: 88px; place-items: center; padding: 12px; color: var(--text-muted); font-size: 12px; text-align: center; }
+
+    /* Level 2 */
+    .cmd-l2-head {
+      display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-bottom: 1px solid var(--panel-muted);
+      color: var(--text); font-size: 12.5px; font-weight: 700;
+    }
+    .cmd-l2-back { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: var(--text-secondary); }
+    .cmd-l2-back:hover { background: var(--panel); color: var(--accent); }
+    .cmd-l2-title { flex: 1; }
+    .cmd-l2-esc { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+    .cmd-check { color: var(--accent); width: 16px; height: 16px; }
+    .cmd-sub { color: var(--text-muted); font-size: 10.5px; font-family: var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="frame-head">
+      <i data-lucide="slash-square"></i>
+      <span>/ 命令菜单</span>
+      <span class="tag">Demo 1 · 一级 + 二级</span>
+    </div>
+    <div class="hint">
+      在输入框敲 <b>/</b> 唤起命令菜单 · 键盘 <kbd>↑</kbd><kbd>↓</kbd> 移动 · <kbd>Enter</kbd> 选中/下钻 · <kbd>Esc</kbd> 返回/关闭 · 也可直接点击
+    </div>
+
+    <div class="toggles">
+      <span style="color:var(--text-muted);font-size:11px;align-self:center;">模拟前置条件：</span>
+      <button class="toggle" id="tg-run"><i data-lucide="loader"></i>run 运行中</button>
+      <button class="toggle" id="tg-empty"><i data-lucide="file-x"></i>空项目</button>
+      <button class="toggle" id="tg-busy"><i data-lucide="hourglass"></i>简报生成中</button>
+    </div>
+
+    <div class="composer-area">
+      <div class="cmd-menu" id="menu"></div>
+      <div class="composer" id="composer">
+        <div class="editor" id="editor" contenteditable="true" data-placeholder="输入 / 唤起命令，或直接描述你的需求…"></div>
+        <div class="composer-controls">
+          <div class="control-group">
+            当前模式：<code id="cur-mode">talk</code> · 模型：<code id="cur-model">GPT-5</code> · 目标：<code id="cur-target">单页 · 设计稿</code>
+          </div>
+          <button class="send-button"><i data-lucide="arrow-up"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint" id="log" style="min-height:20px;color:var(--ok);font-weight:600;"></div>
+  </div>
+
+  <script>
+    const state = {
+      runActive: false, emptyProject: false, busy: false,
+      mode: 'talk', model: 'GPT-5', target: '单页 · 设计稿',
+      open: false, level: 1, query: '', active: 0, sub: null, subActive: 0,
+    };
+
+    const MODELS = ['GPT-5', 'Claude Sonnet 4.5', 'DeepSeek V3', 'Kimi K2', 'Gemini 2.5 Pro'];
+    const TARGETS = ['单页 · 设计稿', '单页 · 幻灯片', '整份 · 设计稿', '整份 · 幻灯片'];
+
+    const COMMANDS = [
+      { id: 'plan',   group: '模式', icon: 'list-checks',   name: '计划模式', cmd: '/plan',   desc: '切换到计划模式', kind: 'mode' },
+      { id: 'ask',    group: '模式', icon: 'help-circle',   name: '审问模式', cmd: '/ask',    desc: '切换到审问模式', kind: 'mode' },
+      { id: 'talk',   group: '模式', icon: 'message-circle',name: '聊天模式', cmd: '/talk',   desc: '切换到聊天模式', kind: 'mode' },
+      { id: 'kickoff',group: '操作', icon: 'rocket',        name: '启动简报', cmd: '/kickoff',desc: '生成交给新 Agent 的启动 prompt', kind: 'briefing' },
+      { id: 'handoff',group: '操作', icon: 'git-pull-request-arrow', name: '交接简报', cmd: '/handoff', desc: '生成上下文交接 prompt', kind: 'briefing' },
+      { id: 'commit', group: '操作', icon: 'git-commit-horizontal', name: '提交', cmd: '/commit', desc: '执行一次 Git 提交', kind: 'action' },
+      { id: 'polish', group: '操作', icon: 'wand-sparkles', name: '润色', cmd: '/polish', desc: '润色当前输入内容', kind: 'briefing' },
+      { id: 'model',  group: '设置', icon: 'cpu',           name: '切换模型', cmd: '/model',  desc: '选择对话使用的模型', kind: 'submenu' },
+      { id: 'target', group: '设置', icon: 'target',        name: '切换目标', cmd: '/target', desc: '选择生成目标范围与对象', kind: 'submenu' },
+    ];
+
+    const editor = document.getElementById('editor');
+    const menu = document.getElementById('menu');
+    const log = document.getElementById('log');
+
+    function disabledReason(cmd) {
+      if (cmd.kind === 'mode' || cmd.kind === 'submenu') return null;
+      if (state.runActive) return 'run 运行中不可用';
+      if (state.emptyProject) return '空项目不可用';
+      if (state.busy) return '有操作进行中';
+      return null;
+    }
+
+    function filtered() {
+      const q = state.query.toLowerCase();
+      return COMMANDS.filter(c => !q || c.cmd.slice(1).startsWith(q) || c.id.startsWith(q));
+    }
+
+    function renderLevel1() {
+      const list = filtered();
+      state.active = Math.min(state.active, Math.max(0, list.length - 1));
+      if (!list.length) {
+        menu.innerHTML = '<div class="cmd-empty">无匹配命令</div>';
+        return;
+      }
+      let html = '<div class="cmd-body">';
+      let lastGroup = null;
+      list.forEach((c, i) => {
+        if (c.group !== lastGroup) { html += `<div class="cmd-group-head">${c.group}</div>`; lastGroup = c.group; }
+        const reason = disabledReason(c);
+        const isDisabled = !!reason;
+        const modeOn = c.kind === 'mode' && state.mode === c.id;
+        const cls = ['cmd-cell'];
+        if (i === state.active && !isDisabled) cls.push('active');
+        if (isDisabled) cls.push('disabled');
+        if (modeOn) cls.push('mode-on');
+        let right = '';
+        if (c.kind === 'submenu') right = '<i data-lucide="chevron-right" class="cmd-chev"></i>';
+        else if (modeOn) right = '<span class="cmd-badge on">当前</span>';
+        else if (i === state.active && !isDisabled) right = '<span class="cmd-enter">↵</span>';
+        const desc = isDisabled ? reason : c.desc;
+        html += `<button class="${cls.join(' ')}" data-i="${i}" ${isDisabled ? 'data-disabled="1"' : ''}>
+          <span class="cmd-icon"><i data-lucide="${c.icon}"></i></span>
+          <span class="cmd-copy">
+            <span class="cmd-name">${c.cmd.replace(/^\//, '')}</span>
+            <span class="cmd-desc">${desc}</span>
+          </span>
+          <span class="cmd-right">${right}</span>
+        </button>`;
+      });
+      html += '</div>';
+      menu.innerHTML = html;
+    }
+
+    function renderLevel2() {
+      const isModel = state.sub === 'model';
+      const items = isModel ? MODELS : TARGETS;
+      const cur = isModel ? state.model : state.target;
+      const title = isModel ? '选择模型' : '选择目标';
+      state.subActive = Math.min(state.subActive, items.length - 1);
+      let html = `<div class="cmd-l2-head">
+        <button class="cmd-l2-back" data-back="1"><i data-lucide="arrow-left"></i></button>
+        <span class="cmd-l2-title">${title}</span>
+        <span class="cmd-l2-esc">Esc 返回</span>
+      </div><div class="cmd-body">`;
+      items.forEach((it, i) => {
+        const cls = ['cmd-cell'];
+        if (i === state.subActive) cls.push('active');
+        const checked = it === cur;
+        html += `<button class="${cls.join(' ')}" data-sub="${i}">
+          <span class="cmd-icon"><i data-lucide="${isModel ? 'cpu' : 'target'}"></i></span>
+          <span class="cmd-copy"><span class="cmd-name plain">${it}</span></span>
+          <span class="cmd-right">${checked ? '<i data-lucide="check" class="cmd-check"></i>' : (i === state.subActive ? '<span class="cmd-enter">↵</span>' : '')}</span>
+        </button>`;
+      });
+      html += '</div>';
+      menu.innerHTML = html;
+    }
+
+    function render() {
+      menu.classList.toggle('visible', state.open);
+      if (!state.open) return;
+      if (state.level === 1) renderLevel1(); else renderLevel2();
+      if (window.lucide) lucide.createIcons();
+      bindCells();
+    }
+
+    function bindCells() {
+      menu.querySelectorAll('[data-i]').forEach(el => {
+        el.addEventListener('mousedown', e => {
+          e.preventDefault();
+          if (el.dataset.disabled) return;
+          state.active = +el.dataset.i;
+          chooseLevel1();
+        });
+      });
+      menu.querySelectorAll('[data-sub]').forEach(el => {
+        el.addEventListener('mousedown', e => { e.preventDefault(); state.subActive = +el.dataset.sub; chooseLevel2(); });
+      });
+      const back = menu.querySelector('[data-back]');
+      if (back) back.addEventListener('mousedown', e => { e.preventDefault(); state.level = 1; render(); });
+    }
+
+    function openMenu() { state.open = true; state.level = 1; state.query = ''; state.active = 0; render(); }
+    function closeMenu() { state.open = false; render(); }
+
+    function chooseLevel1() {
+      const list = filtered();
+      const c = list[state.active];
+      if (!c) return;
+      if (disabledReason(c)) return;
+      if (c.kind === 'submenu') { state.level = 2; state.sub = c.id; state.subActive = 0; render(); return; }
+      // execute action + clear /token
+      clearSlashToken();
+      closeMenu();
+      if (c.kind === 'mode') { state.mode = c.id; document.getElementById('cur-mode').textContent = c.id; note(`已切换到「${c.name}」`); }
+      else if (c.id === 'commit') note('已触发 Git 提交流程（复用现有 commit）');
+      else if (c.id === 'polish') note('已触发润色流程（复用现有 polish）');
+      else if (c.id === 'kickoff') note('已发起「启动简报」生成 → 见 Demo 2/3');
+      else if (c.id === 'handoff') note('已发起「交接简报」生成 → 见 Demo 2/3');
+    }
+
+    function chooseLevel2() {
+      const isModel = state.sub === 'model';
+      const items = isModel ? MODELS : TARGETS;
+      const val = items[state.subActive];
+      clearSlashToken();
+      closeMenu();
+      if (isModel) { state.model = val; document.getElementById('cur-model').textContent = val; note(`模型已切换为「${val}」`); }
+      else { state.target = val; document.getElementById('cur-target').textContent = val; note(`目标已切换为「${val}」`); }
+    }
+
+    function note(t) { log.textContent = '✓ ' + t; }
+
+    function clearSlashToken() {
+      const txt = editor.textContent;
+      const idx = txt.lastIndexOf('/');
+      if (idx >= 0) editor.textContent = txt.slice(0, idx);
+      placeCaretEnd();
+    }
+    function placeCaretEnd() {
+      editor.focus();
+      const r = document.createRange(); r.selectNodeContents(editor); r.collapse(false);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    }
+
+    // input detection
+    editor.addEventListener('input', () => {
+      const txt = editor.textContent;
+      const m = txt.match(/\/([a-z]*)$/i);
+      if (m) { if (!state.open) openMenu(); state.query = m[1].toLowerCase(); state.level = 1; state.active = 0; render(); }
+      else if (state.open) closeMenu();
+    });
+
+    document.addEventListener('keydown', e => {
+      if (!state.open) return;
+      if (state.level === 1) {
+        const list = filtered();
+        if (e.key === 'ArrowDown') { e.preventDefault(); state.active = (state.active + 1) % list.length; render(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); state.active = (state.active - 1 + list.length) % list.length; render(); }
+        else if (e.key === 'Enter') { e.preventDefault(); chooseLevel1(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeMenu(); }
+      } else {
+        const items = (state.sub === 'model' ? MODELS : TARGETS);
+        if (e.key === 'ArrowDown') { e.preventDefault(); state.subActive = (state.subActive + 1) % items.length; render(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); state.subActive = (state.subActive - 1 + items.length) % items.length; render(); }
+        else if (e.key === 'Enter') { e.preventDefault(); chooseLevel2(); }
+        else if (e.key === 'Escape') { e.preventDefault(); state.level = 1; render(); }
+      }
+    });
+
+    editor.addEventListener('focus', () => document.getElementById('composer').classList.add('focus'));
+    editor.addEventListener('blur', () => { document.getElementById('composer').classList.remove('focus'); setTimeout(closeMenu, 120); });
+
+    function bindToggle(id, key, label) {
+      const el = document.getElementById(id);
+      el.addEventListener('click', () => { state[key] = !state[key]; el.classList.toggle('on', state[key]); if (state.open) render(); });
+    }
+    bindToggle('tg-run', 'runActive'); bindToggle('tg-empty', 'emptyProject'); bindToggle('tg-busy', 'busy');
+
+    lucide.createIcons();
+  </script>
+</body>
+</html>
