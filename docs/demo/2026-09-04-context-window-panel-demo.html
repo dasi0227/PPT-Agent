@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>上下文窗口面板 · 常驻态 · 原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --ok: #2f855a;
+      --danger: #c94242;
+      /* 6 类上下文分桶配色 */
+      --c-read_ppt: #2f67f6;
+      --c-run_command: #0d9488;
+      --c-system_prompt: #7c3aed;
+      --c-user_prompt: #d97706;
+      --c-chat_history: #db2777;
+      --c-other: #8793a2;
+      --shadow-card: 0 10px 30px rgba(31, 42, 55, 0.1);
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { width: 100%; min-width: 320px; margin: 0; }
+    body {
+      display: grid; place-items: start center; min-height: 100dvh; padding: 40px 20px;
+      background: var(--workspace); color: var(--text); font-family: var(--font); font-size: 14px;
+    }
+    button { border: 0; cursor: pointer; background: transparent; color: inherit; font: inherit; }
+    /* 视觉隐藏滚动条，保留滚动逻辑 */
+    .scroll { scrollbar-width: none; -ms-overflow-style: none; }
+    .scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+    .frame { width: min(420px, 100%); display: grid; gap: 14px; }
+    .frame-head { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; }
+    .frame-head svg { color: var(--accent); }
+    .frame-head .tag { margin-left: auto; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); padding: 3px 8px; color: var(--text-muted); font-size: 11px; font-weight: 600; }
+
+    /* 面板本体 */
+    .panel {
+      border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface);
+      box-shadow: var(--shadow-card); overflow: hidden;
+    }
+    .panel-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px; }
+    .panel-title { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; }
+    .panel-title .caret { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; color: var(--text-muted); }
+    .panel-title .caret:hover { background: var(--panel-muted); color: var(--text-secondary); }
+    .panel-title .info { color: var(--text-muted); display: inline-flex; }
+    .panel-title .info svg { width: 13px; height: 13px; }
+    .compact-btn {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+      padding: 6px 12px; font-size: 12px; font-weight: 650; color: var(--text-secondary);
+    }
+    .compact-btn:hover { border-color: var(--border-strong); color: var(--text); }
+    .compact-btn svg { width: 13px; height: 13px; }
+
+    /* 进度条：分段染色 */
+    .meter-row { display: flex; align-items: center; gap: 10px; padding: 2px 14px 12px; }
+    .meter {
+      flex: 1; position: relative; height: 8px; border-radius: 999px; overflow: hidden;
+      background: var(--panel-muted); display: flex;
+    }
+    .seg { height: 100%; }
+    .meter-pct { font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: var(--text-secondary); min-width: 40px; text-align: right; }
+
+    /* 分桶 tab */
+    .tabs { display: flex; gap: 4px; padding: 0 10px 10px; overflow-x: auto; }
+    .tab {
+      flex: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;
+      padding: 6px 9px; font-size: 11.5px; font-weight: 650; color: var(--text-secondary);
+      border: 1px solid transparent;
+    }
+    .tab:hover { background: var(--panel); }
+    .tab.on { background: var(--panel); border-color: var(--border); color: var(--text); }
+    .tab .dot { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+    .tab .tk { font-family: var(--mono); font-size: 10.5px; color: var(--text-muted); }
+
+    /* 明细列表 */
+    .list { border-top: 1px solid var(--panel-muted); max-height: 240px; overflow-y: auto; }
+    .item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--panel-muted); }
+    .item:last-child { border-bottom: 0; }
+    .item .ic { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; flex: none; }
+    .item .ic svg { width: 14px; height: 14px; }
+    .item .meta { min-width: 0; flex: 1; }
+    .item .name { font-size: 12.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .sub { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
+    .item .layer { flex: none; border-radius: 5px; padding: 2px 6px; font-size: 9.5px; font-weight: 700; letter-spacing: .02em; }
+    .layer.seed { background: #f1f5f9; color: #64748b; }
+    .layer.transcript { background: var(--accent-soft); color: var(--accent); }
+    .item .tok { flex: none; font-family: var(--mono); font-size: 11px; font-weight: 650; color: var(--text-secondary); min-width: 52px; text-align: right; }
+
+    .legend-note { padding: 8px 14px 12px; font-size: 10.5px; color: var(--text-muted); border-top: 1px solid var(--panel-muted); line-height: 1.6; }
+    .legend-note b { color: var(--text-secondary); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="frame-head">
+      <i data-lucide="gauge"></i>
+      <span>上下文窗口面板</span>
+      <span class="tag">Demo 1 · 常驻态 · 6 类分桶</span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">
+          上下文
+          <button class="caret" title="展开/收起"><i data-lucide="chevron-down"></i></button>
+          <span class="info" title="下一次会发给模型的 Prompt 占用"><i data-lucide="info"></i></span>
+        </span>
+        <button class="compact-btn" id="compactBtn"><i data-lucide="minimize-2"></i>压缩</button>
+      </div>
+
+      <div class="meter-row">
+        <div class="meter" id="meter"></div>
+        <span class="meter-pct" id="pct">63%</span>
+      </div>
+
+      <div class="tabs scroll" id="tabs"></div>
+
+      <div class="list scroll" id="list"></div>
+
+      <div class="legend-note">
+        进度条 = <b>下一次发给模型的 Prompt Token</b> ÷ <b>模型窗口（64K）</b>。
+        <span style="color:var(--c-read_ppt)">■</span> 属 <b>SEED</b>（每轮重建，不可压）；
+        <span style="color:var(--accent)">■</span> 属 <b>TRANSCRIPT</b>（对话累积，compact 作用于此）。
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 模拟：下一次 prompt 的分桶占用（token）。窗口 64K。
+    const WINDOW = 65536;
+    const BUCKETS = [
+      { key: 'read_ppt',      label: 'read_ppt',      color: 'var(--c-read_ppt)',      icon: 'file-text' },
+      { key: 'run_command',   label: 'run_command',   color: 'var(--c-run_command)',   icon: 'terminal' },
+      { key: 'system_prompt', label: 'system_prompt', color: 'var(--c-system_prompt)', icon: 'shield' },
+      { key: 'user_prompt',   label: 'user_prompt',   color: 'var(--c-user_prompt)',   icon: 'message-square' },
+      { key: 'chat_history',  label: 'chat_history',  color: 'var(--c-chat_history)',  icon: 'history' },
+      { key: 'other',         label: '其他',           color: 'var(--c-other)',         icon: 'ellipsis' },
+    ];
+    // 每桶 token 与明细条目（layer: seed | transcript）
+    const DATA = {
+      read_ppt:      { tokens: 14200, items: [
+        { name: 'outline.json（12 页大纲）', sub: 'project spec 快照', layer: 'seed', tok: 3200 },
+        { name: 'design.json + theme', sub: 'design/theme 契约', layer: 'seed', tok: 2600 },
+        { name: 'slide-07.html（read_ppt 观察）', sub: '运行中读取', layer: 'transcript', tok: 5100 },
+        { name: 'slide-03.html（read_ppt 观察）', sub: '运行中读取', layer: 'transcript', tok: 3300 },
+      ]},
+      run_command:   { tokens: 4100, items: [
+        { name: 'npm run build（输出）', sub: 'run_command 观察', layer: 'transcript', tok: 2600 },
+        { name: 'git status（输出）', sub: 'run_command 观察', layer: 'transcript', tok: 1500 },
+      ]},
+      system_prompt: { tokens: 8900, items: [
+        { name: 'system policy', sub: '角色 + 安全策略', layer: 'seed', tok: 3400 },
+        { name: '工具 schema（11 个工具）', sub: '能力声明', layer: 'seed', tok: 5500 },
+      ]},
+      user_prompt:   { tokens: 2400, items: [
+        { name: '本次指令', sub: 'user_instruction', layer: 'seed', tok: 900 },
+        { name: 'steering：先做首页', sub: '运行中插入', layer: 'transcript', tok: 700 },
+        { name: 'steering：字号再大点', sub: '运行中插入', layer: 'transcript', tok: 800 },
+      ]},
+      chat_history:  { tokens: 9800, items: [
+        { name: '历史对话（compact 前 24 轮）', sub: '持久 transcript', layer: 'transcript', tok: 7600 },
+        { name: 'thread memory', sub: '跨 run 确认信息', layer: 'transcript', tok: 2200 },
+      ]},
+      other:         { tokens: 1900, items: [
+        { name: 'context refs 索引', sub: '可用引用清单', layer: 'seed', tok: 1100 },
+        { name: 'runtime_state', sub: '格式包裹兜底', layer: 'other', tok: 800 },
+      ]},
+    };
+
+    let active = null; // null = 显示全部；否则单桶
+    const meter = document.getElementById('meter');
+    const pct = document.getElementById('pct');
+    const tabsEl = document.getElementById('tabs');
+    const listEl = document.getElementById('list');
+
+    function total() { return BUCKETS.reduce((s, b) => s + DATA[b.key].tokens, 0); }
+
+    function renderMeter() {
+      const used = total();
+      meter.innerHTML = BUCKETS.map(b => {
+        const t = DATA[b.key].tokens;
+        const w = (t / WINDOW * 100).toFixed(2);
+        const dim = active && active !== b.key ? 'opacity:.28;' : '';
+        return `<span class="seg" style="width:${w}%;background:${b.color};${dim}"></span>`;
+      }).join('');
+      pct.textContent = Math.round(used / WINDOW * 100) + '%';
+    }
+
+    function renderTabs() {
+      const allOn = active === null;
+      tabsEl.innerHTML =
+        `<button class="tab ${allOn ? 'on' : ''}" data-k="__all"><span class="dot" style="background:linear-gradient(90deg,var(--c-read_ppt),var(--c-chat_history))"></span>全部<span class="tk">${(total()/1000).toFixed(1)}k</span></button>` +
+        BUCKETS.map(b => {
+          const t = DATA[b.key].tokens;
+          return `<button class="tab ${active===b.key?'on':''}" data-k="${b.key}"><span class="dot" style="background:${b.color}"></span>${b.label}<span class="tk">${(t/1000).toFixed(1)}k</span></button>`;
+        }).join('');
+      tabsEl.querySelectorAll('.tab').forEach(el => el.addEventListener('click', () => {
+        const k = el.dataset.k;
+        active = k === '__all' ? null : k;
+        render();
+      }));
+    }
+
+    function renderList() {
+      const keys = active ? [active] : BUCKETS.map(b => b.key);
+      const rows = [];
+      keys.forEach(k => {
+        const b = BUCKETS.find(x => x.key === k);
+        DATA[k].items.forEach(it => rows.push({ b, it }));
+      });
+      listEl.innerHTML = rows.map(({ b, it }) => `
+        <div class="item">
+          <span class="ic" style="background:color-mix(in srgb, ${b.color} 12%, #fff);color:${b.color}"><i data-lucide="${b.icon}"></i></span>
+          <span class="meta">
+            <div class="name">${escapeHtml(it.name)}</div>
+            <div class="sub">${escapeHtml(it.sub)}</div>
+          </span>
+          <span class="layer ${it.layer === 'seed' ? 'seed' : it.layer === 'transcript' ? 'transcript' : 'seed'}">${it.layer === 'transcript' ? 'TRANSCRIPT' : it.layer === 'seed' ? 'SEED' : '其他'}</span>
+          <span class="tok">${it.tok.toLocaleString()}</span>
+        </div>`).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function render() { renderMeter(); renderTabs(); renderList(); }
+    function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    document.getElementById('compactBtn').addEventListener('click', () => {
+      // 常驻态点击压缩：TRANSCRIPT 层收缩（此处仅演示数值回落）
+      DATA.chat_history.tokens = 2600;
+      DATA.chat_history.items = [{ name: '压缩摘要（24 轮 → 1 条）', sub: '结构化摘要', layer: 'transcript', tok: 2600 }];
+      DATA.read_ppt.items = DATA.read_ppt.items.filter(i => i.layer === 'seed');
+      DATA.read_ppt.tokens = 5800;
+      DATA.run_command.tokens = 0; DATA.run_command.items = [];
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

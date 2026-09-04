@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>上下文窗口 · 状态流转 & 时间线卡片 · 原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9eef5;
+      --surface: #ffffff;
+      --panel: #f8fafc;
+      --panel-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #8793a2;
+      --border: #d8e0e9;
+      --border-strong: #c4ceda;
+      --accent: #2f67f6;
+      --accent-soft: #eaf0ff;
+      --ok: #2f855a;
+      --ok-soft: #e6f4ec;
+      --warn: #d97706;
+      --warn-soft: #fdf1e0;
+      --danger: #c94242;
+      /* 6 类上下文分桶配色（与 Demo 1 一致） */
+      --c-read_ppt: #2f67f6;
+      --c-run_command: #0d9488;
+      --c-system_prompt: #7c3aed;
+      --c-user_prompt: #d97706;
+      --c-chat_history: #db2777;
+      --c-other: #8793a2;
+      --shadow-card: 0 10px 30px rgba(31, 42, 55, 0.1);
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { width: 100%; min-width: 320px; margin: 0; }
+    body {
+      display: grid; place-items: start center; min-height: 100dvh; padding: 40px 20px;
+      background: var(--workspace); color: var(--text); font-family: var(--font); font-size: 14px;
+    }
+    button { border: 0; cursor: pointer; background: transparent; color: inherit; font: inherit; }
+    .scroll { scrollbar-width: none; -ms-overflow-style: none; }
+    .scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+    .frame { width: min(440px, 100%); display: grid; gap: 14px; }
+    .frame-head { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; }
+    .frame-head svg { color: var(--accent); }
+    .frame-head .tag { margin-left: auto; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); padding: 3px 8px; color: var(--text-muted); font-size: 11px; font-weight: 600; }
+
+    /* 状态切换器 */
+    .states { display: flex; flex-wrap: wrap; gap: 6px; }
+    .states button {
+      border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 6px 11px;
+      font-size: 12px; font-weight: 650; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px;
+    }
+    .states button .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--text-muted); }
+    .states button.on { border-color: rgba(47,103,246,0.4); background: var(--accent-soft); color: var(--accent); }
+    .states button.on .dot { background: var(--accent); }
+    .states .play { margin-left: auto; border-color: rgba(47,103,246,0.4); background: var(--accent); color: #fff; }
+    .states .play:hover { filter: brightness(1.03); }
+    .states .play svg { width: 13px; height: 13px; }
+
+    /* 面板 */
+    .panel {
+      border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface);
+      box-shadow: var(--shadow-card); overflow: hidden; transition: border-color .25s;
+    }
+    .panel.warn { border-color: rgba(217,119,6,0.5); }
+    .panel-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 8px; }
+    .panel-title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 9px;
+      font-size: 11px; font-weight: 650; background: var(--panel-muted); color: var(--text-secondary);
+    }
+    .status-pill .live { width: 7px; height: 7px; border-radius: 999px; background: var(--text-muted); }
+    .status-pill.running { background: var(--accent-soft); color: var(--accent); }
+    .status-pill.running .live { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+    .status-pill.warn { background: var(--warn-soft); color: var(--warn); }
+    .status-pill.warn .live { background: var(--warn); animation: pulse 1.1s ease-in-out infinite; }
+    .status-pill.ok { background: var(--ok-soft); color: var(--ok); }
+    .status-pill.ok .live { background: var(--ok); animation: pulse 1.1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+
+    .compact-btn {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+      padding: 6px 12px; font-size: 12px; font-weight: 650; color: var(--text-secondary);
+    }
+    .compact-btn:hover:not(:disabled) { border-color: var(--border-strong); color: var(--text); }
+    .compact-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .compact-btn svg { width: 13px; height: 13px; }
+    .compact-btn .spin { animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 进度条：所有形态下结构一致 */
+    .meter-row { display: flex; align-items: center; gap: 10px; padding: 2px 14px 12px; }
+    .meter { flex: 1; position: relative; height: 8px; border-radius: 999px; overflow: hidden; background: var(--panel-muted); display: flex; }
+    .meter .seg { height: 100%; transition: width .5s cubic-bezier(.4,0,.2,1); }
+    .meter .thresh { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--danger); opacity: .55; }
+    .meter-pct { font-family: var(--mono); font-size: 12.5px; font-weight: 700; min-width: 42px; text-align: right; color: var(--text-secondary); transition: color .25s; }
+    .meter-pct.warn { color: var(--warn); }
+    .meter-pct.ok { color: var(--ok); }
+
+    /* 分桶迷你图例 */
+    .legend { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 0 14px 12px; }
+    .legend .lg { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--text-secondary); }
+    .legend .lg .d { width: 8px; height: 8px; border-radius: 3px; }
+    .legend .lg .v { font-family: var(--mono); color: var(--text-muted); }
+
+    /* 对话时间线 */
+    .timeline-head { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-top: 2px; }
+    .timeline-head svg { width: 14px; height: 14px; color: var(--text-muted); }
+    .timeline-head .hint { margin-left: auto; font-weight: 500; color: var(--text-muted); font-size: 10.5px; }
+
+    /* 压缩完成事件卡片（复刻 briefing 富卡片范式，留存于时间线） */
+    .fbcard { border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; }
+    .fbcard.flash { animation: flash 1.1s ease; }
+    @keyframes flash {
+      0% { border-color: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); }
+      100% { border-color: var(--border-strong); box-shadow: var(--shadow-card); }
+    }
+    .fb-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--panel-muted); }
+    .fb-badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 7px; padding: 4px 9px; font-size: 11.5px; font-weight: 700; background: var(--ok-soft); color: var(--ok); }
+    .fb-badge svg { width: 14px; height: 14px; }
+    .fb-sub { color: var(--text-muted); font-size: 11px; }
+    .fb-sub.right { margin-left: auto; font-family: var(--mono); }
+
+    .fb-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 14px; }
+    .metric { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; background: var(--panel); }
+    .metric .k { font-size: 10.5px; color: var(--text-muted); font-weight: 600; }
+    .metric .v { margin-top: 3px; font-size: 15px; font-weight: 750; font-family: var(--mono); display: flex; align-items: baseline; gap: 6px; }
+    .metric .v .arrow { color: var(--text-muted); font-size: 12px; }
+    .metric .v .new { color: var(--ok); }
+    .metric.wide { grid-column: 1 / -1; }
+    .metric .chips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+    .chip { border-radius: 999px; padding: 2px 8px; font-size: 10.5px; font-weight: 650; font-family: var(--mono); }
+
+    /* 摘要正文：300px 定高裁切 + 渐隐 + 内联展开 */
+    .fb-body { padding: 6px 14px 14px; }
+    .fb-body .sec-title { font-size: 11px; font-weight: 700; color: var(--text-secondary); margin: 8px 0 6px; letter-spacing: .02em; }
+    .summary-wrap { position: relative; }
+    .summary {
+      position: relative; border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+      padding: 12px 13px; font-size: 12.5px; line-height: 1.7; color: var(--text-secondary);
+      max-height: 300px; overflow: hidden; transition: max-height .3s ease;
+    }
+    .summary.open { max-height: 1200px; }
+    .summary h5 { margin: 12px 0 4px; font-size: 12px; color: var(--text); font-weight: 700; }
+    .summary h5:first-child { margin-top: 0; }
+    .summary ul { margin: 0; padding-left: 17px; }
+    .summary li { margin: 2px 0; }
+    .fade { position: absolute; left: 1px; right: 1px; bottom: 1px; height: 64px; border-radius: 0 0 10px 10px; background: linear-gradient(180deg, rgba(248,250,252,0), var(--panel)); pointer-events: none; }
+    .expand-btn {
+      position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+      display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-strong);
+      border-radius: 999px; background: var(--surface); padding: 4px 12px; font-size: 11.5px; font-weight: 650; color: var(--text-secondary);
+      box-shadow: 0 2px 8px rgba(31,42,55,.12);
+    }
+    .expand-btn:hover { color: var(--accent); border-color: rgba(47,103,246,.4); }
+    .expand-btn svg { width: 12px; height: 12px; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="frame-head">
+      <i data-lucide="activity"></i>
+      <span>上下文窗口 · 状态流转</span>
+      <span class="tag">Demo 2 · 状态流转 & 时间线卡片</span>
+    </div>
+
+    <div class="states" id="states">
+      <button data-s="idle"><span class="dot"></span>空闲</button>
+      <button data-s="running"><span class="dot"></span>运行中</button>
+      <button data-s="warning"><span class="dot"></span>警戒</button>
+      <button data-s="compacting"><span class="dot"></span>压缩中</button>
+      <button class="play" id="playBtn"><i data-lucide="play"></i>模拟自动压缩</button>
+    </div>
+
+    <div class="panel" id="panel">
+      <div class="panel-head">
+        <span class="panel-title">上下文</span>
+        <span class="status-pill" id="statusPill"><span class="live"></span><span id="statusText">空闲</span></span>
+        <button class="compact-btn" id="compactBtn"><i data-lucide="minimize-2"></i><span>压缩</span></button>
+      </div>
+
+      <div class="meter-row">
+        <div class="meter" id="meter"><div class="thresh" style="left:85%"></div></div>
+        <span class="meter-pct" id="pct">40%</span>
+      </div>
+
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <!-- 压缩完成 = 一条时间线事件，用富卡片留存 -->
+    <div class="timeline-head">
+      <i data-lucide="git-commit-horizontal"></i>对话时间线
+      <span class="hint">压缩完成后追加一条事件卡片</span>
+    </div>
+
+    <div class="fbcard" id="fbcard">
+      <div class="fb-head">
+        <span class="fb-badge"><i data-lucide="check-circle-2"></i>上下文已压缩</span>
+        <span class="fb-sub" id="fbTrigger">自动触发 · 耗时 4.2s</span>
+      </div>
+      <div class="fb-metrics">
+        <div class="metric">
+          <div class="k">窗口占用</div>
+          <div class="v">85% <span class="arrow">→</span> <span class="new">45%</span></div>
+        </div>
+        <div class="metric">
+          <div class="k">回收 Token</div>
+          <div class="v"><span class="new">−26.0k</span></div>
+        </div>
+      </div>
+      <div class="fb-body">
+        <div class="sec-title">压缩摘要</div>
+        <div class="summary-wrap">
+          <div class="summary" id="summary">
+            <h5>目标与意图</h5>
+            <ul>
+              <li>为「2026 Q3 增长复盘」制作 12 页深色商务风 PPT，重点强化首页与数据页的视觉层级。</li>
+            </ul>
+            <h5>已完成改动</h5>
+            <ul>
+              <li>outline.json 定稿 12 页；design/theme 切换为深色主色 #0F172A + 琥珀强调色。</li>
+              <li>已生成并预览 slide-01（封面）、slide-03（GMV 趋势）、slide-07（渠道拆解）。</li>
+              <li>slide-07 柱状图从并列改为堆叠，图例移至右上。</li>
+            </ul>
+            <h5>关键决策</h5>
+            <ul>
+              <li>正文字号统一 20px、标题 40px；用户确认后不再逐页询问。</li>
+              <li>数据页一律用真实数据占位，禁止编造数字。</li>
+            </ul>
+            <h5>未决问题</h5>
+            <ul>
+              <li>第 9 页「竞品对比」表格列数待用户提供最终口径。</li>
+              <li>结尾页是否加二维码未定。</li>
+            </ul>
+            <h5>下一步</h5>
+            <ul>
+              <li>补齐 slide-04~06、08 内容页，套用已定稿 theme。</li>
+              <li>回读全篇做一次一致性巡检。</li>
+            </ul>
+          </div>
+          <div class="fade" id="fade"></div>
+          <button class="expand-btn" id="expandBtn"><i data-lucide="chevron-down"></i>展开全文</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const WINDOW = 65536;
+    const BUCKETS = [
+      { key: 'read_ppt',      label: 'read_ppt',      color: 'var(--c-read_ppt)' },
+      { key: 'run_command',   label: 'run_command',   color: 'var(--c-run_command)' },
+      { key: 'system_prompt', label: 'system_prompt', color: 'var(--c-system_prompt)' },
+      { key: 'user_prompt',   label: 'user_prompt',   color: 'var(--c-user_prompt)' },
+      { key: 'chat_history',  label: 'chat_history',  color: 'var(--c-chat_history)' },
+      { key: 'other',         label: '其他',           color: 'var(--c-other)' },
+    ];
+
+    // 各形态下「下一次 prompt」的分桶占用（token）
+    const SNAP = {
+      idle:       { read_ppt: 9800,  run_command: 0,    system_prompt: 8900, user_prompt: 1500, chat_history: 4000,  other: 1900 },
+      running:    { read_ppt: 16800, run_command: 5200, system_prompt: 8900, user_prompt: 2400, chat_history: 12800, other: 2100 },
+      warning:    { read_ppt: 18200, run_command: 7100, system_prompt: 8900, user_prompt: 2600, chat_history: 16800, other: 2100 },
+      compacting: { read_ppt: 18200, run_command: 7100, system_prompt: 8900, user_prompt: 2600, chat_history: 16800, other: 2100 },
+    };
+    // 压缩完成后回落到的低占用快照（TRANSCRIPT 层收缩，SEED 不动）
+    const POST_COMPACT = { read_ppt: 12000, run_command: 1200, system_prompt: 8900, user_prompt: 2600, chat_history: 2900, other: 2100 };
+
+    const META = {
+      idle:       { pill: '',        text: '空闲',     tone: '',     btn: 'enabled' },
+      running:    { pill: 'running', text: '运行中',   tone: '',     btn: 'disabled' },
+      warning:    { pill: 'warn',    text: '接近阈值', tone: 'warn', btn: 'disabled' },
+      compacting: { pill: 'ok',      text: '压缩中',   tone: 'ok',   btn: 'busy' },
+    };
+
+    let state = 'idle';
+    let snapOverride = null; // 压缩后临时低占用快照
+    const $ = id => document.getElementById(id);
+    const meter = $('meter'), pct = $('pct'), legend = $('legend');
+    const panel = $('panel'), pill = $('statusPill'), statusText = $('statusText');
+    const compactBtn = $('compactBtn'), fbcard = $('fbcard');
+
+    function currentSnap() { return snapOverride || SNAP[state]; }
+    function totalOf(snap) { return BUCKETS.reduce((sum, b) => sum + (snap[b.key] || 0), 0); }
+
+    function render() {
+      const snap = currentSnap(), meta = META[state];
+      const used = totalOf(snap);
+      const ratio = used / WINDOW;
+
+      meter.innerHTML = '<div class="thresh" style="left:85%"></div>' + BUCKETS.map(b => {
+        const w = ((snap[b.key] || 0) / WINDOW * 100).toFixed(2);
+        return `<span class="seg" style="width:${w}%;background:${b.color}"></span>`;
+      }).join('');
+      pct.textContent = Math.round(ratio * 100) + '%';
+      pct.className = 'meter-pct' + (meta.tone ? ' ' + meta.tone : '');
+
+      pill.className = 'status-pill' + (meta.pill ? ' ' + meta.pill : '');
+      statusText.textContent = meta.text;
+      panel.className = 'panel' + (state === 'warning' ? ' warn' : '');
+
+      if (meta.btn === 'busy') {
+        compactBtn.disabled = true;
+        compactBtn.innerHTML = '<i data-lucide="loader" class="spin"></i><span>压缩中…</span>';
+        compactBtn.title = '压缩进行中';
+      } else if (meta.btn === 'disabled') {
+        compactBtn.disabled = true;
+        compactBtn.innerHTML = '<i data-lucide="minimize-2"></i><span>压缩</span>';
+        compactBtn.title = '运行中不可手动压缩';
+      } else {
+        compactBtn.disabled = false;
+        compactBtn.innerHTML = '<i data-lucide="minimize-2"></i><span>压缩</span>';
+        compactBtn.title = '手动压缩上下文';
+      }
+
+      legend.innerHTML = BUCKETS.map(b => {
+        const t = snap[b.key] || 0;
+        return `<span class="lg"><span class="d" style="background:${b.color}"></span>${b.label} <span class="v">${(t/1000).toFixed(1)}k</span></span>`;
+      }).join('');
+
+      document.querySelectorAll('.states [data-s]').forEach(el => el.classList.toggle('on', el.dataset.s === state));
+
+      if (window.lucide) lucide.createIcons();
+      requestAnimationFrame(setupCollapse);
+    }
+
+    // 切换到某形态；base 用于清空压缩后的低占用覆盖
+    function setState(s) { state = s; snapOverride = null; render(); }
+
+    // 压缩完成：回落到目标形态（运行中/空闲）+ 低占用快照 + 时间线追加事件卡片
+    function finishCompact(backTo, trigger) {
+      state = backTo;
+      snapOverride = POST_COMPACT;
+      render();
+      $('fbTrigger').textContent = trigger;
+      fbcard.classList.remove('flash');
+      void fbcard.offsetWidth; // 重启动画
+      fbcard.classList.add('flash');
+    }
+
+    // 折叠：基于渲染后实际高度判定（scrollHeight > 300）
+    function setupCollapse() {
+      const summary = $('summary'), fade = $('fade'), btn = $('expandBtn');
+      if (summary.classList.contains('open')) { fade.hidden = true; btn.hidden = false; return; }
+      const overflow = summary.scrollHeight > 300;
+      fade.hidden = !overflow;
+      btn.hidden = !overflow;
+    }
+    $('expandBtn').addEventListener('click', () => {
+      const summary = $('summary'), fade = $('fade'), btn = $('expandBtn');
+      const open = summary.classList.toggle('open');
+      fade.hidden = open;
+      btn.innerHTML = open ? '<i data-lucide="chevron-up"></i>收起' : '<i data-lucide="chevron-down"></i>展开全文';
+      if (window.lucide) lucide.createIcons();
+    });
+
+    document.querySelectorAll('.states [data-s]').forEach(el =>
+      el.addEventListener('click', () => setState(el.dataset.s)));
+
+    // 手动压缩：空闲 → 压缩中 → 回到空闲 + 追加事件卡片
+    compactBtn.addEventListener('click', () => {
+      if (compactBtn.disabled) return;
+      const backTo = 'idle';
+      setState('compacting');
+      setTimeout(() => finishCompact(backTo, '手动触发 · 耗时 3.6s'), 1400);
+    });
+
+    // 模拟自动压缩：运行中 → 警戒 → 压缩中 → 回到运行中 + 追加事件卡片
+    let playing = false;
+    $('playBtn').addEventListener('click', () => {
+      if (playing) return;
+      playing = true;
+      setState('running');
+      setTimeout(() => setState('warning'), 1200);
+      setTimeout(() => setState('compacting'), 2400);
+      setTimeout(() => { finishCompact('running', '自动触发 · 耗时 4.2s'); playing = false; }, 4000);
+    });
+
+    render();
+  </script>
+</body>
+</html>
