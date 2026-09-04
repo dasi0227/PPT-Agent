@@ -14,6 +14,31 @@ const terminal = (data: Record<string, unknown> = {}) => ({
 });
 
 describe('public event reducer', () => {
+  it('adds a standalone context compaction card', () => {
+    const items = reduceSSEEvent([], event('context.compacted', {
+      compaction: {
+        id: 'cmp_1',
+        thread_id: 't1',
+        project_id: 'p1',
+        run_id: 'r1',
+        trigger: 'auto',
+        summary: '## 目标与意图\n继续任务',
+        before_tokens: 56000,
+        after_tokens: 30000,
+        max_tokens: 65536,
+        reclaimed_tokens: 26000,
+        duration_ms: 4200,
+        created_at: 1,
+      },
+    }));
+    expect(items[0]).toMatchObject({
+      type: 'context_compaction',
+      compactionId: 'cmp_1',
+      trigger: 'auto',
+      reclaimedTokens: 26000,
+    });
+  });
+
   it('upserts tool completion into the started row without raw payloads', () => {
     let state = reduceSSEEvent([], event('tool.started', {
       call_id: 'c1', tool: 'mutate_ppt', plan_step_id: 'build',

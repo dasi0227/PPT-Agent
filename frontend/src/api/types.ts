@@ -235,6 +235,7 @@ export interface LLMProfileCapabilities {
   vision: boolean;
   tool_calls: boolean;
   multiple_tool_calls: boolean;
+  context_window_tokens: number;
 }
 
 export interface LLMProfile {
@@ -447,7 +448,53 @@ export type SSEEventName =
   | 'tool.started'
   | 'tool.completed'
   | 'question.asked'
-  | 'question.answered';
+  | 'question.answered'
+  | 'context.window.updated'
+  | 'context.compacted';
+
+export type ContextBucketKey =
+  | 'read_ppt'
+  | 'run_command'
+  | 'system_prompt'
+  | 'user_prompt'
+  | 'chat_history'
+  | 'other';
+
+export interface ContextWindowDetail {
+  name: string;
+  source: string;
+  layer: 'seed' | 'transcript';
+  tokens: number;
+}
+
+export interface ContextWindowSnapshot {
+  total: number;
+  max: number;
+  ratio: number;
+  status: 'idle' | 'running' | 'warning' | 'compacting';
+  buckets: Record<ContextBucketKey, number>;
+  details: Record<ContextBucketKey, ContextWindowDetail[]>;
+}
+
+export interface ContextCompaction {
+  id: string;
+  thread_id: string;
+  project_id: string;
+  run_id?: string;
+  trigger: 'auto' | 'manual';
+  summary: string;
+  before_tokens: number;
+  after_tokens: number;
+  max_tokens: number;
+  reclaimed_tokens: number;
+  duration_ms: number;
+  created_at: number;
+}
+
+export interface CompactContextResponse {
+  snapshot: ContextWindowSnapshot;
+  compaction: ContextCompaction;
+}
 
 export type PlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 
@@ -638,4 +685,6 @@ export type SSEEvent =
       question_id: string;
       answer: QuestionAnswer;
       display_text: string;
-    }>;
+    }>
+  | SSEEventBase<'context.window.updated', PublicEventBase & ContextWindowSnapshot>
+  | SSEEventBase<'context.compacted', PublicEventBase & { compaction: ContextCompaction }>;

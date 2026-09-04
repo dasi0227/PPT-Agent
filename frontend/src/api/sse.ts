@@ -15,6 +15,8 @@ export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
   'command.permission_requested', 'command.permission_answered',
   'message.reasoning', 'message.milestone', 'message.final',
   'tool.started', 'tool.completed', 'question.asked', 'question.answered',
+  'context.window.updated',
+  'context.compacted',
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -139,7 +141,35 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
       return hasString(data, 'question_id')
         && validAnswer(data.answer)
         && hasSafeString(data, 'display_text');
+    case 'context.window.updated':
+      return isNonNegativeInteger(data.total)
+        && typeof data.max === 'number' && Number.isInteger(data.max) && data.max > 0
+        && typeof data.ratio === 'number' && data.ratio >= 0
+        && ['idle', 'running', 'warning', 'compacting'].includes(String(data.status))
+        && validContextBuckets(data.buckets)
+        && isRecord(data.details);
+    case 'context.compacted':
+      return validContextCompaction(data.compaction);
   }
+}
+
+function validContextBuckets(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return ['read_ppt', 'run_command', 'system_prompt', 'user_prompt', 'chat_history', 'other']
+    .every((key) => isNonNegativeInteger(value[key]));
+}
+
+function validContextCompaction(value: unknown): boolean {
+  return isRecord(value)
+    && hasString(value, 'id')
+    && ['auto', 'manual'].includes(String(value.trigger))
+    && hasString(value, 'summary')
+    && isNonNegativeInteger(value.before_tokens)
+    && isNonNegativeInteger(value.after_tokens)
+    && typeof value.max_tokens === 'number' && Number.isInteger(value.max_tokens) && value.max_tokens > 0
+    && isNonNegativeInteger(value.reclaimed_tokens)
+    && isNonNegativeInteger(value.duration_ms)
+    && isNonNegativeInteger(value.created_at);
 }
 
 function validLoadedResources(value: unknown): boolean {

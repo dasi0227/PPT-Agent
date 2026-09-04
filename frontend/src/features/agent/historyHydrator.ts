@@ -214,6 +214,26 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       });
       continue;
     }
+    if (entry.type === 'context_compaction') {
+      const trigger = entry.data.trigger;
+      if ((trigger !== 'auto' && trigger !== 'manual') ||
+        typeof entry.data.id !== 'string' ||
+        typeof entry.data.summary !== 'string') continue;
+      items.push({
+        id: `context-compaction:${entry.data.id}`,
+        type: 'context_compaction',
+        compactionId: entry.data.id,
+        trigger,
+        summary: entry.data.summary,
+        beforeTokens: Number(entry.data.before_tokens ?? 0),
+        afterTokens: Number(entry.data.after_tokens ?? 0),
+        maxTokens: Number(entry.data.max_tokens ?? 0),
+        reclaimedTokens: Number(entry.data.reclaimed_tokens ?? 0),
+        durationMs: Number(entry.data.duration_ms ?? 0),
+        timestamp: Number(entry.data.created_at ?? entry.ts ?? 0) * 1000,
+      });
+      continue;
+    }
     const event = parsePublicEvent(entry.type, entry.data, String(entry.seq));
     if (!event) continue;
     items = reduceSSEEvent(items, event);

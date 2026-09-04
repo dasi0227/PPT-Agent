@@ -21,6 +21,29 @@
   }
 }
 
+.context-window-scroll {
+  scrollbar-width: none;
+}
+
+.context-window-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.context-compaction-card {
+  animation: context-compaction-flash 1.1s ease-out;
+}
+
+@keyframes context-compaction-flash {
+  from {
+    border-color: #2f7d65;
+    box-shadow: 0 0 0 4px #e7f3ee;
+  }
+  to {
+    border-color: #d5dbe3;
+    box-shadow: none;
+  }
+}
+
 .global-toast-viewport {
   position: fixed;
   top: 1rem;

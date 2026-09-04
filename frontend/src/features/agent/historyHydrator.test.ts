@@ -16,6 +16,28 @@ const terminal = (runId = 'r1', data: Record<string, unknown> = {}) => ({
 });
 
 describe('history hydrator', () => {
+  it('restores context compaction cards outside run grouping', () => {
+    const hydrated = hydrateRunFromHistory([
+      entry(1, 'context_compaction', {
+        id: 'cmp_1',
+        trigger: 'manual',
+        summary: '## 下一步\n继续',
+        before_tokens: 50000,
+        after_tokens: 24000,
+        max_tokens: 65536,
+        reclaimed_tokens: 26000,
+        duration_ms: 3600,
+        created_at: 1,
+      }, 'cmp_1'),
+    ]);
+    expect(hydrated.items[0]).toMatchObject({
+      type: 'context_compaction',
+      compactionId: 'cmp_1',
+      trigger: 'manual',
+    });
+    expect(hydrated.items[0]).not.toHaveProperty('runId');
+  });
+
   it('reuses public reducers for tools, plan, question, final, and terminal', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {

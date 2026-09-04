@@ -26,6 +26,7 @@ import { useProjectStore } from './projectStore';
 import { useComposerStore } from './composerStore';
 import { newClientIdentity } from '../lib/clientIdentity';
 import { showGlobalError, showGlobalWarning } from './toastStore';
+import { useContextWindowStore } from './contextWindowStore';
 
 export type { PlanState } from '../api/types';
 
@@ -537,6 +538,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           if (import.meta.env.DEV) console.warn('忽略未知 SSE 事件', eventName);
         },
         onMessage: (event) => {
+          if (event.event === 'context.window.updated') {
+            useContextWindowStore.getState().update(threadId, event.data);
+          }
           const current = get().sessions[threadId] ?? freshSession();
           if (event.id && current.processedEventIds?.includes(event.id)) return;
           updateSession(threadId, (prev) => {
@@ -642,6 +646,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             });
           }
           if (event.event === 'run.completed' || event.event === 'run.failed' || event.event === 'run.error' || event.event === 'run.canceled') {
+            const contextSession = useContextWindowStore.getState().sessions[threadId];
+            if (contextSession?.snapshot) {
+              useContextWindowStore.getState().update(threadId, {
+                ...contextSession.snapshot,
+                status: 'idle',
+              });
+            }
             stopCancelReconciliation(threadId, runId);
             updated.eventSourceClose?.();
             removePersistedRun(threadId);

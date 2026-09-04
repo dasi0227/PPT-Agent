@@ -21,6 +21,7 @@ import { ComponentActivity, SkillActivity } from './SkillActivity';
 import { useProjectStore } from '../../stores/projectStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { BriefingActivity } from './BriefingActivity';
+import { ContextCompactionActivity } from './ContextCompactionActivity';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -173,6 +174,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
         {item.type === 'git_commit' && <GitCommitEvent item={item} />}
         {item.type === 'briefing' && <BriefingActivity item={item} />}
+        {item.type === 'context_compaction' && <ContextCompactionActivity item={item} />}
       </div>
     );
   };

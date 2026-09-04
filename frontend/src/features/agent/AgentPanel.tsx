@@ -11,6 +11,7 @@ import { useComposerStore } from '../../stores/composerStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useBriefingStore } from '../../stores/briefingStore';
 import { useActiveSession } from './useActiveSession';
+import { ContextWindowPanel } from './ContextWindowPanel';
 
 export const AgentPanel: React.FC = () => {
   const toggleRightPanel = useUIStore((state) => state.toggleRightPanel);
@@ -59,6 +60,7 @@ export const AgentPanel: React.FC = () => {
         </div>
       </header>
       <ThreadTabs />
+      <ContextWindowPanel />
       <Timeline />
       <CommandComposer />
     </div>

@@ -9,7 +9,7 @@ describe('ModelSelector', () => {
         profiles={[{
           name: '文本模型',
           model: 'text-model',
-          capabilities: { vision: false, tool_calls: true, multiple_tool_calls: true },
+          capabilities: { vision: false, tool_calls: true, multiple_tool_calls: true, context_window_tokens: 65536 },
         }]}
         value="文本模型"
         requiresVision

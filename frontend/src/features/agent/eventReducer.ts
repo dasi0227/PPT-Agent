@@ -27,6 +27,7 @@ export type TimelineItemType =
   | 'command_permission'
   | 'git_commit'
   | 'briefing'
+  | 'context_compaction'
   | 'terminal_notice';
 
 export interface BaseTimelineItem {
@@ -152,6 +153,18 @@ export interface BriefingTimelineItem extends BaseTimelineItem {
   loadingStartedAt?: number;
 }
 
+export interface ContextCompactionTimelineItem extends BaseTimelineItem {
+  type: 'context_compaction';
+  compactionId: string;
+  trigger: 'auto' | 'manual';
+  summary: string;
+  beforeTokens: number;
+  afterTokens: number;
+  maxTokens: number;
+  reclaimedTokens: number;
+  durationMs: number;
+}
+
 export type TimelineItem =
   | UserTurnItem
   | RunLifecycleItem
@@ -164,6 +177,7 @@ export type TimelineItem =
   | CommandPermissionItem
   | GitCommitTimelineItem
   | BriefingTimelineItem
+  | ContextCompactionTimelineItem
   | TerminalNoticeItem;
 
 function normalizeStepStatus(status: unknown): PlanStepStatus {
@@ -232,7 +246,24 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     case 'run.progress':
 	case 'plan.updated':
 	case 'run.mode_changed':
+    case 'context.window.updated':
 		return state;
+    case 'context.compacted': {
+      const compaction = event.data.compaction;
+      return upsertById(state, {
+        id: `context-compaction:${compaction.id}`,
+        type: 'context_compaction',
+        compactionId: compaction.id,
+        trigger: compaction.trigger,
+        summary: compaction.summary,
+        beforeTokens: compaction.before_tokens,
+        afterTokens: compaction.after_tokens,
+        maxTokens: compaction.max_tokens,
+        reclaimedTokens: compaction.reclaimed_tokens,
+        durationMs: compaction.duration_ms,
+        timestamp: compaction.created_at * 1000,
+      });
+    }
 
     case 'run.resumed': {
       const item: RunLifecycleItem = {

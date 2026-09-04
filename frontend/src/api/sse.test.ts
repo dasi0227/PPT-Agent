@@ -41,11 +41,29 @@ const payloads: Record<string, unknown> = {
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_ppt', status: 'completed', display: { label: '已读取全局设计' } },
   'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', options: [], allow_custom: true }] },
   'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
+  'context.window.updated': {
+    ...base,
+    total: 32000,
+    max: 65536,
+    ratio: 32000 / 65536,
+    status: 'running',
+    buckets: { read_ppt: 10000, run_command: 2000, system_prompt: 8000, user_prompt: 2000, chat_history: 9000, other: 1000 },
+    details: {},
+  },
+  'context.compacted': {
+    ...base,
+    compaction: {
+      id: 'cmp_1', thread_id: 't1', project_id: 'p1', run_id: 'r1',
+      trigger: 'auto', summary: '## 目标与意图\n继续',
+      before_tokens: 56000, after_tokens: 30000, max_tokens: 65536,
+      reclaimed_tokens: 26000, duration_ms: 4200, created_at: 1,
+    },
+  },
 };
 
 describe('SSE parser', () => {
-  it('registers and parses all 20 public events', () => {
-	  expect(SSE_EVENT_NAMES).toHaveLength(20);
+  it('registers and parses all 22 public events', () => {
+	  expect(SSE_EVENT_NAMES).toHaveLength(22);
     for (const eventName of SSE_EVENT_NAMES) {
       expect(parseSSEEvent(eventName, JSON.stringify(payloads[eventName]), '12')).toMatchObject({
         id: '12',
