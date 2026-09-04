@@ -52,13 +52,13 @@
 
 ### 2.1 范围划分
 
-| 命令                     | 映射                          | 是否需要新后端 |
-| ---------------------- | --------------------------- | ------- |
+| 命令                       | 映射                          | 是否需要新后端 |
+| ------------------------ | --------------------------- | ------- |
 | `/plan` `/grill` `/chat` | composer `setIntent(mode)`  | 否       |
-| `/model` `/target`     | composer store setter（二级菜单） | 否       |
-| `/commit`              | 现有 git-commit 异步 SSE 流程     | 否（复用）   |
-| `/polish`              | 现有 polish 同步 endpoint       | 否（复用）   |
-| `/kickoff` `/handoff`  | 新增轻量同步 service              | **是**   |
+| `/model` `/target`       | composer store setter（二级菜单） | 否       |
+| `/commit`                | 现有 git-commit 异步 SSE 流程     | 否（复用）   |
+| `/polish`                | 现有 polish 同步 endpoint       | 否（复用）   |
+| `/kickoff` `/handoff`    | 新增轻量同步 service              | **是**   |
 
 **结论**：唯一新增的后端能力是 `/kickoff` 和 `/handoff`；其余 6 个命令是**前端命令分发层**，复用既有 state / endpoint。`/plan` 等模式命令仅翻转模式开关，不自动提交任务。
 
