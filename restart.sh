@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # restart.sh - 清理旧进程、初始化工作目录、启动前后端并打开浏览器。
 # 用法：./restart.sh              （交互式：会询问是否重置数据）
-#       ./restart.sh --reset      （清空 WORK_ROOT 后重新初始化）
+#       ./restart.sh --reset      （清空固定工作目录后重新初始化）
 #       ./restart.sh --no-reset   （保留数据并补齐缺失的预置资源）
 set -euo pipefail
 
@@ -10,7 +10,16 @@ BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 RENDERER_DIR="$BACKEND_DIR/render-worker"
 WORK_ROOT="$HOME/.dasi/ppt"
-BACKEND_ADDR="127.0.0.1:8787"
+BACKEND_PORT="8787"
+if [ -f "$BACKEND_DIR/.env" ]; then
+  configured_backend_port="$(sed -n 's/^[[:space:]]*PORT[[:space:]]*=[[:space:]]*//p' "$BACKEND_DIR/.env" | tail -n 1 | tr -d '[:space:]')"
+  BACKEND_PORT="${configured_backend_port:-$BACKEND_PORT}"
+fi
+if [[ ! "$BACKEND_PORT" =~ ^[0-9]+$ ]] || (( BACKEND_PORT < 1 || BACKEND_PORT > 65535 )); then
+  printf 'backend/.env 中的 PORT 必须是 1 到 65535 之间的整数\n' >&2
+  exit 1
+fi
+BACKEND_ADDR="127.0.0.1:$BACKEND_PORT"
 FRONTEND_URL="http://localhost:5173"
 LOG_DIR="$ROOT_DIR/.run"
 mkdir -p "$LOG_DIR"
@@ -19,7 +28,7 @@ RESULT_COLUMN=36
 STEP_1="【1/6】关闭可能在运行的前后端进程"
 STEP_2="【2/6】是否重置数据？[y/n]"
 STEP_3="【3/6】启动 Chromium 渲染"
-STEP_4="【4/6】启动后端 port=8787 pid=xxxx"
+STEP_4="【4/6】启动后端 port=$BACKEND_PORT pid=xxxx"
 STEP_5="【5/6】启动前端 port=5173 pid=xxxx"
 STEP_6="【6/6】打卡浏览器"
 
@@ -87,7 +96,7 @@ close_running_processes() {
   pkill -f "vite" 2>>"$LOG_DIR/restart.log" || true
 
   if command -v lsof >/dev/null 2>&1; then
-    for port in 8787 5173; do
+    for port in "$BACKEND_PORT" 5173; do
       local pids
       pids="$(lsof -ti tcp:"$port" 2>/dev/null || true)"
       if [ -n "$pids" ] && ! kill -9 $pids 2>>"$LOG_DIR/restart.log"; then
@@ -146,14 +155,12 @@ fi
 
 if (
   cd "$BACKEND_DIR"
-  WORK_ROOT="$WORK_ROOT" \
-    DASI_SEED_DEFAULT_PROMPTS="$SEED_DEFAULT_PROMPTS" \
-    LLM_CONFIG_PATH="$ROOT_DIR/config.yaml" \
+  DASI_SEED_DEFAULT_PROMPTS="$SEED_DEFAULT_PROMPTS" \
     nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
   echo $! >"$LOG_DIR/backend.pid"
 ); then
   backend_pid="$(<"$LOG_DIR/backend.pid")"
-  printf -v backend_step '【4/6】启动后端 port=8787 pid=%-5s' "$backend_pid"
+  printf -v backend_step '【4/6】启动后端 port=%s pid=%-5s' "$BACKEND_PORT" "$backend_pid"
 else
   print_result "$STEP_4" "启动失败 ❌：无法启动后端进程（日志：$LOG_DIR/backend.log）"
   exit 1

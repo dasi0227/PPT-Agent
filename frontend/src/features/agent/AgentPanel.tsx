@@ -43,7 +43,8 @@ export const AgentPanel: React.FC = () => {
           <Bot className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} />
           智能体
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="relative flex items-center gap-0.5">
+          <ContextWindowPanel />
           <IconButton
             label={commitActive ? '正在提交项目版本' : '提交项目版本'}
             onClick={() => void commit()}
@@ -60,7 +61,6 @@ export const AgentPanel: React.FC = () => {
         </div>
       </header>
       <ThreadTabs />
-      <ContextWindowPanel />
       <Timeline />
       <CommandComposer />
     </div>

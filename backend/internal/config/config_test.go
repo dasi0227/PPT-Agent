@@ -47,6 +47,18 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
+func prepareBackendConfig(t *testing.T, content string) string {
+	t.Helper()
+	root := t.TempDir()
+	backendDir := filepath.Join(root, "backend")
+	if err := os.MkdirAll(backendDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(backendDir, "config.yaml"), content)
+	chdirForTest(t, backendDir)
+	return backendDir
+}
+
 func validConfig(secret string) string {
 	return `llm:
   default: Kimi Vision
@@ -64,21 +76,22 @@ func validConfig(secret string) string {
 `
 }
 
-func TestLoadReadsDefaultConfigAndKeepsAppEnvSeparate(t *testing.T) {
-	dir := t.TempDir()
-	clearEnvForTest(t, "LLM_CONFIG_PATH", "WORK_ADDR", "WORK_ROOT", "LOG_LEVEL", "DEEPSEEK_API_KEY")
-	chdirForTest(t, dir)
-	writeFile(t, filepath.Join(dir, "config.yaml"), validConfig("sk-test-secret"))
-	writeFile(t, filepath.Join(dir, ".env"), "WORK_ADDR=127.0.0.1:9999\nWORK_ROOT=./runtime-data\nDEEPSEEK_API_KEY=must-not-be-an-llm-source\n")
-	t.Setenv("LLM_CONFIG_PATH", "")
+func TestLoadReadsOnlyPortFromEnvironment(t *testing.T) {
+	clearEnvForTest(t, "PORT")
+	backendDir := prepareBackendConfig(t, validConfig("sk-test-secret"))
+	writeFile(t, filepath.Join(backendDir, ".env"), "PORT=9999\nWORK_ROOT=./ignored\nLLM_CONFIG_PATH=./ignored.yaml\nLOG_LEVEL=warn\n")
+	t.Setenv("WORK_ROOT", "./also-ignored")
+	t.Setenv("LLM_CONFIG_PATH", "./also-ignored.yaml")
+	t.Setenv("LOG_LEVEL", "error")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.WorkAddr != "127.0.0.1:9999" || cfg.WorkRoot != "./runtime-data" ||
-		cfg.DBPath != filepath.Join("./runtime-data", "db", "ppt.db") || cfg.LogLevel != "debug" {
-		t.Fatal("application environment was not preserved")
+	expectedRoot := defaultWorkRoot()
+	if cfg.WorkAddr != "127.0.0.1:9999" || cfg.WorkRoot != expectedRoot ||
+		cfg.DBPath != filepath.Join(expectedRoot, "db", "ppt.db") || cfg.LogLevel != logLevel {
+		t.Fatal("fixed backend configuration was not preserved")
 	}
 	if cfg.LLM.Default != "Kimi Vision" || len(cfg.LLM.Profiles) != 2 ||
 		cfg.LLM.Profiles[0].Key != "sk-test-secret" {
@@ -86,46 +99,35 @@ func TestLoadReadsDefaultConfigAndKeepsAppEnvSeparate(t *testing.T) {
 	}
 }
 
-func TestLoadReadsLogLevelFromEnv(t *testing.T) {
-	dir := t.TempDir()
-	clearEnvForTest(t, "LLM_CONFIG_PATH", "LOG_LEVEL")
-	chdirForTest(t, dir)
-	writeFile(t, filepath.Join(dir, "config.yaml"), validConfig("secret"))
-	t.Setenv("LOG_LEVEL", "warn")
+func TestLoadUsesDefaultPort(t *testing.T) {
+	clearEnvForTest(t, "PORT")
+	prepareBackendConfig(t, validConfig("secret"))
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.LogLevel != "warn" {
-		t.Fatalf("LOG_LEVEL was not loaded: %q", cfg.LogLevel)
+	if cfg.WorkAddr != "127.0.0.1:8787" {
+		t.Fatalf("default listen address was not used: %q", cfg.WorkAddr)
 	}
 }
 
-func TestLoadUsesExplicitLLMConfigPath(t *testing.T) {
-	dir := t.TempDir()
-	clearEnvForTest(t, "LLM_CONFIG_PATH", "WORK_ADDR", "WORK_ROOT")
-	chdirForTest(t, dir)
-	path := filepath.Join(dir, "profiles.yaml")
-	writeFile(t, path, validConfig("secret"))
-	t.Setenv("LLM_CONFIG_PATH", path)
-	t.Setenv("WORK_ADDR", "127.0.0.1:8788")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.WorkAddr != "127.0.0.1:8788" || cfg.LLM.Default != "Kimi Vision" {
-		t.Fatal("explicit configuration was not used")
+func TestLoadRejectsInvalidPort(t *testing.T) {
+	for _, port := range []string{"abc", "0", "65536"} {
+		t.Run(port, func(t *testing.T) {
+			clearEnvForTest(t, "PORT")
+			backendDir := prepareBackendConfig(t, validConfig("secret"))
+			writeFile(t, filepath.Join(backendDir, ".env"), "PORT="+port+"\n")
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PORT") {
+				t.Fatalf("invalid port %q was accepted: %v", port, err)
+			}
+		})
 	}
 }
 
 func TestLoadRejectsMissingProfilesInsteadOfFallingBack(t *testing.T) {
-	dir := t.TempDir()
-	clearEnvForTest(t, "LLM_CONFIG_PATH", "DEEPSEEK_API_KEY")
-	chdirForTest(t, dir)
-	writeFile(t, filepath.Join(dir, "config.yaml"), "llm:\n  default: anything\n  profiles: []\n")
-	t.Setenv("LLM_CONFIG_PATH", "")
+	clearEnvForTest(t, "PORT")
+	prepareBackendConfig(t, "llm:\n  default: anything\n  profiles: []\n")
 	t.Setenv("DEEPSEEK_API_KEY", "legacy-key-must-not-enable-fallback")
 
 	_, err := Load()
@@ -185,8 +187,7 @@ func TestLLMConfigValidationAndSecretRedaction(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "profiles.yaml")
 			writeFile(t, path, test.config)
-			t.Setenv("LLM_CONFIG_PATH", path)
-			_, err := Load()
+			_, err := loadLLMConfig(path)
 			if err == nil {
 				t.Fatal("expected startup validation error")
 			}
@@ -205,8 +206,7 @@ func TestLocalHTTPProfileURLIsAllowedForDevelopment(t *testing.T) {
   profiles:
     - {name: Local, provider: openai, url: http://127.0.0.1:8080/v1, model: gpt-5, key: secret}
 `)
-	t.Setenv("LLM_CONFIG_PATH", path)
-	if _, err := Load(); err != nil {
+	if _, err := loadLLMConfig(path); err != nil {
 		t.Fatalf("local development URL was rejected: %v", err)
 	}
 }

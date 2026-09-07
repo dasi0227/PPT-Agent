@@ -185,25 +185,34 @@ export function navigateCommandMenu(
   level: CommandMenuLevel,
   activeIndex: number,
   key: 'ArrowUp' | 'ArrowDown' | 'Enter' | 'Escape',
-  candidateCount: number,
+  candidateDisabled: readonly boolean[],
 ): CommandMenuKeyResult {
+  const candidateCount = candidateDisabled.length;
   if (key === 'Escape') {
     return level === 'root'
       ? { level, activeIndex, action: 'close' }
       : { level: 'root', activeIndex: 0, action: 'none' };
   }
   if (key === 'Enter') {
-    return { level, activeIndex, action: candidateCount > 0 ? 'select' : 'none' };
+    const canSelect = activeIndex >= 0
+      && activeIndex < candidateCount
+      && !candidateDisabled[activeIndex];
+    return { level, activeIndex, action: canSelect ? 'select' : 'none' };
   }
   if (candidateCount <= 0) {
     return { level, activeIndex: 0, action: 'none' };
   }
   const direction = key === 'ArrowDown' ? 1 : -1;
-  return {
-    level,
-    activeIndex: (activeIndex + direction + candidateCount) % candidateCount,
-    action: 'none',
-  };
+  let nextIndex = activeIndex >= 0 && activeIndex < candidateCount
+    ? activeIndex
+    : direction > 0 ? -1 : 0;
+  for (let step = 0; step < candidateCount; step += 1) {
+    nextIndex = (nextIndex + direction + candidateCount) % candidateCount;
+    if (!candidateDisabled[nextIndex]) {
+      return { level, activeIndex: nextIndex, action: 'none' };
+    }
+  }
+  return { level, activeIndex: -1, action: 'none' };
 }
 
 function includes(value: string, query: string): boolean {

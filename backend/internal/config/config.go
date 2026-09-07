@@ -7,13 +7,20 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/spf13/viper"
 	"github.com/subosito/gotenv"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	listenHost    = "127.0.0.1"
+	defaultPort   = "8787"
+	llmConfigPath = "config.yaml"
+	logLevel      = "debug"
 )
 
 type LLMProfile struct {
@@ -29,8 +36,8 @@ type LLMConfig struct {
 	Profiles []LLMProfile `yaml:"profiles"`
 }
 
-// Config combines non-LLM application environment with the explicit profile
-// YAML. Provider credentials are never sourced implicitly from .env.
+// Config combines the single configurable listen port with fixed local runtime
+// paths and the backend-local LLM profile YAML.
 type Config struct {
 	WorkAddr string
 	WorkRoot string
@@ -43,35 +50,38 @@ func Load() (*Config, error) {
 	if err := loadDotEnv(); err != nil {
 		return nil, err
 	}
-	v := viper.New()
-	v.SetDefault("work_addr", "127.0.0.1:8787")
-	v.SetDefault("work_root", defaultWorkRoot())
-	v.SetDefault("log_level", "debug")
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.AutomaticEnv()
-	_ = v.BindEnv("work_addr", "WORK_ADDR")
-	_ = v.BindEnv("work_root", "WORK_ROOT")
-	_ = v.BindEnv("log_level", "LOG_LEVEL")
-
-	llmConfig, err := loadLLMConfig()
+	port, err := loadPort()
 	if err != nil {
 		return nil, err
 	}
+	llmConfig, err := loadLLMConfig(llmConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	workRoot := defaultWorkRoot()
 	cfg := &Config{
-		WorkAddr: v.GetString("work_addr"),
-		WorkRoot: v.GetString("work_root"),
-		LogLevel: v.GetString("log_level"),
+		WorkAddr: net.JoinHostPort(listenHost, port),
+		WorkRoot: workRoot,
+		LogLevel: logLevel,
 		LLM:      llmConfig,
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
 	return cfg, nil
 }
 
-func loadLLMConfig() (LLMConfig, error) {
-	path := strings.TrimSpace(os.Getenv("LLM_CONFIG_PATH"))
-	if path == "" {
-		path = "config.yaml"
+func loadPort() (string, error) {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		return defaultPort, nil
 	}
+	value, err := strconv.Atoi(port)
+	if err != nil || value < 1 || value > 65535 {
+		return "", errors.New("PORT must be an integer between 1 and 65535")
+	}
+	return strconv.Itoa(value), nil
+}
+
+func loadLLMConfig(path string) (LLMConfig, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

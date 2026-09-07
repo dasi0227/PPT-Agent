@@ -15,17 +15,17 @@ import {
   Blocks,
   Check,
   ChevronRight,
-  CircleHelp,
   Cpu,
   Crosshair,
+  Footprints,
   GalleryThumbnails,
   GitCommitHorizontal,
+  Handshake,
+  ListChecks,
+  MessageCircleQuestion,
   MessagesSquare,
   NotebookText,
-  PackageOpen,
-  Rocket,
-  Sparkles,
-  Workflow,
+  WandSparkles,
 } from 'lucide-react';
 import type { ComponentReference, Prompt } from '../../api/types';
 import { useComponentStore } from '../../stores/componentStore';
@@ -233,6 +233,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const composingRef = useRef(false);
     const dismissedRef = useRef('');
     const [trigger, setTrigger] = useState<ComposerTrigger | null>(null);
+    const triggerRef = useRef<ComposerTrigger | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const [summaryCol, setSummaryCol] = useState(0);
     const [summaryRow, setSummaryRow] = useState(0);
@@ -267,6 +268,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       : trigger?.kind === 'page'
         ? pageCandidates.length
         : promptCandidates.length;
+    const commandCandidateDisabled = commandLevel === 'root'
+      ? commandCandidates.map((command) => command.disabled)
+      : commandOptions.map((option) => Boolean(option.disabled));
     const hasConfiguredCandidates = trigger?.kind === 'command'
       ? commandLevel === 'root' || commandOptions.length > 0
       : trigger?.kind === 'component'
@@ -278,12 +282,14 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const updateTrigger = useCallback(() => {
       const editor = editorRef.current;
       if (!editor || disabled || readOnly || composingRef.current || document.activeElement !== editor) {
-        setTrigger(null);
+        triggerRef.current = null;
+        setTrigger((current) => current === null ? current : null);
         return;
       }
       const offset = caretOffset(editor);
       if (offset == null) {
-        setTrigger(null);
+        triggerRef.current = null;
+        setTrigger((current) => current === null ? current : null);
         return;
       }
       const text = serializeComposerText(editor);
@@ -305,15 +311,21 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
               : null;
       const signature = next ? `${next.kind}:${next.start}:${next.end}:${next.query}` : '';
       if (!next || dismissedRef.current === signature) {
-        setTrigger(null);
+        triggerRef.current = null;
+        setTrigger((current) => current === null ? current : null);
         return;
       }
+      const current = triggerRef.current;
+      const currentSignature = current
+        ? `${current.kind}:${current.start}:${current.end}:${current.query}`
+        : '';
+      if (currentSignature === signature) return;
       setActiveIndex(0);
-      if (next.kind === 'command' && trigger?.kind !== 'command') {
+      if (next.kind === 'command' && current?.kind !== 'command') {
         setCommandLevel('root');
       }
       // 首次进入汇总面板：高亮第一个非空列的首项
-      if (next.kind === 'summary' && trigger?.kind !== 'summary') {
+      if (next.kind === 'summary' && current?.kind !== 'summary') {
         const cols = [
           matchPages(pages, next.query).length,
           matchComponents(components, next.query).length,
@@ -323,8 +335,13 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         setSummaryCol(firstNonEmpty < 0 ? 0 : firstNonEmpty);
         setSummaryRow(0);
       }
+      triggerRef.current = next;
       setTrigger(next);
-    }, [components, disabled, pages, prompts, readOnly, trigger]);
+    }, [components, disabled, pages, prompts, readOnly]);
+
+    useEffect(() => {
+      triggerRef.current = trigger;
+    }, [trigger]);
 
     useImperativeHandle(forwardedRef, () => ({
       getPlainText: () => editorRef.current ? serializeComposerText(editorRef.current) : '',
@@ -552,8 +569,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const applyCommand = (command: ResolvedSlashCommand) => {
       if (command.disabled) return;
       if (command.submenu) {
+        const options = command.submenu === 'model' ? modelOptions : targetOptions;
         setCommandLevel(command.submenu);
-        setActiveIndex(0);
+        setActiveIndex(options.findIndex((option) => !option.disabled));
         return;
       }
       if (clearCommandTrigger()) onSlashCommand?.(command.id);
@@ -589,7 +607,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             commandLevel,
             activeIndex,
             event.key as 'ArrowUp' | 'ArrowDown' | 'Enter' | 'Escape',
-            candidateCount,
+            commandCandidateDisabled,
           );
           event.preventDefault();
           if (result.action === 'close') {
@@ -723,19 +741,19 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const CommandIcon = ({ id }: { id: SlashCommandId }) => {
       const Icon = id === 'plan'
-        ? Workflow
+        ? ListChecks
         : id === 'grill'
-          ? CircleHelp
+          ? MessageCircleQuestion
           : id === 'chat'
             ? MessagesSquare
             : id === 'kickoff'
-              ? Rocket
+              ? Footprints
               : id === 'handoff'
-                ? PackageOpen
+                ? Handshake
                 : id === 'commit'
                   ? GitCommitHorizontal
                   : id === 'polish'
-                    ? Sparkles
+                    ? WandSparkles
                     : id === 'model'
                       ? Cpu
                       : Crosshair;
@@ -862,7 +880,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                             aria-selected={active}
                             aria-disabled={command.disabled}
                             data-candidate-index={index}
-                            onMouseEnter={() => setActiveIndex(index)}
+                            onMouseEnter={() => {
+                              if (!command.disabled) setActiveIndex(index);
+                            }}
                             onMouseDown={(event) => {
                               event.preventDefault();
                               applyCommand(command);
@@ -899,7 +919,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   aria-selected={activeIndex === index}
                   aria-disabled={option.disabled}
                   data-candidate-index={index}
-                  onMouseEnter={() => setActiveIndex(index)}
+                  onMouseEnter={() => {
+                    if (!option.disabled) setActiveIndex(index);
+                  }}
                   onMouseDown={(event) => {
                     event.preventDefault();
                     applyCommandOption(option);

@@ -17,9 +17,15 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 	if os.Getenv("RUN_DEEPSEEK_LIVE") != "1" {
 		t.Skip("set RUN_DEEPSEEK_LIVE=1 to validate tool schemas against DeepSeek")
 	}
-	if strings.TrimSpace(os.Getenv("LLM_CONFIG_PATH")) == "" {
-		t.Setenv("LLM_CONFIG_PATH", findRepoConfig(t))
+	backendConfig := findBackendConfig(t)
+	oldWorkingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
 	}
+	if err := os.Chdir(filepath.Dir(backendConfig)); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWorkingDir) })
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +86,7 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 	}
 }
 
-func findRepoConfig(t *testing.T) string {
+func findBackendConfig(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
 	if err != nil {

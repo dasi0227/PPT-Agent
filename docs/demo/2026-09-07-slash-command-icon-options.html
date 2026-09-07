@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Slash 命令图标方案</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #202936;
+      --muted: #5e6a7c;
+      --quiet: #8d99aa;
+      --line: #d8dee8;
+      --line-strong: #b8c3d3;
+      --surface: #ffffff;
+      --canvas: #f3f5f8;
+      --accent: #2458d8;
+      --accent-soft: #eaf0ff;
+      --focus: #174dd8;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--canvas);
+    }
+
+    button, input { font: inherit; }
+
+    ::selection { color: #fff; background: var(--accent); }
+
+    .page {
+      width: min(1080px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 56px 0 72px;
+    }
+
+    .page-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 390px);
+      gap: 56px;
+      align-items: end;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    h1 {
+      max-width: 620px;
+      margin: 0;
+      font-size: clamp(32px, 5vw, 58px);
+      line-height: 1.04;
+      letter-spacing: -0.035em;
+    }
+
+    .intro {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.75;
+    }
+
+    .command-section {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      gap: 48px;
+      padding: 48px 0;
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    .command-title {
+      position: sticky;
+      top: 28px;
+      align-self: start;
+    }
+
+    .command-name {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      margin: 0 0 14px;
+      padding: 0 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      background: var(--surface);
+      font: 700 15px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: -0.01em;
+    }
+
+    .command-title h2 {
+      margin: 0 0 9px;
+      font-size: 24px;
+      letter-spacing: -0.025em;
+    }
+
+    .command-title p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .selected-copy {
+      min-height: 21px;
+      margin-top: 18px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .option-list {
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+
+    .option {
+      position: relative;
+      display: grid;
+      grid-template-columns: 54px minmax(130px, 180px) minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      min-height: 88px;
+      padding: 16px 18px;
+      border-top: 1px solid var(--line);
+      cursor: pointer;
+      transition: background-color 160ms ease-out;
+    }
+
+    .option:first-child { border-top: 0; }
+    .option:hover { background: #f8faff; }
+    .option:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+    .option:has(input:checked) { background: var(--accent-soft); }
+    .option.confirmed-option { cursor: default; background: var(--accent-soft); }
+    .option.confirmed-option .icon-stage {
+      color: var(--accent);
+      border-color: rgba(47, 103, 246, 0.3);
+      background: var(--surface);
+    }
+
+    .option input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .icon-stage {
+      display: grid;
+      width: 52px;
+      height: 52px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--muted);
+      background: var(--canvas);
+      transition: color 160ms ease-out, border-color 160ms ease-out, background-color 160ms ease-out;
+    }
+
+    .option:has(input:checked) .icon-stage {
+      color: var(--accent);
+      border-color: rgba(47, 103, 246, 0.3);
+      background: var(--surface);
+    }
+
+    .icon-stage svg {
+      width: 25px;
+      height: 25px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .option-name strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 14px;
+    }
+
+    .option-name code {
+      color: var(--quiet);
+      font-size: 11px;
+    }
+
+    .rationale {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      color: var(--accent);
+      background: rgba(47, 103, 246, 0.1);
+      font-size: 11px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .current {
+      color: var(--muted);
+      background: #edf0f4;
+    }
+
+    .footer-note {
+      margin: 28px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    @media (max-width: 760px) {
+      .page { width: min(100% - 24px, 620px); padding-top: 32px; }
+      .page-header, .command-section { grid-template-columns: 1fr; gap: 24px; }
+      .command-title { position: static; }
+      .option { grid-template-columns: 48px minmax(0, 1fr) auto; gap: 12px; }
+      .icon-stage { width: 46px; height: 46px; }
+      .rationale { grid-column: 2 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <symbol id="footprints" viewBox="0 0 24 24"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></symbol>
+    <symbol id="sport-shoe" viewBox="0 0 24 24"><path d="m15 10.42 4.8-5.07"/><path d="M19 18h3"/><path d="M9.5 22 21.414 9.415A2 2 0 0 0 21.2 6.4l-5.61-4.208A1 1 0 0 0 14 3v2a2 2 0 0 1-1.394 1.906L8.677 8.053A1 1 0 0 0 8 9c-.155 6.393-2.082 9-4 9a2 2 0 0 0 0 4h14"/></symbol>
+    <symbol id="step-forward" viewBox="0 0 24 24"><path d="M10.029 4.285A2 2 0 0 0 7 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/><path d="M3 4v16"/></symbol>
+    <symbol id="person-standing" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><path d="m9 20 3-6 3 6"/><path d="m6 8 6 2 6-2"/><path d="M12 10v4"/></symbol>
+    <symbol id="handshake" viewBox="0 0 24 24"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></symbol>
+    <symbol id="hand-helping" viewBox="0 0 24 24"><path d="M11 12h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 14"/><path d="m7 18 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9"/><path d="m2 13 6 6"/></symbol>
+    <symbol id="hand-grab" viewBox="0 0 24 24"><path d="M18 11.5V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1.4"/><path d="M14 10V8a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 9.9V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v5"/><path d="M6 14a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0"/></symbol>
+    <symbol id="hand" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></symbol>
+    <symbol id="wand-sparkles" viewBox="0 0 24 24"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/><path d="M5 6v4"/><path d="M19 14v4"/><path d="M10 2v2"/><path d="M7 8H3"/><path d="M21 16h-4"/><path d="M11 3H9"/></symbol>
+  </svg>
+
+  <main class="page">
+    <header class="page-header">
+      <h1>Slash 命令<br>图标方向选择</h1>
+      <p class="intro">图标方案已经确认：kickoff 使用 Footprints、handoff 使用 Handshake，polish 使用 WandSparkles。三者均来自项目当前的 Lucide 版本。</p>
+    </header>
+
+    <section class="command-section" aria-labelledby="kickoff-title">
+      <div class="command-title">
+        <span class="command-name">/kickoff</span>
+        <h2 id="kickoff-title">启动简报</h2>
+        <p>围绕“kick”的脚与迈步意象，比较字面联想、启动感和小尺寸辨识度。</p>
+        <div class="selected-copy" data-selected="kickoff">当前选择：足迹 Footprints</div>
+      </div>
+      <div class="option-list" role="radiogroup" aria-label="kickoff 图标方案">
+        <label class="option"><input type="radio" name="kickoff" value="足迹 Footprints" checked><span class="icon-stage"><svg><use href="#footprints"/></svg></span><span class="option-name"><strong>足迹</strong><code>Footprints</code></span><p class="rationale">同时表达“脚”和“迈出第一步”，在命令菜单的小尺寸下轮廓也最清楚。</p><span class="tag">当前选择</span></label>
+        <label class="option"><input type="radio" name="kickoff" value="运动鞋 SportShoe"><span class="icon-stage"><svg><use href="#sport-shoe"/></svg></span><span class="option-name"><strong>运动鞋</strong><code>SportShoe</code></span><p class="rationale">与“kick”的字面关联最直接，个性强，但图形细节比足迹更密。</p><span></span></label>
+        <label class="option"><input type="radio" name="kickoff" value="向前一步 StepForward"><span class="icon-stage"><svg><use href="#step-forward"/></svg></span><span class="option-name"><strong>向前一步</strong><code>StepForward</code></span><p class="rationale">强调从准备进入执行阶段；更抽象，也可能被看成媒体播放控制。</p><span></span></label>
+        <label class="option"><input type="radio" name="kickoff" value="起身 PersonStanding"><span class="icon-stage"><svg><use href="#person-standing"/></svg></span><span class="option-name"><strong>起身</strong><code>PersonStanding</code></span><p class="rationale">带有“准备行动”的人体意象，友好克制，但脚部关联最弱。</p><span></span></label>
+      </div>
+    </section>
+
+    <section class="command-section" aria-labelledby="handoff-title">
+      <div class="command-title">
+        <span class="command-name">/handoff</span>
+        <h2 id="handoff-title">交接简报</h2>
+        <p>围绕“hand”的手与交接意象，比较协作、递交和接棒的不同侧重。</p>
+        <div class="selected-copy" data-selected="handoff">当前选择：握手 Handshake</div>
+      </div>
+      <div class="option-list" role="radiogroup" aria-label="handoff 图标方案">
+        <label class="option"><input type="radio" name="handoff" value="握手 Handshake" checked><span class="icon-stage"><svg><use href="#handshake"/></svg></span><span class="option-name"><strong>握手</strong><code>Handshake</code></span><p class="rationale">两只手共同完成交接，协作语义最完整，也最符合任务移交场景。</p><span class="tag">当前选择</span></label>
+        <label class="option"><input type="radio" name="handoff" value="递手 HandHelping"><span class="icon-stage"><svg><use href="#hand-helping"/></svg></span><span class="option-name"><strong>递手</strong><code>HandHelping</code></span><p class="rationale">更像将内容递给下一位，传递方向明确，但小尺寸轮廓略抽象。</p><span></span></label>
+        <label class="option"><input type="radio" name="handoff" value="接棒 HandGrab"><span class="icon-stage"><svg><use href="#hand-grab"/></svg></span><span class="option-name"><strong>接棒</strong><code>HandGrab</code></span><p class="rationale">强调接收方抓住任务继续推进，动作感强，交接关系需要结合文案理解。</p><span></span></label>
+        <label class="option"><input type="radio" name="handoff" value="手掌 Hand"><span class="icon-stage"><svg><use href="#hand"/></svg></span><span class="option-name"><strong>手掌</strong><code>Hand</code></span><p class="rationale">与 handoff 字面呼应最简单，但也可能被理解为暂停或举手。</p><span></span></label>
+      </div>
+    </section>
+
+    <section class="command-section" aria-labelledby="polish-title">
+      <div class="command-title">
+        <span class="command-name">/polish</span>
+        <h2 id="polish-title">润色表达</h2>
+        <p>表达文字被优化、变得更精炼。方案已经确认并同步到实际命令菜单。</p>
+        <div class="selected-copy">已确定：魔法棒 WandSparkles</div>
+      </div>
+      <div class="option-list" aria-label="polish 已确定图标">
+        <div class="option confirmed-option"><span class="icon-stage"><svg><use href="#wand-sparkles"/></svg></span><span class="option-name"><strong>魔法棒</strong><code>WandSparkles</code></span><p class="rationale">比普通闪光更强调“执行一次润色转换”，动作意图明确。</p><span class="tag">已确定</span></div>
+      </div>
+    </section>
+
+    <p class="footer-note">最终采用 Footprints、Handshake 与 WandSparkles，均已同步到实际 Slash 命令菜单。</p>
+  </main>
+
+  <script>
+    document.querySelectorAll('input[type="radio"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const output = document.querySelector(`[data-selected="${input.name}"]`);
+        if (output) output.textContent = `已选择：${input.value}`;
+      });
+    });
+  </script>
+</body>
+</html>

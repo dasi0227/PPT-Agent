@@ -165,16 +165,33 @@ describe('slash commands', () => {
   });
 
   it('navigates secondary menus with wrapping, select, and root escape', () => {
-    expect(navigateCommandMenu('model', 0, 'ArrowUp', 3)).toEqual({
+    expect(navigateCommandMenu('model', 0, 'ArrowUp', [false, false, false])).toEqual({
       level: 'model', activeIndex: 2, action: 'none',
     });
-    expect(navigateCommandMenu('target', 3, 'ArrowDown', 4)).toEqual({
+    expect(navigateCommandMenu('target', 3, 'ArrowDown', [false, false, false, false])).toEqual({
       level: 'target', activeIndex: 0, action: 'none',
     });
-    expect(navigateCommandMenu('model', 1, 'Enter', 3).action).toBe('select');
-    expect(navigateCommandMenu('model', 1, 'Escape', 3)).toEqual({
+    expect(navigateCommandMenu('model', 1, 'Enter', [false, false, false]).action).toBe('select');
+    expect(navigateCommandMenu('model', 1, 'Escape', [false, false, false])).toEqual({
       level: 'root', activeIndex: 0, action: 'none',
     });
-    expect(navigateCommandMenu('root', 1, 'Escape', 9).action).toBe('close');
+    expect(navigateCommandMenu('root', 1, 'Escape', Array(9).fill(false)).action).toBe('close');
+  });
+
+  it('skips disabled command candidates in both directions', () => {
+    const disabled = [false, false, false, true, true, true, true, false, false];
+    expect(navigateCommandMenu('root', 2, 'ArrowDown', disabled)).toEqual({
+      level: 'root', activeIndex: 7, action: 'none',
+    });
+    expect(navigateCommandMenu('root', 7, 'ArrowUp', disabled)).toEqual({
+      level: 'root', activeIndex: 2, action: 'none',
+    });
+    expect(navigateCommandMenu('root', 3, 'Enter', disabled).action).toBe('none');
+    expect(navigateCommandMenu('model', -1, 'ArrowUp', [true, false, true, false])).toEqual({
+      level: 'model', activeIndex: 3, action: 'none',
+    });
+    expect(navigateCommandMenu('model', 0, 'ArrowDown', [true, true])).toEqual({
+      level: 'model', activeIndex: -1, action: 'none',
+    });
   });
 });
