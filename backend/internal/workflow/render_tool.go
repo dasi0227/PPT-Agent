@@ -25,11 +25,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-const (
-	renderViewportWidth  = 1920
-	renderViewportHeight = 1080
-	maxRenderOutputBytes = 1024 * 1024
-)
+const maxRenderOutputBytes = 1024 * 1024
 
 var ErrRenderWorkerUnavailable = errors.New("render worker unavailable")
 
@@ -434,8 +430,8 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	screenshotPath := filepath.Join(screenshotDir, screenshotID+".png")
 	request := RenderRequest{
 		RunID: runID, ProjectDir: input.ProjectDir, SlideID: slideID, HTML: string(normalizedHTML),
-		ScreenshotPath: screenshotPath, ViewportWidth: renderViewportWidth,
-		ViewportHeight: renderViewportHeight, TimeoutMS: 15000,
+		ScreenshotPath: screenshotPath, ViewportWidth: frame.Canvas.Width,
+		ViewportHeight: frame.Canvas.Height, TimeoutMS: 15000,
 		Frame: frame, BaseCSS: string(baseCSS), ThemeID: theme.ID, ThemeCSS: theme.CSS,
 	}
 	started := time.Now()
@@ -472,7 +468,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		"screenshot_ref": screenshotRef, "screenshot_url": screenshotURL,
 		"slide_id": slideID, "source": source,
 		"revision": presentationRevision(t.pack, input, slideID), "hash": sourceHash,
-		"viewport":     map[string]int{"width": renderViewportWidth, "height": renderViewportHeight},
+		"viewport":     map[string]int{"width": frame.Canvas.Width, "height": frame.Canvas.Height},
 		"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
 		"clipping": diagnostics.Clipping, "runtime_chrome": diagnostics.RuntimeChrome, "console_errors": diagnostics.ConsoleErrors,
 		"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,

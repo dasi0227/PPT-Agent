@@ -23,7 +23,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Canonical 16:9 stage. Runtime viewport and theme stage dimensions are 1920x1080. */
+/* Canonical 16:9 stage. Runtime owns its fixed 1920x1080 CSS-pixel dimensions;
+   theme --stage-* tokens must mirror this contract but never resize the canvas. */
 .slide-scaler {
   position: fixed;
   inset: 0;
@@ -35,8 +36,8 @@ body {
 
 .slide-stage {
   position: relative;
-  width: calc(var(--stage-w) * 1px);
-  height: calc(var(--stage-h) * 1px);
+  width: 1920px;
+  height: 1080px;
   overflow: hidden;
   background: var(--color-bg);
   color: var(--color-fg);

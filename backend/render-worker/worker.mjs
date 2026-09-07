@@ -7,8 +7,6 @@ import { chromium } from 'playwright-core';
 
 const MAX_INPUT_BYTES = 3 * 1024 * 1024;
 const MAX_CLIPPING_ITEMS = 50;
-const RENDER_VIEWPORT_WIDTH = 1920;
-const RENDER_VIEWPORT_HEIGHT = 1080;
 const CHROME_CANDIDATES = process.platform === 'darwin'
   ? [
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -91,7 +89,8 @@ async function launchBrowser() {
 }
 
 async function injectRuntimeFrame(page, frame) {
-  if (!frame || frame.slide_id === undefined || !Number.isInteger(frame.ordinal) || !Number.isInteger(frame.total)) {
+  if (!frame || frame.slide_id === undefined || !Number.isInteger(frame.ordinal) || !Number.isInteger(frame.total) ||
+      !frame.canvas || frame.canvas.width !== 1920 || frame.canvas.height !== 1080 || frame.canvas.aspect_ratio !== '16:9') {
     throw new Error('invalid runtime frame context');
   }
   await page.evaluate(context => {
@@ -115,12 +114,17 @@ async function injectRuntimeFrame(page, frame) {
       node.dataset.chromeStyle = item.style || '';
       node.textContent = text;
       if (item.type === 'page_number') node.setAttribute('aria-label', `第 ${context.ordinal} 页，共 ${context.total} 页`);
+      const styleTokens = new Set(String(item.style || '').toLowerCase().split(/\s+/));
+      const font = styleTokens.has('label')
+        ? '700 16px/1.2 ui-sans-serif,system-ui,sans-serif'
+        : `500 ${styleTokens.has('compact') ? '16px' : '14px'}/1.2 ui-monospace,SFMono-Regular,Menlo,monospace`;
+      const extra = styleTokens.has('label') ? ['letter-spacing:.08em!important', 'text-transform:uppercase!important'] : ['letter-spacing:.04em!important'];
       node.style.cssText = [
-        'position:fixed!important', 'z-index:2147483647!important', 'padding:.2em .45em!important',
-        'color:rgba(20,25,35,.58)!important', 'font:500 14px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace!important',
-        'letter-spacing:.04em!important', 'pointer-events:none!important', ...(positions[item.placement] || positions['bottom-right']),
+        'position:absolute!important', 'z-index:2!important', 'padding:3px 6px!important',
+        'color:rgba(20,25,35,.58)!important', `font:${font}!important`,
+        'pointer-events:none!important', ...extra, ...(positions[item.placement] || positions['bottom-right']),
       ].join(';');
-      document.documentElement.appendChild(node);
+      (document.querySelector('.slide-stage') || document.body).appendChild(node);
     }
   }, frame);
 }
@@ -133,12 +137,12 @@ async function render(input, browser, handles = new Map()) {
       typeof input.theme_css !== 'string') {
     throw new Error('invalid render request');
   }
-  if (input.viewport_width !== RENDER_VIEWPORT_WIDTH ||
-      input.viewport_height !== RENDER_VIEWPORT_HEIGHT) {
-    throw new Error(`render viewport must be ${RENDER_VIEWPORT_WIDTH}x${RENDER_VIEWPORT_HEIGHT}`);
+  if (!input.frame?.canvas || input.viewport_width !== input.frame.canvas.width ||
+      input.viewport_height !== input.frame.canvas.height) {
+    throw new Error('render viewport must match the runtime canvas');
   }
-  const width = RENDER_VIEWPORT_WIDTH;
-  const height = RENDER_VIEWPORT_HEIGHT;
+  const width = input.frame.canvas.width;
+  const height = input.frame.canvas.height;
   const timeout = Math.min(Math.max(Number(input.timeout_ms) || 15000, 1000), 20000);
   const slidePath = `/slides/${encodeURIComponent(input.slide_id)}/index.html`;
   const failedResources = [];

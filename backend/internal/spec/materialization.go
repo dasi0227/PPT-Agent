@@ -47,7 +47,7 @@ func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideI
 		}
 	}
 	return RuntimeFrameContext{
-		SlideID: slideID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: string(loc.Slide.Role),
+		SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: design.Theme, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: string(loc.Slide.Role),
 		Section:    RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
 		Subsection: subsection, Numbering: RuntimeFrameNumbering{Visible: visible, Format: manifest.Numbering.Format},
 		Chrome: append([]ChromeItem(nil), design.Chrome...),

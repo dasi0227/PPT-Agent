@@ -27,6 +27,11 @@ export function isRuntimeSlide(value: unknown): value is RuntimeSlide {
     && typeof value.html === 'string'
     && isRecord(value.frame)
     && value.frame.slide_id === value.id
+    && isRecord(value.frame.canvas)
+    && value.frame.canvas.width === 1920
+    && value.frame.canvas.height === 1080
+    && value.frame.canvas.aspect_ratio === '16:9'
+    && typeof value.frame.theme_id === 'string'
     && typeof value.frame.ordinal === 'number'
     && typeof value.frame.total === 'number';
 }

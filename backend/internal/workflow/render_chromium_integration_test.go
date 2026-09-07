@@ -20,7 +20,7 @@ const (
 )
 
 func testRenderFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{SlideID: "slide-01", DeckTitle: "Deck", Ordinal: 2, Total: 2, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Numbering: spec.RuntimeFrameNumbering{Visible: true, Format: "number"}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}, {Type: "section_marker", Placement: "top-left", Style: "muted"}, {Type: "deck_title", Placement: "top-right", Style: "muted"}}}
+	return spec.RuntimeFrameContext{SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Numbering: spec.RuntimeFrameNumbering{Visible: true, Format: "number"}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}, {Type: "section_marker", Placement: "top-left", Style: "muted"}, {Type: "deck_title", Placement: "top-right", Style: "muted"}}}
 }
 
 func TestNodeSlideRendererWithRealChromium(t *testing.T) {
@@ -50,7 +50,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 		ViewportWidth:  1600, ViewportHeight: 900, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
 	})
-	if invalidViewportErr == nil || !strings.Contains(invalidViewportErr.Error(), "render viewport must be 1920x1080") {
+	if invalidViewportErr == nil || !strings.Contains(invalidViewportErr.Error(), "render viewport must match the runtime canvas") {
 		t.Fatalf("non-canonical viewport accepted: %v", invalidViewportErr)
 	}
 	screenshot := filepath.Join(dir, "shot.png")

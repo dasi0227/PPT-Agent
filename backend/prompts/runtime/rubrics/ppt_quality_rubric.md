@@ -23,7 +23,7 @@ Visual consistency:
 - New or edited slides do not look like unrelated templates.
 
 Implementation quality:
-- Slide HTML uses a 1600x900 .slide-stage.
+- Slide HTML uses one 1920x1080 CSS-pixel `.slide-stage`. Author every coordinate, layout and visual decision within that fixed canvas; Runtime, not slide HTML, fits it into an editor, thumbnail, fullscreen view or screenshot.
 - Slide HTML leaves the runtime-owned base-link and theme-link nodes untouched; the runtime injects both stylesheets.
 - CSS avoids heavy runtime dependencies and browser-unsafe assumptions.
 - Resources are project-local, data or blob references only.

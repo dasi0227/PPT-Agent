@@ -17,6 +17,8 @@ function createRuntime() {
 describe('slide runtime', () => {
   const frame = (id: string, ordinal: number, visible = true) => ({
     slide_id: id, ordinal, total: 2, role: ordinal === 1 ? 'cover' : 'content',
+    canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
+    theme_id: 'swiss-modern',
     section: { id: 'sec_1', title: '正文', index: 1 }, numbering: { visible, format: 'number' },
     deck_title: 'Deck',
     chrome: [
@@ -44,7 +46,10 @@ describe('slide runtime', () => {
     ) as HTMLElement[];
 
     expect(initialFrames).toHaveLength(2);
-    expect(initialFrames.map((container) => container.querySelector('iframe')?.getAttribute('srcdoc'))).toEqual(slides.map((slide) => slide.html));
+    const srcdocs = initialFrames.map((container) => container.querySelector('iframe')?.getAttribute('srcdoc') ?? '');
+    expect(srcdocs.every((srcdoc) => srcdoc.includes('id="base-link"'))).toBe(true);
+    expect(srcdocs.every((srcdoc) => srcdoc.includes('/api/v1/themes/swiss-modern/css'))).toBe(true);
+    expect(initialFrames[0]?.querySelector('.runtime-canvas')).not.toBeNull();
     expect(initialFrames.every((container) => container.querySelector('iframe')?.getAttribute('sandbox') === 'allow-scripts')).toBe(true);
     expect(initialFrames[0]?.querySelector('[data-runtime-page-number]')).toBeNull();
     expect(initialFrames[1]?.querySelector('[data-runtime-page-number]')?.textContent).toBe('2');

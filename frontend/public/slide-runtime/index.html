@@ -23,11 +23,24 @@
       height: 100%;
       background: #fff;
     }
+    .runtime-canvas {
+      --runtime-canvas-width: 1920px;
+      --runtime-canvas-height: 1080px;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: var(--runtime-canvas-width);
+      height: var(--runtime-canvas-height);
+      overflow: hidden;
+      background: #fff;
+      transform: translate(-50%, -50%) scale(var(--runtime-canvas-scale, 1));
+      transform-origin: center;
+    }
     .slide-frame {
       position: absolute;
       inset: 0;
-      width: 100%;
-      height: 100%;
+      width: var(--runtime-canvas-width);
+      height: var(--runtime-canvas-height);
       border: none;
       background: #fff;
     }
@@ -37,7 +50,7 @@
     .runtime-chrome {
       position: absolute;
       z-index: 2;
-      padding: 0.2em 0.45em;
+      padding: 3px 6px;
       color: rgba(20, 25, 35, 0.58);
       font: 500 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
       letter-spacing: 0.04em;
@@ -50,6 +63,11 @@
     .runtime-chrome[data-placement$="-right"] { right: 3.4%; }
     .runtime-chrome[data-placement="left-edge"] { left: 1.5%; top: 50%; transform: translateY(-50%); }
     .runtime-chrome[data-placement="right-edge"] { right: 1.5%; top: 50%; transform: translateY(-50%); }
+    .runtime-chrome[data-chrome-style~="compact"] { font-size: 16px; }
+    .runtime-chrome[data-chrome-style~="tiny"] { font-size: 14px; }
+    .runtime-chrome[data-chrome-style~="muted"] { color: rgba(20, 25, 35, 0.58); }
+    .runtime-chrome[data-chrome-style~="mono"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .runtime-chrome[data-chrome-style~="label"] { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
   </style>
 </head>
 <body>
@@ -75,6 +93,12 @@
         && value.frame !== null
         && typeof value.frame === 'object'
         && value.frame.slide_id === value.id
+        && value.frame.canvas !== null
+        && typeof value.frame.canvas === 'object'
+        && value.frame.canvas.width === 1920
+        && value.frame.canvas.height === 1080
+        && value.frame.canvas.aspect_ratio === '16:9'
+        && typeof value.frame.theme_id === 'string'
         && Number.isInteger(value.frame.ordinal)
         && Number.isInteger(value.frame.total);
     }
@@ -106,6 +130,7 @@
 
       frames.forEach((frame, frameIndex) => {
         frame.dataset.active = frameIndex === nextIndex ? 'true' : 'false';
+        if (frameIndex === nextIndex) fitCanvas(frame, state.slides[frameIndex].frame.canvas);
       });
     }
 
@@ -126,8 +151,41 @@
         node.dataset.placement = item.placement || 'bottom-right';
         node.dataset.chromeStyle = item.style || '';
         if (item.type === 'page_number') node.setAttribute('aria-label', `第 ${context.ordinal} 页，共 ${context.total} 页`);
-        container.appendChild(node);
+        container.querySelector('.runtime-canvas').appendChild(node);
       });
+    }
+
+    function normalizeSlideHTML(source, themeID) {
+      const document = new DOMParser().parseFromString(source, 'text/html');
+      const head = document.head;
+      head.querySelectorAll('link').forEach((link) => {
+        const id = link.getAttribute('id');
+        const href = link.getAttribute('href') || '';
+        if (id === 'base-link' || id === 'theme-link' || href.endsWith('/common/base.css') || href.endsWith('/common/tokens.css')) {
+          link.remove();
+        }
+      });
+      const base = document.createElement('link');
+      base.id = 'base-link';
+      base.rel = 'stylesheet';
+      base.href = '/api/v1/runtime/base.css';
+      head.appendChild(base);
+      const theme = document.createElement('link');
+      theme.id = 'theme-link';
+      theme.rel = 'stylesheet';
+      theme.href = `/api/v1/themes/${encodeURIComponent(themeID)}/css`;
+      head.appendChild(theme);
+      return `<!doctype html>${document.documentElement.outerHTML}`;
+    }
+
+    function fitCanvas(container, canvas) {
+      const availableWidth = container.clientWidth;
+      const availableHeight = container.clientHeight;
+      if (!availableWidth || !availableHeight) return;
+      const wrapper = container.querySelector('.runtime-canvas');
+      wrapper.style.setProperty('--runtime-canvas-width', `${canvas.width}px`);
+      wrapper.style.setProperty('--runtime-canvas-height', `${canvas.height}px`);
+      wrapper.style.setProperty('--runtime-canvas-scale', String(Math.min(availableWidth / canvas.width, availableHeight / canvas.height)));
     }
 
     function loadSlides(slides) {
@@ -145,6 +203,8 @@
           container.dataset.slideFrame = 'true';
           container.dataset.active = 'false';
           container.dataset.slideId = slide.id;
+          const canvas = document.createElement('div');
+          canvas.className = 'runtime-canvas';
           const frame = document.createElement('iframe');
           frame.className = 'slide-frame';
           frame.setAttribute('sandbox', 'allow-scripts');
@@ -155,15 +215,18 @@
               message: `第 ${index + 1} 页渲染失败`
             }, '*');
           });
-          container.appendChild(frame);
+          canvas.appendChild(frame);
+          container.appendChild(canvas);
         }
         const frame = container.querySelector('iframe');
-        if (frame.getAttribute('srcdoc') !== slide.html) {
-          frame.srcdoc = slide.html;
+        const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.theme_id);
+        if (frame.getAttribute('srcdoc') !== normalizedHTML) {
+          frame.srcdoc = normalizedHTML;
         }
         container.dataset.index = String(index);
         frame.title = `Slide ${index + 1}`;
         applyRuntimeFrame(container, slide.frame);
+        fitCanvas(container, slide.frame.canvas);
         deck.appendChild(container);
       });
 
@@ -193,6 +256,13 @@
         }, '*');
       }
     });
+
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => {
+        const active = deck.querySelector('[data-slide-frame][data-active="true"]');
+        if (active) fitCanvas(active, state.slides[Number(active.dataset.index)].frame.canvas);
+      }).observe(deck);
+    }
 
     window.parent.postMessage({ type: 'runtimeReady' }, '*');
   </script>

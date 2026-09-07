@@ -123,6 +123,8 @@ type ChromeItem struct {
 
 type RuntimeFrameContext struct {
 	SlideID    string                `json:"slide_id"`
+	Canvas     RuntimeCanvas         `json:"canvas"`
+	ThemeID    string                `json:"theme_id"`
 	DeckTitle  string                `json:"deck_title"`
 	Ordinal    int                   `json:"ordinal"`
 	Total      int                   `json:"total"`
@@ -174,11 +176,11 @@ type MaterializationArtifact struct {
 	Hash     string `json:"hash"`
 }
 type MaterializationSource struct {
-	ManifestRevision int    `json:"manifest_revision"`
-	OutlineNodeHash  string `json:"outline_node_hash"`
-	SpecRevision     int    `json:"spec_revision"`
+	ManifestRevision  int    `json:"manifest_revision"`
+	OutlineNodeHash   string `json:"outline_node_hash"`
+	SpecRevision      int    `json:"spec_revision"`
 	DesignContentHash string `json:"design_content_hash"`
-	Hash             string `json:"hash"`
+	Hash              string `json:"hash"`
 }
 type MaterializationFrame struct {
 	ContextHash string `json:"context_hash"`

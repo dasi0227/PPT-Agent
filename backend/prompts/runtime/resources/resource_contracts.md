@@ -6,7 +6,7 @@ Resource ownership:
 - Design owns the deck-wide theme, direction, density and shared visual system.
 - An outline slide node owns the stable slide identity reference, canonical page title, and semantic role.
 - Slide Spec owns one page's primary message, ordered element intents, and optional layout direction. It never stores title, section, subsection, role, placement, ordinal, or page number.
-- Slide HTML is the Agent-authored page body. Runtime owns the surrounding frame, shared chrome, ordinal, total, and page-number rendering.
+- Slide HTML is the Agent-authored page body on a fixed 1920x1080 CSS-pixel canvas. Runtime owns the surrounding frame, equal-ratio fitting and centering, shared chrome, ordinal, total, section marker, deck title and page-number rendering. Do not add or position any of those shared decorations in slide HTML.
 
 Runtime owns schema version, revision, project identity, slide identity and timestamps. Never manually supply Runtime-managed fields.
 

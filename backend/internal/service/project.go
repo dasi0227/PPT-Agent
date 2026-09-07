@@ -252,7 +252,7 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID,
 		Title: proj.Title, Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
 		Language: firstNonEmpty(p.Language, "zh-CN"), Positioning: proj.Title,
-		Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"},
+		Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: spec.CanvasAspectRatio},
 		Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover", "conclusion"}, Format: "number"},
 		CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt}
 	if err := sb.Write(filepath.Join(projectRel, "manifest.json"), mustJSON(manifest)); err != nil {
