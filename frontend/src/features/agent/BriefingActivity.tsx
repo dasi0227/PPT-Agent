@@ -7,6 +7,7 @@ import {
   Clipboard,
   FileText,
   Loader2,
+  MessageSquarePlus,
   RefreshCw,
   Send,
   X,
@@ -16,6 +17,7 @@ import { useBriefingStore } from '../../stores/briefingStore';
 import { useComposerStore } from '../../stores/composerStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useThreadStore } from '../../stores/threadStore';
 import { useActiveSession } from './useActiveSession';
 import type { BriefingTimelineItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -76,6 +78,8 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
   const generate = useBriefingStore((state) => state.generate);
+  const createThread = useThreadStore((state) => state.createThread);
+  const setThreadDraft = useComposerStore((state) => state.setThreadDraft);
   const briefingSession = useBriefingStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
@@ -86,6 +90,7 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [copied, setCopied] = useState(false);
+  const [creatingContinuation, setCreatingContinuation] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -132,6 +137,16 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
       setFeedback('');
       setFeedbackOpen(false);
       setExpanded(false);
+    }
+  };
+  const createContinuation = async () => {
+    if (!activeProjectId || creatingContinuation) return;
+    setCreatingContinuation(true);
+    try {
+      const threadId = await createThread(activeProjectId);
+      setThreadDraft(threadId, version.content);
+    } finally {
+      setCreatingContinuation(false);
     }
   };
 
@@ -215,6 +230,19 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
             {expanded ? '收起' : '展开全文'}
           </button>
         )}
+      </div>
+      <div className="border-t border-border px-3 py-2">
+        <button
+          type="button"
+          onClick={() => void createContinuation()}
+          disabled={creatingContinuation}
+          className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 text-xs font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-text-400 disabled:opacity-55"
+        >
+          {creatingContinuation
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={1.75} />
+            : <MessageSquarePlus className="h-3.5 w-3.5" strokeWidth={1.75} />}
+          以此版本新建会话
+        </button>
       </div>
       {feedbackOpen && isLatest && (
         <div className="border-t border-border px-3 py-3">

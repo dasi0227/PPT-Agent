@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>从 briefing 快速新建会话 · 原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #e8edf3;
+      --workspace: #f8f9fb;
+      --surface: #ffffff;
+      --panel: #f8f9fb;
+      --muted: #f0f3f7;
+      --border: #d5dbe3;
+      --border-strong: #bcc5d0;
+      --ink: #17202b;
+      --text: #536171;
+      --quiet: #667385;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      --handoff: #067066;
+      --handoff-soft: #e6f5f2;
+      --success: #2f7d65;
+      --shadow: 0 10px 24px rgb(0 0 0 / 14%);
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-width: 320px; min-height: 100%; margin: 0; }
+    body { min-height: 100vh; padding: 30px; background: var(--canvas); color: var(--ink); font-family: var(--font); }
+    button, select, textarea { font: inherit; }
+    button { border: 0; cursor: pointer; }
+    button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .demo-shell { width: min(1420px, 100%); margin: 0 auto; }
+    .demo-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 0 0 14px; }
+    .demo-heading h1 { margin: 0; font-size: 16px; letter-spacing: -.01em; }
+    .demo-heading p { margin: 0; color: var(--text); font-size: 12px; }
+    .app { display: grid; grid-template-columns: minmax(0, 1fr) 420px; height: min(810px, calc(100vh - 92px)); min-height: 680px; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--workspace); box-shadow: var(--shadow); }
+
+    /* Existing PowerPoint workspace, deliberately quiet behind the agent panel. */
+    .stage { display: grid; grid-template-rows: 48px 1fr; min-width: 0; border-right: 1px solid var(--border); }
+    .appbar { display: flex; align-items: center; gap: 10px; padding: 0 18px; border-bottom: 1px solid var(--border); background: var(--surface); }
+    .ppt-mark { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 5px; background: #c94330; color: #fff; font-weight: 750; font-size: 12px; }
+    .crumb { color: var(--quiet); font-size: 12px; }.crumb strong { color: var(--ink); font-weight: 650; }
+    .top-actions { display: flex; gap: 8px; margin-left: auto; }.ghost { padding: 6px 9px; border-radius: 6px; background: transparent; color: var(--text); font-size: 12px; }.ghost:hover { background: var(--muted); color: var(--ink); }
+    .workspace { display: grid; grid-template-columns: 126px 1fr; min-height: 0; }
+    .slides { padding: 16px 12px; background: #f2f5f8; border-right: 1px solid var(--border); }.slides-label { margin: 0 0 12px 4px; color: var(--quiet); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+    .slide-thumb { height: 67px; margin: 0 0 9px; padding: 5px; border: 1px solid transparent; border-radius: 5px; background: var(--surface); }.slide-thumb.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgb(47 103 246 / 12%); }.slide-image { position: relative; height: 100%; overflow: hidden; border-radius: 2px; background: #14213a; }.slide-image::before { content: ""; position: absolute; top: 12px; left: 10px; width: 46px; height: 5px; background: #fff; box-shadow: 0 9px 0 rgb(255 255 255 / 48%), 0 18px 0 rgb(255 255 255 / 24%); }.slide-image::after { content: ""; position: absolute; right: -3px; bottom: -8px; width: 32px; height: 32px; border-radius: 50%; background: #2f67f6; }
+    .slide-area { display: grid; min-width: 0; place-items: center; padding: 32px; background: #e9eef4; }.deck { position: relative; width: min(690px, 90%); aspect-ratio: 16 / 9; overflow: hidden; padding: 10%; background: #16243f; box-shadow: 0 22px 40px rgb(23 32 43 / 20%); color: #fff; }.deck:after { content: ""; position: absolute; right: -11%; top: -33%; width: 42%; height: 128%; border: 1px solid rgb(111 156 255 / 35%); border-radius: 50%; }.deck small { position: relative; z-index: 1; color: #84a9ff; font-size: clamp(9px, 1vw, 14px); font-weight: 700; letter-spacing: .12em; }.deck h2 { position: relative; z-index: 1; max-width: 76%; margin: 8% 0 4%; font-size: clamp(22px, 3.2vw, 48px); line-height: 1.08; letter-spacing: -.045em; }.deck p { position: relative; z-index: 1; max-width: 59%; margin: 0; color: #b7c6df; font-size: clamp(9px, 1.1vw, 15px); line-height: 1.7; }
+
+    /* Agent panel */
+    .agent { display: grid; grid-template-rows: 48px 42px minmax(0, 1fr) auto; min-width: 0; background: var(--panel); }
+    .agent-header { display: flex; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--border); background: var(--panel); }.agent-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }.agent-title svg { color: var(--accent); }.agent-status { margin-left: auto; color: var(--quiet); font-size: 11px; }
+    .tabs { display: flex; align-items: center; gap: 3px; padding: 5px 8px; overflow: auto hidden; border-bottom: 1px solid var(--border); background: var(--surface); }.tab { display: inline-flex; min-width: 84px; height: 29px; align-items: center; gap: 5px; padding: 0 8px; border-radius: 6px; background: transparent; color: var(--text); font-size: 12px; white-space: nowrap; }.tab:hover { background: var(--muted); }.tab.active { background: rgb(23 32 43 / 6%); color: var(--ink); font-weight: 650; }.tab .dot { width: 5px; height: 5px; border-radius: 999px; background: var(--handoff); }.new-tab { min-width: auto; margin-left: auto; padding: 0 7px; color: var(--quiet); }
+    .timeline { overflow: auto; padding: 15px 12px 18px; }.turn { margin: 0 0 14px; }.turn-label { margin: 0 0 7px; color: var(--quiet); font-size: 11px; font-weight: 700; letter-spacing: .04em; }.message { border-radius: 9px; padding: 10px 11px; background: var(--surface); color: var(--text); font-size: 12px; line-height: 1.55; }.message.user { margin-left: 46px; background: var(--accent-soft); color: #2959cf; }
+    .briefing { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }.briefing-head { display: flex; align-items: center; min-height: 42px; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }.briefing-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 5px; background: var(--handoff-soft); color: var(--handoff); font-size: 11px; font-weight: 750; }.briefing-badge svg { width: 13px; height: 13px; }.version { margin-left: auto; color: var(--quiet); font-family: var(--mono); font-size: 11px; }.icon-action { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 5px; background: transparent; color: var(--text); }.icon-action:hover { background: var(--muted); color: var(--ink); }.icon-action svg { width: 14px; height: 14px; }
+    .brief-copy { position: relative; max-height: 164px; overflow: hidden; padding: 11px 12px 24px; color: #263241; font-size: 12px; line-height: 1.63; }.brief-copy:after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 48px; background: linear-gradient(transparent, #fff 75%); pointer-events: none; }.brief-copy strong { font-weight: 700; }.briefing-actions { display: flex; align-items: center; gap: 6px; padding: 0 10px 10px; }.button { display: inline-flex; height: 30px; align-items: center; justify-content: center; gap: 6px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 11px; font-weight: 650; transition: background-color .15s, border-color .15s, color .15s, transform .15s; }.button:hover { border-color: var(--border-strong); color: var(--ink); }.button:active { transform: translateY(1px); }.button svg { width: 13px; height: 13px; }.button.primary { flex: 1; border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: 0 1px 2px rgb(47 103 246 / 20%); }.button.primary:hover { background: #2358df; border-color: #2358df; }.button.source { color: var(--handoff); border-color: #a8d9d2; background: #f5fbfa; }.linked-note { display: none; align-items: center; gap: 6px; margin: 0 10px 10px; padding: 7px 8px; border-radius: 6px; background: #f5fbfa; color: #39786f; font-size: 11px; }.linked-note svg { width: 13px; height: 13px; }
+
+    .composer { padding: 10px; border-top: 1px solid var(--border); background: var(--surface); }.composer-source { display: none; align-items: center; gap: 7px; margin: 0 0 8px; padding: 7px 8px; border: 1px solid #b9ded9; border-radius: 6px; background: #f4fbfa; color: #36766d; font-size: 11px; }.composer-source strong { color: #1e5d55; }.composer-source button { margin-left: auto; padding: 0; background: none; color: var(--handoff); font-size: 11px; font-weight: 700; }.composer textarea { display: block; width: 100%; min-height: 76px; resize: vertical; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 12px; line-height: 1.5; }.composer textarea::placeholder { color: #748093; }.compose-controls { display: flex; align-items: center; gap: 5px; margin-top: 8px; }.control { display: inline-flex; height: 27px; min-width: 0; max-width: 116px; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); font-size: 11px; white-space: nowrap; }.control:hover { border-color: var(--border); background: var(--muted); color: var(--ink); }.control svg { flex: none; width: 12px; height: 12px; }.mode { color: #6640c7; }.send { display: grid; width: 29px; height: 29px; margin-left: auto; place-items: center; border-radius: 6px; background: var(--accent); color: #fff; }.send:hover { background: #2358df; }.send svg { width: 14px; height: 14px; }
+
+    /* New-thread state: a source trail is shown where the task is started, not in a blocking dialog. */
+    .app[data-state="new"] .old-thread { display: none; }.app[data-state="new"] .new-thread { display: block; }.app[data-state="new"] .tab.origin.active { background: transparent; color: var(--text); font-weight: 400; }.app[data-state="new"] .tab.continuation { background: rgb(23 32 43 / 6%); color: var(--ink); font-weight: 650; }.new-thread { display: none; }
+    .new-thread .message { margin-bottom: 14px; }.new-thread .message strong { color: var(--ink); }.summary { margin: 0 0 12px; padding: 10px 11px; border: 1px solid #c5e4df; border-radius: 8px; background: #f4fbfa; }.summary-title { display: flex; align-items: center; gap: 6px; color: #23695f; font-size: 11px; font-weight: 700; }.summary-title svg { width: 14px; height: 14px; }.summary p { margin: 6px 0 0 20px; color: #53736e; font-size: 12px; line-height: 1.5; }
+    .toast { position: fixed; z-index: 5; bottom: 24px; left: 50%; display: flex; align-items: center; gap: 7px; padding: 9px 13px; border: 1px solid #a4d4ca; border-radius: 999px; background: #f0faf7; box-shadow: 0 10px 28px rgb(25 92 77 / 16%); color: #23695f; font-size: 12px; font-weight: 650; opacity: 0; transform: translate(-50%, 12px); pointer-events: none; transition: opacity .2s, transform .2s; }.toast.show { opacity: 1; transform: translate(-50%, 0); }.toast svg { width: 15px; height: 15px; }
+    .legend { display: flex; align-items: center; gap: 12px; margin-top: 12px; color: var(--text); font-size: 11px; }.legend span { display: inline-flex; align-items: center; gap: 5px; }.legend i { width: 7px; height: 7px; border-radius: 99px; background: var(--accent); }.legend i.green { background: var(--handoff); }
+    @media (max-width: 900px) { body { padding: 14px; }.app { grid-template-columns: 1fr; height: auto; min-height: 780px; }.stage { display: none; }.agent { min-height: 780px; }.demo-heading { align-items: flex-start; flex-direction: column; gap: 4px; } }
+  </style>
+</head>
+<body>
+  <main class="demo-shell">
+    <div class="demo-heading">
+      <h1>briefing → 新会话 · 快速启动</h1>
+      <p>Handoff 示例；Kickoff 使用相同行动。点击卡片中的主按钮，查看把选中版本带入全新会话的状态。</p>
+    </div>
+
+    <section class="app" id="app" data-state="origin" aria-label="PPT 创作应用原型">
+      <section class="stage" aria-hidden="true">
+        <header class="appbar"><span class="ppt-mark">P</span><span class="crumb"><strong>2026 技术复盘</strong> / 第 5 页</span><div class="top-actions"><button class="ghost">播放</button><button class="ghost">分享</button></div></header>
+        <div class="workspace"><aside class="slides"><p class="slides-label">幻灯片</p><div class="slide-thumb"><div class="slide-image"></div></div><div class="slide-thumb"><div class="slide-image"></div></div><div class="slide-thumb"><div class="slide-image"></div></div><div class="slide-thumb"><div class="slide-image"></div></div><div class="slide-thumb active"><div class="slide-image"></div></div></aside><div class="slide-area"><article class="deck"><small>ENGINEERING REVIEW · 2026</small><h2>让创作从交接中继续</h2><p>把已经整理好的判断、进度与边界，直接带到下一段工作里。</p></article></div></div>
+      </section>
+
+      <section class="agent">
+        <header class="agent-header"><div class="agent-title"><i data-lucide="bot"></i>智能体</div><span class="agent-status">项目：2026 技术复盘</span></header>
+        <nav class="tabs" aria-label="会话标签"><button class="tab origin active" id="originTab">视觉调整</button><button class="tab continuation" id="continuationTab">新会话</button><button class="tab new-tab" id="newTab" aria-label="新建会话"><i data-lucide="plus"></i></button></nav>
+
+        <div class="timeline old-thread" id="originThread">
+          <section class="turn"><p class="turn-label">你</p><div class="message user">整理当前工作进度，准备交给下一位 Agent。</div></section>
+          <section class="turn"><p class="turn-label">智能体 · 交接简报</p>
+            <article class="briefing">
+              <header class="briefing-head"><span class="briefing-badge"><i data-lucide="git-pull-request-arrow"></i>Handoff</span><span class="version">v2 / 2</span><button class="icon-action" title="复制全文" aria-label="复制全文"><i data-lucide="copy"></i></button></header>
+              <div class="brief-copy"><strong>项目交接说明</strong><br><br>当前正在完善 PowerPoint 创作产品的 Agent 工作流。/kickoff 与 /handoff 已支持生成、反馈修订与版本链。<br><br><strong>已完成</strong><br>· 简报独立存储并合流进会话时间线<br>· 当前卡片支持版本切换、复制与重新生成<br><br><strong>下一步</strong><br>将简报作为一个新会话的首条输入；新 Agent 需要重新读取项目当前状态，并将本简报视为背景。</div>
+              <div class="briefing-actions"><button class="button" title="复制全文"><i data-lucide="copy"></i>复制</button><button class="button primary" id="continueButton"><i data-lucide="message-square-plus"></i>以此版本新建会话</button></div>
+            </article>
+          </section>
+        </div>
+
+        <div class="timeline new-thread" id="continuationThread">
+          <section class="turn"><p class="turn-label">新会话</p><div class="message"><strong>输入已就绪。</strong><br>你可以在下方编辑内容、切换模型或修改工作方式，再开始任务。</div></section>
+        </div>
+
+        <footer class="composer">
+          <textarea id="prompt" aria-label="任务输入" placeholder="输入你的想法与目标"></textarea>
+          <div class="compose-controls"><button class="control" title="项目"><i data-lucide="folder-kanban"></i><span>2026 技术复盘</span></button><button class="control" title="目标页面"><i data-lucide="file-stack"></i><span>第 5 页</span></button><button class="control" title="交互模式"><i data-lucide="route"></i><span class="mode">执行</span></button><button class="control" title="模型"><i data-lucide="sparkles"></i><span>GPT-5.6</span><i data-lucide="chevron-down"></i></button><button class="send" id="startButton" aria-label="开始任务" title="开始任务"><i data-lucide="send"></i></button></div>
+        </footer>
+      </section>
+    </section>
+    <div class="legend"><span><i></i>蓝色主行动：基于当前选中简报版本创建普通新会话</span></div>
+  </main>
+  <div class="toast" id="toast"><i data-lucide="check"></i><span id="toastText">已创建新会话</span></div>
+  <script>
+    const app = document.getElementById('app');
+    const prompt = document.getElementById('prompt');
+    const toast = document.getElementById('toast');
+    let toastTimer;
+    function icons() { if (window.lucide) lucide.createIcons(); }
+    function notice(text) { document.getElementById('toastText').textContent = text; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2200); }
+    const briefingDraft = `# 项目交接说明（Handoff v2）
+
+请先重新读取项目当前状态，再继续完成以下工作：
+- 在简报卡片提供“以此版本新建会话”。
+- 将选中的简报版本作为首条输入草稿。
+- 用户可编辑内容、选择模型及交互模式后开始任务。`;
+    function showNew() { app.dataset.state = 'new'; prompt.value = briefingDraft; prompt.focus(); notice('已创建新会话，首条输入已预填'); }
+    function showOrigin() { app.dataset.state = 'origin'; notice('已回到原会话'); }
+    document.getElementById('continueButton').addEventListener('click', showNew);
+    document.getElementById('continuationTab').addEventListener('click', showNew);
+    document.getElementById('originTab').addEventListener('click', showOrigin);
+    document.getElementById('startButton').addEventListener('click', () => notice('任务已开始：GPT-5.6 正在读取项目状态'));
+    document.getElementById('newTab').addEventListener('click', () => { app.dataset.state = 'new'; prompt.value = ''; prompt.focus(); notice('已创建空白会话'); });
+    icons();
+  </script>
+</body>
+</html>

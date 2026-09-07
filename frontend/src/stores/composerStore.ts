@@ -16,12 +16,15 @@ interface ComposerState {
   modelProfileName: string | null;
   polishing: boolean;
   selectedSkillIds: string[];
+  threadDrafts: Record<string, string>;
   userTouchedTarget: boolean;
   setArtifact: (artifact: Artifact) => void;
   setLevel: (level: ScopeLevel) => void;
   setIntent: (mode: RunMode) => void;
   setModelProfileName: (name: string) => void;
   setPolishing: (value: boolean) => void;
+  setThreadDraft: (threadId: string, text: string) => void;
+  clearThreadDraft: (threadId: string) => void;
   toggleSkill: (id: string) => void;
   reconcileSkills: (validIds: string[]) => void;
   applyContextDefault: (hasSlides: boolean) => void;
@@ -35,6 +38,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   modelProfileName: initialModelProfile(),
   polishing: false,
   selectedSkillIds: [],
+  threadDrafts: {},
   userTouchedTarget: false,
   setArtifact: (artifact) => set({ artifact, userTouchedTarget: true }),
   setLevel: (level) => set({ level, userTouchedTarget: true }),
@@ -44,6 +48,19 @@ export const useComposerStore = create<ComposerState>((set) => ({
     set({ modelProfileName: name });
   },
   setPolishing: (polishing) => set({ polishing }),
+  setThreadDraft: (threadId, text) => set((state) => {
+    if (text) return { threadDrafts: { ...state.threadDrafts, [threadId]: text } };
+    if (!(threadId in state.threadDrafts)) return state;
+    const threadDrafts = { ...state.threadDrafts };
+    delete threadDrafts[threadId];
+    return { threadDrafts };
+  }),
+  clearThreadDraft: (threadId) => set((state) => {
+    if (!(threadId in state.threadDrafts)) return state;
+    const threadDrafts = { ...state.threadDrafts };
+    delete threadDrafts[threadId];
+    return { threadDrafts };
+  }),
   toggleSkill: (id) => set((state) => {
     if (state.selectedSkillIds.includes(id)) {
       return { selectedSkillIds: state.selectedSkillIds.filter((selected) => selected !== id) };
@@ -71,6 +88,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     mode: 'execute',
     polishing: false,
     selectedSkillIds: [],
+    threadDrafts: {},
     userTouchedTarget: false,
   }),
 }));

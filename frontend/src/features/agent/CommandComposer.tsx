@@ -179,6 +179,11 @@ export const CommandComposer: React.FC = () => {
   const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling';
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
   const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
+  const activeThreadDraft = activeThreadId ? composer.threadDrafts[activeThreadId] : undefined;
+  const setComposerText = (nextText: string) => {
+    setText(nextText);
+    if (activeThreadId) composer.setThreadDraft(activeThreadId, nextText);
+  };
   const showCancelButton = Boolean(activeRunId)
     && (runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling')
     && text.trim() === '';
@@ -237,6 +242,11 @@ export const CommandComposer: React.FC = () => {
     editorRef.current?.setPlainText('');
     resetForProject();
   }, [activeProjectId, resetForProject]);
+  useEffect(() => {
+    const draft = activeThreadDraft ?? '';
+    setText(draft);
+    editorRef.current?.setPlainText(draft);
+  }, [activeThreadId, activeThreadDraft]);
   useEffect(() => {
     applyContextDefault(slides.length > 0);
   }, [activeProjectId, applyContextDefault, slides.length]);
@@ -412,6 +422,7 @@ export const CommandComposer: React.FC = () => {
       if (created) {
         setText('');
         editorRef.current?.setPlainText('');
+        composer.clearThreadDraft(threadId);
       }
       else setSubmitError('运行创建失败，请检查时间线中的错误后重试');
     } catch (error) {
@@ -459,7 +470,7 @@ export const CommandComposer: React.FC = () => {
         model: composer.modelProfileName,
       }, controller.signal);
       if (polishRequestRef.current !== requestID || controller.signal.aborted) return;
-      setText(result.polished_instruction);
+      setComposerText(result.polished_instruction);
       requestAnimationFrame(() => {
         editorRef.current?.setPlainText(result.polished_instruction);
         editorRef.current?.focusEnd();
@@ -542,7 +553,7 @@ export const CommandComposer: React.FC = () => {
           <PromptComposerEditor
             ref={editorRef}
             value={text}
-            onChange={setText}
+            onChange={setComposerText}
             onKeyDown={handleKeyDown}
             onCompositionChange={setIsComposing}
             placeholder={composerPlaceholder}
