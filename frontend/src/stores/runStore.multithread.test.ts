@@ -23,7 +23,7 @@ vi.mock('../api/runs', () => ({
 import { IDLE_SESSION, useRunStore } from './runStore';
 
 const request = (instruction: string) => ({
-  scope: { artifact: 'ppt' as const, level: 'deck' as const },
+  scope: { object: 'presentation' as const, selection: { kind: 'all_pages' as const } },
   mode: 'execute' as const ,
   instruction,
 });

@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useComposerStore } from './composerStore';
 
-describe('composerStore Skills', () => {
+describe('composerStore', () => {
   beforeEach(() => {
-    useComposerStore.setState({ selectedSkillIds: [], threadDrafts: {} });
+    useComposerStore.setState({
+      scopeObject: 'presentation',
+      scopeSelection: 'current_page',
+      lastNonGlobalSelection: 'current_page',
+      customSlideIds: [],
+      customSectionIds: [],
+      selectedSkillIds: [],
+      threadDrafts: {},
+    });
   });
 
   it('selects at most three Skills and allows selected Skills to be removed', () => {
@@ -32,5 +40,24 @@ describe('composerStore Skills', () => {
 
     useComposerStore.getState().clearThreadDraft('thread-next');
     expect(useComposerStore.getState().threadDrafts).toEqual({});
+  });
+
+  it('restores the previous page selection after leaving global resources', () => {
+    useComposerStore.getState().setScopeSelection('custom_sections');
+    useComposerStore.getState().toggleCustomSection('sec_one');
+    useComposerStore.getState().setScopeObject('global');
+    expect(useComposerStore.getState().scopeSelection).toBe('all_pages');
+    useComposerStore.getState().setScopeObject('global');
+
+    useComposerStore.getState().setScopeObject('presentation');
+    expect(useComposerStore.getState().scopeSelection).toBe('custom_sections');
+    expect(useComposerStore.getState().customSectionIds).toEqual(['sec_one']);
+  });
+
+  it('removes custom page and section IDs that no longer exist', () => {
+    useComposerStore.setState({ customSlideIds: ['sli_one', 'sli_gone'], customSectionIds: ['sec_one', 'sec_gone'] });
+    useComposerStore.getState().reconcileScopeIds(['sli_one'], ['sec_one']);
+    expect(useComposerStore.getState().customSlideIds).toEqual(['sli_one']);
+    expect(useComposerStore.getState().customSectionIds).toEqual(['sec_one']);
   });
 });

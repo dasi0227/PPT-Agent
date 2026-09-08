@@ -3,7 +3,7 @@ import { Send, Sparkles, StopCircle } from 'lucide-react';
 import { llmApi } from '../../api/llm';
 import { polishApi } from '../../api/polish';
 import { skillsApi } from '../../api/skills';
-import type { CreateRunRequest, LLMProfile, Skill } from '../../api/types';
+import type { CreateRunRequest, CreateRunScopeInput, LLMProfile, Skill } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
@@ -27,6 +27,31 @@ import {
   type SlashMenuOption,
 } from './PromptComposerEditor';
 import { resolveSlashCommands, type SlashCommandId } from './promptMatching';
+
+function composerScopeInput(
+  composer: ReturnType<typeof useComposerStore.getState>,
+  currentSlideId: string | undefined,
+): CreateRunScopeInput | null {
+  if (composer.scopeObject === 'global') {
+    return { object: 'global', selection: { kind: 'all_pages' } };
+  }
+  if (composer.scopeSelection === 'current_page') {
+    return currentSlideId
+      ? { object: composer.scopeObject, selection: { kind: 'current_page', current_slide_id: currentSlideId } }
+      : { object: composer.scopeObject, selection: { kind: 'all_pages' } };
+  }
+  if (composer.scopeSelection === 'custom_pages') {
+    return composer.customSlideIds.length > 0
+      ? { object: composer.scopeObject, selection: { kind: 'custom_pages', slide_ids: composer.customSlideIds } }
+      : null;
+  }
+  if (composer.scopeSelection === 'custom_sections') {
+    return composer.customSectionIds.length > 0
+      ? { object: composer.scopeObject, selection: { kind: 'custom_sections', section_ids: composer.customSectionIds } }
+      : null;
+  }
+  return { object: composer.scopeObject, selection: { kind: 'all_pages' } };
+}
 
 const COMPOSER_CONTROLS_FIT_GUARD_PX = 2;
 const COMPOSER_CONTROLS_HYSTERESIS_PX = 12;
@@ -201,7 +226,7 @@ export const CommandComposer: React.FC = () => {
     : steering
       ? '追加对当前任务的要求'
       : '输入你的想法与目标';
-  const requiresVision = composer.mode === 'execute' && composer.artifact === 'ppt';
+  const requiresVision = composer.mode === 'execute' && ['html', 'presentation', 'global'].includes(composer.scopeObject);
 
   const activeSnapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const slides = useMemo(() => orderedSlides(activeSnapshot), [activeSnapshot]);
@@ -213,8 +238,16 @@ export const CommandComposer: React.FC = () => {
     specState: slide.spec ? 'ready' as const : 'pending' as const,
     htmlState: slide.materialization?.state ?? 'not_materialized' as const,
   })), [slides]);
+  const scopePages = useMemo(() => pageCandidates.map((page) => ({ id: page.slideId, ordinal: page.ordinal, title: page.title })), [pageCandidates]);
+  const scopeSections = useMemo(() => (activeSnapshot?.outline.sections ?? []).map((section) => ({
+    id: section.id,
+    title: section.title,
+    pageCount: section.slides.length + section.subsections.reduce((total, subsection) => total + subsection.slides.length, 0),
+  })), [activeSnapshot]);
   const currentSlide = slides.find((slide) => slide.id === currentSlideId);
   const isEmptyProject = Boolean(activeProjectId) && slides.length === 0;
+  const scopeSelectionEmpty = (composer.scopeSelection === 'custom_pages' && composer.customSlideIds.length === 0)
+    || (composer.scopeSelection === 'custom_sections' && composer.customSectionIds.length === 0);
   const slashCommands = useMemo(() => resolveSlashCommands({
     runActive,
     emptyProject: isEmptyProject,
@@ -229,11 +262,11 @@ export const CommandComposer: React.FC = () => {
     disabled: requiresVision && !profile.capabilities.vision,
   })), [composer.modelProfileName, profiles, requiresVision]);
   const targetOptions = useMemo<SlashMenuOption[]>(() => [
-    { id: 'slide:spec', label: '单页设计稿', selected: composer.level === 'slide' && composer.artifact === 'spec' },
-    { id: 'slide:ppt', label: '单页幻灯片', selected: composer.level === 'slide' && composer.artifact === 'ppt' },
-    { id: 'deck:spec', label: '整份设计稿', selected: composer.level === 'deck' && composer.artifact === 'spec' },
-    { id: 'deck:ppt', label: '整份幻灯片', selected: composer.level === 'deck' && composer.artifact === 'ppt' },
-  ], [composer.artifact, composer.level]);
+    { id: 'object:spec', label: '设计稿', selected: composer.scopeObject === 'spec' },
+    { id: 'object:html', label: '幻灯片', selected: composer.scopeObject === 'html' },
+    { id: 'object:presentation', label: '演示文稿', selected: composer.scopeObject === 'presentation' },
+    { id: 'object:global', label: '全局资源', selected: composer.scopeObject === 'global' },
+  ], [composer.scopeObject]);
 
   useEffect(() => {
     if (previousProjectId.current === activeProjectId) return;
@@ -250,6 +283,9 @@ export const CommandComposer: React.FC = () => {
   useEffect(() => {
     applyContextDefault(slides.length > 0);
   }, [activeProjectId, applyContextDefault, slides.length]);
+  useEffect(() => {
+    composer.reconcileScopeIds(scopePages.map((page) => page.id), scopeSections.map((section) => section.id));
+  }, [composer.reconcileScopeIds, scopePages, scopeSections]);
   useEffect(() => {
     let current = true;
     setProfilesLoading(true);
@@ -338,8 +374,8 @@ export const CommandComposer: React.FC = () => {
       window.removeEventListener('resize', refreshThresholds);
     };
   }, [
-    composer.artifact,
-    composer.level,
+    composer.scopeObject,
+    composer.scopeSelection,
     composer.modelProfileName,
     composer.selectedSkillIds.length,
     isEmptyProject,
@@ -378,13 +414,11 @@ export const CommandComposer: React.FC = () => {
       setSubmitError(profilesError || '模型列表仍在加载，请稍候');
       return;
     }
-    const scope = {
-      artifact: composer.artifact,
-      level: mentionedSlideIds.length > 0 || (composer.level === 'slide' && !currentSlide)
-        ? 'deck' as const
-        : composer.level,
-      ...(mentionedSlideIds.length === 0 && composer.level === 'slide' && currentSlide ? { slide_id: currentSlide.id } : {}),
-    };
+    const scope = composerScopeInput(composer, currentSlide?.id);
+    if (!scope) {
+      setSubmitError(composer.scopeSelection === 'custom_pages' ? '请至少选择一页' : '请至少选择一章');
+      return;
+    }
     const request: CreateRunRequest = {
       client_request_id: newClientIdentity('req'),
       model: composer.modelProfileName,
@@ -395,12 +429,9 @@ export const CommandComposer: React.FC = () => {
       ...(componentNames.length > 0 ? { component_names: componentNames } : {}),
       ...(mentionedSlideIds.length > 0 ? { mentioned_slide_ids: mentionedSlideIds } : {}),
     };
-    if (request.scope.level === 'slide' && !request.scope.slide_id) {
-      request.scope = { artifact: request.scope.artifact, level: 'deck' };
-    }
     const selectedProfile = profiles.find((profile) => profile.name === request.model);
     const requiresVision = request.mode === 'execute' &&
-      request.scope.artifact === 'ppt';
+      ['html', 'presentation', 'global'].includes(request.scope.object);
     if (!selectedProfile) {
       setSubmitError('所选模型已不可用，请重新选择');
       return;
@@ -456,11 +487,11 @@ export const CommandComposer: React.FC = () => {
     polishAbortRef.current = controller;
     setSubmitError('');
     setPolishing(true);
-    const scope = {
-      artifact: composer.artifact,
-      level: composer.level === 'slide' && !currentSlide ? 'deck' as const : composer.level,
-      ...(composer.level === 'slide' && currentSlide ? { slide_id: currentSlide.id } : {}),
-    };
+    const scope = composerScopeInput(composer, currentSlide?.id);
+    if (!scope) {
+      setSubmitError(composer.scopeSelection === 'custom_pages' ? '请至少选择一页' : '请至少选择一章');
+      return;
+    }
     try {
       const result = await polishApi.polish(activeProjectId, {
         instruction,
@@ -517,10 +548,9 @@ export const CommandComposer: React.FC = () => {
   };
 
   const selectTargetOption = (id: string) => {
-    const [level, artifact] = id.split(':');
-    if ((level !== 'slide' && level !== 'deck') || (artifact !== 'spec' && artifact !== 'ppt')) return;
-    composer.setLevel(level);
-    composer.setArtifact(artifact);
+    const [kind, object] = id.split(':');
+    if (kind !== 'object' || !['spec', 'html', 'presentation', 'global'].includes(object)) return;
+    composer.setScopeObject(object as 'spec' | 'html' | 'presentation' | 'global');
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -619,12 +649,16 @@ export const CommandComposer: React.FC = () => {
               onToggle={composer.toggleSkill}
             />
             <TargetSelector
-              artifact={composer.artifact}
-              level={composer.level}
-              onTargetChange={(target) => {
-                composer.setArtifact(target.artifact);
-                composer.setLevel(target.level);
-              }}
+              object={composer.scopeObject}
+              selection={composer.scopeSelection}
+              selectedSlideIds={composer.customSlideIds}
+              selectedSectionIds={composer.customSectionIds}
+              pages={scopePages}
+              sections={scopeSections}
+              onObjectChange={composer.setScopeObject}
+              onSelectionChange={composer.setScopeSelection}
+              onToggleSlide={composer.toggleCustomSlide}
+              onToggleSection={composer.toggleCustomSection}
               disabled={disabled || steering}
               locked={isEmptyProject}
             />
@@ -649,9 +683,10 @@ export const CommandComposer: React.FC = () => {
             ) : (
               <button
                 onClick={() => void submit()}
-                disabled={!text.trim() || disabled || commitActive || polishing || briefingActive || (!steering && (profilesLoading || Boolean(profilesError)))}
+                disabled={!text.trim() || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:bg-text-400 disabled:opacity-50"
-                aria-label="发送"
+                aria-label={scopeSelectionEmpty ? '请至少选择一页或一章' : '发送'}
+                title={scopeSelectionEmpty ? '请至少选择一页或一章' : '发送'}
               >
                 <Send className="h-4 w-4" />
               </button>

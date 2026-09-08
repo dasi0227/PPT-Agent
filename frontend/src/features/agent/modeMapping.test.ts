@@ -7,10 +7,10 @@ const slide = { id: 'stable-slide', project_id: 'p1', layout: 'content', title: 
 describe('createTargetedRun', () => {
   it('resolves the current page to a stable slide id', () => {
     expect(createTargetedRun({
-      artifact: 'ppt', level: 'slide', mode: 'execute', instruction: 'revise',
+      object: 'presentation', selection: 'current_page', mode: 'execute', instruction: 'revise',
       slides: [slide], currentSlideId: 'stable-slide',
     })).toEqual({
-      scope: { artifact: 'ppt', level: 'slide', slide_id: 'stable-slide' },
+      scope: { object: 'presentation', selection: { kind: 'current_page', current_slide_id: 'stable-slide' } },
       mode: 'execute',
       instruction: 'revise',
     });
@@ -18,14 +18,14 @@ describe('createTargetedRun', () => {
 
   it('falls back to deck when no page exists', () => {
     expect(createTargetedRun({
-      artifact: 'spec', level: 'slide', mode: 'chat', instruction: 'advise',
+      object: 'spec', selection: 'current_page', mode: 'chat', instruction: 'advise',
       slides: [], currentSlideId: null,
-    }).scope).toEqual({ artifact: 'spec', level: 'deck' });
+    }).scope).toEqual({ object: 'spec', selection: { kind: 'all_pages' } });
   });
 
   it.each([
-    ['spec', 'deck'], ['spec', 'slide'], ['ppt', 'deck'], ['ppt', 'slide'],
-  ] as const)('supports %s/%s', (artifact, level) => {
-    expect(createTargetedRun({ artifact, level, mode: 'execute', instruction: 'go', slides: [slide], currentSlideId: 'stable-slide' }).scope.artifact).toBe(artifact);
+    ['spec', 'all_pages'], ['html', 'current_page'], ['presentation', 'all_pages'], ['global', 'all_pages'],
+  ] as const)('supports %s/%s', (object, selection) => {
+    expect(createTargetedRun({ object, selection, mode: 'execute', instruction: 'go', slides: [slide], currentSlideId: 'stable-slide' }).scope.object).toBe(object);
   });
 });

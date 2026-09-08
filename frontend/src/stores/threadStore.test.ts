@@ -99,7 +99,7 @@ describe('threadStore v6', () => {
       activeThreadIdByProjectId: { p1: 't2' },
     });
     useRunStore.setState({
-      sessions: { t2: { activeRunId: null, status: 'idle', scope: { artifact: 'ppt', level: 'slide' }, mode: 'execute', timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null } },
+      sessions: { t2: { activeRunId: null, status: 'idle', scope: { object: 'presentation', selection: { kind: 'current_page' } }, mode: 'execute', timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null } },
     });
 
     await useThreadStore.getState().deleteThread('p1', 't2');
@@ -129,7 +129,7 @@ describe('threadStore v6', () => {
         t2: {
           activeRunId: 'run_1',
           status: 'running',
-          scope: { artifact: 'ppt', level: 'slide' },
+          scope: { object: 'presentation', selection: { kind: 'current_page' } },
           mode: 'execute',
           timelineItems: [{ id: 'u1', type: 'user_turn', runId: 'run_1', text: '继续', timestamp: 1 }],
           pendingQuestion: null,

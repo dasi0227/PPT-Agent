@@ -130,18 +130,33 @@ export interface Run {
   paused_at?: number;
 }
 
-export type Artifact = 'spec' | 'ppt';
-export type ScopeLevel = 'slide' | 'deck';
+export type ScopeObject = 'spec' | 'html' | 'presentation' | 'global';
+export type ScopeSelectionKind = 'current_page' | 'all_pages' | 'custom_pages' | 'custom_sections';
 export type RunMode = 'chat' | 'grill' | 'plan' | 'execute';
 export type RunLanguage = 'zh-CN' | 'en-US';
 export type SlideRange = '5-8' | '9-15' | '16-25' | '26+';
 
-export interface RunScope { artifact: Artifact; level: ScopeLevel; slide_id?: string }
+export interface ScopeSelectionInput {
+  kind: ScopeSelectionKind;
+  current_slide_id?: string;
+  slide_ids?: string[];
+  section_ids?: string[];
+}
+
+export interface CreateRunScopeInput { object: ScopeObject; selection: ScopeSelectionInput }
+export interface ScopeSource { kind: ScopeSelectionKind; section_ids?: string[] }
+export interface RunScope {
+  object: ScopeObject;
+  slide_ids: string[];
+  source: ScopeSource;
+  include_run_created_slides: boolean;
+  revision: number;
+}
 
 export interface CreateRunRequest {
   client_request_id?: string;
   model?: string;
-  scope: RunScope;
+  scope: CreateRunScopeInput;
   mode: RunMode;
   instruction: string;
   skill_ids?: string[];
@@ -252,7 +267,7 @@ export interface LLMProfilesResponse {
 export interface PolishRequest {
   instruction: string;
   thread_id?: string;
-  scope: RunScope;
+  scope: CreateRunScopeInput;
   mode: RunMode;
   model: string;
 }
@@ -426,6 +441,14 @@ export interface CommandPermissionRequest {
   decision: 'allow_once' | 'deny';
 }
 
+export interface ScopeExpansionRequest {
+  interaction_id: string;
+  call_id: string;
+  base_revision: number;
+  decision: 'approve' | 'reject' | 'adjust';
+  adjusted_scope?: CreateRunScopeInput;
+}
+
 export type JsonRecord = Record<string, unknown>;
 
 export type SSEEventName =
@@ -441,6 +464,9 @@ export type SSEEventName =
   | 'plan.approval_answered'
   | 'command.permission_requested'
   | 'command.permission_answered'
+  | 'scope.expansion_requested'
+  | 'scope.expansion_answered'
+  | 'scope.updated'
   | 'run.mode_changed'
   | 'message.reasoning'
   | 'message.milestone'
@@ -503,6 +529,7 @@ export interface PlanStep {
   title: string;
   status: PlanStepStatus;
   detail?: string;
+  target_slide_ids?: string[];
 }
 
 export interface PlanState {
@@ -645,6 +672,29 @@ export type SSEEvent =
       reason: string;
     }>
   | SSEEventBase<'command.permission_answered', PublicEventBase & CommandPermissionRequest>
+  | SSEEventBase<'scope.expansion_requested', PublicEventBase & {
+      interaction_id: string;
+      call_id: string;
+      base_revision: number;
+      current_scope: RunScope;
+      requested_addition: { slide_ids?: string[]; object?: ScopeObject };
+      proposed_scope: RunScope;
+      affected_page_count: number;
+      reason: string;
+    }>
+  | SSEEventBase<'scope.expansion_answered', PublicEventBase & {
+      interaction_id: string;
+      call_id: string;
+      base_revision: number;
+      decision: 'approve' | 'reject' | 'adjust';
+      applied_scope?: RunScope;
+    }>
+  | SSEEventBase<'scope.updated', PublicEventBase & {
+      previous_scope: RunScope;
+      scope: RunScope;
+      cause: string;
+      interaction_id?: string;
+    }>
   | SSEEventBase<'run.mode_changed', PublicEventBase & { previous_mode: RunMode; mode: RunMode }>
   | SSEEventBase<'message.reasoning', PublicEventBase & { message_id: string; text: string }>
   | SSEEventBase<'message.milestone', PublicEventBase & {

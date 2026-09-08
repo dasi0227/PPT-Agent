@@ -13,6 +13,7 @@ export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
   'run.started', 'run.progress', 'run.resumed', 'run.completed', 'run.failed', 'run.error', 'run.canceled',
   'plan.updated', 'plan.approval_requested', 'plan.approval_answered', 'run.mode_changed',
   'command.permission_requested', 'command.permission_answered',
+  'scope.expansion_requested', 'scope.expansion_answered', 'scope.updated',
   'message.reasoning', 'message.milestone', 'message.final',
   'tool.started', 'tool.completed', 'question.asked', 'question.answered',
   'context.window.updated',
@@ -25,6 +26,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function hasString(data: Record<string, unknown>, key: string): boolean {
   return typeof data[key] === 'string' && data[key] !== '';
+}
+
+function isPositiveInteger(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 export function parseSSEEvent(eventName: string, raw: string, id?: string): SSEEvent | null {
@@ -102,6 +107,17 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && hasString(data, 'call_id')
         && hasString(data, 'command_hash')
         && ['allow_once', 'deny'].includes(String(data.decision));
+    case 'scope.expansion_requested':
+      return hasString(data, 'interaction_id') && hasString(data, 'call_id')
+        && isPositiveInteger(data.base_revision) && validRunScope(data.current_scope)
+        && validScopeAddition(data.requested_addition) && validRunScope(data.proposed_scope)
+        && isNonNegativeInteger(data.affected_page_count) && hasSafeString(data, 'reason');
+    case 'scope.expansion_answered':
+      return hasString(data, 'interaction_id') && hasString(data, 'call_id')
+        && isPositiveInteger(data.base_revision) && ['approve', 'reject', 'adjust'].includes(String(data.decision))
+        && (data.applied_scope === undefined || validRunScope(data.applied_scope));
+    case 'scope.updated':
+      return validRunScope(data.previous_scope) && validRunScope(data.scope) && hasString(data, 'cause');
     case 'run.mode_changed':
       return ['chat', 'grill', 'plan', 'execute'].includes(String(data.previous_mode))
         && ['chat', 'grill', 'plan', 'execute'].includes(String(data.mode));
@@ -210,9 +226,17 @@ function hasSafeString(data: Record<string, unknown>, key: string): boolean {
 
 function validRunScope(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  if (!['spec', 'ppt'].includes(String(value.artifact))) return false;
-  if (value.level === 'slide') return hasString(value, 'slide_id') && value.slide_id !== 'current';
-  return value.level === 'deck' && (value.slide_id === undefined || value.slide_id === '');
+  if (!['spec', 'html', 'presentation', 'global'].includes(String(value.object))) return false;
+  if (!Array.isArray(value.slide_ids) || !value.slide_ids.every((id) => typeof id === 'string' && id.startsWith('sli_'))) return false;
+  if (!isRecord(value.source) || !['current_page', 'all_pages', 'custom_pages', 'custom_sections'].includes(String(value.source.kind))) return false;
+  return typeof value.include_run_created_slides === 'boolean' && isPositiveInteger(value.revision);
+}
+
+function validScopeAddition(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const slidesValid = value.slide_ids === undefined || (Array.isArray(value.slide_ids) && value.slide_ids.every((id) => typeof id === 'string' && id.startsWith('sli_')));
+  const objectValid = value.object === undefined || ['spec', 'html', 'presentation', 'global'].includes(String(value.object));
+  return slidesValid && objectValid;
 }
 
 function validOptionalPublicTarget(value: unknown): boolean {

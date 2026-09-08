@@ -13,6 +13,8 @@ import {
   Skill,
   SSEEvent,
   ToolPreview,
+  RunScope,
+  CreateRunScopeInput,
 } from '../../api/types';
 
 export type TimelineItemType =
@@ -25,6 +27,7 @@ export type TimelineItemType =
   | 'question'
   | 'plan_approval'
   | 'command_permission'
+  | 'scope_expansion'
   | 'git_commit'
   | 'briefing'
   | 'context_compaction'
@@ -40,7 +43,7 @@ export interface BaseTimelineItem {
 export interface UserTurnItem extends BaseTimelineItem {
   type: 'user_turn';
   text: string;
-  scope?: { artifact: string; level: string; slide_id?: string };
+  scope?: RunScope | CreateRunScopeInput;
   mode?: string;
   skills?: Skill[];
   components?: PublicLoadedResource[];
@@ -116,6 +119,19 @@ export interface CommandPermissionItem extends BaseTimelineItem {
   answer?: 'allow_once' | 'deny';
 }
 
+export interface ScopeExpansionItem extends BaseTimelineItem {
+  type: 'scope_expansion';
+  interactionId: string;
+  callId: string;
+  baseRevision: number;
+  currentScope: RunScope;
+  requestedAddition: { slide_ids?: string[]; object?: RunScope['object'] };
+  proposedScope: RunScope;
+  affectedPageCount: number;
+  reason: string;
+  answer?: { decision: 'approve' | 'reject' | 'adjust'; appliedScope?: RunScope };
+}
+
 export interface TerminalNoticeItem extends BaseTimelineItem {
   type: 'terminal_notice';
   status: 'failed' | 'canceled' | 'error';
@@ -175,6 +191,7 @@ export type TimelineItem =
   | QuestionItem
   | PlanApprovalItem
   | CommandPermissionItem
+  | ScopeExpansionItem
   | GitCommitTimelineItem
   | BriefingTimelineItem
   | ContextCompactionTimelineItem
@@ -194,6 +211,7 @@ export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState |
     id: String(step.id ?? ''),
     title: String(step.title ?? ''),
     status: normalizeStepStatus(step.status),
+    target_slide_ids: Array.isArray(step.target_slide_ids) ? step.target_slide_ids.map(String) : undefined,
   }));
   return {
     id: String(plan.plan_id),
@@ -246,6 +264,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     case 'run.progress':
 	case 'plan.updated':
 	case 'run.mode_changed':
+    case 'scope.updated':
     case 'context.window.updated':
 		return state;
     case 'context.compacted': {
@@ -312,6 +331,23 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         return state;
       }
       return upsertById(state, { ...existing, answer: event.data.decision });
+    }
+    case 'scope.expansion_requested': {
+      const id = `${runId}:scope-expansion:${event.data.interaction_id}`;
+      const existing = state.find((item): item is ScopeExpansionItem => item.type === 'scope_expansion' && item.id === id);
+      return upsertById(state, {
+        id, type: 'scope_expansion', runId, interactionId: event.data.interaction_id,
+        callId: event.data.call_id, baseRevision: event.data.base_revision,
+        currentScope: event.data.current_scope, requestedAddition: event.data.requested_addition,
+        proposedScope: event.data.proposed_scope, affectedPageCount: event.data.affected_page_count,
+        reason: event.data.reason, answer: existing?.answer, timestamp: existing?.timestamp ?? timestamp,
+      });
+    }
+    case 'scope.expansion_answered': {
+      const id = `${runId}:scope-expansion:${event.data.interaction_id}`;
+      const existing = state.find((item): item is ScopeExpansionItem => item.type === 'scope_expansion' && item.id === id);
+      if (!existing || existing.callId !== event.data.call_id || existing.baseRevision !== event.data.base_revision) return state;
+      return upsertById(state, { ...existing, answer: { decision: event.data.decision, appliedScope: event.data.applied_scope } });
     }
 
     case 'message.reasoning': {

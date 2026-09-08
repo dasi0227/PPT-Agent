@@ -41,13 +41,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function readHistoryScope(data: Record<string, unknown>): RunScope | undefined {
   const raw = data.scope;
   if (!isRecord(raw)) return undefined;
-  const artifact = raw.artifact;
-  if ((artifact !== 'spec' && artifact !== 'ppt') ||
-    (raw.level !== 'slide' && raw.level !== 'deck')) return undefined;
+  const object = raw.object;
+  const source = raw.source;
+  if (!['spec', 'html', 'presentation', 'global'].includes(String(object)) ||
+    !isRecord(source) || !['current_page', 'all_pages', 'custom_pages', 'custom_sections'].includes(String(source.kind)) ||
+    !Array.isArray(raw.slide_ids) || typeof raw.revision !== 'number') return undefined;
   return {
-    artifact,
-    level: raw.level,
-    ...(typeof raw.slide_id === 'string' && raw.slide_id !== '' ? { slide_id: raw.slide_id } : {}),
+    object: object as RunScope['object'],
+    slide_ids: raw.slide_ids.filter((id): id is string => typeof id === 'string'),
+    source: {
+      kind: source.kind as RunScope['source']['kind'],
+      ...(Array.isArray(source.section_ids) ? { section_ids: source.section_ids.filter((id): id is string => typeof id === 'string') } : {}),
+    },
+    include_run_created_slides: raw.include_run_created_slides === true,
+    revision: raw.revision,
   };
 }
 
@@ -257,6 +264,12 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       session = { ...session, status: 'waiting', pendingQuestion: null };
     } else if (event.event === 'command.permission_answered') {
       session = { ...session, status: 'running', pendingQuestion: null };
+    } else if (event.event === 'scope.expansion_requested') {
+      session = { ...session, status: 'waiting', pendingQuestion: null };
+    } else if (event.event === 'scope.expansion_answered') {
+      session = { ...session, status: 'running', pendingQuestion: null };
+    } else if (event.event === 'scope.updated') {
+      session = { ...session, scope: event.data.scope };
     } else if (event.event === 'run.mode_changed') {
       session = { ...session, status: 'running', mode: event.data.mode, pendingQuestion: null };
     } else if (event.event === 'run.resumed') {

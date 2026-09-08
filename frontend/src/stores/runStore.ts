@@ -5,6 +5,7 @@ import { subscribeRunEvents } from '../api/sse';
 import { threadsApi } from '../api/threads';
 import {
   CreateRunRequest,
+  CreateRunScopeInput,
   PlanState,
   PublicTarget,
   QuestionAnswer,
@@ -14,6 +15,7 @@ import {
   RunMode,
   RunProgressStage,
   RunScope,
+  ScopeExpansionRequest,
   SSEEvent,
 } from '../api/types';
 import { TimelineItem, reducePlan, reduceSSEEvent } from '../features/agent/eventReducer';
@@ -38,7 +40,7 @@ export interface RunSession {
   projectId?: string | null;
   status: RunStatus;
   streamStatus?: StreamStatus;
-  scope: RunScope;
+  scope: RunScope | CreateRunScopeInput;
   mode: RunMode;
   timelineItems: TimelineItem[];
   pendingQuestion: { id: string; prompt: string } | null;
@@ -62,7 +64,7 @@ export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   projectId: null,
   status: 'idle',
   streamStatus: 'idle',
-  scope: { artifact: 'ppt', level: 'slide' },
+  scope: { object: 'presentation', selection: { kind: 'current_page' } },
   mode: 'execute',
   timelineItems: [],
   pendingQuestion: null,
@@ -238,10 +240,27 @@ function requestFromTimeline(
     Boolean(item.mode) &&
     (!runId || item.runId === runId));
   if (!original || original.type !== 'user_turn' || !original.scope || !original.mode) return undefined;
+  let scope: CreateRunScopeInput;
+  if ('selection' in original.scope) {
+    scope = original.scope as CreateRunScopeInput;
+  } else {
+    const normalized = original.scope;
+    const source = normalized.source;
+    scope = {
+      object: normalized.object,
+      selection: normalized.object === 'global' || source.kind === 'all_pages'
+        ? { kind: 'all_pages' }
+        : source.kind === 'current_page'
+          ? { kind: 'current_page', current_slide_id: normalized.slide_ids[0] }
+          : source.kind === 'custom_sections' && source.section_ids?.length
+            ? { kind: 'custom_sections', section_ids: source.section_ids }
+            : { kind: 'custom_pages', slide_ids: normalized.slide_ids },
+    };
+  }
   return {
     client_request_id: newClientIdentity('req'),
     ...(model ? { model } : {}),
-    scope: original.scope as RunScope,
+    scope,
     mode: original.mode as RunMode,
     instruction: original.text,
     ...(original.skills?.length ? { skill_ids: original.skills.map((skill) => skill.id) } : {}),
@@ -266,6 +285,7 @@ interface RunStoreV2 {
     commandHash: string,
     decision: 'allow_once' | 'deny',
   ) => Promise<boolean>;
+  answerScopeExpansion: (threadId: string, runId: string, payload: ScopeExpansionRequest) => Promise<boolean>;
   cancelRun: (threadId: string, runId: string, reason?: RunCancelReason) => Promise<boolean>;
   steerRun: (threadId: string, runId: string, content: string, clientMessageId: string) => Promise<boolean>;
   retryRun: (threadId: string) => Promise<boolean>;
@@ -590,6 +610,15 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
                     : '已拒绝命令执行，Agent 正在调整',
                 };
               }
+            } else if (event.event === 'scope.expansion_requested') {
+              status = prev.status === 'canceling' ? 'canceling' : 'waiting';
+              pendingQuestion = null;
+              progress = null;
+            } else if (event.event === 'scope.expansion_answered') {
+              if (prev.status !== 'canceling') {
+                status = 'running';
+                progress = { stage: 'thinking', text: event.data.decision === 'reject' ? '范围申请已拒绝，Agent 正在调整' : '范围已更新，继续执行中' };
+              }
             } else if (event.event === 'run.resumed') {
               if (prev.status !== 'canceling') status = 'recovering';
               progress = null;
@@ -632,6 +661,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               processedEventIds: event.id
                 ? [...(prev.processedEventIds ?? []), event.id].slice(-500)
                 : prev.processedEventIds,
+              ...(event.event === 'scope.updated' ? { scope: event.data.scope } : {}),
             };
           });
 
@@ -939,6 +969,29 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         } catch {
           // The existing timeline remains usable when an authoritative refresh is unavailable.
         }
+        return false;
+      }
+    },
+
+    answerScopeExpansion: async (threadId, runId, payload) => {
+      try {
+        await runsApi.submitScopeExpansion(runId, payload);
+        updateSession(threadId, (prev) => ({
+          status: prev.status === 'canceling' ? 'canceling' : 'running',
+          progress: prev.status === 'canceling' ? prev.progress : {
+            stage: 'thinking',
+            text: payload.decision === 'reject' ? '范围申请已拒绝，Agent 正在调整' : '范围已更新，继续执行中',
+          },
+          timelineItems: prev.timelineItems.map((item) => item.type === 'scope_expansion'
+            && item.interactionId === payload.interaction_id
+            && item.callId === payload.call_id
+            ? { ...item, answer: { decision: payload.decision } }
+            : item),
+        }));
+        return true;
+      } catch (error) {
+        const detail = errorMessage(error);
+        showGlobalError(localizedErrorMessage(detail.message, '范围审批提交失败，请重试'));
         return false;
       }
     },

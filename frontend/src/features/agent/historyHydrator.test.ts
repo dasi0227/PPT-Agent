@@ -42,7 +42,7 @@ describe('history hydrator', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
         text: '生成 PPT',
-        scope: { artifact: 'ppt', level: 'deck' },
+        scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
         mode: 'execute',
         skills: [{
           id: 'story',
@@ -100,7 +100,7 @@ describe('history hydrator', () => {
   it('restores resume history and a superseded paused terminal', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
-        text: '继续生成', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute',
+        text: '继续生成', scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute',
       }),
       entry(2, 'run.resumed', base),
       entry(3, 'run.canceled', terminal('r1', { reason: 'superseded' })),
@@ -134,7 +134,7 @@ describe('history hydrator', () => {
 
   it('accepts canonical targets and rejects legacy deck targets', () => {
     const valid = hydrateRunFromHistory([
-      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
+      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute' }),
       entry(2, 'run.error', terminal('r1', {
         affected_targets: [{ type: 'deck', part: 'manifest' }],
         error: { code: 'COMMIT_FAILED', message: '保存失败', retryable: true },
@@ -146,7 +146,7 @@ describe('history hydrator', () => {
     expect(valid.session.status).toBe('error');
 
     const legacy = hydrateRunFromHistory([
-      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute' }),
+      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute' }),
       entry(2, 'run.error', terminal('r1', {
         affected_targets: [{ type: 'deck', part: 'deck' }],
         error: { code: 'COMMIT_FAILED', message: '不应展示', retryable: true },
@@ -162,7 +162,7 @@ describe('history hydrator', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
         text: '开始',
-        scope: { artifact: 'ppt', level: 'deck' },
+        scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
         mode: 'execute',
       }),
       entry(2, 'steering', {
@@ -190,7 +190,7 @@ describe('history hydrator', () => {
     };
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
-        text: '先规划再执行', scope: { artifact: 'ppt', level: 'deck' }, mode: 'plan',
+        text: '先规划再执行', scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'plan',
       }),
       entry(2, 'plan.updated', { ...base, plan }),
       entry(3, 'plan.approval_requested', { ...base, interaction_id: 'i1', plan }),
@@ -224,7 +224,7 @@ describe('history hydrator', () => {
     });
     const pending = hydrateRunFromHistory([
       entry(1, 'user_turn', {
-        text: '更新文件', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute',
+        text: '更新文件', scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute',
       }),
       requested,
     ]);
@@ -233,7 +233,7 @@ describe('history hydrator', () => {
 
     const answered = hydrateRunFromHistory([
       entry(1, 'user_turn', {
-        text: '更新文件', scope: { artifact: 'ppt', level: 'deck' }, mode: 'execute',
+        text: '更新文件', scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute',
       }),
       requested,
       entry(3, 'command.permission_answered', {
@@ -252,14 +252,14 @@ describe('history hydrator', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
         text: '第一轮',
-        scope: { artifact: 'ppt', level: 'deck' },
+        scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
         mode: 'execute',
       }, 'old'),
       entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成' }, 'old'),
       entry(3, 'run.completed', terminal('old'), 'old'),
       entry(1, 'user_turn', {
         text: '第二轮',
-        scope: { artifact: 'ppt', level: 'slide', slide_id: 's2' },
+        scope: { object: 'presentation', slide_ids: ['sli_2'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 },
         mode: 'grill',
       }, 'new'),
       entry(2, 'question.asked', {
@@ -275,7 +275,7 @@ describe('history hydrator', () => {
       activeRunId: 'new',
       status: 'waiting',
       pendingQuestion: { id: 'q2', prompt: '请选择方向' },
-      scope: { level: 'slide', slide_id: 's2' },
+      scope: { object: 'presentation', slide_ids: ['sli_2'], source: { kind: 'current_page' } },
     });
     expect(hydrated.lastEventId).toBe('2');
     expect(hydrated.plan).toBeNull();

@@ -22,6 +22,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { BriefingActivity } from './BriefingActivity';
 import { ContextCompactionActivity } from './ContextCompactionActivity';
+import { ScopeExpansionCard } from './ScopeExpansionCard';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -145,9 +146,7 @@ export const Timeline: React.FC = () => {
                   text={item.text}
                   timestamp={item.timestamp}
                   label="复制用户消息"
-                  scopeLabel={item.scope
-                    ? targetLabel(item.scope.artifact as 'spec' | 'ppt', item.scope.level as 'slide' | 'deck')
-                    : undefined}
+                  scopeLabel={item.scope ? targetLabel(item.scope) : undefined}
                 />
               </div>
             </div>
@@ -170,6 +169,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'question' && <QuestionPanel item={item} />}
         {item.type === 'plan_approval' && <PlanApproval item={item} />}
         {item.type === 'command_permission' && <CommandPermissionCard item={item} />}
+        {item.type === 'scope_expansion' && <ScopeExpansionCard item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
         {item.type === 'git_commit' && <GitCommitEvent item={item} />}

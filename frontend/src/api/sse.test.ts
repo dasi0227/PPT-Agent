@@ -17,7 +17,7 @@ const terminal = {
 const payloads: Record<string, unknown> = {
   'run.started': {
     ...base,
-    scope: { artifact: 'ppt', level: 'deck' },
+    scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
     mode: 'execute',
     user_input: '生成 PPT',
     skills: [{ id: 'story', name: '演示叙事', description: '梳理页面叙事。' }],
@@ -33,6 +33,9 @@ const payloads: Record<string, unknown> = {
   'plan.approval_answered': { ...base, interaction_id: 'i1', plan_id: 'p1', revision: 1, decision: 'approve' },
   'command.permission_requested': { ...base, interaction_id: 'cp1', call_id: 'c2', command: 'cat .env', command_hash: 'sha256:abc', reason_code: 'SENSITIVE_READ', reason: '该命令将读取敏感文件。' },
   'command.permission_answered': { ...base, interaction_id: 'cp1', call_id: 'c2', command_hash: 'sha256:abc', decision: 'allow_once' },
+  'scope.expansion_requested': { ...base, interaction_id: 'se1', call_id: 'c3', base_revision: 1, current_scope: { object: 'html', slide_ids: ['sli_1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 }, requested_addition: { slide_ids: ['sli_2'] }, proposed_scope: { object: 'html', slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 }, affected_page_count: 2, reason: '需要同步第二页' },
+  'scope.expansion_answered': { ...base, interaction_id: 'se1', call_id: 'c3', base_revision: 1, decision: 'approve', applied_scope: { object: 'html', slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 } },
+  'scope.updated': { ...base, previous_scope: { object: 'html', slide_ids: ['sli_1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 }, scope: { object: 'html', slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 }, cause: 'user_approved_expansion' },
   'run.mode_changed': { ...base, previous_mode: 'plan', mode: 'execute' },
   'message.reasoning': { ...base, message_id: 'm1', text: '先确认全局设计。' },
   'message.milestone': { ...base, message_id: 'm2', text: '全局设计已完成。', completed_step_ids: ['s1'] },
@@ -62,8 +65,8 @@ const payloads: Record<string, unknown> = {
 };
 
 describe('SSE parser', () => {
-  it('registers and parses all 22 public events', () => {
-	  expect(SSE_EVENT_NAMES).toHaveLength(22);
+  it('registers and parses all 25 public events', () => {
+	  expect(SSE_EVENT_NAMES).toHaveLength(25);
     for (const eventName of SSE_EVENT_NAMES) {
       expect(parseSSEEvent(eventName, JSON.stringify(payloads[eventName]), '12')).toMatchObject({
         id: '12',

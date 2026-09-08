@@ -7,6 +7,7 @@ import {
   Run,
   RunCancelReason,
   RunInputPayload,
+  ScopeExpansionRequest,
   SteerRunRequest,
   SteerRunResponse,
 } from './types';
@@ -32,6 +33,10 @@ export const runsApi = {
       method: 'POST',
       body: JSON.stringify(payload),
       reportError: false,
+    }),
+  submitScopeExpansion: (runId: string, payload: ScopeExpansionRequest) =>
+    fetchClient<void>(`/runs/${runId}/scope-expansion`, {
+      method: 'POST', body: JSON.stringify(payload), reportError: false,
     }),
   steer: (runId: string, payload: SteerRunRequest) => fetchClient<SteerRunResponse>(`/runs/${runId}/steer`, {
     method: 'POST',
