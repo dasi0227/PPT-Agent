@@ -130,9 +130,10 @@ func NewRunTerminalPayloadFromBase(base PublicEventBase, durationMS int64, affec
 }
 
 type PublicPlanStep struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	ID             string   `json:"id"`
+	Title          string   `json:"title"`
+	Status         string   `json:"status"`
+	TargetSlideIDs []string `json:"target_slide_ids,omitempty"`
 }
 
 type PublicPlan struct {

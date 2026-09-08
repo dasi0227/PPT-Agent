@@ -101,9 +101,16 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 		Changes         ChangeSet          `json:"changes"`
 		Evidence        []Evidence         `json:"evidence"`
 		Requirements    *RequirementLedger `json:"requirements,omitempty"`
+		Work            []SlideWorkItem    `json:"work_ledger,omitempty"`
 	}{
 		Mode: mode, Phase: req.Phase, ContextBriefing: req.ContextBriefing,
 		Changes: req.Changes, Evidence: req.Evidence, Requirements: req.Requirements,
+		Work: func() []SlideWorkItem {
+			if req.Work == nil {
+				return nil
+			}
+			return req.Work.Snapshot()
+		}(),
 	}
 	if req.Plan != nil {
 		state.Plan = req.Plan

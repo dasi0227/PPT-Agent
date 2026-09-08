@@ -400,8 +400,8 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) Too
 
 // mutationOperationAllowed is the single scope rule used both to disclose a
 // mutate_ppt schema variant and to authorize the decoded mutation request.
-// In particular, deck scope does not override artifact=spec: spec runs must
-// never receive or execute slide HTML mutations.
+// Page coverage and object capabilities are independent: spec-only runs must
+// never receive or execute slide HTML mutations, even when every page is in scope.
 func mutationOperationAllowed(scope model.RunScope, op, slideID string) bool {
 	if strings.HasPrefix(op, "manifest.") || strings.HasPrefix(op, "outline.") || strings.HasPrefix(op, "design.") {
 		return scope.AllowsGlobal()

@@ -179,7 +179,7 @@ func (r *Runtime) runReviewCompletion(
 		Mode: state.mode, FinishPhase: state.phase, ActiveTools: state.activeTools,
 		Issues: state.issues, Scope: state.scope, Session: state.tx, Changes: state.changeSet(),
 		Evidence: state.ledger, Context: state.pack, Plan: state.plan,
-		Requirements: state.requirements, FinishMessage: candidateMessage, Canceled: ctx.Err() != nil,
+		Requirements: state.requirements, Work: state.work, FinishMessage: candidateMessage, Canceled: ctx.Err() != nil,
 	})
 	reviewCommand := state.pack.Command
 	reviewCommand.Skills = nil

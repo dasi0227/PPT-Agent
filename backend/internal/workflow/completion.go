@@ -51,6 +51,7 @@ type CompletionContext struct {
 	Context       contextengine.ContextPack
 	Plan          *Plan
 	Requirements  *RequirementLedger
+	Work          *WorkLedger
 	FinishMessage string
 	Canceled      bool
 }
@@ -403,6 +404,9 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	}
 	if ctx.Mode == model.ModeExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
 		issues = append(issues, CompletionIssue{Code: "PLAN_NOT_COMPLETE", Summary: "the optional execution plan still has pending, in-progress, or failed steps"})
+	}
+	if ctx.Mode == model.ModeExecute && ctx.Work != nil && ctx.Work.HasBlockingItems() {
+		issues = append(issues, CompletionIssue{Code: "WORK_NOT_COMPLETE", Summary: "the explicit page work ledger still has pending, running, or failed items"})
 	}
 	for _, policy := range g.Policies {
 		issues = append(issues, policy.Check(ctx)...)

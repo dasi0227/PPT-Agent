@@ -98,6 +98,7 @@ type RuntimeCheckpoint struct {
 	ResumePhase           RunPhase                      `json:"resume_phase,omitempty"`
 	Plan                  *Plan                         `json:"plan,omitempty"`
 	Requirements          *RequirementLedger            `json:"requirements,omitempty"`
+	Work                  *WorkLedger                   `json:"work_ledger,omitempty"`
 	Changes               ChangeSet                     `json:"changes"`
 	Evidence              []Evidence                    `json:"evidence"`
 	ContextIndexRef       string                        `json:"context_index_ref,omitempty"`
@@ -148,6 +149,7 @@ type AgentRequest struct {
 	Changes               ChangeSet
 	Evidence              []Evidence
 	Requirements          *RequirementLedger
+	Work                  *WorkLedger
 	ContextBriefing       string
 	ActiveSkills          []model.RunSkill
 	Messages              []llm.Message
@@ -356,6 +358,7 @@ type RunState struct {
 	trace                   TraceRecorder
 	lifecycle               LifecycleObserver
 	requirements            *RequirementLedger
+	work                    *WorkLedger
 	contextIndex            ContextIndex
 	contextIndexRef         string
 	retrievedContext        []RetrievedContextItem
@@ -384,6 +387,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		scope: input.Context.Command.Scope, mode: input.Context.Command.Mode, pack: input.Context, ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
+		work:              NewWorkLedger(),
 		activeSkills:      ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...)},
 		calibrationFactor: 1,
 	}
@@ -423,6 +427,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		if input.ResumeCheckpoint.Requirements != nil {
 			state.requirements = input.ResumeCheckpoint.Requirements
+		}
+		if input.ResumeCheckpoint.Work != nil {
+			state.work = input.ResumeCheckpoint.Work
 		}
 		state.turns = input.ResumeCheckpoint.Turns
 		state.toolCalls = input.ResumeCheckpoint.ToolCalls
@@ -552,6 +559,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			RunID: state.runID, LoopID: state.loopID, Phase: state.phase,
 			Context: state.pack, Mode: state.mode, Plan: state.plan, Changes: state.changeSet(),
 			Evidence: state.ledger.Entries(state.changeSet()), Requirements: state.requirements,
+			Work:                  state.work,
 			ContextBriefing:       state.contextBriefing,
 			ActiveSkills:          append([]model.RunSkill{}, state.activeSkills.Skills...),
 			Messages:              append([]llm.Message{}, state.messages...),
@@ -728,6 +736,7 @@ func (r *Runtime) executeToolBatch(
 	emitTerminal := make([]bool, len(calls))
 	decisions := make([]*ToolDecision, len(calls))
 	approvals := make([]string, len(calls))
+	workTargets := make([][]string, len(calls))
 	projector := ToolPublicProjector{ProjectDir: input.ProjectDir}
 	planStepID := currentPlanStepID(state.plan)
 	var lifecycleMu sync.Mutex
@@ -854,6 +863,10 @@ func (r *Runtime) executeToolBatch(
 			return false
 		}
 		started[index] = true
+		if desc, ok := registry.Descriptor(call.Name); ok && !desc.ReadOnly {
+			workTargets[index] = slideIDsFromArgs(call.Args)
+			state.work.MarkRunning(workTargets[index], state.scope)
+		}
 		lifecycleMu.Lock()
 		r.emitToolProgress(input.Emitter, state, call)
 		if input.Emitter != nil {
@@ -929,8 +942,31 @@ func (r *Runtime) executeToolBatch(
 		if result.Code == "" && !result.OK {
 			result = failedToolResult(CodeCanceled, "run canceled before tool start", false)
 		}
-		result = bindToolErrorObservation(result, call, state.pack)
-		results[index] = result
+		results[index] = bindToolErrorObservation(result, call, state.pack)
+	}
+	type workOutcome struct {
+		ok      bool
+		message string
+	}
+	workOutcomes := map[string]workOutcome{}
+	for index, slideIDs := range workTargets {
+		for _, slideID := range slideIDs {
+			outcome, exists := workOutcomes[slideID]
+			if !exists {
+				outcome.ok = true
+			}
+			outcome.ok = outcome.ok && results[index].OK
+			if !results[index].OK && outcome.message == "" {
+				outcome.message = results[index].Summary
+			}
+			workOutcomes[slideID] = outcome
+		}
+	}
+	for slideID, outcome := range workOutcomes {
+		state.work.Complete([]string{slideID}, outcome.ok, outcome.message)
+	}
+	for index, call := range calls {
+		result := results[index]
 		if started[index] {
 			r.persistToolCall(context.Background(), input, state, call, result)
 		}
@@ -985,6 +1021,35 @@ func (r *Runtime) executeToolBatch(
 		}
 	}
 	return results
+}
+
+func slideIDsFromArgs(args map[string]any) []string {
+	seen := map[string]bool{}
+	var visit func(any)
+	visit = func(value any) {
+		switch typed := value.(type) {
+		case map[string]any:
+			for key, child := range typed {
+				if key == "slide_id" {
+					if id, ok := child.(string); ok && strings.HasPrefix(id, "sli_") {
+						seen[id] = true
+					}
+				}
+				visit(child)
+			}
+		case []any:
+			for _, child := range typed {
+				visit(child)
+			}
+		}
+	}
+	visit(args)
+	out := make([]string, 0, len(seen))
+	for id := range seen {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func bindToolErrorObservation(result ToolResult, call llm.ToolCall, pack contextengine.ContextPack) ToolResult {
@@ -1424,6 +1489,11 @@ func (r *Runtime) executeControl(
 			return StructuredOutcome{}, false
 		}
 		state.plan = &next
+		if err := state.work.SyncPlan(state.plan, state.scope); err != nil {
+			state.plan = nil
+			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
+			return StructuredOutcome{}, false
+		}
 		if input.Emitter != nil {
 			input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(next)})
 		}
@@ -1452,6 +1522,11 @@ func (r *Runtime) executeControl(
 			}
 			previous := state.plan
 			state.plan = &next
+			if err := state.work.SyncPlan(state.plan, state.scope); err != nil {
+				state.plan = previous
+				r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
+				return StructuredOutcome{}, false
+			}
 			if input.Emitter != nil {
 				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(next)})
 				completed := completedPlanSteps(previous, next)
@@ -1478,6 +1553,11 @@ func (r *Runtime) executeControl(
 			next.Status = PlanActive
 		}
 		state.plan = &next
+		if err := state.work.SyncPlan(state.plan, state.scope); err != nil {
+			state.plan = previous
+			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
+			return StructuredOutcome{}, false
+		}
 		if input.Emitter != nil {
 			input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{
 				PublicEventBase: publicBase(state.runID), Plan: publicPlan(next),
@@ -1885,7 +1965,7 @@ func (r *Runtime) finishCandidate(
 		Mode: state.mode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
 		Issues: state.issues, Scope: state.scope, Session: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: state.pack, Plan: state.plan,
-		Requirements: state.requirements, FinishMessage: message, Canceled: ctx.Err() != nil,
+		Requirements: state.requirements, Work: state.work, FinishMessage: message, Canceled: ctx.Err() != nil,
 	})
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{
 		"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,
@@ -2178,7 +2258,7 @@ func (state *RunState) changeSet() ChangeSet {
 func (state *RunState) checkpoint(questionID string, now time.Time) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
-		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Changes: state.changeSet(),
+		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Work: state.work, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
 		ActiveDurationMS:  state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS: state.waitingDurationAt(now).Milliseconds(),
@@ -2615,13 +2695,13 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	if mode == model.ModePlan && phase == PhasePlanning && plan == nil {
 		out = append(out, ToolSchema{Name: "create_plan", Description: "Persist the complete Markdown plan and wait for explicit user approval. Do not call finish.", Parameters: objectSchema([]string{"title", "content", "steps"}, map[string]any{
 			"title": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"},
-			"steps": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"title"}, map[string]any{"title": map[string]any{"type": "string"}})},
+			"steps": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"title"}, map[string]any{"title": map[string]any{"type": "string"}, "target_slide_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}})},
 		})})
 	}
 	if mode == model.ModePlan && phase == PhasePlanning && plan != nil && plan.Status == PlanAwaitingApproval {
 		out = append(out, ToolSchema{Name: "update_plan", Description: "Replace the complete proposed plan after user feedback. Runtime owns IDs and revisions.", Parameters: objectSchema([]string{"title", "content", "steps"}, map[string]any{
 			"title": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"},
-			"steps": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"title"}, map[string]any{"title": map[string]any{"type": "string"}})},
+			"steps": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"title"}, map[string]any{"title": map[string]any{"type": "string"}, "target_slide_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}})},
 		})})
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
@@ -2634,7 +2714,7 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 			}),
 		})
 		if plan == nil {
-			out = append(out, ToolSchema{Name: "update_plan", Description: "Create an optional lightweight execution checklist.", Parameters: objectSchema([]string{"title", "content", "steps"}, map[string]any{"title": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "steps": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"title"}, map[string]any{"title": map[string]any{"type": "string"}})}})})
+			out = append(out, ToolSchema{Name: "update_plan", Description: "Create an optional lightweight execution checklist. Declare target_slide_ids only for pages this step explicitly promises to process.", Parameters: objectSchema([]string{"title", "content", "steps"}, map[string]any{"title": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "steps": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"title"}, map[string]any{"title": map[string]any{"type": "string"}, "target_slide_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}})}})})
 		} else {
 			out = append(out, ToolSchema{
 				Name: "update_plan", Description: "Update only statuses of the approved execution plan; title, content, and steps are locked.",
