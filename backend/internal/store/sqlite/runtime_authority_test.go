@@ -53,7 +53,7 @@ func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
 			Model: "kimi-k3", URL: "https://gateway.example/v1",
 		},
 		Command: model.RunCommand{
-			Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+			Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages),
 			Mode:  model.ModeChat, Instruction: "inspect",
 		},
 		Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1,
@@ -144,7 +144,7 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	if err := s.CreateRun(ctx, model.Run{
 		ID: "run-1", ThreadID: "thread-1", ProjectID: "project-1",
 		Command: model.RunCommand{
-			Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+			Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages),
 			Mode:  model.ModeExecute, Instruction: "test",
 		},
 		Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1,

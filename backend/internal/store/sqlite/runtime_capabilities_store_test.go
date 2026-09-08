@@ -20,7 +20,7 @@ func TestSaveContextIndexConcurrentRetryHasOneSnapshot(t *testing.T) {
 	}
 	if err := s.CreateRun(ctx, model.Run{
 		ID: "r", ThreadID: "t", ProjectID: "p",
-		Command: model.RunCommand{Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck}, Mode: model.ModeExecute},
+		Command: model.RunCommand{Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages), Mode: model.ModeExecute},
 		Status:  model.RunRunning, CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestRuntimeCapabilityStoresRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", Command: model.RunCommand{
-		Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeSlide, SlideID: "s1"},
+		Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeCurrentPage, "s1"),
 		Mode:  model.ModeExecute, Instruction: "edit",
 	}, Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}
 	if err := s.CreateRun(ctx, runModel); err != nil {
@@ -185,7 +185,7 @@ func TestCommitPlanApprovalAtomicallyUpdatesCommandContextAndCheckpoint(t *testi
 		t.Fatal(err)
 	}
 	runModel := model.Run{ID: "plan-run", ThreadID: "t", ProjectID: "p", Command: model.RunCommand{
-		Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+		Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 		Mode:  model.ModePlan, Instruction: "plan then execute",
 	}, Status: model.RunWaiting, CreatedAt: 1, UpdatedAt: 1}
 	if err := s.CreateRun(ctx, runModel); err != nil {
@@ -233,7 +233,7 @@ func TestCommitPlanApprovalRollsBackEveryAuthorityFieldOnFailure(t *testing.T) {
 	}
 	for _, id := range []string{"plan-run", "other-run"} {
 		if err := s.CreateRun(ctx, model.Run{ID: id, ThreadID: "t", ProjectID: "p", Command: model.RunCommand{
-			Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, Mode: model.ModePlan, Instruction: "plan",
+			Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), Mode: model.ModePlan, Instruction: "plan",
 		}, Status: model.RunWaiting, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 			t.Fatal(err)
 		}

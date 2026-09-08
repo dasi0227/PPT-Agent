@@ -299,28 +299,17 @@ func AllowsWrite(scope model.RunScope, target Resource) bool {
 	if target.Type == "file" && target.Part == "content" {
 		return true
 	}
-	if scope.Artifact == model.ArtifactSpec && target.Type == "slide" && target.Part == "html" {
+	if target.Type == "deck" {
+		return scope.AllowsGlobal()
+	}
+	if target.Type != "slide" || !scope.ContainsSlide(target.SlideID) {
 		return false
 	}
-	if scope.Level == model.ScopeDeck {
-		return true
-	}
-	return target.Type == "slide" && target.SlideID == scope.SlideID
+	return (target.Part == "spec" && scope.AllowsSpec()) ||
+		(target.Part == "html" && scope.AllowsHTML())
 }
 
-func AllowsRead(scope model.RunScope, target Resource) bool {
-	if target.Type == "file" && target.Part == "content" {
-		return true
-	}
-	if target.Type == "deck" {
-		return true
-	}
-	if scope.Level == model.ScopeDeck {
-		return true
-	}
-	return target.SlideID == scope.SlideID &&
-		(scope.Artifact == model.ArtifactPPT || target.Part != "html")
-}
+func AllowsRead(model.RunScope, Resource) bool { return true }
 
 func AllowsArtifact(scope model.RunScope, ref ArtifactRef) bool {
 	return AllowsWrite(scope, resourceForArtifact(ref))
@@ -341,7 +330,7 @@ func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode, scope model.
 
 func toolRelevantToRun(name string, mode model.RunMode, scope model.RunScope) bool {
 	if name == "render_slide" {
-		return mode == model.ModeExecute && scope.Artifact == model.ArtifactPPT
+		return mode == model.ModeExecute && scope.AllowsHTML()
 	}
 	return true
 }
@@ -366,8 +355,7 @@ func toolAvailable(desc ToolDescriptor, phase RunPhase, mode model.RunMode, scop
 	if desc.ReadOnly {
 		return true
 	}
-	return mode == model.ModeExecute && phase == PhaseExecuting &&
-		(scope.Artifact == model.ArtifactSpec || scope.Artifact == model.ArtifactPPT)
+	return mode == model.ModeExecute && phase == PhaseExecuting
 }
 
 func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) ToolSchema {
@@ -379,12 +367,14 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) Too
 			props, _ := variant["properties"].(map[string]any)
 			opSchema, _ := props["op"].(map[string]any)
 			op, _ := opSchema["const"].(string)
-			allowed := mutationOperationAllowed(scope, op, scope.SlideID)
+			probeSlideID := ""
+			if len(scope.SlideIDs) > 0 {
+				probeSlideID = scope.SlideIDs[0]
+			}
+			allowed := mutationOperationAllowed(scope, op, probeSlideID)
 			if allowed {
-				if scope.Level == model.ScopeSlide && scope.SlideID != "" {
-					if _, ok := props["slide_id"]; ok {
-						props["slide_id"] = map[string]any{"const": scope.SlideID}
-					}
+				if _, ok := props["slide_id"]; ok && !scope.AllowsGlobal() {
+					props["slide_id"] = map[string]any{"type": "string", "enum": scope.SlideIDs}
 				}
 				filtered = append(filtered, raw)
 			}
@@ -399,10 +389,10 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) Too
 	if _, ok := properties["resource"]; ok {
 		properties["resource"] = resourceSchemaForScope(scope, !readOnly)
 	}
-	if schema.Name == "render_slide" && scope.Level == model.ScopeSlide && scope.SlideID != "" {
+	if schema.Name == "render_slide" && !scope.AllowsGlobal() {
 		properties["slide_id"] = map[string]any{
-			"type": "string", "const": scope.SlideID,
-			"description": "The only slide authorized by the current run scope.",
+			"type": "string", "enum": scope.SlideIDs,
+			"description": "A slide authorized by the current run scope.",
 		}
 	}
 	return schema
@@ -413,24 +403,21 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) Too
 // In particular, deck scope does not override artifact=spec: spec runs must
 // never receive or execute slide HTML mutations.
 func mutationOperationAllowed(scope model.RunScope, op, slideID string) bool {
-	if scope.Artifact == model.ArtifactSpec && strings.HasPrefix(op, "slide.html.") {
+	if strings.HasPrefix(op, "manifest.") || strings.HasPrefix(op, "outline.") || strings.HasPrefix(op, "design.") {
+		return scope.AllowsGlobal()
+	}
+	if !scope.ContainsSlide(slideID) {
 		return false
 	}
-	if scope.Level == model.ScopeDeck {
-		return true
-	}
-	if slideID != scope.SlideID {
-		return false
-	}
-	return strings.HasPrefix(op, "slide.spec.") ||
-		(scope.Artifact == model.ArtifactPPT && strings.HasPrefix(op, "slide.html."))
+	return (strings.HasPrefix(op, "slide.spec.") && scope.AllowsSpec()) ||
+		(strings.HasPrefix(op, "slide.html.") && scope.AllowsHTML())
 }
 
 func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {
 	if err := input.Context.Command.Validate(); err != nil {
 		return failedToolResult(ErrCapabilityDenied.Error(), "RunCommand is invalid: "+err.Error(), false)
 	}
-	if input.Scope != input.Context.Command.Scope || input.Mode != input.Context.Command.Mode {
+	if !input.Scope.Equal(input.Context.Command.Scope) || input.Mode != input.Context.Command.Mode {
 		return failedToolResult(ErrCapabilityDenied.Error(), "tool input scope or mode diverges from the Runtime RunCommand", false)
 	}
 	if !disclosed[name] {

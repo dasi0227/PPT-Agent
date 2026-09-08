@@ -12,7 +12,7 @@ import (
 
 func activeRunSpec() model.RunCommand {
 	return model.RunCommand{
-		Scope:       model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+		Scope:       model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages),
 		Mode:        model.ModeExecute,
 		Instruction: "test",
 	}

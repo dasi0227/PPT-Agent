@@ -133,18 +133,19 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	for _, page := range req.Command.MentionedPages {
 		mentionedIDs[page.SlideID] = true
 	}
-	if req.Command.Scope.Level == model.ScopeSlide {
-		if _, exists := pptspec.FindSlide(outline, req.Command.Scope.SlideID); !exists {
-			return ContextPack{}, fmt.Errorf("%w: slide %s is not present in outline", ErrRequiredMissing, req.Command.Scope.SlideID)
+	if req.Command.Scope.IsSinglePage() {
+		targetID := req.Command.Scope.SlideIDs[0]
+		if _, exists := pptspec.FindSlide(outline, targetID); !exists {
+			return ContextPack{}, fmt.Errorf("%w: slide %s is not present in outline", ErrRequiredMissing, targetID)
 		}
-		target, ok := slides[req.Command.Scope.SlideID]
-		pack.Target = TargetContext{Artifact: req.Command.Scope.Artifact, Level: req.Command.Scope.Level}
+		target, ok := slides[targetID]
+		pack.Target = TargetContext{Object: req.Command.Scope.Object, SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
 		if ok {
 			pack.Target.SlideSpec = &target
 			pack.RelatedSlides = (RelatedSlideLoader{}).Load(outline, slides, target)
 		}
 	} else {
-		pack.Target = TargetContext{Artifact: req.Command.Scope.Artifact, Level: req.Command.Scope.Level}
+		pack.Target = TargetContext{Object: req.Command.Scope.Object, SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
 		for _, summary := range pack.Outline.Summaries {
 			if mentionedIDs[summary.ID] {
 				pack.RelatedSlides = append(pack.RelatedSlides, summary)
@@ -266,14 +267,14 @@ func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextReque
 	for _, loc := range pptspec.FlattenOutline(pack.Outline.Outline) {
 		ids = append(ids, loc.Slide.SlideID)
 	}
-	if req.Command.Scope.Level == model.ScopeSlide {
-		ids = []string{req.Command.Scope.SlideID}
+	if req.Command.Scope.IsSinglePage() {
+		ids = append([]string{}, req.Command.Scope.SlideIDs...)
 	}
 	for _, id := range ids {
 		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(id)))
 		summary, raw, err := (SlideHTMLSummaryLoader{}).Load(path)
 		state, source := loadMaterializationState(project.WorkDir, id, pack.PresentationManifest.Manifest, pack.Outline.Outline, slides[id], *pack.Design.Design)
-		if req.Command.Scope.Level == model.ScopeSlide && id == req.Command.Scope.SlideID {
+		if req.Command.Scope.IsSinglePage() && id == req.Command.Scope.SlideIDs[0] {
 			pack.Target.Materialization = &pptspec.Materialization{State: state, Revisions: source}
 		}
 		if err != nil {
@@ -317,7 +318,7 @@ func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextReque
 		})
 		_ = capturedSummary
 		manifest.Refs = append(manifest.Refs, ref)
-		if req.Command.Scope.Level == model.ScopeSlide && id == req.Command.Scope.SlideID {
+		if req.Command.Scope.IsSinglePage() && id == req.Command.Scope.SlideIDs[0] {
 			pack.Target.SlideHTMLSummary = &summary
 			pack.Target.SlideHTMLRef = &ref
 			fullTokens := ref.EstimatedTokens[DetailFull]

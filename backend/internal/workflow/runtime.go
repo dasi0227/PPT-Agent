@@ -691,7 +691,7 @@ func (r *Runtime) executeToolBatch(
 	disclosed map[string]bool,
 	calls []llm.ToolCall,
 ) []ToolResult {
-	if state.pack.Command.Scope.Artifact == "" {
+	if state.pack.Command.Scope.Object == "" {
 		state.pack = input.Context
 	}
 	if state.mode == "" {

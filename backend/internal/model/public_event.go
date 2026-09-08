@@ -361,12 +361,16 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if !ok {
 			return errors.New("run scope is required")
 		}
+		rawScope, err := json.Marshal(scope)
+		if err != nil {
+			return err
+		}
+		var runScope RunScope
+		if err := json.Unmarshal(rawScope, &runScope); err != nil {
+			return errors.New("run scope is invalid")
+		}
 		command := RunCommand{
-			Scope: RunScope{
-				Artifact: Artifact(stringValue(scope["artifact"])),
-				Level:    ScopeLevel(stringValue(scope["level"])),
-				SlideID:  stringValue(scope["slide_id"]),
-			},
+			Scope:       runScope,
 			Mode:        RunMode(stringValue(data["mode"])),
 			Instruction: stringValue(data["user_input"]),
 		}

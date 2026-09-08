@@ -284,9 +284,9 @@ func (fakeWriteTool) Schema() ToolSchema {
 }
 
 func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
-	ref := ArtifactRef{Kind: t.kind, ID: "s1", Path: model.SlideSpecPath("s1")}
+	ref := ArtifactRef{Kind: t.kind, ID: "sli_1", Path: model.SlideSpecPath("sli_1")}
 	if t.kind == ArtifactSlideHTML {
-		ref.Path = model.SlideHTMLPath("s1")
+		ref.Path = model.SlideHTMLPath("sli_1")
 	}
 	content := []byte(stringValue(input.Args["content"]))
 	if len(content) == 0 {
@@ -302,14 +302,14 @@ func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		part = "html"
 	}
 	result.ChangedTargets = []ChangedTarget{{
-		Type: "slide", SlideID: "s1", Part: part, Hash: change.AfterHash, Fields: []string{part},
+		Type: "slide", SlideID: "sli_1", Part: part, Hash: change.AfterHash, Fields: []string{part},
 	}}
 	if input.Args["evidence"] != false {
 		kind := "schema"
 		if t.kind == ArtifactSlideHTML {
 			kind = "static"
 		}
-		result.Evidence = []Evidence{newEvidence(kind, Resource{Type: "slide", SlideID: "s1", Part: part}, change.AfterHash)}
+		result.Evidence = []Evidence{newEvidence(kind, Resource{Type: "slide", SlideID: "sli_1", Part: part}, change.AfterHash)}
 	}
 	return result
 }
@@ -321,13 +321,13 @@ func (fakeRenderTool) Schema() ToolSchema {
 }
 
 func (fakeRenderTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
-	ref := ArtifactRef{Kind: ArtifactSlideHTML, ID: "s1", Path: model.SlideHTMLPath("s1")}
+	ref := ArtifactRef{Kind: ArtifactSlideHTML, ID: "sli_1", Path: model.SlideHTMLPath("sli_1")}
 	raw, err := input.Session.Read(ref)
 	if err != nil {
 		return failedToolResult("RENDER_FAILED", err.Error(), false)
 	}
 	result := SuccessfulToolResult("rendered")
-	result.Evidence = []Evidence{newEvidence("render", Resource{Type: "slide", SlideID: "s1", Part: "html"}, hashBytes(raw))}
+	result.Evidence = []Evidence{newEvidence("render", Resource{Type: "slide", SlideID: "sli_1", Part: "html"}, hashBytes(raw))}
 	return result
 }
 
@@ -368,7 +368,7 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "chat-explicit-finish", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "分析当前页"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "分析当前页"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
@@ -413,7 +413,7 @@ func TestRuntimePassesOpaqueProviderContinuationWithoutParsingIt(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "opaque-continuation", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "inspect"),
+		Context:     testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "inspect"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
@@ -438,7 +438,7 @@ func TestSteeringInjectsIndependentUserMessagesInAcceptanceOrderBeforeFirstNext(
 	}}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "steer-initial", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "review"),
+		Context:     testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "review"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Steering: steering,
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 1 {
@@ -467,7 +467,7 @@ func TestSteeringWaitsUntilCompleteToolBatchObservation(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "steer-boundary", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "modify"),
+		Context:     testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "modify"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Steering: steering,
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
@@ -495,7 +495,7 @@ func TestToolCallIdempotencyReplaysEvidenceWithoutDuplicateSideEffects(t *testin
 	commits := 0
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "idempotent-tool", ProjectDir: dir,
-		Context:        testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "modify"),
+		Context:        testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "modify"),
 		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
 		Emitter:        events,
 		Idempotency:    idempotencyStore,
@@ -507,7 +507,7 @@ func TestToolCallIdempotencyReplaysEvidenceWithoutDuplicateSideEffects(t *testin
 	if events.count(model.EventToolStarted) != 1 || events.count(model.EventToolCompleted) != 1 {
 		t.Fatalf("tool replay emitted duplicate business lifecycle: %+v", events.events)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("s1")))
+	raw, err := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
 	if err != nil || string(raw) != "idempotent" {
 		t.Fatalf("formal content=%q err=%v", raw, err)
 	}
@@ -554,7 +554,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		}
 		prompt := runtimeSystemPromptForRequest(AgentRequest{
 			Phase: phase, Mode: mode,
-			Context: testPack(mode, model.ArtifactPPT, model.ScopeDeck, false, "检查 Prompt 装配"),
+			Context: testPack(mode, model.ScopeObjectPresentation, model.ScopeAllPages, false, "检查 Prompt 装配"),
 		})
 		if !strings.Contains(prompt, `<prompt_module id="core_runtime_policy" version="`) ||
 			!strings.Contains(prompt, `path="core/core_runtime_policy.md"`) ||
@@ -610,7 +610,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 func TestRuntimePromptAgentContractsDoNotRequireManagedFields(t *testing.T) {
 	prompt := runtimeSystemPromptForRequest(AgentRequest{
 		Phase: PhaseExecuting, Mode: model.ModeExecute,
-		Context: testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeDeck, false, "生成整套演示文稿"),
+		Context: testPack(model.ModeExecute, model.ScopeObjectPresentation, model.ScopeAllPages, false, "生成整套演示文稿"),
 	})
 	prefix := "Authoritative writable model contracts:\n"
 	start := strings.Index(prompt, prefix)
@@ -646,7 +646,7 @@ func TestRuntimePromptAgentContractsDoNotRequireManagedFields(t *testing.T) {
 }
 
 func TestRuntimePromptUsesModeSpecificModulesAndContextBriefing(t *testing.T) {
-	pack := testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeSlide, false, "优化当前页视觉层级")
+	pack := testPack(model.ModeExecute, model.ScopeObjectPresentation, model.ScopeCurrentPage, false, "优化当前页视觉层级")
 	execute := runtimeSystemPromptForRequest(AgentRequest{
 		Phase: PhaseExecuting, Mode: model.ModeExecute,
 		Context: pack, ContextBriefing: "Objective: optimize visual hierarchy",
@@ -672,7 +672,7 @@ func TestRuntimePromptUsesModeSpecificModulesAndContextBriefing(t *testing.T) {
 
 func TestCognitiveAgentPlacesTaskStateOnlyInUserMessage(t *testing.T) {
 	provider := &capturingProvider{}
-	pack := testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "把标题改成季度总结")
+	pack := testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "把标题改成季度总结")
 	plan := &Plan{
 		ID: "plan-trust", Revision: 2, ApprovedRevision: 1, Status: PlanActive,
 		Title: "批准计划", Content: "只修改标题",
@@ -705,7 +705,7 @@ func TestCognitiveAgentPlacesTaskStateOnlyInUserMessage(t *testing.T) {
 
 func TestCognitiveAgentInjectsReferencedComponentHTMLWithTrustBoundary(t *testing.T) {
 	provider := &capturingProvider{}
-	pack := testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeDeck, false, "参考能力卡片")
+	pack := testPack(model.ModeExecute, model.ScopeObjectPresentation, model.ScopeAllPages, false, "参考能力卡片")
 	pack.Command.Components = []model.RunComponent{{
 		ID: "feature-card", Name: "能力卡片", Description: "Feature card",
 		HTML: "<section><h2>Complete component</h2></section>",
@@ -745,7 +745,7 @@ func TestCognitiveAgentInjectsReferencedComponentHTMLWithTrustBoundary(t *testin
 
 func TestCognitiveAgentInjectsMentionedPagePointersWithoutContent(t *testing.T) {
 	provider := &capturingProvider{}
-	pack := testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeDeck, false, "同步修改页面")
+	pack := testPack(model.ModeExecute, model.ScopeObjectPresentation, model.ScopeAllPages, false, "同步修改页面")
 	pack.Command.MentionedPages = []model.MentionedPage{{
 		Kind: "slide", SlideID: "sli_a", Ordinal: 3, Title: "融资历程",
 		SpecState: "ready", HTMLState: "spec_stale",
@@ -783,7 +783,7 @@ func TestCognitiveAgentInjectsMentionedPagePointersWithoutContent(t *testing.T) 
 }
 
 func TestEveryApprovedExecuteTurnInjectsTheFullPlanContract(t *testing.T) {
-	pack := testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeSlide, false, "按批准计划执行")
+	pack := testPack(model.ModeExecute, model.ScopeObjectPresentation, model.ScopeCurrentPage, false, "按批准计划执行")
 	for _, status := range []PlanStatus{PlanActive, PlanCompleted} {
 		plan := &Plan{
 			ID: "plan-1", Revision: 4, ApprovedRevision: 2, Status: status,
@@ -818,7 +818,7 @@ func TestResumeRestoresModeAndFullApprovedPlanBeforeReasoning(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
 	_ = NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "resume-approved", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeDeck, false, "继续执行"),
+		Context: testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeAllPages, false, "继续执行"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
 			RunID: "resume-approved", LoopID: "same-loop", Mode: model.ModeExecute,
 			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Plan: plan,
@@ -846,14 +846,14 @@ func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 	committed := false
 	_ = NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "resume-pending", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModePlan, model.ArtifactSpec, model.ScopeDeck, false, "继续审批"),
+		Context: testPack(model.ModePlan, model.ScopeObjectSpec, model.ScopeAllPages, false, "继续审批"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
 			RunID: "resume-pending", LoopID: "pending-loop", Mode: model.ModePlan,
 			Phase: PhaseWaitingInput, ResumePhase: PhaseWaitingInput, Plan: plan,
 		},
 		Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
-			return testPack(mode, model.ArtifactSpec, model.ScopeDeck, false, "继续审批"), nil
+			return testPack(mode, model.ScopeObjectSpec, model.ScopeAllPages, false, "继续审批"), nil
 		},
 		CommitPlanApproval: func(_ context.Context, _ model.RunMode, _ contextengine.ContextPack, checkpoint RuntimeCheckpoint) error {
 			committed = checkpoint.Plan != nil && checkpoint.Plan.ApprovedRevision == 3
@@ -872,7 +872,7 @@ func TestAgentRequestCarriesContextBriefingAndRequirementLedger(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "briefing", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "分析当前页结构"),
+		Context:     testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "分析当前页结构"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 1 {
@@ -895,7 +895,7 @@ func TestFinishMessageEmptyRejectsEmptyMessage(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "strict-finish", ProjectDir: t.TempDir(),
-		Context:         testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "给出完整分析"),
+		Context:         testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeAllPages, false, "给出完整分析"),
 		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
 		SemanticReviews: acceptingReviewer{},
 	})
@@ -912,7 +912,7 @@ func TestExecuteFinishWithoutChangesIsAllowedByGate(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "execute-no-change", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		Context:     testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
@@ -934,7 +934,7 @@ func TestReviewCompletionReturnsChecksToSameLoop(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "review-tool", ProjectDir: t.TempDir(),
-		Context:         testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeDeck, false, "检查执行结果"),
+		Context:         testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeAllPages, false, "检查执行结果"),
 		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
 		SemanticReviews: reviewer,
 	})
@@ -958,7 +958,7 @@ func TestRuntimeStopsImmediatelyWhenAnExposedToolHitsPolicyDenial(t *testing.T) 
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID:       "policy-denial",
 		ProjectDir:  t.TempDir(),
-		Context:     testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeDeck, false, "apply a change"),
+		Context:     testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeAllPages, false, "apply a change"),
 		DomainTools: policyDeniedProvider{},
 		Emitter:     events,
 	})
@@ -988,7 +988,7 @@ func TestExecuteLetsAgentCreatePlanWithoutChangingPhase(t *testing.T) {
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "complex", ProjectDir: dir,
-		Context:         testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "重建当前页结构"),
+		Context:         testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "重建当前页结构"),
 		Emitter:         events,
 		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
 		SemanticReviews: acceptingReviewer{},
@@ -1048,7 +1048,7 @@ func TestPlanStepsNeverCreateAnotherLoop(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "one-loop", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "重建当前页结构"),
+		Context:     testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "重建当前页结构"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	for _, request := range agent.requests {
@@ -1069,7 +1069,7 @@ func TestExecutePlanBlocksFinishUntilAgentCompletesIt(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "plan-gate", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "检查并处理当前页"),
+		Context:     testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "检查并处理当前页"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 4 {
@@ -1089,7 +1089,7 @@ func TestDirectExecuteProducesNoPlan(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "simple", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		Context: testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if events.count(model.EventPlanUpdated) != 0 {
@@ -1107,7 +1107,7 @@ func TestExecuteLetsAgentChoosePlanAfterScopeExpansionSignal(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "upgrade", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		Context: testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || events.count(model.EventPlanUpdated) != 1 {
@@ -1141,7 +1141,7 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "gate-continue", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		Context: testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
@@ -1177,7 +1177,7 @@ func TestStaleEvidenceDoesNotSatisfyGate(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "stale", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ArtifactPPT, model.ScopeSlide, false, "修改当前页文案"),
+		Context:     testPack(model.ModeExecute, model.ScopeObjectPresentation, model.ScopeCurrentPage, false, "修改当前页文案"),
 		DomainTools: fakeProvider{kind: ArtifactSlideHTML},
 	})
 	if outcome.Status != StatusFailed || outcome.Code != CodeGateRejectedRepeated {
@@ -1193,7 +1193,7 @@ func TestIdenticalGateRejectionThreeTimesBlowsFuse(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "fuse", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		Context:     testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Code != CodeGateRejectedRepeated || outcome.Status != StatusFailed {
@@ -1376,7 +1376,7 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 	prompter := &approvingPrompter{}
 	events := &eventRecorder{}
 	commits := 0
-	pack := testPack(model.ModePlan, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行")
+	pack := testPack(model.ModePlan, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "先规划再执行")
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "approval-transition", ProjectDir: dir, Context: pack,
 		Emitter: events, Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
@@ -1384,7 +1384,7 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 			return fakeProvider{kind: ArtifactSlideSpec}
 		},
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
-			fresh := testPack(mode, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行")
+			fresh := testPack(mode, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "先规划再执行")
 			fresh.Manifest.ContextID = "ctx_execute"
 			fresh.Manifest.PackHash = "execute_hash"
 			return fresh, nil
@@ -1437,14 +1437,14 @@ func TestPlanApprovalWaitDoesNotConsumeActiveDurationBudget(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "approval-active-clock", ProjectDir: dir,
-		Context: testPack(model.ModePlan, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"),
+		Context: testPack(model.ModePlan, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "先规划再执行"),
 		Emitter: events, Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 		DomainToolsForContext: func(contextengine.ContextPack) DomainToolProvider {
 			return fakeProvider{kind: ArtifactSlideSpec}
 		},
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
-			return testPack(mode, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"), nil
+			return testPack(mode, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "先规划再执行"), nil
 		},
 		CommitPlanApproval: func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error {
 			return nil
@@ -1469,12 +1469,12 @@ func TestPlanApprovalCommitFailureStaysWaitingAndCanRetry(t *testing.T) {
 	attempts := 0
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "approval-retry", ProjectDir: dir,
-		Context:  testPack(model.ModePlan, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"),
+		Context:  testPack(model.ModePlan, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "先规划再执行"),
 		Emitter:  events,
 		Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
-			return testPack(mode, model.ArtifactSpec, model.ScopeSlide, false, "先规划再执行"), nil
+			return testPack(mode, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "先规划再执行"), nil
 		},
 		CommitPlanApproval: func(_ context.Context, _ model.RunMode, _ contextengine.ContextPack, checkpoint RuntimeCheckpoint) error {
 			attempts++
@@ -1542,7 +1542,7 @@ func (s *recordingContextIndexStore) LatestContextIndex(_ context.Context, runID
 func TestResumeReusesCheckpointContextIndexAcrossRepeatedRecovery(t *testing.T) {
 	runtime := NewRuntime(&scriptedAgent{})
 	store := newRecordingContextIndexStore()
-	pack := testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "resume")
+	pack := testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "resume")
 
 	first := &RunState{runID: pack.Manifest.RunID, loopID: "loop", scope: pack.Command.Scope, pack: pack}
 	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{ContextIndexStore: store}, first); err != nil {
@@ -1604,7 +1604,7 @@ func TestPostCommitCheckpointFailureDoesNotReportCommittedRunAsFailed(t *testing
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "post-commit-checkpoint", ProjectDir: dir,
-		Context:        testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		Context:        testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
 		Checkpoint:     checkpoints,
 		CommitMetadata: func(context.Context, CommitContext) error { return nil },
@@ -1612,7 +1612,7 @@ func TestPostCommitCheckpointFailureDoesNotReportCommittedRunAsFailed(t *testing
 	if outcome.Status != StatusCompleted || checkpoints.failures != 2 {
 		t.Fatalf("outcome=%+v checkpoint_failures=%d", outcome, checkpoints.failures)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("s1")))
+	raw, err := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
 	if err != nil || string(raw) != "committed" {
 		t.Fatalf("committed artifact missing: raw=%q err=%v", raw, err)
 	}
@@ -1628,7 +1628,7 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 	prompter, checkpoints := &fakePrompter{}, &checkpointRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "ask", ProjectDir: dir,
-		Context:  testPack(model.ModeGrill, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
+		Context:  testPack(model.ModeGrill, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "讨论当前页"),
 		Prompter: prompter, Checkpoint: checkpoints, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || prompter.calls != 1 || len(checkpoints.checkpoints) == 0 {
@@ -1663,7 +1663,7 @@ func TestQuestionWaitsDoNotConsumeActiveDurationBudget(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "question-active-clock", ProjectDir: t.TempDir(),
-		Context:  testPack(model.ModeGrill, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
+		Context:  testPack(model.ModeGrill, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "讨论当前页"),
 		Prompter: prompter, Emitter: events, Checkpoint: checkpoints,
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -1700,7 +1700,7 @@ func TestCanceledQuestionWaitKeepsActiveDurationFrozen(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "question-canceled-clock", ProjectDir: t.TempDir(),
-		Context:  testPack(model.ModeGrill, model.ArtifactSpec, model.ScopeSlide, false, "讨论当前页"),
+		Context:  testPack(model.ModeGrill, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "讨论当前页"),
 		Prompter: prompter, Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -1720,7 +1720,7 @@ func TestActiveExecutionStillConsumesDurationBudget(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "active-budget", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "继续分析"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "继续分析"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -1741,7 +1741,7 @@ func TestCheckpointRestoresActiveDurationBudget(t *testing.T) {
 	activeBeforeRestart := 90 * time.Minute
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "restored-active-budget", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "继续分析"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "继续分析"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 		ResumeCheckpoint: &RuntimeCheckpoint{
@@ -1766,14 +1766,14 @@ func TestCommitOnlyAfterGateAcceptance(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "commit", ProjectDir: dir,
-		Context:        testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		Context:        testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
 		CommitMetadata: func(context.Context, CommitContext) error { commits++; return nil },
 	})
 	if outcome.Status != StatusCompleted || commits != 1 {
 		t.Fatalf("outcome=%+v commits=%d", outcome, commits)
 	}
-	raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("s1")))
+	raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
 	if string(raw) != "committed" {
 		t.Fatalf("formal content=%q", raw)
 	}
@@ -1795,11 +1795,11 @@ func TestFailedAndCanceledRunsDiscardOverlayProducts(t *testing.T) {
 			}
 			outcome := NewRuntime(agent).Run(ctx, RuntimeInput{
 				RunID: test.name, ProjectDir: dir,
-				Context:     testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+				Context:     testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 				DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 			})
 			cancel()
-			raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("s1")))
+			raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
 			if string(raw) != "formal" || (test.cancel && outcome.Status != StatusCanceled) || (!test.cancel && outcome.Status != StatusFailed) {
 				t.Fatalf("outcome=%+v formal=%q", outcome, raw)
 			}
@@ -1816,7 +1816,7 @@ func TestProviderErrorAfterContextCancellationFinishesCanceled(t *testing.T) {
 	events := &eventRecorder{}
 	outcome := NewRuntime(cancelingAgent{cancel: cancel}).Run(ctx, RuntimeInput{
 		RunID: "provider-canceled", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		Context:     testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Emitter: events,
 	})
 	if outcome.Status != StatusCanceled || outcome.Code != CodeCanceled {
@@ -1841,7 +1841,7 @@ func TestProviderUnavailableUsesAuthoritativeTransientProjection(t *testing.T) {
 	agent := &scriptedAgent{err: fmt.Errorf("%w: %s", llm.ErrUnavailable, cause)}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "provider-unavailable", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "review"),
+		Context:     testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "review"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Emitter: events,
 	})
 	if outcome.Status != StatusFailed || outcome.Code != "PROVIDER_UNAVAILABLE" {
@@ -1876,7 +1876,7 @@ func TestCancellationPairsEveryStartedToolBeforeCanceledTerminal(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(ctx, RuntimeInput{
 		RunID: "cancel-tool", ProjectDir: t.TempDir(),
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeSlide, false, "search"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "search"),
 		Emitter: emitter, DomainTools: blockingReadProvider{},
 	})
 	if outcome.Status != StatusCanceled || outcome.Code != CodeCanceled {
@@ -1928,7 +1928,7 @@ func TestRunCommandAuditDoesNotRecordOutput(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-audit", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查项目文件"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeAllPages, false, "检查项目文件"),
 		Emitter: events, Trace: traces,
 	})
 	if outcome.Status != StatusCompleted {
@@ -1968,7 +1968,7 @@ func TestRunCommandBatchPreservesTimelineOrder(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-order", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查项目目录"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeAllPages, false, "检查项目目录"),
 		Emitter: events,
 	})
 	if outcome.Status != StatusCompleted {
@@ -2046,7 +2046,7 @@ func TestSensitiveRunCommandRequiresAllowOnceBeforeExecution(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sensitive-allow", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2070,7 +2070,7 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sensitive-deny", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2102,7 +2102,7 @@ func TestAllowedSedCommandCommitsOnlyAtSuccessfulCompletion(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sed-commit", ProjectDir: dir,
-		Context:  testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改项目文件"),
+		Context:  testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改项目文件"),
 		Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2128,7 +2128,7 @@ func TestCanceledSedPermissionLeavesBaselineUnchanged(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sed-cancel", ProjectDir: dir,
-		Context:  testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改项目文件"),
+		Context:  testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改项目文件"),
 		Prompter: prompter,
 	})
 	if outcome.Status != StatusFailed && outcome.Status != StatusCanceled {
@@ -2161,7 +2161,7 @@ func TestCommandPermissionWaitDoesNotConsumeActiveDuration(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "command-permission-clock", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查环境文件"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter, Checkpoint: checkpoints,
 		Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -2223,7 +2223,7 @@ func TestPendingCommandRecoveryRestoresExistingSessionOverlay(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: runID, ProjectDir: dir,
-		Context:          testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "继续运行"),
+		Context:          testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "继续运行"),
 		Prompter:         prompter,
 		ResumeCheckpoint: checkpoint,
 	})
@@ -2245,7 +2245,7 @@ func TestDeniedRunCommandNeverEmitsToolStarted(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-denied", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ArtifactSpec, model.ScopeDeck, false, "检查项目文件"),
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeAllPages, false, "检查项目文件"),
 		Emitter: events,
 	})
 	if outcome.Status != StatusCompleted {
@@ -2277,7 +2277,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 			ToolCalls: []llm.ToolCall{{
 				ID: "write", Name: "mutate_ppt",
 				Args: map[string]any{
-					"target":  map[string]any{"type": "slide", "slide_id": "s1"},
+					"target":  map[string]any{"type": "slide", "slide_id": "sli_1"},
 					"content": "<section>private html</section>",
 				},
 			}},
@@ -2286,7 +2286,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "public", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "修改当前页标题"),
+		Context: testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "修改当前页标题"),
 		Emitter: events, Trace: traces, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
@@ -2355,7 +2355,7 @@ func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "milestone", ProjectDir: dir,
-		Context:         testPack(model.ModeExecute, model.ArtifactSpec, model.ScopeSlide, false, "重建当前页结构"),
+		Context:         testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "重建当前页结构"),
 		Emitter:         events,
 		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
 		SemanticReviews: acceptingReviewer{},
@@ -2376,18 +2376,18 @@ func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
 	}
 }
 
-func testPack(mode model.RunMode, artifact model.Artifact, level model.ScopeLevel, empty bool, instruction string) contextengine.ContextPack {
-	sections := []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{SlideID: "s1", Title: "Old", Role: "content"}}, Subsections: []spec.Subsection{}}}
-	summaries := []contextengine.SlideSummary{{ID: "s1", Title: "Old", State: string(model.MaterializationFresh)}}
+func testPack(mode model.RunMode, object model.ScopeObject, selection model.ScopeSelectionKind, empty bool, instruction string) contextengine.ContextPack {
+	sections := []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{SlideID: "sli_1", Title: "Old", Role: "content"}}, Subsections: []spec.Subsection{}}}
+	summaries := []contextengine.SlideSummary{{ID: "sli_1", Title: "Old", State: string(model.MaterializationFresh)}}
 	if empty {
 		sections, summaries = []spec.Section{}, []contextengine.SlideSummary{}
 	}
-	target := model.RunScope{Artifact: artifact, Level: level}
-	if level == model.ScopeSlide {
-		target.SlideID = "s1"
+	target := model.NewRunScope(object, selection)
+	if selection == model.ScopeCurrentPage {
+		target.SlideIDs = []string{"sli_1"}
 	}
-	slide := &spec.SlideSpec{SchemaVersion: spec.SchemaVersion, Revision: 1, SlideID: "s1"}
-	if empty || level == model.ScopeDeck {
+	slide := &spec.SlideSpec{SchemaVersion: spec.SchemaVersion, Revision: 1, SlideID: "sli_1"}
+	if empty || selection == model.ScopeAllPages {
 		slide = nil
 	}
 	return contextengine.ContextPack{
@@ -2400,13 +2400,13 @@ func testPack(mode model.RunMode, artifact model.Artifact, level model.ScopeLeve
 			SchemaVersion: spec.SchemaVersion, ProjectID: "p1", Sections: sections,
 		}, Summaries: summaries},
 		Target: contextengine.TargetContext{
-			Artifact: artifact, Level: level, SlideSpec: slide,
+			Object: object, SlideIDs: append([]string{}, target.SlideIDs...), SlideSpec: slide,
 			Materialization: &spec.Materialization{State: string(model.MaterializationFresh)},
 		},
 		SlideHTML:  contextengine.SlideHTMLContext{Summaries: map[string]contextengine.HTMLSummary{}},
 		Components: []contextengine.ComponentCandidate{}, RelatedSlides: []contextengine.SlideSummary{},
 		Revisions: contextengine.RevisionRefs{
-			SlideSpecs: map[string]int{"s1": 1}, SlideHTML: map[string]int{"s1": 1},
+			SlideSpecs: map[string]int{"sli_1": 1}, SlideHTML: map[string]int{"sli_1": 1},
 		},
 		Manifest: contextengine.ContextManifest{
 			ContextID: "ctx", RunID: "run", ThreadID: "thread", ProjectID: "p1",
@@ -2420,9 +2420,9 @@ func testPack(mode model.RunMode, artifact model.Artifact, level model.ScopeLeve
 func testProject(t *testing.T, kind ArtifactKind) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := model.SlideSpecPath("s1")
+	path := model.SlideSpecPath("sli_1")
 	if kind == ArtifactSlideHTML {
-		path = model.SlideHTMLPath("s1")
+		path = model.SlideHTMLPath("sli_1")
 	}
 	full := filepath.Join(dir, filepath.FromSlash(path))
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {

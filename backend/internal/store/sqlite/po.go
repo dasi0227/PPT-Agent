@@ -69,26 +69,28 @@ func threadToPO(m model.Thread) threadPO {
 }
 
 type runPO struct {
-	ID                string `gorm:"column:id;primaryKey"`
-	ThreadID          string `gorm:"column:thread_id"`
-	ProjectID         string `gorm:"column:project_id"`
-	ScopeArtifact     string `gorm:"column:scope_artifact"`
-	ScopeLevel        string `gorm:"column:scope_level"`
-	ScopeSlideID      string `gorm:"column:scope_slide_id"`
-	Mode              string `gorm:"column:mode"`
-	RunCommandJSON    string `gorm:"column:run_command_json"`
-	ClientRequestID   string `gorm:"column:client_request_id"`
-	ModelProfileName  string `gorm:"column:model_profile_name"`
-	ModelProvider     string `gorm:"column:model_provider"`
-	ModelName         string `gorm:"column:model_name"`
-	ModelURL          string `gorm:"column:model_url"`
-	CancelRequestedAt *int64 `gorm:"column:cancel_requested_at"`
-	OwnerInstanceID   string `gorm:"column:owner_instance_id"`
-	PauseReason       string `gorm:"column:pause_reason"`
-	PausedAt          *int64 `gorm:"column:paused_at"`
-	Status            string `gorm:"column:status"`
-	CreatedAt         int64  `gorm:"column:created_at"`
-	UpdatedAt         int64  `gorm:"column:updated_at"`
+	ID                           string `gorm:"column:id;primaryKey"`
+	ThreadID                     string `gorm:"column:thread_id"`
+	ProjectID                    string `gorm:"column:project_id"`
+	ScopeObject                  string `gorm:"column:scope_object"`
+	ScopeSlideIDsJSON            string `gorm:"column:scope_slide_ids_json"`
+	ScopeSourceJSON              string `gorm:"column:scope_source_json"`
+	ScopeIncludeRunCreatedSlides int    `gorm:"column:scope_include_run_created_slides"`
+	ScopeRevision                int64  `gorm:"column:scope_revision"`
+	Mode                         string `gorm:"column:mode"`
+	RunCommandJSON               string `gorm:"column:run_command_json"`
+	ClientRequestID              string `gorm:"column:client_request_id"`
+	ModelProfileName             string `gorm:"column:model_profile_name"`
+	ModelProvider                string `gorm:"column:model_provider"`
+	ModelName                    string `gorm:"column:model_name"`
+	ModelURL                     string `gorm:"column:model_url"`
+	CancelRequestedAt            *int64 `gorm:"column:cancel_requested_at"`
+	OwnerInstanceID              string `gorm:"column:owner_instance_id"`
+	PauseReason                  string `gorm:"column:pause_reason"`
+	PausedAt                     *int64 `gorm:"column:paused_at"`
+	Status                       string `gorm:"column:status"`
+	CreatedAt                    int64  `gorm:"column:created_at"`
+	UpdatedAt                    int64  `gorm:"column:updated_at"`
 }
 
 func (runPO) TableName() string { return "runs" }
@@ -113,10 +115,13 @@ func (r runPO) toModel() model.Run {
 
 func runToPO(m model.Run) runPO {
 	raw, _ := json.Marshal(m.Command)
+	slideIDs, _ := json.Marshal(m.Command.Scope.SlideIDs)
+	source, _ := json.Marshal(m.Command.Scope.Source)
 	return runPO{
 		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID,
-		ScopeArtifact: string(m.Command.Scope.Artifact),
-		ScopeLevel:    string(m.Command.Scope.Level), ScopeSlideID: m.Command.Scope.SlideID,
+		ScopeObject: string(m.Command.Scope.Object), ScopeSlideIDsJSON: string(slideIDs),
+		ScopeSourceJSON: string(source), ScopeIncludeRunCreatedSlides: boolInt(m.Command.Scope.IncludeRunCreatedSlides),
+		ScopeRevision:     m.Command.Scope.Revision,
 		Mode:              string(m.Command.Mode),
 		RunCommandJSON:    string(raw),
 		ClientRequestID:   m.ClientRequestID,
@@ -130,6 +135,13 @@ func runToPO(m model.Run) runPO {
 		PausedAt:          int64PtrOrNil(m.PausedAt),
 		Status:            string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func int64PtrOrNil(value int64) *int64 {

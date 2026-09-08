@@ -151,13 +151,13 @@ func playbookID(pack contextengine.ContextPack) string {
 		return "playbook_read_only_planning"
 	case command.Mode != model.ModeExecute:
 		return "playbook_read_only_collaboration"
-	case command.Scope.Artifact == model.ArtifactSpec:
+	case command.Scope.Object == model.ScopeObjectSpec:
 		return "playbook_spec_edit"
-	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeSlide:
+	case command.Scope.AllowsHTML() && command.Scope.IsSinglePage():
 		return "playbook_slide_presentation_edit"
-	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeDeck && len(spec.FlattenOutline(pack.Outline.Outline)) == 0:
+	case command.Scope.AllowsHTML() && !command.Scope.IsSinglePage() && len(spec.FlattenOutline(pack.Outline.Outline)) == 0:
 		return "playbook_empty_deck_generation"
-	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeDeck:
+	case command.Scope.AllowsHTML():
 		return "playbook_deck_coordinated_edit"
 	default:
 		return "playbook_default"
@@ -181,7 +181,7 @@ func resourceContractsModule(pack contextengine.ContextPack) (PromptModule, bool
 }
 
 func resourceContractNames(pack contextengine.ContextPack) []string {
-	if pack.Command.Scope.Level == model.ScopeSlide {
+	if pack.Command.Scope.IsSinglePage() && !pack.Command.Scope.AllowsGlobal() {
 		return []string{pptschema.SlideSpecName}
 	}
 	return []string{pptschema.ManifestName, pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}

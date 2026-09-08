@@ -88,7 +88,7 @@ type CommandOptionsCompletionPolicy struct{}
 
 func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 	command := ctx.Context.Command
-	if ctx.Mode != model.ModeExecute || command.Scope.Level != model.ScopeDeck ||
+	if ctx.Mode != model.ModeExecute || command.Scope.Source.Kind != model.ScopeAllPages ||
 		(command.Options.Language == "" && command.Options.Range == "") {
 		return nil
 	}
@@ -165,7 +165,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
 			}
-			if ctx.Context.Command.Scope.Artifact == model.ArtifactPPT && ctx.Session != nil {
+			if ctx.Context.Command.Scope.AllowsHTML() && ctx.Session != nil {
 				htmlTarget := Resource{Type: "slide", SlideID: change.Artifact.ID, Part: "html"}
 				if specChangeAffectsHTML(ctx.Session, change.Artifact) {
 					if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, change.Artifact.ID) {
@@ -177,7 +177,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
 			}
-			if ctx.Context.Command.Scope.Artifact == model.ArtifactPPT && ctx.Session != nil {
+			if ctx.Context.Command.Scope.AllowsHTML() && ctx.Session != nil {
 				if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
 					for _, location := range spec.FlattenOutline(deck) {
 						slideID := location.Slide.SlideID

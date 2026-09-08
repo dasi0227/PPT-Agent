@@ -23,11 +23,11 @@ func NewPolishHandler(svc *service.PolishService) *PolishHandler {
 }
 
 type polishRequest struct {
-	Instruction string         `json:"instruction"`
-	ThreadID    string         `json:"thread_id"`
-	Scope       model.RunScope `json:"scope"`
-	Mode        model.RunMode  `json:"mode"`
-	Model       string         `json:"model"`
+	Instruction string                    `json:"instruction"`
+	ThreadID    string                    `json:"thread_id"`
+	Scope       model.CreateRunScopeInput `json:"scope"`
+	Mode        model.RunMode             `json:"mode"`
+	Model       string                    `json:"model"`
 }
 
 func (h *PolishHandler) Polish(c *gin.Context) {
@@ -39,7 +39,7 @@ func (h *PolishHandler) Polish(c *gin.Context) {
 	}
 	result, err := h.svc.Polish(c.Request.Context(), c.Param("id"), service.PolishParams{
 		Instruction: body.Instruction, ThreadID: body.ThreadID,
-		Scope: body.Scope, Mode: body.Mode, Model: body.Model,
+		ScopeInput: body.Scope, Mode: body.Mode, Model: body.Model,
 	})
 	switch {
 	case err == nil:

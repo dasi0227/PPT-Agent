@@ -21,29 +21,29 @@ func (p *countingEmbeddingProvider) Embed(_ context.Context, input []string) ([]
 }
 
 func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
-	scope := model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "s1"}
+	scope := model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_1")
 	index := ContextIndex{RunID: "r", ID: "idx", Items: []ContextIndexItem{
 		{
 			RefID: "target", Kind: "slide_html", Source: "context_index",
-			Target:  Resource{Type: "slide", SlideID: "s1", Part: "html"},
+			Target:  Resource{Type: "slide", SlideID: "sli_1", Part: "html"},
 			Summary: "pricing roadmap and launch story", Freshness: "current",
 			Hash: "h1", TokenCost: map[DetailLevel]int{DetailSummary: 100},
 		},
 		{
 			RefID: "other-slide", Kind: "slide_html", Source: "context_index",
-			Target:  Resource{Type: "slide", SlideID: "s2", Part: "html"},
+			Target:  Resource{Type: "slide", SlideID: "sli_2", Part: "html"},
 			Summary: "pricing roadmap", Freshness: "current",
 			Hash: "h2", TokenCost: map[DetailLevel]int{DetailSummary: 100},
 		},
 		{
 			RefID: "stale", Kind: "slide_html", Source: "context_index",
-			Target:  Resource{Type: "slide", SlideID: "s1", Part: "html"},
+			Target:  Resource{Type: "slide", SlideID: "sli_1", Part: "html"},
 			Summary: "pricing roadmap stale", Freshness: "stale",
 			Hash: "h3", TokenCost: map[DetailLevel]int{DetailSummary: 100},
 		},
 		{
 			RefID: "expensive", Kind: "slide_html", Source: "context_index",
-			Target:  Resource{Type: "slide", SlideID: "s1", Part: "html"},
+			Target:  Resource{Type: "slide", SlideID: "sli_1", Part: "html"},
 			Summary: "pricing roadmap appendix", Freshness: "current",
 			Hash: "h4", TokenCost: map[DetailLevel]int{DetailSummary: 2000},
 		},
@@ -52,14 +52,14 @@ func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
 		Index: index, Scope: scope, Embedder: HashEmbeddingProvider{},
 	}).Retrieve(context.Background(), RetrievalQuery{
 		Command: model.RunCommand{
-			Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "s1"},
+			Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_1"),
 		},
 		QueryText: "pricing roadmap", Limit: 10, DetailBudget: 300,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Results) != 1 || result.Results[0].RefID != "target" {
+	if len(result.Results) != 2 || result.Results[0].RefID != "target" || result.Results[1].RefID != "other-slide" {
 		t.Fatalf("unexpected retrieval result=%+v", result.Results)
 	}
 	if result.Results[0].Score <= 0 || !strings.Contains(result.Results[0].SelectionReason, "current revision") {
@@ -73,7 +73,7 @@ func TestTurnContextRetrievalReusesStableQueryAndInjectsSummary(t *testing.T) {
 	runtime.Embedder = embedder
 	state := &RunState{
 		runID: "r", loopID: "loop", phase: PhaseChat,
-		scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+		scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 		pack: contextengine.ContextPack{
 			Command: model.RunCommand{Instruction: "pricing roadmap"},
 		},

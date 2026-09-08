@@ -95,15 +95,20 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 }
 func errorsIsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
 func resourceSchema() map[string]any  { return resourceSchemaForScope(model.RunScope{}, false) }
-func resourceSchemaForScope(scope model.RunScope, _ bool) map[string]any {
-	variants := []any{objectSchema([]string{"kind"}, map[string]any{"kind": map[string]any{"enum": []string{"manifest", "outline", "design"}}})}
+func resourceSchemaForScope(scope model.RunScope, writeOnly bool) map[string]any {
+	variants := []any{}
+	if !writeOnly || scope.AllowsGlobal() {
+		variants = append(variants, objectSchema([]string{"kind"}, map[string]any{"kind": map[string]any{"enum": []string{"manifest", "outline", "design"}}}))
+	}
 	parts := []string{"spec", "html"}
-	if scope.Artifact == model.ArtifactSpec {
+	if writeOnly && scope.AllowsSpec() && !scope.AllowsHTML() {
 		parts = []string{"spec"}
+	} else if writeOnly && scope.AllowsHTML() && !scope.AllowsSpec() {
+		parts = []string{"html"}
 	}
 	id := map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}
-	if scope.Level == model.ScopeSlide && scope.SlideID != "" {
-		id = map[string]any{"const": scope.SlideID}
+	if writeOnly && !scope.AllowsGlobal() {
+		id = map[string]any{"type": "string", "enum": scope.SlideIDs}
 	}
 	variants = append(variants, objectSchema([]string{"kind", "slide_id", "part"}, map[string]any{"kind": map[string]any{"const": "slide"}, "slide_id": id, "part": map[string]any{"enum": parts}}))
 	return map[string]any{"oneOf": variants}

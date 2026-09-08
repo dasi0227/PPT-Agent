@@ -26,15 +26,15 @@ func NewRunHandler(svc *service.RunService) *RunHandler {
 }
 
 type createRunBody struct {
-	ClientRequestID   string           `json:"client_request_id"`
-	Model             string           `json:"model"`
-	Instruction       string           `json:"instruction"`
-	Scope             model.RunScope   `json:"scope"`
-	Mode              model.RunMode    `json:"mode"`
-	Options           model.RunOptions `json:"options"`
-	SkillIDs          []string         `json:"skill_ids"`
-	ComponentNames    []string         `json:"component_names"`
-	MentionedSlideIDs []string         `json:"mentioned_slide_ids"`
+	ClientRequestID   string                    `json:"client_request_id"`
+	Model             string                    `json:"model"`
+	Instruction       string                    `json:"instruction"`
+	Scope             model.CreateRunScopeInput `json:"scope"`
+	Mode              model.RunMode             `json:"mode"`
+	Options           model.RunOptions          `json:"options"`
+	SkillIDs          []string                  `json:"skill_ids"`
+	ComponentNames    []string                  `json:"component_names"`
+	MentionedSlideIDs []string                  `json:"mentioned_slide_ids"`
 }
 
 type runResponse struct {
@@ -77,7 +77,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
-	if body.Scope.Artifact == "" {
+	if body.Scope.Object == "" {
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "INVALID_SCOPE", Message: "scope is required"})
 		return
 	}
@@ -92,9 +92,9 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		ComponentNames:    body.ComponentNames,
 		MentionedSlideIDs: body.MentionedSlideIDs,
 		Instruction:       body.Instruction,
+		ScopeInput:        &body.Scope,
 		Command: model.RunCommand{
-			Scope: body.Scope, Mode: body.Mode,
-			Instruction: body.Instruction, Options: body.Options,
+			Mode: body.Mode, Instruction: body.Instruction, Options: body.Options,
 		},
 	}
 	r, err := h.svc.CreateRun(c.Request.Context(), threadID, params)

@@ -4,22 +4,44 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
-type Artifact string
+type ScopeObject string
 
 const (
-	ArtifactSpec Artifact = "spec"
-	ArtifactPPT  Artifact = "ppt"
+	ScopeObjectSpec         ScopeObject = "spec"
+	ScopeObjectHTML         ScopeObject = "html"
+	ScopeObjectPresentation ScopeObject = "presentation"
+	ScopeObjectGlobal       ScopeObject = "global"
 )
 
-type ScopeLevel string
+type ScopeSelectionKind string
 
 const (
-	ScopeSlide ScopeLevel = "slide"
-	ScopeDeck  ScopeLevel = "deck"
+	ScopeCurrentPage    ScopeSelectionKind = "current_page"
+	ScopeAllPages       ScopeSelectionKind = "all_pages"
+	ScopeCustomPages    ScopeSelectionKind = "custom_pages"
+	ScopeCustomSections ScopeSelectionKind = "custom_sections"
 )
+
+type ScopeSelectionInput struct {
+	Kind           ScopeSelectionKind `json:"kind"`
+	CurrentSlideID string             `json:"current_slide_id,omitempty"`
+	SlideIDs       []string           `json:"slide_ids,omitempty"`
+	SectionIDs     []string           `json:"section_ids,omitempty"`
+}
+
+type CreateRunScopeInput struct {
+	Object    ScopeObject         `json:"object"`
+	Selection ScopeSelectionInput `json:"selection"`
+}
+
+type ScopeSource struct {
+	Kind       ScopeSelectionKind `json:"kind"`
+	SectionIDs []string           `json:"section_ids,omitempty"`
+}
 
 type RunMode string
 
@@ -47,9 +69,91 @@ const (
 )
 
 type RunScope struct {
-	Artifact Artifact   `json:"artifact"`
-	Level    ScopeLevel `json:"level"`
-	SlideID  string     `json:"slide_id,omitempty"`
+	Object                  ScopeObject `json:"object"`
+	SlideIDs                []string    `json:"slide_ids"`
+	Source                  ScopeSource `json:"source"`
+	IncludeRunCreatedSlides bool        `json:"include_run_created_slides"`
+	Revision                int64       `json:"revision"`
+}
+
+func NewRunScope(object ScopeObject, kind ScopeSelectionKind, slideIDs ...string) RunScope {
+	return RunScope{
+		Object: object, SlideIDs: append([]string{}, slideIDs...), Source: ScopeSource{Kind: kind},
+		IncludeRunCreatedSlides: kind == ScopeAllPages, Revision: 1,
+	}
+}
+
+func (s RunScope) Validate() error {
+	switch s.Object {
+	case ScopeObjectSpec, ScopeObjectHTML, ScopeObjectPresentation, ScopeObjectGlobal:
+	default:
+		return fmt.Errorf("unsupported scope object %q", s.Object)
+	}
+	switch s.Source.Kind {
+	case ScopeCurrentPage, ScopeAllPages, ScopeCustomPages, ScopeCustomSections:
+	default:
+		return fmt.Errorf("unsupported scope source %q", s.Source.Kind)
+	}
+	if s.Revision < 1 {
+		return errors.New("scope revision must be at least 1")
+	}
+	if len(s.SlideIDs) == 0 && s.Object != ScopeObjectGlobal && s.Source.Kind != ScopeAllPages {
+		return errors.New("scope requires at least one slide_id")
+	}
+	seen := make(map[string]bool, len(s.SlideIDs))
+	for _, id := range s.SlideIDs {
+		if !slideIDPattern.MatchString(id) || id == "current" {
+			return fmt.Errorf("invalid stable slide_id %q", id)
+		}
+		if seen[id] {
+			return fmt.Errorf("duplicate slide_id %q", id)
+		}
+		seen[id] = true
+	}
+	if s.Source.Kind == ScopeCustomSections && len(s.Source.SectionIDs) == 0 {
+		return errors.New("custom_sections scope requires section_ids")
+	}
+	if s.Source.Kind != ScopeCustomSections && len(s.Source.SectionIDs) > 0 {
+		return errors.New("section_ids are only valid for custom_sections scope")
+	}
+	if s.Object == ScopeObjectGlobal && s.Source.Kind != ScopeAllPages {
+		return errors.New("global scope must use all_pages")
+	}
+	if s.IncludeRunCreatedSlides != (s.Source.Kind == ScopeAllPages) {
+		return errors.New("include_run_created_slides must match all_pages scope")
+	}
+	return nil
+}
+
+func (s RunScope) ContainsSlide(slideID string) bool {
+	if s.Object == ScopeObjectGlobal {
+		return true
+	}
+	for _, candidate := range s.SlideIDs {
+		if candidate == slideID {
+			return true
+		}
+	}
+	return false
+}
+
+func (s RunScope) AllowsSpec() bool {
+	return s.Object == ScopeObjectSpec || s.Object == ScopeObjectPresentation || s.Object == ScopeObjectGlobal
+}
+
+func (s RunScope) AllowsHTML() bool {
+	return s.Object == ScopeObjectHTML || s.Object == ScopeObjectPresentation || s.Object == ScopeObjectGlobal
+}
+
+func (s RunScope) AllowsGlobal() bool { return s.Object == ScopeObjectGlobal }
+
+func (s RunScope) IsSinglePage() bool { return !s.AllowsGlobal() && len(s.SlideIDs) == 1 }
+
+func (s RunScope) Equal(other RunScope) bool {
+	return s.Object == other.Object && s.Source.Kind == other.Source.Kind &&
+		slices.Equal(s.Source.SectionIDs, other.Source.SectionIDs) &&
+		slices.Equal(s.SlideIDs, other.SlideIDs) &&
+		s.IncludeRunCreatedSlides == other.IncludeRunCreatedSlides && s.Revision == other.Revision
 }
 
 type RunOptions struct {
@@ -116,20 +220,8 @@ type RunCommand struct {
 var ErrInvalidRunCommand = errors.New("invalid run command")
 
 func (c RunCommand) Validate() error {
-	if c.Scope.Artifact != ArtifactSpec && c.Scope.Artifact != ArtifactPPT {
-		return fmt.Errorf("%w: unsupported artifact %q", ErrInvalidRunCommand, c.Scope.Artifact)
-	}
-	if c.Scope.Level != ScopeSlide && c.Scope.Level != ScopeDeck {
-		return fmt.Errorf("%w: unsupported level %q", ErrInvalidRunCommand, c.Scope.Level)
-	}
-	if c.Scope.Level == ScopeSlide && strings.TrimSpace(c.Scope.SlideID) == "" {
-		return fmt.Errorf("%w: slide_id is required for slide scope", ErrInvalidRunCommand)
-	}
-	if c.Scope.Level == ScopeDeck && c.Scope.SlideID != "" {
-		return fmt.Errorf("%w: slide_id is forbidden for deck scope", ErrInvalidRunCommand)
-	}
-	if c.Scope.SlideID == "current" {
-		return fmt.Errorf("%w: current must be resolved to a stable slide_id", ErrInvalidRunCommand)
+	if err := c.Scope.Validate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidRunCommand, err)
 	}
 	switch c.Mode {
 	case ModeChat, ModeGrill, ModePlan, ModeExecute:
@@ -149,8 +241,8 @@ func (c RunCommand) Validate() error {
 	default:
 		return fmt.Errorf("%w: unsupported range %q", ErrInvalidRunCommand, c.Options.Range)
 	}
-	if c.Options.Range != "" && c.Scope.Level != ScopeDeck {
-		return fmt.Errorf("%w: range is only valid for deck scope", ErrInvalidRunCommand)
+	if c.Options.Range != "" && c.Scope.Source.Kind != ScopeAllPages {
+		return fmt.Errorf("%w: range is only valid for all_pages scope", ErrInvalidRunCommand)
 	}
 	if len(c.Skills) > MaxRunSkills {
 		return fmt.Errorf("%w: at most %d skills may be selected", ErrInvalidRunCommand, MaxRunSkills)
@@ -182,9 +274,6 @@ func (c RunCommand) Validate() error {
 	}
 	if len(c.MentionedPages) > MaxMentionedPages {
 		return fmt.Errorf("%w: at most %d pages may be mentioned", ErrInvalidRunCommand, MaxMentionedPages)
-	}
-	if len(c.MentionedPages) > 0 && c.Scope.Level != ScopeDeck {
-		return fmt.Errorf("%w: mentioned pages are only valid for deck scope", ErrInvalidRunCommand)
 	}
 	seenPages := map[string]bool{}
 	for _, page := range c.MentionedPages {

@@ -115,13 +115,13 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	po := runToPO(r)
 	return mapProjectWriteErr(s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
-			 scope_artifact, scope_level, scope_slide_id, mode, run_command_json,
+			 scope_object, scope_slide_ids_json, scope_source_json, scope_include_run_created_slides, scope_revision, mode, run_command_json,
 			 client_request_id, model_profile_name, model_provider, model_name, model_url,
 			 cancel_requested_at, owner_instance_id, pause_reason, paused_at,
 			 status, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		po.ID, po.ThreadID, po.ProjectID, po.ScopeArtifact, po.ScopeLevel,
-		nullIfEmpty(po.ScopeSlideID), po.Mode, po.RunCommandJSON,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		po.ID, po.ThreadID, po.ProjectID, po.ScopeObject, po.ScopeSlideIDsJSON,
+		po.ScopeSourceJSON, po.ScopeIncludeRunCreatedSlides, po.ScopeRevision, po.Mode, po.RunCommandJSON,
 		nullIfEmpty(po.ClientRequestID), nullIfEmpty(po.ModelProfileName),
 		nullIfEmpty(po.ModelProvider), nullIfEmpty(po.ModelName), nullIfEmpty(po.ModelURL),
 		po.CancelRequestedAt, po.OwnerInstanceID, po.PauseReason, po.PausedAt,

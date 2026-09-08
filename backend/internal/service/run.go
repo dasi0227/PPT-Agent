@@ -20,6 +20,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
@@ -226,6 +227,27 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 	command := p.Command
+	var snapshot *spec.ProjectContentSnapshot
+	loadSnapshot := func() (spec.ProjectContentSnapshot, error) {
+		if snapshot != nil {
+			return *snapshot, nil
+		}
+		value, snapshotErr := NewPPTMutationService(svc.store).Snapshot(ctx, project.ID)
+		if snapshotErr == nil {
+			snapshot = &value
+		}
+		return value, snapshotErr
+	}
+	if p.ScopeInput != nil {
+		value, snapshotErr := loadSnapshot()
+		if snapshotErr != nil {
+			return model.Run{}, snapshotErr
+		}
+		command.Scope, err = resolveRunScope(value, *p.ScopeInput)
+		if err != nil {
+			return model.Run{}, err
+		}
+	}
 	if len(p.SkillIDs) > 0 {
 		if svc.skills == nil {
 			return model.Run{}, model.NewAgentError("SKILL_NOT_FOUND", "create_run", nil)
@@ -245,11 +267,11 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		}
 	}
 	if len(p.MentionedSlideIDs) > 0 {
-		snapshot, snapshotErr := NewPPTMutationService(svc.store).Snapshot(ctx, project.ID)
+		value, snapshotErr := loadSnapshot()
 		if snapshotErr != nil {
 			return model.Run{}, snapshotErr
 		}
-		command.MentionedPages, command.DroppedMentionedSlideIDs, err = resolveMentionedPages(snapshot, p.MentionedSlideIDs)
+		command.MentionedPages, command.DroppedMentionedSlideIDs, err = resolveMentionedPages(value, p.MentionedSlideIDs)
 		if err != nil {
 			return model.Run{}, err
 		}
@@ -271,29 +293,12 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			agentErr.Details["next_action"] = "请选择支持工具调用的模型。"
 			return model.Run{}, agentErr
 		}
-		if command.Mode == model.ModeExecute &&
-			command.Scope.Artifact == model.ArtifactPPT &&
+		if command.Mode == model.ModeExecute && command.Scope.AllowsHTML() &&
 			!capabilities.Vision {
 			agentErr := model.NewAgentError("MODEL_CAPABILITY_MISMATCH", "create_run", nil)
 			agentErr.Details["required_capability"] = "vision"
 			agentErr.Details["next_action"] = "请选择标记为支持页面观察的模型。"
 			return model.Run{}, agentErr
-		}
-	}
-	if command.Scope.Level == model.ScopeSlide {
-		slides, err := svc.store.ListSlides(ctx, project.ID)
-		if err != nil {
-			return model.Run{}, err
-		}
-		found := false
-		for _, slide := range slides {
-			if slide.ID == command.Scope.SlideID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return model.Run{}, ErrSlideTargetNotFound
 		}
 	}
 	p.Command, p.Instruction = command, command.Instruction

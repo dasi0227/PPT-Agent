@@ -44,8 +44,9 @@ type CreateRunParams struct {
 	// Theme falls back to project.Theme when omitted.
 	Theme string
 	// Internal deck runner page count.
-	PageCount int
-	Command   RunCommand
+	PageCount  int
+	Command    RunCommand
+	ScopeInput *CreateRunScopeInput
 }
 
 type IdempotencyRecord struct {

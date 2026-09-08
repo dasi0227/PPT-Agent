@@ -91,8 +91,8 @@ type SlideSummary struct {
 }
 
 type TargetContext struct {
-	Artifact         model.Artifact           `json:"artifact"`
-	Level            model.ScopeLevel         `json:"level"`
+	Object           model.ScopeObject        `json:"object"`
+	SlideIDs         []string                 `json:"slide_ids"`
 	SlideSpec        *pptspec.SlideSpec       `json:"slide_spec,omitempty"`
 	Materialization  *pptspec.Materialization `json:"materialization,omitempty"`
 	SlideHTMLSummary *HTMLSummary             `json:"slide_html_summary,omitempty"`

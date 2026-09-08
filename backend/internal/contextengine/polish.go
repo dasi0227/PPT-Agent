@@ -110,14 +110,15 @@ func (a *ContextAssembler) AssemblePolish(
 		slide, ok := slides[loc.Slide.SlideID]
 		pack.Outline.Slides = append(pack.Outline.Slides, slideSummary(loc, slide, ok))
 	}
-	if req.Command.Scope.Level == model.ScopeSlide {
-		target, ok := slides[req.Command.Scope.SlideID]
+	if req.Command.Scope.IsSinglePage() {
+		targetID := req.Command.Scope.SlideIDs[0]
+		target, ok := slides[targetID]
 		if !ok {
-			return PolishContext{}, fmt.Errorf("%w: target slide %s", ErrRequiredMissing, req.Command.Scope.SlideID)
+			return PolishContext{}, fmt.Errorf("%w: target slide %s", ErrRequiredMissing, targetID)
 		}
 		pack.Target.Spec = &target
 		pack.RelatedSlides = (RelatedSlideLoader{}).Load(outline, slides, target)
-		if req.Command.Scope.Artifact == model.ArtifactPPT {
+		if req.Command.Scope.AllowsHTML() {
 			path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(target.SlideID)))
 			if summary, _, loadErr := (SlideHTMLSummaryLoader{}).Load(path); loadErr == nil {
 				pack.Target.HTMLTitle = summary.Title

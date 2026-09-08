@@ -17,20 +17,20 @@ type ContextProfileResolver struct{}
 func (ContextProfileResolver) Resolve(command model.RunCommand) (ContextProfile, error) {
 	var id ProfileID
 	switch {
-	case command.Scope.Artifact == model.ArtifactSpec && command.Scope.Level == model.ScopeDeck:
-		id = ProfileSpecDeck
-	case command.Scope.Artifact == model.ArtifactSpec && command.Scope.Level == model.ScopeSlide:
+	case command.Scope.Object == model.ScopeObjectSpec && command.Scope.IsSinglePage():
 		id = ProfileSpecSlide
-	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeDeck:
-		id = ProfilePPTDeck
-	case command.Scope.Artifact == model.ArtifactPPT && command.Scope.Level == model.ScopeSlide:
+	case command.Scope.Object == model.ScopeObjectSpec:
+		id = ProfileSpecDeck
+	case command.Scope.AllowsHTML() && command.Scope.IsSinglePage():
 		id = ProfilePPTSlide
+	case command.Scope.AllowsHTML() || command.Scope.AllowsGlobal():
+		id = ProfilePPTDeck
 	default:
-		return ContextProfile{}, fmt.Errorf("unsupported context profile: %s/%s", command.Scope.Artifact, command.Scope.Level)
+		return ContextProfile{}, fmt.Errorf("unsupported context profile: %s", command.Scope.Object)
 	}
 	p := ContextProfile{ID: id, Required: map[SegmentKind]bool{
 		SegmentPolicy: true, SegmentRunCommand: true, SegmentPresentationManifest: true, SegmentOutline: true, SegmentDesign: true,
-		SegmentMemory: true, SegmentTarget: command.Scope.Level == model.ScopeSlide,
+		SegmentMemory: true, SegmentTarget: command.Scope.IsSinglePage(),
 	}, Forbidden: map[SegmentKind]bool{}}
 	if id == ProfileSpecDeck || id == ProfileSpecSlide {
 		p.Forbidden[SegmentSlideHTML] = true

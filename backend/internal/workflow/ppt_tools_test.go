@@ -41,7 +41,7 @@ func TestMutatePPTExposesClosedScopedOperations(t *testing.T) {
 	if err := registry.Register(tool, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
-	schemas := registry.Disclose(PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeSlide, SlideID: "sli_aaaaaa"})
+	schemas := registry.Disclose(PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectSpec, model.ScopeCurrentPage, "sli_aaaaaa"))
 	if len(schemas) != 1 {
 		t.Fatalf("schemas=%v", schemas)
 	}
@@ -52,7 +52,8 @@ func TestMutatePPTExposesClosedScopedOperations(t *testing.T) {
 	variants := schemas[0].Parameters["oneOf"].([]any)
 	for _, raw := range variants {
 		props := raw.(map[string]any)["properties"].(map[string]any)
-		if props["slide_id"].(map[string]any)["const"] != "sli_aaaaaa" {
+		values, _ := props["slide_id"].(map[string]any)["enum"].([]string)
+		if len(values) != 1 || values[0] != "sli_aaaaaa" {
 			t.Fatal("slide scope was not bound")
 		}
 	}
@@ -93,7 +94,7 @@ func TestSpecDeckScopeNeverDisclosesOrExecutesHTMLMutation(t *testing.T) {
 	if err := registry.Register(tool, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
-	scope := model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck}
+	scope := model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages)
 	schemas := registry.Disclose(PhaseExecuting, model.ModeExecute, scope)
 	if len(schemas) != 1 {
 		t.Fatalf("schemas=%v", schemas)
@@ -130,21 +131,21 @@ func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
 				name:    "plan deck",
 				phase:   PhasePlanning,
 				mode:    model.ModePlan,
-				scope:   model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+				scope:   model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 				control: controlSchemas(PhasePlanning, model.ModePlan, nil),
 			},
 			{
 				name:    "execute deck",
 				phase:   PhaseExecuting,
 				mode:    model.ModeExecute,
-				scope:   model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+				scope:   model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 				control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
 			},
 			{
 				name:    "execute slide",
 				phase:   PhaseExecuting,
 				mode:    model.ModeExecute,
-				scope:   model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "sli_aaaaaa"},
+				scope:   model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_aaaaaa"),
 				control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
 			},
 		}
@@ -180,10 +181,10 @@ func TestDefaultToolDisclosureUsesTheSamePolicyAsExecution(t *testing.T) {
 		scope model.RunScope
 		want  []string
 	}{
-		{"chat", PhaseChat, model.ModeChat, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "run_command"}},
-		{"plan", PhasePlanning, model.ModePlan, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, []string{"read_ppt", "run_command"}},
-		{"execute spec deck", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck}, []string{"mutate_ppt", "read_ppt", "run_command"}},
-		{"execute ppt slide", PhaseExecuting, model.ModeExecute, model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeSlide, SlideID: "sli_aaaaaa"}, []string{"mutate_ppt", "read_ppt", "render_slide", "run_command"}},
+		{"chat", PhaseChat, model.ModeChat, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), []string{"read_ppt", "run_command"}},
+		{"plan", PhasePlanning, model.ModePlan, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), []string{"read_ppt", "run_command"}},
+		{"execute spec deck", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages), []string{"mutate_ppt", "read_ppt", "run_command"}},
+		{"execute ppt slide", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_aaaaaa"), []string{"mutate_ppt", "read_ppt", "render_slide", "run_command"}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -233,13 +234,13 @@ func TestToolRegistryRejectsIncoherentCapabilityPolicy(t *testing.T) {
 
 func TestToolRegistryRejectsScopeOrModeThatDriftsFromRunCommand(t *testing.T) {
 	pack := mutationPack("pro_aaaaaa", spec.Outline{})
-	pack.Command = model.RunCommand{Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, Mode: model.ModeExecute, Instruction: "read deck"}
+	pack.Command = model.RunCommand{Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), Mode: model.ModeExecute, Instruction: "read deck"}
 	registry := NewToolRegistry()
 	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
 	result := registry.Execute(context.Background(), map[string]bool{"read_ppt": true}, "read_ppt", map[string]any{}, DomainToolInput{
-		Context: pack, Scope: model.RunScope{Artifact: model.ArtifactSpec, Level: model.ScopeDeck},
+		Context: pack, Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages),
 		Mode: model.ModeExecute, Phase: PhaseExecuting,
 	})
 	if result.Code != ErrCapabilityDenied.Error() {
@@ -299,7 +300,7 @@ func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 	}
 	defer session.Discard()
 	pack := mutationPack(projectID, outline)
-	pack.Command = model.RunCommand{Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, Mode: model.ModeExecute, Instruction: "initialize deck"}
+	pack.Command = model.RunCommand{Scope: model.NewRunScope(model.ScopeObjectGlobal, model.ScopeAllPages), Mode: model.ModeExecute, Instruction: "initialize deck"}
 	registry := NewToolRegistry()
 	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
@@ -350,7 +351,7 @@ func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	result := (mutatePPTTool{pack: mutationPack(projectID, outline)}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck}, Args: map[string]any{
+	result := (mutatePPTTool{pack: mutationPack(projectID, outline)}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Scope: model.NewRunScope(model.ScopeObjectGlobal, model.ScopeAllPages), Args: map[string]any{
 		"op": "outline.init", "structure": []any{map[string]any{"id": "sec_agent", "client_ref": "opening", "title": "Opening", "purpose": "Start", "slides": []any{}, "subsections": []any{}}},
 	}})
 	if result.OK || result.Code != CodeContentInvalid {

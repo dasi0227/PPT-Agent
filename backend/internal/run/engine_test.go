@@ -786,7 +786,7 @@ func testRun(id string) model.Run {
 		ID: id, ThreadID: "t1", ProjectID: "p1",
 		Command: model.RunCommand{
 			Instruction: "test",
-			Scope:       model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+			Scope:       model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 			Mode:        model.ModeExecute,
 		},
 	}

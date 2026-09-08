@@ -49,7 +49,7 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 		t.Fatalf("manifest version target is not accepted: %v", err)
 	}
 	runCols := tableColumns(t, db, "runs")
-	for _, want := range []string{"owner_instance_id", "pause_reason", "paused_at"} {
+	for _, want := range []string{"scope_object", "scope_slide_ids_json", "scope_source_json", "scope_include_run_created_slides", "scope_revision", "owner_instance_id", "pause_reason", "paused_at"} {
 		if !runCols[want] {
 			t.Fatalf("runs table missing lifecycle column %q; got %v", want, runCols)
 		}
@@ -61,9 +61,9 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 		t.Fatalf("insert thread: %v", err)
 	}
 	if err := db.Exec(`
-		INSERT INTO runs(id,thread_id,project_id,scope_artifact,scope_level,mode,run_command_json,status,paused_at,created_at,updated_at)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?)
-	`, "paused-run", "pause-thread", "layout-v6", "ppt", "deck", "execute", `{}`, "paused", 2, 1, 2).Error; err != nil {
+		INSERT INTO runs(id,thread_id,project_id,scope_object,scope_slide_ids_json,scope_source_json,scope_include_run_created_slides,scope_revision,mode,run_command_json,status,paused_at,created_at,updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	`, "paused-run", "pause-thread", "layout-v6", "presentation", `[]`, `{"kind":"all_pages"}`, 1, 1, "execute", `{}`, "paused", 2, 1, 2).Error; err != nil {
 		t.Fatalf("paused run status is not accepted: %v", err)
 	}
 	promptCols := tableColumns(t, db, "prompts")

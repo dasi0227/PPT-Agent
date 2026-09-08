@@ -30,7 +30,7 @@ func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.
 	base := model.NewPublicEventBase("resume-run")
 	if err := first.Emit(context.Background(), model.EventRunStarted, model.RunStartedPayload{
 		PublicEventBase: base,
-		Scope:           model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+		Scope:           model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 		Mode:            model.ModePlan, UserInput: "plan",
 	}); err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 		payload any
 	}{
 		{model.EventRunStarted, model.RunStartedPayload{
-			PublicEventBase: base(), Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+			PublicEventBase: base(), Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 			Mode: model.ModeExecute, UserInput: "change title",
 		}},
 		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Stage: "thinking", Text: "正在分析"}},
@@ -171,7 +171,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 		t.Fatal("accepted an event before run.started")
 	}
 	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
-		PublicEventBase: base(), Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+		PublicEventBase: base(), Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 		Mode: model.ModeExecute, UserInput: "go",
 	}); err != nil {
 		t.Fatal(err)

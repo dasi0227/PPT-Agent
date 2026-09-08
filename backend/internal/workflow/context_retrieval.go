@@ -251,7 +251,7 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 		queryText = query.Command.Instruction
 	}
 	scope := r.Scope
-	if scope.Artifact == "" {
+	if scope.Object == "" {
 		scope = query.Command.Scope
 	}
 	allowedKinds := map[string]bool{}
@@ -360,14 +360,14 @@ func retrievalScopeAllows(scope model.RunScope, target Resource) bool {
 }
 
 func resourceForRunScope(target model.RunScope) Resource {
-	if target.Level == model.ScopeSlide {
+	if target.IsSinglePage() {
 		part := "spec"
-		if target.Artifact == model.ArtifactPPT {
+		if target.AllowsHTML() {
 			part = "html"
 		}
-		return Resource{Type: "slide", SlideID: target.SlideID, Part: part}
+		return Resource{Type: "slide", SlideID: target.SlideIDs[0], Part: part}
 	}
-	if target.Artifact == model.ArtifactPPT {
+	if target.AllowsHTML() {
 		return Resource{Type: "deck", Part: "design"}
 	}
 	return Resource{Type: "deck", Part: "outline"}

@@ -32,7 +32,7 @@ func TestPolishEndpointReturnsTextWithoutStartingRun(t *testing.T) {
 		ID string `json:"id"`
 	}
 	decodeResponse(t, response, &thread)
-	body := `{"instruction":"更有冲击力","thread_id":"` + thread.ID + `","scope":{"artifact":"ppt","level":"deck"},"mode":"execute","model":"Polish"}`
+	body := `{"instruction":"更有冲击力","thread_id":"` + thread.ID + `","scope":{"object":"presentation","selection":{"kind":"all_pages"}},"mode":"execute","model":"Polish"}`
 	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/polish", body)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"changed":true`) || !strings.Contains(response.Body.String(), `"prompt_version":"2026-08-23.v1"`) {
 		t.Fatalf("polish response: %d %s", response.Code, response.Body.String())

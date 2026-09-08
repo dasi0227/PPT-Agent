@@ -30,17 +30,12 @@ func NewRequirementLedger(command model.RunCommand) *RequirementLedger {
 	if len(parts) == 0 {
 		parts = []string{strings.TrimSpace(command.Instruction)}
 	}
-	items := make([]RequirementItem, 0, len(parts)+3)
+	items := make([]RequirementItem, 0, len(parts)+2)
 	for index, part := range parts {
 		items = append(items, RequirementItem{
 			ID: fmt.Sprintf("req_%02d", index+1), Text: part, Status: RequirementPending,
 		})
 	}
-	scope := fmt.Sprintf("Scope artifact=%s level=%s", command.Scope.Artifact, command.Scope.Level)
-	if command.Scope.SlideID != "" {
-		scope += " slide_id=" + command.Scope.SlideID
-	}
-	items = append(items, RequirementItem{ID: "req_scope", Text: scope, Status: RequirementSatisfied})
 	if command.Options.Language != "" {
 		items = append(items, RequirementItem{
 			ID: "req_language", Text: "Output language=" + string(command.Options.Language), Status: RequirementPending,

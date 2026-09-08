@@ -68,7 +68,7 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 	payload := RunStartedPayload{
 		PublicEventBase: NewPublicEventBase("r1"),
-		Scope:           RunScope{Artifact: ArtifactPPT, Level: ScopeSlide, SlideID: "s1"},
+		Scope:           NewRunScope(ScopeObjectPresentation, ScopeCurrentPage, "sli_1"),
 		Mode:            ModeExecute,
 		UserInput:       "revise",
 		Skills: []PublicSkill{{
@@ -88,7 +88,7 @@ func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	value := string(raw)
-	for _, want := range []string{`"schema_version":3`, `"scope":`, `"artifact":"ppt"`, `"mode":"execute"`} {
+	for _, want := range []string{`"schema_version":3`, `"scope":`, `"object":"presentation"`, `"mode":"execute"`} {
 		if !strings.Contains(value, want) {
 			t.Fatalf("run.started missing %s: %s", want, value)
 		}
@@ -96,7 +96,7 @@ func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 	if !strings.Contains(value, `"kind":"component"`) || strings.Contains(value, `"html"`) {
 		t.Fatalf("run.started component projection is unsafe: %s", value)
 	}
-	for _, legacy := range []string{`"target":`, `"interaction":`, `"presentation"`} {
+	for _, legacy := range []string{`"target":`, `"interaction":`, `"artifact":`, `"level":`} {
 		if strings.Contains(value, legacy) {
 			t.Fatalf("run.started contains legacy field %s: %s", legacy, value)
 		}

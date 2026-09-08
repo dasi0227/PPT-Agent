@@ -51,7 +51,7 @@ func (PromptCompiler) compile(pack ContextPack, systemPolicy, runtimeState strin
 		projectContext["outline"] = pack.Outline
 	}
 	writeSection("project_context", projectContext)
-	if pack.Target.Artifact != "" {
+	if pack.Target.Object != "" {
 		writeSection("target_context", pack.Target)
 	}
 	writeSection("related_context", pack.RelatedSlides)

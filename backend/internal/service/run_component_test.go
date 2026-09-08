@@ -69,7 +69,7 @@ func TestCreateRunResolvesComponentNamesIntoCommandSnapshot(t *testing.T) {
 		ClientRequestID: "component-request",
 		ComponentNames:  []string{"能力卡片"},
 		Command: model.RunCommand{
-			Scope: model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+			Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 			Mode:  model.ModeExecute, Instruction: "参考能力卡片",
 		},
 	})

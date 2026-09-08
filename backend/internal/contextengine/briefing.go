@@ -20,7 +20,10 @@ func (a *ContextAssembler) AssembleBriefing(
 	return a.AssemblePolish(ctx, PolishContextRequest{
 		ThreadID: req.ThreadID,
 		Command: model.RunCommand{
-			Scope:       model.RunScope{Artifact: model.ArtifactPPT, Level: model.ScopeDeck},
+			Scope: model.RunScope{
+				Object: model.ScopeObjectGlobal, Source: model.ScopeSource{Kind: model.ScopeAllPages},
+				IncludeRunCreatedSlides: true, Revision: 1,
+			},
 			Mode:        model.ModeChat,
 			Instruction: "Generate a project briefing.",
 		},

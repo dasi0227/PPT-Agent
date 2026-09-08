@@ -7,7 +7,7 @@ import (
 
 func TestRunCommandValidation(t *testing.T) {
 	valid := RunCommand{
-		Scope:       RunScope{Artifact: ArtifactPPT, Level: ScopeSlide, SlideID: "stable"},
+		Scope:       NewRunScope(ScopeObjectPresentation, ScopeCurrentPage, "sli_stable"),
 		Mode:        ModeExecute,
 		Instruction: "revise",
 	}
@@ -15,16 +15,16 @@ func TestRunCommandValidation(t *testing.T) {
 		t.Fatalf("valid command rejected: %v", err)
 	}
 	cases := []RunCommand{
-		{Scope: RunScope{Artifact: "generate", Level: ScopeDeck}, Mode: valid.Mode, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: "current"}, Mode: valid.Mode, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeSlide}, Mode: valid.Mode, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck, SlideID: "current"}, Mode: valid.Mode, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck, SlideID: "stable"}, Mode: valid.Mode, Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Mode: "consult", Instruction: "x"},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Mode: valid.Mode, Instruction: "  "},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Mode: valid.Mode, Instruction: "x", Options: RunOptions{Language: "fr-FR"}},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeDeck}, Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: "8-15"}},
-		{Scope: RunScope{Artifact: ArtifactSpec, Level: ScopeSlide, SlideID: "stable"}, Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: SlideRangeFiveToEight}},
+		{Scope: NewRunScope("generate", ScopeAllPages), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope(ScopeObjectSpec, "current"), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope(ScopeObjectSpec, ScopeCurrentPage), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope(ScopeObjectSpec, ScopeCurrentPage, "current"), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope(ScopeObjectSpec, ScopeCustomPages, "stable"), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope(ScopeObjectSpec, ScopeAllPages), Mode: "consult", Instruction: "x"},
+		{Scope: NewRunScope(ScopeObjectSpec, ScopeAllPages), Mode: valid.Mode, Instruction: "  "},
+		{Scope: NewRunScope(ScopeObjectSpec, ScopeAllPages), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Language: "fr-FR"}},
+		{Scope: NewRunScope(ScopeObjectSpec, ScopeAllPages), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: "8-15"}},
+		{Scope: NewRunScope(ScopeObjectSpec, ScopeCurrentPage, "sli_stable"), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: SlideRangeFiveToEight}},
 	}
 	for i, command := range cases {
 		if err := command.Validate(); err == nil {
@@ -35,7 +35,7 @@ func TestRunCommandValidation(t *testing.T) {
 
 func TestRunCommandValidationForMentionedPages(t *testing.T) {
 	valid := RunCommand{
-		Scope: RunScope{Artifact: ArtifactPPT, Level: ScopeDeck}, Mode: ModeExecute, Instruction: "sync",
+		Scope: NewRunScope(ScopeObjectPresentation, ScopeAllPages), Mode: ModeExecute, Instruction: "sync",
 		MentionedPages: []MentionedPage{{
 			Kind: "slide", SlideID: "sli_a-1", Ordinal: 2, Title: "融资历程",
 			SpecState: "ready", HTMLState: "fresh",
@@ -45,7 +45,6 @@ func TestRunCommandValidationForMentionedPages(t *testing.T) {
 		t.Fatalf("valid mentioned page rejected: %v", err)
 	}
 	cases := []RunCommand{
-		{Scope: RunScope{Artifact: ArtifactPPT, Level: ScopeSlide, SlideID: "sli_a"}, Mode: ModeExecute, Instruction: "x", MentionedPages: valid.MentionedPages},
 		{Scope: valid.Scope, Mode: valid.Mode, Instruction: "x", MentionedPages: []MentionedPage{{Kind: "section", SlideID: "sli_a"}}},
 		{Scope: valid.Scope, Mode: valid.Mode, Instruction: "x", MentionedPages: []MentionedPage{{Kind: "slide", SlideID: "current"}}},
 		{Scope: valid.Scope, Mode: valid.Mode, Instruction: "x", MentionedPages: []MentionedPage{{Kind: "slide", SlideID: "sli_a"}, {Kind: "slide", SlideID: "sli_a"}}},
@@ -65,7 +64,7 @@ func TestRunCommandValidationForMentionedPages(t *testing.T) {
 
 func TestRunCommandValidationAcceptsPlanIntentAndOptions(t *testing.T) {
 	command := RunCommand{
-		Scope:       RunScope{Artifact: ArtifactSpec, Level: ScopeDeck},
+		Scope:       NewRunScope(ScopeObjectSpec, ScopeAllPages),
 		Mode:        ModePlan,
 		Instruction: "plan the work",
 		Options:     RunOptions{Language: LanguageChinese, Range: SlideRangeNineToFifteen},
@@ -77,7 +76,7 @@ func TestRunCommandValidationAcceptsPlanIntentAndOptions(t *testing.T) {
 
 func TestRunCommandValidationAcceptsAtMostThreeCompleteUniqueSkills(t *testing.T) {
 	command := RunCommand{
-		Scope: RunScope{Artifact: ArtifactPPT, Level: ScopeDeck},
+		Scope: NewRunScope(ScopeObjectPresentation, ScopeAllPages),
 		Mode:  ModeExecute, Instruction: "build",
 		Skills: []RunSkill{
 			{ID: "one", Name: "One", Description: "First", Content: "Use one."},
@@ -103,7 +102,7 @@ func TestRunCommandValidationAcceptsAtMostThreeCompleteUniqueSkills(t *testing.T
 
 func TestRunCommandValidationRequiresAtMostEightCompleteUniqueComponentNames(t *testing.T) {
 	command := RunCommand{
-		Scope: RunScope{Artifact: ArtifactPPT, Level: ScopeDeck},
+		Scope: NewRunScope(ScopeObjectPresentation, ScopeAllPages),
 		Mode:  ModeExecute, Instruction: "build",
 	}
 	for index := 0; index < MaxRunComponents; index++ {

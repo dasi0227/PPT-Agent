@@ -22,7 +22,7 @@ const polishTimeout = 12 * time.Second
 type PolishParams struct {
 	Instruction string
 	ThreadID    string
-	Scope       model.RunScope
+	ScopeInput  model.CreateRunScopeInput
 	Mode        model.RunMode
 	Model       string
 }
@@ -51,10 +51,6 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if instruction == "" || utf8.RuneCountInString(instruction) > maxPolishInstructionRunes {
 		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_prompt", nil)
 	}
-	command := model.RunCommand{Scope: params.Scope, Mode: params.Mode, Instruction: instruction}
-	if err := command.Validate(); err != nil {
-		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_prompt", err)
-	}
 	project, err := svc.store.GetProject(ctx, projectID)
 	if err != nil {
 		return PolishResult{}, err
@@ -67,6 +63,18 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 		if thread.ProjectID != project.ID {
 			return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_prompt", errors.New("thread does not belong to project"))
 		}
+	}
+	snapshot, err := NewPPTMutationService(svc.store).Snapshot(ctx, project.ID)
+	if err != nil {
+		return PolishResult{}, err
+	}
+	scope, err := resolveRunScope(snapshot, params.ScopeInput)
+	if err != nil {
+		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_prompt", err)
+	}
+	command := model.RunCommand{Scope: scope, Mode: params.Mode, Instruction: instruction}
+	if err := command.Validate(); err != nil {
+		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_prompt", err)
 	}
 	if svc.registry == nil {
 		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_prompt", nil)
