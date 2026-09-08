@@ -50,6 +50,8 @@ const (
 	checkpointAfterUserAnswer         checkpointBoundary = "after_user_answer"
 	checkpointBeforeCommandPermission checkpointBoundary = "before_command_permission"
 	checkpointAfterCommandPermission  checkpointBoundary = "after_command_permission"
+	checkpointBeforeScopeExpansion    checkpointBoundary = "before_scope_expansion"
+	checkpointAfterScopeExpansion     checkpointBoundary = "after_scope_expansion"
 	checkpointAfterReview             checkpointBoundary = "after_review"
 	checkpointAfterWrite              checkpointBoundary = "after_write"
 	checkpointAfterRender             checkpointBoundary = "after_render"

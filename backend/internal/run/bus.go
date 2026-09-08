@@ -34,6 +34,7 @@ type Bus struct {
 	toolCalls       map[string]bool
 	toolNames       map[string]string
 	questions       map[string]bool
+	scopeExpansions map[string]bool
 }
 
 func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
@@ -42,6 +43,7 @@ func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
 		subscribers:   map[int]chan model.Event{},
 		planCompleted: map[string]bool{}, toolCalls: map[string]bool{},
 		toolNames: map[string]string{}, questions: map[string]bool{},
+		scopeExpansions: map[string]bool{},
 	}
 }
 
@@ -80,6 +82,7 @@ func isWhitelistedForHistory(evt model.EventType) bool {
 	switch evt {
 	case model.EventRunStarted, model.EventRunResumed, model.EventPlanUpdated,
 		model.EventPlanApprovalRequested, model.EventPlanApprovalAnswered, model.EventRunModeChanged,
+		model.EventScopeExpansionRequested, model.EventScopeExpansionAnswered, model.EventScopeUpdated,
 		model.EventMessageReasoning, model.EventMessageMilestone, model.EventMessageFinal,
 		model.EventToolStarted, model.EventToolCompleted,
 		model.EventQuestionAsked, model.EventQuestionAnswered,
@@ -236,6 +239,18 @@ func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 		if !exists || answered {
 			return errors.New("question.answered must match a pending question")
 		}
+	case model.EventScopeExpansionRequested:
+		for _, answered := range b.scopeExpansions {
+			if !answered {
+				return errors.New("only one scope expansion may be pending")
+			}
+		}
+	case model.EventScopeExpansionAnswered:
+		interactionID, _ := data["interaction_id"].(string)
+		answered, exists := b.scopeExpansions[interactionID]
+		if !exists || answered {
+			return errors.New("scope.expansion_answered must match a pending request")
+		}
 	case model.EventMessageFinal:
 		if b.cancelRequested {
 			return errors.New("canceled run cannot emit message.final")
@@ -307,6 +322,12 @@ func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
 	case model.EventQuestionAnswered:
 		questionID, _ := data["question_id"].(string)
 		b.questions[questionID] = true
+	case model.EventScopeExpansionRequested:
+		interactionID, _ := data["interaction_id"].(string)
+		b.scopeExpansions[interactionID] = false
+	case model.EventScopeExpansionAnswered:
+		interactionID, _ := data["interaction_id"].(string)
+		b.scopeExpansions[interactionID] = true
 	case model.EventMessageFinal:
 		b.finalCount++
 	case model.EventRunCompleted:

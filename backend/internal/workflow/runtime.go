@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,15 @@ type PlanApprovalResumer interface {
 
 type CommandPermissionPrompter interface {
 	AskCommandPermission(context.Context, model.CommandPermissionRequestedPayload) (model.CommandPermissionAnswer, error)
+}
+
+type ScopeExpansionPrompter interface {
+	AskScopeExpansion(context.Context, model.ScopeExpansionRequestedPayload) (model.ScopeExpansionAnswer, error)
+	ResumeAfterScopeExpansion(context.Context)
+}
+
+type ScopeExpansionResumer interface {
+	ResumeScopeExpansion(context.Context, model.ScopeExpansionRequestedPayload) (model.ScopeExpansionAnswer, error)
 }
 
 type SteeringSource interface {
@@ -80,31 +90,38 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
-	RunID                string                        `json:"run_id"`
-	LoopID               string                        `json:"loop_id"`
-	Boundary             string                        `json:"boundary,omitempty"`
-	Phase                RunPhase                      `json:"phase"`
-	Mode                 model.RunMode                 `json:"mode"`
-	ResumePhase          RunPhase                      `json:"resume_phase,omitempty"`
-	Plan                 *Plan                         `json:"plan,omitempty"`
-	Requirements         *RequirementLedger            `json:"requirements,omitempty"`
-	Changes              ChangeSet                     `json:"changes"`
-	Evidence             []Evidence                    `json:"evidence"`
-	ContextIndexRef      string                        `json:"context_index_ref,omitempty"`
-	ContextBriefing      string                        `json:"context_briefing,omitempty"`
-	MessageSummary       []CheckpointMessage           `json:"message_summary,omitempty"`
-	LatestToolResults    []CheckpointToolResult        `json:"latest_tool_results,omitempty"`
-	ActiveSkills         []model.RunSkill              `json:"active_skills,omitempty"`
-	Turns                int                           `json:"turns"`
-	ToolCalls            int                           `json:"tool_calls"`
-	ActiveDurationMS     int64                         `json:"active_duration_ms"`
-	WaitingDurationMS    int64                         `json:"waiting_duration_ms"`
-	WaitingQuestionID    string                        `json:"waiting_question_id,omitempty"`
-	PendingCommand       *PendingCommandApproval       `json:"pending_command,omitempty"`
-	Session              *RunSessionSnapshot           `json:"session,omitempty"`
-	ProviderContinuation *ProviderContinuationSnapshot `json:"provider_continuation,omitempty"`
-	CompletionFailures   int                           `json:"completion_failures"`
-	CreatedAt            int64                         `json:"created_at"`
+	RunID                 string                        `json:"run_id"`
+	LoopID                string                        `json:"loop_id"`
+	Boundary              string                        `json:"boundary,omitempty"`
+	Phase                 RunPhase                      `json:"phase"`
+	Mode                  model.RunMode                 `json:"mode"`
+	ResumePhase           RunPhase                      `json:"resume_phase,omitempty"`
+	Plan                  *Plan                         `json:"plan,omitempty"`
+	Requirements          *RequirementLedger            `json:"requirements,omitempty"`
+	Changes               ChangeSet                     `json:"changes"`
+	Evidence              []Evidence                    `json:"evidence"`
+	ContextIndexRef       string                        `json:"context_index_ref,omitempty"`
+	ContextBriefing       string                        `json:"context_briefing,omitempty"`
+	MessageSummary        []CheckpointMessage           `json:"message_summary,omitempty"`
+	LatestToolResults     []CheckpointToolResult        `json:"latest_tool_results,omitempty"`
+	ActiveSkills          []model.RunSkill              `json:"active_skills,omitempty"`
+	Turns                 int                           `json:"turns"`
+	ToolCalls             int                           `json:"tool_calls"`
+	ActiveDurationMS      int64                         `json:"active_duration_ms"`
+	WaitingDurationMS     int64                         `json:"waiting_duration_ms"`
+	WaitingQuestionID     string                        `json:"waiting_question_id,omitempty"`
+	PendingCommand        *PendingCommandApproval       `json:"pending_command,omitempty"`
+	PendingScopeExpansion *PendingScopeExpansion        `json:"pending_scope_expansion,omitempty"`
+	Scope                 model.RunScope                `json:"scope"`
+	Session               *RunSessionSnapshot           `json:"session,omitempty"`
+	ProviderContinuation  *ProviderContinuationSnapshot `json:"provider_continuation,omitempty"`
+	CompletionFailures    int                           `json:"completion_failures"`
+	CreatedAt             int64                         `json:"created_at"`
+}
+
+type PendingScopeExpansion struct {
+	Request     model.ScopeExpansionRequestedPayload `json:"request"`
+	ResumePhase RunPhase                             `json:"resume_phase"`
 }
 
 type PendingCommandApproval struct {
@@ -259,6 +276,7 @@ type RuntimeInput struct {
 	PersistMode           func(context.Context, model.RunMode) error
 	DomainToolsForContext func(contextengine.ContextPack) DomainToolProvider
 	CommitPlanApproval    func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error
+	CommitScopeExpansion  func(context.Context, model.RunScope, RuntimeCheckpoint) error
 	Logger                *zap.Logger
 	Transcript            TranscriptStore
 	Calibration           TokenCalibration
@@ -349,6 +367,7 @@ type RunState struct {
 	lastCheckpointAt        time.Time
 	tools                   *ToolRegistry
 	pendingCommand          *PendingCommandApproval
+	pendingScopeExpansion   *PendingScopeExpansion
 	activeSkills            ActiveSkillSet
 	calibrationFactor       float64
 	lastWindow              contextengine.WindowSnapshot
@@ -415,6 +434,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.gateCount = input.ResumeCheckpoint.CompletionFailures
 		state.pendingCommand = input.ResumeCheckpoint.PendingCommand
+		state.pendingScopeExpansion = input.ResumeCheckpoint.PendingScopeExpansion
 		if input.ResumeCheckpoint.ActiveSkills != nil {
 			state.activeSkills.Skills = append([]model.RunSkill{}, input.ResumeCheckpoint.ActiveSkills...)
 		}
@@ -481,6 +501,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	state.tools = registry
 	if state.pendingCommand != nil {
 		if outcome, terminal := r.resumePendingCommand(ctx, input, state); terminal {
+			return outcome
+		}
+	}
+	if state.pendingScopeExpansion != nil {
+		if outcome, terminal := r.awaitScopeExpansion(ctx, input, state, state.pendingScopeExpansion.Request, nil, ""); terminal {
 			return outcome
 		}
 	}
@@ -1512,6 +1537,38 @@ func (r *Runtime) executeControl(
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return StructuredOutcome{}, false
+	case "request_privilege":
+		if state.mode != model.ModeExecute || state.phase != PhaseExecuting {
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege is only available while executing", false))
+			return StructuredOutcome{}, false
+		}
+		var request struct {
+			AddSlideIDs []string          `json:"add_slide_ids"`
+			AddObject   model.ScopeObject `json:"add_object"`
+			Reason      string            `json:"reason"`
+		}
+		raw, _ := json.Marshal(call.Args)
+		if err := json.Unmarshal(raw, &request); err != nil || strings.TrimSpace(request.Reason) == "" || (len(request.AddSlideIDs) == 0 && request.AddObject == "") {
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege requires a reason and at least one scope addition", true))
+			return StructuredOutcome{}, false
+		}
+		proposed, addition, err := proposeScopeExpansion(state.scope, state.pack, request.AddSlideIDs, request.AddObject)
+		if err != nil {
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, err.Error(), true))
+			return StructuredOutcome{}, false
+		}
+		if proposed.Equal(state.scope) {
+			result := SuccessfulToolResult("requested privileges are already included in the active scope")
+			result.Data = map[string]any{"scope": state.scope, "changed": false}
+			r.appendControlObservation(state, call, assistantText, result)
+			return StructuredOutcome{}, false
+		}
+		requestEvent := model.ScopeExpansionRequestedPayload{
+			PublicEventBase: publicBase(state.runID), InteractionID: "scope_" + uuid.NewString(), CallID: call.ID,
+			BaseRevision: state.scope.Revision, CurrentScope: state.scope, RequestedAddition: addition,
+			ProposedScope: proposed, AffectedPageCount: len(proposed.SlideIDs), Reason: strings.TrimSpace(request.Reason),
+		}
+		return r.awaitScopeExpansion(ctx, input, state, requestEvent, &call, assistantText)
 	case "review_completion":
 		mode := state.mode
 		if mode != model.ModePlan && mode != model.ModeExecute {
@@ -1537,6 +1594,275 @@ func (r *Runtime) executeControl(
 		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "unknown runtime control tool", false))
 		return StructuredOutcome{}, false
 	}
+}
+
+func (r *Runtime) awaitScopeExpansion(
+	ctx context.Context,
+	input RuntimeInput,
+	state *RunState,
+	request model.ScopeExpansionRequestedPayload,
+	call *llm.ToolCall,
+	assistantText string,
+) (StructuredOutcome, bool) {
+	prompter, ok := input.Prompter.(ScopeExpansionPrompter)
+	if !ok {
+		if call != nil {
+			r.appendControlObservation(state, *call, assistantText, failedToolResult(CodeInvalidControlCall, "scope expansion requires an interactive prompter", false))
+		}
+		return StructuredOutcome{}, false
+	}
+	state.resumePhase = PhaseExecuting
+	state.pendingScopeExpansion = &PendingScopeExpansion{Request: request, ResumePhase: PhaseExecuting}
+	r.changePhase(input.Emitter, state, PhaseWaitingInput, "scope expansion approval required")
+	if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeScopeExpansion, request.InteractionID); err != nil {
+		return r.fail(input, state, CodeAgentFailed, err), true
+	}
+	state.pauseActiveClock(r.clockNow())
+	var answer model.ScopeExpansionAnswer
+	var err error
+	if call == nil {
+		if resumer, ok := input.Prompter.(ScopeExpansionResumer); ok {
+			answer, err = resumer.ResumeScopeExpansion(ctx, request)
+		} else {
+			answer, err = prompter.AskScopeExpansion(ctx, request)
+		}
+	} else {
+		answer, err = prompter.AskScopeExpansion(ctx, request)
+	}
+	if err != nil {
+		code := CodeAgentFailed
+		if errors.Is(err, context.Canceled) {
+			code = CodeCanceled
+		}
+		return r.fail(input, state, code, err), true
+	}
+	state.resumeActiveClock(r.clockNow())
+	if state.scope.Revision != request.BaseRevision {
+		return r.fail(input, state, CodeAgentFailed, errors.New("scope changed while expansion approval was pending")), true
+	}
+	var applied *model.RunScope
+	if answer.Decision == "approve" {
+		next := request.ProposedScope
+		applied = &next
+	} else if answer.Decision == "adjust" {
+		if answer.AdjustedScope == nil {
+			return r.fail(input, state, CodeAgentFailed, errors.New("adjusted scope is required")), true
+		}
+		next, resolveErr := resolveRuntimeScopeSelection(state.pack, *answer.AdjustedScope)
+		if resolveErr != nil || !scopeContains(next, state.scope) {
+			if resolveErr == nil {
+				resolveErr = errors.New("adjusted scope cannot remove current privileges")
+			}
+			return r.fail(input, state, CodeAgentFailed, resolveErr), true
+		}
+		next.Revision = state.scope.Revision + 1
+		applied = &next
+	}
+	if applied != nil {
+		previous := state.scope
+		candidate := *state
+		candidate.scope = *applied
+		candidate.pack.Command.Scope = *applied
+		candidate.pack.Target.Object = applied.Object
+		candidate.pack.Target.SlideIDs = append([]string{}, applied.SlideIDs...)
+		candidate.pendingScopeExpansion = nil
+		candidate.phase = PhaseExecuting
+		checkpoint := r.checkpointForBoundary(&candidate, checkpointAfterScopeExpansion, "")
+		if input.CommitScopeExpansion == nil {
+			return r.fail(input, state, CodeAgentFailed, errors.New("atomic scope expansion store is required")), true
+		}
+		if err := input.CommitScopeExpansion(ctx, *applied, checkpoint); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
+		state.scope = *applied
+		state.pack.Command.Scope = *applied
+		state.pack.Target.Object = applied.Object
+		state.pack.Target.SlideIDs = append([]string{}, applied.SlideIDs...)
+		registry, registryErr := buildDomainToolRegistry(input, state.pack)
+		if registryErr != nil {
+			return r.fail(input, state, CodeAgentFailed, registryErr), true
+		}
+		state.tools = registry
+		if input.Emitter != nil {
+			input.Emitter.Emit(model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: publicBase(state.runID), PreviousScope: previous, Scope: *applied, Cause: "user_approved_expansion", InteractionID: request.InteractionID})
+		}
+	}
+	state.pendingScopeExpansion = nil
+	state.resumePhase = PhaseExecuting
+	r.changePhase(input.Emitter, state, PhaseExecuting, "scope expansion answered")
+	prompter.ResumeAfterScopeExpansion(ctx)
+	if input.Emitter != nil {
+		input.Emitter.Emit(model.EventScopeExpansionAnswered, model.ScopeExpansionAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: request.InteractionID, CallID: request.CallID, BaseRevision: request.BaseRevision, Decision: answer.Decision, AppliedScope: applied})
+	}
+	if call == nil {
+		call = &llm.ToolCall{ID: request.CallID, Name: "request_privilege", Args: map[string]any{}}
+	}
+	result := SuccessfulToolResult("scope expansion answered")
+	result.Data = map[string]any{"decision": answer.Decision, "scope": state.scope}
+	r.appendControlObservation(state, *call, assistantText, result)
+	if applied == nil {
+		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterScopeExpansion, ""); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
+	}
+	return StructuredOutcome{}, false
+}
+
+func proposeScopeExpansion(current model.RunScope, pack contextengine.ContextPack, addSlideIDs []string, addObject model.ScopeObject) (model.RunScope, model.ScopeExpansionAddition, error) {
+	if current.Object == model.ScopeObjectGlobal {
+		return current, model.ScopeExpansionAddition{}, nil
+	}
+	known, ordered := runtimeSlideOrder(pack)
+	requested := make(map[string]bool)
+	for _, raw := range addSlideIDs {
+		id := strings.TrimSpace(raw)
+		if !known[id] {
+			return model.RunScope{}, model.ScopeExpansionAddition{}, fmt.Errorf("slide %q is not present in the current outline", id)
+		}
+		requested[id] = true
+	}
+	object, err := mergeScopeObject(current.Object, addObject)
+	if err != nil {
+		return model.RunScope{}, model.ScopeExpansionAddition{}, err
+	}
+	next := current
+	next.Object = object
+	selected := make(map[string]bool, len(current.SlideIDs)+len(requested))
+	for _, id := range current.SlideIDs {
+		selected[id] = true
+	}
+	for id := range requested {
+		selected[id] = true
+	}
+	if object == model.ScopeObjectGlobal {
+		next.Source = model.ScopeSource{Kind: model.ScopeAllPages}
+		next.IncludeRunCreatedSlides = true
+		for _, id := range ordered {
+			selected[id] = true
+		}
+	} else if current.Source.Kind != model.ScopeAllPages && len(requested) > 0 {
+		next.Source = model.ScopeSource{Kind: model.ScopeCustomPages}
+		next.IncludeRunCreatedSlides = false
+	}
+	next.SlideIDs = orderedSelection(ordered, selected)
+	next.Revision = current.Revision
+	if next.Object != current.Object || !slices.Equal(next.SlideIDs, current.SlideIDs) || next.Source.Kind != current.Source.Kind {
+		next.Revision++
+	}
+	return next, model.ScopeExpansionAddition{SlideIDs: orderedSelection(ordered, requested), Object: addObject}, next.Validate()
+}
+
+func mergeScopeObject(current, addition model.ScopeObject) (model.ScopeObject, error) {
+	if addition == "" || addition == current {
+		return current, nil
+	}
+	if addition == model.ScopeObjectGlobal {
+		return model.ScopeObjectGlobal, nil
+	}
+	if addition != model.ScopeObjectSpec && addition != model.ScopeObjectHTML && addition != model.ScopeObjectPresentation {
+		return "", fmt.Errorf("unsupported scope object %q", addition)
+	}
+	if current == model.ScopeObjectPresentation || addition == model.ScopeObjectPresentation {
+		return model.ScopeObjectPresentation, nil
+	}
+	if current != addition {
+		return model.ScopeObjectPresentation, nil
+	}
+	return current, nil
+}
+
+func runtimeSlideOrder(pack contextengine.ContextPack) (map[string]bool, []string) {
+	known := make(map[string]bool, len(pack.Outline.Summaries))
+	ordered := make([]string, 0, len(pack.Outline.Summaries))
+	for _, slide := range pack.Outline.Summaries {
+		known[slide.ID] = true
+		ordered = append(ordered, slide.ID)
+	}
+	return known, ordered
+}
+
+func orderedSelection(ordered []string, selected map[string]bool) []string {
+	out := make([]string, 0, len(selected))
+	for _, id := range ordered {
+		if selected[id] {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func resolveRuntimeScopeSelection(pack contextengine.ContextPack, input model.CreateRunScopeInput) (model.RunScope, error) {
+	known, ordered := runtimeSlideOrder(pack)
+	if input.Object == model.ScopeObjectGlobal {
+		input.Selection = model.ScopeSelectionInput{Kind: model.ScopeAllPages}
+	}
+	selected := map[string]bool{}
+	source := model.ScopeSource{Kind: input.Selection.Kind}
+	switch input.Selection.Kind {
+	case model.ScopeCurrentPage:
+		if !known[input.Selection.CurrentSlideID] {
+			return model.RunScope{}, errors.New("adjusted current page is invalid")
+		}
+		selected[input.Selection.CurrentSlideID] = true
+	case model.ScopeAllPages:
+		for _, id := range ordered {
+			selected[id] = true
+		}
+	case model.ScopeCustomPages:
+		for _, id := range input.Selection.SlideIDs {
+			if !known[id] {
+				return model.RunScope{}, fmt.Errorf("adjusted slide %q is invalid", id)
+			}
+			selected[id] = true
+		}
+	case model.ScopeCustomSections:
+		wanted := map[string]bool{}
+		for _, id := range input.Selection.SectionIDs {
+			wanted[id] = true
+		}
+		for _, section := range pack.Outline.Outline.Sections {
+			if !wanted[section.ID] {
+				continue
+			}
+			delete(wanted, section.ID)
+			source.SectionIDs = append(source.SectionIDs, section.ID)
+			for _, slide := range section.Slides {
+				selected[slide.SlideID] = true
+			}
+			for _, subsection := range section.Subsections {
+				for _, slide := range subsection.Slides {
+					selected[slide.SlideID] = true
+				}
+			}
+		}
+		if len(wanted) > 0 {
+			return model.RunScope{}, errors.New("adjusted section is invalid")
+		}
+	default:
+		return model.RunScope{}, errors.New("adjusted scope selection is invalid")
+	}
+	next := model.RunScope{Object: input.Object, SlideIDs: orderedSelection(ordered, selected), Source: source, IncludeRunCreatedSlides: source.Kind == model.ScopeAllPages, Revision: 1}
+	return next, next.Validate()
+}
+
+func scopeContains(candidate, current model.RunScope) bool {
+	if current.Object == model.ScopeObjectGlobal {
+		return candidate.Object == model.ScopeObjectGlobal
+	}
+	if candidate.Object != model.ScopeObjectGlobal {
+		if current.AllowsSpec() && !candidate.AllowsSpec() {
+			return false
+		}
+		if current.AllowsHTML() && !candidate.AllowsHTML() {
+			return false
+		}
+	}
+	for _, id := range current.SlideIDs {
+		if !candidate.ContainsSlide(id) {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Runtime) finishCandidate(
@@ -1857,7 +2183,8 @@ func (state *RunState) checkpoint(questionID string, now time.Time) RuntimeCheck
 		ActiveDurationMS:  state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS: state.waitingDurationAt(now).Milliseconds(),
 		WaitingQuestionID: questionID, CompletionFailures: state.gateCount,
-		PendingCommand: state.pendingCommand, Session: state.tx.Snapshot(),
+		PendingCommand: state.pendingCommand, PendingScopeExpansion: state.pendingScopeExpansion,
+		Scope: state.scope, Session: state.tx.Snapshot(),
 	}
 }
 
@@ -2280,7 +2607,7 @@ func approximateMessageTokens(messages []llm.Message) int {
 }
 
 func isControlTool(name string) bool {
-	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "review_completion" || name == "finish"
+	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_completion" || name == "finish"
 }
 
 func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema {
@@ -2298,6 +2625,14 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 		})})
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
+		out = append(out, ToolSchema{
+			Name: "request_privilege", Description: "Request a user-approved expansion of the active write scope. Provide only the incremental pages/object needed and explain why. This call must be the only call in the response.",
+			Parameters: objectSchema([]string{"reason"}, map[string]any{
+				"add_slide_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"add_object":    map[string]any{"type": "string", "enum": []string{"spec", "html", "presentation", "global"}},
+				"reason":        map[string]any{"type": "string"},
+			}),
+		})
 		if plan == nil {
 			out = append(out, ToolSchema{Name: "update_plan", Description: "Create an optional lightweight execution checklist.", Parameters: objectSchema([]string{"title", "content", "steps"}, map[string]any{"title": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "steps": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"title"}, map[string]any{"title": map[string]any{"type": "string"}})}})})
 		} else {

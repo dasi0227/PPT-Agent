@@ -107,6 +107,7 @@ func (r *Router) register() {
 	v1.POST("/runs/:id/input", r.run.Input)
 	v1.POST("/runs/:id/plan-approval", r.run.PlanApproval)
 	v1.POST("/runs/:id/command-permission", r.run.CommandPermission)
+	v1.POST("/runs/:id/scope-expansion", r.run.ScopeExpansion)
 	v1.POST("/runs/:id/steer", r.run.Steer)
 	v1.POST("/runs/:id/resume", r.run.Resume)
 	v1.DELETE("/runs/:id", r.run.Cancel)

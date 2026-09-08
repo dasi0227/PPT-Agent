@@ -25,6 +25,9 @@ var PublicEventTypes = [...]EventType{
 	EventPlanApprovalAnswered,
 	EventCommandPermissionRequested,
 	EventCommandPermissionAnswered,
+	EventScopeExpansionRequested,
+	EventScopeExpansionAnswered,
+	EventScopeUpdated,
 	EventRunModeChanged,
 	EventMessageReasoning,
 	EventMessageMilestone,
@@ -194,6 +197,48 @@ type CommandPermissionAnsweredPayload struct {
 	CallID        string `json:"call_id"`
 	CommandHash   string `json:"command_hash"`
 	Decision      string `json:"decision"`
+}
+
+type ScopeExpansionAddition struct {
+	SlideIDs []string    `json:"slide_ids,omitempty"`
+	Object   ScopeObject `json:"object,omitempty"`
+}
+
+type ScopeExpansionRequestedPayload struct {
+	PublicEventBase
+	InteractionID     string                 `json:"interaction_id"`
+	CallID            string                 `json:"call_id"`
+	BaseRevision      int64                  `json:"base_revision"`
+	CurrentScope      RunScope               `json:"current_scope"`
+	RequestedAddition ScopeExpansionAddition `json:"requested_addition"`
+	ProposedScope     RunScope               `json:"proposed_scope"`
+	AffectedPageCount int                    `json:"affected_page_count"`
+	Reason            string                 `json:"reason"`
+}
+
+type ScopeExpansionAnswer struct {
+	InteractionID string               `json:"interaction_id"`
+	CallID        string               `json:"call_id"`
+	BaseRevision  int64                `json:"base_revision"`
+	Decision      string               `json:"decision"`
+	AdjustedScope *CreateRunScopeInput `json:"adjusted_scope,omitempty"`
+}
+
+type ScopeExpansionAnsweredPayload struct {
+	PublicEventBase
+	InteractionID string    `json:"interaction_id"`
+	CallID        string    `json:"call_id"`
+	BaseRevision  int64     `json:"base_revision"`
+	Decision      string    `json:"decision"`
+	AppliedScope  *RunScope `json:"applied_scope,omitempty"`
+}
+
+type ScopeUpdatedPayload struct {
+	PublicEventBase
+	PreviousScope RunScope `json:"previous_scope"`
+	Scope         RunScope `json:"scope"`
+	Cause         string   `json:"cause"`
+	InteractionID string   `json:"interaction_id,omitempty"`
 }
 
 type RunModeChangedPayload struct {
@@ -453,6 +498,18 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		}
 		if !oneOf(stringValue(data["decision"]), "allow_once", "deny") {
 			return errors.New("invalid command permission decision")
+		}
+	case EventScopeExpansionRequested:
+		if err := requireString(data, "interaction_id", "call_id", "reason"); err != nil || intValue(data["base_revision"]) < 1 {
+			return errors.New("invalid scope expansion request")
+		}
+	case EventScopeExpansionAnswered:
+		if err := requireString(data, "interaction_id", "call_id", "decision"); err != nil || intValue(data["base_revision"]) < 1 || !oneOf(stringValue(data["decision"]), "approve", "reject", "adjust") {
+			return errors.New("invalid scope expansion answer")
+		}
+	case EventScopeUpdated:
+		if err := requireString(data, "cause"); err != nil {
+			return err
 		}
 	case EventRunModeChanged:
 		if !oneOf(stringValue(data["previous_mode"]), "chat", "grill", "plan", "execute") || !oneOf(stringValue(data["mode"]), "chat", "grill", "plan", "execute") {

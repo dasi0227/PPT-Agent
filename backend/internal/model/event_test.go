@@ -11,13 +11,14 @@ func TestPublicEventTypeSetContainsAllEvents(t *testing.T) {
 		EventRunStarted, EventRunProgress, EventRunCompleted, EventRunFailed, EventRunError, EventRunCanceled,
 		EventRunResumed,
 		EventPlanUpdated, EventPlanApprovalRequested, EventPlanApprovalAnswered,
-		EventCommandPermissionRequested, EventCommandPermissionAnswered, EventRunModeChanged,
+		EventCommandPermissionRequested, EventCommandPermissionAnswered,
+		EventScopeExpansionRequested, EventScopeExpansionAnswered, EventScopeUpdated, EventRunModeChanged,
 		EventMessageReasoning, EventMessageMilestone, EventMessageFinal,
 		EventToolStarted, EventToolCompleted, EventQuestionAsked, EventQuestionAnswered,
 		EventContextWindowUpdated,
 		EventContextCompacted,
 	}
-	if len(PublicEventTypes) != 22 {
+	if len(PublicEventTypes) != 25 {
 		t.Fatalf("public event count=%d", len(PublicEventTypes))
 	}
 	for index, event := range want {

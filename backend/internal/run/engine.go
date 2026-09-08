@@ -396,6 +396,17 @@ func (e *Engine) SubmitCommandPermission(ctx context.Context, id string, answer 
 	return nil
 }
 
+func (e *Engine) SubmitScopeExpansion(ctx context.Context, id string, answer model.ScopeExpansionAnswer) error {
+	a, ok := e.lookup(id)
+	if !ok {
+		return ErrRunNotRunning
+	}
+	if !a.queue.ReplyScopeExpansion(answer) {
+		return ErrReplyMismatch
+	}
+	return nil
+}
+
 // Cancel 取消 Run：停止后续 LLM 调用，保留已落盘产物（ARCH-RUN-004 / API-RUN-005）。
 func (e *Engine) Cancel(ctx context.Context, id string) error {
 	_, err := e.RequestCancel(ctx, id)

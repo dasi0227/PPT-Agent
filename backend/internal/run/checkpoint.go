@@ -62,6 +62,35 @@ func (c *checkpoint) ResumeAfterPlanApproval(ctx context.Context) {
 	c.engine.setStatus(ctx, c.runID, model.RunRunning)
 }
 
+func (c *checkpoint) AskScopeExpansion(ctx context.Context, payload model.ScopeExpansionRequestedPayload) (model.ScopeExpansionAnswer, error) {
+	c.queue.MarkScopeExpansion(payload)
+	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
+	if err := c.bus.Emit(ctx, model.EventScopeExpansionRequested, payload); err != nil {
+		return model.ScopeExpansionAnswer{}, err
+	}
+	select {
+	case answer := <-c.queue.ScopeExpansionSignal():
+		return answer, nil
+	case <-ctx.Done():
+		return model.ScopeExpansionAnswer{}, ctx.Err()
+	}
+}
+
+func (c *checkpoint) ResumeAfterScopeExpansion(ctx context.Context) {
+	c.engine.setStatus(ctx, c.runID, model.RunRunning)
+}
+
+func (c *checkpoint) ResumeScopeExpansion(ctx context.Context, payload model.ScopeExpansionRequestedPayload) (model.ScopeExpansionAnswer, error) {
+	c.queue.MarkScopeExpansion(payload)
+	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
+	select {
+	case answer := <-c.queue.ScopeExpansionSignal():
+		return answer, nil
+	case <-ctx.Done():
+		return model.ScopeExpansionAnswer{}, ctx.Err()
+	}
+}
+
 func (c *checkpoint) AskCommandPermission(
 	ctx context.Context,
 	payload model.CommandPermissionRequestedPayload,

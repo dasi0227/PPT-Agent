@@ -107,6 +107,61 @@ func (s *Store) CommitPlanApproval(
 	})
 }
 
+// CommitScopeExpansion atomically advances the canonical Run scope and the
+// checkpoint that resumes execution under that exact revision.
+func (s *Store) CommitScopeExpansion(ctx context.Context, runID string, scope model.RunScope, checkpoint workflow.RuntimeCheckpoint) error {
+	if runID == "" || checkpoint.RunID != runID || checkpoint.Scope.Revision != scope.Revision {
+		return errors.New("invalid scope expansion transition")
+	}
+	if err := scope.Validate(); err != nil {
+		return err
+	}
+	if checkpoint.CreatedAt == 0 {
+		checkpoint.CreatedAt = time.Now().UnixNano()
+	}
+	rawCheckpoint, err := json.Marshal(checkpoint)
+	if err != nil {
+		return err
+	}
+	slideIDs, _ := json.Marshal(scope.SlideIDs)
+	source, _ := json.Marshal(scope.Source)
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row runPO
+		if err := tx.First(&row, "id = ?", runID).Error; err != nil {
+			return mapErr(err)
+		}
+		var command model.RunCommand
+		if err := json.Unmarshal([]byte(row.RunCommandJSON), &command); err != nil {
+			return err
+		}
+		if command.Scope.Revision+1 != scope.Revision {
+			return errors.New("scope revision changed during approval")
+		}
+		command.Scope = scope
+		rawCommand, err := json.Marshal(command)
+		if err != nil {
+			return err
+		}
+		result := tx.Model(&runPO{}).Where("id = ? AND scope_revision = ?", runID, command.Scope.Revision-1).Updates(map[string]any{
+			"scope_object": string(scope.Object), "scope_slide_ids_json": string(slideIDs), "scope_source_json": string(source),
+			"scope_include_run_created_slides": boolInt(scope.IncludeRunCreatedSlides), "scope_revision": scope.Revision,
+			"run_command_json": string(rawCommand), "status": string(model.RunRunning), "updated_at": nowUnix(),
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errors.New("scope revision changed during approval")
+		}
+		var seq int64
+		if err := tx.Raw("SELECT COALESCE(MAX(seq), 0) + 1 FROM run_checkpoints WHERE run_id = ?", runID).Scan(&seq).Error; err != nil {
+			return err
+		}
+		id := "ckpt_" + workflowHash(runID, checkpoint.LoopID, seq, checkpoint.CreatedAt)
+		return tx.Create(&runCheckpointPO{ID: id, RunID: runID, LoopID: checkpoint.LoopID, Seq: seq, Phase: string(checkpoint.Phase), CheckpointJSON: string(rawCheckpoint), CreatedAt: checkpoint.CreatedAt}).Error
+	})
+}
+
 func (s *Store) LatestCheckpoint(ctx context.Context, runID string) (workflow.RuntimeCheckpoint, error) {
 	var po runCheckpointPO
 	if err := s.db.WithContext(ctx).Where("run_id = ?", runID).

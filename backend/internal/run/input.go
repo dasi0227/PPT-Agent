@@ -20,10 +20,13 @@ type InputQueue struct {
 	answered          map[string]model.PlanApprovalAnswer
 	commandPermission map[string]model.CommandPermissionRequestedPayload
 	commandAnswered   map[string]model.CommandPermissionAnswer
+	scopeExpansion    map[string]model.ScopeExpansionRequestedPayload
+	scopeAnswered     map[string]model.ScopeExpansionAnswer
 	// reply 通道：waiting 状态下收到匹配应答时通知 engine 恢复。
 	replyCh             chan AcceptedReply
 	approvalCh          chan model.PlanApprovalAnswer
 	commandPermissionCh chan model.CommandPermissionAnswer
+	scopeExpansionCh    chan model.ScopeExpansionAnswer
 }
 
 func NewInputQueue() *InputQueue {
@@ -33,10 +36,52 @@ func NewInputQueue() *InputQueue {
 		answered:            map[string]model.PlanApprovalAnswer{},
 		commandPermission:   map[string]model.CommandPermissionRequestedPayload{},
 		commandAnswered:     map[string]model.CommandPermissionAnswer{},
+		scopeExpansion:      map[string]model.ScopeExpansionRequestedPayload{},
+		scopeAnswered:       map[string]model.ScopeExpansionAnswer{},
 		replyCh:             make(chan AcceptedReply, 8),
 		approvalCh:          make(chan model.PlanApprovalAnswer, 8),
 		commandPermissionCh: make(chan model.CommandPermissionAnswer, 8),
+		scopeExpansionCh:    make(chan model.ScopeExpansionAnswer, 8),
 	}
+}
+
+func (q *InputQueue) MarkScopeExpansion(payload model.ScopeExpansionRequestedPayload) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.scopeExpansion[payload.InteractionID] = payload
+}
+
+func (q *InputQueue) ReplyScopeExpansion(answer model.ScopeExpansionAnswer) bool {
+	q.mu.Lock()
+	pending, ok := q.scopeExpansion[answer.InteractionID]
+	if !ok {
+		previous, replay := q.scopeAnswered[answer.InteractionID]
+		q.mu.Unlock()
+		if !replay {
+			return false
+		}
+		left, _ := json.Marshal(previous)
+		right, _ := json.Marshal(answer)
+		return string(left) == string(right)
+	}
+	if pending.CallID != answer.CallID || pending.BaseRevision != answer.BaseRevision ||
+		(answer.Decision != "approve" && answer.Decision != "reject" && answer.Decision != "adjust") ||
+		(answer.Decision == "adjust" && answer.AdjustedScope == nil) {
+		q.mu.Unlock()
+		return false
+	}
+	delete(q.scopeExpansion, answer.InteractionID)
+	q.scopeAnswered[answer.InteractionID] = answer
+	q.mu.Unlock()
+	select {
+	case q.scopeExpansionCh <- answer:
+	default:
+	}
+	return true
+}
+
+func (q *InputQueue) ScopeExpansionSignal() <-chan model.ScopeExpansionAnswer {
+	return q.scopeExpansionCh
 }
 
 func (q *InputQueue) MarkCommandPermission(payload model.CommandPermissionRequestedPayload) {
@@ -162,7 +207,7 @@ func (q *InputQueue) Reply(replyTo, content string) bool {
 func (q *InputQueue) HasAwaiting() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return len(q.awaiting) > 0 || len(q.commandPermission) > 0 || len(q.approval) > 0
+	return len(q.awaiting) > 0 || len(q.commandPermission) > 0 || len(q.approval) > 0 || len(q.scopeExpansion) > 0
 }
 
 // ReplySignal 暴露应答信号通道，engine 在 waiting 时等待它恢复。

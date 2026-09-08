@@ -321,6 +321,19 @@ func (h *RunHandler) CommandPermission(c *gin.Context) {
 	c.Status(http.StatusAccepted)
 }
 
+func (h *RunHandler) ScopeExpansion(c *gin.Context) {
+	var answer model.ScopeExpansionAnswer
+	if err := c.ShouldBindJSON(&answer); err != nil {
+		AbortWithError(c, ErrBadRequest("invalid scope expansion answer"))
+		return
+	}
+	if err := h.svc.SubmitScopeExpansion(c.Request.Context(), c.Param("id"), answer); err != nil {
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "SCOPE_EXPANSION_REJECTED", Message: "范围扩权审批已过期或不匹配"})
+		return
+	}
+	c.Status(http.StatusAccepted)
+}
+
 // Cancel DELETE /runs/{id}
 func (h *RunHandler) Cancel(c *gin.Context) {
 	runID := c.Param("id")

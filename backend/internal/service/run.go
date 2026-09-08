@@ -115,6 +115,22 @@ type planApprovalCommitStore interface {
 	CommitPlanApproval(context.Context, string, model.RunMode, model.RunContext, workflow.RuntimeCheckpoint) error
 }
 
+type scopeExpansionCommitStore interface {
+	CommitScopeExpansion(context.Context, string, model.RunScope, workflow.RuntimeCheckpoint) error
+}
+
+func (r *workflowExecution) commitScopeExpansion(ctx context.Context, scope model.RunScope, checkpoint workflow.RuntimeCheckpoint) error {
+	store, ok := r.store.(scopeExpansionCommitStore)
+	if !ok {
+		return errors.New("atomic scope expansion store is required")
+	}
+	if err := store.CommitScopeExpansion(ctx, r.runID, scope, checkpoint); err != nil {
+		return err
+	}
+	r.pack.Command.Scope = scope
+	return nil
+}
+
 func (r *workflowExecution) commitPlanApproval(
 	ctx context.Context,
 	mode model.RunMode,
@@ -201,10 +217,11 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 				Command: command, Budget: contextengine.DefaultBudget(),
 			}, r.project)
 		},
-		CommitPlanApproval: r.commitPlanApproval,
-		Transcript:         r.transcripts,
-		Calibration:        r.calibration,
-		RecordCompaction:   r.recordAutoCompaction,
+		CommitPlanApproval:   r.commitPlanApproval,
+		CommitScopeExpansion: r.commitScopeExpansion,
+		Transcript:           r.transcripts,
+		Calibration:          r.calibration,
+		RecordCompaction:     r.recordAutoCompaction,
 	})
 	if outcome.Status == workflow.StatusCompleted {
 		memoryStore := contextengine.ThreadMemoryStore{}
@@ -605,6 +622,10 @@ func (svc *RunService) SubmitPlanApproval(ctx context.Context, runID string, ans
 
 func (svc *RunService) SubmitCommandPermission(ctx context.Context, runID string, answer model.CommandPermissionAnswer) error {
 	return svc.engine.SubmitCommandPermission(ctx, runID, answer)
+}
+
+func (svc *RunService) SubmitScopeExpansion(ctx context.Context, runID string, answer model.ScopeExpansionAnswer) error {
+	return svc.engine.SubmitScopeExpansion(ctx, runID, answer)
 }
 
 func (svc *RunService) Cancel(ctx context.Context, runID string) error {
