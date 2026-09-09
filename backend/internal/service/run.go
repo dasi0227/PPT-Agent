@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextcompact"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
@@ -44,6 +45,7 @@ type RunService struct {
 	themes      *ThemeService
 	transcripts *contextengine.FSTranscriptStore
 	calibration *contextengine.CalibrationStore
+	attachments *AttachmentService
 }
 
 func NewRunService(
@@ -76,11 +78,12 @@ func NewRunService(
 		themes:      themes,
 		transcripts: transcripts,
 		calibration: calibration,
+		attachments: NewAttachmentService(s),
 	}
 }
 
 func NewRunServiceWithExecutionFactory(s store.Store, engine *run.Engine, factory ExecutionFactory) *RunService {
-	return &RunService{store: s, engine: engine, factory: factory}
+	return &RunService{store: s, engine: engine, factory: factory, attachments: NewAttachmentService(s)}
 }
 
 func NewRunServiceWithExecutionFactoryAndRegistry(
@@ -89,7 +92,7 @@ func NewRunServiceWithExecutionFactoryAndRegistry(
 	factory ExecutionFactory,
 	registry *llm.Registry,
 ) *RunService {
-	return &RunService{store: s, engine: engine, factory: factory, registry: registry}
+	return &RunService{store: s, engine: engine, factory: factory, registry: registry, attachments: NewAttachmentService(s)}
 }
 
 type workflowExecution struct {
@@ -244,6 +247,14 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 	command := p.Command
+	if svc.attachments == nil {
+		return model.Run{}, errors.New("attachment service is unavailable")
+	}
+	attachments, err := svc.attachments.ResolveReferences(ctx, project, p.AttachmentIDs)
+	if err != nil {
+		return model.Run{}, err
+	}
+	command.Attachments = attachments
 	var snapshot *spec.ProjectContentSnapshot
 	loadSnapshot := func() (spec.ProjectContentSnapshot, error) {
 		if snapshot != nil {
@@ -317,6 +328,9 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			agentErr.Details["next_action"] = "请选择标记为支持页面观察的模型。"
 			return model.Run{}, agentErr
 		}
+		if err := validateAttachmentCapabilities(selectedProfile.Capabilities(), command.Attachments, "create_run"); err != nil {
+			return model.Run{}, err
+		}
 	}
 	p.Command, p.Instruction = command, command.Instruction
 	if p.ClientRequestID == "" {
@@ -329,7 +343,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		"instruction": command.Instruction, "scope": command.Scope,
 		"mode": command.Mode, "options": command.Options, "skills": command.Skills,
 		"components": command.Components, "mentioned_pages": command.MentionedPages,
-		"dropped_mentioned_slide_ids": command.DroppedMentionedSlideIDs, "model": p.Model,
+		"dropped_mentioned_slide_ids": command.DroppedMentionedSlideIDs, "attachments": command.Attachments, "model": p.Model,
 	})
 	if err != nil {
 		return model.Run{}, err
@@ -562,22 +576,34 @@ func (r runImageResolver) ResolveImage(ctx context.Context, ref string) (llm.Ima
 		return llm.ImageData{}, err
 	}
 	prefix := "run:" + r.runID + "/screenshot:"
-	if !strings.HasPrefix(ref, prefix) {
+	if strings.HasPrefix(ref, prefix) {
+		screenshotID := strings.TrimPrefix(ref, prefix)
+		if !screenshotIDPattern.MatchString(screenshotID) || strings.TrimSpace(r.projectID) == "" {
+			return llm.ImageData{}, errors.New("invalid runtime screenshot reference")
+		}
+		path := filepath.Join(r.projectDir, ".runtime", "renders", r.runID, screenshotID+".png")
+		raw, err := readImageWithContext(ctx, path, 10*1024*1024)
+		if err != nil {
+			return llm.ImageData{}, err
+		}
+		if len(raw) < 8 || string(raw[:8]) != "\x89PNG\r\n\x1a\n" {
+			return llm.ImageData{}, errors.New("runtime screenshot MIME or size is invalid")
+		}
+		return llm.ImageData{Bytes: raw, MIMEType: "image/png"}, nil
+	}
+	attachmentID, variant, ok := attachment.ParseImageRef(r.projectID, ref)
+	if !ok {
 		return llm.ImageData{}, errors.New("image reference does not belong to the current run")
 	}
-	screenshotID := strings.TrimPrefix(ref, prefix)
-	if !screenshotIDPattern.MatchString(screenshotID) || strings.TrimSpace(r.projectID) == "" {
-		return llm.ImageData{}, errors.New("invalid runtime screenshot reference")
-	}
-	path := filepath.Join(r.projectDir, ".runtime", "renders", r.runID, screenshotID+".png")
-	raw, err := readImageWithContext(ctx, path, 10*1024*1024)
+	meta, raw, err := attachment.Read(ctx, r.projectDir, r.projectID, attachmentID, variant)
 	if err != nil {
 		return llm.ImageData{}, err
 	}
-	if len(raw) < 8 || string(raw[:8]) != "\x89PNG\r\n\x1a\n" {
-		return llm.ImageData{}, errors.New("runtime screenshot MIME or size is invalid")
+	mimeType := meta.MediaType
+	if variant == "thumbnail" {
+		mimeType = "image/webp"
 	}
-	return llm.ImageData{Bytes: raw, MIMEType: "image/png"}, nil
+	return llm.ImageData{Bytes: raw, MIMEType: mimeType}, nil
 }
 
 func readImageWithContext(ctx context.Context, path string, maxBytes int) ([]byte, error) {
@@ -669,18 +695,64 @@ func (svc *RunService) RequestCancel(ctx context.Context, runID string, reason m
 	return current, nil
 }
 
-func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, content string) (model.SteeringMessage, error) {
+func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, content string, attachmentIDs []string) (model.SteeringMessage, error) {
 	content = strings.TrimSpace(content)
-	if !clientIdentityPattern.MatchString(clientMessageID) || len([]rune(content)) < 1 || len([]rune(content)) > 8000 {
+	if !clientIdentityPattern.MatchString(clientMessageID) || len([]rune(content)) > 8000 {
 		return model.SteeringMessage{}, model.NewAgentError("BAD_REQUEST", "steer_run", nil)
 	}
-	requestHash, err := idempotency.CanonicalHash(map[string]string{
-		"expected_run_id": expectedRunID, "client_message_id": clientMessageID, "content": content,
+	runModel, err := svc.store.GetRun(ctx, runID)
+	if err != nil {
+		return model.SteeringMessage{}, err
+	}
+	project, err := svc.store.GetProject(ctx, runModel.ProjectID)
+	if err != nil {
+		return model.SteeringMessage{}, err
+	}
+	if svc.attachments == nil {
+		return model.SteeringMessage{}, errors.New("attachment service is unavailable")
+	}
+	attachments, err := svc.attachments.ResolveReferences(ctx, project, attachmentIDs)
+	if err != nil {
+		return model.SteeringMessage{}, err
+	}
+	if content == "" && len(attachments) == 0 {
+		return model.SteeringMessage{}, model.NewAgentError("BAD_REQUEST", "steer_run", nil)
+	}
+	if len(attachments) > 0 && svc.registry != nil {
+		profile, profileErr := svc.registry.Resolve(runModel.Model.ProfileName)
+		if profileErr != nil {
+			return model.SteeringMessage{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "steer_run", profileErr)
+		}
+		if err := validateAttachmentCapabilities(profile.Capabilities(), attachments, "steer_run"); err != nil {
+			return model.SteeringMessage{}, err
+		}
+	}
+	requestHash, err := idempotency.CanonicalHash(map[string]any{
+		"expected_run_id": expectedRunID, "client_message_id": clientMessageID, "content": content, "attachments": attachments,
 	})
 	if err != nil {
 		return model.SteeringMessage{}, err
 	}
-	return svc.engine.Steer(ctx, runID, expectedRunID, clientMessageID, requestHash, content)
+	return svc.engine.Steer(ctx, runID, expectedRunID, clientMessageID, requestHash, content, attachments)
+}
+
+func validateAttachmentCapabilities(caps llm.Capabilities, attachments []model.AttachmentReference, operation string) error {
+	if len(attachments) == 0 {
+		return nil
+	}
+	if !caps.Vision {
+		return model.NewAgentError("MODEL_VISION_REQUIRED", operation, nil)
+	}
+	allowed := make(map[string]bool, len(caps.ImageInputMIMEs))
+	for _, mime := range caps.ImageInputMIMEs {
+		allowed[mime] = true
+	}
+	for _, attachment := range attachments {
+		if !allowed[attachment.MediaType] || (caps.MaxImageBytes > 0 && attachment.SizeBytes > int64(caps.MaxImageBytes)) {
+			return model.NewAgentError("ATTACHMENT_TYPE_UNSUPPORTED", operation, nil)
+		}
+	}
+	return nil
 }
 
 func (svc *RunService) GetRun(ctx context.Context, runID string) (model.Run, error) {

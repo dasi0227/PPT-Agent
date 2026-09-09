@@ -162,6 +162,7 @@ export interface CreateRunRequest {
   skill_ids?: string[];
   component_names?: string[];
   mentioned_slide_ids?: string[];
+	attachment_ids?: string[];
   options?: { language?: RunLanguage; range?: SlideRange };
 }
 
@@ -361,6 +362,7 @@ export interface SteerRunRequest {
   expected_run_id: string;
   client_message_id: string;
   content: string;
+	attachment_ids?: string[];
 }
 
 export interface SteerRunResponse {
@@ -484,6 +486,7 @@ export type ContextBucketKey =
   | 'system_prompt'
   | 'user_prompt'
   | 'chat_history'
+	| 'uploaded_file'
   | 'other';
 
 export interface ContextWindowDetail {

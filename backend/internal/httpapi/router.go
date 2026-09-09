@@ -25,14 +25,19 @@ type Router struct {
 	gitCommit     *GitCommitHandler
 	prompt        *PromptHandler
 	contextWindow *ContextWindowHandler
+	attachment    *AttachmentHandler
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, promptH *PromptHandler, contextWindowH *ContextWindowHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, promptH *PromptHandler, contextWindowH *ContextWindowHandler, attachmentH ...*AttachmentHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
 
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, prompt: promptH, contextWindow: contextWindowH}
+	var attachments *AttachmentHandler
+	if len(attachmentH) > 0 {
+		attachments = attachmentH[0]
+	}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, prompt: promptH, contextWindow: contextWindowH, attachment: attachments}
 	r.register()
 	return r
 }
@@ -82,6 +87,11 @@ func (r *Router) register() {
 	v1.GET("/projects/:id/content", r.project.Content)
 	v1.POST("/projects/:id/mutations", r.project.Mutate)
 	v1.PATCH("/projects/:id/theme", r.project.SetTheme)
+	if r.attachment != nil {
+		v1.POST("/projects/:id/attachments", r.attachment.Upload)
+		v1.GET("/projects/:id/attachments/:attachment_id", r.attachment.Get)
+		v1.GET("/projects/:id/attachments/:attachment_id/content", r.attachment.Content)
+	}
 	if r.gitCommit != nil {
 		v1.POST("/projects/:id/git-commits", r.gitCommit.Create)
 		v1.GET("/git-commits/:id", r.gitCommit.Get)

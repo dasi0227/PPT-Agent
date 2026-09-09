@@ -175,6 +175,7 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 				if data, ok := out[index]["data"].(map[string]any); ok {
 					data["status"] = message.Status
 					data["rejection_code"] = message.RejectionCode
+					data["attachments"] = message.Attachments
 				}
 				continue
 			}
@@ -183,7 +184,7 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 				"run_id": message.RunID, "turn": "user", "type": "steering",
 				"data": map[string]any{
 					"client_message_id": message.ClientMessageID, "text": message.Content,
-					"status": message.Status, "rejection_code": message.RejectionCode,
+					"attachments": message.Attachments, "status": message.Status, "rejection_code": message.RejectionCode,
 				},
 			})
 			nextSyntheticSeq++

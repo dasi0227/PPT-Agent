@@ -101,14 +101,15 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 	switch e.Type {
 	case model.EventRunStarted:
 		text, _ := data["user_input"].(string)
-		if text == "" {
+		attachments, _ := data["attachments"].([]any)
+		if text == "" && len(attachments) == 0 {
 			return HistoryEntry{}, false
 		}
 		entry.Turn = "user"
 		entry.Type = "user_turn"
 		entry.Data = map[string]any{
 			"text": text, "scope": data["scope"], "mode": data["mode"],
-			"skills": data["skills"], "resources": data["resources"],
+			"skills": data["skills"], "resources": data["resources"], "attachments": data["attachments"],
 		}
 	default:
 		entry.Turn = "agent"
@@ -406,7 +407,7 @@ func (b *Bus) AppendSteeringHistory(ctx context.Context, message model.SteeringM
 		Turn: "user", Type: "steering",
 		Data: map[string]any{
 			"client_message_id": message.ClientMessageID, "text": message.Content,
-			"status": message.Status, "rejection_code": message.RejectionCode,
+			"attachments": message.Attachments, "status": message.Status, "rejection_code": message.RejectionCode,
 		},
 	})
 }

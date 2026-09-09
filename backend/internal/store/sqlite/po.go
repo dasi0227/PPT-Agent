@@ -184,6 +184,7 @@ type steeringPO struct {
 	ClientMessageID string `gorm:"column:client_message_id;primaryKey"`
 	RequestHash     string `gorm:"column:request_hash"`
 	Content         string `gorm:"column:content"`
+	AttachmentsJSON string `gorm:"column:attachments_json"`
 	Status          string `gorm:"column:status"`
 	AcceptedAt      int64  `gorm:"column:accepted_at"`
 	InjectedAt      *int64 `gorm:"column:injected_at"`
@@ -193,9 +194,11 @@ type steeringPO struct {
 func (steeringPO) TableName() string { return "steering_inbox" }
 
 func (p steeringPO) toModel() model.SteeringMessage {
+	var attachments []model.AttachmentReference
+	_ = json.Unmarshal([]byte(p.AttachmentsJSON), &attachments)
 	return model.SteeringMessage{
 		RunID: p.RunID, ThreadID: p.ThreadID, ClientMessageID: p.ClientMessageID,
-		RequestHash: p.RequestHash, Content: p.Content, Status: model.SteeringStatus(p.Status),
+		RequestHash: p.RequestHash, Content: p.Content, Attachments: attachments, Status: model.SteeringStatus(p.Status),
 		AcceptedAt: p.AcceptedAt, InjectedAt: valueOrZero(p.InjectedAt), RejectionCode: p.RejectionCode,
 	}
 }

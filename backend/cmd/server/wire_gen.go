@@ -64,6 +64,8 @@ func initApp() (*App, func(), error) {
 	}
 	fsTranscriptStore := provideTranscriptStore()
 	calibrationStore := provideCalibrationStore()
+	attachmentService := service.NewAttachmentService(store)
+	attachmentHandler := httpapi.NewAttachmentHandler(attachmentService)
 	runService := service.NewRunService(store, engine, registry, workRoot, nodeSlideRenderer, fsTranscriptStore, calibrationStore)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
@@ -101,7 +103,7 @@ func initApp() (*App, func(), error) {
 	promptHandler := httpapi.NewPromptHandler(promptService)
 	contextWindowService := service.NewContextWindowService(store, registry, lockManager, fsTranscriptStore, calibrationStore)
 	contextWindowHandler := httpapi.NewContextWindowHandler(contextWindowService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler, contextWindowHandler)
+	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler, contextWindowHandler, attachmentHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	app := provideApp(server, engine, zapLogger)
@@ -123,11 +125,11 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideEngine,
 	provideHistoryWriter,
 	provideRenderWorker, service.NewHealthService, provideProjectService,
-	provideThreadService, service.NewRunService, service.NewContextWindowService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
+	provideThreadService, service.NewAttachmentService, service.NewRunService, service.NewContextWindowService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
 	provideSlideService, service.NewPPTMutationService, provideThemeService,
 	provideComponentService,
 	provideSkillService,
-	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewContextWindowHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
+	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewAttachmentHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewContextWindowHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
 	provideHTTPServer,
 	provideApp,
 )

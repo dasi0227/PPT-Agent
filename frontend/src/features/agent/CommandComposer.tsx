@@ -1,11 +1,12 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Send, Sparkles, StopCircle } from 'lucide-react';
+import { FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
+import { attachmentsApi } from '../../api/attachments';
 import { llmApi } from '../../api/llm';
 import { polishApi } from '../../api/polish';
 import { skillsApi } from '../../api/skills';
 import type { CreateRunRequest, CreateRunScopeInput, LLMProfile, Skill } from '../../api/types';
 import { cn } from '../../lib/utils';
-import { useComposerStore } from '../../stores/composerStore';
+import { MAX_MESSAGE_ATTACHMENTS, type ComposerAttachment, useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
@@ -164,9 +165,20 @@ function resolveControlsDensity(
   return current;
 }
 
+function formatFileSize(size: number): string {
+	if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MiB`;
+	if (size >= 1024) return `${Math.max(1, Math.round(size / 1024))} KiB`;
+	return `${size} B`;
+}
+
+function supportedImageFile(file: File): boolean {
+	return ['image/png', 'image/jpeg', 'image/webp'].includes(file.type);
+}
+
 export const CommandComposer: React.FC = () => {
   const [text, setText] = useState('');
   const [submitError, setSubmitError] = useState('');
+	const [uploadingCount, setUploadingCount] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
@@ -177,6 +189,7 @@ export const CommandComposer: React.FC = () => {
   const [controlsDensity, setControlsDensity] = useState<ComposerControlsDensity>('full');
   const controlBarRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<PromptComposerEditorHandle>(null);
+	const fileInputRef = useRef<HTMLInputElement>(null);
   const polishAbortRef = useRef<AbortController | null>(null);
   const polishRequestRef = useRef(0);
   const { activeProjectId, contentByProjectId } = useProjectStore();
@@ -205,13 +218,16 @@ export const CommandComposer: React.FC = () => {
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
   const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
   const activeThreadDraft = activeThreadId ? composer.threadDrafts[activeThreadId] : undefined;
+	const activeAttachments = activeThreadId ? composer.threadAttachments[activeThreadId] ?? [] : [];
+	const hasAttachments = activeAttachments.length > 0;
+	const hasPendingUploads = uploadingCount > 0;
   const setComposerText = (nextText: string) => {
     setText(nextText);
     if (activeThreadId) composer.setThreadDraft(activeThreadId, nextText);
   };
   const showCancelButton = Boolean(activeRunId)
     && (runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling')
-    && text.trim() === '';
+	&& text.trim() === '' && !hasAttachments;
   const disabledPlaceholder = runStatus === 'waiting'
     ? '请先回答上方问题'
     : runStatus === 'recovering'
@@ -226,7 +242,7 @@ export const CommandComposer: React.FC = () => {
     : steering
       ? '追加对当前任务的要求'
       : '输入你的想法与目标';
-  const requiresVision = composer.mode === 'execute' && ['html', 'presentation', 'global'].includes(composer.scopeObject);
+	const requiresVision = hasAttachments || (composer.mode === 'execute' && ['html', 'presentation', 'global'].includes(composer.scopeObject));
 
   const activeSnapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const slides = useMemo(() => orderedSlides(activeSnapshot), [activeSnapshot]);
@@ -384,14 +400,58 @@ export const CommandComposer: React.FC = () => {
     skills.length,
     skillsLoading,
     showCancelButton,
+		hasAttachments,
   ]);
+
+	const uploadFiles = async (files: File[]) => {
+		if (!activeProjectId || disabled || files.length === 0) return;
+		const unsupported = files.find((file) => !supportedImageFile(file));
+		if (unsupported) {
+			setSubmitError('仅支持 PNG、JPG 和 WebP 图片');
+			return;
+		}
+		const oversized = files.find((file) => file.size > 10 * 1024 * 1024);
+		if (oversized) {
+			setSubmitError('图片超过 10 MiB，请压缩后重试');
+			return;
+		}
+		if (activeAttachments.length + uploadingCount + files.length > MAX_MESSAGE_ATTACHMENTS) {
+			setSubmitError('每条消息最多添加 8 张图片');
+			return;
+		}
+		setSubmitError('');
+		let threadId: string;
+		try {
+			threadId = activeThreadId ?? await ensureActiveThread(activeProjectId);
+		} catch (error) {
+			setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+			return;
+		}
+		setUploadingCount((count) => count + files.length);
+		const results = await Promise.all(files.map(async (file) => {
+			try {
+				const uploaded = await attachmentsApi.upload(activeProjectId, file);
+				const item: ComposerAttachment = {
+					attachmentId: uploaded.id, name: uploaded.original_name,
+					size: uploaded.size_bytes, mediaType: uploaded.media_type,
+				};
+				composer.addThreadAttachment(threadId, item);
+				return null;
+			} catch (error) {
+				return error instanceof Error ? error.message : `${file.name} 上传失败，请重试`;
+			}
+		}));
+		setUploadingCount((count) => Math.max(0, count - files.length));
+		const failure = results.find((result): result is string => Boolean(result));
+		if (failure) setSubmitError(failure);
+	};
 
   const submit = async () => {
     const editor = editorRef.current;
     const raw = (editor?.getSubmitText() ?? text).trim();
     const componentNames = editor?.getComponentNames() ?? [];
     const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
-    if (disabled || commitActive || polishing || briefingActive || !activeProjectId || !raw) return;
+	if (disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!raw && !hasAttachments)) return;
     setSubmitError('');
     const projectId = activeProjectId;
     let threadId: string;
@@ -402,10 +462,11 @@ export const CommandComposer: React.FC = () => {
       return;
     }
     if (steering && activeRunId) {
-      const accepted = await steerRun(threadId, activeRunId, raw, newClientIdentity('msg'));
+		const accepted = await steerRun(threadId, activeRunId, raw, newClientIdentity('msg'), activeAttachments.map((attachment) => attachment.attachmentId));
       if (accepted) {
         setText('');
         editorRef.current?.setPlainText('');
+		composer.clearThreadDraft(threadId);
       }
       else setSubmitError('追加要求未能加入当前任务；文本已保留，可在任务结束后作为新请求发送');
       return;
@@ -425,13 +486,14 @@ export const CommandComposer: React.FC = () => {
       scope,
       mode: composer.mode,
       instruction: raw,
+		...(hasAttachments ? { attachment_ids: activeAttachments.map((attachment) => attachment.attachmentId) } : {}),
       ...(composer.selectedSkillIds.length > 0 ? { skill_ids: composer.selectedSkillIds } : {}),
       ...(componentNames.length > 0 ? { component_names: componentNames } : {}),
       ...(mentionedSlideIds.length > 0 ? { mentioned_slide_ids: mentionedSlideIds } : {}),
     };
     const selectedProfile = profiles.find((profile) => profile.name === request.model);
-    const requiresVision = request.mode === 'execute' &&
-      ['html', 'presentation', 'global'].includes(request.scope.object);
+    const requiresVision = hasAttachments || (request.mode === 'execute' &&
+      ['html', 'presentation', 'global'].includes(request.scope.object));
     if (!selectedProfile) {
       setSubmitError('所选模型已不可用，请重新选择');
       return;
@@ -453,7 +515,7 @@ export const CommandComposer: React.FC = () => {
       if (created) {
         setText('');
         editorRef.current?.setPlainText('');
-        composer.clearThreadDraft(threadId);
+		composer.clearThreadDraft(threadId);
       }
       else setSubmitError('运行创建失败，请检查时间线中的错误后重试');
     } catch (error) {
@@ -560,6 +622,8 @@ export const CommandComposer: React.FC = () => {
       void submit();
     }
   };
+	const selectedProfile = profiles.find((profile) => profile.name === composer.modelProfileName);
+	const attachmentModelSupported = !hasAttachments || Boolean(selectedProfile?.capabilities.vision);
 
   return (
     <div className="bg-panel px-3 pb-3 pt-1">
@@ -579,7 +643,43 @@ export const CommandComposer: React.FC = () => {
         </div>
       )}
       <div className="relative rounded-[22px] border border-border/80 bg-panel shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
+		<input
+			ref={fileInputRef}
+			type="file"
+			accept="image/png,image/jpeg,image/webp"
+			multiple
+			className="sr-only"
+			onChange={(event) => {
+				const files = Array.from(event.currentTarget.files ?? []);
+				event.currentTarget.value = '';
+				void uploadFiles(files);
+			}}
+		/>
         <div className="relative rounded-t-[22px]">
+			{hasAttachments && (
+				<div className="flex gap-2 overflow-x-auto px-3 pb-1.5 pt-3" aria-label="当前消息引用的图片">
+					{activeAttachments.map((attachment) => (
+						<div key={attachment.attachmentId} className="relative grid w-44 shrink-0 grid-cols-[38px_minmax(0,1fr)] items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 shadow-sm">
+							<span className="grid h-[38px] w-[38px] place-items-center rounded-md bg-panel-muted text-text-600" aria-hidden="true">
+								<FileImage className="h-5 w-5" strokeWidth={1.75} />
+							</span>
+							<span className="min-w-0">
+								<span className="block truncate text-[11px] font-semibold leading-4 text-text-900">{attachment.name}</span>
+								<span className="mt-0.5 block text-[11px] leading-3 text-text-600">{formatFileSize(attachment.size)}</span>
+							</span>
+							<button
+								type="button"
+								onClick={() => activeThreadId && composer.removeThreadAttachment(activeThreadId, attachment.attachmentId)}
+								className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900"
+								aria-label={`移除 ${attachment.name}`}
+								title="从当前消息移除"
+							>
+								<X className="h-3.5 w-3.5" strokeWidth={1.75} />
+							</button>
+						</div>
+					))}
+				</div>
+			)}
           <PromptComposerEditor
             ref={editorRef}
             value={text}
@@ -596,6 +696,7 @@ export const CommandComposer: React.FC = () => {
             onSlashCommand={(command) => { void executeSlashCommand(command); }}
             onModelOption={composer.setModelProfileName}
             onTargetOption={selectTargetOption}
+			onPasteFiles={(files) => { void uploadFiles(files); }}
           />
           {text.trim() !== '' && !disabled && (
             <button
@@ -614,7 +715,7 @@ export const CommandComposer: React.FC = () => {
           )}
           {polishing && <span className="composer-polish-sweep" aria-hidden="true" />}
           <span className="sr-only" aria-live="polite">
-            {polishing ? '正在润色表达' : ''}
+			{polishing ? '正在润色表达' : hasPendingUploads ? '正在上传图片' : hasAttachments ? `已添加 ${activeAttachments.length} 张图片` : ''}
           </span>
         </div>
         <div
@@ -627,6 +728,16 @@ export const CommandComposer: React.FC = () => {
           )}
         >
           <div data-composer-control-group="start" className="flex min-w-0 items-center gap-0.5">
+			<button
+				type="button"
+				onClick={() => fileInputRef.current?.click()}
+				disabled={disabled}
+				className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-50"
+				aria-label="选择图片"
+				title="选择图片"
+			>
+				<Paperclip className="h-4 w-4" strokeWidth={1.75} />
+			</button>
             <InteractionModeButtons
               mode={composer.mode}
               onIntentChange={composer.setIntent}
@@ -683,10 +794,10 @@ export const CommandComposer: React.FC = () => {
             ) : (
               <button
                 onClick={() => void submit()}
-                disabled={!text.trim() || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
+                disabled={(!text.trim() && !hasAttachments) || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:bg-text-400 disabled:opacity-50"
-                aria-label={scopeSelectionEmpty ? '请至少选择一页或一章' : '发送'}
-                title={scopeSelectionEmpty ? '请至少选择一页或一章' : '发送'}
+                aria-label={scopeSelectionEmpty ? '请至少选择一页或一章' : !attachmentModelSupported ? '当前模型不支持图片，请更换模型后发送' : '发送'}
+                title={scopeSelectionEmpty ? '请至少选择一页或一章' : !attachmentModelSupported ? '当前模型不支持图片，请更换模型后发送' : '发送'}
               >
                 <Send className="h-4 w-4" />
               </button>

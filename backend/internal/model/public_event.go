@@ -78,11 +78,12 @@ type PublicError struct {
 
 type RunStartedPayload struct {
 	PublicEventBase
-	Scope     RunScope               `json:"scope"`
-	Mode      RunMode                `json:"mode"`
-	UserInput string                 `json:"user_input"`
-	Skills    []PublicSkill          `json:"skills,omitempty"`
-	Resources []PublicLoadedResource `json:"resources,omitempty"`
+	Scope       RunScope               `json:"scope"`
+	Mode        RunMode                `json:"mode"`
+	UserInput   string                 `json:"user_input"`
+	Skills      []PublicSkill          `json:"skills,omitempty"`
+	Resources   []PublicLoadedResource `json:"resources,omitempty"`
+	Attachments []AttachmentReference  `json:"attachments,omitempty"`
 }
 
 type ProgressValue struct {

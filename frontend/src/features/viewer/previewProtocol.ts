@@ -31,6 +31,7 @@ export function isRuntimeSlide(value: unknown): value is RuntimeSlide {
     && value.frame.canvas.width === 1920
     && value.frame.canvas.height === 1080
     && value.frame.canvas.aspect_ratio === '16:9'
+		&& (value.frame.project_id === undefined || typeof value.frame.project_id === 'string')
     && typeof value.frame.theme_id === 'string'
     && typeof value.frame.ordinal === 'number'
     && typeof value.frame.total === 'number';

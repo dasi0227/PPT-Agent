@@ -50,7 +50,7 @@ const payloads: Record<string, unknown> = {
     max: 65536,
     ratio: 32000 / 65536,
     status: 'running',
-    buckets: { read_ppt: 10000, run_command: 2000, system_prompt: 8000, user_prompt: 2000, chat_history: 9000, other: 1000 },
+    buckets: { read_ppt: 10000, run_command: 2000, system_prompt: 8000, user_prompt: 2000, chat_history: 9000, uploaded_file: 1024, other: 1000 },
     details: {},
   },
   'context.compacted': {

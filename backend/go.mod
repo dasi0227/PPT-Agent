@@ -3,6 +3,7 @@ module github.com/dasi0227/PPT-Agent/backend
 go 1.26.4
 
 require (
+	github.com/chai2010/webp v1.4.0
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/gin-gonic/gin v1.10.0
 	github.com/glebarez/sqlite v1.11.0

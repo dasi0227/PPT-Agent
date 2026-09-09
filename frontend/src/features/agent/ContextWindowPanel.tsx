@@ -3,6 +3,7 @@ import {
   FileText,
   Gauge,
   History,
+	Image,
   Loader2,
   MessageSquare,
   Minimize2,
@@ -34,16 +35,17 @@ const BUCKETS: Array<{
   { key: 'system_prompt', label: '系统提示词', color: '#7C3AED', icon: Shield },
   { key: 'user_prompt', label: '用户提示词', color: '#D97706', icon: MessageSquare },
   { key: 'chat_history', label: '对话历史', color: '#DB2777', icon: History },
+	{ key: 'uploaded_file', label: '上传文件', color: '#EA580C', icon: Image },
   { key: 'other', label: '其它', color: '#8793A2', icon: Ellipsis },
 ];
 
 const EMPTY_BUCKETS: ContextWindowSnapshot['buckets'] = {
   read_ppt: 0, run_command: 0, system_prompt: 0,
-  user_prompt: 0, chat_history: 0, other: 0,
+  user_prompt: 0, chat_history: 0, uploaded_file: 0, other: 0,
 };
 const EMPTY_DETAILS: ContextWindowSnapshot['details'] = {
   read_ppt: [], run_command: [], system_prompt: [],
-  user_prompt: [], chat_history: [], other: [],
+  user_prompt: [], chat_history: [], uploaded_file: [], other: [],
 };
 const EMPTY_SNAPSHOT: ContextWindowSnapshot = {
   total: 0,

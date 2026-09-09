@@ -18,6 +18,7 @@ const (
 	BucketSystemPrompt ContextBucket = "system_prompt"
 	BucketUserPrompt   ContextBucket = "user_prompt"
 	BucketChatHistory  ContextBucket = "chat_history"
+	BucketUploadedFile ContextBucket = "uploaded_file"
 	BucketOther        ContextBucket = "other"
 )
 
@@ -27,6 +28,7 @@ var ContextBuckets = [...]ContextBucket{
 	BucketSystemPrompt,
 	BucketUserPrompt,
 	BucketChatHistory,
+	BucketUploadedFile,
 	BucketOther,
 }
 
@@ -122,7 +124,7 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 				bucket = BucketRunCommand
 			}
 		}
-		add(bucket, transcriptMessageName(message, index), source, LayerTranscript, EstimateMessageTokens(message))
+		addTranscriptMessage(add, message, index, bucket, source)
 	}
 
 	factor := input.Factor
@@ -145,6 +147,75 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 		ratio = float64(total) / float64(input.Max)
 	}
 	return WindowSnapshot{Total: total, Max: input.Max, Ratio: ratio, Buckets: buckets, Details: scaledDetails}
+}
+
+func addTranscriptMessage(
+	add func(ContextBucket, string, string, ContextLayer, int),
+	message llm.Message,
+	index int,
+	bucket ContextBucket,
+	source string,
+) {
+	baseTokens := messageEnvelopeTokens + EstimateValueTokens(message.ToolCalls) + EstimateTextTokens(message.ToolCallID)
+	if baseTokens > 0 {
+		add(bucket, transcriptMessageName(message, index), source, LayerTranscript, baseTokens)
+	}
+	for partIndex, part := range message.Content {
+		partTokens := EstimateTextTokens(part.Text)
+		if part.Type == "image" {
+			partTokens = imageApproxTokens
+		}
+		partBucket, partSource := bucket, source
+		if part.Type == "image" && strings.HasPrefix(part.ImageRef, "project:") {
+			partBucket, partSource = BucketUploadedFile, "message_attachment"
+		}
+		if source == "read_image" || attachmentDescriptionKind(part.Text) != "" {
+			partBucket = BucketUploadedFile
+			if source == "read_image" {
+				partSource = "read_image"
+			} else if attachmentDescriptionKind(part.Text) == "compacted_reference" {
+				partSource = "compacted_reference"
+			} else {
+				partSource = "message_attachment"
+			}
+		}
+		name := transcriptMessageName(message, index)
+		if attachmentName := attachmentDescriptionName(part.Text); attachmentName != "" {
+			name = attachmentName
+		} else if partBucket == BucketUploadedFile && part.Type == "image" {
+			name = "uploaded image " + itoa(partIndex+1)
+		}
+		add(partBucket, name, partSource, LayerTranscript, partTokens)
+	}
+}
+
+func attachmentDescriptionKind(text string) string {
+	switch {
+	case strings.HasPrefix(text, "<image_attachment>"):
+		return "message_attachment"
+	case strings.HasPrefix(text, "<attachment_reference>"):
+		return "compacted_reference"
+	default:
+		return ""
+	}
+}
+
+func attachmentDescriptionName(text string) string {
+	if attachmentDescriptionKind(text) == "" {
+		return ""
+	}
+	start := strings.Index(text, ">") + 1
+	end := strings.LastIndex(text, "<")
+	if start <= 0 || end <= start {
+		return ""
+	}
+	var value struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal([]byte(text[start:end]), &value) != nil {
+		return ""
+	}
+	return value.Name
 }
 
 const (

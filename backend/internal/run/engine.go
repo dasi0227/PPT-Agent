@@ -144,6 +144,7 @@ func ensureRunStarted(ctx context.Context, bus *Bus, run model.Run) error {
 		UserInput:       run.Command.Instruction,
 		Skills:          run.Command.PublicSkills(),
 		Resources:       run.Command.PublicComponents(),
+		Attachments:     run.Command.Attachments,
 	})
 }
 
@@ -233,7 +234,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 			PublicEventBase: model.NewPublicEventBase(a.run.ID),
 			Scope:           a.run.Command.Scope, Mode: a.run.Command.Mode,
 			UserInput: a.run.Command.Instruction,
-			Skills:    a.run.Command.PublicSkills(), Resources: a.run.Command.PublicComponents(),
+			Skills:    a.run.Command.PublicSkills(), Resources: a.run.Command.PublicComponents(), Attachments: a.run.Command.Attachments,
 		}); err != nil {
 			e.setStatus(context.Background(), a.run.ID, model.RunFailed)
 			return
@@ -531,7 +532,11 @@ func (e *Engine) PauseAll(ctx context.Context, reason string) error {
 	return errors.Join(failures...)
 }
 
-func (e *Engine) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, requestHash, content string) (model.SteeringMessage, error) {
+func (e *Engine) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, requestHash, content string, attachmentGroups ...[]model.AttachmentReference) (model.SteeringMessage, error) {
+	var attachments []model.AttachmentReference
+	if len(attachmentGroups) > 0 {
+		attachments = attachmentGroups[0]
+	}
 	if runID != expectedRunID {
 		return model.SteeringMessage{}, model.NewAgentError("RUN_NOT_STEERABLE", "steer_run", nil)
 	}
@@ -555,7 +560,7 @@ func (e *Engine) Steer(ctx context.Context, runID, expectedRunID, clientMessageI
 	}
 	message := model.SteeringMessage{
 		RunID: runID, ThreadID: a.run.ThreadID, ClientMessageID: clientMessageID,
-		RequestHash: requestHash, Content: content, Status: model.SteeringAccepted,
+		RequestHash: requestHash, Content: content, Attachments: attachments, Status: model.SteeringAccepted,
 		AcceptedAt: time.Now().UnixNano(),
 	}
 	existing, created, err := e.store.CreateSteering(ctx, message)

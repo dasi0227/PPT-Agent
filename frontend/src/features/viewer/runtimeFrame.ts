@@ -2,6 +2,7 @@ import type { ProjectContentSnapshot } from '../../api/types';
 import { flattenOutline } from '../deck/selectors';
 
 export interface RuntimeFrameContext {
+	project_id?: string;
   slide_id: string;
   canvas: { width: 1920; height: 1080; aspect_ratio: '16:9' };
   theme_id: string;
@@ -22,7 +23,8 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
   const sectionIndex = snapshot.outline.sections.findIndex((section) => section.id === item.section.id);
   const subsectionIndex = item.subsection ? item.section.subsections.findIndex((subsection) => subsection.id === item.subsection?.id) : -1;
   return {
-    slide_id: slideId,
+	project_id: snapshot.manifest.project_id,
+	slide_id: slideId,
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
     theme_id: snapshot.design.theme,
     deck_title: snapshot.manifest.title,

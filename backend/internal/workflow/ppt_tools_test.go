@@ -181,10 +181,10 @@ func TestDefaultToolDisclosureUsesTheSamePolicyAsExecution(t *testing.T) {
 		scope model.RunScope
 		want  []string
 	}{
-		{"chat", PhaseChat, model.ModeChat, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), []string{"read_ppt", "run_command"}},
-		{"plan", PhasePlanning, model.ModePlan, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), []string{"read_ppt", "run_command"}},
-		{"execute spec deck", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages), []string{"mutate_ppt", "read_ppt", "run_command"}},
-		{"execute ppt slide", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_aaaaaa"), []string{"mutate_ppt", "read_ppt", "render_slide", "run_command"}},
+		{"chat", PhaseChat, model.ModeChat, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), []string{"read_image", "read_ppt", "run_command"}},
+		{"plan", PhasePlanning, model.ModePlan, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), []string{"read_image", "read_ppt", "run_command"}},
+		{"execute spec deck", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages), []string{"mutate_ppt", "read_image", "read_ppt", "run_command"}},
+		{"execute ppt slide", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_aaaaaa"), []string{"mutate_ppt", "read_image", "read_ppt", "render_slide", "run_command"}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

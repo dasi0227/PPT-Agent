@@ -172,6 +172,9 @@ func classifyTranscript(messages []llm.Message) []TranscriptEntry {
 				bucket = BucketRunCommand
 			}
 		}
+		if messageContainsUploadedFile(message) {
+			bucket = BucketUploadedFile
+		}
 		entries = append(entries, TranscriptEntry{
 			Role: message.Role, Content: append([]llm.ContentPart(nil), message.Content...),
 			ToolCallID: message.ToolCallID, ToolCalls: append([]llm.ToolCall(nil), message.ToolCalls...),
@@ -179,6 +182,15 @@ func classifyTranscript(messages []llm.Message) []TranscriptEntry {
 		})
 	}
 	return entries
+}
+
+func messageContainsUploadedFile(message llm.Message) bool {
+	for _, part := range message.Content {
+		if (part.Type == "image" && strings.HasPrefix(part.ImageRef, "project:")) || attachmentDescriptionKind(part.Text) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func loadTranscriptTurns(workDir, threadID string, limit int) []RecentTurn {

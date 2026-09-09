@@ -35,6 +35,7 @@ type createRunBody struct {
 	SkillIDs          []string                  `json:"skill_ids"`
 	ComponentNames    []string                  `json:"component_names"`
 	MentionedSlideIDs []string                  `json:"mentioned_slide_ids"`
+	AttachmentIDs     []string                  `json:"attachment_ids"`
 }
 
 type runResponse struct {
@@ -91,6 +92,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		SkillIDs:          body.SkillIDs,
 		ComponentNames:    body.ComponentNames,
 		MentionedSlideIDs: body.MentionedSlideIDs,
+		AttachmentIDs:     body.AttachmentIDs,
 		Instruction:       body.Instruction,
 		ScopeInput:        &body.Scope,
 		Command: model.RunCommand{
@@ -204,15 +206,16 @@ func (h *RunHandler) Resume(c *gin.Context) {
 func (h *RunHandler) Steer(c *gin.Context) {
 	runID := c.Param("id")
 	var body struct {
-		ExpectedRunID   string `json:"expected_run_id"`
-		ClientMessageID string `json:"client_message_id"`
-		Content         string `json:"content"`
+		ExpectedRunID   string   `json:"expected_run_id"`
+		ClientMessageID string   `json:"client_message_id"`
+		Content         string   `json:"content"`
+		AttachmentIDs   []string `json:"attachment_ids"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		AbortWithError(c, ProjectAgentError(model.NewAgentError("BAD_REQUEST", "steer_run", err), "BAD_REQUEST", "steer_run"))
 		return
 	}
-	message, err := h.svc.Steer(c.Request.Context(), runID, body.ExpectedRunID, body.ClientMessageID, body.Content)
+	message, err := h.svc.Steer(c.Request.Context(), runID, body.ExpectedRunID, body.ClientMessageID, body.Content, body.AttachmentIDs)
 	if err != nil {
 		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "steer_run"))
 		return

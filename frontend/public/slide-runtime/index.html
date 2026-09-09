@@ -155,8 +155,23 @@
       });
     }
 
-    function normalizeSlideHTML(source, themeID) {
-      const document = new DOMParser().parseFromString(source, 'text/html');
+    function attachmentContentURL(projectID, source) {
+      if (!projectID || typeof source !== 'string') return null;
+      const normalized = source.startsWith('/') ? source : `/${source}`;
+      const match = normalized.match(/^\/attachments\/(att_[A-Za-z0-9_-]{1,128})\/original\.(png|jpe?g|webp)$/i);
+      if (!match) return null;
+      return `/api/v1/projects/${encodeURIComponent(projectID)}/attachments/${encodeURIComponent(match[1])}/content?variant=original`;
+    }
+
+    function bridgeAttachmentPaths(source, projectID) {
+      if (!projectID || typeof source !== 'string') return source;
+      return source.replace(/\/?attachments\/(att_[A-Za-z0-9_-]{1,128})\/original\.(png|jpe?g|webp)/gi, (path, attachmentID) => (
+        attachmentContentURL(projectID, path) || path
+      ));
+    }
+
+    function normalizeSlideHTML(source, themeID, projectID) {
+		const document = new DOMParser().parseFromString(bridgeAttachmentPaths(source, projectID), 'text/html');
       const head = document.head;
       head.querySelectorAll('link').forEach((link) => {
         const id = link.getAttribute('id');
@@ -175,6 +190,10 @@
       theme.rel = 'stylesheet';
       theme.href = `/api/v1/themes/${encodeURIComponent(themeID)}/css`;
       head.appendChild(theme);
+		document.querySelectorAll('img[src], source[src]').forEach((node) => {
+			const bridged = attachmentContentURL(projectID, node.getAttribute('src'));
+			if (bridged) node.setAttribute('src', bridged);
+		});
       return `<!doctype html>${document.documentElement.outerHTML}`;
     }
 
@@ -219,7 +238,7 @@
           container.appendChild(canvas);
         }
         const frame = container.querySelector('iframe');
-        const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.theme_id);
+        const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.theme_id, slide.frame.project_id);
         if (frame.getAttribute('srcdoc') !== normalizedHTML) {
           frame.srcdoc = normalizedHTML;
         }

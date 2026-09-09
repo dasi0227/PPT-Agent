@@ -27,6 +27,7 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 		{pptReadTool{pack: p.Pack}, true, CapabilityPPTRead, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 		{mutatePPTTool{pack: p.Pack}, false, CapabilityPPTMutate, RiskMedium, []RunPhase{PhaseExecuting}},
 		{slideRenderTool{pack: p.Pack, renderer: renderer, themes: p.Themes}, true, CapabilityPPTRender, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
+		{readImageTool{}, true, CapabilityImageRead, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 	}
 	if p.Components != nil {
 		tools = append(tools, struct {

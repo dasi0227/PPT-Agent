@@ -3,6 +3,14 @@ import type { RunMode, ScopeObject, ScopeSelectionKind } from '../api/types';
 
 const RECENT_MODEL_KEY = 'ppt-agent-recent-model-profile-v1';
 export const MAX_SELECTED_SKILLS = 3;
+export const MAX_MESSAGE_ATTACHMENTS = 8;
+
+export interface ComposerAttachment {
+  attachmentId: string;
+  name: string;
+  size: number;
+  mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
+}
 
 function initialModelProfile(): string | null {
   if (typeof localStorage === 'undefined') return null;
@@ -20,6 +28,7 @@ interface ComposerState {
   polishing: boolean;
   selectedSkillIds: string[];
   threadDrafts: Record<string, string>;
+	threadAttachments: Record<string, ComposerAttachment[]>;
   userTouchedTarget: boolean;
   setScopeObject: (object: ScopeObject) => void;
   setScopeSelection: (selection: ScopeSelectionKind) => void;
@@ -30,6 +39,8 @@ interface ComposerState {
   setPolishing: (value: boolean) => void;
   setThreadDraft: (threadId: string, text: string) => void;
   clearThreadDraft: (threadId: string) => void;
+	addThreadAttachment: (threadId: string, attachment: ComposerAttachment) => void;
+	removeThreadAttachment: (threadId: string, attachmentId: string) => void;
   toggleSkill: (id: string) => void;
   reconcileSkills: (validIds: string[]) => void;
   reconcileScopeIds: (slideIds: string[], sectionIds: string[]) => void;
@@ -52,6 +63,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   polishing: false,
   selectedSkillIds: [],
   threadDrafts: {},
+	threadAttachments: {},
   userTouchedTarget: false,
   setScopeObject: (scopeObject) => set((state) => {
     if (scopeObject === 'global') {
@@ -84,11 +96,26 @@ export const useComposerStore = create<ComposerState>((set) => ({
     return { threadDrafts };
   }),
   clearThreadDraft: (threadId) => set((state) => {
-    if (!(threadId in state.threadDrafts)) return state;
-    const threadDrafts = { ...state.threadDrafts };
-    delete threadDrafts[threadId];
-    return { threadDrafts };
+	const threadDrafts = { ...state.threadDrafts };
+	const threadAttachments = { ...state.threadAttachments };
+	delete threadDrafts[threadId];
+	delete threadAttachments[threadId];
+	return { threadDrafts, threadAttachments };
   }),
+	addThreadAttachment: (threadId, attachment) => set((state) => {
+		const existing = state.threadAttachments[threadId] ?? [];
+		if (existing.some((candidate) => candidate.attachmentId === attachment.attachmentId) || existing.length >= MAX_MESSAGE_ATTACHMENTS) return state;
+		return { threadAttachments: { ...state.threadAttachments, [threadId]: [...existing, attachment] } };
+	}),
+	removeThreadAttachment: (threadId, attachmentId) => set((state) => {
+		const existing = state.threadAttachments[threadId] ?? [];
+		const next = existing.filter((candidate) => candidate.attachmentId !== attachmentId);
+		if (next.length === existing.length) return state;
+		const threadAttachments = { ...state.threadAttachments };
+		if (next.length === 0) delete threadAttachments[threadId];
+		else threadAttachments[threadId] = next;
+		return { threadAttachments };
+	}),
   toggleSkill: (id) => set((state) => {
     if (state.selectedSkillIds.includes(id)) return { selectedSkillIds: state.selectedSkillIds.filter((selected) => selected !== id) };
     if (state.selectedSkillIds.length >= MAX_SELECTED_SKILLS) return state;
@@ -117,6 +144,6 @@ export const useComposerStore = create<ComposerState>((set) => ({
   }),
   resetForProject: () => set({
     scopeObject: 'presentation', scopeSelection: 'current_page', lastNonGlobalSelection: 'current_page', customSlideIds: [], customSectionIds: [],
-    mode: 'execute', polishing: false, selectedSkillIds: [], threadDrafts: {}, userTouchedTarget: false,
+    mode: 'execute', polishing: false, selectedSkillIds: [], threadDrafts: {}, threadAttachments: {}, userTouchedTarget: false,
   }),
 }));

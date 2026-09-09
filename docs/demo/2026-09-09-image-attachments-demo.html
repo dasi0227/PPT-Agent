@@ -13,14 +13,12 @@
       --panel-muted: #eef2f7;
       --text: #17202b;
       --text-secondary: #526070;
-      --text-muted: #7d8997;
+      --text-muted: #657385;
       --border: #d7dee8;
       --border-strong: #c4ceda;
       --accent: #2f67f6;
       --accent-strong: #2556d8;
       --accent-soft: #eaf0ff;
-      --success: #16845b;
-      --success-soft: #e6f6ef;
       --focus: 0 0 0 3px rgba(47, 103, 246, .2);
       --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
     }
@@ -119,7 +117,7 @@
       background: rgba(255,255,255,.9);
       padding: 5px 10px;
       color: var(--text-muted);
-      font-size: 10.5px;
+      font-size: 11px;
       box-shadow: 0 3px 12px rgba(31,42,55,.06);
       backdrop-filter: blur(7px);
     }
@@ -139,7 +137,7 @@
       justify-content: center;
       margin-bottom: 7px;
       color: var(--text-muted);
-      font-size: 10.5px;
+      font-size: 11px;
       opacity: 0;
       transform: translateY(3px);
       transition: opacity .16s ease, transform .16s ease;
@@ -164,6 +162,10 @@
       font-size: 13px;
       line-height: 1.55;
     }
+    .composer.has-attachments textarea {
+      min-height: 76px;
+      padding-top: 9px;
+    }
     .composer textarea::placeholder { color: #8894a2; opacity: 1; }
     .composer textarea:focus-visible { box-shadow: none; }
 
@@ -171,7 +173,7 @@
       display: flex;
       gap: 8px;
       overflow-x: auto;
-      padding: 0 12px 10px;
+      padding: 12px 12px 2px;
       scrollbar-width: none;
     }
     .attachments:empty { display: none; }
@@ -196,45 +198,16 @@
       from { transform: translateY(3px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
-    .thumb {
-      position: relative;
+    .file-icon {
+      display: grid;
       width: 42px;
       height: 42px;
-      overflow: hidden;
+      place-items: center;
       border-radius: 7px;
-      background: #dce5f1;
+      background: #f0f2f5;
+      color: #697687;
     }
-    .thumb.brand {
-      background:
-        linear-gradient(145deg, transparent 0 55%, rgba(255,255,255,.18) 55% 59%, transparent 59%),
-        linear-gradient(145deg, #132238 0 47%, #316cf4 47% 100%);
-    }
-    .thumb.brand::after {
-      position: absolute;
-      right: 6px;
-      bottom: 6px;
-      width: 13px;
-      height: 13px;
-      border: 2px solid rgba(255,255,255,.88);
-      border-radius: 50%;
-      content: "";
-    }
-    .thumb.product {
-      background:
-        radial-gradient(circle at 62% 38%, #ffffff 0 9%, transparent 10%),
-        linear-gradient(135deg, #e9efe8 0 50%, #c8dbc9 50% 100%);
-    }
-    .thumb.product::after {
-      position: absolute;
-      left: 11px;
-      bottom: 7px;
-      width: 20px;
-      height: 25px;
-      border-radius: 8px 8px 5px 5px;
-      background: #5b7461;
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.28);
-      content: "";
-    }
+    .file-icon svg { width: 21px; height: 21px; }
     .attachment-copy { min-width: 0; }
     .attachment-name {
       overflow: hidden;
@@ -246,20 +219,10 @@
       white-space: nowrap;
     }
     .attachment-meta {
-      display: flex;
-      align-items: center;
-      gap: 5px;
       margin-top: 4px;
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 11px;
       line-height: 1;
-    }
-    .ready-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--success);
-      box-shadow: 0 0 0 2px var(--success-soft);
     }
     .remove {
       position: absolute;
@@ -311,7 +274,7 @@
     .tool-button {
       gap: 5px;
       padding: 0 7px;
-      font-size: 10.5px;
+      font-size: 11px;
       font-weight: 650;
     }
     .tool-button.model {
@@ -384,8 +347,8 @@
     <div class="composer-zone">
       <div class="hint" id="hint" aria-live="polite"></div>
       <section class="composer" aria-label="Agent 输入框">
-        <textarea id="prompt" placeholder="输入你的想法与目标">参考品牌图的色彩和构图，把产品图用在封面。</textarea>
         <div class="attachments" id="attachments" aria-label="当前消息的图片附件"></div>
+        <textarea id="prompt" placeholder="输入你的想法与目标">参考品牌图的色彩和构图，把产品图用在封面。</textarea>
 
         <div class="composer-controls">
           <div class="control-start">
@@ -430,13 +393,17 @@
 
   <template id="attachmentTemplate">
     <article class="attachment">
-      <div class="thumb" aria-hidden="true"></div>
+      <div class="file-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3.5" y="4" width="17" height="16" rx="3"/>
+          <circle cx="9" cy="9" r="1.4"/>
+          <path d="m6.5 16 3.5-3.5 2.5 2.5 2-2 3 3"/>
+        </svg>
+      </div>
       <div class="attachment-copy">
         <div class="attachment-name"></div>
-        <div class="attachment-meta">
-          <span class="ready-dot"></span>
-          <span class="meta-copy"></span>
-        </div>
+        <div class="attachment-meta"></div>
       </div>
       <button class="remove" type="button" aria-label="移除附件"
         title="移除当前消息引用">
@@ -450,8 +417,8 @@
 
   <script>
     const mockFiles = [
-      { id: "brand", name: "品牌视觉参考.webp", size: "1.8 MB", kind: "brand" },
-      { id: "product", name: "桌面端产品图.png", size: "2.4 MB", kind: "product" }
+      { id: "brand", name: "品牌视觉参考.webp", size: "1.8 MB" },
+      { id: "product", name: "桌面端产品图.png", size: "2.4 MB" }
     ];
     const state = { attachments: [] };
     const attachmentList = document.getElementById("attachments");
@@ -460,20 +427,19 @@
     const hint = document.getElementById("hint");
     const live = document.getElementById("live");
     const prototypeNote = document.querySelector(".prototype-note");
+    const composer = document.querySelector(".composer");
 
     function render() {
       attachmentList.replaceChildren();
       state.attachments.forEach(function (file) {
         const fragment = template.content.cloneNode(true);
         const card = fragment.querySelector(".attachment");
-        const thumb = fragment.querySelector(".thumb");
         const name = fragment.querySelector(".attachment-name");
-        const meta = fragment.querySelector(".meta-copy");
+        const meta = fragment.querySelector(".attachment-meta");
         const remove = fragment.querySelector(".remove");
-        thumb.classList.add(file.kind);
         name.textContent = file.name;
         name.title = file.name;
-        meta.textContent = file.size + " · 可用";
+        meta.textContent = file.size;
         remove.setAttribute("aria-label", "移除 " + file.name);
         remove.addEventListener("click", function () {
           state.attachments = state.attachments.filter(function (item) {
@@ -486,6 +452,7 @@
       });
 
       const count = state.attachments.length;
+      composer.classList.toggle("has-attachments", count > 0);
       attachButton.classList.toggle("active", count > 0);
       attachButton.setAttribute("aria-pressed", String(count > 0));
       hint.classList.toggle("visible", count > 0);

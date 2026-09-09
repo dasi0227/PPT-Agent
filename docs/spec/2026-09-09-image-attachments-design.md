@@ -1,10 +1,10 @@
 # 图片附件与视觉参考上下文设计
 
-- 状态：设计定稿，待实现
+- 状态：已实现
 - 日期：2026-09-09
 - 对应 TODO：【四、】上传图片与参考图，让 Agent 基于视觉素材创作
 - 关联设计：2026-09-04-context-window-compaction-design.md
-- 本次交付：本文档与 docs/demo/2026-09-09-image-attachments-demo.html
+- 本次交付：本文档、docs/demo/2026-09-09-image-attachments-demo.html 及对应生产实现
 
 ## 1. 需求解释
 
@@ -14,7 +14,7 @@
 
 1. 用户通过右栏回形针入口选择图片，或在输入框粘贴图片文件。
 2. 图片选中后立即上传到当前项目，上传与发送消息解耦。
-3. 附件在输入框内显示缩略图、文件名和状态，发送前可解除当前消息引用。
+3. 上传成功的附件在输入框内显示统一图片文件图标、文件名和大小，发送前可解除当前消息引用。
 4. 发送时把稳定附件 ID 和图片 Item 一起放入对话上下文，使视觉模型直接看到图片。
 5. 只要图片 Item 仍处于有效 Conversation Context，后续 Model Call 就继续可见；compact 或裁剪可以移除图片 Item，但不删除项目原图。
 6. 图片不再位于当前 context 时，Agent 可通过 read_image 按附件 ID 重新读取缩略图或原图。
@@ -49,9 +49,10 @@
 - 点击调用浏览器原生多文件选择，accept 只允许 image/png、image/jpeg、image/webp。
 - 输入框接收剪贴板中的图片 File Item；同次粘贴的文字与图片分别进入文本和附件流程。
 - 选择或粘贴后立即上传，而不是等发送消息时上传。
-- 附件临时区位于文本编辑区下方、底部控制栏上方，仍属于 composer。
-- 每张附件展示缩略图、截断文件名、大小和 uploading / ready / failed 状态。
-- 失败项保留在 composer 内，提供重试；移除只解除本条消息引用。
+- 附件临时区位于 composer 顶部、文本编辑区上方；有附件时先看到引用对象，再输入如何使用。
+- 每张附件使用统一图片文件 icon，不显示图片缩略图；卡片只展示截断文件名与文件大小。
+- 附件卡不展示“可用”、成功点或其他状态文案；只有上传且校验成功的图片才进入附件列表。
+- 上传或校验失败的文件不生成附件卡，错误沿用 composer 的统一错误提示；移除成功附件只解除本条消息引用。
 - 不提供“仅参考 / 可用于页面”选择器，由用户提示词表达用途，Agent 判断。
 - 有附件时要求 vision 模型；不支持时阻止发送并保留草稿与附件。
 - 新 run 和运行中的 steering 都支持图片附件。
@@ -224,30 +225,24 @@ ContextWindowDetail 以原始文件名展示每张图的估算占用。source �
 
 ### 6.1 状态模型
 
-附件草稿按 thread 隔离，并与文本草稿一起在切换 thread 时恢复：
+附件草稿按 thread 隔离，并与文本草稿一起在切换 thread 时恢复。composer 只保存后端已确认可用的附件：
 
 ~~~ts
-type ComposerAttachmentStatus = 'uploading' | 'ready' | 'failed';
-
 interface ComposerAttachment {
-  localId: string;
-  attachmentId?: string;
-  file: File;
-  previewURL: string;
+  attachmentId: string;
   name: string;
   size: number;
-  status: ComposerAttachmentStatus;
-  error?: string;
+  mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
 }
 ~~~
 
-File 和 object URL 只用于当前浏览器上传过程；成功后以后端 ID 为准。移除、切换项目或销毁草稿时必须 revokeObjectURL。
+待上传 File 仅存在于短生命周期 upload job，不进入可见附件列表。上传及校验成功后以后端 ID 为准并加入 ComposerAttachment；失败 job 直接丢弃，通过现有 composer 错误区域说明原因。因为 UI 不渲染图片缩略图，所以无需为附件卡创建 object URL。
 
 ### 6.2 发送条件
 
-- 文本非空或至少一张 ready 附件时可发送，允许纯图片消息。
-- 存在 uploading 附件时禁用发送并提示“正在上传图片”。
-- 存在 failed 附件时不静默丢弃，用户必须重试或移除。
+- 文本非空或至少有一张已进入列表的附件时可发送，允许纯图片消息。
+- upload job 进行中时禁用发送；成功后卡片直接出现，不额外显示“可用”状态。
+- 上传失败的文件不显示为附件卡，由统一错误提示说明失败文件与原因；用户可重新选择。
 - 有附件且模型不支持 vision 时禁用发送，提示“当前模型不支持图片，请更换模型后发送”。
 - 发送成功后清空当前消息引用和预览 URL，不删除项目文件。
 
@@ -255,7 +250,7 @@ File 和 object URL 只用于当前浏览器上传过程；成功后以后端 ID
 
 - 回形针按钮使用 aria-label 和 title“选择图片”。
 - 隐藏 file input 可由键盘触发按钮访问。
-- 状态变化经 aria-live=polite 通知；错误说明具体文件和修复方式。
+- 附件加入、移除和上传失败经 aria-live=polite 通知；错误说明具体文件和修复方式。
 - 回形针属于 composer start control group，必须被现有控制栏宽度测量逻辑纳入。
 - 窄屏附件区横向滚动，不展开成独立面板。
 
@@ -313,12 +308,11 @@ File 和 object URL 只用于当前浏览器上传过程；成功后以后端 ID
 - Provider：PNG/JPEG/WebP、无 vision 拦截、不支持 MIME 拒绝。
 - Transcript/compact：图片跨轮保留、compact 后保留引用、read_image 恢复。
 - Context：七桶总和、图片拆分归类、details 文件名、compact 前后差值。
-- Composer：file picker、多图粘贴、状态、移除、纯图发送、vision 拦截、steering。
+- Composer：file picker、多图粘贴、成功附件展示、失败文件过滤、移除、纯图发送、vision 拦截、steering。
 - Slide runtime：附件在编辑器预览与 render worker 中一致可见，路径逃逸被拒绝。
 
 ## 11. 本次不做
 
-- 不实现生产前端、后端、Schema 或测试代码；本次只交付开发设计与视觉原型。
 - 不支持拖放。
 - 不支持 GIF、SVG、PDF、Office、文本或表格文件。
 - 不提供项目附件库、附件删除或未引用文件清理。
@@ -399,6 +393,12 @@ File 和 object URL 只用于当前浏览器上传过程；成功后以后端 ID
 
 - 用户决定：所有边界已确定。
 - 最终落点：uploaded_file 独立统计当前有效 prompt 中的上传文件；仅上传未引用为 0，消息图片、历史有效图片、read_image 结果和 compact 后轻量引用按实际内容计入。
+
+### Q17：附件卡片如何呈现？
+
+- 用户修正：composer 不显示图片缩略图，改用统一图片文件 icon；只显示文件名和大小，不显示“可用”等状态。
+- 用户修正：不可用文件不进入附件列表；附件列表从文本下方移动到文本上方。
+- 最终落点：只有上传且校验成功的附件才在 composer 顶部形成紧凑文件卡，失败原因由统一错误提示承载。
 
 ## 13. 代码现状与实现注意点
 

@@ -165,6 +165,7 @@ const (
 	MaxRunSkills      = 3
 	MaxRunComponents  = 8
 	MaxMentionedPages = 8
+	MaxRunAttachments = 8
 )
 
 var slideIDPattern = regexp.MustCompile(`^sli_[A-Za-z0-9_-]+$`)
@@ -206,15 +207,29 @@ type MentionedPage struct {
 	HTMLState string `json:"html_state"`
 }
 
+// AttachmentReference is the immutable, message-level snapshot of a project image.
+// The project filesystem owns the bytes; Runs and steering messages retain this
+// metadata so history remains interpretable after a context compaction.
+type AttachmentReference struct {
+	ID           string `json:"id"`
+	OriginalName string `json:"original_name"`
+	MediaType    string `json:"media_type"`
+	Extension    string `json:"extension"`
+	SizeBytes    int64  `json:"size_bytes"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+}
+
 type RunCommand struct {
-	Scope                    RunScope        `json:"scope"`
-	Mode                     RunMode         `json:"mode"`
-	Instruction              string          `json:"instruction"`
-	Options                  RunOptions      `json:"options,omitempty"`
-	Skills                   []RunSkill      `json:"skills,omitempty"`
-	Components               []RunComponent  `json:"components,omitempty"`
-	MentionedPages           []MentionedPage `json:"mentioned_pages,omitempty"`
-	DroppedMentionedSlideIDs []string        `json:"dropped_mentioned_slide_ids,omitempty"`
+	Scope                    RunScope              `json:"scope"`
+	Mode                     RunMode               `json:"mode"`
+	Instruction              string                `json:"instruction"`
+	Options                  RunOptions            `json:"options,omitempty"`
+	Skills                   []RunSkill            `json:"skills,omitempty"`
+	Components               []RunComponent        `json:"components,omitempty"`
+	MentionedPages           []MentionedPage       `json:"mentioned_pages,omitempty"`
+	DroppedMentionedSlideIDs []string              `json:"dropped_mentioned_slide_ids,omitempty"`
+	Attachments              []AttachmentReference `json:"attachments,omitempty"`
 }
 
 var ErrInvalidRunCommand = errors.New("invalid run command")
@@ -228,7 +243,7 @@ func (c RunCommand) Validate() error {
 	default:
 		return fmt.Errorf("%w: unsupported mode %q", ErrInvalidRunCommand, c.Mode)
 	}
-	if strings.TrimSpace(c.Instruction) == "" {
+	if strings.TrimSpace(c.Instruction) == "" && len(c.Attachments) == 0 {
 		return fmt.Errorf("%w: instruction is required", ErrInvalidRunCommand)
 	}
 	switch c.Options.Language {
@@ -287,6 +302,21 @@ func (c RunCommand) Validate() error {
 			return fmt.Errorf("%w: mentioned pages must be unique", ErrInvalidRunCommand)
 		}
 		seenPages[page.SlideID] = true
+	}
+	if len(c.Attachments) > MaxRunAttachments {
+		return fmt.Errorf("%w: at most %d attachments may be referenced", ErrInvalidRunCommand, MaxRunAttachments)
+	}
+	seenAttachments := map[string]bool{}
+	for _, attachment := range c.Attachments {
+		if !strings.HasPrefix(attachment.ID, "att_") || strings.TrimSpace(attachment.OriginalName) == "" ||
+			(attachment.MediaType != "image/png" && attachment.MediaType != "image/jpeg" && attachment.MediaType != "image/webp") ||
+			attachment.SizeBytes <= 0 || attachment.Width <= 0 || attachment.Height <= 0 {
+			return fmt.Errorf("%w: attachment snapshot is invalid", ErrInvalidRunCommand)
+		}
+		if seenAttachments[attachment.ID] {
+			return fmt.Errorf("%w: attachments must be unique", ErrInvalidRunCommand)
+		}
+		seenAttachments[attachment.ID] = true
 	}
 	return nil
 }

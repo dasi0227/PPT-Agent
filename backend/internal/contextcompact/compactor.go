@@ -82,11 +82,28 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		Role:    llm.RoleUser,
 		Content: llm.TextContent("<context_summary>\n" + summary + "\n</context_summary>"),
 	}}, retained...)
+	next = compactProjectAttachmentImages(next)
 	return Result{
 		Messages: next, Summary: summary,
 		BeforeTranscriptTokens: before, AfterTranscriptTokens: messageTokens(next),
 		DroppedInputTokens: dropped,
 	}, nil
+}
+
+// compactProjectAttachmentImages releases visual payload tokens while retaining
+// the adjacent structured attachment descriptions in the transcript.
+func compactProjectAttachmentImages(messages []llm.Message) []llm.Message {
+	for index := range messages {
+		parts := make([]llm.ContentPart, 0, len(messages[index].Content))
+		for _, part := range messages[index].Content {
+			if part.Type == "image" && strings.HasPrefix(part.ImageRef, "project:") {
+				continue
+			}
+			parts = append(parts, part)
+		}
+		messages[index].Content = parts
+	}
+	return messages
 }
 
 func splitTranscript(messages []llm.Message) (compressed, retained []llm.Message) {

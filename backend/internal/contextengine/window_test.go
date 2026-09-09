@@ -48,6 +48,22 @@ func TestPromptEstimatorAccountsForBucketsToolsAndImages(t *testing.T) {
 	}
 }
 
+func TestPromptEstimatorSeparatesProjectImageAttachments(t *testing.T) {
+	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: []llm.ContentPart{
+			{Type: "text", Text: `<image_attachment>{"attachment_id":"att_brand","name":"brand.png"}</image_attachment>`},
+			{Type: "image", ImageRef: "project:pro_a/attachment:att_brand/original", MIMEType: "image/png"},
+		}}},
+		Max: 65536, Factor: 1,
+	})
+	if snapshot.Buckets[BucketUploadedFile] <= imageApproxTokens || snapshot.Buckets[BucketUserPrompt] == 0 {
+		t.Fatalf("attachment bucket classification failed: %+v", snapshot.Buckets)
+	}
+	if len(snapshot.Details[BucketUploadedFile]) != 2 || snapshot.Details[BucketUploadedFile][0].Name != "brand.png" {
+		t.Fatalf("attachment details missing: %+v", snapshot.Details[BucketUploadedFile])
+	}
+}
+
 func TestCalibrationStoreUsesBoundedEMA(t *testing.T) {
 	store := NewCalibrationStore()
 	if got := store.Factor("thread"); got != 1 {

@@ -400,11 +400,15 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 	var out model.SteeringMessage
 	created := false
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		attachments, marshalErr := json.Marshal(message.Attachments)
+		if marshalErr != nil {
+			return marshalErr
+		}
 		res := tx.Exec(`INSERT INTO steering_inbox
-			(run_id,thread_id,client_message_id,request_hash,content,status,accepted_at,injected_at,rejection_code)
-			VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(thread_id,client_message_id) DO NOTHING`,
+			(run_id,thread_id,client_message_id,request_hash,content,attachments_json,status,accepted_at,injected_at,rejection_code)
+			VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(thread_id,client_message_id) DO NOTHING`,
 			message.RunID, message.ThreadID, message.ClientMessageID, message.RequestHash,
-			message.Content, message.Status, message.AcceptedAt, nil, message.RejectionCode)
+			message.Content, string(attachments), message.Status, message.AcceptedAt, nil, message.RejectionCode)
 		if res.Error != nil {
 			return res.Error
 		}

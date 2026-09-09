@@ -50,7 +50,7 @@ export function parsePublicEvent(eventName: string, data: unknown, id?: string):
 }
 
 const progressStages = new Set(['thinking', 'planning', 'reading', 'writing', 'rendering', 'finalizing']);
-const businessTools = new Set(['read_ppt', 'mutate_ppt', 'render_slide', 'run_command', 'load_component', 'load_skill']);
+const businessTools = new Set(['read_ppt', 'read_image', 'mutate_ppt', 'render_slide', 'run_command', 'load_component', 'load_skill']);
 const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
@@ -171,7 +171,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
 
 function validContextBuckets(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  return ['read_ppt', 'run_command', 'system_prompt', 'user_prompt', 'chat_history', 'other']
+  return ['read_ppt', 'run_command', 'system_prompt', 'user_prompt', 'chat_history', 'uploaded_file', 'other']
     .every((key) => isNonNegativeInteger(value[key]));
 }
 

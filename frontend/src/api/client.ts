@@ -100,10 +100,10 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     signal: externalSignal,
     ...requestOptions
   } = options;
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
+  const headers = new Headers(options.headers);
+  if (!(requestOptions.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   const timeoutController = new AbortController();
   const timeout = window.setTimeout(() => timeoutController.abort('timeout'), timeoutMs);
   const combined = combineSignals([externalSignal ?? undefined, timeoutController.signal]);

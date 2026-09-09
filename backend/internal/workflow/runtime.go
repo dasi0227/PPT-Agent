@@ -57,8 +57,10 @@ type SteeringSource interface {
 }
 
 type SteeringInput struct {
-	ID      string
-	Content string
+	ID          string
+	Content     string
+	ProjectID   string
+	Attachments []model.AttachmentReference
 }
 
 type LifecycleObserver interface {
@@ -402,7 +404,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.messages = append(state.messages, messages...)
 		instruction := currentRunInstructionMessage(input.RunID, input.Context.Command.Instruction)
 		if !containsMessageText(state.messages, instruction) {
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(instruction)})
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: attachmentMessageParts(
+				instruction, input.Context.Project.ID, input.Context.Command.Attachments,
+			)})
 		}
 	}
 	defer func() {
@@ -2366,8 +2370,10 @@ func (r *Runtime) appendSteering(ctx context.Context, state *RunState, steering 
 	}
 	ids := make([]string, 0, len(messages))
 	for _, message := range messages {
-		if strings.TrimSpace(message.Content) != "" {
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("User steering: " + message.Content)})
+		if strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0 {
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: attachmentMessageParts(
+				"User steering: "+message.Content, message.ProjectID, message.Attachments,
+			)})
 			ids = append(ids, message.ID)
 		}
 	}
@@ -2383,6 +2389,22 @@ func (r *Runtime) persistTranscript(input RuntimeInput, state *RunState) error {
 
 func currentRunInstructionMessage(runID, instruction string) string {
 	return "<run_user_instruction run_id=\"" + runID + "\">\n" + instruction + "\n</run_user_instruction>"
+}
+
+func attachmentMessageParts(text, projectID string, attachments []model.AttachmentReference) []llm.ContentPart {
+	parts := llm.TextContent(text)
+	for _, attachment := range attachments {
+		description, _ := json.Marshal(map[string]any{
+			"attachment_id": attachment.ID, "name": attachment.OriginalName,
+			"media_type": attachment.MediaType, "width": attachment.Width, "height": attachment.Height,
+			"size_bytes": attachment.SizeBytes,
+		})
+		parts = append(parts,
+			llm.ContentPart{Type: "text", Text: "<image_attachment>" + string(description) + "</image_attachment>"},
+			llm.ContentPart{Type: "image", ImageRef: "project:" + projectID + "/attachment:" + attachment.ID + "/original", MIMEType: attachment.MediaType, Detail: "high"},
+		)
+	}
+	return parts
 }
 
 func containsMessageText(messages []llm.Message, text string) bool {

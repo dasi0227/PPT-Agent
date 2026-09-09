@@ -287,7 +287,7 @@ interface RunStoreV2 {
   ) => Promise<boolean>;
   answerScopeExpansion: (threadId: string, runId: string, payload: ScopeExpansionRequest) => Promise<boolean>;
   cancelRun: (threadId: string, runId: string, reason?: RunCancelReason) => Promise<boolean>;
-  steerRun: (threadId: string, runId: string, content: string, clientMessageId: string) => Promise<boolean>;
+	steerRun: (threadId: string, runId: string, content: string, clientMessageId: string, attachmentIds?: string[]) => Promise<boolean>;
   retryRun: (threadId: string) => Promise<boolean>;
   clearRun: (threadId: string) => void;
   closeSessions: (threadIds: string[]) => void;
@@ -1053,7 +1053,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       }
     },
 
-    steerRun: async (threadId, runId, content, clientMessageId) => {
+    steerRun: async (threadId, runId, content, clientMessageId, attachmentIds = []) => {
       const itemId = `steering_${clientMessageId}`;
       updateSession(threadId, (prev) => ({
         timelineItems: [...prev.timelineItems, {
@@ -1071,6 +1071,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           expected_run_id: runId,
           client_message_id: clientMessageId,
           content,
+			...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
         });
         updateSession(threadId, (prev) => ({
           timelineItems: prev.timelineItems.map((item) =>

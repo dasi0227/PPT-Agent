@@ -94,6 +94,9 @@ interface PromptComposerEditorProps {
   onSlashCommand?: (command: SlashCommandId) => void;
   onModelOption?: (id: string) => void;
   onTargetOption?: (id: string) => void;
+	// File items share the paste gesture with plain text, but never enter the
+	// contenteditable DOM. The parent uploads and renders them separately.
+	onPasteFiles?: (files: File[]) => void;
 }
 
 function nodePlainText(node: Node): string {
@@ -227,6 +230,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     onSlashCommand,
     onModelOption,
     onTargetOption,
+		onPasteFiles,
   }, forwardedRef) {
     const editorRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -702,6 +706,11 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     };
 
     const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+		const files = Array.from(event.clipboardData.items)
+			.filter((item) => item.kind === 'file')
+			.map((item) => item.getAsFile())
+			.filter((file): file is File => file !== null);
+		if (files.length > 0) onPasteFiles?.(files);
       event.preventDefault();
       insertPlainText(event.currentTarget, event.clipboardData.getData('text/plain'));
       syncValue();
