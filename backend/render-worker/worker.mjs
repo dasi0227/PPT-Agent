@@ -307,6 +307,58 @@ async function render(input, browser, handles = new Map()) {
   }
 }
 
+async function assemblePDF(input, browser, handles = new Map()) {
+  if (!input || !Array.isArray(input.png_paths) || input.png_paths.length === 0 ||
+      !input.png_paths.every(path => typeof path === 'string') || typeof input.output_path !== 'string') {
+    throw new Error('invalid PDF request');
+  }
+  const timeout = Math.min(Math.max(Number(input.timeout_ms) || 20000, 1000), 30000);
+  const images = await Promise.all(input.png_paths.map(async path => {
+    const raw = await fs.readFile(path);
+    if (raw.length < 8 || raw.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error('invalid PNG input');
+    return raw;
+  }));
+  const handle = {
+    canceled: false, context: undefined, server: undefined,
+    async cancel() {
+      this.canceled = true;
+      if (this.context) await this.context.close().catch(() => {});
+      if (this.server) await new Promise(resolveClose => this.server.close(resolveClose)).catch(() => {});
+    },
+  };
+  handles.set(input.request_id, handle);
+  const server = createServer((request, response) => {
+    const match = /^\/pages\/(\d+)\.png$/.exec(request.url?.split('?')[0] ?? '');
+    const index = match ? Number(match[1]) : -1;
+    if (!Number.isInteger(index) || index < 0 || index >= images.length) { response.writeHead(404); response.end(); return; }
+    response.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
+    response.end(images[index]);
+  });
+  handle.server = server;
+  await new Promise((accept, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', accept); });
+  const address = server.address();
+  const origin = `http://127.0.0.1:${address.port}`;
+  let context;
+  try {
+    context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, serviceWorkers: 'block' });
+    handle.context = context;
+    if (handle.canceled) throw new Error('RUN_CANCELED');
+    const page = await context.newPage();
+    page.setDefaultTimeout(timeout);
+    const body = images.map((_, index) => `<section><img src="${origin}/pages/${index}.png"></section>`).join('');
+    await page.setContent(`<!doctype html><html><head><style>@page{size:13.333333in 7.5in;margin:0}html,body{margin:0;padding:0}section{width:13.333333in;height:7.5in;break-after:page;overflow:hidden}section:last-child{break-after:auto}img{display:block;width:100%;height:100%;object-fit:fill}</style></head><body>${body}</body></html>`, { waitUntil: 'networkidle', timeout });
+    await page.pdf({ path: input.output_path, width: '13.333333in', height: '7.5in', printBackground: true, preferCSSPageSize: true, margin: { top: '0', right: '0', bottom: '0', left: '0' } });
+    const pdf = await fs.readFile(input.output_path);
+    const pageCount = (pdf.toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
+    if (pageCount !== images.length) throw new Error(`PDF page count mismatch: expected ${images.length}, got ${pageCount}`);
+    return { page_count: pageCount };
+  } finally {
+    handles.delete(input.request_id);
+    if (context) await context.close().catch(() => {});
+    await new Promise(resolveClose => server.close(resolveClose)).catch(() => {});
+  }
+}
+
 async function readInput() {
   const chunks = [];
   let size = 0;
@@ -350,12 +402,14 @@ async function serve() {
       })}\n`);
       continue;
     }
-    if (request.type !== 'render') {
+    if (request.type !== 'render' && request.type !== 'pdf') {
       process.stdout.write(`${JSON.stringify({ request_id: request.request_id, ok: false, error: 'invalid worker command' })}\n`);
       continue;
     }
-    const task = render(request, browser, handles)
-      .then(diagnostics => ({ request_id: request.request_id, ok: true, diagnostics }))
+    const task = (request.type === 'pdf' ? assemblePDF(request, browser, handles) : render(request, browser, handles))
+      .then(result => request.type === 'pdf'
+        ? ({ request_id: request.request_id, ok: true, page_count: result.page_count })
+        : ({ request_id: request.request_id, ok: true, diagnostics: result }))
       .catch(error => ({ request_id: request.request_id, ok: false, error: String(error?.message ?? error) }))
       .then(response => process.stdout.write(`${JSON.stringify(response)}\n`));
     active.add(task);

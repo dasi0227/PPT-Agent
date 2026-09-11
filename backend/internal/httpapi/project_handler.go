@@ -101,7 +101,10 @@ func (h *ProjectHandler) Patch(c *gin.Context) {
 	}
 	p, err := h.svc.RenameProject(c.Request.Context(), c.Param("id"), title)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
+		if errors.Is(err, service.ErrRunActive) {
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project is currently locked"})
+			return
+		} else if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
 			AbortWithError(c, ErrNotFound("project not found"))
 			return
 		}
@@ -112,7 +115,10 @@ func (h *ProjectHandler) Patch(c *gin.Context) {
 }
 func (h *ProjectHandler) Delete(c *gin.Context) {
 	if err := h.svc.DeleteProject(c.Request.Context(), c.Param("id")); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
+		if errors.Is(err, service.ErrRunActive) {
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project is currently locked"})
+			return
+		} else if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
 			AbortWithError(c, ErrNotFound("project not found"))
 			return
 		}

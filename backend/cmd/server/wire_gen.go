@@ -64,13 +64,18 @@ func initApp() (*App, func(), error) {
 	}
 	fsTranscriptStore := provideTranscriptStore()
 	calibrationStore := provideCalibrationStore()
-	attachmentService := service.NewAttachmentService(store)
-	attachmentHandler := httpapi.NewAttachmentHandler(attachmentService)
 	runService := service.NewRunService(store, engine, registry, workRoot, nodeSlideRenderer, fsTranscriptStore, calibrationStore)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
-	projectService := provideProjectService(store, workRoot, lockManager, themeService)
-	pptMutationService := service.NewPPTMutationService(store)
+	manager, cleanup4, err := provideExportManager(nodeSlideRenderer, workRoot)
+	if err != nil {
+		cleanup3()
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	projectService := provideProjectService(store, workRoot, lockManager, themeService, manager)
+	pptMutationService := providePPTMutationService(store, lockManager)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
 	threadService := provideThreadService(store, fsTranscriptStore)
 	threadHandler := httpapi.NewThreadHandler(threadService)
@@ -87,6 +92,7 @@ func initApp() (*App, func(), error) {
 	briefingHandler := httpapi.NewBriefingHandler(kickoffService, handoffService)
 	gitCommitService, err := provideGitCommitService(store, registry, lockManager)
 	if err != nil {
+		cleanup4()
 		cleanup3()
 		cleanup2()
 		cleanup()
@@ -95,6 +101,7 @@ func initApp() (*App, func(), error) {
 	gitCommitHandler := httpapi.NewGitCommitHandler(gitCommitService)
 	promptService, err := providePromptService(store)
 	if err != nil {
+		cleanup4()
 		cleanup3()
 		cleanup2()
 		cleanup()
@@ -103,11 +110,16 @@ func initApp() (*App, func(), error) {
 	promptHandler := httpapi.NewPromptHandler(promptService)
 	contextWindowService := service.NewContextWindowService(store, registry, lockManager, fsTranscriptStore, calibrationStore)
 	contextWindowHandler := httpapi.NewContextWindowHandler(contextWindowService)
-	router := httpapi.NewRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler, contextWindowHandler, attachmentHandler)
+	attachmentService := provideAttachmentService(store, lockManager)
+	attachmentHandler := httpapi.NewAttachmentHandler(attachmentService)
+	exportService := service.NewExportService(store, lockManager, themeService, manager)
+	exportHandler := httpapi.NewExportHandler(exportService)
+	router := provideRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler, contextWindowHandler, attachmentHandler, exportHandler)
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
 	app := provideApp(server, engine, zapLogger)
 	return app, func() {
+		cleanup4()
 		cleanup3()
 		cleanup2()
 		cleanup()
@@ -124,12 +136,17 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideWorkRoot,
 	provideEngine,
 	provideHistoryWriter,
-	provideRenderWorker, service.NewHealthService, provideProjectService,
-	provideThreadService, service.NewAttachmentService, service.NewRunService, service.NewContextWindowService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
-	provideSlideService, service.NewPPTMutationService, provideThemeService,
+	provideRenderWorker,
+	provideExportManager, service.NewHealthService, provideProjectService,
+	provideThreadService,
+	provideAttachmentService, service.NewExportService, service.NewRunService, service.NewContextWindowService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
+	provideSlideService,
+	providePPTMutationService,
+	provideThemeService,
 	provideComponentService,
 	provideSkillService,
-	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewAttachmentHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewContextWindowHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, httpapi.NewRouter, engineFromRouter,
+	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewAttachmentHandler, httpapi.NewExportHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewContextWindowHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, provideRouter,
+	engineFromRouter,
 	provideHTTPServer,
 	provideApp,
 )

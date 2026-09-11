@@ -26,6 +26,25 @@ type Router struct {
 	prompt        *PromptHandler
 	contextWindow *ContextWindowHandler
 	attachment    *AttachmentHandler
+	export        *ExportHandler
+}
+
+func (r *Router) WithExportHandler(handler *ExportHandler) *Router {
+	r.export = handler
+	r.registerExport()
+	return r
+}
+
+func (r *Router) registerExport() {
+	if r.export == nil {
+		return
+	}
+	v1 := r.engine.Group("/api/v1")
+	v1.POST("/projects/:id/exports", r.export.Create)
+	v1.GET("/exports/:id", r.export.Get)
+	v1.GET("/exports/:id/events", r.export.Events)
+	v1.GET("/exports/:id/download", r.export.Download)
+	v1.DELETE("/exports/:id", r.export.Cancel)
 }
 
 func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, promptH *PromptHandler, contextWindowH *ContextWindowHandler, attachmentH ...*AttachmentHandler) *Router {

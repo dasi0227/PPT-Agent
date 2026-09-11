@@ -15,7 +15,7 @@ import (
 
 const (
 	validToolHTML = `<!doctype html><html lang="zh"><head><link id="base-link" rel="stylesheet" href="/api/v1/runtime/base.css"><link id="theme-link" rel="stylesheet" href="/api/v1/themes/swiss-modern/css"></head><body><section class="slide-stage"><h1>Original</h1></section></body></html>`
-	testBaseCSS   = `.slide-stage{width:1920px;height:1080px;overflow:hidden}`
+	testBaseCSS   = `html,body{margin:0}.slide-stage{width:1920px;height:1080px;overflow:hidden}`
 	testThemeCSS  = `:root{--theme-proof:37px}`
 )
 
@@ -87,6 +87,17 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	}
 	if config.Width != 1920 || config.Height != 1080 {
 		t.Fatalf("screenshot size=%dx%d", config.Width, config.Height)
+	}
+	pdfPath := filepath.Join(dir, "deck.pdf")
+	pageCount, err := renderer.AssemblePDF(context.Background(), []string{screenshot, screenshot}, pdfPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pageCount != 2 {
+		t.Fatalf("PDF page count=%d", pageCount)
+	}
+	if info, statErr := os.Stat(pdfPath); statErr != nil || info.Size() == 0 {
+		t.Fatalf("PDF was not created: info=%v err=%v", info, statErr)
 	}
 
 	secondScreenshot := filepath.Join(dir, "shot-2.png")

@@ -88,6 +88,14 @@ type RenderDiagnostics struct {
 	DurationMS      int64            `json:"duration_ms"`
 }
 
+type PDFRequest struct {
+	Type       string   `json:"type,omitempty"`
+	RequestID  string   `json:"request_id,omitempty"`
+	PNGPaths   []string `json:"png_paths"`
+	OutputPath string   `json:"output_path"`
+	TimeoutMS  int      `json:"timeout_ms"`
+}
+
 type SlideRenderer interface {
 	Render(context.Context, RenderRequest) (RenderDiagnostics, error)
 }
@@ -116,7 +124,62 @@ type workerRenderResponse struct {
 	OK                    bool              `json:"ok"`
 	Error                 string            `json:"error"`
 	Diagnostics           RenderDiagnostics `json:"diagnostics"`
+	PageCount             int               `json:"page_count"`
 	InfrastructureFailure bool              `json:"-"`
+}
+
+// AssemblePDF asks the shared Chromium worker to place an already rendered PNG
+// batch into fixed 16:9, marginless PDF pages.
+func (r *NodeSlideRenderer) AssemblePDF(ctx context.Context, paths []string, outputPath string) (int, error) {
+	select {
+	case r.slots <- struct{}{}:
+		defer func() { <-r.slots }()
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+	commandCtx, cancel := context.WithTimeout(ctx, r.config.Timeout)
+	defer cancel()
+	if err := r.ensureWorker(commandCtx); err != nil {
+		return 0, err
+	}
+	request := PDFRequest{Type: "pdf", RequestID: "pdf_" + uuid.NewString(), PNGPaths: append([]string(nil), paths...), OutputPath: outputPath, TimeoutMS: 20000}
+	raw, err := json.Marshal(request)
+	if err != nil {
+		return 0, err
+	}
+	response := make(chan workerRenderResponse, 1)
+	r.mu.Lock()
+	if r.closed || r.stdin == nil {
+		r.mu.Unlock()
+		return 0, renderWorkerError("worker_state", ErrRenderWorkerUnavailable)
+	}
+	r.pending[request.RequestID] = response
+	stdin := r.stdin
+	r.mu.Unlock()
+	r.writeMu.Lock()
+	_, writeErr := stdin.Write(append(raw, '\n'))
+	r.writeMu.Unlock()
+	if writeErr != nil {
+		r.removePending(request.RequestID)
+		return 0, renderWorkerError("worker_stdin_write", writeErr)
+	}
+	select {
+	case result := <-response:
+		if !result.OK {
+			return 0, errors.New(result.Error)
+		}
+		return result.PageCount, nil
+	case <-commandCtx.Done():
+		cancelRaw, _ := json.Marshal(map[string]any{"type": "cancel", "request_id": request.RequestID})
+		r.writeMu.Lock()
+		_, _ = stdin.Write(append(cancelRaw, '\n'))
+		r.writeMu.Unlock()
+		r.removePending(request.RequestID)
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		return 0, renderWorkerError("worker_response_timeout", commandCtx.Err())
+	}
 }
 
 func NewNodeSlideRenderer(config NodeRendererConfig) *NodeSlideRenderer {

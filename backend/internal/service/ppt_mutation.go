@@ -7,20 +7,47 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
-type PPTMutationService struct{ store store.Store }
+type PPTMutationService struct {
+	store store.Store
+	locks *run.LockManager
+}
 
 func NewPPTMutationService(st store.Store) *PPTMutationService { return &PPTMutationService{store: st} }
+func NewPPTMutationServiceWithLocks(st store.Store, locks *run.LockManager) *PPTMutationService {
+	return &PPTMutationService{store: st, locks: locks}
+}
 
 func (s *PPTMutationService) Apply(ctx context.Context, projectID string, req pptmutation.Request) (spec.ProjectContentSnapshot, pptmutation.Result, error) {
+	if active, err := s.store.HasActiveRun(ctx, projectID); err != nil {
+		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err
+	} else if active {
+		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, ErrRunActive
+	}
+	if active, err := s.store.HasActiveGitCommit(ctx, projectID); err != nil {
+		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err
+	} else if active {
+		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, ErrGitCommitActive
+	}
+	release := func() {}
+	var lockErr error
+	if s.locks != nil {
+		release, lockErr = s.locks.Acquire(ctx, projectID, 5*time.Second)
+		if lockErr != nil {
+			return spec.ProjectContentSnapshot{}, pptmutation.Result{}, ErrRunActive
+		}
+	}
+	defer release()
 	if active, err := s.store.HasActiveRun(ctx, projectID); err != nil {
 		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err
 	} else if active {

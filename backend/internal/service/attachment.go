@@ -4,20 +4,35 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
 // AttachmentService is the project-authorized gateway to the on-disk image store.
 type AttachmentService struct {
 	store store.Store
+	locks *run.LockManager
 }
 
 func NewAttachmentService(s store.Store) *AttachmentService { return &AttachmentService{store: s} }
+func NewAttachmentServiceWithLocks(s store.Store, locks *run.LockManager) *AttachmentService {
+	return &AttachmentService{store: s, locks: locks}
+}
 
 func (svc *AttachmentService) Upload(ctx context.Context, projectID, originalName string, source io.Reader) (attachment.Meta, error) {
+	release := func() {}
+	var lockErr error
+	if svc.locks != nil {
+		release, lockErr = svc.locks.Acquire(ctx, projectID, 5*time.Second)
+		if lockErr != nil {
+			return attachment.Meta{}, ErrRunActive
+		}
+	}
+	defer release()
 	project, err := svc.store.GetProject(ctx, projectID)
 	if err != nil {
 		return attachment.Meta{}, err

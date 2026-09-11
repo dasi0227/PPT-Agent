@@ -29,6 +29,11 @@ import { useThreadStore } from '../../stores/threadStore';
 import { useActiveSession, useActiveThreadId } from '../agent/useActiveSession';
 import { showGlobalWarning } from '../../stores/toastStore';
 import type { DOMSelection } from '../../api/types';
+import { ExportButton } from '../export/ExportButton';
+import { ExportProgressDialog } from '../export/ExportProgressDialog';
+import { useExportStore } from '../../stores/exportStore';
+import { useGitCommitStore } from '../../stores/gitCommitStore';
+import { useRunStore } from '../../stores/runStore';
 
 function visibleHTML(state: ResourceState<string>): string | undefined {
   if (state.status === 'ready') return state.data;
@@ -256,15 +261,20 @@ export const PreviewWorkspace: React.FC = () => {
     contentErrorByProjectId,
     loadProjectContent,
   } = useProjectStore();
+  const projectId = activeProjectId;
   const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel, showRightPanel } = useUIStore();
   const activeThreadId = useActiveThreadId();
   const runSession = useActiveSession();
+  const allRunSessions = useRunStore((state) => state.sessions);
+  const projectThreads = useThreadStore((state) => projectId ? state.threadsByProjectId[projectId] ?? [] : []);
+  const commitSession = useGitCommitStore((state) => projectId ? state.sessions[projectId] : undefined);
+  const exportSession = useExportStore((state) => state.session);
+  const startExport = useExportStore((state) => state.start);
   const composer = useComposerStore();
   const ensureActiveThread = useThreadStore((state) => state.ensureActiveThread);
   const snapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const specLoading = activeProjectId ? contentLoadingByProjectId[activeProjectId] : false;
   const specError = activeProjectId ? contentErrorByProjectId[activeProjectId] : undefined;
-  const projectId = activeProjectId;
   const slides = useMemo(
     () => orderedSlides(snapshot),
     [snapshot],
@@ -275,6 +285,11 @@ export const PreviewWorkspace: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const hasSlides = slides.length > 0;
+  const runBlocking = projectThreads.some((thread) => ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(allRunSessions[thread.id]?.status ?? 'idle'));
+  const commitBlocking = commitSession?.status === 'creating' || commitSession?.status === 'running';
+  const exportBlocking = exportSession?.projectId === projectId && ['accepted', 'running', 'ready', 'delivering'].includes(exportSession.operation.status);
+  const exportDisabled = !projectId || runBlocking || commitBlocking || exportBlocking;
+  const exportDisabledReason = !projectId ? '请先打开项目' : runBlocking ? 'Agent 任务运行中，暂时不能导出' : commitBlocking ? '项目正在提交，暂时不能导出' : exportBlocking ? '当前项目已有导出任务' : undefined;
   const selectedIndex = currentSlideId ? slides.findIndex((slide) => slide.id === currentSlideId) : -1;
   const safePage = selectedIndex >= 0 ? selectedIndex : 0;
   const currentSlide = slides[safePage];
@@ -435,6 +450,7 @@ export const PreviewWorkspace: React.FC = () => {
           <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML || currentView !== 'html'}>
             <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
+          <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
         </div>
 
         <div className="flex items-center gap-3">
@@ -591,6 +607,7 @@ export const PreviewWorkspace: React.FC = () => {
           </div>
         )}
       </div>
+      <ExportProgressDialog />
     </div>
   );
 };

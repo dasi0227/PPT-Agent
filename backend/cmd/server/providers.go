@@ -11,6 +11,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	presentationexport "github.com/dasi0227/PPT-Agent/backend/internal/export"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -80,8 +81,27 @@ func provideSkillService(s store.Store, workRoot service.WorkRoot) *service.Skil
 	return service.NewSkillService(workRoot, s)
 }
 
-func provideProjectService(s store.Store, workRoot service.WorkRoot, locks *run.LockManager, themes *service.ThemeService) *service.ProjectService {
-	return service.NewProjectServiceWithRepositories(s, workRoot, locks, themes)
+func provideProjectService(s store.Store, workRoot service.WorkRoot, locks *run.LockManager, themes *service.ThemeService, exports *presentationexport.Manager) *service.ProjectService {
+	return service.NewProjectServiceWithRepositories(s, workRoot, locks, themes).WithExportManager(exports)
+}
+
+func provideAttachmentService(s store.Store, locks *run.LockManager) *service.AttachmentService {
+	return service.NewAttachmentServiceWithLocks(s, locks)
+}
+func providePPTMutationService(s store.Store, locks *run.LockManager) *service.PPTMutationService {
+	return service.NewPPTMutationServiceWithLocks(s, locks)
+}
+
+func provideExportManager(renderer *workflow.NodeSlideRenderer, workRoot service.WorkRoot) (*presentationexport.Manager, func(), error) {
+	manager := presentationexport.NewManager(renderer)
+	if err := manager.CleanupWorkRoot(string(workRoot)); err != nil {
+		return nil, nil, err
+	}
+	return manager, manager.Close, nil
+}
+
+func provideRouter(cfg *config.Config, log *zap.Logger, health *httpapi.HealthHandler, runH *httpapi.RunHandler, projectH *httpapi.ProjectHandler, threadH *httpapi.ThreadHandler, slideH *httpapi.SlideHandler, repositoryH *httpapi.RepositoryHandler, llmH *httpapi.LLMHandler, polishH *httpapi.PolishHandler, briefingH *httpapi.BriefingHandler, gitCommitH *httpapi.GitCommitHandler, promptH *httpapi.PromptHandler, contextWindowH *httpapi.ContextWindowHandler, attachmentH *httpapi.AttachmentHandler, exportH *httpapi.ExportHandler) *httpapi.Router {
+	return httpapi.NewRouter(cfg, log, health, runH, projectH, threadH, slideH, repositoryH, llmH, polishH, briefingH, gitCommitH, promptH, contextWindowH, attachmentH).WithExportHandler(exportH)
 }
 
 func provideSlideService(s store.Store, themes *service.ThemeService) *service.SlideService {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
+	presentationexport "github.com/dasi0227/PPT-Agent/backend/internal/export"
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -28,6 +29,12 @@ type ProjectService struct {
 	git      *gitcommit.Executor
 	locks    *run.LockManager
 	themes   *ThemeService
+	exports  *presentationexport.Manager
+}
+
+func (svc *ProjectService) WithExportManager(manager *presentationexport.Manager) *ProjectService {
+	svc.exports = manager
+	return svc
 }
 
 func NewProjectServiceWithRepositories(s store.Store, workRoot WorkRoot, locks *run.LockManager, themes *ThemeService) *ProjectService {
@@ -103,6 +110,15 @@ func (svc *ProjectService) initializeRepository(ctx context.Context, workDir str
 }
 
 func (svc *ProjectService) RenameProject(ctx context.Context, id, title string) (model.Project, error) {
+	release := func() {}
+	var lockErr error
+	if svc.locks != nil {
+		release, lockErr = svc.locks.Acquire(ctx, id, 5*time.Second)
+		if lockErr != nil {
+			return model.Project{}, ErrRunActive
+		}
+	}
+	defer release()
 	p, err := svc.store.GetProject(ctx, id)
 	if err != nil {
 		return model.Project{}, err
@@ -153,9 +169,21 @@ func (svc *ProjectService) projectWithFileRevisions(project model.Project) (mode
 }
 
 func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {
+	release := func() {}
+	var lockErr error
+	if svc.locks != nil {
+		release, lockErr = svc.locks.Acquire(ctx, id, 5*time.Second)
+		if lockErr != nil {
+			return ErrRunActive
+		}
+	}
+	defer release()
 	proj, err := svc.store.GetProject(ctx, id)
 	if err != nil {
 		return err
+	}
+	if svc.exports != nil {
+		svc.exports.CancelProject(id)
 	}
 	if err := svc.store.DeleteProject(ctx, id); err != nil {
 		return err

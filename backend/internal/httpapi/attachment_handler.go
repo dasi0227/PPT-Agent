@@ -92,6 +92,10 @@ func (h *AttachmentHandler) Content(c *gin.Context) {
 }
 
 func handleAttachmentError(c *gin.Context, err error, operation string) {
+	if errors.Is(err, service.ErrRunActive) {
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project is currently locked"})
+		return
+	}
 	var agentErr *model.AgentError
 	if errors.As(err, &agentErr) {
 		AbortWithError(c, ProjectAgentError(agentErr, "INTERNAL", operation))
