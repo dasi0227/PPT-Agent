@@ -4,8 +4,10 @@ import {
   ChevronRight,
   LayoutGrid,
   MonitorPlay,
+  MousePointer2,
   PanelLeftOpen,
   PanelRightOpen,
+  Scan,
 } from 'lucide-react';
 import type { Slide, SlideSpec } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
@@ -22,6 +24,11 @@ import { SlideSpecCard } from './SlideSpecCard';
 import { slideRoleLabel } from './semanticLabels';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
 import { orderedSlides } from '../deck/selectors';
+import { useComposerStore } from '../../stores/composerStore';
+import { useThreadStore } from '../../stores/threadStore';
+import { useActiveSession, useActiveThreadId } from '../agent/useActiveSession';
+import { showGlobalWarning } from '../../stores/toastStore';
+import type { DOMSelection } from '../../api/types';
 
 function visibleHTML(state: ResourceState<string>): string | undefined {
   if (state.status === 'ready') return state.data;
@@ -37,6 +44,13 @@ function PreviewFrame({
   runtimeSlides,
   runtimeIndex,
   fallbackFrame,
+  selectionMode,
+  selectionSlide,
+  draftSelections,
+  onSelection,
+  onSelectionMessage,
+  onSelectionCanceled,
+  onSelectionPresence,
 }: {
   slide: Slide;
   state: ResourceState<string>;
@@ -45,6 +59,13 @@ function PreviewFrame({
   runtimeSlides?: RuntimeSlide[];
   runtimeIndex?: number;
   fallbackFrame?: RuntimeSlide['frame'];
+  selectionMode?: 'element' | 'region' | 'none';
+  selectionSlide?: { id: string; revision: number; hash: string };
+  draftSelections?: DOMSelection[];
+  onSelection?: (selection: DOMSelection) => void;
+  onSelectionMessage?: (message: string) => void;
+  onSelectionCanceled?: () => void;
+  onSelectionPresence?: (statuses: Array<{ selection_id: string; status: 'active' | 'content_deleted'; targets?: Array<{ target_id: string; status: 'active' | 'content_deleted' }> }>) => void;
 }) {
   const visibleHtml = visibleHTML(state);
   const deck = runtimeSlides && runtimeIndex !== undefined && runtimeIndex >= 0
@@ -64,6 +85,13 @@ function PreviewFrame({
           index={deckIndex}
           className="h-full w-full border-0"
           title={title}
+          selectionMode={selectionMode}
+          selectionSlide={selectionSlide}
+          draftSelections={draftSelections}
+          onSelection={onSelection}
+          onSelectionMessage={onSelectionMessage}
+          onSelectionCanceled={onSelectionCanceled}
+          onSelectionPresence={onSelectionPresence}
         />
       )}
       {(state.status === 'idle' || (state.status === 'loading' && !state.previous)) && (
@@ -228,7 +256,11 @@ export const PreviewWorkspace: React.FC = () => {
     contentErrorByProjectId,
     loadProjectContent,
   } = useProjectStore();
-  const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel } = useUIStore();
+  const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel, showRightPanel } = useUIStore();
+  const activeThreadId = useActiveThreadId();
+  const runSession = useActiveSession();
+  const composer = useComposerStore();
+  const ensureActiveThread = useThreadStore((state) => state.ensureActiveThread);
   const snapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const specLoading = activeProjectId ? contentLoadingByProjectId[activeProjectId] : false;
   const specError = activeProjectId ? contentErrorByProjectId[activeProjectId] : undefined;
@@ -239,6 +271,7 @@ export const PreviewWorkspace: React.FC = () => {
   );
   const { getState, load } = useSlideRenderCache(projectId);
   const [fullscreen, setFullscreen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState<'element' | 'region' | 'none'>('none');
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const hasSlides = slides.length > 0;
@@ -265,6 +298,55 @@ export const PreviewWorkspace: React.FC = () => {
   const runtimeIndex = currentSlide
     ? runtimeSlides.findIndex((slide) => slide.id === currentSlide.id)
     : -1;
+  const draftSelections = useMemo(() => activeThreadId
+    ? (composer.threadReferences[activeThreadId] ?? []).flatMap((item) => item.kind === 'dom' ? [item.selection] : [])
+    : [], [activeThreadId, composer.threadReferences]);
+  const currentMaterialization = currentSlide && snapshot ? snapshot.slides_by_id[currentSlide.id]?.materialization : null;
+  const selectionSlide = currentSlide && currentMaterialization ? {
+    id: currentSlide.id, revision: currentMaterialization.artifact.revision, hash: currentMaterialization.artifact.hash,
+  } : undefined;
+  const selectionEnabled = previewMode === 'main' && currentView === 'html' && currentHasHTML && !fullscreen
+    && !['creating', 'waiting', 'paused', 'recovering', 'canceling'].includes(runSession.status);
+
+  const acceptSelection = useCallback(async (raw: DOMSelection) => {
+    if (!projectId) return;
+    let threadId = activeThreadId;
+    if (!threadId) {
+      try { threadId = await ensureActiveThread(projectId); } catch {
+        showGlobalWarning('无法创建会话，请重试。');
+        const retry = selectionMode; setSelectionMode('none'); window.setTimeout(() => setSelectionMode(retry), 0);
+        return;
+      }
+    }
+    const state = useComposerStore.getState();
+    const references = state.threadReferences[threadId] ?? [];
+    const selections = references.flatMap((item) => item.kind === 'dom' ? [item.selection] : []);
+    const duplicate = selections.find((item) => item.dedupe_key && item.dedupe_key === raw.dedupe_key);
+    if (duplicate) {
+      state.setEditingDOMSelection(threadId, duplicate.selection_id);
+      showRightPanel();
+      setSelectionMode('none');
+      return;
+    }
+    if (selections.length >= 8) {
+      showGlobalWarning('每条消息最多添加 8 个 DOM 标记。');
+      const retry = selectionMode; setSelectionMode('none'); window.setTimeout(() => setSelectionMode(retry), 0);
+      return;
+    }
+    const selectionID = `sel_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
+    const next: DOMSelection = { ...raw, selection_id: selectionID, marker_no: state.nextMarkerByThread[threadId] ?? 1 };
+    const encoder = new TextEncoder();
+    const totalBytes = [...selections, next].reduce((sum, item) => sum + encoder.encode(JSON.stringify({ dom_targets: item.dom_targets ?? [], chrome_targets: item.chrome_targets ?? [] })).byteLength, 0);
+    if (totalBytes > 256 * 1024) {
+      showGlobalWarning('选择内容过大，请缩小范围。');
+      const retry = selectionMode; setSelectionMode('none'); window.setTimeout(() => setSelectionMode(retry), 0);
+      return;
+    }
+    state.addThreadDOMSelection(threadId, next);
+    state.setEditingDOMSelection(threadId, next.selection_id);
+    showRightPanel();
+    setSelectionMode('none');
+  }, [activeThreadId, ensureActiveThread, projectId, selectionMode, showRightPanel]);
 
   useEffect(() => {
     if (!currentSlide || !currentHasHTML || currentView !== 'html' || previewMode !== 'main') return;
@@ -283,7 +365,33 @@ export const PreviewWorkspace: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!selectionEnabled) setSelectionMode('none');
+  }, [selectionEnabled]);
+
+  useEffect(() => {
+	setSelectionMode('none');
+  }, [activeThreadId, currentSlideId, currentView, previewMode]);
+
+  useEffect(() => {
+    if (!activeThreadId) return;
+    const known = new Set(slides.map((slide) => slide.id));
+    const state = useComposerStore.getState();
+    (state.threadReferences[activeThreadId] ?? []).forEach((item) => {
+      if (item.kind !== 'dom') return;
+      const status = known.has(item.selection.slide_id)
+        ? (item.selection.status === 'page_deleted' ? 'active' : item.selection.status)
+        : 'page_deleted';
+      if (status !== item.selection.status) state.updateThreadDOMSelection(activeThreadId, item.selection.selection_id, { status });
+    });
+  }, [activeThreadId, slides]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && selectionMode !== 'none') {
+        event.preventDefault();
+        setSelectionMode('none');
+        return;
+      }
       if (isEditableTarget(event.target)) return;
       if (event.key === 'ArrowLeft' && safePage > 0) {
         event.preventDefault();
@@ -301,7 +409,7 @@ export const PreviewWorkspace: React.FC = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [enterOverview, exitOverview, goNext, goPrev, previewMode, safePage, slides.length]);
+  }, [enterOverview, exitOverview, goNext, goPrev, previewMode, safePage, selectionMode, slides.length]);
 
   const present = useCallback(() => {
     if (!canvasRef.current) return;
@@ -352,6 +460,12 @@ export const PreviewWorkspace: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1">
+            <IconButton label="选择元素" aria-pressed={selectionMode === 'element'} onClick={() => setSelectionMode((value) => value === 'element' ? 'none' : 'element')} disabled={!selectionEnabled} className={selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}>
+              <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
+            </IconButton>
+            <IconButton label="框选区域" aria-pressed={selectionMode === 'region'} onClick={() => setSelectionMode((value) => value === 'region' ? 'none' : 'region')} disabled={!selectionEnabled} className={selectionMode === 'region' ? 'bg-accent-soft text-accent' : undefined}>
+              <Scan className="h-4 w-4" strokeWidth={1.75} />
+            </IconButton>
             <IconButton label="上一页" onClick={goPrev} disabled={!hasSlides || safePage === 0}>
               <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
@@ -390,6 +504,25 @@ export const PreviewWorkspace: React.FC = () => {
                 runtimeSlides={runtimeSlides}
                 runtimeIndex={runtimeIndex}
                 fallbackFrame={snapshot ? buildRuntimeFrame(snapshot, currentSlide.id) : undefined}
+                selectionMode={selectionMode}
+                selectionSlide={selectionSlide}
+                draftSelections={draftSelections}
+                onSelection={(selection) => { void acceptSelection(selection); }}
+                onSelectionMessage={showGlobalWarning}
+                onSelectionCanceled={() => setSelectionMode('none')}
+                onSelectionPresence={(statuses) => {
+                  if (!activeThreadId) return;
+                  const state = useComposerStore.getState();
+                  const references = state.threadReferences[activeThreadId] ?? [];
+                  statuses.forEach((item) => {
+                    const current = references.find((reference) => reference.kind === 'dom' && reference.selection.selection_id === item.selection_id);
+                    if (current?.kind !== 'dom') return;
+                    const targetStatuses = new Map((item.targets ?? []).map((target) => [target.target_id, target.status]));
+                    const domTargets = current.selection.dom_targets?.map((target) => ({ ...target, status: targetStatuses.get(target.target_id) ?? target.status }));
+                    const targetsChanged = domTargets?.some((target, index) => target.status !== current.selection.dom_targets?.[index]?.status) ?? false;
+                    if (current.selection.status !== item.status || targetsChanged) state.updateThreadDOMSelection(activeThreadId, item.selection_id, { status: item.status, dom_targets: domTargets });
+                  });
+                }}
               />
             ) : currentView === 'html' ? (
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">

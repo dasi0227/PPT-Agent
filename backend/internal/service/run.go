@@ -255,6 +255,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 	command.Attachments = attachments
+	command.DOMSelections = append([]model.DOMSelection{}, p.DOMSelections...)
+	command.ReferenceOrder = append([]model.ReferenceOrderItem{}, p.ReferenceOrder...)
 	var snapshot *spec.ProjectContentSnapshot
 	loadSnapshot := func() (spec.ProjectContentSnapshot, error) {
 		if snapshot != nil {
@@ -275,6 +277,21 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		if err != nil {
 			return model.Run{}, err
 		}
+	}
+	if len(command.DOMSelections) > 0 {
+		value, snapshotErr := loadSnapshot()
+		if snapshotErr != nil {
+			return model.Run{}, snapshotErr
+		}
+		deletedSlideIDs, lookupErr := svc.deletedSelectionSlideIDs(ctx, project.ID, value, command.DOMSelections)
+		if lookupErr != nil {
+			return model.Run{}, lookupErr
+		}
+		if err := validateSelectionProject(value, command.DOMSelections, deletedSlideIDs); err != nil {
+			return model.Run{}, domSelectionAgentError("create_run", err)
+		}
+		reconcileSelectionMaterialization(value, command.DOMSelections)
+		command.Scope = mergeSelectionScope(command.Scope, value, command.DOMSelections)
 	}
 	if len(p.SkillIDs) > 0 {
 		if svc.skills == nil {
@@ -343,7 +360,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		"instruction": command.Instruction, "scope": command.Scope,
 		"mode": command.Mode, "options": command.Options, "skills": command.Skills,
 		"components": command.Components, "mentioned_pages": command.MentionedPages,
-		"dropped_mentioned_slide_ids": command.DroppedMentionedSlideIDs, "attachments": command.Attachments, "model": p.Model,
+		"dropped_mentioned_slide_ids": command.DroppedMentionedSlideIDs, "attachments": command.Attachments,
+		"dom_selections": command.DOMSelections, "reference_order": command.ReferenceOrder, "model": p.Model,
 	})
 	if err != nil {
 		return model.Run{}, err
@@ -695,7 +713,7 @@ func (svc *RunService) RequestCancel(ctx context.Context, runID string, reason m
 	return current, nil
 }
 
-func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, content string, attachmentIDs []string) (model.SteeringMessage, error) {
+func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, content string, attachmentIDs []string, domSelections []model.DOMSelection, referenceOrder []model.ReferenceOrderItem) (model.SteeringMessage, error) {
 	content = strings.TrimSpace(content)
 	if !clientIdentityPattern.MatchString(clientMessageID) || len([]rune(content)) > 8000 {
 		return model.SteeringMessage{}, model.NewAgentError("BAD_REQUEST", "steer_run", nil)
@@ -715,9 +733,24 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 	if err != nil {
 		return model.SteeringMessage{}, err
 	}
-	if content == "" && len(attachments) == 0 {
+	if err := model.ValidateDOMSelections(domSelections, attachments, referenceOrder); err != nil {
+		return model.SteeringMessage{}, domSelectionAgentError("steer_run", err)
+	}
+	if content == "" && ((len(domSelections) > 0 && !model.DOMSelectionsHaveIntent(domSelections)) || (len(domSelections) == 0 && len(attachments) == 0)) {
 		return model.SteeringMessage{}, model.NewAgentError("BAD_REQUEST", "steer_run", nil)
 	}
+	snapshot, err := NewPPTMutationService(svc.store).Snapshot(ctx, project.ID)
+	if err != nil {
+		return model.SteeringMessage{}, err
+	}
+	deletedSlideIDs, err := svc.deletedSelectionSlideIDs(ctx, project.ID, snapshot, domSelections)
+	if err != nil {
+		return model.SteeringMessage{}, err
+	}
+	if err := validateSelectionProject(snapshot, domSelections, deletedSlideIDs); err != nil {
+		return model.SteeringMessage{}, domSelectionAgentError("steer_run", err)
+	}
+	reconcileSelectionMaterialization(snapshot, domSelections)
 	if len(attachments) > 0 && svc.registry != nil {
 		profile, profileErr := svc.registry.Resolve(runModel.Model.ProfileName)
 		if profileErr != nil {
@@ -729,11 +762,48 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 	}
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
 		"expected_run_id": expectedRunID, "client_message_id": clientMessageID, "content": content, "attachments": attachments,
+		"dom_selections": domSelections, "reference_order": referenceOrder,
 	})
 	if err != nil {
 		return model.SteeringMessage{}, err
 	}
-	return svc.engine.Steer(ctx, runID, expectedRunID, clientMessageID, requestHash, content, attachments)
+	for attempt := 0; attempt < 2; attempt++ {
+		mergedScope := mergeSelectionScope(runModel.Command.Scope, snapshot, domSelections)
+		message, steerErr := svc.engine.SteerWithReferences(ctx, runID, expectedRunID, clientMessageID, requestHash, content, attachments, domSelections, referenceOrder, mergedScope)
+		var agentErr *model.AgentError
+		if steerErr == nil || !errors.As(steerErr, &agentErr) || agentErr.Code != "RUN_REVISION_CONFLICT" || attempt == 1 {
+			return message, steerErr
+		}
+		// A concurrent monotonic scope update won the CAS. Re-read once and
+		// apply the same union/escalation rules; a second conflict is surfaced.
+		runModel, err = svc.store.GetRun(ctx, runID)
+		if err != nil {
+			return model.SteeringMessage{}, err
+		}
+		snapshot, err = NewPPTMutationService(svc.store).Snapshot(ctx, project.ID)
+		if err != nil {
+			return model.SteeringMessage{}, err
+		}
+	}
+	return model.SteeringMessage{}, model.NewAgentError("RUN_REVISION_CONFLICT", "steer_run", nil)
+}
+
+func (svc *RunService) deletedSelectionSlideIDs(ctx context.Context, projectID string, snapshot spec.ProjectContentSnapshot, selections []model.DOMSelection) (map[string]bool, error) {
+	deleted := map[string]bool{}
+	for _, selection := range selections {
+		if selection.Status != model.DOMSelectionPageDeleted {
+			continue
+		}
+		if _, exists := snapshot.SlidesByID[selection.SlideID]; exists {
+			continue
+		}
+		versions, err := svc.store.ListVersions(ctx, "slide_html", model.SlideHTMLVersionTarget(projectID, selection.SlideID))
+		if err != nil {
+			return nil, err
+		}
+		deleted[selection.SlideID] = len(versions) > 0
+	}
+	return deleted, nil
 }
 
 func validateAttachmentCapabilities(caps llm.Capabilities, attachments []model.AttachmentReference, operation string) error {

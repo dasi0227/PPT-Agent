@@ -49,6 +49,7 @@ describe('slide runtime', () => {
     const srcdocs = initialFrames.map((container) => container.querySelector('iframe')?.getAttribute('srcdoc') ?? '');
     expect(srcdocs.every((srcdoc) => srcdoc.includes('id="base-link"'))).toBe(true);
     expect(srcdocs.every((srcdoc) => srcdoc.includes('/api/v1/themes/swiss-modern/css'))).toBe(true);
+    expect(srcdocs.every((srcdoc) => srcdoc.includes('/slide-runtime/selection-bridge.js'))).toBe(true);
     expect(initialFrames[0]?.querySelector('.runtime-canvas')).not.toBeNull();
     expect(initialFrames.every((container) => container.querySelector('iframe')?.getAttribute('sandbox') === 'allow-scripts')).toBe(true);
     expect(initialFrames[0]?.querySelector('[data-runtime-page-number]')).toBeNull();
@@ -70,6 +71,16 @@ describe('slide runtime', () => {
     expect(afterGotoFrames[1]).toBe(initialFrames[1]);
     expect(afterGotoFrames[0]?.dataset.active).toBe('false');
     expect(afterGotoFrames[1]?.dataset.active).toBe('true');
+    dom.window.close();
+  });
+
+  it('renders current-thread draft markers only after a validated session command', () => {
+    const dom = createRuntime();
+    const { window } = dom;
+    window.dispatchEvent(new window.MessageEvent('message', { source: window as unknown as Window, data: { type: 'updateDeck', slides: [{ id: 's1', html: '<h1>one</h1>', frame: frame('s1', 1) }], index: 0 } }));
+    window.dispatchEvent(new window.MessageEvent('message', { source: window as unknown as Window, data: { type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'element', html_revision: 1, html_hash: 'sha256:a' } }));
+    window.dispatchEvent(new window.MessageEvent('message', { source: window as unknown as Window, data: { type: 'renderDraftSelections', session_id: 'session-one', slide_id: 's1', selections: [{ selection_id: 'sel_one', marker_no: 3, status: 'active', rect: { x: 10, y: 20, width: 100, height: 40 } }] } }));
+    expect(window.document.querySelector('.selection-box span')?.textContent).toBe('3');
     dom.window.close();
   });
 

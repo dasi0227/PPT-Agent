@@ -622,37 +622,41 @@ func TestSteeringStateMachineAndIdempotency(t *testing.T) {
 	}
 
 	// The active handle exists while the run is still pending or entering running.
-	first, err := engine.Steer(context.Background(), "steering", "steering", "msg-1", "hash-1", "dark")
+	first, err := steerText(engine, "msg-1", "hash-1", "dark")
 	if err != nil || first.Status != model.SteeringAccepted {
 		t.Fatalf("pending steering rejected: message=%+v err=%v", first, err)
 	}
-	replay, err := engine.Steer(context.Background(), "steering", "steering", "msg-1", "hash-1", "dark")
+	replay, err := steerText(engine, "msg-1", "hash-1", "dark")
 	if err != nil || replay.AcceptedAt != first.AcceptedAt {
 		t.Fatalf("same steering request did not replay first result: first=%+v replay=%+v err=%v", first, replay, err)
 	}
-	_, err = engine.Steer(context.Background(), "steering", "steering", "msg-1", "hash-other", "light")
+	_, err = steerText(engine, "msg-1", "hash-other", "light")
 	assertAgentErrorCode(t, err, "IDEMPOTENCY_KEY_REUSED")
 
 	checkpoint := <-ready
 	checkpoint.PhaseChanged(workflow.PhaseExecuting)
-	if _, err := engine.Steer(context.Background(), "steering", "steering", "msg-2", "hash-2", "compact"); err != nil {
+	if _, err := steerText(engine, "msg-2", "hash-2", "compact"); err != nil {
 		t.Fatalf("running steering rejected: %v", err)
 	}
 	checkpoint.PhaseChanged(workflow.PhaseWaitingInput)
-	_, err = engine.Steer(context.Background(), "steering", "steering", "msg-wait", "hash-wait", "answer-like")
+	_, err = steerText(engine, "msg-wait", "hash-wait", "answer-like")
 	assertAgentErrorCode(t, err, "RUN_WAITING_FOR_ANSWER")
 	checkpoint.PhaseChanged(workflow.PhaseCompletionCheck)
-	_, err = engine.Steer(context.Background(), "steering", "steering", "msg-complete", "hash-complete", "late")
+	_, err = steerText(engine, "msg-complete", "hash-complete", "late")
 	assertAgentErrorCode(t, err, "RUN_NOT_STEERABLE")
 
 	if _, err := engine.RequestCancel(context.Background(), "steering"); err != nil {
 		t.Fatal(err)
 	}
-	_, err = engine.Steer(context.Background(), "steering", "steering", "msg-cancel", "hash-cancel", "too late")
+	_, err = steerText(engine, "msg-cancel", "hash-cancel", "too late")
 	assertAgentErrorCode(t, err, "RUN_CANCELING")
 	waitRunStatus(t, store, "steering", model.RunCanceled)
-	_, err = engine.Steer(context.Background(), "steering", "steering", "msg-terminal", "hash-terminal", "next")
+	_, err = steerText(engine, "msg-terminal", "hash-terminal", "next")
 	assertAgentErrorCode(t, err, "RUN_NOT_STEERABLE")
+}
+
+func steerText(engine *Engine, clientMessageID, requestHash, content string) (model.SteeringMessage, error) {
+	return engine.SteerWithReferences(context.Background(), "steering", "steering", clientMessageID, requestHash, content, nil, nil, nil, model.RunScope{})
 }
 
 func assertAgentErrorCode(t *testing.T, err error, code string) {

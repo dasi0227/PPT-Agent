@@ -287,7 +287,7 @@ interface RunStoreV2 {
   ) => Promise<boolean>;
   answerScopeExpansion: (threadId: string, runId: string, payload: ScopeExpansionRequest) => Promise<boolean>;
   cancelRun: (threadId: string, runId: string, reason?: RunCancelReason) => Promise<boolean>;
-	steerRun: (threadId: string, runId: string, content: string, clientMessageId: string, attachmentIds?: string[]) => Promise<boolean>;
+	steerRun: (threadId: string, runId: string, content: string, clientMessageId: string, attachmentIds?: string[], domSelections?: import('../api/types').DOMSelection[], referenceOrder?: import('../api/types').ReferenceOrderItem[]) => Promise<boolean>;
   retryRun: (threadId: string) => Promise<boolean>;
   clearRun: (threadId: string) => void;
   closeSessions: (threadIds: string[]) => void;
@@ -462,6 +462,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         components: payload.component_names?.map((name) => ({
           kind: 'component' as const, id: name, name,
         })) ?? [],
+        domSelections: payload.dom_selections?.map(({ selection_id, marker_no, comment, status }) => ({ selection_id, marker_no, comment, status })),
+        referenceOrder: payload.reference_order,
         timestamp: Date.now(),
       };
       updateSession(threadId, (prev) => ({
@@ -1053,7 +1055,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       }
     },
 
-    steerRun: async (threadId, runId, content, clientMessageId, attachmentIds = []) => {
+    steerRun: async (threadId, runId, content, clientMessageId, attachmentIds = [], domSelections = [], referenceOrder = []) => {
       const itemId = `steering_${clientMessageId}`;
       updateSession(threadId, (prev) => ({
         timelineItems: [...prev.timelineItems, {
@@ -1061,6 +1063,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           type: 'user_turn',
           runId,
           text: content,
+		  domSelections: domSelections.map(({ selection_id, marker_no, comment, status }) => ({ selection_id, marker_no, comment, status })),
+		  referenceOrder,
           deliveryStatus: 'sending',
           clientMessageId,
           timestamp: Date.now(),
@@ -1072,6 +1076,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           client_message_id: clientMessageId,
           content,
 			...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+			...(domSelections.length > 0 ? { dom_selections: domSelections } : {}),
+			...(referenceOrder.length > 0 ? { reference_order: referenceOrder } : {}),
         });
         updateSession(threadId, (prev) => ({
           timelineItems: prev.timelineItems.map((item) =>

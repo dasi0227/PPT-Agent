@@ -64,6 +64,31 @@ func TestPromptEstimatorSeparatesProjectImageAttachments(t *testing.T) {
 	}
 }
 
+func TestPromptEstimatorClassifiesDOMSelectionByMessageAge(t *testing.T) {
+	oldDOM := `<selected_dom>{"selection_id":"sel_old","outer_html":"<div>old</div>"}</selected_dom>`
+	currentDOM := `<selected_dom>{"selection_id":"sel_current","outer_html":"<div>current</div>"}</selected_dom>`
+	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: []llm.Message{
+		{Role: llm.RoleUser, Content: []llm.ContentPart{{Type: "text", Text: oldDOM}}},
+		{Role: llm.RoleAssistant, Content: []llm.ContentPart{{Type: "text", Text: "working"}}},
+		{Role: llm.RoleUser, Content: []llm.ContentPart{{Type: "text", Text: currentDOM}}},
+	}})
+	countDOM := func(bucket ContextBucket) int {
+		count := 0
+		for _, detail := range snapshot.Details[bucket] {
+			if detail.Source == "dom_selection" {
+				count++
+			}
+		}
+		return count
+	}
+	if countDOM(BucketChatHistory) != 1 || countDOM(BucketUserPrompt) != 1 {
+		t.Fatalf("DOM buckets were not split by age: details=%+v", snapshot.Details)
+	}
+	if countDOM(BucketUploadedFile) != 0 || countDOM(BucketReadPPT) != 0 {
+		t.Fatalf("DOM data was classified as a file or read result: details=%+v", snapshot.Details)
+	}
+}
+
 func TestCalibrationStoreUsesBoundedEMA(t *testing.T) {
 	store := NewCalibrationStore()
 	if got := store.Factor("thread"); got != 1 {

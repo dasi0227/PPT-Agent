@@ -68,6 +68,10 @@
     .runtime-chrome[data-chrome-style~="muted"] { color: rgba(20, 25, 35, 0.58); }
     .runtime-chrome[data-chrome-style~="mono"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     .runtime-chrome[data-chrome-style~="label"] { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .selection-overlay-layer { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+    .selection-draft-box { position: absolute; border: 3px solid #4f46e5; background: rgba(79,70,229,.08); box-sizing: border-box; }
+    .selection-draft-box > span { position: absolute; left: -3px; top: -27px; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 7px 7px 7px 0; background: #4f46e5; color: white; font: 700 15px/26px ui-sans-serif,system-ui,sans-serif; text-align: center; }
+    .selection-draft-box[data-status="content_deleted"] { border-style: dashed; opacity: .7; }
   </style>
 </head>
 <body>
@@ -77,7 +81,9 @@
     const deck = document.getElementById('deck');
     const state = {
       slides: [],
-      activeIndex: 0
+      activeIndex: 0,
+      selection: { mode: 'none', sessionID: '', slideID: '', revision: 0, hash: '' },
+      drafts: new Map()
     };
 
     function isIndex(value) {
@@ -119,6 +125,49 @@
         && isIndex(value.index);
     }
 
+    function validRect(value) {
+      return value && [value.x, value.y, value.width, value.height].every((item) => typeof item === 'number' && Number.isFinite(item))
+        && value.x >= 0 && value.y >= 0 && value.width >= 0 && value.height >= 0
+        && value.x + value.width <= 1920.001 && value.y + value.height <= 1080.001;
+    }
+
+    function isSelectionMode(value) {
+      return value && value.type === 'setSelectionMode' && typeof value.session_id === 'string'
+        && typeof value.slide_id === 'string' && ['none', 'element', 'region'].includes(value.mode)
+        && Number.isInteger(value.html_revision) && typeof value.html_hash === 'string';
+    }
+
+    function isDraftRender(value) {
+      return value && value.type === 'renderDraftSelections' && typeof value.session_id === 'string'
+        && typeof value.slide_id === 'string' && Array.isArray(value.selections)
+        && value.selections.every((item) => item && typeof item.selection_id === 'string' && Number.isInteger(item.marker_no) && item.marker_no > 0 && validRect(item.rect));
+    }
+
+    function isSelectionProbe(value) {
+      return value && value.type === 'probeDraftSelections' && typeof value.session_id === 'string'
+        && typeof value.slide_id === 'string' && Array.isArray(value.selections) && value.selections.length <= 8;
+    }
+
+    function validIncomingSelection(value) {
+      if (!value || !['element', 'region'].includes(value.kind) || value.slide_id !== state.selection.slideID
+        || value.html_revision !== state.selection.revision || value.html_hash !== state.selection.hash
+        || value.canvas?.width !== 1920 || value.canvas?.height !== 1080 || value.status !== 'active'
+        || !validRect(value.rect) || value.rect.width <= 0 || value.rect.height <= 0 || !Array.isArray(value.dom_targets) || value.dom_targets.length > 50
+        || !Array.isArray(value.chrome_targets)) return false;
+      if (new TextEncoder().encode(JSON.stringify({ dom_targets: value.dom_targets, chrome_targets: value.chrome_targets })).byteLength > 128 * 1024) return false;
+      const targetsValid = value.dom_targets.every((target) => target && typeof target.target_id === 'string' && target.target_id.length > 0
+        && typeof target.tag === 'string' && target.tag.length > 0 && validRect(target.rect) && target.rect.width > 0 && target.rect.height > 0
+        && target.fingerprint && typeof target.fingerprint === 'object' && target.fingerprint.tag === target.tag
+        && Array.isArray(target.candidate_selectors) && target.candidate_selectors.length <= 3
+        && target.box_model && validRect(target.box_model.content)
+        && target.computed_style && typeof target.computed_style === 'object');
+      const chromeTypes = ['page_number', 'section_marker', 'key_message', 'deck_title'];
+      const chromeValid = value.chrome_targets.every((target) => target && chromeTypes.includes(target.type)
+        && typeof target.placement === 'string' && typeof target.style === 'string' && typeof target.text === 'string'
+        && validRect(target.rect) && target.rect.width > 0 && target.rect.height > 0);
+      return targetsValid && chromeValid && value.dom_targets.length + value.chrome_targets.length > 0;
+    }
+
     function setActive(index) {
       const frames = Array.from(deck.querySelectorAll('[data-slide-frame]'));
       if (!frames.length) {
@@ -151,6 +200,19 @@
         node.dataset.placement = item.placement || 'bottom-right';
         node.dataset.chromeStyle = item.style || '';
         if (item.type === 'page_number') node.setAttribute('aria-label', `第 ${context.ordinal} 页，共 ${context.total} 页`);
+        node.addEventListener('click', (event) => {
+          if (state.selection.mode !== 'element' || state.selection.slideID !== context.slide_id) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const rect = rectForNode(node);
+          const chrome = chromeTargets(container, rect).filter((target) => target.type === node.dataset.runtimeChrome);
+          finishSelection({
+            selection_id: '', marker_no: 0, kind: 'element', comment: '', slide_id: context.slide_id,
+            html_revision: state.selection.revision, html_hash: state.selection.hash,
+            canvas: { width: 1920, height: 1080 }, rect, status: 'active', dom_targets: [], chrome_targets: chrome,
+            dedupe_key: 'chrome|' + context.slide_id + '|' + state.selection.hash + '|' + node.dataset.runtimeChrome + '|' + node.dataset.placement
+          });
+        });
         container.querySelector('.runtime-canvas').appendChild(node);
       });
     }
@@ -170,7 +232,7 @@
       ));
     }
 
-    function normalizeSlideHTML(source, themeID, projectID) {
+    function normalizeSlideHTML(source, themeID, projectID, slideID) {
 		const document = new DOMParser().parseFromString(bridgeAttachmentPaths(source, projectID), 'text/html');
       const head = document.head;
       head.querySelectorAll('link').forEach((link) => {
@@ -194,6 +256,10 @@
 			const bridged = attachmentContentURL(projectID, node.getAttribute('src'));
 			if (bridged) node.setAttribute('src', bridged);
 		});
+      const bridge = document.createElement('script');
+      bridge.src = '/slide-runtime/selection-bridge.js';
+      bridge.dataset.slideId = slideID;
+      document.body.appendChild(bridge);
       return `<!doctype html>${document.documentElement.outerHTML}`;
     }
 
@@ -234,11 +300,19 @@
               message: `第 ${index + 1} 页渲染失败`
             }, '*');
           });
+          frame.addEventListener('load', () => {
+            postModeToInner();
+            renderDrafts(slide.id);
+          });
           canvas.appendChild(frame);
+          const overlays = document.createElement('div');
+          overlays.className = 'selection-overlays';
+          overlays.style.cssText = 'position:absolute;inset:0;z-index:3;pointer-events:none';
+          canvas.appendChild(overlays);
           container.appendChild(canvas);
         }
         const frame = container.querySelector('iframe');
-        const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.theme_id, slide.frame.project_id);
+        const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.theme_id, slide.frame.project_id, slide.id);
         if (frame.getAttribute('srcdoc') !== normalizedHTML) {
           frame.srcdoc = normalizedHTML;
         }
@@ -256,7 +330,100 @@
       });
     }
 
+    function containerFor(slideID) {
+      return Array.from(deck.querySelectorAll('[data-slide-frame]')).find((item) => item.dataset.slideId === slideID) || null;
+    }
+
+    function postModeToInner() {
+      const config = state.selection;
+      const container = containerFor(config.slideID);
+      const frame = container && container.querySelector('iframe');
+      if (frame) frame.contentWindow.postMessage({
+        bridge: 'ppt-dom-selection-v1', type: 'innerSetSelectionMode', slide_id: config.slideID,
+        session_id: config.sessionID, mode: config.mode, html_revision: config.revision, html_hash: config.hash
+      }, '*');
+      deck.querySelectorAll('[data-runtime-chrome]').forEach((node) => {
+        const enabled = config.mode === 'element' && node.closest('[data-slide-frame]') === container;
+        node.style.pointerEvents = enabled ? 'auto' : 'none';
+        node.style.cursor = enabled ? 'crosshair' : '';
+        node.style.zIndex = enabled ? '4' : '';
+      });
+    }
+
+    function renderDrafts(slideID) {
+      const container = containerFor(slideID);
+      const layer = container && container.querySelector('.selection-overlays');
+      if (!layer) return;
+      layer.replaceChildren();
+      (state.drafts.get(slideID) || []).forEach((item) => {
+        if (item.status === 'page_deleted') return;
+        const box = document.createElement('div');
+        box.className = 'selection-box';
+        box.dataset.status = item.status;
+        box.style.position = 'absolute';
+        box.style.left = item.rect.x + 'px';
+        box.style.top = item.rect.y + 'px';
+        box.style.width = item.rect.width + 'px';
+        box.style.height = item.rect.height + 'px';
+        box.style.border = '2px solid #2563eb';
+        box.style.background = 'rgba(37,99,235,.06)';
+        box.style.boxSizing = 'border-box';
+        const marker = document.createElement('span');
+        marker.textContent = String(item.marker_no);
+        marker.style.cssText = 'position:absolute;left:-2px;top:-26px;min-width:24px;height:24px;padding:0 5px;border-radius:5px 5px 5px 0;background:#2563eb;color:white;font:600 13px/24px sans-serif;text-align:center';
+        box.appendChild(marker);
+        layer.appendChild(box);
+      });
+    }
+
+    function rectForNode(node) {
+      const canvas = node.closest('.runtime-canvas').getBoundingClientRect();
+      const raw = node.getBoundingClientRect();
+      const scale = canvas.width / 1920;
+      return { x: (raw.left - canvas.left) / scale, y: (raw.top - canvas.top) / scale, width: raw.width / scale, height: raw.height / scale };
+    }
+
+    function chromeTargets(container, region) {
+      return Array.from(container.querySelectorAll('[data-runtime-chrome]')).flatMap((node) => {
+        const rect = rectForNode(node);
+        if (region && !(rect.x >= region.x && rect.y >= region.y && rect.x + rect.width <= region.x + region.width && rect.y + rect.height <= region.y + region.height)) return [];
+        return [{ type: node.dataset.runtimeChrome, placement: node.dataset.placement || '', style: node.dataset.chromeStyle || '', text: node.textContent || '', rect }];
+      });
+    }
+
+    function finishSelection(selection) {
+      state.selection.mode = 'none';
+      postModeToInner();
+      window.parent.postMessage({ type: 'selectionCreated', session_id: state.selection.sessionID, slide_id: state.selection.slideID, selection }, '*');
+    }
+
     window.addEventListener('message', (event) => {
+      const active = deck.querySelector('[data-slide-frame][data-active="true"]');
+      const inner = active && active.querySelector('iframe');
+      if (inner && event.source === inner.contentWindow) {
+        const message = event.data;
+        if (!message || message.bridge !== 'ppt-dom-selection-v1' || message.slide_id !== state.selection.slideID || message.session_id !== state.selection.sessionID) return;
+        if (message.type === 'innerSelectionCreated') {
+          const selection = message.selection;
+          if (selection.kind === 'region') selection.chrome_targets = chromeTargets(active, selection.rect);
+          if (validIncomingSelection(selection)) finishSelection(selection);
+          else {
+            window.parent.postMessage({ type: 'selectionRejected', session_id: message.session_id, slide_id: message.slide_id, message: '选择内容无效或过大，请缩小范围。' }, '*');
+            postModeToInner();
+          }
+        } else if (message.type === 'innerSelectionEmpty') {
+          window.parent.postMessage({ type: 'selectionEmpty', session_id: message.session_id, slide_id: message.slide_id, message: String(message.message || '未选中有效元素，请重试。') }, '*');
+        } else if (message.type === 'innerSelectionRejected') {
+          window.parent.postMessage({ type: 'selectionRejected', session_id: message.session_id, slide_id: message.slide_id, message: String(message.message || '选择内容无效，请重试。') }, '*');
+        } else if (message.type === 'innerSelectionCanceled') {
+          state.selection.mode = 'none';
+          postModeToInner();
+          window.parent.postMessage({ type: 'selectionCanceled', session_id: message.session_id, slide_id: message.slide_id }, '*');
+        } else if (message.type === 'innerSelectionPresence' && Array.isArray(message.statuses)) {
+          window.parent.postMessage({ type: 'selectionPresence', session_id: message.session_id, slide_id: message.slide_id, statuses: message.statuses }, '*');
+        }
+        return;
+      }
       if (event.source !== window.parent) {
         return;
       }
@@ -267,6 +434,17 @@
           setActive(event.data.index);
         } else if (isGotoSlide(event.data)) {
           setActive(event.data.index);
+        } else if (isSelectionMode(event.data)) {
+          const current = state.slides[state.activeIndex];
+          if (!current || current.id !== event.data.slide_id) return;
+          state.selection = { mode: event.data.mode, sessionID: event.data.session_id, slideID: event.data.slide_id, revision: event.data.html_revision, hash: event.data.html_hash };
+          postModeToInner();
+        } else if (isDraftRender(event.data) && event.data.session_id === state.selection.sessionID) {
+          state.drafts.set(event.data.slide_id, event.data.selections.filter((item) => validRect(item.rect)));
+          renderDrafts(event.data.slide_id);
+        } else if (isSelectionProbe(event.data) && event.data.session_id === state.selection.sessionID) {
+          const container = containerFor(event.data.slide_id);
+          container?.querySelector('iframe')?.contentWindow?.postMessage({ bridge: 'ppt-dom-selection-v1', type: 'innerProbeSelections', slide_id: event.data.slide_id, session_id: event.data.session_id, selections: event.data.selections }, '*');
         }
       } catch (error) {
         window.parent.postMessage({

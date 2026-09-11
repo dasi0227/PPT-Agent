@@ -57,10 +57,13 @@ type SteeringSource interface {
 }
 
 type SteeringInput struct {
-	ID          string
-	Content     string
-	ProjectID   string
-	Attachments []model.AttachmentReference
+	ID             string
+	Content        string
+	ProjectID      string
+	Attachments    []model.AttachmentReference
+	DOMSelections  []model.DOMSelection
+	ReferenceOrder []model.ReferenceOrderItem
+	Scope          model.RunScope
 }
 
 type LifecycleObserver interface {
@@ -116,6 +119,7 @@ type RuntimeCheckpoint struct {
 	PendingCommand        *PendingCommandApproval       `json:"pending_command,omitempty"`
 	PendingScopeExpansion *PendingScopeExpansion        `json:"pending_scope_expansion,omitempty"`
 	Scope                 model.RunScope                `json:"scope"`
+	DOMSelections         []model.DOMSelection          `json:"dom_selections,omitempty"`
 	Session               *RunSessionSnapshot           `json:"session,omitempty"`
 	ProviderContinuation  *ProviderContinuationSnapshot `json:"provider_continuation,omitempty"`
 	CompletionFailures    int                           `json:"completion_failures"`
@@ -403,9 +407,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.messages = append(state.messages, messages...)
 		instruction := currentRunInstructionMessage(input.RunID, input.Context.Command.Instruction)
-		if !containsMessageText(state.messages, instruction) {
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: attachmentMessageParts(
-				instruction, input.Context.Project.ID, input.Context.Command.Attachments,
+		if !containsRunInstruction(state.messages, input.RunID) {
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
+				instruction, input.Context.Project.ID, input.Context.Command.Attachments, input.Context.Command.DOMSelections, input.Context.Command.ReferenceOrder,
 			)})
 		}
 	}
@@ -418,6 +422,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 	}()
 	if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.RunID == input.RunID {
+		state.pack.Command.DOMSelections = append([]model.DOMSelection{}, input.ResumeCheckpoint.DOMSelections...)
 		state.loopID = input.ResumeCheckpoint.LoopID
 		state.phase = input.ResumeCheckpoint.ResumePhase
 		if state.phase == "" {
@@ -2370,10 +2375,15 @@ func (r *Runtime) appendSteering(ctx context.Context, state *RunState, steering 
 	}
 	ids := make([]string, 0, len(messages))
 	for _, message := range messages {
-		if strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0 {
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: attachmentMessageParts(
-				"User steering: "+message.Content, message.ProjectID, message.Attachments,
+		if strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0 || len(message.DOMSelections) > 0 {
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
+				"User steering: "+message.Content, message.ProjectID, message.Attachments, message.DOMSelections, message.ReferenceOrder,
 			)})
+			if message.Scope.Object != "" {
+				state.scope = message.Scope
+				state.pack.Command.Scope = message.Scope
+			}
+			state.pack.Command.DOMSelections = append(state.pack.Command.DOMSelections, message.DOMSelections...)
 			ids = append(ids, message.ID)
 		}
 	}
@@ -2392,8 +2402,33 @@ func currentRunInstructionMessage(runID, instruction string) string {
 }
 
 func attachmentMessageParts(text, projectID string, attachments []model.AttachmentReference) []llm.ContentPart {
+	return referenceMessageParts(text, projectID, attachments, nil, model.NormalizeReferenceOrder(nil, attachments, nil))
+}
+
+func referenceMessageParts(text, projectID string, attachments []model.AttachmentReference, selections []model.DOMSelection, order []model.ReferenceOrderItem) []llm.ContentPart {
 	parts := llm.TextContent(text)
-	for _, attachment := range attachments {
+	attachmentByID := map[string]model.AttachmentReference{}
+	for _, item := range attachments {
+		attachmentByID[item.ID] = item
+	}
+	selectionByID := map[string]model.DOMSelection{}
+	for _, item := range selections {
+		selectionByID[item.SelectionID] = item
+	}
+	for _, ref := range order {
+		if ref.Kind == "dom" {
+			selection, ok := selectionByID[ref.RefID]
+			if !ok {
+				continue
+			}
+			description, _ := json.Marshal(selection)
+			parts = append(parts, llm.ContentPart{Type: "text", Text: "<selected_dom>" + string(description) + "</selected_dom>"})
+			continue
+		}
+		attachment, ok := attachmentByID[ref.RefID]
+		if !ok {
+			continue
+		}
 		description, _ := json.Marshal(map[string]any{
 			"attachment_id": attachment.ID, "name": attachment.OriginalName,
 			"media_type": attachment.MediaType, "width": attachment.Width, "height": attachment.Height,
@@ -2410,6 +2445,16 @@ func attachmentMessageParts(text, projectID string, attachments []model.Attachme
 func containsMessageText(messages []llm.Message, text string) bool {
 	for _, message := range messages {
 		if message.Role == llm.RoleUser && message.Text() == text {
+			return true
+		}
+	}
+	return false
+}
+
+func containsRunInstruction(messages []llm.Message, runID string) bool {
+	prefix := "<run_user_instruction run_id=\"" + runID + "\">"
+	for _, message := range messages {
+		if message.Role == llm.RoleUser && strings.Contains(message.Text(), prefix) {
 			return true
 		}
 	}

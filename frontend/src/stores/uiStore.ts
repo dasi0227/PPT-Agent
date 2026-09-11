@@ -7,6 +7,7 @@ interface UIState {
 
   toggleLeftPanel: () => void;
   toggleRightPanel: () => void;
+  showRightPanel: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -16,7 +17,8 @@ export const useUIStore = create<UIState>()(
       rightPanelHidden: false,
 
       toggleLeftPanel: () => set((state) => ({ leftPanelHidden: !state.leftPanelHidden })),
-      toggleRightPanel: () => set((state) => ({ rightPanelHidden: !state.rightPanelHidden }))
+      toggleRightPanel: () => set((state) => ({ rightPanelHidden: !state.rightPanelHidden })),
+      showRightPanel: () => set({ rightPanelHidden: false })
     }),
     {
       name: 'ppt-agent-ui-v6',

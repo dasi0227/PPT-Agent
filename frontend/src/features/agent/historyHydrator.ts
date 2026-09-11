@@ -6,6 +6,8 @@ import type {
   RunMode,
   RunScope,
   Skill,
+	PublicDOMSelection,
+	ReferenceOrderItem,
 } from '../../api/types';
 import { parsePublicEvent } from '../../api/sse';
 import { reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
@@ -17,6 +19,19 @@ export interface HistoryEntry {
   turn: 'user' | 'agent';
   type: string;
   data: Record<string, unknown>;
+}
+
+function readDOMSelections(data: Record<string, unknown>): PublicDOMSelection[] {
+	if (!Array.isArray(data.dom_selections)) return [];
+	return data.dom_selections.flatMap((value) => {
+		if (!isRecord(value) || typeof value.selection_id !== 'string' || typeof value.marker_no !== 'number' || typeof value.comment !== 'string' || !['active','content_deleted','page_deleted'].includes(String(value.status))) return [];
+		return [{ selection_id:value.selection_id, marker_no:value.marker_no, comment:value.comment, status:value.status as PublicDOMSelection['status'] }];
+	});
+}
+
+function readReferenceOrder(data: Record<string, unknown>): ReferenceOrderItem[] {
+	if (!Array.isArray(data.reference_order)) return [];
+	return data.reference_order.flatMap((value) => isRecord(value) && (value.kind === 'image' || value.kind === 'dom') && typeof value.ref_id === 'string' ? [{ kind:value.kind, ref_id:value.ref_id }] : []);
 }
 
 export interface HydratedRunView {
@@ -156,6 +171,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         mode,
         skills: readHistorySkills(entry.data),
         components: readHistoryComponents(entry.data),
+		domSelections: readDOMSelections(entry.data),
+		referenceOrder: readReferenceOrder(entry.data),
       });
       continue;
     }
@@ -170,6 +187,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         deliveryStatus: entry.data.status === 'rejected' ? 'rejected' : 'accepted',
         rejectionCode: String(entry.data.rejection_code ?? ''),
         timestamp: (entry.ts || 0) * 1000,
+		domSelections: readDOMSelections(entry.data),
+		referenceOrder: readReferenceOrder(entry.data),
       });
       continue;
     }

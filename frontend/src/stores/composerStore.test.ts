@@ -11,6 +11,9 @@ describe('composerStore', () => {
       customSectionIds: [],
       selectedSkillIds: [],
       threadDrafts: {},
+      threadReferences: {},
+      nextMarkerByThread: {},
+      editingSelectionIdByThread: {},
     });
   });
 
@@ -59,5 +62,24 @@ describe('composerStore', () => {
     useComposerStore.getState().reconcileScopeIds(['sli_one'], ['sec_one']);
     expect(useComposerStore.getState().customSlideIds).toEqual(['sli_one']);
     expect(useComposerStore.getState().customSectionIds).toEqual(['sec_one']);
+  });
+
+  it('keeps mixed references ordered and DOM marker numbers monotonic', () => {
+    const store = useComposerStore.getState();
+    store.addThreadAttachment('thread-one', { attachmentId: 'att_one', name: 'one.png', size: 10, mediaType: 'image/png' });
+    const base = { kind: 'element' as const, comment: '', slide_id: 'sli_one', html_revision: 1, html_hash: 'sha256:a', canvas: { width: 1920 as const, height: 1080 as const }, rect: { x: 1, y: 1, width: 10, height: 10 }, status: 'active' as const, dom_targets: [], chrome_targets: [] };
+    store.addThreadDOMSelection('thread-one', { ...base, selection_id: 'sel_one', marker_no: 1, dedupe_key: 'one' });
+    store.addThreadDOMSelection('thread-one', { ...base, selection_id: 'sel_two', marker_no: 2, dedupe_key: 'two' });
+    useComposerStore.getState().removeThreadDOMSelection('thread-one', 'sel_one');
+    expect(useComposerStore.getState().threadReferences['thread-one'].map((item) => item.kind)).toEqual(['image', 'dom']);
+    expect(useComposerStore.getState().nextMarkerByThread['thread-one']).toBe(3);
+  });
+
+  it('deduplicates DOM selections without consuming another marker', () => {
+    const selection = { selection_id: 'sel_one', marker_no: 1, kind: 'element' as const, comment: '', slide_id: 'sli_one', html_revision: 1, html_hash: 'sha256:a', canvas: { width: 1920 as const, height: 1080 as const }, rect: { x: 1, y: 1, width: 10, height: 10 }, status: 'active' as const, dom_targets: [], chrome_targets: [], dedupe_key: 'same' };
+    useComposerStore.getState().addThreadDOMSelection('thread-one', selection);
+    useComposerStore.getState().addThreadDOMSelection('thread-one', { ...selection, selection_id: 'sel_duplicate', marker_no: 2 });
+    expect(useComposerStore.getState().threadReferences['thread-one']).toHaveLength(1);
+    expect(useComposerStore.getState().nextMarkerByThread['thread-one']).toBe(2);
   });
 });

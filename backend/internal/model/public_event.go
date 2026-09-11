@@ -78,12 +78,14 @@ type PublicError struct {
 
 type RunStartedPayload struct {
 	PublicEventBase
-	Scope       RunScope               `json:"scope"`
-	Mode        RunMode                `json:"mode"`
-	UserInput   string                 `json:"user_input"`
-	Skills      []PublicSkill          `json:"skills,omitempty"`
-	Resources   []PublicLoadedResource `json:"resources,omitempty"`
-	Attachments []AttachmentReference  `json:"attachments,omitempty"`
+	Scope          RunScope               `json:"scope"`
+	Mode           RunMode                `json:"mode"`
+	UserInput      string                 `json:"user_input"`
+	Skills         []PublicSkill          `json:"skills,omitempty"`
+	Resources      []PublicLoadedResource `json:"resources,omitempty"`
+	Attachments    []AttachmentReference  `json:"attachments,omitempty"`
+	DOMSelections  []PublicDOMSelection   `json:"dom_selections,omitempty"`
+	ReferenceOrder []ReferenceOrderItem   `json:"reference_order,omitempty"`
 }
 
 type ProgressValue struct {
@@ -421,8 +423,18 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			Mode:        RunMode(stringValue(data["mode"])),
 			Instruction: stringValue(data["user_input"]),
 		}
-		if err := command.Validate(); err != nil {
+		if strings.TrimSpace(command.Instruction) == "" {
+			if selections, ok := data["dom_selections"].([]any); !ok || len(selections) == 0 {
+				return errors.New("user input is required")
+			}
+		}
+		if err := command.Scope.Validate(); err != nil {
 			return err
+		}
+		switch command.Mode {
+		case ModeChat, ModeGrill, ModePlan, ModeExecute:
+		default:
+			return errors.New("run mode is invalid")
 		}
 		if err := validatePublicSkills(data["skills"]); err != nil {
 			return err

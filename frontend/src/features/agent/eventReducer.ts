@@ -50,6 +50,8 @@ export interface UserTurnItem extends BaseTimelineItem {
   deliveryStatus?: 'sending' | 'accepted' | 'rejected';
   clientMessageId?: string;
   rejectionCode?: string;
+  domSelections?: import('../../api/types').PublicDOMSelection[];
+  referenceOrder?: import('../../api/types').ReferenceOrderItem[];
 }
 
 export interface ReasoningItem extends BaseTimelineItem {

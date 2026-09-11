@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDown, CheckCircle2, ChevronRight, PauseCircle, StopCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowDown, CheckCircle2, ChevronRight, Code2, FileImage, PauseCircle, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
 import { targetLabel } from './runtimeLabels';
 import { useActiveSession } from './useActiveSession';
@@ -78,6 +78,7 @@ export const Timeline: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const followingRef = useRef(true);
   const [showReturn, setShowReturn] = useState(false);
+	const [openDOMReference, setOpenDOMReference] = useState<{ key:string; marker:number; comment:string; status:string } | null>(null);
   const reducedMotion = typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -129,6 +130,18 @@ export const Timeline: React.FC = () => {
             <div className="flex justify-end">
               <div className="group flex max-w-[88%] flex-col items-end">
                 <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
+				  {item.referenceOrder && item.referenceOrder.length > 0 && (
+					<div className="mb-2 flex max-w-full gap-1.5 overflow-x-auto" aria-label="消息引用">
+					  {item.referenceOrder.map((reference) => {
+						if (reference.kind === 'image') return <span key={`image:${reference.ref_id}`} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] text-text-600"><FileImage className="h-3.5 w-3.5" /> 图片</span>;
+						const selection = item.domSelections?.find((candidate) => candidate.selection_id === reference.ref_id);
+						if (!selection) return null;
+						const key = `${item.id}:${selection.selection_id}`;
+						return <button key={key} type="button" onClick={() => setOpenDOMReference(openDOMReference?.key === key ? null : { key, marker:selection.marker_no, comment:selection.comment, status:selection.status })} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-text-900"><Code2 className="h-3.5 w-3.5 text-accent" />标记 {selection.marker_no}</button>;
+					  })}
+					</div>
+				  )}
+				  {openDOMReference?.key.startsWith(`${item.id}:`) && <div className="mb-2 rounded-md border border-border bg-surface p-2 text-xs text-text-600"><div className="font-semibold text-text-900">标记 {openDOMReference.marker}</div><div className="mt-1 whitespace-pre-wrap">{openDOMReference.comment || '未填写注释'}</div>{openDOMReference.status !== 'active' && <div className="mt-1 text-warning">{openDOMReference.status === 'page_deleted' ? '页面已删除' : '内容已删除'}</div>}</div>}
                   <MarkdownMessage content={item.text} />
                   {item.deliveryStatus && (
                     <div className={`mt-1 text-[10px] ${

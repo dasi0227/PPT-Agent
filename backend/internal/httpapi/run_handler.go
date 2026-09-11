@@ -26,16 +26,18 @@ func NewRunHandler(svc *service.RunService) *RunHandler {
 }
 
 type createRunBody struct {
-	ClientRequestID   string                    `json:"client_request_id"`
-	Model             string                    `json:"model"`
-	Instruction       string                    `json:"instruction"`
-	Scope             model.CreateRunScopeInput `json:"scope"`
-	Mode              model.RunMode             `json:"mode"`
-	Options           model.RunOptions          `json:"options"`
-	SkillIDs          []string                  `json:"skill_ids"`
-	ComponentNames    []string                  `json:"component_names"`
-	MentionedSlideIDs []string                  `json:"mentioned_slide_ids"`
-	AttachmentIDs     []string                  `json:"attachment_ids"`
+	ClientRequestID   string                     `json:"client_request_id"`
+	Model             string                     `json:"model"`
+	Instruction       string                     `json:"instruction"`
+	Scope             model.CreateRunScopeInput  `json:"scope"`
+	Mode              model.RunMode              `json:"mode"`
+	Options           model.RunOptions           `json:"options"`
+	SkillIDs          []string                   `json:"skill_ids"`
+	ComponentNames    []string                   `json:"component_names"`
+	MentionedSlideIDs []string                   `json:"mentioned_slide_ids"`
+	AttachmentIDs     []string                   `json:"attachment_ids"`
+	DOMSelections     []model.DOMSelection       `json:"dom_selections"`
+	ReferenceOrder    []model.ReferenceOrderItem `json:"reference_order"`
 }
 
 type runResponse struct {
@@ -93,6 +95,8 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		ComponentNames:    body.ComponentNames,
 		MentionedSlideIDs: body.MentionedSlideIDs,
 		AttachmentIDs:     body.AttachmentIDs,
+		DOMSelections:     body.DOMSelections,
+		ReferenceOrder:    body.ReferenceOrder,
 		Instruction:       body.Instruction,
 		ScopeInput:        &body.Scope,
 		Command: model.RunCommand{
@@ -176,7 +180,17 @@ func handleCreateRunError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrSlideTargetNotFound):
 		AbortWithError(c, ProjectAgentError(model.NewAgentError("SLIDE_NOT_FOUND", "create_run", err), "SLIDE_NOT_FOUND", "create_run"))
 	case errors.Is(err, model.ErrInvalidRunCommand):
-		AbortWithError(c, ProjectAgentError(model.NewAgentError("INVALID_SCOPE", "create_run", err), "INVALID_SCOPE", "create_run"))
+		code := "INVALID_SCOPE"
+		for _, item := range []struct {
+			target error
+			code   string
+		}{{model.ErrDOMSelectionInvalid, "DOM_SELECTION_INVALID"}, {model.ErrDOMSelectionLimit, "DOM_SELECTION_LIMIT"}, {model.ErrDOMSelectionTooLarge, "DOM_SELECTION_TOO_LARGE"}, {model.ErrDOMSelectionCommentTooLong, "DOM_SELECTION_COMMENT_TOO_LONG"}, {model.ErrReferenceOrderInvalid, "REFERENCE_ORDER_INVALID"}} {
+			if errors.Is(err, item.target) {
+				code = item.code
+				break
+			}
+		}
+		AbortWithError(c, ProjectAgentError(model.NewAgentError(code, "create_run", err), code, "create_run"))
 	case errors.Is(err, service.ErrRunScopeUnsupported):
 		AbortWithError(c, ProjectAgentError(model.NewAgentError("RUN_SCOPE_UNSUPPORTED", "create_run", err), "RUN_SCOPE_UNSUPPORTED", "create_run"))
 	default:
@@ -206,16 +220,18 @@ func (h *RunHandler) Resume(c *gin.Context) {
 func (h *RunHandler) Steer(c *gin.Context) {
 	runID := c.Param("id")
 	var body struct {
-		ExpectedRunID   string   `json:"expected_run_id"`
-		ClientMessageID string   `json:"client_message_id"`
-		Content         string   `json:"content"`
-		AttachmentIDs   []string `json:"attachment_ids"`
+		ExpectedRunID   string                     `json:"expected_run_id"`
+		ClientMessageID string                     `json:"client_message_id"`
+		Content         string                     `json:"content"`
+		AttachmentIDs   []string                   `json:"attachment_ids"`
+		DOMSelections   []model.DOMSelection       `json:"dom_selections"`
+		ReferenceOrder  []model.ReferenceOrderItem `json:"reference_order"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		AbortWithError(c, ProjectAgentError(model.NewAgentError("BAD_REQUEST", "steer_run", err), "BAD_REQUEST", "steer_run"))
 		return
 	}
-	message, err := h.svc.Steer(c.Request.Context(), runID, body.ExpectedRunID, body.ClientMessageID, body.Content, body.AttachmentIDs)
+	message, err := h.svc.Steer(c.Request.Context(), runID, body.ExpectedRunID, body.ClientMessageID, body.Content, body.AttachmentIDs, body.DOMSelections, body.ReferenceOrder)
 	if err != nil {
 		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "steer_run"))
 		return

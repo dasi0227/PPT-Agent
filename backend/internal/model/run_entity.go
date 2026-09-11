@@ -44,10 +44,12 @@ type CreateRunParams struct {
 	// Theme falls back to project.Theme when omitted.
 	Theme string
 	// Internal deck runner page count.
-	PageCount     int
-	AttachmentIDs []string
-	Command       RunCommand
-	ScopeInput    *CreateRunScopeInput
+	PageCount      int
+	AttachmentIDs  []string
+	DOMSelections  []DOMSelection
+	ReferenceOrder []ReferenceOrderItem
+	Command        RunCommand
+	ScopeInput     *CreateRunScopeInput
 }
 
 type IdempotencyRecord struct {
@@ -76,6 +78,9 @@ type SteeringMessage struct {
 	RequestHash     string
 	Content         string
 	Attachments     []AttachmentReference
+	DOMSelections   []DOMSelection
+	ReferenceOrder  []ReferenceOrderItem
+	Scope           RunScope
 	Status          SteeringStatus
 	AcceptedAt      int64
 	InjectedAt      int64

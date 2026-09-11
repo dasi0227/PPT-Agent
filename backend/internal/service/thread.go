@@ -176,6 +176,8 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 					data["status"] = message.Status
 					data["rejection_code"] = message.RejectionCode
 					data["attachments"] = message.Attachments
+					data["dom_selections"] = model.PublicDOMSelections(message.DOMSelections)
+					data["reference_order"] = message.ReferenceOrder
 				}
 				continue
 			}
@@ -184,7 +186,8 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 				"run_id": message.RunID, "turn": "user", "type": "steering",
 				"data": map[string]any{
 					"client_message_id": message.ClientMessageID, "text": message.Content,
-					"attachments": message.Attachments, "status": message.Status, "rejection_code": message.RejectionCode,
+					"attachments": message.Attachments, "dom_selections": model.PublicDOMSelections(message.DOMSelections),
+					"reference_order": message.ReferenceOrder, "status": message.Status, "rejection_code": message.RejectionCode,
 				},
 			})
 			nextSyntheticSeq++

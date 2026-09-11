@@ -75,3 +75,36 @@ func TestResolveRunScopeRejectsUnknownAndEmptySelections(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeSelectionScopeIsMonotonicAndSingleRevision(t *testing.T) {
+	base := model.NewRunScope(model.ScopeObjectSpec, model.ScopeCurrentPage, "sli_1")
+	selection := model.DOMSelection{SlideID: "sli_2", Status: model.DOMSelectionActive}
+	got := mergeSelectionScope(base, scopeSnapshot(), []model.DOMSelection{selection, selection})
+	if got.Object != model.ScopeObjectPresentation || got.Source.Kind != model.ScopeCustomPages || got.Revision != 2 {
+		t.Fatalf("scope = %+v", got)
+	}
+	if len(got.SlideIDs) != 2 || got.SlideIDs[0] != "sli_1" || got.SlideIDs[1] != "sli_2" {
+		t.Fatalf("slide ids = %#v", got.SlideIDs)
+	}
+}
+
+func TestMergeChromeSelectionUpgradesToGlobal(t *testing.T) {
+	base := model.NewRunScope(model.ScopeObjectHTML, model.ScopeCurrentPage, "sli_2")
+	selection := model.DOMSelection{SlideID: "sli_2", Status: model.DOMSelectionActive, ChromeTargets: []model.ChromeTarget{{Type: "page_number"}}}
+	got := mergeSelectionScope(base, scopeSnapshot(), []model.DOMSelection{selection})
+	if got.Object != model.ScopeObjectGlobal || got.Source.Kind != model.ScopeAllPages || !got.IncludeRunCreatedSlides || got.Revision != 2 || len(got.SlideIDs) != 3 {
+		t.Fatalf("scope = %+v", got)
+	}
+}
+
+func TestValidateSelectionProjectAllowsOnlyExplicitDeletedPages(t *testing.T) {
+	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_missing", Status: model.DOMSelectionActive}}, nil); err == nil {
+		t.Fatal("unknown active page accepted")
+	}
+	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_missing", Status: model.DOMSelectionPageDeleted}}, map[string]bool{"sli_missing": true}); err != nil {
+		t.Fatalf("deleted page rejected: %v", err)
+	}
+	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_other_project", Status: model.DOMSelectionPageDeleted}}, nil); err == nil {
+		t.Fatal("unproven deleted page accepted")
+	}
+}

@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
+import { Code2, FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
 import { llmApi } from '../../api/llm';
 import { polishApi } from '../../api/polish';
@@ -218,8 +218,13 @@ export const CommandComposer: React.FC = () => {
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
   const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
   const activeThreadDraft = activeThreadId ? composer.threadDrafts[activeThreadId] : undefined;
-	const activeAttachments = activeThreadId ? composer.threadAttachments[activeThreadId] ?? [] : [];
+	const activeReferences = activeThreadId ? composer.threadReferences[activeThreadId] ?? [] : [];
+	const activeAttachments = activeReferences.flatMap((item) => item.kind === 'image' ? [item.attachment] : []);
+	const activeDOMSelections = activeReferences.flatMap((item) => item.kind === 'dom' ? [item.selection] : []);
 	const hasAttachments = activeAttachments.length > 0;
+	const hasDOMSelections = activeDOMSelections.length > 0;
+	const hasDOMIntent = activeDOMSelections.some((selection) => selection.comment.trim() !== '');
+	const hasSendableContent = text.trim() !== '' || (hasDOMSelections ? hasDOMIntent : hasAttachments);
 	const hasPendingUploads = uploadingCount > 0;
   const setComposerText = (nextText: string) => {
     setText(nextText);
@@ -227,7 +232,7 @@ export const CommandComposer: React.FC = () => {
   };
   const showCancelButton = Boolean(activeRunId)
     && (runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling')
-	&& text.trim() === '' && !hasAttachments;
+	&& activeReferences.length === 0 && text.trim() === '';
   const disabledPlaceholder = runStatus === 'waiting'
     ? '请先回答上方问题'
     : runStatus === 'recovering'
@@ -451,7 +456,8 @@ export const CommandComposer: React.FC = () => {
     const raw = (editor?.getSubmitText() ?? text).trim();
     const componentNames = editor?.getComponentNames() ?? [];
     const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
-	if (disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!raw && !hasAttachments)) return;
+	const apiDOMSelections = activeDOMSelections.map(({ dedupe_key: _dedupeKey, ...selection }) => selection);
+	if (disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!raw && (hasDOMSelections ? !hasDOMIntent : !hasAttachments))) return;
     setSubmitError('');
     const projectId = activeProjectId;
     let threadId: string;
@@ -462,7 +468,7 @@ export const CommandComposer: React.FC = () => {
       return;
     }
     if (steering && activeRunId) {
-		const accepted = await steerRun(threadId, activeRunId, raw, newClientIdentity('msg'), activeAttachments.map((attachment) => attachment.attachmentId));
+		const accepted = await steerRun(threadId, activeRunId, raw, newClientIdentity('msg'), activeAttachments.map((attachment) => attachment.attachmentId), apiDOMSelections, activeReferences.map((item) => ({ kind: item.kind, ref_id: item.kind === 'image' ? item.attachment.attachmentId : item.selection.selection_id })));
       if (accepted) {
         setText('');
         editorRef.current?.setPlainText('');
@@ -487,6 +493,8 @@ export const CommandComposer: React.FC = () => {
       mode: composer.mode,
       instruction: raw,
 		...(hasAttachments ? { attachment_ids: activeAttachments.map((attachment) => attachment.attachmentId) } : {}),
+		...(hasDOMSelections ? { dom_selections: apiDOMSelections } : {}),
+		...(activeReferences.length > 0 ? { reference_order: activeReferences.map((item) => ({ kind: item.kind, ref_id: item.kind === 'image' ? item.attachment.attachmentId : item.selection.selection_id })) } : {}),
       ...(composer.selectedSkillIds.length > 0 ? { skill_ids: composer.selectedSkillIds } : {}),
       ...(componentNames.length > 0 ? { component_names: componentNames } : {}),
       ...(mentionedSlideIds.length > 0 ? { mentioned_slide_ids: mentionedSlideIds } : {}),
@@ -656,26 +664,47 @@ export const CommandComposer: React.FC = () => {
 			}}
 		/>
         <div className="relative rounded-t-[22px]">
-			{hasAttachments && (
-				<div className="flex gap-2 overflow-x-auto px-3 pb-1.5 pt-3" aria-label="当前消息引用的图片">
-					{activeAttachments.map((attachment) => (
-						<div key={attachment.attachmentId} className="relative grid w-44 shrink-0 grid-cols-[38px_minmax(0,1fr)] items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 shadow-sm">
+			{activeReferences.length > 0 && (
+				<div className="flex gap-2 overflow-x-auto px-3 pb-1.5 pt-3" aria-label="当前消息引用">
+					{activeReferences.map((reference) => reference.kind === 'image' ? (
+						<div key={reference.attachment.attachmentId} className="relative grid w-44 shrink-0 grid-cols-[38px_minmax(0,1fr)] items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 shadow-sm">
 							<span className="grid h-[38px] w-[38px] place-items-center rounded-md bg-panel-muted text-text-600" aria-hidden="true">
 								<FileImage className="h-5 w-5" strokeWidth={1.75} />
 							</span>
 							<span className="min-w-0">
-								<span className="block truncate text-[11px] font-semibold leading-4 text-text-900">{attachment.name}</span>
-								<span className="mt-0.5 block text-[11px] leading-3 text-text-600">{formatFileSize(attachment.size)}</span>
+								<span className="block truncate text-[11px] font-semibold leading-4 text-text-900">{reference.attachment.name}</span>
+								<span className="mt-0.5 block text-[11px] leading-3 text-text-600">{formatFileSize(reference.attachment.size)}</span>
 							</span>
 							<button
 								type="button"
-								onClick={() => activeThreadId && composer.removeThreadAttachment(activeThreadId, attachment.attachmentId)}
+								onClick={() => activeThreadId && composer.removeThreadAttachment(activeThreadId, reference.attachment.attachmentId)}
 								className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900"
-								aria-label={`移除 ${attachment.name}`}
+								aria-label={`移除 ${reference.attachment.name}`}
 								title="从当前消息移除"
 							>
 								<X className="h-3.5 w-3.5" strokeWidth={1.75} />
 							</button>
+						</div>
+					) : (
+						<div key={reference.selection.selection_id} className="relative w-36 shrink-0">
+							{composer.editingSelectionIdByThread[activeThreadId ?? ''] === reference.selection.selection_id && (
+								<textarea autoFocus value={reference.selection.comment} aria-label={`标记 ${reference.selection.marker_no} 注释`}
+									onChange={(event) => activeThreadId && composer.updateThreadDOMSelection(activeThreadId, reference.selection.selection_id, { comment: Array.from(event.target.value).slice(0, 500).join('') })}
+									onBlur={() => activeThreadId && composer.setEditingDOMSelection(activeThreadId)}
+									onKeyDown={(event) => { if (!activeThreadId) return; if (event.key === 'Escape') { event.preventDefault(); composer.setEditingDOMSelection(activeThreadId); } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); composer.setEditingDOMSelection(activeThreadId); editorRef.current?.focusEnd(); } }}
+									className="mb-1 h-16 w-full resize-none rounded-md border border-border bg-surface p-2 text-xs outline-none focus:border-accent" placeholder="添加注释（可选）" />
+							)}
+							<button type="button" onClick={() => {
+								if (!activeThreadId) return;
+								if (reference.selection.status !== 'page_deleted') {
+									useDeckStore.getState().setCurrentSlideId(reference.selection.slide_id);
+									useDeckStore.getState().exitOverview();
+								}
+								composer.setEditingDOMSelection(activeThreadId, reference.selection.selection_id);
+							}} className="flex h-[52px] w-full items-center gap-2 rounded-lg border border-border bg-surface px-3 pr-7 text-xs font-semibold text-text-900 shadow-sm">
+								<Code2 className="h-4 w-4 text-accent" /> 标记 {reference.selection.marker_no}
+							</button>
+							<button type="button" onClick={() => activeThreadId && composer.removeThreadDOMSelection(activeThreadId, reference.selection.selection_id)} className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted" aria-label={`移除标记 ${reference.selection.marker_no}`}><X className="h-3.5 w-3.5" /></button>
 						</div>
 					))}
 				</div>
@@ -794,7 +823,7 @@ export const CommandComposer: React.FC = () => {
             ) : (
               <button
                 onClick={() => void submit()}
-                disabled={(!text.trim() && !hasAttachments) || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
+				disabled={!hasSendableContent || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-white disabled:bg-text-400 disabled:opacity-50"
                 aria-label={scopeSelectionEmpty ? '请至少选择一页或一章' : !attachmentModelSupported ? '当前模型不支持图片，请更换模型后发送' : '发送'}
                 title={scopeSelectionEmpty ? '请至少选择一页或一章' : !attachmentModelSupported ? '当前模型不支持图片，请更换模型后发送' : '发送'}

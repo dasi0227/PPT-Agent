@@ -153,6 +153,31 @@ export interface RunScope {
   revision: number;
 }
 
+export interface CanvasRect { x: number; y: number; width: number; height: number }
+export interface DOMAncestor { tag: string; stable_id?: string; class_summary?: string; sibling_index: number }
+export interface DOMFingerprint {
+  tag: string; stable_id?: string; classes?: string[]; key_attributes?: string[];
+  sibling_index: number; text_summary_hash?: string; ancestors?: DOMAncestor[];
+}
+export interface DOMEdges { top: number; right: number; bottom: number; left: number }
+export interface DOMBoxModel { content: CanvasRect; padding: DOMEdges; border: DOMEdges; margin: DOMEdges }
+export type DOMSelectionStatus = 'active' | 'content_deleted' | 'page_deleted';
+export interface DOMTarget {
+  target_id: string; fingerprint: DOMFingerprint; candidate_selectors?: string[]; tag: string;
+  attributes?: Record<string, string>; text_summary?: string; outer_html?: string; outer_html_truncated?: boolean;
+  ancestors?: DOMAncestor[]; parent_target_id?: string; rect: CanvasRect; box_model: DOMBoxModel;
+  computed_style?: Record<string, string>; status?: DOMSelectionStatus;
+}
+export interface ChromeTarget { type: 'page_number' | 'section_marker' | 'key_message' | 'deck_title'; placement: string; style: string; text: string; rect: CanvasRect }
+export interface DOMSelection {
+  selection_id: string; marker_no: number; kind: 'element' | 'region'; comment: string;
+  slide_id: string; html_revision: number; html_hash: string; canvas: { width: 1920; height: 1080 };
+  rect: CanvasRect; status: DOMSelectionStatus; dom_targets?: DOMTarget[]; chrome_targets?: ChromeTarget[];
+  dedupe_key?: string;
+}
+export interface PublicDOMSelection { selection_id: string; marker_no: number; comment: string; status: DOMSelectionStatus }
+export interface ReferenceOrderItem { kind: 'image' | 'dom'; ref_id: string }
+
 export interface CreateRunRequest {
   client_request_id?: string;
   model?: string;
@@ -163,6 +188,8 @@ export interface CreateRunRequest {
   component_names?: string[];
   mentioned_slide_ids?: string[];
 	attachment_ids?: string[];
+  dom_selections?: DOMSelection[];
+  reference_order?: ReferenceOrderItem[];
   options?: { language?: RunLanguage; range?: SlideRange };
 }
 
@@ -363,6 +390,8 @@ export interface SteerRunRequest {
   client_message_id: string;
   content: string;
 	attachment_ids?: string[];
+  dom_selections?: DOMSelection[];
+  reference_order?: ReferenceOrderItem[];
 }
 
 export interface SteerRunResponse {
@@ -649,6 +678,9 @@ export type SSEEvent =
       user_input: string;
       skills?: Skill[];
       resources?: PublicLoadedResource[];
+      attachments?: unknown[];
+      dom_selections?: PublicDOMSelection[];
+      reference_order?: ReferenceOrderItem[];
     }>
   | SSEEventBase<'run.progress', PublicEventBase & {
       stage: RunProgressStage;

@@ -106,6 +106,12 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 		add(BucketSystemPrompt, "tool schemas", "tools", LayerSeed, EstimateValueTokens(input.Tools))
 	}
 	toolNames := map[string]string{}
+	lastUserIndex := -1
+	for index := range input.Messages {
+		if input.Messages[index].Role == llm.RoleUser {
+			lastUserIndex = index
+		}
+	}
 	for index, message := range input.Messages {
 		for _, call := range message.ToolCalls {
 			toolNames[call.ID] = call.Name
@@ -124,7 +130,7 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 				bucket = BucketRunCommand
 			}
 		}
-		addTranscriptMessage(add, message, index, bucket, source)
+		addTranscriptMessage(add, message, index, bucket, source, index == lastUserIndex)
 	}
 
 	factor := input.Factor
@@ -155,6 +161,7 @@ func addTranscriptMessage(
 	index int,
 	bucket ContextBucket,
 	source string,
+	isLatestUser bool,
 ) {
 	baseTokens := messageEnvelopeTokens + EstimateValueTokens(message.ToolCalls) + EstimateTextTokens(message.ToolCallID)
 	if baseTokens > 0 {
@@ -166,6 +173,12 @@ func addTranscriptMessage(
 			partTokens = imageApproxTokens
 		}
 		partBucket, partSource := bucket, source
+		if strings.HasPrefix(part.Text, "<selected_dom>") || strings.HasPrefix(part.Text, "<selected_dom_reference>") {
+			partBucket, partSource = BucketChatHistory, "dom_selection"
+			if isLatestUser {
+				partBucket = BucketUserPrompt
+			}
+		}
 		if part.Type == "image" && strings.HasPrefix(part.ImageRef, "project:") {
 			partBucket, partSource = BucketUploadedFile, "message_attachment"
 		}

@@ -102,7 +102,8 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 	case model.EventRunStarted:
 		text, _ := data["user_input"].(string)
 		attachments, _ := data["attachments"].([]any)
-		if text == "" && len(attachments) == 0 {
+		selections, _ := data["dom_selections"].([]any)
+		if text == "" && len(attachments) == 0 && len(selections) == 0 {
 			return HistoryEntry{}, false
 		}
 		entry.Turn = "user"
@@ -110,6 +111,7 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 		entry.Data = map[string]any{
 			"text": text, "scope": data["scope"], "mode": data["mode"],
 			"skills": data["skills"], "resources": data["resources"], "attachments": data["attachments"],
+			"dom_selections": data["dom_selections"], "reference_order": data["reference_order"],
 		}
 	default:
 		entry.Turn = "agent"
@@ -407,7 +409,8 @@ func (b *Bus) AppendSteeringHistory(ctx context.Context, message model.SteeringM
 		Turn: "user", Type: "steering",
 		Data: map[string]any{
 			"client_message_id": message.ClientMessageID, "text": message.Content,
-			"attachments": message.Attachments, "status": message.Status, "rejection_code": message.RejectionCode,
+			"attachments": message.Attachments, "dom_selections": model.PublicDOMSelections(message.DOMSelections),
+			"reference_order": message.ReferenceOrder, "status": message.Status, "rejection_code": message.RejectionCode,
 		},
 	})
 }

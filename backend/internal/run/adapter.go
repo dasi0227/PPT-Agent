@@ -40,7 +40,8 @@ func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringI
 	for _, message := range messages {
 		out = append(out, workflow.SteeringInput{
 			ID: message.ClientMessageID, Content: message.Content,
-			Attachments: message.Attachments, ProjectID: c.active.run.ProjectID,
+			Attachments: message.Attachments, DOMSelections: message.DOMSelections,
+			ReferenceOrder: message.ReferenceOrder, Scope: message.Scope, ProjectID: c.active.run.ProjectID,
 		})
 	}
 	return out, nil

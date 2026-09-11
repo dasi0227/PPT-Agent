@@ -145,6 +145,8 @@ func ensureRunStarted(ctx context.Context, bus *Bus, run model.Run) error {
 		Skills:          run.Command.PublicSkills(),
 		Resources:       run.Command.PublicComponents(),
 		Attachments:     run.Command.Attachments,
+		DOMSelections:   model.PublicDOMSelections(run.Command.DOMSelections),
+		ReferenceOrder:  run.Command.ReferenceOrder,
 	})
 }
 
@@ -235,6 +237,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 			Scope:           a.run.Command.Scope, Mode: a.run.Command.Mode,
 			UserInput: a.run.Command.Instruction,
 			Skills:    a.run.Command.PublicSkills(), Resources: a.run.Command.PublicComponents(), Attachments: a.run.Command.Attachments,
+			DOMSelections: model.PublicDOMSelections(a.run.Command.DOMSelections), ReferenceOrder: a.run.Command.ReferenceOrder,
 		}); err != nil {
 			e.setStatus(context.Background(), a.run.ID, model.RunFailed)
 			return
@@ -532,11 +535,7 @@ func (e *Engine) PauseAll(ctx context.Context, reason string) error {
 	return errors.Join(failures...)
 }
 
-func (e *Engine) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, requestHash, content string, attachmentGroups ...[]model.AttachmentReference) (model.SteeringMessage, error) {
-	var attachments []model.AttachmentReference
-	if len(attachmentGroups) > 0 {
-		attachments = attachmentGroups[0]
-	}
+func (e *Engine) SteerWithReferences(ctx context.Context, runID, expectedRunID, clientMessageID, requestHash, content string, attachments []model.AttachmentReference, domSelections []model.DOMSelection, referenceOrder []model.ReferenceOrderItem, scope model.RunScope) (model.SteeringMessage, error) {
 	if runID != expectedRunID {
 		return model.SteeringMessage{}, model.NewAgentError("RUN_NOT_STEERABLE", "steer_run", nil)
 	}
@@ -561,10 +560,17 @@ func (e *Engine) Steer(ctx context.Context, runID, expectedRunID, clientMessageI
 	message := model.SteeringMessage{
 		RunID: runID, ThreadID: a.run.ThreadID, ClientMessageID: clientMessageID,
 		RequestHash: requestHash, Content: content, Attachments: attachments, Status: model.SteeringAccepted,
+		DOMSelections: domSelections, ReferenceOrder: referenceOrder, Scope: scope,
 		AcceptedAt: time.Now().UnixNano(),
 	}
 	existing, created, err := e.store.CreateSteering(ctx, message)
 	if err != nil {
+		if errors.Is(err, ErrRunRevisionConflict) {
+			return model.SteeringMessage{}, model.NewAgentError("RUN_REVISION_CONFLICT", "steer_run", err)
+		}
+		if errors.Is(err, ErrRunNotRunning) {
+			return model.SteeringMessage{}, model.NewAgentError("RUN_NOT_STEERABLE", "steer_run", err)
+		}
 		return model.SteeringMessage{}, err
 	}
 	if !created && existing.RequestHash != requestHash {
@@ -572,6 +578,9 @@ func (e *Engine) Steer(ctx context.Context, runID, expectedRunID, clientMessageI
 	}
 	if created && e.hw != nil {
 		_ = a.bus.AppendSteeringHistory(ctx, message)
+	}
+	if created && scope.Object != "" {
+		a.run.Command.Scope = scope
 	}
 	return existing, nil
 }

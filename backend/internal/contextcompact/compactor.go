@@ -9,6 +9,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	compactprompts "github.com/dasi0227/PPT-Agent/backend/prompts/compact"
 )
 
@@ -83,11 +84,39 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		Content: llm.TextContent("<context_summary>\n" + summary + "\n</context_summary>"),
 	}}, retained...)
 	next = compactProjectAttachmentImages(next)
+	next = compactDOMSelections(next)
 	return Result{
 		Messages: next, Summary: summary,
 		BeforeTranscriptTokens: before, AfterTranscriptTokens: messageTokens(next),
 		DroppedInputTokens: dropped,
 	}, nil
+}
+
+func compactDOMSelections(messages []llm.Message) []llm.Message {
+	const open, close = "<selected_dom>", "</selected_dom>"
+	for messageIndex := range messages {
+		for partIndex := range messages[messageIndex].Content {
+			part := &messages[messageIndex].Content[partIndex]
+			if part.Type != "text" || !strings.HasPrefix(part.Text, open) || !strings.HasSuffix(part.Text, close) {
+				continue
+			}
+			var selection model.DOMSelection
+			if json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimPrefix(part.Text, open), close)), &selection) != nil {
+				continue
+			}
+			targets := make([]map[string]any, 0, len(selection.DOMTargets))
+			for _, target := range selection.DOMTargets {
+				targets = append(targets, map[string]any{"fingerprint": target.Fingerprint, "tag": target.Tag, "text_summary": target.TextSummary, "status": target.Status})
+			}
+			chrome := make([]map[string]any, 0, len(selection.ChromeTargets))
+			for _, target := range selection.ChromeTargets {
+				chrome = append(chrome, map[string]any{"type": target.Type, "placement": target.Placement, "text": target.Text})
+			}
+			raw, _ := json.Marshal(map[string]any{"selection_id": selection.SelectionID, "marker_no": selection.MarkerNo, "comment": selection.Comment, "status": selection.Status, "slide_id": selection.SlideID, "html_revision": selection.HTMLRevision, "dom_targets": targets, "chrome_targets": chrome})
+			part.Text = "<selected_dom_reference>" + string(raw) + "</selected_dom_reference>"
+		}
+	}
+	return messages
 }
 
 // compactProjectAttachmentImages releases visual payload tokens while retaining

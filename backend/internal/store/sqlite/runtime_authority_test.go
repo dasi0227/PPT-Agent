@@ -2,11 +2,14 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 func TestRuntimeAuthorityMigrationCreatesTablesAndIndexes(t *testing.T) {
@@ -182,5 +185,58 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	pending, _ = s.ListPendingSteering(ctx, "run-1")
 	if len(pending) != 1 || pending[0].ClientMessageID != "msg-2" {
 		t.Fatalf("injected message remained pending: %+v", pending)
+	}
+}
+
+func TestSteeringAtomicallyAdvancesScopeAndCheckpoint(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, model.Project{ID: "steering-project", Title: "project", WorkDir: t.TempDir(), Status: "draft", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateThread(ctx, model.Thread{ID: "steering-thread", ProjectID: "steering-project", HistoryPath: "thread.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	initial := model.RunScope{Object: model.ScopeObjectSpec, SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCurrentPage}, Revision: 1}
+	if err := s.CreateRun(ctx, model.Run{
+		ID: "steering-run", ThreadID: "steering-thread", ProjectID: "steering-project",
+		Command: model.RunCommand{Scope: initial, Mode: model.ModeExecute, Instruction: "test"},
+		Status:  model.RunRunning, CreatedAt: 1, UpdatedAt: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveCheckpoint(ctx, workflow.RuntimeCheckpoint{
+		RunID: "steering-run", LoopID: "loop-one", Phase: workflow.PhaseExecuting,
+		Mode: model.ModeExecute, Scope: initial, CreatedAt: 2,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	expanded := model.RunScope{Object: model.ScopeObjectPresentation, SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCustomPages}, Revision: 2}
+	_, created, err := s.CreateSteering(ctx, model.SteeringMessage{
+		RunID: "steering-run", ThreadID: "steering-thread", ClientMessageID: "msg-scope",
+		RequestHash: "hash-scope", Content: "change", Scope: expanded, Status: model.SteeringAccepted, AcceptedAt: 3,
+	})
+	if err != nil || !created {
+		t.Fatalf("create steering: created=%v err=%v", created, err)
+	}
+	storedRun, err := s.GetRun(ctx, "steering-run")
+	if err != nil || storedRun.Command.Scope.Revision != 2 || storedRun.Command.Scope.Object != model.ScopeObjectPresentation {
+		t.Fatalf("scope was not advanced atomically: run=%+v err=%v", storedRun.Command.Scope, err)
+	}
+	checkpoint, err := s.LatestCheckpoint(ctx, "steering-run")
+	if err != nil || checkpoint.Scope.Revision != 2 || checkpoint.Boundary != "steering_accepted" {
+		t.Fatalf("checkpoint was not advanced atomically: checkpoint=%+v err=%v", checkpoint, err)
+	}
+
+	_, _, err = s.CreateSteering(ctx, model.SteeringMessage{
+		RunID: "steering-run", ThreadID: "steering-thread", ClientMessageID: "msg-stale",
+		RequestHash: "hash-stale", Content: "stale", Scope: initial, Status: model.SteeringAccepted, AcceptedAt: 4,
+	})
+	if !errors.Is(err, run.ErrRunRevisionConflict) {
+		t.Fatalf("stale scope error=%v", err)
+	}
+	pending, err := s.ListPendingSteering(ctx, "steering-run")
+	if err != nil || len(pending) != 1 || pending[0].ClientMessageID != "msg-scope" {
+		t.Fatalf("conflict left a partial inbox row: pending=%+v err=%v", pending, err)
 	}
 }

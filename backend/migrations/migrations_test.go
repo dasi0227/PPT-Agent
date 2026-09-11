@@ -77,6 +77,10 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 			t.Fatalf("legacy prompts column %q still exists", removed)
 		}
 	}
+	steeringCols := tableColumns(t, db, "steering_inbox")
+	if !steeringCols["references_json"] || steeringCols["attachments_json"] {
+		t.Fatalf("steering inbox did not switch to unified references: %v", steeringCols)
+	}
 }
 
 func TestPromptNameSchemaReplacesLegacyPromptData(t *testing.T) {

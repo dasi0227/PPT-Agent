@@ -230,6 +230,8 @@ type RunCommand struct {
 	MentionedPages           []MentionedPage       `json:"mentioned_pages,omitempty"`
 	DroppedMentionedSlideIDs []string              `json:"dropped_mentioned_slide_ids,omitempty"`
 	Attachments              []AttachmentReference `json:"attachments,omitempty"`
+	DOMSelections            []DOMSelection        `json:"dom_selections,omitempty"`
+	ReferenceOrder           []ReferenceOrderItem  `json:"reference_order,omitempty"`
 }
 
 var ErrInvalidRunCommand = errors.New("invalid run command")
@@ -243,8 +245,13 @@ func (c RunCommand) Validate() error {
 	default:
 		return fmt.Errorf("%w: unsupported mode %q", ErrInvalidRunCommand, c.Mode)
 	}
-	if strings.TrimSpace(c.Instruction) == "" && len(c.Attachments) == 0 {
-		return fmt.Errorf("%w: instruction is required", ErrInvalidRunCommand)
+	if strings.TrimSpace(c.Instruction) == "" {
+		if len(c.DOMSelections) > 0 && !DOMSelectionsHaveIntent(c.DOMSelections) {
+			return fmt.Errorf("%w: DOM selections require instruction or comment", ErrInvalidRunCommand)
+		}
+		if len(c.DOMSelections) == 0 && len(c.Attachments) == 0 {
+			return fmt.Errorf("%w: instruction is required", ErrInvalidRunCommand)
+		}
 	}
 	switch c.Options.Language {
 	case "", LanguageChinese, LanguageEnglish:
@@ -318,7 +325,19 @@ func (c RunCommand) Validate() error {
 		}
 		seenAttachments[attachment.ID] = true
 	}
+	if err := ValidateDOMSelections(c.DOMSelections, c.Attachments, c.ReferenceOrder); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidRunCommand, err)
+	}
 	return nil
+}
+
+func DOMSelectionsHaveIntent(selections []DOMSelection) bool {
+	for _, selection := range selections {
+		if strings.TrimSpace(selection.Comment) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (c RunCommand) PublicSkills() []PublicSkill {

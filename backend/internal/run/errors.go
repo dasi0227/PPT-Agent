@@ -14,4 +14,5 @@ var (
 	ErrContextStoreUnavailable   = errors.New("run: context manifest store unavailable")
 	ErrLifecycleStoreUnavailable = errors.New("run: lifecycle store unavailable")
 	ErrEngineStopping            = errors.New("run: engine is stopping")
+	ErrRunRevisionConflict       = errors.New("run: scope revision conflict")
 )

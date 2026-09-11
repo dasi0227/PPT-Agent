@@ -86,6 +86,7 @@ func (r *Runtime) checkpointForBoundary(state *RunState, boundary checkpointBoun
 	cp.ActiveSkills = append([]model.RunSkill{}, state.activeSkills.Skills...)
 	cp.MessageSummary = summarizeCheckpointMessages(state.messages)
 	cp.ProviderContinuation = safeContinuationSnapshot(state.continuation)
+	cp.DOMSelections = append([]model.DOMSelection{}, state.pack.Command.DOMSelections...)
 	if cp.CreatedAt == 0 {
 		cp.CreatedAt = time.Now().UnixNano()
 	}

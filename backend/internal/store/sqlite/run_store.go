@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 // 编译期断言：sqlite.Store 满足 run.Store（run_events 持久化 + run 状态机所需）。
@@ -400,19 +402,106 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 	var out model.SteeringMessage
 	created := false
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		attachments, marshalErr := json.Marshal(message.Attachments)
+		references, marshalErr := json.Marshal(struct {
+			Attachments    []model.AttachmentReference `json:"attachments"`
+			DOMSelections  []model.DOMSelection        `json:"dom_selections"`
+			ReferenceOrder []model.ReferenceOrderItem  `json:"reference_order"`
+			Scope          model.RunScope              `json:"scope"`
+		}{message.Attachments, message.DOMSelections, message.ReferenceOrder, message.Scope})
 		if marshalErr != nil {
 			return marshalErr
 		}
+		var runRow runPO
+		var command model.RunCommand
+		var checkpoint workflow.RuntimeCheckpoint
+		if message.Scope.Object != "" {
+			if err := tx.First(&runRow, "id = ?", message.RunID).Error; err != nil {
+				return mapErr(err)
+			}
+			if (model.RunStatus(runRow.Status) != model.RunPending && model.RunStatus(runRow.Status) != model.RunRunning) || runRow.CancelRequestedAt != nil {
+				return run.ErrRunNotRunning
+			}
+			if err := json.Unmarshal([]byte(runRow.RunCommandJSON), &command); err != nil {
+				return err
+			}
+			current := command.Scope
+			if message.Scope.Revision != current.Revision && message.Scope.Revision != current.Revision+1 {
+				return run.ErrRunRevisionConflict
+			}
+			if message.Scope.Revision == current.Revision && !sameRunScope(current, message.Scope) {
+				return run.ErrRunRevisionConflict
+			}
+			var checkpointRow runCheckpointPO
+			if err := tx.Where("run_id = ?", message.RunID).Order("seq DESC").First(&checkpointRow).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					phase := workflow.PhaseExecuting
+					if command.Mode == model.ModePlan {
+						phase = workflow.PhasePlanning
+					} else if command.Mode == model.ModeChat || command.Mode == model.ModeGrill {
+						phase = workflow.PhaseChat
+					}
+					checkpoint = workflow.RuntimeCheckpoint{
+						RunID: message.RunID, LoopID: "loop_steering_" + message.RunID,
+						Phase: phase, Mode: command.Mode, Scope: current,
+						DOMSelections: append([]model.DOMSelection{}, command.DOMSelections...),
+					}
+				} else {
+					return err
+				}
+			} else if err := json.Unmarshal([]byte(checkpointRow.CheckpointJSON), &checkpoint); err != nil {
+				return err
+			}
+		}
+
 		res := tx.Exec(`INSERT INTO steering_inbox
-			(run_id,thread_id,client_message_id,request_hash,content,attachments_json,status,accepted_at,injected_at,rejection_code)
+			(run_id,thread_id,client_message_id,request_hash,content,references_json,status,accepted_at,injected_at,rejection_code)
 			VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(thread_id,client_message_id) DO NOTHING`,
 			message.RunID, message.ThreadID, message.ClientMessageID, message.RequestHash,
-			message.Content, string(attachments), message.Status, message.AcceptedAt, nil, message.RejectionCode)
+			message.Content, string(references), message.Status, message.AcceptedAt, nil, message.RejectionCode)
 		if res.Error != nil {
 			return res.Error
 		}
 		created = res.RowsAffected == 1
+		if created && message.Scope.Object != "" {
+			previousRevision := command.Scope.Revision
+			command.Scope = message.Scope
+			rawCommand, err := json.Marshal(command)
+			if err != nil {
+				return err
+			}
+			scopeSlideIDs, _ := json.Marshal(message.Scope.SlideIDs)
+			scopeSource, _ := json.Marshal(message.Scope.Source)
+			result := tx.Model(&runPO{}).Where("id = ? AND scope_revision = ?", message.RunID, previousRevision).Updates(map[string]any{
+				"scope_object": message.Scope.Object, "scope_slide_ids_json": string(scopeSlideIDs),
+				"scope_source_json": string(scopeSource), "scope_include_run_created_slides": message.Scope.IncludeRunCreatedSlides,
+				"scope_revision": message.Scope.Revision, "run_command_json": string(rawCommand), "updated_at": time.Now().Unix(),
+			})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return run.ErrRunRevisionConflict
+			}
+			checkpoint.Scope = message.Scope
+			checkpoint.DOMSelections = append(checkpoint.DOMSelections, message.DOMSelections...)
+			checkpoint.Boundary = "steering_accepted"
+			checkpoint.CreatedAt = time.Now().UnixNano()
+			rawCheckpoint, err := json.Marshal(checkpoint)
+			if err != nil {
+				return err
+			}
+			var seq int64
+			if err := tx.Raw("SELECT COALESCE(MAX(seq), 0) + 1 FROM run_checkpoints WHERE run_id = ?", message.RunID).Scan(&seq).Error; err != nil {
+				return err
+			}
+			checkpointID := "ckpt_" + workflowHash(message.RunID, checkpoint.LoopID, seq, checkpoint.CreatedAt)
+			if err := tx.Create(&runCheckpointPO{
+				ID: checkpointID, RunID: message.RunID, LoopID: checkpoint.LoopID, Seq: seq,
+				Phase: string(checkpoint.Phase), CheckpointJSON: string(rawCheckpoint), CreatedAt: checkpoint.CreatedAt,
+			}).Error; err != nil {
+				return err
+			}
+		}
 		var po steeringPO
 		if err := tx.First(&po, "thread_id = ? AND client_message_id = ?", message.ThreadID, message.ClientMessageID).Error; err != nil {
 			return err
@@ -421,6 +510,15 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 		return nil
 	})
 	return out, created, err
+}
+
+func sameRunScope(left, right model.RunScope) bool {
+	return left.Object == right.Object &&
+		left.Revision == right.Revision &&
+		left.IncludeRunCreatedSlides == right.IncludeRunCreatedSlides &&
+		left.Source.Kind == right.Source.Kind &&
+		slices.Equal(left.Source.SectionIDs, right.Source.SectionIDs) &&
+		slices.Equal(left.SlideIDs, right.SlideIDs)
 }
 
 func (s *Store) ListPendingSteering(ctx context.Context, runID string) ([]model.SteeringMessage, error) {
