@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -26,6 +27,16 @@ type runtimePromptInput struct {
 	Context contextengine.ContextPack
 }
 
+func effectivePromptMode(mode, commandMode model.RunMode) model.RunMode {
+	if mode != "" {
+		return mode
+	}
+	if commandMode != "" {
+		return commandMode
+	}
+	return model.ModeChat
+}
+
 func runtimeSystemPrompt(phase RunPhase, mode model.RunMode) string {
 	return buildRuntimeSystemPrompt(runtimePromptInput{
 		Phase: phase, Mode: mode,
@@ -33,18 +44,20 @@ func runtimeSystemPrompt(phase RunPhase, mode model.RunMode) string {
 }
 
 func runtimeSystemPromptForRequest(req AgentRequest) string {
-	if req.Mode == "" {
-		req.Mode = req.Context.Command.Mode
-	}
+	req.Mode = effectivePromptMode(req.Mode, req.Context.Command.Mode)
 	return buildRuntimeSystemPrompt(runtimePromptInput{
 		Phase: req.Phase, Mode: req.Mode, Context: req.Context,
 	})
 }
 
 func buildRuntimeSystemPrompt(input runtimePromptInput) string {
+	input.Mode = effectivePromptMode(input.Mode, input.Context.Command.Mode)
+	// Use one effective mode for both the policy and the task playbook.
+	input.Context.Command.Mode = input.Mode
 	modules := []PromptModule{
 		loadPromptModule("core_runtime_policy"),
 		loadPromptModule("user_facing_output"),
+		loadPromptModule("reference_context"),
 		loadPromptModule(modePolicyID(input.Mode)),
 		loadPromptModule(playbookID(input.Context)),
 	}
@@ -65,6 +78,9 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		if module, ok := resourceContractsModule(input.Context); ok {
 			modules = append(modules, module)
 		}
+	}
+	if (input.Mode == model.ModePlan || input.Mode == model.ModeExecute) && input.Context.Command.Scope.AllowsHTML() {
+		modules = append(modules, loadPromptModule("html_authoring"))
 	}
 
 	var b strings.Builder
@@ -88,10 +104,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 }
 
 func runtimeTaskStateForRequest(req AgentRequest) string {
-	mode := req.Mode
-	if mode == "" {
-		mode = req.Context.Command.Mode
-	}
+	mode := effectivePromptMode(req.Mode, req.Context.Command.Mode)
 	state := struct {
 		Mode            model.RunMode      `json:"mode"`
 		Phase           RunPhase           `json:"phase"`
@@ -179,17 +192,19 @@ func resourceContractsModule(pack contextengine.ContextPack) (PromptModule, bool
 			contracts[name] = contract
 		}
 	}
-	if len(contracts) == 0 {
-		return PromptModule{}, false
-	}
 	contractJSON, _ := json.Marshal(contracts)
 	module.Body = strings.ReplaceAll(module.Body, "{{CONTRACTS_JSON}}", string(contractJSON))
+	// Hash the rendered contract, including its scope-specific schema content.
+	module.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(strings.TrimSpace(module.Body))))
 	return module, true
 }
 
 func resourceContractNames(pack contextengine.ContextPack) []string {
-	if pack.Command.Scope.IsSinglePage() && !pack.Command.Scope.AllowsGlobal() {
+	if pack.Command.Scope.AllowsGlobal() {
+		return []string{pptschema.ManifestName, pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}
+	}
+	if pack.Command.Scope.AllowsSpec() {
 		return []string{pptschema.SlideSpecName}
 	}
-	return []string{pptschema.ManifestName, pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}
+	return nil
 }

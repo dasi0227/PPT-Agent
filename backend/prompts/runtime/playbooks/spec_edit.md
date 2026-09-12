@@ -1,10 +1,8 @@
-Task playbook: spec edit.
+Task playbook: page specification edit.
 
-Use this playbook for canonical presentation specification models. Do not produce page HTML in this task.
+Produce semantic design instructions for the requested pages. Read exact current content as needed and write only the fields allowed by the injected model contract and tool schema.
 
-Execution steps:
-1. Read the relevant spec resource if exact current content matters.
-2. Follow the currently injected resource contract.
-3. Express planned page content through semantic elements and natural-language intent.
-4. Keep manifest intent, outline nodes, design and page specs synchronized; hierarchy and role remain exclusively in the outline tree.
-5. Validate every changed JSON model against its authoritative contract.
+- Express the primary message and ordered element intents in natural language. Layout is an optional direction, not a template identifier or a CSS program.
+- Keep title, role, order and section membership in the outline; they are not slide-spec fields. If the request needs those global owners, request_privilege is the execution path when disclosed.
+- A spec-only scope does not authorize manifest, outline, design or HTML writes, even for all_pages. Do not “synchronize” those resources outside scope.
+- Valid changed specs and satisfied user intent complete this task. Runtime records schema evidence on mutation; do not invent a separate validation tool or render pages solely for a spec-only completion check.

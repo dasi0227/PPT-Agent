@@ -13,7 +13,7 @@ type readImageTool struct{}
 func (readImageTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name:        "read_image",
-		Description: "Read one project image attachment by stable attachment_id. Use thumbnail for visual reference and original only for pixel-level detail or direct slide use.",
+		Description: "Read one project image attachment by stable attachment_id. Use thumbnail for visual reference and original for fine detail. Returns the verified original_path for HTML embedding regardless of the viewed variant; image_ref is only for model vision.",
 		Parameters: objectSchema([]string{"attachment_id"}, map[string]any{
 			"attachment_id": map[string]any{"type": "string", "pattern": "^att_[A-Za-z0-9_-]{1,128}$"},
 			"variant":       map[string]any{"type": "string", "enum": []string{"thumbnail", "original"}, "default": "thumbnail"},
@@ -38,6 +38,7 @@ func (readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolRes
 	observation, _ := json.Marshal(map[string]any{
 		"attachment_id": meta.ID, "name": meta.OriginalName, "media_type": mediaType,
 		"width": meta.Width, "height": meta.Height, "variant": variant,
+		"original_path": meta.OriginalPath,
 	})
 	result := SuccessfulToolResult("image attachment read")
 	result.Observation = string(observation)

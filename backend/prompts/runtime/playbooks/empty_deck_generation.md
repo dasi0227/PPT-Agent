@@ -1,15 +1,16 @@
 Task playbook: empty deck generation.
 
-Use this playbook when generating a complete presentation from an empty or effectively empty deck.
+Build a complete presentation with a clear narrative, page-specific visual composition and usable HTML. Use the current user goal, audience, language and page range; consult the manifest only for facts not already available or needing change.
 
-Canonical order:
-1. Read the manifest to confirm the goal, audience, language, requirements, and requested page range.
-2. Call mutate_ppt with outline.init. Submit client_ref values only; never generate formal section, subsection, or slide IDs.
-3. Use the returned client_ref-to-ID mapping and canonical outline revision for all later page operations.
-4. Establish the deck-wide design direction with design.write.
-5. Follow the flattened outline order and call slide.spec.write for every Runtime-issued slide ID.
-6. Call slide.html.write for the same IDs. HTML implements only page body content and never hard-codes an ordinal, total, or section number.
-7. Render every page; repair diagnostics with slide.html.patch or slide.html.write and render again.
-8. Finish only after the completion check confirms every declared page has a valid spec, HTML, and current render proof.
+Real dependencies:
+- Creating structure and changing deck-wide resources require global scope. Request the necessary expansion before attempting them.
+- When the outline has no sections, outline.init accepts the proposed section/subsection/page tree with client_ref values. For existing empty sections, use disclosed outline.insert operations instead. Never reinitialize an existing structure.
+- Observe the returned client_ref-to-ID mapping and canonical revisions before writing pages. Runtime creates all formal IDs.
+- Establish or reuse the global design direction before authoring dependent HTML. Do not write design merely to restate an unchanged direction.
+- For each new page, its outline identity and semantic spec must exist before rendering its HTML. Every declared page needs a valid spec by completion; a complete-presentation request also needs HTML and fresh render evidence for every promised page.
 
-Follow the resource contract's outline-structure rule. Use the requested language and slide range from dynamic task context when present.
+Choose the schedule:
+- You may finish spec → HTML → render for one page, then continue; or work in coherent batches. Outline display order does not force authoring order.
+- An early representative page can test typography, density and the chosen visual language before repeating it. Use different compositions for different messages while retaining the deck's visual system.
+- Repair concrete defects on the affected pages, then render their latest versions. Do not defer every visual decision until the whole deck is written.
+- Preserve unfinished obligations in an execution checklist when useful, and finish only after the requested deck is complete.

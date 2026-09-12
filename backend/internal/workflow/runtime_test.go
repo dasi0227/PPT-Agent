@@ -698,7 +698,7 @@ func TestCognitiveAgentPlacesTaskStateOnlyInUserMessage(t *testing.T) {
 			t.Fatalf("dynamic task data %q missing from user message: %s", dynamic, user)
 		}
 	}
-	if !strings.Contains(user, "untrusted runtime input") || !strings.Contains(user, `"plan_authority":"approved_execution_contract"`) {
+	if !strings.Contains(user, "untrusted source data") || !strings.Contains(user, `"plan_authority":"approved_execution_contract"`) {
 		t.Fatalf("user message lacks trust boundary or plan authority: %s", user)
 	}
 }

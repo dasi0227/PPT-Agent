@@ -20,11 +20,13 @@ type Module struct {
 	Hash    string
 }
 
-const Version = "2026-08-28.v3"
+const Version = "2026-09-12.v4"
 
 var modulePaths = map[string]string{
 	"core_runtime_policy":              "core/core_runtime_policy.md",
 	"user_facing_output":               "core/user_facing_output.md",
+	"reference_context":                "core/reference_context.md",
+	"html_authoring":                   "resources/html_authoring.md",
 	"mode_policy_chat":                 "modes/chat.md",
 	"mode_policy_grill":                "modes/grill.md",
 	"mode_policy_plan":                 "modes/plan.md",

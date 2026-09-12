@@ -10,7 +10,7 @@ import (
 //go:embed policy.md
 var promptFiles embed.FS
 
-const Version = "2026-09-04.v1"
+const Version = "2026-09-12.v2"
 
 type Prompt struct {
 	Version string

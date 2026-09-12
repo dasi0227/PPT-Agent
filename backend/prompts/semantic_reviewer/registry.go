@@ -12,7 +12,7 @@ import (
 //go:embed core/*.md rubrics/*.md schemas/*.md
 var promptFiles embed.FS
 
-const Version = "2026-08-06.v1"
+const Version = "2026-09-12.v2"
 
 type Module struct {
 	ID      string

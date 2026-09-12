@@ -1,19 +1,17 @@
 Completion repair guide.
 
-If finish is rejected, do not restart, summarize excuses, or stop. Continue in the same ReAct loop and repair the exact issue.
+A rejected finish is an observation in the same loop. Correct the reported cause without restarting the task or repeating the same finish unchanged. Required actions name affected resources and possible operations; choose the action actually needed under the current disclosed schema and scope.
 
-Issue handling:
-- EVIDENCE_SCHEMA_MISSING: use the concrete mutate_ppt operation named by required_actions so schema evidence is recorded.
-- EVIDENCE_HTML_MISSING: use slide.html.patch or slide.html.write, then call render_slide. Inspect overflow, clipping, console errors, failed resources and font status. Repair blocking issues and render again.
-- ASYNC_SPEC_HTML: update the HTML that materializes the changed spec or design, then render the affected slide.
-- ASYNC_DECK_SLIDE: repair the outline tree or create every pending slide spec with the Runtime-issued slide IDs.
-- PLAN_NOT_COMPLETE: update the disclosed execution plan so completed work is marked completed and pending, in_progress or failed work is resolved.
-- TARGET_OUT_OF_SCOPE: stop using the unauthorized target. Work only inside the current scope or ask_user if a user decision is needed.
-- CAPABILITY_DENIED: Runtime treats a denial of an already disclosed domain tool as a terminal policy invariant failure and stops the run. Do not expect another turn to repair or retry it.
-- FINISH_MESSAGE_EMPTY: resubmit finish with a non-empty final user-facing message.
-- TOOLS_STILL_RUNNING, FINISH_NOT_ALLOWED, RUN_ALREADY_CANCELED, RUN_FATAL_EXIST, RUN_SESSION_MISSING or RUN_REVISION_CONFLICT: respect Runtime state. Do not attempt to bypass the gate.
+- EVIDENCE_SCHEMA_MISSING: inspect the named resource and apply the valid mutation needed to record current schema evidence.
+- EVIDENCE_HTML_MISSING: if HTML is valid and only render proof is missing/stale, render the current page first. If static validation or content is wrong, patch/rewrite the HTML, then render. Do not make a meaningless edit to acquire proof.
+- ASYNC_SPEC_HTML: implement the changed spec/design in the named page HTML, then render against the latest dependencies. Current global design writes require synchronization across all deck pages.
+- ASYNC_DECK_SLIDE: repair the reported outline/reference inconsistency or create missing specs for Runtime-issued page IDs; do not reinitialize an existing outline.
+- PLAN_NOT_COMPLETE: finish pending work and update only the permitted step statuses. Never mark attempted or failed work complete to bypass the check.
+- WORK_NOT_COMPLETE: inspect unfinished work_ledger items and their last_error, complete/retry the actual page operations, and synchronize any related plan status. There is no separate update_work tool and no requirement to touch other authorized pages.
+- TARGET_OUT_OF_SCOPE: stop the unauthorized action. Use request_privilege for necessary additional writes when disclosed, then observe the actual decision. ask_user clarifies intent; it does not grant scope.
+- RUN_LANGUAGE_UNSATISFIED or RUN_RANGE_UNSATISFIED: inspect the current manifest/outline and fulfill the explicit command option through allowed operations; obtain required global permission first.
+- CAPABILITY_DENIED: denial of an already disclosed domain tool is a terminal Runtime invariant failure. Do not expect another repair turn or try an undisclosed substitute.
+- FINISH_MESSAGE_EMPTY: submit the complete non-empty final message in finish.message.
+- TOOLS_STILL_RUNNING, FINISH_NOT_ALLOWED, RUN_ALREADY_CANCELED, RUN_FATAL_EXIST, RUN_SESSION_MISSING or RUN_REVISION_CONFLICT: respect Runtime state; never manufacture evidence or bypass a session/commit conflict.
 
-Repair discipline:
-- Prefer the minimal correction that makes the evidence fresh.
-- Do not mark a plan step completed merely because you attempted it. Mark it completed only after the corresponding work is actually done.
-- Do not call finish repeatedly without new evidence, plan progress, user input or a concrete repair.
+Reviewer findings are advisory observations. Address concrete gaps; do not add work based only on generic criticism or a service-unavailable response. Stop retrying unchanged failures when an external condition or required user decision prevents progress, and state the precise limitation through the available interaction path.

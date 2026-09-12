@@ -1,39 +1,12 @@
 PPT quality rubric.
 
-Use this rubric before submitting a plan or completing presentation work.
+Use the relevant criteria while planning and before delivery; this is a judgement aid, not a mandatory sequence of tools.
 
-Narrative:
-- The deck or slide has a clear purpose, audience and point of view.
-- Page order and section transitions support the user's goal.
-- A slide has one primary message, not several competing messages.
-
-Hierarchy:
-- Title, key message, evidence and supporting detail are visually distinct.
-- The user's intended emphasis is reflected in size, placement, contrast and grouping.
-- Important content is not buried in dense paragraphs.
-
-Density:
-- Content fits the presentation canvas without crowding or accidental whitespace.
-- Text is concise enough for presentation use.
-- Tables, charts and lists are simplified to the level the audience can process.
-
-Visual consistency:
-- Palette, typography, spacing, grid, shape language and motion direction are coherent.
-- Deck-level design decisions are applied consistently across affected slides.
-- New or edited slides do not look like unrelated templates.
-
-Implementation quality:
-- Slide HTML uses one 1920x1080 CSS-pixel `.slide-stage`. Author every coordinate, layout and visual decision within that fixed canvas; Runtime, not slide HTML, fits it into an editor, thumbnail, fullscreen view or screenshot.
-- Slide HTML leaves the runtime-owned base-link and theme-link nodes untouched; the runtime injects both stylesheets.
-- CSS avoids heavy runtime dependencies and browser-unsafe assumptions.
-- Resources are project-local, data or blob references only.
-- Slide HTML contains no static page number, total page count, ordinal-dependent copy, or section number. Runtime frame injects numbering and shared chrome.
-
-Accessibility:
-- Semantic HTML is used where appropriate.
-- Images or meaningful visual elements have useful alt text.
-- Contrast, font size and CJK-safe fonts support readability.
-
-Render proof:
-- Latest affected HTML and design-affecting changes have fresh render evidence.
-- No blocking overflow, clipping, console errors, failed resources or font failures remain.
+- Purpose and coverage: the deck serves the user's audience and intended outcome, addresses explicit requirements and prohibitions, and respects requested language and page count. A local edit preserves unaffected meaning.
+- Narrative: each page has a primary message; its supporting content earns its place. Order and transitions create a coherent explanation, comparison or decision path.
+- Evidence: facts, metrics, quotes and sources come from supplied or verified material. Mark uncertainty when it matters. Do not invent data to fill a layout.
+- Hierarchy and density: emphasis follows meaning through typography, position, contrast and grouping. Titles, conclusions and evidence are distinguishable; text, charts and tables remain readable on the presentation canvas. Simplify or recompose before shrinking everything.
+- Composition: alignment, spacing and deliberate whitespace support reading. Choose layouts appropriate to the message instead of repeating identical cards, columns or decorative patterns on every page.
+- Consistency: preserve the chosen visual direction through palette, typography, spacing and shape language; vary page composition without making the deck look like unrelated templates.
+- Accessibility: use semantic HTML and meaningful alternative text, sufficient contrast, CJK-safe font fallbacks and reduced-motion-friendly behavior.
+- Verification: validate the requested kind of work. Specs need valid semantic models; changed HTML needs fresh render evidence and model judgement of visual quality. A successful render is not proof of factual correctness or narrative completeness; a spec-only plan/edit does not require rendered slides.
