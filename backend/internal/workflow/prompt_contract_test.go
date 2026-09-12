@@ -41,8 +41,36 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 							t.Fatalf("%s hash does not describe injected content", id)
 						}
 					}
+					modeCount, playbookCount := 0, 0
+					for id := range seen {
+						if strings.HasPrefix(id, "mode.") {
+							modeCount++
+						}
+						if strings.HasPrefix(id, "playbook.") {
+							playbookCount++
+						}
+					}
+					expectedPlaybook := ""
+					if mode == model.ModeExecute {
+						switch {
+						case object == model.ScopeObjectGlobal:
+							expectedPlaybook = "playbook.deck"
+						case object == model.ScopeObjectSpec:
+							expectedPlaybook = "playbook.spec"
+						case count == 1:
+							expectedPlaybook = "playbook.slide"
+						default:
+							expectedPlaybook = "playbook.deck"
+						}
+					}
+					if modeCount != 1 || !seen["mode."+string(mode)] {
+						t.Fatalf("incorrect mode modules: %v", seen)
+					}
+					if expectedPlaybook == "" && playbookCount != 0 || expectedPlaybook != "" && (playbookCount != 1 || !seen[expectedPlaybook]) {
+						t.Fatalf("incorrect task modules: %v", seen)
+					}
 					writableMode := mode == model.ModePlan || mode == model.ModeExecute
-					if seen["html_authoring"] != (writableMode && pack.Command.Scope.AllowsHTML()) || seen["resource_contracts"] != writableMode {
+					if seen["core.html"] != (writableMode && pack.Command.Scope.AllowsHTML()) || seen["core.structure"] != writableMode {
 						t.Fatalf("wrong scoped module set: %v", seen)
 					}
 					if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {
@@ -87,7 +115,7 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 			t.Fatalf("inconsistent mode: %s", mode)
 		}
 		pack.Command.Mode = mode
-		if !strings.Contains(prompt, `id="`+playbookID(pack)+`"`) {
+		if id := playbookID(pack); id != "" && !strings.Contains(prompt, `id="`+id+`"`) {
 			t.Fatalf("playbook uses stale context mode: %s", mode)
 		}
 		if mode != model.ModeChat && strings.Contains(user, `"mode":"chat"`) {
@@ -96,7 +124,7 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 	}
 	pack := testPack(model.ModePlan, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "fallback")
 	prompt, user := compiledPromptForAgentRequest(AgentRequest{Context: pack})
-	if !strings.Contains(prompt, `id="playbook_read_only_planning"`) || !strings.Contains(user, `"mode":"plan"`) {
+	if !strings.Contains(prompt, `id="mode.plan"`) || !strings.Contains(user, `"mode":"plan"`) {
 		t.Fatal("missing request mode did not use command mode")
 	}
 }

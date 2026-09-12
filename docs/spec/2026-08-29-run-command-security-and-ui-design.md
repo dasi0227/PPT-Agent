@@ -854,7 +854,7 @@ backend/internal/run/input.go
 backend/internal/run/engine.go
 backend/internal/httpapi/run_handler.go
 backend/internal/httpapi/router.go
-backend/prompts/runtime/core/core_runtime_policy.md
+backend/prompts/mode/execute.md
 backend/go.mod
 backend/go.sum
 ```

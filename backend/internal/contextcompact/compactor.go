@@ -10,7 +10,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	compactprompts "github.com/dasi0227/PPT-Agent/backend/prompts/compact"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 )
 
 const (
@@ -67,7 +67,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	defer cancel()
 	response, err := c.provider.Generate(requestCtx, llm.GenerateRequest{
 		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: llm.TextContent(compactprompts.Load())},
+			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
 			{Role: llm.RoleUser, Content: llm.TextContent("<transcript>\n" + string(raw) + "\n</transcript>")},
 		},
 		Reasoning: llm.ReasoningProviderDefault, MaxOutputTokens: maxSummaryTokens,
@@ -168,7 +168,7 @@ func shouldRetainUser(message llm.Message) bool {
 }
 
 func compactRequestTokens(messages []llm.Message) int {
-	total := contextengine.EstimateTextTokens(compactprompts.Load()) + 16
+	total := contextengine.EstimateTextTokens(prompts.MustLoad("command.compact").Body) + 16
 	for _, message := range messages {
 		total += contextengine.EstimateMessageTokens(message)
 	}

@@ -12,10 +12,9 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
-	handoffprompts "github.com/dasi0227/PPT-Agent/backend/prompts/handoff"
-	kickoffprompts "github.com/dasi0227/PPT-Agent/backend/prompts/kickoff"
 )
 
 const briefingTimeout = 45 * time.Second
@@ -67,12 +66,12 @@ func newBriefingGenerator(s store.Store, registry *llm.Registry, locks *run.Lock
 }
 
 func (svc *KickoffService) Generate(ctx context.Context, projectID string, params BriefingParams) (BriefingResult, error) {
-	prompt := kickoffprompts.Load()
+	prompt := prompts.MustLoad("command.kickoff")
 	return svc.generator.generate(ctx, projectID, model.BriefingKickoff, params, prompt.Body, prompt.Version)
 }
 
 func (svc *HandoffService) Generate(ctx context.Context, projectID string, params BriefingParams) (BriefingResult, error) {
-	prompt := handoffprompts.Load()
+	prompt := prompts.MustLoad("command.handoff")
 	return svc.generator.generate(ctx, projectID, model.BriefingHandoff, params, prompt.Body, prompt.Version)
 }
 
@@ -145,7 +144,7 @@ func (svc *briefingGenerator) generate(
 	if err != nil {
 		return BriefingResult{}, err
 	}
-	system, err := contextengine.CompileBriefingContext(pack, policy)
+	reference, err := contextengine.CompileBriefingContext(pack)
 	if err != nil {
 		return BriefingResult{}, err
 	}
@@ -157,8 +156,8 @@ func (svc *briefingGenerator) generate(
 	defer cancel()
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{
 		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: llm.TextContent(system)},
-			{Role: llm.RoleUser, Content: llm.TextContent(userMessage)},
+			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
+			{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + userMessage)},
 		},
 		Reasoning:       llm.ReasoningProviderDefault,
 		MaxOutputTokens: maxBriefingOutputTokens,

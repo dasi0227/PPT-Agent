@@ -9,7 +9,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	semanticprompts "github.com/dasi0227/PPT-Agent/backend/prompts/semantic_reviewer"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 )
 
 const CodeReviewServiceUnavailable = "REVIEW_SERVICE_UNAVAILABLE"
@@ -64,7 +64,6 @@ type SemanticReviewInput struct {
 	RetrievedContext  []ReviewContextItem `json:"retrieved_context"`
 	CandidateMessage  string              `json:"candidate_message,omitempty"`
 	Focus             string              `json:"focus,omitempty"`
-	Rubric            string              `json:"rubric"`
 }
 
 type ReviewContextItem struct {
@@ -190,7 +189,6 @@ func (r *Runtime) runReviewCompletion(
 		Evidence: state.ledger.Entries(state.changeSet()), LatestIssues: state.issues,
 		ContextBriefing: state.contextBriefing, RetrievedContext: reviewContextItems(state.retrievedContext),
 		CandidateMessage: candidateMessage, Focus: focus,
-		Rubric: semanticprompts.MustLoad("ppt_completion_rubric").Body,
 	}
 	recordTrace(input.Trace, state.runID, "semantic.review.started", map[string]any{
 		"loop_id": state.loopID, "call_id": callID, "focus": focus,
@@ -253,30 +251,15 @@ func reviewContextItems(values []RetrievedContextItem) []ReviewContextItem {
 }
 
 func semanticReviewerPrompt() string {
-	modules := []semanticprompts.Module{
-		semanticprompts.MustLoad("semantic_reviewer_policy"),
-		semanticprompts.MustLoad("ppt_completion_rubric"),
-		semanticprompts.MustLoad("review_output_contract"),
-	}
-	var b strings.Builder
-	b.WriteString("<semantic_reviewer_prompt_manifest version=\"" + semanticprompts.Version + "\">\n")
-	for _, module := range modules {
-		b.WriteString("<prompt_module id=\"" + module.ID + "\" path=\"" + module.Path + "\" hash=\"" + module.Hash + "\">\n")
-		b.WriteString(strings.TrimSpace(module.Body))
-		b.WriteString("\n</prompt_module>\n")
-	}
-	b.WriteString("</semantic_reviewer_prompt_manifest>")
-	return b.String()
+	m := prompts.MustLoad("subagent.reviewer.agent")
+	return fmt.Sprintf("<semantic_reviewer_prompt_manifest version=%q>\n<prompt_module id=%q version=%q path=%q hash=%q>\n%s\n</prompt_module>\n</semantic_reviewer_prompt_manifest>", m.Version, m.ID, m.Version, m.Path, m.Hash, m.Body)
 }
 
 func semanticReviewerPromptManifest() string {
+	m := prompts.MustLoad("subagent.reviewer.agent")
 	raw, _ := json.Marshal(map[string]any{
-		"version": semanticprompts.Version,
-		"modules": []string{
-			"semantic_reviewer_policy",
-			"ppt_completion_rubric",
-			"review_output_contract",
-		},
+		"version": m.Version,
+		"modules": []map[string]string{{"id": m.ID, "path": m.Path, "version": m.Version, "hash": m.Hash}},
 	})
 	return string(raw)
 }

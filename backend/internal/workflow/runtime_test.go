@@ -556,15 +556,15 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			Phase: phase, Mode: mode,
 			Context: testPack(mode, model.ScopeObjectPresentation, model.ScopeAllPages, false, "检查 Prompt 装配"),
 		})
-		if !strings.Contains(prompt, `<prompt_module id="core_runtime_policy" version="`) ||
-			!strings.Contains(prompt, `path="core/core_runtime_policy.md"`) ||
+		if !strings.Contains(prompt, `<prompt_module id="core.agent" version="`) ||
+			!strings.Contains(prompt, `path="prompts/core/agent.md"`) ||
 			!strings.Contains(prompt, `hash="`) {
 			t.Fatalf("%s prompt is not assembled from versioned modules: %q", mode, prompt)
 		}
-		hasFinish := strings.Contains(prompt, `id="finish_contract"`)
-		hasQuality := strings.Contains(prompt, `id="ppt_quality_rubric"`)
-		hasRepair := strings.Contains(prompt, `id="completion_repair_guide"`)
-		hasContracts := strings.Contains(prompt, `id="resource_contracts"`)
+		hasFinish := strings.Contains(prompt, `id="runtime.completion"`)
+		hasQuality := strings.Contains(prompt, `id="core.quality"`)
+		hasRepair := strings.Contains(prompt, `id="runtime.recovery"`)
+		hasContracts := strings.Contains(prompt, `id="core.structure"`)
 		switch mode {
 		case model.ModeChat, model.ModeGrill:
 			if !hasFinish || hasQuality || hasRepair || hasContracts {
@@ -651,10 +651,10 @@ func TestRuntimePromptUsesModeSpecificModulesAndContextBriefing(t *testing.T) {
 		Phase: PhaseExecuting, Mode: model.ModeExecute,
 		Context: pack, ContextBriefing: "Objective: optimize visual hierarchy",
 	})
-	if !strings.Contains(execute, `id="mode_policy_execute"`) ||
-		!strings.Contains(execute, `id="playbook_slide_presentation_edit"`) ||
-		!strings.Contains(execute, `path="playbooks/slide_presentation_edit.md"`) ||
-		!strings.Contains(execute, "single-slide presentation edit") ||
+	if !strings.Contains(execute, `id="mode.execute"`) ||
+		!strings.Contains(execute, `id="playbook.slide"`) ||
+		!strings.Contains(execute, `path="prompts/playbook/slide.md"`) ||
+		!strings.Contains(execute, "single-slide HTML creation and edit") ||
 		!strings.Contains(execute, "Simple local work may proceed directly") {
 		t.Fatalf("execute prompt missing cognitive modules:\n%s", execute)
 	}

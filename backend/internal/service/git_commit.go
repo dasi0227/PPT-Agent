@@ -14,9 +14,9 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
-	gitcommitprompts "github.com/dasi0227/PPT-Agent/backend/prompts/git_commit"
 )
 
 const (
@@ -403,7 +403,7 @@ func generateGitCommitMessage(
 	projectTitle string,
 	changes gitcommit.ChangeSet,
 ) (generatedCommitMessage, error) {
-	prompt := gitcommitprompts.Load()
+	prompt := prompts.MustLoad("command.commit")
 	user := fmt.Sprintf(
 		"Project: %s\n\nFile status:\n%s\n\nLine statistics:\n%s\n\nStaged diff:\n%s",
 		projectTitle, changes.NameStatus, changes.NumStat, changes.Diff,

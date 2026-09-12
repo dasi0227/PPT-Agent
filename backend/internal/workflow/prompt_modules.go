@@ -1,25 +1,17 @@
 package workflow
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
-	runtimeprompts "github.com/dasi0227/PPT-Agent/backend/prompts/runtime"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
-type PromptModule struct {
-	ID      string
-	Version string
-	Path    string
-	Hash    string
-	Body    string
-}
+type PromptModule = prompts.Module
 
 type runtimePromptInput struct {
 	Phase   RunPhase
@@ -55,37 +47,39 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	// Use one effective mode for both the policy and the task playbook.
 	input.Context.Command.Mode = input.Mode
 	modules := []PromptModule{
-		loadPromptModule("core_runtime_policy"),
-		loadPromptModule("user_facing_output"),
-		loadPromptModule("reference_context"),
+		loadPromptModule("core.agent"),
+		loadPromptModule("core.output"),
+		loadPromptModule("core.reference"),
 		loadPromptModule(modePolicyID(input.Mode)),
-		loadPromptModule(playbookID(input.Context)),
+	}
+	if id := playbookID(input.Context); id != "" {
+		modules = append(modules, loadPromptModule(id))
 	}
 	switch input.Mode {
 	case model.ModeChat, model.ModeGrill:
-		modules = append(modules, loadPromptModule("finish_contract"))
+		modules = append(modules, loadPromptModule("runtime.completion"))
 	case model.ModePlan:
-		modules = append(modules, loadPromptModule("ppt_quality_rubric"))
+		modules = append(modules, loadPromptModule("core.quality"))
 		if module, ok := resourceContractsModule(input.Context); ok {
 			modules = append(modules, module)
 		}
 	case model.ModeExecute:
 		modules = append(modules,
-			loadPromptModule("completion_repair_guide"),
-			loadPromptModule("finish_contract"),
-			loadPromptModule("ppt_quality_rubric"),
+			loadPromptModule("runtime.recovery"),
+			loadPromptModule("runtime.completion"),
+			loadPromptModule("core.quality"),
 		)
 		if module, ok := resourceContractsModule(input.Context); ok {
 			modules = append(modules, module)
 		}
 	}
 	if (input.Mode == model.ModePlan || input.Mode == model.ModeExecute) && input.Context.Command.Scope.AllowsHTML() {
-		modules = append(modules, loadPromptModule("html_authoring"))
+		modules = append(modules, loadPromptModule("core.html"))
 	}
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "<runtime_prompt_manifest version=\"%s\" mode=\"%s\" phase=\"%s\">\n",
-		runtimeprompts.Version, input.Mode, input.Phase)
+		prompts.Version, input.Mode, input.Phase)
 	for _, module := range modules {
 		if strings.TrimSpace(module.Body) == "" {
 			continue
@@ -142,7 +136,7 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 }
 
 func loadPromptModule(id string) PromptModule {
-	module := runtimeprompts.MustLoad(id)
+	module := prompts.MustLoad(id)
 	return PromptModule{
 		ID: module.ID, Version: module.Version, Path: module.Path,
 		Hash: module.Hash, Body: module.Body,
@@ -151,51 +145,47 @@ func loadPromptModule(id string) PromptModule {
 
 func modePolicyID(mode model.RunMode) string {
 	switch mode {
-	case model.ModeChat:
-		return "mode_policy_chat"
-	case model.ModeGrill:
-		return "mode_policy_grill"
-	case model.ModePlan:
-		return "mode_policy_plan"
-	case model.ModeExecute:
-		return "mode_policy_execute"
+	case model.ModeChat, model.ModeGrill, model.ModePlan, model.ModeExecute:
+		return "mode." + string(mode)
 	default:
-		return "mode_policy_chat"
+		panic(fmt.Sprintf("invalid prompt mode %q", mode))
 	}
 }
 
 func playbookID(pack contextengine.ContextPack) string {
-	command := pack.Command
+	if pack.Command.Mode != model.ModeExecute {
+		return ""
+	}
 	switch {
-	case command.Mode == model.ModePlan:
-		return "playbook_read_only_planning"
-	case command.Mode != model.ModeExecute:
-		return "playbook_read_only_collaboration"
-	case command.Scope.Object == model.ScopeObjectSpec:
-		return "playbook_spec_edit"
-	case command.Scope.AllowsHTML() && command.Scope.IsSinglePage():
-		return "playbook_slide_presentation_edit"
-	case command.Scope.AllowsHTML() && !command.Scope.IsSinglePage() && len(spec.FlattenOutline(pack.Outline.Outline)) == 0:
-		return "playbook_empty_deck_generation"
-	case command.Scope.AllowsHTML():
-		return "playbook_deck_coordinated_edit"
+	case pack.Command.Scope.AllowsGlobal():
+		return "playbook.deck"
+	case pack.Command.Scope.Object == model.ScopeObjectSpec:
+		return "playbook.spec"
+	case pack.Command.Scope.AllowsHTML() && pack.Command.Scope.IsSinglePage():
+		return "playbook.slide"
+	case pack.Command.Scope.AllowsHTML():
+		return "playbook.deck"
 	default:
-		return "playbook_default"
+		return ""
 	}
 }
 
 func resourceContractsModule(pack contextengine.ContextPack) (PromptModule, bool) {
-	module := loadPromptModule("resource_contracts")
+	module := loadPromptModule("core.structure")
 	contracts := map[string]any{}
 	for _, name := range resourceContractNames(pack) {
-		if contract, err := pptschema.AgentContract(name); err == nil {
-			contracts[name] = contract
+		contract, err := pptschema.AgentContract(name)
+		if err != nil {
+			panic(err)
 		}
+		contracts[name] = contract
 	}
 	contractJSON, _ := json.Marshal(contracts)
-	module.Body = strings.ReplaceAll(module.Body, "{{CONTRACTS_JSON}}", string(contractJSON))
-	// Hash the rendered contract, including its scope-specific schema content.
-	module.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(strings.TrimSpace(module.Body))))
+	var err error
+	module, err = module.WithBody(strings.ReplaceAll(module.Body, "{{CONTRACTS_JSON}}", string(contractJSON)))
+	if err != nil {
+		panic(err)
+	}
 	return module, true
 }
 

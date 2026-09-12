@@ -550,7 +550,7 @@ func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
 			t.Fatalf("polish context leaked runtime field %q: %s", forbidden, raw)
 		}
 	}
-	compiled, err := CompilePolishContext(pack, "SYSTEM POLICY")
+	compiled, err := CompilePolishContext(pack)
 	if err != nil || !strings.Contains(compiled, "untrusted reference data") || strings.Contains(compiled, commandInstruction(pack)) {
 		t.Fatalf("compiled polish context mismatch: %v %s", err, compiled)
 	}

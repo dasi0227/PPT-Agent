@@ -71,7 +71,7 @@
 
 ## 【六、】优化和淬炼创作提示词，提升 Agent 任务完成效率
 
-实现记录（2026-09-12）：[创作 Prompt 组装升级与变更总结](docs/spec/2026-09-12-creation-prompt-upgrade-design.md)。提示词、组装与回归测试已落地，真实模型效果评估尚未执行。
+实现记录（2026-09-12）：[创作 Prompt 组装升级与变更总结](docs/spec/2026-09-12-creation-prompt-upgrade-design.md)。已完成 21 份 Markdown 目录重组、内容淬炼、统一嵌入加载与动态上下文隔离；真实模型效果评估尚未执行。
 
 原因：
 

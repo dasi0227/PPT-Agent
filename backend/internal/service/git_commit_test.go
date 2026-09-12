@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -126,6 +127,9 @@ complete:
 		t.Fatalf("unexpected result: %+v", result)
 	}
 	requests := provider.Requests()
+	if len(requests) != 1 || requests[0].Messages[0].Text() != prompts.MustLoad("command.commit").Body {
+		t.Fatal("wrong commit policy")
+	}
 	if len(requests) != 1 || len(requests[0].Tools) != 1 || requests[0].Tools[0].Name != "git_commit" {
 		t.Fatalf("unexpected model request: %+v", requests)
 	}

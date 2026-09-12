@@ -34,7 +34,7 @@ func TestPolishEndpointReturnsTextWithoutStartingRun(t *testing.T) {
 	decodeResponse(t, response, &thread)
 	body := `{"instruction":"更有冲击力","thread_id":"` + thread.ID + `","scope":{"object":"presentation","selection":{"kind":"all_pages"}},"mode":"execute","model":"Polish"}`
 	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/polish", body)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"changed":true`) || !strings.Contains(response.Body.String(), `"prompt_version":"2026-08-23.v1"`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"changed":true`) || !strings.Contains(response.Body.String(), `"prompt_version":"2026-09-12.v5"`) {
 		t.Fatalf("polish response: %d %s", response.Code, response.Body.String())
 	}
 	if len(provider.Requests()) != 1 || len(provider.Requests()[0].Tools) != 0 {

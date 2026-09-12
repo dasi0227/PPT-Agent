@@ -2,6 +2,7 @@ package contextcompact
 
 import (
 	"context"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"strings"
 	"testing"
 
@@ -30,6 +31,9 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	}
 	if len(provider.Requests()) != 1 {
 		t.Fatalf("model calls=%d", len(provider.Requests()))
+	}
+	if provider.Requests()[0].Messages[0].Text() != prompts.MustLoad("command.compact").Body {
+		t.Fatal("wrong compaction policy")
 	}
 	if len(result.Messages) != 6 || !strings.Contains(result.Messages[0].Text(), "<context_summary>") {
 		t.Fatalf("unexpected replacement: %+v", result.Messages)

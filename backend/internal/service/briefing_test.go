@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -169,5 +170,31 @@ func TestBriefingRejectsBusyAndEmptyProjects(t *testing.T) {
 	}
 	if len(fixture.provider.Requests()) != 0 {
 		t.Fatal("precondition failure called the provider")
+	}
+}
+
+func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
+	for _, kind := range []model.BriefingKind{model.BriefingKickoff, model.BriefingHandoff} {
+		t.Run(string(kind), func(t *testing.T) {
+			f := newBriefingFixture(t, "brief")
+			params := BriefingParams{ThreadID: f.thread.ID, Model: "Briefing"}
+			var result BriefingResult
+			var err error
+			if kind == model.BriefingKickoff {
+				result, err = NewKickoffService(f.store, f.registry, f.locks).Generate(context.Background(), f.project.ID, params)
+			} else {
+				result, err = NewHandoffService(f.store, f.registry, f.locks).Generate(context.Background(), f.project.ID, params)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := f.provider.Requests()[0]
+			if req.Messages[0].Text() != prompts.MustLoad("command."+string(kind)).Body || result.PromptVersion != prompts.Version {
+				t.Fatal("wrong catalog policy/version")
+			}
+			if strings.Contains(req.Messages[0].Text(), f.project.Title) || !strings.Contains(req.Messages[1].Text(), f.project.Title) || len(req.Tools) != 0 {
+				t.Fatal("briefing context or tools crossed policy boundary")
+			}
+		})
 	}
 }

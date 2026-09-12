@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,11 +78,14 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 		t.Fatalf("polish generation policy mismatch: %+v", requests[0])
 	}
 	system := requests[0].Messages[0].Text()
-	if !strings.Contains(system, "Board narrative") || !strings.Contains(system, "Board decision") || !strings.Contains(system, "untrusted reference data") {
-		t.Fatalf("authoritative context missing: %s", system)
+	user := requests[0].Messages[1].Text()
+	if system != prompts.MustLoad("command.polish").Body || result.PromptVersion != prompts.Version {
+		t.Fatal("polish did not use the catalog policy/version")
 	}
-	if strings.Contains(system, "这一页更有冲击力") || requests[0].Messages[1].Text() != "这一页更有冲击力" {
-		t.Fatalf("user draft crossed prompt layers: %+v", requests[0].Messages)
+	for _, value := range []string{"Board narrative", "Board decision", "这一页更有冲击力"} {
+		if strings.Contains(system, value) || !strings.Contains(user, value) {
+			t.Fatalf("dynamic value crossed prompt layers: %s", value)
+		}
 	}
 	active, err := st.GetRun(context.Background(), "active")
 	if err != nil || active.Status != model.RunRunning {

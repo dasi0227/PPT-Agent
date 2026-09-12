@@ -10,8 +10,8 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
-	polishprompts "github.com/dasi0227/PPT-Agent/backend/prompts/polish"
 )
 
 const maxPolishInstructionRunes = 4000
@@ -92,16 +92,16 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 		}
 		return PolishResult{}, err
 	}
-	prompt := polishprompts.Load()
-	system, err := contextengine.CompilePolishContext(pack, prompt.Body)
+	prompt := prompts.MustLoad("command.polish")
+	reference, err := contextengine.CompilePolishContext(pack)
 	if err != nil {
 		return PolishResult{}, err
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, polishTimeout)
 	defer cancel()
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{Messages: []llm.Message{
-		{Role: llm.RoleSystem, Content: llm.TextContent(system)},
-		{Role: llm.RoleUser, Content: llm.TextContent(instruction)},
+		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
+		{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + instruction)},
 	}, Reasoning: llm.ReasoningDisabled, MaxOutputTokens: maxPolishOutputTokens})
 	if err != nil {
 		if errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {
