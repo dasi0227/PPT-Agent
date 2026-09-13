@@ -58,7 +58,14 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 		t.Fatalf("new store: %v", err)
 	}
 	locks := run.NewLockManager()
-	engine := run.NewEngine(st, locks, nil, zap.NewNop())
+	engine := run.NewEngine(st, locks, run.NewFSHistoryWriter(st), zap.NewNop())
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := engine.PauseAll(ctx, "test_finished"); err != nil {
+			t.Error(err)
+		}
+	})
 	runSvc := service.NewRunServiceWithExecutionFactoryAndRegistry(st, engine, factory, registry)
 	projectSvc := service.NewProjectService(st, service.WorkRoot(root))
 	themes := service.NewThemeService(service.WorkRoot(root))
@@ -97,6 +104,9 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 		nil,
 		nil,
 	)
+	if _, err := router.WithProjectHistory(); err != nil {
+		t.Fatal(err)
+	}
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)
 	return srv, root

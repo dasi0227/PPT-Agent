@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
@@ -10,6 +11,7 @@ import (
 
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
+	history       *projecthistory.Manager
 	engine        *gin.Engine
 	cfg           *config.Config
 	log           *zap.Logger
@@ -57,6 +59,7 @@ func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH 
 		attachments = attachmentH[0]
 	}
 	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, prompt: promptH, contextWindow: contextWindowH, attachment: attachments}
+	engine.Use(r.projectHistoryGate())
 	r.register()
 	return r
 }

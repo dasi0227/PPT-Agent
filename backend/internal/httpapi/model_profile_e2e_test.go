@@ -109,6 +109,16 @@ func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), `"model":"Text Profile"`) {
 		t.Fatalf("explicit model selection failed: %d %s", response.Code, response.Body.String())
 	}
+	var first struct {
+		ID string `json:"id"`
+	}
+	decodeResponse(t, response, &first)
+	// A second Run is only legal after the first task has ended. Replaying its
+	// terminal stream also waits for the history writer to finish.
+	events := apiReq(t, http.MethodGet, baseURL+"/api/v1/runs/"+first.ID+"/events", "")
+	if events.Code != http.StatusOK {
+		t.Fatalf("wait for first run: %d", events.Code)
+	}
 	defaulted := strings.Replace(explicit, `"client_request_id":"req-model-explicit",`, `"client_request_id":"req-model-default",`, 1)
 	defaulted = strings.Replace(defaulted, `"model":"Text Profile",`, "", 1)
 	response = apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", defaulted)

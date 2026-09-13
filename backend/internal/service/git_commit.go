@@ -183,6 +183,10 @@ func (svc *GitCommitService) Start(ctx context.Context, projectID string, params
 		}
 		return model.GitCommitOperation{}, err
 	}
+	if err := run.CommitStartBarrier(ctx); err != nil {
+		release()
+		return model.GitCommitOperation{}, err
+	}
 	bus := newGitCommitBus()
 	svc.mu.Lock()
 	svc.buses[operation.ID] = bus

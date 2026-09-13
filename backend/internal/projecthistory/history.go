@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +56,7 @@ type File struct {
 }
 type Snapshot struct {
 	ProjectID string          `json:"project_id"`
+	WorkDir   string          `json:"work_dir"`
 	Database  json.RawMessage `json:"database"`
 	Files     map[string]File `json:"files"`
 	State     State           `json:"state"`
@@ -107,7 +109,7 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err = mkdirDurable(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), ".prepare-")
@@ -159,8 +161,15 @@ func excluded(path string) bool {
 	return first == ".git" || first == ".runtime" || first == ".run" || first == ".commit-tmp"
 }
 func files(root string) (map[string]File, error) {
+	info, err := os.Lstat(root)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, errors.New("project snapshot requires a real directory")
+	}
 	out := map[string]File{}
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -208,7 +217,7 @@ func (m *Manager) Capture(ctx context.Context, p model.Project, s State) (string
 	if err != nil {
 		return "", err
 	}
-	snap := Snapshot{p.ID, db, f, s}
+	snap := Snapshot{ProjectID: p.ID, WorkDir: p.WorkDir, Database: db, Files: f, State: s}
 	raw, err := json.Marshal(snap)
 	if err != nil {
 		return "", err
@@ -238,12 +247,17 @@ func (m *Manager) load(id, ref string) (Snapshot, error) {
 }
 func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) error {
 	// A durable journal and preimage exist before touching any active bytes.
+	if info, err := os.Lstat(p.WorkDir); err == nil && !info.IsDir() {
+		return errors.New("project restore requires a real directory")
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	for rel := range snap.Files {
 		if !filepath.IsLocal(rel) || excluded(rel) {
 			return errors.New("invalid snapshot path")
 		}
 	}
-	if err := os.MkdirAll(p.WorkDir, 0755); err != nil {
+	if err := mkdirDurable(p.WorkDir, 0755); err != nil {
 		return err
 	}
 	entries, err := os.ReadDir(p.WorkDir)
@@ -286,6 +300,34 @@ func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) err
 	}
 	return m.Store.RestoreProject(ctx, p.ID, snap.Database)
 }
+
+// Sync newly created directory links too: syncing only a file's immediate
+// directory would not persist a newly created project-history parent.
+func mkdirDurable(path string, mode fs.FileMode) error {
+	info, err := os.Stat(path)
+	if err == nil {
+		if !info.IsDir() {
+			return errors.New("snapshot directory is not a directory")
+		}
+		return nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	parent := filepath.Dir(path)
+	if err := mkdirDurable(parent, mode); err != nil {
+		return err
+	}
+	if err := os.Mkdir(path, mode); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	dir, err := os.Open(parent)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
+}
 func (m *Manager) Recover(ctx context.Context, id string) error {
 	path := filepath.Join(m.dir(id), "journal.json")
 	raw, err := os.ReadFile(path)
@@ -308,9 +350,11 @@ func (m *Manager) Recover(ctx context.Context, id string) error {
 		if err != nil {
 			return err
 		}
-		p, err := m.Store.GetProject(ctx, id)
-		if err != nil {
-			return err
+		// A failed project deletion may already have removed its database row.
+		// The verified preimage owns the original location as well as its rows.
+		p := model.Project{ID: id, WorkDir: snap.WorkDir}
+		if !filepath.IsAbs(p.WorkDir) {
+			return errors.New("invalid snapshot work directory")
 		}
 		if err = m.apply(ctx, p, snap); err != nil {
 			return err
@@ -322,12 +366,43 @@ func (m *Manager) Recover(ctx context.Context, id string) error {
 	return os.Remove(path)
 }
 func (m *Manager) Initialize(ctx context.Context) error {
-	projects, err := m.Store.ListProjects(ctx)
+	entries, err := os.ReadDir(m.root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	for _, p := range projects {
-		if err = m.Recover(ctx, p.ID); err != nil {
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(m.root, entry.Name(), "journal.json"))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		var journal Journal
+		if err = json.Unmarshal(raw, &journal); err != nil {
+			return err
+		}
+		if len(journal.Before) != 64 || strings.ContainsAny(journal.Before, "/\\") {
+			return ErrTarget
+		}
+		raw, err = os.ReadFile(filepath.Join(m.root, entry.Name(), journal.Before+".json"))
+		if err != nil {
+			return err
+		}
+		var snap Snapshot
+		if err = json.Unmarshal(raw, &snap); err != nil {
+			return err
+		}
+		if m.dir(snap.ProjectID) != filepath.Join(m.root, entry.Name()) {
+			return ErrTarget
+		}
+		if err = m.Recover(ctx, snap.ProjectID); err != nil {
 			return err
 		}
 	}
@@ -433,7 +508,7 @@ func (m *Manager) Preview(ctx context.Context, id, runID string) (Preview, error
 		old, ok := current[name]
 		if !ok {
 			v.Added = append(v.Added, name)
-		} else if string(old.Data) != string(f.Data) {
+		} else if string(old.Data) != string(f.Data) || old.Mode != f.Mode {
 			v.Modified = append(v.Modified, name)
 		}
 	}
@@ -442,14 +517,49 @@ func (m *Manager) Preview(ctx context.Context, id, runID string) (Preview, error
 			v.Deleted = append(v.Deleted, name)
 		}
 	}
-	threads, err := m.Store.ListThreads(ctx, id)
+	currentDB, err := m.Store.CaptureProject(ctx, id)
 	if err != nil {
 		return v, err
 	}
-	v.Threads = len(threads)
-	v.Runs = len(s.Checkpoints) - len(target.State.Checkpoints)
-	if v.Runs < 0 {
-		v.Runs = -v.Runs
+	// Restoring can bring back threads absent from the active project.
+	var targetRows map[string][]map[string]any
+	var currentRows map[string][]map[string]any
+	if err := json.Unmarshal(target.Database, &targetRows); err != nil {
+		return v, err
+	}
+	if err := json.Unmarshal(currentDB, &currentRows); err != nil {
+		return v, err
+	}
+	threadIDs := map[string]bool{}
+	for _, row := range currentRows["threads"] {
+		if threadID, ok := row["id"].(string); ok {
+			threadIDs[threadID] = true
+		}
+	}
+	for _, row := range targetRows["threads"] {
+		if threadID, ok := row["id"].(string); ok {
+			threadIDs[threadID] = true
+		}
+	}
+	v.Threads = len(threadIDs)
+	sort.Strings(v.Added)
+	sort.Strings(v.Modified)
+	sort.Strings(v.Deleted)
+	runIDs := map[string]int{}
+	for _, row := range currentRows["runs"] {
+		if runID, ok := row["id"].(string); ok {
+			runIDs[runID]++
+		}
+	}
+	for _, row := range targetRows["runs"] {
+		if runID, ok := row["id"].(string); ok {
+			runIDs[runID]--
+		}
+	}
+	for _, delta := range runIDs {
+		if delta != 0 {
+			v.Runs++
+		}
 	}
 	return v, nil
 }
@@ -558,7 +668,11 @@ func (m *Manager) BeginMutation(ctx context.Context, id string, revision int64) 
 			return nil, err
 		}
 	}
+	settled := false
 	return func(success bool) error {
+		if settled {
+			return nil
+		}
 		if !success {
 			if before != "" {
 				return m.Recover(context.WithoutCancel(ctx), id)
@@ -580,8 +694,11 @@ func (m *Manager) BeginMutation(ctx context.Context, id string, revision int64) 
 		if err = m.Save(id, next); err != nil {
 			return err
 		}
+		settled = true
 		if before != "" {
-			return m.Recover(context.WithoutCancel(ctx), id)
+			// The state marker already commits acceptance. Cleanup failure must
+			// not prevent a durably accepted worker from starting.
+			_ = m.Recover(context.WithoutCancel(ctx), id)
 		}
 		return nil
 	}, nil

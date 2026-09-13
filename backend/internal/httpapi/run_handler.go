@@ -26,18 +26,19 @@ func NewRunHandler(svc *service.RunService) *RunHandler {
 }
 
 type createRunBody struct {
-	ClientRequestID   string                     `json:"client_request_id"`
-	Model             string                     `json:"model"`
-	Instruction       string                     `json:"instruction"`
-	Scope             model.CreateRunScopeInput  `json:"scope"`
-	Mode              model.RunMode              `json:"mode"`
-	Options           model.RunOptions           `json:"options"`
-	SkillIDs          []string                   `json:"skill_ids"`
-	ComponentNames    []string                   `json:"component_names"`
-	MentionedSlideIDs []string                   `json:"mentioned_slide_ids"`
-	AttachmentIDs     []string                   `json:"attachment_ids"`
-	DOMSelections     []model.DOMSelection       `json:"dom_selections"`
-	ReferenceOrder    []model.ReferenceOrderItem `json:"reference_order"`
+	RestoredCheckpoint bool                       `json:"restored_checkpoint"`
+	ClientRequestID    string                     `json:"client_request_id"`
+	Model              string                     `json:"model"`
+	Instruction        string                     `json:"instruction"`
+	Scope              model.CreateRunScopeInput  `json:"scope"`
+	Mode               model.RunMode              `json:"mode"`
+	Options            model.RunOptions           `json:"options"`
+	SkillIDs           []string                   `json:"skill_ids"`
+	ComponentNames     []string                   `json:"component_names"`
+	MentionedSlideIDs  []string                   `json:"mentioned_slide_ids"`
+	AttachmentIDs      []string                   `json:"attachment_ids"`
+	DOMSelections      []model.DOMSelection       `json:"dom_selections"`
+	ReferenceOrder     []model.ReferenceOrderItem `json:"reference_order"`
 }
 
 type runResponse struct {
@@ -89,16 +90,17 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		return
 	}
 	params := model.CreateRunParams{
-		ClientRequestID:   body.ClientRequestID,
-		Model:             body.Model,
-		SkillIDs:          body.SkillIDs,
-		ComponentNames:    body.ComponentNames,
-		MentionedSlideIDs: body.MentionedSlideIDs,
-		AttachmentIDs:     body.AttachmentIDs,
-		DOMSelections:     body.DOMSelections,
-		ReferenceOrder:    body.ReferenceOrder,
-		Instruction:       body.Instruction,
-		ScopeInput:        &body.Scope,
+		RestoredCheckpoint: body.RestoredCheckpoint,
+		ClientRequestID:    body.ClientRequestID,
+		Model:              body.Model,
+		SkillIDs:           body.SkillIDs,
+		ComponentNames:     body.ComponentNames,
+		MentionedSlideIDs:  body.MentionedSlideIDs,
+		AttachmentIDs:      body.AttachmentIDs,
+		DOMSelections:      body.DOMSelections,
+		ReferenceOrder:     body.ReferenceOrder,
+		Instruction:        body.Instruction,
+		ScopeInput:         &body.Scope,
 		Command: model.RunCommand{
 			Mode: body.Mode, Instruction: body.Instruction, Options: body.Options,
 		},

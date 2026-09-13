@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
@@ -179,8 +181,11 @@ func TestBusyAndSymlink(t *testing.T) {
 	m, p := fixture(t)
 	ctx := context.Background()
 	cp(t, m, p, "cp1", model.RunPaused)
-	if _, err := m.Preview(ctx, p.ID, "cp1"); !errors.Is(err, ErrBusy) {
-		t.Fatal(err)
+	for _, status := range []model.RunStatus{model.RunPending, model.RunRunning, model.RunWaiting, model.RunPaused, model.RunRecovering} {
+		must(t, m.Store.SetRunStatus(ctx, "cp1", status))
+		if _, err := m.Preview(ctx, p.ID, "cp1"); !errors.Is(err, ErrBusy) {
+			t.Fatalf("status %s: %v", status, err)
+		}
 	}
 	must(t, m.Store.SetRunStatus(ctx, "cp1", model.RunDone))
 	release, _ := m.Locks.TryAcquire(p.ID)
@@ -238,4 +243,89 @@ func TestPreviewBusyExportAndSequence(t *testing.T) {
 	if _, err := m.Preview(context.Background(), p.ID, "cp1"); !errors.Is(err, ErrBusy) {
 		t.Fatal(err)
 	}
+}
+
+func TestInterruptedDeletionRecoversWithoutProjectRow(t *testing.T) {
+	m, p := fixture(t)
+	ctx := context.Background()
+	put(t, p, "file", "before")
+	cp(t, m, p, "cp1", model.RunDone)
+	put(t, p, "file", "latest")
+	s := switchTo(t, m, p, "cp1", "back")
+	_, err := m.BeginMutation(ctx, p.ID, s.Revision)
+	must(t, err)
+	must(t, m.Store.DeleteProject(ctx, p.ID))
+	must(t, os.RemoveAll(p.WorkDir))
+	// No finish callback: recreate the manager as at process startup.
+	restarted := New(m.Store, m.Locks, filepath.Dir(m.root))
+	must(t, restarted.Initialize(ctx))
+	content(t, p, "file", "before")
+	if _, err := m.Store.GetProject(ctx, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	switchTo(t, restarted, p, "", "restore")
+	content(t, p, "file", "latest")
+}
+
+func TestCommittedMutationSurvivesRestartAndCannotReopenFuture(t *testing.T) {
+	m, p := fixture(t)
+	ctx := context.Background()
+	cp(t, m, p, "cp1", model.RunDone)
+	s := switchTo(t, m, p, "cp1", "back")
+	finish, err := m.BeginMutation(ctx, p.ID, s.Revision)
+	must(t, err)
+	raw, err := os.ReadFile(filepath.Join(m.dir(p.ID), "journal.json"))
+	must(t, err)
+	put(t, p, "file", "accepted branch")
+	must(t, finish(true))
+	accepted, _ := m.State(p.ID)
+	must(t, finish(false)) // A later handler failure cannot undo accepted work.
+	must(t, os.WriteFile(filepath.Join(m.dir(p.ID), "journal.json"), raw, 0600))
+	restarted := New(m.Store, m.Locks, filepath.Dir(m.root))
+	must(t, restarted.Initialize(ctx))
+	content(t, p, "file", "accepted branch")
+	after, _ := m.State(p.ID)
+	if after.Revision != accepted.Revision || after.Latest != "" {
+		t.Fatal("accepted branch resurrected its future")
+	}
+}
+
+func TestTranscriptLoaderSeesOnlyActiveBoundary(t *testing.T) {
+	m, p := fixture(t)
+	transcript := contextengine.NewFSTranscriptStore()
+	messages := func(text string) []llm.Message {
+		return []llm.Message{{Role: llm.RoleUser, Content: []llm.ContentPart{{Type: "text", Text: text}}}}
+	}
+	must(t, transcript.Replace(p.WorkDir, "t1", messages("before compaction")))
+	cp(t, m, p, "cp1", model.RunDone)
+	must(t, transcript.Replace(p.WorkDir, "t1", messages("future compacted summary")))
+	switchTo(t, m, p, "cp1", "back")
+	loaded, err := transcript.Load(p.WorkDir, "t1")
+	must(t, err)
+	if len(loaded) != 1 || loaded[0].Text() != "before compaction" {
+		t.Fatalf("future leaked: %+v", loaded)
+	}
+	switchTo(t, m, p, "", "restore")
+	loaded, err = transcript.Load(p.WorkDir, "t1")
+	must(t, err)
+	if len(loaded) != 1 || loaded[0].Text() != "future compacted summary" {
+		t.Fatalf("summary not restored: %+v", loaded)
+	}
+}
+
+func TestSnapshotWriteFailureAndConcurrentGate(t *testing.T) {
+	m, p := fixture(t)
+	put(t, p, "file", "live")
+	must(t, os.MkdirAll(m.root, 0700))
+	must(t, os.WriteFile(m.dir(p.ID), []byte("not a directory"), 0600))
+	if err := m.Baseline(context.Background(), p, "cp1", "t1", model.CreateRunParams{}); err == nil {
+		t.Fatal("snapshot write failure ignored")
+	}
+	content(t, p, "file", "live")
+	release := m.Gate(p.ID)
+	if unlock, ok := m.TryGate(p.ID); ok {
+		unlock()
+		t.Fatal("concurrent mutation admitted")
+	}
+	release()
 }

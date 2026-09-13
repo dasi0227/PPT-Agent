@@ -1,0 +1,252 @@
+package httpapi
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/gin-gonic/gin"
+)
+
+func (r *Router) WithProjectHistory() (*Router, error) {
+	manager, err := r.run.svc.EnableProjectHistory(r.cfg.WorkRoot)
+	if err != nil {
+		return nil, err
+	}
+	r.history = manager
+	if r.export != nil {
+		manager.ExportActive = r.export.svc.Manager().Active
+	}
+	group := r.engine.Group("/api/v1/projects/:id/history")
+	group.GET("", r.historyState)
+	group.GET("/preview", r.historyPreview)
+	group.POST("/switch", r.historySwitch)
+	return r, nil
+}
+func historyError(c *gin.Context, err error) {
+	code := "HISTORY_UNAVAILABLE"
+	status := http.StatusInternalServerError
+	message := "项目历史操作失败，请重试"
+	switch {
+	case errors.Is(err, projecthistory.ErrConflict):
+		code = "HISTORY_REVISION_CONFLICT"
+		status = 409
+		message = err.Error()
+	case errors.Is(err, projecthistory.ErrBusy):
+		code = "HISTORY_BUSY"
+		status = 409
+		message = err.Error()
+	case errors.Is(err, projecthistory.ErrTarget):
+		code = "HISTORY_TARGET_UNAVAILABLE"
+		status = 409
+		message = err.Error()
+	}
+	AbortWithError(c, &APIError{HTTPStatus: status, Code: code, Message: message})
+}
+
+func historyResponseState(s projecthistory.State) gin.H {
+	checkpoints := make([]gin.H, 0, len(s.Checkpoints))
+	for _, cp := range s.Checkpoints {
+		checkpoints = append(checkpoints, gin.H{"run_id": cp.RunID, "thread_id": cp.ThreadID, "time": cp.Time, "sequence": cp.Sequence})
+	}
+	return gin.H{"revision": s.Revision, "scene_revision": s.SceneRevision, "checkpoints": checkpoints,
+		"latest": s.Latest, "latest_time": s.LatestTime, "scene": s.Scene}
+}
+func (r *Router) historyState(c *gin.Context) {
+	s, err := r.history.State(c.Param("id"))
+	if err != nil {
+		historyError(c, err)
+		return
+	}
+	visible := []projecthistory.Checkpoint{}
+	for _, cp := range s.Checkpoints {
+		run, err := r.history.Store.GetRun(c.Request.Context(), cp.RunID)
+		if err == nil && run.Status.Terminal() {
+			visible = append(visible, cp)
+		}
+	}
+	s.Checkpoints = visible
+	c.JSON(200, historyResponseState(s))
+}
+func (r *Router) historyPreview(c *gin.Context) {
+	v, err := r.history.Preview(c.Request.Context(), c.Param("id"), c.Query("run_id"))
+	if err != nil {
+		historyError(c, err)
+		return
+	}
+	c.JSON(200, v)
+}
+func (r *Router) historySwitch(c *gin.Context) {
+	var body struct {
+		RunID     string          `json:"run_id"`
+		Revision  int64           `json:"revision"`
+		Operation string          `json:"operation_id"`
+		Scene     json.RawMessage `json:"scene"`
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<20)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		AbortWithError(c, ErrBadRequest("invalid history command"))
+		return
+	}
+	s, err := r.history.Switch(c.Request.Context(), c.Param("id"), body.RunID, body.Revision, body.Operation, body.Scene)
+	if err != nil {
+		historyError(c, err)
+		return
+	}
+	c.Header("X-Project-History-Revision", strconv.FormatInt(s.Revision, 10))
+	if err := r.history.Collect(c.Param("id")); err != nil {
+		r.log.Warn("project checkpoint cleanup deferred")
+	}
+	c.JSON(200, historyResponseState(s))
+}
+
+type historyResponse struct {
+	gin.ResponseWriter
+	body   bytes.Buffer
+	status int
+}
+
+func (w *historyResponse) WriteHeader(status int) { w.status = status }
+func (w *historyResponse) WriteHeaderNow()        {}
+func (w *historyResponse) Write(raw []byte) (int, error) {
+	if w.status == 0 {
+		w.status = 200
+	}
+	return w.body.Write(raw)
+}
+func (w *historyResponse) WriteString(raw string) (int, error) { return w.Write([]byte(raw)) }
+func (w *historyResponse) Status() int {
+	if w.status == 0 {
+		return 200
+	}
+	return w.status
+}
+func (w *historyResponse) Size() int     { return w.body.Len() }
+func (w *historyResponse) Written() bool { return w.status != 0 }
+
+// Every project HTTP read and write crosses this gate. Resource IDs are resolved
+// before locking and revalidated by the handler after locking. Long SSE streams
+// never hold the gate; subscribers must resolve a currently visible run first.
+func (r *Router) projectHistoryGate() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if r.history == nil || c.FullPath() == "" {
+			c.Next()
+			return
+		}
+		path := strings.TrimPrefix(c.Request.URL.Path, "/api/v1/")
+		parts := strings.Split(path, "/")
+		if len(parts) < 2 {
+			c.Next()
+			return
+		}
+		ctx := c.Request.Context()
+		id := ""
+		switch parts[0] {
+		case "projects":
+			id = parts[1]
+		case "threads":
+			v, err := r.history.Store.GetThread(ctx, parts[1])
+			if err == nil {
+				id = v.ProjectID
+			}
+		case "runs":
+			v, err := r.history.Store.GetRun(ctx, parts[1])
+			if err == nil {
+				id = v.ProjectID
+			}
+		case "slides":
+			v, err := r.history.Store.GetSlide(ctx, parts[1])
+			if err == nil {
+				id = v.ProjectID
+			}
+		case "git-commits":
+			v, err := r.history.Store.GetGitCommitOperation(ctx, parts[1])
+			if err == nil {
+				id = v.ProjectID
+			}
+		}
+		if id == "" {
+			c.Next()
+			return
+		}
+		var release func()
+		if c.Request.Method != "GET" || strings.Contains(path, "/history/preview") {
+			var acquired bool
+			release, acquired = r.history.TryGate(id)
+			if !acquired {
+				historyError(c, projecthistory.ErrBusy)
+				return
+			}
+		} else {
+			release = r.history.Gate(id)
+		}
+		defer func() {
+			if release != nil {
+				release()
+			}
+		}()
+		if err := r.history.Recover(ctx, id); err != nil {
+			historyError(c, err)
+			return
+		}
+		s, err := r.history.State(id)
+		if err != nil {
+			historyError(c, err)
+			return
+		}
+		c.Header("X-Project-ID", id)
+		c.Header("X-Project-History-Revision", strconv.FormatInt(s.Revision, 10))
+		c.Header("Cache-Control", "no-store")
+		isHistory := len(parts) > 2 && parts[0] == "projects" && parts[2] == "history"
+		readOnly := c.Request.Method == "GET" || c.Request.Method == "HEAD" || c.Request.Method == "OPTIONS"
+		if strings.HasSuffix(path, "/events") {
+			release()
+			release = nil
+			c.Next()
+			return
+		}
+		if readOnly || isHistory {
+			c.Next()
+			return
+		}
+		// Run controls operate on an existing task; polish and export do not mutate authoring history.
+		if parts[0] == "runs" || strings.HasSuffix(path, "/polish") || strings.HasSuffix(path, "/exports") {
+			c.Next()
+			return
+		}
+		revision, _ := strconv.ParseInt(c.GetHeader("X-Discard-Future-Revision"), 10, 64)
+		if s.Latest != "" && revision == 0 {
+			AbortWithError(c, &APIError{HTTPStatus: 409, Code: "HISTORY_CONFIRM_REQUIRED", Message: "继续创作将丢弃原来的后续历史，无法再恢复到最新现场。", Details: map[string]any{"project_id": id, "revision": s.Revision}})
+			return
+		}
+		finish, err := r.history.BeginMutation(ctx, id, revision)
+		if err != nil {
+			historyError(c, err)
+			return
+		}
+		c.Request = c.Request.WithContext(run.WithStartBarrier(c.Request.Context(), func() error { return finish(true) }))
+		original := c.Writer
+		buffer := &historyResponse{ResponseWriter: original}
+		c.Writer = buffer
+		defer func() { c.Writer = original }()
+		c.Next()
+		c.Writer = original
+		if err = finish(buffer.Status() < 400); err != nil {
+			historyError(c, err)
+			return
+		}
+		if next, err := r.history.State(id); err == nil {
+			c.Header("X-Project-History-Revision", strconv.FormatInt(next.Revision, 10))
+		}
+		if cleanupErr := r.history.Collect(id); cleanupErr != nil {
+			r.log.Warn("project checkpoint cleanup deferred")
+		}
+		original.WriteHeader(buffer.Status())
+		_, _ = original.Write(buffer.body.Bytes())
+	}
+}

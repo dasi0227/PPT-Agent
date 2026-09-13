@@ -20,6 +20,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -34,6 +35,7 @@ type WorkRoot string
 type ExecutionFactory func(r model.Run, p model.CreateRunParams, proj model.Project) run.Execution
 
 type RunService struct {
+	history     *projecthistory.Manager
 	store       store.Store
 	engine      *run.Engine
 	factory     ExecutionFactory
@@ -46,6 +48,19 @@ type RunService struct {
 	transcripts *contextengine.FSTranscriptStore
 	calibration *contextengine.CalibrationStore
 	attachments *AttachmentService
+}
+
+func (svc *RunService) EnableProjectHistory(root string) (*projecthistory.Manager, error) {
+	snapshotStore, ok := svc.store.(projecthistory.SnapshotStore)
+	if !ok {
+		return nil, errors.New("project snapshot store required")
+	}
+	manager := projecthistory.New(snapshotStore, svc.engine.ProjectLocks(), root)
+	if err := manager.Initialize(context.Background()); err != nil {
+		return nil, err
+	}
+	svc.history = manager
+	return manager, nil
 }
 
 func NewRunService(
@@ -290,6 +305,11 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		if err := validateSelectionProject(value, command.DOMSelections, deletedSlideIDs); err != nil {
 			return model.Run{}, domSelectionAgentError("create_run", err)
 		}
+		if p.RestoredCheckpoint {
+			if err := validateRestoredDOM(project, value, command.DOMSelections); err != nil {
+				return model.Run{}, err
+			}
+		}
 		reconcileSelectionMaterialization(value, command.DOMSelections)
 		command.Scope = mergeSelectionScope(command.Scope, value, command.DOMSelections)
 	}
@@ -320,6 +340,9 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		if err != nil {
 			return model.Run{}, err
 		}
+	}
+	if p.RestoredCheckpoint && len(command.DroppedMentionedSlideIDs) > 0 {
+		return model.Run{}, invalidRestoredReference("恢复的页面引用已失效，请移除后重新选择")
 	}
 	if err := command.Validate(); err != nil {
 		return model.Run{}, err
@@ -399,6 +422,12 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	runModel := model.Run{
 		ID: uuid.NewString(), ThreadID: thread.ID, ProjectID: project.ID,
 		ClientRequestID: p.ClientRequestID, Command: command,
+	}
+	if svc.history != nil {
+		if err := svc.history.Baseline(ctx, project, runModel.ID, thread.ID, p); err != nil {
+			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "CHECKPOINT_FAILED")
+			return model.Run{}, err
+		}
 	}
 	if selectedProfile.Adapter() != nil {
 		runModel.Model = model.ModelSelection{
@@ -861,4 +890,10 @@ func (svc *RunService) GetRenderScreenshot(ctx context.Context, runID, screensho
 
 func (svc *RunService) Subscribe(ctx context.Context, runID string, afterSeq int64) (<-chan model.Event, func(), error) {
 	return svc.engine.Subscribe(ctx, runID, afterSeq)
+}
+
+func invalidRestoredReference(message string) error {
+	err := model.NewAgentError("BAD_REQUEST", "create_run", nil)
+	err.SafeMessage = message
+	return err
 }

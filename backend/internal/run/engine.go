@@ -190,6 +190,11 @@ func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Ex
 		}
 	}
 
+	if err := CommitStartBarrier(ctx); err != nil {
+		_ = e.store.SetRunStatus(context.WithoutCancel(ctx), r.ID, model.RunFailed)
+		e.mu.Unlock()
+		return model.Run{}, err
+	}
 	bus := NewBus(r.ID, r.ThreadID, e.store, e.hw)
 	queue := NewInputQueue()
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -656,3 +661,6 @@ func (e *Engine) Subscribe(ctx context.Context, id string, afterSeq int64) (<-ch
 
 	return out, stop, nil
 }
+
+// ProjectLocks shares execution exclusion with project history switches.
+func (e *Engine) ProjectLocks() *LockManager { return e.locks }
