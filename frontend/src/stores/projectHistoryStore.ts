@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { projectHistoryApi, type HistoryPreview, type HistoryState } from '../api/projectHistory';
 import { invalidateHistoryRequests } from '../api/client';
-import { composerScene, loadProjectComposer, saveProjectComposer, useComposerStore, type ComposerReference, type ComposerState } from './composerStore';
+import { composerScene, loadProjectComposer, restoreDraftMentions, saveProjectComposer, useComposerStore, type ComposerReference, type ComposerState } from './composerStore';
+import { projectWorkspaceRoute } from '../features/workspace/routes';
 import { useThreadStore } from './threadStore';
 import { useDeckStore } from './deckStore';
 import { useRunStore } from './runStore';
@@ -32,6 +33,7 @@ export const useProjectHistoryStore = create<HistoryUI>((set, get) => ({
     try {
       const state = await projectHistoryApi.switch(projectId, preview, operation, {
         composer: composerScene(), slide_id: useDeckStore.getState().currentSlideId,
+        view: useDeckStore.getState().globalView, preview_mode: useDeckStore.getState().previewMode,
         active_thread_id: useThreadStore.getState().getActiveThreadId(projectId),
       }, runId);
       applyHistoryScene(projectId, state);
@@ -74,6 +76,7 @@ export function applyHistoryScene(projectId: string, state: HistoryState) {
   } else if (scene.composer) {
     useComposerStore.getState().resetForProject();
     useComposerStore.setState(scene.composer as Partial<ComposerState>);
+    for (const threadId of Object.keys(useComposerStore.getState().threadResourceMentions)) restoreDraftMentions(threadId);
     if (scene.active_thread_id) localStorage.setItem(threadKey(projectId), scene.active_thread_id);
   }
   saveProjectComposer(projectId);
@@ -91,10 +94,14 @@ export function reloadHistory(projectId: string, state: HistoryState) {
   invalidateHistoryRequests();
   useRunStore.getState().dropSessions(Object.keys(useRunStore.getState().sessions));
   useGitCommitStore.getState().closeAll();
-  const slide = state.scene?.input?.scope_input.selection.current_slide_id ?? state.scene?.slide_id;
   // A fresh document destroys every iframe, timer, stream and in-flight callback.
   // The server-persisted scene is applied before the new document loads history.
-  const params = new URLSearchParams();
-  if (slide) params.set('slide', slide);
-  window.location.replace(`/projects/${encodeURIComponent(projectId)}${params.size ? `?${params}` : ''}`);
+  window.location.replace(historyWorkspaceRoute(projectId, state));
+}
+export function historyWorkspaceRoute(projectId: string, state: HistoryState) {
+  return projectWorkspaceRoute(projectId, {
+    slideId: state.scene?.input?.scope_input.selection.current_slide_id ?? state.scene?.slide_id,
+    view: state.scene?.view,
+    mode: state.scene?.preview_mode,
+  });
 }

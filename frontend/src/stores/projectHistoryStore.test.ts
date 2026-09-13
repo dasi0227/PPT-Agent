@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { HistoryState } from '../api/projectHistory';
-import { applyHistoryScene } from './projectHistoryStore';
+import { applyHistoryScene, historyWorkspaceRoute } from './projectHistoryStore';
 import { composerScene, loadProjectComposer, useComposerStore } from './composerStore';
 
 beforeEach(() => { loadProjectComposer(null); localStorage.clear(); useComposerStore.getState().resetForProject(); });
@@ -34,7 +34,7 @@ describe('project checkpoint composer scene', () => {
   });
   it('restores the original drafts for all threads from the durable server scene', () => {
     loadProjectComposer('p');
-    useComposerStore.setState({ threadDrafts: { t1: 'one', t2: 'two' }, mode: 'plan', customSectionIds: ['section'] });
+    useComposerStore.setState({ threadDrafts: { t1: 'one', t2: 'two' }, mode: 'plan', customSectionIds: ['section'], threadResourceMentions: { t2: { component_names: ['chart'], mentioned_slide_ids: ['s2'] } } });
     const original = JSON.parse(JSON.stringify(composerScene())) as Record<string, unknown>;
     useComposerStore.getState().resetForProject();
     localStorage.clear(); // Simulates returning without a local in-memory recovery backup.
@@ -42,5 +42,10 @@ describe('project checkpoint composer scene', () => {
     expect(useComposerStore.getState().threadDrafts).toEqual({ t1: 'one', t2: 'two' });
     expect(useComposerStore.getState().mode).toBe('plan');
     expect(useComposerStore.getState().customSectionIds).toEqual(['section']);
+    expect(useComposerStore.getState().restoredInputs.t2).toMatchObject({ component_names: ['chart'], mentioned_slide_ids: ['s2'] });
+  });
+  it('restores the original selected page and preview mode through the workspace route', () => {
+    expect(historyWorkspaceRoute('p', { revision: 12, scene_revision: 12, checkpoints: [], scene: { slide_id: 's2', view: 'outline', preview_mode: 'overview' } }))
+      .toBe('/projects/p?slide=s2&view=outline&mode=overview');
   });
 });

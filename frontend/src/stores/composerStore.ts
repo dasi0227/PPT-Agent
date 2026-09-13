@@ -22,6 +22,7 @@ function initialModelProfile(): string | null {
 
 export interface ComposerState {
   restoredInputs: Record<string, Partial<CreateRunRequest>>;
+  threadResourceMentions: Record<string, Pick<CreateRunRequest, 'component_names' | 'mentioned_slide_ids'>>;
   scopeObject: ScopeObject;
   scopeSelection: ScopeSelectionKind;
   lastNonGlobalSelection: ScopeSelectionKind;
@@ -67,6 +68,7 @@ const toggleId = (ids: string[], id: string) => (
 
 export const useComposerStore = create<ComposerState>((set) => ({
   restoredInputs: {},
+  threadResourceMentions: {},
   scopeObject: 'presentation',
   scopeSelection: 'current_page',
   lastNonGlobalSelection: 'current_page',
@@ -114,6 +116,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   }),
   clearThreadDraft: (threadId) => set((state) => {
 	const threadDrafts = { ...state.threadDrafts };
+ const threadResourceMentions = { ...state.threadResourceMentions }; delete threadResourceMentions[threadId];
  const restoredInputs = { ...state.restoredInputs }; delete restoredInputs[threadId];
 	const threadReferences = { ...state.threadReferences };
 	const nextMarkerByThread = { ...state.nextMarkerByThread };
@@ -122,7 +125,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
 	delete threadReferences[threadId];
 	delete nextMarkerByThread[threadId];
 	delete editingSelectionIdByThread[threadId];
-	return { restoredInputs, threadDrafts, threadReferences, nextMarkerByThread, editingSelectionIdByThread };
+	return { restoredInputs, threadResourceMentions, threadDrafts, threadReferences, nextMarkerByThread, editingSelectionIdByThread };
   }),
 	addThreadAttachment: (threadId, attachment) => set((state) => {
 		const existing = state.threadReferences[threadId] ?? [];
@@ -187,6 +190,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   }),
   resetForProject: () => set({
     restoredInputs: {},
+    threadResourceMentions: {},
     scopeObject: 'presentation', scopeSelection: 'current_page', lastNonGlobalSelection: 'current_page', customSlideIds: [], customSectionIds: [],
     mode: 'execute', polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {}, userTouchedTarget: false,
   }),
@@ -204,6 +208,7 @@ export function composerScene(): Partial<ComposerState> {
     modelProfileName:s.modelProfileName, selectedSkillIds:s.selectedSkillIds,
     threadDrafts:s.threadDrafts, threadReferences:s.threadReferences, nextMarkerByThread:s.nextMarkerByThread,
     editingSelectionIdByThread:s.editingSelectionIdByThread, userTouchedTarget:s.userTouchedTarget, restoredInputs:s.restoredInputs,
+    threadResourceMentions:s.threadResourceMentions,
   };
 }
 export function loadProjectComposer(projectId: string | null) {
@@ -213,6 +218,22 @@ export function loadProjectComposer(projectId: string | null) {
   useComposerStore.getState().resetForProject();
   if (saved) { try { useComposerStore.setState(JSON.parse(saved) as Partial<ComposerState>); } catch { /* An invalid local draft is ignored. */ } }
   draftProject = projectId;
+  for (const threadId of Object.keys(useComposerStore.getState().threadResourceMentions)) restoreDraftMentions(threadId);
+}
+// Inline editor chips become explicit removable references after rehydration;
+// the persisted draft contains data, never executable editor HTML.
+export function restoreDraftMentions(threadId: string) {
+  const state = useComposerStore.getState();
+  const refs = state.threadResourceMentions[threadId];
+  if (!refs?.component_names?.length && !refs?.mentioned_slide_ids?.length) return;
+  const previous = state.restoredInputs[threadId];
+  useComposerStore.setState({
+    restoredInputs: { ...state.restoredInputs, [threadId]: { ...previous,
+      component_names: [...new Set([...(previous?.component_names ?? []), ...(refs.component_names ?? [])])],
+      mentioned_slide_ids: [...new Set([...(previous?.mentioned_slide_ids ?? []), ...(refs.mentioned_slide_ids ?? [])])],
+    } },
+    threadResourceMentions: { ...state.threadResourceMentions, [threadId]: {} },
+  });
 }
 export function saveProjectComposer(projectId: string) {
   localStorage.setItem(draftKey(projectId), JSON.stringify(composerScene()));

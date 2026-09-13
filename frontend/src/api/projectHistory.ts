@@ -17,7 +17,7 @@ export interface HistoryState {
   checkpoints: { run_id: string; thread_id: string; time: number; sequence: number }[];
   latest?: string;
   latest_time?: number;
-  scene?: { thread_id?: string; input?: CheckpointInput; composer?: Record<string, unknown>; slide_id?: string; active_thread_id?: string };
+  scene?: { thread_id?: string; input?: CheckpointInput; composer?: Record<string, unknown>; slide_id?: string; active_thread_id?: string; view?: 'html' | 'outline'; preview_mode?: 'main' | 'overview' };
 }
 export interface HistoryPreview {
   revision: number; time: number; input: string; threads: number; runs: number;

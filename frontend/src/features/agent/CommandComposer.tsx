@@ -1,4 +1,4 @@
-import { loadProjectComposer } from '../../stores/composerStore';
+import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Code2, FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
@@ -230,7 +230,13 @@ export const CommandComposer: React.FC = () => {
 	const hasPendingUploads = uploadingCount > 0;
   const setComposerText = (nextText: string) => {
     setText(nextText);
-    if (activeThreadId) composer.setThreadDraft(activeThreadId, nextText);
+    if (activeThreadId) {
+      useComposerStore.setState((state) => ({ threadResourceMentions: { ...state.threadResourceMentions, [activeThreadId]: {
+        component_names: editorRef.current?.getComponentNames() ?? [],
+        mentioned_slide_ids: editorRef.current?.getMentionedSlideIds() ?? [],
+      } } }));
+      composer.setThreadDraft(activeThreadId, nextText);
+    }
   };
   const showCancelButton = Boolean(activeRunId)
     && (runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling')
@@ -298,10 +304,15 @@ export const CommandComposer: React.FC = () => {
     editorRef.current?.setPlainText('');
     loadProjectComposer(activeProjectId);
   }, [activeProjectId, resetForProject]);
+  const loadedDraftThread = useRef<string | null | undefined>(null);
   useEffect(() => {
     const draft = activeThreadDraft ?? '';
     setText(draft);
-    editorRef.current?.setPlainText(draft);
+    if (loadedDraftThread.current !== activeThreadId || editorRef.current?.getPlainText() !== draft) {
+      if (activeThreadId) restoreDraftMentions(activeThreadId);
+      editorRef.current?.setPlainText(draft);
+    }
+    loadedDraftThread.current = activeThreadId;
   }, [activeThreadId, activeThreadDraft]);
   useEffect(() => {
     applyContextDefault(slides.length > 0);
