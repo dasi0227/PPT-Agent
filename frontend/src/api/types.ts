@@ -179,6 +179,7 @@ export interface PublicDOMSelection { selection_id: string; marker_no: number; c
 export interface ReferenceOrderItem { kind: 'image' | 'dom'; ref_id: string }
 
 export interface CreateRunRequest {
+  restored_checkpoint?: boolean;
   client_request_id?: string;
   model?: string;
   scope: CreateRunScopeInput;

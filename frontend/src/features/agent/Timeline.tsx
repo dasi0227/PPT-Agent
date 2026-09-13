@@ -1,3 +1,4 @@
+import { RollbackButton } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowDown, CheckCircle2, ChevronRight, Code2, FileImage, PauseCircle, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
@@ -160,7 +161,7 @@ export const Timeline: React.FC = () => {
                   timestamp={item.timestamp}
                   label="复制用户消息"
                   scopeLabel={item.scope ? targetLabel(item.scope) : undefined}
-                />
+                ><RollbackButton runId={item.runId} steering={Boolean(item.deliveryStatus)} /></MessageMetaActions>
               </div>
             </div>
             {item.skills && item.skills.length > 0 && (

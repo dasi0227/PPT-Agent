@@ -13,11 +13,13 @@ export function MessageMetaActions({
   timestamp,
   label,
   scopeLabel,
+  children,
 }: {
   text: string;
   timestamp: number;
   label: string;
   scopeLabel?: string;
+  children?: React.ReactNode;
 }) {
   const [copied, setCopied] = React.useState(false);
 
@@ -41,6 +43,7 @@ export function MessageMetaActions({
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
       </button>
+      {children}
       {scopeLabel && <span className="select-none whitespace-nowrap text-[11px]">{scopeLabel}</span>}
       <time className="select-none whitespace-nowrap text-[11px] tabular-nums" dateTime={new Date(timestamp).toISOString()}>
         {formatTimestamp(timestamp)}

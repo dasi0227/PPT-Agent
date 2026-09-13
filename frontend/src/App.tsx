@@ -1,3 +1,4 @@
+import { ProjectHistoryDialogs } from './features/agent/ProjectHistoryControls';
 import { useEffect } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { GlobalToasts } from './components/ui/GlobalToasts';
@@ -32,6 +33,7 @@ export function App() {
         <Route path="/warehouse/prompt" element={<PromptRepositoryPage />} />
         <Route path="*" element={<UnknownRouteRedirect />} />
       </Routes>
+      <ProjectHistoryDialogs />
       <GlobalModals />
       <GlobalToasts />
     </BrowserRouter>

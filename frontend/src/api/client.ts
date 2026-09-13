@@ -1,7 +1,11 @@
+import { confirmDiscardFuture } from '../stores/historyConfirmationStore';
 import { showGlobalError } from '../stores/toastStore';
 
 const API_BASE = '/api/v1';
 const DEFAULT_TIMEOUT_MS = 15_000;
+let historyEpoch = 0;
+export function invalidateHistoryRequests() { historyEpoch += 1; }
+export function currentHistoryEpoch() { return historyEpoch; }
 
 export class APIError extends Error {
   readonly retryable: boolean;
@@ -92,6 +96,7 @@ function errorFields(body: unknown): { code?: string; message?: string; details?
 }
 
 export async function fetchClient<T>(path: string, options: FetchClientOptions = {}): Promise<T> {
+  const epoch = historyEpoch;
   const url = `${API_BASE}${path}`;
   const {
     timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -111,9 +116,19 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
   try {
     const response = await fetch(url, { ...requestOptions, headers, signal: combined.signal });
 
+    if (epoch !== historyEpoch) throw new RequestCanceledError();
     if (!response.ok) {
       const body = await readErrorBody(response);
       const parsed = errorFields(body);
+      if (parsed.code === 'HISTORY_CONFIRM_REQUIRED' && !headers.has('X-Discard-Future-Revision')) {
+        window.clearTimeout(timeout);
+        const confirmed = await confirmDiscardFuture(parsed.message ?? '继续创作将丢弃原来的后续历史。');
+        if (!confirmed || epoch !== historyEpoch) throw new RequestCanceledError();
+        const revision = (parsed.details as { revision?: number } | undefined)?.revision;
+        if (!revision) throw new RequestCanceledError();
+        headers.set('X-Discard-Future-Revision', String(revision));
+        return await fetchClient<T>(path, { ...options, headers });
+      }
       throw new APIError(
         response.status,
         parsed.code,
@@ -125,14 +140,19 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     }
 
     if (response.status === 204) return undefined as T;
-    if (responseType === 'text') return response.text() as Promise<T>;
+    if (responseType === 'text') {
+      const text = await response.text();
+      if (epoch !== historyEpoch) throw new RequestCanceledError();
+      return text as T;
+    }
 
     const text = await response.text();
+    if (epoch !== historyEpoch) throw new RequestCanceledError();
     if (text.trim() === '') return undefined as T;
     return JSON.parse(text) as T;
   } catch (error) {
     let requestError: Error;
-    if (error instanceof APIError) requestError = error;
+    if (error instanceof APIError || error instanceof RequestCanceledError) requestError = error;
     else if (timeoutController.signal.aborted) requestError = new RequestTimeoutError(timeoutMs);
     else if (externalSignal?.aborted) requestError = new RequestCanceledError();
     else if (error instanceof DOMException && error.name === 'AbortError') requestError = new RequestCanceledError();

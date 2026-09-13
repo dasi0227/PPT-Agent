@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { RequestCanceledError } from '../api/client';
 
 const slideLoads: string[] = [];
 vi.mock('./projectStore', () => ({
@@ -37,7 +38,7 @@ vi.mock('../api/sse', async (importOriginal) => {
   };
 });
 
-let createMode: 'resolve' | 'pending' | 'reject' = 'resolve';
+let createMode: 'resolve' | 'pending' | 'reject' | 'cancel' = 'resolve';
 let resolveCreate: ((value: any) => void) | null = null;
 let recoveredRun: any = null;
 let steeringMode: 'resolve' | 'reject' = 'resolve';
@@ -77,6 +78,7 @@ vi.mock('../api/runs', () => ({
       };
       if (createMode === 'pending') return new Promise((resolve) => { resolveCreate = resolve; });
       if (createMode === 'reject') return Promise.reject(new Error('offline'));
+      if (createMode === 'cancel') return Promise.reject(new RequestCanceledError());
       return Promise.resolve(run);
     },
     submitInput: async () => ({}),
@@ -158,6 +160,13 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'paused' |
 
 describe('runStore public event sessions', () => {
   beforeEach(reset);
+
+  test('canceling future-discard confirmation leaves no speculative history', async () => {
+    createMode = 'cancel';
+    expect(await useRunStore.getState().createRun('t1', request('draft'), 'p1')).toBe(false);
+    expect(useRunStore.getState().sessions.t1).toBeUndefined();
+    expect(connections).toHaveLength(0);
+  });
 
   test('optimistically inserts a user turn before create resolves', async () => {
     createMode = 'pending';

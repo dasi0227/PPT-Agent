@@ -41,9 +41,12 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       const threads = await threadsApi.list(projectId);
       set((state) => {
         const nextThreads = { ...state.threadsByProjectId, [projectId]: threads };
-        const alreadyOpen = state.openThreadIdsByProjectId[projectId];
+        const valid = new Set(threads.map((thread) => thread.id));
+        const alreadyOpen = state.openThreadIdsByProjectId[projectId]?.filter((id) => valid.has(id));
         const nextOpen = { ...state.openThreadIdsByProjectId };
         const nextActive = { ...state.activeThreadIdByProjectId };
+        nextOpen[projectId] = alreadyOpen ?? [];
+        if (!nextActive[projectId] || !valid.has(nextActive[projectId]!)) nextActive[projectId] = threads[0]?.id ?? null;
         if ((!alreadyOpen || alreadyOpen.length === 0) && threads.length > 0) {
           nextOpen[projectId] = threads.map((thread) => thread.id);
           if (!nextActive[projectId]) nextActive[projectId] = threads[0].id;

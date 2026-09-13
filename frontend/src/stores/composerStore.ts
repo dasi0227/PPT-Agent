@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DOMSelection, RunMode, ScopeObject, ScopeSelectionKind } from '../api/types';
+import type { CreateRunRequest, DOMSelection, RunMode, ScopeObject, ScopeSelectionKind } from '../api/types';
 
 const RECENT_MODEL_KEY = 'ppt-agent-recent-model-profile-v1';
 export const MAX_SELECTED_SKILLS = 3;
@@ -20,7 +20,8 @@ function initialModelProfile(): string | null {
   return localStorage.getItem(RECENT_MODEL_KEY);
 }
 
-interface ComposerState {
+export interface ComposerState {
+  restoredInputs: Record<string, Partial<CreateRunRequest>>;
   scopeObject: ScopeObject;
   scopeSelection: ScopeSelectionKind;
   lastNonGlobalSelection: ScopeSelectionKind;
@@ -57,11 +58,15 @@ interface ComposerState {
   resetForProject: () => void;
 }
 
+function clearRestoredScopes(state: ComposerState) {
+  return Object.fromEntries(Object.entries(state.restoredInputs).map(([id, input]) => [id, { ...input, scope: undefined }]));
+}
 const toggleId = (ids: string[], id: string) => (
   ids.includes(id) ? ids.filter((candidate) => candidate !== id) : [...ids, id]
 );
 
 export const useComposerStore = create<ComposerState>((set) => ({
+  restoredInputs: {},
   scopeObject: 'presentation',
   scopeSelection: 'current_page',
   lastNonGlobalSelection: 'current_page',
@@ -79,20 +84,21 @@ export const useComposerStore = create<ComposerState>((set) => ({
   setScopeObject: (scopeObject) => set((state) => {
     if (scopeObject === 'global') {
       return state.scopeObject === 'global'
-        ? { userTouchedTarget: true }
-        : { scopeObject, scopeSelection: 'all_pages', lastNonGlobalSelection: state.scopeSelection, userTouchedTarget: true };
+        ? { userTouchedTarget: true, restoredInputs: clearRestoredScopes(state) }
+        : { restoredInputs: clearRestoredScopes(state), scopeObject, scopeSelection: 'all_pages', lastNonGlobalSelection: state.scopeSelection, userTouchedTarget: true };
     }
     return {
+      restoredInputs: clearRestoredScopes(state),
       scopeObject,
       ...(state.scopeObject === 'global' ? { scopeSelection: state.lastNonGlobalSelection } : {}),
       userTouchedTarget: true,
     };
   }),
   setScopeSelection: (scopeSelection) => set((state) => (
-    state.scopeObject === 'global' ? state : { scopeSelection, lastNonGlobalSelection: scopeSelection, userTouchedTarget: true }
+    state.scopeObject === 'global' ? state : { restoredInputs: clearRestoredScopes(state), scopeSelection, lastNonGlobalSelection: scopeSelection, userTouchedTarget: true }
   )),
-  toggleCustomSlide: (slideId) => set((state) => ({ customSlideIds: toggleId(state.customSlideIds, slideId), userTouchedTarget: true })),
-  toggleCustomSection: (sectionId) => set((state) => ({ customSectionIds: toggleId(state.customSectionIds, sectionId), userTouchedTarget: true })),
+  toggleCustomSlide: (slideId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSlideIds: toggleId(state.customSlideIds, slideId), userTouchedTarget: true })),
+  toggleCustomSection: (sectionId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSectionIds: toggleId(state.customSectionIds, sectionId), userTouchedTarget: true })),
   setIntent: (mode) => set({ mode }),
   setModelProfileName: (name) => {
     if (typeof localStorage !== 'undefined') localStorage.setItem(RECENT_MODEL_KEY, name);
@@ -108,6 +114,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   }),
   clearThreadDraft: (threadId) => set((state) => {
 	const threadDrafts = { ...state.threadDrafts };
+ const restoredInputs = { ...state.restoredInputs }; delete restoredInputs[threadId];
 	const threadReferences = { ...state.threadReferences };
 	const nextMarkerByThread = { ...state.nextMarkerByThread };
 	const editingSelectionIdByThread = { ...state.editingSelectionIdByThread };
@@ -115,7 +122,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
 	delete threadReferences[threadId];
 	delete nextMarkerByThread[threadId];
 	delete editingSelectionIdByThread[threadId];
-	return { threadDrafts, threadReferences, nextMarkerByThread, editingSelectionIdByThread };
+	return { restoredInputs, threadDrafts, threadReferences, nextMarkerByThread, editingSelectionIdByThread };
   }),
 	addThreadAttachment: (threadId, attachment) => set((state) => {
 		const existing = state.threadReferences[threadId] ?? [];
@@ -157,6 +164,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     return { selectedSkillIds: [...state.selectedSkillIds, id] };
   }),
   reconcileSkills: (validIds) => set((state) => {
+    if (Object.keys(state.restoredInputs).length > 0) return state;
     const valid = new Set(validIds);
     const selectedSkillIds = state.selectedSkillIds.filter((id) => valid.has(id)).slice(0, MAX_SELECTED_SKILLS);
     return selectedSkillIds.length === state.selectedSkillIds.length && selectedSkillIds.every((id, index) => id === state.selectedSkillIds[index])
@@ -178,7 +186,35 @@ export const useComposerStore = create<ComposerState>((set) => ({
     return state.scopeObject === scopeObject && state.scopeSelection === scopeSelection ? state : { scopeObject, scopeSelection, lastNonGlobalSelection: scopeSelection };
   }),
   resetForProject: () => set({
+    restoredInputs: {},
     scopeObject: 'presentation', scopeSelection: 'current_page', lastNonGlobalSelection: 'current_page', customSlideIds: [], customSectionIds: [],
     mode: 'execute', polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {}, userTouchedTarget: false,
   }),
 }));
+
+// Pure composer edits persist per project without entering model history or
+// invalidating the server's restore point.
+let draftProject: string | null = null;
+const draftKey = (id: string) => `ppt-agent-composer-project-${id}`;
+export function composerScene(): Partial<ComposerState> {
+  const s = useComposerStore.getState();
+  return {
+    scopeObject:s.scopeObject, scopeSelection:s.scopeSelection, lastNonGlobalSelection:s.lastNonGlobalSelection,
+    customSlideIds:s.customSlideIds, customSectionIds:s.customSectionIds, mode:s.mode,
+    modelProfileName:s.modelProfileName, selectedSkillIds:s.selectedSkillIds,
+    threadDrafts:s.threadDrafts, threadReferences:s.threadReferences, nextMarkerByThread:s.nextMarkerByThread,
+    editingSelectionIdByThread:s.editingSelectionIdByThread, userTouchedTarget:s.userTouchedTarget, restoredInputs:s.restoredInputs,
+  };
+}
+export function loadProjectComposer(projectId: string | null) {
+  if (draftProject === projectId) return;
+  const saved = projectId ? localStorage.getItem(draftKey(projectId)) : null;
+  draftProject = null;
+  useComposerStore.getState().resetForProject();
+  if (saved) { try { useComposerStore.setState(JSON.parse(saved) as Partial<ComposerState>); } catch { /* An invalid local draft is ignored. */ } }
+  draftProject = projectId;
+}
+export function saveProjectComposer(projectId: string) {
+  localStorage.setItem(draftKey(projectId), JSON.stringify(composerScene()));
+}
+useComposerStore.subscribe(() => { if (draftProject) saveProjectComposer(draftProject); });

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { APIError } from '../api/client';
+import { APIError, currentHistoryEpoch, RequestCanceledError } from '../api/client';
 import { runsApi } from '../api/runs';
 import { subscribeRunEvents } from '../api/sse';
 import { threadsApi } from '../api/threads';
@@ -449,6 +449,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     getSession: (threadId) => get().sessions[threadId] ?? IDLE_SESSION,
 
     createRun: async (threadId, payload, projectId) => {
+      const previousSession = get().sessions[threadId];
+      const historyEpoch = currentHistoryEpoch();
       stopCancelReconciliation(threadId);
       payload = { ...payload, client_request_id: payload.client_request_id ?? newClientIdentity('req') };
       get().sessions[threadId]?.eventSourceClose?.();
@@ -518,6 +520,17 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         get().subscribeRun(threadId, run.id, undefined, run.project_id);
         return true;
       } catch (error) {
+        if (error instanceof RequestCanceledError) {
+          if (historyEpoch === currentHistoryEpoch()) {
+            set((state) => {
+              const sessions = { ...state.sessions };
+              if (previousSession) sessions[threadId] = previousSession;
+              else delete sessions[threadId];
+              return { sessions };
+            });
+          }
+          return false;
+        }
         const detail = errorMessage(error);
         updateSession(threadId, (prev) => ({
           status: 'error',

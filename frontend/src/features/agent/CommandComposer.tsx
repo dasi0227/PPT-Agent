@@ -1,3 +1,5 @@
+import { loadProjectComposer } from '../../stores/composerStore';
+import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Code2, FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
@@ -294,7 +296,7 @@ export const CommandComposer: React.FC = () => {
     previousProjectId.current = activeProjectId;
     setText('');
     editorRef.current?.setPlainText('');
-    resetForProject();
+    loadProjectComposer(activeProjectId);
   }, [activeProjectId, resetForProject]);
   useEffect(() => {
     const draft = activeThreadDraft ?? '';
@@ -305,8 +307,9 @@ export const CommandComposer: React.FC = () => {
     applyContextDefault(slides.length > 0);
   }, [activeProjectId, applyContextDefault, slides.length]);
   useEffect(() => {
-    composer.reconcileScopeIds(scopePages.map((page) => page.id), scopeSections.map((section) => section.id));
-  }, [composer.reconcileScopeIds, scopePages, scopeSections]);
+    if (activeThreadId && useComposerStore.getState().restoredInputs[activeThreadId]) return;
+    useComposerStore.getState().reconcileScopeIds(scopePages.map((page) => page.id), scopeSections.map((section) => section.id));
+  }, [activeThreadId, scopePages, scopeSections]);
   useEffect(() => {
     let current = true;
     setProfilesLoading(true);
@@ -315,6 +318,7 @@ export const CommandComposer: React.FC = () => {
       .then((response) => {
         if (!current) return;
         setProfiles(response.profiles);
+        if (Object.keys(useComposerStore.getState().restoredInputs).length > 0) return;
         const remembered = useComposerStore.getState().modelProfileName;
         const selected = response.profiles.some((profile) => profile.name === remembered)
           ? remembered
@@ -481,12 +485,15 @@ export const CommandComposer: React.FC = () => {
       setSubmitError(profilesError || '模型列表仍在加载，请稍候');
       return;
     }
-    const scope = composerScopeInput(composer, currentSlide?.id);
+    const restored = composer.restoredInputs[threadId];
+    const scope = restored?.scope ?? composerScopeInput(composer, currentSlide?.id);
     if (!scope) {
       setSubmitError(composer.scopeSelection === 'custom_pages' ? '请至少选择一页' : '请至少选择一章');
       return;
     }
     const request: CreateRunRequest = {
+      ...restored,
+      ...(restored ? { restored_checkpoint: true } : {}),
       client_request_id: newClientIdentity('req'),
       model: composer.modelProfileName,
       scope,
@@ -496,8 +503,8 @@ export const CommandComposer: React.FC = () => {
 		...(hasDOMSelections ? { dom_selections: apiDOMSelections } : {}),
 		...(activeReferences.length > 0 ? { reference_order: activeReferences.map((item) => ({ kind: item.kind, ref_id: item.kind === 'image' ? item.attachment.attachmentId : item.selection.selection_id })) } : {}),
       ...(composer.selectedSkillIds.length > 0 ? { skill_ids: composer.selectedSkillIds } : {}),
-      ...(componentNames.length > 0 ? { component_names: componentNames } : {}),
-      ...(mentionedSlideIds.length > 0 ? { mentioned_slide_ids: mentionedSlideIds } : {}),
+      ...((componentNames.length > 0 || restored?.component_names?.length) ? { component_names: [...new Set([...(restored?.component_names ?? []), ...componentNames])] } : {}),
+      ...((mentionedSlideIds.length > 0 || restored?.mentioned_slide_ids?.length) ? { mentioned_slide_ids: [...new Set([...(restored?.mentioned_slide_ids ?? []), ...mentionedSlideIds])] } : {}),
     };
     const selectedProfile = profiles.find((profile) => profile.name === request.model);
     const requiresVision = hasAttachments || (request.mode === 'execute' &&
@@ -557,7 +564,8 @@ export const CommandComposer: React.FC = () => {
     polishAbortRef.current = controller;
     setSubmitError('');
     setPolishing(true);
-    const scope = composerScopeInput(composer, currentSlide?.id);
+    const restored = activeThreadId ? composer.restoredInputs[activeThreadId] : undefined;
+    const scope = restored?.scope ?? composerScopeInput(composer, currentSlide?.id);
     if (!scope) {
       setSubmitError(composer.scopeSelection === 'custom_pages' ? '请至少选择一页' : '请至少选择一章');
       return;
@@ -635,6 +643,8 @@ export const CommandComposer: React.FC = () => {
 
   return (
     <div className="bg-panel px-3 pb-3 pt-1">
+      <HistoryBanner />
+      <RestoredInputResources />
       {submitError && (
         <div role="alert" className="mb-2 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">
           {submitError}

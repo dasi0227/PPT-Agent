@@ -1,3 +1,4 @@
+import { currentHistoryEpoch } from '../../api/client';
 import { useEffect } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
@@ -26,11 +27,14 @@ export function useActiveSession(): RunSession {
     // 空态才 replay：运行时 in-memory 优先，防止刷新覆盖已有 SSE 增量。
     const current = useRunStore.getState().sessions[threadId];
     if (current && (current.activeRunId || current.status !== 'idle' || current.timelineItems.length > 0)) return;
+    const epoch = currentHistoryEpoch();
+    let canceled = false;
     Promise.all([
       threadsApi.history(threadId).catch(() => []),
       runsApi.activeForThread(threadId).catch(() => null),
     ])
       .then(([entries, activeRun]) => {
+        if (canceled || epoch !== currentHistoryEpoch()) return;
         const hydrated = hydrateRunFromHistory(entries as unknown as HistoryEntry[]);
         const runStore = useRunStore.getState();
         if (entries.length > 0) {
@@ -55,6 +59,7 @@ export function useActiveSession(): RunSession {
       .catch(() => {
         // 历史记录失败不覆盖当前内存会话；用户仍可继续发送新指令。
       });
+    return () => { canceled = true; };
   }, [activeProjectId, threadId]);
 
   if (!threadId) return IDLE_SESSION;
