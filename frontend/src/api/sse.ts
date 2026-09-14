@@ -55,7 +55,7 @@ const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
 function validBase(data: Record<string, unknown>): boolean {
-  return data.schema_version === 3
+  return data.schema_version === 4
     && hasString(data, 'run_id')
     && hasString(data, 'occurred_at')
     && String(data.occurred_at).endsWith('Z')
@@ -122,10 +122,15 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
       return ['chat', 'grill', 'plan', 'execute'].includes(String(data.previous_mode))
         && ['chat', 'grill', 'plan', 'execute'].includes(String(data.mode));
     case 'message.reasoning':
+      return hasString(data, 'message_id')
+        && hasSafeString(data, 'text');
     case 'message.final':
       return hasString(data, 'message_id')
         && hasSafeString(data, 'text')
-        && (eventName !== 'message.final' || validTargets(data.affected_targets));
+        && Array.isArray(data.affected_targets)
+        && validTargets(data.affected_targets)
+        && isPositiveInteger(data.project_history_revision)
+        && validSuggestedNextInputs(data.suggested_next_inputs);
     case 'message.milestone':
       return hasString(data, 'message_id')
         && hasSafeString(data, 'text')
@@ -167,6 +172,16 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
     case 'context.compacted':
       return validContextCompaction(data.compaction);
   }
+}
+
+function validSuggestedNextInputs(value: unknown): boolean {
+  return Array.isArray(value)
+    && value.length <= 3
+    && value.every((item) => typeof item === 'string'
+      && item.length > 0
+      && Array.from(item).length <= 80
+      && !/[\r\n\t]/u.test(item))
+    && new Set(value.map((item) => String(item).toLocaleLowerCase())).size === value.length;
 }
 
 function validContextBuckets(value: unknown): boolean {

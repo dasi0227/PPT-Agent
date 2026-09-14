@@ -11,6 +11,7 @@ import type {
 } from '../../api/types';
 import { parsePublicEvent } from '../../api/sse';
 import { reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
+import { reduceNextInputSuggestions, type NextInputSuggestionsState } from './nextInputSuggestions';
 
 export interface HistoryEntry {
   seq: number;
@@ -47,6 +48,7 @@ export interface HistorySessionState {
   scope?: RunScope;
   mode?: RunMode;
   pendingQuestion: { id: string; prompt: string } | null;
+  nextInputSuggestions: NextInputSuggestionsState | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -139,6 +141,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     activeRunId: null,
     status: 'idle',
     pendingQuestion: null,
+    nextInputSuggestions: null,
   };
   if (!Array.isArray(entries)) return { items: [], plan: null, session: emptySession };
   // Thread History is append-ordered. Public seq is only monotonic within one
@@ -160,6 +163,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         scope,
         mode,
         pendingQuestion: null,
+        nextInputSuggestions: session.nextInputSuggestions,
       };
       items.push({
         id: `${entry.run_id}:${entry.seq}`,
@@ -264,9 +268,12 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     if (!event) continue;
     items = reduceSSEEvent(items, event);
     plan = reducePlan(plan, event);
-    if (entry.run_id !== session.activeRunId) {
-      session = { activeRunId: entry.run_id, status: 'running', pendingQuestion: null };
+    if (session.activeRunId === null || event.event === 'run.started') {
+      session = { activeRunId: entry.run_id, status: 'running', pendingQuestion: null, nextInputSuggestions: session.nextInputSuggestions };
     }
+    const nextInputSuggestions = reduceNextInputSuggestions(session.nextInputSuggestions, event, session.activeRunId);
+    if (entry.run_id !== session.activeRunId) continue;
+    session = { ...session, nextInputSuggestions };
     if (event.event === 'question.asked') {
       session = {
         ...session,

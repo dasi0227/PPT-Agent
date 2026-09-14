@@ -10,6 +10,7 @@ import { useGitCommitStore } from './gitCommitStore';
 
 interface HistoryUI {
   states: Record<string, HistoryState>;
+  stateErrorByProjectId: Record<string, boolean>;
   dialog: { projectId: string; runId?: string; preview: HistoryPreview; operation: string } | null;
   busy: boolean;
   error: string | null;
@@ -17,7 +18,7 @@ interface HistoryUI {
   execute: () => Promise<void>;
 }
 export const useProjectHistoryStore = create<HistoryUI>((set, get) => ({
-  states: {}, dialog: null, busy: false, error: null,
+  states: {}, stateErrorByProjectId: {}, dialog: null, busy: false, error: null,
   preview: async (projectId, runId) => {
     if (get().busy) return;
     set({ busy: true, error: null });

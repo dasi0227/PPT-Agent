@@ -19,6 +19,7 @@ import {
   SSEEvent,
 } from '../api/types';
 import { TimelineItem, reducePlan, reduceSSEEvent } from '../features/agent/eventReducer';
+import { reduceNextInputSuggestions, type NextInputSuggestionsState } from '../features/agent/nextInputSuggestions';
 import {
   hydrateRunFromHistory,
   type HistoryEntry,
@@ -57,6 +58,7 @@ export interface RunSession {
   lastEventId?: string;
   processedEventIds?: string[];
   originalRequest?: CreateRunRequest;
+  nextInputSuggestions: NextInputSuggestionsState | null;
 }
 
 export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
@@ -72,6 +74,7 @@ export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   eventSourceClose: null,
   plan: null,
   processedEventIds: [],
+  nextInputSuggestions: null,
 });
 
 interface PersistedActiveRun {
@@ -204,18 +207,21 @@ function ensureTerminalTimelineItem(
     return reduceSSEEvent(items, {
       event: 'message.final',
       data: {
-        schema_version: 3,
+        schema_version: 4,
         run_id: runId,
         occurred_at: occurredAt,
         message_id: `${runId}:reconciled-final`,
         text: '任务已完成。',
+        affected_targets: [],
+        suggested_next_inputs: [],
+        project_history_revision: 1,
       },
     });
   }
   return reduceSSEEvent(items, {
     event: status === 'canceled' ? 'run.canceled' : 'run.error',
     data: {
-      schema_version: 3,
+      schema_version: 4,
       run_id: runId,
       occurred_at: occurredAt,
       duration_ms: 0,
@@ -314,7 +320,7 @@ function endPausedRun(items: TimelineItem[], runId: string): TimelineItem[] {
   return reduceSSEEvent(items, {
     event: 'run.canceled',
     data: {
-      schema_version: 3,
+      schema_version: 4,
       run_id: runId,
       occurred_at: new Date().toISOString(),
       duration_ms: 0,
@@ -387,6 +393,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           ),
           plan: hydrated.session.activeRunId === runId ? hydrated.plan : prev.plan,
           lastEventId: hydrated.session.activeRunId === runId ? hydrated.lastEventId : prev.lastEventId,
+          nextInputSuggestions: hydrated.session.activeRunId === runId
+            ? hydrated.session.nextInputSuggestions
+            : prev.nextInputSuggestions,
         }));
       })
       .catch(() => {
@@ -584,6 +593,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             let pendingQuestion = prev.pendingQuestion;
             let progress = prev.progress;
             const nextPlan = reducePlan(prev.plan, event);
+            const nextInputSuggestions = reduceNextInputSuggestions(prev.nextInputSuggestions, event, prev.activeRunId);
 
             if (event.event === 'question.asked') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
@@ -677,6 +687,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
                 ? [...(prev.processedEventIds ?? []), event.id].slice(-500)
                 : prev.processedEventIds,
               ...(event.event === 'scope.updated' ? { scope: event.data.scope } : {}),
+              nextInputSuggestions,
             };
           });
 
@@ -750,11 +761,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             : terminalStatus(run.status);
           let hydratedItems: TimelineItem[] = [];
           let hydratedPlan: PlanState | null = null;
+          let hydratedSuggestions: NextInputSuggestionsState | null = null;
           try {
             const history = await threadsApi.history(record.threadId);
             const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
             hydratedItems = hydrated.items;
             hydratedPlan = hydrated.plan;
+            hydratedSuggestions = hydrated.session.nextInputSuggestions;
           } catch {
             // SSE replay still recovers the active suffix when history is temporarily unavailable.
           }
@@ -772,6 +785,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             lastEventId: record.lastEventId,
             timelineItems: prev.timelineItems.length > 0 ? prev.timelineItems : hydratedItems,
             plan: prev.plan ?? hydratedPlan,
+            nextInputSuggestions: prev.timelineItems.length > 0 ? prev.nextInputSuggestions : hydratedSuggestions,
             pendingQuestion: status === 'waiting' && pending?.type === 'question'
               ? { id: pending.questionId, prompt: pending.questions[0].title }
               : null,
@@ -851,7 +865,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           timelineItems: reduceSSEEvent(prev.timelineItems, {
             event: 'run.resumed',
             data: {
-              schema_version: 3,
+              schema_version: 4,
               run_id: runId,
               occurred_at: new Date().toISOString(),
             },
@@ -979,6 +993,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             plan: hydrated.plan,
             status: hydrated.session.status,
             pendingQuestion: hydrated.session.pendingQuestion,
+            nextInputSuggestions: hydrated.session.nextInputSuggestions,
             lastEventId: hydrated.lastEventId ?? prev.lastEventId,
           }));
         } catch {
@@ -1190,6 +1205,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         scope: session?.scope ?? IDLE_SESSION.scope,
         mode: session?.mode ?? IDLE_SESSION.mode,
         pendingQuestion: session?.pendingQuestion ?? null,
+        nextInputSuggestions: session?.nextInputSuggestions ?? null,
         lastEventId,
         originalRequest: requestFromTimeline(items, session?.activeRunId),
       });

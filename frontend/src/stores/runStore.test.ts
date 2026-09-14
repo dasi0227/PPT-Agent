@@ -113,7 +113,7 @@ const request = (instruction: string) => ({
   mode: 'execute' as const ,
   instruction,
 });
-const base = { schema_version: 3, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 4, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
 const terminal = (data: Record<string, unknown> = {}) => ({
   ...base,
   duration_ms: 5,
@@ -523,7 +523,7 @@ describe('runStore public event sessions', () => {
   test('completed run closes its stream and refreshes the committed project once', async () => {
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
     const connection = connections[0];
-    connection.onMessage({ id: '1', event: 'message.final', data: { ...base, message_id: 'm1', text: '已完成' } });
+    connection.onMessage({ id: '1', event: 'message.final', data: { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: [], project_history_revision: 1 } });
     connection.onMessage({
       id: '2', event: 'run.completed',
       data: terminal({
@@ -691,7 +691,7 @@ describe('runStore public event sessions', () => {
           activeRunId: null, status: 'idle',
           scope: request('').scope, mode: request('').mode,
           timelineItems: [seed], pendingQuestion: null, progress: null,
-          eventSourceClose: null, plan: null,
+          eventSourceClose: null, plan: null, nextInputSuggestions: null,
         },
       },
     });

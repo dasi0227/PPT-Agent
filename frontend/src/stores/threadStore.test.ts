@@ -99,7 +99,7 @@ describe('threadStore v6', () => {
       activeThreadIdByProjectId: { p1: 't2' },
     });
     useRunStore.setState({
-      sessions: { t2: { activeRunId: null, status: 'idle', scope: { object: 'presentation', selection: { kind: 'current_page' } }, mode: 'execute', timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null } },
+      sessions: { t2: { activeRunId: null, status: 'idle', scope: { object: 'presentation', selection: { kind: 'current_page' } }, mode: 'execute', timelineItems: [], pendingQuestion: null, progress: null, eventSourceClose: null, plan: null, nextInputSuggestions: null } },
     });
 
     await useThreadStore.getState().deleteThread('p1', 't2');
@@ -136,6 +136,7 @@ describe('threadStore v6', () => {
           progress: null,
           eventSourceClose: close,
           plan: null,
+          nextInputSuggestions: null,
         },
       },
     });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
 
-const base = { schema_version: 3, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 4, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const entry = (seq: number, type: string, data: Record<string, unknown>, runId = 'r1'): HistoryEntry => ({
   seq, ts: 1_754_130_600, run_id: runId, turn: type === 'user_turn' ? 'user' : 'agent', type, data,
 });
@@ -74,7 +74,7 @@ describe('history hydrator', () => {
       entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'mutate_ppt', status: 'completed', display: { label: '已生成页面' } }),
       entry(5, 'question.asked', { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', options: [{ id: 'tech', label: '科技' }], allow_custom: false }] }),
       entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] }, display_text: '科技' }),
-      entry(7, 'message.final', { ...base, message_id: 'm1', text: '已完成' }),
+      entry(7, 'message.final', { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: ['优化第 1 页'], project_history_revision: 6 }),
       entry(8, 'run.completed', terminal()),
     ]);
     expect(hydrated.plan).toMatchObject({ id: 'p1', revision: 1 });
@@ -86,6 +86,9 @@ describe('history hydrator', () => {
     });
     expect(hydrated.items.find((item) => item.type === 'question')).toMatchObject({ displayText: '科技' });
     expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'done', pendingQuestion: null });
+    expect(hydrated.session.nextInputSuggestions).toEqual({
+      runId: 'r1', messageId: 'm1', items: ['优化第 1 页'], projectHistoryRevision: 6, status: 'eligible',
+    });
   });
 
   it('never restores progress or internal trace records', () => {
@@ -255,7 +258,7 @@ describe('history hydrator', () => {
         scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
         mode: 'execute',
       }, 'old'),
-      entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成' }, 'old'),
+      entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成', affected_targets: [], suggested_next_inputs: [], project_history_revision: 1 }, 'old'),
       entry(3, 'run.completed', terminal('old'), 'old'),
       entry(1, 'user_turn', {
         text: '第二轮',
@@ -279,6 +282,39 @@ describe('history hydrator', () => {
     });
     expect(hydrated.lastEventId).toBe('2');
     expect(hydrated.plan).toBeNull();
+  });
+
+  it('does not let late events from a consumed run restore stale suggestions', () => {
+    const hydrated = hydrateRunFromHistory([
+      entry(1, 'user_turn', {
+        text: '第一轮',
+        scope: { object: 'presentation', slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
+        mode: 'execute',
+      }, 'old'),
+      entry(2, 'message.final', {
+        ...base, run_id: 'old', message_id: 'old-final', text: '完成', affected_targets: [],
+        suggested_next_inputs: ['旧候选'], project_history_revision: 1,
+      }, 'old'),
+      entry(3, 'run.completed', terminal('old'), 'old'),
+      entry(1, 'user_turn', {
+        text: '第二轮',
+        scope: { object: 'presentation', slide_ids: ['sli_2'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 },
+        mode: 'execute',
+      }, 'new'),
+      entry(2, 'run.started', {
+        ...base, run_id: 'new',
+        scope: { object: 'presentation', slide_ids: ['sli_2'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 },
+        mode: 'execute', user_input: '第二轮',
+      }, 'new'),
+      entry(4, 'message.final', {
+        ...base, run_id: 'old', message_id: 'late-old-final', text: '迟到结果', affected_targets: [],
+        suggested_next_inputs: ['不得恢复'], project_history_revision: 1,
+      }, 'old'),
+      entry(5, 'run.completed', terminal('old'), 'old'),
+    ]);
+
+    expect(hydrated.session.activeRunId).toBe('new');
+    expect(hydrated.session.nextInputSuggestions).toBeNull();
   });
 
   it('restores Git commit terminal items without changing Run session state', () => {

@@ -87,6 +87,7 @@ interface PromptComposerEditorProps {
   placeholder: string;
   disabled: boolean;
   readOnly: boolean;
+	suggestionsVisible?: boolean;
   pages?: PageMentionCandidate[];
   slashCommands?: ResolvedSlashCommand[];
   modelOptions?: SlashMenuOption[];
@@ -94,6 +95,8 @@ interface PromptComposerEditorProps {
   onSlashCommand?: (command: SlashCommandId) => void;
   onModelOption?: (id: string) => void;
   onTargetOption?: (id: string) => void;
+	onFocusChange?: (focused: boolean) => void;
+	onMenuOpenChange?: (open: boolean) => void;
 	// File items share the paste gesture with plain text, but never enter the
 	// contenteditable DOM. The parent uploads and renders them separately.
 	onPasteFiles?: (files: File[]) => void;
@@ -223,6 +226,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     placeholder,
     disabled,
     readOnly,
+		suggestionsVisible = false,
     pages = [],
     slashCommands = [],
     modelOptions = [],
@@ -230,6 +234,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     onSlashCommand,
     onModelOption,
     onTargetOption,
+		onFocusChange,
+		onMenuOpenChange,
 		onPasteFiles,
   }, forwardedRef) {
     const editorRef = useRef<HTMLDivElement>(null);
@@ -242,6 +248,10 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const [summaryCol, setSummaryCol] = useState(0);
     const [summaryRow, setSummaryRow] = useState(0);
     const [commandLevel, setCommandLevel] = useState<CommandMenuLevel>('root');
+		useEffect(() => {
+			onMenuOpenChange?.(Boolean(trigger));
+			return () => onMenuOpenChange?.(false);
+		}, [onMenuOpenChange, trigger]);
     const prompts = usePromptStore((state) => state.prompts);
     const version = usePromptStore((state) => state.version);
     const loadPrompts = usePromptStore((state) => state.load);
@@ -1097,11 +1107,15 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
           data-empty={String(value.length === 0)}
           spellCheck={false}
           onFocus={() => {
+				onFocusChange?.(true);
             void loadPrompts().catch(() => undefined);
             void loadComponents().catch(() => undefined);
             updateTrigger();
           }}
-          onBlur={() => setTrigger(null)}
+			onBlur={() => {
+				setTrigger(null);
+				onFocusChange?.(false);
+			}}
           onInput={handleInput}
           onKeyDown={handleEditorKeyDown}
           onBeforeInput={(event) => {
@@ -1122,7 +1136,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             syncValue();
             requestAnimationFrame(updateTrigger);
           }}
-          className="composer-prompt-editor max-h-32 min-h-[60px] w-full overflow-y-auto bg-transparent py-3 pl-3 pr-12 text-sm leading-5 text-text-900 focus:outline-none focus-visible:outline-none disabled:opacity-50"
+          className={`composer-prompt-editor max-h-32 w-full overflow-y-auto bg-transparent pl-3 pr-12 text-sm leading-5 text-text-900 focus:outline-none focus-visible:outline-none disabled:opacity-50 ${suggestionsVisible ? 'min-h-6 py-1' : 'min-h-[60px] py-3'}`}
         />
       </>
     );

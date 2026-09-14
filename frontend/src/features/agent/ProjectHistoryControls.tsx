@@ -49,9 +49,16 @@ export function ProjectHistoryDialogs() {
         applyHistoryScene(projectId, state);
         if (previous?.id === projectId && previous.scene !== state.scene_revision) { reloadHistory(projectId, state); return; }
         seen.current = { id: projectId, scene: state.scene_revision };
-        useProjectHistoryStore.setState((s) => ({ states: { ...s.states, [projectId]: state } }));
+        useProjectHistoryStore.setState((s) => ({
+          states: { ...s.states, [projectId]: state },
+          stateErrorByProjectId: { ...s.stateErrorByProjectId, [projectId]: false },
+        }));
         selectHistoryThread(projectId);
-      } catch { /* Explicit actions surface errors; background polling stays quiet. */ }
+      } catch {
+        useProjectHistoryStore.setState((s) => ({
+          stateErrorByProjectId: { ...s.stateErrorByProjectId, [projectId]: true },
+        }));
+      }
       finally { loading = false; }
     };
     void refresh();

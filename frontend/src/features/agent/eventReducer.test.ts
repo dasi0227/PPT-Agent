@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SSEEvent } from '../../api/types';
 import { reducePlan, reduceSSEEvent } from './eventReducer';
 
-const base = { schema_version: 3 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 4 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const event = (name: SSEEvent['event'], data: Record<string, unknown>, id = '1') =>
   ({ id, event: name, data: { ...base, ...data } } as SSEEvent);
 const terminal = (data: Record<string, unknown> = {}) => ({
@@ -161,6 +161,7 @@ describe('public event reducer', () => {
   it('shows one final message and no completed terminal card', () => {
     let state = reduceSSEEvent([], event('message.final', {
       message_id: 'm1', text: '已完成', affected_targets: [{ type: 'slide', slide_id: 's1', part: 'html' }],
+      suggested_next_inputs: [], project_history_revision: 1,
     }));
     state = reduceSSEEvent(state, event('run.completed', terminal(), '2'));
     expect(state.map((item) => item.type)).toEqual(['final']);

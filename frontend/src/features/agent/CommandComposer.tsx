@@ -1,6 +1,6 @@
 import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Code2, FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
 import { llmApi } from '../../api/llm';
@@ -30,6 +30,10 @@ import {
   type SlashMenuOption,
 } from './PromptComposerEditor';
 import { resolveSlashCommands, type SlashCommandId } from './promptMatching';
+import { NextInputSuggestionsPanel } from './NextInputSuggestionsPanel';
+import { projectHistoryApi } from '../../api/projectHistory';
+import { useProjectHistoryStore } from '../../stores/projectHistoryStore';
+import { nextInputShortcutIndex } from './nextInputSuggestions';
 
 function composerScopeInput(
   composer: ReturnType<typeof useComposerStore.getState>,
@@ -189,16 +193,21 @@ export const CommandComposer: React.FC = () => {
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [skillsError, setSkillsError] = useState('');
   const [controlsDensity, setControlsDensity] = useState<ComposerControlsDensity>('full');
+  const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [verifiedSuggestionKey, setVerifiedSuggestionKey] = useState<string | null>(null);
   const controlBarRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<PromptComposerEditorHandle>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
   const polishAbortRef = useRef<AbortController | null>(null);
   const polishRequestRef = useRef(0);
-  const { activeProjectId, contentByProjectId } = useProjectStore();
+  const { activeProjectId, contentByProjectId, contentLoadingByProjectId, contentErrorByProjectId } = useProjectStore();
   const { currentSlideId } = useDeckStore();
   const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
-  const { status: runStatus, activeRunId, plan } = useActiveSession();
+  const activeSession = useActiveSession();
+  const { status: runStatus, activeRunId, plan, nextInputSuggestions } = activeSession;
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
@@ -228,7 +237,45 @@ export const CommandComposer: React.FC = () => {
 	const hasDOMIntent = activeDOMSelections.some((selection) => selection.comment.trim() !== '');
 	const hasSendableContent = text.trim() !== '' || (hasDOMSelections ? hasDOMIntent : hasAttachments);
 	const hasPendingUploads = uploadingCount > 0;
-  const setComposerText = (nextText: string) => {
+	const activeResourceMentions = activeThreadId ? composer.threadResourceMentions[activeThreadId] : undefined;
+	const hasRestoredInput = Boolean(activeThreadId && composer.restoredInputs[activeThreadId]);
+	const draftPristine = text.length === 0
+		&& activeReferences.length === 0
+		&& !hasPendingUploads
+		&& !hasRestoredInput
+		&& (activeResourceMentions?.component_names?.length ?? 0) === 0
+		&& (activeResourceMentions?.mentioned_slide_ids?.length ?? 0) === 0;
+	const suggestionKey = nextInputSuggestions
+		? `${activeProjectId ?? ''}:${activeThreadId ?? ''}:${nextInputSuggestions.runId}:${nextInputSuggestions.messageId}:${nextInputSuggestions.projectHistoryRevision}`
+		: null;
+	const historyState = useProjectHistoryStore((state) => activeProjectId ? state.states[activeProjectId] : undefined);
+	const historyStateFailed = useProjectHistoryStore((state) => activeProjectId ? state.stateErrorByProjectId[activeProjectId] === true : true);
+	const projectContentReady = Boolean(
+		activeProjectId
+		&& contentByProjectId[activeProjectId]
+		&& !contentLoadingByProjectId[activeProjectId]
+		&& !contentErrorByProjectId[activeProjectId],
+	);
+	const suggestionsVisible = Boolean(
+		suggestionKey
+		&& verifiedSuggestionKey === suggestionKey
+		&& nextInputSuggestions?.status === 'eligible'
+		&& nextInputSuggestions.items.length > 0
+		&& nextInputSuggestions.items.length <= 3
+		&& runStatus === 'done'
+		&& activeProjectId
+		&& activeSession.projectId === activeProjectId
+		&& historyState?.revision === nextInputSuggestions.projectHistoryRevision
+		&& !historyStateFailed
+		&& projectContentReady
+		&& draftPristine
+		&& !disabled
+		&& !polishing
+		&& !commitActive
+		&& !briefingActive
+		&& !suggestionsDismissed
+	);
+  const setComposerText = useCallback((nextText: string) => {
     setText(nextText);
     if (activeThreadId) {
       useComposerStore.setState((state) => ({ threadResourceMentions: { ...state.threadResourceMentions, [activeThreadId]: {
@@ -237,7 +284,7 @@ export const CommandComposer: React.FC = () => {
       } } }));
       composer.setThreadDraft(activeThreadId, nextText);
     }
-  };
+  }, [activeThreadId, composer]);
   const showCancelButton = Boolean(activeRunId)
     && (runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling')
 	&& activeReferences.length === 0 && text.trim() === '';
@@ -314,6 +361,38 @@ export const CommandComposer: React.FC = () => {
     }
     loadedDraftThread.current = activeThreadId;
   }, [activeThreadId, activeThreadDraft]);
+	useEffect(() => {
+		setSuggestionsDismissed(false);
+	}, [suggestionKey]);
+	useEffect(() => {
+		setVerifiedSuggestionKey(null);
+		if (!suggestionKey || !activeProjectId || nextInputSuggestions?.status !== 'eligible' || historyStateFailed) return;
+		let canceled = false;
+		Promise.all([
+			projectHistoryApi.state(activeProjectId),
+			useProjectStore.getState().loadProjectContent(activeProjectId),
+		]).then(([state]) => {
+			if (canceled) return;
+			useProjectHistoryStore.setState((current) => ({
+				states: { ...current.states, [activeProjectId]: state },
+				stateErrorByProjectId: { ...current.stateErrorByProjectId, [activeProjectId]: false },
+			}));
+			const project = useProjectStore.getState();
+			if (state.revision === nextInputSuggestions.projectHistoryRevision
+				&& project.contentByProjectId[activeProjectId]
+				&& !project.contentLoadingByProjectId[activeProjectId]
+				&& !project.contentErrorByProjectId[activeProjectId]) {
+				setVerifiedSuggestionKey(suggestionKey);
+			}
+		}).catch(() => {
+			if (canceled) return;
+			setVerifiedSuggestionKey(null);
+			useProjectHistoryStore.setState((current) => ({
+				stateErrorByProjectId: { ...current.stateErrorByProjectId, [activeProjectId]: true },
+			}));
+		});
+		return () => { canceled = true; };
+	}, [activeProjectId, historyStateFailed, nextInputSuggestions, suggestionKey]);
   useEffect(() => {
     applyContextDefault(slides.length > 0);
   }, [activeProjectId, applyContextDefault, slides.length]);
@@ -642,8 +721,48 @@ export const CommandComposer: React.FC = () => {
     composer.setScopeObject(object as 'spec' | 'html' | 'presentation' | 'global');
   };
 
+	const selectSuggestion = useCallback((value: string) => {
+		setComposerText(value);
+		requestAnimationFrame(() => {
+			editorRef.current?.setPlainText(value);
+			editorRef.current?.focusEnd();
+		});
+	}, [setComposerText]);
+
+	useEffect(() => {
+		if (!suggestionsVisible) return;
+		const onKeyDown = (event: globalThis.KeyboardEvent) => {
+			const target = event.target instanceof HTMLElement ? event.target : null;
+			const editable = target?.closest('input, textarea, select, [contenteditable="true"]');
+			const blocked = composerMenuOpen || Boolean(document.querySelector(
+				'[role="dialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"], [role="grid"]',
+			));
+			const index = nextInputShortcutIndex({
+				altKey: event.altKey,
+				metaKey: event.metaKey,
+				ctrlKey: event.ctrlKey,
+				shiftKey: event.shiftKey,
+				isComposing: event.isComposing || isComposing,
+				code: event.code,
+				blocked,
+				targetEditable: Boolean(editable),
+				targetIsComposer: Boolean(target?.closest('.composer-prompt-editor')),
+			});
+			if (index === null || !nextInputSuggestions?.items[index]) return;
+			event.preventDefault();
+			selectSuggestion(nextInputSuggestions.items[index]);
+		};
+		window.addEventListener('keydown', onKeyDown);
+		return () => window.removeEventListener('keydown', onKeyDown);
+	}, [composerMenuOpen, isComposing, nextInputSuggestions, selectSuggestion, suggestionsVisible]);
+
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.nativeEvent.isComposing || isComposing || polishing || commitActive || briefingActive) return;
+		if (event.key === 'Escape' && suggestionsVisible && composerFocused) {
+			event.preventDefault();
+			setSuggestionsDismissed(true);
+			return;
+		}
     if (event.key === 'Enter' && (isMac() ? event.metaKey : event.ctrlKey)) {
       event.preventDefault();
       void submit();
@@ -729,16 +848,25 @@ export const CommandComposer: React.FC = () => {
 						</div>
 					))}
 				</div>
-			)}
+          )}
+		  {suggestionsVisible && nextInputSuggestions && (
+			<NextInputSuggestionsPanel items={nextInputSuggestions.items} onSelect={selectSuggestion} />
+		  )}
           <PromptComposerEditor
             ref={editorRef}
             value={text}
             onChange={setComposerText}
             onKeyDown={handleKeyDown}
             onCompositionChange={setIsComposing}
-            placeholder={composerPlaceholder}
+            placeholder={suggestionsVisible ? '' : composerPlaceholder}
             disabled={disabled}
             readOnly={polishing}
+			suggestionsVisible={suggestionsVisible}
+			onFocusChange={(focused) => {
+				setComposerFocused(focused);
+				if (!focused) setSuggestionsDismissed(false);
+			}}
+			onMenuOpenChange={setComposerMenuOpen}
             pages={steering ? [] : pageCandidates}
             slashCommands={slashCommands}
             modelOptions={modelOptions}

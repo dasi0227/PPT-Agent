@@ -386,7 +386,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         runId,
         messageId: event.data.message_id,
         text: event.data.text,
-        affectedTargets: event.data.affected_targets ?? [],
+        affectedTargets: event.data.affected_targets,
         durationMs: existing?.durationMs,
         timestamp,
       };

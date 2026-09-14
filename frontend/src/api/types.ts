@@ -576,7 +576,7 @@ export interface PlanState {
 }
 
 export interface PublicEventBase {
-  schema_version: 3;
+  schema_version: 4;
   run_id: string;
   occurred_at: string;
 }
@@ -741,7 +741,9 @@ export type SSEEvent =
   | SSEEventBase<'message.final', PublicEventBase & {
       message_id: string;
       text: string;
-      affected_targets?: PublicTarget[];
+      affected_targets: PublicTarget[];
+      suggested_next_inputs: string[];
+      project_history_revision: number;
     }>
   | SSEEventBase<'tool.started', PublicEventBase & {
       call_id: string;
