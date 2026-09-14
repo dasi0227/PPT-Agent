@@ -94,7 +94,7 @@ func TestSpecDeckScopeNeverDisclosesOrExecutesHTMLMutation(t *testing.T) {
 	if err := registry.Register(tool, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
-	scope := model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages)
+	scope := model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages, "sli_aaaaaa")
 	schemas := registry.Disclose(PhaseExecuting, model.ModeExecute, scope)
 	if len(schemas) != 1 {
 		t.Fatalf("schemas=%v", schemas)
@@ -183,7 +183,8 @@ func TestDefaultToolDisclosureUsesTheSamePolicyAsExecution(t *testing.T) {
 	}{
 		{"chat", PhaseChat, model.ModeChat, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), []string{"read_image", "read_ppt", "run_command"}},
 		{"plan", PhasePlanning, model.ModePlan, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), []string{"read_image", "read_ppt", "run_command"}},
-		{"execute spec deck", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages), []string{"mutate_ppt", "read_image", "read_ppt", "run_command"}},
+		{"execute empty spec deck", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages), []string{"read_image", "read_ppt", "run_command"}},
+		{"execute empty presentation deck", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages), []string{"read_image", "read_ppt", "run_command"}},
 		{"execute ppt slide", PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_aaaaaa"), []string{"mutate_ppt", "read_image", "read_ppt", "render_slide", "run_command"}},
 	}
 	for _, test := range cases {

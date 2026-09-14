@@ -24,7 +24,7 @@ describe('DesignSummary', () => {
 
   it('labels an undecided visual direction instead of implying one', () => {
     render(<DesignSummary design={{
-      version: '4.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: '', density: 'medium',
+      version: '4.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: '待确定', density: 'medium',
       chrome: [], created_at: 1, updated_at: 1,
     }} />);
 

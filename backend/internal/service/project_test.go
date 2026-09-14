@@ -56,8 +56,11 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if err := json.Unmarshal(raw, &design); err != nil {
 		t.Fatal(err)
 	}
-	if design.Direction != "" {
-		t.Fatalf("new project must not preselect a visual direction: %q", design.Direction)
+	if design.Direction != "待确定" {
+		t.Fatalf("new project must mark its visual direction as undecided: %q", design.Direction)
+	}
+	if err := spec.ValidateDesign(design); err != nil {
+		t.Fatalf("new project design must satisfy the schema: %v", err)
 	}
 
 	changed, cleanup, err := gitcommit.NewExecutor().StageAll(ctx, project.WorkDir, "verify-empty")

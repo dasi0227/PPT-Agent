@@ -324,7 +324,11 @@ func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode, scope model.
 		if !toolAvailable(desc, phase, mode, scope) {
 			continue
 		}
-		out = append(out, scopeToolSchema(desc.Tool.Schema(), scope, desc.ReadOnly))
+		schema, disclosed := scopeToolSchema(desc.Tool.Schema(), scope, desc.ReadOnly)
+		if !disclosed {
+			continue
+		}
+		out = append(out, schema)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -332,7 +336,10 @@ func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode, scope model.
 
 func toolRelevantToRun(name string, mode model.RunMode, scope model.RunScope) bool {
 	if name == "render_slide" {
-		return mode == model.ModeExecute && scope.AllowsHTML()
+		// A slide-specific render schema cannot name a target when a deck scope
+		// contains no slides. Do not expose an enum: [] to the provider.
+		return mode == model.ModeExecute && scope.AllowsHTML() &&
+			(scope.AllowsGlobal() || len(scope.SlideIDs) > 0)
 	}
 	return true
 }
@@ -360,10 +367,15 @@ func toolAvailable(desc ToolDescriptor, phase RunPhase, mode model.RunMode, scop
 	return mode == model.ModeExecute && phase == PhaseExecuting
 }
 
-func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) ToolSchema {
+func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) (ToolSchema, bool) {
 	if schema.Name == "mutate_ppt" {
-		variants, _ := schema.Parameters["oneOf"].([]any)
-		filtered := []any{}
+		variants, scoped := schema.Parameters["oneOf"].([]any)
+		if !scoped {
+			// mutate_ppt is also a valid name for generic test or extension tools.
+			// Only the domain mutation schema uses oneOf variants that need scoping.
+			return schema, true
+		}
+		filtered := make([]any, 0, len(variants))
 		for _, raw := range variants {
 			variant, _ := raw.(map[string]any)
 			props, _ := variant["properties"].(map[string]any)
@@ -381,12 +393,17 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) Too
 				filtered = append(filtered, raw)
 			}
 		}
+		if len(filtered) == 0 {
+			// A function schema with oneOf: [] is invalid for providers and
+			// describes no executable operation for this Run scope.
+			return ToolSchema{}, false
+		}
 		schema.Parameters["oneOf"] = filtered
-		return schema
+		return schema, true
 	}
 	properties, _ := schema.Parameters["properties"].(map[string]any)
 	if properties == nil {
-		return schema
+		return schema, true
 	}
 	if _, ok := properties["resource"]; ok {
 		properties["resource"] = resourceSchemaForScope(scope, !readOnly)
@@ -397,7 +414,7 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) Too
 			"description": "A slide authorized by the current run scope.",
 		}
 	}
-	return schema
+	return schema, true
 }
 
 // mutationOperationAllowed is the single scope rule used both to disclose a

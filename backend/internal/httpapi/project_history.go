@@ -129,9 +129,10 @@ func (w *historyResponse) Status() int {
 func (w *historyResponse) Size() int     { return w.body.Len() }
 func (w *historyResponse) Written() bool { return w.status != 0 }
 
-// Every project HTTP read and write crosses this gate. Resource IDs are resolved
-// before locking and revalidated by the handler after locking. Long SSE streams
-// never hold the gate; subscribers must resolve a currently visible run first.
+// Only requests that can mutate project history, plus history previews that
+// snapshot project bytes, cross this gate. Ordinary reads observe files and
+// state published through durable atomic replacement, so making them exclusive
+// would let routine UI hydration reject an unrelated write such as Run creation.
 func (r *Router) projectHistoryGate() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if r.history == nil || c.FullPath() == "" {
@@ -139,6 +140,16 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			return
 		}
 		path := strings.TrimPrefix(c.Request.URL.Path, "/api/v1/")
+		readOnly := c.Request.Method == "GET" || c.Request.Method == "HEAD" || c.Request.Method == "OPTIONS"
+		// Preview computes a diff from a stable project snapshot, so it remains
+		// serialized with writers. All other reads must never take the exclusive
+		// gate: active-session hydration runs concurrently with a newly submitted
+		// command in normal UI flow.
+		if readOnly && !strings.HasSuffix(path, "/history/preview") {
+			c.Header("Cache-Control", "no-store")
+			c.Next()
+			return
+		}
 		parts := strings.Split(path, "/")
 		if len(parts) < 2 {
 			c.Next()
@@ -203,7 +214,6 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 		c.Header("X-Project-History-Revision", strconv.FormatInt(s.Revision, 10))
 		c.Header("Cache-Control", "no-store")
 		isHistory := len(parts) > 2 && parts[0] == "projects" && parts[2] == "history"
-		readOnly := c.Request.Method == "GET" || c.Request.Method == "HEAD" || c.Request.Method == "OPTIONS"
 		if strings.HasSuffix(path, "/events") {
 			release()
 			release = nil

@@ -13,7 +13,7 @@ func defaultDesign(projectID string, now int64) spec.Design {
 	return spec.Design{
 		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID,
 		Theme:     "swiss-modern",
-		Direction: "",
+		Direction: "待确定",
 		Density:   "medium",
 		Chrome: []spec.ChromeItem{
 			{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono counter"},
