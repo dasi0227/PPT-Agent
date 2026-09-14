@@ -80,6 +80,7 @@ type runPO struct {
 	Mode                         string `gorm:"column:mode"`
 	RunCommandJSON               string `gorm:"column:run_command_json"`
 	ClientRequestID              string `gorm:"column:client_request_id"`
+	ProjectHistoryRevision       int64  `gorm:"column:project_history_revision"`
 	ModelProfileName             string `gorm:"column:model_profile_name"`
 	ModelProvider                string `gorm:"column:model_provider"`
 	ModelName                    string `gorm:"column:model_name"`
@@ -100,7 +101,8 @@ func (r runPO) toModel() model.Run {
 	_ = json.Unmarshal([]byte(r.RunCommandJSON), &command)
 	return model.Run{
 		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
-		ClientRequestID: r.ClientRequestID, Command: command, Status: model.RunStatus(r.Status),
+		ClientRequestID: r.ClientRequestID, ProjectHistoryRevision: r.ProjectHistoryRevision,
+		Command: command, Status: model.RunStatus(r.Status),
 		Model: model.ModelSelection{
 			ProfileName: r.ModelProfileName, Provider: r.ModelProvider,
 			Model: r.ModelName, URL: r.ModelURL,
@@ -114,6 +116,9 @@ func (r runPO) toModel() model.Run {
 }
 
 func runToPO(m model.Run) runPO {
+	if m.ProjectHistoryRevision < 1 {
+		m.ProjectHistoryRevision = 1
+	}
 	raw, _ := json.Marshal(m.Command)
 	slideIDs, _ := json.Marshal(m.Command.Scope.SlideIDs)
 	source, _ := json.Marshal(m.Command.Scope.Source)
@@ -121,19 +126,20 @@ func runToPO(m model.Run) runPO {
 		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID,
 		ScopeObject: string(m.Command.Scope.Object), ScopeSlideIDsJSON: string(slideIDs),
 		ScopeSourceJSON: string(source), ScopeIncludeRunCreatedSlides: boolInt(m.Command.Scope.IncludeRunCreatedSlides),
-		ScopeRevision:     m.Command.Scope.Revision,
-		Mode:              string(m.Command.Mode),
-		RunCommandJSON:    string(raw),
-		ClientRequestID:   m.ClientRequestID,
-		ModelProfileName:  m.Model.ProfileName,
-		ModelProvider:     m.Model.Provider,
-		ModelName:         m.Model.Model,
-		ModelURL:          m.Model.URL,
-		CancelRequestedAt: int64PtrOrNil(m.CancelRequestedAt),
-		OwnerInstanceID:   m.OwnerInstanceID,
-		PauseReason:       m.PauseReason,
-		PausedAt:          int64PtrOrNil(m.PausedAt),
-		Status:            string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		ScopeRevision:          m.Command.Scope.Revision,
+		Mode:                   string(m.Command.Mode),
+		RunCommandJSON:         string(raw),
+		ClientRequestID:        m.ClientRequestID,
+		ProjectHistoryRevision: m.ProjectHistoryRevision,
+		ModelProfileName:       m.Model.ProfileName,
+		ModelProvider:          m.Model.Provider,
+		ModelName:              m.Model.Model,
+		ModelURL:               m.Model.URL,
+		CancelRequestedAt:      int64PtrOrNil(m.CancelRequestedAt),
+		OwnerInstanceID:        m.OwnerInstanceID,
+		PauseReason:            m.PauseReason,
+		PausedAt:               int64PtrOrNil(m.PausedAt),
+		Status:                 string(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 

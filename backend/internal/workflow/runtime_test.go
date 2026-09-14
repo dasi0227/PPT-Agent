@@ -402,6 +402,36 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	}
 }
 
+func TestFinishPublishesNormalizedSuggestionsWithRunHistoryRevision(t *testing.T) {
+	events := &eventRecorder{}
+	agent := &scriptedAgent{responses: []AgentResponse{toolCall("finish", "finish", map[string]any{
+		"message":               "已完成。",
+		"suggested_next_inputs": []any{"  优化\n第 2 页  ", "优化 第 2 页", 12, "补充演讲备注"},
+	})}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "suggestions", ProjectDir: t.TempDir(), ProjectHistoryRevision: 9,
+		Context: testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "分析当前页"),
+		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+	})
+	if outcome.Status != StatusCompleted {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if outcome.ProjectHistoryRevision != 9 || !slices.Equal(outcome.SuggestedNextInputs, []string{"优化 第 2 页", "补充演讲备注"}) {
+		t.Fatalf("structured outcome lost suggestions: %+v", outcome)
+	}
+	for _, event := range events.events {
+		if event.kind != model.EventMessageFinal {
+			continue
+		}
+		payload := event.payload.(model.MessageFinalPayload)
+		if payload.ProjectHistoryRevision != 9 || !slices.Equal(payload.SuggestedNextInputs, []string{"优化 第 2 页", "补充演讲备注"}) {
+			t.Fatalf("final suggestions=%+v", payload)
+		}
+		return
+	}
+	t.Fatal("missing message.final")
+}
+
 func TestRuntimePassesOpaqueProviderContinuationWithoutParsingIt(t *testing.T) {
 	continuation := &llm.ProviderContinuation{
 		Provider: "deepseek", Model: "deepseek-v4-pro",
@@ -562,20 +592,21 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			t.Fatalf("%s prompt is not assembled from versioned modules: %q", mode, prompt)
 		}
 		hasFinish := strings.Contains(prompt, `id="runtime.completion"`)
+		hasSuggestions := strings.Contains(prompt, `id="runtime.next-input-suggestions"`)
 		hasQuality := strings.Contains(prompt, `id="core.quality"`)
 		hasRepair := strings.Contains(prompt, `id="runtime.recovery"`)
 		hasContracts := strings.Contains(prompt, `id="core.structure"`)
 		switch mode {
 		case model.ModeChat, model.ModeGrill:
-			if !hasFinish || hasQuality || hasRepair || hasContracts {
+			if !hasFinish || !hasSuggestions || hasQuality || hasRepair || hasContracts {
 				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
 			}
 		case model.ModePlan:
-			if hasFinish || !hasQuality || hasRepair || !hasContracts {
+			if hasFinish || hasSuggestions || !hasQuality || hasRepair || !hasContracts {
 				t.Fatalf("plan prompt contains wrong conditional modules: %q", prompt)
 			}
 		case model.ModeExecute:
-			if !hasFinish || !hasQuality || !hasRepair || !hasContracts {
+			if !hasFinish || !hasSuggestions || !hasQuality || !hasRepair || !hasContracts {
 				t.Fatalf("execute prompt is missing required conditional modules: %q", prompt)
 			}
 		}
@@ -594,8 +625,12 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		t.Fatalf("finish schema description=%q", finishDescription)
 	}
 	properties, _ := finishParameters["properties"].(map[string]any)
-	if len(properties) != 1 || properties["message"] == nil {
-		t.Fatalf("finish schema must expose only message: %+v", finishParameters)
+	if len(properties) != 2 || properties["message"] == nil || properties["suggested_next_inputs"] == nil {
+		t.Fatalf("finish schema must expose message and optional suggestions: %+v", finishParameters)
+	}
+	required, _ := finishParameters["required"].([]string)
+	if !slices.Equal(required, []string{"message"}) {
+		t.Fatalf("finish must require only message: %+v", finishParameters)
 	}
 	planPrompt := runtimeSystemPrompt(PhasePlanning, model.ModePlan)
 	if !strings.Contains(planPrompt, "Plan Mode is read-only") ||

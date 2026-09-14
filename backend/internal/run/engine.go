@@ -310,9 +310,18 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 	case workflow.StatusCompleted:
 		e.setStatus(ctx, a.run.ID, model.RunDone)
 		if !a.bus.Terminated() {
+			projectHistoryRevision := outcome.ProjectHistoryRevision
+			if projectHistoryRevision < 1 {
+				projectHistoryRevision = a.run.ProjectHistoryRevision
+			}
+			if projectHistoryRevision < 1 {
+				projectHistoryRevision = 1
+			}
 			_ = a.bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{
 				PublicEventBase: model.NewPublicEventBase(a.run.ID),
 				MessageID:       "msg_fallback_" + a.run.ID, Text: "已完成本次任务。",
+				AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: workflow.NormalizeSuggestedNextInputs(outcome.SuggestedNextInputs),
+				ProjectHistoryRevision: projectHistoryRevision,
 			})
 			_ = a.bus.Emit(ctx, model.EventRunCompleted, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
 		}

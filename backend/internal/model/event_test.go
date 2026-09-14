@@ -43,12 +43,12 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 	for _, payload := range []map[string]any{
 		{
-			"schema_version": 3, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 4, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"call_id": "c1", "tool": "mutate_ppt", "display": map[string]any{"label": "生成"},
 			"args": map[string]any{"html": "<section />"},
 		},
 		{
-			"schema_version": 3, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 4, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"message_id": "m1", "text": "安全摘要", "reasoning_content": "hidden",
 		},
 	} {
@@ -66,7 +66,7 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 }
 
-func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
+func TestRunStartedPayloadUsesV4RunCommandFields(t *testing.T) {
 	payload := RunStartedPayload{
 		PublicEventBase: NewPublicEventBase("r1"),
 		Scope:           NewRunScope(ScopeObjectPresentation, ScopeCurrentPage, "sli_1"),
@@ -89,7 +89,7 @@ func TestRunStartedPayloadUsesV3RunCommandFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	value := string(raw)
-	for _, want := range []string{`"schema_version":3`, `"scope":`, `"object":"presentation"`, `"mode":"execute"`} {
+	for _, want := range []string{`"schema_version":4`, `"scope":`, `"object":"presentation"`, `"mode":"execute"`} {
 		if !strings.Contains(value, want) {
 			t.Fatalf("run.started missing %s: %s", want, value)
 		}
@@ -118,6 +118,25 @@ func TestRunLifecyclePayloadsValidate(t *testing.T) {
 	canceled.Reason = "unexpected"
 	if err := ValidatePublicEvent(EventRunCanceled, canceled); err == nil {
 		t.Fatal("invalid cancellation reason was accepted")
+	}
+}
+
+func TestMessageFinalV4RequiresBoundedSuggestionsAndHistoryRevision(t *testing.T) {
+	payload := MessageFinalPayload{
+		PublicEventBase: NewPublicEventBase("r1"), MessageID: "m1", Text: "完成。",
+		AffectedTargets: []PublicTarget{}, SuggestedNextInputs: []string{"继续优化第 2 页"}, ProjectHistoryRevision: 4,
+	}
+	if err := ValidatePublicEvent(EventMessageFinal, payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.SuggestedNextInputs = []string{"重复", "重复"}
+	if err := ValidatePublicEvent(EventMessageFinal, payload); err == nil {
+		t.Fatal("duplicate suggestions were accepted")
+	}
+	payload.SuggestedNextInputs = []string{}
+	payload.ProjectHistoryRevision = 0
+	if err := ValidatePublicEvent(EventMessageFinal, payload); err == nil {
+		t.Fatal("missing history revision was accepted")
 	}
 }
 

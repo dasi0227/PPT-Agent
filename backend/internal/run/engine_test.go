@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -310,6 +311,7 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 			PublicEventBase: model.NewPublicEventBase(created.ID),
 			MessageID:       "recovered-final",
 			Text:            "恢复完成。",
+			AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{}, ProjectHistoryRevision: 1,
 		})
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 	})); err != nil {
@@ -395,6 +397,7 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 		})
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: model.NewPublicEventBase("r1"), MessageID: "m2", Text: "分析完成。",
+			AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{}, ProjectHistoryRevision: 1,
 		})
 		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("r1", 10, nil, nil))
 		outcome := workflow.StructuredOutcome{Status: workflow.StatusCompleted}
@@ -477,27 +480,43 @@ func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
 	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
 	activeDurationMS := int64(1_234)
 	execution := scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
-		return workflow.StructuredOutcome{Status: workflow.StatusCompleted, DurationMS: &activeDurationMS}
+		return workflow.StructuredOutcome{
+			Status: workflow.StatusCompleted, DurationMS: &activeDurationMS,
+			SuggestedNextInputs: []string{" 继续优化第 2 页 ", "继续优化第 2 页"}, ProjectHistoryRevision: 7,
+		}
 	})
 	if _, err := engine.Start(context.Background(), testRun("fallback-duration"), execution); err != nil {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, store, "fallback-duration", model.RunDone)
 	events, _ := store.EventsSince(context.Background(), "fallback-duration", 0)
+	finalFound := false
+	terminalFound := false
 	for _, event := range events {
-		if event.Type != model.EventRunCompleted {
-			continue
+		if event.Type == model.EventMessageFinal {
+			var payload model.MessageFinalPayload
+			if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.ProjectHistoryRevision != 7 || !reflect.DeepEqual(payload.SuggestedNextInputs, []string{"继续优化第 2 页"}) {
+				t.Fatalf("fallback final payload=%+v", payload)
+			}
+			finalFound = true
 		}
-		var payload model.RunTerminalPayload
-		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-			t.Fatal(err)
+		if event.Type == model.EventRunCompleted {
+			var payload model.RunTerminalPayload
+			if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.DurationMS != activeDurationMS {
+				t.Fatalf("duration=%d want=%d", payload.DurationMS, activeDurationMS)
+			}
+			terminalFound = true
 		}
-		if payload.DurationMS != activeDurationMS {
-			t.Fatalf("duration=%d want=%d", payload.DurationMS, activeDurationMS)
-		}
-		return
 	}
-	t.Fatal("fallback run.completed was not emitted")
+	if !finalFound || !terminalFound {
+		t.Fatalf("fallback terminal events missing: %+v", events)
+	}
 }
 
 func TestSchedulerRecoversRuntimePanicAsRunError(t *testing.T) {
@@ -685,6 +704,7 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		}
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: model.NewPublicEventBase("question"), MessageID: "m1", Text: "已继续完成。",
+			AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{}, ProjectHistoryRevision: 1,
 		})
 		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("question", 10, nil, nil))
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
@@ -748,6 +768,7 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 		}
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: model.NewPublicEventBase("command-permission"), MessageID: "m1", Text: "done",
+			AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{}, ProjectHistoryRevision: 1,
 		})
 		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("command-permission", 10, nil, nil))
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}

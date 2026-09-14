@@ -425,18 +425,18 @@ func (m *Manager) idle(ctx context.Context, id string) error {
 	}
 	return nil
 }
-func (m *Manager) Baseline(ctx context.Context, p model.Project, runID, threadID string, input model.CreateRunParams) error {
+func (m *Manager) Baseline(ctx context.Context, p model.Project, runID, threadID string, input model.CreateRunParams) (int64, error) {
 	release, ok := m.Locks.TryAcquire(p.ID)
 	if !ok {
-		return ErrBusy
+		return 0, ErrBusy
 	}
 	defer release()
 	if err := m.idle(ctx, p.ID); err != nil {
-		return err
+		return 0, err
 	}
 	s, err := m.State(p.ID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	valid := []Checkpoint{}
 	for _, cp := range s.Checkpoints {
@@ -447,12 +447,15 @@ func (m *Manager) Baseline(ctx context.Context, p model.Project, runID, threadID
 	s.Checkpoints = valid
 	ref, err := m.Capture(ctx, p, s)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	s.Sequence++
 	s.Revision++
 	s.Checkpoints = append(s.Checkpoints, Checkpoint{runID, threadID, time.Now().UnixMilli(), s.Sequence, ref, input})
-	return m.Save(p.ID, s)
+	if err := m.Save(p.ID, s); err != nil {
+		return 0, err
+	}
+	return s.Revision, nil
 }
 func (m *Manager) target(ctx context.Context, id, runID string) (State, Snapshot, *Checkpoint, error) {
 	s, err := m.State(id)

@@ -59,7 +59,13 @@ func cp(t *testing.T, m *Manager, p model.Project, id string, status model.RunSt
 	t.Helper()
 	ctx := context.Background()
 	cmd := model.RunCommand{Instruction: id, Mode: model.ModeChat, Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages)}
-	must(t, m.Baseline(ctx, p, id, "t1", model.CreateRunParams{Command: cmd}))
+	revision, err := m.Baseline(ctx, p, id, "t1", model.CreateRunParams{Command: cmd})
+	must(t, err)
+	state, err := m.State(p.ID)
+	must(t, err)
+	if revision < 1 || revision != state.Revision {
+		t.Fatalf("baseline revision=%d state revision=%d", revision, state.Revision)
+	}
 	must(t, m.Store.CreateRun(ctx, model.Run{ID: id, ProjectID: p.ID, ThreadID: "t1", Status: status, Command: cmd}))
 }
 func switchTo(t *testing.T, m *Manager, p model.Project, id, op string) State {
@@ -318,7 +324,7 @@ func TestSnapshotWriteFailureAndConcurrentGate(t *testing.T) {
 	put(t, p, "file", "live")
 	must(t, os.MkdirAll(m.root, 0700))
 	must(t, os.WriteFile(m.dir(p.ID), []byte("not a directory"), 0600))
-	if err := m.Baseline(context.Background(), p, "cp1", "t1", model.CreateRunParams{}); err == nil {
+	if _, err := m.Baseline(context.Background(), p, "cp1", "t1", model.CreateRunParams{}); err == nil {
 		t.Fatal("snapshot write failure ignored")
 	}
 	content(t, p, "file", "live")

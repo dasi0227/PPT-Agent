@@ -264,33 +264,34 @@ func approvedPlanExecutionGuidance() string {
 }
 
 type RuntimeInput struct {
-	RunID                 string
-	ProjectDir            string
-	Context               contextengine.ContextPack
-	Emitter               EventEmitter
-	Prompter              Prompter
-	Steering              SteeringSource
-	Checkpoint            CheckpointSink
-	CommitMetadata        CommitMetadata
-	DomainTools           DomainToolProvider
-	Budget                RuntimeBudget
-	Trace                 TraceRecorder
-	ImageResolver         llm.ImageRefResolver
-	Lifecycle             LifecycleObserver
-	Idempotency           IdempotencyStore
-	ContextIndexStore     ContextIndexStore
-	SemanticReviews       SemanticReviewer
-	SemanticReviewStore   SemanticReviewStore
-	ResumeCheckpoint      *RuntimeCheckpoint
-	RefreshContext        func(context.Context, model.RunMode) (contextengine.ContextPack, error)
-	PersistMode           func(context.Context, model.RunMode) error
-	DomainToolsForContext func(contextengine.ContextPack) DomainToolProvider
-	CommitPlanApproval    func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error
-	CommitScopeExpansion  func(context.Context, model.RunScope, RuntimeCheckpoint) error
-	Logger                *zap.Logger
-	Transcript            TranscriptStore
-	Calibration           TokenCalibration
-	RecordCompaction      func(context.Context, contextcompact.Result, contextengine.WindowSnapshot, contextengine.WindowSnapshot, time.Duration) (model.ContextCompaction, error)
+	RunID                  string
+	ProjectDir             string
+	ProjectHistoryRevision int64
+	Context                contextengine.ContextPack
+	Emitter                EventEmitter
+	Prompter               Prompter
+	Steering               SteeringSource
+	Checkpoint             CheckpointSink
+	CommitMetadata         CommitMetadata
+	DomainTools            DomainToolProvider
+	Budget                 RuntimeBudget
+	Trace                  TraceRecorder
+	ImageResolver          llm.ImageRefResolver
+	Lifecycle              LifecycleObserver
+	Idempotency            IdempotencyStore
+	ContextIndexStore      ContextIndexStore
+	SemanticReviews        SemanticReviewer
+	SemanticReviewStore    SemanticReviewStore
+	ResumeCheckpoint       *RuntimeCheckpoint
+	RefreshContext         func(context.Context, model.RunMode) (contextengine.ContextPack, error)
+	PersistMode            func(context.Context, model.RunMode) error
+	DomainToolsForContext  func(contextengine.ContextPack) DomainToolProvider
+	CommitPlanApproval     func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error
+	CommitScopeExpansion   func(context.Context, model.RunScope, RuntimeCheckpoint) error
+	Logger                 *zap.Logger
+	Transcript             TranscriptStore
+	Calibration            TokenCalibration
+	RecordCompaction       func(context.Context, contextcompact.Result, contextengine.WindowSnapshot, contextengine.WindowSnapshot, time.Duration) (model.ContextCompaction, error)
 }
 
 type Runtime struct {
@@ -363,6 +364,8 @@ type RunState struct {
 	lastProgress            string
 	lastReasoning           string
 	lastMilestoneRevision   int
+	suggestedNextInputs     []string
+	projectHistoryRevision  int64
 	trace                   TraceRecorder
 	lifecycle               LifecycleObserver
 	requirements            *RequirementLedger
@@ -395,9 +398,10 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		scope: input.Context.Command.Scope, mode: input.Context.Command.Mode, pack: input.Context, ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
-		work:              NewWorkLedger(),
-		activeSkills:      ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...)},
-		calibrationFactor: 1,
+		work:                   NewWorkLedger(),
+		activeSkills:           ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...)},
+		calibrationFactor:      1,
+		projectHistoryRevision: input.ProjectHistoryRevision,
 	}
 	if input.Calibration != nil {
 		state.calibrationFactor = input.Calibration.Factor(input.Context.Manifest.ThreadID)
@@ -1680,7 +1684,8 @@ func (r *Runtime) executeControl(
 		return StructuredOutcome{}, false
 	case "finish":
 		message := stringValue(call.Args["message"])
-		return r.finishCandidate(ctx, input, state, call, assistantText, message)
+		suggestions := NormalizeSuggestedNextInputs(call.Args["suggested_next_inputs"])
+		return r.finishCandidate(ctx, input, state, call, assistantText, message, suggestions)
 	default:
 		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "unknown runtime control tool", false))
 		return StructuredOutcome{}, false
@@ -1963,6 +1968,7 @@ func (r *Runtime) finishCandidate(
 	call llm.ToolCall,
 	assistantText string,
 	message string,
+	suggestedNextInputs []string,
 ) (StructuredOutcome, bool) {
 	if violation := finishMessageViolation(message); violation != "" {
 		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeFinishMessageEmpty, violation, true))
@@ -2090,6 +2096,12 @@ func (r *Runtime) finishCandidate(
 			"loop_id": state.loopID, "boundary": checkpointTerminal,
 		})
 	}
+	historyRevision := input.ProjectHistoryRevision
+	if historyRevision < 1 {
+		historyRevision = 1
+	}
+	state.suggestedNextInputs = append([]string{}, suggestedNextInputs...)
+	state.projectHistoryRevision = historyRevision
 	outcome := r.outcome(state, StatusCompleted, "", "")
 	if input.Emitter != nil {
 		affected := publicAffectedTargets(input.ProjectDir, changes)
@@ -2098,7 +2110,9 @@ func (r *Runtime) finishCandidate(
 			Text: safeFinalMessage(
 				state.lastSummary, state.mode, len(affected),
 			),
-			AffectedTargets: affected,
+			AffectedTargets:        affected,
+			SuggestedNextInputs:    suggestedNextInputs,
+			ProjectHistoryRevision: historyRevision,
 		})
 		input.Emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(
 			publicBase(state.runID),
@@ -2248,7 +2262,9 @@ func (r *Runtime) outcome(state *RunState, status WorkflowStatus, code, message 
 	return StructuredOutcome{
 		LoopID: state.loopID, Phase: state.phase, Status: status,
 		Scope: state.scope, Changes: state.changeSet(), Issues: append([]Issue{}, state.issues...),
-		Summary: state.lastSummary, Code: code, Message: message, DurationMS: &durationMS,
+		Summary: state.lastSummary, SuggestedNextInputs: append([]string{}, state.suggestedNextInputs...),
+		ProjectHistoryRevision: state.projectHistoryRevision,
+		Code:                   code, Message: message, DurationMS: &durationMS,
 	}
 }
 
@@ -2842,9 +2858,13 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeGrill)) ||
 		(phase == PhaseExecuting && mode == model.ModeExecute) {
 		out = append(out, ToolSchema{
-			Name: "finish", Description: "Submit the complete final user-facing response for the current chat, grill, or execute run. Ordinary assistant text is not a completion signal. The Completion Gate checks the message before the run may complete.",
+			Name: "finish", Description: "Submit the complete final user-facing response and optional next-input suggestions for the current chat, grill, or execute run. Ordinary assistant text is not a completion signal. The Completion Gate checks only the message before the run may complete.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{
 				"message": map[string]any{"type": "string"},
+				"suggested_next_inputs": map[string]any{
+					"type": "array", "maxItems": 3,
+					"items": map[string]any{"type": "string", "maxLength": 80},
+				},
 			}),
 		})
 	}

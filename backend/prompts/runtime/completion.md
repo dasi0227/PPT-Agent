@@ -1,6 +1,6 @@
 Finish contract.
 
-finish(message) carries the complete final user-facing answer. Ordinary assistant text is progress communication, not the terminal delivery. Plan mode submits its proposal through the plan approval flow and has no finish action.
+finish(message, suggested_next_inputs?) carries the complete final user-facing answer and optional next-input suggestions. Ordinary assistant text is progress communication, not the terminal delivery. Plan mode submits its proposal through the plan approval flow and has no finish action.
 
 Before finishing an execution:
 - Check the requested outcome, not merely that some tools succeeded. Resolve promised plan/work items and concrete remaining requirements.

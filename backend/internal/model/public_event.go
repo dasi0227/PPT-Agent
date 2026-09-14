@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const PublicEventSchemaVersion = 3
+const PublicEventSchemaVersion = 4
 
 var PublicEventTypes = [...]EventType{
 	EventRunStarted,
@@ -266,9 +266,11 @@ type MessageMilestonePayload struct {
 
 type MessageFinalPayload struct {
 	PublicEventBase
-	MessageID       string         `json:"message_id"`
-	Text            string         `json:"text"`
-	AffectedTargets []PublicTarget `json:"affected_targets,omitempty"`
+	MessageID              string         `json:"message_id"`
+	Text                   string         `json:"text"`
+	AffectedTargets        []PublicTarget `json:"affected_targets"`
+	SuggestedNextInputs    []string       `json:"suggested_next_inputs"`
+	ProjectHistoryRevision int64          `json:"project_history_revision"`
 }
 
 type ToolStartedPayload struct {
@@ -390,7 +392,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		return err
 	}
 	if intValue(data["schema_version"]) != PublicEventSchemaVersion {
-		return errors.New("schema_version must be 3")
+		return errors.New("schema_version must be 4")
 	}
 	if strings.TrimSpace(stringValue(data["run_id"])) == "" {
 		return errors.New("run_id is required")
@@ -546,6 +548,12 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			if err := validateTargets(data["affected_targets"]); err != nil {
 				return err
 			}
+			if !isInteger(data["project_history_revision"]) || int64Value(data["project_history_revision"]) < 1 {
+				return errors.New("project_history_revision must be a positive integer")
+			}
+			if err := validateSuggestedNextInputs(data["suggested_next_inputs"]); err != nil {
+				return err
+			}
 		}
 	case EventToolStarted:
 		if err := requireString(data, "call_id", "tool"); err != nil {
@@ -676,6 +684,27 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			strings.TrimSpace(stringValue(compaction["summary"])) == "" {
 			return errors.New("invalid context compaction")
 		}
+	}
+	return nil
+}
+
+func validateSuggestedNextInputs(value any) error {
+	values, ok := value.([]any)
+	if !ok || len(values) > 3 {
+		return errors.New("suggested_next_inputs must be an array with at most three items")
+	}
+	seen := []string{}
+	for _, raw := range values {
+		candidate, ok := raw.(string)
+		if !ok || candidate == "" || len([]rune(candidate)) > 80 || strings.ContainsAny(candidate, "\r\n\t") {
+			return errors.New("suggested_next_inputs contains an invalid item")
+		}
+		for _, previous := range seen {
+			if strings.EqualFold(previous, candidate) {
+				return errors.New("suggested_next_inputs must be unique")
+			}
+		}
+		seen = append(seen, candidate)
 	}
 	return nil
 }

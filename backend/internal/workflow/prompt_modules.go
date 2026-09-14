@@ -73,6 +73,9 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 			modules = append(modules, module)
 		}
 	}
+	if finishDisclosed(input.Phase, input.Mode) {
+		modules = append(modules, loadPromptModule("runtime.next-input-suggestions"))
+	}
 	if (input.Mode == model.ModePlan || input.Mode == model.ModeExecute) && input.Context.Command.Scope.AllowsHTML() {
 		modules = append(modules, loadPromptModule("core.html"))
 	}
@@ -95,6 +98,11 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	}
 	b.WriteString("</runtime_prompt_manifest>")
 	return b.String()
+}
+
+func finishDisclosed(phase RunPhase, mode model.RunMode) bool {
+	return (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeGrill)) ||
+		(phase == PhaseExecuting && mode == model.ModeExecute)
 }
 
 func runtimeTaskStateForRequest(req AgentRequest) string {

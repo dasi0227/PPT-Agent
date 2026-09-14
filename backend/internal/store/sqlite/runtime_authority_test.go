@@ -51,6 +51,7 @@ func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
 	}
 	runModel := model.Run{
 		ID: "model-run", ThreadID: "model-thread", ProjectID: "model-project",
+		ProjectHistoryRevision: 7,
 		Model: model.ModelSelection{
 			ProfileName: "Kimi Stable", Provider: "kimi",
 			Model: "kimi-k3", URL: "https://gateway.example/v1",
@@ -65,8 +66,8 @@ func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := s.GetRun(ctx, runModel.ID)
-	if err != nil || got.Model != runModel.Model {
-		t.Fatalf("model snapshot changed: got=%+v err=%v", got.Model, err)
+	if err != nil || got.Model != runModel.Model || got.ProjectHistoryRevision != runModel.ProjectHistoryRevision {
+		t.Fatalf("run snapshot changed: got=%+v err=%v", got, err)
 	}
 	columns := tableColumnsForStoreTest(t, s, "runs")
 	for _, column := range []string{"model_profile_name", "model_provider", "model_name", "model_url"} {

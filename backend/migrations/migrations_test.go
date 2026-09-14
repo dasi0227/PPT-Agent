@@ -49,7 +49,7 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 		t.Fatalf("manifest version target is not accepted: %v", err)
 	}
 	runCols := tableColumns(t, db, "runs")
-	for _, want := range []string{"scope_object", "scope_slide_ids_json", "scope_source_json", "scope_include_run_created_slides", "scope_revision", "owner_instance_id", "pause_reason", "paused_at"} {
+	for _, want := range []string{"scope_object", "scope_slide_ids_json", "scope_source_json", "scope_include_run_created_slides", "scope_revision", "project_history_revision", "owner_instance_id", "pause_reason", "paused_at"} {
 		if !runCols[want] {
 			t.Fatalf("runs table missing lifecycle column %q; got %v", want, runCols)
 		}

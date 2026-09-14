@@ -17,27 +17,7 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 	if os.Getenv("RUN_DEEPSEEK_LIVE") != "1" {
 		t.Skip("set RUN_DEEPSEEK_LIVE=1 to validate tool schemas against DeepSeek")
 	}
-	backendConfig := findBackendConfig(t)
-	oldWorkingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(filepath.Dir(backendConfig)); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(oldWorkingDir) })
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	profile, ok := deepSeekProfile(cfg.LLM.Profiles)
-	if !ok {
-		t.Skip("no DeepSeek profile configured")
-	}
-	adapter := llm.NewDeepSeekAdapter(llm.DeepSeekConfig{
-		APIKey: profile.Key, BaseURL: profile.URL, Model: profile.Model,
-		Timeout: 90 * time.Second,
-	})
+	adapter := configuredDeepSeekAdapter(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	for _, test := range []struct {
@@ -84,6 +64,84 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeepSeekLiveProducesBoundedNextInputSuggestions(t *testing.T) {
+	if os.Getenv("RUN_DEEPSEEK_LIVE") != "1" {
+		t.Skip("set RUN_DEEPSEEK_LIVE=1 to observe next-input suggestions")
+	}
+	adapter := configuredDeepSeekAdapter(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	for _, mode := range []model.RunMode{model.ModeChat, model.ModeGrill, model.ModeExecute} {
+		t.Run(string(mode), func(t *testing.T) {
+			phase := PhaseChat
+			if mode == model.ModeExecute {
+				phase = PhaseExecuting
+			}
+			var finish ToolSchema
+			for _, schema := range controlSchemas(phase, mode, nil) {
+				if schema.Name == "finish" {
+					finish = schema
+					break
+				}
+			}
+			if finish.Name == "" {
+				t.Fatal("finish is not disclosed")
+			}
+			response, err := adapter.Generate(ctx, llm.GenerateRequest{
+				Messages: []llm.Message{
+					{Role: llm.RoleSystem, Content: llm.TextContent(
+						"You are completing a PPT creation task in " + string(mode) + " mode.\n" +
+							loadPromptModule("runtime.completion").Body + "\n" + loadPromptModule("runtime.next-input-suggestions").Body,
+					)},
+					{Role: llm.RoleUser, Content: llm.TextContent("The Chinese user asked to improve the narrative of a product launch deck. The work is complete: the opening now states the audience problem and slide 2 has a clearer evidence hierarchy. Call finish exactly once with a concise Chinese final response and zero to three useful next-input suggestions.")},
+				},
+				Tools:           toLLMToolSchemas([]ToolSchema{finish}),
+				Reasoning:       llm.ReasoningDisabled,
+				MaxOutputTokens: 320,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != "finish" {
+				t.Fatalf("expected one finish call, got text=%q calls=%+v", response.Text(), response.ToolCalls)
+			}
+			call := response.ToolCalls[0]
+			message, ok := call.Args["message"].(string)
+			if !ok || strings.TrimSpace(message) == "" {
+				t.Fatalf("finish message is empty: %+v", call.Args)
+			}
+			suggestions := NormalizeSuggestedNextInputs(call.Args["suggested_next_inputs"])
+			t.Logf("mode=%s suggestions=%d values=%q", mode, len(suggestions), suggestions)
+		})
+	}
+}
+
+func configuredDeepSeekAdapter(t *testing.T) llm.Provider {
+	t.Helper()
+	backendConfig := findBackendConfig(t)
+	oldWorkingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(filepath.Dir(backendConfig)); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWorkingDir) })
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, ok := deepSeekProfile(cfg.LLM.Profiles)
+	if !ok {
+		t.Skip("no DeepSeek profile configured")
+	}
+	return llm.NewDeepSeekAdapter(llm.DeepSeekConfig{
+		APIKey: profile.Key, BaseURL: profile.URL, Model: profile.Model,
+		Timeout: 90 * time.Second,
+	})
 }
 
 func findBackendConfig(t *testing.T) string {
