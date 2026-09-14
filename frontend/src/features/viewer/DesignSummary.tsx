@@ -11,7 +11,7 @@ export function DesignSummary({ design }: { design: Design }) {
       <p className="mt-3 text-xs font-medium uppercase tracking-wide text-text-400">
         {design.theme} · {densityLabel(design.density)}
       </p>
-      <p className="mt-2 text-sm text-text-600">{design.direction}</p>
+      <p className="mt-2 text-sm text-text-600">{design.direction || '视觉方向待确定'}</p>
       {design.chrome.length > 0 && (
         <p className="mt-2 text-xs text-text-400">
           页面装饰：{design.chrome.map(chromeLabel).join(' · ')}

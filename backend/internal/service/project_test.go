@@ -48,6 +48,17 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if status := projectGitOutput(t, project.WorkDir, "status", "--porcelain=v1"); status != "" {
 		t.Fatalf("new project repository is dirty: %q", status)
 	}
+	var design spec.Design
+	raw, err := os.ReadFile(filepath.Join(project.WorkDir, "design.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &design); err != nil {
+		t.Fatal(err)
+	}
+	if design.Direction != "" {
+		t.Fatalf("new project must not preselect a visual direction: %q", design.Direction)
+	}
 
 	changed, cleanup, err := gitcommit.NewExecutor().StageAll(ctx, project.WorkDir, "verify-empty")
 	if err != nil {

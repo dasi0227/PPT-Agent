@@ -1,7 +1,7 @@
 package prompt
 
 // Version identifies this coordinated prompt release; Hash identifies exact content.
-const Version = "2026-09-14.v6"
+const Version = "2026-09-14.v7"
 
 type entry struct{ Path, Version string }
 

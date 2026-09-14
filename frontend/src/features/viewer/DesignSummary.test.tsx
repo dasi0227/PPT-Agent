@@ -21,4 +21,13 @@ describe('DesignSummary', () => {
     expect(screen.getByText('swiss-modern · 适中')).toBeInTheDocument();
     expect(screen.getByText('页面装饰：页码（右下）')).toBeInTheDocument();
   });
+
+  it('labels an undecided visual direction instead of implying one', () => {
+    render(<DesignSummary design={{
+      version: '4.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: '', density: 'medium',
+      chrome: [], created_at: 1, updated_at: 1,
+    }} />);
+
+    expect(screen.getByText('视觉方向待确定')).toBeInTheDocument();
+  });
 });

@@ -35,27 +35,27 @@ describe('MarkdownMessage', () => {
     expect(container.querySelector('.prose')).toHaveClass('prose-hr:my-4', 'prose-hr:border-border');
   });
 
-  it('uses compact indentation for nested lists', () => {
+  it('keeps list markers visibly indented from the message edge', () => {
     const markdown = '1. 演示设定\n   - 标题\n   - 目标';
     const { container } = render(<MarkdownMessage content={markdown} />);
     const prose = container.querySelector('.prose');
 
     expect(prose).toHaveClass(
-      'prose-ul:pl-3',
-      'prose-ol:pl-4',
-      '[&_li>ul]:pl-2',
-      '[&_li>ol]:pl-2',
+      'prose-ul:pl-6',
+      'prose-ol:pl-6',
+      '[&_li>ul]:pl-5',
+      '[&_li>ol]:pl-5',
     );
   });
 
-  it('separates numbered bold section titles from following prose', () => {
-    const markdown = '**1. 主题与定位**\n正文内容\n\n**2. 页面结构**\n- 第一页';
+  it('promotes standalone bold section titles and separates their content', () => {
+    const markdown = '**我是谁**\n正文内容\n\n**2. 页面结构**\n- 第一页';
     render(<MarkdownMessage content={markdown} />);
 
-    const titleParagraph = screen.getByText('1. 主题与定位').closest('p');
     const bodyParagraph = screen.getByText('正文内容').closest('p');
-    expect(titleParagraph).not.toBe(bodyParagraph);
-    expect(screen.getByText('2. 页面结构').closest('p')).not.toBeNull();
+    expect(screen.getByRole('heading', { level: 3, name: '我是谁' })).toBeInTheDocument();
+    expect(bodyParagraph).not.toBeNull();
+    expect(screen.getByRole('heading', { level: 3, name: '2. 页面结构' })).toBeInTheDocument();
     expect(screen.getByText('第一页').closest('li')).not.toBeNull();
   });
 
