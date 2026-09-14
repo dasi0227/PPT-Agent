@@ -434,7 +434,7 @@ func generateGitCommitMessage(
 				{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
 				{Role: llm.RoleUser, Content: llm.TextContent(user)},
 			},
-			Tools: []llm.ToolSchema{tool}, Reasoning: llm.ReasoningDisabled, MaxOutputTokens: 1024,
+			Tools: []llm.ToolSchema{tool}, MaxOutputTokens: 1024,
 		})
 		cancel()
 		if err != nil {

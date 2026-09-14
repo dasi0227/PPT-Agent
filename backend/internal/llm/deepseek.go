@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -35,7 +34,7 @@ func NewDeepSeekAdapter(cfg DeepSeekConfig) *DeepSeekAdapter {
 		cfg.Model = "deepseek-chat"
 	}
 	return &DeepSeekAdapter{
-		model: cfg.Model, capabilities: capabilitiesFor("deepseek", cfg.Model),
+		model: cfg.Model, capabilities: productCapabilities(),
 		http: newAdapterHTTP(cfg.APIKey, cfg.BaseURL, cfg.Timeout),
 	}
 }
@@ -51,12 +50,11 @@ func (d *DeepSeekAdapter) Capabilities() Capabilities {
 }
 
 type chatWireMessage struct {
-	Role             string         `json:"role"`
-	Content          any            `json:"content"`
-	ReasoningContent string         `json:"reasoning_content,omitempty"`
-	ToolCallID       string         `json:"tool_call_id,omitempty"`
-	Name             string         `json:"name,omitempty"`
-	ToolCalls        []chatToolCall `json:"tool_calls,omitempty"`
+	Role       string         `json:"role"`
+	Content    any            `json:"content"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
+	Name       string         `json:"name,omitempty"`
+	ToolCalls  []chatToolCall `json:"tool_calls,omitempty"`
 }
 
 type chatContentPart struct {
@@ -89,12 +87,11 @@ type chatTool struct {
 }
 
 type deepSeekRequest struct {
-	Model           string            `json:"model"`
-	Messages        []chatWireMessage `json:"messages"`
-	Tools           []chatTool        `json:"tools,omitempty"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
-	Thinking        map[string]string `json:"thinking,omitempty"`
-	MaxTokens       int               `json:"max_tokens,omitempty"`
+	Model     string            `json:"model"`
+	Messages  []chatWireMessage `json:"messages"`
+	Tools     []chatTool        `json:"tools,omitempty"`
+	Thinking  map[string]string `json:"thinking,omitempty"`
+	MaxTokens int               `json:"max_tokens,omitempty"`
 }
 
 type chatChoice struct {
@@ -112,35 +109,17 @@ type deepSeekResponse struct {
 	Usage   chatUsage    `json:"usage"`
 }
 
-type deepSeekContinuation struct {
-	ReasoningByCall map[string]string `json:"reasoning_by_call,omitempty"`
-}
-
 func (d *DeepSeekAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
 	if err := validateContinuation(req.Continuation, d.Name(), d.Model()); err != nil {
 		return GenerateResponse{}, err
 	}
-	if !d.capabilities.ToolCalls && len(req.Tools) > 0 {
-		return GenerateResponse{}, fmt.Errorf("%w: model tool capability is unknown", ErrBadRequest)
-	}
-	continuation, err := decodeDeepSeekContinuation(req.Continuation)
-	if err != nil {
-		return GenerateResponse{}, err
-	}
-	messages, err := chatMessages(ctx, req.Messages, req.ImageResolver, d.capabilities, continuation.ReasoningByCall)
+	messages, err := chatMessages(ctx, req.Messages, req.ImageResolver, d.capabilities)
 	if err != nil {
 		return GenerateResponse{}, err
 	}
 	body := deepSeekRequest{
 		Model: d.model, Messages: messages, Tools: chatTools(req.Tools), MaxTokens: req.MaxOutputTokens,
-	}
-	if d.capabilities.Reasoning {
-		if req.Reasoning == ReasoningDisabled {
-			body.Thinking = map[string]string{"type": "disabled"}
-		} else {
-			body.ReasoningEffort = "high"
-			body.Thinking = map[string]string{"type": "enabled"}
-		}
+		Thinking: map[string]string{"type": "disabled"},
 	}
 	var wire deepSeekResponse
 	if err := d.http.doJSON(ctx, "/v1/chat/completions", body, req.OnRetry, &wire); err != nil {
@@ -154,19 +133,8 @@ func (d *DeepSeekAdapter) Generate(ctx context.Context, req GenerateRequest) (Ge
 	if err != nil {
 		return GenerateResponse{}, err
 	}
-	if len(toolCalls) > 0 && message.ReasoningContent != "" {
-		if continuation.ReasoningByCall == nil {
-			continuation.ReasoningByCall = map[string]string{}
-		}
-		continuation.ReasoningByCall[toolCalls[0].ID] = message.ReasoningContent
-	}
-	next, err := encodeDeepSeekContinuation(d.Name(), d.Model(), continuation)
-	if err != nil {
-		return GenerateResponse{}, err
-	}
 	return GenerateResponse{
 		Content: TextContent(chatWireText(message.Content)), ToolCalls: toolCalls,
-		Continuation: next,
 		Usage: Usage{
 			InputTokens: wire.Usage.PromptTokens, OutputTokens: wire.Usage.CompletionTokens,
 			TotalTokens: wire.Usage.TotalTokens,
@@ -174,37 +142,11 @@ func (d *DeepSeekAdapter) Generate(ctx context.Context, req GenerateRequest) (Ge
 	}, nil
 }
 
-func decodeDeepSeekContinuation(value *ProviderContinuation) (deepSeekContinuation, error) {
-	out := deepSeekContinuation{ReasoningByCall: map[string]string{}}
-	if value == nil || len(value.Opaque) == 0 {
-		return out, nil
-	}
-	if err := json.Unmarshal(value.Opaque, &out); err != nil {
-		return deepSeekContinuation{}, fmt.Errorf("%w: invalid continuation", ErrBadRequest)
-	}
-	if out.ReasoningByCall == nil {
-		out.ReasoningByCall = map[string]string{}
-	}
-	return out, nil
-}
-
-func encodeDeepSeekContinuation(provider, model string, value deepSeekContinuation) (*ProviderContinuation, error) {
-	if len(value.ReasoningByCall) == 0 {
-		return nil, nil
-	}
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return nil, fmt.Errorf("%w: encode continuation", ErrBadRequest)
-	}
-	return &ProviderContinuation{Provider: provider, Model: model, Opaque: raw}, nil
-}
-
 func chatMessages(
 	ctx context.Context,
 	messages []Message,
 	resolver ImageRefResolver,
 	capabilities Capabilities,
-	reasoningByCall map[string]string,
 ) ([]chatWireMessage, error) {
 	out := make([]chatWireMessage, len(messages))
 	for i, message := range messages {
@@ -214,7 +156,6 @@ func chatMessages(
 			for _, call := range message.ToolCalls {
 				out[i].ToolCalls = append(out[i].ToolCalls, toChatToolCall(call))
 			}
-			out[i].ReasoningContent = reasoningByCall[message.ToolCalls[0].ID]
 		}
 		parts := make([]chatContentPart, 0, len(message.Content))
 		hasImage := false

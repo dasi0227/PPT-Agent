@@ -70,7 +70,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
 			{Role: llm.RoleUser, Content: llm.TextContent("<transcript>\n" + string(raw) + "\n</transcript>")},
 		},
-		Reasoning: llm.ReasoningProviderDefault, MaxOutputTokens: maxSummaryTokens,
+		MaxOutputTokens: maxSummaryTokens,
 	})
 	if err != nil {
 		return Result{}, err

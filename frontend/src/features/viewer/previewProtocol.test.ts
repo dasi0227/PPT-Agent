@@ -9,6 +9,9 @@ describe('preview protocol validation', () => {
       index: 0,
     })).toBe(true);
     expect(isPreviewCommand({ type: 'gotoSlide', index: 2 })).toBe(true);
+    expect(isPreviewCommand({ type: 'replayCurrentSlide', slide_id: 's1' })).toBe(true);
+    expect(isPreviewCommand({ type: 'replayCurrentSlide', slide_id: '' })).toBe(false);
+    expect(isPreviewCommand({ type: 'replayCurrentSlide', slide_id: 's1', callback: 'x' })).toBe(false);
     expect(isPreviewCommand({ type: 'updateDeck', slides: [{ id: 's1', url: '/secret' }], index: 0 })).toBe(false);
     expect(isPreviewCommand({ type: 'executeScript', callback: 'x' })).toBe(false);
     expect(isPreviewCommand({ type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'region', html_revision: 2, html_hash: 'sha256:a' })).toBe(true);

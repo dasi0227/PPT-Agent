@@ -56,7 +56,6 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 					{Role: llm.RoleUser, Content: llm.TextContent("Reply with OK only.")},
 				},
 				Tools:           toLLMToolSchemas(test.tools),
-				Reasoning:       llm.ReasoningDisabled,
 				MaxOutputTokens: 32,
 			})
 			if err != nil {
@@ -99,7 +98,6 @@ func TestDeepSeekLiveProducesBoundedNextInputSuggestions(t *testing.T) {
 					{Role: llm.RoleUser, Content: llm.TextContent("The Chinese user asked to improve the narrative of a product launch deck. The work is complete: the opening now states the audience problem and slide 2 has a clearer evidence hierarchy. Call finish exactly once with a concise Chinese final response and zero to three useful next-input suggestions.")},
 				},
 				Tools:           toLLMToolSchemas([]ToolSchema{finish}),
-				Reasoning:       llm.ReasoningDisabled,
 				MaxOutputTokens: 320,
 			})
 			if err != nil {
@@ -139,7 +137,7 @@ func configuredDeepSeekAdapter(t *testing.T) llm.Provider {
 		t.Skip("no DeepSeek profile configured")
 	}
 	return llm.NewDeepSeekAdapter(llm.DeepSeekConfig{
-		APIKey: profile.Key, BaseURL: profile.URL, Model: profile.Model,
+		APIKey: profile.Key, Model: profile.Model,
 		Timeout: 90 * time.Second,
 	})
 }

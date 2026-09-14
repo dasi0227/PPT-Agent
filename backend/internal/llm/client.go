@@ -49,17 +49,14 @@ func (m Message) Text() string {
 	return ""
 }
 
-// Capabilities are code-owned facts for one provider/model combination.
-// Configuration cannot override them.
+// Capabilities are the fixed product contract for every configured model.
 type Capabilities struct {
-	Vision                  bool
-	ToolCalls               bool
-	MultipleToolCalls       bool
-	Reasoning               bool
-	RequiresReasoningReplay bool
-	ContextWindowTokens     int
-	ImageInputMIMEs         []string
-	MaxImageBytes           int
+	Vision              bool
+	ToolCalls           bool
+	MultipleToolCalls   bool
+	ContextWindowTokens int
+	ImageInputMIMEs     []string
+	MaxImageBytes       int
 }
 
 type ImageData struct {
@@ -86,7 +83,7 @@ type ToolCall struct {
 }
 
 // ProviderContinuation is deliberately opaque to Runtime. Adapters use it for
-// protocol state such as DeepSeek reasoning replay and OpenAI response state.
+// provider protocol state such as OpenAI response state.
 type ProviderContinuation struct {
 	Provider string          `json:"provider"`
 	Model    string          `json:"model"`
@@ -99,22 +96,12 @@ type Usage struct {
 	TotalTokens  int
 }
 
-// ReasoningPolicy lets one call opt out of provider reasoning without changing
-// the profile's capabilities or the Runtime's provider-default behavior.
-type ReasoningPolicy uint8
-
-const (
-	ReasoningProviderDefault ReasoningPolicy = iota
-	ReasoningDisabled
-)
-
 type GenerateRequest struct {
 	Messages        []Message
 	Tools           []ToolSchema
 	ImageResolver   ImageRefResolver
 	Continuation    *ProviderContinuation
 	OnRetry         func(attempt int)
-	Reasoning       ReasoningPolicy
 	MaxOutputTokens int
 }
 

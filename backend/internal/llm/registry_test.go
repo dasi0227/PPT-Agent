@@ -20,8 +20,8 @@ func (p registryFakeProvider) Generate(context.Context, GenerateRequest) (Genera
 
 func TestRegistrySupportsMultipleProfilesForOneProvider(t *testing.T) {
 	registry, err := NewRegistry("Kimi Vision", []ProfileConfig{
-		{Name: "Kimi Vision", Provider: "kimi", URL: "https://api.moonshot.cn/v1", Model: "kimi-k3", Key: "one"},
-		{Name: "Kimi Text", Provider: "kimi", URL: "https://api.moonshot.cn/v1", Model: "kimi-k2", Key: "two"},
+		{Name: "Kimi Vision", Provider: "kimi", Model: "kimi-k3", Key: "one"},
+		{Name: "Kimi Text", Provider: "kimi", Model: "any-new-model", Key: "two"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -31,14 +31,14 @@ func TestRegistrySupportsMultipleProfilesForOneProvider(t *testing.T) {
 		t.Fatalf("default profile resolution failed: err=%v", err)
 	}
 	text, err := registry.Resolve("Kimi Text")
-	if err != nil || text.Capabilities().Vision || !text.Capabilities().ToolCalls {
+	if err != nil || !text.Capabilities().Vision || !text.Capabilities().ToolCalls {
 		t.Fatalf("same-provider model capabilities are wrong: err=%v", err)
 	}
 }
 
-func TestRegistryUnknownModelFailsClosed(t *testing.T) {
+func TestRegistryUsesProductCapabilitiesForEveryConfiguredModel(t *testing.T) {
 	registry, err := NewRegistry("Unknown", []ProfileConfig{{
-		Name: "Unknown", Provider: "openai", URL: "https://api.openai.com/v1",
+		Name: "Unknown", Provider: "openai",
 		Model: "future-unregistered-model", Key: "secret",
 	}})
 	if err != nil {
@@ -46,8 +46,8 @@ func TestRegistryUnknownModelFailsClosed(t *testing.T) {
 	}
 	profile, _ := registry.Resolve("Unknown")
 	caps := profile.Capabilities()
-	if caps.Vision || caps.ToolCalls || caps.MultipleToolCalls || caps.Reasoning {
-		t.Fatalf("unknown model capabilities were invented: %+v", caps)
+	if !caps.Vision || !caps.ToolCalls || !caps.MultipleToolCalls || caps.ContextWindowTokens != 200_000 {
+		t.Fatalf("configured model did not receive the product contract: %+v", caps)
 	}
 }
 
@@ -56,7 +56,6 @@ func TestPublicRegistryProjectionContainsOnlySafeFields(t *testing.T) {
 		name: "kimi", model: "kimi-k3",
 		caps: Capabilities{
 			Vision: true, ToolCalls: true, MultipleToolCalls: true,
-			Reasoning: true, RequiresReasoningReplay: true,
 			ImageInputMIMEs: []string{"image/png"}, MaxImageBytes: 123,
 		},
 	}
@@ -78,7 +77,7 @@ func TestPublicRegistryProjectionContainsOnlySafeFields(t *testing.T) {
 	}
 }
 
-func TestKnownModelsDeclareContextWindows(t *testing.T) {
+func TestConfiguredProvidersUseFixedContextWindow(t *testing.T) {
 	cases := []struct {
 		provider string
 		model    string
@@ -88,7 +87,14 @@ func TestKnownModelsDeclareContextWindows(t *testing.T) {
 		{ProviderOpenAI, "gpt-5"},
 	}
 	for _, tc := range cases {
-		if got := capabilitiesFor(tc.provider, tc.model).ContextWindowTokens; got <= 0 {
+		registry, err := NewRegistry("Profile", []ProfileConfig{{
+			Name: "Profile", Provider: tc.provider, Model: tc.model, Key: "secret",
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		profile, _ := registry.Resolve("")
+		if got := profile.Capabilities().ContextWindowTokens; got != 200_000 {
 			t.Fatalf("%s/%s context window=%d", tc.provider, tc.model, got)
 		}
 	}

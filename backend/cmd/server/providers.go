@@ -38,7 +38,7 @@ func provideLLMRegistry(cfg *config.Config) (*llm.Registry, error) {
 	for _, profile := range cfg.LLM.Profiles {
 		profiles = append(profiles, llm.ProfileConfig{
 			Name: profile.Name, Provider: profile.Provider,
-			URL: profile.URL, Model: profile.Model, Key: profile.Key,
+			Model: profile.Model, Key: profile.Key,
 		})
 	}
 	return llm.NewRegistry(cfg.LLM.Default, profiles)

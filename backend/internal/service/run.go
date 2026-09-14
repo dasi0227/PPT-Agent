@@ -356,23 +356,6 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "create_run", nil)
 		}
 		p.Model = selectedProfile.Name()
-		capabilities := selectedProfile.Capabilities()
-		if !capabilities.ToolCalls {
-			agentErr := model.NewAgentError("MODEL_CAPABILITY_MISMATCH", "create_run", nil)
-			agentErr.Details["required_capability"] = "tool_calls"
-			agentErr.Details["next_action"] = "请选择支持工具调用的模型。"
-			return model.Run{}, agentErr
-		}
-		if command.Mode == model.ModeExecute && command.Scope.AllowsHTML() &&
-			!capabilities.Vision {
-			agentErr := model.NewAgentError("MODEL_CAPABILITY_MISMATCH", "create_run", nil)
-			agentErr.Details["required_capability"] = "vision"
-			agentErr.Details["next_action"] = "请选择标记为支持页面观察的模型。"
-			return model.Run{}, agentErr
-		}
-		if err := validateAttachmentCapabilities(selectedProfile.Capabilities(), command.Attachments, "create_run"); err != nil {
-			return model.Run{}, err
-		}
 	}
 	p.Command, p.Instruction = command, command.Instruction
 	if p.ClientRequestID == "" {
@@ -786,15 +769,6 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 		return model.SteeringMessage{}, domSelectionAgentError("steer_run", err)
 	}
 	reconcileSelectionMaterialization(snapshot, domSelections)
-	if len(attachments) > 0 && svc.registry != nil {
-		profile, profileErr := svc.registry.Resolve(runModel.Model.ProfileName)
-		if profileErr != nil {
-			return model.SteeringMessage{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "steer_run", profileErr)
-		}
-		if err := validateAttachmentCapabilities(profile.Capabilities(), attachments, "steer_run"); err != nil {
-			return model.SteeringMessage{}, err
-		}
-	}
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
 		"expected_run_id": expectedRunID, "client_message_id": clientMessageID, "content": content, "attachments": attachments,
 		"dom_selections": domSelections, "reference_order": referenceOrder,
@@ -839,25 +813,6 @@ func (svc *RunService) deletedSelectionSlideIDs(ctx context.Context, projectID s
 		deleted[selection.SlideID] = len(versions) > 0
 	}
 	return deleted, nil
-}
-
-func validateAttachmentCapabilities(caps llm.Capabilities, attachments []model.AttachmentReference, operation string) error {
-	if len(attachments) == 0 {
-		return nil
-	}
-	if !caps.Vision {
-		return model.NewAgentError("MODEL_VISION_REQUIRED", operation, nil)
-	}
-	allowed := make(map[string]bool, len(caps.ImageInputMIMEs))
-	for _, mime := range caps.ImageInputMIMEs {
-		allowed[mime] = true
-	}
-	for _, attachment := range attachments {
-		if !allowed[attachment.MediaType] || (caps.MaxImageBytes > 0 && attachment.SizeBytes > int64(caps.MaxImageBytes)) {
-			return model.NewAgentError("ATTACHMENT_TYPE_UNSUPPORTED", operation, nil)
-		}
-	}
-	return nil
 }
 
 func (svc *RunService) GetRun(ctx context.Context, runID string) (model.Run, error) {

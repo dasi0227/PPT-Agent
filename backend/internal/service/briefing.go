@@ -159,7 +159,6 @@ func (svc *briefingGenerator) generate(
 			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
 			{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + userMessage)},
 		},
-		Reasoning:       llm.ReasoningProviderDefault,
 		MaxOutputTokens: maxBriefingOutputTokens,
 	})
 	if err != nil {

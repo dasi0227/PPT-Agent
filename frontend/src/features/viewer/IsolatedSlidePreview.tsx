@@ -16,6 +16,7 @@ interface IsolatedSlidePreviewProps {
   onSelectionMessage?: (message: string) => void;
   onSelectionCanceled?: () => void;
   onSelectionPresence?: (statuses: Array<{ selection_id: string; status: 'active' | 'content_deleted'; targets?: Array<{ target_id: string; status: 'active' | 'content_deleted' }> }>) => void;
+  replayRequest?: { id: number; slideId: string };
 }
 
 export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
@@ -31,11 +32,14 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   onSelectionMessage,
   onSelectionCanceled,
   onSelectionPresence,
+  replayRequest,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const indexRef = useRef(index);
   const [renderError, setRenderError] = useState('');
   const [runtimeVersion, setRuntimeVersion] = useState(0);
+  const [runtimeReady, setRuntimeReady] = useState(false);
+  const deliveredReplayRef = useRef(replayRequest?.id);
   const sessionRef = useRef(`selection_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`);
   indexRef.current = index;
 
@@ -70,6 +74,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
       if (message.type === 'runtimeReady') {
         setRenderError('');
         sendDeck();
+        setRuntimeReady(true);
         window.setTimeout(sendSelectionState, 0);
       } else if (message.type === 'renderError') {
         setRenderError(message.message);
@@ -88,14 +93,23 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   }, [onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionSlide?.id, sendDeck, sendSelectionState]);
 
   useEffect(() => {
-    iframeRef.current?.contentWindow?.postMessage({ type: 'gotoSlide', index }, '*');
-  }, [index]);
-
-  useEffect(() => {
     sendDeck();
   }, [sendDeck]);
 
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'gotoSlide', index }, '*');
+  }, [index]);
+
   useEffect(() => { sendSelectionState(); }, [sendSelectionState]);
+
+  useEffect(() => {
+    if (!runtimeReady || !replayRequest || replayRequest.id === deliveredReplayRef.current) return;
+    deliveredReplayRef.current = replayRequest.id;
+    iframeRef.current?.contentWindow?.postMessage({
+      type: 'replayCurrentSlide',
+      slide_id: replayRequest.slideId,
+    }, '*');
+  }, [replayRequest, runtimeReady]);
 
   return (
     <div className="relative h-full w-full">
@@ -120,6 +134,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
             className="h-7 bg-white px-2 text-xs text-danger"
             onClick={() => {
               setRenderError('');
+              setRuntimeReady(false);
               setRuntimeVersion((value) => value + 1);
             }}
           >重试</Button>

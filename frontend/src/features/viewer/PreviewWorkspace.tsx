@@ -56,6 +56,7 @@ function PreviewFrame({
   onSelectionMessage,
   onSelectionCanceled,
   onSelectionPresence,
+  replayRequest,
 }: {
   slide: Slide;
   state: ResourceState<string>;
@@ -71,6 +72,7 @@ function PreviewFrame({
   onSelectionMessage?: (message: string) => void;
   onSelectionCanceled?: () => void;
   onSelectionPresence?: (statuses: Array<{ selection_id: string; status: 'active' | 'content_deleted'; targets?: Array<{ target_id: string; status: 'active' | 'content_deleted' }> }>) => void;
+  replayRequest?: { id: number; slideId: string };
 }) {
   const visibleHtml = visibleHTML(state);
   const deck = runtimeSlides && runtimeIndex !== undefined && runtimeIndex >= 0
@@ -97,6 +99,7 @@ function PreviewFrame({
           onSelectionMessage={onSelectionMessage}
           onSelectionCanceled={onSelectionCanceled}
           onSelectionPresence={onSelectionPresence}
+          replayRequest={replayRequest}
         />
       )}
       {(state.status === 'idle' || (state.status === 'loading' && !state.previous)) && (
@@ -281,6 +284,8 @@ export const PreviewWorkspace: React.FC = () => {
   );
   const { getState, load } = useSlideRenderCache(projectId);
   const [fullscreen, setFullscreen] = useState(false);
+  const [replayRequest, setReplayRequest] = useState<{ id: number; slideId: string }>();
+  const replayRequestIDRef = useRef(0);
   const [selectionMode, setSelectionMode] = useState<'element' | 'region' | 'none'>('none');
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -426,10 +431,18 @@ export const PreviewWorkspace: React.FC = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [enterOverview, exitOverview, goNext, goPrev, previewMode, safePage, selectionMode, slides.length]);
 
-  const present = useCallback(() => {
-    if (!canvasRef.current) return;
-    void canvasRef.current.requestFullscreen();
-  }, []);
+  const present = useCallback(async () => {
+    const canvas = canvasRef.current;
+    const expectedSlideID = currentSlide?.id;
+    if (!canvas || !expectedSlideID) return;
+    try {
+      await canvas.requestFullscreen();
+    } catch {
+      return;
+    }
+    replayRequestIDRef.current += 1;
+    setReplayRequest({ id: replayRequestIDRef.current, slideId: expectedSlideID });
+  }, [currentSlide?.id]);
 
   return (
     <div className="relative flex h-full flex-col bg-canvas">
@@ -526,6 +539,7 @@ export const PreviewWorkspace: React.FC = () => {
                 onSelection={(selection) => { void acceptSelection(selection); }}
                 onSelectionMessage={showGlobalWarning}
                 onSelectionCanceled={() => setSelectionMode('none')}
+                replayRequest={replayRequest}
                 onSelectionPresence={(statuses) => {
                   if (!activeThreadId) return;
                   const state = useComposerStore.getState();

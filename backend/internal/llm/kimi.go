@@ -30,7 +30,7 @@ func NewKimiAdapter(cfg KimiConfig) *KimiAdapter {
 		cfg.BaseURL = "https://api.moonshot.cn/v1"
 	}
 	return &KimiAdapter{
-		model: cfg.Model, capabilities: capabilitiesFor("kimi", cfg.Model),
+		model: cfg.Model, capabilities: productCapabilities(),
 		http: newAdapterHTTP(cfg.APIKey, cfg.BaseURL, cfg.Timeout),
 	}
 }
@@ -65,9 +65,6 @@ func (k *KimiAdapter) Generate(ctx context.Context, req GenerateRequest) (Genera
 	if req.Continuation != nil && len(req.Continuation.Opaque) > 0 {
 		return GenerateResponse{}, fmt.Errorf("%w: Kimi continuation is unsupported", ErrBadRequest)
 	}
-	if !k.capabilities.ToolCalls && len(req.Tools) > 0 {
-		return GenerateResponse{}, fmt.Errorf("%w: model tool capability is unknown", ErrBadRequest)
-	}
 	messages, err := kimiMessages(ctx, req.Messages, req.ImageResolver, k.capabilities)
 	if err != nil {
 		return GenerateResponse{}, err
@@ -75,11 +72,8 @@ func (k *KimiAdapter) Generate(ctx context.Context, req GenerateRequest) (Genera
 	body := kimiRequest{
 		Model: k.model, Messages: messages, Tools: chatTools(req.Tools), MaxTokens: req.MaxOutputTokens,
 	}
-	// Kimi reasoning parameters are provider-specific. The Runtime does not
-	// consume hidden reasoning, so the initial adapter mode keeps it disabled.
-	if k.capabilities.Reasoning {
-		body.Thinking = map[string]string{"type": "disabled"}
-	}
+	// The product does not request hidden reasoning from configured models.
+	body.Thinking = map[string]string{"type": "disabled"}
 	var wire kimiResponse
 	if err := k.http.doJSON(ctx, "/v1/chat/completions", body, req.OnRetry, &wire); err != nil {
 		return GenerateResponse{}, err
@@ -110,7 +104,7 @@ func kimiMessages(
 	resolver ImageRefResolver,
 	capabilities Capabilities,
 ) ([]chatWireMessage, error) {
-	wire, err := chatMessages(ctx, messages, resolver, capabilities, nil)
+	wire, err := chatMessages(ctx, messages, resolver, capabilities)
 	if err != nil {
 		return nil, err
 	}

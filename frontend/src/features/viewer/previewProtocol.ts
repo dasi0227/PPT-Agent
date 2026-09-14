@@ -7,6 +7,7 @@ export interface RuntimeSlide {
 export type PreviewCommand =
   | { type: 'updateDeck'; slides: RuntimeSlide[]; index: number }
   | { type: 'gotoSlide'; index: number }
+  | { type: 'replayCurrentSlide'; slide_id: string }
   | { type: 'setSelectionMode'; session_id: string; slide_id: string; mode: 'element' | 'region' | 'none'; html_revision: number; html_hash: string }
   | { type: 'renderDraftSelections'; session_id: string; slide_id: string; selections: Array<{ selection_id: string; marker_no: number; rect: import('../../api/types').CanvasRect; status: import('../../api/types').DOMSelectionStatus }> }
   | { type: 'probeDraftSelections'; session_id: string; slide_id: string; selections: import('../../api/types').DOMSelection[] };
@@ -95,6 +96,11 @@ export function isRuntimeSlide(value: unknown): value is RuntimeSlide {
 export function isPreviewCommand(value: unknown): value is PreviewCommand {
   if (!isRecord(value) || typeof value.type !== 'string') return false;
   if (value.type === 'gotoSlide') return isIndex(value.index);
+  if (value.type === 'replayCurrentSlide') {
+    return Object.keys(value).length === 2
+      && typeof value.slide_id === 'string'
+      && value.slide_id.length > 0;
+  }
   if (value.type === 'setSelectionMode') return isSessionMessage(value) && ['element', 'region', 'none'].includes(String(value.mode)) && Number.isInteger(value.html_revision) && typeof value.html_hash === 'string';
   if (value.type === 'renderDraftSelections') return isSessionMessage(value) && Array.isArray(value.selections) && value.selections.every((item) => isRecord(item) && typeof item.selection_id === 'string' && Number.isInteger(item.marker_no) && isRect(item.rect) && ['active','content_deleted','page_deleted'].includes(String(item.status)));
   if (value.type === 'probeDraftSelections') return isSessionMessage(value) && Array.isArray(value.selections) && value.selections.length <= 8;

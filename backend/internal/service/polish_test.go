@@ -74,7 +74,7 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 	if len(defaultProvider.Requests()) != 0 {
 		t.Fatal("polish ignored the selected profile and called the registry default")
 	}
-	if requests[0].Reasoning != llm.ReasoningDisabled || requests[0].MaxOutputTokens != maxPolishOutputTokens {
+	if requests[0].MaxOutputTokens != maxPolishOutputTokens {
 		t.Fatalf("polish generation policy mismatch: %+v", requests[0])
 	}
 	system := requests[0].Messages[0].Text()

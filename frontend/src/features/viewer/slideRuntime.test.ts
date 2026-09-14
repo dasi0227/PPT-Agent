@@ -28,7 +28,15 @@ describe('slide runtime', () => {
     ],
   });
 
-  it('renders validated HTML with srcdoc and switches without rebuilding frames', () => {
+  const send = (
+    runtimeWindow: ReturnType<typeof createRuntime>['window'],
+    data: unknown,
+    source: MessageEventSource = runtimeWindow as unknown as Window,
+  ) => {
+    runtimeWindow.dispatchEvent(new runtimeWindow.MessageEvent('message', { source, data }));
+  };
+
+  it('executes only the current slide and creates fresh frames when navigating away and back', () => {
     const dom = createRuntime();
     const { window } = dom;
     const slides = [
@@ -36,87 +44,121 @@ describe('slide runtime', () => {
       { id: 's2', html: '<!doctype html><title>two</title>', frame: frame('s2', 2) },
     ];
 
-    window.dispatchEvent(new window.MessageEvent('message', {
-      source: window as unknown as Window,
-      data: { type: 'updateDeck', slides, index: 0 },
-    }));
+    send(window, { type: 'updateDeck', slides, index: 0 });
 
     const initialFrames = Array.from(
       window.document.querySelectorAll('[data-slide-frame]'),
     ) as HTMLElement[];
 
-    expect(initialFrames).toHaveLength(2);
-    const srcdocs = initialFrames.map((container) => container.querySelector('iframe')?.getAttribute('srcdoc') ?? '');
-    expect(srcdocs.every((srcdoc) => srcdoc.includes('id="base-link"'))).toBe(true);
-    expect(srcdocs.every((srcdoc) => srcdoc.includes('/api/v1/themes/swiss-modern/css'))).toBe(true);
-    expect(srcdocs.every((srcdoc) => srcdoc.includes('/slide-runtime/selection-bridge.js'))).toBe(true);
+    expect(initialFrames).toHaveLength(1);
+    const initialFrame = initialFrames[0];
+    const srcdoc = initialFrame.querySelector('iframe')?.getAttribute('srcdoc') ?? '';
+    expect(srcdoc).toContain('id="base-link"');
+    expect(srcdoc).toContain('/api/v1/themes/swiss-modern/css');
+    expect(srcdoc).toContain('/slide-runtime/selection-bridge.js');
+    expect(srcdoc).not.toContain('<title>two</title>');
     expect(initialFrames[0]?.querySelector('.runtime-canvas')).not.toBeNull();
     expect(initialFrames.every((container) => container.querySelector('iframe')?.getAttribute('sandbox') === 'allow-scripts')).toBe(true);
     expect(initialFrames[0]?.querySelector('[data-runtime-page-number]')).toBeNull();
-    expect(initialFrames[1]?.querySelector('[data-runtime-page-number]')?.textContent).toBe('2');
-    expect(initialFrames[1]?.querySelector('[data-runtime-chrome="section_marker"]')?.textContent).toBe('正文');
-    expect(initialFrames[1]?.querySelector('[data-runtime-chrome="deck_title"]')?.textContent).toBe('Deck');
     expect(initialFrames[0]?.dataset.active).toBe('true');
-    expect(initialFrames[1]?.dataset.active).toBe('false');
 
-    window.dispatchEvent(new window.MessageEvent('message', {
-      source: window as unknown as Window,
-      data: { type: 'gotoSlide', index: 1 },
-    }));
+    send(window, { type: 'gotoSlide', index: 1 });
 
     const afterGotoFrames = Array.from(
       window.document.querySelectorAll('[data-slide-frame]'),
     ) as HTMLElement[];
-    expect(afterGotoFrames[0]).toBe(initialFrames[0]);
-    expect(afterGotoFrames[1]).toBe(initialFrames[1]);
-    expect(afterGotoFrames[0]?.dataset.active).toBe('false');
-    expect(afterGotoFrames[1]?.dataset.active).toBe('true');
+    expect(afterGotoFrames).toHaveLength(1);
+    expect(afterGotoFrames[0]).not.toBe(initialFrame);
+    expect(afterGotoFrames[0]?.dataset.slideId).toBe('s2');
+    expect(afterGotoFrames[0]?.querySelector('[data-runtime-page-number]')?.textContent).toBe('2');
+    expect(afterGotoFrames[0]?.querySelector('[data-runtime-chrome="section_marker"]')?.textContent).toBe('正文');
+    expect(afterGotoFrames[0]?.querySelector('[data-runtime-chrome="deck_title"]')?.textContent).toBe('Deck');
+
+    send(window, { type: 'gotoSlide', index: 0 });
+    const returnedFrame = window.document.querySelector('[data-slide-frame]') as HTMLElement;
+    expect(returnedFrame.dataset.slideId).toBe('s1');
+    expect(returnedFrame).not.toBe(initialFrame);
     dom.window.close();
   });
 
   it('renders current-thread draft markers only after a validated session command', () => {
     const dom = createRuntime();
     const { window } = dom;
-    window.dispatchEvent(new window.MessageEvent('message', { source: window as unknown as Window, data: { type: 'updateDeck', slides: [{ id: 's1', html: '<h1>one</h1>', frame: frame('s1', 1) }], index: 0 } }));
-    window.dispatchEvent(new window.MessageEvent('message', { source: window as unknown as Window, data: { type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'element', html_revision: 1, html_hash: 'sha256:a' } }));
-    window.dispatchEvent(new window.MessageEvent('message', { source: window as unknown as Window, data: { type: 'renderDraftSelections', session_id: 'session-one', slide_id: 's1', selections: [{ selection_id: 'sel_one', marker_no: 3, status: 'active', rect: { x: 10, y: 20, width: 100, height: 40 } }] } }));
+    send(window, { type: 'updateDeck', slides: [{ id: 's1', html: '<h1>one</h1>', frame: frame('s1', 1) }], index: 0 });
+    send(window, { type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'element', html_revision: 1, html_hash: 'sha256:a' });
+    send(window, { type: 'renderDraftSelections', session_id: 'session-one', slide_id: 's1', selections: [{ selection_id: 'sel_one', marker_no: 3, status: 'active', rect: { x: 10, y: 20, width: 100, height: 40 } }] });
+    expect(window.document.querySelector('.selection-box span')?.textContent).toBe('3');
+
+    send(window, { type: 'updateDeck', slides: [{ id: 's1', html: '<h1>updated</h1>', frame: frame('s1', 1) }], index: 0 });
     expect(window.document.querySelector('.selection-box span')?.textContent).toBe('3');
     dom.window.close();
   });
 
-  it('appends prefetched slides without rebuilding existing frames', () => {
+  it('keeps the current execution for prefetch, repeated navigation, and frame metadata updates', () => {
     const dom = createRuntime();
     const { window } = dom;
 
-    window.dispatchEvent(new window.MessageEvent('message', {
-      source: window as unknown as Window,
-      data: {
-        type: 'updateDeck',
-        slides: [{ id: 's1', html: '<!doctype html><title>one</title>', frame: frame('s1', 1) }],
-        index: 0,
-      },
-    }));
+    send(window, {
+      type: 'updateDeck',
+      slides: [{ id: 's1', html: '<!doctype html><title>one</title>', frame: frame('s1', 1) }],
+      index: 0,
+    });
     const firstFrame = window.document.querySelector('[data-slide-frame]') as HTMLElement;
+    send(window, { type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'element', html_revision: 1, html_hash: 'sha256:a' });
 
-    window.dispatchEvent(new window.MessageEvent('message', {
-      source: window as unknown as Window,
-      data: {
-        type: 'updateDeck',
-        slides: [
-          { id: 's1', html: '<!doctype html><title>one</title>', frame: frame('s1', 1) },
-          { id: 's2', html: '<!doctype html><title>two</title>', frame: frame('s2', 2) },
-        ],
-        index: 0,
-      },
-    }));
+    const updatedFrame = {
+      ...frame('s1', 1),
+      ordinal: 2,
+      total: 3,
+      deck_title: 'Renamed Deck',
+    };
+    send(window, {
+      type: 'updateDeck',
+      slides: [
+        { id: 's1', html: '<!doctype html><title>one</title>', frame: updatedFrame },
+        { id: 's2', html: '<!doctype html><title>prefetched</title>', frame: frame('s2', 2) },
+      ],
+      index: 0,
+    });
+    send(window, { type: 'gotoSlide', index: 0 });
 
     const frames = Array.from(
       window.document.querySelectorAll('[data-slide-frame]'),
     ) as HTMLElement[];
-    expect(frames).toHaveLength(2);
+    expect(frames).toHaveLength(1);
     expect(frames[0]).toBe(firstFrame);
     expect(frames[0]?.dataset.active).toBe('true');
-    expect(frames[1]?.dataset.active).toBe('false');
+    expect(frames[0]?.querySelector('[data-runtime-page-number]')?.textContent).toBe('2');
+    expect(frames[0]?.querySelector('[data-runtime-chrome="deck_title"]')?.textContent).toBe('Renamed Deck');
+    expect((frames[0]?.querySelector('[data-runtime-page-number]') as HTMLElement)?.style.pointerEvents).toBe('auto');
+    expect(frames[0]?.querySelector('iframe')?.getAttribute('srcdoc')).not.toContain('prefetched');
+    dom.window.close();
+  });
+
+  it('rebuilds only for current HTML, theme, or a matching replay request', () => {
+    const dom = createRuntime();
+    const { window } = dom;
+    const html = '<!doctype html><title>one</title>';
+    const slide = { id: 's1', html, frame: frame('s1', 1) };
+
+    send(window, { type: 'updateDeck', slides: [slide], index: 0 });
+    const initial = window.document.querySelector('[data-slide-frame]');
+
+    send(window, { type: 'updateDeck', slides: [{ ...slide, html: '<!doctype html><title>changed</title>' }], index: 0 });
+    const htmlChanged = window.document.querySelector('[data-slide-frame]');
+    expect(htmlChanged).not.toBe(initial);
+
+    const themed = { ...slide, html: '<!doctype html><title>changed</title>', frame: { ...slide.frame, theme_id: 'editorial' } };
+    send(window, { type: 'updateDeck', slides: [themed], index: 0 });
+    const themeChanged = window.document.querySelector('[data-slide-frame]');
+    expect(themeChanged).not.toBe(htmlChanged);
+
+    send(window, { type: 'replayCurrentSlide', slide_id: 'other' });
+    expect(window.document.querySelector('[data-slide-frame]')).toBe(themeChanged);
+    send(window, { type: 'replayCurrentSlide', slide_id: 's1', callback: 'x' });
+    expect(window.document.querySelector('[data-slide-frame]')).toBe(themeChanged);
+    send(window, { type: 'replayCurrentSlide', slide_id: 's1' });
+    expect(window.document.querySelector('[data-slide-frame]')).not.toBe(themeChanged);
     dom.window.close();
   });
 
@@ -129,14 +171,8 @@ describe('slide runtime', () => {
       index: 0,
     };
 
-    window.dispatchEvent(new window.MessageEvent('message', {
-      source: {} as Window,
-      data: validDeck,
-    }));
-    window.dispatchEvent(new window.MessageEvent('message', {
-      source: window as unknown as Window,
-      data: { type: 'executeScript', callback: 'alert(1)' },
-    }));
+    send(window, validDeck, {} as Window);
+    send(window, { type: 'executeScript', callback: 'alert(1)' });
 
     expect(window.document.querySelectorAll('[data-slide-frame]')).toHaveLength(0);
     dom.window.close();

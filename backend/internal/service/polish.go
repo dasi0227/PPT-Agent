@@ -102,7 +102,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
 		{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + instruction)},
-	}, Reasoning: llm.ReasoningDisabled, MaxOutputTokens: maxPolishOutputTokens})
+	}, MaxOutputTokens: maxPolishOutputTokens})
 	if err != nil {
 		if errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {
 			return PolishResult{}, context.Canceled

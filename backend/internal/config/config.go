@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -26,7 +25,6 @@ const (
 type LLMProfile struct {
 	Name     string `yaml:"name"`
 	Provider string `yaml:"provider"`
-	URL      string `yaml:"url"`
 	Model    string `yaml:"model"`
 	Key      string `yaml:"key"`
 }
@@ -130,9 +128,6 @@ func validateLLMConfig(cfg LLMConfig) error {
 		default:
 			return fmt.Errorf("MODEL_PROVIDER_UNSUPPORTED: %s.provider is unsupported", label)
 		}
-		if err := validateProfileURL(profile.URL); err != nil {
-			return fmt.Errorf("%s.url is invalid", label)
-		}
 		if strings.TrimSpace(profile.Model) == "" {
 			return fmt.Errorf("%s.model must not be empty", label)
 		}
@@ -144,24 +139,6 @@ func validateLLMConfig(cfg LLMConfig) error {
 		return errors.New("llm.default must exactly match one configured profile name")
 	}
 	return nil
-}
-
-func validateProfileURL(raw string) error {
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.IsAbs() == false || parsed.Host == "" || parsed.User != nil {
-		return errors.New("invalid URL")
-	}
-	switch parsed.Scheme {
-	case "https":
-		return nil
-	case "http":
-		host := parsed.Hostname()
-		ip := net.ParseIP(host)
-		if host == "localhost" || (ip != nil && ip.IsLoopback()) {
-			return nil
-		}
-	}
-	return errors.New("URL must use https or local development http")
 }
 
 func defaultWorkRoot() string {

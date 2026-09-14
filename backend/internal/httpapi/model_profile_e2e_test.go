@@ -127,7 +127,7 @@ func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 	}
 }
 
-func TestCreateRunRejectsMissingProfileAndCapabilityMismatch(t *testing.T) {
+func TestCreateRunRejectsMissingProfileButTrustsConfiguredModels(t *testing.T) {
 	_, baseURL, threadID := setupModelProjectThread(t)
 	missing := `{
 		"client_request_id":"req-model-missing",
@@ -141,18 +141,16 @@ func TestCreateRunRejectsMissingProfileAndCapabilityMismatch(t *testing.T) {
 		!strings.Contains(response.Body.String(), "MODEL_PROFILE_NOT_FOUND") {
 		t.Fatalf("missing profile error mismatch: %d %s", response.Code, response.Body.String())
 	}
-	mismatch := `{
+	configured := `{
 		"client_request_id":"req-model-mismatch",
 		"model":"Text Profile",
 		"scope":{"object":"presentation","selection":{"kind":"all_pages"}},
 		"mode":"execute",
 		"instruction":"make presentation"
 	}`
-	response = apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", mismatch)
-	if response.Code != http.StatusUnprocessableEntity ||
-		!strings.Contains(response.Body.String(), "MODEL_CAPABILITY_MISMATCH") ||
-		!strings.Contains(response.Body.String(), `"required_capability":"vision"`) {
-		t.Fatalf("capability mismatch error is not actionable: %d %s", response.Code, response.Body.String())
+	response = apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", configured)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("configured model should not be rejected by a capability registry: %d %s", response.Code, response.Body.String())
 	}
 }
 

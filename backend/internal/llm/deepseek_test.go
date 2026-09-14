@@ -55,7 +55,7 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-func TestDeepSeekGeneratePreservesMultipleToolCallsAndReasoningContinuation(t *testing.T) {
+func TestDeepSeekGeneratePreservesMultipleToolCallsWithThinkingDisabled(t *testing.T) {
 	var requests []map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		var body map[string]any
@@ -85,11 +85,11 @@ func TestDeepSeekGeneratePreservesMultipleToolCallsAndReasoningContinuation(t *t
 	}
 	if len(first.ToolCalls) != 2 || first.ToolCalls[0].ID != "call-1" ||
 		first.ToolCalls[1].ID != "call-2" || first.Usage.TotalTokens != 14 ||
-		first.Continuation == nil {
+		first.Continuation != nil {
 		t.Fatalf("normalized response is incomplete: %+v", first)
 	}
-	if requests[0]["reasoning_effort"] != "high" || requests[0]["thinking"].(map[string]any)["type"] != "enabled" {
-		t.Fatalf("provider-default DeepSeek reasoning changed: %#v", requests[0])
+	if requests[0]["thinking"].(map[string]any)["type"] != "disabled" {
+		t.Fatalf("DeepSeek thinking must be disabled: %#v", requests[0])
 	}
 	_, err = adapter.Generate(context.Background(), GenerateRequest{
 		Messages: []Message{
@@ -98,20 +98,14 @@ func TestDeepSeekGeneratePreservesMultipleToolCallsAndReasoningContinuation(t *t
 			{Role: RoleTool, ToolCallID: "call-1", Content: TextContent("outline")},
 			{Role: RoleTool, ToolCallID: "call-2", Content: TextContent("rendered")},
 		},
-		Tools:        []ToolSchema{{Name: "read_ppt"}, {Name: "render_slide"}},
-		Continuation: first.Continuation,
+		Tools: []ToolSchema{{Name: "read_ppt"}, {Name: "render_slide"}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	messages := requests[1]["messages"].([]any)
-	assistant := messages[1].(map[string]any)
-	if assistant["reasoning_content"] != "private-state" {
-		t.Fatalf("DeepSeek reasoning continuation was not replayed: %#v", assistant)
-	}
 }
 
-func TestDeepSeekGenerateCanDisableReasoningForPolish(t *testing.T) {
+func TestDeepSeekGenerateAlwaysDisablesThinking(t *testing.T) {
 	var requestBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if err := json.NewDecoder(request.Body).Decode(&requestBody); err != nil {
@@ -125,7 +119,6 @@ func TestDeepSeekGenerateCanDisableReasoningForPolish(t *testing.T) {
 	})
 	_, err := adapter.Generate(context.Background(), GenerateRequest{
 		Messages:        []Message{{Role: RoleUser, Content: TextContent("polish")}},
-		Reasoning:       ReasoningDisabled,
 		MaxOutputTokens: 1024,
 	})
 	if err != nil {
@@ -143,13 +136,22 @@ func TestDeepSeekGenerateCanDisableReasoningForPolish(t *testing.T) {
 	}
 }
 
-func TestDeepSeekFailsClosedForImageInput(t *testing.T) {
+func TestDeepSeekSupportsConfiguredImageInput(t *testing.T) {
 	adapter := NewDeepSeekAdapter(DeepSeekConfig{
 		APIKey: "secret", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-pro",
 	})
-	if adapter.Capabilities().Vision {
-		t.Fatal("DeepSeek V4 must remain text-only")
+	if !adapter.Capabilities().Vision {
+		t.Fatal("configured models must support the product image contract")
 	}
+	var received bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		received = true
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer server.Close()
+	adapter = NewDeepSeekAdapter(DeepSeekConfig{
+		APIKey: "secret", BaseURL: server.URL, Model: "deepseek-v4-pro",
+	})
 	_, err := adapter.Generate(context.Background(), GenerateRequest{
 		Messages: []Message{{Role: RoleUser, Content: []ContentPart{{
 			Type: "image", ImageRef: "run:r/screenshot:shot-1",
@@ -158,8 +160,8 @@ func TestDeepSeekFailsClosedForImageInput(t *testing.T) {
 			Bytes: testPNG(t, 2, 2), MIMEType: "image/png",
 		}},
 	})
-	if !errors.Is(err, ErrBadRequest) {
-		t.Fatalf("expected a closed image capability failure, got %v", err)
+	if err != nil || !received {
+		t.Fatalf("image input was not sent: err=%v received=%v", err, received)
 	}
 }
 

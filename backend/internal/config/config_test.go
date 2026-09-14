@@ -65,12 +65,10 @@ func validConfig(secret string) string {
   profiles:
     - name: Kimi Vision
       provider: kimi
-      url: https://api.moonshot.cn/v1
       model: kimi-k3
       key: ` + secret + `
     - name: Kimi Text
       provider: kimi
-      url: https://api.moonshot.cn/v1
       model: kimi-k2
       key: another-secret
 `
@@ -145,40 +143,35 @@ func TestLLMConfigValidationAndSecretRedaction(t *testing.T) {
 		{"duplicate name", `llm:
   default: Same
   profiles:
-    - {name: Same, provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: ` + secret + `}
-    - {name: Same, provider: openai, url: https://api.openai.com/v1, model: gpt-5, key: other}
+    - {name: Same, provider: kimi, model: kimi-k3, key: ` + secret + `}
+    - {name: Same, provider: openai, model: gpt-5, key: other}
 `},
 		{"blank name", `llm:
   default: " "
   profiles:
-    - {name: " ", provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: ` + secret + `}
+    - {name: " ", provider: kimi, model: kimi-k3, key: ` + secret + `}
 `},
-		{"control name", "llm:\n  default: \"bad\\u0001name\"\n  profiles:\n    - {name: \"bad\\u0001name\", provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: " + secret + "}\n"},
-		{"long name", "llm:\n  default: " + strings.Repeat("名", 81) + "\n  profiles:\n    - {name: " + strings.Repeat("名", 81) + ", provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: " + secret + "}\n"},
+		{"control name", "llm:\n  default: \"bad\\u0001name\"\n  profiles:\n    - {name: \"bad\\u0001name\", provider: kimi, model: kimi-k3, key: " + secret + "}\n"},
+		{"long name", "llm:\n  default: " + strings.Repeat("名", 81) + "\n  profiles:\n    - {name: " + strings.Repeat("名", 81) + ", provider: kimi, model: kimi-k3, key: " + secret + "}\n"},
 		{"unknown provider", `llm:
   default: Bad
   profiles:
-    - {name: Bad, provider: unknown, url: https://example.com, model: x, key: ` + secret + `}
+    - {name: Bad, provider: unknown, model: x, key: ` + secret + `}
 `},
 		{"missing default", `llm:
   default: Missing
   profiles:
-    - {name: Present, provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: ` + secret + `}
+    - {name: Present, provider: kimi, model: kimi-k3, key: ` + secret + `}
 `},
 		{"empty model", `llm:
   default: Bad
   profiles:
-    - {name: Bad, provider: kimi, url: https://api.moonshot.cn/v1, model: "", key: ` + secret + `}
+    - {name: Bad, provider: kimi, model: "", key: ` + secret + `}
 `},
 		{"empty key", `llm:
   default: Bad
   profiles:
-    - {name: Bad, provider: kimi, url: https://api.moonshot.cn/v1, model: kimi-k3, key: ""}
-`},
-		{"invalid url", `llm:
-  default: Bad
-  profiles:
-    - {name: Bad, provider: kimi, url: http://provider.example.com, model: kimi-k3, key: ` + secret + `}
+    - {name: Bad, provider: kimi, model: kimi-k3, key: ""}
 `},
 	}
 
@@ -195,18 +188,5 @@ func TestLLMConfigValidationAndSecretRedaction(t *testing.T) {
 				t.Fatalf("configuration error leaked a key: %v", err)
 			}
 		})
-	}
-}
-
-func TestLocalHTTPProfileURLIsAllowedForDevelopment(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "profiles.yaml")
-	writeFile(t, path, `llm:
-  default: Local
-  profiles:
-    - {name: Local, provider: openai, url: http://127.0.0.1:8080/v1, model: gpt-5, key: secret}
-`)
-	if _, err := loadLLMConfig(path); err != nil {
-		t.Fatalf("local development URL was rejected: %v", err)
 	}
 }

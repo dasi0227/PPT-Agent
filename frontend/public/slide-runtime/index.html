@@ -44,9 +44,6 @@
       border: none;
       background: #fff;
     }
-    .runtime-slide[data-active="false"] {
-      display: none;
-    }
     .runtime-chrome {
       position: absolute;
       z-index: 2;
@@ -82,6 +79,7 @@
     const state = {
       slides: [],
       activeIndex: 0,
+      activeExecution: null,
       selection: { mode: 'none', sessionID: '', slideID: '', revision: 0, hash: '' },
       drafts: new Map()
     };
@@ -125,6 +123,15 @@
         && isIndex(value.index);
     }
 
+    function isReplayCurrentSlide(value) {
+      return value !== null
+        && typeof value === 'object'
+        && value.type === 'replayCurrentSlide'
+        && Object.keys(value).length === 2
+        && typeof value.slide_id === 'string'
+        && value.slide_id.length > 0;
+    }
+
     function validRect(value) {
       return value && [value.x, value.y, value.width, value.height].every((item) => typeof item === 'number' && Number.isFinite(item))
         && value.x >= 0 && value.y >= 0 && value.width >= 0 && value.height >= 0
@@ -166,21 +173,6 @@
         && typeof target.placement === 'string' && typeof target.style === 'string' && typeof target.text === 'string'
         && validRect(target.rect) && target.rect.width > 0 && target.rect.height > 0);
       return targetsValid && chromeValid && value.dom_targets.length + value.chrome_targets.length > 0;
-    }
-
-    function setActive(index) {
-      const frames = Array.from(deck.querySelectorAll('[data-slide-frame]'));
-      if (!frames.length) {
-        return;
-      }
-
-      const nextIndex = Math.max(0, Math.min(index, frames.length - 1));
-      state.activeIndex = nextIndex;
-
-      frames.forEach((frame, frameIndex) => {
-        frame.dataset.active = frameIndex === nextIndex ? 'true' : 'false';
-        if (frameIndex === nextIndex) fitCanvas(frame, state.slides[frameIndex].frame.canvas);
-      });
     }
 
     function applyRuntimeFrame(container, context) {
@@ -273,61 +265,90 @@
       wrapper.style.setProperty('--runtime-canvas-scale', String(Math.min(availableWidth / canvas.width, availableHeight / canvas.height)));
     }
 
-    function loadSlides(slides) {
-      const existing = new Map(
-        Array.from(deck.querySelectorAll('[data-slide-frame]')).map((frame) => [frame.dataset.slideId, frame])
-      );
-      const nextIDs = new Set(slides.map((slide) => slide.id));
+    function renderSlide(index, forceReplay = false) {
+      if (!isIndex(index) || index >= state.slides.length) return false;
+      const slide = state.slides[index];
+      const execution = state.activeExecution;
+      const canReuse = !forceReplay
+        && execution
+        && execution.container.isConnected
+        && execution.slideID === slide.id
+        && execution.html === slide.html
+        && execution.themeID === slide.frame.theme_id;
+
+      if (canReuse) {
+        state.activeIndex = index;
+        execution.container.dataset.index = String(index);
+        execution.container.querySelector('iframe').title = `Slide ${index + 1}`;
+        applyRuntimeFrame(execution.container, slide.frame);
+        fitCanvas(execution.container, slide.frame.canvas);
+        postModeToInner();
+        return true;
+      }
+
+      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.theme_id, slide.frame.project_id, slide.id);
+      const container = document.createElement('div');
+      container.className = 'runtime-slide';
+      container.dataset.slideFrame = 'true';
+      container.dataset.active = 'true';
+      container.dataset.slideId = slide.id;
+      container.dataset.index = String(index);
+
+      const canvas = document.createElement('div');
+      canvas.className = 'runtime-canvas';
+      const frame = document.createElement('iframe');
+      frame.className = 'slide-frame';
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.title = `Slide ${index + 1}`;
+      frame.addEventListener('error', () => {
+        if (state.activeExecution?.container !== container) return;
+        const currentIndex = Number(container.dataset.index);
+        window.parent.postMessage({
+          type: 'renderError',
+          index: currentIndex,
+          message: `第 ${currentIndex + 1} 页渲染失败`
+        }, '*');
+      });
+      frame.addEventListener('load', () => {
+        if (state.activeExecution?.container !== container) return;
+        postModeToInner();
+        renderDrafts(slide.id);
+      });
+      frame.srcdoc = normalizedHTML;
+      canvas.appendChild(frame);
+
+      const overlays = document.createElement('div');
+      overlays.className = 'selection-overlays';
+      overlays.style.cssText = 'position:absolute;inset:0;z-index:3;pointer-events:none';
+      canvas.appendChild(overlays);
+      container.appendChild(canvas);
+      applyRuntimeFrame(container, slide.frame);
+
+      state.activeIndex = index;
+      state.activeExecution = {
+        slideID: slide.id,
+        html: slide.html,
+        themeID: slide.frame.theme_id,
+        container
+      };
+      deck.replaceChildren(container);
+      fitCanvas(container, slide.frame.canvas);
+      renderDrafts(slide.id);
+      postModeToInner();
+      return true;
+    }
+
+    function updateDeck(slides, index) {
+      if (slides.length === 0) {
+        state.slides = [];
+        state.activeIndex = 0;
+        state.activeExecution = null;
+        deck.replaceChildren();
+        return;
+      }
+      if (index >= slides.length) return;
       state.slides = slides.slice();
-
-      slides.forEach((slide, index) => {
-        let container = existing.get(slide.id);
-        if (!container) {
-          container = document.createElement('div');
-          container.className = 'runtime-slide';
-          container.dataset.slideFrame = 'true';
-          container.dataset.active = 'false';
-          container.dataset.slideId = slide.id;
-          const canvas = document.createElement('div');
-          canvas.className = 'runtime-canvas';
-          const frame = document.createElement('iframe');
-          frame.className = 'slide-frame';
-          frame.setAttribute('sandbox', 'allow-scripts');
-          frame.addEventListener('error', () => {
-            window.parent.postMessage({
-              type: 'renderError',
-              index,
-              message: `第 ${index + 1} 页渲染失败`
-            }, '*');
-          });
-          frame.addEventListener('load', () => {
-            postModeToInner();
-            renderDrafts(slide.id);
-          });
-          canvas.appendChild(frame);
-          const overlays = document.createElement('div');
-          overlays.className = 'selection-overlays';
-          overlays.style.cssText = 'position:absolute;inset:0;z-index:3;pointer-events:none';
-          canvas.appendChild(overlays);
-          container.appendChild(canvas);
-        }
-        const frame = container.querySelector('iframe');
-        const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.theme_id, slide.frame.project_id, slide.id);
-        if (frame.getAttribute('srcdoc') !== normalizedHTML) {
-          frame.srcdoc = normalizedHTML;
-        }
-        container.dataset.index = String(index);
-        frame.title = `Slide ${index + 1}`;
-        applyRuntimeFrame(container, slide.frame);
-        fitCanvas(container, slide.frame.canvas);
-        deck.appendChild(container);
-      });
-
-      existing.forEach((container, slideID) => {
-        if (!nextIDs.has(slideID)) {
-          container.remove();
-        }
-      });
+      renderSlide(index);
     }
 
     function containerFor(slideID) {
@@ -430,10 +451,12 @@
 
       try {
         if (isUpdateDeck(event.data)) {
-          loadSlides(event.data.slides);
-          setActive(event.data.index);
+          updateDeck(event.data.slides, event.data.index);
         } else if (isGotoSlide(event.data)) {
-          setActive(event.data.index);
+          renderSlide(event.data.index);
+        } else if (isReplayCurrentSlide(event.data)) {
+          const current = state.slides[state.activeIndex];
+          if (current?.id === event.data.slide_id) renderSlide(state.activeIndex, true);
         } else if (isSelectionMode(event.data)) {
           const current = state.slides[state.activeIndex];
           if (!current || current.id !== event.data.slide_id) return;
@@ -457,7 +480,8 @@
     if (typeof ResizeObserver !== 'undefined') {
       new ResizeObserver(() => {
         const active = deck.querySelector('[data-slide-frame][data-active="true"]');
-        if (active) fitCanvas(active, state.slides[Number(active.dataset.index)].frame.canvas);
+        const current = state.slides[state.activeIndex];
+        if (active && current) fitCanvas(active, current.frame.canvas);
       }).observe(deck);
     }
 

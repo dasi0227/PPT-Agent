@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -17,7 +16,6 @@ const (
 type ProfileConfig struct {
 	Name     string
 	Provider string
-	URL      string
 	Model    string
 	Key      string
 	Timeout  time.Duration
@@ -78,25 +76,27 @@ func (r *Registry) GoString() string { return r.String() }
 func NewRegistry(defaultName string, configs []ProfileConfig) (*Registry, error) {
 	registered := make([]Profile, 0, len(configs))
 	for _, cfg := range configs {
+		baseURL, err := providerBaseURL(cfg.Provider)
+		if err != nil {
+			return nil, err
+		}
 		var adapter Provider
 		switch cfg.Provider {
 		case ProviderDeepSeek:
 			adapter = NewDeepSeekAdapter(DeepSeekConfig{
-				APIKey: cfg.Key, BaseURL: cfg.URL, Model: cfg.Model, Timeout: cfg.Timeout,
+				APIKey: cfg.Key, BaseURL: baseURL, Model: cfg.Model, Timeout: cfg.Timeout,
 			})
 		case ProviderKimi:
 			adapter = NewKimiAdapter(KimiConfig{
-				APIKey: cfg.Key, BaseURL: cfg.URL, Model: cfg.Model, Timeout: cfg.Timeout,
+				APIKey: cfg.Key, BaseURL: baseURL, Model: cfg.Model, Timeout: cfg.Timeout,
 			})
 		case ProviderOpenAI:
 			adapter = NewOpenAIAdapter(OpenAIConfig{
-				APIKey: cfg.Key, BaseURL: cfg.URL, Model: cfg.Model, Timeout: cfg.Timeout,
+				APIKey: cfg.Key, BaseURL: baseURL, Model: cfg.Model, Timeout: cfg.Timeout,
 			})
-		default:
-			return nil, fmt.Errorf("MODEL_PROVIDER_UNSUPPORTED: profile %q uses an unsupported provider", cfg.Name)
 		}
 		registered = append(registered, Profile{
-			name: cfg.Name, provider: cfg.Provider, model: cfg.Model, url: cfg.URL, adapter: adapter,
+			name: cfg.Name, provider: cfg.Provider, model: cfg.Model, url: baseURL, adapter: adapter,
 		})
 	}
 	return NewRegistryWithProfiles(defaultName, registered)
@@ -185,64 +185,27 @@ func (r *Registry) Public() PublicProfiles {
 	return out
 }
 
-func capabilitiesFor(provider, model string) Capabilities {
-	model = strings.ToLower(strings.TrimSpace(model))
+func providerBaseURL(provider string) (string, error) {
 	switch provider {
 	case ProviderDeepSeek:
-		switch {
-		case model == "deepseek-chat":
-			return Capabilities{ToolCalls: true, MultipleToolCalls: true, ContextWindowTokens: 65536}
-		case model == "deepseek-reasoner",
-			strings.HasPrefix(model, "deepseek-v4-pro"),
-			strings.HasPrefix(model, "deepseek-v4-flash"):
-			return Capabilities{
-				ToolCalls: true, MultipleToolCalls: true, Reasoning: true,
-				RequiresReasoningReplay: true,
-				ContextWindowTokens:     65536,
-			}
-		}
+		return "https://api.deepseek.com", nil
 	case ProviderKimi:
-		switch {
-		case strings.HasPrefix(model, "kimi-k3"), strings.HasPrefix(model, "kimi-k2.6"):
-			return Capabilities{
-				Vision: true, ToolCalls: true, MultipleToolCalls: true, Reasoning: true,
-				ImageInputMIMEs:     []string{"image/png", "image/jpeg", "image/webp"},
-				MaxImageBytes:       defaultMaxImageBytes,
-				ContextWindowTokens: 262144,
-			}
-		case strings.HasPrefix(model, "kimi-k2"):
-			return Capabilities{ToolCalls: true, MultipleToolCalls: true, Reasoning: true, ContextWindowTokens: 131072}
-		}
+		return "https://api.moonshot.cn/v1", nil
 	case ProviderOpenAI:
-		switch {
-		case strings.HasPrefix(model, "gpt-5"),
-			strings.HasPrefix(model, "gpt-4.1"),
-			strings.HasPrefix(model, "gpt-4o"),
-			strings.HasPrefix(model, "o3"),
-			strings.HasPrefix(model, "o4"):
-			return Capabilities{
-				Vision: true, ToolCalls: true, MultipleToolCalls: true, Reasoning: true,
-				ImageInputMIMEs:     []string{"image/png", "image/jpeg", "image/webp"},
-				MaxImageBytes:       defaultMaxImageBytes,
-				ContextWindowTokens: openAIContextWindow(model),
-			}
-		}
+		return "https://api.openai.com/v1", nil
+	default:
+		return "", fmt.Errorf("MODEL_PROVIDER_UNSUPPORTED: unsupported provider %q", provider)
 	}
-	// Unknown models fail closed. In particular, a YAML entry cannot invent
-	// vision or tool support with configuration flags.
-	return Capabilities{}
 }
 
-func openAIContextWindow(model string) int {
-	switch {
-	case strings.HasPrefix(model, "gpt-4.1"):
-		return 1047576
-	case strings.HasPrefix(model, "gpt-5"):
-		return 400000
-	case strings.HasPrefix(model, "o3"), strings.HasPrefix(model, "o4"):
-		return 200000
-	default:
-		return 128000
+func productCapabilities() Capabilities {
+	return Capabilities{
+		Vision:              true,
+		ToolCalls:           true,
+		MultipleToolCalls:   true,
+		ContextWindowTokens: 200_000,
+		ImageInputMIMEs:     []string{"image/png", "image/jpeg", "image/webp"},
+		MaxImageBytes:       defaultMaxImageBytes,
 	}
 }
 

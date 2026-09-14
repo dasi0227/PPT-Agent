@@ -31,7 +31,7 @@ func NewOpenAIAdapter(cfg OpenAIConfig) *OpenAIAdapter {
 		cfg.BaseURL = "https://api.openai.com/v1"
 	}
 	return &OpenAIAdapter{
-		model: cfg.Model, capabilities: capabilitiesFor("openai", cfg.Model),
+		model: cfg.Model, capabilities: productCapabilities(),
 		http: newAdapterHTTP(cfg.APIKey, cfg.BaseURL, cfg.Timeout),
 	}
 }
@@ -94,9 +94,6 @@ type openAIContinuation struct {
 func (o *OpenAIAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
 	if err := validateContinuation(req.Continuation, o.Name(), o.Model()); err != nil {
 		return GenerateResponse{}, err
-	}
-	if !o.capabilities.ToolCalls && len(req.Tools) > 0 {
-		return GenerateResponse{}, fmt.Errorf("%w: model tool capability is unknown", ErrBadRequest)
 	}
 	continuation, err := decodeOpenAIContinuation(req.Continuation)
 	if err != nil {
