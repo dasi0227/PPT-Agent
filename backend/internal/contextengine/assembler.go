@@ -22,6 +22,10 @@ type ComponentIndexLoader interface {
 	LoadComponents(context.Context) ([]model.Component, error)
 }
 
+type SkillIndexLoader interface {
+	LoadSkills(context.Context) ([]model.RepositorySkill, error)
+}
+
 type ThemeLoader interface {
 	Get(string) (model.Theme, error)
 }
@@ -33,10 +37,10 @@ type ContextStore interface {
 type ContextAssembler struct {
 	store      ContextStore
 	components ComponentIndexLoader
+	skills     SkillIndexLoader
 	themes     ThemeLoader
 	estimator  TokenEstimator
 	profiles   ContextProfileResolver
-	memory     ThreadMemoryStore
 	registry   *RefRegistry
 }
 
@@ -45,11 +49,16 @@ func NewContextAssembler(s ContextStore, registry *RefRegistry) *ContextAssemble
 		registry = NewRefRegistry()
 	}
 	return &ContextAssembler{store: s, estimator: StableTokenEstimator{},
-		profiles: ContextProfileResolver{}, memory: ThreadMemoryStore{}, registry: registry}
+		profiles: ContextProfileResolver{}, registry: registry}
 }
 
 func (a *ContextAssembler) WithComponentLoader(loader ComponentIndexLoader) *ContextAssembler {
 	a.components = loader
+	return a
+}
+
+func (a *ContextAssembler) WithSkillLoader(loader SkillIndexLoader) *ContextAssembler {
+	a.skills = loader
 	return a
 }
 
@@ -86,10 +95,6 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	if err != nil {
 		return ContextPack{}, err
 	}
-	memory, memoryWarnings, err := a.memory.Load(project.WorkDir, req.ThreadID)
-	if err != nil {
-		return ContextPack{}, err
-	}
 	pack := ContextPack{
 		SchemaVersion: SchemaVersion, Profile: profile.ID, Command: req.Command,
 		Project:              (ProjectLoader{}).Load(project),
@@ -97,8 +102,8 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		Outline:              OutlineContext{Outline: outline, Summaries: []SlideSummary{}},
 		RelatedSlides:        []SlideSummary{}, Design: DesignContext{Design: &design},
 		SlideHTML:  SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
-		Components: []ComponentCandidate{}, Memory: memory,
-		Revisions: (RevisionLoader{}).From(deck, outline, design, slides, memory),
+		Components: []ComponentCandidate{}, Skills: []SkillCandidate{},
+		Revisions: (RevisionLoader{}).From(deck, outline, design, slides),
 	}
 	if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
 		if a.themes == nil {
@@ -157,7 +162,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		ContextID: opaqueID("ctx", req.RunID, project.ID, string(profile.ID), string(stableJSON(req.Command))),
 		RunID:     req.RunID, ThreadID: req.ThreadID, ProjectID: req.ProjectID, Profile: profile.ID,
 		ReadOnly: req.Command.Mode != model.ModeExecute, BudgetTokens: limit, OutputReserve: budget.OutputReserve,
-		Segments: []ContextSegment{}, Refs: []ContextRef{}, Dropped: []DroppedSegment{}, Warnings: memoryWarnings,
+		Segments: []ContextSegment{}, Refs: []ContextRef{}, Dropped: []DroppedSegment{},
 	}
 	addSegment := func(kind SegmentKind, source string, revision, priority int, reason string, required bool, detail DetailLevel, value any) {
 		tokens := a.estimator.Estimate(value)
@@ -182,7 +187,6 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	if pack.Theme != nil {
 		addSegment(SegmentTheme, "theme://"+pack.Theme.ID+"/contract", 0, 88, "current theme metadata and CSS contract", true, DetailFull, pack.Theme)
 	}
-	addSegment(SegmentMemory, "thread://"+req.ThreadID+"/memory", memory.Revision, 75, "cross-run confirmed context", true, DetailFull, memory)
 	if len(pack.RelatedSlides) > 0 && len(mentionedIDs) == 0 {
 		if cap := budget.SegmentCaps[SegmentRelated]; cap > 0 && a.estimator.Estimate(pack.RelatedSlides) > cap {
 			manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentRelated), Reason: "segment cap exceeded"})
@@ -201,19 +205,34 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	}
 	if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
 		a.loadSlideHTML(project, req, slides, &pack, &manifest, addSegment, limit)
-		if a.components != nil {
-			components, componentErr := a.components.LoadComponents(ctx)
-			if componentErr != nil {
-				manifest.Warnings = append(manifest.Warnings, "component repository unavailable: "+componentErr.Error())
-			} else {
-				pack.Components = componentCandidates(components)
-				if cap := budget.SegmentCaps[SegmentComponents]; cap > 0 && a.estimator.Estimate(pack.Components) > cap {
-					manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentComponents), Reason: "segment cap exceeded"})
-					pack.Components = []ComponentCandidate{}
-				}
-				if len(pack.Components) > 0 {
-					addSegment(SegmentComponents, "components://index", 0, 20, "available component reference catalog", false, DetailSummary, pack.Components)
-				}
+	}
+	if a.components != nil {
+		components, componentErr := a.components.LoadComponents(ctx)
+		if componentErr != nil {
+			manifest.Warnings = append(manifest.Warnings, "component repository unavailable: "+componentErr.Error())
+		} else {
+			pack.Components = componentCandidates(components)
+			if cap := budget.SegmentCaps[SegmentComponents]; cap > 0 && a.estimator.Estimate(pack.Components) > cap {
+				manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentComponents), Reason: "segment cap exceeded"})
+				pack.Components = []ComponentCandidate{}
+			}
+			if len(pack.Components) > 0 {
+				addSegment(SegmentComponents, "components://index", 0, 20, "available component reference catalog", false, DetailSummary, pack.Components)
+			}
+		}
+	}
+	if a.skills != nil {
+		skills, skillErr := a.skills.LoadSkills(ctx)
+		if skillErr != nil {
+			manifest.Warnings = append(manifest.Warnings, "skill repository unavailable: "+skillErr.Error())
+		} else {
+			pack.Skills = skillCandidates(skills)
+			if cap := budget.SegmentCaps[SegmentSkills]; cap > 0 && a.estimator.Estimate(pack.Skills) > cap {
+				manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentSkills), Reason: "segment cap exceeded"})
+				pack.Skills = []SkillCandidate{}
+			}
+			if len(pack.Skills) > 0 {
+				addSegment(SegmentSkills, "skills://index", 0, 20, "available skill catalog", false, DetailSummary, pack.Skills)
 			}
 		}
 	}
@@ -339,7 +358,7 @@ type BudgetAllocator struct{}
 func (BudgetAllocator) Allocate(pack *ContextPack, manifest *ContextManifest, limit int) {
 	for sumTokens(manifest.Segments) > limit {
 		dropped := false
-		for _, kind := range []SegmentKind{SegmentComponents, SegmentRelated, SegmentSlideHTML} {
+		for _, kind := range []SegmentKind{SegmentComponents, SegmentSkills, SegmentRelated, SegmentSlideHTML} {
 			for i, s := range manifest.Segments {
 				if s.Kind == kind && !s.Required {
 					manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: s.ID, Reason: "input budget exceeded"})
@@ -347,6 +366,8 @@ func (BudgetAllocator) Allocate(pack *ContextPack, manifest *ContextManifest, li
 					switch kind {
 					case SegmentComponents:
 						pack.Components = []ComponentCandidate{}
+					case SegmentSkills:
+						pack.Skills = []SkillCandidate{}
 					case SegmentRelated:
 						pack.RelatedSlides = []SlideSummary{}
 					case SegmentSlideHTML:
@@ -419,6 +440,9 @@ func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec,
 func componentCandidates(components []model.Component) []ComponentCandidate {
 	out := make([]ComponentCandidate, 0, len(components))
 	for _, component := range components {
+		if component.Disabled {
+			continue
+		}
 		tags := make([]string, len(component.Tags))
 		for index, tag := range component.Tags {
 			tags[index] = string(tag)
@@ -426,6 +450,23 @@ func componentCandidates(components []model.Component) []ComponentCandidate {
 		out = append(out, ComponentCandidate{
 			ID: component.ID, Name: component.Name, Description: component.Description,
 			Tags: tags,
+		})
+	}
+	return out
+}
+
+func skillCandidates(skills []model.RepositorySkill) []SkillCandidate {
+	out := make([]SkillCandidate, 0, len(skills))
+	for _, skill := range skills {
+		if skill.Disabled {
+			continue
+		}
+		tags := make([]string, len(skill.Tags))
+		for index, tag := range skill.Tags {
+			tags[index] = string(tag)
+		}
+		out = append(out, SkillCandidate{
+			ID: skill.ID, Name: skill.Name, Description: skill.Description, Tags: tags,
 		})
 	}
 	return out

@@ -223,7 +223,7 @@ export const CommandComposer: React.FC = () => {
   const setPolishing = composer.setPolishing;
   const applyContextDefault = composer.applyContextDefault;
   const resetForProject = composer.resetForProject;
-  const previousProjectId = useRef(activeProjectId);
+  const previousProjectId = useRef<string | null | undefined>(undefined);
   const steering = runStatus === 'running' && Boolean(activeRunId);
   const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling';
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
@@ -321,7 +321,7 @@ export const CommandComposer: React.FC = () => {
     pageCount: section.slides.length + section.subsections.reduce((total, subsection) => total + subsection.slides.length, 0),
   })), [activeSnapshot]);
   const currentSlide = slides.find((slide) => slide.id === currentSlideId);
-  const isEmptyProject = Boolean(activeProjectId) && slides.length === 0;
+  const isEmptyProject = Boolean(activeProjectId) && projectContentReady && slides.length === 0;
   const scopeSelectionEmpty = (composer.scopeSelection === 'custom_pages' && composer.customSlideIds.length === 0)
     || (composer.scopeSelection === 'custom_sections' && composer.customSectionIds.length === 0);
   const slashCommands = useMemo(() => resolveSlashCommands({
@@ -338,11 +338,11 @@ export const CommandComposer: React.FC = () => {
     disabled: requiresVision && !profile.capabilities.vision,
   })), [composer.modelProfileName, profiles, requiresVision]);
   const targetOptions = useMemo<SlashMenuOption[]>(() => [
-    { id: 'object:spec', label: '设计稿', selected: composer.scopeObject === 'spec' },
-    { id: 'object:html', label: '幻灯片', selected: composer.scopeObject === 'html' },
-    { id: 'object:presentation', label: '演示文稿', selected: composer.scopeObject === 'presentation' },
+    { id: 'object:spec', label: '设计稿', selected: composer.scopeObject === 'spec', disabled: isEmptyProject },
+    { id: 'object:html', label: '幻灯片', selected: composer.scopeObject === 'html', disabled: isEmptyProject },
+    { id: 'object:presentation', label: '演示文稿', selected: composer.scopeObject === 'presentation', disabled: isEmptyProject },
     { id: 'object:global', label: '全局资源', selected: composer.scopeObject === 'global' },
-  ], [composer.scopeObject]);
+  ], [composer.scopeObject, isEmptyProject]);
 
   useEffect(() => {
     if (previousProjectId.current === activeProjectId) return;
@@ -394,8 +394,9 @@ export const CommandComposer: React.FC = () => {
 		return () => { canceled = true; };
 	}, [activeProjectId, historyStateFailed, nextInputSuggestions, suggestionKey]);
   useEffect(() => {
+    if (!projectContentReady) return;
     applyContextDefault(slides.length > 0);
-  }, [activeProjectId, applyContextDefault, slides.length]);
+  }, [activeProjectId, applyContextDefault, projectContentReady, slides.length]);
   useEffect(() => {
     if (activeThreadId && useComposerStore.getState().restoredInputs[activeThreadId]) return;
     useComposerStore.getState().reconcileScopeIds(scopePages.map((page) => page.id), scopeSections.map((section) => section.id));
@@ -949,7 +950,7 @@ export const CommandComposer: React.FC = () => {
               onToggleSlide={composer.toggleCustomSlide}
               onToggleSection={composer.toggleCustomSection}
               disabled={disabled || steering}
-              locked={isEmptyProject}
+              emptyProject={isEmptyProject}
             />
             <ModelSelector
               profiles={profiles}

@@ -14,10 +14,10 @@ func TestExecutorStagesAndCommitsAllProjectChanges(t *testing.T) {
 	if err := executor.Bootstrap(ctx, root); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "threads"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "notes"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "threads", "ignored.jsonl"), []byte("secret\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "notes", "source.jsonl"), []byte("source\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "manifest.json"), []byte("{\"title\":\"Deck\"}\n"), 0o644); err != nil {
@@ -28,8 +28,8 @@ func TestExecutorStagesAndCommitsAllProjectChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cleanup()
-	if changes.FilesChanged != 2 {
-		t.Fatalf("expected manifest and .gitignore, got %+v", changes)
+	if changes.FilesChanged != 3 {
+		t.Fatalf("expected all artifact files and .gitignore, got %+v", changes)
 	}
 	result, err := executor.Commit(ctx, root, changes, Message{
 		Title: "feat: initialize presentation", Items: []string{"Track the initial presentation content"},
@@ -46,6 +46,6 @@ func TestExecutorStagesAndCommitsAllProjectChanges(t *testing.T) {
 	}
 	defer nextCleanup()
 	if next.FilesChanged != 0 {
-		t.Fatalf("ignored history left repository dirty: %+v", next)
+		t.Fatalf("committed artifact repository remains dirty: %+v", next)
 	}
 }

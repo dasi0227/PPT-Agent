@@ -70,18 +70,12 @@ func (SlideHTMLSummaryLoader) Load(path string) (HTMLSummary, []byte, error) {
 	return summary, raw, err
 }
 
-type ThreadMemoryLoader struct{ Store ThreadMemoryStore }
-
-func (l ThreadMemoryLoader) Load(workDir, threadID string) (ThreadMemory, []string, error) {
-	return l.Store.Load(workDir, threadID)
-}
-
 type RevisionLoader struct{}
 
-func (RevisionLoader) From(manifest pptspec.Manifest, outline pptspec.Outline, design pptspec.Design, slides map[string]pptspec.SlideSpec, memory ThreadMemory) RevisionRefs {
+func (RevisionLoader) From(manifest pptspec.Manifest, outline pptspec.Outline, design pptspec.Design, slides map[string]pptspec.SlideSpec) RevisionRefs {
 	r := RevisionRefs{
 		Manifest: manifest.Revision, Outline: outline.Revision, Design: design.Revision,
-		SlideSpecs: map[string]int{}, SlideHTML: map[string]int{}, ThreadMemory: memory.Revision,
+		SlideSpecs: map[string]int{}, SlideHTML: map[string]int{},
 	}
 	for id, slide := range slides {
 		r.SlideSpecs[id] = slide.Revision

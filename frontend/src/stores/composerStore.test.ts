@@ -57,6 +57,13 @@ describe('composerStore', () => {
     expect(useComposerStore.getState().customSectionIds).toEqual(['sec_one']);
   });
 
+  it('uses all resources for an empty project even after restoring a stale target', () => {
+    useComposerStore.setState({ scopeObject: 'presentation', scopeSelection: 'current_page', userTouchedTarget: true });
+    useComposerStore.getState().applyContextDefault(false);
+    expect(useComposerStore.getState().scopeObject).toBe('global');
+    expect(useComposerStore.getState().scopeSelection).toBe('all_pages');
+  });
+
   it('removes custom page and section IDs that no longer exist', () => {
     useComposerStore.setState({ customSlideIds: ['sli_one', 'sli_gone'], customSectionIds: ['sec_one', 'sec_gone'] });
     useComposerStore.getState().reconcileScopeIds(['sli_one'], ['sec_one']);

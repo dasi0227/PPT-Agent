@@ -24,6 +24,10 @@ type SkillService struct {
 	metadata repositoryMetadataStore
 }
 
+func (s *SkillService) LoadSkills(context.Context) ([]model.RepositorySkill, error) {
+	return s.List()
+}
+
 type skillFrontmatter struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`

@@ -66,8 +66,15 @@ func (PromptCompiler) compile(pack ContextPack, systemPolicy, runtimeState strin
 			},
 		})
 	}
-	if pack.Memory.SchemaVersion != "" {
-		writeSection("memory", pack.Memory)
+	if len(pack.Components) > 0 || len(pack.Skills) > 0 {
+		writeSection("available_resources", map[string]any{
+			"components": pack.Components,
+			"skills":     pack.Skills,
+			"usage_contract": []string{
+				"Use only the exact stable IDs listed here with load_component and load_skill.",
+				"load_component returns the component HTML; load_skill returns the skill instructions.",
+			},
+		})
 	}
 	writeSection("available_context_refs", pack.Manifest.Refs)
 

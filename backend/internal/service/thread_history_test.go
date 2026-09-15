@@ -22,8 +22,9 @@ import (
 func TestHistorySkipsCorruptLinesAndSortsBySeq(t *testing.T) {
 	ctx := context.Background()
 	work := t.TempDir()
-	workDir := filepath.Join(work, "p1")
-	if err := os.MkdirAll(filepath.Join(workDir, "threads"), 0o755); err != nil {
+	workDir := filepath.Join(work, "projects", "p1", "artifacts")
+	threadDir := filepath.Join(model.ProjectRoot(workDir), "threads", "t1")
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -32,7 +33,7 @@ func TestHistorySkipsCorruptLinesAndSortsBySeq(t *testing.T) {
 		`{corrupt`,
 		`{"seq":1,"ts":100,"run_id":"r1","turn":"user","type":"user_turn","data":{"text":"a"}}`,
 	}
-	if err := os.WriteFile(filepath.Join(workDir, "threads/t1.jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(threadDir, "user.jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,7 +51,7 @@ func TestHistorySkipsCorruptLinesAndSortsBySeq(t *testing.T) {
 	if err := st.CreateProject(ctx, model.Project{ID: "p1", WorkDir: workDir, Title: "t", Theme: "d", Status: "ready", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: model.UserHistoryPath("t1"), Status: "active", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -71,11 +72,12 @@ func TestHistorySkipsCorruptLinesAndSortsBySeq(t *testing.T) {
 func TestHistoryEmptyFileReturnsEmpty(t *testing.T) {
 	ctx := context.Background()
 	work := t.TempDir()
-	workDir := filepath.Join(work, "p1")
-	if err := os.MkdirAll(filepath.Join(workDir, "threads"), 0o755); err != nil {
+	workDir := filepath.Join(work, "projects", "p1", "artifacts")
+	threadDir := filepath.Join(model.ProjectRoot(workDir), "threads", "t1")
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(workDir, "threads/t1.jsonl"), []byte(""), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(threadDir, "user.jsonl"), []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,7 +93,7 @@ func TestHistoryEmptyFileReturnsEmpty(t *testing.T) {
 	}
 	now := time.Now().Unix()
 	_ = st.CreateProject(ctx, model.Project{ID: "p1", WorkDir: workDir, Title: "t", Theme: "d", Status: "ready", CreatedAt: now, UpdatedAt: now})
-	_ = st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: now, UpdatedAt: now})
+	_ = st.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: model.UserHistoryPath("t1"), Status: "active", CreatedAt: now, UpdatedAt: now})
 
 	out, err := service.NewThreadService(st).History(ctx, "t1")
 	if err != nil {
@@ -105,11 +107,12 @@ func TestHistoryEmptyFileReturnsEmpty(t *testing.T) {
 func TestHistoryMergesBriefingGroupWithoutWritingJSONL(t *testing.T) {
 	ctx := context.Background()
 	work := t.TempDir()
-	workDir := filepath.Join(work, "p1")
-	if err := os.MkdirAll(filepath.Join(workDir, "threads"), 0o755); err != nil {
+	workDir := filepath.Join(work, "projects", "p1", "artifacts")
+	threadDir := filepath.Join(model.ProjectRoot(workDir), "threads", "t1")
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	historyPath := filepath.Join(workDir, "threads/t1.jsonl")
+	historyPath := filepath.Join(threadDir, "user.jsonl")
 	initial := strings.Join([]string{
 		`{"seq":1,"ts":100,"run_id":"r1","turn":"user","type":"user_turn","data":{"text":"first"}}`,
 		`{"seq":1,"ts":300,"run_id":"r2","turn":"user","type":"user_turn","data":{"text":"second"}}`,
@@ -133,7 +136,7 @@ func TestHistoryMergesBriefingGroupWithoutWritingJSONL(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.CreateThread(ctx, model.Thread{
-		ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl",
+		ID: "t1", ProjectID: "p1", HistoryPath: model.UserHistoryPath("t1"),
 		Status: "active", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)

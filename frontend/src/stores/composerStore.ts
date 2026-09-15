@@ -69,8 +69,8 @@ const toggleId = (ids: string[], id: string) => (
 export const useComposerStore = create<ComposerState>((set) => ({
   restoredInputs: {},
   threadResourceMentions: {},
-  scopeObject: 'presentation',
-  scopeSelection: 'current_page',
+  scopeObject: 'global',
+  scopeSelection: 'all_pages',
   lastNonGlobalSelection: 'current_page',
   customSlideIds: [],
   customSectionIds: [],
@@ -183,15 +183,18 @@ export const useComposerStore = create<ComposerState>((set) => ({
       : { customSlideIds, customSectionIds };
   }),
   applyContextDefault: (hasSlides) => set((state) => {
-    if (state.userTouchedTarget) return state;
-    const scopeObject: ScopeObject = hasSlides ? 'presentation' : 'spec';
+    if (state.userTouchedTarget && hasSlides) return state;
+    const scopeObject: ScopeObject = hasSlides ? 'presentation' : 'global';
     const scopeSelection: ScopeSelectionKind = hasSlides ? 'current_page' : 'all_pages';
-    return state.scopeObject === scopeObject && state.scopeSelection === scopeSelection ? state : { scopeObject, scopeSelection, lastNonGlobalSelection: scopeSelection };
+    const userTouchedTarget = hasSlides ? state.userTouchedTarget : false;
+    return state.scopeObject === scopeObject && state.scopeSelection === scopeSelection && state.userTouchedTarget === userTouchedTarget
+      ? state
+      : { scopeObject, scopeSelection, lastNonGlobalSelection: scopeSelection, userTouchedTarget };
   }),
   resetForProject: () => set({
     restoredInputs: {},
     threadResourceMentions: {},
-    scopeObject: 'presentation', scopeSelection: 'current_page', lastNonGlobalSelection: 'current_page', customSlideIds: [], customSectionIds: [],
+    scopeObject: 'global', scopeSelection: 'all_pages', lastNonGlobalSelection: 'current_page', customSlideIds: [], customSectionIds: [],
     mode: 'execute', polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {}, userTouchedTarget: false,
   }),
 }));

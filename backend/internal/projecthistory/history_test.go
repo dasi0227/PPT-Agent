@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
@@ -29,10 +30,11 @@ func fixture(t *testing.T) (*Manager, model.Project) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := model.Project{ID: "p1", Title: "present", WorkDir: filepath.Join(root, "projects", "p1"), Status: "draft", Theme: "default", LayoutVersion: 6, CreatedAt: 1, UpdatedAt: 1}
+	p := model.Project{ID: "p1", Title: "present", WorkDir: filepath.Join(root, "projects", "p1", "artifacts"), Status: "draft", Theme: "default", LayoutVersion: 6, CreatedAt: 1, UpdatedAt: 1}
 	must(t, st.CreateProject(context.Background(), p))
 	must(t, os.MkdirAll(p.WorkDir, 0755))
-	must(t, st.CreateThread(context.Background(), model.Thread{ID: "t1", ProjectID: p.ID, Status: "active", CreatedAt: 1, UpdatedAt: 1, HistoryPath: "threads/t1.jsonl"}))
+	must(t, os.MkdirAll(filepath.Join(model.ProjectRoot(p.WorkDir), "threads", "t1"), 0755))
+	must(t, st.CreateThread(context.Background(), model.Thread{ID: "t1", ProjectID: p.ID, Status: "active", CreatedAt: 1, UpdatedAt: 1, HistoryPath: model.UserHistoryPath("t1")}))
 	return New(st, run.NewLockManager(), root), p
 }
 func must(t *testing.T, err error) {
@@ -43,17 +45,23 @@ func must(t *testing.T, err error) {
 }
 func put(t *testing.T, p model.Project, path, text string) {
 	t.Helper()
-	full := filepath.Join(p.WorkDir, path)
+	full := projectPath(p, path)
 	must(t, os.MkdirAll(filepath.Dir(full), 0755))
 	must(t, os.WriteFile(full, []byte(text), 0644))
 }
 func content(t *testing.T, p model.Project, path, want string) {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(p.WorkDir, path))
+	raw, err := os.ReadFile(projectPath(p, path))
 	must(t, err)
 	if string(raw) != want {
 		t.Fatalf("%s = %q, want %q", path, raw, want)
 	}
+}
+func projectPath(p model.Project, path string) string {
+	if strings.HasPrefix(filepath.ToSlash(path), "threads/") {
+		return filepath.Join(model.ProjectRoot(p.WorkDir), filepath.FromSlash(path))
+	}
+	return filepath.Join(p.WorkDir, filepath.FromSlash(path))
 }
 func cp(t *testing.T, m *Manager, p model.Project, id string, status model.RunStatus) {
 	t.Helper()
@@ -80,21 +88,21 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	m, p := fixture(t)
 	ctx := context.Background()
 	put(t, p, "outline.json", "initial")
-	put(t, p, "threads/t1.transcript.jsonl", "before first")
+	put(t, p, "threads/t1/model.jsonl", "before first")
 	put(t, p, ".git/HEAD", "real git")
 	cp(t, m, p, "cp1", model.RunDone)
 	put(t, p, "outline.json", "manual before cp2")
 	cp(t, m, p, "cp2", model.RunFailed)
-	put(t, p, "threads/t1.transcript.jsonl", "future compacted summary")
-	must(t, m.Store.CreateThread(ctx, model.Thread{ID: "t2", ProjectID: p.ID, Status: "active", CreatedAt: 1, UpdatedAt: 1, HistoryPath: "threads/t2.jsonl"}))
-	put(t, p, "threads/t2.jsonl", "future conversation")
+	put(t, p, "threads/t1/model.jsonl", "future compacted summary")
+	must(t, m.Store.CreateThread(ctx, model.Thread{ID: "t2", ProjectID: p.ID, Status: "active", CreatedAt: 1, UpdatedAt: 1, HistoryPath: model.UserHistoryPath("t2")}))
+	put(t, p, "threads/t2/user.jsonl", "future conversation")
 	cp(t, m, p, "cp3", model.RunCanceled)
 	cp(t, m, p, "cp4", model.RunDone)
 	put(t, p, "outline.json", "manual latest")
 	put(t, p, "attachments/new/original.png", "bytes")
 	s := switchTo(t, m, p, "cp2", "rollback2")
 	content(t, p, "outline.json", "manual before cp2")
-	content(t, p, "threads/t1.transcript.jsonl", "before first")
+	content(t, p, "threads/t1/model.jsonl", "before first")
 	if _, err := m.Store.GetRun(ctx, "cp2"); err == nil {
 		t.Fatal("target execution remains visible")
 	}
@@ -120,7 +128,7 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	must(t, restarted.Initialize(ctx))
 	s = switchTo(t, restarted, p, "", "restore")
 	content(t, p, "outline.json", "manual latest")
-	content(t, p, "threads/t1.transcript.jsonl", "future compacted summary")
+	content(t, p, "threads/t1/model.jsonl", "future compacted summary")
 	content(t, p, "attachments/new/original.png", "bytes")
 	content(t, p, ".git/HEAD", "real git")
 	if string(s.Scene) != `{"draft":"original"}` {
@@ -261,7 +269,8 @@ func TestInterruptedDeletionRecoversWithoutProjectRow(t *testing.T) {
 	_, err := m.BeginMutation(ctx, p.ID, s.Revision)
 	must(t, err)
 	must(t, m.Store.DeleteProject(ctx, p.ID))
-	must(t, os.RemoveAll(p.WorkDir))
+	must(t, os.RemoveAll(filepath.Join(model.ProjectRoot(p.WorkDir), "artifacts")))
+	must(t, os.RemoveAll(filepath.Join(model.ProjectRoot(p.WorkDir), "threads")))
 	// No finish callback: recreate the manager as at process startup.
 	restarted := New(m.Store, m.Locks, filepath.Dir(m.root))
 	must(t, restarted.Initialize(ctx))

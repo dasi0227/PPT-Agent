@@ -74,6 +74,7 @@ func NewRunService(
 ) *RunService {
 	refRegistry := contextengine.NewRefRegistry()
 	components := NewComponentService(workRoot, s)
+	skills := NewSkillService(workRoot, s)
 	themes := NewThemeService(workRoot, s)
 	if transcripts == nil {
 		transcripts = contextengine.NewFSTranscriptStore()
@@ -85,10 +86,11 @@ func NewRunService(
 		store: s, engine: engine,
 		assembler: contextengine.NewContextAssembler(s, refRegistry).
 			WithComponentLoader(components).
+			WithSkillLoader(skills).
 			WithThemeLoader(themes),
 		renderer:    renderer,
 		registry:    registry,
-		skills:      NewSkillService(workRoot, s),
+		skills:      skills,
 		components:  components,
 		themes:      themes,
 		transcripts: transcripts,
@@ -243,14 +245,6 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		Calibration:          r.calibration,
 		RecordCompaction:     r.recordAutoCompaction,
 	})
-	if outcome.Status == workflow.StatusCompleted {
-		memoryStore := contextengine.ThreadMemoryStore{}
-		old, _, err := memoryStore.Load(r.project.WorkDir, r.pack.Manifest.ThreadID)
-		if err == nil {
-			next := (contextengine.ThreadMemoryUpdater{}).UpdateSuccessful(old, r.runID, r.pack.Command.Instruction)
-			_ = memoryStore.Save(r.project.WorkDir, r.pack.Manifest.ThreadID, next)
-		}
-	}
 	return outcome
 }
 

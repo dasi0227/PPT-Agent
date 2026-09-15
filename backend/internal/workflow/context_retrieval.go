@@ -213,12 +213,6 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScop
 			AvailableLevels: []DetailLevel{DetailLevel(segment.DetailLevel)},
 		})
 	}
-	for _, item := range pack.Memory.UserPreferences {
-		appendItem(memoryIndexItem("memory", "user_preference", pack, item))
-	}
-	for _, item := range pack.Memory.ConfirmedDecisions {
-		appendItem(memoryIndexItem("memory", "confirmed_decision", pack, item))
-	}
 	if embedder != nil {
 		texts := make([]string, len(index.Items))
 		for i := range index.Items {
@@ -343,13 +337,6 @@ func targetForSegment(segment contextengine.ContextSegment) Resource {
 		return Resource{Type: "slide", SlideID: id, Part: part}
 	}
 	return Resource{Type: "deck", Part: "outline"}
-}
-
-func memoryIndexItem(kind, source string, pack contextengine.ContextPack, item contextengine.MemoryItem) ContextIndexItem {
-	return ContextIndexItem{
-		Kind: kind, Source: source, Revision: pack.Revisions.ThreadMemory,
-		Summary: item.Key + ": " + item.Value, Freshness: "current",
-	}
 }
 
 func retrievalScopeAllows(scope model.RunScope, target Resource) bool {

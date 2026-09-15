@@ -1,6 +1,7 @@
 package contextengine
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -8,7 +9,10 @@ import (
 )
 
 func TestFSTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
-	workDir := t.TempDir()
+	workDir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	store := NewFSTranscriptStore()
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("make a deck")},
@@ -32,7 +36,7 @@ func TestFSTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 	if err != nil || loaded[2].Text() != "<html>" {
 		t.Fatalf("round trip failed: messages=%+v err=%v", loaded, err)
 	}
-	if filepath.Base(TranscriptPath("thread")) != "thread.transcript.jsonl" {
+	if TranscriptPath("thread") != "threads/thread/model.jsonl" {
 		t.Fatalf("unexpected transcript path: %s", TranscriptPath("thread"))
 	}
 }

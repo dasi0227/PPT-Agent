@@ -200,14 +200,14 @@ describe('SSE parser', () => {
         type: 'deck',
         part: 'outline',
         display_name: '目录结构',
-        local_path: '/Users/test/.dasi/ppt/projects/p1/outline.json',
-        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/outline.json',
+        local_path: '/Users/test/.dasi/ppt/projects/p1/artifacts/outline.json',
+        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/artifacts/outline.json',
         insertions: 69,
         deletions: 9,
       },
       display: {
         label: '正在创建目录结构',
-        detail: '/Users/test/.dasi/ppt/projects/p1/outline.json',
+        detail: '/Users/test/.dasi/ppt/projects/p1/artifacts/outline.json',
       },
     }), '1a');
     expect(started).not.toBeNull();
@@ -222,14 +222,14 @@ describe('SSE parser', () => {
       target: {
         type: 'deck',
         part: 'outline',
-        local_path: '/Users/test/.dasi/ppt/projects/p1/outline.json',
-        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/outline.json',
+        local_path: '/Users/test/.dasi/ppt/projects/p1/artifacts/outline.json',
+        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/artifacts/outline.json',
         insertions: 69,
         deletions: 9,
       },
       display: {
         label: '已创建目录结构',
-        detail: '/Users/test/.dasi/ppt/projects/p1/outline.json',
+        detail: '/Users/test/.dasi/ppt/projects/p1/artifacts/outline.json',
       },
     }), '1');
 
@@ -246,8 +246,8 @@ describe('SSE parser', () => {
       affected_targets: [{
         type: 'deck',
         part: 'outline',
-        local_path: '/Users/test/.dasi/ppt/projects/p1/outline.json',
-        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/outline.json',
+        local_path: '/Users/test/.dasi/ppt/projects/p1/artifacts/outline.json',
+        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/artifacts/outline.json',
         insertions: 69,
         deletions: 9,
       }],
@@ -267,8 +267,8 @@ describe('SSE parser', () => {
         slide_id: 'slide-01',
         part: 'spec',
         display_name: '页面',
-        local_path: '/Users/test/.dasi/ppt/projects/p1/slides/slide-01/spec.json',
-        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/slides/slide-01/spec.json',
+        local_path: '/Users/test/.dasi/ppt/projects/p1/artifacts/slides/slide-01/spec.json',
+        open_url: 'vscode://file/Users/test/.dasi/ppt/projects/p1/artifacts/slides/slide-01/spec.json',
         insertions: 29,
       }],
       error: null,

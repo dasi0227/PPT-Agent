@@ -402,6 +402,41 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	}
 }
 
+type recordingTranscript struct {
+	messages []llm.Message
+}
+
+func (s *recordingTranscript) Load(string, string) ([]llm.Message, error) {
+	return append([]llm.Message(nil), s.messages...), nil
+}
+
+func (s *recordingTranscript) Replace(_ string, _ string, messages []llm.Message) error {
+	s.messages = append([]llm.Message(nil), messages...)
+	return nil
+}
+
+func TestFinishPersistsFinalReplyInModelHistory(t *testing.T) {
+	transcript := &recordingTranscript{}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("finish", "finish", map[string]any{"message": "已完成，下一步可以继续调整视觉层级。"}),
+	}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "finish-history", ProjectDir: t.TempDir(), Transcript: transcript,
+		Context:     testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "完成任务"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+	})
+	if outcome.Status != StatusCompleted {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if len(transcript.messages) < 2 {
+		t.Fatalf("model history=%+v", transcript.messages)
+	}
+	last := transcript.messages[len(transcript.messages)-1]
+	if last.Role != llm.RoleAssistant || last.Text() != "已完成，下一步可以继续调整视觉层级。" {
+		t.Fatalf("final reply missing from model history: %+v", last)
+	}
+}
+
 func TestFinishPublishesNormalizedSuggestionsWithRunHistoryRevision(t *testing.T) {
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{toolCall("finish", "finish", map[string]any{

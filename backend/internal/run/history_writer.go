@@ -10,7 +10,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-// HistoryEntry 是 <workdir>/<history_path> 里 jsonl 每行的 schema（UX §2.3）。
+// HistoryEntry 是 <project-root>/<history_path> 里 jsonl 每行的 schema（UX §2.3）。
 type HistoryEntry struct {
 	Seq   int64          `json:"seq"`
 	TS    int64          `json:"ts"`
@@ -31,7 +31,7 @@ type ThreadLocator interface {
 	GetProject(ctx context.Context, id string) (model.Project, error)
 }
 
-// FSHistoryWriter 按 thread 独立 mutex 串行化 append 到 <workdir>/<history_path>。
+// FSHistoryWriter 按 thread 独立 mutex 串行化 append 到 <project-root>/<history_path>。
 // 目录不存在会自动创建；单 thread 内保证行的原子性与顺序，跨 thread 无相互阻塞。
 type FSHistoryWriter struct {
 	loc ThreadLocator
@@ -65,7 +65,7 @@ func (w *FSHistoryWriter) Append(ctx context.Context, threadID string, entry His
 	if err != nil {
 		return err
 	}
-	full := filepath.Join(proj.WorkDir, filepath.FromSlash(th.HistoryPath))
+	full := filepath.Join(model.ProjectRoot(proj.WorkDir), filepath.FromSlash(th.HistoryPath))
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return err
 	}

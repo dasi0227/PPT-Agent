@@ -14,7 +14,7 @@ import (
 
 const (
 	maxDiffBytes = 96 * 1024
-	ignoreBlock  = "threads/\n.run/\n.commit-tmp/\n*.tmp\n"
+	ignoreBlock  = ".run/\n.commit-tmp/\n*.tmp\n"
 )
 
 type ChangeSet struct {

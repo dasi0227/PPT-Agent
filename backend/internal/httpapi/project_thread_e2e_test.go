@@ -462,7 +462,7 @@ func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
 	_ = json.Unmarshal(resp.Body.Bytes(), &runModel)
 	runID := runModel["id"].(string)
 	screenshotID := "shot_123e4567-e89b-12d3-a456-426614174000"
-	path := filepath.Join(root, "projects", projectID, ".runtime", "renders", runID, screenshotID+".png")
+	path := filepath.Join(root, "projects", projectID, "artifacts", ".runtime", "renders", runID, screenshotID+".png")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -494,7 +494,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 	}
 	projectID, _ := project["id"].(string)
 	workDir, _ := project["work_dir"].(string)
-	if projectID == "" || workDir != filepath.Join(root, "projects", projectID) {
+	if projectID == "" || workDir != filepath.Join(root, "projects", projectID, "artifacts") {
 		t.Fatalf("bad project response: %+v", project)
 	}
 	if _, err := os.Stat(filepath.Join(workDir, "state.json")); err != nil {
@@ -531,6 +531,27 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","scope":{"object":"spec","selection":{"kind":"all_pages"}},"mode":"execute","instruction":"生成设计稿"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestDeleteProjectPurgesPrivateContainerAfterHistoryAccepts(t *testing.T) {
+	srv, root := setupProjectThreadServer(t)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Delete me","language":"zh-CN"}`)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
+	}
+	var project map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &project); err != nil {
+		t.Fatal(err)
+	}
+	projectID := project["id"].(string)
+	projectRoot := filepath.Join(root, "projects", projectID)
+	resp = apiReq(t, http.MethodDelete, srv.URL+"/api/v1/projects/"+projectID, "")
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("delete project: %d %s", resp.Code, resp.Body.String())
+	}
+	if _, err := os.Stat(projectRoot); !os.IsNotExist(err) {
+		t.Fatalf("deleted project container remains: %v", err)
 	}
 }
 

@@ -65,7 +65,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	}
 	id := svc.newID()
 	now := svc.clock()
-	workDir := filepath.Join(svc.workRoot, "projects", id)
+	workDir := filepath.Join(svc.workRoot, "projects", id, "artifacts")
 	proj := model.Project{
 		ID:              id,
 		Title:           title,
@@ -83,11 +83,11 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 		return model.Project{}, err
 	}
 	if err := svc.initializeRepository(ctx, workDir); err != nil {
-		_ = os.RemoveAll(workDir)
+		_ = os.RemoveAll(model.ProjectRoot(workDir))
 		return model.Project{}, err
 	}
 	if err := svc.store.CreateProject(ctx, proj); err != nil {
-		_ = os.RemoveAll(workDir)
+		_ = os.RemoveAll(model.ProjectRoot(workDir))
 		return model.Project{}, err
 	}
 	return proj, nil
@@ -168,6 +168,14 @@ func (svc *ProjectService) projectWithFileRevisions(project model.Project) (mode
 	return project, nil
 }
 
+type deferredProjectCleanupKey struct{}
+
+// WithDeferredProjectCleanup keeps checkpoints alive until the history middleware
+// has accepted a project deletion and no longer needs its rollback preimage.
+func WithDeferredProjectCleanup(ctx context.Context) context.Context {
+	return context.WithValue(ctx, deferredProjectCleanupKey{}, true)
+}
+
 func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {
 	release := func() {}
 	var lockErr error
@@ -188,7 +196,14 @@ func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {
 	if err := svc.store.DeleteProject(ctx, id); err != nil {
 		return err
 	}
-	return os.RemoveAll(proj.WorkDir)
+	if deferred, _ := ctx.Value(deferredProjectCleanupKey{}).(bool); deferred {
+		root := model.ProjectRoot(proj.WorkDir)
+		return errors.Join(
+			os.RemoveAll(filepath.Join(root, "artifacts")),
+			os.RemoveAll(filepath.Join(root, "threads")),
+		)
+	}
+	return os.RemoveAll(model.ProjectRoot(proj.WorkDir))
 }
 
 func (svc *ProjectService) SetTheme(ctx context.Context, id, themeID string) (model.Project, error) {
@@ -251,8 +266,9 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err != nil {
 		return err
 	}
-	projectRel := filepath.Join("projects", proj.ID)
-	for _, rel := range []string{projectRel, filepath.Join(projectRel, "threads"), filepath.Join(projectRel, "slides")} {
+	projectRoot := filepath.Join("projects", proj.ID)
+	projectRel := filepath.Join(projectRoot, "artifacts")
+	for _, rel := range []string{projectRel, filepath.Join(projectRoot, "threads"), filepath.Join(projectRoot, "checkpoints"), filepath.Join(projectRel, "slides")} {
 		abs, err := sb.Resolve(rel)
 		if err != nil {
 			return err

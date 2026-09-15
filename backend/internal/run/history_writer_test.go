@@ -32,19 +32,20 @@ func (f *fakeLoc) GetProject(_ context.Context, id string) (model.Project, error
 
 func TestFSHistoryWriter_AppendCreatesFile(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "threads"), 0o755); err != nil {
+	workDir := filepath.Join(dir, "artifacts")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	loc := &fakeLoc{
-		proj: model.Project{ID: "p1", WorkDir: dir},
-		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl"},
+		proj: model.Project{ID: "p1", WorkDir: workDir},
+		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: model.UserHistoryPath("t1")},
 	}
 	w := NewFSHistoryWriter(loc)
 	err := w.Append(context.Background(), "t1", HistoryEntry{Seq: 1, TS: 100, RunID: "r1", Turn: "user", Type: "user_turn", Data: map[string]any{"text": "hi"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "threads/t1.jsonl"))
+	raw, err := os.ReadFile(filepath.Join(dir, "threads", "t1", "user.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,10 +61,11 @@ func TestFSHistoryWriter_AppendCreatesFile(t *testing.T) {
 
 func TestFSHistoryWriter_AppendsMultipleLines(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(dir, "threads"), 0o755)
+	workDir := filepath.Join(dir, "artifacts")
+	_ = os.MkdirAll(workDir, 0o755)
 	loc := &fakeLoc{
-		proj: model.Project{ID: "p1", WorkDir: dir},
-		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl"},
+		proj: model.Project{ID: "p1", WorkDir: workDir},
+		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: model.UserHistoryPath("t1")},
 	}
 	w := NewFSHistoryWriter(loc)
 	for i := 0; i < 3; i++ {
@@ -71,7 +73,7 @@ func TestFSHistoryWriter_AppendsMultipleLines(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	raw, _ := os.ReadFile(filepath.Join(dir, "threads/t1.jsonl"))
+	raw, _ := os.ReadFile(filepath.Join(dir, "threads", "t1", "user.jsonl"))
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 lines, got %d: %s", len(lines), string(raw))
@@ -80,10 +82,11 @@ func TestFSHistoryWriter_AppendsMultipleLines(t *testing.T) {
 
 func TestFSHistoryWriter_ConcurrentSameThread(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.MkdirAll(filepath.Join(dir, "threads"), 0o755)
+	workDir := filepath.Join(dir, "artifacts")
+	_ = os.MkdirAll(workDir, 0o755)
 	loc := &fakeLoc{
-		proj: model.Project{ID: "p1", WorkDir: dir},
-		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl"},
+		proj: model.Project{ID: "p1", WorkDir: workDir},
+		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: model.UserHistoryPath("t1")},
 	}
 	w := NewFSHistoryWriter(loc)
 	var wg sync.WaitGroup
@@ -95,7 +98,7 @@ func TestFSHistoryWriter_ConcurrentSameThread(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
-	raw, _ := os.ReadFile(filepath.Join(dir, "threads/t1.jsonl"))
+	raw, _ := os.ReadFile(filepath.Join(dir, "threads", "t1", "user.jsonl"))
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	if len(lines) != 50 {
 		t.Fatalf("expected 50 lines, got %d", len(lines))
@@ -110,9 +113,11 @@ func TestFSHistoryWriter_ConcurrentSameThread(t *testing.T) {
 
 func TestFSHistoryWriter_UnknownThreadReturnsError(t *testing.T) {
 	dir := t.TempDir()
+	workDir := filepath.Join(dir, "artifacts")
+	_ = os.MkdirAll(workDir, 0o755)
 	loc := &fakeLoc{
-		proj: model.Project{ID: "p1", WorkDir: dir},
-		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl"},
+		proj: model.Project{ID: "p1", WorkDir: workDir},
+		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: model.UserHistoryPath("t1")},
 	}
 	w := NewFSHistoryWriter(loc)
 	err := w.Append(context.Background(), "unknown", HistoryEntry{Seq: 1})

@@ -10,6 +10,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -239,7 +240,12 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			historyError(c, err)
 			return
 		}
-		c.Request = c.Request.WithContext(run.WithStartBarrier(c.Request.Context(), func() error { return finish(true) }))
+		isProjectDelete := c.Request.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "projects"
+		requestContext := c.Request.Context()
+		if isProjectDelete {
+			requestContext = service.WithDeferredProjectCleanup(requestContext)
+		}
+		c.Request = c.Request.WithContext(run.WithStartBarrier(requestContext, func() error { return finish(true) }))
 		original := c.Writer
 		buffer := &historyResponse{ResponseWriter: original}
 		c.Writer = buffer
@@ -255,6 +261,11 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 		}
 		if cleanupErr := r.history.Collect(id); cleanupErr != nil {
 			r.log.Warn("project checkpoint cleanup deferred")
+		}
+		if isProjectDelete && buffer.Status() < 400 {
+			if cleanupErr := r.history.Purge(id); cleanupErr != nil {
+				r.log.Warn("deleted project container cleanup deferred")
+			}
 		}
 		original.WriteHeader(buffer.Status())
 		_, _ = original.Write(buffer.body.Bytes())

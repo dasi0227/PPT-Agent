@@ -245,16 +245,20 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 func newFSWriterForTest(t *testing.T) (*FSHistoryWriter, string) {
 	t.Helper()
 	dir := t.TempDir()
+	workDir := filepath.Join(dir, "artifacts")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	locator := &fakeLoc{
-		proj: model.Project{ID: "p1", WorkDir: dir},
-		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl"},
+		proj: model.Project{ID: "p1", WorkDir: workDir},
+		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: model.UserHistoryPath("t1")},
 	}
 	return NewFSHistoryWriter(locator), dir
 }
 
 func readHistoryLines(t *testing.T, dir string) []HistoryEntry {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(dir, "threads", "t1.jsonl"))
+	raw, err := os.ReadFile(filepath.Join(dir, "threads", "t1", "user.jsonl"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

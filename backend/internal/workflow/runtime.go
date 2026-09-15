@@ -2016,6 +2016,11 @@ func (r *Runtime) finishCandidate(
 	if state.lastSummary == "" {
 		state.lastSummary = "Run completed"
 	}
+	// The finish payload is the assistant's authoritative final reply. Persist it
+	// so the next run receives the same conversation that the user saw.
+	state.messages = append(state.messages, llm.Message{
+		Role: llm.RoleAssistant, Content: llm.TextContent(state.lastSummary),
+	})
 	if state.mode == model.ModeExecute {
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted")
 		state.tx.AcceptMaterializationProofs(result.MaterializationProofs)

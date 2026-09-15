@@ -84,7 +84,7 @@ type Manager struct {
 }
 
 func New(s SnapshotStore, locks *run.LockManager, root string) *Manager {
-	return &Manager{Store: s, Locks: locks, root: filepath.Join(root, "project-history")}
+	return &Manager{Store: s, Locks: locks, root: filepath.Join(root, "projects")}
 }
 func (m *Manager) TryGate(id string) (func(), bool) {
 	v, _ := m.gates.LoadOrStore(id, &sync.Mutex{})
@@ -100,9 +100,19 @@ func (m *Manager) Gate(id string) func() {
 	mu.Lock()
 	return mu.Unlock
 }
+func (m *Manager) container(id string) string {
+	if id == "" || id == "." || !filepath.IsLocal(id) || filepath.Base(id) != id {
+		return filepath.Join(m.root, ".invalid-project-id")
+	}
+	return filepath.Join(m.root, id)
+}
 func (m *Manager) dir(id string) string {
-	sum := sha256.Sum256([]byte(id))
-	return filepath.Join(m.root, hex.EncodeToString(sum[:]))
+	return filepath.Join(m.container(id), "checkpoints")
+}
+
+// Purge removes the project container after a project deletion has been durably accepted.
+func (m *Manager) Purge(id string) error {
+	return os.RemoveAll(m.container(id))
 }
 func writeJSON(path string, v any) error {
 	raw, err := json.Marshal(v)
@@ -209,7 +219,7 @@ func files(root string) (map[string]File, error) {
 	return out, err
 }
 func (m *Manager) Capture(ctx context.Context, p model.Project, s State) (string, error) {
-	f, err := files(p.WorkDir)
+	f, err := projectFiles(p.WorkDir)
 	if err != nil {
 		return "", err
 	}
@@ -245,37 +255,74 @@ func (m *Manager) load(id, ref string) (Snapshot, error) {
 	}
 	return snap, err
 }
+
+// Only these two trees belong to a project restore. Checkpoints never snapshot themselves.
+func projectFiles(workDir string) (map[string]File, error) {
+	out := map[string]File{}
+	for _, tree := range []string{"artifacts", "threads"} {
+		root := filepath.Join(model.ProjectRoot(workDir), tree)
+		values, err := files(root)
+		if errors.Is(err, os.ErrNotExist) && tree == "threads" {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for name, value := range values {
+			out[tree+"/"+name] = value
+		}
+	}
+	return out, nil
+}
+
 func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) error {
+	trees := map[string]map[string]File{"artifacts": {}, "threads": {}}
+	for name, value := range snap.Files {
+		parts := strings.SplitN(name, "/", 2)
+		if len(parts) != 2 || trees[parts[0]] == nil || !filepath.IsLocal(parts[1]) || excluded(parts[1]) {
+			return errors.New("invalid snapshot path")
+		}
+		trees[parts[0]][parts[1]] = value
+	}
+	for _, tree := range []string{"artifacts", "threads"} {
+		if err := restoreFiles(filepath.Join(model.ProjectRoot(p.WorkDir), tree), trees[tree]); err != nil {
+			return err
+		}
+	}
+	return m.Store.RestoreProject(ctx, p.ID, snap.Database)
+}
+
+func restoreFiles(root string, snapshotFiles map[string]File) error {
 	// A durable journal and preimage exist before touching any active bytes.
-	if info, err := os.Lstat(p.WorkDir); err == nil && !info.IsDir() {
+	if info, err := os.Lstat(root); err == nil && !info.IsDir() {
 		return errors.New("project restore requires a real directory")
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	for rel := range snap.Files {
+	for rel := range snapshotFiles {
 		if !filepath.IsLocal(rel) || excluded(rel) {
 			return errors.New("invalid snapshot path")
 		}
 	}
-	if err := mkdirDurable(p.WorkDir, 0755); err != nil {
+	if err := mkdirDurable(root, 0755); err != nil {
 		return err
 	}
-	entries, err := os.ReadDir(p.WorkDir)
+	entries, err := os.ReadDir(root)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
 		if !excluded(entry.Name()) {
-			if err = os.RemoveAll(filepath.Join(p.WorkDir, entry.Name())); err != nil {
+			if err = os.RemoveAll(filepath.Join(root, entry.Name())); err != nil {
 				return err
 			}
 		}
 	}
-	for rel, f := range snap.Files {
+	for rel, f := range snapshotFiles {
 		if !filepath.IsLocal(rel) || excluded(rel) {
 			return errors.New("invalid snapshot path")
 		}
-		path := filepath.Join(p.WorkDir, filepath.FromSlash(rel))
+		path := filepath.Join(root, filepath.FromSlash(rel))
 		if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
@@ -295,14 +342,14 @@ func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) err
 			return closeErr
 		}
 	}
-	if err := syncDirectories(p.WorkDir); err != nil {
+	if err := syncDirectories(root); err != nil {
 		return err
 	}
-	return m.Store.RestoreProject(ctx, p.ID, snap.Database)
+	return nil
 }
 
 // Sync newly created directory links too: syncing only a file's immediate
-// directory would not persist a newly created project-history parent.
+// directory would not persist a newly created project checkpoint parent.
 func mkdirDurable(path string, mode fs.FileMode) error {
 	info, err := os.Stat(path)
 	if err == nil {
@@ -353,7 +400,7 @@ func (m *Manager) Recover(ctx context.Context, id string) error {
 		// A failed project deletion may already have removed its database row.
 		// The verified preimage owns the original location as well as its rows.
 		p := model.Project{ID: id, WorkDir: snap.WorkDir}
-		if !filepath.IsAbs(p.WorkDir) {
+		if p.WorkDir != filepath.Join(m.root, id, "artifacts") {
 			return errors.New("invalid snapshot work directory")
 		}
 		if err = m.apply(ctx, p, snap); err != nil {
@@ -377,7 +424,7 @@ func (m *Manager) Initialize(ctx context.Context) error {
 		if !entry.IsDir() {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(m.root, entry.Name(), "journal.json"))
+		raw, err := os.ReadFile(filepath.Join(m.root, entry.Name(), "checkpoints", "journal.json"))
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
@@ -391,7 +438,7 @@ func (m *Manager) Initialize(ctx context.Context) error {
 		if len(journal.Before) != 64 || strings.ContainsAny(journal.Before, "/\\") {
 			return ErrTarget
 		}
-		raw, err = os.ReadFile(filepath.Join(m.root, entry.Name(), journal.Before+".json"))
+		raw, err = os.ReadFile(filepath.Join(m.root, entry.Name(), "checkpoints", journal.Before+".json"))
 		if err != nil {
 			return err
 		}
@@ -399,7 +446,7 @@ func (m *Manager) Initialize(ctx context.Context) error {
 		if err = json.Unmarshal(raw, &snap); err != nil {
 			return err
 		}
-		if m.dir(snap.ProjectID) != filepath.Join(m.root, entry.Name()) {
+		if m.dir(snap.ProjectID) != filepath.Join(m.root, entry.Name(), "checkpoints") {
 			return ErrTarget
 		}
 		if err = m.Recover(ctx, snap.ProjectID); err != nil {
@@ -498,7 +545,7 @@ func (m *Manager) Preview(ctx context.Context, id, runID string) (Preview, error
 	if err != nil {
 		return Preview{}, err
 	}
-	current, err := files(p.WorkDir)
+	current, err := projectFiles(p.WorkDir)
 	if err != nil {
 		return Preview{}, err
 	}

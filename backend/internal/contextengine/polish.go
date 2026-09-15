@@ -43,19 +43,6 @@ type PolishTargetContext struct {
 	HTMLWarnings []string           `json:"html_warnings,omitempty"`
 }
 
-type PolishMemoryContext struct {
-	UserPreferences    []PolishMemoryItem `json:"user_preferences,omitempty"`
-	ConfirmedDecisions []PolishMemoryItem `json:"confirmed_decisions,omitempty"`
-	BrandConstraints   []PolishMemoryItem `json:"brand_constraints,omitempty"`
-	ContentFacts       []PolishMemoryItem `json:"content_facts,omitempty"`
-	RecentChanges      []PolishMemoryItem `json:"recent_changes,omitempty"`
-}
-
-type PolishMemoryItem struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
 type PolishContext struct {
 	SchemaVersion   string               `json:"schema_version"`
 	Command         PolishCommandContext `json:"command"`
@@ -64,7 +51,6 @@ type PolishContext struct {
 	Design          DesignContext        `json:"design"`
 	Target          PolishTargetContext  `json:"target,omitempty"`
 	RelatedSlides   []SlideSummary       `json:"related_slides,omitempty"`
-	Memory          PolishMemoryContext  `json:"memory,omitempty"`
 	RecentTurns     []PolishRecentTurn   `json:"recent_turns,omitempty"`
 	EstimatedTokens int                  `json:"estimated_tokens"`
 	Warnings        []string             `json:"warnings,omitempty"`
@@ -129,12 +115,6 @@ func (a *ContextAssembler) AssemblePolish(
 		}
 	}
 	if strings.TrimSpace(req.ThreadID) != "" {
-		memory, warnings, loadErr := a.memory.Load(project.WorkDir, req.ThreadID)
-		if loadErr != nil {
-			return PolishContext{}, loadErr
-		}
-		pack.Warnings = append(pack.Warnings, warnings...)
-		pack.Memory = projectPolishMemory(memory)
 		for _, turn := range loadTranscriptTurns(project.WorkDir, req.ThreadID, 4) {
 			if turn.Turn != "user" {
 				continue
@@ -155,37 +135,12 @@ func CompilePolishContext(pack PolishContext) (string, error) {
 		string(raw) + "\n</polish_context>", nil
 }
 
-func projectPolishMemory(memory ThreadMemory) PolishMemoryContext {
-	return PolishMemoryContext{
-		UserPreferences:    takeLatestMemory(memory.UserPreferences, 6),
-		ConfirmedDecisions: takeLatestMemory(memory.ConfirmedDecisions, 6),
-		BrandConstraints:   takeLatestMemory(memory.BrandConstraints, 6),
-		ContentFacts:       takeLatestMemory(memory.ContentFacts, 6),
-		RecentChanges:      takeLatestMemory(memory.RecentChanges, 4),
-	}
-}
-
-func takeLatestMemory(items []MemoryItem, limit int) []PolishMemoryItem {
-	if len(items) > limit {
-		items = items[len(items)-limit:]
-	}
-	out := make([]PolishMemoryItem, 0, len(items))
-	for _, item := range items {
-		out = append(out, PolishMemoryItem{Key: item.Key, Value: compactText(item.Value, 320)})
-	}
-	return out
-}
-
 func trimPolishContext(pack *PolishContext, estimator TokenEstimator, limit int) {
 	estimate := func() int { return estimator.Estimate(pack) }
 	for estimate() > limit {
 		switch {
 		case len(pack.RecentTurns) > 0:
 			pack.RecentTurns = pack.RecentTurns[1:]
-		case len(pack.Memory.RecentChanges) > 0:
-			pack.Memory.RecentChanges = pack.Memory.RecentChanges[1:]
-		case len(pack.Memory.ContentFacts) > 0:
-			pack.Memory.ContentFacts = pack.Memory.ContentFacts[1:]
 		case len(pack.Outline.Slides) > 12:
 			pack.Outline.Slides = pack.Outline.Slides[:len(pack.Outline.Slides)-1]
 		case len(pack.RelatedSlides) > 0:

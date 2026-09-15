@@ -13,6 +13,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
@@ -38,6 +39,19 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	projectRoot := filepath.Join(root, "projects", project.ID)
+	if project.WorkDir != filepath.Join(projectRoot, "artifacts") {
+		t.Fatalf("project work dir = %q", project.WorkDir)
+	}
+	for _, path := range []string{
+		project.WorkDir,
+		filepath.Join(projectRoot, "threads"),
+		filepath.Join(projectRoot, "checkpoints"),
+	} {
+		if info, statErr := os.Stat(path); statErr != nil || !info.IsDir() {
+			t.Fatalf("project directory missing: %s (%v)", path, statErr)
+		}
 	}
 	if subject := projectGitOutput(t, project.WorkDir, "log", "-1", "--format=%s"); subject != initialProjectCommitTitle {
 		t.Fatalf("initial commit subject = %q", subject)
@@ -70,6 +84,25 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	defer cleanup()
 	if changed.FilesChanged != 0 {
 		t.Fatalf("initial scaffold remains uncommitted: %+v", changed)
+	}
+
+	thread, err := NewThreadService(st).CreateThread(ctx, project.ID, CreateThreadParams{Title: "First task"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if thread.HistoryPath != model.UserHistoryPath(thread.ID) {
+		t.Fatalf("thread history path = %q", thread.HistoryPath)
+	}
+	for _, path := range []string{
+		filepath.Join(projectRoot, filepath.FromSlash(model.UserHistoryPath(thread.ID))),
+		filepath.Join(projectRoot, filepath.FromSlash(model.ModelHistoryPath(thread.ID))),
+	} {
+		if info, statErr := os.Stat(path); statErr != nil || !info.Mode().IsRegular() {
+			t.Fatalf("thread history file missing: %s (%v)", path, statErr)
+		}
+	}
+	if _, statErr := os.Stat(filepath.Join(projectRoot, "threads", thread.ID, "memory.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("memory.json must not be created: %v", statErr)
 	}
 }
 

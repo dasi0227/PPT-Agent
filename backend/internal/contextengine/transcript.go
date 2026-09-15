@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 type TranscriptEntry struct {
@@ -38,7 +39,7 @@ func NewFSTranscriptStore() *FSTranscriptStore {
 }
 
 func TranscriptPath(threadID string) string {
-	return filepath.ToSlash(filepath.Join("threads", threadID+".transcript.jsonl"))
+	return model.ModelHistoryPath(threadID)
 }
 
 func (s *FSTranscriptStore) Create(workDir, threadID string) error {
@@ -49,7 +50,7 @@ func (s *FSTranscriptStore) Remove(workDir, threadID string) error {
 	lock := s.lockFor(workDir, threadID)
 	lock.Lock()
 	defer lock.Unlock()
-	err := os.Remove(filepath.Join(workDir, filepath.FromSlash(TranscriptPath(threadID))))
+	err := os.Remove(filepath.Join(model.ProjectRoot(workDir), filepath.FromSlash(TranscriptPath(threadID))))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -72,7 +73,7 @@ func (s *FSTranscriptStore) LoadEntries(workDir, threadID string) ([]TranscriptE
 	lock := s.lockFor(workDir, threadID)
 	lock.Lock()
 	defer lock.Unlock()
-	path := filepath.Join(workDir, filepath.FromSlash(TranscriptPath(threadID)))
+	path := filepath.Join(model.ProjectRoot(workDir), filepath.FromSlash(TranscriptPath(threadID)))
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return []TranscriptEntry{}, nil
@@ -104,7 +105,7 @@ func (s *FSTranscriptStore) Replace(workDir, threadID string, messages []llm.Mes
 	lock := s.lockFor(workDir, threadID)
 	lock.Lock()
 	defer lock.Unlock()
-	path := filepath.Join(workDir, filepath.FromSlash(TranscriptPath(threadID)))
+	path := filepath.Join(model.ProjectRoot(workDir), filepath.FromSlash(TranscriptPath(threadID)))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}

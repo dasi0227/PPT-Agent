@@ -31,7 +31,7 @@ const (
 	SegmentTheme                SegmentKind = "theme"
 	SegmentSlideHTML            SegmentKind = "slide_html"
 	SegmentComponents           SegmentKind = "components"
-	SegmentMemory               SegmentKind = "thread_memory"
+	SegmentSkills               SegmentKind = "skills"
 )
 
 type DetailLevel string
@@ -53,7 +53,7 @@ func DefaultBudget() TokenBudget {
 	return TokenBudget{ContextWindow: 32768, InputLimit: 20000, OutputReserve: 8000, SegmentCaps: map[SegmentKind]int{
 		SegmentPolicy: 3000, SegmentRunCommand: 1200, SegmentPresentationManifest: 1600, SegmentOutline: 3000, SegmentTarget: 6000,
 		SegmentRelated: 2400, SegmentDesign: 3000, SegmentTheme: 2400, SegmentSlideHTML: 6000,
-		SegmentComponents: 1800, SegmentMemory: 2000,
+		SegmentComponents: 1800, SegmentSkills: 1800,
 	}}
 }
 
@@ -130,6 +130,13 @@ type ComponentCandidate struct {
 	Tags        []string `json:"tags"`
 }
 
+type SkillCandidate struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags"`
+}
+
 type RecentTurn struct {
 	Turn  string `json:"turn"`
 	Type  string `json:"type"`
@@ -138,12 +145,11 @@ type RecentTurn struct {
 }
 
 type RevisionRefs struct {
-	Manifest     int            `json:"manifest"`
-	Outline      int            `json:"outline"`
-	Design       int            `json:"design"`
-	SlideSpecs   map[string]int `json:"slide_specs"`
-	SlideHTML    map[string]int `json:"slide_html"`
-	ThreadMemory int            `json:"thread_memory"`
+	Manifest   int            `json:"manifest"`
+	Outline    int            `json:"outline"`
+	Design     int            `json:"design"`
+	SlideSpecs map[string]int `json:"slide_specs"`
+	SlideHTML  map[string]int `json:"slide_html"`
 }
 
 type ContextPack struct {
@@ -159,7 +165,7 @@ type ContextPack struct {
 	Theme                *ThemeContext               `json:"theme,omitempty"`
 	SlideHTML            SlideHTMLContext            `json:"slide_html"`
 	Components           []ComponentCandidate        `json:"components"`
-	Memory               ThreadMemory                `json:"memory"`
+	Skills               []SkillCandidate            `json:"skills"`
 	Revisions            RevisionRefs                `json:"revisions"`
 	Manifest             ContextManifest             `json:"manifest"`
 	RefResolver          *ContextRefResolver         `json:"-"`

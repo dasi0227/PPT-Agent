@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -56,7 +55,7 @@ func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p 
 		ID:          id,
 		ProjectID:   projectID,
 		Title:       strings.TrimSpace(p.Title),
-		HistoryPath: filepath.ToSlash(filepath.Join("threads", id+".jsonl")),
+		HistoryPath: model.UserHistoryPath(id),
 		Status:      "active",
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -127,7 +126,7 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 	if err != nil {
 		return nil, err
 	}
-	sb, err := artifactfs.NewSandbox(proj.WorkDir)
+	sb, err := artifactfs.NewSandbox(model.ProjectRoot(proj.WorkDir))
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +356,7 @@ func historySeq(entry map[string]any) float64 {
 }
 
 func writeEmptyHistory(workDir, rel string) error {
-	sb, err := artifactfs.NewSandbox(workDir)
+	sb, err := artifactfs.NewSandbox(model.ProjectRoot(workDir))
 	if err != nil {
 		return err
 	}
@@ -365,7 +364,7 @@ func writeEmptyHistory(workDir, rel string) error {
 }
 
 func removeHistory(workDir, rel string) error {
-	sb, err := artifactfs.NewSandbox(workDir)
+	sb, err := artifactfs.NewSandbox(model.ProjectRoot(workDir))
 	if err != nil {
 		return err
 	}

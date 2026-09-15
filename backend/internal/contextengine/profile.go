@@ -30,7 +30,7 @@ func (ContextProfileResolver) Resolve(command model.RunCommand) (ContextProfile,
 	}
 	p := ContextProfile{ID: id, Required: map[SegmentKind]bool{
 		SegmentPolicy: true, SegmentRunCommand: true, SegmentPresentationManifest: true, SegmentOutline: true, SegmentDesign: true,
-		SegmentMemory: true, SegmentTarget: command.Scope.IsSinglePage(),
+		SegmentTarget: command.Scope.IsSinglePage(),
 	}, Forbidden: map[SegmentKind]bool{}}
 	if id == ProfileSpecDeck || id == ProfileSpecSlide {
 		p.Forbidden[SegmentSlideHTML] = true

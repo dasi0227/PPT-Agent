@@ -24,6 +24,18 @@ type fakeThemeLoader struct {
 	requested []string
 }
 
+type fakeComponentLoader struct{ values []model.Component }
+
+func (l fakeComponentLoader) LoadComponents(context.Context) ([]model.Component, error) {
+	return l.values, nil
+}
+
+type fakeSkillLoader struct{ values []model.RepositorySkill }
+
+func (l fakeSkillLoader) LoadSkills(context.Context) ([]model.RepositorySkill, error) {
+	return l.values, nil
+}
+
 func (l *fakeThemeLoader) Get(id string) (model.Theme, error) {
 	l.requested = append(l.requested, id)
 	if l.err != nil {
@@ -55,7 +67,7 @@ func testAssembler(store ContextStore, registry *RefRegistry) *ContextAssembler 
 
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
 	deck := pptspec.Manifest{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Positioning: "thesis", Requirements: []string{}, Prohibitions: []string{}, Canvas: pptspec.CanvasSettings{AspectRatio: "16:9"}, Numbering: pptspec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 2}
 	writeJSON(t, filepath.Join(dir, "manifest.json"), deck)
 	outline := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Title: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Title: "Three", Role: "evidence"}}}}}}, CreatedAt: 1, UpdatedAt: 2}
@@ -424,28 +436,6 @@ func TestRefStaleAfterRevisionChange(t *testing.T) {
 	}
 }
 
-func TestCorruptMemorySafelyRebuildsAndSuccessUpdateIsBounded(t *testing.T) {
-	project, _ := fixture(t)
-	path := memoryPath(project.WorkDir, "t1")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("{broken"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	m, warn, err := (ThreadMemoryStore{}).Load(project.WorkDir, "t1")
-	if err != nil || len(warn) != 1 || m.Revision != 0 {
-		t.Fatalf("%+v %v %v", m, warn, err)
-	}
-	u := ThreadMemoryUpdater{Clock: func() int64 { return 1 }}
-	for i := 0; i < 30; i++ {
-		m = u.UpdateSuccessful(m, "run-"+string(rune('a'+i)), "change")
-	}
-	if m.Revision != 30 || len(m.RecentChanges) != 20 {
-		t.Fatalf("revision/items=%d/%d", m.Revision, len(m.RecentChanges))
-	}
-}
-
 func TestPromptCompilerSnapshotSeparatesUserInstruction(t *testing.T) {
 	p := ContextPack{SchemaVersion: SchemaVersion, Command: spec(model.ScopeObjectSpec, model.ScopeAllPages), Project: ProjectContext{ID: "p1"}}
 	got, err := (PromptCompiler{}).Compile(p, "SYSTEM")
@@ -509,18 +499,60 @@ func TestPromptCompilerIncludesThemeContractOnlyInUserContext(t *testing.T) {
 	}
 }
 
+func TestPromptCompilerIncludesExactRepositoryResourceCatalog(t *testing.T) {
+	p := ContextPack{
+		SchemaVersion: SchemaVersion,
+		Command:       spec(model.ScopeObjectGlobal, model.ScopeAllPages),
+		Project:       ProjectContext{ID: "p1"},
+		Components: []ComponentCandidate{{
+			ID: "feature-card", Name: "能力卡片", Description: "聚焦一项能力", Tags: []string{"card"},
+		}},
+		Skills: []SkillCandidate{{
+			ID: "story-architect", Name: "演示叙事架构", Description: "组织演示叙事", Tags: []string{"methodology"},
+		}},
+	}
+	got, err := (PromptCompiler{}).Compile(p, "SYSTEM")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"<available_resources>", `"id":"feature-card"`, `"id":"story-architect"`,
+		"Use only the exact stable IDs listed here", "load_component returns the component HTML",
+	} {
+		if !strings.Contains(got.User, expected) {
+			t.Fatalf("compiled resource catalog missing %q: %s", expected, got.User)
+		}
+	}
+}
+
+func TestAssemblerLoadsEnabledRepositoryCatalogForEveryProfile(t *testing.T) {
+	project, store := fixture(t)
+	assembler := testAssembler(store, NewRefRegistry()).
+		WithComponentLoader(fakeComponentLoader{values: []model.Component{
+			{ID: "feature-card", Name: "能力卡片", Tags: []model.ComponentTag{model.ComponentTagCard}},
+			{ID: "disabled-component", Name: "停用组件", Disabled: true},
+		}}).
+		WithSkillLoader(fakeSkillLoader{values: []model.RepositorySkill{
+			{ID: "story-architect", Name: "演示叙事架构", Tags: []model.SkillTag{model.SkillTagMethodology}},
+			{ID: "disabled-skill", Name: "停用技能", Disabled: true},
+		}})
+	pack, err := assembler.Assemble(context.Background(), ContextRequest{
+		RunID: "r1", ThreadID: "t1", ProjectID: project.ID,
+		Command: spec(model.ScopeObjectSpec, model.ScopeAllPages),
+	}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pack.Components) != 1 || pack.Components[0].ID != "feature-card" {
+		t.Fatalf("component catalog = %+v", pack.Components)
+	}
+	if len(pack.Skills) != 1 || pack.Skills[0].ID != "story-architect" {
+		t.Fatalf("skill catalog = %+v", pack.Skills)
+	}
+}
+
 func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
 	project, store := fixture(t)
-	threadDir := filepath.Join(project.WorkDir, "threads")
-	if err := os.MkdirAll(threadDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	memory := EmptyMemory()
-	memory.Revision = 1
-	memory.ConfirmedDecisions = []MemoryItem{{Key: "audience", Value: "面向董事会，强调可验证结论", SourceRun: "r1", RecordedAt: 1}}
-	if err := (ThreadMemoryStore{}).Save(project.WorkDir, "t1", memory); err != nil {
-		t.Fatal(err)
-	}
 	if err := NewFSTranscriptStore().Replace(project.WorkDir, "t1", []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("保持整体克制")},
 	}); err != nil {
@@ -535,8 +567,8 @@ func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
 	if pack.Target.Spec == nil || pack.Target.Spec.SlideID != "sli_bbbbbb" || pack.Target.HTMLTitle != "sli_bbbbbb" {
 		t.Fatalf("target context missing: %+v", pack.Target)
 	}
-	if len(pack.Memory.ConfirmedDecisions) != 1 || len(pack.RecentTurns) != 1 {
-		t.Fatalf("thread context missing: memory=%+v turns=%+v", pack.Memory, pack.RecentTurns)
+	if len(pack.RecentTurns) != 1 {
+		t.Fatalf("thread context missing: turns=%+v", pack.RecentTurns)
 	}
 	if pack.EstimatedTokens > PolishContextTokenBudget {
 		t.Fatalf("polish context exceeded budget: %d", pack.EstimatedTokens)

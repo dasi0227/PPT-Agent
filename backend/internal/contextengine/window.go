@@ -91,7 +91,6 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 		{name: "related_context", bucket: BucketReadPPT},
 		{name: "design_context", bucket: BucketReadPPT},
 		{name: "theme_context", bucket: BucketReadPPT},
-		{name: "memory", bucket: BucketChatHistory},
 		{name: "transcript", bucket: BucketChatHistory},
 	} {
 		content, rest := extractXMLSections(remainingUser, section.name)

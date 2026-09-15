@@ -49,4 +49,16 @@ describe('TargetSelector', () => {
     expect(customSection).toHaveAttribute('aria-disabled', 'true');
     expect(customSection).toHaveAttribute('data-disabled');
   });
+
+  it('keeps the selector open in an empty project and disables unavailable targets', () => {
+    render(<TargetSelector {...base} object="global" selection="all_pages" pages={[]} sections={[]} emptyProject />);
+    const trigger = screen.getByRole('button', { name: '范围：全部页 · 全局资源' });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+    expect(screen.getByRole('radiogroup', { name: '修改对象' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '修改对象：设计稿' })).toHaveAttribute('data-disabled');
+    expect(screen.getByRole('radio', { name: '修改对象：全局资源' })).not.toHaveAttribute('data-disabled');
+    expect(screen.getByRole('radio', { name: '页面范围：当前页' })).toHaveAttribute('data-disabled');
+    expect(screen.getByRole('radio', { name: '页面范围：全部页' })).not.toHaveAttribute('data-disabled');
+  });
 });

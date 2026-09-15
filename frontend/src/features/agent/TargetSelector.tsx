@@ -45,7 +45,7 @@ interface TargetSelectorProps {
   onToggleSlide: (id: string) => void;
   onToggleSection: (id: string) => void;
   disabled?: boolean;
-  locked?: boolean;
+  emptyProject?: boolean;
 }
 
 export const TargetSelector: React.FC<TargetSelectorProps> = ({
@@ -60,7 +60,7 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
   onToggleSlide,
   onToggleSection,
   disabled,
-  locked = false,
+  emptyProject = false,
 }) => {
   const [scopeOpen, setScopeOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(true);
@@ -95,8 +95,6 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
       <span className="composer-target-label min-w-0 truncate">{label}</span>
     </button>
   );
-
-  if (locked) return trigger;
 
   return (
     <DropdownMenu open={scopeOpen} onOpenChange={(open) => { setScopeOpen(open); if (open && customMode) setCustomOpen(true); }}>
@@ -161,25 +159,30 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-8 shrink-0 text-[11px] font-medium text-text-700">对象</span>
             <div role="radiogroup" aria-label="修改对象" className="grid min-w-0 flex-1 grid-cols-4 gap-1 rounded-lg bg-panel-muted p-1">
-              {objectModes.map((item) => (
-                <DropdownMenuItem
-                  key={item.value}
-                  role="radio"
-                  aria-checked={item.value === object}
-                  aria-label={`修改对象：${item.label}`}
-                  onSelect={(event) => { event.preventDefault(); onObjectChange(item.value); }}
-                  className={segmentClass(item.value === object)}
-                >
-                  {item.label}
-                </DropdownMenuItem>
-              ))}
+              {objectModes.map((item) => {
+                const unavailable = emptyProject && item.value !== 'global';
+                return (
+                  <DropdownMenuItem
+                    key={item.value}
+                    role="radio"
+                    aria-checked={item.value === object}
+                    aria-label={`修改对象：${item.label}`}
+                    aria-disabled={unavailable}
+                    disabled={unavailable}
+                    onSelect={(event) => { event.preventDefault(); onObjectChange(item.value); }}
+                    className={segmentClass(item.value === object, unavailable)}
+                  >
+                    {item.label}
+                  </DropdownMenuItem>
+                );
+              })}
             </div>
           </div>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="w-8 shrink-0 text-[11px] font-medium text-text-700">页面</span>
             <div role="radiogroup" aria-label="页面范围" className="grid min-w-0 flex-1 grid-cols-4 gap-1 rounded-lg bg-panel-muted p-1">
               {pageModes.map((item) => {
-                const unavailable = object === 'global';
+                const unavailable = (object === 'global' || emptyProject) && item.value !== 'all_pages';
                 return (
                   <DropdownMenuItem
                     key={item.value}
