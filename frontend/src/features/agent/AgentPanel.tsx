@@ -12,6 +12,7 @@ import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useBriefingStore } from '../../stores/briefingStore';
 import { useActiveSession } from './useActiveSession';
 import { ContextWindowPanel } from './ContextWindowPanel';
+import { PlanIndicator } from './PlanIndicator';
 
 export const AgentPanel: React.FC = () => {
   const toggleRightPanel = useUIStore((state) => state.toggleRightPanel);
@@ -23,7 +24,7 @@ export const AgentPanel: React.FC = () => {
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
-  const { status: runStatus } = useActiveSession();
+  const { status: runStatus, plan } = useActiveSession();
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const briefingActive = useBriefingStore((state) => (
     activeProjectId ? state.sessions[activeProjectId]?.status === 'generating' : false
@@ -44,6 +45,7 @@ export const AgentPanel: React.FC = () => {
           智能体
         </div>
         <div className="relative flex items-center gap-0.5">
+          <PlanIndicator plan={plan} running={runActive} />
           <ContextWindowPanel />
           <IconButton
             label={commitActive ? '正在提交项目版本' : '提交项目版本'}

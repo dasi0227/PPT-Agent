@@ -39,8 +39,8 @@ describe('PromptComposerEditor slash command menu', () => {
 
     await waitFor(() => expect(screen.getByRole('listbox', { name: '命令' })).toBeInTheDocument());
     expect(screen.getByRole('option', { name: '计划模式' }).querySelector('svg'))
-      .toHaveClass('lucide-list-checks');
-    expect(screen.getByRole('option', { name: '审问模式' }).querySelector('svg'))
+      .toHaveClass('lucide-clipboard-list');
+    expect(screen.getByRole('option', { name: '盘问模式' }).querySelector('svg'))
       .toHaveClass('lucide-message-circle-question-mark');
     expect(screen.getByRole('option', { name: '启动简报' }).querySelector('svg'))
       .toHaveClass('lucide-footprints');
@@ -131,11 +131,12 @@ describe('PromptComposerEditor slash command menu', () => {
     fireEvent.keyDown(editor, { key: 'ArrowDown' });
     fireEvent.keyDown(editor, { key: 'ArrowDown' });
     fireEvent.keyDown(editor, { key: 'ArrowDown' });
+    fireEvent.keyDown(editor, { key: 'ArrowDown' });
     await waitFor(() => expect(screen.getByRole('option', { name: '切换模型' }))
       .toHaveAttribute('aria-selected', 'true'));
 
     fireEvent.keyDown(editor, { key: 'ArrowUp' });
-    await waitFor(() => expect(screen.getByRole('option', { name: '聊天模式' }))
+    await waitFor(() => expect(screen.getByRole('option', { name: '计划模式' }))
       .toHaveAttribute('aria-selected', 'true'));
   });
 });

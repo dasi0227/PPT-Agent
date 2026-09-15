@@ -1,6 +1,6 @@
 import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Code2, FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
 import { llmApi } from '../../api/llm';
@@ -16,10 +16,9 @@ import { useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { isMac } from '../../lib/platform';
 import { newClientIdentity } from '../../lib/clientIdentity';
-import { InteractionModeButtons } from './InteractionModeButtons';
+import { ModeSelector } from './ModeSelector';
 import { ModelSelector } from './ModelSelector';
 import { SkillSelector } from './SkillSelector';
-import { PlanIndicator } from './PlanIndicator';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
@@ -60,117 +59,6 @@ function composerScopeInput(
   return { object: composer.scopeObject, selection: { kind: 'all_pages' } };
 }
 
-const COMPOSER_CONTROLS_FIT_GUARD_PX = 2;
-const COMPOSER_CONTROLS_HYSTERESIS_PX = 12;
-type ComposerControlsDensity = 'full' | 'left-compact' | 'all-compact';
-
-interface ComposerControlWidths {
-  start: number;
-  end: number;
-  startButtons: number[];
-  endButtons: number[];
-  gap: number;
-}
-
-interface ComposerControlThresholds {
-  full: number;
-  leftCompact: number;
-  allCompact: number;
-}
-
-function applyDensityClass(element: HTMLElement, density: ComposerControlsDensity) {
-  element.classList.toggle('composer-controls-left-compact', density !== 'full');
-  element.classList.toggle('composer-controls-right-compact', density === 'all-compact');
-}
-
-function elementWidth(element: HTMLElement): number {
-  return Math.ceil(element.getBoundingClientRect().width || element.scrollWidth);
-}
-
-function readControlWidths(element: HTMLElement): ComposerControlWidths | null {
-  const start = element.querySelector<HTMLElement>('[data-composer-control-group="start"]');
-  const end = element.querySelector<HTMLElement>('[data-composer-control-group="end"]');
-  if (!start || !end) return null;
-
-  const styles = window.getComputedStyle(element);
-  return {
-    start: elementWidth(start),
-    end: elementWidth(end),
-    startButtons: Array.from(start.querySelectorAll<HTMLElement>('.composer-mode-button, .composer-plan-button'))
-      .map(elementWidth),
-    endButtons: Array.from(end.querySelectorAll<HTMLElement>('.composer-skill-button, .composer-target-button, .composer-model-button'))
-      .map(elementWidth),
-    gap: Number.parseFloat(styles.columnGap) || 0,
-  };
-}
-
-function largestExpansion(expanded: number[], compact: number[]): number {
-  return expanded.reduce((largest, width, index) => (
-    Math.max(largest, width - (compact[index] ?? width))
-  ), 0);
-}
-
-function measureControlThresholds(bar: HTMLElement): ComposerControlThresholds | null {
-  const clone = bar.cloneNode(true) as HTMLElement;
-  clone.removeAttribute('data-controls-density');
-  clone.classList.add('composer-controls-measure');
-  clone.setAttribute('aria-hidden', 'true');
-  clone.setAttribute('inert', '');
-  clone.querySelectorAll<HTMLElement>('[data-state]').forEach((element) => {
-    element.removeAttribute('data-state');
-  });
-  document.body.appendChild(clone);
-
-  try {
-    applyDensityClass(clone, 'full');
-    const full = readControlWidths(clone);
-    applyDensityClass(clone, 'left-compact');
-    const leftCompact = readControlWidths(clone);
-    applyDensityClass(clone, 'all-compact');
-    const allCompact = readControlWidths(clone);
-    if (!full || !leftCompact || !allCompact || full.start <= 0 || full.end <= 0) return null;
-
-    const leftHoverReserve = largestExpansion(full.startButtons, leftCompact.startButtons);
-    const rightHoverReserve = largestExpansion(full.endButtons, allCompact.endButtons);
-    const guard = COMPOSER_CONTROLS_FIT_GUARD_PX;
-    return {
-      full: full.start + full.end + full.gap + guard,
-      leftCompact: leftCompact.start + full.end + full.gap + leftHoverReserve + guard,
-      allCompact: allCompact.start + allCompact.end + full.gap
-        + Math.max(leftHoverReserve, rightHoverReserve) + guard,
-    };
-  } finally {
-    clone.remove();
-  }
-}
-
-function resolveControlsDensity(
-  current: ComposerControlsDensity,
-  available: number,
-  thresholds: ComposerControlThresholds,
-): ComposerControlsDensity {
-  if (available <= 0) return current;
-  const fullThreshold = thresholds.full;
-  const allThreshold = Math.min(fullThreshold, thresholds.allCompact);
-  const leftThreshold = Math.min(fullThreshold, Math.max(allThreshold, thresholds.leftCompact));
-
-  if (current === 'full') {
-    if (available < leftThreshold) return 'all-compact';
-    if (available < fullThreshold) return 'left-compact';
-    return current;
-  }
-
-  if (current === 'left-compact') {
-    if (available < leftThreshold) return 'all-compact';
-    if (available >= fullThreshold + COMPOSER_CONTROLS_HYSTERESIS_PX) return 'full';
-    return current;
-  }
-
-  if (available >= fullThreshold + COMPOSER_CONTROLS_HYSTERESIS_PX) return 'full';
-  if (available >= leftThreshold + COMPOSER_CONTROLS_HYSTERESIS_PX) return 'left-compact';
-  return current;
-}
-
 function formatFileSize(size: number): string {
 	if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MiB`;
 	if (size >= 1024) return `${Math.max(1, Math.round(size / 1024))} KiB`;
@@ -192,12 +80,10 @@ export const CommandComposer: React.FC = () => {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [skillsError, setSkillsError] = useState('');
-  const [controlsDensity, setControlsDensity] = useState<ComposerControlsDensity>('full');
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [verifiedSuggestionKey, setVerifiedSuggestionKey] = useState<string | null>(null);
-  const controlBarRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<PromptComposerEditorHandle>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
   const polishAbortRef = useRef<AbortController | null>(null);
@@ -207,7 +93,7 @@ export const CommandComposer: React.FC = () => {
   const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
   const activeSession = useActiveSession();
-  const { status: runStatus, activeRunId, plan, nextInputSuggestions } = activeSession;
+  const { status: runStatus, activeRunId, nextInputSuggestions } = activeSession;
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
@@ -461,48 +347,6 @@ export const CommandComposer: React.FC = () => {
     };
   }, [activeProjectId, setPolishing]);
 
-  useLayoutEffect(() => {
-    const bar = controlBarRef.current;
-    if (!bar) return undefined;
-    let thresholds = measureControlThresholds(bar);
-
-    const updateDensity = () => {
-      if (!thresholds) return;
-      const currentThresholds = thresholds;
-      const styles = window.getComputedStyle(bar);
-      const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0)
-        + (Number.parseFloat(styles.paddingRight) || 0);
-      const available = bar.clientWidth - horizontalPadding;
-      setControlsDensity((current) => resolveControlsDensity(current, available, currentThresholds));
-    };
-
-    const refreshThresholds = () => {
-      thresholds = measureControlThresholds(bar) ?? thresholds;
-      updateDensity();
-    };
-
-    updateDensity();
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateDensity);
-    observer?.observe(bar);
-    window.addEventListener('resize', refreshThresholds);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', refreshThresholds);
-    };
-  }, [
-    composer.scopeObject,
-    composer.scopeSelection,
-    composer.modelProfileName,
-    composer.selectedSkillIds.length,
-    isEmptyProject,
-    profiles.length,
-    profilesLoading,
-    skills.length,
-    skillsLoading,
-    showCancelButton,
-		hasAttachments,
-  ]);
-
 	const uploadFiles = async (files: File[]) => {
 		if (!activeProjectId || disabled || files.length === 0) return;
 		const unsupported = files.find((file) => !supportedImageFile(file));
@@ -635,10 +479,6 @@ export const CommandComposer: React.FC = () => {
     await cancelRun(activeThreadId, activeRunId);
   };
 
-  const togglePlanIntent = () => {
-    composer.setIntent(composer.mode === 'plan' ? 'execute' : 'plan');
-  };
-
   const polishText = async () => {
     const editor = editorRef.current;
     const instruction = editor?.getPlainText().trim() ?? '';
@@ -691,7 +531,7 @@ export const CommandComposer: React.FC = () => {
 
   const executeSlashCommand = async (command: SlashCommandId) => {
     setSubmitError('');
-    if (command === 'plan' || command === 'grill' || command === 'chat') {
+    if (command === 'execute' || command === 'plan' || command === 'grill' || command === 'chat') {
       composer.setIntent(command);
       return;
     }
@@ -897,40 +737,24 @@ export const CommandComposer: React.FC = () => {
 			{polishing ? '正在润色表达' : hasPendingUploads ? '正在上传图片' : hasAttachments ? `已添加 ${activeAttachments.length} 张图片` : ''}
           </span>
         </div>
-        <div
-          ref={controlBarRef}
-          data-controls-density={controlsDensity}
-          className={cn(
-            'composer-control-bar flex min-w-0 items-center justify-between gap-3 px-3 pb-2',
-            controlsDensity !== 'full' && 'composer-controls-left-compact',
-            controlsDensity === 'all-compact' && 'composer-controls-right-compact',
-          )}
-        >
+        <div className="flex min-w-0 items-center justify-between gap-3 px-3 pb-2">
           <div data-composer-control-group="start" className="flex min-w-0 items-center gap-0.5">
 			<button
 				type="button"
 				onClick={() => fileInputRef.current?.click()}
 				disabled={disabled}
-				className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-50"
+				className="composer-attach-button inline-flex h-7 min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
 				aria-label="选择图片"
 				title="选择图片"
 			>
-				<Paperclip className="h-4 w-4" strokeWidth={1.75} />
+				<Paperclip className="h-3.5 w-3.5" strokeWidth={1.75} />
+				<span className="composer-attach-label shrink-0 whitespace-nowrap">附件</span>
 			</button>
-            <InteractionModeButtons
+            <ModeSelector
               mode={composer.mode}
-              onIntentChange={composer.setIntent}
+              onChange={composer.setIntent}
               disabled={disabled || steering}
             />
-            <PlanIndicator
-              plan={plan}
-              running={runActive}
-              selected={composer.mode === 'plan'}
-              disabled={plan && plan.steps.length > 0 ? false : disabled || steering}
-              onSelectPlan={togglePlanIntent}
-            />
-          </div>
-          <div data-composer-control-group="end" className="flex min-w-0 shrink-0 items-center gap-0.5">
             <SkillSelector
               skills={skills}
               selectedIds={composer.selectedSkillIds}
@@ -938,6 +762,8 @@ export const CommandComposer: React.FC = () => {
               disabled={disabled || steering}
               onToggle={composer.toggleSkill}
             />
+          </div>
+          <div data-composer-control-group="end" className="flex min-w-0 shrink-0 items-center gap-0.5">
             <TargetSelector
               object={composer.scopeObject}
               selection={composer.scopeSelection}

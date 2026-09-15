@@ -15,13 +15,14 @@ import {
   Blocks,
   Check,
   ChevronRight,
+  ClipboardList,
   Cpu,
   Crosshair,
   Footprints,
   GalleryThumbnails,
   GitCommitHorizontal,
+  Hammer,
   Handshake,
-  ListChecks,
   MessageCircleQuestion,
   MessagesSquare,
   NotebookText,
@@ -759,23 +760,25 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     };
 
     const CommandIcon = ({ id }: { id: SlashCommandId }) => {
-      const Icon = id === 'plan'
-        ? ListChecks
-        : id === 'grill'
-          ? MessageCircleQuestion
-          : id === 'chat'
-            ? MessagesSquare
-            : id === 'kickoff'
-              ? Footprints
-              : id === 'handoff'
-                ? Handshake
-                : id === 'commit'
-                  ? GitCommitHorizontal
-                  : id === 'polish'
-                    ? WandSparkles
-                    : id === 'model'
-                      ? Cpu
-                      : Crosshair;
+      const Icon = id === 'execute'
+        ? Hammer
+        : id === 'plan'
+          ? ClipboardList
+          : id === 'grill'
+            ? MessageCircleQuestion
+            : id === 'chat'
+              ? MessagesSquare
+              : id === 'kickoff'
+                ? Footprints
+                : id === 'handoff'
+                  ? Handshake
+                  : id === 'commit'
+                    ? GitCommitHorizontal
+                    : id === 'polish'
+                      ? WandSparkles
+                      : id === 'model'
+                        ? Cpu
+                        : Crosshair;
       return <Icon className="h-[15px] w-[15px]" strokeWidth={1.75} />;
     };
 

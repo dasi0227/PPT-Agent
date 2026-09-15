@@ -2,6 +2,7 @@ import React from 'react';
 import { CircleArrowRight, CircleCheck, CircleDashed, CircleX, ListChecks } from 'lucide-react';
 import type { PlanState, PlanStepStatus } from '../../api/types';
 import { cn } from '../../lib/utils';
+import { IconButton } from '../../components/ui/primitives';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,9 +70,6 @@ function RollingCount({ completed, total }: { completed: number; total: number }
 interface PlanIndicatorProps {
   plan?: PlanState | null;
   running: boolean;
-  selected?: boolean;
-  disabled?: boolean;
-  onSelectPlan?: () => void;
 }
 
 function PlanText({
@@ -142,63 +140,32 @@ function PlanText({
   );
 }
 
-const planButtonClass = (selected: boolean) => cn(
-  'composer-plan-button relative inline-flex h-7 min-w-0 shrink-0 items-center gap-0.5 overflow-visible rounded-md border px-1 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45',
-  selected
-    ? 'border-accent/30 bg-accent-soft text-accent'
-    : 'border-border bg-transparent text-text-600 hover:bg-panel-muted hover:text-text-900',
-);
-
-export const PlanIndicator: React.FC<PlanIndicatorProps> = ({
-  plan,
-  running,
-  selected = false,
-  disabled = false,
-  onSelectPlan,
-}) => {
+export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) => {
   const hasPlan = Boolean(plan && plan.steps.length > 0);
   const total = plan?.steps.length ?? 0;
   const completed = plan?.steps.filter((step) => step.status === 'completed').length ?? 0;
   const inFlight = running && completed < total;
 
-  if (!hasPlan) {
-    const togglePlan = () => {
-      onSelectPlan?.();
-    };
-    return (
-      <button
-        type="button"
-        aria-label="计划"
-        aria-pressed={selected}
-        title="只写计划并回显，不修改项目内容"
-        disabled={disabled}
-        onClick={togglePlan}
-        className={planButtonClass(selected)}
-      >
-        <ListChecks className="h-3.5 w-3.5" strokeWidth={1.75} />
-        <span className="composer-plan-label shrink-0 whitespace-nowrap">计划</span>
-      </button>
-    );
-  }
+  if (!hasPlan) return null;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={`计划 ${completed} / ${total}`}
-          aria-pressed={selected}
-          disabled={disabled}
-          className={planButtonClass(selected)}
+        <IconButton
+          label={`查看计划进度 ${completed} / ${total}`}
+          aria-haspopup="menu"
+          className="relative"
         >
-          <ListChecks className={cn('h-3.5 w-3.5 shrink-0', inFlight && 'animate-pulse motion-reduce:animate-none')} strokeWidth={1.75} />
-          <span className="composer-plan-label shrink-0 whitespace-nowrap">计划</span>
-          <span className="composer-plan-progress-badge absolute -right-2 -top-2 z-10 inline-flex h-4 min-w-[24px] items-center justify-center rounded-full border-2 border-panel bg-text-600 px-1 text-[9px] leading-none tabular-nums text-white shadow-sm">
+          <ListChecks
+            className={cn('h-4 w-4', inFlight && 'animate-pulse motion-reduce:animate-none')}
+            strokeWidth={1.75}
+          />
+          <span className="pointer-events-none absolute -right-1.5 -top-1.5 z-10 inline-flex h-3.5 min-w-[22px] items-center justify-center rounded-full border-2 border-panel bg-text-600 px-1 text-[9px] leading-none tabular-nums text-white shadow-sm">
             <RollingCount completed={completed} total={total} />
           </span>
-        </button>
+        </IconButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-[320px] overflow-visible p-2">
+      <DropdownMenuContent side="bottom" align="end" className="w-[320px] overflow-visible p-2">
         <div className="mb-1.5 flex items-center gap-2 px-1">
           <PlanText className="max-w-[248px] text-sm font-semibold text-text-900">
             {plan?.title || '执行计划'}

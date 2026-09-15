@@ -494,15 +494,12 @@
   display: none;
 }
 
-.composer-control-bar {
-  container-type: inline-size;
-}
-
-.composer-control-bar.composer-controls-left-compact .composer-mode-button,
-.composer-control-bar.composer-controls-left-compact .composer-plan-button,
-.composer-control-bar.composer-controls-right-compact .composer-skill-button,
-.composer-control-bar.composer-controls-right-compact .composer-target-button,
-.composer-control-bar.composer-controls-right-compact .composer-model-button {
+/* Composer control chips are icon-only by default; the label expands on hover/focus/open. */
+.composer-mode-button,
+.composer-attach-button,
+.composer-skill-button,
+.composer-target-button,
+.composer-model-button {
   width: auto;
   min-width: 28px;
   justify-content: center;
@@ -513,11 +510,11 @@
   transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.composer-control-bar.composer-controls-left-compact .composer-mode-label,
-.composer-control-bar.composer-controls-left-compact .composer-plan-label,
-.composer-control-bar.composer-controls-right-compact .composer-skill-label,
-.composer-control-bar.composer-controls-right-compact .composer-target-label,
-.composer-control-bar.composer-controls-right-compact .composer-model-label {
+.composer-mode-label,
+.composer-attach-label,
+.composer-skill-label,
+.composer-target-label,
+.composer-model-label {
   display: inline-block;
   max-width: 0;
   overflow: hidden;
@@ -529,69 +526,55 @@
   white-space: nowrap;
 }
 
-.composer-control-bar.composer-controls-left-compact
-  .composer-mode-button:is(:hover, :focus-visible, [data-state='open'], [aria-pressed='true']),
-.composer-control-bar.composer-controls-left-compact
-  .composer-plan-button:is(:hover, :focus-visible, [data-state='open'], [aria-pressed='true']) {
+.composer-mode-button:is(:hover, :focus-visible, [data-state='open']) {
   gap: 0.125rem;
   padding-inline: 0.25rem;
 }
 
-.composer-control-bar.composer-controls-right-compact
-  .composer-skill-button:is(:hover, :focus-visible, [data-state='open']),
-.composer-control-bar.composer-controls-right-compact
-  .composer-target-button:is(:hover, :focus-visible, [data-state='open']),
-.composer-control-bar.composer-controls-right-compact
-  .composer-model-button:is(:hover, :focus-visible, [data-state='open']) {
+.composer-attach-button:is(:hover, :focus-visible) {
+  gap: 0.125rem;
+  padding-inline: 0.25rem;
+}
+
+.composer-skill-button:is(:hover, :focus-visible, [data-state='open']) {
+  gap: 0.125rem;
+  padding-inline: 0.25rem;
+}
+
+.composer-target-button:is(:hover, :focus-visible, [data-state='open']),
+.composer-model-button:is(:hover, :focus-visible, [data-state='open']) {
   gap: 0.25rem;
   padding-inline: 0.5rem;
 }
 
-.composer-control-bar.composer-controls-left-compact
-  .composer-mode-button:is(:hover, :focus-visible, [data-state='open'], [aria-pressed='true']) .composer-mode-label,
-.composer-control-bar.composer-controls-left-compact
-  .composer-plan-button:is(:hover, :focus-visible, [data-state='open'], [aria-pressed='true']) .composer-plan-label {
+.composer-mode-button:is(:hover, :focus-visible, [data-state='open']) .composer-mode-label {
   max-width: 3rem;
   opacity: 1;
   transform: translateX(0);
 }
 
-.composer-control-bar.composer-controls-right-compact
-  .composer-skill-button:is(:hover, :focus-visible, [data-state='open']) .composer-skill-label {
-  max-width: 5rem;
+.composer-attach-button:is(:hover, :focus-visible) .composer-attach-label {
+  max-width: 3rem;
   opacity: 1;
   transform: translateX(0);
 }
 
-.composer-control-bar.composer-controls-right-compact
-  .composer-target-button:is(:hover, :focus-visible, [data-state='open']) .composer-target-label {
+.composer-skill-button:is(:hover, :focus-visible, [data-state='open']) .composer-skill-label {
+  max-width: 3.5rem;
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.composer-target-button:is(:hover, :focus-visible, [data-state='open']) .composer-target-label {
   max-width: 7rem;
   opacity: 1;
   transform: translateX(0);
 }
 
-.composer-control-bar.composer-controls-right-compact
-  .composer-model-button:is(:hover, :focus-visible, [data-state='open']) .composer-model-label {
+.composer-model-button:is(:hover, :focus-visible, [data-state='open']) .composer-model-label {
   max-width: 10rem;
   opacity: 1;
   transform: translateX(0);
-}
-
-.composer-control-bar.composer-controls-measure {
-  position: fixed !important;
-  left: -10000px !important;
-  bottom: 0 !important;
-  width: max-content !important;
-  min-width: max-content !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  contain: layout style !important;
-}
-
-.composer-control-bar.composer-controls-measure,
-.composer-control-bar.composer-controls-measure * {
-  transition: none !important;
-  animation: none !important;
 }
 
 .overview-slide-card {
