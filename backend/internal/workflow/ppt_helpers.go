@@ -254,13 +254,6 @@ func currentMaterializationProof(pack contextengine.ContextPack, projectDir stri
 	}
 	return MaterializationProof{SlideID: slideID, HTMLRevision: revision, ManifestRevision: deck.Revision, OutlineNodeHash: nodeHash, SpecRevision: slide.Revision, DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID)}, nil
 }
-func renderSourceHash(pack contextengine.ContextPack, tx *RunSession, slideID string) (string, error) {
-	html, _, err := readArtifact(tx.ProjectDir(), tx, slideHTMLRef(slideID))
-	if err != nil {
-		return "", err
-	}
-	return hashBytes(html), nil
-}
 func MaterializationSourceHash(deckRaw []byte, nodeHash string, specRaw, designRaw []byte) string {
 	return spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw)
 }
