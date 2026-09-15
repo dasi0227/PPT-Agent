@@ -168,7 +168,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			}
 			if ctx.Context.Command.Scope.AllowsHTML() && ctx.Session != nil {
 				htmlTarget := Resource{Type: "slide", SlideID: change.Artifact.ID, Part: "html"}
-				if specChangeAffectsHTML(ctx.Session, change.Artifact) {
+				if change.AffectsHTML {
 					if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, change.Artifact.ID) {
 						issues = append(issues, asyncSpecHTMLIssue(htmlTarget))
 					}
@@ -307,20 +307,9 @@ func hasArtifactChange(changes ChangeSet, kind ArtifactKind, id string) bool {
 	return false
 }
 
-// specChangeAffectsHTML ignores bookkeeping fields but treats every semantic
-// or placement change as presentation-affecting.
-func specChangeAffectsHTML(tx *RunSession, ref ArtifactRef) bool {
-	if tx == nil {
-		return true
-	}
-	beforeRaw, err := tx.ReadBaseline(ref)
-	if err != nil {
-		return true
-	}
-	afterRaw, err := tx.Read(ref)
-	if err != nil {
-		return true
-	}
+// specBytesAffectHTML ignores bookkeeping fields but treats every semantic or
+// placement change as presentation-affecting.
+func specBytesAffectHTML(beforeRaw, afterRaw []byte) bool {
 	var before spec.SlideSpec
 	var after spec.SlideSpec
 	if json.Unmarshal(beforeRaw, &before) != nil || json.Unmarshal(afterRaw, &after) != nil {
@@ -466,7 +455,7 @@ func acceptedMaterializationProofs(ctx CompletionContext) []MaterializationProof
 func specChangeRequiresHTMLSync(ctx CompletionContext, slideID string) bool {
 	for _, change := range ctx.Changes.All() {
 		if change.Artifact.Kind == ArtifactSlideSpec && change.Artifact.ID == slideID {
-			return specChangeAffectsHTML(ctx.Session, change.Artifact)
+			return change.AffectsHTML
 		}
 	}
 	return false

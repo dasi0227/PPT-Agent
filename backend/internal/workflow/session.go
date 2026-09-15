@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -20,9 +21,8 @@ var (
 	ErrArtifactHashMismatch = errors.New("artifact hash mismatch")
 )
 
-// sessionArtifact records one artifact in the run overlay. Project files are
-// untouched until Commit, so failed and canceled runs discard provisional
-// identities and pending resources as one unit.
+// sessionArtifact records one artifact in the current tool-call transaction.
+// A successful tool call commits and clears these entries before the next call.
 type sessionArtifact struct {
 	Ref           ArtifactRef
 	Source        string
@@ -41,7 +41,8 @@ type WriteItem struct {
 	Content []byte
 }
 
-// RunSession is the run's isolated authoring overlay.
+// RunSession stages only the currently executing tool call. Completed calls are
+// durably written to the project and are never discarded with the rest of a Run.
 type RunSession struct {
 	projectDir            string
 	runID                 string
@@ -67,7 +68,18 @@ type RunSessionArtifactState struct {
 	Delete        bool        `json:"delete"`
 }
 
-// NewRunSession opens an isolated overlay rooted at the project directory.
+type MutationJournal struct {
+	RunID                 string                    `json:"run_id"`
+	OperationID           string                    `json:"operation_id"`
+	RequestHash           string                    `json:"request_hash"`
+	Committed             bool                      `json:"committed"`
+	Artifacts             []RunSessionArtifactState `json:"artifacts"`
+	MaterializationProofs []MaterializationProof    `json:"materialization_proofs,omitempty"`
+}
+
+type MutationReceiptLookup func(context.Context, string, string) (string, bool, error)
+
+// NewRunSession opens an isolated tool-call transaction rooted at the project directory.
 func NewRunSession(projectDir, runID string) (*RunSession, error) {
 	projectDir, err := filepath.Abs(projectDir)
 	if err != nil {
@@ -152,7 +164,25 @@ func ActiveRunSession(projectDir string) *RunSession {
 func (s *RunSession) ReadPath(path string) ([]byte, error) {
 	return s.Read(ArtifactRef{Kind: ArtifactDerived, ID: path, Path: path})
 }
-func (s *RunSession) Discard() { activeRunSessions.CompareAndDelete(s.projectDir, s); s.closed = true }
+func (s *RunSession) Discard() {
+	s.resetOperation()
+	activeRunSessions.CompareAndDelete(s.projectDir, s)
+	s.closed = true
+}
+
+func (s *RunSession) resetOperation() {
+	s.artifacts = map[string]sessionArtifact{}
+	s.materializationProofs = nil
+}
+
+// RollbackOperation abandons only the current tool call. Artifacts committed by
+// earlier calls already live on disk and are intentionally left untouched.
+func (s *RunSession) RollbackOperation() {
+	if s == nil || s.closed {
+		return
+	}
+	s.resetOperation()
+}
 
 func (s *RunSession) HasChange(ref ArtifactRef) bool {
 	relative, err := s.resolveRelative(ref)
@@ -163,9 +193,8 @@ func (s *RunSession) HasChange(ref ArtifactRef) bool {
 	return ok && !entry.Delete
 }
 
-// Write records content in the isolated run overlay. Repeated writes of the
-// same artifact in one run keep the run's baseline (the bytes present before
-// the run touched it) and only advance the after hash.
+// Write records content in the current tool-call transaction. Repeated writes
+// keep the bytes present before this tool call as the rollback preimage.
 func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (ArtifactChange, error) {
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
@@ -196,7 +225,7 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, Source: source, Insertions: insertions, Deletions: deletions}, nil
 }
 
-// WriteBatch applies a logical domain-target update to the overlay in order
+// WriteBatch applies a logical domain-target update to the transaction in order
 // and records each change.
 func (s *RunSession) WriteBatch(items []WriteItem) ([]ArtifactChange, error) {
 	if len(items) == 0 {
@@ -264,8 +293,8 @@ func (s *RunSession) Delete(ref ArtifactRef, source string) error {
 	return nil
 }
 
-// ReadBaseline returns the bytes that existed before this run first touched the
-// artifact. It falls back to the on-disk content for untouched artifacts.
+// ReadBaseline returns the bytes that existed before the current tool call
+// first touched the artifact. It falls back to disk for untouched artifacts.
 func (s *RunSession) ReadBaseline(ref ArtifactRef) ([]byte, error) {
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
@@ -310,6 +339,9 @@ func (s *RunSession) ChangeSet() ChangeSet {
 			AfterHash: entry.AfterHash, Source: entry.Source,
 			Tentative: strings.HasPrefix(entry.Source, "tentative:"),
 		}
+		if entry.Ref.Kind == ArtifactSlideSpec {
+			change.AffectsHTML = entry.Delete || specBytesAffectHTML(entry.BeforeContent, entry.AfterContent)
+		}
 		change.Insertions, change.Deletions = lineDiffStat(entry.BeforeContent, entry.AfterContent)
 		switch {
 		case entry.Delete:
@@ -350,64 +382,237 @@ func (s *RunSession) AcceptMaterializationProofs(proofs []MaterializationProof) 
 	s.materializationProofs = append([]MaterializationProof(nil), proofs...)
 }
 
-func (s *RunSession) Commit(ctx context.Context, metadata CommitMetadata) error {
+func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResultJSON string, metadata CommitMetadata) (ChangeSet, error) {
 	if s.closed {
-		return errors.New("run session is closed")
+		return EmptyChangeSet(), errors.New("run session is closed")
+	}
+	if strings.TrimSpace(operationID) == "" {
+		return EmptyChangeSet(), errors.New("operation id is required")
 	}
 	if err := s.ValidateBaselines(); err != nil {
-		return err
+		s.resetOperation()
+		return EmptyChangeSet(), err
+	}
+	changes := s.ChangeSet()
+	snapshot := s.Snapshot()
+	if snapshot == nil {
+		return EmptyChangeSet(), errors.New("run session is closed")
+	}
+	requestHash, err := mutationRequestHash(s.runID, operationID, snapshot.Artifacts, s.materializationProofs)
+	if err != nil {
+		return EmptyChangeSet(), err
+	}
+	journal := MutationJournal{
+		RunID: s.runID, OperationID: operationID, RequestHash: requestHash,
+		Artifacts: snapshot.Artifacts, MaterializationProofs: append([]MaterializationProof(nil), s.materializationProofs...),
+	}
+	journalPath := mutationJournalPath(s.projectDir, s.runID, operationID)
+	if err := writeMutationJournal(journalPath, journal); err != nil {
+		s.resetOperation()
+		return EmptyChangeSet(), err
 	}
 	keys := make([]string, 0, len(s.artifacts))
 	for key := range s.artifacts {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	applied := []sessionArtifact{}
-	rollback := func() {
-		for i := len(applied) - 1; i >= 0; i-- {
-			entry := applied[i]
-			path := filepath.Join(s.projectDir, entry.Relative)
-			if entry.Existed {
-				_ = atomicWrite(path, entry.BeforeContent)
-			} else {
-				_ = os.Remove(path)
-			}
+	rollback := func(cause error) error {
+		if rollbackErr := restoreMutationArtifacts(s.projectDir, journal.Artifacts, false); rollbackErr != nil {
+			return errors.Join(cause, fmt.Errorf("mutation rollback failed: %w", rollbackErr))
 		}
+		_ = removeMutationJournal(journalPath)
+		return cause
 	}
 	for _, key := range keys {
 		entry := s.artifacts[key]
 		path := filepath.Join(s.projectDir, entry.Relative)
 		var err error
 		if entry.Delete {
-			err = os.Remove(path)
-			if errors.Is(err, fs.ErrNotExist) {
-				err = nil
-			}
+			err = durableRemove(path)
 		} else {
 			err = atomicWrite(path, entry.AfterContent)
 		}
 		if err != nil {
-			rollback()
-			return err
+			s.resetOperation()
+			return EmptyChangeSet(), rollback(err)
 		}
-		applied = append(applied, entry)
 	}
 	if metadata != nil {
 		if err := ctx.Err(); err != nil {
-			rollback()
-			return err
+			s.resetOperation()
+			return EmptyChangeSet(), rollback(err)
 		}
 		commitContext := CommitContext{
+			OperationID:           operationID,
+			RequestHash:           journal.RequestHash,
+			ToolResultJSON:        toolResultJSON,
 			Changes:               s.ChangeSet(),
 			MaterializationProofs: append([]MaterializationProof(nil), s.materializationProofs...),
 		}
 		if err := metadata(ctx, commitContext); err != nil {
-			rollback()
-			return err
+			s.resetOperation()
+			return EmptyChangeSet(), rollback(err)
 		}
+	}
+	journal.Committed = true
+	_ = writeMutationJournal(journalPath, journal)
+	_ = removeMutationJournal(journalPath)
+	s.resetOperation()
+	return changes, nil
+}
+
+func mutationRequestHash(runID, operationID string, artifacts []RunSessionArtifactState, proofs []MaterializationProof) (string, error) {
+	hashInput, err := json.Marshal(struct {
+		RunID       string                    `json:"run_id"`
+		OperationID string                    `json:"operation_id"`
+		Artifacts   []RunSessionArtifactState `json:"artifacts"`
+		Proofs      []MaterializationProof    `json:"materialization_proofs"`
+	}{runID, operationID, artifacts, proofs})
+	if err != nil {
+		return "", err
+	}
+	return hashBytes(hashInput), nil
+}
+
+// Commit is retained as the explicit close operation for callers outside the
+// Runtime. Runtime tool calls use CommitOperation and keep the session open.
+func (s *RunSession) Commit(ctx context.Context, metadata CommitMetadata) error {
+	if _, err := s.CommitOperation(ctx, "session_commit", "", metadata); err != nil {
+		return err
 	}
 	s.closed = true
 	activeRunSessions.CompareAndDelete(s.projectDir, s)
+	return nil
+}
+
+func mutationJournalPath(projectDir, runID, operationID string) string {
+	name := hashBytes([]byte(runID+"\x00"+operationID)) + ".json"
+	return filepath.Join(projectDir, ".runtime", "mutations", name)
+}
+
+func writeMutationJournal(path string, journal MutationJournal) error {
+	raw, err := json.Marshal(journal)
+	if err != nil {
+		return err
+	}
+	return atomicWrite(path, raw)
+}
+
+func removeMutationJournal(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func restoreMutationArtifacts(projectDir string, artifacts []RunSessionArtifactState, committed bool) error {
+	for index := len(artifacts) - 1; index >= 0; index-- {
+		entry := artifacts[index]
+		relative := filepath.Clean(filepath.FromSlash(entry.Relative))
+		if relative == "." || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return ErrInvalidArtifactPath
+		}
+		if hashBytes(entry.BeforeContent) != entry.BeforeHash || hashBytes(entry.AfterContent) != entry.AfterHash {
+			return errors.New("mutation journal hash mismatch")
+		}
+		path := filepath.Join(projectDir, relative)
+		current, readErr := os.ReadFile(path)
+		currentExists := readErr == nil
+		if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
+			return readErr
+		}
+		matchesBefore := currentExists == entry.Existed && (!currentExists || hashBytes(current) == entry.BeforeHash)
+		postExists := !entry.Delete
+		matchesAfter := currentExists == postExists && (!currentExists || hashBytes(current) == entry.AfterHash)
+		if !matchesBefore && !matchesAfter {
+			if committed {
+				// A later committed operation or an intentional user edit has
+				// superseded this already-receipted postimage. Preserve it.
+				continue
+			}
+			return fmt.Errorf("%w: recovery target %s changed outside the journal", ErrArtifactHashMismatch, entry.Relative)
+		}
+		if committed {
+			if matchesAfter {
+				continue
+			}
+			if entry.Delete {
+				if err := durableRemove(path); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := atomicWrite(path, entry.AfterContent); err != nil {
+				return err
+			}
+			continue
+		}
+		if matchesBefore {
+			continue
+		}
+		if entry.Existed {
+			if err := atomicWrite(path, entry.BeforeContent); err != nil {
+				return err
+			}
+		} else if err := durableRemove(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func RecoverMutationJournals(ctx context.Context, projectDir string, lookup MutationReceiptLookup) error {
+	dir := filepath.Join(projectDir, ".runtime", "mutations")
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		var journal MutationJournal
+		if err := json.Unmarshal(raw, &journal); err != nil {
+			return err
+		}
+		if strings.TrimSpace(journal.RunID) == "" || strings.TrimSpace(journal.OperationID) == "" {
+			return errors.New("mutation journal has no operation identity")
+		}
+		expectedHash, hashErr := mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts, journal.MaterializationProofs)
+		if hashErr != nil {
+			return hashErr
+		}
+		if expectedHash != journal.RequestHash {
+			return errors.New("mutation journal request hash mismatch")
+		}
+		committed := journal.Committed
+		if !committed && lookup != nil {
+			receiptHash, found, lookupErr := lookup(ctx, journal.RunID, journal.OperationID)
+			if lookupErr != nil {
+				return lookupErr
+			}
+			if found {
+				if receiptHash != journal.RequestHash {
+					return errors.New("mutation receipt hash mismatch")
+				}
+				committed = true
+			}
+		}
+		if err := restoreMutationArtifacts(projectDir, journal.Artifacts, committed); err != nil {
+			return err
+		}
+		if err := removeMutationJournal(path); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -443,7 +648,29 @@ func atomicWrite(path string, content []byte) error {
 	if err != nil {
 		return err
 	}
-	return os.Rename(tmpName, path)
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func durableRemove(path string) error {
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func syncDirectory(path string) error {
+	dir, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func hashBytes(content []byte) string {

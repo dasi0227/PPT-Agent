@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +12,35 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
+
+type stagedFileTool struct{}
+
+func (stagedFileTool) Schema() ToolSchema {
+	return ToolSchema{Name: "mutate_ppt", Parameters: objectSchema(nil, map[string]any{})}
+}
+
+func (stagedFileTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
+	if _, err := input.Session.Write(projectFileRef("generated.txt"), "test", []byte("durable\n")); err != nil {
+		return failedToolResult(CodeCommitFailed, err.Error(), false)
+	}
+	return SuccessfulToolResult("written")
+}
+
+type diskProbeTool struct{}
+
+func (diskProbeTool) Schema() ToolSchema {
+	return ToolSchema{Name: "disk_probe", Parameters: objectSchema(nil, map[string]any{})}
+}
+
+func (diskProbeTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
+	raw, err := os.ReadFile(filepath.Join(input.ProjectDir, "generated.txt"))
+	if err != nil {
+		return failedToolResult(CodeAgentFailed, err.Error(), false)
+	}
+	result := SuccessfulToolResult("read")
+	result.Observation = string(raw)
+	return result
+}
 
 type timedBatchTool struct {
 	name   string
@@ -126,6 +157,33 @@ func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 	}
 	if events.count(model.EventToolStarted) != 2 || events.count(model.EventToolCompleted) != 2 {
 		t.Fatalf("dependency-skipped call should not emit public tool events: %+v", events.events)
+	}
+}
+
+func TestSuccessfulWriteIsVisibleToNextDiskTool(t *testing.T) {
+	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeAllPages, true, "batch")
+	tx, err := NewRunSession(dir, "batch-durable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Discard()
+	registry := NewToolRegistry()
+	if err := registry.Register(stagedFileTool{}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Register(diskProbeTool{}, true, CapabilityRead, RiskLow, PhaseExecuting); err != nil {
+		t.Fatal(err)
+	}
+	state := batchState(pack)
+	state.tx = tx
+	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
+		RunID: "batch-durable", ProjectDir: dir, Context: pack,
+	}, state, registry, map[string]bool{"mutate_ppt": true, "disk_probe": true}, []llm.ToolCall{
+		{ID: "write", Name: "mutate_ppt", Args: map[string]any{}},
+		{ID: "probe", Name: "disk_probe", Args: map[string]any{}},
+	})
+	if len(results) != 2 || !results[0].OK || !results[1].OK || results[1].Observation != "durable\n" {
+		t.Fatalf("results=%+v", results)
 	}
 }
 

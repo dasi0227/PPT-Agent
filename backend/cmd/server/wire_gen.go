@@ -124,7 +124,7 @@ func initApp() (*App, func(), error) {
 	}
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(configConfig, ginEngine)
-	app := provideApp(server, engine, zapLogger)
+	app := provideApp(server, engine, runService, zapLogger)
 	return app, func() {
 		cleanup4()
 		cleanup3()

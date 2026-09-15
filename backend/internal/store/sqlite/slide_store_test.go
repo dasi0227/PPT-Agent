@@ -140,6 +140,36 @@ func TestCommitWorkflowRetryReusesVersionRows(t *testing.T) {
 	}
 }
 
+func TestCommitWorkflowAtomicallyRecordsMutationReceiptAndToolResult(t *testing.T) {
+	s := newTestStore(t)
+	seedProject(t, s)
+	ctx := context.Background()
+	if _, _, err := s.AcquireIdempotency(ctx, model.IdempotencyRecord{
+		Scope: "tool_call", OwnerID: "run", Key: "call_1", RequestHash: "tool-request", Status: "in_progress",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	commit := model.ArtifactCommit{
+		ProjectID: "p1", RunID: "run", OperationID: "call_1",
+		RequestHash: "mutation-request", ToolResultJSON: `{"ok":true}`,
+	}
+	if err := s.CommitWorkflow(ctx, commit); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := s.GetIdempotency(ctx, "artifact_commit", "run", "call_1")
+	if err != nil || receipt.RequestHash != "mutation-request" || receipt.Status != "completed" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	toolCall, err := s.GetIdempotency(ctx, "tool_call", "run", "call_1")
+	if err != nil || toolCall.Status != "completed" || toolCall.ResultJSON != `{"ok":true}` {
+		t.Fatalf("tool call=%+v err=%v", toolCall, err)
+	}
+	commit.RequestHash = "conflicting-request"
+	if err := s.CommitWorkflow(ctx, commit); err == nil {
+		t.Fatal("conflicting operation receipt was accepted")
+	}
+}
+
 func TestSetProjectStatus(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)

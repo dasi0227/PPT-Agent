@@ -13,9 +13,9 @@ import (
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
 
-// TestCreateRunRejectsWhenProjectHasActiveRun verifies Phase B point 6: with the
-// Active authoring overlays are serialized per project. A create attempt while another run
-// is active is rejected with ErrRunActive (mapped to 409 RUN_ACTIVE).
+// TestCreateRunRejectsWhenProjectHasActiveRun verifies that durable tool-level
+// mutations remain serialized per project. A second active run is rejected with
+// ErrRunActive (mapped to 409 RUN_ACTIVE).
 func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	root := t.TempDir()
 	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "run.db")}, zap.NewNop())

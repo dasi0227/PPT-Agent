@@ -39,6 +39,136 @@ func TestRunSessionRollsBackFilesWhenCommitMetadataFails(t *testing.T) {
 	}
 }
 
+func TestRunSessionCommitsEachOperationAndStaysOpen(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(path, []byte("before\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	session, err := NewRunSession(dir, "run_operation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Discard()
+	if _, err := session.Write(projectFileRef("notes.txt"), "run_command", []byte("after\n")); err != nil {
+		t.Fatal(err)
+	}
+	var metadata CommitContext
+	changes, err := session.CommitOperation(context.Background(), "call_1", `{"ok":true}`, func(_ context.Context, input CommitContext) error {
+		metadata = input
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes.Count() != 1 || metadata.OperationID != "call_1" || metadata.RequestHash == "" || metadata.ToolResultJSON != `{"ok":true}` {
+		t.Fatalf("changes=%+v metadata=%+v", changes, metadata)
+	}
+	if raw, err := os.ReadFile(path); err != nil || string(raw) != "after\n" {
+		t.Fatalf("committed raw=%q err=%v", raw, err)
+	}
+	if snapshot := session.Snapshot(); snapshot == nil || len(snapshot.Artifacts) != 0 {
+		t.Fatalf("session did not reset after operation: %+v", snapshot)
+	}
+	if _, err := session.Write(projectFileRef("notes.txt"), "run_command", []byte("second\n")); err != nil {
+		t.Fatalf("session was not reusable: %v", err)
+	}
+}
+
+func TestRunSessionRecordsWhetherSpecChangeAffectsHTML(t *testing.T) {
+	dir := t.TempDir()
+	ref := ArtifactRef{Kind: ArtifactSlideSpec, ID: "sli_one", Path: "slides/sli_one/spec.json"}
+	path := filepath.Join(dir, filepath.FromSlash(ref.Path))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"revision":1,"key_message":"same"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	session, err := NewRunSession(dir, "run_spec_semantics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Discard()
+	if _, err := session.Write(ref, "mutate_ppt", []byte(`{"revision":2,"key_message":"same"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if changes := session.ChangeSet(); len(changes.Updated) != 1 || changes.Updated[0].AffectsHTML {
+		t.Fatalf("revision-only change=%+v", changes)
+	}
+	session.RollbackOperation()
+	if _, err := session.Write(ref, "mutate_ppt", []byte(`{"revision":2,"key_message":"changed"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if changes := session.ChangeSet(); len(changes.Updated) != 1 || !changes.Updated[0].AffectsHTML {
+		t.Fatalf("semantic change=%+v", changes)
+	}
+}
+
+func TestRecoverMutationJournalRollsBackWithoutReceipt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(path, []byte("after\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	artifact := RunSessionArtifactState{
+		Ref: ArtifactRef{Kind: ArtifactProjectFile, ID: "notes.txt", Path: "notes.txt"}, Relative: "notes.txt",
+		BeforeContent: []byte("before\n"), AfterContent: []byte("after\n"),
+		BeforeHash: hashBytes([]byte("before\n")), AfterHash: hashBytes([]byte("after\n")), Existed: true,
+	}
+	journal := MutationJournal{RunID: "run_recovery", OperationID: "call_1", Artifacts: []RunSessionArtifactState{artifact}}
+	requestHash, err := mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journal.RequestHash = requestHash
+	journalPath := mutationJournalPath(dir, journal.RunID, journal.OperationID)
+	if err := writeMutationJournal(journalPath, journal); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecoverMutationJournals(context.Background(), dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(path); err != nil || string(raw) != "before\n" {
+		t.Fatalf("recovered raw=%q err=%v", raw, err)
+	}
+}
+
+func TestRecoverMutationJournalRollsForwardWithReceipt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(path, []byte("before\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	artifact := RunSessionArtifactState{
+		Ref: ArtifactRef{Kind: ArtifactProjectFile, ID: "notes.txt", Path: "notes.txt"}, Relative: "notes.txt",
+		BeforeContent: []byte("before\n"), AfterContent: []byte("after\n"),
+		BeforeHash: hashBytes([]byte("before\n")), AfterHash: hashBytes([]byte("after\n")), Existed: true,
+	}
+	journal := MutationJournal{RunID: "run_recovery", OperationID: "call_1", Artifacts: []RunSessionArtifactState{artifact}}
+	requestHash, err := mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journal.RequestHash = requestHash
+	journalPath := mutationJournalPath(dir, journal.RunID, journal.OperationID)
+	if err := writeMutationJournal(journalPath, journal); err != nil {
+		t.Fatal(err)
+	}
+	lookup := func(_ context.Context, runID, operationID string) (string, bool, error) {
+		if runID != journal.RunID || operationID != journal.OperationID {
+			t.Fatalf("lookup run=%q operation=%q", runID, operationID)
+		}
+		return journal.RequestHash, true, nil
+	}
+	if err := RecoverMutationJournals(context.Background(), dir, lookup); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(path); err != nil || string(raw) != "after\n" {
+		t.Fatalf("recovered raw=%q err=%v", raw, err)
+	}
+}
+
 func TestRunSessionSnapshotRestoresOverlayWithoutChangingBaseline(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "notes.txt")

@@ -2,6 +2,8 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -56,6 +58,34 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 				DoNothing: true,
 			}).Create(&po).Error; err != nil {
 				return err
+			}
+		}
+		if commit.RunID != "" && commit.OperationID != "" {
+			now := time.Now().UnixNano()
+			receipt := idempotencyPO{
+				Scope: "artifact_commit", OwnerID: commit.RunID, Key: commit.OperationID,
+				RequestHash: commit.RequestHash, Status: "completed", ResultJSON: commit.ToolResultJSON,
+				CreatedAt: now, UpdatedAt: now,
+			}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "scope"}, {Name: "owner_id"}, {Name: "key"}},
+				DoNothing: true,
+			}).Create(&receipt).Error; err != nil {
+				return err
+			}
+			var stored idempotencyPO
+			if err := tx.First(&stored, "scope = ? AND owner_id = ? AND key = ?", "artifact_commit", commit.RunID, commit.OperationID).Error; err != nil {
+				return err
+			}
+			if stored.RequestHash != commit.RequestHash || stored.Status != "completed" {
+				return fmt.Errorf("artifact commit receipt conflicts with operation %s", commit.OperationID)
+			}
+			if commit.ToolResultJSON != "" {
+				if err := tx.Model(&idempotencyPO{}).
+					Where("scope = ? AND owner_id = ? AND key = ?", "tool_call", commit.RunID, commit.OperationID).
+					Updates(map[string]any{"status": "completed", "result_json": commit.ToolResultJSON, "updated_at": now}).Error; err != nil {
+					return err
+				}
 			}
 		}
 		return nil

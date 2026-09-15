@@ -103,11 +103,13 @@ func (t mutatePPTTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		content, _, readErr := readArtifact(input.ProjectDir, input.Session, ref)
 		if readErr == nil {
 			kind := "schema"
+			revision := revisionFromModel(content)
 			if resource.Part == "html" {
 				kind = "static"
+				revision = presentationRevision(t.pack, input, resource.SlideID)
 			}
 			hash := hashBytes(content)
-			out.ChangedTargets = []ChangedTarget{{Type: resource.Type, SlideID: resource.SlideID, Part: resource.Part, Revision: revisionFromModel(content), Hash: hash}}
+			out.ChangedTargets = []ChangedTarget{{Type: resource.Type, SlideID: resource.SlideID, Part: resource.Part, Revision: revision, Hash: hash}}
 			out.Evidence = []Evidence{newEvidence(kind, resource, hash, map[string]any{"valid": true})}
 		}
 	}

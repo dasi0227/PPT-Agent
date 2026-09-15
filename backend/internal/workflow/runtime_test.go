@@ -1827,7 +1827,7 @@ func TestCheckpointRestoresActiveDurationBudget(t *testing.T) {
 	}
 }
 
-func TestCommitOnlyAfterGateAcceptance(t *testing.T) {
+func TestSuccessfulToolsCommitBeforeGateAcceptance(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	commits := 0
 	agent := &scriptedAgent{responses: []AgentResponse{
@@ -1840,7 +1840,7 @@ func TestCommitOnlyAfterGateAcceptance(t *testing.T) {
 		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
 		CommitMetadata: func(context.Context, CommitContext) error { commits++; return nil },
 	})
-	if outcome.Status != StatusCompleted || commits != 1 {
+	if outcome.Status != StatusCompleted || commits != 2 {
 		t.Fatalf("outcome=%+v commits=%d", outcome, commits)
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
@@ -1849,7 +1849,7 @@ func TestCommitOnlyAfterGateAcceptance(t *testing.T) {
 	}
 }
 
-func TestFailedAndCanceledRunsDiscardOverlayProducts(t *testing.T) {
+func TestFailedAndCanceledRunsKeepCompletedToolProducts(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		cancel bool
@@ -1870,7 +1870,7 @@ func TestFailedAndCanceledRunsDiscardOverlayProducts(t *testing.T) {
 			})
 			cancel()
 			raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
-			if string(raw) != "formal" || (test.cancel && outcome.Status != StatusCanceled) || (!test.cancel && outcome.Status != StatusFailed) {
+			if string(raw) != "dirty" || (test.cancel && outcome.Status != StatusCanceled) || (!test.cancel && outcome.Status != StatusFailed) {
 				t.Fatalf("outcome=%+v formal=%q", outcome, raw)
 			}
 			if ActiveRunSession(dir) != nil {
@@ -2243,7 +2243,7 @@ func TestCommandPermissionWaitDoesNotConsumeActiveDuration(t *testing.T) {
 	}
 }
 
-func TestPendingCommandRecoveryRestoresExistingSessionOverlay(t *testing.T) {
+func TestPendingCommandRecoveryDiscardsLegacyUncommittedSession(t *testing.T) {
 	dir := t.TempDir()
 	notesPath := filepath.Join(dir, "notes.txt")
 	if err := os.WriteFile(notesPath, []byte("before\n"), 0o600); err != nil {
@@ -2301,8 +2301,8 @@ func TestPendingCommandRecoveryRestoresExistingSessionOverlay(t *testing.T) {
 		t.Fatalf("outcome=%+v requests=%+v", outcome, prompter.requests)
 	}
 	raw, err := os.ReadFile(notesPath)
-	if err != nil || string(raw) != "staged\n" {
-		t.Fatalf("restored overlay was not committed: raw=%q err=%v", raw, err)
+	if err != nil || string(raw) != "before\n" {
+		t.Fatalf("legacy uncommitted session was not discarded: raw=%q err=%v", raw, err)
 	}
 }
 

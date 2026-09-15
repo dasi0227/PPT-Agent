@@ -3,6 +3,7 @@ package workflow
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -116,13 +117,14 @@ func resourceForArtifact(ref ArtifactRef) Resource {
 }
 
 type ArtifactChange struct {
-	Artifact   ArtifactRef `json:"artifact"`
-	BeforeHash string      `json:"before_hash,omitempty"`
-	AfterHash  string      `json:"after_hash"`
-	Source     string      `json:"source"`
-	Tentative  bool        `json:"tentative,omitempty"`
-	Insertions int         `json:"insertions,omitempty"`
-	Deletions  int         `json:"deletions,omitempty"`
+	Artifact    ArtifactRef `json:"artifact"`
+	BeforeHash  string      `json:"before_hash,omitempty"`
+	AfterHash   string      `json:"after_hash"`
+	Source      string      `json:"source"`
+	Tentative   bool        `json:"tentative,omitempty"`
+	AffectsHTML bool        `json:"affects_html,omitempty"`
+	Insertions  int         `json:"insertions,omitempty"`
+	Deletions   int         `json:"deletions,omitempty"`
 }
 
 type ChangeSet struct {
@@ -148,6 +150,68 @@ func (c ChangeSet) All() []ArtifactChange {
 	out = append(out, c.Created...)
 	out = append(out, c.Updated...)
 	out = append(out, c.Deleted...)
+	return out
+}
+
+func mergeChangeSets(base, next ChangeSet) ChangeSet {
+	type accumulated struct {
+		kind   string
+		change ArtifactChange
+	}
+	values := map[string]accumulated{}
+	apply := func(kind string, change ArtifactChange) {
+		key := change.Artifact.Key()
+		current, exists := values[key]
+		if !exists {
+			values[key] = accumulated{kind: kind, change: change}
+			return
+		}
+		change.BeforeHash = current.change.BeforeHash
+		change.AffectsHTML = current.change.AffectsHTML || change.AffectsHTML
+		change.Insertions += current.change.Insertions
+		change.Deletions += current.change.Deletions
+		switch {
+		case current.kind == "created" && kind == "deleted":
+			delete(values, key)
+		case current.kind == "created":
+			values[key] = accumulated{kind: "created", change: change}
+		case current.kind == "deleted" && kind == "created":
+			values[key] = accumulated{kind: "updated", change: change}
+		case kind == "deleted":
+			values[key] = accumulated{kind: "deleted", change: change}
+		default:
+			values[key] = accumulated{kind: "updated", change: change}
+		}
+	}
+	for _, set := range []ChangeSet{base, next} {
+		for _, change := range set.Created {
+			apply("created", change)
+		}
+		for _, change := range set.Updated {
+			apply("updated", change)
+		}
+		for _, change := range set.Deleted {
+			apply("deleted", change)
+		}
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := EmptyChangeSet()
+	out.Warnings = append(append([]Issue{}, base.Warnings...), next.Warnings...)
+	for _, key := range keys {
+		value := values[key]
+		switch value.kind {
+		case "created":
+			out.Created = append(out.Created, value.change)
+		case "deleted":
+			out.Deleted = append(out.Deleted, value.change)
+		default:
+			out.Updated = append(out.Updated, value.change)
+		}
+	}
 	return out
 }
 
@@ -191,6 +255,9 @@ type StructuredOutcome struct {
 }
 
 type CommitContext struct {
+	OperationID           string
+	RequestHash           string
+	ToolResultJSON        string
 	Changes               ChangeSet
 	MaterializationProofs []MaterializationProof
 }

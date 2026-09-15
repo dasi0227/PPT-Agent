@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -381,9 +382,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	if !created {
 		return svc.replayCreateRun(ctx, record)
 	}
-	// Serialize runs per project: each active run owns the project's authoring
-	// overlay, so a second concurrent run would race on the
-	// same files. Reuse RUN_ACTIVE to reject a new run while one is in flight.
+	// Serialize runs per project: each active run may commit tool-level project
+	// transactions, so a second concurrent run would race on the same files.
 	if active, activeErr := svc.store.HasActiveRun(ctx, project.ID); activeErr != nil {
 		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
 		return model.Run{}, activeErr
@@ -397,6 +397,10 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	} else if active {
 		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "GIT_COMMIT_ACTIVE")
 		return model.Run{}, ErrGitCommitActive
+	}
+	if err := svc.recoverProjectMutations(ctx, project); err != nil {
+		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RECOVERY_FAILED")
+		return model.Run{}, err
 	}
 	runModel := model.Run{
 		ID: uuid.NewString(), ThreadID: thread.ID, ProjectID: project.ID,
@@ -509,6 +513,9 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	if err != nil {
 		return model.Run{}, err
 	}
+	if err := svc.recoverProjectMutations(ctx, project); err != nil {
+		return model.Run{}, err
+	}
 	checkpointStore, ok := svc.store.(interface {
 		LatestCheckpoint(context.Context, string) (workflow.RuntimeCheckpoint, error)
 	})
@@ -558,6 +565,34 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 		return model.Run{}, err
 	}
 	return resumed, nil
+}
+
+func (svc *RunService) recoverProjectMutations(ctx context.Context, project model.Project) error {
+	return workflow.RecoverMutationJournals(ctx, project.WorkDir, func(ctx context.Context, runID, operationID string) (string, bool, error) {
+		receipt, err := svc.store.GetIdempotency(ctx, "artifact_commit", runID, operationID)
+		if errors.Is(err, run.ErrRunNotFound) {
+			return "", false, nil
+		}
+		if err != nil {
+			return "", false, err
+		}
+		return receipt.RequestHash, receipt.Status == "completed", nil
+	})
+}
+
+// RecoverAllProjectMutations resolves crash journals before the HTTP server
+// exposes project files to clients.
+func (svc *RunService) RecoverAllProjectMutations(ctx context.Context) error {
+	projects, err := svc.store.ListProjects(ctx)
+	if err != nil {
+		return err
+	}
+	for _, project := range projects {
+		if err := svc.recoverProjectMutations(ctx, project); err != nil {
+			return fmt.Errorf("recover project %s mutations: %w", project.ID, err)
+		}
+	}
+	return nil
 }
 
 func (svc *RunService) completeCreateSuccess(ctx context.Context, threadID, key, runID string) {

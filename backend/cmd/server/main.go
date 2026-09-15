@@ -12,12 +12,14 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 )
 
 // App 是装配完成的应用（由 wire 注入），持有运行所需依赖。
 type App struct {
 	server *http.Server
 	engine *run.Engine
+	runs   *service.RunService
 	log    *zap.Logger
 }
 
@@ -27,6 +29,13 @@ func main() {
 		panic(err)
 	}
 	defer cleanup()
+	recoveryCtx, cancelRecovery := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := app.runs.RecoverAllProjectMutations(recoveryCtx); err != nil {
+		cancelRecovery()
+		app.log.Error("recovering project mutations failed", zap.Error(err))
+		return
+	}
+	cancelRecovery()
 
 	go func() {
 		app.log.Info("server starting", zap.String("addr", app.server.Addr))

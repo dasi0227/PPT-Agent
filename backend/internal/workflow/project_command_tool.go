@@ -16,7 +16,7 @@ type projectCommandTool struct{}
 func (projectCommandTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name:        "run_command",
-		Description: "Run a restricted project-local command. Use read_ppt for PPT resources changed in the current Run. Supported reads: ls, cat, head, tail, find, grep, jq, rg, pwd, stat, sed -n, wc, git status, git diff, and git log. The only write form is a confirmed single-file sed -i substitution in execute mode.",
+		Description: "Run a restricted project-local command against the current durable project state. Supported reads: ls, cat, head, tail, find, grep, jq, rg, pwd, stat, sed -n, wc, git status, git diff, and git log. The only write form is a confirmed single-file sed -i substitution in execute mode.",
 		Parameters: objectSchema([]string{"command"}, map[string]any{
 			"command": map[string]any{
 				"type": "string", "minLength": 1, "maxLength": 4096,

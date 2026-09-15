@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -20,6 +22,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 type EventEmitter interface {
@@ -361,6 +364,7 @@ type RunState struct {
 	gateEvidence            int64
 	lastSummary             string
 	committed               bool
+	committedChanges        ChangeSet
 	lastProgress            string
 	lastReasoning           string
 	lastMilestoneRevision   int
@@ -399,6 +403,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
 		work:                   NewWorkLedger(),
+		committedChanges:       EmptyChangeSet(),
 		activeSkills:           ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...)},
 		calibrationFactor:      1,
 		projectHistoryRevision: input.ProjectHistoryRevision,
@@ -461,6 +466,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.activeSkills.Skills = append([]model.RunSkill{}, input.ResumeCheckpoint.ActiveSkills...)
 		}
 		state.contextIndexRef = input.ResumeCheckpoint.ContextIndexRef
+		state.committedChanges = input.ResumeCheckpoint.Changes
 		recordTrace(input.Trace, input.RunID, "checkpoint.loaded", map[string]any{
 			"loop_id": state.loopID, "phase": state.phase, "boundary": input.ResumeCheckpoint.Boundary,
 		})
@@ -501,14 +507,19 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 
 	if state.mode == model.ModeExecute {
-		// Typed tools write to an isolated RunSession overlay. Runtime commits
-		// the complete overlay only after the completion and commit checks pass.
+		// RunSession is the transaction for the currently executing tool call.
+		// Every successful mutation is committed before the next call starts.
 		var session *RunSession
 		var err error
-		if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.Session != nil {
+		if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.Session != nil && len(input.ResumeCheckpoint.Session.Artifacts) == 0 {
 			session, err = RestoreRunSession(input.ProjectDir, input.RunID, *input.ResumeCheckpoint.Session)
 		} else {
 			session, err = NewRunSession(input.ProjectDir, input.RunID)
+			if err == nil && input.ResumeCheckpoint != nil && input.ResumeCheckpoint.Session != nil && len(input.ResumeCheckpoint.Session.Artifacts) > 0 {
+				recordTrace(input.Trace, input.RunID, "checkpoint.uncommitted_operation_discarded", map[string]any{
+					"artifacts": len(input.ResumeCheckpoint.Session.Artifacts),
+				})
+			}
 		}
 		if err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
@@ -913,9 +924,67 @@ func (r *Runtime) executeToolBatch(
 			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
 		}
 	}
+	commitPrepared := func(index int) {
+		if !started[index] || state.tx == nil {
+			return
+		}
+		call := calls[index]
+		desc, exists := registry.Descriptor(call.Name)
+		if !exists {
+			return
+		}
+		mutates := !desc.ReadOnly
+		if decisions[index] != nil {
+			mutates = mutates || decisions[index].Mutates
+		}
+		proofs := materializationProofs(results[index])
+		if !results[index].OK {
+			if mutates {
+				state.tx.RollbackOperation()
+			}
+			return
+		}
+		if !mutates && len(proofs) == 0 {
+			return
+		}
+		err := stageMaterializationRecords(state.tx, proofs)
+		resultJSON := ""
+		if err == nil {
+			resultJSON, err = marshalPersistedToolResult(results[index])
+		}
+		if err == nil {
+			state.tx.AcceptMaterializationProofs(proofs)
+			var committed ChangeSet
+			committed, err = state.tx.CommitOperation(ctx, call.ID, resultJSON, input.CommitMetadata)
+			if err == nil {
+				state.committedChanges = mergeChangeSets(state.committedChanges, committed)
+				refreshRuntimePack(input.ProjectDir, state, results[index].ChangedTargets)
+				if input.DomainToolsForContext != nil {
+					if next, registryErr := buildDomainToolRegistry(input, state.pack); registryErr == nil {
+						registry = next
+						state.tools = next
+					} else {
+						recordTrace(input.Trace, state.runID, "tool_registry.refresh_failed", map[string]any{
+							"call_id": call.ID, "tool": call.Name, "error": registryErr.Error(),
+						})
+					}
+				}
+				for _, change := range committed.All() {
+					recordTrace(input.Trace, state.runID, "target.committed", map[string]any{
+						"call_id": call.ID, "target": resourceForArtifact(change.Artifact), "artifact": change.Artifact,
+					})
+				}
+			}
+		}
+		if err != nil {
+			state.tx.RollbackOperation()
+			results[index] = failedToolResult(CodeCommitFailed, err.Error(), false)
+		}
+	}
 	execute := func(index int) {
 		if prepare(index) {
 			runPrepared(index)
+			commitPrepared(index)
 		}
 	}
 	switch {
@@ -929,10 +998,24 @@ func (r *Runtime) executeToolBatch(
 		runConcurrentBatch(ctx, len(calls), 3, func(index int) {
 			if prepared[index] {
 				runPrepared(index)
+				commitPrepared(index)
 			}
 		})
 	case batchIsIndependentRenders(calls):
-		runConcurrentBatch(ctx, len(calls), 3, execute)
+		prepared := make([]bool, len(calls))
+		for index := range calls {
+			prepared[index] = prepare(index)
+		}
+		runConcurrentBatch(ctx, len(calls), 3, func(index int) {
+			if prepared[index] {
+				runPrepared(index)
+			}
+		})
+		for index := range calls {
+			if prepared[index] {
+				commitPrepared(index)
+			}
+		}
 	default:
 		writeFailed := false
 		for index, call := range calls {
@@ -1111,10 +1194,128 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall, pack context
 }
 
 type persistedToolResult struct {
-	Result             ToolResult        `json:"result"`
-	Evidence           []Evidence        `json:"evidence"`
-	InvalidatedTargets []Resource        `json:"invalidated_targets"`
-	ObservationParts   []llm.ContentPart `json:"observation_parts"`
+	Result                ToolResult             `json:"result"`
+	Evidence              []Evidence             `json:"evidence"`
+	MaterializationProofs []MaterializationProof `json:"materialization_proofs,omitempty"`
+	InvalidatedTargets    []Resource             `json:"invalidated_targets"`
+	ObservationParts      []llm.ContentPart      `json:"observation_parts"`
+}
+
+func marshalPersistedToolResult(result ToolResult) (string, error) {
+	raw, err := json.Marshal(persistedToolResult{
+		Result: result, Evidence: result.Evidence, MaterializationProofs: materializationProofs(result),
+		InvalidatedTargets: result.InvalidatedTargets, ObservationParts: result.ObservationParts,
+	})
+	return string(raw), err
+}
+
+func materializationProofs(result ToolResult) []MaterializationProof {
+	proofs := make([]MaterializationProof, 0)
+	seen := map[string]bool{}
+	for _, evidence := range result.Evidence {
+		if evidence.Materialization == nil || seen[evidence.Materialization.SlideID] {
+			continue
+		}
+		seen[evidence.Materialization.SlideID] = true
+		proofs = append(proofs, *evidence.Materialization)
+	}
+	return proofs
+}
+
+func stageMaterializationRecords(session *RunSession, proofs []MaterializationProof) error {
+	for _, proof := range proofs {
+		if !stableSlideID.MatchString(proof.SlideID) {
+			return errors.New("materialization proof has an invalid slide_id")
+		}
+		record := spec.MaterializationRecord{
+			SchemaVersion: spec.SchemaVersion,
+			Artifact: spec.MaterializationArtifact{
+				Revision: proof.HTMLRevision,
+				Hash:     "sha256:" + proof.ArtifactHash,
+			},
+			Source: spec.MaterializationSource{
+				ManifestRevision:  proof.ManifestRevision,
+				OutlineNodeHash:   proof.OutlineNodeHash,
+				SpecRevision:      proof.SpecRevision,
+				DesignContentHash: proof.DesignContentHash,
+				Hash:              proof.SourceHash,
+			},
+			Frame:      spec.MaterializationFrame{ContextHash: proof.FrameContextHash},
+			RenderedAt: time.Now().Unix(),
+		}
+		if err := spec.ValidateMaterialization(record); err != nil {
+			return err
+		}
+		raw, err := json.MarshalIndent(record, "", "  ")
+		if err != nil {
+			return err
+		}
+		path := model.SlideMaterializationPath(proof.SlideID)
+		if _, err := session.Write(ArtifactRef{
+			Kind: ArtifactDerived, ID: proof.SlideID + ":materialization", Path: path,
+		}, "render_slide", raw); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTarget) {
+	if state.pack.Revisions.SlideSpecs == nil {
+		state.pack.Revisions.SlideSpecs = map[string]int{}
+	}
+	if state.pack.Revisions.SlideHTML == nil {
+		state.pack.Revisions.SlideHTML = map[string]int{}
+	}
+	for _, target := range targets {
+		switch {
+		case target.Type == "deck" && target.Part == "manifest":
+			state.pack.Revisions.Manifest = target.Revision
+			var value spec.Manifest
+			if raw, err := os.ReadFile(filepath.Join(projectDir, "manifest.json")); err == nil && json.Unmarshal(raw, &value) == nil {
+				state.pack.PresentationManifest.Manifest = value
+			}
+		case target.Type == "deck" && target.Part == "outline":
+			state.pack.Revisions.Outline = target.Revision
+			var value spec.Outline
+			if raw, err := os.ReadFile(filepath.Join(projectDir, "outline.json")); err == nil && json.Unmarshal(raw, &value) == nil {
+				state.pack.Outline.Outline = value
+			}
+		case target.Type == "deck" && target.Part == "design":
+			state.pack.Revisions.Design = target.Revision
+			var value spec.Design
+			if raw, err := os.ReadFile(filepath.Join(projectDir, "design.json")); err == nil && json.Unmarshal(raw, &value) == nil {
+				state.pack.Design.Design = &value
+			}
+		case target.Type == "slide" && target.Part == "spec":
+			state.pack.Revisions.SlideSpecs[target.SlideID] = target.Revision
+			if state.pack.Target.SlideSpec != nil && state.pack.Target.SlideSpec.SlideID == target.SlideID {
+				var value spec.SlideSpec
+				if raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(model.SlideSpecPath(target.SlideID)))); err == nil && json.Unmarshal(raw, &value) == nil {
+					state.pack.Target.SlideSpec = &value
+				}
+			}
+		case target.Type == "slide" && target.Part == "html":
+			state.pack.Revisions.SlideHTML[target.SlideID] = target.Revision
+			if len(state.pack.Target.SlideIDs) == 1 && state.pack.Target.SlideIDs[0] == target.SlideID {
+				if raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(model.SlideHTMLPath(target.SlideID)))); err == nil {
+					state.pack.Target.SlideHTML = string(raw)
+				}
+			}
+		}
+	}
+	if state.scope.IncludeRunCreatedSlides {
+		for _, slideID := range runtimeSlideOrderIDs(state.pack) {
+			if !state.scope.ContainsSlide(slideID) {
+				state.scope.SlideIDs = append(state.scope.SlideIDs, slideID)
+			}
+		}
+	}
+}
+
+func runtimeSlideOrderIDs(pack contextengine.ContextPack) []string {
+	_, ordered := runtimeSlideOrder(pack)
+	return ordered
 }
 
 func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall) (ToolResult, bool) {
@@ -1156,6 +1357,15 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 		return failedToolResult("INTERNAL", "stored tool result is invalid", false), false
 	}
 	persisted.Result.Evidence = persisted.Evidence
+	for proofIndex := range persisted.MaterializationProofs {
+		proof := persisted.MaterializationProofs[proofIndex]
+		for evidenceIndex := range persisted.Result.Evidence {
+			if persisted.Result.Evidence[evidenceIndex].Target.SlideID == proof.SlideID {
+				persisted.Result.Evidence[evidenceIndex].Materialization = &proof
+				break
+			}
+		}
+	}
 	persisted.Result.InvalidatedTargets = persisted.InvalidatedTargets
 	persisted.Result.ObservationParts = persisted.ObservationParts
 	return persisted.Result, false
@@ -1165,12 +1375,9 @@ func (r *Runtime) persistToolCall(ctx context.Context, input RuntimeInput, state
 	if input.Idempotency == nil {
 		return
 	}
-	raw, err := json.Marshal(persistedToolResult{
-		Result: result, Evidence: result.Evidence,
-		InvalidatedTargets: result.InvalidatedTargets, ObservationParts: result.ObservationParts,
-	})
+	raw, err := marshalPersistedToolResult(result)
 	if err == nil {
-		_ = input.Idempotency.CompleteIdempotency(ctx, "tool_call", state.runID, call.ID, "completed", string(raw))
+		_ = input.Idempotency.CompleteIdempotency(ctx, "tool_call", state.runID, call.ID, "completed", raw)
 	}
 }
 
@@ -2022,73 +2229,15 @@ func (r *Runtime) finishCandidate(
 		Role: llm.RoleAssistant, Content: llm.TextContent(state.lastSummary),
 	})
 	if state.mode == model.ModeExecute {
-		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted")
-		state.tx.AcceptMaterializationProofs(result.MaterializationProofs)
-		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommit, ""); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
-		}
-		commitHash, hashErr := idempotency.CanonicalHash(map[string]any{
-			"changes": changes, "proofs": result.MaterializationProofs,
-		})
-		if hashErr != nil {
-			return r.fail(input, state, CodeCommitFailed, hashErr), true
-		}
-		shouldCommit := true
-		if input.Idempotency != nil {
-			record, created, acquireErr := input.Idempotency.AcquireIdempotency(ctx, model.IdempotencyRecord{
-				Scope: "commit", OwnerID: state.runID, Key: "commit",
-				RequestHash: commitHash, Status: "in_progress",
-			})
-			if acquireErr != nil {
-				return r.fail(input, state, CodeCommitFailed, acquireErr), true
-			}
-			if record.RequestHash != commitHash {
-				return r.fail(input, state, "IDEMPOTENCY_KEY_REUSED", errors.New("commit key reused with different changes")), true
-			}
-			if !created {
-				for record.Status == "in_progress" {
-					select {
-					case <-ctx.Done():
-						return r.fail(input, state, CodeCanceled, ctx.Err()), true
-					case <-time.After(10 * time.Millisecond):
-					}
-					record, acquireErr = input.Idempotency.GetIdempotency(ctx, "commit", state.runID, "commit")
-					if acquireErr != nil {
-						return r.fail(input, state, CodeCommitFailed, acquireErr), true
-					}
-				}
-				if record.Status != "completed" {
-					return r.fail(input, state, CodeCommitFailed, errors.New("previous commit result was not confirmed")), true
-				}
-				shouldCommit = false
-			}
-		}
-		if shouldCommit {
-			if err := state.tx.Commit(ctx, input.CommitMetadata); err != nil {
-				if input.Idempotency != nil {
-					_ = input.Idempotency.CompleteIdempotency(context.Background(), "commit", state.runID, "commit", "failed", `{"code":"COMMIT_FAILED"}`)
-				}
-				if ctx.Err() != nil {
-					return r.fail(input, state, CodeCanceled, ctx.Err()), true
-				}
-				return r.fail(input, state, CodeCommitFailed, err), true
-			}
-			if input.Idempotency != nil {
-				_ = input.Idempotency.CompleteIdempotency(context.Background(), "commit", state.runID, "commit", "completed", `{"status":"completed"}`)
-			}
-		}
+		// All successful tool calls are already durable. Completion only closes
+		// the now-empty transaction and records the terminal audit boundary.
+		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted; finalizing durable changes")
+		state.tx.Discard()
 		state.committed = true
 		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterCommit, ""); err != nil {
-			// Artifact files and metadata are already durably committed. An audit
-			// checkpoint failure cannot safely turn this into a failed run because
-			// callers would reasonably retry work whose effects already exist.
+			// Artifact files and metadata were committed at their tool boundaries.
 			recordTrace(input.Trace, state.runID, "checkpoint.persistence_failed", map[string]any{
 				"loop_id": state.loopID, "boundary": checkpointAfterCommit,
-			})
-		}
-		for _, change := range changes.All() {
-			recordTrace(input.Trace, state.runID, "target.committed", map[string]any{
-				"target": resourceForArtifact(change.Artifact), "artifact": change.Artifact,
 			})
 		}
 	}
@@ -2282,9 +2431,9 @@ func outcomeDurationMS(outcome StructuredOutcome) int64 {
 
 func (state *RunState) changeSet() ChangeSet {
 	if state.tx == nil {
-		return EmptyChangeSet()
+		return state.committedChanges
 	}
-	return state.tx.ChangeSet()
+	return mergeChangeSets(state.committedChanges, state.tx.ChangeSet())
 }
 
 func (state *RunState) checkpoint(questionID string, now time.Time) RuntimeCheckpoint {
