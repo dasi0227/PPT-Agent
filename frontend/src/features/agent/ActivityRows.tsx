@@ -167,7 +167,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
         showToggle && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
       )}
     >
-      <Flag className="mt-0.5 h-4 w-4 shrink-0 text-[#7C3AED]" strokeWidth={1.75} />
+      <Flag className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
       <span ref={textRef} className={cn('min-w-0 flex-1 font-semibold text-text-900', !expanded && 'line-clamp-1')}>{item.text}</span>
       {showToggle && (
         <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
@@ -260,7 +260,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       >
         {icon}
         <span className="min-w-0 truncate text-[13px] font-normal text-text-900">
-          {presentActivityText(item.label, item.target, slides)}
+          {renderActivityLabel(item.label, item.target, slides)}
         </span>
         {hasDetails && (expanded
           ? <ChevronDown className="h-3.5 w-3.5 text-text-400" />
@@ -342,26 +342,89 @@ const groupVerbByTool: Record<string, string> = {
   read_ppt: '已读取',
 };
 
+// deck 级产物（manifest/outline/design）对应的可读名词，在活动行中加粗突出对象。
+const deckObjectNounByPart: Record<string, string> = {
+  manifest: '演示内容',
+  outline: '目录结构',
+  design: '视觉设计',
+};
+
+interface ObjectName {
+  name: string;
+  bold: boolean;
+}
+
+function targetObjectName(target: PublicTarget | undefined): ObjectName {
+  if (target?.type === 'deck') {
+    const noun = deckObjectNounByPart[target.part];
+    if (noun) return { name: noun, bold: true };
+  }
+  if (target?.type === 'slide' && target.part === 'spec') return { name: '页面设计稿', bold: false };
+  if (target?.type === 'slide' && target.part === 'html') return { name: '幻灯片', bold: false };
+  return { name: '', bold: false };
+}
+
+// 从命令文本提取可执行程序名（首段空白分隔的词），供分组行展示具体命令。
+function commandName(text?: string): string | null {
+  const trimmed = text?.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^\S+/);
+  return match ? match[0] : null;
+}
+
+// 渲染活动文本：对 deck 级产物名词加粗，突出「已读取演示内容」中的对象。
+function renderActivityLabel(text: string, target: PublicTarget | undefined, slides: Slide[]): React.ReactNode {
+  const label = presentActivityText(text, target, slides);
+  const { name, bold } = targetObjectName(target);
+  if (bold && label.endsWith(name)) {
+    return (
+      <>
+        {label.slice(0, label.length - name.length)}
+        <span className="font-semibold">{name}</span>
+      </>
+    );
+  }
+  return label;
+}
+
 function groupedVerb(items: ToolActivityItem[]): string {
   if (items[0].tool !== 'mutate_ppt') return groupVerbByTool[items[0].tool] ?? '已完成';
   const verbs = items.map((item) => item.label.startsWith('已创建') ? '已创建' : item.label.startsWith('已更新') ? '已更新' : '已完成');
   return verbs.every((verb) => verb === verbs[0]) ? verbs[0] : '已完成';
 }
 
-function groupedObjectLabel(items: ToolActivityItem[]): string {
-  const kinds = items.map((item) => {
-    const target = item.target;
-    if (target?.type === 'slide' && target.part === 'spec') return '页面设计稿';
-    if (target?.type === 'slide' && target.part === 'html') return '幻灯片';
-    if (target?.type === 'deck' && target.part === 'manifest') return '演示内容';
-    if (target?.type === 'deck' && target.part === 'outline') return '目录结构';
-    if (target?.type === 'deck' && target.part === 'design') return '视觉设计';
-    return '';
-  });
+interface GroupedObjectParts {
+  prefix: string;
+  noun: string | null;
+  bold: boolean;
+}
+
+function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
+  const kinds = items.map((item) => targetObjectName(item.target));
   const first = kinds[0];
-  if (!first || kinds.some((kind) => kind !== first)) return `${items.length} 项`;
-  const unit = first === '幻灯片' ? '张' : first === '目录结构' ? '份' : first === '视觉设计' ? '套' : '个';
-  return `${items.length} ${unit}${first}`;
+  if (!first.name || kinds.some((kind) => kind.name !== first.name)) {
+    return { prefix: `${items.length} 项`, noun: null, bold: false };
+  }
+  const unit = first.name === '幻灯片' ? '张' : first.name === '目录结构' ? '份' : first.name === '视觉设计' ? '套' : '个';
+  return { prefix: `${items.length} ${unit}`, noun: first.name, bold: first.bold };
+}
+
+function groupLabel(items: ToolActivityItem[], verb: string): React.ReactNode {
+  if (items[0].tool === 'run_command') {
+    const name = commandName(items[0].command?.text);
+    const uniform = name != null && items.every((item) => commandName(item.command?.text) === name);
+    if (uniform) {
+      return <>已执行 <span className="font-semibold">{name}</span> 命令</>;
+    }
+    return `已执行 ${items.length} 条命令`;
+  }
+  const { prefix, noun, bold } = groupedObjectParts(items);
+  return (
+    <>
+      {verb} {prefix}
+      {noun ? (bold ? <span className="font-semibold">{noun}</span> : noun) : null}
+    </>
+  );
 }
 
 export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items }) => {
@@ -379,9 +442,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
           ? <SquareTerminal className="h-4 w-4 text-success" strokeWidth={1.75} />
           : toolStatusIcon(items[0].tool, false)}
         <span className="min-w-0 flex-1">
-          {items[0].tool === 'run_command'
-            ? `已执行 ${items.length} 条命令`
-            : `${verb} ${groupedObjectLabel(items)}`}
+          {groupLabel(items, verb)}
         </span>
         {expanded
           ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />

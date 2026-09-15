@@ -57,7 +57,7 @@ describe('SkillSelector', () => {
     }
 
     expect(trigger).toHaveTextContent('技能 3');
-    expect(screen.getByRole('menu')).toHaveClass('w-[370px]');
+    expect(screen.getByRole('menu')).toHaveClass('w-[280px]');
     expect(screen.getByRole('menuitemcheckbox', { name: '技能：技能四' })).toHaveAttribute('data-disabled');
     expect(screen.getByText('第一个技能')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/搜索/)).toBeNull();

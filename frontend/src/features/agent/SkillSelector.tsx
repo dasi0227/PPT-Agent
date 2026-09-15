@@ -1,6 +1,7 @@
 import React from 'react';
-import { Blocks, BookOpenText } from 'lucide-react';
+import { Blocks, BookOpenText, Check } from 'lucide-react';
 import type { Skill } from '../../api/types';
+import { cn } from '../../lib/utils';
 import { MAX_SELECTED_SKILLS } from '../../stores/composerStore';
 import {
   DropdownMenu,
@@ -57,7 +58,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
           align="start"
           className={[
             'max-h-72 max-w-[calc(100vw-24px)] overflow-y-auto p-1',
-            skills.length === 0 ? 'w-[220px]' : 'w-[370px]',
+            skills.length === 0 ? 'w-[220px]' : 'w-[280px]',
           ].join(' ')}
         >
           {skills.length === 0 && (
@@ -79,20 +80,25 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
                   event.preventDefault();
                   if (!optionDisabled) onToggle(skill.id);
                 }}
-                className={[
-                  'flex min-h-12 items-center gap-2 rounded-sm px-2 py-2 text-xs',
-                  active ? 'bg-accent-soft text-text-900' : 'text-text-600',
+                className={cn(
+                  'flex items-start gap-2.5 rounded-sm px-2 py-1.5 text-xs',
+                  active ? 'bg-accent-soft/70' : 'hover:bg-panel-muted',
                   optionDisabled ? 'cursor-not-allowed opacity-45' : '',
-                ].join(' ')}
+                )}
               >
                 <BookOpenText
-                  className={`h-4 w-4 shrink-0 ${active ? 'text-accent' : 'text-text-400'}`}
+                  className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', active ? 'text-accent' : 'text-text-600')}
                   strokeWidth={1.75}
                 />
-                <span className="flex min-w-0 flex-1 items-baseline leading-[1.45]">
-                  <span className="mr-1.5 shrink-0 font-semibold text-text-900">{skill.name}</span>
-                  <span className="min-w-0 truncate" title={skill.description}>{skill.description}</span>
+                <span className="min-w-0 flex-1">
+                  <span className={cn('block truncate font-semibold', active ? 'text-accent' : 'text-text-900')}>
+                    {skill.name}
+                  </span>
+                  <span className="block truncate text-[11px] leading-4 text-text-400" title={skill.description}>
+                    {skill.description}
+                  </span>
                 </span>
+                {active && <Check className="mt-1 h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2.5} />}
               </DropdownMenuItem>
             );
           })}
