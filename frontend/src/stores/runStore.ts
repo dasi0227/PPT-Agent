@@ -188,9 +188,26 @@ function isTerminalRunStatus(status: string): status is 'done' | 'failed' | 'can
 function mergeAuthoritativeTimeline(current: TimelineItem[], authoritative: TimelineItem[]): TimelineItem[] {
   const authoritativeById = new Map(authoritative.map((item) => [item.id, item]));
   const currentIds = new Set(current.map((item) => item.id));
+  const authoritativeOriginalTurns = new Map(
+    authoritative
+      .filter((item) => item.type === 'user_turn' && item.runId && item.scope && item.mode)
+      .map((item) => [item.runId!, item]),
+  );
+  const mergedOriginalRunIds = new Set<string>();
   return [
-    ...current.map((item) => authoritativeById.get(item.id) ?? item),
-    ...authoritative.filter((item) => !currentIds.has(item.id)),
+    ...current.map((item) => {
+      const exact = authoritativeById.get(item.id);
+      if (exact) return exact;
+      if (item.type !== 'user_turn' || !item.runId || !item.scope || !item.mode) return item;
+      const original = authoritativeOriginalTurns.get(item.runId);
+      if (!original) return item;
+      mergedOriginalRunIds.add(item.runId);
+      return { ...original, id: item.id };
+    }),
+    ...authoritative.filter((item) => (
+      !currentIds.has(item.id)
+      && !(item.type === 'user_turn' && item.runId && mergedOriginalRunIds.has(item.runId))
+    )),
   ];
 }
 

@@ -179,6 +179,9 @@ describe('runStore public event sessions', () => {
       scope: request('').scope, mode: request('').mode, events_url: '',
     });
     await pending;
+    expect(useRunStore.getState().sessions.t1.timelineItems[0]).toMatchObject({
+      runId: 'run_1',
+    });
   });
 
   test('stores selected Skill metadata on the user turn and reuses ids for retry', async () => {
@@ -456,6 +459,31 @@ describe('runStore public event sessions', () => {
     await vi.waitFor(() => {
       expect(useRunStore.getState().sessions.t1.timelineItems)
         .toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice', status: 'canceled' })]));
+    });
+  });
+
+  test('does not duplicate the original user turn when cancellation replays history', async () => {
+    vi.useFakeTimers();
+    await useRunStore.getState().createRun('t1', request('keep one copy'), 'p1');
+    reconciledRuns.push(authoritativeRun('canceled'));
+    historyEntries = [
+      {
+        seq: 1,
+        ts: 1,
+        run_id: 'run_1',
+        turn: 'user',
+        type: 'user_turn',
+        data: { text: 'keep one copy', scope: request('').scope, mode: 'execute' },
+      },
+    ];
+
+    await useRunStore.getState().cancelRun('t1', 'run_1');
+    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.waitFor(() => {
+      const userTurns = useRunStore.getState().sessions.t1.timelineItems.filter((item) => item.type === 'user_turn');
+      expect(userTurns).toHaveLength(1);
+      expect(userTurns[0]).toMatchObject({ text: 'keep one copy', runId: 'run_1' });
+      expect(userTurns[0].id).toMatch(/^user_/);
     });
   });
 

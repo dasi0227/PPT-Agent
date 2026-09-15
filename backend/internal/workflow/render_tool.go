@@ -519,7 +519,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		))
 		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
-	sourceHash, err := renderHashWithoutSession(t.pack, input, slideID, theme.CSS)
+	sourceHash, err := renderArtifactHash(input, slideID)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, err.Error(), true)
@@ -614,12 +614,12 @@ func currentDesignForRender(pack contextengine.ContextPack, projectDir string, s
 	return design, nil
 }
 
-func renderHashWithoutSession(pack contextengine.ContextPack, input DomainToolInput, slideID, themeCSS string) (string, error) {
+func renderArtifactHash(input DomainToolInput, slideID string) (string, error) {
 	htmlRaw, _, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
 	if err != nil {
 		return "", err
 	}
-	return hashBytes(append(append([]byte{}, htmlRaw...), []byte(themeCSS)...)), nil
+	return hashBytes(htmlRaw), nil
 }
 
 func presentationRevision(pack contextengine.ContextPack, input DomainToolInput, slideID string) int {

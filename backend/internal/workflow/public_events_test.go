@@ -100,6 +100,22 @@ func TestPublicToolTargetResolvesReadSlideOrdinalFromOutline(t *testing.T) {
 	}
 }
 
+func TestPublicToolTargetResolvesRenderSlideOrdinalFromOutline(t *testing.T) {
+	projectDir := t.TempDir()
+	outline := `{"sections":[{"slides":[{"slide_id":"sli_random4"},{"slide_id":"sli_attea2"}],"subsections":[]}]}`
+	if err := os.WriteFile(filepath.Join(projectDir, "outline.json"), []byte(outline), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	target := publicToolTarget(projectDir, "render_slide", map[string]any{"slide_id": "sli_attea2"})
+	if target == nil {
+		t.Fatal("render slide target is nil")
+	}
+	if target.DisplayName != "第 2 页" {
+		t.Fatalf("display name = %q, want 第 2 页", target.DisplayName)
+	}
+}
+
 func TestPublicPlanDoesNotTruncateLongUIText(t *testing.T) {
 	longTitle := strings.Repeat("很长的计划标题", 40)
 	plan := publicPlan(Plan{

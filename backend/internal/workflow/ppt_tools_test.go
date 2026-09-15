@@ -15,6 +15,28 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
+type successfulScreenshotRenderer struct{}
+
+func (successfulScreenshotRenderer) Render(_ context.Context, request RenderRequest) (RenderDiagnostics, error) {
+	if err := os.WriteFile(request.ScreenshotPath, []byte("screenshot"), 0o600); err != nil {
+		return RenderDiagnostics{}, err
+	}
+	return RenderDiagnostics{
+		ScreenshotBytes: 10,
+		ContentSize:     map[string]int{"width": request.ViewportWidth, "height": request.ViewportHeight},
+		Overflow:        map[string]bool{"horizontal": false, "vertical": false},
+		FontStatus:      "loaded",
+	}, nil
+}
+
+type staticThemeLoader struct {
+	theme model.Theme
+}
+
+func (l staticThemeLoader) Get(string) (model.Theme, error) {
+	return l.theme, nil
+}
+
 func mutationPack(projectID string, outline spec.Outline) contextengine.ContextPack {
 	return contextengine.ContextPack{Project: contextengine.ProjectContext{ID: projectID}, PresentationManifest: contextengine.PresentationManifestContext{Manifest: spec.Manifest{ProjectID: projectID}}, Outline: contextengine.OutlineContext{Outline: outline}, Revisions: contextengine.RevisionRefs{Manifest: 1, Outline: outline.Revision, Design: 1, SlideSpecs: map[string]int{}, SlideHTML: map[string]int{}}}
 }
@@ -378,5 +400,67 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	}
 	if frame.Ordinal != 2 || frame.Total != 2 || !frame.Numbering.Visible {
 		t.Fatalf("frame=%#v", frame)
+	}
+}
+
+func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
+	dir := t.TempDir()
+	projectID := "pro_aaaaaa"
+	slideID := "sli_attea2"
+	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: slideID, Title: "Cover", Role: spec.SlideRoleCover}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
+	design := spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Density: "medium", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
+	slide := spec.SlideSpec{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, SlideID: slideID, KeyMessage: "Hello", Elements: []spec.Element{}, CreatedAt: 1, UpdatedAt: 1}
+	html := []byte(`<!doctype html><html><body><section class="slide-stage"><h1>Hello</h1></section></body></html>`)
+	for path, value := range map[string]any{
+		"manifest.json":              deck,
+		"outline.json":               outline,
+		"design.json":                design,
+		model.SlideSpecPath(slideID): slide,
+	} {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fullPath := filepath.Join(dir, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fullPath, raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	htmlPath := filepath.Join(dir, model.SlideHTMLPath(slideID))
+	if err := os.MkdirAll(filepath.Dir(htmlPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(htmlPath, html, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	session, err := NewRunSession(dir, "run_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Discard()
+	pack := mutationPack(projectID, outline)
+	pack.Revisions.SlideHTML[slideID] = 1
+	pack.Revisions.SlideSpecs[slideID] = 1
+	result := (slideRenderTool{
+		pack:     pack,
+		renderer: successfulScreenshotRenderer{},
+		themes:   staticThemeLoader{theme: model.Theme{ID: "clean", CSS: `:root{--accent:red}`}},
+	}).Execute(context.Background(), DomainToolInput{
+		Args: map[string]any{"slide_id": slideID}, RunID: "run_1", ProjectDir: dir, Session: session,
+		Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
+	})
+	if !result.OK {
+		t.Fatalf("render result=%+v", result)
+	}
+	wantHash := hashBytes(html)
+	if result.Data["hash"] != wantHash || len(result.Evidence) != 1 || result.Evidence[0].SourceHash != wantHash {
+		t.Fatalf("render hash=%v evidence=%+v want=%s", result.Data["hash"], result.Evidence, wantHash)
+	}
+	if result.Evidence[0].Materialization == nil || result.Evidence[0].Materialization.ArtifactHash != wantHash {
+		t.Fatalf("materialization=%+v want artifact hash %s", result.Evidence[0].Materialization, wantHash)
 	}
 }
