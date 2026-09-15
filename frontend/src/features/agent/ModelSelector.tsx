@@ -63,7 +63,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 onSelect={() => onChange(profile.name)}
                 className={[
                   'flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs',
-                  active ? 'bg-panel-muted text-text-900' : 'text-text-600',
+                  active ? 'bg-accent-soft text-text-900' : 'text-text-600',
                   optionDisabled ? 'cursor-not-allowed opacity-45' : '',
                 ].join(' ')}
               >

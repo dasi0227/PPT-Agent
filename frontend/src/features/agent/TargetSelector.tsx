@@ -89,7 +89,7 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
       type="button"
       aria-label={`范围：${label}`}
       disabled={disabled}
-      className="composer-target-button inline-flex h-7 min-w-0 max-w-[168px] shrink-0 items-center gap-1.5 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-700 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+      className="composer-target-button inline-flex h-7 min-w-0 max-w-[168px] shrink-0 items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
     >
       <Crosshair className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
       <span className="composer-target-label min-w-0 truncate">{label}</span>
@@ -150,12 +150,6 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
           </section>
         )}
         <section className="overflow-hidden rounded-xl bg-surface p-2 shadow-lg">
-          <header className="mb-1 flex h-7 items-center px-1">
-            <strong className="text-xs font-semibold text-text-900">任务范围</strong>
-            <button type="button" aria-label="关闭任务范围" className="ml-auto flex h-6 w-6 items-center justify-center rounded-md text-text-500 hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" onSelect={(event) => event.preventDefault()} onClick={() => setScopeOpen(false)}>
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </header>
           <div className="flex items-center gap-2">
             <span className="w-8 shrink-0 text-[11px] font-medium text-text-700">对象</span>
             <div role="radiogroup" aria-label="修改对象" className="grid min-w-0 flex-1 grid-cols-4 gap-1 rounded-lg bg-panel-muted p-1">

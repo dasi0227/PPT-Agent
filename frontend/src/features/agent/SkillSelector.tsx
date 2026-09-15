@@ -54,7 +54,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           side="top"
-          align="end"
+          align="start"
           className={[
             'max-h-72 max-w-[calc(100vw-24px)] overflow-y-auto p-1',
             skills.length === 0 ? 'w-[220px]' : 'w-[370px]',

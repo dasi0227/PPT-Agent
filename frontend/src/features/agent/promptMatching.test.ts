@@ -148,8 +148,9 @@ describe('slash commands', () => {
   });
 
   it('filters commands by command-name prefix and keeps disabled matches', () => {
-    expect(matchSlashCommands(commands, 'pl').map((command) => command.id)).toEqual(['plan', 'polish']);
-    expect(matchSlashCommands(commands, 'ha').map((command) => command.id)).toEqual(['chat', 'handoff']);
+    expect(matchSlashCommands(commands, 'pl').map((command) => command.id)).toEqual(['polish']);
+    expect(matchSlashCommands(commands, 'ha').map((command) => command.id)).toEqual(['handoff']);
+    expect(matchSlashCommands(commands, '开发').map((command) => command.id)).toEqual(['execute']);
     expect(matchSlashCommands(commands, '')).toHaveLength(10);
     const disabled = resolveSlashCommands({
       runActive: true,

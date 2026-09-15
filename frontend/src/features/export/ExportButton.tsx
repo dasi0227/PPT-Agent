@@ -6,8 +6,8 @@ export function ExportButton({ disabled, reason, onExport }: { disabled: boolean
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" disabled={disabled} title={disabled ? reason : '导出完整演示文稿'} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium text-text-600 hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-45">
-          <Download className="h-4 w-4" strokeWidth={1.75} />导出
+        <button type="button" disabled={disabled} aria-label="导出" title={disabled ? reason : '导出完整演示文稿'} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-45">
+          <Download className="h-4 w-4" strokeWidth={1.75} />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
