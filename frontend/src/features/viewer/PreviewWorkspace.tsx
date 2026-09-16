@@ -11,10 +11,10 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import type { Slide, SlideSpec } from '../../api/types';
+import type { Slide } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
-import { useDeckStore, type PageView } from '../../stores/deckStore';
+import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { DesignSummary } from './DesignSummary';
@@ -23,7 +23,6 @@ import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import type { RuntimeSlide } from './previewProtocol';
 import { buildRuntimeFrame } from './runtimeFrame';
 import { SlideSpecCard } from './SlideSpecCard';
-import { slideRoleLabel } from './semanticLabels';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
 import { orderedSlides } from '../deck/selectors';
 import { useComposerStore } from '../../stores/composerStore';
@@ -143,8 +142,6 @@ function OverviewSlide({
   state,
   load,
   select,
-  spec,
-  view,
   frame,
 }: {
   slide: Slide;
@@ -153,8 +150,6 @@ function OverviewSlide({
   state: ResourceState<string>;
   load: () => void;
   select: () => void;
-  spec?: SlideSpec;
-  view: PageView;
   frame?: RuntimeSlide['frame'];
 }) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -162,7 +157,7 @@ function OverviewSlide({
   loadRef.current = load;
   useEffect(() => {
     const node = ref.current;
-    if (!node || view !== 'html' || !hasRenderedHTML(slide)) return;
+    if (!node || !hasRenderedHTML(slide)) return;
     if (typeof IntersectionObserver === 'undefined') {
       void loadRef.current();
       return;
@@ -175,9 +170,9 @@ function OverviewSlide({
     }, { rootMargin: '160px' });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [slide, view]);
+  }, [slide]);
 
-  const html = view === 'html' && state.status === 'ready' ? state.data : undefined;
+  const html = state.status === 'ready' ? state.data : undefined;
   const title = slide.title || '未命名页面';
   return (
     <button
@@ -188,9 +183,7 @@ function OverviewSlide({
       aria-label={`打开第 ${index + 1} 页：${title}`}
       className={cn(
         'overview-slide-card group relative aspect-video overflow-hidden text-left ring-1 ring-border hover:ring-accent',
-        view === 'outline'
-          ? 'rounded-lg bg-surface transition-[background-color,box-shadow] hover:bg-panel'
-          : 'rounded bg-surface shadow-sm',
+        'rounded bg-surface shadow-sm',
         selected && 'ring-2 ring-accent',
       )}
     >
@@ -201,24 +194,10 @@ function OverviewSlide({
           className="h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-white pointer-events-none"
           title={`第 ${index + 1} 页预览`}
         />
-      ) : view === 'html' && state.status === 'error' ? (
+      ) : state.status === 'error' ? (
         <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-xs text-danger">
           <span>HTML 加载失败</span>
           <span className="text-text-600">打开页面后可重试</span>
-        </div>
-      ) : view === 'outline' && spec ? (
-        <div className="overview-slide-content h-full">
-          <div className="overview-slide-meta flex items-center leading-none">
-            <span className="overview-slide-meta-chip inline-flex items-center rounded-[5px] bg-panel-muted font-semibold tracking-[0.12em] tabular-nums text-text-600">
-              {String(index + 1).padStart(2, '0')}
-            </span>
-            <span className="overview-slide-meta-chip inline-flex items-center rounded-[5px] bg-accent-soft font-semibold text-accent">
-              {slideRoleLabel(slide.role ?? 'content')}
-            </span>
-          </div>
-          <h2 className="overview-slide-title line-clamp-2 font-semibold text-text-900">
-            {title}
-          </h2>
         </div>
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-5 text-center">
@@ -229,14 +208,12 @@ function OverviewSlide({
             {slide.title || '未命名页面'}
           </span>
           <span className="text-[10px] text-text-400">
-            {view === 'html' && hasRenderedHTML(slide) ? '缩略图加载中' : '页面未物化'}
+            {hasRenderedHTML(slide) ? '缩略图加载中' : '页面未物化'}
           </span>
         </div>
       )}
-      {view !== 'outline' && (
-        <span className="absolute bottom-2 right-2 rounded bg-ink/75 px-1.5 py-0.5 text-xs text-white">{index + 1}</span>
-      )}
-      {view === 'html' && !hasRenderedHTML(slide) && (
+      <span className="absolute bottom-2 right-2 rounded bg-ink/75 px-1.5 py-0.5 text-xs text-white">{index + 1}</span>
+      {!hasRenderedHTML(slide) && (
         <span className="absolute bottom-2 left-2 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">
           未生成 HTML
         </span>
@@ -449,6 +426,7 @@ export const PreviewWorkspace: React.FC = () => {
     const canvas = canvasRef.current;
     const expectedSlideID = currentSlide?.id;
     if (!canvas || !expectedSlideID) return;
+    setGlobalView('html');
     try {
       await canvas.requestFullscreen();
     } catch {
@@ -456,7 +434,7 @@ export const PreviewWorkspace: React.FC = () => {
     }
     replayRequestIDRef.current += 1;
     setReplayRequest({ id: replayRequestIDRef.current, slideId: expectedSlideID });
-  }, [currentSlide?.id]);
+  }, [currentSlide?.id, setGlobalView]);
 
   return (
     <div className="relative flex h-full flex-col bg-canvas">
@@ -467,7 +445,7 @@ export const PreviewWorkspace: React.FC = () => {
               <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
           )}
-          <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML || currentView !== 'html'}>
+          <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML}>
             <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
           <IconButton
@@ -633,13 +611,11 @@ export const PreviewWorkspace: React.FC = () => {
                   index={index}
                   selected={safePage === index}
                   state={getState(slide)}
-                  view={globalView}
                   load={() => load(slide, 'prefetch')}
                   select={() => {
                     setCurrentSlideId(slide.id);
                     exitOverview();
                   }}
-                  spec={slide.spec}
                   frame={snapshot ? buildRuntimeFrame(snapshot, slide.id) : undefined}
                 />
               ))}
