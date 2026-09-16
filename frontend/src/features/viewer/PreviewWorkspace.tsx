@@ -522,14 +522,28 @@ export const PreviewWorkspace: React.FC = () => {
               )}
             >幻灯片</button>
           </div>
-          <div className="ml-1.5 flex h-8 items-center gap-0.5 rounded-full border border-border bg-surface px-1">
-            <IconButton label="上一页" onClick={goPrev} disabled={!hasSlides || safePage === 0} className="h-6 w-6 rounded-full">
+          <div className="ml-1.5 flex items-center gap-0.5 rounded-full bg-panel-muted p-0.5">
+            <IconButton
+              label="上一页"
+              onClick={goPrev}
+              disabled={!hasSlides || safePage === 0}
+              className="h-7 w-7 rounded-full transition-colors hover:bg-accent-soft hover:text-accent"
+            >
               <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
-            <span className="min-w-14 text-center text-[13px] tabular-nums text-text-600">
-              {hasSlides ? `${safePage + 1} / ${slides.length}` : '0 / 0'}
+            <span
+              className="flex h-7 min-w-14 items-center justify-center gap-1 px-2 text-[13px] tabular-nums"
+              aria-label={hasSlides ? `第 ${safePage + 1} 页，共 ${slides.length} 页` : '暂无页面'}
+            >
+              <span aria-hidden="true" className="font-semibold text-text-900">{hasSlides ? safePage + 1 : 0}</span>
+              <span aria-hidden="true" className="text-text-600">/ {hasSlides ? slides.length : 0}</span>
             </span>
-            <IconButton label="下一页" onClick={goNext} disabled={!hasSlides || safePage >= slides.length - 1} className="h-6 w-6 rounded-full">
+            <IconButton
+              label="下一页"
+              onClick={goNext}
+              disabled={!hasSlides || safePage >= slides.length - 1}
+              className="h-7 w-7 rounded-full transition-colors hover:bg-accent-soft hover:text-accent"
+            >
               <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
           </div>
