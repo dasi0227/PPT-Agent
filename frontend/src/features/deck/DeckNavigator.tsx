@@ -189,7 +189,7 @@ function SlideThumbnail({
         <IsolatedSlidePreview
           slides={[{ id: slide.id, html, frame }]}
           index={0}
-          className="pointer-events-none h-[400%] w-[400%] origin-top-left scale-25 border-0 bg-white"
+          className="pointer-events-none h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-white"
           title={`${slide.title || '页面'}缩略图`}
         />
       ) : (

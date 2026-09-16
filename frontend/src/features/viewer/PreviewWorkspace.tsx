@@ -192,7 +192,7 @@ function OverviewSlide({
         <IsolatedSlidePreview
           slides={[{ id: slide.id, html, frame }]}
           index={0}
-          className="h-[400%] w-[400%] origin-top-left scale-25 border-0 bg-white pointer-events-none"
+          className="h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-white pointer-events-none"
           title={`第 ${index + 1} 页预览`}
         />
       ) : view === 'html' && state.status === 'error' ? (

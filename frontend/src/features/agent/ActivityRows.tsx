@@ -293,8 +293,10 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
   const slides = orderedSlides(snapshot);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
-  const hasDetails = Boolean(item.detail || item.error || item.preview || item.command || item.resources?.length);
   const detailText = item.error?.message ?? item.detail;
+  const renderPassed = item.tool === 'render_slide' && item.status === 'completed';
+  const showDetailText = Boolean(detailText) && !renderPassed;
+  const hasDetails = Boolean(showDetailText || item.preview || item.command || item.resources?.length);
   const commandOutput = [
     item.command?.stdout_preview,
     item.command?.stderr_preview,
@@ -351,7 +353,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
         {expanded && hasDetails && <div className="pb-1.5 pl-[30px] pr-2 pt-px text-xs leading-5 text-text-600">
           {item.command ? (
             <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
-          ) : detailText && (
+          ) : showDetailText && detailText && (
             item.target?.open_url ? (
               <a
                 href={item.target.open_url}

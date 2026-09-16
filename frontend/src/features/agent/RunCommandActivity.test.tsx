@@ -147,6 +147,31 @@ describe('run command activity', () => {
     expect(container.querySelector('.lucide-circle-check-big')).not.toBeInTheDocument();
   });
 
+  it('shows only the screenshot when a slide render passes', () => {
+    render(<ToolActivityRow item={commandItem({
+      tool: 'render_slide',
+      label: '第 3 页渲染通过',
+      detail: 'slides/sli_three/index.html',
+      status: 'completed',
+      command: undefined,
+      target: {
+        type: 'slide', slide_id: 'sli_three', part: 'html',
+        open_url: 'vscode://file/project/slides/sli_three/index.html',
+      },
+      preview: {
+        slide_id: 'sli_three',
+        image_url: '/api/v1/runs/run-1/screenshots/shot-1',
+        warnings: [],
+      },
+    })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /第 3 页渲染通过/ }));
+
+    expect(screen.getByRole('img', { name: /渲染预览/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /index.html/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/slides\/sli_three\/index.html/)).not.toBeInTheDocument();
+  });
+
   it('expands loaded resources as names with ExternalLink actions only', () => {
     render(<ToolActivityRow item={commandItem({
       tool: 'load_component',
