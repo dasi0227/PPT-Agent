@@ -146,7 +146,7 @@ function DeckNavigatorChrome({
           disabled={insertDisabled}
           aria-label="新增章节"
           title="新增章节"
-          className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 transition-colors hover:bg-black/5 hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ml-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 transition-colors hover:bg-black/5 hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
         </button>
