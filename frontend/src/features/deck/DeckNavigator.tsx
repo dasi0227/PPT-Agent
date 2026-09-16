@@ -108,9 +108,13 @@ function MenuIcon({ children }: { children: ReactNode }) {
 function DeckNavigatorChrome({
   pageCount,
   sectionCount,
+  onInsertSection,
+  insertDisabled,
 }: {
   pageCount: number;
   sectionCount: number;
+  onInsertSection: () => void;
+  insertDisabled: boolean;
 }) {
   const toggleLeftPanel = useUIStore((state) => state.toggleLeftPanel);
 
@@ -136,6 +140,16 @@ function DeckNavigatorChrome({
         <span className="text-xs tabular-nums text-text-400">
           {sectionCount} 章 · {pageCount} 页
         </span>
+        <button
+          type="button"
+          onClick={onInsertSection}
+          disabled={insertDisabled}
+          aria-label="新增章节"
+          title="新增章节"
+          className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 transition-colors hover:bg-black/5 hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
+        </button>
       </div>
     </>
   );
@@ -406,6 +420,8 @@ export function DeckNavigator() {
         <DeckNavigatorChrome
           pageCount={0}
           sectionCount={0}
+          onInsertSection={() => {}}
+          insertDisabled
         />
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-xs text-text-400">
           目录加载中
@@ -420,6 +436,8 @@ export function DeckNavigator() {
         <DeckNavigatorChrome
           pageCount={slides.length}
           sectionCount={snapshot.outline.sections.length}
+          onInsertSection={() => void insertSection()}
+          insertDisabled={locked}
         />
 
         <div
@@ -617,15 +635,6 @@ export function DeckNavigator() {
               </section>
                 );
               })}
-              <button
-                type="button"
-                disabled={locked}
-                className="mx-1 mt-1 flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-dashed border-border-strong text-xs font-medium text-text-500 transition-colors hover:border-accent hover:bg-accent-soft hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={() => void insertSection()}
-              >
-                <FolderPlus className="h-4 w-4" strokeWidth={1.8} />
-                <span>新增章节</span>
-              </button>
             </>
           )}
         </div>

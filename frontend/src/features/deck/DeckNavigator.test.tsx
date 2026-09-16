@@ -116,13 +116,13 @@ describe('DeckNavigator', () => {
     const summaryRow = screen.getByTestId('deck-navigator-summary-row');
     expect(summaryRow).toHaveClass('h-9');
     expect(within(summaryRow).getByText('2 章 · 3 页')).toBeInTheDocument();
-    expect(within(summaryRow).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(summaryRow).getByRole('button', { name: '新增章节' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '隐藏左侧目录' }));
     expect(useUIStore.getState().leftPanelHidden).toBe(true);
   });
 
-  it('shows page titles and keeps the create action below all sections', () => {
+  it('shows page titles and keeps the create action in the summary row', () => {
     render(<DeckNavigator />);
 
     const scrollRegion = screen.getByTestId('deck-navigator-scroll');
@@ -130,7 +130,9 @@ describe('DeckNavigator', () => {
     expect(screen.getByText('问题与目标')).toBeInTheDocument();
     expect(screen.getByText('核心定义')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新增页面' })).not.toBeInTheDocument();
-    expect(scrollRegion.lastElementChild).toBe(within(scrollRegion).getByRole('button', { name: '新增章节' }));
+    const summaryRow = screen.getByTestId('deck-navigator-summary-row');
+    expect(within(summaryRow).getByRole('button', { name: '新增章节' })).toBeInTheDocument();
+    expect(within(scrollRegion).queryByRole('button', { name: '新增章节' })).not.toBeInTheDocument();
   });
 
   it('shows rendered-page placeholders instead of titles in slide view', () => {
