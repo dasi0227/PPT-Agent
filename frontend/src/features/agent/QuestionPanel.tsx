@@ -386,7 +386,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
           aria-label="继续"
           disabled={!pending || submitting || !complete}
           onClick={() => void submit()}
-          className="inline-flex h-9 items-center gap-1 rounded-lg bg-text-900 px-3 text-sm text-surface disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-9 items-center gap-1 rounded-lg bg-accent px-3 text-sm text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? '提交中' : '继续'}
           {!submitting && <ArrowRight className="h-4 w-4" strokeWidth={1.75} />}
