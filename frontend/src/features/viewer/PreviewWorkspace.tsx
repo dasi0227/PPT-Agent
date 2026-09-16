@@ -484,7 +484,7 @@ export const PreviewWorkspace: React.FC = () => {
               aria-pressed={globalView === 'outline'}
               className={cn(
                 'h-7 rounded-full px-3 font-medium transition-colors',
-                globalView === 'outline' ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-700',
+                globalView === 'outline' ? 'bg-accent text-white' : 'text-text-400 hover:text-text-700',
               )}
             >设计稿</button>
             <button
@@ -493,18 +493,18 @@ export const PreviewWorkspace: React.FC = () => {
               aria-pressed={globalView === 'html'}
               className={cn(
                 'h-7 rounded-full px-3 font-medium transition-colors',
-                globalView === 'html' ? 'bg-surface text-text-900 shadow-sm' : 'text-text-400 hover:text-text-700',
+                globalView === 'html' ? 'bg-accent text-white' : 'text-text-400 hover:text-text-700',
               )}
             >幻灯片</button>
           </div>
-          <div className="ml-1.5 flex items-center gap-1">
-            <IconButton label="上一页" onClick={goPrev} disabled={!hasSlides || safePage === 0}>
+          <div className="ml-1.5 flex h-8 items-center gap-0.5 rounded-full border border-border bg-surface px-1">
+            <IconButton label="上一页" onClick={goPrev} disabled={!hasSlides || safePage === 0} className="h-6 w-6 rounded-full">
               <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
-            <span className="min-w-14 text-center text-sm tabular-nums text-text-600">
+            <span className="min-w-14 text-center text-[13px] tabular-nums text-text-600">
               {hasSlides ? `${safePage + 1} / ${slides.length}` : '0 / 0'}
             </span>
-            <IconButton label="下一页" onClick={goNext} disabled={!hasSlides || safePage >= slides.length - 1}>
+            <IconButton label="下一页" onClick={goNext} disabled={!hasSlides || safePage >= slides.length - 1} className="h-6 w-6 rounded-full">
               <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
           </div>
