@@ -1,9 +1,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, MessageCircleQuestion } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Circle, MessageCircleQuestion } from 'lucide-react';
 import { useRunStore } from '../../stores/runStore';
 import { cn } from '../../lib/utils';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
-import type { QuestionField, QuestionFieldAnswer, QuestionOption } from '../../api/types';
+import type { QuestionField, QuestionFieldAnswer } from '../../api/types';
 import type { QuestionItem } from './eventReducer';
 
 const CUSTOM_OPTION_ID = '__custom__';
@@ -11,11 +11,6 @@ const CUSTOM_OPTION_ID = '__custom__';
 interface DraftAnswer {
   selectedOptionId?: string;
   customText: string;
-}
-
-function optionLabel(options: QuestionOption[], id?: string): string {
-  if (!id) return '';
-  return options.find((option) => option.id === id)?.label ?? '';
 }
 
 function initialDrafts(questions: QuestionField[]): Record<string, DraftAnswer> {
@@ -27,11 +22,6 @@ function hasAnswer(question: QuestionField, draft: DraftAnswer | undefined): boo
   if (question.options.length === 0) return draft.customText.trim() !== '';
   if (draft.selectedOptionId === CUSTOM_OPTION_ID) return draft.customText.trim() !== '';
   return Boolean(draft.selectedOptionId);
-}
-
-function answerText(question: QuestionField, answer: QuestionFieldAnswer | undefined): string {
-  if (!answer) return '';
-  return answer.custom_text?.trim() || optionLabel(question.options, answer.selected_option_id);
 }
 
 function QuestionSlide({
@@ -157,61 +147,124 @@ function QuestionSlide({
   );
 }
 
-function SubmittedQuestionRow({ question, value }: { question: QuestionField; value: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const toggle = () => setExpanded((current) => !current);
+function AnsweredQuestionOption({
+  description,
+  label,
+  selected,
+}: {
+  description?: string;
+  label: string;
+  selected: boolean;
+}) {
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-expanded={expanded}
-      onClick={toggle}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          toggle();
-        }
-      }}
-      className="flex cursor-pointer items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className={cn(
+        'flex items-start gap-2 rounded-lg border px-3 py-2',
+        selected ? 'border-accent/20 bg-accent-soft' : 'border-border bg-surface',
+      )}
     >
-      <MessageCircleQuestion className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
-      <div className="min-w-0 flex-1">
-        <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-1">
-          <span className="font-medium text-text-400">Q：</span>
-          <span className="truncate">{question.title}</span>
-        </div>
-        {expanded && <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-1">
-          <span className="font-medium text-text-400">A：</span>
-          <span>{value}</span>
-        </div>}
-      </div>
-      <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
-        {expanded
-          ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
-          : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
+      {selected
+        ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+        : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-border-strong" strokeWidth={1.75} aria-hidden="true" />}
+      <span className="min-w-0 flex-1">
+        <span className={cn('block text-[13px] font-medium', selected ? 'text-accent' : 'text-text-900')}>{label}</span>
+        {description && (
+          <span className="mt-0.5 block text-xs leading-5 text-text-600">{description}</span>
+        )}
       </span>
     </div>
   );
 }
 
-function SubmittedQuestionDetailRow({ question, value }: { question: QuestionField; value: string }) {
+function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
+  const questions = item.questions;
+  const answers = item.answer?.answers ?? [];
+  const [expanded, setExpanded] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const detailsId = `question-answer-details-${item.questionId}`;
+  const currentQuestion = questions[Math.min(currentIndex, questions.length - 1)];
+  const currentAnswer = answers.find((answer) => answer.question_id === currentQuestion.id);
+
   return (
-    <div className="question-detail-row flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-900">
-      <MessageCircleQuestion
-        className="mt-0.5 h-4 w-4 shrink-0 text-success"
-        strokeWidth={1.75}
-        aria-hidden="true"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-1">
-          <span className="font-medium text-text-400">Q：</span>
-          <span>{question.title}</span>
-        </div>
-        <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-1">
-          <span className="font-medium text-text-400">A：</span>
-          <span>{value}</span>
-        </div>
-      </div>
+    <div className="rounded-lg">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={detailsId}
+        onClick={() => setExpanded((value) => !value)}
+        className="flex min-h-8 w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] font-normal leading-5 text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <MessageCircleQuestion className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
+        <span className="min-w-0 flex-1 truncate">询问了 {questions.length} 个问题</span>
+        <ChevronRight
+          className={cn('h-3.5 w-3.5 shrink-0 text-text-400 transition-transform', expanded && 'rotate-90')}
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
+      </button>
+      {expanded && (
+        <article
+          id={detailsId}
+          data-testid="answered-question-card"
+          className="ml-6 mt-1.5 rounded-[10px] border border-border-strong bg-surface p-4"
+        >
+          <div className="flex items-start gap-2">
+            <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-success" strokeWidth={1.75} />
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold leading-5 text-text-900">{currentQuestion.title}</h3>
+              {currentQuestion.description && (
+                <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{currentQuestion.description}</p>
+              )}
+            </div>
+          </div>
+          {currentQuestion.options.length > 0 ? (
+            <div className="mt-3 space-y-2 pl-7">
+              {currentQuestion.options.map((option) => (
+                <AnsweredQuestionOption
+                  key={option.id}
+                  label={option.label}
+                  description={option.description}
+                  selected={currentAnswer?.selected_option_id === option.id}
+                />
+              ))}
+              {currentQuestion.allow_custom && currentAnswer?.custom_text?.trim() && (
+                <AnsweredQuestionOption
+                  label="自定义回答"
+                  description={currentAnswer.custom_text.trim()}
+                  selected={currentAnswer.selected_option_id === CUSTOM_OPTION_ID}
+                />
+              )}
+            </div>
+          ) : (
+            <p className="mt-3 pl-7 text-[13px] leading-5 text-text-900">{currentAnswer?.custom_text?.trim() ?? ''}</p>
+          )}
+          {questions.length > 1 && (
+            <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+              <div className="inline-flex items-center gap-2 text-[13px] text-text-600">
+                <button
+                  type="button"
+                  aria-label="上一个问题"
+                  disabled={currentIndex === 0}
+                  onClick={() => setCurrentIndex((index) => index - 1)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted disabled:opacity-35"
+                >
+                  <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+                </button>
+                <span className="min-w-[38px] text-center tabular-nums">{currentIndex + 1} / {questions.length}</span>
+                <button
+                  type="button"
+                  aria-label="下一个问题"
+                  disabled={currentIndex === questions.length - 1}
+                  onClick={() => setCurrentIndex((index) => index + 1)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted disabled:opacity-35"
+                >
+                  <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
+                </button>
+              </div>
+            </div>
+          )}
+        </article>
+      )}
     </div>
   );
 }
@@ -224,7 +277,6 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [drafts, setDrafts] = useState<Record<string, DraftAnswer>>(() => initialDrafts(questions));
   const [submitting, setSubmitting] = useState(false);
-  const [answeredGroupExpanded, setAnsweredGroupExpanded] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number>();
   const panelRef = useRef<HTMLFieldSetElement>(null);
   const questionRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -235,7 +287,6 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   useEffect(() => {
     setCurrentIndex(0);
     setDrafts(initialDrafts(questions));
-    setAnsweredGroupExpanded(false);
   }, [item.questionId, questions]);
 
   useEffect(() => {
@@ -257,49 +308,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
     return () => observer.disconnect();
   }, [currentIndex, drafts, item.answer, questions]);
 
-  if (item.answer) {
-    const groupedAnswers = item.answer.answers;
-    if (questions.length > 1) {
-      return (
-        <div className="rounded-lg transition-colors duration-150">
-          <button
-            type="button"
-            aria-expanded={answeredGroupExpanded}
-            onClick={() => setAnsweredGroupExpanded((value) => !value)}
-            className="flex min-h-8 w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <MessageCircleQuestion className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
-            <span className="min-w-0 flex-1 truncate">询问了 {questions.length} 个问题</span>
-            {answeredGroupExpanded
-              ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />
-              : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />}
-          </button>
-          {answeredGroupExpanded && (
-            <div className="space-y-1 pb-1">
-              {questions.map((question) => (
-                <SubmittedQuestionDetailRow
-                  key={question.id}
-                  question={question}
-                  value={answerText(question, groupedAnswers.find((answer) => answer.question_id === question.id))}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-    return (
-      <div className="space-y-1">
-        {questions.map((question) => (
-          <SubmittedQuestionRow
-            key={question.id}
-            question={question}
-            value={answerText(question, groupedAnswers.find((answer) => answer.question_id === question.id))}
-          />
-        ))}
-      </div>
-    );
-  }
+  if (item.answer) return <AnsweredQuestionCard item={item} />;
 
   const setDraft = (questionId: string, patch: Partial<DraftAnswer>) => {
     setDrafts((current) => ({
