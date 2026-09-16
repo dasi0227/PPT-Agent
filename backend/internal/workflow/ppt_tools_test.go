@@ -109,30 +109,90 @@ func TestMutationPatchSchemaDisclosesTheRuntimePathPolicy(t *testing.T) {
 	}
 }
 
-func TestOutlineInitSchemaIncludesOneCompleteMinimalExample(t *testing.T) {
+func TestOutlineInitSchemaIncludesDirectAndGroupedExamples(t *testing.T) {
 	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	variants := mutationSchema(mutationPack("pro_aaaaaa", empty))["oneOf"].([]any)
 	outlineInit := variants[1].(map[string]any)
 	examples, _ := outlineInit["examples"].([]any)
-	if len(examples) != 1 {
+	if len(examples) != 2 {
 		t.Fatalf("outline.init examples=%v", examples)
 	}
-	example, _ := examples[0].(map[string]any)
-	if example["op"] != "outline.init" {
-		t.Fatalf("outline.init example=%v", example)
-	}
-	structure, _ := example["structure"].([]any)
-	if len(structure) != 1 {
-		t.Fatalf("outline.init example structure=%v", structure)
-	}
-	section, _ := structure[0].(map[string]any)
-	for _, field := range []string{"client_ref", "title", "purpose", "slides", "subsections"} {
-		if _, ok := section[field]; !ok {
-			t.Fatalf("outline.init example section is missing %s: %v", field, section)
+	for _, raw := range examples {
+		example, _ := raw.(map[string]any)
+		if example["op"] != "outline.init" {
+			t.Fatalf("outline.init example=%v", example)
+		}
+		structure, _ := example["structure"].([]any)
+		if len(structure) != 1 {
+			t.Fatalf("outline.init example structure=%v", structure)
+		}
+		section, _ := structure[0].(map[string]any)
+		for _, field := range []string{"client_ref", "title", "purpose", "slides", "subsections"} {
+			if _, ok := section[field]; !ok {
+				t.Fatalf("outline.init example section is missing %s: %v", field, section)
+			}
+		}
+		if err := validateToolArguments(ToolSchema{Parameters: mutationSchema(mutationPack("pro_aaaaaa", empty))}, example); err != nil {
+			t.Fatalf("outline.init example does not satisfy its schema: %v", err)
 		}
 	}
-	if err := validateToolArguments(ToolSchema{Parameters: mutationSchema(mutationPack("pro_aaaaaa", empty))}, example); err != nil {
-		t.Fatalf("outline.init example does not satisfy its schema: %v", err)
+
+	grouped := examples[1].(map[string]any)["structure"].([]any)[0].(map[string]any)
+	subsections, _ := grouped["subsections"].([]any)
+	if len(subsections) != 1 {
+		t.Fatalf("grouped outline.init example subsections=%v", subsections)
+	}
+	subsection, _ := subsections[0].(map[string]any)
+	for _, field := range []string{"client_ref", "title", "purpose", "slides"} {
+		value, ok := subsection[field]
+		if !ok || (field == "title" && strings.TrimSpace(fmt.Sprint(value)) == "") {
+			t.Fatalf("grouped outline.init example subsection is missing %s: %v", field, subsection)
+		}
+	}
+}
+
+func TestSlideSpecSchemaIncludesLegalComparisonExample(t *testing.T) {
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	schema := mutationSchema(mutationPack("pro_aaaaaa", empty))
+	variants := schema["oneOf"].([]any)
+	var slideSpecWrite map[string]any
+	for _, raw := range variants {
+		variant := raw.(map[string]any)
+		properties := variant["properties"].(map[string]any)
+		op, _ := properties["op"].(map[string]any)["const"].(string)
+		if op == "slide.spec.write" {
+			slideSpecWrite = variant
+			break
+		}
+	}
+	if slideSpecWrite == nil {
+		t.Fatal("slide.spec.write schema is missing")
+	}
+	slideSpec := slideSpecWrite["properties"].(map[string]any)["spec"].(map[string]any)
+	examples, _ := slideSpec["examples"].([]any)
+	if len(examples) != 1 {
+		t.Fatalf("slide spec examples=%v", examples)
+	}
+	example := examples[0].(map[string]any)
+	elements, _ := example["elements"].([]any)
+	if len(elements) == 0 {
+		t.Fatalf("comparison slide example has no elements: %v", example)
+	}
+	for _, raw := range elements {
+		element := raw.(map[string]any)
+		if element["type"] == "comparison" {
+			t.Fatalf("comparison slide example used a slide role as an element type: %v", element)
+		}
+	}
+	args := map[string]any{"op": "slide.spec.write", "slide_id": "sli_aaaaaa", "spec": example}
+	if err := validateToolArguments(ToolSchema{Parameters: schema}, args); err != nil {
+		t.Fatalf("comparison slide example does not satisfy slide.spec.write schema: %v", err)
+	}
+
+	elementSchema := slideSpec["properties"].(map[string]any)["elements"].(map[string]any)["items"].(map[string]any)
+	typeDescription, _ := elementSchema["properties"].(map[string]any)["type"].(map[string]any)["description"].(string)
+	if !strings.Contains(typeDescription, "comparison is a slide role") {
+		t.Fatalf("element type description does not disambiguate comparison: %q", typeDescription)
 	}
 }
 

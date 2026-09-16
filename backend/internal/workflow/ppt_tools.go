@@ -219,8 +219,12 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	}
 	role := map[string]any{"enum": roles}
 	draftSlide := objectSchema([]string{"client_ref", "title", "role"}, map[string]any{"client_ref": text(120), "title": text(160), "role": role})
-	draftSubsection := objectSchema([]string{"client_ref", "title", "purpose", "slides"}, map[string]any{"client_ref": text(120), "title": text(160), "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}})
-	draftSection := objectSchema([]string{"client_ref", "title", "purpose", "slides", "subsections"}, map[string]any{"client_ref": text(120), "title": text(160), "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}, "subsections": map[string]any{"type": "array", "items": draftSubsection}})
+	subsectionTitle := text(160)
+	subsectionTitle["description"] = "Required human-readable subsection title. Every subsection must include this field."
+	draftSubsection := objectSchema([]string{"client_ref", "title", "purpose", "slides"}, map[string]any{"client_ref": text(120), "title": subsectionTitle, "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}})
+	draftSubsection["description"] = "Grouped outline node. client_ref, title, purpose, and slides are all required."
+	draftSubsections := map[string]any{"type": "array", "items": draftSubsection, "description": "Subsections of a grouped section. Each subsection must include client_ref, title, purpose, and slides."}
+	draftSection := objectSchema([]string{"client_ref", "title", "purpose", "slides", "subsections"}, map[string]any{"client_ref": text(120), "title": text(160), "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}, "subsections": draftSubsections})
 	draftNode := map[string]any{"oneOf": []any{
 		objectSchema([]string{"kind", "client_ref", "title", "purpose", "slides", "subsections"}, map[string]any{"kind": map[string]any{"const": "section"}, "client_ref": text(120), "title": text(160), "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}, "subsections": map[string]any{"type": "array", "items": draftSubsection}}),
 		objectSchema([]string{"kind", "client_ref", "title", "purpose"}, map[string]any{"kind": map[string]any{"const": "subsection"}, "client_ref": text(120), "title": text(160), "purpose": text(400)}),
@@ -230,8 +234,20 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	changes["minProperties"] = 1
 	chrome := objectSchema([]string{"type", "placement", "style"}, map[string]any{"type": map[string]any{"enum": []string{"page_number", "section_marker", "key_message", "deck_title"}}, "placement": map[string]any{"enum": []string{"top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right", "left-edge", "right-edge"}}, "style": text(160)})
 	design := objectSchema([]string{"direction", "chrome"}, map[string]any{"direction": text(600), "chrome": map[string]any{"type": "array", "maxItems": 12, "items": chrome}})
-	element := objectSchema([]string{"type", "intent"}, map[string]any{"type": map[string]any{"enum": []string{"text", "list", "metric", "quote", "table", "chart", "diagram", "code", "asset"}}, "intent": text(1200)})
+	elementType := map[string]any{
+		"enum":        []string{"text", "list", "metric", "quote", "table", "chart", "diagram", "code", "asset"},
+		"description": "Semantic content primitive. For comparison slides, use text, list, table, or diagram and express the comparison in intent/layout; comparison is a slide role, not an element type.",
+	}
+	element := objectSchema([]string{"type", "intent"}, map[string]any{"type": elementType, "intent": text(1200)})
 	slideSpec := objectSchema([]string{"key_message", "elements"}, map[string]any{"key_message": text(500), "elements": map[string]any{"type": "array", "items": element}, "layout": text(80)})
+	slideSpec["examples"] = []any{map[string]any{
+		"key_message": "Option A is faster while option B offers more control.",
+		"elements": []any{
+			map[string]any{"type": "text", "intent": "Present the two options side by side with their primary trade-off."},
+			map[string]any{"type": "table", "intent": "Compare speed, control, and setup effort for option A and option B."},
+		},
+		"layout": "split-comparison",
+	}}
 	edits := map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{"old_text": text(maxPPTContentBytes), "new_text": map[string]any{"type": "string", "maxLength": maxPPTContentBytes}})}
 	outlineInit := variant("outline.init", []string{"structure"}, map[string]any{"structure": map[string]any{"type": "array", "minItems": 1, "items": draftSection}}).(map[string]any)
 	outlineInit["examples"] = []any{map[string]any{
@@ -240,6 +256,16 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 			"client_ref": "opening", "title": "Opening", "purpose": "Introduce the topic",
 			"slides":      []any{map[string]any{"client_ref": "cover", "title": "Presentation title", "role": "cover"}},
 			"subsections": []any{},
+		}},
+	}, map[string]any{
+		"op": "outline.init",
+		"structure": []any{map[string]any{
+			"client_ref": "analysis", "title": "Analysis", "purpose": "Explain the key findings",
+			"slides": []any{},
+			"subsections": []any{map[string]any{
+				"client_ref": "market", "title": "Market context", "purpose": "Establish the external context",
+				"slides": []any{map[string]any{"client_ref": "market_shift", "title": "The market is shifting", "role": "context"}},
+			}},
 		}},
 	}}
 	variants := []any{
