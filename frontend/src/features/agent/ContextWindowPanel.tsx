@@ -65,7 +65,6 @@ export function ContextWindowPanel() {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const threadId = useThreadStore((state) => (
     activeProjectId ? state.activeThreadIdByProjectId[activeProjectId] : null
@@ -95,9 +94,20 @@ export function ContextWindowPanel() {
     const closeOnOutsidePress = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement && rootRef.current?.contains(activeElement)) {
+        activeElement.blur();
+      }
+      setOpen(false);
+    };
     document.addEventListener('pointerdown', closeOnOutsidePress);
+    document.addEventListener('keydown', closeOnEscape);
     return () => {
       document.removeEventListener('pointerdown', closeOnOutsidePress);
+      document.removeEventListener('keydown', closeOnEscape);
     };
   }, [open]);
 
@@ -144,7 +154,6 @@ export function ContextWindowPanel() {
     <div ref={rootRef} className="contents">
       <span className="relative inline-flex">
         <IconButton
-          ref={triggerRef}
           label={`上下文窗口，当前使用 ${percent}%`}
           aria-haspopup="dialog"
           aria-expanded={open}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TargetSelector } from './TargetSelector';
 
@@ -38,6 +38,23 @@ describe('TargetSelector', () => {
     expect(screen.getByText('结论')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: /封面/ }));
     expect(base.onToggleSlide).toHaveBeenCalledWith('sli_1');
+  });
+
+  it('closes the custom window first and the selector second with Escape', async () => {
+    render(<TargetSelector {...base} selection="custom_pages" selectedSlideIds={['sli_2']} />);
+    const trigger = screen.getByRole('button', { name: '范围：自选页 · 演示文稿' });
+    trigger.focus();
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+    const menu = screen.getByRole('menu');
+
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByText('封面')).not.toBeInTheDocument();
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(trigger).not.toHaveFocus();
   });
 
   it('locks global resources to all pages', () => {

@@ -18,7 +18,7 @@ function StepNode({ status, animateCompletion }: { status: PlanStepStatus; anima
           role="img"
           aria-label="已完成"
           data-plan-step-status="completed"
-          className={cn(nodeClasses, 'border-success bg-success text-white', animateCompletion && 'plan-step-node-completed')}
+          className={cn(nodeClasses, 'border-success/45 bg-success-soft text-success', animateCompletion && 'plan-step-node-completed')}
         >
           <Check className="h-3 w-3" strokeWidth={2.4} />
         </span>
@@ -69,7 +69,7 @@ function PlanStepRow({ step, nextStep }: { step: PlanStep; nextStep?: PlanStep }
           className="absolute -bottom-2.5 left-[17px] top-[30px] w-0.5 overflow-hidden rounded-full bg-border"
         >
           <span className={cn(
-            'plan-step-connector-fill block h-full w-full origin-top scale-y-0 rounded-full bg-success',
+            'plan-step-connector-fill block h-full w-full origin-top scale-y-0 rounded-full bg-success/70',
             reached && 'scale-y-100',
           )} />
         </span>
@@ -199,6 +199,7 @@ function PlanText({
 }
 
 export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) => {
+  const dismissedByPointerRef = React.useRef(false);
   const hasPlan = Boolean(plan && plan.steps.length > 0);
   const total = plan?.steps.length ?? 0;
   const completed = plan?.steps.filter((step) => step.status === 'completed').length ?? 0;
@@ -210,20 +211,28 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
         <IconButton
           label={hasPlan ? `查看计划进度 ${completed} / ${total}` : '暂无计划'}
           aria-haspopup="menu"
-          className="relative"
         >
           <ListChecks
             className={cn('h-4 w-4', inFlight && 'animate-pulse motion-reduce:animate-none')}
             strokeWidth={1.75}
           />
-          {hasPlan && (
-            <span className="pointer-events-none absolute -right-1.5 -top-1.5 z-10 inline-flex h-3.5 min-w-[22px] items-center justify-center rounded-full border-2 border-panel bg-text-600 px-1 text-[9px] leading-none tabular-nums text-white shadow-sm">
-              <RollingCount completed={completed} total={total} />
-            </span>
-          )}
         </IconButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="bottom" align="end" className="w-[320px] overflow-visible p-2">
+      <DropdownMenuContent
+        side="bottom"
+        align="end"
+        className="w-[320px] overflow-visible p-2"
+        onPointerDownOutside={() => {
+          dismissedByPointerRef.current = true;
+        }}
+        onEscapeKeyDown={() => {
+          dismissedByPointerRef.current = false;
+        }}
+        onCloseAutoFocus={(event) => {
+          if (dismissedByPointerRef.current) event.preventDefault();
+          dismissedByPointerRef.current = false;
+        }}
+      >
         {hasPlan ? (
           <>
             <div className="mb-1.5 flex items-center gap-2 px-1">

@@ -77,8 +77,9 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
   const customItems = effectiveSelection === 'custom_pages'
     ? pages.map((page) => ({ id: page.id, title: page.title || '未命名页面', meta: String(page.ordinal), checked: selectedSlideIds.includes(page.id) }))
     : sections.map((section) => ({ id: section.id, title: section.title || '未命名章节', meta: `${section.pageCount} 页`, checked: selectedSectionIds.includes(section.id) }));
-  const closeCustomWindow = () => {
+  const closeCustomWindow = (restoreFocus = true) => {
     setCustomOpen(false);
+    if (!restoreFocus) return;
     requestAnimationFrame(() => {
       (effectiveSelection === 'custom_pages' ? customPageTriggerRef : customSectionTriggerRef).current?.focus();
     });
@@ -104,7 +105,11 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
         align="end"
         sideOffset={8}
         className="w-[340px] border-0 bg-transparent p-0 shadow-none"
-        onEscapeKeyDown={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          if (!customMode || !customOpen) return;
+          event.preventDefault();
+          closeCustomWindow(false);
+        }}
       >
         {customMode && customOpen && (
           <section className="mb-2 overflow-hidden rounded-xl bg-surface shadow-lg">

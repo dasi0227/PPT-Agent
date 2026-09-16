@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HistoryBanner, ProjectHistoryDialogs, RollbackButton } from './ProjectHistoryControls';
 import { MessageMetaActions } from './MessageMetaActions';
@@ -29,5 +29,15 @@ describe('checkpoint controls', () => {
     expect(execute).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('closes the history preview with Escape when no operation is running', async () => {
+    vi.spyOn(projectHistoryApi, 'preview').mockResolvedValue({ revision: 1, time: 1000, input: 'hello', threads: 2, runs: 3, added: [], modified: [], deleted: [] });
+    render(<><HistoryBanner /><ProjectHistoryDialogs /></>);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '恢复到最新' })); });
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByText('恢复到最新现场？')).not.toBeInTheDocument());
   });
 });

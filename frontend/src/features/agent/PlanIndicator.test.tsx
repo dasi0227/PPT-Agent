@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { PlanState } from '../../api/types';
 import { PlanIndicator } from './PlanIndicator';
@@ -22,10 +22,12 @@ describe('PlanIndicator', () => {
     render(<PlanIndicator plan={plan} running />);
 
     const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
+    expect(trigger).not.toHaveTextContent('2/4');
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
 
     expect(document.querySelectorAll('[data-plan-step-status="completed"]')).toHaveLength(2);
+    expect(document.querySelector('[data-plan-step-status="completed"]')).toHaveClass('border-success/45', 'bg-success-soft', 'text-success');
     expect(document.querySelectorAll('[data-plan-step-status="in_progress"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-plan-step-status="pending"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-plan-step-connector="true"]')).toHaveLength(3);
@@ -60,5 +62,32 @@ describe('PlanIndicator', () => {
     expect(completedRow?.querySelector('[data-plan-step-status="completed"]')).toHaveClass('plan-step-node-completed');
     expect(document.querySelectorAll('[data-plan-step-connector][data-reached="true"]')).toHaveLength(3);
     expect(screen.getByText('最终复核').closest('li')).toHaveClass('bg-accent-soft/80');
+  });
+
+  it('does not restore focus to the trigger after a pointer dismissal', async () => {
+    render(<PlanIndicator plan={plan} running />);
+    const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    await act(() => new Promise((resolve) => window.setTimeout(resolve, 0)));
+    fireEvent.pointerDown(document.body, { button: 0 });
+    fireEvent.click(document.body);
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(trigger).not.toHaveFocus();
+  });
+
+  it('does not restore focus to the trigger after an Escape-key dismissal', async () => {
+    render(<PlanIndicator plan={plan} running />);
+    const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+
+    const menu = screen.getByRole('menu');
+    fireEvent.keyDown(menu, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(trigger).not.toHaveFocus();
   });
 });

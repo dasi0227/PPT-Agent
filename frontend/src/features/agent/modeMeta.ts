@@ -10,8 +10,8 @@ export interface ModeMeta {
 export const MODE_ORDER: RunMode[] = ['execute', 'chat', 'grill', 'plan'];
 
 export const MODE_META: Record<RunMode, ModeMeta> = {
-  execute: { label: '开发', description: '直接开发并修改项目内容', icon: Hammer },
-  chat: { label: '讨论', description: '只分析和交流，不修改项目内容', icon: MessagesSquare },
-  grill: { label: '盘问', description: '只读探索，需要时可向你提问', icon: MessageCircleQuestion },
-  plan: { label: '计划', description: '只写计划并回显，不修改项目内容', icon: ClipboardList },
+  execute: { label: '开发', description: '开发代码，制作 PPT（默认）', icon: Hammer },
+  chat: { label: '讨论', description: '陪你进行头脑风暴（只读）', icon: MessagesSquare },
+  grill: { label: '盘问', description: '跟你确认决策细节（只读）', icon: MessageCircleQuestion },
+  plan: { label: '计划', description: '开发前生成计划供你拍板', icon: ClipboardList },
 };
