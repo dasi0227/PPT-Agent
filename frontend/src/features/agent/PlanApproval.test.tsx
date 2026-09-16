@@ -42,7 +42,7 @@ describe('PlanApproval', () => {
     expect(approve).toHaveAttribute('aria-pressed', 'true');
     const continueButton = screen.getByRole('button', { name: '继续' });
     expect(continueButton).not.toBeDisabled();
-    expect(continueButton).toHaveClass('h-9', 'bg-text-900', 'text-surface');
+    expect(continueButton).toHaveClass('h-9', 'bg-accent', 'text-white');
     expect(continueButton.querySelector('svg')).toHaveClass('h-4', 'w-4');
     expect(runsApi.submitPlanApproval).not.toHaveBeenCalled();
   });
