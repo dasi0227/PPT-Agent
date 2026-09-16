@@ -43,7 +43,6 @@ const snapshot: ProjectContentSnapshot = {
     project_id: 'p1',
     theme: 'clean',
     direction: 'minimal',
-    density: 'medium',
     chrome: [],
     created_at: 1,
     updated_at: 1,

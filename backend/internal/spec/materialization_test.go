@@ -4,7 +4,7 @@ import "testing"
 
 func TestRuntimeFrameAndMaterializationFreshnessAreIndependent(t *testing.T) {
 	deck, outline := validDeck(), validOutline()
-	design := Design{SchemaVersion: SchemaVersion, Revision: 1, ProjectID: deck.ProjectID, Theme: "clean", Direction: "minimal", Density: "medium", Chrome: []ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono"}}, CreatedAt: 1, UpdatedAt: 1}
+	design := Design{SchemaVersion: SchemaVersion, Revision: 1, ProjectID: deck.ProjectID, Theme: "clean", Direction: "minimal", Chrome: []ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono"}}, CreatedAt: 1, UpdatedAt: 1}
 	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa")
 	if !ok || cover.Canvas != CanonicalCanvas() || cover.Numbering.Visible || cover.Ordinal != 1 {
 		t.Fatalf("unexpected cover frame: %#v", cover)
@@ -30,7 +30,7 @@ func TestRuntimeFrameAndMaterializationFreshnessAreIndependent(t *testing.T) {
 }
 
 func TestDesignContentHashExcludesTheme(t *testing.T) {
-	left := Design{Theme: "swiss-modern", Direction: "clear", Density: "medium", Chrome: []ChromeItem{}}
+	left := Design{Theme: "swiss-modern", Direction: "clear", Chrome: []ChromeItem{}}
 	right := left
 	right.Theme = "tokyo-night"
 	right.Revision = 99

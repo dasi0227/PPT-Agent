@@ -1,15 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  BarChart3,
   ChevronLeft,
   ChevronRight,
+  Code,
+  Layers,
   LayoutGrid,
+  List,
   MonitorPlay,
   MousePointer2,
   PanelLeftOpen,
   PanelRightOpen,
+  Quote,
   Scan,
+  Table,
+  TrendingUp,
+  Type,
+  Workflow,
   ZoomIn,
   ZoomOut,
+  type LucideIcon,
 } from 'lucide-react';
 import type { Slide } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
@@ -22,6 +32,7 @@ import { EmptyState } from './EmptyState';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import type { RuntimeSlide } from './previewProtocol';
 import { buildRuntimeFrame } from './runtimeFrame';
+import { elementTypeLabel, slideRoleLabel } from './semanticLabels';
 import { SlideSpecCard } from './SlideSpecCard';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
 import { orderedSlides } from '../deck/selectors';
@@ -39,6 +50,18 @@ import { useRunStore } from '../../stores/runStore';
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.15;
+
+const ELEMENT_TYPE_ICONS: Record<string, LucideIcon> = {
+  text: Type,
+  list: List,
+  metric: TrendingUp,
+  quote: Quote,
+  table: Table,
+  chart: BarChart3,
+  diagram: Workflow,
+  code: Code,
+  asset: Layers,
+};
 
 function visibleHTML(state: ResourceState<string>): string | undefined {
   if (state.status === 'ready') return state.data;
@@ -174,6 +197,8 @@ function OverviewSlide({
 
   const html = state.status === 'ready' ? state.data : undefined;
   const title = slide.title || '未命名页面';
+  const keyMessage = slide.spec?.key_message.trim() || '';
+  const elements = slide.spec?.elements ?? [];
   return (
     <button
       ref={ref}
@@ -199,17 +224,38 @@ function OverviewSlide({
           <span>HTML 加载失败</span>
           <span className="text-text-600">打开页面后可重试</span>
         </div>
-      ) : (
+      ) : hasRenderedHTML(slide) ? (
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-5 text-center">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-text-400">
-            {slide.layout || '页面'}
+          <span className="line-clamp-2 text-xs font-medium text-text-900">{title}</span>
+          <span className="text-[10px] text-text-400">缩略图加载中</span>
+        </div>
+      ) : (
+        <div className="flex h-full flex-col p-3.5 pb-7">
+          <span className="inline-flex w-fit items-center rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-accent">
+            {slideRoleLabel(slide.role ?? 'content')}
           </span>
-          <span className="line-clamp-2 text-xs font-medium text-text-900">
-            {slide.title || '未命名页面'}
-          </span>
-          <span className="text-[10px] text-text-400">
-            {hasRenderedHTML(slide) ? '缩略图加载中' : '页面未物化'}
-          </span>
+          <div className="flex flex-1 flex-col justify-center py-1.5">
+            <span className="line-clamp-2 text-xs font-semibold text-text-900">{title}</span>
+            {keyMessage ? (
+              <span className="mt-1 line-clamp-2 text-[11px] leading-snug text-text-600">{keyMessage}</span>
+            ) : null}
+          </div>
+          {elements.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {elements.map((element, elementIndex) => {
+                const Icon = ELEMENT_TYPE_ICONS[element.type];
+                return (
+                  <span
+                    key={elementIndex}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[10px] text-text-600"
+                  >
+                    {Icon ? <Icon className="h-3 w-3 text-text-400" strokeWidth={1.75} /> : null}
+                    {elementTypeLabel(element.type)}
+                  </span>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       )}
       <span className="absolute bottom-2 right-2 rounded bg-ink/75 px-1.5 py-0.5 text-xs text-white">{index + 1}</span>

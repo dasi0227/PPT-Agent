@@ -115,7 +115,7 @@ func writePolishFixture(t *testing.T, dir string) {
 		Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Decision", Purpose: "Decision support", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Board decision", Role: "conclusion"}}, Subsections: []pptspec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1,
 	})
 	write(filepath.Join(dir, "design.json"), pptspec.Design{
-		SchemaVersion: pptspec.SchemaVersion, Revision: 1, ProjectID: "p1", Theme: "editorial", Direction: "restrained board style", Density: "medium", Chrome: []pptspec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1,
+		SchemaVersion: pptspec.SchemaVersion, Revision: 1, ProjectID: "p1", Theme: "editorial", Direction: "restrained board style", Chrome: []pptspec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1,
 	})
 	write(filepath.Join(dir, "slides", "sli_aaaaaa", "spec.json"), pptspec.SlideSpec{
 		SchemaVersion: pptspec.SchemaVersion, Revision: 1, ProjectID: "p1", SlideID: "sli_aaaaaa", KeyMessage: "Approve the investment", Elements: []pptspec.Element{{Type: "metric", Intent: "show return"}}, CreatedAt: 1, UpdatedAt: 1,

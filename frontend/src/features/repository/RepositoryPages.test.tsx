@@ -114,7 +114,7 @@ function projectContent(theme: string): ProjectContentSnapshot {
   return {
     manifest: { version: '4.0', revision: 1, project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
     outline: { version: '4.0', revision: 1, project_id: 'project-7', sections: [], created_at: 1, updated_at: 1 },
-    design: { version: '4.0', revision: theme === 'swiss-modern' ? 1 : 2, project_id: 'project-7', theme, direction: '', density: 'medium', chrome: [], created_at: 1, updated_at: theme === 'swiss-modern' ? 1 : 2 },
+    design: { version: '4.0', revision: theme === 'swiss-modern' ? 1 : 2, project_id: 'project-7', theme, direction: '', chrome: [], created_at: 1, updated_at: theme === 'swiss-modern' ? 1 : 2 },
     slides_by_id: {},
   };
 }

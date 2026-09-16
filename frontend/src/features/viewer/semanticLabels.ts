@@ -30,13 +30,6 @@ const PART_LABELS: Record<string, string> = {
   html: '幻灯片',
 };
 
-// 视觉密度（design.density）。
-const DENSITY_LABELS: Record<Design['density'], string> = {
-  sparse: '宽松',
-  medium: '适中',
-  dense: '紧凑',
-};
-
 // 页面装饰件类型（chrome.type）。
 const CHROME_TYPE_LABELS: Record<ChromeItem['type'], string> = {
   page_number: '页码',
@@ -57,6 +50,19 @@ const CHROME_PLACEMENT_LABELS: Record<ChromeItem['placement'], string> = {
   'right-edge': '右侧边',
 };
 
+// 页面元素类型（SlideSpec.elements[].type）。
+const ELEMENT_TYPE_LABELS: Record<string, string> = {
+  text: '文本',
+  list: '列表',
+  metric: '指标',
+  quote: '引用',
+  table: '表格',
+  chart: '图表',
+  diagram: '图示',
+  code: '代码',
+  asset: '素材',
+};
+
 export function slideRoleLabel(role: string): string {
   return SLIDE_ROLE_LABELS[role.trim().toLowerCase()] ?? role;
 }
@@ -65,8 +71,8 @@ export function partLabel(part: string): string {
   return PART_LABELS[part.trim().toLowerCase()] ?? part;
 }
 
-export function densityLabel(density: Design['density']): string {
-  return DENSITY_LABELS[density] ?? density;
+export function elementTypeLabel(type: string): string {
+  return ELEMENT_TYPE_LABELS[type.trim().toLowerCase()] ?? type;
 }
 
 export function chromeLabel(item: ChromeItem): string {

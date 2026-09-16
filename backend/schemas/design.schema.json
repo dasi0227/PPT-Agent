@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ppt-agent.local/schemas/design.schema.json",
   "title": "PPT Design",
-  "description": "Deck-wide theme selection, visual direction, density, and shared chrome.",
+  "description": "Deck-wide theme selection, visual direction, and shared chrome.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,7 +11,6 @@
     "project_id",
     "theme",
     "direction",
-    "density",
     "chrome",
     "created_at",
     "updated_at"
@@ -41,10 +40,6 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 600
-    },
-    "density": {
-      "type": "string",
-      "enum": ["sparse", "medium", "dense"]
     },
     "chrome": {
       "type": "array",
@@ -93,7 +88,6 @@
   "x-agent-example": {
     "theme": "tokyo-night",
     "direction": "偏云原生控制台感，而不是赛博朋克海报感",
-    "density": "medium",
     "chrome": [
       {
         "type": "page_number",

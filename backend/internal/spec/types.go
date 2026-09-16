@@ -110,7 +110,6 @@ type Design struct {
 	ProjectID     string       `json:"project_id"`
 	Theme         string       `json:"theme"`
 	Direction     string       `json:"direction"`
-	Density       string       `json:"density"`
 	Chrome        []ChromeItem `json:"chrome"`
 	CreatedAt     int64        `json:"created_at"`
 	UpdatedAt     int64        `json:"updated_at"`

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chromeLabel, densityLabel, partLabel, slideRoleLabel } from './semanticLabels';
+import { chromeLabel, elementTypeLabel, partLabel, slideRoleLabel } from './semanticLabels';
 
 describe('semanticLabels', () => {
   it('maps known slide roles to Chinese labels and falls back on unknown', () => {
@@ -17,9 +17,11 @@ describe('semanticLabels', () => {
     expect(partLabel('unknown')).toBe('unknown');
   });
 
-  it('maps density', () => {
-    expect(densityLabel('medium')).toBe('适中');
-    expect(densityLabel('sparse')).toBe('宽松');
+  it('maps element types to Chinese labels and falls back on unknown', () => {
+    expect(elementTypeLabel('text')).toBe('文本');
+    expect(elementTypeLabel('chart')).toBe('图表');
+    expect(elementTypeLabel('asset')).toBe('素材');
+    expect(elementTypeLabel('unknown-type')).toBe('unknown-type');
   });
 
   it('describes chrome item as type（placement）', () => {

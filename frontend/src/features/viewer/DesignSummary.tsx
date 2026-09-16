@@ -1,5 +1,5 @@
 import type { Design } from '../../api/types';
-import { chromeLabel, densityLabel } from './semanticLabels';
+import { chromeLabel } from './semanticLabels';
 
 export function DesignSummary({ design }: { design: Design }) {
   const direction = design.direction.trim();
@@ -7,19 +7,32 @@ export function DesignSummary({ design }: { design: Design }) {
 
   return (
     <section className="rounded-xl border border-border bg-surface p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-text-900">全局视觉规范</h3>
-        <span className="text-xs text-text-400">rev {design.revision}</span>
-      </div>
-      <p className="mt-3 text-xs font-medium uppercase tracking-wide text-text-400">
-        {design.theme} · {densityLabel(design.density)}
-      </p>
-      <p className="mt-2 text-sm text-text-600">{directionLabel}</p>
-      {design.chrome.length > 0 && (
-        <p className="mt-2 text-xs text-text-400">
-          页面装饰：{design.chrome.map(chromeLabel).join(' · ')}
-        </p>
-      )}
+      <h3 className="font-semibold text-text-900">全局视觉规范</h3>
+      <dl className="mt-4 space-y-3">
+        <div className="flex gap-4">
+          <dt className="w-16 shrink-0 text-xs leading-6 text-text-400">主题</dt>
+          <dd className="text-sm font-semibold leading-6 text-text-900">{design.theme}</dd>
+        </div>
+        <div className="flex gap-4">
+          <dt className="w-16 shrink-0 text-xs leading-6 text-text-400">视觉方向</dt>
+          <dd className="text-sm leading-6 text-text-600">{directionLabel}</dd>
+        </div>
+        {design.chrome.length > 0 && (
+          <div className="flex gap-4">
+            <dt className="w-16 shrink-0 text-xs leading-6 text-text-400">页面装饰</dt>
+            <dd className="flex flex-wrap gap-2">
+              {design.chrome.map((item, index) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center rounded-full border border-border bg-panel-muted px-2.5 py-0.5 text-xs text-text-900"
+                >
+                  {chromeLabel(item)}
+                </span>
+              ))}
+            </dd>
+          </div>
+        )}
+      </dl>
     </section>
   );
 }

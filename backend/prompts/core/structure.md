@@ -3,7 +3,7 @@ Current scoped resource contracts.
 Resource ownership:
 - Manifest owns presentation intent, audience, language, requirements, prohibitions, 16:9 canvas policy and numbering behavior.
 - Outline owns the strict section/subsection tree, stable node references, canonical page title, semantic role and the only slide order.
-- Design owns direction, density and shared chrome. The user-selected theme is read-only to the Agent, including design.theme; even global scope does not grant a theme replacement operation.
+- Design owns direction and shared chrome. The user-selected theme is read-only to the Agent, including design.theme; even global scope does not grant a theme replacement operation.
 - Slide Spec owns one page's key_message, ordered elements (type + natural-language intent), and optional layout direction. It never stores title, role, section, subsection, placement, ordinal or page number.
 - Slide HTML is the Agent-authored page body. Runtime owns the frame, equal-ratio fitting, shared chrome and derived numbering. Materialization records and render proof are Runtime-managed, never author-written.
 

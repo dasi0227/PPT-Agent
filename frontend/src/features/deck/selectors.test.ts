@@ -19,7 +19,7 @@ const outline: Outline = {
 const snapshot: ProjectContentSnapshot = {
   manifest: { version: '4.0', revision: 1, project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: ['cover'], format: 'number' }, created_at: 1, updated_at: 1 },
   outline,
-  design: { version: '4.0', revision: 1, project_id: 'pro_1', theme: 'default', direction: '', density: 'medium', chrome: [], created_at: 1, updated_at: 1 },
+  design: { version: '4.0', revision: 1, project_id: 'pro_1', theme: 'default', direction: '', chrome: [], created_at: 1, updated_at: 1 },
   slides_by_id: {
     sli_1: { spec_state: 'pending', spec: null, html_state: 'pending', html_revision: 0, materialization: null },
     sli_2: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_revision: 0, materialization: null },

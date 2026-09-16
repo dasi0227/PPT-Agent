@@ -89,10 +89,9 @@ func DesignContentHash(design Design) string {
 func designContentBytes(design Design) []byte {
 	raw, _ := json.Marshal(struct {
 		Direction string       `json:"direction"`
-		Density   string       `json:"density"`
 		Chrome    []ChromeItem `json:"chrome"`
 	}{
-		Direction: design.Direction, Density: design.Density, Chrome: design.Chrome,
+		Direction: design.Direction, Chrome: design.Chrome,
 	})
 	return raw
 }

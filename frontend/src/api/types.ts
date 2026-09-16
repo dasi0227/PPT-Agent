@@ -68,7 +68,6 @@ export interface Design {
   project_id: string;
   theme: string;
   direction: string;
-  density: 'sparse' | 'medium' | 'dense';
   chrome: Array<{
     type: 'page_number' | 'section_marker' | 'key_message' | 'deck_title';
     placement: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' | 'left-edge' | 'right-edge';

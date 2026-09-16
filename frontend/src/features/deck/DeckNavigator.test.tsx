@@ -70,7 +70,6 @@ function snapshot(): ProjectContentSnapshot {
       project_id: 'pro_1',
       theme: 'default',
       direction: '',
-      density: 'medium',
       chrome: [],
       created_at: 1,
       updated_at: 1,

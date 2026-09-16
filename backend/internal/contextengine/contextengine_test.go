@@ -76,7 +76,6 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 		SchemaVersion: pptspec.SchemaVersion, Revision: 3, ProjectID: "p1", CreatedAt: 1, UpdatedAt: 2,
 		Theme:     "swiss-modern",
 		Direction: "test direction",
-		Density:   "medium",
 		Chrome: []pptspec.ChromeItem{
 			{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono counter"},
 		},
@@ -424,7 +423,7 @@ func TestRefStaleAfterRevisionChange(t *testing.T) {
 		},
 		Source: pptspec.MaterializationSource{
 			ManifestRevision: 2, OutlineNodeHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-			SpecRevision: 2, DesignContentHash: pptspec.DesignContentHash(pptspec.Design{Direction: "test", Density: "medium"}),
+			SpecRevision: 2, DesignContentHash: pptspec.DesignContentHash(pptspec.Design{Direction: "test"}),
 			Hash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 		Frame:      pptspec.MaterializationFrame{ContextHash: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},

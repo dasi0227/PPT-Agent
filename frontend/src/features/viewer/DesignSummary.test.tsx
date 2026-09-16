@@ -10,21 +10,22 @@ describe('DesignSummary', () => {
       project_id: 'pro_aaaaaa',
       theme: 'swiss-modern',
       direction: 'minimal geometric accent',
-      density: 'medium',
       chrome: [{ type: 'page_number', placement: 'bottom-right', style: 'tiny muted mono counter' }],
       created_at: 1,
       updated_at: 2,
     }} />);
     expect(screen.getByText('全局视觉规范')).toBeInTheDocument();
-    expect(screen.getByText('rev 3')).toBeInTheDocument();
+    expect(screen.getByText('主题')).toBeInTheDocument();
+    expect(screen.getByText('swiss-modern')).toBeInTheDocument();
+    expect(screen.getByText('视觉方向')).toBeInTheDocument();
     expect(screen.getByText('minimal geometric accent')).toBeInTheDocument();
-    expect(screen.getByText('swiss-modern · 适中')).toBeInTheDocument();
-    expect(screen.getByText('页面装饰：页码（右下）')).toBeInTheDocument();
+    expect(screen.getByText('页面装饰')).toBeInTheDocument();
+    expect(screen.getByText('页码（右下）')).toBeInTheDocument();
   });
 
   it('labels an undecided visual direction instead of implying one', () => {
     render(<DesignSummary design={{
-      version: '4.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: '待确定', density: 'medium',
+      version: '4.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: '待确定',
       chrome: [], created_at: 1, updated_at: 1,
     }} />);
 
