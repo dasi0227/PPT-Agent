@@ -8,6 +8,8 @@ import {
   PanelLeftOpen,
   PanelRightOpen,
   Scan,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import type { Slide, SlideSpec } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
@@ -34,6 +36,10 @@ import { ExportProgressDialog } from '../export/ExportProgressDialog';
 import { useExportStore } from '../../stores/exportStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useRunStore } from '../../stores/runStore';
+
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 1.15;
 
 function visibleHTML(state: ResourceState<string>): string | undefined {
   if (state.status === 'ready') return state.data;
@@ -287,6 +293,7 @@ export const PreviewWorkspace: React.FC = () => {
   const [replayRequest, setReplayRequest] = useState<{ id: number; slideId: string }>();
   const replayRequestIDRef = useRef(0);
   const [selectionMode, setSelectionMode] = useState<'element' | 'region' | 'none'>('none');
+  const [zoom, setZoom] = useState(1);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const hasSlides = slides.length > 0;
@@ -304,6 +311,8 @@ export const PreviewWorkspace: React.FC = () => {
   const goNext = useCallback(() => {
     if (safePage < slides.length - 1) setCurrentSlideId(slides[safePage + 1].id);
   }, [safePage, setCurrentSlideId, slides]);
+  const zoomIn = useCallback(() => setZoom((value) => Math.min(ZOOM_MAX, Number((value * ZOOM_STEP).toFixed(3)))), []);
+  const zoomOut = useCallback(() => setZoom((value) => Math.max(ZOOM_MIN, Number((value / ZOOM_STEP).toFixed(3)))), []);
   const currentHasHTML = currentSlide ? hasRenderedHTML(currentSlide) : false;
   const currentView = currentSlide ? effectiveView(currentSlide.id, currentHasHTML) : 'html';
   const currentState = currentSlide ? getState(currentSlide) : { status: 'idle' as const };
@@ -327,6 +336,7 @@ export const PreviewWorkspace: React.FC = () => {
   } : undefined;
   const selectionEnabled = previewMode === 'main' && currentView === 'html' && currentHasHTML && !fullscreen
     && !['creating', 'waiting', 'paused', 'recovering', 'canceling'].includes(runSession.status);
+  const zoomEnabled = hasSlides && previewMode === 'main' && currentView === 'html' && currentHasHTML;
 
   const acceptSelection = useCallback(async (raw: DOMSelection) => {
     if (!projectId) return;
@@ -393,6 +403,10 @@ export const PreviewWorkspace: React.FC = () => {
   }, [activeThreadId, currentSlideId, currentView, previewMode]);
 
   useEffect(() => {
+    setZoom(1);
+  }, [previewMode, currentView]);
+
+  useEffect(() => {
     if (!activeThreadId) return;
     const known = new Set(slides.map((slide) => slide.id));
     const state = useComposerStore.getState();
@@ -453,6 +467,9 @@ export const PreviewWorkspace: React.FC = () => {
               <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
           )}
+          <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML || currentView !== 'html'}>
+            <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
           <IconButton
             label={previewMode === 'overview' ? '切换到单页视图' : '切换到概览视图'}
             onClick={previewMode === 'overview' ? exitOverview : enterOverview}
@@ -460,14 +477,7 @@ export const PreviewWorkspace: React.FC = () => {
           >
             <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
-          <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML || currentView !== 'html'}>
-            <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
-          </IconButton>
-          <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center rounded-full bg-panel-muted p-0.5 text-xs">
+          <div className="ml-1.5 flex items-center rounded-full bg-panel-muted p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setGlobalView('outline')}
@@ -487,14 +497,7 @@ export const PreviewWorkspace: React.FC = () => {
               )}
             >幻灯片</button>
           </div>
-
-          <div className="flex items-center gap-1">
-            <IconButton label="选择元素" aria-pressed={selectionMode === 'element'} onClick={() => setSelectionMode((value) => value === 'element' ? 'none' : 'element')} disabled={!selectionEnabled} className={selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}>
-              <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
-            </IconButton>
-            <IconButton label="框选区域" aria-pressed={selectionMode === 'region'} onClick={() => setSelectionMode((value) => value === 'region' ? 'none' : 'region')} disabled={!selectionEnabled} className={selectionMode === 'region' ? 'bg-accent-soft text-accent' : undefined}>
-              <Scan className="h-4 w-4" strokeWidth={1.75} />
-            </IconButton>
+          <div className="ml-1.5 flex items-center gap-1">
             <IconButton label="上一页" onClick={goPrev} disabled={!hasSlides || safePage === 0}>
               <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
@@ -504,12 +507,32 @@ export const PreviewWorkspace: React.FC = () => {
             <IconButton label="下一页" onClick={goNext} disabled={!hasSlides || safePage >= slides.length - 1}>
               <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
-            {rightPanelHidden && (
-              <IconButton label="展开右侧对话" onClick={toggleRightPanel}>
-                <PanelRightOpen className="h-4 w-4" strokeWidth={1.75} />
-              </IconButton>
-            )}
           </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <IconButton label="选择元素" aria-pressed={selectionMode === 'element'} onClick={() => setSelectionMode((value) => value === 'element' ? 'none' : 'element')} disabled={!selectionEnabled} className={selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}>
+            <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
+          <IconButton label="框选区域" aria-pressed={selectionMode === 'region'} onClick={() => setSelectionMode((value) => value === 'region' ? 'none' : 'region')} disabled={!selectionEnabled} className={selectionMode === 'region' ? 'bg-accent-soft text-accent' : undefined}>
+            <Scan className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
+          <div className="ml-1.5 flex items-center gap-1">
+            <IconButton label="缩小" onClick={zoomOut} disabled={!zoomEnabled || zoom <= ZOOM_MIN}>
+              <ZoomOut className="h-4 w-4" strokeWidth={1.75} />
+            </IconButton>
+            <IconButton label="放大" onClick={zoomIn} disabled={!zoomEnabled || zoom >= ZOOM_MAX}>
+              <ZoomIn className="h-4 w-4" strokeWidth={1.75} />
+            </IconButton>
+          </div>
+          <div className="ml-1.5">
+            <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
+          </div>
+          {rightPanelHidden && (
+            <IconButton label="展开右侧对话" onClick={toggleRightPanel}>
+              <PanelRightOpen className="h-4 w-4" strokeWidth={1.75} />
+            </IconButton>
+          )}
         </div>
       </div>
 
@@ -519,7 +542,10 @@ export const PreviewWorkspace: React.FC = () => {
         className="relative flex flex-1 items-center justify-center overflow-hidden bg-canvas p-6 data-[fullscreen=true]:p-0"
       >
         {previewMode === 'main' ? (
-          <div className="flex aspect-video h-auto max-h-full w-full max-w-5xl items-center justify-center">
+          <div
+            className="flex aspect-video h-auto max-h-full w-full max-w-5xl items-center justify-center transition-transform duration-150 ease-out motion-reduce:transition-none"
+            style={currentView === 'html' && currentHasHTML ? { transform: `scale(${zoom})` } : undefined}
+          >
             {!projectId ? (
               <InlineNotice tone="info">请先从顶部项目 Tab 打开或新建项目。</InlineNotice>
             ) : !hasSlides ? (
