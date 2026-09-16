@@ -266,14 +266,7 @@ function SlideRow({
       onDragOver={(event) => event.preventDefault()}
       onDrop={onDrop}
       onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
       role="button"
-      tabIndex={0}
       aria-current={selected ? 'page' : undefined}
       className={cn(
         'group/page relative mx-1 my-px grid cursor-pointer grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md border border-transparent px-1 transition-colors',

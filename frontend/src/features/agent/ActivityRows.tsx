@@ -81,16 +81,9 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
   const interactive = showToggle
     ? {
         role: 'button' as const,
-        tabIndex: 0,
         'aria-expanded': expanded,
         'aria-label': expanded ? '收起思路' : '展开思路',
         onClick: toggle,
-        onKeyDown: (event: React.KeyboardEvent) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            toggle();
-          }
-        },
       }
     : {};
 
@@ -151,16 +144,9 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
   const interactive = showToggle
     ? {
         role: 'button' as const,
-        tabIndex: 0,
         'aria-expanded': expanded,
         'aria-label': expanded ? '收起计划' : '展开计划',
         onClick: toggle,
-        onKeyDown: (event: React.KeyboardEvent) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            toggle();
-          }
-        },
       }
     : {};
 

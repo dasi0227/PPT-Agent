@@ -669,11 +669,11 @@ export const CommandComposer: React.FC = () => {
 					) : (
 						<div key={reference.selection.selection_id} className="relative w-36 shrink-0">
 							{composer.editingSelectionIdByThread[activeThreadId ?? ''] === reference.selection.selection_id && (
-								<textarea autoFocus value={reference.selection.comment} aria-label={`标记 ${reference.selection.marker_no} 注释`}
-									onChange={(event) => activeThreadId && composer.updateThreadDOMSelection(activeThreadId, reference.selection.selection_id, { comment: Array.from(event.target.value).slice(0, 500).join('') })}
-									onBlur={() => activeThreadId && composer.setEditingDOMSelection(activeThreadId)}
-									onKeyDown={(event) => { if (!activeThreadId) return; if (event.key === 'Escape') { event.preventDefault(); composer.setEditingDOMSelection(activeThreadId); } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); composer.setEditingDOMSelection(activeThreadId); editorRef.current?.focusEnd(); } }}
-									className="mb-1 h-16 w-full resize-none rounded-md border border-border bg-surface p-2 text-xs outline-none focus:border-accent" placeholder="添加注释（可选）" />
+									<textarea autoFocus value={reference.selection.comment} aria-label={`标记 ${reference.selection.marker_no} 注释`}
+										onChange={(event) => activeThreadId && composer.updateThreadDOMSelection(activeThreadId, reference.selection.selection_id, { comment: Array.from(event.target.value).slice(0, 500).join('') })}
+										onBlur={() => activeThreadId && composer.setEditingDOMSelection(activeThreadId)}
+										onKeyDown={(event) => { if (!activeThreadId) return; if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); composer.setEditingDOMSelection(activeThreadId); editorRef.current?.focusEnd(); } }}
+										className="mb-1 h-16 w-full resize-none rounded-md border border-border bg-surface p-2 text-xs outline-none focus:border-accent" placeholder="添加注释（可选）" />
 							)}
 							<button type="button" onClick={() => {
 								if (!activeThreadId) return;

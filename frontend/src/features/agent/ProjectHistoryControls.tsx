@@ -71,7 +71,7 @@ export function ProjectHistoryDialogs() {
   const preview = dialog?.preview;
   return <>
     <Dialog open={Boolean(dialog)} onOpenChange={(open) => { if (!open) close(); }}>
-      <DialogContent onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onInteractOutside={(event) => { if (busy) event.preventDefault(); }}>
+      <DialogContent onEscapeKeyDown={(event) => event.preventDefault()} onInteractOutside={(event) => { if (busy) event.preventDefault(); }}>
         <DialogTitle>{dialog?.runId ? '回到此消息发送前？' : '恢复到最新现场？'}</DialogTitle>
         <DialogDescription className="text-text-600">{dialog?.runId ? '项目文件、所有会话和上下文将一起回退。当前草稿会被目标输入替换，之后可恢复到首次回退前的最新现场。' : '恢复首次回退前的项目文件、所有会话与上下文，并用当时的草稿替换当前草稿。'}</DialogDescription>
         {preview && <div className="space-y-3 text-sm text-text-600">
@@ -86,7 +86,7 @@ export function ProjectHistoryDialogs() {
       </DialogContent>
     </Dialog>
     <Dialog open={Boolean(pending)} onOpenChange={(open) => { if (!open) pending?.resolve(false); }}>
-      <DialogContent>
+      <DialogContent onEscapeKeyDown={(event) => event.preventDefault()}>
         <DialogTitle>丢弃原来的后续历史？</DialogTitle>
         <DialogDescription className="text-text-600">{pending?.message} 取消会保留当前草稿和恢复入口。</DialogDescription>
         <DialogFooter><Button variant="secondary" onClick={() => pending?.resolve(false)}>取消</Button><Button variant="primary" onClick={() => pending?.resolve(true)}>丢弃并继续</Button></DialogFooter>

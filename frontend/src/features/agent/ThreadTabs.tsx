@@ -42,14 +42,7 @@ export const ThreadTabs: React.FC = () => {
                   key={th.id}
                   role="tab"
                   aria-selected={isActive}
-                  tabIndex={0}
                   onClick={() => setActiveThread(activeProjectId, th.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setActiveThread(activeProjectId, th.id);
-                    }
-                  }}
                   className={cn(
                     "group px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors flex items-center gap-1.5 min-w-[100px] max-w-[160px] focus-visible:outline-none",
                     isActive ? "bg-black/5 text-text-900" : "text-text-600 hover:bg-black/5"

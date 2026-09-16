@@ -456,17 +456,13 @@ export const PreviewWorkspace: React.FC = () => {
       } else if (event.key === 'ArrowRight' && safePage < slides.length - 1) {
         event.preventDefault();
         goNext();
-      } else if (event.key.toLowerCase() === 'o') {
-        event.preventDefault();
-        if (previewMode === 'overview') exitOverview();
-        else enterOverview();
       } else if (event.key === 'Escape' && document.fullscreenElement) {
         void document.exitFullscreen();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [enterOverview, exitOverview, goNext, goPrev, previewMode, safePage, selectionMode, slides.length]);
+  }, [goNext, goPrev, safePage, selectionMode, slides.length]);
 
   const present = useCallback(async () => {
     const canvas = canvasRef.current;

@@ -104,11 +104,7 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
         align="end"
         sideOffset={8}
         className="w-[340px] border-0 bg-transparent p-0 shadow-none"
-        onEscapeKeyDown={(event) => {
-          if (!customMode || !customOpen) return;
-          event.preventDefault();
-          closeCustomWindow();
-        }}
+        onEscapeKeyDown={(event) => event.preventDefault()}
       >
         {customMode && customOpen && (
           <section className="mb-2 overflow-hidden rounded-xl bg-surface shadow-lg">

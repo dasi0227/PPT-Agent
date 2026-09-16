@@ -40,14 +40,7 @@ export const ProjectTabs: React.FC = () => {
                 key={proj.id}
                 role="tab"
                 aria-selected={isActive}
-                tabIndex={0}
                 onClick={() => activateProject(proj.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    activateProject(proj.id);
-                  }
-                }}
                 className={cn(
                   "group h-10 px-3 pl-4 rounded-t-md text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer focus-visible:ring-inset",
                   isActive

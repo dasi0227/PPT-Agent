@@ -4,8 +4,8 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { ThreadTabs } from './ThreadTabs';
 
-describe('ThreadTabs keyboard access', () => {
-  it('switches threads with Enter and exposes selected tab state', () => {
+describe('ThreadTabs selection', () => {
+  it('switches threads by click and exposes selected tab state', () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
     useThreadStore.setState({
       threadsByProjectId: {
@@ -24,6 +24,8 @@ describe('ThreadTabs keyboard access', () => {
     const second = screen.getByRole('tab', { name: /会话二/ });
     expect(first).toHaveAttribute('aria-selected', 'true');
     fireEvent.keyDown(second, { key: 'Enter' });
+    expect(useThreadStore.getState().activeThreadIdByProjectId.p1).toBe('t1');
+    fireEvent.click(second);
     expect(useThreadStore.getState().activeThreadIdByProjectId.p1).toBe('t2');
     expect(second).toHaveAttribute('aria-selected', 'true');
   });
