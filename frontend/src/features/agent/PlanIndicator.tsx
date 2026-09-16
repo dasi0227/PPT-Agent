@@ -146,13 +146,11 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
   const completed = plan?.steps.filter((step) => step.status === 'completed').length ?? 0;
   const inFlight = running && completed < total;
 
-  if (!hasPlan) return null;
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <IconButton
-          label={`查看计划进度 ${completed} / ${total}`}
+          label={hasPlan ? `查看计划进度 ${completed} / ${total}` : '暂无计划'}
           aria-haspopup="menu"
           className="relative"
         >
@@ -160,43 +158,51 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
             className={cn('h-4 w-4', inFlight && 'animate-pulse motion-reduce:animate-none')}
             strokeWidth={1.75}
           />
-          <span className="pointer-events-none absolute -right-1.5 -top-1.5 z-10 inline-flex h-3.5 min-w-[22px] items-center justify-center rounded-full border-2 border-panel bg-text-600 px-1 text-[9px] leading-none tabular-nums text-white shadow-sm">
-            <RollingCount completed={completed} total={total} />
-          </span>
+          {hasPlan && (
+            <span className="pointer-events-none absolute -right-1.5 -top-1.5 z-10 inline-flex h-3.5 min-w-[22px] items-center justify-center rounded-full border-2 border-panel bg-text-600 px-1 text-[9px] leading-none tabular-nums text-white shadow-sm">
+              <RollingCount completed={completed} total={total} />
+            </span>
+          )}
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="bottom" align="end" className="w-[320px] overflow-visible p-2">
-        <div className="mb-1.5 flex items-center gap-2 px-1">
-          <PlanText className="max-w-[248px] text-sm font-semibold text-text-900">
-            {plan?.title || '执行计划'}
-          </PlanText>
-          <span className="shrink-0 text-xs text-text-400">
-            <RollingCount completed={completed} total={total} />
-          </span>
-        </div>
-        <div className="max-h-[280px] space-y-0.5 overflow-y-auto pr-1">
-          {plan?.steps.map((step) => (
-            <div
-              key={step.id}
-              className={cn(
-                'flex min-h-8 items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
-                step.status === 'in_progress' && 'bg-accent-soft/80',
-              )}
-            >
-              <StepIcon status={step.status} />
-              <div className="min-w-0 flex-1">
-                <PlanText className="max-w-[238px] leading-5 text-text-900">
-                  {step.title}
-                </PlanText>
-                {step.detail && (
-                  <PlanText className="mt-0.5 max-w-[238px] text-xs leading-4 text-text-400">
-                    {step.detail}
-                  </PlanText>
-                )}
-              </div>
+        {hasPlan ? (
+          <>
+            <div className="mb-1.5 flex items-center gap-2 px-1">
+              <PlanText className="max-w-[248px] text-sm font-semibold text-text-900">
+                {plan?.title || '执行计划'}
+              </PlanText>
+              <span className="shrink-0 text-xs text-text-400">
+                <RollingCount completed={completed} total={total} />
+              </span>
             </div>
-          ))}
-        </div>
+            <div className="max-h-[280px] space-y-0.5 overflow-y-auto pr-1">
+              {plan?.steps.map((step) => (
+                <div
+                  key={step.id}
+                  className={cn(
+                    'flex min-h-8 items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
+                    step.status === 'in_progress' && 'bg-accent-soft/80',
+                  )}
+                >
+                  <StepIcon status={step.status} />
+                  <div className="min-w-0 flex-1">
+                    <PlanText className="max-w-[238px] leading-5 text-text-900">
+                      {step.title}
+                    </PlanText>
+                    {step.detail && (
+                      <PlanText className="mt-0.5 max-w-[238px] text-xs leading-4 text-text-400">
+                        {step.detail}
+                      </PlanText>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-center py-4 text-sm text-text-400">暂无计划</div>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

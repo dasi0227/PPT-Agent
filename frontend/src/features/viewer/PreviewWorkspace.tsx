@@ -74,6 +74,7 @@ function PreviewFrame({
   state,
   retry,
   title,
+  fullscreen = false,
   runtimeSlides,
   runtimeIndex,
   fallbackFrame,
@@ -90,6 +91,7 @@ function PreviewFrame({
   state: ResourceState<string>;
   retry: () => void;
   title: string;
+  fullscreen?: boolean;
   runtimeSlides?: RuntimeSlide[];
   runtimeIndex?: number;
   fallbackFrame?: RuntimeSlide['frame'];
@@ -113,7 +115,10 @@ function PreviewFrame({
     : 0;
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded bg-white shadow-canvas ring-1 ring-border">
+    <div className={cn(
+      'relative h-full w-full overflow-hidden bg-white',
+      fullscreen ? 'rounded-none' : 'rounded shadow-canvas ring-1 ring-border',
+    )}>
       {deck.length > 0 && (
         <IsolatedSlidePreview
           slides={deck}
@@ -563,8 +568,12 @@ export const PreviewWorkspace: React.FC = () => {
       >
         {previewMode === 'main' ? (
           <div
-            className="flex aspect-video h-auto max-h-full w-full max-w-5xl items-center justify-center transition-transform duration-150 ease-out motion-reduce:transition-none"
-            style={currentView === 'html' && currentHasHTML ? { transform: `scale(${zoom})` } : undefined}
+            data-testid="slide-preview-stage"
+            className={cn(
+              'flex w-full items-center justify-center transition-transform duration-150 ease-out motion-reduce:transition-none',
+              fullscreen ? 'h-full max-w-none' : 'aspect-video h-auto max-h-full max-w-5xl',
+            )}
+            style={!fullscreen && currentView === 'html' && currentHasHTML ? { transform: `scale(${zoom})` } : undefined}
           >
             {!projectId ? (
               <InlineNotice tone="info">请先从顶部项目 Tab 打开或新建项目。</InlineNotice>
@@ -576,6 +585,7 @@ export const PreviewWorkspace: React.FC = () => {
                 state={currentState}
                 retry={() => void load(currentSlide, 'current')}
                 title={`第 ${safePage + 1} 页 HTML 预览`}
+                fullscreen={fullscreen}
                 runtimeSlides={runtimeSlides}
                 runtimeIndex={runtimeIndex}
                 fallbackFrame={snapshot ? buildRuntimeFrame(snapshot, currentSlide.id) : undefined}
