@@ -134,6 +134,19 @@ describe('run command activity', () => {
     expect(container.textContent).toContain('已读取演示内容');
   });
 
+  it('uses a monitor icon for completed slide renders', () => {
+    const { container } = render(<ToolActivityRow item={commandItem({
+      tool: 'render_slide',
+      label: '第 3 页渲染通过',
+      status: 'completed',
+      command: undefined,
+      target: { type: 'slide', slide_id: 'sli_three', part: 'html' },
+    })} />);
+
+    expect(container.querySelector('.lucide-monitor')).toBeInTheDocument();
+    expect(container.querySelector('.lucide-circle-check-big')).not.toBeInTheDocument();
+  });
+
   it('expands loaded resources as names with ExternalLink actions only', () => {
     render(<ToolActivityRow item={commandItem({
       tool: 'load_component',

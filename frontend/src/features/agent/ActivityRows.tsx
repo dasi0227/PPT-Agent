@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Flag,
   Loader2,
+  Monitor,
   RotateCcw,
   Search,
   SquareTerminal,
@@ -200,12 +201,13 @@ export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) 
   </div>
 );
 
-// 图标字形按工具区分（读取=eye，创建=sparkles，搜索=search），颜色由状态决定：
-// 成功=success 绿、失败=danger 红。兜底工具（render）成功用勾、失败用三角。
+// 图标字形按工具区分（读取=eye，创建=sparkles，渲染=monitor，搜索=search），颜色由状态决定：
+// 成功=success 绿、失败=danger 红；未知工具才使用通用状态图标兜底。
 function toolStatusIcon(tool: string, failed: boolean) {
   const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
   if (tool === 'read_ppt') return <Eye className={className} strokeWidth={1.75} />;
   if (tool === 'mutate_ppt') return <Sparkles className={className} strokeWidth={1.75} />;
+  if (tool === 'render_slide') return <Monitor className={className} strokeWidth={1.75} />;
   if (tool === 'load_component') return <ComponentIcon className={className} strokeWidth={1.75} />;
   if (tool === 'load_skill') return <Blocks className={className} strokeWidth={1.75} />;
   if (tool === 'search_reference' || tool.startsWith('search') || tool.includes('reference')) {
