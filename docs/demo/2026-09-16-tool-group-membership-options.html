@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>工具组归属视觉方案 — 对比预览</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #e9edf2;
+      --panel: #f8f9fb;
+      --surface: #ffffff;
+      --muted-surface: #f0f3f7;
+      --ink: #17202b;
+      --text: #455160;
+      --muted: #5f6b7a;
+      --subtle: #95a0ae;
+      --line: #d5dbe3;
+      --line-strong: #bcc5d0;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      --success: #2f7d65;
+      --shadow: 0 10px 30px rgb(29 41 57 / 10%);
+      font-family: Aptos, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--workspace);
+      color: var(--ink);
+    }
+
+    body {
+      padding: 28px 24px 40px;
+    }
+
+    .wrap {
+      width: min(100%, 960px);
+      margin: 0 auto;
+    }
+
+    .intro { margin: 4px 2px 22px; }
+
+    .intro h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .intro p {
+      margin: 7px 0 0;
+      max-width: 640px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .card-head {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .card-head .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 20px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .card-head h2 {
+      margin: 9px 0 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .card-head p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .stage {
+      flex: 1;
+      padding: 16px;
+      background: var(--panel);
+    }
+
+    /* ---- 共享的行样式 ---- */
+    .row {
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1fr) 16px;
+      align-items: center;
+      gap: 8px;
+      min-height: 30px;
+      padding: 4px 6px;
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .row svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.75;
+      color: var(--success);
+    }
+
+    .row .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .label b { font-weight: 650; }
+    .row .chevron { color: var(--subtle); }
+
+    .children { overflow: hidden; }
+
+    /* ---- 方案 A：子项缩进 ---- */
+    .opt-a .children { padding-left: 30px; }
+
+    /* ---- 方案 B：统一背景 ---- */
+    .opt-b .group-shell {
+      border-radius: 9px;
+      background: var(--muted-surface);
+      padding: 3px 2px;
+    }
+
+    /* ---- 方案 C：左侧引导线 ---- */
+    .opt-c .group-shell { position: relative; }
+    .opt-c .rail {
+      position: absolute;
+      top: 18px;
+      bottom: 10px;
+      left: 13px;
+      width: 2px;
+      border-radius: 1px;
+      background: var(--line-strong);
+    }
+    .opt-c .children .row svg { color: var(--success); }
+
+    /* ---- 方案 D：强调色条 + 缩进 ---- */
+    .opt-d .group-shell {
+      position: relative;
+      border-left: 3px solid var(--accent);
+      border-radius: 4px 9px 9px 4px;
+      background: #eff3fe;
+      padding: 3px 6px 3px 10px;
+    }
+    .opt-d .children .row { color: var(--text); }
+
+    .footnote {
+      margin: 20px 2px 0;
+      color: var(--subtle);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 720px) {
+      body { padding: 18px 12px 32px; }
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="intro">
+      <h1>工具组展开后的归属视觉</h1>
+      <p>同一个「已读取 2 项」分组，折叠后点击展开为两条子项。以下是四种让用户感知子项「同属一组」的设计方向——聚焦在缩进、背景色、引导线、强调色条这几个维度，请横向对比后告诉我你倾向哪一种（也可以组合）。</p>
+    </header>
+
+    <section class="grid">
+
+      <!-- 方案 A -->
+      <article class="card">
+        <header class="card-head">
+          <span class="tag">方案 A</span>
+          <h2>子项缩进</h2>
+          <p>子项整体向右缩进，仅靠位置层级暗示归属。改动最小、最安静。</p>
+        </header>
+        <div class="stage">
+          <div class="opt-a">
+            <div class="group-shell">
+              <div class="row">
+                <i data-lucide="eye"></i>
+                <span class="label">已读取 2 项</span>
+                <i class="chevron" data-lucide="chevron-down"></i>
+              </div>
+              <div class="children">
+                <div class="row"><i data-lucide="eye"></i><span class="label">已读取 <b>演示内容</b></span><span></span></div>
+                <div class="row"><i data-lucide="eye"></i><span class="label">已读取 <b>目录结构</b></span><span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- 方案 B -->
+      <article class="card">
+        <header class="card-head">
+          <span class="tag">方案 B</span>
+          <h2>统一背景色块</h2>
+          <p>组头与子项共享一块浅色圆角背景，边界清晰，一眼可辨。</p>
+        </header>
+        <div class="stage">
+          <div class="opt-b">
+            <div class="group-shell">
+              <div class="row">
+                <i data-lucide="eye"></i>
+                <span class="label">已读取 2 项</span>
+                <i class="chevron" data-lucide="chevron-down"></i>
+              </div>
+              <div class="children">
+                <div class="row"><i data-lucide="eye"></i><span class="label">已读取 <b>演示内容</b></span><span></span></div>
+                <div class="row"><i data-lucide="eye"></i><span class="label">已读取 <b>目录结构</b></span><span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- 方案 C -->
+      <article class="card">
+        <header class="card-head">
+          <span class="tag">方案 C</span>
+          <h2>左侧引导线</h2>
+          <p>一条纵向引导线从组头贯穿到末条子项，像文件树的连接线。</p>
+        </header>
+        <div class="stage">
+          <div class="opt-c">
+            <div class="group-shell">
+              <span class="rail"></span>
+              <div class="row">
+                <i data-lucide="eye"></i>
+                <span class="label">已读取 2 项</span>
+                <i class="chevron" data-lucide="chevron-down"></i>
+              </div>
+              <div class="children">
+                <div class="row"><i data-lucide="eye"></i><span class="label">已读取 <b>演示内容</b></span><span></span></div>
+                <div class="row"><i data-lucide="eye"></i><span class="label">已读取 <b>目录结构</b></span><span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- 方案 D -->
+      <article class="card">
+        <header class="card-head">
+          <span class="tag">方案 D</span>
+          <h2>强调色条 + 缩进</h2>
+          <p>组左侧一条强调色竖线作为锚点，子项同时缩进，归属感最强。</p>
+        </header>
+        <div class="stage">
+          <div class="opt-d">
+            <div class="group-shell">
+              <div class="row">
+                <i data-lucide="eye"></i>
+                <span class="label">已读取 2 项</span>
+                <i class="chevron" data-lucide="chevron-down"></i>
+              </div>
+              <div class="children">
+                <div class="row"><i data-lucide="eye"></i><span class="label">已读取 <b>演示内容</b></span><span></span></div>
+                <div class="row"><i data-lucide="eye"></i><span class="label">已读取 <b>目录结构</b></span><span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+    </section>
+
+    <p class="footnote">说明：以上均为「展开后」的静态示意，子项标签中的「演示内容 / 目录结构」为已加粗的对象名词。方案可自由组合（例如「缩进 + 引导线」「强调色条 + 统一背景」）。</p>
+  </main>
+
+  <script>
+    if (window.lucide) {
+      window.lucide.createIcons({ attrs: { "aria-hidden": "true" } });
+    }
+  </script>
+</body>
+</html>

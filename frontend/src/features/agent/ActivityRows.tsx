@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Eye,
   ExternalLink,
   Flag,
@@ -203,6 +204,72 @@ function toolStatusIcon(tool: string, failed: boolean) {
     : <CheckCircle2 className={className} strokeWidth={1.75} />;
 }
 
+// 命令卡片：默认限制最大高度只展示部分，超出时在底部提供「展开全部」，展开后可「收起」。
+function CommandCard({ command, commandOutput, status }: {
+  command: NonNullable<ToolActivityItem['command']>;
+  commandOutput: string;
+  status: ToolActivityItem['status'];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (expanded) return;
+    const el = contentRef.current;
+    if (!el) return;
+    const measure = () => setOverflowing(el.scrollHeight - el.clientHeight > 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded, command.text, commandOutput]);
+
+  return (
+    <div>
+      <div ref={contentRef} className={expanded ? '' : 'relative max-h-[240px] overflow-hidden'}>
+        <div className="rounded-md bg-[#EDF0F3] px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]">
+          <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
+            {command.text}
+          </code>
+          {commandOutput && (
+            <pre className={cn(
+              'mt-[7px] whitespace-pre-wrap break-words border-t border-[#D7DCE3] pt-[7px] font-mono text-[11px] font-normal text-[#758191]',
+              status === 'failed' && 'text-[#A34851]',
+            )}>
+              {commandOutput}
+            </pre>
+          )}
+        </div>
+        {!expanded && overflowing && (
+          <div className="absolute inset-x-0 bottom-0 flex h-14 items-end justify-center bg-gradient-to-b from-[#EDF0F3]/0 to-[#EDF0F3] pb-1.5">
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="inline-flex h-6 items-center rounded-full border border-border bg-surface px-3 text-[11px] font-medium text-text-600 shadow-sm hover:bg-panel-muted hover:text-text-900"
+            >
+              展开全部
+            </button>
+          </div>
+        )}
+      </div>
+      {expanded && overflowing && (
+        <div className="mt-2 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] text-text-400 hover:bg-panel-muted hover:text-text-600"
+          >
+            <ChevronUp className="h-3 w-3" strokeWidth={1.75} />
+            收起
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
   const [expanded, setExpanded] = useState(Boolean(item.preview?.warnings.length));
   const [runningVisible, setRunningVisible] = useState(
@@ -269,19 +336,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       <TimelineDisclosure open={expanded && hasDetails}>
         {expanded && hasDetails && <div className="pb-1.5 pl-[30px] pr-2 pt-px text-xs leading-5 text-text-600">
           {item.command ? (
-            <div className="rounded-md bg-[#EDF0F3] px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]">
-              <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
-                {item.command.text}
-              </code>
-              {commandOutput && (
-                <pre className={cn(
-                  'mt-[7px] whitespace-pre-wrap break-words border-t border-[#D7DCE3] pt-[7px] font-mono text-[11px] font-normal text-[#758191]',
-                  item.status === 'failed' && 'text-[#A34851]',
-                )}>
-                  {commandOutput}
-                </pre>
-              )}
-            </div>
+            <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
           ) : detailText && (
             item.target?.open_url ? (
               <a
@@ -364,14 +419,6 @@ function targetObjectName(target: PublicTarget | undefined): ObjectName {
   return { name: '', bold: false };
 }
 
-// 从命令文本提取可执行程序名（首段空白分隔的词），供分组行展示具体命令。
-function commandName(text?: string): string | null {
-  const trimmed = text?.trim();
-  if (!trimmed) return null;
-  const match = trimmed.match(/^\S+/);
-  return match ? match[0] : null;
-}
-
 // 渲染活动文本：对 deck 级产物名词加粗，突出「已读取演示内容」中的对象。
 function renderActivityLabel(text: string, target: PublicTarget | undefined, slides: Slide[]): React.ReactNode {
   const label = presentActivityText(text, target, slides);
@@ -411,11 +458,6 @@ function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
 
 function groupLabel(items: ToolActivityItem[], verb: string): React.ReactNode {
   if (items[0].tool === 'run_command') {
-    const name = commandName(items[0].command?.text);
-    const uniform = name != null && items.every((item) => commandName(item.command?.text) === name);
-    if (uniform) {
-      return <>已执行 <span className="font-semibold">{name}</span> 命令</>;
-    }
     return `已执行 ${items.length} 条命令`;
   }
   const { prefix, noun, bold } = groupedObjectParts(items);

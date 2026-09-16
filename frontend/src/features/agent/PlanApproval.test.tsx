@@ -87,7 +87,12 @@ describe('PlanApproval', () => {
 
     expect(screen.getByTestId('plan-approval-actions')).toHaveClass('border-t');
     fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
-    expect(screen.getByPlaceholderText('说明需要调整的内容')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('说明需要调整的内容')).toHaveClass(
+      'focus:border-2',
+      'focus:border-ink',
+      'focus-visible:ring-0',
+      'focus-visible:ring-offset-0',
+    );
     expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
 
     fireEvent.change(screen.getByPlaceholderText('说明需要调整的内容'), { target: { value: '需要调整标题' } });

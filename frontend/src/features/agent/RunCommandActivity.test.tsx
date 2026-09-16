@@ -97,26 +97,13 @@ describe('run command activity', () => {
     expect(screen.queryByText('/Users/test/project/manifest.json')).toBeNull();
   });
 
-  it('uses the confirmed command name for grouped rows', () => {
+  it('uses the confirmed command-count title for grouped rows', () => {
     const items = ['1', '2', '3'].map((id) => commandItem({
       id: `r1:tool:${id}`,
       callId: id,
       status: 'completed',
       label: '已执行命令',
       command: { text: 'pwd', status: 'completed' },
-    }));
-    const { container } = render(<ToolGroupRow items={items} />);
-    expect(screen.getByText('pwd')).toHaveClass('font-semibold');
-    expect(container.textContent).toContain('已执行 pwd 命令');
-  });
-
-  it('falls back to the command count when grouped commands differ', () => {
-    const items = ['1', '2', '3'].map((id, index) => commandItem({
-      id: `r1:tool:${id}`,
-      callId: id,
-      status: 'completed',
-      label: '已执行命令',
-      command: { text: index === 0 ? 'pwd' : 'ls', status: 'completed' },
     }));
     render(<ToolGroupRow items={items} />);
     expect(screen.getByText('已执行 3 条命令')).toBeInTheDocument();

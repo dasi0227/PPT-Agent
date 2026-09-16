@@ -23,7 +23,7 @@ function groupToolItems(items: TimelineItem[]): DisplayEntry[] {
   let pending: ToolActivityItem[] = [];
 
   const flush = () => {
-    if (pending.length >= 3) {
+    if (pending.length >= 2) {
       result.push({ kind: 'tool_group', id: `group:${pending[0].id}`, items: pending });
     } else {
       pending.forEach((item) => result.push({ kind: 'item', item }));
@@ -79,7 +79,7 @@ export function groupTimelineItems(items: TimelineItem[], _currentSlideId?: stri
   let pending: ToolActivityItem[] = [];
 
   const flush = () => {
-    if (pending.length >= 3) {
+    if (pending.length >= 2) {
       result.push({ kind: 'tool_group', id: `group:${pending[0].id}`, items: pending });
     } else {
       pending.forEach((item) => result.push({ kind: 'item', item }));

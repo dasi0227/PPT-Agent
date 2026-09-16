@@ -55,7 +55,7 @@ describe('timeline grouping', () => {
     });
   });
 
-  it('groups three consecutive successful commands but keeps two separate', () => {
+  it('groups two or more consecutive successful commands but keeps a single one separate', () => {
     const command = (id: string): TimelineItem => ({
       id,
       type: 'tool',
@@ -68,8 +68,13 @@ describe('timeline grouping', () => {
       timestamp: 1,
     });
 
-    expect(groupTimelineItems([command('1'), command('2')]).map((entry) => entry.kind))
-      .toEqual(['item', 'item']);
+    expect(groupTimelineItems([command('1')]).map((entry) => entry.kind))
+      .toEqual(['item']);
+    expect(groupTimelineItems([command('1'), command('2')]))
+      .toEqual([expect.objectContaining({ kind: 'tool_group', items: expect.arrayContaining([
+        expect.objectContaining({ callId: '1' }),
+        expect.objectContaining({ callId: '2' }),
+      ]) })]);
     expect(groupTimelineItems([command('1'), command('2'), command('3')]))
       .toEqual([expect.objectContaining({ kind: 'tool_group', items: expect.arrayContaining([
         expect.objectContaining({ callId: '1' }),
