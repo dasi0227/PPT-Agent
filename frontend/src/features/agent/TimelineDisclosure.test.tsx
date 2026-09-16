@@ -31,14 +31,15 @@ describe('timeline disclosure motion', () => {
       type: 'milestone',
       runId: 'run-1',
       messageId: 'message-1',
-      text: '完成页面编排计划',
+      text: '已完成「页面编排计划」',
       completedStepIds: ['step-1'],
       timestamp: 1,
     };
     const { container } = render(<MilestoneRow item={item} />);
 
     expect(container.firstChild).not.toHaveClass('motion-safe:animate-[timeline-enter_120ms_ease-out]');
-    expect(screen.getByText('完成页面编排计划')).toHaveClass('font-semibold', 'text-text-900');
+    expect(screen.getByText('页面编排计划')).toHaveClass('font-semibold');
+    expect(container.textContent).toContain('已完成「页面编排计划」');
   });
 
   it('opens grouped tool rows through the shared disclosure', () => {

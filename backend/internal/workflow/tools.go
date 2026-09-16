@@ -1,16 +1,19 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 var (
@@ -433,6 +436,10 @@ func mutationOperationAllowed(scope model.RunScope, op, slideID string) bool {
 }
 
 func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {
+	if args == nil {
+		args = map[string]any{}
+		input.Args = args
+	}
 	if err := input.Context.Command.Validate(); err != nil {
 		return failedToolResult(ErrCapabilityDenied.Error(), "RunCommand is invalid: "+err.Error(), false)
 	}
@@ -448,6 +455,13 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	}
 	if !toolAvailable(desc, input.Phase, input.Mode, input.Scope) {
 		return failedToolResult(ErrCapabilityDenied.Error(), "tool is unavailable for the current Runtime mode, phase, scope, capability, or risk policy", false)
+	}
+	schema, disclosedForScope := scopeToolSchema(desc.Tool.Schema(), input.Scope, desc.ReadOnly)
+	if !disclosedForScope {
+		return failedToolResult(ErrToolNotDisclosed.Error(), "tool has no operation available for the current run scope", false)
+	}
+	if err := validateToolArguments(schema, args); err != nil {
+		return failedToolResult(CodeContentInvalid, err.Error(), false)
 	}
 	mutates := input.Decision != nil && input.Decision.Mutates
 	if (!desc.ReadOnly || mutates) && input.Session == nil {
@@ -465,6 +479,67 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 		}
 	}
 	return result
+}
+
+func validateToolArguments(schema ToolSchema, args map[string]any) error {
+	parameters := discriminatedArgumentSchema(schema.Parameters, args)
+	raw, err := json.Marshal(parameters)
+	if err != nil {
+		return fmt.Errorf("tool argument schema is invalid: %w", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	const resource = "tool-arguments.schema.json"
+	if err := compiler.AddResource(resource, io.NopCloser(bytes.NewReader(raw))); err != nil {
+		return fmt.Errorf("tool argument schema is invalid: %w", err)
+	}
+	compiled, err := compiler.Compile(resource)
+	if err != nil {
+		return fmt.Errorf("tool argument schema is invalid: %w", err)
+	}
+	if err := compiled.Validate(args); err != nil {
+		var validation *jsonschema.ValidationError
+		if errors.As(err, &validation) {
+			leaf := mostSpecificValidationError(validation)
+			location := leaf.InstanceLocation
+			if location == "" {
+				location = "/"
+			}
+			return fmt.Errorf("tool arguments do not match schema at %s: %s", location, leaf.Message)
+		}
+		return fmt.Errorf("tool arguments do not match schema: %w", err)
+	}
+	return nil
+}
+
+// oneOf mutation schemas are discriminated by op. Validating the selected
+// branch preserves the same contract while avoiding an error from an
+// unrelated branch masking the actual invalid field.
+func discriminatedArgumentSchema(parameters map[string]any, args map[string]any) map[string]any {
+	op, _ := args["op"].(string)
+	variants, _ := parameters["oneOf"].([]any)
+	if op == "" || len(variants) == 0 {
+		return parameters
+	}
+	for _, raw := range variants {
+		variant, _ := raw.(map[string]any)
+		properties, _ := variant["properties"].(map[string]any)
+		opSchema, _ := properties["op"].(map[string]any)
+		if opSchema["const"] == op {
+			return variant
+		}
+	}
+	return parameters
+}
+
+func mostSpecificValidationError(root *jsonschema.ValidationError) *jsonschema.ValidationError {
+	best := root
+	for _, cause := range root.Causes {
+		candidate := mostSpecificValidationError(cause)
+		if len(candidate.InstanceLocation) > len(best.InstanceLocation) || len(best.Causes) > 0 {
+			best = candidate
+		}
+	}
+	return best
 }
 
 func declaredTarget(args map[string]any) (Resource, bool) {

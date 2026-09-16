@@ -233,9 +233,18 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	element := objectSchema([]string{"type", "intent"}, map[string]any{"type": map[string]any{"enum": []string{"text", "list", "metric", "quote", "table", "chart", "diagram", "code", "asset"}}, "intent": text(1200)})
 	slideSpec := objectSchema([]string{"key_message", "elements"}, map[string]any{"key_message": text(500), "elements": map[string]any{"type": "array", "items": element}, "layout": text(80)})
 	edits := map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{"old_text": text(maxPPTContentBytes), "new_text": map[string]any{"type": "string", "maxLength": maxPPTContentBytes}})}
+	outlineInit := variant("outline.init", []string{"structure"}, map[string]any{"structure": map[string]any{"type": "array", "minItems": 1, "items": draftSection}}).(map[string]any)
+	outlineInit["examples"] = []any{map[string]any{
+		"op": "outline.init",
+		"structure": []any{map[string]any{
+			"client_ref": "opening", "title": "Opening", "purpose": "Introduce the topic",
+			"slides":      []any{map[string]any{"client_ref": "cover", "title": "Presentation title", "role": "cover"}},
+			"subsections": []any{},
+		}},
+	}}
 	variants := []any{
 		variant("manifest.patch", []string{"patch"}, map[string]any{"patch": patch("manifest.patch")}),
-		variant("outline.init", []string{"structure"}, map[string]any{"structure": map[string]any{"type": "array", "minItems": 1, "items": draftSection}}),
+		outlineInit,
 		variant("outline.insert", []string{"node", "position"}, map[string]any{"node": draftNode, "position": position, "direct_slides_policy": map[string]any{"enum": []string{"move_into_new_subsection"}}}),
 		variant("outline.move", []string{"node_id", "position"}, map[string]any{"node_id": map[string]any{"type": "string"}, "position": position}),
 		variant("outline.update", []string{"node_id", "changes"}, map[string]any{"node_id": map[string]any{"type": "string"}, "changes": changes}),

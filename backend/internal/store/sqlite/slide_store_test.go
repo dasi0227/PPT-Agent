@@ -140,6 +140,32 @@ func TestCommitWorkflowRetryReusesVersionRows(t *testing.T) {
 	}
 }
 
+func TestCommitWorkflowAllowsDifferentCallsToVersionTheSameRunTarget(t *testing.T) {
+	s := newTestStore(t)
+	seedProject(t, s)
+	ctx := context.Background()
+	for index, versionID := range []string{"run-call-one", "run-call-two"} {
+		commit := model.ArtifactCommit{
+			ProjectID: "p1",
+			Versions: []model.Version{{
+				ID: versionID, TargetType: "slide_html", TargetID: "p1:sli_1",
+				VersionNo: index, SnapshotPath: "versions/slides/sli_1/html/v" + itoaLocal(index) + ".html",
+				RunID: "run", CreatedAt: int64(index + 1),
+			}},
+		}
+		if err := s.CommitWorkflow(ctx, commit); err != nil {
+			t.Fatalf("commit call %d: %v", index+1, err)
+		}
+	}
+	versions, err := s.ListVersions(ctx, "slide_html", "p1:sli_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 2 || versions[0].ID != "run-call-one" || versions[1].ID != "run-call-two" {
+		t.Fatalf("versions=%+v", versions)
+	}
+}
+
 func TestCommitWorkflowAtomicallyRecordsMutationReceiptAndToolResult(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)

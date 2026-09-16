@@ -280,7 +280,12 @@ func (p fakeProvider) RegisterDomainTools(registry *ToolRegistry) error {
 type fakeWriteTool struct{ kind ArtifactKind }
 
 func (fakeWriteTool) Schema() ToolSchema {
-	return ToolSchema{Name: "mutate_ppt", Description: "test write", Parameters: objectSchema(nil, map[string]any{})}
+	return ToolSchema{Name: "mutate_ppt", Description: "test write", Parameters: objectSchema(nil, map[string]any{
+		"content": map[string]any{"type": "string"}, "evidence": map[string]any{"type": "boolean"},
+		"target": objectSchema([]string{"type", "slide_id"}, map[string]any{
+			"type": map[string]any{"type": "string"}, "slide_id": map[string]any{"type": "string"},
+		}),
+	})}
 }
 
 func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolResult {

@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS versions (
     UNIQUE (target_type, target_id, version_no)
 );
 CREATE INDEX IF NOT EXISTS idx_versions_target ON versions(target_type, target_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_run_target
+CREATE INDEX IF NOT EXISTS idx_versions_run_target
 ON versions(run_id, target_type, target_id) WHERE run_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS threads (

@@ -29,8 +29,15 @@ func TestRuntimeAuthorityMigrationCreatesTablesAndIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 		if count != 1 {
-			t.Fatalf("missing unique index %s", name)
+			t.Fatalf("missing index %s", name)
 		}
+	}
+	var versionIndexUnique int
+	if err := s.db.Raw("SELECT `unique` FROM pragma_index_list('versions') WHERE name = ?", "idx_versions_run_target").Scan(&versionIndexUnique).Error; err != nil {
+		t.Fatal(err)
+	}
+	if versionIndexUnique != 0 {
+		t.Fatal("idx_versions_run_target must allow multiple call_ids in one run")
 	}
 }
 

@@ -144,6 +144,9 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
   const showToggle = overflowing || expanded;
   const toggle = () => setExpanded((value) => !value);
 
+  const completedMatch = item.text.match(/^已完成「(.+)」$/);
+  const completedTitles = completedMatch?.[1].split('」、「');
+
   const interactive = showToggle
     ? {
         role: 'button' as const,
@@ -169,7 +172,16 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
       )}
     >
       <Flag className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
-      <span ref={textRef} className={cn('min-w-0 flex-1 font-semibold text-text-900', !expanded && 'line-clamp-1')}>{item.text}</span>
+      <span ref={textRef} className={cn('min-w-0 flex-1 text-text-900', !expanded && 'line-clamp-1')}>
+        {completedTitles ? (
+          <>已完成「{completedTitles.map((title, index) => (
+            <React.Fragment key={`${title}:${index}`}>
+              {index > 0 && '」、「'}
+              <strong className="font-semibold">{title}</strong>
+            </React.Fragment>
+          ))}」</>
+        ) : <strong className="font-semibold">{item.text}</strong>}
+      </span>
       {showToggle && (
         <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
           {expanded
@@ -419,6 +431,14 @@ function targetObjectName(target: PublicTarget | undefined): ObjectName {
   return { name: '', bold: false };
 }
 
+// 从命令文本提取可执行程序名（首段空白分隔的词），供分组行展示具体命令。
+function commandName(text?: string): string | null {
+  const trimmed = text?.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^\S+/);
+  return match ? match[0] : null;
+}
+
 // 渲染活动文本：对 deck 级产物名词加粗，突出「已读取演示内容」中的对象。
 function renderActivityLabel(text: string, target: PublicTarget | undefined, slides: Slide[]): React.ReactNode {
   const label = presentActivityText(text, target, slides);
@@ -458,6 +478,11 @@ function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
 
 function groupLabel(items: ToolActivityItem[], verb: string): React.ReactNode {
   if (items[0].tool === 'run_command') {
+    const name = commandName(items[0].command?.text);
+    const uniform = name != null && items.every((item) => commandName(item.command?.text) === name);
+    if (uniform) {
+      return <>已执行 <span className="font-semibold">{name}</span> 命令</>;
+    }
     return `已执行 ${items.length} 条命令`;
   }
   const { prefix, noun, bold } = groupedObjectParts(items);

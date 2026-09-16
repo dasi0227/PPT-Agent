@@ -52,7 +52,9 @@ type timedBatchTool struct {
 }
 
 func (t timedBatchTool) Schema() ToolSchema {
-	return ToolSchema{Name: t.name, Parameters: objectSchema(nil, map[string]any{})}
+	return ToolSchema{Name: t.name, Parameters: objectSchema([]string{"id"}, map[string]any{
+		"id": map[string]any{"type": "string"}, "fail": map[string]any{"type": "boolean"},
+	})}
 }
 
 func (t timedBatchTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {

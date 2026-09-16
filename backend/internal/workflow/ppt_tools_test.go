@@ -109,6 +109,90 @@ func TestMutationPatchSchemaDisclosesTheRuntimePathPolicy(t *testing.T) {
 	}
 }
 
+func TestOutlineInitSchemaIncludesOneCompleteMinimalExample(t *testing.T) {
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	variants := mutationSchema(mutationPack("pro_aaaaaa", empty))["oneOf"].([]any)
+	outlineInit := variants[1].(map[string]any)
+	examples, _ := outlineInit["examples"].([]any)
+	if len(examples) != 1 {
+		t.Fatalf("outline.init examples=%v", examples)
+	}
+	example, _ := examples[0].(map[string]any)
+	if example["op"] != "outline.init" {
+		t.Fatalf("outline.init example=%v", example)
+	}
+	structure, _ := example["structure"].([]any)
+	if len(structure) != 1 {
+		t.Fatalf("outline.init example structure=%v", structure)
+	}
+	section, _ := structure[0].(map[string]any)
+	for _, field := range []string{"client_ref", "title", "purpose", "slides", "subsections"} {
+		if _, ok := section[field]; !ok {
+			t.Fatalf("outline.init example section is missing %s: %v", field, section)
+		}
+	}
+	if err := validateToolArguments(ToolSchema{Parameters: mutationSchema(mutationPack("pro_aaaaaa", empty))}, example); err != nil {
+		t.Fatalf("outline.init example does not satisfy its schema: %v", err)
+	}
+}
+
+func TestToolRegistryReportsPreciseMissingOutlineFieldBeforeExecution(t *testing.T) {
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	pack := mutationPack("pro_aaaaaa", empty)
+	pack.Command = model.RunCommand{
+		Scope: model.NewRunScope(model.ScopeObjectGlobal, model.ScopeAllPages),
+		Mode:  model.ModeExecute, Instruction: "initialize outline",
+	}
+	registry := NewToolRegistry()
+	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
+		t.Fatal(err)
+	}
+	args := map[string]any{
+		"op": "outline.init",
+		"structure": []any{map[string]any{
+			"client_ref": "opening", "purpose": "Start", "slides": []any{}, "subsections": []any{},
+		}},
+	}
+	result := registry.Execute(context.Background(), map[string]bool{"mutate_ppt": true}, "mutate_ppt", args, DomainToolInput{
+		Args: args, Context: pack, Scope: pack.Command.Scope, Phase: PhaseExecuting, Mode: model.ModeExecute,
+	})
+	if result.OK || result.Code != CodeContentInvalid || !strings.Contains(result.Summary, "/structure/0") || !strings.Contains(result.Summary, "title") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestToolRegistryReportsPreciseInvalidSlideSpecFieldBeforeExecution(t *testing.T) {
+	outline := spec.Outline{
+		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", CreatedAt: 1, UpdatedAt: 1,
+		Sections: []spec.Section{{
+			ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start",
+			Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}},
+		}},
+	}
+	pack := mutationPack("pro_aaaaaa", outline)
+	pack.Command = model.RunCommand{
+		Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeCurrentPage, "sli_aaaaaa"),
+		Mode:  model.ModeExecute, Instruction: "write slide spec",
+	}
+	registry := NewToolRegistry()
+	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
+		t.Fatal(err)
+	}
+	args := map[string]any{
+		"op": "slide.spec.write", "slide_id": "sli_aaaaaa",
+		"spec": map[string]any{
+			"key_message": "Compare options",
+			"elements":    []any{map[string]any{"type": "comparison", "intent": "Compare A and B"}},
+		},
+	}
+	result := registry.Execute(context.Background(), map[string]bool{"mutate_ppt": true}, "mutate_ppt", args, DomainToolInput{
+		Args: args, Context: pack, Scope: pack.Command.Scope, Phase: PhaseExecuting, Mode: model.ModeExecute,
+	})
+	if result.OK || result.Code != CodeContentInvalid || !strings.Contains(result.Summary, "/spec/elements/0/type") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestSpecDeckScopeNeverDisclosesOrExecutesHTMLMutation(t *testing.T) {
 	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	tool := mutatePPTTool{pack: mutationPack("pro_aaaaaa", empty)}

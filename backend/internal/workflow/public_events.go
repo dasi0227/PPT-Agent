@@ -125,11 +125,11 @@ func milestoneText(title string, completed []PlanStep) string {
 	titles := make([]string, 0, len(completed))
 	for _, step := range completed {
 		if t := strings.TrimSpace(step.Title); t != "" {
-			titles = append(titles, t)
+			titles = append(titles, sanitizePublicText(t, 120))
 		}
 	}
 	if len(titles) > 0 {
-		return strings.Join(titles, "、") + "已完成"
+		return "已完成「" + strings.Join(titles, "」、「") + "」"
 	}
 	return sanitizePublicText(title, 180)
 }
@@ -377,7 +377,10 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			}
 			return "已更新" + targetName, targetDetail(target, "修改已完成"), true
 		}
-		return targetName + "操作失败", publicToolError(result), true
+		if creating {
+			return "创建" + targetName + "失败", publicToolError(result), true
+		}
+		return "更新" + targetName + "失败", publicToolError(result), true
 	case "render_slide":
 		if started {
 			return "检查" + targetName + "布局", "", true
