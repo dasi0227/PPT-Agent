@@ -411,6 +411,29 @@
   transform: translateY(-50%);
 }
 
+.plan-step-connector-fill {
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.plan-step-node-completed {
+  animation: plan-step-node-completed 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes plan-step-node-completed {
+  from { transform: scale(0.72); }
+  to { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-step-connector-fill {
+    transition-duration: 1ms;
+  }
+
+  .plan-step-node-completed {
+    animation: none;
+  }
+}
+
 .polish-sparkles-active {
   animation: polish-sparkles 900ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }

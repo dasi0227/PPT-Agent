@@ -1,6 +1,6 @@
 import React from 'react';
-import { CircleArrowRight, CircleCheck, CircleDashed, CircleX, ListChecks } from 'lucide-react';
-import type { PlanState, PlanStepStatus } from '../../api/types';
+import { Check, LoaderCircle, ListChecks, X } from 'lucide-react';
+import type { PlanState, PlanStep, PlanStepStatus } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { IconButton } from '../../components/ui/primitives';
 import {
@@ -9,18 +9,76 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 
-function StepIcon({ status }: { status: PlanStepStatus }) {
-  const classes = 'h-4 w-4 shrink-0';
+function StepNode({ status, animateCompletion }: { status: PlanStepStatus; animateCompletion: boolean }) {
+  const nodeClasses = 'relative z-10 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 bg-surface transition-colors duration-200';
   switch (status) {
     case 'completed':
-      return <CircleCheck data-plan-step-status="completed" className={cn(classes, 'text-success')} strokeWidth={1.75} />;
+      return (
+        <span
+          role="img"
+          aria-label="已完成"
+          data-plan-step-status="completed"
+          className={cn(nodeClasses, 'border-success bg-success text-white', animateCompletion && 'plan-step-node-completed')}
+        >
+          <Check className="h-3 w-3" strokeWidth={2.4} />
+        </span>
+      );
     case 'in_progress':
-      return <CircleArrowRight data-plan-step-status="in_progress" className={cn(classes, 'text-accent')} strokeWidth={1.75} />;
+      return (
+        <span role="img" aria-label="正在执行" data-plan-step-status="in_progress" className={cn(nodeClasses, 'border-accent/25 text-accent')}>
+          <LoaderCircle className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} />
+        </span>
+      );
     case 'failed':
-      return <CircleX data-plan-step-status="failed" className={cn(classes, 'text-danger')} strokeWidth={1.75} />;
+      return (
+        <span role="img" aria-label="执行失败" data-plan-step-status="failed" className={cn(nodeClasses, 'border-danger bg-danger-soft text-danger')}>
+          <X className="h-3 w-3" strokeWidth={2.2} />
+        </span>
+      );
     default:
-      return <CircleDashed data-plan-step-status="pending" className={cn(classes, 'text-text-400')} strokeWidth={1.75} />;
+      return <span role="img" aria-label="等待执行" data-plan-step-status="pending" className={cn(nodeClasses, 'border-border-strong')} />;
   }
+}
+
+function connectorReached(step: PlanStep, nextStep: PlanStep | undefined): boolean {
+  return step.status === 'completed' && nextStep !== undefined && nextStep.status !== 'pending';
+}
+
+function PlanStepRow({ step, nextStep }: { step: PlanStep; nextStep?: PlanStep }) {
+  const previousStatus = React.useRef(step.status);
+  const animateCompletion = previousStatus.current !== 'completed' && step.status === 'completed';
+  const reached = connectorReached(step, nextStep);
+
+  React.useEffect(() => {
+    previousStatus.current = step.status;
+  }, [step.status]);
+
+  return (
+    <li
+      className={cn(
+        'relative grid min-h-10 grid-cols-[20px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-2 py-2 text-sm',
+        step.status === 'in_progress' && 'bg-accent-soft/80',
+      )}
+    >
+      <StepNode status={step.status} animateCompletion={animateCompletion} />
+      {nextStep && (
+        <span
+          data-plan-step-connector="true"
+          data-reached={reached || undefined}
+          aria-hidden="true"
+          className="absolute -bottom-2.5 left-[17px] top-[30px] w-0.5 overflow-hidden rounded-full bg-border"
+        >
+          <span className={cn(
+            'plan-step-connector-fill block h-full w-full origin-top scale-y-0 rounded-full bg-success',
+            reached && 'scale-y-100',
+          )} />
+        </span>
+      )}
+      <PlanText className="max-w-[238px] leading-5 text-text-900">
+        {step.title}
+      </PlanText>
+    </li>
+  );
 }
 
 function RollingCharacter({ character }: { character: string }) {
@@ -176,29 +234,11 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
                 <RollingCount completed={completed} total={total} />
               </span>
             </div>
-            <div className="max-h-[280px] space-y-0.5 overflow-y-auto pr-1">
-              {plan?.steps.map((step) => (
-                <div
-                  key={step.id}
-                  className={cn(
-                    'flex min-h-8 items-center gap-2 rounded-lg px-2 py-1.5 text-sm',
-                    step.status === 'in_progress' && 'bg-accent-soft/80',
-                  )}
-                >
-                  <StepIcon status={step.status} />
-                  <div className="min-w-0 flex-1">
-                    <PlanText className="max-w-[238px] leading-5 text-text-900">
-                      {step.title}
-                    </PlanText>
-                    {step.detail && (
-                      <PlanText className="mt-0.5 max-w-[238px] text-xs leading-4 text-text-400">
-                        {step.detail}
-                      </PlanText>
-                    )}
-                  </div>
-                </div>
+            <ol className="max-h-[280px] overflow-y-auto pr-1">
+              {plan?.steps.map((step, index) => (
+                <PlanStepRow key={step.id} step={step} nextStep={plan.steps[index + 1]} />
               ))}
-            </div>
+            </ol>
           </>
         ) : (
           <div className="flex items-center justify-center py-4 text-sm text-text-400">暂无计划</div>
