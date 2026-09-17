@@ -126,10 +126,17 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 		PublicEventBase: NewPublicEventBase("r1"),
 		Total:           10, Max: 100, Ratio: 0.1, Status: "idle",
 		Buckets: map[string]int{
-			"read_ppt": 0, "run_command": 0, "system_prompt": 0, "user_prompt": 0,
-			"chat_history": 0, "uploaded_file": 0, "other": 10,
+			"system_prompt": 0, "runtime": 0, "chat_history": 0,
+			"read_file": 0, "run_command": 0, "other": 10,
 		},
-		Details: map[string][]ContextWindowBucketDetail{},
+		Details: map[string][]ContextWindowBucketDetail{
+			"system_prompt": {{Name: "system prompts"}, {Name: "tool definitions"}},
+			"runtime":       {{Name: "runtime state"}, {Name: "runtime resources"}, {Name: "runtime messages"}},
+			"chat_history":  {{Name: "user messages"}, {Name: "assistant messages"}, {Name: "other tools"}, {Name: "context summary"}},
+			"read_file":     {{Name: "read_ppt"}, {Name: "read_image"}, {Name: "read_project"}},
+			"run_command":   {{Name: "run_command"}},
+			"other":         {{Name: "other", Tokens: 10}},
+		},
 	}
 	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err != nil {
 		t.Fatal(err)
@@ -141,6 +148,20 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 	payload.Status = "running"
 	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err == nil {
 		t.Fatal("running context window status was accepted")
+	}
+	payload.Status = "idle"
+	raw, _ := json.Marshal(payload)
+	var legacyDetail map[string]any
+	_ = json.Unmarshal(raw, &legacyDetail)
+	groups := legacyDetail["details"].(map[string]any)
+	systemDetails := groups["system_prompt"].([]any)
+	systemDetails[0].(map[string]any)["source"] = "legacy"
+	if err := ValidatePublicEvent(EventContextWindowUpdated, legacyDetail); err == nil {
+		t.Fatal("legacy context window detail source was accepted")
+	}
+	payload.Buckets["user_prompt"] = 0
+	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err == nil {
+		t.Fatal("legacy context window bucket was accepted")
 	}
 }
 

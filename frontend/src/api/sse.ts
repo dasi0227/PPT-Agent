@@ -168,7 +168,8 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && typeof data.ratio === 'number' && data.ratio >= 0
         && ['idle', 'compacting'].includes(String(data.status))
         && validContextBuckets(data.buckets)
-        && isRecord(data.details);
+        && validContextDetails(data.details)
+        && validContextWindowTotals(data);
     case 'context.compacted':
       return validContextCompaction(data.compaction);
   }
@@ -186,8 +187,49 @@ function validSuggestedNextInputs(value: unknown): boolean {
 
 function validContextBuckets(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  return ['read_ppt', 'run_command', 'system_prompt', 'user_prompt', 'chat_history', 'uploaded_file', 'other']
+  const keys = ['system_prompt', 'runtime', 'chat_history', 'read_file', 'run_command', 'other'];
+  return Object.keys(value).length === keys.length
+    && keys
     .every((key) => isNonNegativeInteger(value[key]));
+}
+
+function validContextDetails(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const groups: Record<string, string[]> = {
+    system_prompt: ['system prompts', 'tool definitions'],
+    runtime: ['runtime state', 'runtime resources', 'runtime messages'],
+    chat_history: ['user messages', 'assistant messages', 'other tools', 'context summary'],
+    read_file: ['read_ppt', 'read_image', 'read_project'],
+    run_command: ['run_command'],
+    other: ['other'],
+  };
+  return Object.keys(value).length === Object.keys(groups).length
+    && Object.entries(groups).every(([key, names]) => {
+      const details = value[key];
+      return Array.isArray(details)
+        && details.length === names.length
+        && details.every((detail, index) => isRecord(detail)
+          && Object.keys(detail).length === 2
+          && detail.name === names[index]
+          && isNonNegativeInteger(detail.tokens));
+    });
+}
+
+function validContextWindowTotals(data: Record<string, unknown>): boolean {
+  if (!isRecord(data.buckets) || !isRecord(data.details)) return false;
+  let bucketTotal = 0;
+  for (const [key, tokens] of Object.entries(data.buckets)) {
+    if (!isNonNegativeInteger(tokens)) return false;
+    const bucketTokens = Number(tokens);
+    const details = data.details[key];
+    if (!Array.isArray(details)) return false;
+    const detailTotal = details.reduce((sum, detail) => (
+      isRecord(detail) && isNonNegativeInteger(detail.tokens) ? sum + detail.tokens : sum
+    ), 0);
+    if (detailTotal !== bucketTokens) return false;
+    bucketTotal += bucketTokens;
+  }
+  return bucketTotal === data.total;
 }
 
 function validContextCompaction(value: unknown): boolean {

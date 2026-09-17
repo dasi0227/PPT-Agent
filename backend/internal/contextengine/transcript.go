@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,9 +93,21 @@ func (s *FSTranscriptStore) LoadEntries(workDir, threadID string) ([]TranscriptE
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			return nil, err
 		}
+		if !isContextBucket(entry.Type) {
+			return nil, fmt.Errorf("unsupported transcript context type %q", entry.Type)
+		}
 		entries = append(entries, entry)
 	}
 	return entries, scanner.Err()
+}
+
+func isContextBucket(value ContextBucket) bool {
+	for _, bucket := range ContextBuckets {
+		if value == bucket {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *FSTranscriptStore) Replace(workDir, threadID string, messages []llm.Message) error {
@@ -158,19 +171,15 @@ func classifyTranscript(messages []llm.Message) []TranscriptEntry {
 			toolNames[call.ID] = call.Name
 		}
 		bucket := BucketChatHistory
-		if message.Role == llm.RoleUser {
-			bucket = BucketUserPrompt
-		}
 		if message.Role == llm.RoleTool {
-			switch toolNames[message.ToolCallID] {
-			case "read_ppt":
-				bucket = BucketReadPPT
-			case "run_command":
-				bucket = BucketRunCommand
-			}
+			bucket, _ = toolBucket(toolNames[message.ToolCallID])
+		} else if message.Role == llm.RoleSystem {
+			bucket = BucketSystemPrompt
+		} else if message.Role == llm.RoleUser && isRuntimeControlMessage(strings.TrimSpace(message.Text())) {
+			bucket = BucketRuntime
 		}
 		if messageContainsUploadedFile(message) {
-			bucket = BucketUploadedFile
+			bucket = BucketReadFile
 		}
 		entries = append(entries, TranscriptEntry{
 			Role: message.Role, Content: append([]llm.ContentPart(nil), message.Content...),

@@ -1,17 +1,16 @@
 import {
+  Activity,
   Ellipsis,
   FileText,
   Gauge,
   History,
-	Image,
   Loader2,
-  MessageSquare,
   Minimize2,
-  Shield,
+  ShieldCheck,
   Terminal,
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { ContextBucketKey, ContextWindowSnapshot } from '../../api/types';
+import type { ContextBucketKey, ContextWindowDetailName, ContextWindowSnapshot } from '../../api/types';
 import { threadsApi } from '../../api/threads';
 import { IconButton } from '../../components/ui/primitives';
 import { useBriefingStore } from '../../stores/briefingStore';
@@ -30,23 +29,62 @@ const BUCKETS: Array<{
   color: string;
   icon: typeof FileText;
 }> = [
-  { key: 'read_ppt', label: '读文件', color: '#2F67F6', icon: FileText },
-  { key: 'run_command', label: '跑命令', color: '#0D9488', icon: Terminal },
-  { key: 'system_prompt', label: '系统提示词', color: '#7C3AED', icon: Shield },
-  { key: 'user_prompt', label: '用户提示词', color: '#D97706', icon: MessageSquare },
+  { key: 'system_prompt', label: '系统提示词', color: '#7C3AED', icon: ShieldCheck },
+  { key: 'runtime', label: '运行时', color: '#2563EB', icon: Activity },
   { key: 'chat_history', label: '对话历史', color: '#DB2777', icon: History },
-	{ key: 'uploaded_file', label: '上传文件', color: '#EA580C', icon: Image },
+  { key: 'read_file', label: '读文件', color: '#D97706', icon: FileText },
+  { key: 'run_command', label: '跑命令', color: '#0D9488', icon: Terminal },
   { key: 'other', label: '其它', color: '#8793A2', icon: Ellipsis },
 ];
 
+const DETAIL_DESCRIPTIONS: Record<ContextWindowDetailName, string> = {
+  'system prompts': '定义 Agent 行为、模式与任务约束',
+  'tool definitions': '本轮可用工具及参数结构',
+  'runtime state': '当前模式、阶段、计划与执行进度',
+  'runtime resources': '可用资源、引用与已加载能力',
+  'runtime messages': '运行时自动注入的控制指令',
+  'user messages': '已提交的用户指令与补充',
+  'assistant messages': 'Agent 已生成的自然语言回复',
+  'other tools': '其余工具的调用与返回结果',
+  'context summary': '压缩历史生成的结构化摘要',
+  read_ppt: '通过 read_ppt 读取的页面与项目内容',
+  read_image: '读取或上传并送入模型的图片',
+  read_project: '每轮自动注入的项目上下文',
+  run_command: '终端命令、输出与执行状态',
+  other: '协议包装及尚未归类的剩余内容',
+};
+
 const EMPTY_BUCKETS: ContextWindowSnapshot['buckets'] = {
-  read_ppt: 0, run_command: 0, system_prompt: 0,
-  user_prompt: 0, chat_history: 0, uploaded_file: 0, other: 0,
+  system_prompt: 0,
+  runtime: 0,
+  chat_history: 0,
+  read_file: 0,
+  run_command: 0,
+  other: 0,
 };
+
 const EMPTY_DETAILS: ContextWindowSnapshot['details'] = {
-  read_ppt: [], run_command: [], system_prompt: [],
-  user_prompt: [], chat_history: [], uploaded_file: [], other: [],
+  system_prompt: [{ name: 'system prompts', tokens: 0 }, { name: 'tool definitions', tokens: 0 }],
+  runtime: [
+    { name: 'runtime state', tokens: 0 },
+    { name: 'runtime resources', tokens: 0 },
+    { name: 'runtime messages', tokens: 0 },
+  ],
+  chat_history: [
+    { name: 'user messages', tokens: 0 },
+    { name: 'assistant messages', tokens: 0 },
+    { name: 'other tools', tokens: 0 },
+    { name: 'context summary', tokens: 0 },
+  ],
+  read_file: [
+    { name: 'read_ppt', tokens: 0 },
+    { name: 'read_image', tokens: 0 },
+    { name: 'read_project', tokens: 0 },
+  ],
+  run_command: [{ name: 'run_command', tokens: 0 }],
+  other: [{ name: 'other', tokens: 0 }],
 };
+
 const EMPTY_SNAPSHOT: ContextWindowSnapshot = {
   total: 0,
   max: 0,
@@ -56,14 +94,18 @@ const EMPTY_SNAPSHOT: ContextWindowSnapshot = {
   details: EMPTY_DETAILS,
 };
 
-function formatTokens(tokens: number): string {
-  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
-  return String(tokens);
+function formatParentTokens(tokens: number): string {
+  return `${(tokens / 1000).toFixed(1)} k`;
+}
+
+function formatDetailTokens(tokens: number): string {
+  return `${(tokens / 1000).toFixed(2)} k`;
 }
 
 export function ContextWindowPanel() {
   const [open, setOpen] = useState(false);
   const panelId = useId();
+  const detailPanelId = `${panelId}-details`;
   const rootRef = useRef<HTMLDivElement>(null);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const threadId = useThreadStore((state) => (
@@ -83,7 +125,7 @@ export function ContextWindowPanel() {
   const briefingActive = useBriefingStore((state) => (
     activeProjectId ? state.sessions[activeProjectId]?.status === 'generating' : false
   ));
-  const [activeBucket, setActiveBucket] = useState<ContextBucketKey>('read_ppt');
+  const [activeBucket, setActiveBucket] = useState<ContextBucketKey>('system_prompt');
 
   useEffect(() => {
     if (threadId && model) void load(threadId, model);
@@ -113,6 +155,7 @@ export function ContextWindowPanel() {
 
   useEffect(() => {
     setOpen(false);
+    setActiveBucket('system_prompt');
   }, [activeProjectId, threadId]);
 
   const snapshot = session?.snapshot ?? EMPTY_SNAPSHOT;
@@ -120,14 +163,11 @@ export function ContextWindowPanel() {
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const compacting = session?.compacting || snapshot.status === 'compacting';
   const warning = snapshot.ratio >= 0.8;
-  const status = compacting ? 'compacting' : 'idle';
   const disabled = !threadId || !model || runActive || commitActive || briefingActive || polishing || compacting;
   const percent = Math.round(snapshot.ratio * 100);
-  const details = snapshot.details[activeBucket] ?? [];
-  const statusMeta = {
-    idle: { label: '空闲', classes: 'bg-panel-muted text-text-600', dot: 'bg-text-400' },
-    compacting: { label: '压缩中', classes: 'bg-success-soft text-success', dot: 'bg-success animate-pulse motion-reduce:animate-none' },
-  }[status];
+  const details = snapshot.details[activeBucket];
+  const activeBucketMeta = BUCKETS.find((bucket) => bucket.key === activeBucket) ?? BUCKETS[0];
+  const DetailIcon = activeBucketMeta.icon;
 
   const segments = useMemo(() => BUCKETS.map((bucket) => ({
     ...bucket,
@@ -179,11 +219,12 @@ export function ContextWindowPanel() {
         >
           <header className="flex min-h-11 items-center gap-2 px-3 py-2.5">
             <h2 className="text-xs font-semibold text-text-900">上下文窗口</h2>
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusMeta.classes}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
-              {statusMeta.label}
-            </span>
-            {session?.loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-text-400 motion-reduce:animate-none" />}
+            {session?.loading && (
+              <Loader2
+                aria-label="正在加载上下文窗口"
+                className="h-3.5 w-3.5 animate-spin text-text-400 motion-reduce:animate-none"
+              />
+            )}
             <button
               type="button"
               onClick={() => void runCompact()}
@@ -203,7 +244,7 @@ export function ContextWindowPanel() {
               {segments.map((segment) => (
                 <span
                   key={segment.key}
-                  className="h-full transition-[width] duration-500 ease-out"
+                  className="h-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
                   style={{ width: `${segment.width}%`, backgroundColor: segment.color }}
                 />
               ))}
@@ -216,11 +257,18 @@ export function ContextWindowPanel() {
             </span>
           </div>
 
-          <div className="context-window-scroll flex gap-1 overflow-x-auto border-t border-border px-2.5 py-2.5">
+          <div
+            role="tablist"
+            aria-label="上下文分桶"
+            className="context-window-scroll flex gap-1 overflow-x-auto border-t border-border px-2.5 py-2.5"
+          >
             {BUCKETS.map((bucket) => (
               <button
                 key={bucket.key}
                 type="button"
+                role="tab"
+                aria-selected={activeBucket === bucket.key}
+                aria-controls={detailPanelId}
                 onClick={() => setActiveBucket(bucket.key)}
                 className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold ${
                   activeBucket === bucket.key
@@ -230,35 +278,42 @@ export function ContextWindowPanel() {
               >
                 <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: bucket.color }} />
                 {bucket.label}
-                <span className="font-mono text-[9px] font-normal text-text-400">
-                  {formatTokens(snapshot.buckets[bucket.key])}
+                <span className="font-mono text-[9px] font-normal text-text-400 tabular-nums">
+                  {formatParentTokens(snapshot.buckets[bucket.key])}
                 </span>
               </button>
             ))}
           </div>
 
-          {details.length > 0 && (
-            <div className="max-h-48 overflow-y-auto border-t border-border">
-              {details.map((detail, index) => {
-                const bucket = BUCKETS.find((candidate) => candidate.key === activeBucket) ?? BUCKETS[0];
-                const Icon = bucket.icon;
-                return (
-                  <div key={`${detail.name}:${index}`} className="flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0">
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-panel" style={{ color: bucket.color }}>
-                      <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[11px] font-semibold text-text-900">{detail.name}</span>
-                      <span className="block truncate text-[9px] text-text-400">{detail.source}</span>
-                    </span>
-                    <span className="min-w-10 text-right font-mono text-[10px] text-text-600">
-                      {formatTokens(detail.tokens)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <div
+            id={detailPanelId}
+            role="tabpanel"
+            aria-label={`${activeBucketMeta.label}明细`}
+            className="max-h-52 overflow-y-auto border-t border-border"
+          >
+            {details.map((detail) => (
+              <div
+                key={detail.name}
+                className="grid grid-cols-[1.5rem_minmax(0,1fr)_4.75rem] items-center gap-2 border-b border-border px-3 py-2.5 last:border-b-0"
+              >
+                <span
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-panel"
+                  style={{ color: activeBucketMeta.color }}
+                >
+                  <DetailIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[11px] font-semibold leading-4 text-text-900">{detail.name}</span>
+                  <span className="block truncate text-[10px] leading-4 text-text-400">
+                    {DETAIL_DESCRIPTIONS[detail.name]}
+                  </span>
+                </span>
+                <span className="text-right font-mono text-[10px] leading-4 text-text-600 tabular-nums">
+                  {formatDetailTokens(detail.tokens)}
+                </span>
+              </div>
+            ))}
+          </div>
         </section>
       )}
     </div>

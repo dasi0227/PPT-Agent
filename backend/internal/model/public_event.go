@@ -359,7 +359,6 @@ type QuestionAnsweredPayload struct {
 
 type ContextWindowBucketDetail struct {
 	Name   string `json:"name"`
-	Source string `json:"source"`
 	Tokens int    `json:"tokens"`
 }
 
@@ -671,10 +670,46 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if !ok {
 			return errors.New("context window buckets are required")
 		}
-		for _, key := range []string{"read_ppt", "run_command", "system_prompt", "user_prompt", "chat_history", "uploaded_file", "other"} {
+		detailNames := map[string][]string{
+			"system_prompt": {"system prompts", "tool definitions"},
+			"runtime":       {"runtime state", "runtime resources", "runtime messages"},
+			"chat_history":  {"user messages", "assistant messages", "other tools", "context summary"},
+			"read_file":     {"read_ppt", "read_image", "read_project"},
+			"run_command":   {"run_command"},
+			"other":         {"other"},
+		}
+		if len(buckets) != len(detailNames) {
+			return errors.New("context window buckets must contain exactly six keys")
+		}
+		details, ok := data["details"].(map[string]any)
+		if !ok || len(details) != len(detailNames) {
+			return errors.New("context window details must contain exactly six groups")
+		}
+		bucketTotal := 0
+		for _, key := range []string{"system_prompt", "runtime", "chat_history", "read_file", "run_command", "other"} {
 			if !isInteger(buckets[key]) || intValue(buckets[key]) < 0 {
 				return errors.New("invalid context window bucket " + key)
 			}
+			bucketTotal += intValue(buckets[key])
+			items, ok := details[key].([]any)
+			if !ok || len(items) != len(detailNames[key]) {
+				return errors.New("invalid context window details " + key)
+			}
+			detailTotal := 0
+			for index, rawDetail := range items {
+				detail, ok := rawDetail.(map[string]any)
+				if !ok || len(detail) != 2 || stringValue(detail["name"]) != detailNames[key][index] ||
+					!isInteger(detail["tokens"]) || intValue(detail["tokens"]) < 0 {
+					return errors.New("invalid context window detail " + key)
+				}
+				detailTotal += intValue(detail["tokens"])
+			}
+			if detailTotal != intValue(buckets[key]) {
+				return errors.New("context window detail total does not match bucket " + key)
+			}
+		}
+		if bucketTotal != intValue(data["total"]) {
+			return errors.New("context window bucket total does not match total")
 		}
 	case EventContextCompacted:
 		compaction, ok := data["compaction"].(map[string]any)

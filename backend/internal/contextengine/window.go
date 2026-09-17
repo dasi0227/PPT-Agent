@@ -13,28 +13,34 @@ import (
 type ContextBucket string
 
 const (
-	BucketReadPPT      ContextBucket = "read_ppt"
-	BucketRunCommand   ContextBucket = "run_command"
 	BucketSystemPrompt ContextBucket = "system_prompt"
-	BucketUserPrompt   ContextBucket = "user_prompt"
+	BucketRuntime      ContextBucket = "runtime"
 	BucketChatHistory  ContextBucket = "chat_history"
-	BucketUploadedFile ContextBucket = "uploaded_file"
+	BucketReadFile     ContextBucket = "read_file"
+	BucketRunCommand   ContextBucket = "run_command"
 	BucketOther        ContextBucket = "other"
 )
 
 var ContextBuckets = [...]ContextBucket{
-	BucketReadPPT,
-	BucketRunCommand,
 	BucketSystemPrompt,
-	BucketUserPrompt,
+	BucketRuntime,
 	BucketChatHistory,
-	BucketUploadedFile,
+	BucketReadFile,
+	BucketRunCommand,
 	BucketOther,
+}
+
+var contextWindowDetailNames = map[ContextBucket][]string{
+	BucketSystemPrompt: {"system prompts", "tool definitions"},
+	BucketRuntime:      {"runtime state", "runtime resources", "runtime messages"},
+	BucketChatHistory:  {"user messages", "assistant messages", "other tools", "context summary"},
+	BucketReadFile:     {"read_ppt", "read_image", "read_project"},
+	BucketRunCommand:   {"run_command"},
+	BucketOther:        {"other"},
 }
 
 type WindowBucketDetail struct {
 	Name   string `json:"name"`
-	Source string `json:"source"`
 	Tokens int    `json:"tokens"`
 }
 
@@ -58,70 +64,76 @@ type PromptEstimateInput struct {
 type PromptEstimator struct{}
 
 func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
-	rawBuckets := emptyBuckets()
 	details := emptyDetails()
-	add := func(bucket ContextBucket, name, source string, tokens int) {
+	add := func(bucket ContextBucket, name string, tokens int) {
 		if tokens <= 0 {
 			return
 		}
-		rawBuckets[bucket] += tokens
-		details[bucket] = append(details[bucket], WindowBucketDetail{
-			Name: name, Source: source, Tokens: tokens,
-		})
-	}
-
-	add(BucketSystemPrompt, "system policy", "system_prompt", EstimateTextTokens(input.System)+messageEnvelopeTokens)
-	remainingUser := input.User
-	for _, section := range []struct {
-		name   string
-		bucket ContextBucket
-	}{
-		{name: "user_instruction", bucket: BucketUserPrompt},
-		{name: "run_command", bucket: BucketRunCommand},
-		{name: "project_context", bucket: BucketReadPPT},
-		{name: "target_context", bucket: BucketReadPPT},
-		{name: "related_context", bucket: BucketReadPPT},
-		{name: "design_context", bucket: BucketReadPPT},
-		{name: "theme_context", bucket: BucketReadPPT},
-		{name: "transcript", bucket: BucketChatHistory},
-	} {
-		content, rest := extractXMLSections(remainingUser, section.name)
-		remainingUser = rest
-		if content != "" {
-			add(section.bucket, section.name, section.name, EstimateTextTokens(content))
-		}
-	}
-	add(BucketOther, "runtime wrapper", "runtime_input", EstimateTextTokens(remainingUser)+messageEnvelopeTokens)
-
-	if len(input.Tools) > 0 {
-		add(BucketSystemPrompt, "tool schemas", "tools", EstimateValueTokens(input.Tools))
-	}
-	toolNames := map[string]string{}
-	lastUserIndex := -1
-	for index := range input.Messages {
-		if input.Messages[index].Role == llm.RoleUser {
-			lastUserIndex = index
-		}
-	}
-	for index, message := range input.Messages {
-		for _, call := range message.ToolCalls {
-			toolNames[call.ID] = call.Name
-		}
-		bucket := BucketChatHistory
-		source := string(message.Role)
-		if message.Role == llm.RoleUser {
-			bucket = BucketUserPrompt
-		}
-		if message.Role == llm.RoleTool {
-			source = toolNames[message.ToolCallID]
-			switch source {
-			case "read_ppt":
-				bucket = BucketReadPPT
-			case "run_command":
-				bucket = BucketRunCommand
+		for index := range details[bucket] {
+			if details[bucket][index].Name == name {
+				details[bucket][index].Tokens += tokens
+				return
 			}
 		}
-		addTranscriptMessage(add, message, index, bucket, source, index == lastUserIndex)
+	}
+
+	if input.System != "" {
+		add(BucketSystemPrompt, "system prompts", EstimateTextTokens(input.System)+messageEnvelopeTokens)
+	}
+	remainingUser := input.User
+	wrapperTokens := 0
+	for _, section := range []struct {
+		name, detail string
+		bucket       ContextBucket
+	}{
+		{name: "user_instruction", bucket: BucketChatHistory, detail: "user messages"},
+		{name: "run_command", bucket: BucketRuntime, detail: "runtime state"},
+		{name: "runtime_state", bucket: BucketRuntime, detail: "runtime state"},
+		{name: "project_context", bucket: BucketReadFile, detail: "read_project"},
+		{name: "target_context", bucket: BucketReadFile, detail: "read_project"},
+		{name: "related_context", bucket: BucketReadFile, detail: "read_project"},
+		{name: "design_context", bucket: BucketReadFile, detail: "read_project"},
+		{name: "theme_context", bucket: BucketReadFile, detail: "read_project"},
+		{name: "available_resources", bucket: BucketRuntime, detail: "runtime resources"},
+		{name: "available_context_refs", bucket: BucketRuntime, detail: "runtime resources"},
+		{name: "active_run_skills", bucket: BucketRuntime, detail: "runtime resources"},
+		{name: "referenced_components", bucket: BucketRuntime, detail: "runtime resources"},
+		{name: "mentioned_pages", bucket: BucketRuntime, detail: "runtime resources"},
+	} {
+		content, rest, wrappers := extractXMLSectionContents(remainingUser, section.name)
+		remainingUser = rest
+		wrapperTokens += wrappers
+		if content != "" && !(section.name == "user_instruction" && strings.TrimSpace(content) == `""`) {
+			add(section.bucket, section.detail, EstimateTextTokens(content))
+		}
+	}
+	if input.User != "" {
+		add(BucketOther, "other", EstimateTextTokens(remainingUser)+wrapperTokens+messageEnvelopeTokens)
+	}
+
+	if len(input.Tools) > 0 {
+		add(BucketSystemPrompt, "tool definitions", EstimateValueTokens(input.Tools))
+	}
+	toolNames := map[string]string{}
+	for _, message := range input.Messages {
+		for _, call := range message.ToolCalls {
+			toolNames[call.ID] = call.Name
+			bucket, detail := toolBucket(call.Name)
+			add(bucket, detail, EstimateValueTokens(call))
+		}
+		add(BucketOther, "other", messageEnvelopeTokens+EstimateTextTokens(message.ToolCallID))
+		toolName := ""
+		if message.Role == llm.RoleTool {
+			toolName = toolNames[message.ToolCallID]
+		}
+		for _, part := range message.Content {
+			bucket, detail := messagePartBucket(message, part, toolName)
+			tokens := EstimateTextTokens(part.Text)
+			if part.Type == "image" {
+				tokens = imageApproxTokens
+			}
+			add(bucket, detail, tokens)
+		}
 	}
 
 	factor := input.Factor
@@ -129,9 +141,10 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 		factor = 1
 	}
 	buckets := emptyBuckets()
-	scaledDetails := emptyDetails()
+	scaledDetails := make(map[ContextBucket][]WindowBucketDetail, len(ContextBuckets))
 	total := 0
 	for _, bucket := range ContextBuckets {
+		scaledDetails[bucket] = make([]WindowBucketDetail, 0, len(details[bucket]))
 		for _, detail := range details[bucket] {
 			detail.Tokens = int(math.Ceil(float64(detail.Tokens) * factor))
 			scaledDetails[bucket] = append(scaledDetails[bucket], detail)
@@ -146,51 +159,51 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	return WindowSnapshot{Total: total, Max: input.Max, Ratio: ratio, Buckets: buckets, Details: scaledDetails}
 }
 
-func addTranscriptMessage(
-	add func(ContextBucket, string, string, int),
-	message llm.Message,
-	index int,
-	bucket ContextBucket,
-	source string,
-	isLatestUser bool,
-) {
-	baseTokens := messageEnvelopeTokens + EstimateValueTokens(message.ToolCalls) + EstimateTextTokens(message.ToolCallID)
-	if baseTokens > 0 {
-		add(bucket, transcriptMessageName(message, index), source, baseTokens)
+func toolBucket(name string) (ContextBucket, string) {
+	switch name {
+	case "read_ppt":
+		return BucketReadFile, "read_ppt"
+	case "read_image":
+		return BucketReadFile, "read_image"
+	case "run_command":
+		return BucketRunCommand, "run_command"
+	default:
+		return BucketChatHistory, "other tools"
 	}
-	for partIndex, part := range message.Content {
-		partTokens := EstimateTextTokens(part.Text)
-		if part.Type == "image" {
-			partTokens = imageApproxTokens
-		}
-		partBucket, partSource := bucket, source
-		if strings.HasPrefix(part.Text, "<selected_dom>") || strings.HasPrefix(part.Text, "<selected_dom_reference>") {
-			partBucket, partSource = BucketChatHistory, "dom_selection"
-			if isLatestUser {
-				partBucket = BucketUserPrompt
-			}
-		}
-		if part.Type == "image" && strings.HasPrefix(part.ImageRef, "project:") {
-			partBucket, partSource = BucketUploadedFile, "message_attachment"
-		}
-		if source == "read_image" || attachmentDescriptionKind(part.Text) != "" {
-			partBucket = BucketUploadedFile
-			if source == "read_image" {
-				partSource = "read_image"
-			} else if attachmentDescriptionKind(part.Text) == "compacted_reference" {
-				partSource = "compacted_reference"
-			} else {
-				partSource = "message_attachment"
-			}
-		}
-		name := transcriptMessageName(message, index)
-		if attachmentName := attachmentDescriptionName(part.Text); attachmentName != "" {
-			name = attachmentName
-		} else if partBucket == BucketUploadedFile && part.Type == "image" {
-			name = "uploaded image " + itoa(partIndex+1)
-		}
-		add(partBucket, name, partSource, partTokens)
+}
+
+func messagePartBucket(message llm.Message, part llm.ContentPart, toolName string) (ContextBucket, string) {
+	if toolName != "" {
+		return toolBucket(toolName)
 	}
+	if part.Type == "image" || attachmentDescriptionKind(part.Text) != "" {
+		return BucketReadFile, "read_image"
+	}
+	text := strings.TrimSpace(part.Text)
+	if strings.HasPrefix(text, "<context_summary>") {
+		return BucketChatHistory, "context summary"
+	}
+	switch message.Role {
+	case llm.RoleSystem:
+		return BucketSystemPrompt, "system prompts"
+	case llm.RoleAssistant:
+		return BucketChatHistory, "assistant messages"
+	case llm.RoleUser:
+		if isRuntimeControlMessage(text) {
+			return BucketRuntime, "runtime messages"
+		}
+		return BucketChatHistory, "user messages"
+	case llm.RoleTool:
+		return BucketChatHistory, "other tools"
+	default:
+		return BucketOther, "other"
+	}
+}
+
+func isRuntimeControlMessage(text string) bool {
+	return strings.HasPrefix(text, "Ordinary assistant text cannot submit a plan.") ||
+		strings.HasPrefix(text, "Ordinary assistant text is not a completion signal.") ||
+		strings.HasPrefix(text, "The user approved the plan. Approval is complete")
 }
 
 func attachmentDescriptionKind(text string) string {
@@ -202,24 +215,6 @@ func attachmentDescriptionKind(text string) string {
 	default:
 		return ""
 	}
-}
-
-func attachmentDescriptionName(text string) string {
-	if attachmentDescriptionKind(text) == "" {
-		return ""
-	}
-	start := strings.Index(text, ">") + 1
-	end := strings.LastIndex(text, "<")
-	if start <= 0 || end <= start {
-		return ""
-	}
-	var value struct {
-		Name string `json:"name"`
-	}
-	if json.Unmarshal([]byte(text[start:end]), &value) != nil {
-		return ""
-	}
-	return value.Name
 }
 
 const (
@@ -255,44 +250,40 @@ func EstimateMessageTokens(message llm.Message) int {
 	return total
 }
 
-func extractXMLSections(value, name string) (string, string) {
-	open, close := "<"+name+">", "</"+name+">"
+func extractXMLSectionContents(value, name string) (string, string, int) {
+	openPrefix, close := "<"+name, "</"+name+">"
 	sections := strings.Builder{}
+	wrapperTokens := 0
+	searchFrom := 0
 	for {
-		start := strings.Index(value, open)
-		if start < 0 {
+		startOffset := strings.Index(value[searchFrom:], openPrefix)
+		if startOffset < 0 {
 			break
 		}
-		endOffset := strings.Index(value[start+len(open):], close)
+		start := searchFrom + startOffset
+		nameEnd := start + len(openPrefix)
+		if nameEnd >= len(value) || (value[nameEnd] != '>' && value[nameEnd] != ' ' && value[nameEnd] != '\t' && value[nameEnd] != '\n') {
+			searchFrom = nameEnd
+			continue
+		}
+		openEndOffset := strings.Index(value[nameEnd:], ">")
+		if openEndOffset < 0 {
+			break
+		}
+		contentStart := nameEnd + openEndOffset + 1
+		endOffset := strings.Index(value[contentStart:], close)
 		if endOffset < 0 {
 			break
 		}
-		end := start + len(open) + endOffset + len(close)
-		sections.WriteString(value[start:end])
+		contentEnd := contentStart + endOffset
+		end := contentEnd + len(close)
+		content := value[contentStart:contentEnd]
+		sections.WriteString(content)
+		wrapperTokens += max(0, EstimateTextTokens(value[start:end])-EstimateTextTokens(content))
 		value = value[:start] + value[end:]
+		searchFrom = 0
 	}
-	return sections.String(), value
-}
-
-func transcriptMessageName(message llm.Message, index int) string {
-	if message.Role == llm.RoleTool && message.ToolCallID != "" {
-		return "tool observation " + message.ToolCallID
-	}
-	return string(message.Role) + " message " + itoa(index+1)
-}
-
-func itoa(value int) string {
-	if value == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	index := len(buf)
-	for value > 0 {
-		index--
-		buf[index] = byte('0' + value%10)
-		value /= 10
-	}
-	return string(buf[index:])
+	return sections.String(), value, wrapperTokens
 }
 
 func emptyBuckets() map[ContextBucket]int {
@@ -306,9 +297,16 @@ func emptyBuckets() map[ContextBucket]int {
 func emptyDetails() map[ContextBucket][]WindowBucketDetail {
 	out := make(map[ContextBucket][]WindowBucketDetail, len(ContextBuckets))
 	for _, bucket := range ContextBuckets {
-		out[bucket] = []WindowBucketDetail{}
+		out[bucket] = make([]WindowBucketDetail, 0, len(contextWindowDetailNames[bucket]))
+		for _, name := range contextWindowDetailNames[bucket] {
+			out[bucket] = append(out[bucket], WindowBucketDetail{Name: name})
+		}
 	}
 	return out
+}
+
+func ContextWindowDetailNames(bucket ContextBucket) []string {
+	return append([]string(nil), contextWindowDetailNames[bucket]...)
 }
 
 type CalibrationStore struct {

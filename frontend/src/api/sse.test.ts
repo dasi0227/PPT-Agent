@@ -50,8 +50,15 @@ const payloads: Record<string, unknown> = {
     max: 65536,
     ratio: 32000 / 65536,
     status: 'idle',
-    buckets: { read_ppt: 10000, run_command: 2000, system_prompt: 8000, user_prompt: 2000, chat_history: 9000, uploaded_file: 1024, other: 1000 },
-    details: {},
+    buckets: { system_prompt: 8000, runtime: 2000, chat_history: 9000, read_file: 11024, run_command: 1000, other: 976 },
+    details: {
+      system_prompt: [{ name: 'system prompts', tokens: 5000 }, { name: 'tool definitions', tokens: 3000 }],
+      runtime: [{ name: 'runtime state', tokens: 1000 }, { name: 'runtime resources', tokens: 800 }, { name: 'runtime messages', tokens: 200 }],
+      chat_history: [{ name: 'user messages', tokens: 3000 }, { name: 'assistant messages', tokens: 3000 }, { name: 'other tools', tokens: 3000 }, { name: 'context summary', tokens: 0 }],
+      read_file: [{ name: 'read_ppt', tokens: 5000 }, { name: 'read_image', tokens: 1024 }, { name: 'read_project', tokens: 5000 }],
+      run_command: [{ name: 'run_command', tokens: 1000 }],
+      other: [{ name: 'other', tokens: 976 }],
+    },
   },
   'context.compacted': {
     ...base,
@@ -80,6 +87,22 @@ describe('SSE parser', () => {
     expect(parsePublicEvent('context.window.updated', { ...snapshot, status: 'compacting' })).not.toBeNull();
     expect(parsePublicEvent('context.window.updated', { ...snapshot, status: 'running' })).toBeNull();
     expect(parsePublicEvent('context.window.updated', { ...snapshot, status: 'warning' })).toBeNull();
+  });
+
+  it('rejects legacy context buckets and detail fields', () => {
+    const snapshot = payloads['context.window.updated'] as Record<string, unknown>;
+    expect(parsePublicEvent('context.window.updated', {
+      ...snapshot,
+      buckets: { ...(snapshot.buckets as Record<string, number>), user_prompt: 0 },
+    })).toBeNull();
+    const details = snapshot.details as Record<string, unknown[]>;
+    expect(parsePublicEvent('context.window.updated', {
+      ...snapshot,
+      details: {
+        ...details,
+        system_prompt: [{ name: 'system prompts', source: 'legacy', tokens: 5000 }, { name: 'tool definitions', tokens: 3000 }],
+      },
+    })).toBeNull();
   });
 
   it('rejects invalid run Skill projections', () => {

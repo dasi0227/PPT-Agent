@@ -68,42 +68,48 @@ func TestManualContextCompactRespectsProjectLock(t *testing.T) {
 }
 
 func TestReplaceTranscriptSnapshotPreservesFixedDetailsWithoutLayerLabels(t *testing.T) {
-	fixed := contextengine.WindowBucketDetail{Name: "system policy", Source: "system_prompt", Tokens: 20}
-	oldHistory := contextengine.WindowBucketDetail{Name: "assistant message 1", Source: "assistant", Tokens: 30}
-	newHistory := contextengine.WindowBucketDetail{Name: "user message 1", Source: "user", Tokens: 10}
-	base := contextengine.WindowSnapshot{
-		Total: 50, Max: 100, Ratio: 0.5,
-		Buckets: map[contextengine.ContextBucket]int{
-			contextengine.BucketSystemPrompt: 20,
-			contextengine.BucketChatHistory:  30,
-		},
-		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{
-			contextengine.BucketSystemPrompt: {fixed},
-			contextengine.BucketChatHistory:  {oldHistory},
-		},
-	}
-	before := contextengine.WindowSnapshot{
-		Total: 30, Max: 100,
-		Buckets: map[contextengine.ContextBucket]int{contextengine.BucketChatHistory: 30},
-		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{
-			contextengine.BucketChatHistory: {oldHistory},
-		},
-	}
-	after := contextengine.WindowSnapshot{
-		Total: 10, Max: 100,
-		Buckets: map[contextengine.ContextBucket]int{contextengine.BucketUserPrompt: 10},
-		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{
-			contextengine.BucketUserPrompt: {newHistory},
-		},
-	}
+	base := testWindowSnapshot(100, map[contextengine.ContextBucket]map[string]int{
+		contextengine.BucketSystemPrompt: {"system prompts": 20},
+		contextengine.BucketChatHistory:  {"assistant messages": 30},
+	})
+	before := testWindowSnapshot(100, map[contextengine.ContextBucket]map[string]int{
+		contextengine.BucketChatHistory: {"assistant messages": 30},
+	})
+	after := testWindowSnapshot(100, map[contextengine.ContextBucket]map[string]int{
+		contextengine.BucketChatHistory: {"user messages": 10},
+	})
 
 	got := replaceTranscriptSnapshot(base, before, after)
 	if got.Total != 30 || got.Ratio != 0.3 || got.Buckets[contextengine.BucketSystemPrompt] != 20 ||
-		got.Buckets[contextengine.BucketChatHistory] != 0 || got.Buckets[contextengine.BucketUserPrompt] != 10 {
+		got.Buckets[contextengine.BucketChatHistory] != 10 {
 		t.Fatalf("unexpected snapshot: %+v", got)
 	}
-	if len(got.Details[contextengine.BucketSystemPrompt]) != 1 || got.Details[contextengine.BucketSystemPrompt][0] != fixed ||
-		len(got.Details[contextengine.BucketUserPrompt]) != 1 || got.Details[contextengine.BucketUserPrompt][0] != newHistory {
+	if detailTokens(got.Details[contextengine.BucketSystemPrompt], "system prompts") != 20 ||
+		detailTokens(got.Details[contextengine.BucketChatHistory], "assistant messages") != 0 ||
+		detailTokens(got.Details[contextengine.BucketChatHistory], "user messages") != 10 {
 		t.Fatalf("unexpected details: %+v", got.Details)
 	}
+}
+
+func testWindowSnapshot(
+	max int,
+	values map[contextengine.ContextBucket]map[string]int,
+) contextengine.WindowSnapshot {
+	snapshot := contextengine.WindowSnapshot{
+		Max:     max,
+		Buckets: map[contextengine.ContextBucket]int{},
+		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{},
+	}
+	for _, bucket := range contextengine.ContextBuckets {
+		for _, name := range contextengine.ContextWindowDetailNames(bucket) {
+			tokens := values[bucket][name]
+			snapshot.Details[bucket] = append(snapshot.Details[bucket], contextengine.WindowBucketDetail{Name: name, Tokens: tokens})
+			snapshot.Buckets[bucket] += tokens
+		}
+		snapshot.Total += snapshot.Buckets[bucket]
+	}
+	if max > 0 {
+		snapshot.Ratio = float64(snapshot.Total) / float64(max)
+	}
+	return snapshot
 }

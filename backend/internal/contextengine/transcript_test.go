@@ -29,8 +29,8 @@ func TestFSTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(entries) != len(messages) ||
-		entries[0].Type != BucketUserPrompt ||
-		entries[2].Type != BucketReadPPT {
+		entries[0].Type != BucketChatHistory ||
+		entries[2].Type != BucketReadFile {
 		t.Fatalf("unexpected entries: %+v", entries)
 	}
 	loaded, err := store.Load(workDir, "thread")
@@ -46,5 +46,19 @@ func TestFSTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 	}
 	if strings.Contains(string(raw), `"layer"`) {
 		t.Fatalf("transcript still persists layer labels: %s", raw)
+	}
+}
+
+func TestFSTranscriptStoreRejectsLegacyContextTypes(t *testing.T) {
+	workDir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
+	path := filepath.Join(model.ProjectRoot(workDir), filepath.FromSlash(TranscriptPath("thread")))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"role":"user","content":[],"type":"user_prompt"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewFSTranscriptStore().LoadEntries(workDir, "thread"); err == nil {
+		t.Fatal("legacy transcript context type was accepted")
 	}
 }

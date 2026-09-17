@@ -2789,7 +2789,7 @@ func (r *Runtime) emitContextWindow(
 		details[key] = make([]model.ContextWindowBucketDetail, 0, len(snapshot.Details[bucket]))
 		for _, detail := range snapshot.Details[bucket] {
 			details[key] = append(details[key], model.ContextWindowBucketDetail{
-				Name: detail.Name, Source: detail.Source, Tokens: detail.Tokens,
+				Name: detail.Name, Tokens: detail.Tokens,
 			})
 		}
 	}

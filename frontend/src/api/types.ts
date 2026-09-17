@@ -510,17 +510,31 @@ export type SSEEventName =
   | 'context.compacted';
 
 export type ContextBucketKey =
-  | 'read_ppt'
-  | 'run_command'
   | 'system_prompt'
-  | 'user_prompt'
+  | 'runtime'
   | 'chat_history'
-	| 'uploaded_file'
+  | 'read_file'
+  | 'run_command'
+  | 'other';
+
+export type ContextWindowDetailName =
+  | 'system prompts'
+  | 'tool definitions'
+  | 'runtime state'
+  | 'runtime resources'
+  | 'runtime messages'
+  | 'user messages'
+  | 'assistant messages'
+  | 'other tools'
+  | 'context summary'
+  | 'read_ppt'
+  | 'read_image'
+  | 'read_project'
+  | 'run_command'
   | 'other';
 
 export interface ContextWindowDetail {
-  name: string;
-  source: string;
+  name: ContextWindowDetailName;
   tokens: number;
 }
 

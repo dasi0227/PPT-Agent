@@ -82,19 +82,29 @@ func loadPersistedWindowSnapshot(ctx context.Context, value any, threadID string
 	if err != nil || raw == "" {
 		return contextengine.WindowSnapshot{}, false
 	}
-	var payload struct {
-		Total   int                                                                `json:"total"`
-		Max     int                                                                `json:"max"`
-		Ratio   float64                                                            `json:"ratio"`
-		Buckets map[contextengine.ContextBucket]int                                `json:"buckets"`
-		Details map[contextengine.ContextBucket][]contextengine.WindowBucketDetail `json:"details"`
-	}
-	if json.Unmarshal([]byte(raw), &payload) != nil || payload.Max <= 0 {
+	var rawPayload map[string]any
+	if json.Unmarshal([]byte(raw), &rawPayload) != nil ||
+		model.ValidatePublicEvent(model.EventContextWindowUpdated, rawPayload) != nil {
 		return contextengine.WindowSnapshot{}, false
+	}
+	var payload model.ContextWindowUpdatedPayload
+	if json.Unmarshal([]byte(raw), &payload) != nil {
+		return contextengine.WindowSnapshot{}, false
+	}
+	buckets := make(map[contextengine.ContextBucket]int, len(payload.Buckets))
+	details := make(map[contextengine.ContextBucket][]contextengine.WindowBucketDetail, len(payload.Details))
+	for _, bucket := range contextengine.ContextBuckets {
+		key := string(bucket)
+		buckets[bucket] = payload.Buckets[key]
+		for _, detail := range payload.Details[key] {
+			details[bucket] = append(details[bucket], contextengine.WindowBucketDetail{
+				Name: detail.Name, Tokens: detail.Tokens,
+			})
+		}
 	}
 	return contextengine.WindowSnapshot{
 		Total: payload.Total, Max: payload.Max, Ratio: payload.Ratio,
-		Buckets: payload.Buckets, Details: payload.Details,
+		Buckets: buckets, Details: details,
 	}, true
 }
 
@@ -210,58 +220,34 @@ func replaceTranscriptSnapshot(
 	before contextengine.WindowSnapshot,
 	after contextengine.WindowSnapshot,
 ) contextengine.WindowSnapshot {
-	next := base
+	next := contextengine.WindowSnapshot{Max: base.Max}
 	next.Buckets = map[contextengine.ContextBucket]int{}
 	next.Details = map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{}
-	next.Total = base.Total - before.Total + after.Total
-	if next.Total < 0 {
-		next.Total = after.Total
+	for _, bucket := range contextengine.ContextBuckets {
+		for _, name := range contextengine.ContextWindowDetailNames(bucket) {
+			tokens := detailTokens(base.Details[bucket], name) -
+				detailTokens(before.Details[bucket], name) + detailTokens(after.Details[bucket], name)
+			if tokens < 0 {
+				tokens = detailTokens(after.Details[bucket], name)
+			}
+			next.Details[bucket] = append(next.Details[bucket], contextengine.WindowBucketDetail{
+				Name: name, Tokens: tokens,
+			})
+			next.Buckets[bucket] += tokens
+		}
+		next.Total += next.Buckets[bucket]
 	}
 	if next.Max > 0 {
 		next.Ratio = float64(next.Total) / float64(next.Max)
 	}
-	for _, bucket := range contextengine.ContextBuckets {
-		fixedTokens := base.Buckets[bucket] - before.Buckets[bucket]
-		if fixedTokens < 0 {
-			fixedTokens = 0
-		}
-		value := fixedTokens + after.Buckets[bucket]
-		if value < 0 {
-			value = after.Buckets[bucket]
-		}
-		next.Buckets[bucket] = value
-		fixedDetails := subtractWindowDetails(base.Details[bucket], before.Details[bucket])
-		fixedDetailTokens := 0
-		for _, detail := range fixedDetails {
-			fixedDetailTokens += detail.Tokens
-		}
-		if fixedDetailTokens == fixedTokens {
-			next.Details[bucket] = append(next.Details[bucket], fixedDetails...)
-		} else if fixedTokens > 0 {
-			next.Details[bucket] = append(next.Details[bucket], contextengine.WindowBucketDetail{
-				Name: "previous request context", Source: "last_snapshot", Tokens: fixedTokens,
-			})
-		}
-		next.Details[bucket] = append(next.Details[bucket], after.Details[bucket]...)
-	}
 	return next
 }
 
-func subtractWindowDetails(
-	base []contextengine.WindowBucketDetail,
-	removed []contextengine.WindowBucketDetail,
-) []contextengine.WindowBucketDetail {
-	counts := make(map[contextengine.WindowBucketDetail]int, len(removed))
-	for _, detail := range removed {
-		counts[detail]++
-	}
-	out := make([]contextengine.WindowBucketDetail, 0, len(base))
-	for _, detail := range base {
-		if counts[detail] > 0 {
-			counts[detail]--
-			continue
+func detailTokens(details []contextengine.WindowBucketDetail, name string) int {
+	for _, detail := range details {
+		if detail.Name == name {
+			return detail.Tokens
 		}
-		out = append(out, detail)
 	}
-	return out
+	return 0
 }
