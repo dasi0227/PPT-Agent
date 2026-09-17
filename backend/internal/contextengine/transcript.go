@@ -19,7 +19,6 @@ type TranscriptEntry struct {
 	ToolCallID string            `json:"tool_call_id,omitempty"`
 	ToolCalls  []llm.ToolCall    `json:"tool_calls,omitempty"`
 	Type       ContextBucket     `json:"type"`
-	Layer      ContextLayer      `json:"layer"`
 }
 
 func (entry TranscriptEntry) Message() llm.Message {
@@ -92,9 +91,6 @@ func (s *FSTranscriptStore) LoadEntries(workDir, threadID string) ([]TranscriptE
 		var entry TranscriptEntry
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			return nil, err
-		}
-		if entry.Layer != LayerTranscript {
-			return nil, errors.New("transcript entry must use transcript layer")
 		}
 		entries = append(entries, entry)
 	}
@@ -179,7 +175,7 @@ func classifyTranscript(messages []llm.Message) []TranscriptEntry {
 		entries = append(entries, TranscriptEntry{
 			Role: message.Role, Content: append([]llm.ContentPart(nil), message.Content...),
 			ToolCallID: message.ToolCallID, ToolCalls: append([]llm.ToolCall(nil), message.ToolCalls...),
-			Type: bucket, Layer: LayerTranscript,
+			Type: bucket,
 		})
 	}
 	return entries

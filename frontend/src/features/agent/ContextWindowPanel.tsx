@@ -119,18 +119,13 @@ export function ContextWindowPanel() {
   const runActive = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(runStatus);
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const compacting = session?.compacting || snapshot.status === 'compacting';
-  const status = compacting
-    ? 'compacting'
-    : runActive
-      ? (snapshot.ratio >= 0.8 ? 'warning' : 'running')
-      : 'idle';
+  const warning = snapshot.ratio >= 0.8;
+  const status = compacting ? 'compacting' : 'idle';
   const disabled = !threadId || !model || runActive || commitActive || briefingActive || polishing || compacting;
   const percent = Math.round(snapshot.ratio * 100);
   const details = snapshot.details[activeBucket] ?? [];
   const statusMeta = {
     idle: { label: '空闲', classes: 'bg-panel-muted text-text-600', dot: 'bg-text-400' },
-    running: { label: '运行中', classes: 'bg-accent-soft text-accent', dot: 'bg-accent animate-pulse motion-reduce:animate-none' },
-    warning: { label: '接近阈值', classes: 'bg-warning-soft text-warning', dot: 'bg-warning animate-pulse motion-reduce:animate-none' },
     compacting: { label: '压缩中', classes: 'bg-success-soft text-success', dot: 'bg-success animate-pulse motion-reduce:animate-none' },
   }[status];
 
@@ -163,11 +158,11 @@ export function ContextWindowPanel() {
         >
           <Gauge className="h-4 w-4" strokeWidth={1.75} />
         </IconButton>
-        {(status === 'warning' || status === 'compacting') && (
+        {(warning || compacting) && (
           <span
             aria-hidden="true"
             className={`pointer-events-none absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full ring-2 ring-panel ${
-              status === 'warning' ? 'bg-warning' : 'bg-success animate-pulse motion-reduce:animate-none'
+              compacting ? 'bg-success animate-pulse motion-reduce:animate-none' : 'bg-warning'
             }`}
           />
         )}
@@ -179,7 +174,7 @@ export function ContextWindowPanel() {
           role="dialog"
           aria-label="上下文窗口"
           className={`absolute right-0 top-[calc(100%+6px)] z-50 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border bg-surface shadow-[0_18px_46px_rgba(31,42,55,0.18)] ${
-            status === 'warning' ? 'border-warning/50' : 'border-border-strong'
+            warning && !compacting ? 'border-warning/50' : 'border-border-strong'
           }`}
         >
           <header className="flex min-h-11 items-center gap-2 px-3 py-2.5">
@@ -215,7 +210,7 @@ export function ContextWindowPanel() {
               <span className="absolute inset-y-0 left-[85%] w-px bg-danger/70" />
             </div>
             <span className={`min-w-10 text-right font-mono text-xs font-semibold tabular-nums ${
-              status === 'warning' ? 'text-warning' : status === 'compacting' ? 'text-success' : 'text-text-600'
+              compacting ? 'text-success' : warning ? 'text-warning' : 'text-text-600'
             }`}>
               {percent}%
             </span>
@@ -255,11 +250,6 @@ export function ContextWindowPanel() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[11px] font-semibold text-text-900">{detail.name}</span>
                       <span className="block truncate text-[9px] text-text-400">{detail.source}</span>
-                    </span>
-                    <span className={`rounded px-1.5 py-0.5 text-[8px] font-bold ${
-                      detail.layer === 'transcript' ? 'bg-accent-soft text-accent' : 'bg-panel-muted text-text-600'
-                    }`}>
-                      {detail.layer === 'transcript' ? 'TRANSCRIPT' : 'SEED'}
                     </span>
                     <span className="min-w-10 text-right font-mono text-[10px] text-text-600">
                       {formatTokens(detail.tokens)}

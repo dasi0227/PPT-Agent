@@ -221,17 +221,47 @@ func replaceTranscriptSnapshot(
 		next.Ratio = float64(next.Total) / float64(next.Max)
 	}
 	for _, bucket := range contextengine.ContextBuckets {
-		value := base.Buckets[bucket] - before.Buckets[bucket] + after.Buckets[bucket]
+		fixedTokens := base.Buckets[bucket] - before.Buckets[bucket]
+		if fixedTokens < 0 {
+			fixedTokens = 0
+		}
+		value := fixedTokens + after.Buckets[bucket]
 		if value < 0 {
 			value = after.Buckets[bucket]
 		}
 		next.Buckets[bucket] = value
-		for _, detail := range base.Details[bucket] {
-			if detail.Layer != contextengine.LayerTranscript {
-				next.Details[bucket] = append(next.Details[bucket], detail)
-			}
+		fixedDetails := subtractWindowDetails(base.Details[bucket], before.Details[bucket])
+		fixedDetailTokens := 0
+		for _, detail := range fixedDetails {
+			fixedDetailTokens += detail.Tokens
+		}
+		if fixedDetailTokens == fixedTokens {
+			next.Details[bucket] = append(next.Details[bucket], fixedDetails...)
+		} else if fixedTokens > 0 {
+			next.Details[bucket] = append(next.Details[bucket], contextengine.WindowBucketDetail{
+				Name: "previous request context", Source: "last_snapshot", Tokens: fixedTokens,
+			})
 		}
 		next.Details[bucket] = append(next.Details[bucket], after.Details[bucket]...)
 	}
 	return next
+}
+
+func subtractWindowDetails(
+	base []contextengine.WindowBucketDetail,
+	removed []contextengine.WindowBucketDetail,
+) []contextengine.WindowBucketDetail {
+	counts := make(map[contextengine.WindowBucketDetail]int, len(removed))
+	for _, detail := range removed {
+		counts[detail]++
+	}
+	out := make([]contextengine.WindowBucketDetail, 0, len(base))
+	for _, detail := range base {
+		if counts[detail] > 0 {
+			counts[detail]--
+			continue
+		}
+		out = append(out, detail)
+	}
+	return out
 }

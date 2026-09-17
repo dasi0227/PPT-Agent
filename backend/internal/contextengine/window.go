@@ -32,18 +32,10 @@ var ContextBuckets = [...]ContextBucket{
 	BucketOther,
 }
 
-type ContextLayer string
-
-const (
-	LayerSeed       ContextLayer = "seed"
-	LayerTranscript ContextLayer = "transcript"
-)
-
 type WindowBucketDetail struct {
-	Name   string       `json:"name"`
-	Source string       `json:"source"`
-	Layer  ContextLayer `json:"layer"`
-	Tokens int          `json:"tokens"`
+	Name   string `json:"name"`
+	Source string `json:"source"`
+	Tokens int    `json:"tokens"`
 }
 
 type WindowSnapshot struct {
@@ -68,17 +60,17 @@ type PromptEstimator struct{}
 func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	rawBuckets := emptyBuckets()
 	details := emptyDetails()
-	add := func(bucket ContextBucket, name, source string, layer ContextLayer, tokens int) {
+	add := func(bucket ContextBucket, name, source string, tokens int) {
 		if tokens <= 0 {
 			return
 		}
 		rawBuckets[bucket] += tokens
 		details[bucket] = append(details[bucket], WindowBucketDetail{
-			Name: name, Source: source, Layer: layer, Tokens: tokens,
+			Name: name, Source: source, Tokens: tokens,
 		})
 	}
 
-	add(BucketSystemPrompt, "system policy", "system_prompt", LayerSeed, EstimateTextTokens(input.System)+messageEnvelopeTokens)
+	add(BucketSystemPrompt, "system policy", "system_prompt", EstimateTextTokens(input.System)+messageEnvelopeTokens)
 	remainingUser := input.User
 	for _, section := range []struct {
 		name   string
@@ -96,13 +88,13 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 		content, rest := extractXMLSections(remainingUser, section.name)
 		remainingUser = rest
 		if content != "" {
-			add(section.bucket, section.name, section.name, LayerSeed, EstimateTextTokens(content))
+			add(section.bucket, section.name, section.name, EstimateTextTokens(content))
 		}
 	}
-	add(BucketOther, "runtime wrapper", "runtime_input", LayerSeed, EstimateTextTokens(remainingUser)+messageEnvelopeTokens)
+	add(BucketOther, "runtime wrapper", "runtime_input", EstimateTextTokens(remainingUser)+messageEnvelopeTokens)
 
 	if len(input.Tools) > 0 {
-		add(BucketSystemPrompt, "tool schemas", "tools", LayerSeed, EstimateValueTokens(input.Tools))
+		add(BucketSystemPrompt, "tool schemas", "tools", EstimateValueTokens(input.Tools))
 	}
 	toolNames := map[string]string{}
 	lastUserIndex := -1
@@ -155,7 +147,7 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 }
 
 func addTranscriptMessage(
-	add func(ContextBucket, string, string, ContextLayer, int),
+	add func(ContextBucket, string, string, int),
 	message llm.Message,
 	index int,
 	bucket ContextBucket,
@@ -164,7 +156,7 @@ func addTranscriptMessage(
 ) {
 	baseTokens := messageEnvelopeTokens + EstimateValueTokens(message.ToolCalls) + EstimateTextTokens(message.ToolCallID)
 	if baseTokens > 0 {
-		add(bucket, transcriptMessageName(message, index), source, LayerTranscript, baseTokens)
+		add(bucket, transcriptMessageName(message, index), source, baseTokens)
 	}
 	for partIndex, part := range message.Content {
 		partTokens := EstimateTextTokens(part.Text)
@@ -197,7 +189,7 @@ func addTranscriptMessage(
 		} else if partBucket == BucketUploadedFile && part.Type == "image" {
 			name = "uploaded image " + itoa(partIndex+1)
 		}
-		add(partBucket, name, partSource, LayerTranscript, partTokens)
+		add(partBucket, name, partSource, partTokens)
 	}
 }
 

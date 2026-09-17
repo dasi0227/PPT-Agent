@@ -567,7 +567,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
 		schemas = append(schemas, controlSchemas(state.phase, state.mode, state.plan)...)
-		r.measureContextWindow(input, state, schemas, "")
+		r.measureContextWindow(input, state, schemas)
 		if err := r.compactIfNeeded(ctx, input, state, schemas); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
@@ -2720,7 +2720,7 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	if err := r.persistTranscript(input, state); err != nil {
 		return err
 	}
-	r.measureContextWindow(input, state, schemas, "")
+	r.measureContextWindow(input, state, schemas)
 	if state.tokens >= state.budget.ContextCompactionThreshold {
 		state.nextCompactionTokens = state.tokens + 1024
 	} else {
@@ -2740,7 +2740,7 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	return nil
 }
 
-func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, schemas []ToolSchema, status string) {
+func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, schemas []ToolSchema) {
 	request := AgentRequest{
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase,
 		Context: state.pack, Mode: state.mode, Plan: state.plan, Changes: state.changeSet(),
@@ -2769,14 +2769,7 @@ func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, sche
 	}); ok {
 		snapshots.SetSnapshot(input.Context.Manifest.ThreadID, snapshot)
 	}
-	if status == "" {
-		status = "running"
-		if state.budget.ContextCompactionThreshold > 0 &&
-			snapshot.Total*100 >= state.budget.ContextCompactionThreshold*94 {
-			status = "warning"
-		}
-	}
-	r.emitContextWindow(input.Emitter, state, snapshot, status)
+	r.emitContextWindow(input.Emitter, state, snapshot, "idle")
 }
 
 func (r *Runtime) emitContextWindow(
@@ -2796,7 +2789,7 @@ func (r *Runtime) emitContextWindow(
 		details[key] = make([]model.ContextWindowBucketDetail, 0, len(snapshot.Details[bucket]))
 		for _, detail := range snapshot.Details[bucket] {
 			details[key] = append(details[key], model.ContextWindowBucketDetail{
-				Name: detail.Name, Source: detail.Source, Layer: string(detail.Layer), Tokens: detail.Tokens,
+				Name: detail.Name, Source: detail.Source, Tokens: detail.Tokens,
 			})
 		}
 	}

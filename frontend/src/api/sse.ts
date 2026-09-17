@@ -166,7 +166,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
       return isNonNegativeInteger(data.total)
         && typeof data.max === 'number' && Number.isInteger(data.max) && data.max > 0
         && typeof data.ratio === 'number' && data.ratio >= 0
-        && ['idle', 'running', 'warning', 'compacting'].includes(String(data.status))
+        && ['idle', 'compacting'].includes(String(data.status))
         && validContextBuckets(data.buckets)
         && isRecord(data.details);
     case 'context.compacted':

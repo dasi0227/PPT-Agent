@@ -121,6 +121,29 @@ func TestRunLifecyclePayloadsValidate(t *testing.T) {
 	}
 }
 
+func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
+	payload := ContextWindowUpdatedPayload{
+		PublicEventBase: NewPublicEventBase("r1"),
+		Total:           10, Max: 100, Ratio: 0.1, Status: "idle",
+		Buckets: map[string]int{
+			"read_ppt": 0, "run_command": 0, "system_prompt": 0, "user_prompt": 0,
+			"chat_history": 0, "uploaded_file": 0, "other": 10,
+		},
+		Details: map[string][]ContextWindowBucketDetail{},
+	}
+	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.Status = "compacting"
+	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.Status = "running"
+	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err == nil {
+		t.Fatal("running context window status was accepted")
+	}
+}
+
 func TestMessageFinalV4RequiresBoundedSuggestionsAndHistoryRevision(t *testing.T) {
 	payload := MessageFinalPayload{
 		PublicEventBase: NewPublicEventBase("r1"), MessageID: "m1", Text: "完成。",

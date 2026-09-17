@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>上下文窗口弹窗 · 前端原型</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --workspace: #edf1f6;
+      --surface: #ffffff;
+      --surface-soft: #f7f9fc;
+      --surface-muted: #eef2f7;
+      --text: #17202b;
+      --text-secondary: #536171;
+      --text-muted: #667586;
+      --border: #dce3eb;
+      --border-strong: #c8d2de;
+      --focus: #2764e7;
+      --system: #7c3aed;
+      --runtime: #2563eb;
+      --history: #db2777;
+      --read: #d97706;
+      --command: #0d9488;
+      --other: #8793a2;
+      --font: Aptos, "SF Pro Text", "PingFang SC", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-width: 320px; margin: 0; }
+    body {
+      min-height: 100dvh;
+      padding: 36px 24px 56px;
+      background: var(--workspace);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+    }
+    button { border: 0; background: none; color: inherit; font: inherit; }
+    button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    ::selection { background: #dbe8ff; color: #15376f; }
+
+    .page {
+      width: min(980px, 100%);
+      margin: 0 auto;
+    }
+    .page-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+    .page-head h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 720;
+      letter-spacing: -0.015em;
+    }
+    .page-head p {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(360px, 420px) minmax(420px, 1fr);
+      align-items: start;
+      gap: 22px;
+    }
+
+    .popup {
+      overflow: hidden;
+      border: 0;
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 18px 46px rgba(31, 42, 55, 0.18);
+    }
+    .popup-head {
+      display: flex;
+      min-height: 48px;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 13px;
+    }
+    .popup-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 720;
+      letter-spacing: -0.01em;
+    }
+    .compact-button {
+      display: inline-flex;
+      height: 29px;
+      margin-left: auto;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .compact-button:hover { border-color: var(--border-strong); color: var(--text); }
+    .compact-button svg { width: 13px; height: 13px; }
+
+    .meter-row {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 1px 13px 13px;
+    }
+    .meter {
+      position: relative;
+      display: flex;
+      min-width: 0;
+      height: 8px;
+      flex: 1;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--surface-muted);
+    }
+    .meter-segment { height: 100%; min-width: 0; transition: opacity 160ms ease-out; }
+    .meter-segment.dimmed { opacity: 0.25; }
+    .meter-threshold {
+      position: absolute;
+      inset-block: 0;
+      left: 85%;
+      width: 1px;
+      background: rgba(190, 45, 45, 0.62);
+    }
+    .percent {
+      min-width: 42px;
+      color: var(--text-secondary);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .tabs-wrap {
+      position: relative;
+      border-top: 1px solid var(--border);
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      padding: 9px 10px;
+      scrollbar-color: #c4ceda transparent;
+      scrollbar-width: thin;
+    }
+    .tab {
+      display: inline-flex;
+      height: 29px;
+      flex: none;
+      align-items: center;
+      gap: 5px;
+      padding: 0 8px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .tab:hover { background: var(--surface-soft); color: var(--text); }
+    .tab[aria-selected="true"] {
+      border-color: var(--border-strong);
+      background: var(--surface-soft);
+      color: var(--text);
+    }
+    .tab-dot { width: 8px; height: 8px; flex: none; border-radius: 3px; }
+    .tab-token {
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+
+    .details {
+      border-top: 1px solid var(--border);
+    }
+    .detail-row {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) 70px;
+      min-height: 52px;
+      align-items: center;
+      column-gap: 10px;
+      padding: 8px 13px;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail-row:last-child { border-bottom: 0; }
+    .detail-icon {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 7px;
+      background: color-mix(in srgb, var(--bucket-color) 10%, white);
+      color: var(--bucket-color);
+    }
+    .detail-icon svg { width: 15px; height: 15px; stroke-width: 1.8; }
+    .detail-copy { min-width: 0; line-height: 1.25; }
+    .detail-name {
+      display: block;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 680;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .detail-description {
+      display: block;
+      overflow: hidden;
+      margin-top: 3px;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .detail-token {
+      align-self: center;
+      color: var(--text-secondary);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      line-height: 1;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .choices {
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 12px 34px rgba(31, 42, 55, 0.1);
+      overflow: hidden;
+    }
+    .choices-head {
+      padding: 13px 15px 11px;
+      border-bottom: 1px solid var(--border);
+    }
+    .choices-head h2 { margin: 0; font-size: 13px; font-weight: 720; }
+    .choices-head p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+    .choice-row {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      min-height: 66px;
+      padding: 9px 15px;
+      border-bottom: 1px solid var(--border);
+    }
+    .choice-row:last-child { border-bottom: 0; }
+    .choice-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 680;
+    }
+    .choice-label::before {
+      width: 8px;
+      height: 8px;
+      flex: none;
+      border-radius: 3px;
+      background: var(--bucket-color);
+      content: "";
+    }
+    .choice-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .icon-choice {
+      position: relative;
+      display: grid;
+      min-width: 0;
+      height: 46px;
+      place-items: center;
+      align-content: center;
+      gap: 3px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .icon-choice:hover { border-color: var(--border-strong); color: var(--text-secondary); }
+    .icon-choice[aria-pressed="true"] {
+      border-color: color-mix(in srgb, var(--bucket-color) 46%, var(--border));
+      background: color-mix(in srgb, var(--bucket-color) 7%, white);
+      color: var(--bucket-color);
+    }
+    .icon-choice svg { width: 16px; height: 16px; stroke-width: 1.8; }
+    .icon-choice span {
+      width: 100%;
+      overflow: hidden;
+      font-size: 12px;
+      line-height: 1;
+      text-align: center;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .recommendation {
+      position: absolute;
+      top: -6px;
+      right: -4px;
+      padding: 2px 4px;
+      border: 1px solid color-mix(in srgb, var(--bucket-color) 32%, white);
+      border-radius: 4px;
+      background: var(--surface);
+      color: var(--bucket-color);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    @media (max-width: 860px) {
+      body { padding: 24px 14px 40px; }
+      .workspace { grid-template-columns: minmax(0, 1fr); }
+      .popup { width: min(420px, 100%); }
+      .choices { width: min(560px, 100%); }
+    }
+    @media (max-width: 480px) {
+      .page-head { display: block; }
+      .page-head p { margin-top: 5px; }
+      .choice-row { grid-template-columns: 1fr; gap: 8px; }
+      .choice-list { grid-template-columns: repeat(4, minmax(62px, 1fr)); overflow-x: auto; padding-top: 4px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="page-head">
+      <h1>上下文窗口弹窗</h1>
+      <p>交互原型 · 点击分桶查看明细，点击图标候选替换预览</p>
+    </header>
+
+    <div class="workspace">
+      <section class="popup" aria-label="上下文窗口原型">
+        <header class="popup-head">
+          <h2 class="popup-title">上下文窗口</h2>
+          <button class="compact-button" type="button">
+            <i data-lucide="minimize-2"></i>
+            压缩
+          </button>
+        </header>
+
+        <div class="meter-row">
+          <div class="meter" id="meter" aria-label="上下文窗口使用量"></div>
+          <output class="percent" id="percent">0%</output>
+        </div>
+
+        <div class="tabs-wrap">
+          <div class="tabs" id="tabs" role="tablist" aria-label="上下文分桶"></div>
+        </div>
+
+        <div class="details" id="details" role="tabpanel"></div>
+      </section>
+
+      <aside class="choices" aria-label="分桶图标候选">
+        <header class="choices-head">
+          <h2>图标选择</h2>
+          <p>每类提供四个 Lucide 候选；标记“推荐”的图标是原型默认方案。</p>
+        </header>
+        <div id="choices"></div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    const WINDOW_TOKENS = 65536;
+    const BUCKETS = [
+      {
+        key: 'system_prompt', label: '系统提示词', color: 'var(--system)', tokens: 15924,
+        icon: 'shield-check', recommended: 'shield-check',
+        options: [['shield-check', 'ShieldCheck'], ['shield', 'Shield'], ['scroll-text', 'ScrollText'], ['notebook-text', 'NotebookText']],
+        details: [
+          ['system prompts', '定义 Agent 行为、模式与任务约束', 9860],
+          ['tool definitions', '本轮可用工具及参数结构', 6064],
+        ],
+      },
+      {
+        key: 'runtime', label: '运行时', color: 'var(--runtime)', tokens: 3486,
+        icon: 'activity', recommended: 'activity',
+        options: [['activity', 'Activity'], ['cpu', 'Cpu'], ['workflow', 'Workflow'], ['orbit', 'Orbit']],
+        details: [
+          ['runtime state', '当前模式、阶段、计划与执行进度', 2084],
+          ['runtime resources', '可用资源、引用与已加载能力', 1178],
+          ['runtime messages', '运行时自动注入的控制指令', 224],
+        ],
+      },
+      {
+        key: 'chat_history', label: '对话历史', color: 'var(--history)', tokens: 8740,
+        icon: 'history', recommended: 'history',
+        options: [['history', 'History'], ['messages-square', 'MessagesSquare'], ['message-square-text', 'MessageSquareText'], ['message-circle', 'MessageCircle']],
+        details: [
+          ['user messages', '已提交的用户指令与补充', 3620],
+          ['assistant messages', 'Agent 已生成的自然语言回复', 2880],
+          ['other tools', '其余工具的调用与返回结果', 2240],
+          ['context summary', '压缩历史生成的结构化摘要', 0],
+        ],
+      },
+      {
+        key: 'read_file', label: '读文件', color: 'var(--read)', tokens: 4244,
+        icon: 'file-text', recommended: 'file-text',
+        options: [['file-text', 'FileText'], ['files', 'Files'], ['folder-open', 'FolderOpen'], ['book-open-text', 'BookOpenText']],
+        details: [
+          ['read_ppt', '通过 read_ppt 读取的页面与项目内容', 1800],
+          ['read_image', '读取或上传并送入模型的图片', 24],
+          ['read_project', '每轮自动注入的项目上下文', 2420],
+        ],
+      },
+      {
+        key: 'run_command', label: '跑命令', color: 'var(--command)', tokens: 1320,
+        icon: 'terminal', recommended: 'terminal',
+        options: [['terminal', 'Terminal'], ['square-terminal', 'SquareTerminal'], ['code-2', 'Code2'], ['command', 'Command']],
+        details: [
+          ['run_command', '终端命令、输出与执行状态', 1320],
+        ],
+      },
+      {
+        key: 'other', label: '其它', color: 'var(--other)', tokens: 0,
+        icon: 'ellipsis', recommended: 'ellipsis',
+        options: [['ellipsis', 'Ellipsis'], ['boxes', 'Boxes'], ['circle-help', 'CircleHelp'], ['shapes', 'Shapes']],
+        details: [
+          ['other', '协议包装及尚未归类的剩余内容', 0],
+        ],
+      },
+    ];
+
+    let activeKey = 'system_prompt';
+
+    function formatParentTokens(value) {
+      return `${(value / 1000).toFixed(1)} k`;
+    }
+
+    function formatDetailTokens(value) {
+      return `${(value / 1000).toFixed(2)} k`;
+    }
+
+    function renderMeter() {
+      const active = BUCKETS.find((bucket) => bucket.key === activeKey);
+      const total = BUCKETS.reduce((sum, bucket) => sum + bucket.tokens, 0);
+      document.getElementById('meter').innerHTML = BUCKETS.map((bucket) => `
+        <span
+          class="meter-segment${active && active.key !== bucket.key ? ' dimmed' : ''}"
+          style="width:${bucket.tokens / WINDOW_TOKENS * 100}%;background:${bucket.color}"
+          title="${bucket.label} ${formatParentTokens(bucket.tokens)}"
+        ></span>
+      `).join('') + '<span class="meter-threshold" aria-hidden="true"></span>';
+      document.getElementById('percent').textContent = `${Math.round(total / WINDOW_TOKENS * 100)}%`;
+    }
+
+    function renderTabs() {
+      document.getElementById('tabs').innerHTML = BUCKETS.map((bucket) => `
+        <button
+          class="tab"
+          type="button"
+          role="tab"
+          aria-selected="${bucket.key === activeKey}"
+          data-bucket="${bucket.key}"
+        >
+          <span class="tab-dot" style="background:${bucket.color}"></span>
+          <span>${bucket.label}</span>
+          <span class="tab-token">${formatParentTokens(bucket.tokens)}</span>
+        </button>
+      `).join('');
+
+      document.querySelectorAll('[data-bucket]').forEach((button) => {
+        button.addEventListener('click', () => {
+          activeKey = button.dataset.bucket;
+          renderPopup();
+        });
+      });
+    }
+
+    function renderDetails() {
+      const bucket = BUCKETS.find((item) => item.key === activeKey);
+      document.getElementById('details').innerHTML = bucket.details.map(([name, description, tokens]) => `
+        <div class="detail-row" style="--bucket-color:${bucket.color}">
+          <span class="detail-icon"><i data-lucide="${bucket.icon}"></i></span>
+          <span class="detail-copy">
+            <span class="detail-name">${name}</span>
+            <span class="detail-description">${description}</span>
+          </span>
+          <span class="detail-token">${formatDetailTokens(tokens)}</span>
+        </div>
+      `).join('');
+    }
+
+    function renderChoices() {
+      document.getElementById('choices').innerHTML = BUCKETS.map((bucket) => `
+        <div class="choice-row" style="--bucket-color:${bucket.color}">
+          <div class="choice-label">${bucket.label}</div>
+          <div class="choice-list">
+            ${bucket.options.map(([icon, label]) => `
+              <button
+                class="icon-choice"
+                type="button"
+                aria-label="${bucket.label}使用 ${label} 图标"
+                aria-pressed="${bucket.icon === icon}"
+                data-icon-bucket="${bucket.key}"
+                data-icon="${icon}"
+              >
+                ${icon === bucket.recommended ? '<b class="recommendation">推荐</b>' : ''}
+                <i data-lucide="${icon}"></i>
+                <span>${label}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+
+      document.querySelectorAll('[data-icon-bucket]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const bucket = BUCKETS.find((item) => item.key === button.dataset.iconBucket);
+          bucket.icon = button.dataset.icon;
+          renderChoices();
+          renderDetails();
+          lucide.createIcons();
+        });
+      });
+    }
+
+    function renderPopup() {
+      renderMeter();
+      renderTabs();
+      renderDetails();
+      lucide.createIcons();
+    }
+
+    renderChoices();
+    renderPopup();
+  </script>
+</body>
+</html>

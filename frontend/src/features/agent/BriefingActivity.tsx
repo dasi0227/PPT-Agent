@@ -1,11 +1,11 @@
 import {
+  BookOpenText,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Clipboard,
-  FileText,
   Loader2,
   MessageSquarePlus,
   RefreshCw,
@@ -154,7 +154,7 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
     <article className="overflow-hidden rounded-lg border border-border bg-surface">
       <header className="flex min-h-10 items-center gap-2 border-b border-border px-3 py-2">
         <span className="grid h-6 w-6 place-items-center rounded-full bg-accent-soft text-accent">
-          <FileText className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <BookOpenText className="h-3.5 w-3.5" strokeWidth={1.75} />
         </span>
         <span className="text-xs font-semibold text-text-900">
           {item.kind === 'kickoff' ? 'Kickoff' : 'Handoff'}

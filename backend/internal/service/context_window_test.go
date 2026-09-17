@@ -66,3 +66,44 @@ func TestManualContextCompactRespectsProjectLock(t *testing.T) {
 		t.Fatalf("error=%v", err)
 	}
 }
+
+func TestReplaceTranscriptSnapshotPreservesFixedDetailsWithoutLayerLabels(t *testing.T) {
+	fixed := contextengine.WindowBucketDetail{Name: "system policy", Source: "system_prompt", Tokens: 20}
+	oldHistory := contextengine.WindowBucketDetail{Name: "assistant message 1", Source: "assistant", Tokens: 30}
+	newHistory := contextengine.WindowBucketDetail{Name: "user message 1", Source: "user", Tokens: 10}
+	base := contextengine.WindowSnapshot{
+		Total: 50, Max: 100, Ratio: 0.5,
+		Buckets: map[contextengine.ContextBucket]int{
+			contextengine.BucketSystemPrompt: 20,
+			contextengine.BucketChatHistory:  30,
+		},
+		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{
+			contextengine.BucketSystemPrompt: {fixed},
+			contextengine.BucketChatHistory:  {oldHistory},
+		},
+	}
+	before := contextengine.WindowSnapshot{
+		Total: 30, Max: 100,
+		Buckets: map[contextengine.ContextBucket]int{contextengine.BucketChatHistory: 30},
+		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{
+			contextengine.BucketChatHistory: {oldHistory},
+		},
+	}
+	after := contextengine.WindowSnapshot{
+		Total: 10, Max: 100,
+		Buckets: map[contextengine.ContextBucket]int{contextengine.BucketUserPrompt: 10},
+		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{
+			contextengine.BucketUserPrompt: {newHistory},
+		},
+	}
+
+	got := replaceTranscriptSnapshot(base, before, after)
+	if got.Total != 30 || got.Ratio != 0.3 || got.Buckets[contextengine.BucketSystemPrompt] != 20 ||
+		got.Buckets[contextengine.BucketChatHistory] != 0 || got.Buckets[contextengine.BucketUserPrompt] != 10 {
+		t.Fatalf("unexpected snapshot: %+v", got)
+	}
+	if len(got.Details[contextengine.BucketSystemPrompt]) != 1 || got.Details[contextengine.BucketSystemPrompt][0] != fixed ||
+		len(got.Details[contextengine.BucketUserPrompt]) != 1 || got.Details[contextengine.BucketUserPrompt][0] != newHistory {
+		t.Fatalf("unexpected details: %+v", got.Details)
+	}
+}

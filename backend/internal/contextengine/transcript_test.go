@@ -3,9 +3,11 @@ package contextengine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 func TestFSTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
@@ -28,8 +30,7 @@ func TestFSTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 	}
 	if len(entries) != len(messages) ||
 		entries[0].Type != BucketUserPrompt ||
-		entries[2].Type != BucketReadPPT ||
-		entries[2].Layer != LayerTranscript {
+		entries[2].Type != BucketReadPPT {
 		t.Fatalf("unexpected entries: %+v", entries)
 	}
 	loaded, err := store.Load(workDir, "thread")
@@ -38,5 +39,12 @@ func TestFSTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 	}
 	if TranscriptPath("thread") != "threads/thread/model.jsonl" {
 		t.Fatalf("unexpected transcript path: %s", TranscriptPath("thread"))
+	}
+	raw, err := os.ReadFile(filepath.Join(model.ProjectRoot(workDir), filepath.FromSlash(TranscriptPath("thread"))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"layer"`) {
+		t.Fatalf("transcript still persists layer labels: %s", raw)
 	}
 }

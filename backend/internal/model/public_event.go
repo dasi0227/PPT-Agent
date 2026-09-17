@@ -360,7 +360,6 @@ type QuestionAnsweredPayload struct {
 type ContextWindowBucketDetail struct {
 	Name   string `json:"name"`
 	Source string `json:"source"`
-	Layer  string `json:"layer"`
 	Tokens int    `json:"tokens"`
 }
 
@@ -665,14 +664,14 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if !ok || ratio < 0 {
 			return errors.New("invalid context window ratio")
 		}
-		if !oneOf(stringValue(data["status"]), "running", "warning", "compacting", "idle") {
+		if !oneOf(stringValue(data["status"]), "compacting", "idle") {
 			return errors.New("invalid context window status")
 		}
 		buckets, ok := data["buckets"].(map[string]any)
 		if !ok {
 			return errors.New("context window buckets are required")
 		}
-		for _, key := range []string{"read_ppt", "run_command", "system_prompt", "user_prompt", "chat_history", "other"} {
+		for _, key := range []string{"read_ppt", "run_command", "system_prompt", "user_prompt", "chat_history", "uploaded_file", "other"} {
 			if !isInteger(buckets[key]) || intValue(buckets[key]) < 0 {
 				return errors.New("invalid context window bucket " + key)
 			}

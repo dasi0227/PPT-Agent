@@ -521,7 +521,6 @@ export type ContextBucketKey =
 export interface ContextWindowDetail {
   name: string;
   source: string;
-  layer: 'seed' | 'transcript';
   tokens: number;
 }
 
@@ -529,7 +528,7 @@ export interface ContextWindowSnapshot {
   total: number;
   max: number;
   ratio: number;
-  status: 'idle' | 'running' | 'warning' | 'compacting';
+  status: 'idle' | 'compacting';
   buckets: Record<ContextBucketKey, number>;
   details: Record<ContextBucketKey, ContextWindowDetail[]>;
 }
