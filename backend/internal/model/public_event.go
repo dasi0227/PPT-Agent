@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const PublicEventSchemaVersion = 4
@@ -715,11 +717,31 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		compaction, ok := data["compaction"].(map[string]any)
 		if !ok || strings.TrimSpace(stringValue(compaction["id"])) == "" ||
 			!oneOf(stringValue(compaction["trigger"]), "auto", "manual") ||
-			strings.TrimSpace(stringValue(compaction["summary"])) == "" {
+			!validPublicCompactionTitle(stringValue(compaction["title"])) ||
+			strings.TrimSpace(stringValue(compaction["summary"])) == "" ||
+			!isInteger(compaction["before_tokens"]) || intValue(compaction["before_tokens"]) < 0 ||
+			!isInteger(compaction["after_tokens"]) || intValue(compaction["after_tokens"]) < 0 ||
+			!isInteger(compaction["max_tokens"]) || intValue(compaction["max_tokens"]) <= 0 ||
+			!isInteger(compaction["reclaimed_tokens"]) || intValue(compaction["reclaimed_tokens"]) < 0 ||
+			!isInteger(compaction["duration_ms"]) || int64Value(compaction["duration_ms"]) < 0 ||
+			!isInteger(compaction["created_at"]) || int64Value(compaction["created_at"]) < 0 {
 			return errors.New("invalid context compaction")
 		}
 	}
 	return nil
+}
+
+func validPublicCompactionTitle(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || utf8.RuneCountInString(value) > 48 || strings.ContainsAny(value, "\r\n\t<>") {
+		return false
+	}
+	for _, current := range value {
+		if unicode.IsControl(current) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateSuggestedNextInputs(value any) error {

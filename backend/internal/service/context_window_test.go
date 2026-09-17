@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextcompact"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -15,6 +17,12 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 		"## 目标与意图\n继续任务\n\n## 已完成改动\n已读取页面\n\n## 关键决策\n保持设计\n\n## 未决问题\n无\n\n## 下一步\n继续",
 	)
 	fixture.provider.Caps = llm.Capabilities{ContextWindowTokens: 65536}
+	fixture.provider.Script = []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{
+		ID: "compact-1", Name: "compact_context", Args: map[string]any{
+			"title":   "收敛上下文协议与实现",
+			"summary": "## 目标与意图\n继续任务\n\n## 已完成改动\n已读取页面\n\n## 关键决策\n保持设计\n\n## 未决问题\n无\n\n## 下一步\n继续",
+		},
+	}}}}
 	transcripts := contextengine.NewFSTranscriptStore()
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent(`<run_user_instruction run_id="r1">first</run_user_instruction>`)},
@@ -32,6 +40,7 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if result.Compaction.Trigger != model.ContextCompactionManual ||
+		result.Compaction.Title != "收敛上下文协议与实现" ||
 		result.Compaction.Summary == "" ||
 		result.Snapshot.Status != "idle" {
 		t.Fatalf("unexpected compact result: %+v", result)
@@ -44,7 +53,7 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 		t.Fatalf("transcript was not destructively replaced: %+v", loaded)
 	}
 	records, err := fixture.store.ListThreadContextCompactions(context.Background(), fixture.thread.ID)
-	if err != nil || len(records) != 1 {
+	if err != nil || len(records) != 1 || records[0].Title != result.Compaction.Title {
 		t.Fatalf("compaction record missing: records=%+v err=%v", records, err)
 	}
 }
@@ -64,6 +73,37 @@ func TestManualContextCompactRespectsProjectLock(t *testing.T) {
 	agentErr := model.AsAgentError(err, "INTERNAL", "test")
 	if agentErr.Code != "COMPACT_ACTIVE" {
 		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestAutoContextCompactPersistsGeneratedTitle(t *testing.T) {
+	fixture := newBriefingFixture(t)
+	execution := &workflowExecution{
+		pack:    contextengine.ContextPack{Manifest: contextengine.ContextManifest{ThreadID: fixture.thread.ID}},
+		project: fixture.project,
+		store:   fixture.store,
+		runID:   "run_auto",
+	}
+	compaction, err := execution.recordAutoCompaction(
+		context.Background(),
+		contextcompact.Result{Title: "收敛自动压缩结果", Summary: "## 目标与意图\n继续"},
+		testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
+			contextengine.BucketChatHistory: {"assistant messages": 600},
+		}),
+		testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
+			contextengine.BucketChatHistory: {"context summary": 200},
+		}),
+		2*time.Second,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if compaction.Title != "收敛自动压缩结果" || compaction.Trigger != model.ContextCompactionAuto {
+		t.Fatalf("unexpected auto compaction: %+v", compaction)
+	}
+	records, err := fixture.store.ListThreadContextCompactions(context.Background(), fixture.thread.ID)
+	if err != nil || len(records) != 1 || records[0].Title != compaction.Title {
+		t.Fatalf("auto compaction was not persisted: records=%+v err=%v", records, err)
 	}
 }
 

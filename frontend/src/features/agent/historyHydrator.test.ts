@@ -16,11 +16,14 @@ const terminal = (runId = 'r1', data: Record<string, unknown> = {}) => ({
 });
 
 describe('history hydrator', () => {
-  it('restores context compaction cards outside run grouping', () => {
+	it('restores context compaction timeline items outside run grouping', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'context_compaction', {
         id: 'cmp_1',
+			thread_id: 't1',
+			project_id: 'p1',
         trigger: 'manual',
+			title: '整理当前任务上下文',
         summary: '## 下一步\n继续',
         before_tokens: 50000,
         after_tokens: 24000,
@@ -34,9 +37,21 @@ describe('history hydrator', () => {
       type: 'context_compaction',
       compactionId: 'cmp_1',
       trigger: 'manual',
+			title: '整理当前任务上下文',
     });
     expect(hydrated.items[0]).not.toHaveProperty('runId');
   });
+
+	it('rejects legacy compaction history without a title', () => {
+		const hydrated = hydrateRunFromHistory([
+			entry(1, 'context_compaction', {
+				id: 'cmp_legacy', trigger: 'manual', summary: 'legacy',
+				before_tokens: 10, after_tokens: 5, max_tokens: 100,
+				reclaimed_tokens: 5, duration_ms: 1, created_at: 1,
+			}, 'cmp_legacy'),
+		]);
+		expect(hydrated.items).toEqual([]);
+	});
 
   it('reuses public reducers for tools, plan, question, final, and terminal', () => {
     const hydrated = hydrateRunFromHistory([

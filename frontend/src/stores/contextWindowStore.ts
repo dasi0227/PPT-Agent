@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { threadsApi } from '../api/threads';
 import type { ContextWindowSnapshot } from '../api/types';
 import { showGlobalError } from './toastStore';
+import { useRunStore } from './runStore';
 
 interface ContextWindowSession {
   snapshot: ContextWindowSnapshot | null;
@@ -64,6 +65,7 @@ export const useContextWindowStore = create<ContextWindowState>((set) => ({
           [threadId]: { snapshot: result.snapshot, loading: false, compacting: false },
         },
       }));
+      useRunStore.getState().upsertContextCompaction(threadId, result.compaction);
       return true;
     } catch (error) {
       showGlobalError(error instanceof Error ? error.message : '上下文压缩失败，请重试');

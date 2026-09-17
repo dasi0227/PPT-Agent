@@ -6,6 +6,7 @@ import {
   PublicError,
   BriefingKind,
   BriefingVersion,
+  ContextCompaction,
   PublicLoadedResource,
   PublicTarget,
   QuestionAnswer,
@@ -175,6 +176,7 @@ export interface ContextCompactionTimelineItem extends BaseTimelineItem {
   type: 'context_compaction';
   compactionId: string;
   trigger: 'auto' | 'manual';
+  title: string;
   summary: string;
   beforeTokens: number;
   afterTokens: number;
@@ -234,12 +236,31 @@ function eventItemId(event: SSEEvent, fallback: string): string {
   return event.id ? `${event.data.run_id}:${event.id}` : `${event.data.run_id}:${fallback}`;
 }
 
-function upsertById(state: TimelineItem[], item: TimelineItem): TimelineItem[] {
+export function upsertTimelineItem(state: TimelineItem[], item: TimelineItem): TimelineItem[] {
   const index = state.findIndex((candidate) => candidate.id === item.id);
   if (index < 0) return [...state, item];
   const copy = state.slice();
   copy[index] = item;
   return copy;
+}
+
+export function contextCompactionTimelineItem(
+  compaction: ContextCompaction,
+): ContextCompactionTimelineItem {
+  return {
+    id: `context-compaction:${compaction.id}`,
+    type: 'context_compaction',
+    compactionId: compaction.id,
+    trigger: compaction.trigger,
+    title: compaction.title,
+    summary: compaction.summary,
+    beforeTokens: compaction.before_tokens,
+    afterTokens: compaction.after_tokens,
+    maxTokens: compaction.max_tokens,
+    reclaimedTokens: compaction.reclaimed_tokens,
+    durationMs: compaction.duration_ms,
+    timestamp: compaction.created_at * 1000,
+  };
 }
 
 function settleInterruptedTools(state: TimelineItem[], runId: string): TimelineItem[] {
@@ -271,19 +292,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
 		return state;
     case 'context.compacted': {
       const compaction = event.data.compaction;
-      return upsertById(state, {
-        id: `context-compaction:${compaction.id}`,
-        type: 'context_compaction',
-        compactionId: compaction.id,
-        trigger: compaction.trigger,
-        summary: compaction.summary,
-        beforeTokens: compaction.before_tokens,
-        afterTokens: compaction.after_tokens,
-        maxTokens: compaction.max_tokens,
-        reclaimedTokens: compaction.reclaimed_tokens,
-        durationMs: compaction.duration_ms,
-        timestamp: compaction.created_at * 1000,
-      });
+      return upsertTimelineItem(state, contextCompactionTimelineItem(compaction));
     }
 
     case 'run.resumed': {
@@ -295,23 +304,23 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         text: '已从中断处恢复，继续执行',
         timestamp,
       };
-      return upsertById(settleInterruptedTools(state, runId), item);
+      return upsertTimelineItem(settleInterruptedTools(state, runId), item);
     }
 
 	case 'plan.approval_requested': {
 		const plan = reducePlan(null, event)!;
-		return upsertById(state, { id: `${runId}:plan-approval:${event.data.interaction_id}`, type: 'plan_approval', runId, interactionId: event.data.interaction_id, plan, timestamp });
+		return upsertTimelineItem(state, { id: `${runId}:plan-approval:${event.data.interaction_id}`, type: 'plan_approval', runId, interactionId: event.data.interaction_id, plan, timestamp });
 	}
 	case 'plan.approval_answered': {
 		const id = `${runId}:plan-approval:${event.data.interaction_id}`;
 		const existing = state.find((item): item is PlanApprovalItem => item.type === 'plan_approval' && item.id === id);
-		return existing ? upsertById(state, { ...existing, answer: { decision: event.data.decision, feedback: event.data.feedback } }) : state;
+		return existing ? upsertTimelineItem(state, { ...existing, answer: { decision: event.data.decision, feedback: event.data.feedback } }) : state;
 	}
     case 'command.permission_requested': {
       const id = `${runId}:command-permission:${event.data.interaction_id}`;
       const existing = state.find((item): item is CommandPermissionItem =>
         item.type === 'command_permission' && item.id === id);
-      return upsertById(state, {
+      return upsertTimelineItem(state, {
         id,
         type: 'command_permission',
         runId,
@@ -332,12 +341,12 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       if (!existing || existing.callId !== event.data.call_id || existing.commandHash !== event.data.command_hash) {
         return state;
       }
-      return upsertById(state, { ...existing, answer: event.data.decision });
+      return upsertTimelineItem(state, { ...existing, answer: event.data.decision });
     }
     case 'scope.expansion_requested': {
       const id = `${runId}:scope-expansion:${event.data.interaction_id}`;
       const existing = state.find((item): item is ScopeExpansionItem => item.type === 'scope_expansion' && item.id === id);
-      return upsertById(state, {
+      return upsertTimelineItem(state, {
         id, type: 'scope_expansion', runId, interactionId: event.data.interaction_id,
         callId: event.data.call_id, baseRevision: event.data.base_revision,
         currentScope: event.data.current_scope, requestedAddition: event.data.requested_addition,
@@ -349,7 +358,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       const id = `${runId}:scope-expansion:${event.data.interaction_id}`;
       const existing = state.find((item): item is ScopeExpansionItem => item.type === 'scope_expansion' && item.id === id);
       if (!existing || existing.callId !== event.data.call_id || existing.baseRevision !== event.data.base_revision) return state;
-      return upsertById(state, { ...existing, answer: { decision: event.data.decision, appliedScope: event.data.applied_scope } });
+      return upsertTimelineItem(state, { ...existing, answer: { decision: event.data.decision, appliedScope: event.data.applied_scope } });
     }
 
     case 'message.reasoning': {
@@ -361,7 +370,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         text: event.data.text,
         timestamp,
       };
-      return upsertById(state, item);
+      return upsertTimelineItem(state, item);
     }
 
     case 'message.milestone': {
@@ -374,7 +383,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         completedStepIds: event.data.completed_step_ids,
         timestamp,
       };
-      return upsertById(state, item);
+      return upsertTimelineItem(state, item);
     }
 
     case 'message.final': {
@@ -390,7 +399,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         durationMs: existing?.durationMs,
         timestamp,
       };
-      return upsertById(state, item);
+      return upsertTimelineItem(state, item);
     }
 
     case 'tool.started': {
@@ -414,7 +423,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         resources: existing?.resources,
         timestamp: existing?.timestamp ?? timestamp,
       };
-      return upsertById(state, item);
+      return upsertTimelineItem(state, item);
     }
 
     case 'tool.completed': {
@@ -438,7 +447,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         resources: event.data.resources,
         timestamp: existing?.timestamp ?? timestamp,
       };
-      return upsertById(state, item);
+      return upsertTimelineItem(state, item);
     }
 
     case 'question.asked': {
@@ -456,7 +465,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         displayText: existing?.displayText,
         timestamp: existing?.timestamp ?? timestamp,
       };
-      return upsertById(state, item);
+      return upsertTimelineItem(state, item);
     }
 
     case 'question.answered': {
@@ -464,7 +473,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       const existing = state.find((item): item is QuestionItem =>
         item.type === 'question' && item.id === id);
       if (!existing) return state;
-      return upsertById(state, {
+      return upsertTimelineItem(state, {
         ...existing,
         answer: event.data.answer,
         displayText: event.data.display_text,
@@ -511,7 +520,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         timestamp,
       };
       const settledState = event.data.reason === 'superseded' ? settleInterruptedTools(state, runId) : state;
-      return upsertById(settledState, item);
+      return upsertTimelineItem(settledState, item);
     }
   }
 }

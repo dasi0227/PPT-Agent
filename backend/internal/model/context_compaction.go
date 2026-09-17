@@ -13,6 +13,7 @@ type ContextCompaction struct {
 	ProjectID    string                   `json:"project_id"`
 	RunID        string                   `json:"run_id,omitempty"`
 	Trigger      ContextCompactionTrigger `json:"trigger"`
+	Title        string                   `json:"title"`
 	Summary      string                   `json:"summary"`
 	BeforeTokens int                      `json:"before_tokens"`
 	AfterTokens  int                      `json:"after_tokens"`

@@ -64,7 +64,7 @@ const payloads: Record<string, unknown> = {
     ...base,
     compaction: {
       id: 'cmp_1', thread_id: 't1', project_id: 'p1', run_id: 'r1',
-      trigger: 'auto', summary: '## 目标与意图\n继续',
+			trigger: 'auto', title: '收敛上下文协议与前端实现', summary: '## 目标与意图\n继续',
       before_tokens: 56000, after_tokens: 30000, max_tokens: 65536,
       reclaimed_tokens: 26000, duration_ms: 4200, created_at: 1,
     },
@@ -88,6 +88,17 @@ describe('SSE parser', () => {
     expect(parsePublicEvent('context.window.updated', { ...snapshot, status: 'running' })).toBeNull();
     expect(parsePublicEvent('context.window.updated', { ...snapshot, status: 'warning' })).toBeNull();
   });
+
+	it('requires a safe bounded title for context compaction events', () => {
+		const payload = payloads['context.compacted'] as Record<string, unknown>;
+		const compaction = payload.compaction as Record<string, unknown>;
+		for (const title of ['', 'bad\ntitle', '长'.repeat(49), '<strong>unsafe</strong>']) {
+			expect(parsePublicEvent('context.compacted', {
+				...payload,
+				compaction: { ...compaction, title },
+			})).toBeNull();
+		}
+	});
 
   it('rejects legacy context buckets and detail fields', () => {
     const snapshot = payloads['context.window.updated'] as Record<string, unknown>;

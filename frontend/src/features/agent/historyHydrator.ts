@@ -8,9 +8,10 @@ import type {
   Skill,
 	PublicDOMSelection,
 	ReferenceOrderItem,
+  ContextCompaction,
 } from '../../api/types';
 import { parsePublicEvent } from '../../api/sse';
-import { reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
+import { contextCompactionTimelineItem, reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
 import { reduceNextInputSuggestions, type NextInputSuggestionsState } from './nextInputSuggestions';
 
 export interface HistoryEntry {
@@ -53,6 +54,43 @@ export interface HistorySessionState {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readContextCompaction(data: Record<string, unknown>): ContextCompaction | null {
+  const trigger = data.trigger;
+  const title = data.title;
+  const nonNegativeFields = [
+    data.before_tokens,
+    data.after_tokens,
+    data.reclaimed_tokens,
+    data.duration_ms,
+    data.created_at,
+  ];
+  if ((trigger !== 'auto' && trigger !== 'manual') ||
+    typeof data.id !== 'string' || data.id === '' ||
+    typeof data.thread_id !== 'string' || data.thread_id === '' ||
+    typeof data.project_id !== 'string' || data.project_id === '' ||
+    typeof title !== 'string' || title.trim() === '' || Array.from(title).length > 48 ||
+    /[\r\n\t\p{Cc}<>]/u.test(title) ||
+    typeof data.summary !== 'string' || data.summary.trim() === '' ||
+    !nonNegativeFields.every((value) => typeof value === 'number' && Number.isInteger(value) && value >= 0) ||
+    typeof data.max_tokens !== 'number' || !Number.isInteger(data.max_tokens) || data.max_tokens <= 0 ||
+    (data.run_id !== undefined && typeof data.run_id !== 'string')) return null;
+  return {
+    id: data.id,
+    thread_id: data.thread_id,
+    project_id: data.project_id,
+    run_id: data.run_id as string | undefined,
+    trigger,
+    title,
+    summary: data.summary,
+    before_tokens: data.before_tokens as number,
+    after_tokens: data.after_tokens as number,
+    max_tokens: data.max_tokens,
+    reclaimed_tokens: data.reclaimed_tokens as number,
+    duration_ms: data.duration_ms as number,
+    created_at: data.created_at as number,
+  };
 }
 
 function readHistoryScope(data: Record<string, unknown>): RunScope | undefined {
@@ -245,23 +283,9 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       continue;
     }
     if (entry.type === 'context_compaction') {
-      const trigger = entry.data.trigger;
-      if ((trigger !== 'auto' && trigger !== 'manual') ||
-        typeof entry.data.id !== 'string' ||
-        typeof entry.data.summary !== 'string') continue;
-      items.push({
-        id: `context-compaction:${entry.data.id}`,
-        type: 'context_compaction',
-        compactionId: entry.data.id,
-        trigger,
-        summary: entry.data.summary,
-        beforeTokens: Number(entry.data.before_tokens ?? 0),
-        afterTokens: Number(entry.data.after_tokens ?? 0),
-        maxTokens: Number(entry.data.max_tokens ?? 0),
-        reclaimedTokens: Number(entry.data.reclaimed_tokens ?? 0),
-        durationMs: Number(entry.data.duration_ms ?? 0),
-        timestamp: Number(entry.data.created_at ?? entry.ts ?? 0) * 1000,
-      });
+      const compaction = readContextCompaction(entry.data);
+      if (!compaction) continue;
+      items.push(contextCompactionTimelineItem(compaction));
       continue;
     }
     const event = parsePublicEvent(entry.type, entry.data, String(entry.seq));

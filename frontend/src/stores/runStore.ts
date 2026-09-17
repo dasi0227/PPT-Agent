@@ -6,6 +6,7 @@ import { threadsApi } from '../api/threads';
 import {
   CreateRunRequest,
   CreateRunScopeInput,
+  ContextCompaction,
   PlanState,
   PublicTarget,
   QuestionAnswer,
@@ -18,7 +19,13 @@ import {
   ScopeExpansionRequest,
   SSEEvent,
 } from '../api/types';
-import { TimelineItem, reducePlan, reduceSSEEvent } from '../features/agent/eventReducer';
+import {
+  contextCompactionTimelineItem,
+  TimelineItem,
+  reducePlan,
+  reduceSSEEvent,
+  upsertTimelineItem,
+} from '../features/agent/eventReducer';
 import { reduceNextInputSuggestions, type NextInputSuggestionsState } from '../features/agent/nextInputSuggestions';
 import {
   hydrateRunFromHistory,
@@ -312,6 +319,7 @@ interface RunStoreV2 {
   cancelRun: (threadId: string, runId: string, reason?: RunCancelReason) => Promise<boolean>;
 	steerRun: (threadId: string, runId: string, content: string, clientMessageId: string, attachmentIds?: string[], domSelections?: import('../api/types').DOMSelection[], referenceOrder?: import('../api/types').ReferenceOrderItem[]) => Promise<boolean>;
   retryRun: (threadId: string) => Promise<boolean>;
+  upsertContextCompaction: (threadId: string, compaction: ContextCompaction) => void;
   clearRun: (threadId: string) => void;
   closeSessions: (threadIds: string[]) => void;
   rekeySession: (oldId: string, newId: string) => void;
@@ -1156,6 +1164,15 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         ...(selectedModel ? { model: selectedModel } : {}),
         client_request_id: newClientIdentity('req'),
       }, session.projectId);
+    },
+
+    upsertContextCompaction: (threadId, compaction) => {
+      updateSession(threadId, (prev) => ({
+        timelineItems: upsertTimelineItem(
+          prev.timelineItems,
+          contextCompactionTimelineItem(compaction),
+        ),
+      }));
     },
 
     clearRun: (threadId) => {

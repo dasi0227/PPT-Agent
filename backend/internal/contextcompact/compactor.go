@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -18,10 +20,13 @@ const (
 	maxSummaryTokens       = 4000
 	outputSafetyTokens     = 1024
 	retainedToolRoundCount = 2
+	compactContextToolName = "compact_context"
+	fallbackTitle          = "整理当前任务上下文"
 )
 
 type Result struct {
 	Messages               []llm.Message
+	Title                  string
 	Summary                string
 	BeforeTranscriptTokens int
 	AfterTranscriptTokens  int
@@ -45,7 +50,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	compressed, retained := splitTranscript(pruned)
 	if len(compressed) == 0 {
 		return Result{
-			Messages: retained, Summary: emptySummary(),
+			Messages: retained, Title: fallbackTitle, Summary: emptySummary(),
 			BeforeTranscriptTokens: before, AfterTranscriptTokens: messageTokens(retained),
 		}, nil
 	}
@@ -70,14 +75,15 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
 			{Role: llm.RoleUser, Content: llm.TextContent("<transcript>\n" + string(raw) + "\n</transcript>")},
 		},
+		Tools:           []llm.ToolSchema{compactContextToolSchema()},
 		MaxOutputTokens: maxSummaryTokens,
 	})
 	if err != nil {
 		return Result{}, err
 	}
-	summary := strings.TrimSpace(response.Text())
-	if summary == "" {
-		return Result{}, errors.New("compact summary is empty")
+	title, summary, err := parseCompactContextResponse(response)
+	if err != nil {
+		return Result{}, err
 	}
 	next := append([]llm.Message{{
 		Role:    llm.RoleUser,
@@ -86,10 +92,64 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	next = compactProjectAttachmentImages(next)
 	next = compactDOMSelections(next)
 	return Result{
-		Messages: next, Summary: summary,
+		Messages: next, Title: title, Summary: summary,
 		BeforeTranscriptTokens: before, AfterTranscriptTokens: messageTokens(next),
 		DroppedInputTokens: dropped,
 	}, nil
+}
+
+func compactContextToolSchema() llm.ToolSchema {
+	return llm.ToolSchema{
+		Name:        compactContextToolName,
+		Description: "Return a short timeline title and the durable context summary.",
+		Parameters: map[string]any{
+			"type": "object", "additionalProperties": false,
+			"required": []string{"title", "summary"},
+			"properties": map[string]any{
+				"title":   map[string]any{"type": "string", "minLength": 1, "maxLength": 48},
+				"summary": map[string]any{"type": "string", "minLength": 1},
+			},
+		},
+	}
+}
+
+func parseCompactContextResponse(response llm.GenerateResponse) (string, string, error) {
+	if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != compactContextToolName {
+		return "", "", errors.New("model must call compact_context exactly once")
+	}
+	call := response.ToolCalls[0]
+	summary, ok := call.Args["summary"].(string)
+	if !ok || strings.TrimSpace(summary) == "" {
+		return "", "", errors.New("compact summary is required")
+	}
+	summary = strings.TrimSpace(summary)
+	rawTitle, _ := call.Args["title"].(string)
+	title := strings.TrimSpace(rawTitle)
+	if !validCompactionTitle(rawTitle) || !validCompactionTitle(title) {
+		title = fallbackTitle
+	}
+	return title, summary, nil
+}
+
+func validCompactionTitle(title string) bool {
+	if title == "" || utf8.RuneCountInString(title) > 48 ||
+		strings.ContainsAny(title, "\r\n\t<>") ||
+		strings.Contains(strings.ToLower(title), "compact:") ||
+		strings.HasSuffix(title, ".") || strings.HasSuffix(title, "。") {
+		return false
+	}
+	for _, value := range title {
+		if unicode.IsControl(value) {
+			return false
+		}
+	}
+	trimmed := strings.TrimLeftFunc(title, unicode.IsSpace)
+	for _, prefix := range []string{"#", "- ", "* ", "+ ", "> ", "```"} {
+		if strings.HasPrefix(trimmed, prefix) {
+			return false
+		}
+	}
+	return true
 }
 
 func compactDOMSelections(messages []llm.Message) []llm.Message {
@@ -168,7 +228,8 @@ func shouldRetainUser(message llm.Message) bool {
 }
 
 func compactRequestTokens(messages []llm.Message) int {
-	total := contextengine.EstimateTextTokens(prompts.MustLoad("command.compact").Body) + 16
+	total := contextengine.EstimateTextTokens(prompts.MustLoad("command.compact").Body) +
+		contextengine.EstimateValueTokens([]llm.ToolSchema{compactContextToolSchema()}) + 16
 	for _, message := range messages {
 		total += contextengine.EstimateMessageTokens(message)
 	}

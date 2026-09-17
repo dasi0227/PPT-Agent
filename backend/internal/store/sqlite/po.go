@@ -334,6 +334,7 @@ type contextCompactionPO struct {
 	ProjectID    string `gorm:"column:project_id"`
 	RunID        string `gorm:"column:run_id"`
 	Trigger      string `gorm:"column:trigger"`
+	Title        string `gorm:"column:title"`
 	Summary      string `gorm:"column:summary"`
 	BeforeTokens int    `gorm:"column:before_tokens"`
 	AfterTokens  int    `gorm:"column:after_tokens"`
@@ -348,7 +349,7 @@ func (contextCompactionPO) TableName() string { return "context_compactions" }
 func (p contextCompactionPO) toModel() model.ContextCompaction {
 	return model.ContextCompaction{
 		ID: p.ID, ThreadID: p.ThreadID, ProjectID: p.ProjectID, RunID: p.RunID,
-		Trigger: model.ContextCompactionTrigger(p.Trigger), Summary: p.Summary,
+		Trigger: model.ContextCompactionTrigger(p.Trigger), Title: p.Title, Summary: p.Summary,
 		BeforeTokens: p.BeforeTokens, AfterTokens: p.AfterTokens, MaxTokens: p.MaxTokens,
 		Reclaimed: p.Reclaimed, DurationMS: p.DurationMS, CreatedAt: p.CreatedAt,
 	}
@@ -357,7 +358,7 @@ func (p contextCompactionPO) toModel() model.ContextCompaction {
 func contextCompactionToPO(m model.ContextCompaction) contextCompactionPO {
 	return contextCompactionPO{
 		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID, RunID: m.RunID,
-		Trigger: string(m.Trigger), Summary: m.Summary,
+		Trigger: string(m.Trigger), Title: m.Title, Summary: m.Summary,
 		BeforeTokens: m.BeforeTokens, AfterTokens: m.AfterTokens, MaxTokens: m.MaxTokens,
 		Reclaimed: m.Reclaimed, DurationMS: m.DurationMS, CreatedAt: m.CreatedAt,
 	}

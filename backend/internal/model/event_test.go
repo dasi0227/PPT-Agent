@@ -165,6 +165,37 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 	}
 }
 
+func TestContextCompactedRequiresSafeTitleAndCompleteMetrics(t *testing.T) {
+	payload := ContextCompactedPayload{
+		PublicEventBase: NewPublicEventBase("r1"),
+		Compaction: ContextCompaction{
+			ID: "cmp_1", ThreadID: "t1", ProjectID: "p1", RunID: "r1",
+			Trigger: ContextCompactionAuto, Title: "收敛上下文协议与前端实现",
+			Summary: "## 目标与意图\n继续", BeforeTokens: 56000,
+			AfterTokens: 30000, MaxTokens: 65536, Reclaimed: 26000,
+			DurationMS: 4200, CreatedAt: 1,
+		},
+	}
+	if err := ValidatePublicEvent(EventContextCompacted, payload); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(payload)
+	var data map[string]any
+	_ = json.Unmarshal(raw, &data)
+	compaction := data["compaction"].(map[string]any)
+	for _, invalid := range []any{"", "bad\ntitle", strings.Repeat("长", 49)} {
+		compaction["title"] = invalid
+		if err := ValidatePublicEvent(EventContextCompacted, data); err == nil {
+			t.Fatalf("invalid title accepted: %q", invalid)
+		}
+	}
+	compaction["title"] = "合法标题"
+	delete(compaction, "before_tokens")
+	if err := ValidatePublicEvent(EventContextCompacted, data); err == nil {
+		t.Fatal("missing compaction metrics were accepted")
+	}
+}
+
 func TestMessageFinalV4RequiresBoundedSuggestionsAndHistoryRevision(t *testing.T) {
 	payload := MessageFinalPayload{
 		PublicEventBase: NewPublicEventBase("r1"), MessageID: "m1", Text: "完成。",

@@ -1,6 +1,10 @@
 You compact a PPT creation-agent transcript into a durable working summary for the same continuing task. Summarize the actual task; do not assume the user is developing the PPT Agent software.
 
-Return Markdown with exactly these five level-2 sections:
+Call `compact_context` exactly once. Do not answer with plain text or JSON outside the tool call.
+
+Set `title` to a single-line, task-specific timeline title in the main conversation language. Use 6-24 Chinese characters when Chinese is appropriate and never include `compact:`, Markdown markers, HTML, control characters, or a trailing period. Describe the primary task, stage, or decision instead of saying that context was compressed.
+
+Set `summary` to Markdown with exactly these five level-2 sections:
 
 ## 目标与意图
 ## 已完成改动

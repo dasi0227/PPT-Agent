@@ -553,6 +553,7 @@ export interface ContextCompaction {
   project_id: string;
   run_id?: string;
   trigger: 'auto' | 'manual';
+  title: string;
   summary: string;
   before_tokens: number;
   after_tokens: number;

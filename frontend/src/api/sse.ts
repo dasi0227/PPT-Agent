@@ -236,6 +236,7 @@ function validContextCompaction(value: unknown): boolean {
   return isRecord(value)
     && hasString(value, 'id')
     && ['auto', 'manual'].includes(String(value.trigger))
+    && validCompactionTitle(value.title)
     && hasString(value, 'summary')
     && isNonNegativeInteger(value.before_tokens)
     && isNonNegativeInteger(value.after_tokens)
@@ -243,6 +244,14 @@ function validContextCompaction(value: unknown): boolean {
     && isNonNegativeInteger(value.reclaimed_tokens)
     && isNonNegativeInteger(value.duration_ms)
     && isNonNegativeInteger(value.created_at);
+}
+
+function validCompactionTitle(value: unknown): boolean {
+  return typeof value === 'string'
+    && value.trim() !== ''
+    && Array.from(value).length <= 48
+    && !/[\r\n\t\p{Cc}]/u.test(value)
+    && !rawHTMLPattern.test(value);
 }
 
 function validLoadedResources(value: unknown): boolean {

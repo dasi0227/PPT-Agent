@@ -6,6 +6,7 @@ CREATE TABLE context_compactions (
     project_id TEXT NOT NULL,
     run_id TEXT NOT NULL DEFAULT '',
     trigger TEXT NOT NULL CHECK (trigger IN ('auto', 'manual')),
+    title TEXT NOT NULL,
     summary TEXT NOT NULL,
     before_tokens INTEGER NOT NULL CHECK (before_tokens >= 0),
     after_tokens INTEGER NOT NULL CHECK (after_tokens >= 0),

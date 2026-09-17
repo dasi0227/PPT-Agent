@@ -327,7 +327,7 @@ func contextCompactionHistoryEntry(compaction model.ContextCompaction) map[strin
 		"data": map[string]any{
 			"id": compaction.ID, "thread_id": compaction.ThreadID,
 			"project_id": compaction.ProjectID, "run_id": compaction.RunID,
-			"trigger": compaction.Trigger, "summary": compaction.Summary,
+			"trigger": compaction.Trigger, "title": compaction.Title, "summary": compaction.Summary,
 			"before_tokens": compaction.BeforeTokens, "after_tokens": compaction.AfterTokens,
 			"max_tokens": compaction.MaxTokens, "reclaimed_tokens": compaction.Reclaimed,
 			"duration_ms": compaction.DurationMS, "created_at": compaction.CreatedAt,
