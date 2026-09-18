@@ -495,7 +495,7 @@ func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason 
 	a.cancelRequested = true
 	a.mu.Unlock()
 	_ = a.bus.Emit(context.Background(), model.EventRunProgress, model.RunProgressPayload{
-		PublicEventBase: model.NewPublicEventBase(id), Stage: "finalizing", Text: "取消任务中",
+		PublicEventBase: model.NewPublicEventBase(id), Activity: model.ActivityRunCanceling,
 	})
 	a.cancel()
 	current.CancelRequestedAt = requestedAt

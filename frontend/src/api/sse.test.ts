@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parsePublicEvent, parseSSEEvent, SSE_EVENT_NAMES } from './sse';
 
 const base = {
-  schema_version: 4,
+  schema_version: 5,
   run_id: 'r1',
   occurred_at: '2026-08-02T10:30:00.000Z',
 };
@@ -22,7 +22,7 @@ const payloads: Record<string, unknown> = {
     user_input: '生成 PPT',
     skills: [{ id: 'story', name: '演示叙事', description: '梳理页面叙事。' }],
   },
-  'run.progress': { ...base, stage: 'thinking', text: '正在分析' },
+  'run.progress': { ...base, activity: 'run.analyzing' },
   'run.resumed': base,
   'run.completed': terminal,
   'run.failed': { ...terminal, error: { code: 'RUN_FAILED', message: '任务未能完成。', retryable: false } },
@@ -80,6 +80,16 @@ describe('SSE parser', () => {
         event: eventName,
       });
     }
+  });
+
+  it('accepts only the structured run activity payload', () => {
+    expect(parsePublicEvent('run.progress', { ...base, activity: 'slide.layout.checking' })).not.toBeNull();
+    expect(parsePublicEvent('run.progress', { ...base, activity: 'unknown' })).toBeNull();
+    expect(parsePublicEvent('run.progress', {
+      ...base,
+      activity: 'run.analyzing',
+      text: 'legacy progress text',
+    })).toBeNull();
   });
 
   it('accepts only compaction lifecycle statuses for context windows', () => {
@@ -232,7 +242,7 @@ describe('SSE parser', () => {
 
   it('parses tool events with local file target fields', () => {
     const started = parseSSEEvent('tool.started', JSON.stringify({
-      schema_version: 4,
+      schema_version: 5,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:16.051323Z',
       call_id: 'mutate_ppt_4',
@@ -254,7 +264,7 @@ describe('SSE parser', () => {
     expect(started).not.toBeNull();
 
     const completed = parseSSEEvent('tool.completed', JSON.stringify({
-      schema_version: 4,
+      schema_version: 5,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:17.051323Z',
       call_id: 'mutate_ppt_4',
@@ -279,7 +289,7 @@ describe('SSE parser', () => {
 
   it('parses final and completed events with local affected targets', () => {
     const finalEvent = parseSSEEvent('message.final', JSON.stringify({
-      schema_version: 4,
+      schema_version: 5,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:06:31.781954Z',
       message_id: 'm1',
@@ -299,7 +309,7 @@ describe('SSE parser', () => {
     expect(finalEvent).not.toBeNull();
 
     const completedEvent = parseSSEEvent('run.completed', JSON.stringify({
-      schema_version: 4,
+      schema_version: 5,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:06:31.791303Z',
       duration_ms: 1000,

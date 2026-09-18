@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 )
 
-const PublicEventSchemaVersion = 4
+const PublicEventSchemaVersion = 5
 
 var PublicEventTypes = [...]EventType{
 	EventRunStarted,
@@ -90,18 +90,47 @@ type RunStartedPayload struct {
 	ReferenceOrder []ReferenceOrderItem   `json:"reference_order,omitempty"`
 }
 
-type ProgressValue struct {
-	Current int    `json:"current"`
-	Total   int    `json:"total"`
-	Unit    string `json:"unit"`
-}
-
 type RunProgressPayload struct {
 	PublicEventBase
-	Stage    string         `json:"stage"`
-	Text     string         `json:"text"`
-	Target   *PublicTarget  `json:"target,omitempty"`
-	Progress *ProgressValue `json:"progress,omitempty"`
+	Activity RunActivity `json:"activity"`
+}
+
+type RunActivity string
+
+const (
+	ActivityRunPreparing                  RunActivity = "run.preparing"
+	ActivityRunRecovering                 RunActivity = "run.recovering"
+	ActivityRunAnalyzing                  RunActivity = "run.analyzing"
+	ActivityRunRetrying                   RunActivity = "run.retrying"
+	ActivityRunCanceling                  RunActivity = "run.canceling"
+	ActivityPlanPreparing                 RunActivity = "plan.preparing"
+	ActivityPresentationStructureReading  RunActivity = "presentation.structure.reading"
+	ActivityPresentationDesignReading     RunActivity = "presentation.design.reading"
+	ActivitySlideContentReading           RunActivity = "slide.content.reading"
+	ActivityReferenceInspecting           RunActivity = "reference.inspecting"
+	ActivityPresentationStructureUpdating RunActivity = "presentation.structure.updating"
+	ActivityPresentationDesignUpdating    RunActivity = "presentation.design.updating"
+	ActivitySlideCreating                 RunActivity = "slide.creating"
+	ActivitySlideUpdating                 RunActivity = "slide.updating"
+	ActivitySlideLayoutChecking           RunActivity = "slide.layout.checking"
+	ActivityResourcePreparing             RunActivity = "resource.preparing"
+	ActivityCommandExecuting              RunActivity = "command.executing"
+	ActivityCompletionReviewing           RunActivity = "completion.reviewing"
+)
+
+var validRunActivities = map[RunActivity]struct{}{
+	ActivityRunPreparing: {}, ActivityRunRecovering: {}, ActivityRunAnalyzing: {},
+	ActivityRunRetrying: {}, ActivityRunCanceling: {}, ActivityPlanPreparing: {},
+	ActivityPresentationStructureReading: {}, ActivityPresentationDesignReading: {},
+	ActivitySlideContentReading: {}, ActivityReferenceInspecting: {},
+	ActivityPresentationStructureUpdating: {}, ActivityPresentationDesignUpdating: {},
+	ActivitySlideCreating: {}, ActivitySlideUpdating: {}, ActivitySlideLayoutChecking: {},
+	ActivityResourcePreparing: {}, ActivityCommandExecuting: {}, ActivityCompletionReviewing: {},
+}
+
+func (activity RunActivity) Valid() bool {
+	_, ok := validRunActivities[activity]
+	return ok
 }
 
 type RunTerminalPayload struct {
@@ -443,25 +472,13 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		}
 		return validateLoadedResources(data["resources"])
 	case EventRunProgress:
-		if !oneOf(stringValue(data["stage"]), "thinking", "planning", "reading", "writing", "rendering", "finalizing") {
-			return errors.New("invalid progress stage")
-		}
-		if err := requireString(data, "text"); err != nil {
-			return err
-		}
-		if rawProgress, exists := data["progress"]; exists {
-			progress, ok := rawProgress.(map[string]any)
-			if !ok {
-				return errors.New("progress must be an object")
-			}
-			current, total := intValue(progress["current"]), intValue(progress["total"])
-			if !isInteger(progress["current"]) || !isInteger(progress["total"]) ||
-				current < 0 || total <= 0 || current > total || strings.TrimSpace(stringValue(progress["unit"])) == "" {
-				return errors.New("invalid progress value")
+		for _, legacy := range []string{"stage", "text", "target", "progress"} {
+			if _, exists := data[legacy]; exists {
+				return fmt.Errorf("run progress contains legacy field %s", legacy)
 			}
 		}
-		if err := validateOptionalTarget(data["target"]); err != nil {
-			return err
+		if !RunActivity(stringValue(data["activity"])).Valid() {
+			return errors.New("invalid run activity")
 		}
 	case EventRunCompleted, EventRunFailed, EventRunError, EventRunCanceled:
 		if int64Value(data["duration_ms"]) < 0 || !isInteger(data["duration_ms"]) {

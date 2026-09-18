@@ -45,13 +45,6 @@ const runSummaryLabel = {
   error: '系统异常',
 } as const;
 
-function fallbackProgress(status: ReturnType<typeof useActiveSession>['status']) {
-  if (status === 'creating') return { stage: 'thinking' as const, text: '分析请求中' };
-  if (status === 'running') return { stage: 'thinking' as const, text: '分析任务需求中' };
-  if (status === 'canceling') return { stage: 'thinking' as const, text: '取消任务中' };
-  return null;
-}
-
 function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 'canceled' | 'paused' }) {
   if (status === 'completed') {
     return <CheckCircle2 className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />;
@@ -87,7 +80,6 @@ export const Timeline: React.FC = () => {
     () => groupTimelineItems(timelineItems, currentSlideId ?? undefined),
     [currentSlideId, timelineItems],
   );
-  const displayedProgress = progress ?? fallbackProgress(status);
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle' && !commitActive;
 
@@ -229,8 +221,8 @@ export const Timeline: React.FC = () => {
           <>
             {displayEntries.map((entry) => renderEntry(entry))}
             {status === 'paused' && activeRunId && <PausedRunCard runId={activeRunId} />}
-            {status !== 'waiting' && displayedProgress && (
-              <LiveProgressRow progress={displayedProgress} />
+            {status !== 'waiting' && progress && (
+              <LiveProgressRow progress={progress} />
             )}
             {commitActive && commitSession?.phase && <GitCommitProgress phase={commitSession.phase} />}
           </>

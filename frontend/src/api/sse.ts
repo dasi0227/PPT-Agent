@@ -1,4 +1,4 @@
-import { SSEEvent, SSEEventName } from './types';
+import { RUN_ACTIVITIES, SSEEvent, SSEEventName } from './types';
 
 export interface SSEOptions {
   onMessage?: (event: SSEEvent) => void;
@@ -49,13 +49,13 @@ export function parsePublicEvent(eventName: string, data: unknown, id?: string):
   return { id, event: eventName as SSEEventName, data } as unknown as SSEEvent;
 }
 
-const progressStages = new Set(['thinking', 'planning', 'reading', 'writing', 'rendering', 'finalizing']);
+const runActivities = new Set<string>(RUN_ACTIVITIES);
 const businessTools = new Set(['read_ppt', 'read_image', 'mutate_ppt', 'render_slide', 'run_command', 'load_component', 'load_skill']);
 const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
 function validBase(data: Record<string, unknown>): boolean {
-  return data.schema_version === 4
+  return data.schema_version === 5
     && hasString(data, 'run_id')
     && hasString(data, 'occurred_at')
     && String(data.occurred_at).endsWith('Z')
@@ -70,10 +70,8 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && hasString(data, 'user_input')
         && validSkills(data.skills);
     case 'run.progress':
-      return progressStages.has(String(data.stage))
-        && hasSafeString(data, 'text')
-        && validOptionalPublicTarget(data.target)
-        && validProgress(data.progress);
+      return runActivities.has(String(data.activity))
+        && !['stage', 'text', 'target', 'progress'].some((field) => field in data);
     case 'run.resumed':
       return true;
     case 'run.completed':
@@ -349,18 +347,6 @@ function validOptionalSafeString(value: unknown): boolean {
 
 function validTargets(value: unknown): boolean {
   return value === undefined || (Array.isArray(value) && value.every(validPublicTarget));
-}
-
-function validProgress(value: unknown): boolean {
-  return value === undefined || (
-    isRecord(value)
-    && isNonNegativeInteger(value.current)
-    && typeof value.total === 'number'
-    && Number.isInteger(value.total)
-    && value.total > 0
-    && Number(value.current) <= Number(value.total)
-    && hasString(value, 'unit')
-  );
 }
 
 function isNonNegativeInteger(value: unknown): boolean {

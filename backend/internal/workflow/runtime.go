@@ -408,6 +408,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		calibrationFactor:      1,
 		projectHistoryRevision: input.ProjectHistoryRevision,
 	}
+	if input.ResumeCheckpoint != nil {
+		r.emitProgress(input.Emitter, state, model.ActivityRunRecovering)
+	} else {
+		r.emitProgress(input.Emitter, state, model.ActivityRunPreparing)
+	}
 	if input.Calibration != nil {
 		state.calibrationFactor = input.Calibration.Factor(input.Context.Manifest.ThreadID)
 	}
@@ -500,12 +505,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	if err := r.saveCheckpoint(ctx, input, state, checkpointRuntimeInitialized, ""); err != nil {
 		return r.fail(input, state, CodeAgentFailed, err)
 	}
-	if initialPhase == PhasePlanning {
-		r.emitProgress(input.Emitter, state, "planning", "处理任务中", nil)
-	} else {
-		r.emitProgress(input.Emitter, state, "thinking", "处理任务中", nil)
-	}
-
 	if state.mode == model.ModeExecute {
 		// RunSession is the transaction for the currently executing tool call.
 		// Every successful mutation is committed before the next call starts.
@@ -580,6 +579,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeAgentFailed, errors.New("approved plan content hash mismatch"))
 		}
 		state.turns++
+		if state.mode == model.ModePlan {
+			r.emitProgress(input.Emitter, state, model.ActivityPlanPreparing)
+		} else {
+			r.emitProgress(input.Emitter, state, model.ActivityRunAnalyzing)
+		}
 		r.logProviderRequest(input, state, schemas)
 		request := AgentRequest{
 			RunID: state.runID, LoopID: state.loopID, Phase: state.phase,
@@ -594,7 +598,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			Continuation:          state.continuation,
 			InstructionInMessages: input.Transcript != nil,
 			OnProviderRetry: func(attempt int) {
-				r.emitProgress(input.Emitter, state, "thinking", fmt.Sprintf("模型暂时不可用，重试中（%d / 5）", attempt), nil)
+				r.emitProgress(input.Emitter, state, model.ActivityRunRetrying)
 			},
 		}
 		response, err := r.Agent.Next(ctx, request)
@@ -877,6 +881,9 @@ func (r *Runtime) executeToolBatch(
 			}
 		}
 	}
+	aggregateToolProgress := batchIsIndependentReads(calls) ||
+		batchIsAllowedCommands(calls, decisions, emitTerminal) ||
+		batchIsIndependentRenders(calls)
 	prepare := func(index int) bool {
 		if emitTerminal[index] {
 			return false
@@ -894,7 +901,9 @@ func (r *Runtime) executeToolBatch(
 			state.work.MarkRunning(workTargets[index], state.scope)
 		}
 		lifecycleMu.Lock()
-		r.emitToolProgress(input.Emitter, state, call)
+		if !aggregateToolProgress {
+			r.emitToolProgress(input.Emitter, state, call)
+		}
 		if input.Emitter != nil {
 			if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID, decisions[index]); ok {
 				input.Emitter.Emit(model.EventToolStarted, event)
@@ -986,6 +995,9 @@ func (r *Runtime) executeToolBatch(
 			runPrepared(index)
 			commitPrepared(index)
 		}
+	}
+	if aggregateToolProgress {
+		r.emitProgress(input.Emitter, state, toolBatchActivity(calls))
 	}
 	switch {
 	case batchIsIndependentReads(calls):
@@ -1616,7 +1628,6 @@ func (r *Runtime) awaitPlanApproval(
 				recordTrace(state.trace, state.runID, "plan.approval_transition_failed", map[string]any{
 					"loop_id": state.loopID, "plan_id": plan.ID, "revision": plan.Revision, "error": transitionErr.Error(),
 				})
-				r.emitProgress(input.Emitter, state, "waiting", "计划批准暂未生效，请重新提交", nil)
 				continue
 			}
 			previous := state.mode
@@ -2183,7 +2194,7 @@ func (r *Runtime) finishCandidate(
 	}
 	finishPhase := state.phase
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
-	r.emitProgress(input.Emitter, state, "finalizing", "自我审查中", nil)
+	r.emitProgress(input.Emitter, state, model.ActivityCompletionReviewing)
 	changes := state.changeSet()
 	result := r.Gate.Check(CompletionContext{
 		Mode: state.mode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
@@ -2650,57 +2661,101 @@ func (r *Runtime) emitReasoning(emitter EventEmitter, state *RunState, raw strin
 func (r *Runtime) emitProgress(
 	emitter EventEmitter,
 	state *RunState,
-	stage string,
-	text string,
-	target *model.PublicTarget,
+	activity model.RunActivity,
 ) {
 	if emitter == nil {
 		return
 	}
-	key := stage + "|" + text
-	if target != nil {
-		key += "|" + target.Type + "|" + target.SlideID + "|" + target.Part
-	}
+	key := string(activity)
 	if key == state.lastProgress {
 		return
 	}
 	state.lastProgress = key
 	emitter.Emit(model.EventRunProgress, model.RunProgressPayload{
-		PublicEventBase: publicBase(state.runID), Stage: stage,
-		Text: sanitizePublicText(text, 120), Target: target,
+		PublicEventBase: publicBase(state.runID), Activity: activity,
 	})
 }
 
 func (r *Runtime) emitToolProgress(emitter EventEmitter, state *RunState, call llm.ToolCall) {
-	stage, text := "thinking", "调用工具中"
-	target := publicToolTarget("", call.Name, call.Args)
+	r.emitProgress(emitter, state, toolActivity(call))
+}
+
+func toolBatchActivity(calls []llm.ToolCall) model.RunActivity {
+	activity := model.ActivityRunAnalyzing
+	priority := 0
+	for _, call := range calls {
+		candidate := toolActivity(call)
+		if value := activityPriority(candidate); value > priority {
+			activity, priority = candidate, value
+		}
+	}
+	return activity
+}
+
+func toolActivity(call llm.ToolCall) model.RunActivity {
 	switch call.Name {
 	case "read_ppt":
-		stage, text = "reading", "读取页面中"
+		resource, _ := call.Args["resource"].(map[string]any)
+		switch stringValue(resource["kind"]) {
+		case "manifest", "outline":
+			return model.ActivityPresentationStructureReading
+		case "design":
+			return model.ActivityPresentationDesignReading
+		default:
+			return model.ActivitySlideContentReading
+		}
+	case "read_image":
+		return model.ActivityReferenceInspecting
 	case "mutate_ppt":
-		stage, text = "writing", "更新页面中"
-		if strings.HasSuffix(stringValue(call.Args["op"]), ".write") || stringValue(call.Args["op"]) == "outline.init" || stringValue(call.Args["op"]) == "outline.insert" {
-			text = "创建页面中"
+		op := stringValue(call.Args["op"])
+		switch {
+		case strings.HasPrefix(op, "manifest."), strings.HasPrefix(op, "outline."):
+			return model.ActivityPresentationStructureUpdating
+		case strings.HasPrefix(op, "design."):
+			return model.ActivityPresentationDesignUpdating
+		case strings.HasPrefix(op, "slide.") && strings.HasSuffix(op, ".write"):
+			return model.ActivitySlideCreating
+		default:
+			return model.ActivitySlideUpdating
 		}
 	case "render_slide":
-		stage, text = "rendering", "渲染页面中"
+		return model.ActivitySlideLayoutChecking
+	case "load_component", "load_skill":
+		return model.ActivityResourcePreparing
+	case "run_command":
+		return model.ActivityCommandExecuting
+	default:
+		return model.ActivityRunAnalyzing
 	}
-	if target != nil && target.Type == "slide" {
-		switch call.Name {
-		case "read_ppt":
-			text = "读取页面中"
-		case "mutate_ppt":
-			op := stringValue(call.Args["op"])
-			if strings.HasSuffix(op, ".write") {
-				text = "创建页面中"
-			} else {
-				text = "更新页面中"
-			}
-		case "render_slide":
-			text = "渲染页面中"
-		}
+}
+
+func activityPriority(activity model.RunActivity) int {
+	switch activity {
+	case model.ActivitySlideLayoutChecking:
+		return 70
+	case model.ActivitySlideCreating:
+		return 60
+	case model.ActivitySlideUpdating:
+		return 50
+	case model.ActivityPresentationDesignUpdating:
+		return 45
+	case model.ActivityPresentationStructureUpdating:
+		return 40
+	case model.ActivitySlideContentReading:
+		return 35
+	case model.ActivityPresentationDesignReading:
+		return 30
+	case model.ActivityPresentationStructureReading:
+		return 25
+	case model.ActivityReferenceInspecting:
+		return 20
+	case model.ActivityResourcePreparing:
+		return 15
+	case model.ActivityCommandExecuting:
+		return 10
+	default:
+		return 1
 	}
-	r.emitProgress(emitter, state, stage, text, target)
 }
 
 func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state *RunState, schemas []ToolSchema) error {

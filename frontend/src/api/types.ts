@@ -589,7 +589,7 @@ export interface PlanState {
 }
 
 export interface PublicEventBase {
-  schema_version: 4;
+  schema_version: 5;
   run_id: string;
   occurred_at: string;
 }
@@ -671,13 +671,17 @@ export interface QuestionAnswer {
   answers: QuestionFieldAnswer[];
 }
 
-export type RunProgressStage =
-  | 'thinking'
-  | 'planning'
-  | 'reading'
-  | 'writing'
-  | 'rendering'
-  | 'finalizing';
+export const RUN_ACTIVITIES = [
+  'run.preparing', 'run.recovering', 'run.analyzing', 'run.retrying', 'run.canceling',
+  'plan.preparing',
+  'presentation.structure.reading', 'presentation.design.reading', 'slide.content.reading',
+  'reference.inspecting',
+  'presentation.structure.updating', 'presentation.design.updating',
+  'slide.creating', 'slide.updating', 'slide.layout.checking',
+  'resource.preparing', 'command.executing', 'completion.reviewing',
+] as const;
+
+export type RunActivity = typeof RUN_ACTIVITIES[number];
 
 interface SSEEventBase<Name extends SSEEventName, Data> {
   id?: string;
@@ -697,10 +701,7 @@ export type SSEEvent =
       reference_order?: ReferenceOrderItem[];
     }>
   | SSEEventBase<'run.progress', PublicEventBase & {
-      stage: RunProgressStage;
-      text: string;
-      target?: PublicTarget;
-      progress?: { current: number; total: number; unit: string };
+      activity: RunActivity;
     }>
   | SSEEventBase<'run.resumed', PublicEventBase>
   | SSEEventBase<'run.completed', RunTerminalPayload>

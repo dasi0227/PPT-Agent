@@ -28,7 +28,7 @@ const request = (instruction: string) => ({
   instruction,
 });
 const base = (runId: string) => ({
-  schema_version: 4, run_id: runId, occurred_at: '2026-08-02T10:30:00Z',
+  schema_version: 5, run_id: runId, occurred_at: '2026-08-02T10:30:00Z',
 });
 
 describe('runStore multithread isolation', () => {
@@ -52,11 +52,11 @@ describe('runStore multithread isolation', () => {
     });
     connectionB.onMessage({
       id: '1', event: 'run.progress',
-      data: { ...base('run_tB'), stage: 'writing', text: '处理 B' },
+      data: { ...base('run_tB'), activity: 'slide.creating' },
     });
     expect(useRunStore.getState().sessions.tA.timelineItems.map((item) => item.type)).toEqual(['user_turn', 'reasoning']);
     expect(useRunStore.getState().sessions.tB.timelineItems.map((item) => item.type)).toEqual(['user_turn']);
-    expect(useRunStore.getState().sessions.tB.progress?.text).toBe('处理 B');
+    expect(useRunStore.getState().sessions.tB.progress?.activity).toBe('slide.creating');
 
     connectionA.onMessage({
       id: '2', event: 'run.canceled',

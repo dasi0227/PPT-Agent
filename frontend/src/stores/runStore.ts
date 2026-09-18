@@ -8,13 +8,12 @@ import {
   CreateRunScopeInput,
   ContextCompaction,
   PlanState,
-  PublicTarget,
   QuestionAnswer,
   QuestionFieldAnswer,
   Run,
   RunCancelReason,
   RunMode,
-  RunProgressStage,
+  RunActivity,
   RunScope,
   ScopeExpansionRequest,
   SSEEvent,
@@ -53,12 +52,7 @@ export interface RunSession {
   timelineItems: TimelineItem[];
   pendingQuestion: { id: string; prompt: string } | null;
   progress: {
-    stage: RunProgressStage;
-    text: string;
-    target?: PublicTarget;
-    current?: number;
-    total?: number;
-    unit?: string;
+    activity: RunActivity;
   } | null;
   eventSourceClose: (() => void) | null;
   plan: PlanState | null;
@@ -231,7 +225,7 @@ function ensureTerminalTimelineItem(
     return reduceSSEEvent(items, {
       event: 'message.final',
       data: {
-        schema_version: 4,
+        schema_version: 5,
         run_id: runId,
         occurred_at: occurredAt,
         message_id: `${runId}:reconciled-final`,
@@ -245,7 +239,7 @@ function ensureTerminalTimelineItem(
   return reduceSSEEvent(items, {
     event: status === 'canceled' ? 'run.canceled' : 'run.error',
     data: {
-      schema_version: 4,
+      schema_version: 5,
       run_id: runId,
       occurred_at: occurredAt,
       duration_ms: 0,
@@ -333,19 +327,11 @@ interface RunStoreV2 {
   ) => void;
 }
 
-function continuingProgress(): NonNullable<RunSession['progress']> {
-  return { stage: 'thinking', text: '工具调用完成，推进任务中' };
-}
-
-function hasRunningTool(items: TimelineItem[], runId: string): boolean {
-  return items.some((item) => item.type === 'tool' && item.runId === runId && item.status === 'running');
-}
-
 function endPausedRun(items: TimelineItem[], runId: string): TimelineItem[] {
   return reduceSSEEvent(items, {
     event: 'run.canceled',
     data: {
-      schema_version: 4,
+      schema_version: 5,
       run_id: runId,
       occurred_at: new Date().toISOString(),
       duration_ms: 0,
@@ -635,15 +621,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               if (prev.status !== 'canceling') {
                 if (event.data.decision === 'cancel') {
                   status = 'canceling';
-                  progress = { stage: 'thinking', text: '取消任务中' };
                 } else {
                   status = 'running';
-                  progress = {
-                    stage: 'thinking',
-                    text: event.data.decision === 'approve'
-                      ? '已收到计划，推进任务中'
-                      : '已收到建议，推进任务中',
-                  };
                 }
               }
             } else if (event.event === 'command.permission_requested') {
@@ -653,12 +632,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             } else if (event.event === 'command.permission_answered') {
               if (prev.status !== 'canceling') {
                 status = 'running';
-                progress = {
-                  stage: 'thinking',
-                  text: event.data.decision === 'allow_once'
-                    ? '已允许命令执行，正在继续处理'
-                    : '已拒绝命令执行，Agent 正在调整',
-                };
               }
             } else if (event.event === 'scope.expansion_requested') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
@@ -667,26 +640,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             } else if (event.event === 'scope.expansion_answered') {
               if (prev.status !== 'canceling') {
                 status = 'running';
-                progress = { stage: 'thinking', text: event.data.decision === 'reject' ? '范围申请已拒绝，Agent 正在调整' : '范围已更新，继续执行中' };
               }
             } else if (event.event === 'run.resumed') {
               if (prev.status !== 'canceling') status = 'recovering';
               progress = null;
             } else if (event.event === 'run.progress') {
               if (prev.status !== 'canceling') status = 'running';
-              progress = {
-                stage: event.data.stage,
-                text: event.data.text,
-                target: event.data.target,
-                current: event.data.progress?.current,
-                total: event.data.progress?.total,
-                unit: event.data.progress?.unit,
-              };
-            } else if (event.event === 'tool.completed') {
-              if (prev.status !== 'canceling' && !hasRunningTool(nextTimelineItems, event.data.run_id)) {
-                status = 'running';
-                progress = continuingProgress();
-              }
+              progress = { activity: event.data.activity };
             } else if (event.event === 'run.completed') {
               status = 'done';
               pendingQuestion = null;
@@ -890,7 +850,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           timelineItems: reduceSSEEvent(prev.timelineItems, {
             event: 'run.resumed',
             data: {
-              schema_version: 4,
+              schema_version: 5,
               run_id: runId,
               occurred_at: new Date().toISOString(),
             },
@@ -947,7 +907,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           return {
             status: 'running',
             pendingQuestion: null,
-            progress: { stage: 'thinking', text: '已收到回答，推进任务中' },
             timelineItems,
           };
         });
@@ -990,14 +949,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         });
         updateSession(threadId, (prev) => ({
           status: prev.status === 'canceling' ? 'canceling' : 'running',
-          progress: prev.status === 'canceling'
-            ? prev.progress
-            : {
-                stage: 'thinking',
-                text: decision === 'allow_once'
-                  ? '已允许命令执行，正在继续处理'
-                  : '已拒绝命令执行，Agent 正在调整',
-              },
           timelineItems: prev.timelineItems.map((item) =>
             item.type === 'command_permission'
               && item.interactionId === interactionId
@@ -1033,10 +984,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         await runsApi.submitScopeExpansion(runId, payload);
         updateSession(threadId, (prev) => ({
           status: prev.status === 'canceling' ? 'canceling' : 'running',
-          progress: prev.status === 'canceling' ? prev.progress : {
-            stage: 'thinking',
-            text: payload.decision === 'reject' ? '范围申请已拒绝，Agent 正在调整' : '范围已更新，继续执行中',
-          },
           timelineItems: prev.timelineItems.map((item) => item.type === 'scope_expansion'
             && item.interactionId === payload.interaction_id
             && item.callId === payload.call_id

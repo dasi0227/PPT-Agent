@@ -2508,3 +2508,34 @@ func testProject(t *testing.T, kind ArtifactKind) string {
 	}
 	return dir
 }
+
+func TestToolActivityUsesPresentationSemantics(t *testing.T) {
+	tests := []struct {
+		name string
+		call llm.ToolCall
+		want model.RunActivity
+	}{
+		{"read outline", llm.ToolCall{Name: "read_ppt", Args: map[string]any{"resource": map[string]any{"kind": "outline"}}}, model.ActivityPresentationStructureReading},
+		{"read design", llm.ToolCall{Name: "read_ppt", Args: map[string]any{"resource": map[string]any{"kind": "design"}}}, model.ActivityPresentationDesignReading},
+		{"read slide", llm.ToolCall{Name: "read_ppt", Args: map[string]any{"resource": map[string]any{"kind": "slide"}}}, model.ActivitySlideContentReading},
+		{"read reference", llm.ToolCall{Name: "read_image"}, model.ActivityReferenceInspecting},
+		{"update outline", llm.ToolCall{Name: "mutate_ppt", Args: map[string]any{"op": "outline.update"}}, model.ActivityPresentationStructureUpdating},
+		{"update design", llm.ToolCall{Name: "mutate_ppt", Args: map[string]any{"op": "design.patch"}}, model.ActivityPresentationDesignUpdating},
+		{"create slide", llm.ToolCall{Name: "mutate_ppt", Args: map[string]any{"op": "slide.html.write"}}, model.ActivitySlideCreating},
+		{"update slide", llm.ToolCall{Name: "mutate_ppt", Args: map[string]any{"op": "slide.html.patch"}}, model.ActivitySlideUpdating},
+		{"check layout", llm.ToolCall{Name: "render_slide"}, model.ActivitySlideLayoutChecking},
+		{"load component", llm.ToolCall{Name: "load_component"}, model.ActivityResourcePreparing},
+		{"load skill", llm.ToolCall{Name: "load_skill"}, model.ActivityResourcePreparing},
+		{"run command", llm.ToolCall{Name: "run_command"}, model.ActivityCommandExecuting},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := toolActivity(test.call); got != test.want {
+				t.Fatalf("activity=%s want=%s", got, test.want)
+			}
+		})
+	}
+	if got := toolBatchActivity([]llm.ToolCall{{Name: "read_ppt"}, {Name: "render_slide"}}); got != model.ActivitySlideLayoutChecking {
+		t.Fatalf("batch activity=%s", got)
+	}
+}

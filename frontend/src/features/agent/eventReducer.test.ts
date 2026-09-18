@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SSEEvent } from '../../api/types';
 import { reducePlan, reduceSSEEvent } from './eventReducer';
 
-const base = { schema_version: 4 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 5 as const, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const event = (name: SSEEvent['event'], data: Record<string, unknown>, id = '1') =>
   ({ id, event: name, data: { ...base, ...data } } as SSEEvent);
 const terminal = (data: Record<string, unknown> = {}) => ({
@@ -126,7 +126,7 @@ describe('public event reducer', () => {
   });
 
   it('keeps progress and plan outside timeline items', () => {
-    const progress = reduceSSEEvent([], event('run.progress', { stage: 'writing', text: '正在生成页面' }));
+    const progress = reduceSSEEvent([], event('run.progress', { activity: 'slide.creating' }));
     expect(progress).toEqual([]);
     const planEvent = event('plan.updated', {
 	  plan: { plan_id: 'p1', revision: 1, title: '执行', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] },

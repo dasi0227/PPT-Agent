@@ -113,7 +113,7 @@ const request = (instruction: string) => ({
   mode: 'execute' as const ,
   instruction,
 });
-const base = { schema_version: 4, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 5, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
 const terminal = (data: Record<string, unknown> = {}) => ({
   ...base,
   duration_ms: 5,
@@ -221,18 +221,18 @@ describe('runStore public event sessions', () => {
   test('replaces progress instead of appending timeline items', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     const connection = connections[0];
-    connection.onMessage({ id: '1', event: 'run.progress', data: { ...base, stage: 'writing', text: '正在生成页面' } });
-    connection.onMessage({ id: '2', event: 'run.progress', data: { ...base, stage: 'rendering', text: '正在检查页面' } });
+    connection.onMessage({ id: '1', event: 'run.progress', data: { ...base, activity: 'slide.creating' } });
+    connection.onMessage({ id: '2', event: 'run.progress', data: { ...base, activity: 'slide.layout.checking' } });
     expect(useRunStore.getState().sessions.t1.progress).toMatchObject({
-      stage: 'rendering', text: '正在检查页面',
+      activity: 'slide.layout.checking',
     });
     expect(useRunStore.getState().sessions.t1.timelineItems.map((item) => item.type)).toEqual(['user_turn']);
   });
 
-  test('returns to generic running feedback after the last tool finishes', async () => {
+  test('does not infer a new activity after the last tool finishes', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     const connection = connections[0];
-    connection.onMessage({ id: '1', event: 'run.progress', data: { ...base, stage: 'reading', text: '读取页面中' } });
+    connection.onMessage({ id: '1', event: 'run.progress', data: { ...base, activity: 'presentation.structure.reading' } });
     connection.onMessage({
       id: '2',
       event: 'tool.started',
@@ -244,7 +244,7 @@ describe('runStore public event sessions', () => {
       },
     });
     expect(useRunStore.getState().sessions.t1.progress).toMatchObject({
-      stage: 'reading', text: '读取页面中',
+      activity: 'presentation.structure.reading',
     });
     connection.onMessage({
       id: '3',
@@ -258,7 +258,7 @@ describe('runStore public event sessions', () => {
       },
     });
     expect(useRunStore.getState().sessions.t1.progress).toMatchObject({
-      stage: 'thinking', text: '工具调用完成，推进任务中',
+      activity: 'presentation.structure.reading',
     });
   });
 
@@ -277,7 +277,7 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1).toMatchObject({
       status: 'running',
       pendingQuestion: null,
-      progress: { stage: 'thinking', text: '已收到回答，推进任务中' },
+      progress: null,
     });
     expect(useRunStore.getState().sessions.t1.timelineItems)
       .toEqual(expect.arrayContaining([
@@ -360,7 +360,7 @@ describe('runStore public event sessions', () => {
     });
     expect(useRunStore.getState().sessions.t1).toMatchObject({
       status: 'running',
-      progress: { stage: 'thinking', text: '已收到计划，推进任务中' },
+      progress: null,
     });
   });
 
@@ -429,7 +429,7 @@ describe('runStore public event sessions', () => {
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
     connections[0].onMessage({
       id: '7', event: 'run.progress',
-      data: { ...base, stage: 'thinking', text: '处理中' },
+      data: { ...base, activity: 'run.analyzing' },
     });
     reconciledRuns.push(
       authoritativeRun('running'),

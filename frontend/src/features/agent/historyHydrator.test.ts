@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
 
-const base = { schema_version: 4, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 5, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const entry = (seq: number, type: string, data: Record<string, unknown>, runId = 'r1'): HistoryEntry => ({
   seq, ts: 1_754_130_600, run_id: runId, turn: type === 'user_turn' ? 'user' : 'agent', type, data,
 });
@@ -108,7 +108,7 @@ describe('history hydrator', () => {
 
   it('never restores progress or internal trace records', () => {
     const hydrated = hydrateRunFromHistory([
-      entry(1, 'run.progress', { ...base, stage: 'writing', text: '正在生成' }),
+      entry(1, 'run.progress', { ...base, activity: 'slide.creating' }),
       entry(2, 'context.assembled', { profile: 'full' }),
       entry(3, 'completion.checked', { accepted: false }),
     ]);

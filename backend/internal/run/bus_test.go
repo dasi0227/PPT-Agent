@@ -101,7 +101,7 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 			PublicEventBase: base(), Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 			Mode: model.ModeExecute, UserInput: "change title",
 		}},
-		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Stage: "thinking", Text: "正在分析"}},
+		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}},
 		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: model.PublicPlan{
 			PlanID: "p1", Revision: 1, Title: "计划", Content: "完整计划", Status: "active",
 			Steps: []model.PublicPlanStep{{ID: "s1", Title: "生成", Status: "in_progress"}},
@@ -167,7 +167,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	base := func() model.PublicEventBase { return model.NewPublicEventBase("r1") }
 	store := &memStore2{}
 	bus := NewBus("r1", "", store, nil)
-	if err := bus.Emit(ctx, model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Stage: "thinking", Text: "x"}); err == nil {
+	if err := bus.Emit(ctx, model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}); err == nil {
 		t.Fatal("accepted an event before run.started")
 	}
 	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{

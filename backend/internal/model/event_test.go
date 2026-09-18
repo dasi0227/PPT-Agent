@@ -43,12 +43,12 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 	for _, payload := range []map[string]any{
 		{
-			"schema_version": 4, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 5, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"call_id": "c1", "tool": "mutate_ppt", "display": map[string]any{"label": "生成"},
 			"args": map[string]any{"html": "<section />"},
 		},
 		{
-			"schema_version": 4, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 5, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"message_id": "m1", "text": "安全摘要", "reasoning_content": "hidden",
 		},
 	} {
@@ -66,7 +66,7 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 }
 
-func TestRunStartedPayloadUsesV4RunCommandFields(t *testing.T) {
+func TestRunStartedPayloadUsesV5RunCommandFields(t *testing.T) {
 	payload := RunStartedPayload{
 		PublicEventBase: NewPublicEventBase("r1"),
 		Scope:           NewRunScope(ScopeObjectPresentation, ScopeCurrentPage, "sli_1"),
@@ -89,7 +89,7 @@ func TestRunStartedPayloadUsesV4RunCommandFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	value := string(raw)
-	for _, want := range []string{`"schema_version":4`, `"scope":`, `"object":"presentation"`, `"mode":"execute"`} {
+	for _, want := range []string{`"schema_version":5`, `"scope":`, `"object":"presentation"`, `"mode":"execute"`} {
 		if !strings.Contains(value, want) {
 			t.Fatalf("run.started missing %s: %s", want, value)
 		}
@@ -101,6 +101,32 @@ func TestRunStartedPayloadUsesV4RunCommandFields(t *testing.T) {
 		if strings.Contains(value, legacy) {
 			t.Fatalf("run.started contains legacy field %s: %s", legacy, value)
 		}
+	}
+}
+
+func TestRunProgressAcceptsOnlyStructuredActivity(t *testing.T) {
+	base := NewPublicEventBase("r1")
+	if err := ValidatePublicEvent(EventRunProgress, RunProgressPayload{
+		PublicEventBase: base, Activity: ActivitySlideLayoutChecking,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidatePublicEvent(EventRunProgress, map[string]any{
+		"schema_version": PublicEventSchemaVersion,
+		"run_id":        "r1",
+		"occurred_at":   base.OccurredAt,
+		"activity":      "unknown",
+	}); err == nil {
+		t.Fatal("unknown run activity was accepted")
+	}
+	if err := ValidatePublicEvent(EventRunProgress, map[string]any{
+		"schema_version": PublicEventSchemaVersion,
+		"run_id":        "r1",
+		"occurred_at":   base.OccurredAt,
+		"activity":      string(ActivityRunAnalyzing),
+		"text":          "legacy progress text",
+	}); err == nil {
+		t.Fatal("legacy run progress field was accepted")
 	}
 }
 
