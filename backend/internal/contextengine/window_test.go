@@ -2,12 +2,13 @@ package contextengine
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 )
 
-func TestPromptEstimatorReturnsFixedSixBucketContract(t *testing.T) {
+func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
 	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
 		System: "policy",
 		User: `<runtime_input>
@@ -55,7 +56,7 @@ func TestPromptEstimatorReturnsFixedSixBucketContract(t *testing.T) {
 			t.Fatalf("bucket %s details=%+v", bucket, snapshot.Details[bucket])
 		}
 		for index, detail := range snapshot.Details[bucket] {
-			if detail.Name != ContextWindowDetailNames(bucket)[index] {
+			if bucket != BucketRunCommand && detail.Name != ContextWindowDetailNames(bucket)[index] {
 				t.Fatalf("bucket %s detail order=%+v", bucket, snapshot.Details[bucket])
 			}
 		}
@@ -68,6 +69,60 @@ func TestPromptEstimatorReturnsFixedSixBucketContract(t *testing.T) {
 		snapshot.Buckets[BucketChatHistory] == 0 || snapshot.Buckets[BucketReadFile] <= 1024 ||
 		snapshot.Buckets[BucketRunCommand] == 0 || snapshot.Buckets[BucketOther] == 0 {
 		t.Fatalf("bucket classification failed: %+v", snapshot.Buckets)
+	}
+	if got := snapshot.Details[BucketRunCommand][0].Name; got != "pwd" {
+		t.Fatalf("run command detail=%q", got)
+	}
+}
+
+func TestPromptEstimatorKeepsZeroRunCommandFallback(t *testing.T) {
+	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{Max: 65536})
+	details := snapshot.Details[BucketRunCommand]
+	if len(details) != 1 || details[0].Name != "run_command" || details[0].Tokens != 0 {
+		t.Fatalf("unexpected empty run command details: %+v", details)
+	}
+}
+
+func TestPromptEstimatorRanksTopThreeCommandsAndAggregatesTheRest(t *testing.T) {
+	commands := []struct {
+		id, command, output string
+	}{
+		{id: "ls-1", command: "ls -la", output: strings.Repeat("l", 900)},
+		{id: "rg-1", command: "rg token .", output: strings.Repeat("r", 700)},
+		{id: "git-1", command: "git status", output: strings.Repeat("g", 500)},
+		{id: "cat-1", command: "cat notes.txt", output: strings.Repeat("c", 300)},
+		{id: "pwd-1", command: "pwd", output: strings.Repeat("p", 100)},
+		{id: "ls-2", command: "ls", output: strings.Repeat("l", 100)},
+	}
+	calls := make([]llm.ToolCall, 0, len(commands))
+	messages := []llm.Message{}
+	for _, command := range commands {
+		calls = append(calls, llm.ToolCall{
+			ID: command.id, Name: "run_command", Args: map[string]any{"command": command.command},
+		})
+	}
+	messages = append(messages, llm.Message{Role: llm.RoleAssistant, ToolCalls: calls})
+	for _, command := range commands {
+		messages = append(messages, llm.Message{
+			Role: llm.RoleTool, ToolCallID: command.id, Content: llm.TextContent(command.output),
+		})
+	}
+
+	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: messages, Max: 65536})
+	details := snapshot.Details[BucketRunCommand]
+	if len(details) != 4 {
+		t.Fatalf("unexpected run command details: %+v", details)
+	}
+	wantNames := []string{"ls", "rg", "git", "other command"}
+	total := 0
+	for index, detail := range details {
+		if detail.Name != wantNames[index] {
+			t.Fatalf("run command order=%+v", details)
+		}
+		total += detail.Tokens
+	}
+	if total != snapshot.Buckets[BucketRunCommand] || details[3].Tokens <= 0 {
+		t.Fatalf("run command totals do not balance: details=%+v bucket=%d", details, snapshot.Buckets[BucketRunCommand])
 	}
 }
 

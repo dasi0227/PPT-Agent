@@ -403,6 +403,65 @@ type ContextWindowUpdatedPayload struct {
 	Details map[string][]ContextWindowBucketDetail `json:"details"`
 }
 
+func validateRunCommandContextDetails(items []any) (int, error) {
+	if len(items) < 1 || len(items) > 4 {
+		return 0, errors.New("run_command details must contain one to four items")
+	}
+	total := 0
+	previousTokens := int(^uint(0) >> 1)
+	previousName := ""
+	seen := map[string]bool{}
+	for index, rawDetail := range items {
+		detail, ok := rawDetail.(map[string]any)
+		if !ok || len(detail) != 2 || !isInteger(detail["tokens"]) || intValue(detail["tokens"]) < 0 {
+			return 0, errors.New("invalid context window detail run_command")
+		}
+		name := stringValue(detail["name"])
+		tokens := intValue(detail["tokens"])
+		if seen[name] {
+			return 0, errors.New("duplicate context window detail run_command")
+		}
+		seen[name] = true
+		if name == "run_command" {
+			if len(items) != 1 || tokens != 0 {
+				return 0, errors.New("run_command fallback is only valid for an empty command bucket")
+			}
+			return 0, nil
+		}
+		if name == "other command" {
+			if index != len(items)-1 || tokens <= 0 {
+				return 0, errors.New("other command must be the final positive run_command detail")
+			}
+		} else {
+			if index >= 3 || !validCommandDetailName(name) || tokens <= 0 || tokens > previousTokens ||
+				(tokens == previousTokens && previousName != "" && name < previousName) {
+				return 0, errors.New("invalid ranked run_command detail")
+			}
+			previousTokens = tokens
+			previousName = name
+		}
+		total += tokens
+	}
+	return total, nil
+}
+
+func validCommandDetailName(name string) bool {
+	if len(name) < 1 || len(name) > 64 || !isLowerAlphaNumeric(name[0]) {
+		return false
+	}
+	for index := 1; index < len(name); index++ {
+		char := name[index]
+		if !isLowerAlphaNumeric(char) && char != '.' && char != '_' && char != '+' && char != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func isLowerAlphaNumeric(char byte) bool {
+	return char >= 'a' && char <= 'z' || char >= '0' && char <= '9'
+}
+
 type ContextCompactedPayload struct {
 	PublicEventBase
 	Compaction ContextCompaction `json:"compaction"`
@@ -694,7 +753,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			"runtime":       {"runtime state", "runtime resources", "runtime messages"},
 			"chat_history":  {"user messages", "assistant messages", "other tools", "context summary"},
 			"read_file":     {"read_ppt", "read_image", "read_project"},
-			"run_command":   {"run_command"},
+			"run_command":   nil,
 			"other":         {"other"},
 		}
 		if len(buckets) != len(detailNames) {
@@ -711,7 +770,20 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			}
 			bucketTotal += intValue(buckets[key])
 			items, ok := details[key].([]any)
-			if !ok || len(items) != len(detailNames[key]) {
+			if !ok {
+				return errors.New("invalid context window details " + key)
+			}
+			if key == "run_command" {
+				detailTotal, err := validateRunCommandContextDetails(items)
+				if err != nil {
+					return err
+				}
+				if detailTotal != intValue(buckets[key]) {
+					return errors.New("context window detail total does not match bucket " + key)
+				}
+				continue
+			}
+			if len(items) != len(detailNames[key]) {
 				return errors.New("invalid context window details " + key)
 			}
 			detailTotal := 0

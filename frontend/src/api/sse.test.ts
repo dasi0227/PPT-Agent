@@ -56,7 +56,7 @@ const payloads: Record<string, unknown> = {
       runtime: [{ name: 'runtime state', tokens: 1000 }, { name: 'runtime resources', tokens: 800 }, { name: 'runtime messages', tokens: 200 }],
       chat_history: [{ name: 'user messages', tokens: 3000 }, { name: 'assistant messages', tokens: 3000 }, { name: 'other tools', tokens: 3000 }, { name: 'context summary', tokens: 0 }],
       read_file: [{ name: 'read_ppt', tokens: 5000 }, { name: 'read_image', tokens: 1024 }, { name: 'read_project', tokens: 5000 }],
-      run_command: [{ name: 'run_command', tokens: 1000 }],
+      run_command: [{ name: 'ls', tokens: 1000 }],
       other: [{ name: 'other', tokens: 976 }],
     },
   },
@@ -238,6 +238,24 @@ describe('SSE parser', () => {
       ...(payloads['run.completed'] as Record<string, unknown>),
       trace_id: null,
     }))).toBeNull();
+  });
+
+  it('accepts ranked command details and rejects invalid command rankings', () => {
+    const payload = payloads['context.window.updated'] as Record<string, unknown>;
+    expect(parseSSEEvent('context.window.updated', JSON.stringify(payload))).not.toBeNull();
+
+    const invalid = structuredClone(payload) as Record<string, unknown>;
+    const details = invalid.details as Record<string, unknown>;
+    details.run_command = [
+      { name: 'ls', tokens: 400 },
+      { name: 'rg', tokens: 600 },
+    ];
+    expect(parseSSEEvent('context.window.updated', JSON.stringify(invalid))).toBeNull();
+
+    const invalidFallback = structuredClone(payload) as Record<string, unknown>;
+    const fallbackDetails = invalidFallback.details as Record<string, unknown>;
+    fallbackDetails.run_command = [{ name: 'run_command', tokens: 1000 }];
+    expect(parseSSEEvent('context.window.updated', JSON.stringify(invalidFallback))).toBeNull();
   });
 
   it('parses tool events with local file target fields', () => {

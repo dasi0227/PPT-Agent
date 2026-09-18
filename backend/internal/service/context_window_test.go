@@ -131,6 +131,29 @@ func TestReplaceTranscriptSnapshotPreservesFixedDetailsWithoutLayerLabels(t *tes
 	}
 }
 
+func TestReplaceTranscriptSnapshotReRanksDynamicCommandDetails(t *testing.T) {
+	base := testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
+		contextengine.BucketRunCommand: {
+			"ls": 100, "rg": 80, "git": 60, "other command": 40,
+		},
+	})
+	before := testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
+		contextengine.BucketRunCommand: {"rg": 80, "other command": 40},
+	})
+	after := testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
+		contextengine.BucketRunCommand: {"pwd": 20},
+	})
+
+	got := replaceTranscriptSnapshot(base, before, after)
+	details := got.Details[contextengine.BucketRunCommand]
+	if len(details) != 3 || details[0].Name != "ls" || details[0].Tokens != 100 ||
+		details[1].Name != "git" || details[1].Tokens != 60 ||
+		details[2].Name != "pwd" || details[2].Tokens != 20 ||
+		got.Buckets[contextengine.BucketRunCommand] != 180 {
+		t.Fatalf("unexpected dynamic command replacement: details=%+v bucket=%d", details, got.Buckets[contextengine.BucketRunCommand])
+	}
+}
+
 func testWindowSnapshot(
 	max int,
 	values map[contextengine.ContextBucket]map[string]int,
@@ -141,10 +164,21 @@ func testWindowSnapshot(
 		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{},
 	}
 	for _, bucket := range contextengine.ContextBuckets {
-		for _, name := range contextengine.ContextWindowDetailNames(bucket) {
-			tokens := values[bucket][name]
-			snapshot.Details[bucket] = append(snapshot.Details[bucket], contextengine.WindowBucketDetail{Name: name, Tokens: tokens})
-			snapshot.Buckets[bucket] += tokens
+		if bucket == contextengine.BucketRunCommand {
+			candidates := make([]contextengine.WindowBucketDetail, 0, len(values[bucket]))
+			for name, tokens := range values[bucket] {
+				candidates = append(candidates, contextengine.WindowBucketDetail{Name: name, Tokens: tokens})
+			}
+			snapshot.Details[bucket] = contextengine.NormalizeWindowDetails(bucket, candidates)
+		} else {
+			for _, name := range contextengine.ContextWindowDetailNames(bucket) {
+				snapshot.Details[bucket] = append(snapshot.Details[bucket], contextengine.WindowBucketDetail{
+					Name: name, Tokens: values[bucket][name],
+				})
+			}
+		}
+		for _, detail := range snapshot.Details[bucket] {
+			snapshot.Buckets[bucket] += detail.Tokens
 		}
 		snapshot.Total += snapshot.Buckets[bucket]
 	}

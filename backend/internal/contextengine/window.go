@@ -3,10 +3,14 @@ package contextengine
 import (
 	"encoding/json"
 	"math"
+	"path"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"unicode/utf8"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 )
 
@@ -63,6 +67,11 @@ type PromptEstimateInput struct {
 
 type PromptEstimator struct{}
 
+type toolWindowAttribution struct {
+	bucket ContextBucket
+	detail string
+}
+
 func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	details := emptyDetails()
 	add := func(bucket ContextBucket, name string, tokens int) {
@@ -75,6 +84,7 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 				return
 			}
 		}
+		details[bucket] = append(details[bucket], WindowBucketDetail{Name: name, Tokens: tokens})
 	}
 
 	if input.System != "" {
@@ -114,20 +124,20 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	if len(input.Tools) > 0 {
 		add(BucketSystemPrompt, "tool definitions", EstimateValueTokens(input.Tools))
 	}
-	toolNames := map[string]string{}
+	toolAttributions := map[string]toolWindowAttribution{}
 	for _, message := range input.Messages {
 		for _, call := range message.ToolCalls {
-			toolNames[call.ID] = call.Name
-			bucket, detail := toolBucket(call.Name)
+			bucket, detail := toolBucket(call.Name, call.Args)
+			toolAttributions[call.ID] = toolWindowAttribution{bucket: bucket, detail: detail}
 			add(bucket, detail, EstimateValueTokens(call))
 		}
 		add(BucketOther, "other", messageEnvelopeTokens+EstimateTextTokens(message.ToolCallID))
-		toolName := ""
+		attribution := toolWindowAttribution{}
 		if message.Role == llm.RoleTool {
-			toolName = toolNames[message.ToolCallID]
+			attribution = toolAttributions[message.ToolCallID]
 		}
 		for _, part := range message.Content {
-			bucket, detail := messagePartBucket(message, part, toolName)
+			bucket, detail := messagePartBucket(message, part, attribution)
 			tokens := EstimateTextTokens(part.Text)
 			if part.Type == "image" {
 				tokens = imageApproxTokens
@@ -144,10 +154,13 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	scaledDetails := make(map[ContextBucket][]WindowBucketDetail, len(ContextBuckets))
 	total := 0
 	for _, bucket := range ContextBuckets {
-		scaledDetails[bucket] = make([]WindowBucketDetail, 0, len(details[bucket]))
+		bucketDetails := make([]WindowBucketDetail, 0, len(details[bucket]))
 		for _, detail := range details[bucket] {
 			detail.Tokens = int(math.Ceil(float64(detail.Tokens) * factor))
-			scaledDetails[bucket] = append(scaledDetails[bucket], detail)
+			bucketDetails = append(bucketDetails, detail)
+		}
+		scaledDetails[bucket] = NormalizeWindowDetails(bucket, bucketDetails)
+		for _, detail := range scaledDetails[bucket] {
 			buckets[bucket] += detail.Tokens
 		}
 		total += buckets[bucket]
@@ -159,22 +172,26 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	return WindowSnapshot{Total: total, Max: input.Max, Ratio: ratio, Buckets: buckets, Details: scaledDetails}
 }
 
-func toolBucket(name string) (ContextBucket, string) {
+func toolBucket(name string, args map[string]any) (ContextBucket, string) {
 	switch name {
 	case "read_ppt":
 		return BucketReadFile, "read_ppt"
 	case "read_image":
 		return BucketReadFile, "read_image"
 	case "run_command":
-		return BucketRunCommand, "run_command"
+		return BucketRunCommand, runCommandDetailName(args)
 	default:
 		return BucketChatHistory, "other tools"
 	}
 }
 
-func messagePartBucket(message llm.Message, part llm.ContentPart, toolName string) (ContextBucket, string) {
-	if toolName != "" {
-		return toolBucket(toolName)
+func messagePartBucket(
+	message llm.Message,
+	part llm.ContentPart,
+	attribution toolWindowAttribution,
+) (ContextBucket, string) {
+	if attribution.detail != "" {
+		return attribution.bucket, attribution.detail
 	}
 	if part.Type == "image" || attachmentDescriptionKind(part.Text) != "" {
 		return BucketReadFile, "read_image"
@@ -198,6 +215,85 @@ func messagePartBucket(message llm.Message, part llm.ContentPart, toolName strin
 	default:
 		return BucketOther, "other"
 	}
+}
+
+const (
+	runCommandFallbackDetail = "run_command"
+	otherCommandDetail       = "other command"
+	maxTopCommandDetails     = 3
+)
+
+var commandDetailNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._+-]{0,63}$`)
+
+func runCommandDetailName(args map[string]any) string {
+	source, _ := args["command"].(string)
+	graph, err := commandexec.Parse(source)
+	if err != nil || len(graph.Groups) == 0 || len(graph.Groups[0].Commands) == 0 ||
+		len(graph.Groups[0].Commands[0].Args) == 0 {
+		return otherCommandDetail
+	}
+	executable := strings.ToLower(path.Base(strings.ReplaceAll(graph.Groups[0].Commands[0].Args[0], `\`, "/")))
+	if !commandDetailNamePattern.MatchString(executable) || executable == runCommandFallbackDetail {
+		return otherCommandDetail
+	}
+	return executable
+}
+
+// NormalizeWindowDetails preserves the fixed detail contract for five buckets
+// and applies the dynamic top-three contract to run_command.
+func NormalizeWindowDetails(bucket ContextBucket, details []WindowBucketDetail) []WindowBucketDetail {
+	if bucket == BucketRunCommand {
+		return normalizeRunCommandDetails(details)
+	}
+	tokensByName := make(map[string]int, len(details))
+	for _, detail := range details {
+		if detail.Tokens > 0 {
+			tokensByName[detail.Name] += detail.Tokens
+		}
+	}
+	normalized := make([]WindowBucketDetail, 0, len(contextWindowDetailNames[bucket]))
+	for _, name := range contextWindowDetailNames[bucket] {
+		normalized = append(normalized, WindowBucketDetail{Name: name, Tokens: tokensByName[name]})
+	}
+	return normalized
+}
+
+func normalizeRunCommandDetails(details []WindowBucketDetail) []WindowBucketDetail {
+	tokensByName := make(map[string]int, len(details))
+	otherTokens := 0
+	for _, detail := range details {
+		if detail.Tokens <= 0 || detail.Name == runCommandFallbackDetail {
+			continue
+		}
+		if detail.Name == otherCommandDetail || !commandDetailNamePattern.MatchString(detail.Name) {
+			otherTokens += detail.Tokens
+			continue
+		}
+		tokensByName[detail.Name] += detail.Tokens
+	}
+	commands := make([]WindowBucketDetail, 0, len(tokensByName))
+	for name, tokens := range tokensByName {
+		commands = append(commands, WindowBucketDetail{Name: name, Tokens: tokens})
+	}
+	sort.Slice(commands, func(i, j int) bool {
+		if commands[i].Tokens != commands[j].Tokens {
+			return commands[i].Tokens > commands[j].Tokens
+		}
+		return commands[i].Name < commands[j].Name
+	})
+	if len(commands) > maxTopCommandDetails {
+		for _, detail := range commands[maxTopCommandDetails:] {
+			otherTokens += detail.Tokens
+		}
+		commands = commands[:maxTopCommandDetails]
+	}
+	if otherTokens > 0 {
+		commands = append(commands, WindowBucketDetail{Name: otherCommandDetail, Tokens: otherTokens})
+	}
+	if len(commands) == 0 {
+		return []WindowBucketDetail{{Name: runCommandFallbackDetail}}
+	}
+	return commands
 }
 
 func isRuntimeControlMessage(text string) bool {

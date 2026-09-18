@@ -113,18 +113,18 @@ func TestRunProgressAcceptsOnlyStructuredActivity(t *testing.T) {
 	}
 	if err := ValidatePublicEvent(EventRunProgress, map[string]any{
 		"schema_version": PublicEventSchemaVersion,
-		"run_id":        "r1",
-		"occurred_at":   base.OccurredAt,
-		"activity":      "unknown",
+		"run_id":         "r1",
+		"occurred_at":    base.OccurredAt,
+		"activity":       "unknown",
 	}); err == nil {
 		t.Fatal("unknown run activity was accepted")
 	}
 	if err := ValidatePublicEvent(EventRunProgress, map[string]any{
 		"schema_version": PublicEventSchemaVersion,
-		"run_id":        "r1",
-		"occurred_at":   base.OccurredAt,
-		"activity":      string(ActivityRunAnalyzing),
-		"text":          "legacy progress text",
+		"run_id":         "r1",
+		"occurred_at":    base.OccurredAt,
+		"activity":       string(ActivityRunAnalyzing),
+		"text":           "legacy progress text",
 	}); err == nil {
 		t.Fatal("legacy run progress field was accepted")
 	}
@@ -184,6 +184,22 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 	systemDetails[0].(map[string]any)["source"] = "legacy"
 	if err := ValidatePublicEvent(EventContextWindowUpdated, legacyDetail); err == nil {
 		t.Fatal("legacy context window detail source was accepted")
+	}
+	payload.Total = 110
+	payload.Buckets["run_command"] = 100
+	payload.Details["run_command"] = []ContextWindowBucketDetail{
+		{Name: "ls", Tokens: 60},
+		{Name: "rg", Tokens: 30},
+		{Name: "other command", Tokens: 10},
+	}
+	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err != nil {
+		t.Fatalf("dynamic run command details were rejected: %v", err)
+	}
+	payload.Details["run_command"][1].Tokens = 70
+	payload.Buckets["run_command"] = 140
+	payload.Total = 150
+	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err == nil {
+		t.Fatal("unsorted run command details were accepted")
 	}
 	payload.Buckets["user_prompt"] = 0
 	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err == nil {

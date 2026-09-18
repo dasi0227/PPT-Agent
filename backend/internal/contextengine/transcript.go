@@ -172,7 +172,7 @@ func classifyTranscript(messages []llm.Message) []TranscriptEntry {
 		}
 		bucket := BucketChatHistory
 		if message.Role == llm.RoleTool {
-			bucket, _ = toolBucket(toolNames[message.ToolCallID])
+			bucket, _ = toolBucket(toolNames[message.ToolCallID], nil)
 		} else if message.Role == llm.RoleSystem {
 			bucket = BucketSystemPrompt
 		} else if message.Role == llm.RoleUser && isRuntimeControlMessage(strings.TrimSpace(message.Text())) {

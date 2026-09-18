@@ -419,9 +419,9 @@
         icon: 'file-text', recommended: 'file-text',
         options: [['file-text', 'FileText'], ['files', 'Files'], ['folder-open', 'FolderOpen'], ['book-open-text', 'BookOpenText']],
         details: [
-          ['read_ppt', '通过 read_ppt 读取的页面与项目内容', 1800],
-          ['read_image', '读取或上传并送入模型的图片', 24],
-          ['read_project', '每轮自动注入的项目上下文', 2420],
+          ['read ppt', '通过 read_ppt 读取的页面与项目内容', 1800],
+          ['read image', '读取或上传并送入模型的图片', 24],
+          ['read project', '每轮自动注入的项目上下文', 2420],
         ],
       },
       {
@@ -429,7 +429,10 @@
         icon: 'terminal', recommended: 'terminal',
         options: [['terminal', 'Terminal'], ['square-terminal', 'SquareTerminal'], ['code-2', 'Code2'], ['command', 'Command']],
         details: [
-          ['run_command', '终端命令、输出与执行状态', 1320],
+          ['ls', 'ls 命令的调用与返回结果', 500],
+          ['rg', 'rg 命令的调用与返回结果', 350],
+          ['git', 'git 命令的调用与返回结果', 270],
+          ['other command', '其余命令的调用与返回结果', 200],
         ],
       },
       {

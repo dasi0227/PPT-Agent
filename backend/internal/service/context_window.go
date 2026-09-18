@@ -224,16 +224,24 @@ func replaceTranscriptSnapshot(
 	next.Buckets = map[contextengine.ContextBucket]int{}
 	next.Details = map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{}
 	for _, bucket := range contextengine.ContextBuckets {
-		for _, name := range contextengine.ContextWindowDetailNames(bucket) {
+		names := contextengine.ContextWindowDetailNames(bucket)
+		if bucket == contextengine.BucketRunCommand {
+			names = windowDetailNames(base.Details[bucket], before.Details[bucket], after.Details[bucket])
+		}
+		candidates := make([]contextengine.WindowBucketDetail, 0, len(names))
+		for _, name := range names {
 			tokens := detailTokens(base.Details[bucket], name) -
 				detailTokens(before.Details[bucket], name) + detailTokens(after.Details[bucket], name)
 			if tokens < 0 {
 				tokens = detailTokens(after.Details[bucket], name)
 			}
-			next.Details[bucket] = append(next.Details[bucket], contextengine.WindowBucketDetail{
+			candidates = append(candidates, contextengine.WindowBucketDetail{
 				Name: name, Tokens: tokens,
 			})
-			next.Buckets[bucket] += tokens
+		}
+		next.Details[bucket] = contextengine.NormalizeWindowDetails(bucket, candidates)
+		for _, detail := range next.Details[bucket] {
+			next.Buckets[bucket] += detail.Tokens
 		}
 		next.Total += next.Buckets[bucket]
 	}
@@ -241,6 +249,20 @@ func replaceTranscriptSnapshot(
 		next.Ratio = float64(next.Total) / float64(next.Max)
 	}
 	return next
+}
+
+func windowDetailNames(groups ...[]contextengine.WindowBucketDetail) []string {
+	names := []string{}
+	seen := map[string]bool{}
+	for _, details := range groups {
+		for _, detail := range details {
+			if !seen[detail.Name] {
+				seen[detail.Name] = true
+				names = append(names, detail.Name)
+			}
+		}
+	}
+	return names
 }
 
 func detailTokens(details []contextengine.WindowBucketDetail, name string) int {

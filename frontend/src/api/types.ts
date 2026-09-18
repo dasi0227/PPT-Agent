@@ -517,24 +517,8 @@ export type ContextBucketKey =
   | 'run_command'
   | 'other';
 
-export type ContextWindowDetailName =
-  | 'system prompts'
-  | 'tool definitions'
-  | 'runtime state'
-  | 'runtime resources'
-  | 'runtime messages'
-  | 'user messages'
-  | 'assistant messages'
-  | 'other tools'
-  | 'context summary'
-  | 'read_ppt'
-  | 'read_image'
-  | 'read_project'
-  | 'run_command'
-  | 'other';
-
 export interface ContextWindowDetail {
-  name: ContextWindowDetailName;
+  name: string;
   tokens: number;
 }
 

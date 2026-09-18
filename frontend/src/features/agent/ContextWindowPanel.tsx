@@ -10,7 +10,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { ContextBucketKey, ContextWindowDetailName, ContextWindowSnapshot } from '../../api/types';
+import type { ContextBucketKey, ContextWindowSnapshot } from '../../api/types';
 import { threadsApi } from '../../api/threads';
 import { IconButton } from '../../components/ui/primitives';
 import { useBriefingStore } from '../../stores/briefingStore';
@@ -37,7 +37,7 @@ const BUCKETS: Array<{
   { key: 'other', label: '其它', color: '#8793A2', icon: Ellipsis },
 ];
 
-const DETAIL_DESCRIPTIONS: Record<ContextWindowDetailName, string> = {
+const DETAIL_DESCRIPTIONS: Record<string, string> = {
   'system prompts': '定义 Agent 行为、模式与任务约束',
   'tool definitions': '本轮可用工具及参数结构',
   'runtime state': '当前模式、阶段、计划与执行进度',
@@ -50,7 +50,8 @@ const DETAIL_DESCRIPTIONS: Record<ContextWindowDetailName, string> = {
   read_ppt: '通过 read_ppt 读取的页面与项目内容',
   read_image: '读取或上传并送入模型的图片',
   read_project: '每轮自动注入的项目上下文',
-  run_command: '终端命令、输出与执行状态',
+  run_command: '尚未执行终端命令',
+  'other command': '其余命令的调用与返回结果',
   other: '协议包装及尚未归类的剩余内容',
 };
 
@@ -100,6 +101,16 @@ function formatParentTokens(tokens: number): string {
 
 function formatDetailTokens(tokens: number): string {
   return `${(tokens / 1000).toFixed(2)} k`;
+}
+
+function formatDetailName(name: string): string {
+  return name.replace(/_/g, ' ');
+}
+
+function detailDescription(bucket: ContextBucketKey, name: string): string {
+  if (DETAIL_DESCRIPTIONS[name]) return DETAIL_DESCRIPTIONS[name];
+  if (bucket === 'run_command') return `${formatDetailName(name)} 命令的调用与返回结果`;
+  return '尚未归类的上下文内容';
 }
 
 export function ContextWindowPanel() {
@@ -277,9 +288,11 @@ export function ContextWindowPanel() {
                 }`}
               >
                 <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: bucket.color }} />
-                {bucket.label}
-                <span className="font-mono text-[9px] font-normal text-text-400 tabular-nums">
-                  {formatParentTokens(snapshot.buckets[bucket.key])}
+                <span className="inline-flex items-baseline gap-1">
+                  <span className="leading-none">{bucket.label}</span>
+                  <span className="font-mono text-[9px] font-normal leading-none text-text-400 tabular-nums">
+                    {formatParentTokens(snapshot.buckets[bucket.key])}
+                  </span>
                 </span>
               </button>
             ))}
@@ -303,9 +316,11 @@ export function ContextWindowPanel() {
                   <DetailIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-[11px] font-semibold leading-4 text-text-900">{detail.name}</span>
+                  <span className="block truncate text-[11px] font-semibold leading-4 text-text-900">
+                    {formatDetailName(detail.name)}
+                  </span>
                   <span className="block truncate text-[10px] leading-4 text-text-400">
-                    {DETAIL_DESCRIPTIONS[detail.name]}
+                    {detailDescription(activeBucket, detail.name)}
                   </span>
                 </span>
                 <span className="text-right font-mono text-[10px] leading-4 text-text-600 tabular-nums">

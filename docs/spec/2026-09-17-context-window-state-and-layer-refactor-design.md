@@ -54,10 +54,10 @@ Agent Run 活动状态继续由 Run Store 管理。运行期间上下文窗口�
 | `run_command` | 跑命令 |
 | `other` | 其它 |
 
-- `ContextWindowDetail` 最终只保留 `name / tokens`；删除 `layer / source`。灰色说明由前端根据稳定的 `name` 映射，不接受后端自由文本。
+- `ContextWindowDetail` 最终只保留 `name / tokens`；删除 `layer / source`。灰色说明由前端根据 `name` 映射或按命令名生成，不接受后端自由文本。
 - transcript JSONL 条目删除 `layer`。
 - `ContextWindowSnapshot.status` 仅接受 `idle / compacting`。
-- `buckets` 必须始终返回全部六个 key；`details` 必须始终返回全部六组、共十四条固定明细。值为 `0` 时仍返回对应 bucket 和 detail。
+- `buckets` 必须始终返回全部六个 key；`details` 必须始终返回全部六组。除跑命令外的五组保持固定明细；跑命令组按本节规则动态返回。值为 `0` 时仍返回对应 bucket，且完全没有命令时返回零值兜底明细。
 - 公开事件、查询接口、持久快照、前端类型与 SSE 校验一次性切换到新 key，不接受或兼容 `read_ppt / user_prompt / uploaded_file` 等旧顶层桶。
 - 运行中普通快照发送 `idle`，压缩开始发送 `compacting`，压缩完成后的新快照发送 `idle`。
 - 开发期直接切换新协议，不保留旧字段兼容分支。
@@ -99,14 +99,22 @@ read_project
 
 ### 5.3 跑命令
 
-跑命令桶只保留一条聚合明细，展示文案保持小写：
+跑命令桶按主命令动态聚合，最多展示 Token 占用最高的三种具体命令，并可追加一条剩余命令聚合：
 
 ```text
-run_command
+ls
+rg
+git
+other command
 ```
 
-- `run_command`：合并所有 `run_command` 工具调用参数，以及对应的 stdout、stderr、退出状态和其他返回内容。
-- 所有命令及其结果统一求和，不按命令次数、命令内容或输出类型拆分。
+- 每次 `run_command` 工具调用根据 `command` 参数的首个主命令归类；同一调用的参数、stdout、stderr、退出状态和其他返回内容必须通过 `tool_call_id` 进入同一命令明细。
+- 相同主命令的多次调用合并求和；不同参数不再拆分，例如 `ls` 与 `ls -la` 都归入 `ls`，`git status` 与 `git diff` 都归入 `git`。
+- 具体命令按 Token 降序排列；Token 相同时按命令名字典序排列，保证输出稳定。
+- 只有一至三种具体命令时全部直接展示，不补足三条，也不显示 `other command`。
+- 超过三种具体命令时只保留前三，其余命令的 Token 合并为末尾的 `other command`。
+- 完全没有执行过命令时只返回 `run_command / 0` 作为零值兜底，不显示 `other command`。
+- 无法解析出安全主命令名的调用计入 `other command`；命令名只允许小写字母、数字及 `._+-`，最长 64 个字节。
 - 即使命令实际执行 `cat`、`rg` 等文件读取操作，也仍归入 `run_command`，不得根据命令语义改归读文件。
 - `run_command` 的工具定义属于 `tool definitions`，不属于跑命令。
 - Agent 调用命令前后的自然语言属于对话历史，不属于跑命令。
@@ -172,7 +180,7 @@ other
 ```
 
 - 删除大标题右侧的“空闲 / 压缩中”状态标签；压缩中的反馈只保留在压缩按钮自身。
-- 顶层桶即使 token 为 `0` 也必须展示；选中后，其全部固定子类同样必须展示，不得以零值为由省略。
+- 顶层桶即使 token 为 `0` 也必须展示；选中后，固定子类不得以零值为由省略。跑命令桶没有调用时展示 `run command / 0.00 k`，有调用时仅展示动态命令明细。
 - 顶层桶 token 统一换算为 `x.x k`，保留一位小数并在数字与单位之间保留空格，例如 `15.9 k`、`0.0 k`。
 - 子类 token 统一换算为 `x.xx k`，保留两位小数并在数字与单位之间保留空格，例如 `24` tokens 显示为 `0.02 k`，零值显示为 `0.00 k`。
 - 明细行使用固定列布局，图标、文案区和 token 数字垂直居中；token 列宽固定并使用 tabular numerals，确保各行数字与左侧文案处于同一水平中心线。
@@ -192,11 +200,15 @@ other
 | 对话历史 | `assistant messages` | Agent 已生成的自然语言回复 |
 | 对话历史 | `other tools` | 其余工具的调用与返回结果 |
 | 对话历史 | `context summary` | 压缩历史生成的结构化摘要 |
-| 读文件 | `read_ppt` | 通过 read_ppt 读取的页面与项目内容 |
-| 读文件 | `read_image` | 读取或上传并送入模型的图片 |
-| 读文件 | `read_project` | 每轮自动注入的项目上下文 |
-| 跑命令 | `run_command` | 终端命令、输出与执行状态 |
+| 读文件 | `read ppt` | 通过 read_ppt 读取的页面与项目内容 |
+| 读文件 | `read image` | 读取或上传并送入模型的图片 |
+| 读文件 | `read project` | 每轮自动注入的项目上下文 |
+| 跑命令（无调用） | `run command` | 尚未执行终端命令 |
+| 跑命令（具体命令） | 动态命令名，例如 `ls` | `<命令名> 命令的调用与返回结果` |
+| 跑命令（有剩余） | `other command` | 其余命令的调用与返回结果 |
 | 其它 | `other` | 协议包装及尚未归类的剩余内容 |
+
+协议中的读文件及零值跑命令名称继续使用 `read_ppt / read_image / read_project / run_command`；前端标题统一把下划线替换为空格，不改变协议 key。
 
 ### 6.3 图标选择
 
@@ -226,6 +238,6 @@ other
 - 上下文窗口状态收敛为 `idle / compacting`，普通运行快照继续使用 `idle`。
 - 前端不再展示 `running / warning` 状态，压力提示由 `ratio` 推导。
 - Kickoff / Handoff 简报卡片图标改为 `BookOpenText`。
-- 后端估算器、transcript 分类、公开事件与持久快照读取已切换到六个顶层桶及十四条固定子类，并校验桶、明细与总量守恒。
-- 前端类型、SSE 校验和正式弹窗已同步切换；顺序、配色、图标、格式化、零值展示和固定说明文案与关联 Demo 一致。
+- 后端估算器、transcript 分类、公开事件与持久快照读取已切换到六个顶层桶；跑命令明细动态聚合为 Top 3 + `other command`，并校验桶、明细与总量守恒。
+- 前端类型、SSE 校验和正式弹窗已同步切换；顺序、配色、图标、格式化、零值展示、动态命令说明和关联 Demo 保持一致。
 - 旧顶层桶、`source` 明细字段和旧 transcript 分类值均不再接受，未保留兼容层。
