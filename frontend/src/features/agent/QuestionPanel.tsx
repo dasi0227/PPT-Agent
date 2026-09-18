@@ -231,7 +231,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
                 <AnsweredQuestionOption
                   label="自定义回答"
                   description={currentAnswer.custom_text.trim()}
-                  selected={currentAnswer.selected_option_id === CUSTOM_OPTION_ID}
+                  selected
                 />
               )}
             </div>
@@ -395,7 +395,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
           aria-label="继续"
           disabled={!pending || submitting || !complete}
           onClick={() => void submit()}
-          className="inline-flex h-9 items-center gap-1 rounded-lg bg-accent px-3 text-sm text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-9 items-center gap-1 rounded-lg bg-accent-soft px-3 text-sm text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? '提交中' : '继续'}
           {!submitting && <ArrowRight className="h-4 w-4" strokeWidth={1.75} />}

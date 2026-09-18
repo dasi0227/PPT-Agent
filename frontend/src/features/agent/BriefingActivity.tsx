@@ -236,7 +236,7 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
           type="button"
           onClick={() => void createContinuation()}
           disabled={creatingContinuation}
-          className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 text-xs font-semibold text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-text-400 disabled:opacity-55"
+          className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-accent-soft px-3 text-xs font-semibold text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-55"
         >
           {creatingContinuation
             ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" strokeWidth={1.75} />
@@ -274,7 +274,7 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
               type="button"
               onClick={() => void retry()}
               disabled={!feedback.trim() || busy || !model}
-              className="inline-flex h-7 items-center gap-1 rounded-md bg-accent px-2.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-45"
+              className="inline-flex h-7 items-center gap-1 rounded-md bg-accent-soft px-2.5 text-xs text-accent disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Send className="h-3.5 w-3.5" />
               提交

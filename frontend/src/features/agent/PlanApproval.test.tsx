@@ -30,7 +30,6 @@ describe('PlanApproval', () => {
 
     const approve = screen.getByRole('button', { name: '批准执行' });
     expect(screen.getByText('演示文稿制作计划')).toBeInTheDocument();
-    expect(screen.getByText('1 个步骤')).toBeInTheDocument();
     expect(screen.queryByText(/等待确认/)).toBeNull();
     expect(screen.queryByRole('button', { name: '展开全部' })).toBeNull();
     expect(approve).toHaveAttribute('aria-pressed', 'false');
@@ -42,7 +41,7 @@ describe('PlanApproval', () => {
     expect(approve).toHaveAttribute('aria-pressed', 'true');
     const continueButton = screen.getByRole('button', { name: '继续' });
     expect(continueButton).not.toBeDisabled();
-    expect(continueButton).toHaveClass('h-9', 'bg-accent', 'text-white');
+    expect(continueButton).toHaveClass('h-9', 'bg-accent-soft', 'text-accent');
     expect(continueButton.querySelector('svg')).toHaveClass('h-4', 'w-4');
     expect(runsApi.submitPlanApproval).not.toHaveBeenCalled();
   });
@@ -130,7 +129,6 @@ describe('PlanApproval', () => {
     fireEvent.click(toggle);
 
     expect(screen.getByText('演示文稿制作计划')).toBeInTheDocument();
-    expect(screen.getByText('1 个步骤')).toBeInTheDocument();
     expect(screen.getByText('先完成结构，再生成页面。')).toBeInTheDocument();
     expect(screen.getByTestId('answered-plan-card')).toHaveClass('ml-6', 'border', 'bg-surface', 'p-4');
     expect(screen.queryByText('请补充案例')).toBeNull();

@@ -141,7 +141,7 @@ export function PickerModal<T>({
               type="button"
               disabled={!selectedItem}
               onClick={() => selectedItem && onPick(selectedItem)}
-              className="inline-flex h-9 items-center justify-center rounded-md bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center rounded-md bg-accent-soft px-4 text-sm font-medium text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {confirmationLabel}
             </button>

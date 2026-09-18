@@ -14,7 +14,7 @@ export function Button({
       {...props}
       className={cn(
         'inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45',
-        variant === 'primary' && 'bg-accent text-white hover:bg-accent/90',
+        variant === 'primary' && 'bg-accent-soft text-accent hover:bg-accent/15',
         variant === 'secondary' && 'border border-border-strong bg-panel text-text-900 hover:bg-panel-muted',
         variant === 'ghost' && 'text-text-600 hover:bg-panel-muted hover:text-text-900',
         variant === 'danger' && 'bg-danger text-white hover:bg-danger/90',

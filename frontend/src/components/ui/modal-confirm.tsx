@@ -92,7 +92,7 @@ export function ConfirmModal({
               "inline-flex h-9 min-w-[72px] items-center justify-center rounded-md px-3 text-sm font-medium transition-colors disabled:opacity-50",
               variant === 'danger' 
                 ? "bg-danger text-white hover:bg-danger/90"
-                : "bg-accent text-white hover:bg-accent/90"
+                : "bg-accent-soft text-accent hover:bg-accent/15"
             )}
           >
             {loading ? "..." : confirmLabel}

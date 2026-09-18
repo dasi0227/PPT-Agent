@@ -509,7 +509,7 @@ export const PreviewWorkspace: React.FC = () => {
               aria-pressed={globalView === 'outline'}
               className={cn(
                 'h-7 rounded-full px-3 font-medium transition-colors',
-                globalView === 'outline' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-700',
+                globalView === 'outline' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-600',
               )}
             >设计稿</button>
             <button
@@ -518,7 +518,7 @@ export const PreviewWorkspace: React.FC = () => {
               aria-pressed={globalView === 'html'}
               className={cn(
                 'h-7 rounded-full px-3 font-medium transition-colors',
-                globalView === 'html' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-700',
+                globalView === 'html' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-600',
               )}
             >幻灯片</button>
           </div>

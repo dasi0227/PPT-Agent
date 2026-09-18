@@ -92,12 +92,9 @@ function PlanBody({
 }) {
   return (
     <>
-      <div className="flex items-start gap-2">
-        <ListChecks className="mt-0.5 h-5 w-5 shrink-0 text-accent" strokeWidth={1.75} />
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold leading-5 text-text-900">{item.plan.title}</h3>
-          <p className="mt-0.5 text-xs text-text-400">{item.plan.steps.length} 个步骤</p>
-        </div>
+      <div className="flex items-center gap-2">
+        <ListChecks className="h-5 w-5 shrink-0 text-accent" strokeWidth={1.75} />
+        <h3 className="min-w-0 text-sm font-semibold leading-5 text-text-900">{item.plan.title}</h3>
       </div>
       {preview
         ? <PlanContentPreview content={item.plan.content} />
@@ -172,7 +169,7 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
         ))}
       </div>
       {decision === 'revise' && <textarea className="mt-3 min-h-24 w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-2 focus:border-ink focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="说明需要调整的内容" required />}
-      <div className="mt-3 flex justify-end"><button type="button" disabled={!canSubmit} onClick={() => void submit()} className="inline-flex h-9 items-center gap-1 rounded-lg bg-accent px-3 text-sm text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"><ArrowRight className="h-4 w-4" strokeWidth={1.75} />{submitting ? '提交中' : '继续'}</button></div>
+      <div className="mt-3 flex justify-end"><button type="button" disabled={!canSubmit} onClick={() => void submit()} className="inline-flex h-9 items-center gap-1 rounded-lg bg-accent-soft px-3 text-sm text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-40"><ArrowRight className="h-4 w-4" strokeWidth={1.75} />{submitting ? '提交中' : '继续'}</button></div>
     </div>
   </article>;
 }

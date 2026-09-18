@@ -114,7 +114,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
               <button
                 type="submit"
                 disabled={!title.trim() || isCreating}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-accent-soft px-4 text-sm font-medium text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isCreating && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />}
                 {isCreating ? '正在创建' : '创建项目'}
