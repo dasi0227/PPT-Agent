@@ -69,6 +69,8 @@ func (r *Router) register() {
 	v1.GET("/healthz", r.health.Healthz)
 	if r.llm != nil {
 		v1.GET("/llm/profiles", r.llm.Profiles)
+		v1.GET("/settings/models", r.llm.Settings)
+		v1.PUT("/settings/models", r.llm.SaveSettings)
 	}
 	v1.GET("/runtime/base.css", r.repository.RuntimeBaseCSS)
 	v1.GET("/themes", r.repository.ListThemes)

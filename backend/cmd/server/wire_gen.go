@@ -64,7 +64,7 @@ func initApp() (*App, func(), error) {
 	}
 	fsTranscriptStore := provideTranscriptStore()
 	calibrationStore := provideCalibrationStore()
-	provider, err := provideRenameProvider(configConfig)
+	provider, err := provideRenameProvider(registry)
 	if err != nil {
 		cleanup3()
 		cleanup2()

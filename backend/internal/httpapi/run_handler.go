@@ -42,6 +42,7 @@ type createRunBody struct {
 }
 
 type runResponse struct {
+	ExecutionModel           *model.ActiveModelSelection  `json:"model_execution,omitempty"`
 	ID                       string                       `json:"id"`
 	ThreadID                 string                       `json:"thread_id"`
 	ProjectID                string                       `json:"project_id"`
@@ -64,7 +65,7 @@ func toRunResponse(r model.Run) runResponse {
 		profileName = &value
 	}
 	return runResponse{
-		ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
+		ExecutionModel: r.ExecutionModel, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
 		Scope: r.Command.Scope, Mode: r.Command.Mode,
 		Model: profileName, Skills: r.Command.PublicSkills(), Components: r.Command.PublicComponents(),

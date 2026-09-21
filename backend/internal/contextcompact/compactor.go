@@ -45,6 +45,14 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	if c == nil || c.provider == nil {
 		return Result{}, errors.New("compact provider is required")
 	}
+	provider := c.provider
+	if factory, ok := provider.(interface{ Capture() (llm.Provider, error) }); ok {
+		captured, err := factory.Capture()
+		if err != nil {
+			return Result{}, err
+		}
+		provider = captured
+	}
 	before := messageTokens(messages)
 	pruned := pruneSupersededRenderImages(cloneMessages(messages))
 	compressed, retained := splitTranscript(pruned)
@@ -55,7 +63,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		}, nil
 	}
 
-	maxInput := c.provider.Capabilities().ContextWindowTokens - maxSummaryTokens - outputSafetyTokens
+	maxInput := provider.Capabilities().ContextWindowTokens - maxSummaryTokens - outputSafetyTokens
 	if maxInput <= 0 {
 		return Result{}, errors.New("provider context window is unavailable")
 	}
@@ -70,7 +78,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, compactionTimeout)
 	defer cancel()
-	response, err := c.provider.Generate(requestCtx, llm.GenerateRequest{
+	response, err := provider.Generate(requestCtx, llm.GenerateRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
 			{Role: llm.RoleUser, Content: llm.TextContent("<transcript>\n" + string(raw) + "\n</transcript>")},

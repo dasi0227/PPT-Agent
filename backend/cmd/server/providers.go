@@ -34,30 +34,11 @@ func provideApp(server *http.Server, engine *run.Engine, runs *service.RunServic
 func engineFromRouter(r *httpapi.Router) *gin.Engine { return r.Engine() }
 
 func provideLLMRegistry(cfg *config.Config) (*llm.Registry, error) {
-	profiles := make([]llm.ProfileConfig, 0, len(cfg.LLM.MainRoad.Profiles))
-	for _, profile := range cfg.LLM.MainRoad.Profiles {
-		profiles = append(profiles, llm.ProfileConfig{
-			Name: profile.Name, Provider: profile.Provider,
-			Model: profile.Model, Key: profile.Key,
-		})
-	}
-	return llm.NewRegistry(cfg.LLM.MainRoad.Default, profiles)
+	return llm.NewConfiguredRegistry(cfg.LLMPath, cfg.LLM)
 }
 
-func provideRenameProvider(cfg *config.Config) (llm.Provider, error) {
-	profile := cfg.LLM.SideRoad.Rename
-	registry, err := llm.NewRegistry(profile.Name, []llm.ProfileConfig{{
-		Name: profile.Name, Provider: profile.Provider, Model: profile.Model, Key: profile.Key,
-		Timeout: 20 * time.Second,
-	}})
-	if err != nil {
-		return nil, err
-	}
-	resolved, err := registry.Resolve(profile.Name)
-	if err != nil {
-		return nil, err
-	}
-	return resolved.Adapter(), nil
+func provideRenameProvider(registry *llm.Registry) (llm.Provider, error) {
+	return llm.SideProvider{Registry: registry, Purpose: "rename"}, nil
 }
 
 func provideLockManager() *run.LockManager { return run.NewLockManager() }

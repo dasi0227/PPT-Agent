@@ -23,10 +23,9 @@ func NewBriefingHandler(kickoff *service.KickoffService, handoff *service.Handof
 }
 
 type briefingRequest struct {
-	ThreadID         string `json:"thread_id"`
-	ModelProfileName string `json:"model_profile_name"`
-	BriefingID       string `json:"briefing_id"`
-	Feedback         string `json:"feedback"`
+	ThreadID   string `json:"thread_id"`
+	BriefingID string `json:"briefing_id"`
+	Feedback   string `json:"feedback"`
 }
 
 func (h *BriefingHandler) Kickoff(c *gin.Context) {
@@ -49,7 +48,7 @@ func (h *BriefingHandler) generate(
 		return
 	}
 	result, err := generate(c.Request.Context(), c.Param("id"), service.BriefingParams{
-		ThreadID: body.ThreadID, Model: body.ModelProfileName,
+		ThreadID:   body.ThreadID,
 		BriefingID: body.BriefingID, Feedback: body.Feedback,
 	})
 	switch {

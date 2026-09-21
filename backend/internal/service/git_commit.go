@@ -26,7 +26,6 @@ const (
 
 type GitCommitParams struct {
 	ThreadID        string
-	Model           string
 	ClientRequestID string
 }
 
@@ -125,7 +124,7 @@ func (svc *GitCommitService) Initialize(ctx context.Context) error {
 
 func (svc *GitCommitService) Start(ctx context.Context, projectID string, params GitCommitParams) (model.GitCommitOperation, error) {
 	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(params.ThreadID) == "" ||
-		strings.TrimSpace(params.Model) == "" || strings.TrimSpace(params.ClientRequestID) == "" {
+		strings.TrimSpace(params.ClientRequestID) == "" {
 		return model.GitCommitOperation{}, ErrGitCommitInvalid
 	}
 	if existing, err := svc.store.GetGitCommitOperationByRequest(ctx, params.ThreadID, params.ClientRequestID); err == nil {
@@ -142,7 +141,7 @@ func (svc *GitCommitService) Start(ctx context.Context, projectID string, params
 	if thread.ProjectID != project.ID {
 		return model.GitCommitOperation{}, ErrGitCommitInvalid
 	}
-	profile, err := svc.registry.Resolve(params.Model)
+	profile, err := svc.registry.RoutedProfile("commit", "")
 	if err != nil {
 		return model.GitCommitOperation{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "git_commit", err)
 	}
@@ -296,6 +295,12 @@ func (svc *GitCommitService) execute(
 		svc.fail(ctx, &operation, bus, "GIT_STAGE_FAILED", true, err)
 		return
 	}
+	if route, ok := profile.Adapter().(*llm.RoutedProvider); ok {
+		route.OnFallback = func(switchCtx context.Context, state llm.RouteState) error {
+			payload := model.GitCommitProgressPayload{GitCommitEventBase: model.NewGitCommitEventBase(operation.ID, project.ID, operation.ThreadID), Phase: model.GitCommitAnalyzing, ModelSwitch: &model.ModelSwitch{From: state.Initial, To: state.Active, Purpose: "commit"}}
+			return svc.emit(switchCtx, &operation, bus, model.EventGitCommitProgress, payload, model.GitCommitRunning, model.GitCommitAnalyzing, "", "")
+		}
+	}
 	message, err := generateGitCommitMessage(ctx, profile, project.Title, changes)
 	if err != nil {
 		code := "COMMIT_MESSAGE_INVALID"
@@ -305,6 +310,7 @@ func (svc *GitCommitService) execute(
 		svc.fail(ctx, &operation, bus, code, true, err)
 		return
 	}
+	executionModel := llm.ExecutionOf(profile.Adapter())
 	if err := svc.emitProgress(ctx, &operation, bus, model.GitCommitCommitting); err != nil {
 		svc.fail(ctx, &operation, bus, "GIT_COMMIT_FAILED", true, err)
 		return
@@ -317,6 +323,7 @@ func (svc *GitCommitService) execute(
 		return
 	}
 	result := model.GitCommitResult{
+		ModelProfile: executionModel.Profile, FallbackUsed: executionModel.FallbackUsed,
 		Title: message.Title, Items: message.Items,
 		Branch: gitResult.Branch, Hash: gitResult.Hash, CommittedAt: gitResult.CommittedAt,
 		FilesChanged: gitResult.FilesChanged, Insertions: gitResult.Insertions, Deletions: gitResult.Deletions,
@@ -426,9 +433,10 @@ func generateGitCommitMessage(
 			},
 		},
 	}
+	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
+	defer cancel()
 	var lastErr error
 	for attempt := 0; attempt < gitCommitModelAttempts; attempt++ {
-		requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 		response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
@@ -436,13 +444,12 @@ func generateGitCommitMessage(
 			},
 			Tools: []llm.ToolSchema{tool}, MaxOutputTokens: 1024,
 		})
-		cancel()
 		if err != nil {
 			lastErr = err
 			if errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
 				return generatedCommitMessage{}, context.DeadlineExceeded
 			}
-			continue
+			return generatedCommitMessage{}, err
 		}
 		message, validateErr := validateGitCommitResponse(response)
 		if validateErr == nil {

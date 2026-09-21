@@ -50,7 +50,7 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 	registry, err := llm.NewRegistryWithProfiles("Default", []llm.Profile{
 		llm.NewTestProfile("Default", "https://default.example.invalid", defaultProvider),
 		llm.NewTestProfile("Polish", "https://example.invalid", provider),
-	})
+	}, llm.RoadConfig{Side: config.SideRoadLLMConfig{Default: "Polish"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,8 +59,7 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 		ScopeInput: model.CreateRunScopeInput{Object: model.ScopeObjectPresentation, Selection: model.ScopeSelectionInput{
 			Kind: model.ScopeCurrentPage, CurrentSlideID: "sli_aaaaaa",
 		}},
-		Mode: model.ModeExecute, Model: "Polish",
-	})
+		Mode: model.ModeExecute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +71,7 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 		t.Fatalf("unexpected provider request: %+v", requests)
 	}
 	if len(defaultProvider.Requests()) != 0 {
-		t.Fatal("polish ignored the selected profile and called the registry default")
+		t.Fatal("polish ignored the side-road profile and called the registry default")
 	}
 	if requests[0].MaxOutputTokens != maxPolishOutputTokens {
 		t.Fatalf("polish generation policy mismatch: %+v", requests[0])

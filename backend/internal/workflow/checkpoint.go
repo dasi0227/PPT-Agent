@@ -79,6 +79,12 @@ func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state 
 
 func (r *Runtime) checkpointForBoundary(state *RunState, boundary checkpointBoundary, questionID string) RuntimeCheckpoint {
 	cp := state.checkpoint(questionID, r.clockNow())
+	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
+		if route, ok := cognitive.Provider.(*llm.RoutedProvider); ok {
+			snapshot := route.State()
+			cp.ModelRoute = &snapshot
+		}
+	}
 	cp.Boundary = string(boundary)
 	cp.ContextBriefing = state.contextBriefing
 	cp.ContextIndexRef = state.contextIndexRef

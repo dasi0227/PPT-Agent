@@ -27,7 +27,6 @@ type polishRequest struct {
 	ThreadID    string                    `json:"thread_id"`
 	Scope       model.CreateRunScopeInput `json:"scope"`
 	Mode        model.RunMode             `json:"mode"`
-	Model       string                    `json:"model"`
 }
 
 func (h *PolishHandler) Polish(c *gin.Context) {
@@ -39,13 +38,14 @@ func (h *PolishHandler) Polish(c *gin.Context) {
 	}
 	result, err := h.svc.Polish(c.Request.Context(), c.Param("id"), service.PolishParams{
 		Instruction: body.Instruction, ThreadID: body.ThreadID,
-		ScopeInput: body.Scope, Mode: body.Mode, Model: body.Model,
+		ScopeInput: body.Scope, Mode: body.Mode,
 	})
 	switch {
 	case err == nil:
 		c.JSON(http.StatusOK, gin.H{
 			"polished_instruction": result.Instruction,
 			"changed":              result.Changed,
+			"model_execution":      result.ModelExecution,
 			"prompt_version":       result.PromptVersion,
 		})
 	case errors.Is(err, context.Canceled):

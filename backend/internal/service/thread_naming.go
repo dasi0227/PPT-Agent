@@ -508,10 +508,18 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) {
 	defer cancel()
 	outcome := "kept"
 	safeError := ""
+	provider := svc.provider
+	var captureErr error
+	if factory, ok := provider.(interface{ Capture() (llm.Provider, error) }); ok {
+		provider, captureErr = factory.Capture()
+	}
 	contextValue, err := svc.renameContext(ctx, task.threadID, task.trigger)
+	if captureErr != nil {
+		err = captureErr
+	}
 	if err == nil {
 		var response llm.GenerateResponse
-		response, err = svc.provider.Generate(ctx, llm.GenerateRequest{
+		response, err = provider.Generate(ctx, llm.GenerateRequest{
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.rename").Body)},
 				{Role: llm.RoleUser, Content: llm.TextContent("<rename_context>\n" + contextValue + "\n</rename_context>")},
@@ -561,7 +569,11 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) {
 		}
 	}
 	svc.completeTaskOperation(task, outcome)
-	svc.hub.PublishResult(task.threadID, task.projectID, task.operationID, task.requestID, outcome, safeError)
+	if provider != nil {
+		svc.hub.PublishResult(task.threadID, task.projectID, task.operationID, task.requestID, outcome, safeError, llm.ExecutionOf(provider))
+	} else {
+		svc.hub.PublishResult(task.threadID, task.projectID, task.operationID, task.requestID, outcome, safeError)
+	}
 }
 
 func (svc *NamingService) completeTaskOperation(task renameTask, outcome string) {

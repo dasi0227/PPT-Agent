@@ -25,14 +25,14 @@ const briefingVersionWindow = 2
 
 type BriefingParams struct {
 	ThreadID   string
-	Model      string
 	BriefingID string
 	Feedback   string
 }
 
 type BriefingResult struct {
-	Briefing      model.Briefing `json:"briefing"`
-	PromptVersion string         `json:"prompt_version"`
+	ModelExecution llm.ModelExecution `json:"model_execution"`
+	Briefing       model.Briefing     `json:"briefing"`
+	PromptVersion  string             `json:"prompt_version"`
 }
 
 type briefingGenerator struct {
@@ -84,10 +84,9 @@ func (svc *briefingGenerator) generate(
 	promptVersion string,
 ) (BriefingResult, error) {
 	params.ThreadID = strings.TrimSpace(params.ThreadID)
-	params.Model = strings.TrimSpace(params.Model)
 	params.BriefingID = strings.TrimSpace(params.BriefingID)
 	params.Feedback = strings.TrimSpace(params.Feedback)
-	if params.ThreadID == "" || params.Model == "" ||
+	if params.ThreadID == "" ||
 		(params.BriefingID == "") != (params.Feedback == "") ||
 		utf8.RuneCountInString(params.Feedback) > maxBriefingFeedbackRunes {
 		return BriefingResult{}, model.NewAgentError("BAD_REQUEST", string(kind), nil)
@@ -113,7 +112,7 @@ func (svc *briefingGenerator) generate(
 	if svc.registry == nil {
 		return BriefingResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", string(kind), nil)
 	}
-	profile, err := svc.registry.Resolve(params.Model)
+	profile, err := svc.registry.RoutedProfile(string(kind), "")
 	if err != nil || profile.Adapter() == nil {
 		return BriefingResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", string(kind), err)
 	}
@@ -193,7 +192,8 @@ func (svc *briefingGenerator) generate(
 			BriefingID: briefingID, ThreadID: thread.ID, ProjectID: project.ID,
 			Kind: kind, Versions: versions, UpdatedAt: version.CreatedAt,
 		},
-		PromptVersion: promptVersion,
+		PromptVersion:  promptVersion,
+		ModelExecution: llm.ExecutionOf(profile.Adapter()),
 	}, nil
 }
 

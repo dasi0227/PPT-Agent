@@ -69,7 +69,7 @@ func TestGitCommitServiceEmitsRealPhasesAndPersistsResult(t *testing.T) {
 	}
 	svc := NewGitCommitService(st, registry, run.NewLockManager())
 	operation, err := svc.Start(ctx, "p1", GitCommitParams{
-		ThreadID: "t1", Model: "Commit", ClientRequestID: "req-1",
+		ThreadID: "t1", ClientRequestID: "req-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestGitCommitServiceReturnsEmptyAfterProjectInitialization(t *testing.T) {
 	}
 	svc := NewGitCommitService(st, registry, run.NewLockManager())
 	operation, err := svc.Start(ctx, project.ID, GitCommitParams{
-		ThreadID: thread.ID, Model: "Commit", ClientRequestID: "req-empty",
+		ThreadID: thread.ID, ClientRequestID: "req-empty",
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -61,39 +61,30 @@ func prepareBackendConfig(t *testing.T, content string) string {
 
 func validConfig(secret string) string {
 	return `llm:
-  main-road:
-    default: Kimi Vision
-    profiles:
-      - name: Kimi Vision
-        provider: kimi
-        model: kimi-k3
-        key: ` + secret + `
-      - name: Kimi Text
-        provider: kimi
-        model: kimi-k2
-        key: another-secret
-  side-road:
-    rename:
-      name: Rename Mini
-      provider: kimi
-      model: kimi-k2
-      key: rename-secret
+  - name: Kimi Vision
+    provider: kimi
+    model: kimi-k3
+    key: ` + secret + `
+  - name: Kimi Text
+    provider: kimi
+    model: kimi-k2
+    key: another-secret
+  - name: Rename Mini
+    provider: kimi
+    model: kimi-k2
+    key: rename-secret
+main-road:
+  default: Kimi Vision
+side-road:
+  default: Rename Mini
 `
 }
 
 func configWithMainRoad(body string) string {
-	lines := strings.Split(strings.TrimSpace(body), "\n")
-	for index := range lines {
-		lines[index] = "    " + lines[index]
-	}
-	return "llm:\n  main-road:\n" + strings.Join(lines, "\n") + `
-  side-road:
-    rename:
-      name: Rename Mini
-      provider: kimi
-      model: kimi-k2
-      key: rename-secret
-`
+	lines := strings.SplitN(body, "\n", 2)
+	defaultName := strings.TrimPrefix(lines[0], "default:")
+	profiles := strings.TrimPrefix(lines[1], "profiles:")
+	return "llm:" + profiles + "\nmain-road:\n  default:" + defaultName + "\nside-road:\n  default:" + defaultName + "\n"
 }
 
 func TestLoadReadsOnlyPortFromEnvironment(t *testing.T) {
@@ -113,8 +104,8 @@ func TestLoadReadsOnlyPortFromEnvironment(t *testing.T) {
 		cfg.DBPath != filepath.Join(expectedRoot, "db", "ppt.db") || cfg.LogLevel != logLevel {
 		t.Fatal("fixed backend configuration was not preserved")
 	}
-	if cfg.LLM.MainRoad.Default != "Kimi Vision" || len(cfg.LLM.MainRoad.Profiles) != 2 ||
-		cfg.LLM.MainRoad.Profiles[0].Key != "sk-test-secret" || cfg.LLM.SideRoad.Rename.Name != "Rename Mini" {
+	if cfg.LLM.MainRoad.Default != "Kimi Vision" || len(cfg.LLM.Profiles) != 3 ||
+		cfg.LLM.Profiles[0].Key != "sk-test-secret" || cfg.LLM.SideRoad.Default != "Rename Mini" {
 		t.Fatal("profile YAML was not loaded")
 	}
 }

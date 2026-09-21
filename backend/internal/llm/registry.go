@@ -54,17 +54,23 @@ type PublicProfile struct {
 }
 
 type PublicProfiles struct {
+	Revision string          `json:"revision"`
 	Default  string          `json:"default"`
 	Profiles []PublicProfile `json:"profiles"`
 }
 
 type Registry struct {
+	manager  *ModelConfigManager
+	revision string
+	routing  RoadConfig
+
 	defaultName string
 	profiles    map[string]Profile
 	order       []string
 }
 
 func (r *Registry) String() string {
+	r = r.Snapshot()
 	if r == nil {
 		return "LLMRegistry<nil>"
 	}
@@ -104,13 +110,16 @@ func NewRegistry(defaultName string, configs []ProfileConfig) (*Registry, error)
 
 // NewRegistryWithProfiles supports deterministic tests without paid provider
 // traffic. Production should use NewRegistry so adapter ownership stays fixed.
-func NewRegistryWithProfiles(defaultName string, profiles []Profile) (*Registry, error) {
+func NewRegistryWithProfiles(defaultName string, profiles []Profile, roads ...RoadConfig) (*Registry, error) {
 	if len(profiles) == 0 {
 		return nil, errors.New("LLM registry requires at least one profile")
 	}
 	registry := &Registry{
 		defaultName: defaultName, profiles: make(map[string]Profile, len(profiles)),
 		order: make([]string, 0, len(profiles)),
+	}
+	if len(roads) > 0 {
+		registry.routing = roads[0]
 	}
 	for _, profile := range profiles {
 		if profile.adapter == nil {
@@ -138,6 +147,7 @@ func NewTestProfile(name, url string, adapter Provider) Profile {
 }
 
 func (r *Registry) Default() string {
+	r = r.Snapshot()
 	if r == nil {
 		return ""
 	}
@@ -145,6 +155,7 @@ func (r *Registry) Default() string {
 }
 
 func (r *Registry) Resolve(name string) (Profile, error) {
+	r = r.Snapshot()
 	if r == nil {
 		return Profile{}, errors.New("MODEL_PROFILE_NOT_FOUND")
 	}
@@ -159,10 +170,12 @@ func (r *Registry) Resolve(name string) (Profile, error) {
 }
 
 func (r *Registry) Public() PublicProfiles {
+	r = r.Snapshot()
 	out := PublicProfiles{Default: r.Default(), Profiles: []PublicProfile{}}
 	if r == nil {
 		return out
 	}
+	out.Revision = r.revision
 	names := append([]string(nil), r.order...)
 	if len(names) == 0 {
 		for name := range r.profiles {

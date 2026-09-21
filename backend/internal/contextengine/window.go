@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -318,33 +317,9 @@ const (
 	imageApproxTokens     = 1024
 )
 
-func EstimateTextTokens(value string) int {
-	runes := utf8.RuneCountInString(value)
-	if runes == 0 {
-		return 0
-	}
-	return (runes+2)/3 + 1
-}
-
-func EstimateValueTokens(value any) int {
-	raw, _ := json.Marshal(value)
-	return EstimateTextTokens(string(raw))
-}
-
-func EstimateMessageTokens(message llm.Message) int {
-	total := messageEnvelopeTokens
-	for _, part := range message.Content {
-		switch part.Type {
-		case "image":
-			total += imageApproxTokens
-		default:
-			total += EstimateTextTokens(part.Text)
-		}
-	}
-	total += EstimateValueTokens(message.ToolCalls)
-	total += EstimateTextTokens(message.ToolCallID)
-	return total
-}
+func EstimateTextTokens(value string) int           { return llm.EstimateTextTokens(value) }
+func EstimateValueTokens(value any) int             { return llm.EstimateValueTokens(value) }
+func EstimateMessageTokens(message llm.Message) int { return llm.EstimateMessageTokens(message) }
 
 func extractXMLSectionContents(value, name string) (string, string, int) {
 	openPrefix, close := "<"+name, "</"+name+">"

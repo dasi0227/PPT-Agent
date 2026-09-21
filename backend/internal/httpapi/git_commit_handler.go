@@ -24,7 +24,6 @@ func NewGitCommitHandler(svc *service.GitCommitService) *GitCommitHandler {
 
 type createGitCommitRequest struct {
 	ThreadID        string `json:"thread_id"`
-	Model           string `json:"model"`
 	ClientRequestID string `json:"client_request_id"`
 }
 
@@ -67,7 +66,7 @@ func (h *GitCommitHandler) Create(c *gin.Context) {
 		return
 	}
 	operation, err := h.svc.Start(c.Request.Context(), c.Param("id"), service.GitCommitParams{
-		ThreadID: strings.TrimSpace(request.ThreadID), Model: strings.TrimSpace(request.Model),
+		ThreadID:        strings.TrimSpace(request.ThreadID),
 		ClientRequestID: strings.TrimSpace(request.ClientRequestID),
 	})
 	if err != nil {

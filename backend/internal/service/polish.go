@@ -24,13 +24,13 @@ type PolishParams struct {
 	ThreadID    string
 	ScopeInput  model.CreateRunScopeInput
 	Mode        model.RunMode
-	Model       string
 }
 
 type PolishResult struct {
-	Instruction   string
-	Changed       bool
-	PromptVersion string
+	ModelExecution llm.ModelExecution
+	Instruction    string
+	Changed        bool
+	PromptVersion  string
 }
 
 type PolishService struct {
@@ -79,7 +79,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if svc.registry == nil {
 		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_prompt", nil)
 	}
-	profile, err := svc.registry.Resolve(params.Model)
+	profile, err := svc.registry.RoutedProfile("polish", "")
 	if err != nil {
 		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_prompt", nil)
 	}
@@ -117,6 +117,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 		return PolishResult{}, model.NewAgentError("POLISH_OUTPUT_INVALID", "polish_prompt", nil)
 	}
 	return PolishResult{
-		Instruction: polished, Changed: polished != instruction, PromptVersion: prompt.Version,
+		ModelExecution: llm.ExecutionOf(profile.Adapter()),
+		Instruction:    polished, Changed: polished != instruction, PromptVersion: prompt.Version,
 	}, nil
 }

@@ -7,22 +7,28 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func (svc *RunService) resumeProvider(runModel model.Run) (llm.Provider, error) {
+func (svc *RunService) resumeProvider(runModel model.Run, saved ...*llm.RouteState) (llm.Provider, error) {
 	if svc.registry == nil {
 		return nil, errors.New("model registry is required to resume run")
 	}
-	profile, err := svc.registry.Resolve(runModel.Model.ProfileName)
+	snapshot := svc.registry.Snapshot()
+	if pinned, ok := svc.snapshots.Load(runModel.ID); ok {
+		snapshot = pinned.(*llm.Registry)
+	}
+	profile, err := snapshot.RoutedProfile("main", runModel.Model.ProfileName)
 	if err != nil {
 		return nil, err
 	}
-	if profile.ProviderName() != runModel.Model.Provider ||
-		profile.Model() != runModel.Model.Model ||
-		profile.URL() != runModel.Model.URL {
+	if profile.ProviderName() != runModel.Model.Provider || profile.Model() != runModel.Model.Model || profile.URL() != runModel.Model.URL {
 		return nil, errors.New("model profile changed since checkpoint")
 	}
-	provider := profile.Adapter()
-	if provider == nil {
-		return nil, errors.New("model provider is unavailable")
+	route := profile.Adapter().(*llm.RoutedProvider)
+	if len(saved) > 0 && saved[0] != nil {
+		if err := route.Restore(*saved[0]); err != nil {
+			return nil, err
+		}
+	} else if _, pinned := svc.snapshots.Load(runModel.ID); !pinned && snapshot.Public().Revision != "" {
+		return nil, errors.New("原任务没有可恢复的模型快照，请新建一轮。")
 	}
-	return provider, nil
+	return route, nil
 }

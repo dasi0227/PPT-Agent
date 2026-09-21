@@ -45,7 +45,7 @@ func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
 	decodeResponse(t, response, &thread)
 
 	for _, kind := range []string{"kickoff", "handoff"} {
-		body := `{"thread_id":"` + thread.ID + `","model_profile_name":"Briefing"}`
+		body := `{"thread_id":"` + thread.ID + `"}`
 		response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/"+kind, body)
 		if response.Code != http.StatusOK ||
 			!strings.Contains(response.Body.String(), `"kind":"`+kind+`"`) ||

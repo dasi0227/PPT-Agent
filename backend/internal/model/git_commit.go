@@ -80,11 +80,14 @@ func NewGitCommitEventBase(operationID, projectID, threadID string) GitCommitEve
 }
 
 type GitCommitProgressPayload struct {
+	ModelSwitch *ModelSwitch `json:"model_switch,omitempty"`
 	GitCommitEventBase
 	Phase GitCommitPhase `json:"phase"`
 }
 
 type GitCommitResult struct {
+	ModelProfile string   `json:"model_profile"`
+	FallbackUsed bool     `json:"fallback_used"`
 	Title        string   `json:"title"`
 	Items        []string `json:"items"`
 	Branch       string   `json:"branch"`

@@ -19,9 +19,7 @@ func NewContextWindowHandler(svc *service.ContextWindowService) *ContextWindowHa
 	return &ContextWindowHandler{svc: svc}
 }
 
-type compactContextRequest struct {
-	ModelProfileName string `json:"model_profile_name"`
-}
+type compactContextRequest struct{}
 
 func (h *ContextWindowHandler) Get(c *gin.Context) {
 	snapshot, err := h.svc.Snapshot(
@@ -37,7 +35,7 @@ func (h *ContextWindowHandler) Compact(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
-	result, err := h.svc.Compact(c.Request.Context(), c.Param("id"), body.ModelProfileName)
+	result, err := h.svc.Compact(c.Request.Context(), c.Param("id"), "")
 	h.respond(c, result, err)
 }
 

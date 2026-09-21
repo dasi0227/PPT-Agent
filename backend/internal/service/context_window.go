@@ -20,8 +20,9 @@ type ContextWindowSnapshot struct {
 }
 
 type CompactContextResult struct {
-	Snapshot   ContextWindowSnapshot   `json:"snapshot"`
-	Compaction model.ContextCompaction `json:"compaction"`
+	ModelExecution llm.ModelExecution      `json:"model_execution"`
+	Snapshot       ContextWindowSnapshot   `json:"snapshot"`
+	Compaction     model.ContextCompaction `json:"compaction"`
 }
 
 type ContextWindowService struct {
@@ -50,6 +51,20 @@ func (svc *ContextWindowService) Snapshot(
 	threadID string,
 	modelProfile string,
 ) (ContextWindowSnapshot, error) {
+	// In-flight accounting belongs to the pinned run, even if settings have
+	// since renamed/deleted its selected profile or activated a smaller fallback.
+	if finder, ok := svc.store.(interface {
+		GetActiveRunForThread(context.Context, string) (model.Run, error)
+	}); ok {
+		if _, err := finder.GetActiveRunForThread(ctx, threadID); err == nil {
+			if snapshot, ok := svc.calibration.Snapshot(threadID); ok {
+				return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
+			}
+			if snapshot, ok := loadPersistedWindowSnapshot(ctx, svc.store, threadID); ok {
+				return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
+			}
+		}
+	}
 	thread, project, profile, messages, err := svc.load(ctx, threadID, modelProfile)
 	if err != nil {
 		return ContextWindowSnapshot{}, err
@@ -113,6 +128,10 @@ func (svc *ContextWindowService) Compact(
 	threadID string,
 	modelProfile string,
 ) (CompactContextResult, error) {
+	side, err := svc.registry.RoutedProfile("compact", "")
+	if err != nil {
+		return CompactContextResult{}, err
+	}
 	thread, project, profile, messages, err := svc.load(ctx, threadID, modelProfile)
 	if err != nil {
 		return CompactContextResult{}, err
@@ -141,7 +160,7 @@ func (svc *ContextWindowService) Compact(
 		before = svc.transcriptOnlySnapshot(thread.ID, profile, messages)
 	}
 	startedAt := time.Now()
-	result, err := contextcompact.New(profile.Adapter()).Compact(ctx, messages)
+	result, err := contextcompact.New(side.Adapter()).Compact(ctx, messages)
 	if err != nil {
 		return CompactContextResult{}, err
 	}
@@ -173,8 +192,9 @@ func (svc *ContextWindowService) Compact(
 		return CompactContextResult{}, err
 	}
 	return CompactContextResult{
-		Snapshot:   ContextWindowSnapshot{WindowSnapshot: after, Status: "idle"},
-		Compaction: compaction,
+		Snapshot:       ContextWindowSnapshot{WindowSnapshot: after, Status: "idle"},
+		Compaction:     compaction,
+		ModelExecution: llm.ExecutionOf(side.Adapter()),
 	}, nil
 }
 

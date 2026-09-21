@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/google/uuid"
@@ -91,8 +92,11 @@ func (h *ThreadEventHub) PublishUpdated(thread model.Thread) {
 	h.publish(thread.ProjectID, "thread.naming.updated", map[string]any{"thread": threadEventValue(thread)})
 }
 
-func (h *ThreadEventHub) PublishResult(threadID, projectID, operationID, requestID, outcome, safeError string) {
+func (h *ThreadEventHub) PublishResult(threadID, projectID, operationID, requestID, outcome, safeError string, execution ...llm.ModelExecution) {
 	data := map[string]any{"thread_id": threadID, "request_id": requestID, "outcome": outcome}
+	if len(execution) > 0 {
+		data["model_execution"] = execution[0]
+	}
 	if operationID != "" {
 		data["operation_id"] = operationID
 	}

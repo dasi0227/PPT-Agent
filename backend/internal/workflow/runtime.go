@@ -98,6 +98,7 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
+	ModelRoute            *llm.RouteState               `json:"model_route,omitempty"`
 	RunID                 string                        `json:"run_id"`
 	LoopID                string                        `json:"loop_id"`
 	Boundary              string                        `json:"boundary,omitempty"`
@@ -198,7 +199,7 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		tools = append(tools, llm.ToolSchema{Name: schema.Name, Description: schema.Description, Parameters: schema.Parameters})
 	}
 	response, err := a.Provider.Generate(ctx, llm.GenerateRequest{
-		Messages: messages, Tools: tools, ImageResolver: req.ImageResolver,
+		Messages: messages, Tools: tools, ImageResolver: req.ImageResolver, PauseOnFallback: true,
 		Continuation: req.Continuation, OnRetry: req.OnProviderRetry,
 	})
 	if err != nil {
@@ -408,6 +409,31 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		calibrationFactor:      1,
 		projectHistoryRevision: input.ProjectHistoryRevision,
 	}
+	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
+		if route, ok := cognitive.Provider.(*llm.RoutedProvider); ok {
+			route.OnFallback = func(switchCtx context.Context, routing llm.RouteState) error {
+				if err := r.checkBudget(switchCtx, state); err != nil {
+					return err
+				}
+				state.continuation = nil
+				r.ContextWindowTokens = route.Capabilities().ContextWindowTokens
+				state.budget.ContextCompactionThreshold = DefaultRuntimeBudget(r.ContextWindowTokens).ContextCompactionThreshold
+				state.nextCompactionTokens = 0
+				state.calibrationFactor = 1
+				if err := r.saveCheckpoint(switchCtx, input, state, checkpointBoundary("model_fallback"), ""); err != nil {
+					return err
+				}
+				if input.Emitter != nil {
+					input.Emitter.Emit(model.EventRunProgress, model.RunProgressPayload{
+						PublicEventBase: publicBase(state.runID), Activity: model.ActivityModelFallback,
+						ModelSwitch: &model.ModelSwitch{From: routing.Initial, To: routing.Active, Purpose: routing.Purpose},
+					})
+				}
+				return nil
+			}
+			defer func() { route.OnFallback = nil }()
+		}
+	}
 	if input.ResumeCheckpoint != nil {
 		r.emitProgress(input.Emitter, state, model.ActivityRunRecovering)
 	} else {
@@ -570,6 +596,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.compactIfNeeded(ctx, input, state, schemas); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
+		if r.ContextWindowTokens > 0 && state.tokens >= r.ContextWindowTokens {
+			return r.fail(input, state, CodeAgentFailed, errors.New("上下文超过当前模型窗口，压缩后仍无法发送"))
+		}
 		if err := r.maybePeriodicCheckpoint(ctx, input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
@@ -602,6 +631,10 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			},
 		}
 		response, err := r.Agent.Next(ctx, request)
+		if errors.Is(err, llm.ErrFallbackActivated) {
+			state.turns-- // The failed model call did not advance the tool loop.
+			continue      // Re-measure and compact for the activated model before the next call.
+		}
 		if err != nil {
 			return r.failAgentError(input, state, classifyProviderError(ctx, err))
 		}
@@ -2671,9 +2704,14 @@ func (r *Runtime) emitProgress(
 		return
 	}
 	state.lastProgress = key
-	emitter.Emit(model.EventRunProgress, model.RunProgressPayload{
-		PublicEventBase: publicBase(state.runID), Activity: activity,
-	})
+	payload := model.RunProgressPayload{PublicEventBase: publicBase(state.runID), Activity: activity}
+	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
+		if route, ok := cognitive.Provider.(*llm.RoutedProvider); ok && route.State().FallbackUsed {
+			selected := route.State()
+			payload.ModelSwitch = &model.ModelSwitch{From: selected.Initial, To: selected.Active, Purpose: selected.Purpose}
+		}
+	}
+	emitter.Emit(model.EventRunProgress, payload)
 }
 
 func (r *Runtime) emitToolProgress(emitter EventEmitter, state *RunState, call llm.ToolCall) {

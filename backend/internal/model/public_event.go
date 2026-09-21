@@ -90,7 +90,14 @@ type RunStartedPayload struct {
 	ReferenceOrder []ReferenceOrderItem   `json:"reference_order,omitempty"`
 }
 
+type ModelSwitch struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Purpose string `json:"purpose"`
+}
+
 type RunProgressPayload struct {
+	ModelSwitch *ModelSwitch `json:"model_switch,omitempty"`
 	PublicEventBase
 	Activity RunActivity `json:"activity"`
 }
@@ -102,6 +109,7 @@ const (
 	ActivityRunRecovering                 RunActivity = "run.recovering"
 	ActivityRunAnalyzing                  RunActivity = "run.analyzing"
 	ActivityRunRetrying                   RunActivity = "run.retrying"
+	ActivityModelFallback                 RunActivity = "model.fallback"
 	ActivityRunCanceling                  RunActivity = "run.canceling"
 	ActivityPlanPreparing                 RunActivity = "plan.preparing"
 	ActivityPresentationStructureReading  RunActivity = "presentation.structure.reading"
@@ -120,7 +128,7 @@ const (
 
 var validRunActivities = map[RunActivity]struct{}{
 	ActivityRunPreparing: {}, ActivityRunRecovering: {}, ActivityRunAnalyzing: {},
-	ActivityRunRetrying: {}, ActivityRunCanceling: {}, ActivityPlanPreparing: {},
+	ActivityRunRetrying: {}, ActivityModelFallback: {}, ActivityRunCanceling: {}, ActivityPlanPreparing: {},
 	ActivityPresentationStructureReading: {}, ActivityPresentationDesignReading: {},
 	ActivitySlideContentReading: {}, ActivityReferenceInspecting: {},
 	ActivityPresentationStructureUpdating: {}, ActivityPresentationDesignUpdating: {},

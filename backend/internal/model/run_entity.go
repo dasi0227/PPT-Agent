@@ -1,7 +1,15 @@
 package model
 
 // Run 是一次 Agent 执行的领域表示（生命周期外壳的元数据）。
+type ActiveModelSelection struct {
+	Profile      string `json:"profile"`
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	FallbackUsed bool   `json:"fallback_used"`
+}
+
 type Run struct {
+	ExecutionModel         *ActiveModelSelection
 	ID                     string
 	ThreadID               string
 	ProjectID              string

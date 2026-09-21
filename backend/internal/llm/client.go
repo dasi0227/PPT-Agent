@@ -97,6 +97,7 @@ type Usage struct {
 }
 
 type GenerateRequest struct {
+	PauseOnFallback bool // Runtime rebuilds context before invoking the activated fallback.
 	Messages        []Message
 	Tools           []ToolSchema
 	ImageResolver   ImageRefResolver

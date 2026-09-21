@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -31,15 +32,27 @@ type LLMProfile struct {
 }
 
 type MainRoadLLMConfig struct {
-	Default  string       `yaml:"default"`
-	Profiles []LLMProfile `yaml:"profiles"`
+	Default  string `yaml:"default" json:"default"`
+	Fallback string `yaml:"fallback" json:"fallback"`
 }
 
 type SideRoadLLMConfig struct {
-	Rename LLMProfile `yaml:"rename"`
+	Default  string `yaml:"default" json:"default"`
+	Fallback string `yaml:"fallback" json:"fallback"`
+	Rename   string `yaml:"rename" json:"rename"`
+	Compact  string `yaml:"compact" json:"compact"`
+	Commit   string `yaml:"commit" json:"commit"`
+	Polish   string `yaml:"polish" json:"polish"`
+	Handoff  string `yaml:"handoff" json:"handoff"`
+	Kickoff  string `yaml:"kickoff" json:"kickoff"`
+}
+
+func (s SideRoadLLMConfig) Uses() map[string]string {
+	return map[string]string{"rename": s.Rename, "compact": s.Compact, "commit": s.Commit, "polish": s.Polish, "handoff": s.Handoff, "kickoff": s.Kickoff}
 }
 
 type LLMConfig struct {
+	Profiles []LLMProfile      `yaml:"llm"`
 	MainRoad MainRoadLLMConfig `yaml:"main-road"`
 	SideRoad SideRoadLLMConfig `yaml:"side-road"`
 }
@@ -52,6 +65,7 @@ type Config struct {
 	DBPath   string
 	LogLevel string
 	LLM      LLMConfig
+	LLMPath  string
 }
 
 func Load() (*Config, error) {
@@ -72,6 +86,7 @@ func Load() (*Config, error) {
 		WorkRoot: workRoot,
 		LogLevel: logLevel,
 		LLM:      llmConfig,
+		LLMPath:  llmConfigPath,
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
 	return cfg, nil
@@ -97,40 +112,69 @@ func loadLLMConfig(path string) (LLMConfig, error) {
 		}
 		return LLMConfig{}, fmt.Errorf("read LLM profile config: %w", err)
 	}
-	var document struct {
-		LLM LLMConfig `yaml:"llm"`
-	}
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&document); err != nil {
-		// Do not include parser excerpts: a malformed line may contain a key.
-		return LLMConfig{}, errors.New("LLM profile config contains invalid YAML")
-	}
-	if err := validateLLMConfig(document.LLM); err != nil {
-		return LLMConfig{}, err
-	}
-	return document.LLM, nil
+	return ParseLLMConfig(raw)
 }
 
-func validateLLMConfig(cfg LLMConfig) error {
-	if len(cfg.MainRoad.Profiles) == 0 {
-		return errors.New("llm.main-road.profiles must contain at least one profile")
+func ParseLLMConfig(raw []byte) (LLMConfig, error) {
+	var cfg LLMConfig
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cfg); err != nil {
+		return cfg, errors.New("LLM profile config contains invalid YAML")
 	}
-	seen := make(map[string]struct{}, len(cfg.MainRoad.Profiles))
-	for index, profile := range cfg.MainRoad.Profiles {
-		label := fmt.Sprintf("llm.main-road.profiles[%d]", index)
-		if err := validateLLMProfile(profile, label); err != nil {
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return cfg, errors.New("LLM profile config must contain one YAML document")
+	}
+	NormalizeLLMConfig(&cfg)
+	return cfg, validateLLMConfig(cfg)
+}
+
+func NormalizeLLMConfig(cfg *LLMConfig) {
+	for i := range cfg.Profiles {
+		p := &cfg.Profiles[i]
+		p.Name = strings.TrimSpace(p.Name)
+		p.Provider = strings.TrimSpace(p.Provider)
+		p.Model = strings.TrimSpace(p.Model)
+		p.Key = strings.TrimSpace(p.Key)
+	}
+	fields := []*string{&cfg.MainRoad.Default, &cfg.MainRoad.Fallback, &cfg.SideRoad.Default, &cfg.SideRoad.Fallback, &cfg.SideRoad.Rename, &cfg.SideRoad.Compact, &cfg.SideRoad.Commit, &cfg.SideRoad.Polish, &cfg.SideRoad.Handoff, &cfg.SideRoad.Kickoff}
+	for _, field := range fields {
+		*field = strings.TrimSpace(*field)
+	}
+}
+
+func ValidateLLMConfig(cfg LLMConfig) error { return validateLLMConfig(cfg) }
+func validateLLMConfig(cfg LLMConfig) error {
+	if len(cfg.Profiles) == 0 {
+		return errors.New("llm must contain at least one profile")
+	}
+	seen := make(map[string]bool, len(cfg.Profiles))
+	for i, profile := range cfg.Profiles {
+		if err := validateLLMProfile(profile, fmt.Sprintf("llm[%d]", i)); err != nil {
 			return err
 		}
-		if _, exists := seen[profile.Name]; exists {
-			return fmt.Errorf("llm.main-road profile names must be unique: %q", profile.Name)
+		if seen[profile.Name] {
+			return fmt.Errorf("llm[%d].name must be unique", i)
 		}
-		seen[profile.Name] = struct{}{}
+		seen[profile.Name] = true
 	}
-	if _, ok := seen[cfg.MainRoad.Default]; !ok {
-		return errors.New("llm.main-road.default must exactly match one configured profile name")
+	refs := map[string]string{"main-road.default": cfg.MainRoad.Default, "side-road.default": cfg.SideRoad.Default}
+	for path, name := range refs {
+		if !seen[name] {
+			return fmt.Errorf("%s must reference a configured model", path)
+		}
 	}
-	return validateLLMProfile(cfg.SideRoad.Rename, "llm.side-road.rename")
+	refs = map[string]string{"main-road.fallback": cfg.MainRoad.Fallback, "side-road.fallback": cfg.SideRoad.Fallback}
+	for purpose, name := range cfg.SideRoad.Uses() {
+		refs["side-road."+purpose] = name
+	}
+	for path, name := range refs {
+		if name != "" && !seen[name] {
+			return fmt.Errorf("%s must reference a configured model", path)
+		}
+	}
+	return nil
 }
 
 func validateLLMProfile(profile LLMProfile, label string) error {
@@ -156,6 +200,13 @@ func validateLLMProfile(profile LLMProfile, label string) error {
 	}
 	if strings.TrimSpace(profile.Key) == "" {
 		return fmt.Errorf("%s.key must not be empty", label)
+	}
+	for _, value := range []string{profile.Model, profile.Key} {
+		for _, char := range value {
+			if unicode.IsControl(char) {
+				return fmt.Errorf("%s.model/key must be single-line values", label)
+			}
+		}
 	}
 	return nil
 }

@@ -80,7 +80,7 @@ func TestKickoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 	fixture := newBriefingFixture(t, "# Startup\nDo the work.")
 	result, err := NewKickoffService(fixture.store, fixture.registry, fixture.locks).Generate(
 		context.Background(), fixture.project.ID,
-		BriefingParams{ThreadID: fixture.thread.ID, Model: "Briefing"},
+		BriefingParams{ThreadID: fixture.thread.ID},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +94,7 @@ func TestKickoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 	fixture.provider.GenerateErr = errors.New("provider failed")
 	_, err = NewHandoffService(fixture.store, fixture.registry, fixture.locks).Generate(
 		context.Background(), fixture.project.ID,
-		BriefingParams{ThreadID: fixture.thread.ID, Model: "Briefing"},
+		BriefingParams{ThreadID: fixture.thread.ID},
 	)
 	if err == nil {
 		t.Fatal("expected provider failure")
@@ -111,14 +111,13 @@ func TestKickoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 func TestBriefingRetryUsesTwoLatestVersionsAndAllFeedback(t *testing.T) {
 	fixture := newBriefingFixture(t, "version-one", "version-two", "version-three", "version-four")
 	service := NewKickoffService(fixture.store, fixture.registry, fixture.locks)
-	result, err := service.Generate(context.Background(), "p1", BriefingParams{ThreadID: "t1", Model: "Briefing"})
+	result, err := service.Generate(context.Background(), "p1", BriefingParams{ThreadID: "t1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, feedback := range []string{"feedback-two", "feedback-three", "feedback-four"} {
 		result, err = service.Generate(context.Background(), "p1", BriefingParams{
-			ThreadID: "t1", Model: "Briefing",
-			BriefingID: result.Briefing.BriefingID, Feedback: feedback,
+			ThreadID: "t1", BriefingID: result.Briefing.BriefingID, Feedback: feedback,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -150,7 +149,7 @@ func TestBriefingRejectsBusyAndEmptyProjects(t *testing.T) {
 	}
 	_, err := NewKickoffService(fixture.store, fixture.registry, fixture.locks).Generate(
 		context.Background(), fixture.project.ID,
-		BriefingParams{ThreadID: fixture.thread.ID, Model: "Briefing"},
+		BriefingParams{ThreadID: fixture.thread.ID},
 	)
 	release()
 	var agentErr *model.AgentError
@@ -163,7 +162,7 @@ func TestBriefingRejectsBusyAndEmptyProjects(t *testing.T) {
 	}
 	_, err = NewHandoffService(fixture.store, fixture.registry, fixture.locks).Generate(
 		context.Background(), fixture.project.ID,
-		BriefingParams{ThreadID: fixture.thread.ID, Model: "Briefing"},
+		BriefingParams{ThreadID: fixture.thread.ID},
 	)
 	if !errors.As(err, &agentErr) || agentErr.Code != "PROJECT_EMPTY" {
 		t.Fatalf("expected empty project rejection, got %v", err)
@@ -177,7 +176,7 @@ func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
 	for _, kind := range []model.BriefingKind{model.BriefingKickoff, model.BriefingHandoff} {
 		t.Run(string(kind), func(t *testing.T) {
 			f := newBriefingFixture(t, "brief")
-			params := BriefingParams{ThreadID: f.thread.ID, Model: "Briefing"}
+			params := BriefingParams{ThreadID: f.thread.ID}
 			var result BriefingResult
 			var err error
 			if kind == model.BriefingKickoff {

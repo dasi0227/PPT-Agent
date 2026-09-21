@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,7 @@ type WorkRoot string
 type ExecutionFactory func(r model.Run, p model.CreateRunParams, proj model.Project) run.Execution
 
 type RunService struct {
+	snapshots   sync.Map // Run ID -> immutable model configuration while running/paused.
 	history     *projecthistory.Manager
 	store       store.Store
 	engine      *run.Engine
@@ -120,6 +122,7 @@ func NewRunServiceWithExecutionFactoryAndRegistry(
 }
 
 type workflowExecution struct {
+	releaseSnapshot        func()
 	runtime                *workflow.Runtime
 	pack                   contextengine.ContextPack
 	assembler              *contextengine.ContextAssembler
@@ -252,6 +255,16 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		Calibration:          r.calibration,
 		RecordCompaction:     r.recordAutoCompaction,
 	})
+	if outcome.Status != workflow.StatusWaiting && r.releaseSnapshot != nil {
+		// Shutdown marks a run paused before canceling its workflow context.
+		// Retain its snapshot if this process later resumes the same run.
+		readCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		stored, err := r.store.GetRun(readCtx, r.runID)
+		cancel()
+		if err == nil && stored.Status != model.RunPaused {
+			r.releaseSnapshot()
+		}
+	}
 	return outcome
 }
 
@@ -351,8 +364,9 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 	var selectedProfile llm.Profile
+	modelSnapshot := svc.registry.Snapshot()
 	if svc.registry != nil {
-		selectedProfile, err = svc.registry.Resolve(p.Model)
+		selectedProfile, err = modelSnapshot.RoutedProfile("main", p.Model)
 		if err != nil {
 			return model.Run{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "create_run", nil)
 		}
@@ -467,10 +481,12 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		BudgetTokens: pack.Manifest.BudgetTokens, ManifestJSON: string(raw),
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()})
-	runtime.Compactor = contextcompact.New(selectedProfile.Adapter())
+	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: modelSnapshot, Purpose: "compact"})
+	svc.snapshots.Store(runModel.ID, modelSnapshot)
 	execution := &workflowExecution{
-		runtime: runtime,
-		pack:    pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
+		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
+		runtime:         runtime,
+		pack:            pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		projectHistoryRevision: runModel.ProjectHistoryRevision,
 		renderer:               svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
 		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
@@ -480,6 +496,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	createdRun, startErr := svc.engine.StartWithContext(ctx, runModel, execution, runContext)
 	if startErr != nil {
+		svc.snapshots.Delete(runModel.ID)
 		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_START_FAILED")
 		if errors.Is(startErr, store.ErrGitCommitActive) {
 			return model.Run{}, ErrGitCommitActive
@@ -558,14 +575,17 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 			return model.Run{}, err
 		}
 	}
-	provider, err := svc.resumeProvider(runModel)
+	provider, err := svc.resumeProvider(runModel, checkpoint.ModelRoute)
 	if err != nil {
 		return model.Run{}, err
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: provider})
-	runtime.Compactor = contextcompact.New(provider)
+	route := provider.(*llm.RoutedProvider)
+	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: route.Snapshot(), Purpose: "compact"})
+	svc.snapshots.Store(runModel.ID, route.Snapshot())
 	execution := &workflowExecution{
-		runtime: runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
+		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
+		runtime:         runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		projectHistoryRevision: runModel.ProjectHistoryRevision,
 		renderer:               svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
 		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
@@ -865,7 +885,22 @@ func (svc *RunService) deletedSelectionSlideIDs(ctx context.Context, projectID s
 }
 
 func (svc *RunService) GetRun(ctx context.Context, runID string) (model.Run, error) {
-	return svc.store.GetRun(ctx, runID)
+	value, err := svc.store.GetRun(ctx, runID)
+	if err != nil {
+		return value, err
+	}
+	if value.Model.ProfileName != "" {
+		value.ExecutionModel = &model.ActiveModelSelection{Profile: value.Model.ProfileName, Provider: value.Model.Provider, Model: value.Model.Model}
+	}
+	if reader, ok := svc.store.(interface {
+		LatestCheckpoint(context.Context, string) (workflow.RuntimeCheckpoint, error)
+	}); ok {
+		if checkpoint, err := reader.LatestCheckpoint(ctx, runID); err == nil && checkpoint.ModelRoute != nil {
+			selected := checkpoint.ModelRoute
+			value.ExecutionModel = &model.ActiveModelSelection{Profile: selected.Active, Provider: selected.Provider, Model: selected.Model, FallbackUsed: selected.FallbackUsed}
+		}
+	}
+	return value, nil
 }
 
 func (svc *RunService) GetActiveRunForThread(ctx context.Context, threadID string) (model.Run, error) {
@@ -875,7 +910,11 @@ func (svc *RunService) GetActiveRunForThread(ctx context.Context, threadID strin
 	if !ok {
 		return model.Run{}, run.ErrRunNotFound
 	}
-	return finder.GetActiveRunForThread(ctx, threadID)
+	value, err := finder.GetActiveRunForThread(ctx, threadID)
+	if err != nil {
+		return value, err
+	}
+	return svc.GetRun(ctx, value.ID)
 }
 
 func (svc *RunService) GetRenderScreenshot(ctx context.Context, runID, screenshotID string) ([]byte, error) {
