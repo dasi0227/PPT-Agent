@@ -50,9 +50,9 @@ export const AgentPanel: React.FC = () => {
           <ContextWindowPanel />
           <IconButton
             label={commitActive ? '正在提交项目版本' : '提交项目版本'}
+            expandableLabel="提交"
             onClick={() => void commit()}
             disabled={commitDisabled}
-            className="text-success hover:bg-success-soft hover:text-success"
           >
             {commitActive
               ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" strokeWidth={1.75} />

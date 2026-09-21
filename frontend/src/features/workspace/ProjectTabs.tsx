@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { cn } from '../../lib/utils';
-import { Boxes, Loader2, Plus, MoreHorizontal, Settings } from 'lucide-react';
+import { Archive, Loader2, Plus, MoreHorizontal, Settings } from 'lucide-react';
 import { IconButton } from '../../components/ui/primitives';
 import { ProjectMenu } from './ProjectMenu';
 import { projectRoute, repositoryRoute } from './routes';
@@ -89,18 +89,17 @@ export const ProjectTabs: React.FC = () => {
           </div>
         )}
       </div>
-      <IconButton label="设置" onClick={() => navigate('/settings', { state: { returnTo: `${location.pathname}${location.search}` } })} className="ml-2"><Settings size={16} /></IconButton>
-      <button
-        type="button"
+      <IconButton label="设置" expandableLabel="设置" onClick={() => navigate('/settings', { state: { returnTo: `${location.pathname}${location.search}` } })} className="ml-2"><Settings size={16} /></IconButton>
+      <IconButton
+        label="仓库"
+        expandableLabel="仓库"
         onClick={() => navigate(repositoryRoute('theme'), {
           state: { returnTo: `${location.pathname}${location.search}` },
         })}
-        className="ml-2 flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-text-600 hover:bg-panel-muted hover:text-text-900"
-        title="仓库"
-        aria-label="仓库"
+        className="ml-2"
       >
-        <Boxes className="h-4 w-4" />
-      </button>
+        <Archive className="h-4 w-4" />
+      </IconButton>
     </div>
   );
 };

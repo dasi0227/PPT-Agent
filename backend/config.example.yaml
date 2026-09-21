@@ -1,25 +1,21 @@
 llm:
-    - key: sk-your-deepseek-key
-      model: deepseek-v4-pro
-      name: DeepSeek V4 Pro
+    - name: DeepSeek Flash
       provider: deepseek
-    - key: sk-your-kimi-key
-      model: kimi-k3
-      name: Kimi K3
+      model: deepseek-flash
+      key: sk-your-deepseek-key
+    - name: Kimi K3
       provider: kimi
-    - key: sk-your-openai-key
-      model: gpt-5
-      name: GPT-5
+      model: kimi-k3
+      key: sk-your-kimi-key
+    - name: GPT 5.6
       provider: openai
-    - key: sk-your-rename-key
-      model: gpt-5-mini
-      name: Rename Mini
-      provider: openai
+      model: gpt-5.6
+      key: sk-your-openai-key
 main-road:
     default: Kimi K3
     fallback: null
 side-road:
-    default: Rename Mini
+    default: DeepSeek Flash
     fallback: null
     rename: null
     compact: null

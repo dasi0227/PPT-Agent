@@ -115,6 +115,40 @@ func (r *Registry) Settings() (ModelSettings, error) {
 	defer m.mu.RUnlock()
 	return m.public(), nil
 }
+
+// ReloadSettings adopts a valid disk configuration without changing existing snapshots.
+// Refreshing unchanged content (including comment-only edits) keeps the revision stable.
+func (r *Registry) ReloadSettings() (ModelSettings, error) {
+	if r == nil || r.manager == nil {
+		return ModelSettings{}, errors.New("model settings are unavailable")
+	}
+	m := r.manager
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	raw, err := os.ReadFile(m.path)
+	if err != nil {
+		return ModelSettings{}, settingsError("SETTINGS_READ_FAILED", "无法读取配置文件，原设置仍然有效。")
+	}
+	digest := sha256.Sum256(raw)
+	if digest == m.diskHash {
+		return m.public(), nil
+	}
+	cfg, err := config.ParseLLMConfig(raw)
+	if err != nil {
+		return ModelSettings{}, settingsError("SETTINGS_INVALID", "配置文件无效，原设置仍然有效："+err.Error())
+	}
+	next, err := buildSnapshot(cfg)
+	if err != nil {
+		return ModelSettings{}, settingsError("SETTINGS_INVALID", "无法加载配置，原设置仍然有效："+err.Error())
+	}
+	if next.routing.Fingerprint != m.current.routing.Fingerprint {
+		m.config = cfg
+		m.current = next
+	}
+	m.diskHash = digest
+	return m.public(), nil
+}
+
 func (m *ModelConfigManager) public() ModelSettings {
 	out := ModelSettings{Revision: m.current.revision, Providers: []string{"openai", "deepseek", "kimi"}, Profiles: []SettingsProfile{}, Main: m.config.MainRoad, Side: m.config.SideRoad}
 	for _, p := range m.config.Profiles {
@@ -137,7 +171,7 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 		return ModelSettings{}, settingsError("SETTINGS_WRITE_FAILED", "无法读取配置文件，原设置仍然有效。")
 	}
 	if sha256.Sum256(raw) != m.diskHash {
-		return ModelSettings{}, settingsError("SETTINGS_FILE_CHANGED", "配置文件已在外部修改，请重启后端加载文件，再重新读取设置。")
+		return ModelSettings{}, settingsError("SETTINGS_FILE_CHANGED", "配置文件已在外部修改，请点击右上角刷新，加载最新设置后再编辑保存。")
 	}
 	old := map[string]config.LLMProfile{}
 	used := map[string]bool{}

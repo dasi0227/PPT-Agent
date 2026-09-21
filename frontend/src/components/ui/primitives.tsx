@@ -26,8 +26,8 @@ export function Button({
 
 export const IconButton = React.forwardRef<
   HTMLButtonElement,
-  React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }
->(({ label, className, ...props }, ref) => (
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; expandableLabel?: string }
+>(({ label, expandableLabel, children, className, ...props }, ref) => (
   <button
     ref={ref}
     type="button"
@@ -36,9 +36,13 @@ export const IconButton = React.forwardRef<
     {...props}
     className={cn(
       'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-40',
+      expandableLabel && 'expandable-icon-button',
       className,
     )}
-  />
+  >
+    {children}
+    {expandableLabel && <span aria-hidden="true" className="expandable-icon-label">{expandableLabel}</span>}
+  </button>
 ));
 IconButton.displayName = 'IconButton';
 

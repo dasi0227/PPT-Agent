@@ -100,3 +100,87 @@ func TestSettingsRejectsProviderChangeWithoutReplacementKey(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
+	cfg := config.LLMConfig{
+		Profiles: []config.LLMProfile{{Name: "Main", Provider: "openai", Model: "m", Key: "old-secret"}},
+		MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Main"},
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	write := func(data []byte) {
+		t.Helper()
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(raw)
+	registry, err := NewConfiguredRegistry(path, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, _ := registry.Settings()
+	pinned := registry.Snapshot()
+
+	write(append(raw, []byte("\n# comment only\n")...))
+	unchanged, err := registry.ReloadSettings()
+	if err != nil || unchanged.Revision != before.Revision {
+		t.Fatal("comment-only refresh invalidated the revision", err)
+	}
+
+	// Credential-only edits must also create a new configuration version.
+	cfg.Profiles[0].Key = "new-secret"
+	raw, err = yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(raw)
+	after, err := registry.ReloadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Revision == before.Revision || pinned.Public().Revision != before.Revision {
+		t.Fatal("reload failed to publish a new version while preserving the pinned one")
+	}
+	public, err := json.Marshal(after)
+	if err != nil || strings.Contains(string(public), "secret") {
+		t.Fatal("reload exposed credentials")
+	}
+	edit := SettingsEdit{Revision: before.Revision, Profiles: []ProfileEdit{{PreviousName: "Main", Name: "Main", Provider: "openai", Model: "m"}}, Main: cfg.MainRoad, Side: cfg.SideRoad}
+	_, err = registry.SaveSettings(edit)
+	var conflict *SettingsError
+	if !errors.As(err, &conflict) || conflict.Code != "SETTINGS_REVISION_CONFLICT" {
+		t.Fatal("stale editor overwrote the reloaded version")
+	}
+
+	write([]byte("llm: [invalid-secret"))
+	_, err = registry.ReloadSettings()
+	if err == nil || strings.Contains(err.Error(), "invalid-secret") {
+		t.Fatal("invalid reload succeeded or exposed YAML contents")
+	}
+	active, _ := registry.Settings()
+	if active.Revision != after.Revision {
+		t.Fatal("invalid reload replaced the active configuration")
+	}
+	write(raw)
+	again, err := registry.ReloadSettings()
+	if err != nil || again.Revision != after.Revision {
+		t.Fatal("unchanged refresh created a new revision", err)
+	}
+
+	edit.Revision = after.Revision
+	if _, err = registry.SaveSettings(edit); err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := config.ParseLLMConfig(written)
+	if err != nil || decoded.Profiles[0].Key != "new-secret" {
+		t.Fatal("save did not retain the reloaded credential")
+	}
+}

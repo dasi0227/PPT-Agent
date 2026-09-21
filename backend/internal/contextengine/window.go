@@ -1,7 +1,6 @@
 package contextengine
 
 import (
-	"encoding/json"
 	"math"
 	"path"
 	"regexp"

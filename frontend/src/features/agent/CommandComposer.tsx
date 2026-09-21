@@ -75,7 +75,6 @@ export const CommandComposer: React.FC = () => {
   const [submitError, setSubmitError] = useState('');
 	const [uploadingCount, setUploadingCount] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
-  const [defaultModel, setDefaultModel] = useState('');
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState('');
@@ -297,7 +296,7 @@ export const CommandComposer: React.FC = () => {
       setProfilesLoading(true); setProfilesError('');
       void llmApi.profiles().then((response) => {
         if (!current || id !== request) return;
-        setProfiles(response.profiles); setDefaultModel(response.default);
+        setProfiles(response.profiles);
         useComposerStore.getState().reconcileModels(response.profiles.map((profile) => profile.name), response.default);
       }).catch(() => {
         if (!current || id !== request) return;
@@ -805,8 +804,6 @@ export const CommandComposer: React.FC = () => {
               loading={profilesLoading}
               disabled={disabled || steering}
               onChange={composer.setModelProfileName}
-              onDefault={() => composer.useDefaultModel(defaultModel)}
-              usesDefault={!composer.modelSelectionExplicit}
             />
             {showCancelButton ? (
               <button

@@ -71,6 +71,7 @@ func (r *Router) register() {
 		v1.GET("/llm/profiles", r.llm.Profiles)
 		v1.GET("/settings/models", r.llm.Settings)
 		v1.PUT("/settings/models", r.llm.SaveSettings)
+		v1.POST("/settings/models/reload", r.llm.ReloadSettings)
 	}
 	v1.GET("/runtime/base.css", r.repository.RuntimeBaseCSS)
 	v1.GET("/themes", r.repository.ListThemes)

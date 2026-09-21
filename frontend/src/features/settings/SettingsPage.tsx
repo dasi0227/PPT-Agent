@@ -136,8 +136,10 @@ export function SettingsPage() {
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const value = makeDraft(await settingsApi.get());
+      const value = makeDraft(await settingsApi.reload());
       setDraft(value); setBaseline(JSON.stringify(value)); setEdits({}); setCardErrors({}); setOpenCard(null);
+      useComposerStore.getState().reconcileModels(value.llm.map((row) => row.name), value.main_road.default);
+      window.dispatchEvent(new Event('model-settings-saved'));
     } catch (cause) { setError(cause instanceof Error ? cause.message : '模型设置加载失败。'); }
     finally { setLoading(false); }
   }, []);
@@ -235,6 +237,7 @@ export function SettingsPage() {
         </button>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" /><span className="flex-1 font-bold">设置</span>
         <IconButton label="返回" type="button" title="返回" aria-label="返回" onClick={() => navigate(returnTo)} disabled={saving}><Home size={16} /></IconButton>
+        <IconButton label="刷新设置" type="button" title="刷新设置" disabled={loading || saving} onClick={() => dirty ? setReloadPrompt(true) : void load()}><RefreshCw size={16} className={loading ? 'animate-spin motion-reduce:animate-none' : undefined} /></IconButton>
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav className="flex shrink-0 gap-1 border-b border-border bg-panel p-3 md:w-52 md:flex-col md:border-b-0 md:border-r" aria-label="设置栏目">
@@ -248,7 +251,6 @@ export function SettingsPage() {
             <div className="settings-heading">
               <div><h1>{section === 'models' ? '模型配置' : '模型分配'}</h1><p>{section === 'models' ? '点击卡片编辑模型，保存全部后生效。' : '为主路与各项旁路选择模型。'}</p></div>
               <div className="flex shrink-0 items-center gap-2">
-                <IconButton label="重新读取设置" type="button" title="重新读取设置" aria-label="重新读取设置" disabled={loading || saving} onClick={() => dirty ? setReloadPrompt(true) : void load()}><RefreshCw size={16} /></IconButton>
                 <button type="button" className="settings-primary flex items-center gap-2" disabled={!dirty || saving || loading} onClick={() => void saveAll()}>{saving && <Loader2 size={14} className="animate-spin" />}{saving ? '保存中…' : '保存全部'}</button>
               </div>
             </div>

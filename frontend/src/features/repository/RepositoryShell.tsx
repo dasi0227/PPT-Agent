@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { BookOpenText, Component, Home, NotebookText, Palette, RefreshCw } from 'lucide-react';
+import { BookOpenText, Component, NotebookText, Palette, Presentation, RefreshCw } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
 import { homeRoute, projectRoute, repositoryRoute, type RepositorySection } from '../workspace/routes';
@@ -48,11 +49,17 @@ export function RepositoryShell({
         </button>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-base font-bold text-text-900">仓库</span>
-        <button type="button" onClick={onRefresh} className="grid h-8 w-8 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 active:translate-y-px" title="刷新仓库" aria-label="刷新仓库">
+        <IconButton label="刷新仓库" expandableLabel="刷新" onClick={onRefresh} className="active:translate-y-px">
           <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
-        </button>
-        <Link to={returnTo} className="ml-1 grid h-8 w-8 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 active:translate-y-px" title="返回主页" aria-label="返回主页">
-          <Home className="h-4 w-4" strokeWidth={1.75} />
+        </IconButton>
+        <Link
+          to={returnTo}
+          className="expandable-icon-button ml-1 inline-flex h-8 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:translate-y-px"
+          title="返回主页"
+          aria-label="返回主页"
+        >
+          <Presentation className="h-4 w-4" strokeWidth={1.75} />
+          <span aria-hidden="true" className="expandable-icon-label">主页</span>
         </Link>
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">

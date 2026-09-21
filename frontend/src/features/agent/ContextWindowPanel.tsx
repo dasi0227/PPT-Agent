@@ -201,6 +201,8 @@ export function ContextWindowPanel() {
       <span className="relative inline-flex">
         <IconButton
           label={`上下文窗口，当前使用 ${percent}%`}
+          expandableLabel="压缩"
+          data-state={open ? 'open' : 'closed'}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? panelId : undefined}

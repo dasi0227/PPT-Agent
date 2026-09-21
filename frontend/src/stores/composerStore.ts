@@ -32,7 +32,6 @@ export interface ComposerState {
   modelProfileName: string | null;
   modelSelectionExplicit: boolean;
   reconcileModels: (names: string[], defaultName: string) => void;
-  useDefaultModel: (defaultName: string) => void;
   polishing: boolean;
   selectedSkillIds: string[];
   threadDrafts: Record<string, string>;
@@ -115,10 +114,6 @@ export const useComposerStore = create<ComposerState>((set) => ({
     if (typeof localStorage !== 'undefined') localStorage.removeItem(RECENT_MODEL_KEY);
     return { modelProfileName: defaultName, modelSelectionExplicit: false };
   }),
-  useDefaultModel: (defaultName) => {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(RECENT_MODEL_KEY);
-    set({ modelProfileName: defaultName, modelSelectionExplicit: false });
-  },
   setPolishing: (polishing) => set({ polishing }),
   setThreadDraft: (threadId, text) => set((state) => {
     if (text) return { threadDrafts: { ...state.threadDrafts, [threadId]: text } };

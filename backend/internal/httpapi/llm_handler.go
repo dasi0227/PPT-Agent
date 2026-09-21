@@ -34,6 +34,16 @@ func (h *LLMHandler) Settings(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, settings)
 }
+func (h *LLMHandler) ReloadSettings(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	settings, err := h.registry.ReloadSettings()
+	if err != nil {
+		settingsHTTPError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
 func (h *LLMHandler) SaveSettings(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)

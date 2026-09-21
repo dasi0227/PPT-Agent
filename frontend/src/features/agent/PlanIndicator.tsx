@@ -210,6 +210,7 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
       <DropdownMenuTrigger asChild>
         <IconButton
           label={hasPlan ? `查看计划进度 ${completed} / ${total}` : '暂无计划'}
+          expandableLabel="计划"
           aria-haspopup="menu"
         >
           <ListChecks
