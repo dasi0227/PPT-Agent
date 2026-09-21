@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -29,9 +30,18 @@ type LLMProfile struct {
 	Key      string `yaml:"key"`
 }
 
-type LLMConfig struct {
+type MainRoadLLMConfig struct {
 	Default  string       `yaml:"default"`
 	Profiles []LLMProfile `yaml:"profiles"`
+}
+
+type SideRoadLLMConfig struct {
+	Rename LLMProfile `yaml:"rename"`
+}
+
+type LLMConfig struct {
+	MainRoad MainRoadLLMConfig `yaml:"main-road"`
+	SideRoad SideRoadLLMConfig `yaml:"side-road"`
 }
 
 // Config combines the single configurable listen port with fixed local runtime
@@ -90,7 +100,9 @@ func loadLLMConfig(path string) (LLMConfig, error) {
 	var document struct {
 		LLM LLMConfig `yaml:"llm"`
 	}
-	if err := yaml.Unmarshal(raw, &document); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&document); err != nil {
 		// Do not include parser excerpts: a malformed line may contain a key.
 		return LLMConfig{}, errors.New("LLM profile config contains invalid YAML")
 	}
@@ -101,42 +113,49 @@ func loadLLMConfig(path string) (LLMConfig, error) {
 }
 
 func validateLLMConfig(cfg LLMConfig) error {
-	if len(cfg.Profiles) == 0 {
-		return errors.New("llm.profiles must contain at least one profile")
+	if len(cfg.MainRoad.Profiles) == 0 {
+		return errors.New("llm.main-road.profiles must contain at least one profile")
 	}
-	seen := make(map[string]struct{}, len(cfg.Profiles))
-	for index, profile := range cfg.Profiles {
-		label := fmt.Sprintf("llm.profiles[%d]", index)
-		trimmedName := strings.TrimSpace(profile.Name)
-		if trimmedName == "" {
-			return fmt.Errorf("%s.name must not be empty", label)
-		}
-		if utf8.RuneCountInString(trimmedName) > 80 {
-			return fmt.Errorf("%s.name must contain 1 to 80 characters", label)
-		}
-		for _, char := range profile.Name {
-			if unicode.IsControl(char) {
-				return fmt.Errorf("%s.name must not contain control characters", label)
-			}
+	seen := make(map[string]struct{}, len(cfg.MainRoad.Profiles))
+	for index, profile := range cfg.MainRoad.Profiles {
+		label := fmt.Sprintf("llm.main-road.profiles[%d]", index)
+		if err := validateLLMProfile(profile, label); err != nil {
+			return err
 		}
 		if _, exists := seen[profile.Name]; exists {
-			return fmt.Errorf("llm profile names must be unique: %q", profile.Name)
+			return fmt.Errorf("llm.main-road profile names must be unique: %q", profile.Name)
 		}
 		seen[profile.Name] = struct{}{}
-		switch profile.Provider {
-		case "deepseek", "kimi", "openai":
-		default:
-			return fmt.Errorf("MODEL_PROVIDER_UNSUPPORTED: %s.provider is unsupported", label)
-		}
-		if strings.TrimSpace(profile.Model) == "" {
-			return fmt.Errorf("%s.model must not be empty", label)
-		}
-		if strings.TrimSpace(profile.Key) == "" {
-			return fmt.Errorf("%s.key must not be empty", label)
+	}
+	if _, ok := seen[cfg.MainRoad.Default]; !ok {
+		return errors.New("llm.main-road.default must exactly match one configured profile name")
+	}
+	return validateLLMProfile(cfg.SideRoad.Rename, "llm.side-road.rename")
+}
+
+func validateLLMProfile(profile LLMProfile, label string) error {
+	trimmedName := strings.TrimSpace(profile.Name)
+	if trimmedName == "" {
+		return fmt.Errorf("%s.name must not be empty", label)
+	}
+	if utf8.RuneCountInString(trimmedName) > 80 {
+		return fmt.Errorf("%s.name must contain 1 to 80 characters", label)
+	}
+	for _, char := range profile.Name {
+		if unicode.IsControl(char) {
+			return fmt.Errorf("%s.name must not contain control characters", label)
 		}
 	}
-	if _, ok := seen[cfg.Default]; !ok {
-		return errors.New("llm.default must exactly match one configured profile name")
+	switch profile.Provider {
+	case "deepseek", "kimi", "openai":
+	default:
+		return fmt.Errorf("MODEL_PROVIDER_UNSUPPORTED: %s.provider is unsupported", label)
+	}
+	if strings.TrimSpace(profile.Model) == "" {
+		return fmt.Errorf("%s.model must not be empty", label)
+	}
+	if strings.TrimSpace(profile.Key) == "" {
+		return fmt.Errorf("%s.key must not be empty", label)
 	}
 	return nil
 }

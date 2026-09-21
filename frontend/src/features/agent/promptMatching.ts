@@ -34,6 +34,7 @@ export type SlashCommandId =
   | 'handoff'
   | 'commit'
   | 'polish'
+	| 'rename'
   | 'model'
   | 'target';
 
@@ -76,6 +77,7 @@ export const slashCommands: SlashCommand[] = [
   { id: 'handoff', name: 'handoff', ariaLabel: '交接简报', description: '生成上下文交接 prompt', group: '操作' },
   { id: 'commit', name: 'commit', ariaLabel: '提交', description: '执行一次 Git 提交', group: '操作' },
   { id: 'polish', name: 'polish', ariaLabel: '润色', description: '润色当前输入内容', group: '操作' },
+	{ id: 'rename', name: 'rename', ariaLabel: '会话命名', description: '打开会话命名设置', group: '操作' },
   { id: 'model', name: 'model', ariaLabel: '切换模型', description: '选择对话使用的模型', group: '设置', submenu: 'model' },
   { id: 'target', name: 'target', ariaLabel: '切换目标', description: '选择生成目标范围与对象', group: '设置', submenu: 'target' },
 ];

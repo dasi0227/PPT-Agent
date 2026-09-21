@@ -1,5 +1,5 @@
 import { fetchClient } from './client';
-import { CompactContextResponse, ContextWindowSnapshot, Thread } from './types';
+import { CompactContextResponse, ContextWindowSnapshot, Thread, ThreadNamingAction, ThreadNamingResponse } from './types';
 
 export type ThreadHistoryEntry = Record<string, unknown>;
 
@@ -24,6 +24,11 @@ export const threadsApi = {
     method: 'PATCH',
     body: JSON.stringify(patch)
   }),
+	naming: (id: string, operationId: string, action: ThreadNamingAction, title?: string) =>
+		fetchClient<ThreadNamingResponse>(`/threads/${id}/naming`, {
+			method: 'POST',
+			body: JSON.stringify({ operation_id: operationId, action, ...(title !== undefined ? { title } : {}) }),
+		}),
   delete: (id: string) => fetchClient<void>(`/threads/${id}`, {
     method: 'DELETE'
   })

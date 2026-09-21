@@ -10,8 +10,8 @@ describe('ThreadTabs selection', () => {
     useThreadStore.setState({
       threadsByProjectId: {
         p1: [
-          { id: 't1', project_id: 'p1', title: '会话一', status: 'active', history_path: '', created_at: 1, updated_at: 1 },
-          { id: 't2', project_id: 'p1', title: '会话二', status: 'active', history_path: '', created_at: 1, updated_at: 1 },
+          { id: 't1', project_id: 'p1', title: '会话一', status: 'active', history_path: '', created_at: 1, updated_at: 1, auto_rename_enabled: true, naming_revision: 1 },
+          { id: 't2', project_id: 'p1', title: '会话二', status: 'active', history_path: '', created_at: 1, updated_at: 1, auto_rename_enabled: true, naming_revision: 1 },
         ],
       },
       openThreadIdsByProjectId: { p1: ['t1', 't2'] },
@@ -37,7 +37,7 @@ describe('ThreadTabs create thread', () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
     useThreadStore.setState({
       threadsByProjectId: {
-        p1: [{ id: 't1', project_id: 'p1', title: '会话一', status: 'active', history_path: '', created_at: 1, updated_at: 1 }],
+        p1: [{ id: 't1', project_id: 'p1', title: '会话一', status: 'active', history_path: '', created_at: 1, updated_at: 1, auto_rename_enabled: true, naming_revision: 1 }],
       },
       openThreadIdsByProjectId: { p1: ['t1'] },
       activeThreadIdByProjectId: { p1: 't1' },

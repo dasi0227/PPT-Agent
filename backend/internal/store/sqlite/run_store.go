@@ -67,14 +67,6 @@ func (s *Store) UpdateProjectTheme(ctx context.Context, id, theme string, update
 		Updates(map[string]any{"theme": theme, "updated_at": updatedAt}).Error
 }
 
-func (s *Store) UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error {
-	err := s.db.WithContext(ctx).Model(&threadPO{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"title":      title,
-		"updated_at": updatedAt,
-	}).Error
-	return mapErr(err)
-}
-
 func (s *Store) CreateThread(ctx context.Context, m model.Thread) error {
 	return s.db.WithContext(ctx).Create(threadToPO(m)).Error
 }

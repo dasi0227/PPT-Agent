@@ -64,11 +64,21 @@ func initApp() (*App, func(), error) {
 	}
 	fsTranscriptStore := provideTranscriptStore()
 	calibrationStore := provideCalibrationStore()
-	runService := service.NewRunService(store, engine, registry, workRoot, nodeSlideRenderer, fsTranscriptStore, calibrationStore)
+	provider, err := provideRenameProvider(configConfig)
+	if err != nil {
+		cleanup3()
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	threadEventHub := provideThreadEventHub(store)
+	namingService, cleanup4 := provideNamingService(store, provider, threadEventHub, zapLogger)
+	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, fsTranscriptStore, calibrationStore, namingService)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
-	manager, cleanup4, err := provideExportManager(nodeSlideRenderer, workRoot)
+	manager, cleanup5, err := provideExportManager(nodeSlideRenderer, workRoot)
 	if err != nil {
+		cleanup4()
 		cleanup3()
 		cleanup2()
 		cleanup()
@@ -78,7 +88,7 @@ func initApp() (*App, func(), error) {
 	pptMutationService := providePPTMutationService(store, lockManager)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
 	threadService := provideThreadService(store, fsTranscriptStore)
-	threadHandler := httpapi.NewThreadHandler(threadService)
+	threadHandler := provideThreadHandler(threadService, namingService)
 	slideService := provideSlideService(store, themeService)
 	slideHandler := httpapi.NewSlideHandler(slideService)
 	componentService := provideComponentService(store, workRoot)
@@ -92,6 +102,7 @@ func initApp() (*App, func(), error) {
 	briefingHandler := httpapi.NewBriefingHandler(kickoffService, handoffService)
 	gitCommitService, err := provideGitCommitService(store, registry, lockManager)
 	if err != nil {
+		cleanup5()
 		cleanup4()
 		cleanup3()
 		cleanup2()
@@ -101,6 +112,7 @@ func initApp() (*App, func(), error) {
 	gitCommitHandler := httpapi.NewGitCommitHandler(gitCommitService)
 	promptService, err := providePromptService(store)
 	if err != nil {
+		cleanup5()
 		cleanup4()
 		cleanup3()
 		cleanup2()
@@ -116,6 +128,7 @@ func initApp() (*App, func(), error) {
 	exportHandler := httpapi.NewExportHandler(exportService)
 	router, err := provideRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler, contextWindowHandler, attachmentHandler, exportHandler)
 	if err != nil {
+		cleanup5()
 		cleanup4()
 		cleanup3()
 		cleanup2()
@@ -126,6 +139,7 @@ func initApp() (*App, func(), error) {
 	server := provideHTTPServer(configConfig, ginEngine)
 	app := provideApp(server, engine, runService, zapLogger)
 	return app, func() {
+		cleanup5()
 		cleanup4()
 		cleanup3()
 		cleanup2()
@@ -137,6 +151,9 @@ func initApp() (*App, func(), error) {
 
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
 var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMRegistry,
+	provideRenameProvider,
+	provideThreadEventHub,
+	provideNamingService,
 	provideLockManager,
 	provideTranscriptStore,
 	provideCalibrationStore,
@@ -146,13 +163,13 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideRenderWorker,
 	provideExportManager, service.NewHealthService, provideProjectService,
 	provideThreadService,
-	provideAttachmentService, service.NewExportService, service.NewRunService, service.NewContextWindowService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
+	provideAttachmentService, service.NewExportService, provideRunService, service.NewContextWindowService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
 	provideSlideService,
 	providePPTMutationService,
 	provideThemeService,
 	provideComponentService,
 	provideSkillService,
-	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewAttachmentHandler, httpapi.NewExportHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, httpapi.NewThreadHandler, httpapi.NewContextWindowHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, provideRouter,
+	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewAttachmentHandler, httpapi.NewExportHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, provideThreadHandler, httpapi.NewContextWindowHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, provideRouter,
 	engineFromRouter,
 	provideHTTPServer,
 	provideApp,

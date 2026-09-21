@@ -9,10 +9,11 @@ import (
 )
 
 var (
-	ErrRunActive          = errors.New("store: project has an active run")
-	ErrGitCommitActive    = errors.New("store: project has an active Git commit")
-	ErrPromptNameConflict = errors.New("store: prompt name conflict")
-	ErrTagNotFound        = errors.New("store: tag not found")
+	ErrRunActive               = errors.New("store: project has an active run")
+	ErrGitCommitActive         = errors.New("store: project has an active Git commit")
+	ErrPromptNameConflict      = errors.New("store: prompt name conflict")
+	ErrTagNotFound             = errors.New("store: tag not found")
+	ErrNamingOperationConflict = errors.New("store: naming operation conflict")
 )
 
 type PromptNameConflictError struct {
@@ -41,7 +42,16 @@ type Store interface {
 	GetThread(ctx context.Context, id string) (model.Thread, error)
 	ListThreads(ctx context.Context, projectID string) ([]model.Thread, error)
 	DeleteThread(ctx context.Context, id string) error
-	UpdateThreadTitle(ctx context.Context, id, title string, updatedAt int64) error
+	RecordThreadNamingInput(ctx context.Context, input model.ThreadNamingInput) (model.Thread, bool, error)
+	BeginThreadRenameRequest(ctx context.Context, id string, expectedOperationVersion int64, resetInputCount bool, updatedAt int64) (model.Thread, error)
+	StartThreadExplicitRenameRequest(ctx context.Context, id string, operationVersion int64, updatedAt int64) (model.Thread, error)
+	ApplyThreadRenameResult(ctx context.Context, id, title string, operationVersion int64, updatedAt int64) (model.Thread, bool, error)
+	UpdateThreadNamingState(ctx context.Context, id string, title *string, enabled *bool, resetInputCount bool, updatedAt int64) (model.Thread, error)
+	GetThreadNamingOperation(ctx context.Context, threadID, operationID string) (model.ThreadNamingOperation, error)
+	CreateThreadNamingOperation(ctx context.Context, operation model.ThreadNamingOperation) (bool, error)
+	CompleteThreadNamingOperation(ctx context.Context, operation model.ThreadNamingOperation) error
+	ListThreadNamingInputs(ctx context.Context, threadID string, limit int) ([]model.ThreadNamingInput, error)
+	LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error)
 
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)

@@ -1,18 +1,25 @@
 llm:
-  default: Kimi K3
+  main-road:
+    default: Kimi K3
+    profiles:
+      - name: DeepSeek V4 Pro
+        provider: deepseek
+        model: deepseek-v4-pro
+        key: sk-your-deepseek-key
 
-  profiles:
-    - name: DeepSeek V4 Pro
-      provider: deepseek
-      model: deepseek-v4-pro
-      key: sk-your-deepseek-key
+      - name: Kimi K3
+        provider: kimi
+        model: kimi-k3
+        key: sk-your-kimi-key
 
-    - name: Kimi K3
-      provider: kimi
-      model: kimi-k3
-      key: sk-your-kimi-key
+      - name: GPT-5
+        provider: openai
+        model: gpt-5
+        key: sk-your-openai-key
 
-    - name: GPT-5
+  side-road:
+    rename:
+      name: Rename Mini
       provider: openai
-      model: gpt-5
-      key: sk-your-openai-key
+      model: gpt-5-mini
+      key: sk-your-rename-key

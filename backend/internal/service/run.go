@@ -49,6 +49,12 @@ type RunService struct {
 	transcripts *contextengine.FSTranscriptStore
 	calibration *contextengine.CalibrationStore
 	attachments *AttachmentService
+	naming      *NamingService
+}
+
+func (svc *RunService) WithNaming(naming *NamingService) *RunService {
+	svc.naming = naming
+	return svc
 }
 
 func (svc *RunService) EnableProjectHistory(root string) (*projecthistory.Manager, error) {
@@ -439,6 +445,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, startErr
 		}
 		svc.completeCreateSuccess(ctx, thread.ID, p.ClientRequestID, createdRun.ID)
+		svc.recordNamingInput(thread.ID, p.ClientRequestID, command.Instruction)
 		return createdRun, nil
 	}
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
@@ -480,7 +487,17 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, startErr
 	}
 	svc.completeCreateSuccess(ctx, thread.ID, p.ClientRequestID, createdRun.ID)
+	svc.recordNamingInput(thread.ID, p.ClientRequestID, command.Instruction)
 	return createdRun, nil
+}
+
+func (svc *RunService) recordNamingInput(threadID, inputID, content string) {
+	if svc.naming == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	svc.naming.RecordInput(ctx, threadID, inputID, content)
 }
 
 func (svc *RunService) ListSkills() ([]model.PublicSkill, error) {
@@ -810,6 +827,9 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 		message, steerErr := svc.engine.SteerWithReferences(ctx, runID, expectedRunID, clientMessageID, requestHash, content, attachments, domSelections, referenceOrder, mergedScope)
 		var agentErr *model.AgentError
 		if steerErr == nil || !errors.As(steerErr, &agentErr) || agentErr.Code != "RUN_REVISION_CONFLICT" || attempt == 1 {
+			if steerErr == nil {
+				svc.recordNamingInput(runModel.ThreadID, clientMessageID, content)
+			}
 			return message, steerErr
 		}
 		// A concurrent monotonic scope update won the CAS. Re-read once and

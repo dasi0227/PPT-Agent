@@ -151,7 +151,7 @@ describe('slash commands', () => {
     expect(matchSlashCommands(commands, 'pl').map((command) => command.id)).toEqual(['polish']);
     expect(matchSlashCommands(commands, 'ha').map((command) => command.id)).toEqual(['handoff']);
     expect(matchSlashCommands(commands, '开发').map((command) => command.id)).toEqual(['execute']);
-    expect(matchSlashCommands(commands, '')).toHaveLength(10);
+    expect(matchSlashCommands(commands, '')).toHaveLength(11);
     const disabled = resolveSlashCommands({
       runActive: true,
       emptyProject: false,

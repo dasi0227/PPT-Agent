@@ -43,13 +43,18 @@ func projectToPO(m model.Project) projectPO {
 }
 
 type threadPO struct {
-	ID          string `gorm:"column:id;primaryKey"`
-	ProjectID   string `gorm:"column:project_id"`
-	Title       string `gorm:"column:title"`
-	HistoryPath string `gorm:"column:history_path"`
-	Status      string `gorm:"column:status"`
-	CreatedAt   int64  `gorm:"column:created_at"`
-	UpdatedAt   int64  `gorm:"column:updated_at"`
+	ID                     string `gorm:"column:id;primaryKey"`
+	ProjectID              string `gorm:"column:project_id"`
+	Title                  string `gorm:"column:title"`
+	HistoryPath            string `gorm:"column:history_path"`
+	Status                 string `gorm:"column:status"`
+	AutoRenameEnabled      int    `gorm:"column:auto_rename_enabled"`
+	NamingRevision         int64  `gorm:"column:naming_revision"`
+	RenameOperationVersion int64  `gorm:"column:rename_operation_version"`
+	RenameInputCount       int    `gorm:"column:rename_input_count"`
+	RenameFirstInputSeen   int    `gorm:"column:rename_first_input_seen"`
+	CreatedAt              int64  `gorm:"column:created_at"`
+	UpdatedAt              int64  `gorm:"column:updated_at"`
 }
 
 func (threadPO) TableName() string { return "threads" }
@@ -57,15 +62,55 @@ func (threadPO) TableName() string { return "threads" }
 func (t threadPO) toModel() model.Thread {
 	return model.Thread{
 		ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, HistoryPath: t.HistoryPath,
-		Status: t.Status, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		Status: t.Status, AutoRenameEnabled: t.AutoRenameEnabled != 0,
+		NamingRevision: t.NamingRevision, RenameOperationVersion: t.RenameOperationVersion,
+		RenameInputCount: t.RenameInputCount, RenameFirstInputSeen: t.RenameFirstInputSeen != 0,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
 }
 
 func threadToPO(m model.Thread) threadPO {
+	if m.NamingRevision == 0 {
+		m.AutoRenameEnabled = true
+		m.NamingRevision = 1
+		m.RenameOperationVersion = 1
+	}
 	return threadPO{
 		ID: m.ID, ProjectID: m.ProjectID, Title: m.Title, HistoryPath: m.HistoryPath,
-		Status: m.Status, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+		Status: m.Status, AutoRenameEnabled: boolInt(m.AutoRenameEnabled),
+		NamingRevision: m.NamingRevision, RenameOperationVersion: m.RenameOperationVersion,
+		RenameInputCount: m.RenameInputCount, RenameFirstInputSeen: boolInt(m.RenameFirstInputSeen),
+		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
+}
+
+type threadNamingInputPO struct {
+	ThreadID   string `gorm:"column:thread_id;primaryKey"`
+	InputID    string `gorm:"column:input_id;primaryKey"`
+	Content    string `gorm:"column:content"`
+	AcceptedAt int64  `gorm:"column:accepted_at"`
+}
+
+func (threadNamingInputPO) TableName() string { return "thread_naming_inputs" }
+func (p threadNamingInputPO) toModel() model.ThreadNamingInput {
+	return model.ThreadNamingInput{ThreadID: p.ThreadID, InputID: p.InputID, Content: p.Content, AcceptedAt: p.AcceptedAt}
+}
+
+type threadNamingOperationPO struct {
+	ThreadID    string `gorm:"column:thread_id;primaryKey"`
+	OperationID string `gorm:"column:operation_id;primaryKey"`
+	RequestHash string `gorm:"column:request_hash"`
+	Action      string `gorm:"column:action"`
+	Status      string `gorm:"column:status"`
+	RequestID   string `gorm:"column:request_id"`
+	ResultJSON  string `gorm:"column:result_json"`
+	CreatedAt   int64  `gorm:"column:created_at"`
+	UpdatedAt   int64  `gorm:"column:updated_at"`
+}
+
+func (threadNamingOperationPO) TableName() string { return "thread_naming_operations" }
+func (p threadNamingOperationPO) toModel() model.ThreadNamingOperation {
+	return model.ThreadNamingOperation{ThreadID: p.ThreadID, OperationID: p.OperationID, RequestHash: p.RequestHash, Action: p.Action, Status: p.Status, RequestID: p.RequestID, ResultJSON: p.ResultJSON, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }
 
 type runPO struct {

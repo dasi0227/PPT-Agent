@@ -1,13 +1,23 @@
 import { create } from 'zustand';
-import { Thread } from '../api/types';
+import { Thread, ThreadNamingAction } from '../api/types';
 import { threadsApi } from '../api/threads';
 import { useRunStore } from './runStore';
+import { newClientIdentity } from '../lib/clientIdentity';
+import { showGlobalError, showGlobalNotice, showGlobalSuccess } from './toastStore';
+
+interface RenamePanelTarget { projectId: string; threadId: string }
+
+interface ThreadStreamState { epoch: string; sequence: number }
+const streamStateByProject = new Map<string, ThreadStreamState>();
+const eventSourceByProject = new Map<string, EventSource>();
 
 interface ThreadState {
   threadsByProjectId: Record<string, Thread[]>;
   openThreadIdsByProjectId: Record<string, string[]>;
   activeThreadIdByProjectId: Record<string, string | null>;
   errorByProjectId: Record<string, string | null>;
+	renamePanelTarget: RenamePanelTarget | null;
+	pendingNamingOperationByThreadId: Record<string, string>;
 
   loadThreads: (projectId: string) => Promise<void>;
   openThread: (projectId: string, threadId: string) => void;
@@ -15,6 +25,12 @@ interface ThreadState {
   createThread: (projectId: string, title?: string) => Promise<string>;
   deleteThread: (projectId: string, threadId: string) => Promise<void>;
   renameThread: (projectId: string, threadId: string, title: string) => Promise<void>;
+	openRenamePanel: (projectId: string, threadId: string) => void;
+	closeRenamePanel: () => void;
+	performNamingAction: (projectId: string, threadId: string, action: ThreadNamingAction, title?: string) => Promise<void>;
+	applyThreadSnapshot: (projectId: string, epoch: string, sequence: number, threads: Thread[]) => void;
+	applyThreadNamingUpdate: (projectId: string, epoch: string, sequence: number, thread: Thread) => void;
+	applyThreadNamingResult: (projectId: string, epoch: string, sequence: number, data: Record<string, unknown>) => void;
   setActiveThread: (projectId: string, threadId: string) => void;
   ensureActiveThread: (projectId: string) => Promise<string>;
   getActiveThreadId: (projectId: string) => string | null;
@@ -28,11 +44,65 @@ function withOpen(ids: string[], threadId: string): string[] {
   return ids.includes(threadId) ? ids : [...ids, threadId];
 }
 
+function isThread(value: unknown): value is Thread {
+	if (!value || typeof value !== 'object') return false;
+	const thread = value as Partial<Thread>;
+	return typeof thread.id === 'string' && typeof thread.project_id === 'string'
+		&& typeof thread.title === 'string' && typeof thread.auto_rename_enabled === 'boolean'
+		&& typeof thread.naming_revision === 'number';
+}
+
+function parseThreadEvent(projectId: string, name: string, raw: string) {
+	let data: Record<string, unknown>;
+	try {
+		data = JSON.parse(raw) as Record<string, unknown>;
+	} catch {
+		return;
+	}
+	if (data.schema_version !== 1 || data.project_id !== projectId
+		|| typeof data.stream_epoch !== 'string' || typeof data.sequence !== 'number') return;
+	const epoch = data.stream_epoch;
+	const sequence = data.sequence;
+	if (name === 'threads.snapshot') {
+		if (!Array.isArray(data.threads) || !data.threads.every(isThread)) return;
+		useThreadStore.getState().applyThreadSnapshot(projectId, epoch, sequence, data.threads);
+		return;
+	}
+	if (name === 'thread.naming.updated' && isThread(data.thread)) {
+		useThreadStore.getState().applyThreadNamingUpdate(projectId, epoch, sequence, data.thread);
+		return;
+	}
+	if (name === 'thread.naming.result') {
+		useThreadStore.getState().applyThreadNamingResult(projectId, epoch, sequence, data);
+	}
+}
+
+function ensureThreadEvents(projectId: string) {
+	if (typeof EventSource === 'undefined') return;
+	if (eventSourceByProject.has(projectId)) return;
+	const source = new EventSource(`/api/v1/projects/${encodeURIComponent(projectId)}/thread-events`);
+	for (const name of ['threads.snapshot', 'thread.naming.updated', 'thread.naming.result']) {
+		source.addEventListener(name, (event) => parseThreadEvent(projectId, name, (event as MessageEvent<string>).data));
+	}
+	source.onerror = () => {
+		// EventSource reconnects automatically; the server starts every connection with an authoritative snapshot.
+	};
+	eventSourceByProject.set(projectId, source);
+}
+
+function closeThreadEvents(projectId: string) {
+	eventSourceByProject.get(projectId)?.close();
+	eventSourceByProject.delete(projectId);
+	streamStateByProject.delete(projectId);
+}
+
 export const useThreadStore = create<ThreadState>((set, get) => ({
   threadsByProjectId: {},
   openThreadIdsByProjectId: {},
   activeThreadIdByProjectId: {},
   errorByProjectId: {},
+	renamePanelTarget: null,
+	pendingNamingOperationByThreadId: {},
 
   displayThreads: (projectId) => get().threadsByProjectId[projectId] || [],
 
@@ -58,6 +128,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
           errorByProjectId: { ...state.errorByProjectId, [projectId]: null },
         };
       });
+		ensureThreadEvents(projectId);
     } catch (err) {
       set((state) => ({
         errorByProjectId: {
@@ -112,17 +183,132 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   },
 
   renameThread: async (projectId, threadId, title) => {
-    await threadsApi.patch(threadId, { title });
+		const updated = await threadsApi.patch(threadId, { title });
     set((state) => {
       const threads = state.threadsByProjectId[projectId] || [];
       return {
         threadsByProjectId: {
-          ...state.threadsByProjectId,
-          [projectId]: threads.map(t => t.id === threadId ? { ...t, title, updated_at: Math.floor(Date.now()/1000) } : t)
+			...state.threadsByProjectId,
+			[projectId]: threads.map((thread) => thread.id === threadId && updated.naming_revision >= thread.naming_revision ? updated : thread),
         }
       };
     });
   },
+
+	openRenamePanel: (projectId, threadId) => set({ renamePanelTarget: { projectId, threadId } }),
+	closeRenamePanel: () => set({ renamePanelTarget: null }),
+
+	performNamingAction: async (projectId, threadId, action, title) => {
+		const operationId = newClientIdentity('rename');
+		if (action === 'generate') {
+			set((state) => ({ pendingNamingOperationByThreadId: { ...state.pendingNamingOperationByThreadId, [threadId]: operationId } }));
+		}
+		try {
+			const response = await threadsApi.naming(threadId, operationId, action, title);
+			const stream = streamStateByProject.get(projectId);
+			if (stream && stream.epoch !== response.stream_epoch) {
+				if (action === 'generate') {
+					set((state) => {
+						const pending = { ...state.pendingNamingOperationByThreadId };
+						delete pending[threadId];
+						return { pendingNamingOperationByThreadId: pending };
+					});
+				}
+				return;
+			}
+			if (!stream || stream.epoch === response.stream_epoch) {
+				set((state) => ({
+					threadsByProjectId: {
+						...state.threadsByProjectId,
+						[projectId]: (state.threadsByProjectId[projectId] || []).map((thread) =>
+							thread.id === threadId && response.thread.naming_revision >= thread.naming_revision ? response.thread : thread),
+					},
+				}));
+			}
+			if (action === 'manual') showGlobalSuccess('会话名称已更新，自动命名已关闭');
+			if (action === 'enable') showGlobalSuccess('已开启自动命名');
+			if (action === 'disable') showGlobalNotice('已关闭自动命名');
+			if (action === 'generate' && response.status === 'waiting_for_input') {
+				showGlobalNotice('已开启自动命名，将在收到需求后生成名称');
+				set((state) => {
+					const pending = { ...state.pendingNamingOperationByThreadId };
+					delete pending[threadId];
+					return { pendingNamingOperationByThreadId: pending };
+				});
+			} else if (action === 'generate' && response.status === 'completed') {
+				showGlobalNotice('命名请求已完成');
+				set((state) => {
+					const pending = { ...state.pendingNamingOperationByThreadId };
+					delete pending[threadId];
+					return { pendingNamingOperationByThreadId: pending };
+				});
+			} else if (action === 'generate') {
+				showGlobalNotice('正在重新评估会话名称');
+			}
+		} catch (error) {
+			if (action === 'generate') {
+				set((state) => {
+					const pending = { ...state.pendingNamingOperationByThreadId };
+					delete pending[threadId];
+					return { pendingNamingOperationByThreadId: pending };
+				});
+			}
+			throw error;
+		}
+	},
+
+	applyThreadSnapshot: (projectId, epoch, sequence, threads) => {
+		const current = streamStateByProject.get(projectId);
+		if (current?.epoch === epoch && sequence < current.sequence) return;
+		const epochChanged = Boolean(current && current.epoch !== epoch);
+		streamStateByProject.set(projectId, { epoch, sequence });
+		set((state) => {
+			const valid = new Set(threads.map((thread) => thread.id));
+			const previousThreadIds = new Set((state.threadsByProjectId[projectId] || []).map((thread) => thread.id));
+			const open = (state.openThreadIdsByProjectId[projectId] || []).filter((id) => valid.has(id));
+			const active = state.activeThreadIdByProjectId[projectId];
+			const pending = { ...state.pendingNamingOperationByThreadId };
+			if (epochChanged) {
+				for (const threadId of new Set([...previousThreadIds, ...valid])) delete pending[threadId];
+			}
+			return {
+				threadsByProjectId: { ...state.threadsByProjectId, [projectId]: threads },
+				openThreadIdsByProjectId: { ...state.openThreadIdsByProjectId, [projectId]: open.length > 0 ? open : threads.map((thread) => thread.id) },
+				activeThreadIdByProjectId: { ...state.activeThreadIdByProjectId, [projectId]: active && valid.has(active) ? active : threads[0]?.id ?? null },
+				pendingNamingOperationByThreadId: pending,
+			};
+		});
+	},
+
+	applyThreadNamingUpdate: (projectId, epoch, sequence, updated) => {
+		const current = streamStateByProject.get(projectId);
+		if (!current || current.epoch !== epoch || sequence <= current.sequence) return;
+		streamStateByProject.set(projectId, { epoch, sequence });
+		set((state) => ({
+			threadsByProjectId: {
+				...state.threadsByProjectId,
+				[projectId]: (state.threadsByProjectId[projectId] || []).map((thread) =>
+					thread.id === updated.id && updated.naming_revision >= thread.naming_revision ? updated : thread),
+			},
+		}));
+	},
+
+	applyThreadNamingResult: (projectId, epoch, sequence, data) => {
+		const current = streamStateByProject.get(projectId);
+		if (!current || current.epoch !== epoch || sequence <= current.sequence) return;
+		streamStateByProject.set(projectId, { epoch, sequence });
+		const threadId = typeof data.thread_id === 'string' ? data.thread_id : '';
+		const operationId = typeof data.operation_id === 'string' ? data.operation_id : '';
+		if (!threadId || !operationId || get().pendingNamingOperationByThreadId[threadId] !== operationId) return;
+		set((state) => {
+			const pending = { ...state.pendingNamingOperationByThreadId };
+			delete pending[threadId];
+			return { pendingNamingOperationByThreadId: pending };
+		});
+		if (data.outcome === 'renamed') showGlobalSuccess('会话名称已更新');
+		if (data.outcome === 'kept') showGlobalNotice('当前名称仍适合');
+		if (data.outcome === 'failed') showGlobalError(typeof data.error === 'string' ? data.error : '自动命名失败，请稍后重试');
+	},
 
   deleteThread: async (projectId, threadId) => {
     await threadsApi.delete(threadId);
@@ -134,6 +320,8 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       if (active === threadId) {
         active = nextOpen[idx] ?? nextOpen[idx - 1] ?? null;
       }
+	  const pending = { ...state.pendingNamingOperationByThreadId };
+	  delete pending[threadId];
       return {
         threadsByProjectId: {
           ...state.threadsByProjectId,
@@ -141,6 +329,8 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         },
         openThreadIdsByProjectId: { ...state.openThreadIdsByProjectId, [projectId]: nextOpen },
         activeThreadIdByProjectId: { ...state.activeThreadIdByProjectId, [projectId]: active },
+		pendingNamingOperationByThreadId: pending,
+		renamePanelTarget: state.renamePanelTarget?.threadId === threadId ? null : state.renamePanelTarget,
       };
     });
     useRunStore.getState().dropSessions([threadId]);
@@ -195,9 +385,12 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         activeThreadIdByProjectId: move(state.activeThreadIdByProjectId),
       };
     });
+		closeThreadEvents(oldProjectId);
+		ensureThreadEvents(newProjectId);
   },
 
   dropProject: (projectId) => {
+		closeThreadEvents(projectId);
     const ids = new Set<string>([
       ...(get().openThreadIdsByProjectId[projectId] || []),
       ...(get().threadsByProjectId[projectId] || []).map((t) => t.id),
@@ -210,10 +403,14 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         delete next[projectId];
         return next;
       };
+	  const pending = { ...state.pendingNamingOperationByThreadId };
+	  for (const threadId of ids) delete pending[threadId];
       return {
         threadsByProjectId: drop(state.threadsByProjectId),
         openThreadIdsByProjectId: drop(state.openThreadIdsByProjectId),
         activeThreadIdByProjectId: drop(state.activeThreadIdByProjectId),
+		pendingNamingOperationByThreadId: pending,
+		renamePanelTarget: state.renamePanelTarget?.projectId === projectId ? null : state.renamePanelTarget,
       };
     });
   },

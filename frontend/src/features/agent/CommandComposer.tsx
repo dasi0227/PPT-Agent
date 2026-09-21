@@ -90,7 +90,7 @@ export const CommandComposer: React.FC = () => {
   const polishRequestRef = useRef(0);
   const { activeProjectId, contentByProjectId, contentLoadingByProjectId, contentErrorByProjectId } = useProjectStore();
   const { currentSlideId } = useDeckStore();
-  const { activeThreadIdByProjectId, ensureActiveThread } = useThreadStore();
+  const { activeThreadIdByProjectId, ensureActiveThread, openRenamePanel } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
   const activeSession = useActiveSession();
   const { status: runStatus, activeRunId, nextInputSuggestions } = activeSession;
@@ -396,6 +396,22 @@ export const CommandComposer: React.FC = () => {
     const componentNames = editor?.getComponentNames() ?? [];
     const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
 	const apiDOMSelections = activeDOMSelections.map(({ dedupe_key: _dedupeKey, ...selection }) => selection);
+	if (/^\/rename(?:\s|$)/i.test(raw)) {
+		if (!activeProjectId) return;
+		if (raw.toLocaleLowerCase() !== '/rename') {
+			setSubmitError('/rename 不支持参数，请直接使用 /rename 打开命名面板');
+			return;
+		}
+		try {
+			const threadId = await ensureActiveThread(activeProjectId);
+			openRenamePanel(activeProjectId, threadId);
+			setText('');
+			editorRef.current?.setPlainText('');
+		} catch (error) {
+			setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+		}
+		return;
+	}
 	if (disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!raw && (hasDOMSelections ? !hasDOMIntent : !hasAttachments))) return;
     setSubmitError('');
     const projectId = activeProjectId;
@@ -539,6 +555,16 @@ export const CommandComposer: React.FC = () => {
       await polishText();
       return;
     }
+	if (command === 'rename') {
+		if (!activeProjectId) return;
+		try {
+			const threadId = await ensureActiveThread(activeProjectId);
+			openRenamePanel(activeProjectId, threadId);
+		} catch (error) {
+			setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+		}
+		return;
+	}
     if (!activeProjectId || !composer.modelProfileName) return;
     let threadId: string;
     try {

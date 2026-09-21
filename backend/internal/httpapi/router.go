@@ -120,8 +120,10 @@ func (r *Router) register() {
 		v1.GET("/git-commits/:id/events", r.gitCommit.Events)
 	}
 	v1.GET("/projects/:id/threads", r.thread.List)
+	v1.GET("/projects/:id/thread-events", r.thread.Events)
 	v1.POST("/projects/:id/threads", r.thread.Create)
 	v1.PATCH("/threads/:id", r.thread.Patch)
+	v1.POST("/threads/:id/naming", r.thread.Naming)
 	v1.GET("/threads/:id", r.thread.Get)
 	v1.DELETE("/threads/:id", r.thread.Delete)
 	v1.GET("/threads/:id/history", r.thread.History)

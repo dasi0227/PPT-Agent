@@ -61,16 +61,38 @@ func prepareBackendConfig(t *testing.T, content string) string {
 
 func validConfig(secret string) string {
 	return `llm:
-  default: Kimi Vision
-  profiles:
-    - name: Kimi Vision
-      provider: kimi
-      model: kimi-k3
-      key: ` + secret + `
-    - name: Kimi Text
+  main-road:
+    default: Kimi Vision
+    profiles:
+      - name: Kimi Vision
+        provider: kimi
+        model: kimi-k3
+        key: ` + secret + `
+      - name: Kimi Text
+        provider: kimi
+        model: kimi-k2
+        key: another-secret
+  side-road:
+    rename:
+      name: Rename Mini
       provider: kimi
       model: kimi-k2
-      key: another-secret
+      key: rename-secret
+`
+}
+
+func configWithMainRoad(body string) string {
+	lines := strings.Split(strings.TrimSpace(body), "\n")
+	for index := range lines {
+		lines[index] = "    " + lines[index]
+	}
+	return "llm:\n  main-road:\n" + strings.Join(lines, "\n") + `
+  side-road:
+    rename:
+      name: Rename Mini
+      provider: kimi
+      model: kimi-k2
+      key: rename-secret
 `
 }
 
@@ -91,8 +113,8 @@ func TestLoadReadsOnlyPortFromEnvironment(t *testing.T) {
 		cfg.DBPath != filepath.Join(expectedRoot, "db", "ppt.db") || cfg.LogLevel != logLevel {
 		t.Fatal("fixed backend configuration was not preserved")
 	}
-	if cfg.LLM.Default != "Kimi Vision" || len(cfg.LLM.Profiles) != 2 ||
-		cfg.LLM.Profiles[0].Key != "sk-test-secret" {
+	if cfg.LLM.MainRoad.Default != "Kimi Vision" || len(cfg.LLM.MainRoad.Profiles) != 2 ||
+		cfg.LLM.MainRoad.Profiles[0].Key != "sk-test-secret" || cfg.LLM.SideRoad.Rename.Name != "Rename Mini" {
 		t.Fatal("profile YAML was not loaded")
 	}
 }
@@ -125,7 +147,7 @@ func TestLoadRejectsInvalidPort(t *testing.T) {
 
 func TestLoadRejectsMissingProfilesInsteadOfFallingBack(t *testing.T) {
 	clearEnvForTest(t, "PORT")
-	prepareBackendConfig(t, "llm:\n  default: anything\n  profiles: []\n")
+	prepareBackendConfig(t, configWithMainRoad("default: anything\nprofiles: []"))
 	t.Setenv("DEEPSEEK_API_KEY", "legacy-key-must-not-enable-fallback")
 
 	_, err := Load()
@@ -140,39 +162,14 @@ func TestLLMConfigValidationAndSecretRedaction(t *testing.T) {
 		name   string
 		config string
 	}{
-		{"duplicate name", `llm:
-  default: Same
-  profiles:
-    - {name: Same, provider: kimi, model: kimi-k3, key: ` + secret + `}
-    - {name: Same, provider: openai, model: gpt-5, key: other}
-`},
-		{"blank name", `llm:
-  default: " "
-  profiles:
-    - {name: " ", provider: kimi, model: kimi-k3, key: ` + secret + `}
-`},
-		{"control name", "llm:\n  default: \"bad\\u0001name\"\n  profiles:\n    - {name: \"bad\\u0001name\", provider: kimi, model: kimi-k3, key: " + secret + "}\n"},
-		{"long name", "llm:\n  default: " + strings.Repeat("名", 81) + "\n  profiles:\n    - {name: " + strings.Repeat("名", 81) + ", provider: kimi, model: kimi-k3, key: " + secret + "}\n"},
-		{"unknown provider", `llm:
-  default: Bad
-  profiles:
-    - {name: Bad, provider: unknown, model: x, key: ` + secret + `}
-`},
-		{"missing default", `llm:
-  default: Missing
-  profiles:
-    - {name: Present, provider: kimi, model: kimi-k3, key: ` + secret + `}
-`},
-		{"empty model", `llm:
-  default: Bad
-  profiles:
-    - {name: Bad, provider: kimi, model: "", key: ` + secret + `}
-`},
-		{"empty key", `llm:
-  default: Bad
-  profiles:
-    - {name: Bad, provider: kimi, model: kimi-k3, key: ""}
-`},
+		{"duplicate name", configWithMainRoad("default: Same\nprofiles:\n  - {name: Same, provider: kimi, model: kimi-k3, key: " + secret + "}\n  - {name: Same, provider: openai, model: gpt-5, key: other}")},
+		{"blank name", configWithMainRoad("default: \" \"\nprofiles:\n  - {name: \" \", provider: kimi, model: kimi-k3, key: " + secret + "}")},
+		{"control name", configWithMainRoad("default: \"bad\\u0001name\"\nprofiles:\n  - {name: \"bad\\u0001name\", provider: kimi, model: kimi-k3, key: " + secret + "}")},
+		{"long name", configWithMainRoad("default: " + strings.Repeat("名", 81) + "\nprofiles:\n  - {name: " + strings.Repeat("名", 81) + ", provider: kimi, model: kimi-k3, key: " + secret + "}")},
+		{"unknown provider", configWithMainRoad("default: Bad\nprofiles:\n  - {name: Bad, provider: unknown, model: x, key: " + secret + "}")},
+		{"missing default", configWithMainRoad("default: Missing\nprofiles:\n  - {name: Present, provider: kimi, model: kimi-k3, key: " + secret + "}")},
+		{"empty model", configWithMainRoad("default: Bad\nprofiles:\n  - {name: Bad, provider: kimi, model: \"\", key: " + secret + "}")},
+		{"empty key", configWithMainRoad("default: Bad\nprofiles:\n  - {name: Bad, provider: kimi, model: kimi-k3, key: \"\"}")},
 	}
 
 	for _, test := range cases {

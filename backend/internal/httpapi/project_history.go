@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -94,10 +95,18 @@ func (r *Router) historySwitch(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid history command"))
 		return
 	}
+	var releaseNaming func()
+	if r.thread != nil && r.thread.naming != nil {
+		releaseNaming = r.thread.naming.BeginProjectReset(c.Request.Context(), c.Param("id"))
+		defer releaseNaming()
+	}
 	s, err := r.history.Switch(c.Request.Context(), c.Param("id"), body.RunID, body.Revision, body.Operation, body.Scene)
 	if err != nil {
 		historyError(c, err)
 		return
+	}
+	if r.thread != nil && r.thread.naming != nil {
+		r.thread.naming.Events().ResetProject(c.Request.Context(), c.Param("id"))
 	}
 	c.Header("X-Project-History-Revision", strconv.FormatInt(s.Revision, 10))
 	if err := r.history.Collect(c.Param("id")); err != nil {
@@ -241,6 +250,11 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			return
 		}
 		isProjectDelete := c.Request.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "projects"
+		var releaseNaming func()
+		if isProjectDelete && r.thread != nil && r.thread.naming != nil {
+			releaseNaming = r.thread.naming.BeginProjectReset(ctx, id)
+			defer releaseNaming()
+		}
 		requestContext := c.Request.Context()
 		if isProjectDelete {
 			requestContext = service.WithDeferredProjectCleanup(requestContext)
@@ -263,6 +277,9 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			r.log.Warn("project checkpoint cleanup deferred")
 		}
 		if isProjectDelete && buffer.Status() < 400 {
+			if r.thread != nil && r.thread.naming != nil {
+				r.thread.naming.Events().ResetProject(context.Background(), id)
+			}
 			if cleanupErr := r.history.Purge(id); cleanupErr != nil {
 				r.log.Warn("deleted project container cleanup deferred")
 			}

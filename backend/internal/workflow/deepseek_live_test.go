@@ -132,7 +132,7 @@ func configuredDeepSeekAdapter(t *testing.T) llm.Provider {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile, ok := deepSeekProfile(cfg.LLM.Profiles)
+	profile, ok := deepSeekProfile(cfg.LLM.MainRoad.Profiles)
 	if !ok {
 		t.Skip("no DeepSeek profile configured")
 	}

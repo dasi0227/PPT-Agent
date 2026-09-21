@@ -34,14 +34,30 @@ func provideApp(server *http.Server, engine *run.Engine, runs *service.RunServic
 func engineFromRouter(r *httpapi.Router) *gin.Engine { return r.Engine() }
 
 func provideLLMRegistry(cfg *config.Config) (*llm.Registry, error) {
-	profiles := make([]llm.ProfileConfig, 0, len(cfg.LLM.Profiles))
-	for _, profile := range cfg.LLM.Profiles {
+	profiles := make([]llm.ProfileConfig, 0, len(cfg.LLM.MainRoad.Profiles))
+	for _, profile := range cfg.LLM.MainRoad.Profiles {
 		profiles = append(profiles, llm.ProfileConfig{
 			Name: profile.Name, Provider: profile.Provider,
 			Model: profile.Model, Key: profile.Key,
 		})
 	}
-	return llm.NewRegistry(cfg.LLM.Default, profiles)
+	return llm.NewRegistry(cfg.LLM.MainRoad.Default, profiles)
+}
+
+func provideRenameProvider(cfg *config.Config) (llm.Provider, error) {
+	profile := cfg.LLM.SideRoad.Rename
+	registry, err := llm.NewRegistry(profile.Name, []llm.ProfileConfig{{
+		Name: profile.Name, Provider: profile.Provider, Model: profile.Model, Key: profile.Key,
+		Timeout: 20 * time.Second,
+	}})
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := registry.Resolve(profile.Name)
+	if err != nil {
+		return nil, err
+	}
+	return resolved.Adapter(), nil
 }
 
 func provideLockManager() *run.LockManager { return run.NewLockManager() }
@@ -56,6 +72,23 @@ func provideCalibrationStore() *contextengine.CalibrationStore {
 
 func provideThreadService(s store.Store, transcripts *contextengine.FSTranscriptStore) *service.ThreadService {
 	return service.NewThreadServiceWithTranscript(s, transcripts)
+}
+
+func provideThreadEventHub(s store.Store) *service.ThreadEventHub {
+	return service.NewThreadEventHub(s)
+}
+
+func provideNamingService(s store.Store, provider llm.Provider, hub *service.ThreadEventHub, log *zap.Logger) (*service.NamingService, func()) {
+	svc := service.NewNamingService(s, provider, hub, log)
+	return svc, svc.Close
+}
+
+func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.FSTranscriptStore, calibration *contextengine.CalibrationStore, naming *service.NamingService) *service.RunService {
+	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, calibration).WithNaming(naming)
+}
+
+func provideThreadHandler(threads *service.ThreadService, naming *service.NamingService) *httpapi.ThreadHandler {
+	return httpapi.NewThreadHandler(threads, naming)
 }
 
 func provideGitCommitService(s store.Store, registry *llm.Registry, locks *run.LockManager) (*service.GitCommitService, error) {

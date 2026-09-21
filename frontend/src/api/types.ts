@@ -111,6 +111,17 @@ export interface Thread {
   history_path: string;
   created_at: number;
   updated_at: number;
+	auto_rename_enabled: boolean;
+	naming_revision: number;
+}
+
+export type ThreadNamingAction = 'generate' | 'manual' | 'enable' | 'disable';
+export interface ThreadNamingResponse {
+	operation_id: string;
+	request_id?: string;
+	status: 'accepted' | 'completed' | 'waiting_for_input';
+	thread: Thread;
+	stream_epoch: string;
 }
 
 export interface Run {

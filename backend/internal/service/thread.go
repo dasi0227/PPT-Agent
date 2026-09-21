@@ -51,14 +51,24 @@ func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p 
 	}
 	id := svc.newID()
 	now := svc.clock()
+	title := strings.TrimSpace(p.Title)
+	if title != "" {
+		title, err = ValidateThreadTitle(title)
+		if err != nil {
+			return model.Thread{}, err
+		}
+	}
 	th := model.Thread{
-		ID:          id,
-		ProjectID:   projectID,
-		Title:       strings.TrimSpace(p.Title),
-		HistoryPath: model.UserHistoryPath(id),
-		Status:      "active",
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:                     id,
+		ProjectID:              projectID,
+		Title:                  title,
+		HistoryPath:            model.UserHistoryPath(id),
+		Status:                 "active",
+		AutoRenameEnabled:      title == "",
+		NamingRevision:         1,
+		RenameOperationVersion: 1,
+		CreatedAt:              now,
+		UpdatedAt:              now,
 	}
 	if err := writeEmptyHistory(proj.WorkDir, th.HistoryPath); err != nil {
 		return model.Thread{}, err
@@ -76,16 +86,12 @@ func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p 
 }
 
 func (svc *ThreadService) RenameThread(ctx context.Context, id, title string) (model.Thread, error) {
-	t, err := svc.store.GetThread(ctx, id)
+	clean, err := ValidateThreadTitle(title)
 	if err != nil {
 		return model.Thread{}, err
 	}
-	t.Title = title
-	t.UpdatedAt = svc.clock()
-	if err := svc.store.UpdateThreadTitle(ctx, t.ID, t.Title, t.UpdatedAt); err != nil {
-		return model.Thread{}, err
-	}
-	return t, nil
+	enabled := false
+	return svc.store.UpdateThreadNamingState(ctx, id, &clean, &enabled, true, svc.clock())
 }
 
 func (svc *ThreadService) ListThreads(ctx context.Context, projectID string) ([]model.Thread, error) {
