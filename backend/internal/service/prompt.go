@@ -49,52 +49,52 @@ type PromptWriteParams struct {
 
 var defaultPromptSeeds = []PromptWriteParams{
 	{
-		Name: "叙事大纲 / Storyline Outline", Desc: "梳理整份演示的叙事主线与逐页表达任务。",
+		Name: "叙事大纲", Desc: "梳理整份演示的叙事主线与逐页表达任务。",
 		Value: "请先梳理整份演示的叙事主线，明确开场、论证、转折与结论，并给出逐页标题和每页唯一表达任务。",
 		Tags:  []model.PromptTag{model.PromptTagDeliverable},
 	},
 	{
-		Name: "单页撰写 / Slide Draft", Desc: "围绕当前页面结论撰写简洁、聚焦的内容。",
+		Name: "单页撰写", Desc: "围绕当前页面结论撰写简洁、聚焦的内容。",
 		Value: "请围绕当前页面的核心结论撰写内容，保持标题结论化、正文简洁，并让所有信息共同支撑同一个表达任务。",
 		Tags:  []model.PromptTag{model.PromptTagDeliverable},
 	},
 	{
-		Name: "高管摘要 / Executive Summary", Desc: "提炼核心结论、关键数据、风险与下一步行动。",
+		Name: "高管摘要", Desc: "提炼核心结论、关键数据、风险与下一步行动。",
 		Value: "请将以上内容整理为高管摘要，优先呈现核心结论、关键数据、主要风险与下一步行动。",
 		Tags:  []model.PromptTag{model.PromptTagDeliverable},
 	},
 	{
-		Name: "精简改写 / Concise Rewrite", Desc: "删减重复和空泛表达，保留关键事实。",
+		Name: "精简改写", Desc: "删减重复和空泛表达，保留关键事实。",
 		Value: "请在不损失关键事实的前提下精简这段内容，删除重复信息和空泛修饰，使表达更直接。",
 		Tags:  []model.PromptTag{model.PromptTagDeliverable},
 	},
 	{
-		Name: "深度分析 / Deep Analysis", Desc: "分析关键矛盾、因果关系、假设与风险。",
+		Name: "深度分析", Desc: "分析关键矛盾、因果关系、假设与风险。",
 		Value: "请分析当前材料中的关键矛盾、因果关系、隐含假设与潜在风险，并给出有证据支撑的结论。",
 		Tags:  []model.PromptTag{model.PromptTagReview},
 	},
 	{
-		Name: "数据洞察 / Data Insights", Desc: "识别数据中的趋势、差异、异常与驱动因素。",
+		Name: "数据洞察", Desc: "识别数据中的趋势、差异、异常与驱动因素。",
 		Value: "请从数据中识别最重要的趋势、差异、异常与驱动因素，提炼适合在演示文稿中突出表达的洞察。",
 		Tags:  []model.PromptTag{model.PromptTagDeliverable},
 	},
 	{
-		Name: "图表建议 / Chart Recommendation", Desc: "根据数据关系选择最合适的图表表达。",
+		Name: "图表建议", Desc: "根据数据关系选择最合适的图表表达。",
 		Value: "请根据数据关系选择合适的图表类型，突出最重要的差异或趋势，并避免无意义的装饰和重复标签。",
 		Tags:  []model.PromptTag{model.PromptTagDeliverable},
 	},
 	{
-		Name: "视觉审查 / Visual Review", Desc: "检查并修复页面的视觉层级与排版问题。",
+		Name: "视觉审查", Desc: "检查并修复页面的视觉层级与排版问题。",
 		Value: "请审查当前页面的视觉层级、网格对齐、留白比例、文字换行和内容密度，并直接修复影响阅读的问题。",
 		Tags:  []model.PromptTag{model.PromptTagReview},
 	},
 	{
-		Name: "内容审查 / Content Review", Desc: "检查事实、逻辑、重复信息与措辞问题。",
+		Name: "内容审查", Desc: "检查事实、逻辑、重复信息与措辞问题。",
 		Value: "请检查当前内容是否存在事实冲突、逻辑跳跃、信息重复、结论缺失或措辞含糊，并逐项修正。",
 		Tags:  []model.PromptTag{model.PromptTagReview},
 	},
 	{
-		Name: "演讲备注 / Speaker Notes", Desc: "补充重点解释、停顿和页面过渡话术。",
+		Name: "演讲备注", Desc: "补充重点解释、停顿和页面过渡话术。",
 		Value: "请为当前页面补充简洁的演讲备注，包括开场衔接、重点解释、建议停顿和下一页过渡语。",
 		Tags:  []model.PromptTag{model.PromptTagDeliverable},
 	},

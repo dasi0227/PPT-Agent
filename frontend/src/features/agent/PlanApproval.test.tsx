@@ -51,7 +51,7 @@ describe('PlanApproval', () => {
       return this.dataset.testid === 'plan-content-preview' ? 600 : 0;
     });
     const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.dataset.testid === 'plan-content-preview' ? 480 : 0;
+      return this.dataset.testid === 'plan-content-preview' ? 320 : 0;
     });
 
     try {
@@ -66,11 +66,13 @@ describe('PlanApproval', () => {
       const approve = screen.getByRole('button', { name: '批准执行' });
       fireEvent.click(approve);
       expect(approve).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('plan-content-preview')).toHaveClass('max-h-[480px]', 'overflow-hidden');
+      expect(screen.getByTestId('plan-content-preview')).toHaveStyle({ maxHeight: '320px' });
+      expect(screen.getByTestId('plan-content-preview')).toHaveClass('overflow-hidden');
 
       fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
-      expect(screen.getByTestId('plan-content-preview')).not.toHaveClass('max-h-[480px]');
+      expect(screen.getByTestId('plan-content-preview')).not.toHaveStyle({ maxHeight: '320px' });
       expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '收起' }).closest('[data-testid="plan-content-preview"]')).toBeNull();
       expect(approve).toHaveAttribute('aria-pressed', 'true');
 
       fireEvent.click(screen.getByRole('button', { name: '收起' }));
@@ -137,6 +139,27 @@ describe('PlanApproval', () => {
     expect(screen.queryByText('返回修改')).toBeNull();
     expect(screen.queryByText('取消停止')).toBeNull();
     expect(screen.queryByRole('button', { name: '继续' })).toBeNull();
+  });
+
+  it('keeps long-content controls in the answered plan history card', () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === 'plan-content-preview' ? 600 : 0;
+    });
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === 'plan-content-preview' ? 320 : 0;
+    });
+
+    try {
+      render(<PlanApproval item={{ ...item, answer: { decision: 'approve' } }} />);
+      fireEvent.click(screen.getByRole('button', { name: '计划已批准执行' }));
+
+      expect(screen.getByRole('button', { name: '展开全部' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
+      expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument();
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
   });
 
   it.each([

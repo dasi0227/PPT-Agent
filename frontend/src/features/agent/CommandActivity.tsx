@@ -16,6 +16,7 @@ import type { CommandStatus } from '../../stores/commandRuntime';
 import { showGlobalError, showGlobalSuccess } from '../../stores/toastStore';
 import { cn } from '../../lib/utils';
 import { MarkdownMessage } from './MarkdownMessage';
+import { LongContent } from './LongContent';
 import { TimelineDisclosure } from './TimelineDisclosure';
 export type CommandKind = 'kickoff' | 'handoff' | 'commit' | 'compact' | 'rename' | 'polish';
 const icons = {
@@ -149,6 +150,7 @@ export function CommandActivity({
         <button
           type="button"
           disabled={!ready}
+          aria-label={`${kind}: ${displayTitle}`}
           aria-expanded={ready && open}
           aria-controls={id}
           onClick={() => setOpen((value) => !value)}
@@ -225,9 +227,12 @@ export function CommandActivity({
       <TimelineDisclosure open={ready && open}>
         {ready && open && (
           <div id={id} className="command-detail-card">
-            <div className="text-[13px] leading-[1.85] text-text-700">
+            <LongContent
+              contentClassName="text-[13px] leading-[1.85] text-text-700"
+              testId="command-content-preview"
+            >
               {content && <MarkdownMessage content={content} />} {children}
-            </div>
+            </LongContent>
             {(onRevise || onPrimary || copyText) && (
               <div className="command-footer">
                 {onRevise && (

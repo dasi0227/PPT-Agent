@@ -1,8 +1,9 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-import { ArrowRight, ChevronRight, ChevronUp, ListChecks } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowRight, ChevronRight, ListChecks } from 'lucide-react';
 import { runsApi } from '../../api/runs';
 import { cn } from '../../lib/utils';
 import { MarkdownMessage } from './MarkdownMessage';
+import { LongContent } from './LongContent';
 import type { PlanApprovalItem } from './eventReducer';
 
 const decisions = [
@@ -28,77 +29,26 @@ function decisionClass(decision: PlanDecision, selected: boolean): string {
       : 'border-danger/20 bg-danger-soft text-danger';
 }
 
-function PlanContentPreview({ content }: { content: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const [overflowing, setOverflowing] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    if (expanded) return undefined;
-    const element = contentRef.current;
-    if (!element) return undefined;
-    const measure = () => setOverflowing(element.scrollHeight - element.clientHeight > 1);
-    measure();
-    if (typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [content, expanded]);
-
+function PlanContent({ content }: { content: string }) {
   return (
-    <div className="mt-3">
-      <div
-        ref={contentRef}
-        data-testid="plan-content-preview"
-        className={expanded ? '' : 'relative max-h-[480px] overflow-hidden'}
-      >
-        <div className="text-sm leading-6 text-text-700">
-          <MarkdownMessage content={content} />
-        </div>
-        {!expanded && overflowing && (
-          <div className="absolute inset-x-0 bottom-0 flex h-16 items-end justify-center bg-gradient-to-b from-surface/0 via-surface/85 to-surface pb-1 backdrop-blur-[1px]">
-            <button
-              type="button"
-              onClick={() => setExpanded(true)}
-              className="inline-flex h-7 items-center rounded-full border border-border bg-surface px-3 text-xs font-medium text-text-700 shadow-sm hover:bg-panel-muted hover:text-text-900"
-            >
-              展开全部
-            </button>
-          </div>
-        )}
-      </div>
-      {expanded && overflowing && (
-        <div className="mt-2 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-text-400 hover:bg-panel-muted hover:text-text-700"
-          >
-            <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.75} />
-            收起
-          </button>
-        </div>
-      )}
-    </div>
+    <LongContent
+      className="mt-3"
+      contentClassName="text-sm leading-6 text-text-700"
+      testId="plan-content-preview"
+    >
+      <MarkdownMessage content={content} />
+    </LongContent>
   );
 }
 
-function PlanBody({
-  item,
-  preview = false,
-}: {
-  item: PlanApprovalItem;
-  preview?: boolean;
-}) {
+function PlanBody({ item }: { item: PlanApprovalItem }) {
   return (
     <>
       <div className="flex items-center gap-2">
         <ListChecks className="h-5 w-5 shrink-0 text-accent" strokeWidth={1.75} />
         <h3 className="min-w-0 text-sm font-semibold leading-5 text-text-900">{item.plan.title}</h3>
       </div>
-      {preview
-        ? <PlanContentPreview content={item.plan.content} />
-        : <div className="mt-3 text-sm leading-6 text-text-700"><MarkdownMessage content={item.plan.content} /></div>}
+      <PlanContent content={item.plan.content} />
     </>
   );
 }
@@ -150,7 +100,7 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
   };
   if (answered) return <AnsweredPlanApproval item={item} decision={answered.decision} />;
   return <article className="rounded-[10px] border border-border-strong bg-surface p-4">
-    <PlanBody item={item} preview />
+    <PlanBody item={item} />
     <div className="mt-4 border-t border-border pt-3" role="group" aria-label="计划处理方式" data-testid="plan-approval-actions">
       <div className="grid grid-cols-3 gap-2">
         {decisions.map(([value, label]) => (

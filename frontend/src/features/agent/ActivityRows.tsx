@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  ChevronUp,
   Eye,
   ExternalLink,
   Flag,
@@ -32,6 +31,7 @@ import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
 import { TimelineDisclosure } from './TimelineDisclosure';
+import { LongContent } from './LongContent';
 import { targetFileLabel } from './targetFileLabel';
 
 function safeReasoningMarkdown(text: string): string {
@@ -210,63 +210,26 @@ function CommandCard({ command, commandOutput, status }: {
   commandOutput: string;
   status: ToolActivityItem['status'];
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [overflowing, setOverflowing] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    if (expanded) return;
-    const el = contentRef.current;
-    if (!el) return;
-    const measure = () => setOverflowing(el.scrollHeight - el.clientHeight > 1);
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [expanded, command.text, commandOutput]);
-
   return (
-    <div>
-      <div ref={contentRef} className={expanded ? '' : 'relative max-h-[240px] overflow-hidden'}>
-        <div className="rounded-md bg-[#EDF0F3] px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]">
-          <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
-            {command.text}
-          </code>
-          {commandOutput && (
-            <pre className={cn(
-              'mt-[7px] whitespace-pre-wrap break-words border-t border-[#D7DCE3] pt-[7px] font-mono text-[11px] font-normal text-[#758191]',
-              status === 'failed' && 'text-[#A34851]',
-            )}>
-              {commandOutput}
-            </pre>
-          )}
-        </div>
-        {!expanded && overflowing && (
-          <div className="absolute inset-x-0 bottom-0 flex h-14 items-end justify-center bg-gradient-to-b from-[#EDF0F3]/0 to-[#EDF0F3] pb-1.5">
-            <button
-              type="button"
-              onClick={() => setExpanded(true)}
-              className="inline-flex h-6 items-center rounded-full border border-border bg-surface px-3 text-[11px] font-medium text-text-600 shadow-sm hover:bg-panel-muted hover:text-text-900"
-            >
-              展开全部
-            </button>
-          </div>
+    <LongContent
+      fadeClassName="from-[#EDF0F3]/0 via-[#EDF0F3]/90 to-[#EDF0F3]"
+      buttonClassName="h-6 text-[11px]"
+      controlsClassName="mt-2"
+    >
+      <div className="rounded-md bg-[#EDF0F3] px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]">
+        <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
+          {command.text}
+        </code>
+        {commandOutput && (
+          <pre className={cn(
+            'mt-[7px] whitespace-pre-wrap break-words border-t border-[#D7DCE3] pt-[7px] font-mono text-[11px] font-normal text-[#758191]',
+            status === 'failed' && 'text-[#A34851]',
+          )}>
+            {commandOutput}
+          </pre>
         )}
       </div>
-      {expanded && overflowing && (
-        <div className="mt-2 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] text-text-400 hover:bg-panel-muted hover:text-text-600"
-          >
-            <ChevronUp className="h-3 w-3" strokeWidth={1.75} />
-            收起
-          </button>
-        </div>
-      )}
-    </div>
+    </LongContent>
   );
 }
 

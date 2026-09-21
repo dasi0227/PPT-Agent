@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>长内容卡片 Demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #172033;
+      background: #f6f8fb;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: 32px 20px 80px;
+    }
+
+    button { font: inherit; }
+
+    .content-card {
+      width: min(640px, 100%);
+      margin: 0 auto;
+      overflow: hidden;
+      border: 1px solid #d7dee9;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 1px 2px rgb(16 24 40 / 4%);
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #e6eaf0;
+    }
+
+    .card-icon {
+      width: 28px;
+      height: 28px;
+      flex: none;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: #316cff;
+      background: #edf3ff;
+    }
+
+    .card-title {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      font-size: 14px;
+      font-weight: 650;
+      line-height: 20px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .card-meta {
+      color: #8390a3;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .content-viewport {
+      position: relative;
+    }
+
+    .content-body {
+      padding: 18px 20px 22px;
+      color: #39465a;
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    .content-body h2 {
+      margin: 22px 0 7px;
+      color: #172033;
+      font-size: 15px;
+      line-height: 22px;
+    }
+
+    .content-body h2:first-child { margin-top: 0; }
+    .content-body p { margin: 0; }
+    .content-body ul { margin: 6px 0 0; padding-left: 20px; }
+    .content-body li + li { margin-top: 4px; }
+
+    .content-card:not([data-expanded="true"]) .content-viewport {
+      max-height: 320px;
+      overflow: hidden;
+    }
+
+    .fade-control {
+      position: absolute;
+      inset: auto 0 0;
+      height: 92px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 14px;
+      background: linear-gradient(to bottom, rgb(255 255 255 / 0%), rgb(255 255 255 / 88%) 42%, #fff 72%);
+      backdrop-filter: blur(1.5px);
+    }
+
+    .content-card[data-expanded="true"] .fade-control,
+    .content-card:not([data-overflow="true"]) .fade-control,
+    .content-card:not([data-expanded="true"]) .collapse-footer {
+      display: none;
+    }
+
+    .toggle-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 0 12px;
+      border: 1px solid #d7dee9;
+      border-radius: 8px;
+      color: #526074;
+      background: #fff;
+      box-shadow: 0 2px 8px rgb(16 24 40 / 8%);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+    }
+
+    .toggle-button:hover {
+      border-color: #aab5c4;
+      color: #172033;
+      background: #f8fafc;
+    }
+
+    .toggle-button:focus-visible {
+      outline: 2px solid #316cff;
+      outline-offset: 2px;
+    }
+
+    .toggle-button svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .collapse-footer {
+      display: flex;
+      justify-content: center;
+      padding: 0 20px 18px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .toggle-button { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <article class="content-card" data-expanded="false" data-overflow="false">
+    <header class="card-head">
+      <span class="card-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 5h10M9 12h10M9 19h10" />
+          <path d="m3 5 1 1 2-2M3 12l1 1 2-2M3 19l1 1 2-2" />
+        </svg>
+      </span>
+      <span class="card-title">演示文稿制作计划</span>
+      <span class="card-meta">等待确认</span>
+    </header>
+
+    <div class="content-viewport" id="long-content">
+      <div class="content-body">
+        <h2>目标与范围</h2>
+        <p>制作一套六页的产品介绍演示文稿，帮助第一次接触产品的用户快速理解核心价值、使用方式和最终交付结果。</p>
+
+        <h2>内容结构</h2>
+        <ul>
+          <li>首页建立产品定位，并给出一句清晰的价值主张。</li>
+          <li>第二页解释当前工作流程中的主要问题。</li>
+          <li>第三至第五页依次展示创作流程、关键能力和结果示例。</li>
+          <li>结尾页归纳下一步行动，并保留演示和讨论空间。</li>
+        </ul>
+
+        <h2>视觉方向</h2>
+        <p>采用克制的 Swiss Modern 风格，以白色画布、清晰网格和高对比标题建立秩序。强调色只用于关键数字、状态和行动提示，避免无意义的装饰。</p>
+
+        <h2>制作步骤</h2>
+        <ul>
+          <li>确认主题、受众、演示场景和内容边界。</li>
+          <li>生成目录结构，为每一页定义单一沟通目标。</li>
+          <li>补全各页文案，检查信息密度和前后叙事关系。</li>
+          <li>建立视觉规范，完成六页静态 HTML 页面。</li>
+          <li>逐页渲染检查溢出、裁切、字体加载和版式一致性。</li>
+        </ul>
+
+        <h2>完成标准</h2>
+        <p>六页内容均可在静态首屏完整阅读；标题、正文和数据层级清晰；页面之间保持统一的字体、间距与配色；交付文件可继续编辑和导出。</p>
+      </div>
+
+      <div class="fade-control" aria-hidden="false">
+        <button class="toggle-button expand-button" type="button" aria-expanded="false" aria-controls="long-content">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5" /></svg>
+          展开全部
+        </button>
+      </div>
+    </div>
+
+    <footer class="collapse-footer">
+      <button class="toggle-button collapse-button" type="button" aria-expanded="true" aria-controls="long-content">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m7 14 5-5 5 5" /></svg>
+        收起
+      </button>
+    </footer>
+  </article>
+
+  <script>
+    const card = document.querySelector('.content-card');
+    const viewport = card.querySelector('.content-viewport');
+    const body = card.querySelector('.content-body');
+    const expandButton = card.querySelector('.expand-button');
+    const collapseButton = card.querySelector('.collapse-button');
+
+    const measure = () => {
+      if (card.dataset.expanded === 'true') return;
+      card.dataset.overflow = String(body.scrollHeight > 320);
+    };
+
+    expandButton.addEventListener('click', () => {
+      card.dataset.expanded = 'true';
+      expandButton.setAttribute('aria-expanded', 'true');
+    });
+
+    collapseButton.addEventListener('click', () => {
+      card.dataset.expanded = 'false';
+      expandButton.setAttribute('aria-expanded', 'false');
+      viewport.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      measure();
+    });
+
+    new ResizeObserver(measure).observe(body);
+    measure();
+  </script>
+</body>
+</html>

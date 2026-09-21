@@ -26,7 +26,7 @@ import {
   MessageCircleQuestion,
   MessagesSquare,
   NotebookText,
-	Tag,
+  Signature,
   WandSparkles,
 } from 'lucide-react';
 import type { ComponentReference, Prompt } from '../../api/types';
@@ -777,8 +777,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                     ? GitCommitHorizontal
                     : id === 'polish'
                       ? WandSparkles
-					  : id === 'rename'
-						? Tag
+                      : id === 'rename'
+                        ? Signature
                       : id === 'model'
                         ? Cpu
                         : Crosshair;

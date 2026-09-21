@@ -69,10 +69,10 @@ export interface CommandMenuKeyResult {
 }
 
 export const slashCommands: SlashCommand[] = [
-  { id: 'execute', name: '开发', ariaLabel: '开发模式', description: '切换到开发模式', group: '模式' },
-  { id: 'chat', name: '讨论', ariaLabel: '讨论模式', description: '切换到讨论模式', group: '模式' },
-  { id: 'grill', name: '盘问', ariaLabel: '盘问模式', description: '切换到盘问模式', group: '模式' },
-  { id: 'plan', name: '计划', ariaLabel: '计划模式', description: '切换到计划模式', group: '模式' },
+  { id: 'execute', name: 'create', ariaLabel: '开发模式', description: '切换到开发模式', group: '模式' },
+  { id: 'chat', name: 'chat', ariaLabel: '讨论模式', description: '切换到讨论模式', group: '模式' },
+  { id: 'grill', name: 'grill', ariaLabel: '盘问模式', description: '切换到盘问模式', group: '模式' },
+  { id: 'plan', name: 'plan', ariaLabel: '计划模式', description: '切换到计划模式', group: '模式' },
   { id: 'kickoff', name: 'kickoff', ariaLabel: '启动简报', description: '生成交给新 Agent 的启动 prompt', group: '操作' },
   { id: 'handoff', name: 'handoff', ariaLabel: '交接简报', description: '生成上下文交接 prompt', group: '操作' },
   { id: 'commit', name: 'commit', ariaLabel: '提交', description: '执行一次 Git 提交', group: '操作' },

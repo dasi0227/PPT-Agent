@@ -52,4 +52,28 @@ describe('BriefingActivity', () => {
     });
     expect(screen.queryByText(/来源：/)).not.toBeInTheDocument();
   });
+
+  it('keeps long briefing history content collapsible without covering its footer actions', () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === 'command-content-preview' ? 640 : 0;
+    });
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.dataset.testid === 'command-content-preview' ? 320 : 0;
+    });
+
+    try {
+      render(<BriefingActivity item={briefing} />);
+      fireEvent.click(screen.getByRole('button', { name: /handoff: Handoff v2/ }));
+
+      fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
+      const collapse = screen.getByRole('button', { name: '收起' });
+      expect(collapse).toBeInTheDocument();
+      expect(collapse.closest('[data-testid="command-content-preview"]')).toBeNull();
+      expect(screen.getByRole('button', { name: '复制' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '新建会话' })).toBeInTheDocument();
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
+  });
 });
