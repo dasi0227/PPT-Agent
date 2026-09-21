@@ -38,7 +38,7 @@ describe('ProjectTabs warehouse entry', () => {
     );
 
     const repositoryButton = screen.getByRole('button', { name: '仓库' });
-    expect(repositoryButton).toHaveTextContent('仓库');
+    expect(repositoryButton).not.toHaveTextContent('仓库');
     await user.click(repositoryButton);
     expect(screen.getByLabelText('location')).toHaveTextContent('/warehouse/theme');
     expect(screen.queryByText('选择演示文稿的整体样式')).not.toBeInTheDocument();

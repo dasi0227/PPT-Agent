@@ -585,6 +585,16 @@
   transform: translateX(0);
 }
 
+.agent-panel {
+  container: agent-panel / inline-size;
+}
+
+@container agent-panel (max-width: 380px) {
+  .composer-model-button {
+    max-width: 140px;
+  }
+}
+
 .overview-slide-card {
   container-type: inline-size;
 }

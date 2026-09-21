@@ -100,7 +100,6 @@ export const ProjectTabs: React.FC = () => {
         aria-label="仓库"
       >
         <Boxes className="h-4 w-4" />
-        <span>仓库</span>
       </button>
     </div>
   );

@@ -7,30 +7,27 @@ import { useUIStore } from '../../stores/uiStore';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 import { useProjectStore } from '../../stores/projectStore';
-
-const RIGHT_PANEL_MIN_CONTROLS_PX = 400;
-const RIGHT_PANEL_MIN_SIZE = 20;
-const RIGHT_PANEL_MAX_SIZE = 40;
-
-function rightPanelMinSize(workspaceWidth: number): number {
-  if (!Number.isFinite(workspaceWidth) || workspaceWidth <= 0) return RIGHT_PANEL_MIN_SIZE;
-  const controlsPercent = (RIGHT_PANEL_MIN_CONTROLS_PX / workspaceWidth) * 100;
-  return Math.min(
-    RIGHT_PANEL_MAX_SIZE,
-    Math.max(RIGHT_PANEL_MIN_SIZE, Math.ceil(controlsPercent)),
-  );
-}
+import { workspacePanelLayout } from './panelLayout';
 
 export const AppShell: React.FC = () => {
-  const { leftPanelHidden, rightPanelHidden } = useUIStore();
+  const preferences = useUIStore();
   const { activeProjectId } = useProjectStore();
   const shellRef = React.useRef<HTMLDivElement>(null);
   const [workspaceWidth, setWorkspaceWidth] = React.useState(() =>
     typeof window === 'undefined' ? 0 : window.innerWidth);
-  const dynamicRightMinSize = rightPanelMinSize(workspaceWidth);
-  const rightPanelDefaultSize = rightPanelHidden ? 0 : Math.max(28, dynamicRightMinSize);
-  const centerDefaultSize =
-    100 - (leftPanelHidden ? 0 : 22) - rightPanelDefaultSize;
+  const layout = workspacePanelLayout(workspaceWidth, preferences.leftPanelHidden, preferences.rightPanelHidden);
+  const { leftHidden: leftPanelHidden, rightHidden: rightPanelHidden } = layout;
+  const canExpandLeft = !workspacePanelLayout(workspaceWidth, false, true).leftHidden;
+  const canExpandRight = !workspacePanelLayout(workspaceWidth, true, false).rightHidden;
+  const expandLeft = () => {
+    if (!canExpandLeft) return;
+    const next = workspacePanelLayout(workspaceWidth, false, preferences.rightPanelHidden);
+    useUIStore.setState({ leftPanelHidden: false, rightPanelHidden: next.leftHidden || preferences.rightPanelHidden });
+  };
+  const expandRight = () => {
+    if (!canExpandRight) return;
+    useUIStore.setState({ rightPanelHidden: false });
+  };
 
   React.useLayoutEffect(() => {
     const shell = shellRef.current;
@@ -60,19 +57,26 @@ export const AppShell: React.FC = () => {
           <PanelGroup 
             key={`group-${leftPanelHidden}-${rightPanelHidden}`} 
             direction="horizontal" 
-            autoSaveId={`workspace-shell-v8-${leftPanelHidden ? 'noleft' : 'left'}-${rightPanelHidden ? 'noright' : 'right'}`}
+            autoSaveId={`workspace-shell-v9-${leftPanelHidden ? 'noleft' : 'left'}-${rightPanelHidden ? 'noright' : 'right'}`}
           >
             {!leftPanelHidden && (
               <>
-                <Panel id="left" order={1} defaultSize={22} minSize={16} maxSize={32} collapsible={false} className="bg-panel border-r border-border">
+                <Panel id="left" order={1} defaultSize={layout.leftDefault} minSize={layout.leftMin} maxSize={26} collapsible={false} className="bg-panel border-r border-border">
                   <DeckNavigator />
                 </Panel>
                 <PanelResizeHandle aria-label="调整左栏宽度" className="w-[3px] bg-border hover:bg-accent transition-colors" />
               </>
             )}
             
-            <Panel id="center" order={2} defaultSize={centerDefaultSize} minSize={30} className="bg-canvas flex flex-col">
-              <PreviewWorkspace />
+            <Panel id="center" order={2} defaultSize={layout.centerDefault} minSize={layout.centerMin} className="bg-canvas flex flex-col">
+              <PreviewWorkspace sidebarControls={{
+                leftHidden: leftPanelHidden,
+                rightHidden: rightPanelHidden,
+                canExpandLeft,
+                canExpandRight,
+                onExpandLeft: expandLeft,
+                onExpandRight: expandRight,
+              }} />
             </Panel>
             
             {!rightPanelHidden && (
@@ -81,9 +85,9 @@ export const AppShell: React.FC = () => {
                 <Panel
                   id="right"
                   order={3}
-                  defaultSize={rightPanelDefaultSize}
-                  minSize={dynamicRightMinSize}
-                  maxSize={RIGHT_PANEL_MAX_SIZE}
+                  defaultSize={layout.rightDefault}
+                  minSize={layout.rightMin}
+                  maxSize={40}
                   collapsible={false}
                   className="bg-panel border-l border-border"
                 >

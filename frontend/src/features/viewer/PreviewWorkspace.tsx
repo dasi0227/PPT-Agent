@@ -280,7 +280,18 @@ function isEditableTarget(target: EventTarget | null): boolean {
     );
 }
 
-export const PreviewWorkspace: React.FC = () => {
+interface PreviewWorkspaceProps {
+  sidebarControls?: {
+    leftHidden: boolean;
+    rightHidden: boolean;
+    canExpandLeft: boolean;
+    canExpandRight: boolean;
+    onExpandLeft: () => void;
+    onExpandRight: () => void;
+  };
+}
+
+export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarControls }) => {
   const {
     currentSlideId,
     previewMode,
@@ -299,7 +310,10 @@ export const PreviewWorkspace: React.FC = () => {
     loadProjectContent,
   } = useProjectStore();
   const projectId = activeProjectId;
-  const { leftPanelHidden, rightPanelHidden, toggleLeftPanel, toggleRightPanel, showRightPanel } = useUIStore();
+  const ui = useUIStore();
+  const leftPanelHidden = sidebarControls?.leftHidden ?? ui.leftPanelHidden;
+  const rightPanelHidden = sidebarControls?.rightHidden ?? ui.rightPanelHidden;
+  const { showRightPanel } = ui;
   const activeThreadId = useActiveThreadId();
   const runSession = useActiveSession();
   const allRunSessions = useRunStore((state) => state.sessions);
@@ -485,10 +499,15 @@ export const PreviewWorkspace: React.FC = () => {
 
   return (
     <div className="relative flex h-full flex-col bg-canvas">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3">
-        <div className="flex items-center gap-1">
+      <div className="flex h-12 shrink-0 items-center justify-between gap-2 overflow-x-auto whitespace-nowrap border-b border-border bg-panel px-3">
+        <div className="flex shrink-0 items-center gap-1">
           {leftPanelHidden && (
-            <IconButton label="展开左侧目录" onClick={toggleLeftPanel}>
+            <IconButton
+              label="展开左侧目录"
+              onClick={sidebarControls?.onExpandLeft ?? ui.toggleLeftPanel}
+              disabled={sidebarControls && !sidebarControls.canExpandLeft}
+              title={sidebarControls && !sidebarControls.canExpandLeft ? '加宽窗口后可展开左侧目录' : '展开左侧目录'}
+            >
               <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
           )}
@@ -502,13 +521,13 @@ export const PreviewWorkspace: React.FC = () => {
           >
             <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
-          <div className="ml-1.5 flex items-center rounded-full bg-panel-muted p-0.5 text-xs">
+          <div className="ml-1.5 flex shrink-0 items-center rounded-full bg-panel-muted p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setGlobalView('outline')}
               aria-pressed={globalView === 'outline'}
               className={cn(
-                'h-7 rounded-full px-3 font-medium transition-colors',
+                'h-7 shrink-0 whitespace-nowrap rounded-full px-3 font-medium transition-colors',
                 globalView === 'outline' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-600',
               )}
             >设计稿</button>
@@ -517,12 +536,12 @@ export const PreviewWorkspace: React.FC = () => {
               onClick={() => setGlobalView('html')}
               aria-pressed={globalView === 'html'}
               className={cn(
-                'h-7 rounded-full px-3 font-medium transition-colors',
+                'h-7 shrink-0 whitespace-nowrap rounded-full px-3 font-medium transition-colors',
                 globalView === 'html' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-600',
               )}
             >幻灯片</button>
           </div>
-          <div className="ml-1.5 flex items-center gap-0.5 rounded-full bg-panel-muted p-0.5">
+          <div className="ml-1.5 flex shrink-0 items-center gap-0.5 rounded-full bg-panel-muted p-0.5">
             <IconButton
               label="上一页"
               onClick={goPrev}
@@ -532,7 +551,7 @@ export const PreviewWorkspace: React.FC = () => {
               <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
             <span
-              className="flex h-7 min-w-14 items-center justify-center gap-1 px-2 text-[13px] tabular-nums"
+              className="flex h-7 min-w-14 shrink-0 items-center justify-center gap-1 px-2 text-[13px] tabular-nums"
               aria-label={hasSlides ? `第 ${safePage + 1} 页，共 ${slides.length} 页` : '暂无页面'}
             >
               <span aria-hidden="true" className="font-semibold text-text-900">{hasSlides ? safePage + 1 : 0}</span>
@@ -549,7 +568,7 @@ export const PreviewWorkspace: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <IconButton label="选择元素" aria-pressed={selectionMode === 'element'} onClick={() => setSelectionMode((value) => value === 'element' ? 'none' : 'element')} disabled={!selectionEnabled} className={selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}>
             <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
@@ -568,7 +587,12 @@ export const PreviewWorkspace: React.FC = () => {
             <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
           </div>
           {rightPanelHidden && (
-            <IconButton label="展开右侧对话" onClick={toggleRightPanel}>
+            <IconButton
+              label="展开右侧对话"
+              onClick={sidebarControls?.onExpandRight ?? ui.toggleRightPanel}
+              disabled={sidebarControls && !sidebarControls.canExpandRight}
+              title={sidebarControls && !sidebarControls.canExpandRight ? '加宽窗口后可展开右侧对话' : '展开右侧对话'}
+            >
               <PanelRightOpen className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
           )}

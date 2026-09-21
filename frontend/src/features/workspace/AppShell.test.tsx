@@ -1,5 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { AppShell } from './AppShell';
@@ -33,14 +33,27 @@ vi.mock('react-resizable-panels', () => ({
 
 vi.mock('./ProjectTabs', () => ({ ProjectTabs: () => <nav data-testid="project-tabs">项目标签</nav> }));
 vi.mock('../deck/DeckNavigator', () => ({ DeckNavigator: () => <aside>幻灯片导航</aside> }));
-vi.mock('../viewer/PreviewWorkspace', () => ({ PreviewWorkspace: () => <main>预览区</main> }));
+vi.mock('../viewer/PreviewWorkspace', () => ({
+  PreviewWorkspace: ({ sidebarControls }: { sidebarControls: {
+    leftHidden: boolean;
+    canExpandLeft: boolean;
+    onExpandLeft: () => void;
+  } }) => <main>
+    预览区
+    {sidebarControls.leftHidden && <button disabled={!sidebarControls.canExpandLeft} onClick={sidebarControls.onExpandLeft}>展开左侧目录</button>}
+  </main>,
+}));
 vi.mock('../agent/AgentPanel', () => ({ AgentPanel: () => <aside>Agent 对话</aside> }));
 
 describe('AppShell layout contract', () => {
   beforeEach(() => {
+    vi.stubGlobal('innerWidth', 1440);
+    vi.stubGlobal('ResizeObserver', undefined);
     useProjectStore.setState({ activeProjectId: null });
     useUIStore.setState({ leftPanelHidden: false, rightPanelHidden: false });
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it('hides the top project tabs on the home empty state', () => {
     render(<AppShell />);
@@ -57,12 +70,15 @@ describe('AppShell layout contract', () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
     render(<AppShell />);
     expect(screen.getByTestId('project-tabs')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-left')).toHaveAttribute('data-default-size', '22');
+    expect(screen.getByTestId('panel-left')).toHaveAttribute('data-default-size', '20');
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-min-size', '16');
-    expect(screen.getByTestId('panel-left')).toHaveAttribute('data-max-size', '32');
-    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-min-size', '30');
-    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-default-size', '40');
-    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-min-size', '40');
+    expect(screen.getByTestId('panel-left')).toHaveAttribute('data-max-size', '26');
+    const availableWidth = 1440 - 2 * 3;
+    const centerMin = Number(screen.getByTestId('panel-center').getAttribute('data-min-size'));
+    const rightMin = Number(screen.getByTestId('panel-right').getAttribute('data-min-size'));
+    expect(centerMin / 100 * availableWidth).toBeCloseTo(600);
+    expect(rightMin / 100 * availableWidth).toBeCloseTo(360);
+    expect(screen.getByTestId('panel-right')).toHaveAttribute('data-default-size', '28');
     expect(screen.getByTestId('panel-right')).toHaveAttribute('data-max-size', '40');
     expect(screen.getAllByRole('separator')).toHaveLength(2);
   });
@@ -75,7 +91,7 @@ describe('AppShell layout contract', () => {
     act(() => useUIStore.getState().toggleLeftPanel());
     expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
     expect(screen.getByTestId('panel-right')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '60');
+    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '72');
 
     act(() => useUIStore.getState().toggleRightPanel());
     expect(screen.queryByTestId('panel-right')).not.toBeInTheDocument();
@@ -88,7 +104,7 @@ describe('AppShell layout contract', () => {
     });
     expect(screen.getByTestId('panel-left')).toBeInTheDocument();
     expect(screen.getByTestId('panel-right')).toBeInTheDocument();
-    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '38');
+    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '52');
     expect(screen.getByTestId('panel-group')).toHaveAttribute('data-autosave-id', expandedKey);
   });
 
@@ -99,5 +115,40 @@ describe('AppShell layout contract', () => {
     act(() => useProjectStore.setState({ activeProjectId: 'p2' }));
     expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
     expect(screen.getByTestId('panel-right')).toBeInTheDocument();
+  });
+
+  it('temporarily hides sidebars when the window cannot fit their minimum widths', () => {
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    render(<AppShell />);
+    const resize = (width: number) => act(() => {
+      vi.stubGlobal('innerWidth', width);
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    resize(1100);
+    expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-right')).toBeInTheDocument();
+    resize(800);
+    expect(screen.queryByTestId('panel-right')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-center')).toHaveAttribute('data-default-size', '100');
+    expect(useUIStore.getState()).toMatchObject({ leftPanelHidden: false, rightPanelHidden: false });
+
+    resize(1440);
+    expect(screen.getByTestId('panel-left')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-right')).toBeInTheDocument();
+    act(() => useUIStore.getState().toggleLeftPanel());
+    resize(800);
+    resize(1440);
+    expect(screen.queryByTestId('panel-left')).not.toBeInTheDocument();
+    expect(screen.getByTestId('panel-right')).toBeInTheDocument();
+  });
+
+  it('lets the user switch to the directory when only one sidebar fits', () => {
+    vi.stubGlobal('innerWidth', 1100);
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    render(<AppShell />);
+    act(() => screen.getByRole('button', { name: '展开左侧目录' }).click());
+    expect(screen.getByTestId('panel-left')).toBeInTheDocument();
+    expect(screen.queryByTestId('panel-right')).not.toBeInTheDocument();
   });
 });
