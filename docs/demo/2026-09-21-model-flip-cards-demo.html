@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>模型配置 · 翻转卡片</title>
+  <style>
+    :root {
+      font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #17202b;
+      background: #e9edf2;
+      font-synthesis: none;
+      --surface: #fff;
+      --muted: #5f6b7a;
+      --border: #d5dbe3;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+      --error: #ae303c;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    button, a, select, input { touch-action: manipulation; }
+    button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    ::selection { background: #d6e3ff; color: #17202b; }
+    * { scrollbar-width: thin; scrollbar-color: #bcc5d0 transparent; }
+    .preview { max-width: 1440px; margin: 0 auto; padding: 64px 48px 32px; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+    h1 { margin: 0; font-size: 26px; line-height: 1.3; letter-spacing: -.025em; font-weight: 650; }
+    .intro { margin: 10px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+    .column-control { display: flex; flex-shrink: 0; gap: 3px; padding: 4px; border: 1px solid var(--border); border-radius: 9px; }
+    .column-control button { display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 11px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; }
+    .column-control button[aria-pressed="true"] { background: var(--surface); color: #17202b; }
+    .column-control button:hover { color: var(--accent); }
+    .column-control svg { width: 16px; height: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(var(--columns, 4), minmax(0, 1fr)); gap: 20px; }
+    .model-card { min-width: 0; height: 350px; perspective: 1400px; }
+    .flipper { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 560ms cubic-bezier(.22, 1, .36, 1); }
+    .model-card[data-open="true"] .flipper { transform: rotateY(180deg); }
+    .face { position: absolute; inset: 0; width: 100%; height: 100%; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+    .front { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 25px; padding: 28px; transform: rotateY(0deg); transition: border-color 180ms ease, background-color 180ms ease; }
+    .front:hover { border-color: #93a9d8; background: #fcfdff; }
+    .brand-logo { display: block; width: 60px; height: 60px; object-fit: contain; pointer-events: none; }
+    .model-name { max-width: 100%; font-size: 16px; line-height: 1.65; font-weight: 550; color: #2f3945; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .back { display: flex; flex-direction: column; margin: 0; padding: 22px 19px 18px; transform: rotateY(180deg); }
+    .fields { display: grid; gap: 12px; }
+    .field { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 9px; align-items: center; }
+    .field label { font-size: 12px; color: var(--muted); }
+    select, input { display: block; width: 100%; min-width: 0; color: #2f3945; border: 1px solid #dce1e8; border-radius: 7px; background: #f8f9fb; outline: none; font-size: 12px; caret-color: var(--accent); transition: border-color 160ms ease, background-color 160ms ease; }
+    select { height: 38px; padding: 0 8px; }
+    input { height: 38px; padding: 0 9px; line-height: normal; }
+    input::placeholder { color: var(--muted); }
+    select:focus, input:focus { border-color: var(--accent); background: #fff; outline: 2px solid #e8efff; }
+    [aria-invalid="true"] { border-color: var(--error); }
+    .key-wrap { position: relative; min-width: 0; }
+    .key-input { padding-right: 34px; }
+    .reveal { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 29px; height: 29px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); }
+    .reveal:hover { color: #17202b; background: #e9edf2; }
+    .reveal svg { width: 15px; height: 15px; }
+    .form-footer { margin-top: auto; }
+    .field-error { min-height: 30px; margin: 3px 0 2px; font-size: 11px; line-height: 14px; color: var(--error); }
+    .save { width: 100%; min-height: 35px; border: 0; border-radius: 7px; background: var(--accent-soft); color: #2456d1; font-size: 13px; font-weight: 550; transition: background-color 160ms ease; }
+    .save:hover { background: #dce7ff; }
+    .save:active { background: #cfddff; }
+    .preview-footer { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding-top: 22px; font-size: 12px; line-height: 1.7; color: var(--muted); }
+    .preview-footer p { margin: 0; }
+    .preview-footer a { color: inherit; text-underline-offset: 3px; }
+    #status { text-align: right; }
+    @media (max-width: 1199px) {
+      .preview { padding: 40px 28px 24px; }
+      .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+      .column-control { display: none; }
+    }
+    @media (max-width: 889px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 559px) {
+      .preview { padding: 28px 20px; }
+      h1 { font-size: 23px; }
+      .grid { grid-template-columns: minmax(0, 1fr); }
+      .model-card { height: 340px; }
+      .back { padding-inline: 24px; }
+      .preview-footer { flex-direction: column; gap: 8px; }
+      #status { text-align: left; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="preview">
+    <header class="toolbar">
+      <div>
+        <h1>模型配置</h1>
+        <p class="intro">点击卡片编辑，点击空白处收起。</p>
+      </div>
+      <div class="column-control" role="group" aria-label="预览列数">
+        <button type="button" data-columns="3" aria-pressed="false">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><rect x="1.5" y="3" width="15" height="12" rx="1.5"/><path d="M6.5 3v12M11.5 3v12"/></svg>
+          3 列
+        </button>
+        <button type="button" data-columns="4" aria-pressed="true">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><rect x="1" y="3" width="16" height="12" rx="1.5"/><path d="M5 3v12M9 3v12M13 3v12"/></svg>
+          4 列
+        </button>
+      </div>
+    </header>
+
+    <section class="grid" id="model-grid" aria-label="模型配置卡片"></section>
+
+    <footer class="preview-footer">
+      <p>示例配置，保存仅在当前预览中生效。<br>品牌图标来自 <a href="https://github.com/lobehub/lobe-icons" target="_blank" rel="noreferrer">Lobe Icons</a>。</p>
+      <p id="status" role="status" aria-live="polite">一次只展开一张卡片，也可以按 Esc 收起。</p>
+    </footer>
+  </main>
+
+  <template id="card-template">
+    <article class="model-card" data-open="false">
+      <div class="flipper">
+        <button type="button" class="face front" aria-expanded="false">
+          <img class="brand-logo" src="assets/model-logos/openai.svg" alt="" width="60" height="60">
+          <span class="model-name"></span>
+        </button>
+        <form class="face back" aria-hidden="true" inert novalidate autocomplete="off">
+          <div class="fields">
+            <div class="field"><label data-label="provider">provider</label><select name="provider" required></select></div>
+            <div class="field"><label data-label="name">name</label><input type="text" name="name" spellcheck="false" required maxlength="80"></div>
+            <div class="field"><label data-label="model">model</label><input type="text" name="model" spellcheck="false" autocapitalize="off" required></div>
+            <div class="field">
+              <label data-label="key">key</label>
+              <div class="key-wrap">
+                <input type="password" class="key-input" name="key" spellcheck="false" autocapitalize="off" autocomplete="off" required aria-label="密钥（演示值）">
+                <button class="reveal" type="button" aria-label="显示密钥" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="form-footer">
+            <p class="field-error" role="alert"></p>
+            <button class="save" type="submit">保存</button>
+          </div>
+        </form>
+      </div>
+    </article>
+  </template>
+
+  <script>
+    // 独立交互演示：仅使用示例数据，不请求后端，也不持久化凭证。
+    const brands = [
+      { provider: 'openai', label: 'OpenAI', logo: 'openai' },
+      { provider: 'deepseek', label: 'DeepSeek', logo: 'deepseek' },
+      { provider: 'anthropic', label: 'Anthropic', logo: 'claude' },
+      { provider: 'kimi', label: 'Kimi', logo: 'kimi' },
+      { provider: 'google', label: 'Google', logo: 'gemini' },
+      { provider: 'qwen', label: 'Qwen', logo: 'qwen' },
+      { provider: 'zai', label: 'Z.ai', logo: 'zai' },
+      { provider: 'minimax', label: 'MiniMax', logo: 'minimax' },
+    ];
+    // model 字段是可编辑的演示标识，不代表当前供应商目录或后端接入承诺。
+    const models = [
+      { provider: 'openai', name: '主力创作', model: 'openai-model-example' },
+      { provider: 'deepseek', name: '深度推理', model: 'deepseek-model-example' },
+      { provider: 'anthropic', name: '文字润色', model: 'claude-model-example' },
+      { provider: 'kimi', name: '长文理解', model: 'kimi-model-example' },
+      { provider: 'google', name: '视觉搭档', model: 'gemini-model-example' },
+      { provider: 'qwen', name: '中文写作', model: 'qwen-model-example' },
+      { provider: 'zai', name: '轻量旁路', model: 'glm-model-example' },
+      { provider: 'minimax', name: '备用助手', model: 'minimax-model-example' },
+    ].map((model, index) => ({ ...model, key: `demo-key-not-a-real-secret-${index + 1}` }));
+
+    const grid = document.querySelector('#model-grid');
+    const status = document.querySelector('#status');
+    const template = document.querySelector('#card-template');
+    let activeCard = null;
+    let focusTimer = null;
+
+    function closeCard({ restoreFocus = false } = {}) {
+      if (!activeCard) return;
+      clearTimeout(focusTimer);
+      const card = activeCard;
+      const front = card.querySelector('.front');
+      const back = card.querySelector('.back');
+      const focusedInside = back.contains(document.activeElement);
+      const key = back.elements.namedItem('key');
+      key.type = 'password';
+      const reveal = card.querySelector('.reveal');
+      reveal.setAttribute('aria-pressed', 'false');
+      reveal.setAttribute('aria-label', '显示密钥');
+      card.dataset.open = 'false';
+      front.inert = false;
+      front.removeAttribute('aria-hidden');
+      front.setAttribute('aria-expanded', 'false');
+      if (focusedInside || restoreFocus) front.focus({ preventScroll: true });
+      back.inert = true;
+      back.setAttribute('aria-hidden', 'true');
+      activeCard = null;
+      // 保留表单中的未保存输入，重新打开时继续编辑。
+    }
+
+    function openCard(card) {
+      if (activeCard === card) return;
+      closeCard();
+      activeCard = card;
+      const front = card.querySelector('.front');
+      const back = card.querySelector('.back');
+      card.dataset.open = 'true';
+      back.inert = false;
+      back.removeAttribute('aria-hidden');
+      front.setAttribute('aria-expanded', 'true');
+      // 将焦点移出即将隐藏的正面；翻转后再落到第一个字段。
+      back.tabIndex = -1;
+      back.focus({ preventScroll: true });
+      front.inert = true;
+      front.setAttribute('aria-hidden', 'true');
+      const delay = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420;
+      focusTimer = setTimeout(() => {
+        if (activeCard === card && document.activeElement === back) {
+          back.elements.namedItem('provider').focus({ preventScroll: true });
+        }
+      }, delay);
+    }
+
+    function updateFront(card, model) {
+      const brand = brands.find((item) => item.provider === model.provider);
+      card.querySelector('.brand-logo').src = `assets/model-logos/${brand.logo}.svg`;
+      card.querySelector('.model-name').textContent = model.name;
+      card.querySelector('.front').setAttribute('aria-label', `编辑 ${model.name}，${brand.label}`);
+      card.querySelector('.front').title = model.name;
+      card.querySelector('.back').setAttribute('aria-label', `编辑 ${model.name}`);
+    }
+
+    models.forEach((model, index) => {
+      const card = template.content.firstElementChild.cloneNode(true);
+      const form = card.querySelector('form');
+      form.id = `model-form-${index}`;
+      card.querySelector('.front').setAttribute('aria-controls', form.id);
+      const error = card.querySelector('.field-error');
+      error.id = `model-error-${index}`;
+      form.setAttribute('aria-describedby', error.id);
+      const provider = form.elements.namedItem('provider');
+      brands.forEach((brand) => provider.add(new Option(brand.label, brand.provider)));
+
+      ['provider', 'name', 'model', 'key'].forEach((field) => {
+        const input = form.elements.namedItem(field);
+        input.id = `model-${index}-${field}`;
+        input.value = model[field];
+        card.querySelector(`[data-label="${field}"]`).htmlFor = input.id;
+      });
+      updateFront(card, model);
+      card.querySelector('.front').addEventListener('click', () => openCard(card));
+      card.querySelector('.reveal').addEventListener('click', (event) => {
+        const button = event.currentTarget;
+        const key = form.elements.namedItem('key');
+        const reveal = key.type === 'password';
+        key.type = reveal ? 'text' : 'password';
+        button.setAttribute('aria-pressed', String(reveal));
+        button.setAttribute('aria-label', reveal ? '隐藏密钥' : '显示密钥');
+      });
+      form.addEventListener('input', (event) => {
+        error.textContent = '';
+        event.target.removeAttribute('aria-invalid');
+      });
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const next = Object.fromEntries(['provider', 'name', 'model', 'key'].map((field) => [field, form.elements.namedItem(field).value.trim()]));
+        let invalid = '';
+        let message = '';
+        for (const field of ['provider', 'name', 'model', 'key']) {
+          if (!next[field]) { invalid = field; message = `请填写 ${field}。`; break; }
+          if (/[\u0000-\u001f\u007f]/.test(next[field])) { invalid = field; message = `${field} 请填写单个值，不要插入换行。`; break; }
+        }
+        if (!invalid && models.some((item, itemIndex) => itemIndex !== index && item.name === next.name)) {
+          invalid = 'name'; message = '这个名称已被使用，请换一个名称。';
+        }
+        if (invalid) {
+          error.textContent = message;
+          const input = form.elements.namedItem(invalid);
+          input.setAttribute('aria-invalid', 'true');
+          input.focus();
+          return;
+        }
+        models[index] = next;
+        ['provider', 'name', 'model', 'key'].forEach((field) => {
+          form.elements.namedItem(field).value = next[field];
+          form.elements.namedItem(field).removeAttribute('aria-invalid');
+        });
+        error.textContent = '';
+        updateFront(card, next);
+        status.textContent = `已保存「${next.name}」的预览草稿。`;
+        closeCard({ restoreFocus: true });
+      });
+      grid.append(card);
+    });
+
+    document.addEventListener('pointerdown', (event) => {
+      if (activeCard && !activeCard.contains(event.target)) closeCard();
+    });
+    document.addEventListener('click', (event) => {
+      // 补充键盘触发的外部点击；卡片内部操作不会触发收起。
+      if (activeCard && !activeCard.contains(event.target)) closeCard();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && activeCard) {
+        event.preventDefault();
+        closeCard({ restoreFocus: true });
+      }
+    });
+    document.querySelectorAll('[data-columns]').forEach((button) => {
+      button.addEventListener('click', () => {
+        grid.style.setProperty('--columns', button.dataset.columns);
+        document.querySelectorAll('[data-columns]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+      });
+    });
+  </script>
+</body>
+</html>
