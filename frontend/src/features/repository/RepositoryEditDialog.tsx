@@ -107,16 +107,6 @@ export function RepositoryEditDialog<T extends string>({
               className="h-9 rounded-lg border border-border bg-surface px-3 text-[13px] text-text-900 outline-none focus:border-accent focus:ring-2 focus:ring-accent/10"
             />
           </label>
-          <label className="grid gap-1.5 text-xs font-semibold text-text-600">
-            描述
-            <textarea
-              maxLength={500}
-              rows={4}
-              value={draft.description}
-              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-              className="resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 text-text-900 outline-none focus:border-accent focus:ring-2 focus:ring-accent/10"
-            />
-          </label>
           <fieldset className="grid gap-1.5">
             <legend className="mb-1.5 text-xs font-semibold text-text-600">标签</legend>
             <div className="flex flex-wrap gap-1.5">
@@ -140,6 +130,16 @@ export function RepositoryEditDialog<T extends string>({
               })}
             </div>
           </fieldset>
+          <label className="grid gap-1.5 text-xs font-semibold text-text-600">
+            描述
+            <textarea
+              maxLength={500}
+              rows={4}
+              value={draft.description}
+              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+              className="resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 text-text-900 outline-none focus:border-accent focus:ring-2 focus:ring-accent/10"
+            />
+          </label>
           <DialogFooter className="pt-2">
             <Button type="button" variant="secondary" disabled={saving} onClick={() => requestOpenChange(false)}>
               取消

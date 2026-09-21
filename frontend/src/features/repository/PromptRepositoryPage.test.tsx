@@ -8,7 +8,6 @@ import { PromptRepositoryPage } from './PromptRepositoryPage';
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   get: vi.fn(),
-  create: vi.fn(),
   update: vi.fn(),
   setDisabled: vi.fn(),
   delete: vi.fn(),
@@ -59,25 +58,26 @@ describe('PromptRepositoryPage', () => {
       .toBe(screen.getByRole('button', { name: `删除${first.name}` }));
   });
 
-  it('edits in a dialog and updates the shared cache after saving', async () => {
-    const updated = { ...first, value: '更新后的提示词。', updated_at: 3 };
+  it('edits metadata in a dialog and keeps the prompt value intact', async () => {
+    const updated = { ...first, name: '新名称', desc: '新描述', updated_at: 3 };
     mocks.update.mockResolvedValue(updated);
     renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: `编辑${first.name}` }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveTextContent('编辑提示词');
-    fireEvent.change(within(dialog).getByLabelText('提示词 value'), { target: { value: updated.value } });
+    fireEvent.change(within(dialog).getByLabelText('名称'), { target: { value: updated.name } });
+    fireEvent.change(within(dialog).getByLabelText('描述'), { target: { value: updated.desc } });
     fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
 
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith(first.id, {
-      name: first.name,
-      desc: first.desc,
-      value: updated.value,
+      name: updated.name,
+      desc: updated.desc,
+      value: first.value,
       tags: first.tags,
     }));
-    expect(await screen.findByText(updated.value)).toBeInTheDocument();
-    expect(usePromptStore.getState().prompts[0].value).toBe(updated.value);
+    expect(await screen.findByRole('heading', { name: updated.name })).toBeInTheDocument();
+    expect(usePromptStore.getState().prompts[0].value).toBe(first.value);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -97,42 +97,12 @@ describe('PromptRepositoryPage', () => {
     expect(directoryItem.querySelector('.lucide-pause')).toBeInTheDocument();
   });
 
-  it('filters by tag and creates prompts from the inline form', async () => {
-    const created: Prompt = {
-      id: 'p2',
-      name: '数据分析 / Data Analysis',
-      desc: '分析数据并提炼洞察',
-      value: '分析数据。',
-      tags: ['identity'],
-      disabled: false,
-      created_at: 3,
-      updated_at: 3,
-    };
-    mocks.create.mockResolvedValue(created);
+  it('filters by tag', async () => {
     renderPage();
 
-    {
-      const identityButtons = screen.getAllByRole('button', { name: '身份' });
-      fireEvent.click(identityButtons[identityButtons.length - 1]);
-    }
-    expect(screen.getByText('没有匹配的提示词')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '全部' }));
-    fireEvent.click(screen.getByRole('button', { name: '新建提示词' }));
-    fireEvent.change(screen.getByLabelText('名称'), { target: { value: created.name } });
-    fireEvent.change(screen.getByLabelText('描述'), { target: { value: created.desc } });
-    fireEvent.change(screen.getByLabelText('提示词 value'), { target: { value: created.value } });
-    {
-      const identityButtons = screen.getAllByRole('button', { name: '身份' });
-      fireEvent.click(identityButtons[identityButtons.length - 1]);
-    }
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    const identityButtons = screen.getAllByRole('button', { name: '身份' });
+    fireEvent.click(identityButtons[identityButtons.length - 1]);
 
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({
-      name: created.name,
-      desc: created.desc,
-      value: created.value,
-      tags: ['identity'],
-    }));
-    expect(await screen.findByRole('heading', { name: created.name })).toBeInTheDocument();
+    expect(screen.getByText('没有匹配的提示词')).toBeInTheDocument();
   });
 });

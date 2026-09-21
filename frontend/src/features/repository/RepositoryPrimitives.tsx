@@ -220,12 +220,12 @@ export function RepositoryDetail({
               <RepositoryFileLink href={openUrl} />
             </div>
           </div>
+          {properties && <div className="mt-2.5 min-w-0">{properties}</div>}
           {description && (
             <p className="mt-1.5 line-clamp-2 max-w-3xl text-xs font-medium leading-[18px] text-text-600">
               {description}
             </p>
           )}
-          {properties && <div className="mt-5 min-w-0">{properties}</div>}
         </div>
         {actions && <div className="shrink-0">{actions}</div>}
       </header>
