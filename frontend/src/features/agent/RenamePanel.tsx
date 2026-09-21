@@ -47,10 +47,7 @@ export const RenamePanel: React.FC = () => {
 	return (
 		<div className="absolute bottom-[132px] left-3 right-3 z-30 rounded-2xl border border-border-strong bg-surface p-4 shadow-[0_18px_48px_rgba(15,23,42,0.18)]" role="dialog" aria-label="会话命名设置">
 			<div className="flex items-start justify-between gap-4">
-				<div>
-					<div className="text-sm font-semibold text-text-900">会话命名</div>
-					<div className="mt-1 text-xs text-text-600">自动命名当前{thread.auto_rename_enabled ? '已开启' : '已关闭'}，名称会直接更新。</div>
-				</div>
+				<div className="text-sm font-semibold text-text-900">会话命名</div>
 				<button type="button" onClick={close} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted" aria-label="关闭命名面板">
 					<X className="h-4 w-4" strokeWidth={1.75} />
 				</button>
@@ -67,21 +64,20 @@ export const RenamePanel: React.FC = () => {
 				<label className="flex items-center gap-2 text-xs font-semibold text-text-900"><PencilLine className="h-3.5 w-3.5" />手动命名</label>
 				<div className="mt-2 flex gap-2">
 					<input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={60} placeholder="输入会话名称"
-						className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-900 outline-none focus:border-accent" />
+						className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-900 outline-none transition-colors focus:border-border-strong focus-visible:ring-0 focus-visible:ring-offset-0" />
 					<button type="button" onClick={() => void run('manual')} disabled={Boolean(busy)}
-						className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-text-900 px-3 text-xs font-semibold text-white disabled:opacity-50">
+						className="inline-flex h-9 min-w-[80px] items-center justify-center gap-1.5 rounded-lg bg-accent-soft px-4 text-sm font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-50">
 						<Check className="h-3.5 w-3.5" />保存
 					</button>
 				</div>
-				<div className="mt-1.5 text-[11px] text-text-400">保存后将关闭自动命名。</div>
 			</div>
 
 			<div className="mt-3 grid grid-cols-2 gap-2">
-				<button type="button" onClick={() => void run('enable')} disabled={Boolean(busy)} className="flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-900 hover:bg-panel-muted disabled:opacity-50">
+				<button type="button" onClick={() => void run('enable')} disabled={Boolean(busy)} className="flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-900 transition-colors hover:border-success/20 hover:bg-success-soft hover:text-success disabled:opacity-50">
 					<Power className="h-3.5 w-3.5 text-success" />开启自动命名
 				</button>
-				<button type="button" onClick={() => void run('disable')} disabled={Boolean(busy)} className="flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-900 hover:bg-panel-muted disabled:opacity-50">
-					<PowerOff className="h-3.5 w-3.5 text-text-600" />关闭自动命名
+				<button type="button" onClick={() => void run('disable')} disabled={Boolean(busy)} className="flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-900 transition-colors hover:border-danger/20 hover:bg-danger-soft hover:text-danger disabled:opacity-50">
+					<PowerOff className="h-3.5 w-3.5 text-danger" />关闭自动命名
 				</button>
 			</div>
 			{error && <div role="alert" className="mt-3 text-xs text-danger">{error}</div>}
