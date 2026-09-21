@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CreateRunRequest, DOMSelection, RunMode, ScopeObject, ScopeSelectionKind } from '../api/types';
 
-const RECENT_MODEL_KEY = 'ppt-agent-recent-model-profile-v1';
+const RECENT_MODEL_KEY = 'ppt-agent-recent-model-profile-v2';
 export const MAX_SELECTED_SKILLS = 3;
 export const MAX_MESSAGE_ATTACHMENTS = 8;
 
@@ -30,6 +30,9 @@ export interface ComposerState {
   customSectionIds: string[];
   mode: RunMode;
   modelProfileName: string | null;
+  modelSelectionExplicit: boolean;
+  reconcileModels: (names: string[], defaultName: string) => void;
+  useDefaultModel: (defaultName: string) => void;
   polishing: boolean;
   selectedSkillIds: string[];
   threadDrafts: Record<string, string>;
@@ -76,6 +79,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   customSectionIds: [],
   mode: 'execute',
   modelProfileName: initialModelProfile(),
+  modelSelectionExplicit: !!initialModelProfile(),
   polishing: false,
   selectedSkillIds: [],
   threadDrafts: {},
@@ -104,7 +108,16 @@ export const useComposerStore = create<ComposerState>((set) => ({
   setIntent: (mode) => set({ mode }),
   setModelProfileName: (name) => {
     if (typeof localStorage !== 'undefined') localStorage.setItem(RECENT_MODEL_KEY, name);
-    set({ modelProfileName: name });
+    set({ modelProfileName: name, modelSelectionExplicit: true });
+  },
+  reconcileModels: (names, defaultName) => set((state) => {
+    if (state.modelSelectionExplicit && state.modelProfileName && names.includes(state.modelProfileName)) return state;
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(RECENT_MODEL_KEY);
+    return { modelProfileName: defaultName, modelSelectionExplicit: false };
+  }),
+  useDefaultModel: (defaultName) => {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(RECENT_MODEL_KEY);
+    set({ modelProfileName: defaultName, modelSelectionExplicit: false });
   },
   setPolishing: (polishing) => set({ polishing }),
   setThreadDraft: (threadId, text) => set((state) => {
@@ -208,7 +221,7 @@ export function composerScene(): Partial<ComposerState> {
   return {
     scopeObject:s.scopeObject, scopeSelection:s.scopeSelection, lastNonGlobalSelection:s.lastNonGlobalSelection,
     customSlideIds:s.customSlideIds, customSectionIds:s.customSectionIds, mode:s.mode,
-    modelProfileName:s.modelProfileName, selectedSkillIds:s.selectedSkillIds,
+    modelProfileName:s.modelProfileName, modelSelectionExplicit:s.modelSelectionExplicit, selectedSkillIds:s.selectedSkillIds,
     threadDrafts:s.threadDrafts, threadReferences:s.threadReferences, nextMarkerByThread:s.nextMarkerByThread,
     editingSelectionIdByThread:s.editingSelectionIdByThread, userTouchedTarget:s.userTouchedTarget, restoredInputs:s.restoredInputs,
     threadResourceMentions:s.threadResourceMentions,

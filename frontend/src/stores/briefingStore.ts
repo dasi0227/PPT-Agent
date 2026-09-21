@@ -1,3 +1,4 @@
+import { notifyModelFallback } from '../lib/modelExecution';
 import { create } from 'zustand';
 import { briefingsApi } from '../api/briefings';
 import type { BriefingKind } from '../api/types';
@@ -17,7 +18,6 @@ interface BriefingStore {
   generate: (
     projectId: string,
     threadId: string,
-    model: string,
     kind: BriefingKind,
     briefingId?: string,
     feedback?: string,
@@ -70,7 +70,7 @@ export const useBriefingStore = create<BriefingStore>((set, get) => {
 
   return {
     sessions: {},
-    generate: async (projectId, threadId, model, kind, briefingId, feedback) => {
+    generate: async (projectId, threadId, kind, briefingId, feedback) => {
       if (get().sessions[projectId]?.status === 'generating') return false;
       const itemId = briefingId ? `briefing:${briefingId}` : `briefing:pending:${kind}:${Date.now()}`;
       const controller = new AbortController();
@@ -99,10 +99,10 @@ export const useBriefingStore = create<BriefingStore>((set, get) => {
       try {
         const response = await briefingsApi.generate(projectId, kind, {
           thread_id: threadId,
-          model_profile_name: model,
           ...(briefingId ? { briefing_id: briefingId } : {}),
           ...(feedback ? { feedback } : {}),
         }, controller.signal);
+        notifyModelFallback(response.model_execution, kind === 'kickoff' ? '启动说明' : '交接内容');
         const completed: BriefingTimelineItem = {
           id: `briefing:${response.briefing.briefing_id}`,
           type: 'briefing',

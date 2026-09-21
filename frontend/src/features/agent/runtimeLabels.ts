@@ -32,6 +32,7 @@ export const runActivityLabels: Record<RunActivity, string> = {
   'run.preparing': 'Dasi 正在准备任务',
   'run.recovering': 'Dasi 正在恢复任务',
   'run.analyzing': 'Dasi 正在确定下一步操作',
+  'model.fallback': 'Dasi 已切换至备用模型',
   'run.retrying': 'Dasi 连接暂时不稳定，正在重试',
   'run.canceling': 'Dasi 正在停止任务',
   'plan.preparing': 'Dasi 正在整理执行方案',

@@ -15,10 +15,10 @@ export const threadsApi = {
       `/threads/${threadId}/context-window?model_profile_name=${encodeURIComponent(modelProfileName)}`,
       { reportError: false },
     ),
-  compact: (threadId: string, modelProfileName: string) =>
+  compact: (threadId: string) =>
     fetchClient<CompactContextResponse>(`/threads/${threadId}/compact`, {
       method: 'POST',
-      body: JSON.stringify({ model_profile_name: modelProfileName }),
+      body: JSON.stringify({}),
     }),
   patch: (id: string, patch: {title?: string}) => fetchClient<Thread>(`/threads/${id}`, {
     method: 'PATCH',

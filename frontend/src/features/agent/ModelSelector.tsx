@@ -15,6 +15,8 @@ interface ModelSelectorProps {
   loading: boolean;
   disabled?: boolean;
   onChange: (name: string) => void;
+  onDefault?: () => void;
+  usesDefault?: boolean;
 }
 
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
@@ -23,7 +25,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   requiresVision,
   loading,
   disabled = false,
-  onChange,
+  onChange, onDefault, usesDefault,
 }) => {
   const selected = profiles.find((profile) => profile.name === value);
   const triggerLabel = loading
@@ -52,6 +54,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="max-h-64 w-[196px] overflow-y-auto p-1">
+          {onDefault && <DropdownMenuItem onSelect={onDefault} className={usesDefault ? 'bg-accent-soft text-accent text-xs' : 'text-xs'}>使用主路默认模型</DropdownMenuItem>}
           {profiles.map((profile) => {
             const optionDisabled = requiresVision && !profile.capabilities.vision;
             const active = profile.name === value;

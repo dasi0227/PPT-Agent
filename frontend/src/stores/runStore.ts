@@ -53,6 +53,7 @@ export interface RunSession {
   pendingQuestion: { id: string; prompt: string } | null;
   progress: {
     activity: RunActivity;
+    modelSwitch?: { from: string; to: string; purpose: string };
   } | null;
   eventSourceClose: (() => void) | null;
   plan: PlanState | null;
@@ -60,6 +61,14 @@ export interface RunSession {
   processedEventIds?: string[];
   originalRequest?: CreateRunRequest;
   nextInputSuggestions: NextInputSuggestionsState | null;
+}
+
+function recoveredModelProgress(run: Run): RunSession['progress'] {
+  if (!run.model_execution?.fallback_used || !['pending', 'running', 'recovering'].includes(run.status)) return null;
+  return {
+    activity: 'run.recovering',
+    modelSwitch: { from: run.model ?? '', to: run.model_execution.profile, purpose: 'main' },
+  };
 }
 
 export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
@@ -646,7 +655,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               progress = null;
             } else if (event.event === 'run.progress') {
               if (prev.status !== 'canceling') status = 'running';
-              progress = { activity: event.data.activity };
+              progress = { activity: event.data.activity, modelSwitch: event.data.model_switch };
+              if (event.data.activity === 'model.fallback' && event.data.model_switch) showGlobalWarning(`已切换至备用模型 ${event.data.model_switch.to}`);
             } else if (event.event === 'run.completed') {
               status = 'done';
               pendingQuestion = null;
@@ -768,6 +778,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             scope: run.scope,
             mode: run.mode,
             lastEventId: record.lastEventId,
+            progress: recoveredModelProgress(run),
             timelineItems: prev.timelineItems.length > 0 ? prev.timelineItems : hydratedItems,
             plan: prev.plan ?? hydratedPlan,
             nextInputSuggestions: prev.timelineItems.length > 0 ? prev.nextInputSuggestions : hydratedSuggestions,
@@ -821,7 +832,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           scope: run.scope,
           mode: run.mode,
           lastEventId,
-          progress: null,
+          progress: recoveredModelProgress(run),
           pendingQuestion: status === 'waiting' ? get().sessions[threadId]?.pendingQuestion ?? null : null,
         });
         if (isTerminalRunStatus(run.status)) {

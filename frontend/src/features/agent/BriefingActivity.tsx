@@ -72,7 +72,6 @@ function BriefingLoading({ item }: { item: BriefingTimelineItem }) {
 
 export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
-  const model = useComposerStore((state) => state.modelProfileName);
   const polishing = useComposerStore((state) => state.polishing);
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
@@ -124,11 +123,10 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
   };
   const retry = async () => {
     const trimmed = feedback.trim();
-    if (!trimmed || !activeProjectId || !model || busy) return;
+    if (!trimmed || !activeProjectId || busy) return;
     const succeeded = await generate(
       activeProjectId,
       version.thread_id,
-      model,
       item.kind,
       item.briefingId,
       trimmed,
@@ -273,7 +271,7 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
             <button
               type="button"
               onClick={() => void retry()}
-              disabled={!feedback.trim() || busy || !model}
+              disabled={!feedback.trim() || busy}
               className="inline-flex h-7 items-center gap-1 rounded-md bg-accent-soft px-2.5 text-xs text-accent disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Send className="h-3.5 w-3.5" />

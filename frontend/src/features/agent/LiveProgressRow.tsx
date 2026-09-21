@@ -5,7 +5,7 @@ import { runActivityLabels } from './runtimeLabels';
 
 export const LiveProgressRow: React.FC<{ progress: RunSession['progress'] }> = ({ progress }) => {
   if (!progress) return null;
-  const label = runActivityLabels[progress.activity];
+  const label = progress.modelSwitch ? `备用模型 ${progress.modelSwitch.to} · ${runActivityLabels[progress.activity]}` : runActivityLabels[progress.activity];
   return (
     <div className="flex min-h-8 items-center gap-2 px-1.5 text-xs text-text-600" aria-live="polite">
       <B2Orb className="text-accent" label={label} />

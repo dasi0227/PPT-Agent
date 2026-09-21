@@ -1,3 +1,4 @@
+import { notifyModelFallback } from '../../lib/modelExecution';
 import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -74,6 +75,7 @@ export const CommandComposer: React.FC = () => {
   const [submitError, setSubmitError] = useState('');
 	const [uploadingCount, setUploadingCount] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
+  const [defaultModel, setDefaultModel] = useState('');
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [profilesError, setProfilesError] = useState('');
@@ -289,29 +291,25 @@ export const CommandComposer: React.FC = () => {
   }, [activeThreadId, scopePages, scopeSections]);
   useEffect(() => {
     let current = true;
-    setProfilesLoading(true);
-    setProfilesError('');
-    void llmApi.profiles()
-      .then((response) => {
-        if (!current) return;
-        setProfiles(response.profiles);
-        if (Object.keys(useComposerStore.getState().restoredInputs).length > 0) return;
-        const remembered = useComposerStore.getState().modelProfileName;
-        const selected = response.profiles.some((profile) => profile.name === remembered)
-          ? remembered
-          : response.default;
-        if (selected) useComposerStore.getState().setModelProfileName(selected);
-      })
-      .catch(() => {
-        if (!current) return;
-        setProfiles([]);
+    let request = 0;
+    const loadModels = () => {
+      const id = ++request;
+      setProfilesLoading(true); setProfilesError('');
+      void llmApi.profiles().then((response) => {
+        if (!current || id !== request) return;
+        setProfiles(response.profiles); setDefaultModel(response.default);
+        useComposerStore.getState().reconcileModels(response.profiles.map((profile) => profile.name), response.default);
+      }).catch(() => {
+        if (!current || id !== request) return;
         setProfilesError('模型列表加载失败，请刷新后重试');
-      })
-      .finally(() => {
-        if (current) setProfilesLoading(false);
-      });
-    return () => { current = false; };
+      }).finally(() => { if (current && id === request) setProfilesLoading(false); });
+    };
+    loadModels();
+    window.addEventListener('focus', loadModels);
+    window.addEventListener('model-settings-saved', loadModels);
+    return () => { current = false; window.removeEventListener('focus', loadModels); window.removeEventListener('model-settings-saved', loadModels); };
   }, []);
+
   useEffect(() => {
     let current = true;
     setSkillsLoading(true);
@@ -446,7 +444,7 @@ export const CommandComposer: React.FC = () => {
       ...restored,
       ...(restored ? { restored_checkpoint: true } : {}),
       client_request_id: newClientIdentity('req'),
-      model: composer.modelProfileName,
+      model: composer.modelSelectionExplicit ? composer.modelProfileName ?? undefined : undefined,
       scope,
       mode: composer.mode,
       instruction: raw,
@@ -499,10 +497,6 @@ export const CommandComposer: React.FC = () => {
     const editor = editorRef.current;
     const instruction = editor?.getPlainText().trim() ?? '';
     if (!editor || disabled || commitActive || polishing || briefingActive || !activeProjectId || !instruction) return;
-    if (profilesError || profilesLoading || !composer.modelProfileName) {
-      setSubmitError(profilesError || '模型列表仍在加载，请稍候');
-      return;
-    }
     const selection = editor.captureSelection();
     const requestID = polishRequestRef.current + 1;
     polishRequestRef.current = requestID;
@@ -510,22 +504,22 @@ export const CommandComposer: React.FC = () => {
     polishAbortRef.current?.abort();
     polishAbortRef.current = controller;
     setSubmitError('');
-    setPolishing(true);
     const restored = activeThreadId ? composer.restoredInputs[activeThreadId] : undefined;
     const scope = restored?.scope ?? composerScopeInput(composer, currentSlide?.id);
     if (!scope) {
       setSubmitError(composer.scopeSelection === 'custom_pages' ? '请至少选择一页' : '请至少选择一章');
       return;
     }
+    setPolishing(true);
     try {
       const result = await polishApi.polish(activeProjectId, {
         instruction,
         ...(activeThreadId ? { thread_id: activeThreadId } : {}),
         scope,
         mode: composer.mode,
-        model: composer.modelProfileName,
       }, controller.signal);
       if (polishRequestRef.current !== requestID || controller.signal.aborted) return;
+      notifyModelFallback(result.model_execution, '输入润色');
       setComposerText(result.polished_instruction);
       requestAnimationFrame(() => {
         editorRef.current?.setPlainText(result.polished_instruction);
@@ -565,7 +559,7 @@ export const CommandComposer: React.FC = () => {
 		}
 		return;
 	}
-    if (!activeProjectId || !composer.modelProfileName) return;
+    if (!activeProjectId) return;
     let threadId: string;
     try {
       threadId = await ensureActiveThread(activeProjectId);
@@ -574,11 +568,11 @@ export const CommandComposer: React.FC = () => {
       return;
     }
     if (command === 'commit') {
-      await startCommit(activeProjectId, threadId, composer.modelProfileName);
+      await startCommit(activeProjectId, threadId);
       return;
     }
     if (command === 'kickoff' || command === 'handoff') {
-      await generateBriefing(activeProjectId, threadId, composer.modelProfileName, command);
+      await generateBriefing(activeProjectId, threadId, command);
     }
   };
 
@@ -811,6 +805,8 @@ export const CommandComposer: React.FC = () => {
               loading={profilesLoading}
               disabled={disabled || steering}
               onChange={composer.setModelProfileName}
+              onDefault={() => composer.useDefaultModel(defaultModel)}
+              usesDefault={!composer.modelSelectionExplicit}
             />
             {showCancelButton ? (
               <button

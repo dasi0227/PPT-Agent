@@ -45,7 +45,7 @@ interface PersistedCommit {
 interface GitCommitStore {
   sessions: Record<string, ProjectCommitSession>;
   getSession: (projectId: string) => ProjectCommitSession;
-  start: (projectId: string, threadId: string, model: string) => Promise<boolean>;
+  start: (projectId: string, threadId: string) => Promise<boolean>;
   recover: () => Promise<void>;
   closeAll: () => void;
 }
@@ -153,6 +153,7 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
       const session = get().sessions[projectId];
       if (!session || session.operationId !== operationId) return;
       if (event.event === 'git.commit.progress') {
+        if (event.data.model_switch) showGlobalWarning(`提交说明已切换至备用模型 ${event.data.model_switch.to}`);
         patch(projectId, {
           status: 'running',
           phase: event.data.phase,
@@ -191,7 +192,7 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
   return {
     sessions: {},
     getSession: (projectId) => get().sessions[projectId] ?? idleSession(),
-    start: async (projectId, threadId, model) => {
+    start: async (projectId, threadId) => {
       const current = get().sessions[projectId];
       if (current && (current.status === 'creating' || current.status === 'running')) return false;
       patch(projectId, {
@@ -201,7 +202,6 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
       try {
         const operation = await gitCommitsApi.create(projectId, {
           thread_id: threadId,
-          model,
           client_request_id: newClientIdentity('req'),
         });
         if (!isGitCommitRunning(operation.status)) {

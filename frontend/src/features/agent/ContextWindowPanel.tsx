@@ -174,7 +174,7 @@ export function ContextWindowPanel() {
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const compacting = session?.compacting || snapshot.status === 'compacting';
   const warning = snapshot.ratio >= 0.8;
-  const disabled = !threadId || !model || runActive || commitActive || briefingActive || polishing || compacting;
+  const disabled = !threadId || runActive || commitActive || briefingActive || polishing || compacting;
   const percent = Math.round(snapshot.ratio * 100);
   const details = snapshot.details[activeBucket];
   const activeBucketMeta = BUCKETS.find((bucket) => bucket.key === activeBucket) ?? BUCKETS[0];
@@ -186,8 +186,8 @@ export function ContextWindowPanel() {
   })), [snapshot]);
 
   const runCompact = async () => {
-    if (!threadId || !model || disabled) return;
-    const succeeded = await compact(threadId, model);
+    if (!threadId || disabled) return;
+    const succeeded = await compact(threadId);
     if (!succeeded) return;
     const history = await threadsApi.history(threadId);
     const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);

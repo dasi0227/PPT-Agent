@@ -92,7 +92,6 @@ export function subscribeGitCommitEvents(
 export const gitCommitsApi = {
   create: (projectId: string, body: {
     thread_id: string;
-    model: string;
     client_request_id: string;
   }) => fetchClient<GitCommitOperation>(`/projects/${projectId}/git-commits`, {
     method: 'POST',

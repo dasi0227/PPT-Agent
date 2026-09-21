@@ -2,7 +2,6 @@ import { ChevronRight, GitCommitHorizontal, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import type { GitCommitPhase } from '../../api/types';
 import { cn } from '../../lib/utils';
-import { useComposerStore } from '../../stores/composerStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
@@ -114,17 +113,16 @@ export function GitCommitEvent({ item }: { item: GitCommitTimelineItem }) {
 function GitCommitFailure({ item }: { item: GitCommitTimelineItem }) {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const activeThreadIdByProjectId = useThreadStore((state) => state.activeThreadIdByProjectId);
-  const model = useComposerStore((state) => state.modelProfileName);
   const session = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
   const start = useGitCommitStore((state) => state.start);
   const busy = session?.status === 'creating' || session?.status === 'running';
   const retry = () => {
-    if (!activeProjectId || !model) return;
+    if (!activeProjectId) return;
     const threadId = activeThreadIdByProjectId[activeProjectId];
     if (!threadId) return;
-    void start(activeProjectId, threadId, model);
+    void start(activeProjectId, threadId);
   };
   return (
     <div className="grid min-h-10 grid-cols-[26px_minmax(0,1fr)_28px] items-start gap-2 px-1 py-1.5">
@@ -142,7 +140,7 @@ function GitCommitFailure({ item }: { item: GitCommitTimelineItem }) {
       <button
         type="button"
         onClick={retry}
-        disabled={busy || !activeProjectId || !model}
+        disabled={busy || !activeProjectId}
         className="grid h-7 w-7 place-items-center rounded-md text-text-600 hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:opacity-40"
         aria-label="重新提交"
         title="重新提交"

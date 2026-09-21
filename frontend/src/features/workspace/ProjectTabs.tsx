@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { cn } from '../../lib/utils';
-import { Boxes, Loader2, Plus, MoreHorizontal } from 'lucide-react';
+import { Boxes, Loader2, Plus, MoreHorizontal, Settings } from 'lucide-react';
+import { IconButton } from '../../components/ui/primitives';
 import { ProjectMenu } from './ProjectMenu';
 import { projectRoute, repositoryRoute } from './routes';
 
@@ -88,6 +89,7 @@ export const ProjectTabs: React.FC = () => {
           </div>
         )}
       </div>
+      <IconButton label="设置" onClick={() => navigate('/settings', { state: { returnTo: `${location.pathname}${location.search}` } })} className="ml-2"><Settings size={16} /></IconButton>
       <button
         type="button"
         onClick={() => navigate(repositoryRoute('theme'), {

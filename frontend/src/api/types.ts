@@ -133,6 +133,7 @@ export interface Run {
   mode: RunMode;
   events_url: string;
   model: string | null;
+  model_execution?: ModelExecution;
   skills?: Skill[];
   components?: PublicLoadedResource[];
   dropped_mentioned_slide_ids?: string[];
@@ -299,6 +300,7 @@ export interface LLMProfile {
 }
 
 export interface LLMProfilesResponse {
+  revision?: string;
   default: string;
   profiles: LLMProfile[];
 }
@@ -308,10 +310,10 @@ export interface PolishRequest {
   thread_id?: string;
   scope: CreateRunScopeInput;
   mode: RunMode;
-  model: string;
 }
 
 export interface PolishResponse {
+  model_execution?: ModelExecution;
   polished_instruction: string;
   changed: boolean;
   prompt_version: string;
@@ -341,12 +343,12 @@ export interface Briefing {
 
 export interface BriefingRequest {
   thread_id: string;
-  model_profile_name: string;
   briefing_id?: string;
   feedback?: string;
 }
 
 export interface BriefingResponse {
+  model_execution?: ModelExecution;
   briefing: Briefing;
   prompt_version: string;
 }
@@ -391,7 +393,7 @@ export interface GitCommitEventBase {
 }
 
 export type GitCommitEvent =
-  | { id?: string; event: 'git.commit.progress'; data: GitCommitEventBase & { phase: GitCommitPhase } }
+  | { id?: string; event: 'git.commit.progress'; data: GitCommitEventBase & { phase: GitCommitPhase; model_switch?: { from: string; to: string; purpose: string } } }
   | { id?: string; event: 'git.commit.empty'; data: GitCommitEventBase }
   | { id?: string; event: 'git.commit.completed'; data: GitCommitEventBase & { commit: GitCommitResult } }
   | { id?: string; event: 'git.commit.failed'; data: GitCommitEventBase & { error: GitCommitPublicError } };
@@ -559,6 +561,7 @@ export interface ContextCompaction {
 }
 
 export interface CompactContextResponse {
+  model_execution?: ModelExecution;
   snapshot: ContextWindowSnapshot;
   compaction: ContextCompaction;
 }
@@ -667,7 +670,7 @@ export interface QuestionAnswer {
 }
 
 export const RUN_ACTIVITIES = [
-  'run.preparing', 'run.recovering', 'run.analyzing', 'run.retrying', 'run.canceling',
+  'run.preparing', 'run.recovering', 'run.analyzing', 'run.retrying', 'run.canceling', 'model.fallback',
   'plan.preparing',
   'presentation.structure.reading', 'presentation.design.reading', 'slide.content.reading',
   'reference.inspecting',
@@ -697,6 +700,7 @@ export type SSEEvent =
     }>
   | SSEEventBase<'run.progress', PublicEventBase & {
       activity: RunActivity;
+      model_switch?: { from: string; to: string; purpose: string };
     }>
   | SSEEventBase<'run.resumed', PublicEventBase>
   | SSEEventBase<'run.completed', RunTerminalPayload>
@@ -785,3 +789,5 @@ export type SSEEvent =
     }>
   | SSEEventBase<'context.window.updated', PublicEventBase & ContextWindowSnapshot>
   | SSEEventBase<'context.compacted', PublicEventBase & { compaction: ContextCompaction }>;
+
+export interface ModelExecution { profile: string; provider: string; model: string; fallback_used: boolean }

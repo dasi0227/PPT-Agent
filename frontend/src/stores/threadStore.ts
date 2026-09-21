@@ -3,7 +3,7 @@ import { Thread, ThreadNamingAction } from '../api/types';
 import { threadsApi } from '../api/threads';
 import { useRunStore } from './runStore';
 import { newClientIdentity } from '../lib/clientIdentity';
-import { showGlobalError, showGlobalNotice, showGlobalSuccess } from './toastStore';
+import { showGlobalError, showGlobalNotice, showGlobalSuccess, showGlobalWarning } from './toastStore';
 
 interface RenamePanelTarget { projectId: string; threadId: string }
 
@@ -305,7 +305,9 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 			delete pending[threadId];
 			return { pendingNamingOperationByThreadId: pending };
 		});
-		if (data.outcome === 'renamed') showGlobalSuccess('会话名称已更新');
+		const execution = data.model_execution;
+        if (execution && typeof execution === 'object' && 'fallback_used' in execution && execution.fallback_used && 'profile' in execution && typeof execution.profile === 'string') showGlobalWarning(`会话命名已切换至备用模型 ${execution.profile}`);
+        if (data.outcome === 'renamed') showGlobalSuccess('会话名称已更新');
 		if (data.outcome === 'kept') showGlobalNotice('当前名称仍适合');
 		if (data.outcome === 'failed') showGlobalError(typeof data.error === 'string' ? data.error : '自动命名失败，请稍后重试');
 	},

@@ -1,3 +1,4 @@
+import { notifyModelFallback } from '../lib/modelExecution';
 import { create } from 'zustand';
 import { threadsApi } from '../api/threads';
 import type { ContextWindowSnapshot } from '../api/types';
@@ -13,7 +14,7 @@ interface ContextWindowSession {
 interface ContextWindowState {
   sessions: Record<string, ContextWindowSession>;
   load: (threadId: string, modelProfileName: string) => Promise<void>;
-  compact: (threadId: string, modelProfileName: string) => Promise<boolean>;
+  compact: (threadId: string) => Promise<boolean>;
   update: (threadId: string, snapshot: ContextWindowSnapshot) => void;
   drop: (threadId: string) => void;
 }
@@ -50,7 +51,7 @@ export const useContextWindowStore = create<ContextWindowState>((set) => ({
       }));
     }
   },
-  compact: async (threadId, modelProfileName) => {
+  compact: async (threadId) => {
     set((state) => ({
       sessions: {
         ...state.sessions,
@@ -58,7 +59,8 @@ export const useContextWindowStore = create<ContextWindowState>((set) => ({
       },
     }));
     try {
-      const result = await threadsApi.compact(threadId, modelProfileName);
+      const result = await threadsApi.compact(threadId);
+      notifyModelFallback(result.model_execution, '上下文压缩');
       set((state) => ({
         sessions: {
           ...state.sessions,

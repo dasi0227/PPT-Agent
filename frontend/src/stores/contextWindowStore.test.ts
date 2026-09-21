@@ -37,8 +37,8 @@ describe('context window store', () => {
 
   it('inserts a manual compaction immediately and deduplicates by id', async () => {
     vi.spyOn(threadsApi, 'compact').mockResolvedValue(response);
-    await expect(useContextWindowStore.getState().compact('t1', 'default')).resolves.toBe(true);
-    await expect(useContextWindowStore.getState().compact('t1', 'default')).resolves.toBe(true);
+    await expect(useContextWindowStore.getState().compact('t1')).resolves.toBe(true);
+    await expect(useContextWindowStore.getState().compact('t1')).resolves.toBe(true);
 
     const session = useRunStore.getState().sessions.t1;
     expect(session).toBeDefined();
