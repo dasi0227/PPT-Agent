@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>命令 Timeline · 行与卡片</title>
+  <style>
+    :root { color-scheme:light; --ink:#17202b; --muted:#5f6b7a; --line:#d5dbe3; --blue:#2f67f6; --blue-soft:#e8efff; --green:#2f7d65; --green-soft:#e7f3ee; --red:#c84953; --panel:#f8f9fb; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--panel); color:var(--ink); font:13px/1.65 Aptos,Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+    button,input,textarea { font:inherit; }
+    button { color:inherit; cursor:pointer; border:0; background:transparent; }
+    button:disabled { cursor:default; opacity:.45; }
+    button:focus-visible,input:focus-visible,textarea:focus-visible { outline:2px solid var(--blue); outline-offset:3px; }
+    ::selection { background:#dbe6ff; }
+    input,textarea { caret-color:var(--blue); }
+    ::placeholder { color:var(--muted); }
+    [hidden] { display:none !important; }
+    main { max-width:820px; margin:0 auto; padding:48px 40px 80px; }
+    .section-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:26px; }
+    h1 { font-size:20px; line-height:1.4; font-weight:600; margin:0; letter-spacing:-.02em; }
+    .states { display:flex; gap:4px; flex-wrap:wrap; }
+    .states button { font-size:11px; border-radius:5px; padding:4px 9px; color:var(--muted); }
+    .states button[aria-pressed="true"] { color:var(--blue); background:var(--blue-soft); }
+    .states button:hover { background:#e9edf2; }
+    .timeline { display:flex; flex-direction:column; gap:12px; }
+    .event { position:relative; min-width:0; padding:4px 0; }
+    .event-head { display:flex; flex-wrap:wrap; gap:0 12px; align-items:flex-start; min-width:0; }
+    .event[data-status="loading"] .event-head,.event[data-status="failed"] .event-head { flex-wrap:nowrap; }
+    .event[data-status="loading"] .disclosure,.event[data-status="failed"] .disclosure { flex:1 1 0; }
+    .event-head > .action { flex:none; min-height:28px; margin-top:1px; }
+    .disclosure { display:flex; align-items:flex-start; gap:8px; flex:1 1 240px; min-width:0; padding:4px 0; text-align:left; border-radius:4px; }
+    .disclosure:not(:disabled):hover { background:#f0f3f7; }
+    .disclosure:disabled { opacity:1; }
+    svg { width:14px; height:14px; flex:none; vertical-align:middle; }
+    .command-icon { display:grid; place-items:center; width:26px; height:26px; flex:none; color:var(--green); }
+    .event-copy { flex:1; min-width:0; }
+    .title-line { display:flex; gap:6px; align-items:baseline; min-width:0; line-height:20px; }
+    .command { color:var(--muted); font-size:12px; font-weight:500; flex:none; }
+    .event-title { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .meta { margin-top:1px; font-size:10px; color:var(--muted); display:flex; flex-wrap:wrap; align-items:center; gap:0 7px; line-height:17px; font-variant-numeric:tabular-nums; }
+    .meta i { font-style:normal; }
+    .meta i::before { content:"·"; }
+    .positive { color:var(--green); }
+    .negative { color:var(--red); }
+    .detail-card { margin:8px 0 0 34px; padding:16px; border:1px solid #bcc5d0; border-radius:10px; background:#fff; }
+    .body { margin:0; }
+    .content { font-size:13px; line-height:1.85; color:#475260; white-space:pre-line; overflow-wrap:anywhere; }
+    .actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:16px 0 0; padding-top:12px; border-top:1px solid var(--line); }
+    .actions .primary { margin-left:auto; order:1; }
+    .actions .danger { margin-left:auto; }
+    .action { min-height:32px; display:inline-flex; align-items:center; justify-content:center; gap:5px; padding:5px 10px; border-radius:6px; color:var(--muted); font-size:12px; white-space:nowrap; }
+    .action:hover { background:#e9edf2; color:var(--ink); }
+    .action.primary { color:var(--blue); background:var(--blue-soft); }
+    .action.primary:hover { background:#dbe6ff; }
+    .action.danger { color:var(--red); }
+    .action.danger:hover { background:#fcecef; }
+    .action svg { width:13px; height:13px; }
+    .command-footer { display:flex; align-items:center; gap:8px; margin-top:16px; padding-top:12px; border-top:1px solid var(--line); }
+    .feedback { display:flex; align-items:center; flex:1; min-width:0; margin:0; padding:2px; border:1px solid var(--line); border-radius:6px; background:var(--panel); }
+    .feedback:focus-within { border-color:var(--blue); }
+    .feedback input { flex:1; min-width:0; width:0; padding:5px 8px; border:0; background:transparent; line-height:20px; }
+    .feedback input:focus-visible { outline:none; }
+    .command-footer > .action { flex:none; min-height:36px; }
+    .command-footer > .action.primary { color:var(--muted); background:transparent; }
+    .command-footer > .action.primary:hover { color:var(--blue); background:var(--blue-soft); }
+    .action.retry-action:hover,.action[data-action="retry"]:hover { color:#9a5918; background:#fff3df; }
+    .action.copy-action:hover { color:var(--green); background:var(--green-soft); }
+    .input-demo { margin:16px 0 0 34px; }
+    .detail-card .input-demo { margin-left:0; }
+    label,.field-label { display:block; font-size:11px; color:var(--muted); margin-bottom:5px; }
+    textarea,input { display:block; width:100%; border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:5px; padding:8px 10px; font-size:12px; line-height:1.7; }
+    textarea { min-height:65px; resize:vertical; }
+    .input-demo { border-top:1px dashed var(--line); padding-top:11px; }
+    .input-demo textarea { background:transparent; }
+    .field-label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .inline-status { color:var(--green); font-size:11px; }
+    .progress { margin:6px 0 4px; width:100%; }
+    .progress-row { display:flex; align-items:flex-start; margin:12px 0 8px; }
+    .progress-row .progress { flex:1; min-width:0; }
+    .progress-row .step::before { background:var(--panel); }
+    .progress-row .step.complete::before { background:var(--green); }
+    .steps { position:relative; display:flex; justify-content:space-between; margin:0; padding:0; list-style:none; }
+    .steps::before,.progress-fill { position:absolute; top:5px; left:30px; height:1px; }
+    .steps::before { content:""; right:30px; background:var(--line); }
+    .progress-fill { width:calc((100% - 60px) * var(--fraction)); background:var(--green); transition:width 480ms cubic-bezier(.16,1,.3,1); }
+    .step { position:relative; z-index:1; width:60px; padding-top:21px; text-align:center; font-size:10px; line-height:1.5; color:var(--muted); }
+    .step::before { content:""; position:absolute; top:0; left:calc(50% - 5.5px); width:11px; height:11px; border:1.5px solid var(--line); border-radius:50%; background:#fff; }
+    .step.complete { color:var(--green); }
+    .step.complete::before { border-color:var(--green); background:var(--green); }
+    .step.current { color:var(--green); font-weight:600; }
+    .step.current::before { border-color:var(--green); }
+    .step.current::after { content:""; position:absolute; top:3.5px; left:calc(50% - 2px); width:4px; height:4px; border-radius:50%; background:var(--green); animation:breathe 1.3s ease-in-out infinite; }
+    @keyframes breathe { 50% { opacity:.2; } }
+    .canceled { margin:0; font-size:12px; color:var(--muted); }
+    .event[data-status="failed"] .command-icon { color:var(--red); }
+    .event[data-status="canceled"] .command-icon { color:var(--muted); }
+    .toast { position:fixed; z-index:5; top:18px; left:50%; transform:translateX(-50%); max-width:calc(100vw - 32px); padding:9px 12px 9px 18px; border:1px solid #b7d8cb; border-radius:30px; background:var(--green-soft); color:var(--green); box-shadow:0 8px 22px rgb(47 125 101 / 12%); display:flex; align-items:center; gap:12px; font-size:12px; }
+    .toast button { display:grid; place-items:center; padding:3px; }
+    @media(max-width:640px) { main { padding:30px 20px 50px; } .section-head { align-items:flex-start; flex-direction:column; gap:12px; margin-bottom:20px; } h1 { font-size:18px; } .disclosure { flex-basis:100%; } .detail-card { padding:14px; margin-left:26px; } .input-demo { margin-left:26px; } }
+    @media(max-width:560px) { .command-footer { flex-wrap:wrap; } .feedback { flex-basis:100%; } .command-footer > .primary { margin-left:auto; } }
+    @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; transition:none !important; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="section-head"><h1>行与卡片</h1><div class="states" aria-label="演示状态"><button data-state="done" aria-pressed="true">完成</button><button data-state="loading" aria-pressed="false">演示节点推进</button><button data-state="failed" aria-pressed="false">失败</button></div></div>
+    <div class="timeline"></div>
+  </main>
+  <div class="toast" role="status" hidden><span></span><button aria-label="关闭通知" title="关闭通知"></button></div>
+  <script>
+    const icons = {"Rocket":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-rocket\" aria-hidden=\"true\"><path d=\"M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5\"></path><path d=\"M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09\"></path><path d=\"M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z\"></path><path d=\"M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05\"></path></svg>","BookOpenText":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-book-open-text\" aria-hidden=\"true\"><path d=\"M12 7v14\"></path><path d=\"M16 12h2\"></path><path d=\"M16 8h2\"></path><path d=\"M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z\"></path><path d=\"M6 12h2\"></path><path d=\"M6 8h2\"></path></svg>","GitCommitHorizontal":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-git-commit-horizontal\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"3\"></circle><line x1=\"3\" x2=\"9\" y1=\"12\" y2=\"12\"></line><line x1=\"15\" x2=\"21\" y1=\"12\" y2=\"12\"></line></svg>","Gauge":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-gauge\" aria-hidden=\"true\"><path d=\"m12 14 4-4\"></path><path d=\"M3.34 19a10 10 0 1 1 17.32 0\"></path></svg>","Signature":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-signature\" aria-hidden=\"true\"><path d=\"m21 17-2.156-1.868A.5.5 0 0 0 18 15.5v.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1c0-2.545-3.991-3.97-8.5-4a1 1 0 0 0 0 5c4.153 0 4.745-11.295 5.708-13.5a2.5 2.5 0 1 1 3.31 3.284\"></path><path d=\"M3 21h18\"></path></svg>","Sparkles":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-sparkles\" aria-hidden=\"true\"><path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"></path><path d=\"M20 2v4\"></path><path d=\"M22 4h-4\"></path><circle cx=\"4\" cy=\"20\" r=\"2\"></circle></svg>","ChevronRight":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg>","ChevronLeft":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-left\" aria-hidden=\"true\"><path d=\"m15 18-6-6 6-6\"></path></svg>","RefreshCw":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-refresh-cw\" aria-hidden=\"true\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M8 16H3v5\"></path></svg>","X":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-x\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"></path><path d=\"m6 6 12 12\"></path></svg>","Check":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"></path></svg>","MessageSquarePlus":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-message-square-plus\" aria-hidden=\"true\"><path d=\"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z\"></path><path d=\"M12 8v6\"></path><path d=\"M9 11h6\"></path></svg>","Clipboard":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-clipboard\" aria-hidden=\"true\"><rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\" ry=\"1\"></rect><path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\"></path></svg>","LoaderCircle":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-loader-circle\" aria-hidden=\"true\"><path d=\"M21 12a9 9 0 1 1-6.219-8.56\"></path></svg>"};
+    const icon = name => icons[name] || '';
+    const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const initialInput = '帮我把这份季度汇报做得简洁一些，重点突出增长和接下来的计划。';
+    const polishText = '请优化这份季度业务汇报，面向管理层呈现。保留核心增长指标及其依据，压缩重复信息，并将下一季度计划整理为目标、关键行动和时间节点。整体表达简洁、结论先行，沿用现有视觉风格。';
+    const models = [
+      {kind:'kickoff',icon:'Rocket',title:'季度业务汇报 · 启动简报',open:false,text:'请继续完成季度业务汇报。\n\n目标：面向管理层呈现本季度增长成果与下季度行动。\n设计：沿用现有字体、蓝色强调与留白，保持图表清晰。\n下一步：先确认页面结构，再完善核心数据与行动计划。',steps:['读取项目','组织目标','生成简报']},
+      {kind:'handoff',icon:'BookOpenText',title:'交接已完成页面与后续计划',open:true,text:'已完成封面、业务概览与增长分析，共 8 页。\n已确认：蓝白配色，结论先行，保留关键数据来源。\n接下来：补齐下季度行动计划，并统一图表标注。',steps:['梳理进展','提炼待办','生成交接']},
+      {kind:'commit',icon:'GitCommitHorizontal',title:'统一增长分析页的图表与标注',open:false,text:'• 调整图表颜色，与当前演示文稿保持一致。\n• 补充关键指标的口径说明和数据来源。',steps:['整理变更','生成说明','写入版本']},
+      {kind:'compact',icon:'Gauge',title:'保留汇报目标与已确认的设计约定',method:'手动',open:false,text:'保留汇报受众、内容结构、视觉约定和待办事项，合并重复工具输出与早期讨论。\n\n当前目标：面向管理层呈现季度增长成果与下季度行动。\n设计约定：蓝白配色，结论先行，保留关键数据来源。\n后续任务：补齐行动计划，并统一图表标注。',steps:['读取上下文','提炼摘要','更新上下文']},
+      {kind:'rename',icon:'Signature',title:'季度业务汇报与增长计划',method:'自动',open:true,text:'季度汇报 → 季度业务汇报与增长计划',steps:['理解会话','生成名称','更新名称']},
+      {kind:'polish',icon:'Sparkles',title:'润色输入内容',open:true,text:polishText,steps:['理解意图','优化表达','生成建议']}
+    ].map(d=>({...d,status:'done',phase:0,token:0,input:initialInput,feedback:''}));
+    function button(action,label,ic='',primary=false) {return `<button type="button" class="action${primary?' primary':''}${action==='cancel'?' danger':''}" data-action="${action}">${icon(ic)}${label}</button>`;}
+    function actions(d) {
+      if(d.status==='loading')return `<div class="actions">${button('cancel','停止','X')}</div>`;
+      if(d.status!=='done')return `<div class="actions">${button('retry','重试','RefreshCw',true)}</div>`;
+      if(['commit','compact','rename'].includes(d.kind))return '';
+      return `<div class="command-footer">
+        <form id="feedback-${d.kind}" class="feedback" aria-label="${d.kind}调整建议"><input name="feedback" aria-label="调整建议，按 Enter 重试" value="${esc(d.feedback)}" maxlength="4000" placeholder="调整建议（可选），Enter 重试" autocomplete="off"></form>
+        <button class="action retry-action" type="submit" form="feedback-${d.kind}" title="按建议重试；留空则直接重试">${icon('RefreshCw')}重试</button>
+        ${d.kind==='polish'?'':`<button type="button" class="action copy-action" data-action="copy" title="复制全文">${icon('Clipboard')}复制</button>`}
+        ${button(d.kind==='polish'?'apply':'new',d.kind==='polish'?'应用到输入框':'新建会话',d.kind==='polish'?'Check':'MessageSquarePlus',true)}
+      </div>`;
+    }
+    function progress(d) {
+      return `<div class="progress"><div class="steps" role="group" aria-label="${d.kind}进度"><span class="progress-fill" aria-hidden="true" style="--fraction:${d.phase/2}"></span>${(d.pendingTitle?['检查名称','保存名称','更新会话']:d.steps).map((label,index)=>`<span class="step${index<d.phase?' complete':index===d.phase?' current':''}" ${index===d.phase?'aria-current="step"':''}>${label}</span>`).join('')}</div></div>`;
+    }
+    function metadata(d,i) {
+      const items=[`<span>14:${String(22+i).padStart(2,'0')}</span>`];
+      if(d.kind==='commit'&&d.status==='done')items.push('<span>main a8c3f21</span>','<span>4 files</span>','<span><span class="positive">+42</span> <span class="negative">−18</span></span>');
+      if(d.kind==='compact'){
+        items.push(`<span>${esc(d.method)}</span>`);
+        if(d.status==='done')items.push('<span>窗口 78% → <span class="positive">24%</span></span>','<span>回收 <span class="negative">54k</span> Token</span>');
+      }
+      if(d.kind==='rename')items.push(`<span>${d.status==='loading'?(d.pendingTitle?'手动':'自动'):esc(d.method)}</span>`);
+      return items.join('<i aria-hidden="true"></i>');
+    }
+    const failureTitles={kickoff:'启动简报生成失败',handoff:'交接简报生成失败',commit:'项目版本提交失败',compact:'上下文压缩失败',rename:'会话名称生成失败',polish:'输入内容润色失败'};
+    function renderEvent(d,i) {
+      const id=`event-${i}`,ready=d.status==='done',loading=d.status==='loading',failed=d.status==='failed';
+      const titles={kickoff:'正在生成启动简报',handoff:'正在整理交接简报',commit:'正在提交项目版本',compact:'正在压缩上下文',rename:d.pendingTitle?'正在保存自定义名称':'正在生成会话名称',polish:'正在润色当前输入'};
+      const title=loading?titles[d.kind]:failed?failureTitles[d.kind]:!ready?'已停止':d.title;
+      return `<article class="event" data-index="${i}" data-status="${d.status}" aria-busy="${loading}">
+        <div class="event-head"><button type="button" class="disclosure" data-action="toggle" aria-expanded="${!failed&&(!ready||d.open)}" aria-controls="${id}-detail" title="${esc(title)}${ready?(d.open?' · 点击收起':' · 点击展开'):''}" ${ready?'':'disabled'}>
+          <span class="command-icon">${icon(d.icon)}</span><span class="event-copy"><span class="title-line"><span class="command">${d.kind}:</span><span class="event-title">${esc(title)}</span></span><span class="meta">${metadata(d,i)}</span></span>
+        </button>${loading?button('cancel','停止','X'):failed?button('retry','重试','RefreshCw'):''}</div>
+        <div id="${id}-detail" ${!failed&&(!ready||d.open)?'':'hidden'}>
+        ${loading?`<div class="progress-row">${progress(d)}</div>`:failed?'':`<div class="detail-card">
+        ${!ready?'<div class="canceled">本次操作已停止，当前内容已保留。</div>':`<div class="body"><div class="content">${esc(d.text)}</div></div>`}
+        ${actions(d)}
+        </div>`}
+        ${d.kind==='polish'?`<div class="input-demo"><label class="field-label" for="${id}-input"><span>当前输入</span><span class="inline-status" aria-live="polite">${d.applied?'已替换输入内容':''}</span></label><textarea id="${id}-input" data-draft rows="2">${esc(d.input)}</textarea></div>`:''}
+        </div>
+      </article>`;
+    }
+    function renderAll(){document.querySelector('.timeline').innerHTML=models.map(renderEvent).join('');}
+    function replace(i){const old=document.querySelector(`[data-index="${i}"]`);const template=document.createElement('template');template.innerHTML=renderEvent(models[i],i);old.replaceWith(template.content);}
+    function syncState(){const state=models.some(d=>d.status==='loading')?'loading':models.every(d=>d.status==='done')?'done':models.every(d=>d.status==='failed')?'failed':'';document.querySelectorAll('[data-state]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.state===state)));}
+    let toastTimer;
+    function toast(text){const el=document.querySelector('.toast');el.querySelector('span').textContent=text;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.hidden=true,5000);}
+    document.querySelector('.toast button').innerHTML=icon('X');
+    document.querySelector('.toast button').onclick=()=>document.querySelector('.toast').hidden=true;
+    function generate(i,{feedback='',name='',demo=false}={}) {
+      const d=models[i],token=++d.token;d.status='loading';d.phase=0;d.pendingTitle=name;replace(i);syncState();
+      [1400,3000].forEach((delay,phase)=>setTimeout(()=>{
+        if(token!==d.token)return;d.phase=phase+1;
+        const element=document.querySelector(`[data-index="${i}"] .progress`);
+        const labels=name?['检查名称','保存名称','更新会话']:d.steps;
+        element.querySelector('.progress-fill').style.setProperty('--fraction',d.phase/2);
+        element.querySelectorAll('.step').forEach((node,index)=>{node.className=`step${index<d.phase?' complete':index===d.phase?' current':''}`;if(index===d.phase)node.setAttribute('aria-current','step');else node.removeAttribute('aria-current');});
+        element.setAttribute('aria-label',`${d.kind}：${labels[d.phase]}`);
+      },delay));
+      setTimeout(()=>{
+        if(token!==d.token)return;d.status='done';
+        if(!demo){
+          d.open=true;
+          if(d.kind==='rename'){const previousTitle=d.title;d.title=name||'季度增长复盘与行动计划';d.text=`${previousTitle} → ${d.title}`;d.method=name?'手动':'自动';}
+          else if(['polish','kickoff','handoff'].includes(d.kind)){
+            const base=d.kind==='polish'?'面向管理层优化季度汇报：突出增长数据及来源，精简重复内容，明确下季度目标、关键行动与时间节点，沿用现有视觉风格。':d.kind==='kickoff'?'继续完成季度业务汇报，面向管理层呈现增长成果与下一季度行动。先确认内容结构，再补齐关键数据及来源，保持现有视觉风格。':'已完成 8 页，包括封面、业务概览与增长分析。继续补齐下一季度行动计划，统一图表标注，沿用蓝白配色与结论先行的表达方式。';
+            d.text=base+(feedback?`\n\n补充要求：${feedback}`:'');d.applied=false;d.feedback='';
+          }
+        }
+        d.pendingTitle='';replace(i);syncState();
+      },4700);
+    }
+    renderAll();
+    document.addEventListener('input',event=>{
+      const article=event.target.closest('.event');if(!article)return;const d=models[+article.dataset.index];
+      if(event.target.matches('[data-draft]')){d.input=event.target.value;d.applied=false;article.querySelector('.inline-status').textContent='';}
+      if(event.target.matches('.feedback input'))d.feedback=event.target.value;
+    });
+    document.addEventListener('click',async event=>{
+      const stateButton=event.target.closest('[data-state]');
+      if(stateButton){const state=stateButton.dataset.state;if(state==='loading'){models.forEach((_,i)=>generate(i,{demo:true}));}else{models.forEach(d=>{d.token++;d.status=state;d.pendingTitle='';});renderAll();syncState();}return;}
+      const control=event.target.closest('[data-action]');if(!control)return;
+      const article=control.closest('.event'),i=+article.dataset.index,d=models[i],action=control.dataset.action;
+      if(action==='toggle'){d.open=!d.open;control.setAttribute('aria-expanded',String(d.open));control.title=`${d.title} · 点击${d.open?'收起':'展开'}`;document.getElementById(`event-${i}-detail`).hidden=!d.open;}
+      if(action==='cancel'){d.token++;d.status='canceled';d.pendingTitle='';replace(i);syncState();}
+      if(action==='retry')generate(i,{feedback:d.feedback});
+      if(action==='apply'){d.input=d.text;d.applied=true;replace(i);toast('已替换当前输入内容');}
+      if(action==='copy'){try{await navigator.clipboard.writeText(d.text);toast('已复制全文');}catch{d.open=true;replace(i);const content=document.querySelector(`[data-index="${i}"] .content`),range=document.createRange();range.selectNodeContents(content);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);toast('已选中全文，可按 ⌘C / Ctrl+C 复制');}}
+      if(action==='new'){let preview=article.querySelector('.new-thread');if(preview){preview.remove();return;}preview=document.createElement('div');preview.className='input-demo new-thread';preview.innerHTML=`<label for="new-${i}">新会话草稿 · 演示</label><textarea id="new-${i}" rows="4">${esc(d.text)}</textarea>`;article.querySelector('.detail-card').append(preview);preview.querySelector('textarea').focus();}
+    });
+    document.addEventListener('submit',event=>{
+      event.preventDefault();const form=event.target,article=form.closest('.event');if(!article)return;const i=+article.dataset.index;
+      if(form.classList.contains('feedback'))generate(i,{feedback:form.elements.feedback.value.trim()});
+    });
+    document.addEventListener('keydown',event=>{if(event.isComposing&&event.key==='Enter'&&event.target.matches('input'))event.preventDefault();});
+  </script>
+</body>
+</html>

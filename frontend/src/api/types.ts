@@ -306,6 +306,7 @@ export interface LLMProfilesResponse {
 }
 
 export interface PolishRequest {
+  feedback?: string;
   instruction: string;
   thread_id?: string;
   scope: CreateRunScopeInput;
@@ -536,6 +537,7 @@ export interface ContextWindowDetail {
 }
 
 export interface ContextWindowSnapshot {
+  compaction?: { id: string; phase: number };
   total: number;
   max: number;
   ratio: number;

@@ -117,8 +117,10 @@ func (r *Router) historySwitch(c *gin.Context) {
 
 type historyResponse struct {
 	gin.ResponseWriter
-	body   bytes.Buffer
-	status int
+	body     bytes.Buffer
+	status   int
+	streamed bool
+	finish   func(bool) error
 }
 
 func (w *historyResponse) WriteHeader(status int) { w.status = status }
@@ -235,7 +237,7 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			return
 		}
 		// Run controls operate on an existing task; polish and export do not mutate authoring history.
-		if parts[0] == "runs" || strings.HasSuffix(path, "/polish") || strings.HasSuffix(path, "/exports") {
+		if parts[0] == "runs" || (parts[0] == "git-commits" && strings.HasSuffix(path, "/cancel")) || strings.HasSuffix(path, "/polish") || strings.HasSuffix(path, "/exports") {
 			c.Next()
 			return
 		}
@@ -261,11 +263,18 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 		}
 		c.Request = c.Request.WithContext(run.WithStartBarrier(requestContext, func() error { return finish(true) }))
 		original := c.Writer
-		buffer := &historyResponse{ResponseWriter: original}
+		buffer := &historyResponse{ResponseWriter: original, finish: finish}
 		c.Writer = buffer
 		defer func() { c.Writer = original }()
 		c.Next()
 		c.Writer = original
+		if buffer.streamed {
+			// commandStream settles the history transaction before its terminal frame.
+			if cleanupErr := r.history.Collect(id); cleanupErr != nil {
+				r.log.Warn("project checkpoint cleanup deferred")
+			}
+			return
+		}
 		if err = finish(buffer.Status() < 400); err != nil {
 			historyError(c, err)
 			return

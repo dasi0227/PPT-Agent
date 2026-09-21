@@ -165,6 +165,8 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && typeof data.max === 'number' && Number.isInteger(data.max) && data.max > 0
         && typeof data.ratio === 'number' && data.ratio >= 0
         && ['idle', 'compacting'].includes(String(data.status))
+        && (data.compaction === undefined || (isRecord(data.compaction) && hasString(data.compaction, 'id')
+          && isNonNegativeInteger(data.compaction.phase) && Number(data.compaction.phase) <= 2))
         && validContextBuckets(data.buckets)
         && validContextDetails(data.details)
         && validContextWindowTotals(data);

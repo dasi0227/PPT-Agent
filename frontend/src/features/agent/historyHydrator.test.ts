@@ -367,7 +367,7 @@ describe('history hydrator', () => {
     expect(hydrated.session.status).toBe('idle');
   });
 
-  it('restores a briefing group as one versioned timeline item', () => {
+  it('restores only the latest briefing version', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'briefing', {
         briefing_id: 'brf_1',
@@ -393,7 +393,7 @@ describe('history hydrator', () => {
       briefingId: 'brf_1',
       kind: 'handoff',
       status: 'completed',
-      versions: [{ version_no: 1 }, { version_no: 2 }],
+      versions: [{ version_no: 2, content: 'second' }],
     });
     expect(hydrated.session.status).toBe('idle');
   });

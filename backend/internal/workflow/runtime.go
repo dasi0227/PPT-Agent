@@ -2801,14 +2801,22 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 		(state.nextCompactionTokens > 0 && state.tokens < state.nextCompactionTokens) {
 		return nil
 	}
-	r.emitContextWindow(input.Emitter, state, state.lastWindow, "compacting")
+	progress := &model.ContextCompactionProgress{ID: model.MustShortID("compact"), Phase: 0}
+	r.emitContextWindow(input.Emitter, state, state.lastWindow, "compacting", progress)
 	before := state.lastWindow
 	startedAt := r.clockNow()
 	compactionInput := pruneSupersededRenderImages(append([]llm.Message{}, state.messages...))
+	progress.Phase = 1
+	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
 	result, err := r.Compactor.Compact(ctx, compactionInput)
 	if err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	progress.Phase = 2
+	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
 	state.messages = result.Messages
 	if err := r.persistTranscript(input, state); err != nil {
 		return err
@@ -2870,6 +2878,7 @@ func (r *Runtime) emitContextWindow(
 	state *RunState,
 	snapshot contextengine.WindowSnapshot,
 	status string,
+	progress ...*model.ContextCompactionProgress,
 ) {
 	if emitter == nil || snapshot.Max <= 0 {
 		return
@@ -2886,9 +2895,14 @@ func (r *Runtime) emitContextWindow(
 			})
 		}
 	}
+	var compaction *model.ContextCompactionProgress
+	if len(progress) > 0 {
+		value := *progress[0]
+		compaction = &value
+	}
 	emitter.Emit(model.EventContextWindowUpdated, model.ContextWindowUpdatedPayload{
 		PublicEventBase: publicBase(state.runID), Total: snapshot.Total, Max: snapshot.Max,
-		Ratio: snapshot.Ratio, Status: status, Buckets: buckets, Details: details,
+		Ratio: snapshot.Ratio, Status: status, Buckets: buckets, Details: details, Compaction: compaction,
 	})
 }
 

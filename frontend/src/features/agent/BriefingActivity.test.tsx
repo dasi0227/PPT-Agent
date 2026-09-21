@@ -35,7 +35,7 @@ describe('BriefingActivity', () => {
     useGitCommitStore.setState({ sessions: {} });
   });
 
-  it('creates a normal new thread and stages the selected version as its editable draft', async () => {
+  it('creates a normal new thread and stages the latest content as its editable draft', async () => {
     const createThread = vi.fn().mockResolvedValue('thread-next');
     useThreadStore.setState({
       activeThreadIdByProjectId: { 'project-1': 'thread-source' },
@@ -43,7 +43,8 @@ describe('BriefingActivity', () => {
     });
 
     render(<BriefingActivity item={briefing} />);
-    fireEvent.click(screen.getByRole('button', { name: '以此版本新建会话' }));
+    fireEvent.click(screen.getByRole('button', { name: /handoff: Handoff v2/ }));
+    fireEvent.click(screen.getByRole('button', { name: '新建会话' }));
 
     await waitFor(() => expect(createThread).toHaveBeenCalledWith('project-1'));
     expect(useComposerStore.getState().threadDrafts).toEqual({

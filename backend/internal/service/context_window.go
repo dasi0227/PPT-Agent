@@ -128,6 +128,9 @@ func (svc *ContextWindowService) Compact(
 	threadID string,
 	modelProfile string,
 ) (CompactContextResult, error) {
+	if err := commandPhase(ctx, 0); err != nil {
+		return CompactContextResult{}, err
+	}
 	side, err := svc.registry.RoutedProfile("compact", "")
 	if err != nil {
 		return CompactContextResult{}, err
@@ -160,8 +163,14 @@ func (svc *ContextWindowService) Compact(
 		before = svc.transcriptOnlySnapshot(thread.ID, profile, messages)
 	}
 	startedAt := time.Now()
+	if err := commandPhase(ctx, 1); err != nil {
+		return CompactContextResult{}, err
+	}
 	result, err := contextcompact.New(side.Adapter()).Compact(ctx, messages)
 	if err != nil {
+		return CompactContextResult{}, err
+	}
+	if err := commandPhase(ctx, 2); err != nil {
 		return CompactContextResult{}, err
 	}
 	if err := svc.transcripts.Replace(project.WorkDir, thread.ID, result.Messages); err != nil {

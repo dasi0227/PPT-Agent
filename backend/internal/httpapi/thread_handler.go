@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -271,4 +272,18 @@ func (h *ThreadHandler) setEpochHeader(c *gin.Context, projectID string) {
 	if h.naming != nil && projectID != "" {
 		c.Header("X-Thread-Stream-Epoch", h.naming.Events().Epoch(projectID))
 	}
+}
+
+func (h *ThreadHandler) GenerateName(c *gin.Context) {
+	if h.naming == nil {
+		AbortWithError(c, ErrInternal("naming unavailable"))
+		return
+	}
+	commandStream(c, "rename", func(ctx context.Context) (any, error) {
+		thread, err := h.naming.GenerateNow(ctx, c.Param("id"))
+		if err != nil {
+			return nil, err
+		}
+		return toThreadResponse(thread), nil
+	})
 }

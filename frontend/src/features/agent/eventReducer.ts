@@ -1,3 +1,4 @@
+import type { CommandProgress } from '../../stores/commandRuntime';
 import {
   CommandProjection,
   PlanState,
@@ -30,6 +31,7 @@ export type TimelineItemType =
   | 'command_permission'
   | 'scope_expansion'
   | 'git_commit'
+  | 'command'
   | 'briefing'
   | 'context_compaction'
   | 'terminal_notice';
@@ -152,7 +154,7 @@ export interface TerminalNoticeItem extends BaseTimelineItem {
 export interface GitCommitTimelineItem extends BaseTimelineItem {
   type: 'git_commit';
   operationId: string;
-  status: 'completed' | 'failed';
+  status: 'completed' | 'failed' | 'canceled';
   title?: string;
   items?: string[];
   branch?: string;
@@ -163,13 +165,11 @@ export interface GitCommitTimelineItem extends BaseTimelineItem {
   retryable?: boolean;
 }
 
-export interface BriefingTimelineItem extends BaseTimelineItem {
+export interface BriefingTimelineItem extends BaseTimelineItem, CommandProgress {
   type: 'briefing';
   briefingId: string;
   kind: BriefingKind;
-  status: 'loading' | 'completed';
   versions: BriefingVersion[];
-  loadingStartedAt?: number;
 }
 
 export interface ContextCompactionTimelineItem extends BaseTimelineItem {
@@ -185,7 +185,16 @@ export interface ContextCompactionTimelineItem extends BaseTimelineItem {
   durationMs: number;
 }
 
+export interface CommandTimelineItem extends BaseTimelineItem, CommandProgress {
+  type: 'command';
+  kind: 'rename' | 'polish' | 'compact';
+  title: string;
+  content?: string;
+  method?: 'manual' | 'auto';
+}
+
 export type TimelineItem =
+  | CommandTimelineItem
   | UserTurnItem
   | RunLifecycleItem
   | ReasoningItem

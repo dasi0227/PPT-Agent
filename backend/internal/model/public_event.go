@@ -401,14 +401,20 @@ type ContextWindowBucketDetail struct {
 	Tokens int    `json:"tokens"`
 }
 
+type ContextCompactionProgress struct {
+	ID    string `json:"id"`
+	Phase int    `json:"phase"`
+}
+
 type ContextWindowUpdatedPayload struct {
 	PublicEventBase
-	Total   int                                    `json:"total"`
-	Max     int                                    `json:"max"`
-	Ratio   float64                                `json:"ratio"`
-	Status  string                                 `json:"status"`
-	Buckets map[string]int                         `json:"buckets"`
-	Details map[string][]ContextWindowBucketDetail `json:"details"`
+	Compaction *ContextCompactionProgress             `json:"compaction,omitempty"`
+	Total      int                                    `json:"total"`
+	Max        int                                    `json:"max"`
+	Ratio      float64                                `json:"ratio"`
+	Status     string                                 `json:"status"`
+	Buckets    map[string]int                         `json:"buckets"`
+	Details    map[string][]ContextWindowBucketDetail `json:"details"`
 }
 
 func validateRunCommandContextDetails(items []any) (int, error) {
@@ -741,6 +747,12 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 	case EventContextWindowUpdated:
+		if value, exists := data["compaction"]; exists {
+			progress, ok := value.(map[string]any)
+			if !ok || strings.TrimSpace(stringValue(progress["id"])) == "" || !isInteger(progress["phase"]) || intValue(progress["phase"]) < 0 || intValue(progress["phase"]) > 2 {
+				return errors.New("invalid compaction progress")
+			}
+		}
 		if !isInteger(data["total"]) || !isInteger(data["max"]) ||
 			intValue(data["total"]) < 0 || intValue(data["max"]) <= 0 {
 			return errors.New("invalid context window totals")

@@ -23,15 +23,15 @@ describe('context compaction timeline presentation', () => {
     const { container } = render(<ContextCompactionActivity item={item} />);
     const button = screen.getByRole('button', { name: /compact: 收敛上下文协议与前端实现/ });
     expect(button).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByText('手动触发')).toBeInTheDocument();
+    expect(screen.getByText('手动')).toBeInTheDocument();
     expect(screen.getByText('0.0k')).toHaveClass('text-danger');
     expect(screen.queryByText('继续完成正式实现。')).not.toBeInTheDocument();
     expect(container.querySelector('.context-compaction-card')).toBeNull();
-    expect(container.querySelector('.bg-success-soft')).toBeInTheDocument();
+    expect(container.querySelector('.command-activity-icon')).toHaveClass('text-success');
 
     fireEvent.click(button);
     expect(button).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('继续完成正式实现。')).toBeInTheDocument();
-    expect(screen.getByText('目标与意图').closest('div')?.parentElement).toHaveClass('border-t');
+    expect(screen.getByText('目标与意图').closest('.command-detail-card')).toBeInTheDocument();
   });
 });

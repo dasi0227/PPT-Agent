@@ -90,7 +90,7 @@ func (s *Store) StartThreadExplicitRenameRequest(ctx context.Context, id string,
 		if err := tx.First(&po, "id = ?", id).Error; err != nil {
 			return mapErr(err)
 		}
-		if po.AutoRenameEnabled == 0 || po.RenameFirstInputSeen == 0 || po.RenameOperationVersion != operationVersion {
+		if po.AutoRenameEnabled == 0 || po.RenameOperationVersion != operationVersion {
 			return store.ErrNamingOperationConflict
 		}
 		if err := tx.Model(&threadPO{}).Where("id = ?", id).Updates(map[string]any{

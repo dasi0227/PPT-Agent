@@ -97,6 +97,7 @@ export const gitCommitsApi = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
+  cancel: (operationId: string) => fetchClient<GitCommitOperation>(`/git-commits/${operationId}/cancel`, { method: 'POST', body: '{}', timeoutMs: 60_000 }),
   get: (operationId: string) => fetchClient<GitCommitOperation>(`/git-commits/${operationId}`),
 };
 

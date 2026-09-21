@@ -2,12 +2,10 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 )
 
@@ -47,18 +45,7 @@ func (h *BriefingHandler) generate(
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
-	result, err := generate(c.Request.Context(), c.Param("id"), service.BriefingParams{
-		ThreadID:   body.ThreadID,
-		BriefingID: body.BriefingID, Feedback: body.Feedback,
+	commandStream(c, operation, func(ctx context.Context) (any, error) {
+		return generate(ctx, c.Param("id"), service.BriefingParams{ThreadID: body.ThreadID, BriefingID: body.BriefingID, Feedback: body.Feedback})
 	})
-	switch {
-	case err == nil:
-		c.JSON(http.StatusOK, result)
-	case errors.Is(err, context.Canceled):
-		return
-	case errors.Is(err, run.ErrRunNotFound):
-		AbortWithError(c, ErrNotFound("project or thread not found"))
-	default:
-		AbortWithError(c, ProjectAgentError(err, "INTERNAL", operation))
-	}
 }

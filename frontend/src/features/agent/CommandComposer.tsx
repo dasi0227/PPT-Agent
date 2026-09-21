@@ -1,11 +1,10 @@
-import { notifyModelFallback } from '../../lib/modelExecution';
 import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Code2, FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
 import { llmApi } from '../../api/llm';
-import { polishApi } from '../../api/polish';
+import { polishCommand } from '../../stores/textCommandStore';
 import { skillsApi } from '../../api/skills';
 import type { CreateRunRequest, CreateRunScopeInput, LLMProfile, Skill } from '../../api/types';
 import { cn } from '../../lib/utils';
@@ -87,11 +86,9 @@ export const CommandComposer: React.FC = () => {
   const [verifiedSuggestionKey, setVerifiedSuggestionKey] = useState<string | null>(null);
   const editorRef = useRef<PromptComposerEditorHandle>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
-  const polishAbortRef = useRef<AbortController | null>(null);
-  const polishRequestRef = useRef(0);
   const { activeProjectId, contentByProjectId, contentLoadingByProjectId, contentErrorByProjectId } = useProjectStore();
   const { currentSlideId } = useDeckStore();
-  const { activeThreadIdByProjectId, ensureActiveThread, openRenamePanel } = useThreadStore();
+  const { activeThreadIdByProjectId, ensureActiveThread, performNamingAction } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
   const activeSession = useActiveSession();
   const { status: runStatus, activeRunId, nextInputSuggestions } = activeSession;
@@ -107,7 +104,6 @@ export const CommandComposer: React.FC = () => {
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const composer = useComposerStore();
   const polishing = composer.polishing;
-  const setPolishing = composer.setPolishing;
   const applyContextDefault = composer.applyContextDefault;
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef<string | null | undefined>(undefined);
@@ -332,17 +328,6 @@ export const CommandComposer: React.FC = () => {
     return () => { current = false; };
   }, []);
 
-  useEffect(() => {
-    polishRequestRef.current += 1;
-    polishAbortRef.current?.abort();
-    polishAbortRef.current = null;
-    setPolishing(false);
-    return () => {
-      polishRequestRef.current += 1;
-      polishAbortRef.current?.abort();
-      polishAbortRef.current = null;
-    };
-  }, [activeProjectId, setPolishing]);
 
 	const uploadFiles = async (files: File[]) => {
 		if (!activeProjectId || disabled || files.length === 0) return;
@@ -396,12 +381,12 @@ export const CommandComposer: React.FC = () => {
 	if (/^\/rename(?:\s|$)/i.test(raw)) {
 		if (!activeProjectId) return;
 		if (raw.toLocaleLowerCase() !== '/rename') {
-			setSubmitError('/rename 不支持参数，请直接使用 /rename 打开命名面板');
+			setSubmitError('/rename 不支持参数，请直接使用 /rename 立即生成名称');
 			return;
 		}
 		try {
 			const threadId = await ensureActiveThread(activeProjectId);
-			openRenamePanel(activeProjectId, threadId);
+			void performNamingAction(activeProjectId, threadId, 'generate');
 			setText('');
 			editorRef.current?.setPlainText('');
 		} catch (error) {
@@ -493,48 +478,22 @@ export const CommandComposer: React.FC = () => {
   };
 
   const polishText = async () => {
-    const editor = editorRef.current;
-    const instruction = editor?.getPlainText().trim() ?? '';
-    if (!editor || disabled || commitActive || polishing || briefingActive || !activeProjectId || !instruction) return;
-    const selection = editor.captureSelection();
-    const requestID = polishRequestRef.current + 1;
-    polishRequestRef.current = requestID;
-    const controller = new AbortController();
-    polishAbortRef.current?.abort();
-    polishAbortRef.current = controller;
-    setSubmitError('');
+    const instruction = editorRef.current?.getPlainText().trim() ?? '';
+    if (disabled || commitActive || polishing || briefingActive || !activeProjectId || !instruction) return;
     const restored = activeThreadId ? composer.restoredInputs[activeThreadId] : undefined;
     const scope = restored?.scope ?? composerScopeInput(composer, currentSlide?.id);
     if (!scope) {
-      setSubmitError(composer.scopeSelection === 'custom_pages' ? '请至少选择一页' : '请至少选择一章');
+      setSubmitError('请先选择要处理的页面或章节');
       return;
     }
-    setPolishing(true);
+    setSubmitError('');
     try {
-      const result = await polishApi.polish(activeProjectId, {
-        instruction,
-        ...(activeThreadId ? { thread_id: activeThreadId } : {}),
-        scope,
-        mode: composer.mode,
-      }, controller.signal);
-      if (polishRequestRef.current !== requestID || controller.signal.aborted) return;
-      notifyModelFallback(result.model_execution, '输入润色');
-      setComposerText(result.polished_instruction);
-      requestAnimationFrame(() => {
-        editorRef.current?.setPlainText(result.polished_instruction);
-        editorRef.current?.focusEnd();
+      const threadId = await ensureActiveThread(activeProjectId);
+      await polishCommand(activeProjectId, threadId, {
+        instruction, thread_id: threadId, scope, mode: composer.mode,
       });
     } catch (error) {
-      if (polishRequestRef.current !== requestID || controller.signal.aborted) return;
       setSubmitError(error instanceof Error ? error.message : '润色失败，请重试');
-      requestAnimationFrame(() => {
-        editorRef.current?.restoreSelection(selection);
-      });
-    } finally {
-      if (polishRequestRef.current === requestID) {
-        polishAbortRef.current = null;
-        setPolishing(false);
-      }
     }
   };
 
@@ -552,7 +511,7 @@ export const CommandComposer: React.FC = () => {
 		if (!activeProjectId) return;
 		try {
 			const threadId = await ensureActiveThread(activeProjectId);
-			openRenamePanel(activeProjectId, threadId);
+			void performNamingAction(activeProjectId, threadId, 'generate');
 		} catch (error) {
 			setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
 		}

@@ -35,7 +35,7 @@ import { useProjectStore } from './projectStore';
 import { useComposerStore } from './composerStore';
 import { newClientIdentity } from '../lib/clientIdentity';
 import { showGlobalError, showGlobalWarning } from './toastStore';
-import { useContextWindowStore } from './contextWindowStore';
+import { receiveCompactionEvent, useContextWindowStore } from './contextWindowStore';
 
 export type { PlanState } from '../api/types';
 
@@ -607,8 +607,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           }
           const current = get().sessions[threadId] ?? freshSession();
           if (event.id && current.processedEventIds?.includes(event.id)) return;
+          const compactionHandled = receiveCompactionEvent(threadId, event);
           updateSession(threadId, (prev) => {
-            const nextTimelineItems = reduceSSEEvent(prev.timelineItems, event);
+            const nextTimelineItems = compactionHandled ? prev.timelineItems : reduceSSEEvent(prev.timelineItems, event);
             let status = prev.status === 'creating' ? 'running' : prev.status;
             let pendingQuestion = prev.pendingQuestion;
             let progress = prev.progress;

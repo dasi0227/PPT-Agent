@@ -21,6 +21,7 @@ const polishTimeout = 12 * time.Second
 
 type PolishParams struct {
 	Instruction string
+	Feedback    string
 	ThreadID    string
 	ScopeInput  model.CreateRunScopeInput
 	Mode        model.RunMode
@@ -47,6 +48,12 @@ func NewPolishService(s store.Store, registry *llm.Registry) *PolishService {
 }
 
 func (svc *PolishService) Polish(ctx context.Context, projectID string, params PolishParams) (PolishResult, error) {
+	if err := commandPhase(ctx, 0); err != nil {
+		return PolishResult{}, err
+	}
+	if utf8.RuneCountInString(params.Feedback) > 4000 {
+		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish", nil)
+	}
 	instruction := strings.TrimSpace(params.Instruction)
 	if instruction == "" || utf8.RuneCountInString(instruction) > maxPolishInstructionRunes {
 		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_prompt", nil)
@@ -99,6 +106,12 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, polishTimeout)
 	defer cancel()
+	if err := commandPhase(requestCtx, 1); err != nil {
+		return PolishResult{}, err
+	}
+	if params.Feedback != "" {
+		reference += "\n\n<revision_feedback>\n" + params.Feedback + "\n</revision_feedback>"
+	}
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
 		{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + instruction)},
@@ -111,6 +124,9 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 			return PolishResult{}, model.NewAgentError("PROVIDER_UNAVAILABLE", "polish_prompt", err)
 		}
 		return PolishResult{}, model.NewAgentError("AGENT_FAILED", "polish_prompt", err)
+	}
+	if err := commandPhase(requestCtx, 2); err != nil {
+		return PolishResult{}, err
 	}
 	polished := strings.TrimSpace(response.Text())
 	if polished == "" || utf8.RuneCountInString(polished) > maxPolishOutputRunes {

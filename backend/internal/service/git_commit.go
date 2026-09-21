@@ -66,8 +66,14 @@ func (b *gitCommitBus) publish(event model.GitCommitEvent) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.seq = event.Seq
-	for _, channel := range b.subscribers {
-		channel <- event
+	for id, channel := range b.subscribers {
+		select {
+		case channel <- event:
+		default:
+			// Persisted events can be replayed; a stalled viewer must never block cancellation.
+			delete(b.subscribers, id)
+			close(channel)
+		}
 	}
 }
 
@@ -84,20 +90,27 @@ func (b *gitCommitBus) close() {
 	}
 }
 
+type commitControl struct {
+	cancel     context.CancelFunc
+	done       chan struct{}
+	committing bool
+}
+
 type GitCommitService struct {
 	store    store.Store
 	registry *llm.Registry
 	locks    *run.LockManager
 	git      *gitcommit.Executor
 
-	mu    sync.Mutex
-	buses map[string]*gitCommitBus
+	mu       sync.Mutex
+	buses    map[string]*gitCommitBus
+	controls map[string]*commitControl
 }
 
 func NewGitCommitService(s store.Store, registry *llm.Registry, locks *run.LockManager) *GitCommitService {
 	return &GitCommitService{
 		store: s, registry: registry, locks: locks, git: gitcommit.NewExecutor(),
-		buses: map[string]*gitCommitBus{},
+		buses: map[string]*gitCommitBus{}, controls: map[string]*commitControl{},
 	}
 }
 
@@ -189,8 +202,11 @@ func (svc *GitCommitService) Start(ctx context.Context, projectID string, params
 	bus := newGitCommitBus()
 	svc.mu.Lock()
 	svc.buses[operation.ID] = bus
+	executionCtx, cancel := context.WithCancel(context.Background())
+	control := &commitControl{cancel: cancel, done: make(chan struct{})}
+	svc.controls[operation.ID] = control
 	svc.mu.Unlock()
-	go svc.execute(context.Background(), project, operation, profile, bus, release)
+	go svc.execute(executionCtx, project, operation, profile, bus, release)
 	return operation, nil
 }
 
@@ -265,11 +281,16 @@ func (svc *GitCommitService) execute(
 	bus *gitCommitBus,
 	release func(),
 ) {
-	defer release()
 	defer func() {
+		release()
 		bus.close()
 		svc.mu.Lock()
 		delete(svc.buses, operation.ID)
+		if control := svc.controls[operation.ID]; control != nil {
+			control.cancel()
+			close(control.done)
+			delete(svc.controls, operation.ID)
+		}
 		svc.mu.Unlock()
 	}()
 	if err := svc.git.Bootstrap(ctx, project.WorkDir); err != nil {
@@ -308,6 +329,16 @@ func (svc *GitCommitService) execute(
 			code = "PROVIDER_UNAVAILABLE"
 		}
 		svc.fail(ctx, &operation, bus, code, true, err)
+		return
+	}
+	svc.mu.Lock()
+	control := svc.controls[operation.ID]
+	if ctx.Err() == nil && control != nil {
+		control.committing = true
+	}
+	svc.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		svc.fail(ctx, &operation, bus, "CANCELED", true, err)
 		return
 	}
 	executionModel := llm.ExecutionOf(profile.Adapter())
@@ -357,8 +388,17 @@ func (svc *GitCommitService) fail(
 	retryable bool,
 	cause error,
 ) {
+	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(cause, context.Canceled) {
+		terminalCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		ctx = terminalCtx
+		code, retryable = "COMMIT_CANCELED", true
+	}
 	publicError := model.GitCommitPublicError{
 		Code: code, Message: "提交失败，请重新尝试或手动提交", Retryable: retryable,
+	}
+	if code == "COMMIT_CANCELED" {
+		publicError.Message = "提交已停止"
 	}
 	payload := model.GitCommitFailedPayload{
 		GitCommitEventBase: model.NewGitCommitEventBase(operation.ID, operation.ProjectID, operation.ThreadID),
@@ -437,6 +477,9 @@ func generateGitCommitMessage(
 	defer cancel()
 	var lastErr error
 	for attempt := 0; attempt < gitCommitModelAttempts; attempt++ {
+		if err := requestCtx.Err(); err != nil {
+			return generatedCommitMessage{}, err
+		}
 		response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
@@ -449,6 +492,9 @@ func generateGitCommitMessage(
 			if errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
 				return generatedCommitMessage{}, context.DeadlineExceeded
 			}
+			return generatedCommitMessage{}, err
+		}
+		if err := requestCtx.Err(); err != nil {
 			return generatedCommitMessage{}, err
 		}
 		message, validateErr := validateGitCommitResponse(response)
@@ -519,4 +565,23 @@ func validCommitText(value string, maxRunes int) bool {
 		}
 	}
 	return true
+}
+
+// Cancel acknowledges only after execution has stopped. Once the atomic commit
+// boundary has begun, return its actual outcome instead of claiming cancellation.
+func (svc *GitCommitService) Cancel(ctx context.Context, id string) (model.GitCommitOperation, error) {
+	svc.mu.Lock()
+	control := svc.controls[id]
+	if control != nil && !control.committing {
+		control.cancel()
+	}
+	svc.mu.Unlock()
+	if control != nil {
+		select {
+		case <-control.done:
+		case <-ctx.Done():
+			return model.GitCommitOperation{}, ctx.Err()
+		}
+	}
+	return svc.Get(ctx, id)
 }

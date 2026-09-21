@@ -1,9 +1,10 @@
+import { TextCommandActivity } from './TextCommandActivity';
 import { RollbackButton } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowDown, CheckCircle2, ChevronRight, Code2, FileImage, PauseCircle, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
 import { targetLabel } from './runtimeLabels';
-import { useActiveSession } from './useActiveSession';
+import { useActiveSession, useActiveThreadId } from './useActiveSession';
 import { FinalMessage } from './FinalMessage';
 import { LiveProgressRow } from './LiveProgressRow';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -63,6 +64,7 @@ function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 
 
 export const Timeline: React.FC = () => {
   const session = useActiveSession();
+  const threadId=useActiveThreadId();
   const { activeRunId, timelineItems, status, plan, progress } = session;
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
@@ -80,7 +82,7 @@ export const Timeline: React.FC = () => {
     () => groupTimelineItems(timelineItems, currentSlideId ?? undefined),
     [currentSlideId, timelineItems],
   );
-  const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
+  const commitActive = commitSession?.sourceThreadId===threadId && (commitSession?.status === 'creating' || commitSession?.status === 'running');
   const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle' && !commitActive;
 
   const scrollToLatest = useCallback((smooth: boolean) => {
@@ -179,6 +181,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
         {item.type === 'git_commit' && <GitCommitEvent item={item} />}
+        {item.type === 'command' && <TextCommandActivity item={item} />}
         {item.type === 'briefing' && <BriefingActivity item={item} />}
         {item.type === 'context_compaction' && <ContextCompactionActivity item={item} />}
       </div>
@@ -224,7 +227,7 @@ export const Timeline: React.FC = () => {
             {status !== 'waiting' && progress && (
               <LiveProgressRow progress={progress} />
             )}
-            {commitActive && commitSession?.phase && <GitCommitProgress phase={commitSession.phase} />}
+            {commitActive && <GitCommitProgress phase={commitSession?.phase ?? null} />}
           </>
         )}
       </div>

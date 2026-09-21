@@ -35,8 +35,7 @@ func (h *ContextWindowHandler) Compact(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
-	result, err := h.svc.Compact(c.Request.Context(), c.Param("id"), "")
-	h.respond(c, result, err)
+	commandStream(c, "compact", func(ctx context.Context) (any, error) { return h.svc.Compact(ctx, c.Param("id"), "") })
 }
 
 func (h *ContextWindowHandler) respond(c *gin.Context, result any, err error) {

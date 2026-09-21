@@ -259,7 +259,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         id: `git-commit:${String(entry.data.operation_id ?? entry.run_id)}`,
         type: 'git_commit',
         operationId: String(entry.data.operation_id ?? entry.run_id),
-        status: 'failed',
+        status: error?.code === 'COMMIT_CANCELED' ? 'canceled' : 'failed',
         retryable: error?.retryable === true,
         timestamp: Date.parse(String(entry.data.occurred_at ?? '')) || (entry.ts || 0) * 1000,
       });
@@ -277,7 +277,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         briefingId,
         kind,
         status: 'completed',
-        versions,
+        versions: versions.slice(-1),
         timestamp: Number(entry.data.updated_at ?? entry.ts ?? 0) * 1000,
       });
       continue;

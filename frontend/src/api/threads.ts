@@ -15,11 +15,13 @@ export const threadsApi = {
       `/threads/${threadId}/context-window?model_profile_name=${encodeURIComponent(modelProfileName)}`,
       { reportError: false },
     ),
-  compact: (threadId: string) =>
+  compact: (threadId: string, signal?: AbortSignal, onProgress?: (phase: number) => void) =>
     fetchClient<CompactContextResponse>(`/threads/${threadId}/compact`, {
+      signal, onProgress, responseType: 'command', reportError: false, timeoutMs: 60_000,
       method: 'POST',
       body: JSON.stringify({}),
     }),
+  generateName: (id: string, signal: AbortSignal, onProgress: (phase: number) => void) => fetchClient<Thread>(`/threads/${id}/rename`, { method: 'POST', body: '{}', signal, onProgress, responseType: 'command', reportError: false, timeoutMs: 25_000 }),
   patch: (id: string, patch: {title?: string}) => fetchClient<Thread>(`/threads/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(patch)

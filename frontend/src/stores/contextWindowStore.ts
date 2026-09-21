@@ -1,9 +1,11 @@
+import { RequestCanceledError } from '../api/client';
+import { commandActive, performCommand } from './commandRuntime';
+import type { CommandTimelineItem } from '../features/agent/eventReducer';
+import { contextCompactionTimelineItem } from '../features/agent/eventReducer';
 import { notifyModelFallback } from '../lib/modelExecution';
 import { create } from 'zustand';
 import { threadsApi } from '../api/threads';
-import type { ContextWindowSnapshot } from '../api/types';
-import { showGlobalError } from './toastStore';
-import { useRunStore } from './runStore';
+import type { ContextCompaction, ContextWindowSnapshot, SSEEvent } from '../api/types';
 
 interface ContextWindowSession {
   snapshot: ContextWindowSnapshot | null;
@@ -25,7 +27,7 @@ const emptySession = (): ContextWindowSession => ({
   compacting: false,
 });
 
-export const useContextWindowStore = create<ContextWindowState>((set) => ({
+export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
   sessions: {},
   load: async (threadId, modelProfileName) => {
     set((state) => ({
@@ -39,7 +41,7 @@ export const useContextWindowStore = create<ContextWindowState>((set) => ({
       set((state) => ({
         sessions: {
           ...state.sessions,
-          [threadId]: { snapshot, loading: false, compacting: false },
+          [threadId]: { ...(state.sessions[threadId] ?? emptySession()), snapshot, loading: false },
         },
       }));
     } catch {
@@ -52,43 +54,135 @@ export const useContextWindowStore = create<ContextWindowState>((set) => ({
     }
   },
   compact: async (threadId) => {
+    if (get().sessions[threadId]?.compacting) return false;
     set((state) => ({
       sessions: {
         ...state.sessions,
         [threadId]: { ...(state.sessions[threadId] ?? emptySession()), compacting: true },
       },
     }));
+    const id = `compact:${threadId}`;
+    const initial: CommandTimelineItem = {
+      id,
+      type: 'command',
+      kind: 'compact',
+      title: '压缩上下文',
+      status: 'loading',
+      timestamp: Date.now(),
+    };
     try {
-      const result = await threadsApi.compact(threadId);
-      notifyModelFallback(result.model_execution, '上下文压缩');
-      set((state) => ({
-        sessions: {
-          ...state.sessions,
-          [threadId]: { snapshot: result.snapshot, loading: false, compacting: false },
+      return await performCommand(
+        threadId,
+        initial,
+        (signal, onProgress) => threadsApi.compact(threadId, signal, onProgress),
+        (result) => {
+          notifyModelFallback(result.model_execution, '上下文压缩');
+          set((state) => ({
+            sessions: {
+              ...state.sessions,
+              [threadId]: { snapshot: result.snapshot, loading: false, compacting: false },
+            },
+          }));
+          return contextCompactionTimelineItem(result.compaction);
         },
-      }));
-      useRunStore.getState().upsertContextCompaction(threadId, result.compaction);
-      return true;
-    } catch (error) {
-      showGlobalError(error instanceof Error ? error.message : '上下文压缩失败，请重试');
+        () => {
+          void get().compact(threadId);
+        },
+      );
+    } finally {
       set((state) => ({
         sessions: {
           ...state.sessions,
           [threadId]: { ...(state.sessions[threadId] ?? emptySession()), compacting: false },
         },
       }));
-      return false;
     }
   },
-  update: (threadId, snapshot) => set((state) => ({
-    sessions: {
-      ...state.sessions,
-      [threadId]: { snapshot, loading: false, compacting: snapshot.status === 'compacting' },
-    },
-  })),
-  drop: (threadId) => set((state) => {
-    const sessions = { ...state.sessions };
-    delete sessions[threadId];
-    return { sessions };
-  }),
+
+  update: (threadId, snapshot) =>
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [threadId]: {
+          snapshot,
+          loading: false,
+          compacting: snapshot.status === 'compacting' || commandActive(`compact:${threadId}`),
+        },
+      },
+    })),
+  drop: (threadId) =>
+    set((state) => {
+      const sessions = { ...state.sessions };
+      delete sessions[threadId];
+      return { sessions };
+    }),
 }));
+
+// Automatic compaction belongs to the active run and is stopped with that run.
+const automatic = new Map<
+  string,
+  {
+    id: string;
+    phase: (value: number) => void;
+    resolve: (value: ContextCompaction) => void;
+    reject: (error: Error) => void;
+  }
+>();
+export function receiveCompactionEvent(threadId: string, event: SSEEvent): boolean {
+  if (event.event === 'context.window.updated' && event.data.compaction) {
+    const progress = event.data.compaction;
+    let pending = automatic.get(threadId);
+    if (pending?.id !== progress.id) {
+      pending?.reject(new Error('压缩已被替代'));
+      const result = new Promise<ContextCompaction>((resolve, reject) => {
+        pending = { id: progress.id, phase: () => {}, resolve, reject };
+        automatic.set(threadId, pending);
+      });
+      const job = pending!;
+      const initial: CommandTimelineItem = {
+        id: `compact:${progress.id}`,
+        type: 'command',
+        kind: 'compact',
+        title: '压缩上下文',
+        status: 'loading',
+        method: 'auto',
+        cancellable: false,
+        timestamp: Date.parse(event.data.occurred_at),
+      };
+      void performCommand(
+        threadId,
+        initial,
+        (_signal, phase) => {
+          job.phase = phase;
+          return result;
+        },
+        contextCompactionTimelineItem,
+        () => {
+          void useContextWindowStore.getState().compact(threadId);
+        },
+      );
+    }
+    pending!.phase(progress.phase);
+  } else if (event.event === 'context.compacted') {
+    const pending = automatic.get(threadId);
+    if (pending) {
+      automatic.delete(threadId);
+      pending.resolve(event.data.compaction);
+      return true;
+    }
+  } else if (['run.failed', 'run.error', 'run.canceled', 'run.completed'].includes(event.event)) {
+    automatic
+      .get(threadId)
+      ?.reject(
+        event.event === 'run.canceled' ? new RequestCanceledError() : new Error('运行已结束'),
+      );
+    useContextWindowStore.setState((state) => ({
+      sessions: {
+        ...state.sessions,
+        [threadId]: { ...(state.sessions[threadId] ?? emptySession()), compacting: false },
+      },
+    }));
+    automatic.delete(threadId);
+  }
+  return false;
+}

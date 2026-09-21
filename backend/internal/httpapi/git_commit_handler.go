@@ -143,3 +143,12 @@ func (h *GitCommitHandler) handleError(c *gin.Context, err error) {
 		AbortWithError(c, ErrInternal(err.Error()))
 	}
 }
+
+func (h *GitCommitHandler) Cancel(c *gin.Context) {
+	operation, err := h.svc.Cancel(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toGitCommitOperationResponse(operation))
+}

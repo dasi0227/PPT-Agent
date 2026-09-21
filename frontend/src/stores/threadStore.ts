@@ -1,9 +1,11 @@
+import { generateNameCommand } from './textCommandStore';
+import { upsertCommand } from './commandRuntime';
 import { create } from 'zustand';
 import { Thread, ThreadNamingAction } from '../api/types';
 import { threadsApi } from '../api/threads';
 import { useRunStore } from './runStore';
 import { newClientIdentity } from '../lib/clientIdentity';
-import { showGlobalError, showGlobalNotice, showGlobalSuccess, showGlobalWarning } from './toastStore';
+import { showGlobalError } from './toastStore';
 
 interface RenamePanelTarget { projectId: string; threadId: string }
 
@@ -183,6 +185,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   },
 
   renameThread: async (projectId, threadId, title) => {
+    const previousTitle=get().threadsByProjectId[projectId]?.find(thread=>thread.id===threadId)?.title ?? '';
 		const updated = await threadsApi.patch(threadId, { title });
     set((state) => {
       const threads = state.threadsByProjectId[projectId] || [];
@@ -193,69 +196,47 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         }
       };
     });
+    upsertCommand(threadId,{id:`rename:${newClientIdentity('rename')}`,type:'command',kind:'rename',status:'completed',title:updated.title,content:`${previousTitle || '未命名会话'} → ${updated.title}`,method:'manual',timestamp:Date.now()});
   },
 
 	openRenamePanel: (projectId, threadId) => set({ renamePanelTarget: { projectId, threadId } }),
 	closeRenamePanel: () => set({ renamePanelTarget: null }),
 
-	performNamingAction: async (projectId, threadId, action, title) => {
-		const operationId = newClientIdentity('rename');
-		if (action === 'generate') {
-			set((state) => ({ pendingNamingOperationByThreadId: { ...state.pendingNamingOperationByThreadId, [threadId]: operationId } }));
-		}
-		try {
-			const response = await threadsApi.naming(threadId, operationId, action, title);
-			const stream = streamStateByProject.get(projectId);
-			if (stream && stream.epoch !== response.stream_epoch) {
-				if (action === 'generate') {
-					set((state) => {
-						const pending = { ...state.pendingNamingOperationByThreadId };
-						delete pending[threadId];
-						return { pendingNamingOperationByThreadId: pending };
-					});
-				}
-				return;
-			}
-			if (!stream || stream.epoch === response.stream_epoch) {
-				set((state) => ({
-					threadsByProjectId: {
-						...state.threadsByProjectId,
-						[projectId]: (state.threadsByProjectId[projectId] || []).map((thread) =>
-							thread.id === threadId && response.thread.naming_revision >= thread.naming_revision ? response.thread : thread),
-					},
-				}));
-			}
-			if (action === 'manual') showGlobalSuccess('会话名称已更新，自动命名已关闭');
-			if (action === 'enable') showGlobalSuccess('已开启自动命名');
-			if (action === 'disable') showGlobalNotice('已关闭自动命名');
-			if (action === 'generate' && response.status === 'waiting_for_input') {
-				showGlobalNotice('已开启自动命名，将在收到需求后生成名称');
-				set((state) => {
-					const pending = { ...state.pendingNamingOperationByThreadId };
-					delete pending[threadId];
-					return { pendingNamingOperationByThreadId: pending };
-				});
-			} else if (action === 'generate' && response.status === 'completed') {
-				showGlobalNotice('命名请求已完成');
-				set((state) => {
-					const pending = { ...state.pendingNamingOperationByThreadId };
-					delete pending[threadId];
-					return { pendingNamingOperationByThreadId: pending };
-				});
-			} else if (action === 'generate') {
-				showGlobalNotice('正在重新评估会话名称');
-			}
-		} catch (error) {
-			if (action === 'generate') {
-				set((state) => {
-					const pending = { ...state.pendingNamingOperationByThreadId };
-					delete pending[threadId];
-					return { pendingNamingOperationByThreadId: pending };
-				});
-			}
-			throw error;
-		}
-	},
+  performNamingAction: async (projectId, threadId, action, title) => {
+    const previousTitle = get().threadsByProjectId[projectId]?.find(thread => thread.id === threadId)?.title ?? '';
+    const apply = (updated: Thread) => set(state => ({
+      threadsByProjectId: {
+        ...state.threadsByProjectId,
+        [projectId]: (state.threadsByProjectId[projectId] ?? []).map(thread =>
+          thread.id === threadId && updated.naming_revision >= thread.naming_revision ? updated : thread),
+      },
+    }));
+    if (action === 'generate') {
+      if (get().pendingNamingOperationByThreadId[threadId]) return;
+      const marker = newClientIdentity('rename');
+      set(state => ({ pendingNamingOperationByThreadId: { ...state.pendingNamingOperationByThreadId, [threadId]: marker } }));
+      try {
+        await generateNameCommand(projectId, threadId, previousTitle, apply);
+      } finally {
+        set(state => {
+          const pending = { ...state.pendingNamingOperationByThreadId };
+          if (pending[threadId] === marker) delete pending[threadId];
+          return { pendingNamingOperationByThreadId: pending };
+        });
+      }
+      return;
+    }
+    const operationId = newClientIdentity('rename');
+    const response = await threadsApi.naming(threadId, operationId, action, title);
+    const stream = streamStateByProject.get(projectId);
+    if (stream && stream.epoch !== response.stream_epoch) return;
+    apply(response.thread);
+    if (action === 'manual') upsertCommand(threadId, {
+      id: `rename:${operationId}`, type: 'command', kind: 'rename', status: 'completed',
+      title: response.thread.title, content: `${previousTitle || '未命名会话'} → ${response.thread.title}`,
+      method: 'manual', timestamp: Date.now(),
+    });
+  },
 
 	applyThreadSnapshot: (projectId, epoch, sequence, threads) => {
 		const current = streamStateByProject.get(projectId);
@@ -305,10 +286,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 			delete pending[threadId];
 			return { pendingNamingOperationByThreadId: pending };
 		});
-		const execution = data.model_execution;
-        if (execution && typeof execution === 'object' && 'fallback_used' in execution && execution.fallback_used && 'profile' in execution && typeof execution.profile === 'string') showGlobalWarning(`会话命名已切换至备用模型 ${execution.profile}`);
-        if (data.outcome === 'renamed') showGlobalSuccess('会话名称已更新');
-		if (data.outcome === 'kept') showGlobalNotice('当前名称仍适合');
 		if (data.outcome === 'failed') showGlobalError(typeof data.error === 'string' ? data.error : '自动命名失败，请稍后重试');
 	},
 

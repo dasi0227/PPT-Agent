@@ -1153,3 +1153,37 @@
     display: none;
   }
 }
+
+/* Unified command timeline: plain summaries and progress, cards only for results. */
+.command-activity { padding: 4px 0; min-width: 0; }
+.command-activity-head { display: flex; align-items: flex-start; gap: 12px; }
+.command-activity-summary { display:flex; flex:1; gap:8px; min-width:0; padding:4px 0; text-align:left; border-radius:4px; }
+.command-activity-summary:disabled { cursor:default; opacity:1; }
+.command-activity-summary:enabled:hover { background:#f0f3f7; }
+.command-activity-icon { display:grid; place-items:center; width:26px; height:26px; flex:none; }
+.command-activity-title { display:flex; align-items:baseline; gap:6px; font-size:12px; line-height:20px; min-width:0; }
+.command-activity-meta { display:flex; flex-wrap:wrap; align-items:center; gap:0 7px; margin-top:1px; color:#5f6b7a; font-size:10px; line-height:17px; font-variant-numeric:tabular-nums; }
+.command-action { display:inline-flex; align-items:center; justify-content:center; flex:none; gap:5px; min-height:32px; padding:5px 10px; border-radius:6px; color:#5f6b7a; font-size:12px; white-space:nowrap; }
+.command-action:disabled { opacity:.45; cursor:default; }
+.command-stop:enabled:hover { color:#c84953; background:#fcecef; }
+.command-retry:enabled:hover { color:#9a5918; background:#fff3df; }
+.command-copy:enabled:hover { color:#2f7d65; background:#e7f3ee; }
+.command-primary:enabled:hover { color:#2f67f6; background:#e8efff; }
+.command-activity button:focus-visible,.command-feedback input:focus-visible { outline:2px solid #2f67f6; outline-offset:2px; }
+.command-detail-card { margin:8px 0 0 34px; padding:16px; border:1px solid #bcc5d0; border-radius:10px; background:#fff; overflow-wrap:anywhere; }
+.command-footer { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:16px; padding-top:12px; border-top:1px solid #d5dbe3; }
+.command-feedback { flex:1 1 170px; min-width:120px; }
+.command-feedback input { width:100%; min-width:0; height:34px; border:1px solid #d5dbe3; border-radius:6px; padding:5px 8px; background:#f8f9fb; font-size:12px; }
+.command-feedback input::placeholder { color:#5f6b7a; }
+.command-footer .command-primary { margin-left:auto; }
+.command-progress { position:relative; display:flex; justify-content:space-between; margin:18px 0 12px; }
+.command-progress-line { position:absolute; left:30px; right:30px; top:5px; height:1px; background:#d5dbe3; }
+.command-progress-line>span { display:block; height:100%; background:#2f7d65; transition:width 350ms ease-out; }
+.command-step { position:relative; width:60px; padding-top:21px; text-align:center; color:#5f6b7a; font-size:10px; line-height:15px; }
+.command-step-node { position:absolute; top:0; left:calc(50% - 5.5px); width:11px; height:11px; border:1.5px solid #d5dbe3; border-radius:50%; background:#f8f9fb; }
+.command-step.is-complete,.command-step.is-current { color:#2f7d65; }
+.command-step.is-complete .command-step-node { border-color:#2f7d65; background:#2f7d65; }
+.command-step.is-current .command-step-node { border-color:#2f7d65; }
+.command-step.is-current .command-step-node::after { content:''; display:block; margin:2px; width:4px; height:4px; border-radius:50%; background:#2f7d65; animation:command-node-pulse 1.3s ease-in-out infinite; }
+@keyframes command-node-pulse { 50% { opacity:.2; } }
+@media (prefers-reduced-motion:reduce) { .command-progress-line>span { transition:none; } .command-step.is-current .command-step-node::after { animation:none; } }

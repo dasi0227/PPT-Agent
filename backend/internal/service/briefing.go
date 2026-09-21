@@ -83,11 +83,14 @@ func (svc *briefingGenerator) generate(
 	policy string,
 	promptVersion string,
 ) (BriefingResult, error) {
+	if err := commandPhase(ctx, 0); err != nil {
+		return BriefingResult{}, err
+	}
 	params.ThreadID = strings.TrimSpace(params.ThreadID)
 	params.BriefingID = strings.TrimSpace(params.BriefingID)
 	params.Feedback = strings.TrimSpace(params.Feedback)
 	if params.ThreadID == "" ||
-		(params.BriefingID == "") != (params.Feedback == "") ||
+		(params.BriefingID == "" && params.Feedback != "") ||
 		utf8.RuneCountInString(params.Feedback) > maxBriefingFeedbackRunes {
 		return BriefingResult{}, model.NewAgentError("BAD_REQUEST", string(kind), nil)
 	}
@@ -143,6 +146,9 @@ func (svc *briefingGenerator) generate(
 	if err != nil {
 		return BriefingResult{}, err
 	}
+	if err := commandPhase(ctx, 1); err != nil {
+		return BriefingResult{}, err
+	}
 	reference, err := contextengine.CompileBriefingContext(pack)
 	if err != nil {
 		return BriefingResult{}, err
@@ -153,6 +159,9 @@ func (svc *briefingGenerator) generate(
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, briefingTimeout)
 	defer cancel()
+	if err := commandPhase(requestCtx, 2); err != nil {
+		return BriefingResult{}, err
+	}
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
@@ -169,6 +178,9 @@ func (svc *briefingGenerator) generate(
 			return BriefingResult{}, model.NewAgentError("PROVIDER_UNAVAILABLE", string(kind), err)
 		}
 		return BriefingResult{}, model.NewAgentError("AGENT_FAILED", string(kind), err)
+	}
+	if err := requestCtx.Err(); err != nil {
+		return BriefingResult{}, err
 	}
 	content := strings.TrimSpace(response.Text())
 	if content == "" || utf8.RuneCountInString(content) > maxBriefingOutputRunes {
