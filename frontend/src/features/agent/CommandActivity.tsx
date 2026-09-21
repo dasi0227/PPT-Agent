@@ -171,7 +171,7 @@ export function CommandActivity({
           </span>
           <span className="min-w-0 flex-1">
             <span className="command-activity-title">
-              <span className="shrink-0 font-medium text-text-600">{kind}:</span>
+              <span className="shrink-0 text-[13px] font-bold text-text-600">{kind}</span>
               <span className="truncate font-semibold">{displayTitle}</span>
             </span>
             <span className="command-activity-meta">
@@ -226,7 +226,7 @@ export function CommandActivity({
       )}
       <TimelineDisclosure open={ready && open}>
         {ready && open && (
-          <div id={id} className="command-detail-card">
+          <div id={id} className="timeline-detail-card command-detail-card">
             <LongContent
               contentClassName="text-[13px] leading-[1.85] text-text-700"
               testId="command-content-preview"

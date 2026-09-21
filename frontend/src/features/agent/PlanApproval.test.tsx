@@ -132,7 +132,7 @@ describe('PlanApproval', () => {
 
     expect(screen.getByText('演示文稿制作计划')).toBeInTheDocument();
     expect(screen.getByText('先完成结构，再生成页面。')).toBeInTheDocument();
-    expect(screen.getByTestId('answered-plan-card')).toHaveClass('ml-6', 'border', 'bg-surface', 'p-4');
+    expect(screen.getByTestId('answered-plan-card')).toHaveClass('timeline-detail-card', 'border', 'bg-surface', 'p-4');
     expect(screen.queryByText('请补充案例')).toBeNull();
     expect(screen.queryByRole('group', { name: '已提交的计划处理方式' })).toBeNull();
     expect(screen.queryByText('批准执行')).toBeNull();

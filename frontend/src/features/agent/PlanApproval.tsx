@@ -77,7 +77,7 @@ function AnsweredPlanApproval({ item, decision }: { item: PlanApprovalItem; deci
         <article
           id={detailsId}
           data-testid="answered-plan-card"
-          className="ml-6 mt-1.5 rounded-[10px] border border-border-strong bg-surface p-4"
+          className="timeline-detail-card rounded-[10px] border border-border-strong bg-surface p-4"
         >
           <PlanBody item={item} />
         </article>

@@ -299,7 +299,10 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
           : <ChevronRight className="h-3.5 w-3.5 text-text-400" />)}
       </button>
       <TimelineDisclosure open={expanded && hasDetails}>
-        {expanded && hasDetails && <div className="pb-1.5 pl-[30px] pr-2 pt-px text-xs leading-5 text-text-600">
+        {expanded && hasDetails && <div className={cn(
+          'pb-1.5 text-xs leading-5 text-text-600',
+          item.command || item.preview ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
+        )}>
           {item.command ? (
             <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
           ) : showDetailText && detailText && (

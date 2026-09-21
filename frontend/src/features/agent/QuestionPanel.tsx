@@ -206,7 +206,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
         <article
           id={detailsId}
           data-testid="answered-question-card"
-          className="ml-6 mt-1.5 rounded-[10px] border border-border-strong bg-surface p-4"
+          className="timeline-detail-card rounded-[10px] border border-border-strong bg-surface p-4"
         >
           <div className="flex items-start gap-2">
             <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-success" strokeWidth={1.75} />

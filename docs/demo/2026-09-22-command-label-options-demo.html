@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Command 名称方案</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f8fa;
+      color: #172033;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+    }
+
+    .command-line {
+      width: min(820px, 100%);
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 18px 22px;
+      font-size: 18px;
+      line-height: 28px;
+      white-space: nowrap;
+    }
+
+    .command {
+      flex: none;
+      color: #526074;
+      font-size: 19px;
+      font-weight: 700;
+    }
+
+    .title {
+      min-width: 0;
+      overflow: hidden;
+      color: #172033;
+      font-weight: 650;
+      text-overflow: ellipsis;
+    }
+  </style>
+</head>
+<body>
+  <div class="command-line">
+    <span class="command">commit</span>
+    <span class="title">feat: 生成「如何写一个好的 SKILL」六页入门演示</span>
+  </div>
+</body>
+</html>
