@@ -46,6 +46,7 @@ import { ExportProgressDialog } from '../export/ExportProgressDialog';
 import { useExportStore } from '../../stores/exportStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useRunStore } from '../../stores/runStore';
+import { useCanvasPan } from './useCanvasPan';
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
@@ -379,6 +380,13 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const selectionEnabled = previewMode === 'main' && currentView === 'html' && currentHasHTML && !fullscreen
     && !['creating', 'waiting', 'paused', 'recovering', 'canceling'].includes(runSession.status);
   const zoomEnabled = hasSlides && previewMode === 'main' && currentView === 'html' && currentHasHTML;
+  const canvasPan = useCanvasPan({
+    viewportRef: canvasRef,
+    enabled: zoomEnabled && !fullscreen,
+    selectionActive: selectionMode !== 'none',
+    zoom,
+    pageKey: `${projectId}:${currentSlide?.id}`,
+  });
 
   const acceptSelection = useCallback(async (raw: DOMSelection) => {
     if (!projectId) return;
@@ -602,16 +610,25 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
       <div
         ref={canvasRef}
         data-fullscreen={fullscreen || undefined}
-        className="relative flex flex-1 items-center justify-center overflow-hidden bg-canvas p-6 data-[fullscreen=true]:p-0"
+        className={cn(
+          'relative flex flex-1 items-center justify-center overflow-hidden bg-canvas p-6 data-[fullscreen=true]:p-0',
+          canvasPan.canPan && 'touch-none select-none [&_iframe]:pointer-events-none',
+          canvasPan.canPan && (canvasPan.dragging ? 'cursor-grabbing' : 'cursor-grab'),
+        )}
+        {...canvasPan.pointerHandlers}
       >
         {previewMode === 'main' ? (
           <div
+            ref={canvasPan.stageRef}
             data-testid="slide-preview-stage"
             className={cn(
-              'flex w-full items-center justify-center transition-transform duration-150 ease-out motion-reduce:transition-none',
+              'flex w-full items-center justify-center',
+              !canvasPan.dragging && 'transition-transform duration-150 ease-out motion-reduce:transition-none',
               fullscreen ? 'h-full max-w-none' : 'aspect-video h-auto max-h-full max-w-5xl',
             )}
-            style={!fullscreen && currentView === 'html' && currentHasHTML ? { transform: `scale(${zoom})` } : undefined}
+            style={!fullscreen && currentView === 'html' && currentHasHTML ? {
+              transform: `translate(${canvasPan.position.x}px, ${canvasPan.position.y}px) scale(${zoom})`,
+            } : undefined}
           >
             {!projectId ? (
               <InlineNotice tone="info">请先从顶部项目 Tab 打开或新建项目。</InlineNotice>
