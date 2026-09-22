@@ -11,16 +11,12 @@ export type ResourceState<T> =
 
 const htmlCache = new Map<string, string>();
 
-function revisionOf(slide: Slide): number {
-  return slide.html_revision ?? slide.current_version ?? 0;
-}
-
 export function hasRenderedHTML(slide: Slide): boolean {
-  return Boolean(slide.html_path) && revisionOf(slide) > 0;
+  return Boolean(slide.html_path) && Boolean(slide.html_hash);
 }
 
 export function slideRenderKey(projectId: string, slide: Slide): string {
-  return `${projectId}:${slide.id}:${revisionOf(slide)}`;
+  return `${projectId}:${slide.id}:${slide.html_hash}`;
 }
 
 export function useSlideRenderCache(projectId: string | null) {

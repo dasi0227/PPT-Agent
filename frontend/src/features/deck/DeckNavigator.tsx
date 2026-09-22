@@ -341,7 +341,7 @@ export function DeckNavigator() {
   const { getState, load } = useSlideRenderCache(activeProjectId);
   const runLocked = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(status);
   const locked = pendingMutation || runLocked;
-  const outlineRevision = snapshot?.outline.revision;
+  const outlineHash = snapshot?.hashes.outline;
 
   const commitMutation = async (request: PPTMutation) => {
     if (!activeProjectId || locked) return;
@@ -361,14 +361,14 @@ export function DeckNavigator() {
 
   const insertPage = (parentId: string) => mutate({
     op: 'outline.insert',
-    expected_revision: outlineRevision,
+    expected_hash: outlineHash,
     node: { kind: 'slide', client_ref: clientRef('slide'), title: '新页面', role: 'content' },
     position: { parent_id: parentId },
   });
 
   const insertSection = () => mutate({
     op: 'outline.insert',
-    expected_revision: outlineRevision,
+    expected_hash: outlineHash,
     node: {
       kind: 'section',
       client_ref: clientRef('section'),
@@ -385,7 +385,7 @@ export function DeckNavigator() {
     const clamped = Math.max(0, Math.min(targetIndex, without.length));
     void mutate({
       op: 'outline.move',
-      expected_revision: outlineRevision,
+      expected_hash: outlineHash,
       node_id: slideId,
       position: positionForSibling(parentId, without, clamped),
     });
@@ -395,7 +395,7 @@ export function DeckNavigator() {
     if (!deleteTarget) return;
     const request: PPTMutation = {
       op: 'outline.remove',
-      expected_revision: outlineRevision,
+      expected_hash: outlineHash,
       node_id: deleteTarget.id,
       ...(deleteTarget.kind === 'subsection' && deleteTarget.promote ? { child_policy: 'promote_to_section' as const } : {}),
     };
@@ -643,7 +643,7 @@ export function DeckNavigator() {
           if (!editTarget) return;
           await commitMutation({
             op: 'outline.update',
-            expected_revision: outlineRevision,
+            expected_hash: outlineHash,
             node_id: editTarget.id,
             changes: { title: value.trim() },
           });
@@ -679,7 +679,7 @@ export function DeckNavigator() {
           const section = newSubsectionTarget.section;
           await commitMutation({
             op: 'outline.insert',
-            expected_revision: outlineRevision,
+            expected_hash: outlineHash,
             node: {
               kind: 'subsection',
               client_ref: clientRef('subsection'),

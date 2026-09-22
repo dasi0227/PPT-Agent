@@ -35,7 +35,6 @@ type ContextIndexItem struct {
 	Kind            string              `json:"kind"`
 	Source          string              `json:"source"`
 	Target          Resource            `json:"target"`
-	Revision        int                 `json:"revision"`
 	Hash            string              `json:"hash"`
 	Summary         string              `json:"summary"`
 	Keywords        []string            `json:"keywords"`
@@ -141,7 +140,6 @@ type RetrievedContextItem struct {
 	Kind            string      `json:"kind"`
 	Source          string      `json:"source"`
 	Target          Resource    `json:"target,omitempty"`
-	Revision        int         `json:"revision"`
 	Hash            string      `json:"hash"`
 	Score           float64     `json:"score"`
 	SelectionReason string      `json:"selection_reason"`
@@ -198,7 +196,7 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScop
 		}
 		appendItem(ContextIndexItem{
 			RefID: ref.ID, Kind: string(ref.Kind), Source: "context_manifest",
-			Target: target, Revision: ref.Revision, Hash: ref.ContentHash, Summary: ref.Summary,
+			Target: target, Hash: ref.ContentHash, Summary: ref.Summary,
 			TokenCost: cost, AvailableLevels: levels,
 		})
 	}
@@ -208,7 +206,7 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScop
 		}
 		appendItem(ContextIndexItem{
 			Kind: string(segment.Kind), Source: segment.SourceRef,
-			Target: targetForSegment(segment), Revision: segment.Revision, Hash: segment.ContentHash,
+			Target: targetForSegment(segment), Hash: segment.ContentHash,
 			Summary: segment.SelectionReason, TokenCost: map[DetailLevel]int{DetailLevel(segment.DetailLevel): segment.EstimatedTokens},
 			AvailableLevels: []DetailLevel{DetailLevel(segment.DetailLevel)},
 		})
@@ -292,7 +290,7 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 		}
 		candidates = append(candidates, RetrievedContextItem{
 			RefID: item.RefID, Kind: item.Kind, Source: item.Source, Target: item.Target,
-			Revision: item.Revision, Hash: item.Hash, Score: math.Round(score*10000) / 10000,
+			Hash: item.Hash, Score: math.Round(score*10000) / 10000,
 			SelectionReason: selectionReason(queryText, item, keyword, semantic, scopeBoost, issueBoost),
 			DetailAvailable: len(item.AvailableLevels) > 1, DetailLevel: level,
 			Snippet: compactSnippet(item.Summary, 1200), Freshness: item.Freshness, EstimatedTokens: cost,
@@ -395,7 +393,7 @@ func selectionReason(query string, item ContextIndexItem, keyword, semantic, sco
 		reasons = append(reasons, "matches latest runtime issue")
 	}
 	if item.Freshness == "current" {
-		reasons = append(reasons, "current revision")
+		reasons = append(reasons, "current content")
 	}
 	if len(reasons) == 0 {
 		reasons = append(reasons, "authorized context candidate")

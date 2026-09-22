@@ -1101,7 +1101,7 @@ func (r *Runtime) executeToolBatch(
 		if result.Code == "" && !result.OK {
 			result = failedToolResult(CodeCanceled, "run canceled before tool start", false)
 		}
-		results[index] = bindToolErrorObservation(result, call, state.pack)
+		results[index] = bindToolErrorObservation(result, call)
 	}
 	type workOutcome struct {
 		ok      bool
@@ -1163,7 +1163,7 @@ func (r *Runtime) executeToolBatch(
 		}
 		for _, target := range result.ChangedTargets {
 			recordTrace(input.Trace, state.runID, "target.written", map[string]any{
-				"target": target.Target(), "revision": target.Revision, "hash": target.Hash,
+				"target": target.Target(), "hash": target.Hash,
 				"fields": target.Fields, "tentative": false,
 			})
 		}
@@ -1211,7 +1211,7 @@ func slideIDsFromArgs(args map[string]any) []string {
 	return out
 }
 
-func bindToolErrorObservation(result ToolResult, call llm.ToolCall, pack contextengine.ContextPack) ToolResult {
+func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 	if result.OK || len(result.ObservationParts) > 0 {
 		return result
 	}
@@ -1225,16 +1225,6 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall, pack context
 	}
 	if ok {
 		agentErr.Resource = &model.ErrorResource{Type: target.Type, SlideID: target.SlideID, Part: target.Part}
-		switch {
-		case target.Type == "deck" && target.Part == "outline":
-			agentErr.Details["current_revision"] = pack.Revisions.Outline
-		case target.Type == "deck" && target.Part == "design":
-			agentErr.Details["current_revision"] = pack.Revisions.Design
-		case target.Type == "slide" && target.Part == "spec":
-			agentErr.Details["current_revision"] = pack.Revisions.SlideSpecs[target.SlideID]
-		case target.Type == "slide" && target.Part == "html":
-			agentErr.Details["current_revision"] = pack.Revisions.SlideHTML[target.SlideID]
-		}
 	}
 	agentErr.Details["reason"] = result.Summary
 	agentErr.Details["next_action"] = agentErr.ModelMessage
@@ -1291,13 +1281,12 @@ func stageMaterializationRecords(session *RunSession, proofs []MaterializationPr
 		record := spec.MaterializationRecord{
 			SchemaVersion: spec.SchemaVersion,
 			Artifact: spec.MaterializationArtifact{
-				Revision: proof.HTMLRevision,
-				Hash:     "sha256:" + proof.ArtifactHash,
+				Hash: "sha256:" + proof.ArtifactHash,
 			},
 			Source: spec.MaterializationSource{
-				ManifestRevision:  proof.ManifestRevision,
+				ManifestHash:      proof.ManifestHash,
 				OutlineNodeHash:   proof.OutlineNodeHash,
-				SpecRevision:      proof.SpecRevision,
+				SpecHash:          proof.SpecHash,
 				DesignContentHash: proof.DesignContentHash,
 				Hash:              proof.SourceHash,
 			},
@@ -1322,34 +1311,24 @@ func stageMaterializationRecords(session *RunSession, proofs []MaterializationPr
 }
 
 func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTarget) {
-	if state.pack.Revisions.SlideSpecs == nil {
-		state.pack.Revisions.SlideSpecs = map[string]int{}
-	}
-	if state.pack.Revisions.SlideHTML == nil {
-		state.pack.Revisions.SlideHTML = map[string]int{}
-	}
 	for _, target := range targets {
 		switch {
 		case target.Type == "deck" && target.Part == "manifest":
-			state.pack.Revisions.Manifest = target.Revision
 			var value spec.Manifest
 			if raw, err := os.ReadFile(filepath.Join(projectDir, "manifest.json")); err == nil && json.Unmarshal(raw, &value) == nil {
 				state.pack.PresentationManifest.Manifest = value
 			}
 		case target.Type == "deck" && target.Part == "outline":
-			state.pack.Revisions.Outline = target.Revision
 			var value spec.Outline
 			if raw, err := os.ReadFile(filepath.Join(projectDir, "outline.json")); err == nil && json.Unmarshal(raw, &value) == nil {
 				state.pack.Outline.Outline = value
 			}
 		case target.Type == "deck" && target.Part == "design":
-			state.pack.Revisions.Design = target.Revision
 			var value spec.Design
 			if raw, err := os.ReadFile(filepath.Join(projectDir, "design.json")); err == nil && json.Unmarshal(raw, &value) == nil {
 				state.pack.Design.Design = &value
 			}
 		case target.Type == "slide" && target.Part == "spec":
-			state.pack.Revisions.SlideSpecs[target.SlideID] = target.Revision
 			if state.pack.Target.SlideSpec != nil && state.pack.Target.SlideSpec.SlideID == target.SlideID {
 				var value spec.SlideSpec
 				if raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(model.SlideSpecPath(target.SlideID)))); err == nil && json.Unmarshal(raw, &value) == nil {
@@ -1357,7 +1336,6 @@ func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTar
 				}
 			}
 		case target.Type == "slide" && target.Part == "html":
-			state.pack.Revisions.SlideHTML[target.SlideID] = target.Revision
 			if len(state.pack.Target.SlideIDs) == 1 && state.pack.Target.SlideIDs[0] == target.SlideID {
 				if raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(model.SlideHTMLPath(target.SlideID)))); err == nil {
 					state.pack.Target.SlideHTML = string(raw)

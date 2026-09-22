@@ -80,8 +80,8 @@ func retrievedContextBrief(items []RetrievedContextItem) string {
 			target = "global"
 		}
 		line := fmt.Sprintf(
-			"- %s kind=%s target=%s rev=%d hash=%s score=%.2f reason=%s",
-			item.RefID, item.Kind, target, item.Revision, shortHash(item.Hash), item.Score, item.SelectionReason,
+			"- %s kind=%s target=%s hash=%s score=%.2f reason=%s",
+			item.RefID, item.Kind, target, shortHash(item.Hash), item.Score, item.SelectionReason,
 		)
 		if item.Snippet != "" {
 			line += "\n  summary: " + item.Snippet

@@ -70,19 +70,6 @@ func (SlideHTMLSummaryLoader) Load(path string) (HTMLSummary, []byte, error) {
 	return summary, raw, err
 }
 
-type RevisionLoader struct{}
-
-func (RevisionLoader) From(manifest pptspec.Manifest, outline pptspec.Outline, design pptspec.Design, slides map[string]pptspec.SlideSpec) RevisionRefs {
-	r := RevisionRefs{
-		Manifest: manifest.Revision, Outline: outline.Revision, Design: design.Revision,
-		SlideSpecs: map[string]int{}, SlideHTML: map[string]int{},
-	}
-	for id, slide := range slides {
-		r.SlideSpecs[id] = slide.Revision
-	}
-	return r
-}
-
 func readSourceJSON(path string, target any) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {

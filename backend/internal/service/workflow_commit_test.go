@@ -34,23 +34,24 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	if err := c.Commit(ctx, second); err != nil {
 		t.Fatal(err)
 	}
-	// A late replay must neither increment nor rewind current metadata.
+	// A late replay must never rewind current metadata.
 	if err := c.Commit(ctx, first); err != nil {
 		t.Fatal(err)
 	}
 	slide, err := f.store.GetSlide(ctx, "sli_aaaaaa")
-	if err != nil || slide.CurrentVersion != 3 {
+	if err != nil || slide.ProjectID != f.project.ID {
 		t.Fatalf("slide=%+v err=%v", slide, err)
 	}
 	if _, err := os.Stat(filepath.Join(f.project.WorkDir, "versions")); !os.IsNotExist(err) {
 		t.Fatalf("version files created: %v", err)
 	}
 	for _, name := range []string{"manifest.json", "outline.json", "design.json", model.SlideSpecPath(slide.ID)} {
-		var content struct {
-			Revision int `json:"revision"`
+		var content map[string]any
+		if err := readJSON(filepath.Join(f.project.WorkDir, name), &content); err != nil {
+			t.Fatal(err)
 		}
-		if err := readJSON(filepath.Join(f.project.WorkDir, name), &content); err != nil || content.Revision != 1 {
-			t.Fatalf("content revision %s: %+v %v", name, content, err)
+		if _, exists := content["revision"]; exists {
+			t.Fatalf("unexpected revision in %s", name)
 		}
 	}
 	// Removing an unrendered page still proves it belonged to this project.

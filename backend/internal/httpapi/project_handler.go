@@ -34,17 +34,15 @@ type createProjectRequest struct {
 	Language   string `json:"language"`
 }
 type projectResponse struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	WorkDir         string `json:"work_dir"`
-	Theme           string `json:"theme"`
-	Status          string `json:"status"`
-	DesignPath      string `json:"design_path"`
-	OutlinePath     string `json:"outline_path"`
-	OutlineRevision int    `json:"outline_revision"`
-	DesignRevision  int    `json:"design_revision"`
-	CreatedAt       int64  `json:"created_at"`
-	UpdatedAt       int64  `json:"updated_at"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	WorkDir     string `json:"work_dir"`
+	Theme       string `json:"theme"`
+	Status      string `json:"status"`
+	DesignPath  string `json:"design_path"`
+	OutlinePath string `json:"outline_path"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
 }
 
 func (h *ProjectHandler) List(c *gin.Context) {
@@ -154,8 +152,8 @@ func (h *ProjectHandler) Mutate(c *gin.Context) {
 			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
 		case errors.Is(err, service.ErrGitCommitActive):
 			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "GIT_COMMIT_ACTIVE", Message: "project has an active Git commit"})
-		case errors.Is(err, pptmutation.ErrRevisionConflict):
-			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "REVISION_CONFLICT", Message: err.Error()})
+		case errors.Is(err, pptmutation.ErrContentConflict):
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "CONTENT_CONFLICT", Message: err.Error()})
 		case errors.Is(err, pptmutation.ErrInvalid):
 			AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "MUTATION_INVALID", Message: err.Error()})
 		default:
@@ -190,5 +188,5 @@ func (h *ProjectHandler) SetTheme(c *gin.Context) {
 }
 
 func toProjectResponse(p model.Project) projectResponse {
-	return projectResponse{ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, Status: p.Status, DesignPath: "design.json", OutlinePath: "outline.json", OutlineRevision: p.OutlineRevision, DesignRevision: p.DesignRevision, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+	return projectResponse{ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, Status: p.Status, DesignPath: "design.json", OutlinePath: "outline.json", CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }

@@ -7,7 +7,6 @@
   "additionalProperties": false,
   "required": [
     "version",
-    "revision",
     "project_id",
     "theme",
     "direction",
@@ -17,12 +16,7 @@
   ],
   "properties": {
     "version": {
-      "const": "4.0",
-      "x-runtime-managed": true
-    },
-    "revision": {
-      "type": "integer",
-      "minimum": 1,
+      "const": "5.0",
       "x-runtime-managed": true
     },
     "project_id": {
@@ -47,11 +41,20 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["type", "placement", "style"],
+        "required": [
+          "type",
+          "placement",
+          "style"
+        ],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["page_number", "section_marker", "key_message", "deck_title"]
+            "enum": [
+              "page_number",
+              "section_marker",
+              "key_message",
+              "deck_title"
+            ]
           },
           "placement": {
             "type": "string",

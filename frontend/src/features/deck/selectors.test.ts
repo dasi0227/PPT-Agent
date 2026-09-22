@@ -3,7 +3,7 @@ import type { Outline, ProjectContentSnapshot } from '../../api/types';
 import { adjacentSlideIds, flattenOutline, ordinalBySlideId, orderedSlides, selectedSlide } from './selectors';
 
 const outline: Outline = {
-  version: '4.0', revision: 3, project_id: 'pro_1', created_at: 1, updated_at: 2,
+  version: '5.0', project_id: 'pro_1', created_at: 1, updated_at: 2,
   sections: [
     { id: 'sec_a', title: '开场', purpose: '建立主题', slides: [
       { slide_id: 'sli_1', title: '封面', role: 'cover' },
@@ -17,14 +17,15 @@ const outline: Outline = {
 };
 
 const snapshot: ProjectContentSnapshot = {
-  manifest: { version: '4.0', revision: 1, project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: ['cover'], format: 'number' }, created_at: 1, updated_at: 1 },
+  hashes: { outline: "outline-hash" },
+  manifest: { version: '5.0', project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: ['cover'], format: 'number' }, created_at: 1, updated_at: 1 },
   outline,
-  design: { version: '4.0', revision: 1, project_id: 'pro_1', theme: 'default', direction: '', chrome: [], created_at: 1, updated_at: 1 },
+  design: { version: '5.0', project_id: 'pro_1', theme: 'default', direction: '', chrome: [], created_at: 1, updated_at: 1 },
   slides_by_id: {
-    sli_1: { spec_state: 'pending', spec: null, html_state: 'pending', html_revision: 0, materialization: null },
-    sli_2: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_revision: 0, materialization: null },
-    sli_3: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_revision: 0, materialization: null },
-    sli_4: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_revision: 0, materialization: null },
+    sli_1: { spec_state: 'pending', spec: null, html_state: 'pending', html_hash: '', materialization: null },
+    sli_2: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },
+    sli_3: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },
+    sli_4: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },
   },
 };
 

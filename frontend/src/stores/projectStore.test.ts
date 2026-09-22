@@ -16,9 +16,10 @@ import { useProjectStore } from './projectStore';
 
 function snapshot(revision: number): ProjectContentSnapshot {
   return {
-    manifest: { version: '4.0', revision, project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
-    outline: { version: '4.0', revision, project_id: 'pro_1', sections: [], created_at: 1, updated_at: 1 },
-    design: { version: '4.0', revision, project_id: 'pro_1', theme: 'default', direction: '', chrome: [], created_at: 1, updated_at: 1 },
+    hashes: { outline: `outline-${revision}` },
+    manifest: { version: '5.0', project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
+    outline: { version: '5.0', project_id: 'pro_1', sections: [], created_at: 1, updated_at: 1 },
+    design: { version: '5.0', project_id: 'pro_1', theme: 'default', direction: '', chrome: [], created_at: 1, updated_at: 1 },
     slides_by_id: {},
   };
 }
@@ -49,7 +50,7 @@ describe('projectStore canonical content snapshots', () => {
     await useProjectStore.getState().mutateProject('pro_1', { op: 'outline.insert', node: { kind: 'section', client_ref: 'section', title: 'Section', purpose: 'Purpose', slides: [], subsections: [] }, position: {} });
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(getContent).not.toHaveBeenCalled();
-    expect(useProjectStore.getState().contentByProjectId.pro_1.outline.revision).toBe(2);
+    expect(useProjectStore.getState().contentByProjectId.pro_1.hashes.outline).toBe('outline-2');
     expect(useProjectStore.getState().mutationPendingByProjectId.pro_1).toBe(false);
   });
 
@@ -58,27 +59,26 @@ describe('projectStore canonical content snapshots', () => {
     setTheme.mockResolvedValue({
       id: 'pro_1', title: '项目', work_dir: '/projects/pro_1', theme: 'tokyo-night',
       status: 'ready', design_path: 'design.json', outline_path: 'outline.json',
-      outline_revision: 1, design_revision: 2, created_at: 1, updated_at: 2,
+      created_at: 1, updated_at: 2,
     });
     useProjectStore.setState({
       projects: [{
         id: 'pro_1', title: '项目', work_dir: '/projects/pro_1', theme: 'swiss-modern',
         status: 'ready', design_path: 'design.json', outline_path: 'outline.json',
-        outline_revision: 1, design_revision: 1, created_at: 1, updated_at: 1,
+        created_at: 1, updated_at: 1,
       }],
       contentByProjectId: { pro_1: content },
     });
 
+    getContent.mockResolvedValue({ ...content, hashes: { ...content.hashes, design: 'design-new' }, design: { ...content.design, theme: 'tokyo-night', updated_at: 2 } });
     await useProjectStore.getState().setProjectTheme('pro_1', 'tokyo-night');
 
     expect(setTheme).toHaveBeenCalledWith('pro_1', 'tokyo-night');
     expect(useProjectStore.getState().projects[0]).toMatchObject({
       theme: 'tokyo-night',
-      design_revision: 2,
-    });
+      });
     expect(useProjectStore.getState().contentByProjectId.pro_1.design).toMatchObject({
       theme: 'tokyo-night',
-      revision: 2,
       updated_at: 2,
     });
   });

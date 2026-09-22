@@ -317,7 +317,6 @@ func specBytesAffectHTML(beforeRaw, afterRaw []byte) bool {
 	}
 	clearRuntime := func(value *spec.SlideSpec) {
 		value.SchemaVersion = ""
-		value.Revision = 0
 		value.ProjectID = ""
 		value.SlideID = ""
 		value.CreatedAt = 0
@@ -388,7 +387,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		if ctx.Session == nil {
 			issues = append(issues, CompletionIssue{Code: CodeRunSessionRequired, Summary: "write run has no active run session"})
 		} else if err := ctx.Session.ValidateBaselines(); err != nil {
-			issues = append(issues, CompletionIssue{Code: CodeRevisionConflict, Summary: err.Error()})
+			issues = append(issues, CompletionIssue{Code: CodeContentConflict, Summary: err.Error()})
 		}
 	}
 	if ctx.Mode == model.ModeExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {

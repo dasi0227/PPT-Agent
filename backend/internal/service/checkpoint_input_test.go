@@ -9,7 +9,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func TestRestoredDOMChecksBytesAndMaterializationBeforeResend(t *testing.T) {
+func TestRestoredDOMChecksCurrentHTMLBeforeResend(t *testing.T) {
 	p := model.Project{WorkDir: t.TempDir()}
 	path := filepath.Join(p.WorkDir, model.SlideHTMLPath("sli_one"))
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -19,17 +19,12 @@ func TestRestoredDOMChecksBytesAndMaterializationBeforeResend(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0644); err != nil {
 		t.Fatal(err)
 	}
-	selection := model.DOMSelection{SlideID: "sli_one", HTMLRevision: 2, HTMLHash: spec.ContentHash(raw)}
-	record := &spec.MaterializationRecord{Artifact: spec.MaterializationArtifact{Revision: 2, Hash: selection.HTMLHash}}
-	snapshot := spec.ProjectContentSnapshot{SlidesByID: map[string]spec.SlideContent{"sli_one": {Materialization: record}}}
+	selection := model.DOMSelection{SlideID: "sli_one", HTMLHash: spec.ContentHash(raw)}
+	snapshot := spec.ProjectContentSnapshot{SlidesByID: map[string]spec.SlideContent{"sli_one": {HTMLHash: selection.HTMLHash}}}
 	if err := validateRestoredDOM(p, snapshot, []model.DOMSelection{selection}); err != nil {
 		t.Fatal(err)
 	}
-	record.Artifact.Revision++
-	if err := validateRestoredDOM(p, snapshot, []model.DOMSelection{selection}); err == nil {
-		t.Fatal("stale revision accepted")
-	}
-	record.Artifact.Revision--
+
 	if err := os.WriteFile(path, []byte("<h1>changed</h1>"), 0644); err != nil {
 		t.Fatal(err)
 	}

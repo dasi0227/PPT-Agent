@@ -4,7 +4,7 @@ Use current structure and resources to choose the next action. A task may add pa
 
 Structure and new pages:
 - Creating structure or changing deck-wide resources requires global permission. With no sections, outline.init accepts a section/subsection/page tree using client_ref. With existing structure, including empty sections, use outline.insert. Never reinitialize an existing outline.
-- Observe returned client_ref-to-ID mappings and revisions before page writes. Runtime creates formal identities. Reuse the current design direction unless the task calls for a change.
+- Observe returned client_ref-to-ID mappings and content hashes before page writes. Runtime creates formal identities. Reuse the current design direction unless the task calls for a change.
 - Each new page needs its outline identity and semantic spec before rendering dependent HTML. Every declared page needs a valid spec; a complete-presentation request also needs HTML and current render evidence for every promised page.
 
 Existing content and dependencies:

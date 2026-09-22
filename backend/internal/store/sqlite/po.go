@@ -470,10 +470,9 @@ type semanticReviewPO struct {
 func (semanticReviewPO) TableName() string { return "semantic_reviews" }
 
 type slidePO struct {
-	ID             string `gorm:"column:id;primaryKey"`
-	ProjectID      string `gorm:"column:project_id"`
-	CurrentVersion int    `gorm:"column:current_version"`
-	LastExportAt   *int64 `gorm:"column:last_export_at"`
+	ID           string `gorm:"column:id;primaryKey"`
+	ProjectID    string `gorm:"column:project_id"`
+	LastExportAt *int64 `gorm:"column:last_export_at"`
 }
 
 func (slidePO) TableName() string { return "slides" }
@@ -482,15 +481,13 @@ func (slidePO) TableName() string { return "slides" }
 func (s slidePO) toModel() model.Slide {
 	return model.Slide{
 		ID: s.ID, ProjectID: s.ProjectID,
-		CurrentVersion: s.CurrentVersion,
-		LastExportAt:   s.LastExportAt,
+		LastExportAt: s.LastExportAt,
 	}
 }
 
 func slideToPO(m model.Slide) slidePO {
 	return slidePO{
 		ID: m.ID, ProjectID: m.ProjectID,
-		CurrentVersion: m.CurrentVersion,
-		LastExportAt:   m.LastExportAt,
+		LastExportAt: m.LastExportAt,
 	}
 }

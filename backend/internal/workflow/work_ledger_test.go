@@ -8,7 +8,7 @@ import (
 
 func TestWorkLedgerTracksOnlyExplicitPlanTargets(t *testing.T) {
 	scope := model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCustomPages, "sli_one", "sli_two")
-	plan := &Plan{Steps: []PlanStep{{ID: "step_one", Title: "修改第一页", Status: PlanStepPending, TargetSlideIDs: []string{"sli_one"}}}}
+	plan := &Plan{ApprovalID: "approval-test", Steps: []PlanStep{{ID: "step_one", Title: "修改第一页", Status: PlanStepPending, TargetSlideIDs: []string{"sli_one"}}}}
 	ledger := NewWorkLedger()
 	if err := ledger.SyncPlan(plan, scope); err != nil {
 		t.Fatal(err)
@@ -28,7 +28,7 @@ func TestWorkLedgerTracksOnlyExplicitPlanTargets(t *testing.T) {
 
 func TestWorkLedgerRejectsPlanTargetsOutsideScope(t *testing.T) {
 	scope := model.NewRunScope(model.ScopeObjectHTML, model.ScopeCurrentPage, "sli_one")
-	plan := &Plan{Steps: []PlanStep{
+	plan := &Plan{ApprovalID: "approval-test", Steps: []PlanStep{
 		{ID: "step_one", Title: "范围内", Status: PlanStepPending, TargetSlideIDs: []string{"sli_one"}},
 		{ID: "step_two", Title: "越界", Status: PlanStepPending, TargetSlideIDs: []string{"sli_two"}},
 	}}

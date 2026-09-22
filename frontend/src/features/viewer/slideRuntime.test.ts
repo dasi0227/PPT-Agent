@@ -86,7 +86,7 @@ describe('slide runtime', () => {
     const dom = createRuntime();
     const { window } = dom;
     send(window, { type: 'updateDeck', slides: [{ id: 's1', html: '<h1>one</h1>', frame: frame('s1', 1) }], index: 0 });
-    send(window, { type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'element', html_revision: 1, html_hash: 'sha256:a' });
+    send(window, { type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'element', html_hash: 'sha256:a' });
     send(window, { type: 'renderDraftSelections', session_id: 'session-one', slide_id: 's1', selections: [{ selection_id: 'sel_one', marker_no: 3, status: 'active', rect: { x: 10, y: 20, width: 100, height: 40 } }] });
     expect(window.document.querySelector('.selection-box span')?.textContent).toBe('3');
 
@@ -105,7 +105,7 @@ describe('slide runtime', () => {
       index: 0,
     });
     const firstFrame = window.document.querySelector('[data-slide-frame]') as HTMLElement;
-    send(window, { type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'element', html_revision: 1, html_hash: 'sha256:a' });
+    send(window, { type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'element', html_hash: 'sha256:a' });
 
     const updatedFrame = {
       ...frame('s1', 1),

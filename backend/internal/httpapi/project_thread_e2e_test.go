@@ -138,7 +138,7 @@ func TestCanonicalMutationHTTPReturnsAuthoritativeSnapshot(t *testing.T) {
 		t.Fatalf("runtime IDs=%v", created)
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.update","expected_revision":2,"node_id":"`+sectionID+`","changes":{"title":"新章节"}}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.update","expected_hash":"`+mutation["content"].(map[string]any)["hashes"].(map[string]any)["outline"].(string)+`","node_id":"`+sectionID+`","changes":{"title":"新章节"}}`)
 	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"title":"新章节"`) {
 		t.Fatalf("update outline: %d %s", resp.Code, resp.Body.String())
 	}
@@ -359,7 +359,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	}
 	var view map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &view)
-	if view["outline"].(map[string]any)["version"] != "4.0" || view["manifest"].(map[string]any)["version"] != "4.0" {
+	if view["outline"].(map[string]any)["version"] != "5.0" || view["manifest"].(map[string]any)["version"] != "5.0" {
 		t.Fatalf("unexpected spec response: %s", resp.Body.String())
 	}
 

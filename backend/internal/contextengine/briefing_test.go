@@ -27,7 +27,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 			llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent("可以保持，只调整信息层级。")},
 		)
 	}
-	selection := model.DOMSelection{SelectionID: "sel_1", SlideID: "sli_aaaaaa", Comment: "放大结论标题", HTMLRevision: 2,
+	selection := model.DOMSelection{SelectionID: "sel_1", SlideID: "sli_aaaaaa", Comment: "放大结论标题",
 		DOMTargets: []model.DOMTarget{{TextSummary: "投资结论", OuterHTML: "PRIVATE_LARGE_HTML"}},
 	}
 	messages = append(messages, llm.Message{Role: llm.RoleUser, Content: []llm.ContentPart{

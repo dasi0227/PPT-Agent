@@ -91,10 +91,10 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	put(t, p, "threads/t1/model.jsonl", "before first")
 	put(t, p, ".git/HEAD", "real git")
 	put(t, p, "versions/legacy.html", "untouched legacy")
-	must(t, m.Store.InsertSlide(ctx, model.Slide{ID: "slide", ProjectID: p.ID, CurrentVersion: 1}))
+	must(t, m.Store.InsertSlide(ctx, model.Slide{ID: "slide", ProjectID: p.ID}))
 	cp(t, m, p, "cp1", model.RunDone)
 	put(t, p, "outline.json", "manual before cp2")
-	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp1", OperationID: "html", RequestHash: "hash", Slides: []model.Slide{{ID: "slide", ProjectID: p.ID, CurrentVersion: 2}}}))
+	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp1", OperationID: "html", RequestHash: "hash", Slides: []model.Slide{{ID: "slide", ProjectID: p.ID}}}))
 	cp(t, m, p, "cp2", model.RunFailed)
 	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp2", OperationID: "delete", RequestHash: "hash", DeletedSlideIDs: []string{"slide"}}))
 	put(t, p, "threads/t1/model.jsonl", "future compacted summary")
@@ -122,8 +122,8 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	}
 	s := switchTo(t, m, p, "cp2", "rollback2")
 	slide, err := m.Store.GetSlide(ctx, "slide")
-	if err != nil || slide.CurrentVersion != 2 {
-		t.Fatalf("restored counter: %+v %v", slide, err)
+	if err != nil || slide.ProjectID != p.ID {
+		t.Fatalf("restored identity: %+v %v", slide, err)
 	}
 	deleted, err := m.Store.IsSlideDeleted(ctx, p.ID, "slide")
 	if err != nil || deleted {
@@ -161,8 +161,8 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	}
 	s = switchTo(t, m, p, "cp1", "rollback1")
 	slide, err = m.Store.GetSlide(ctx, "slide")
-	if err != nil || slide.CurrentVersion != 1 {
-		t.Fatalf("initial counter: %+v %v", slide, err)
+	if err != nil || slide.ProjectID != p.ID {
+		t.Fatalf("initial identity: %+v %v", slide, err)
 	}
 	if _, err := m.Store.GetIdempotency(ctx, "artifact_commit", "cp1", "html"); err == nil {
 		t.Fatal("continuous rollback retained receipt")

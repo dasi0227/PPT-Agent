@@ -132,7 +132,7 @@ func TestSetThemePersistsThemeIDToProjectAndDesign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Theme != "tokyo-night" || updated.Theme == "Tokyo Night" || updated.DesignRevision != 2 {
+	if updated.Theme != "tokyo-night" || updated.Theme == "Tokyo Night" {
 		t.Fatalf("updated project=%+v", updated)
 	}
 	stored, err := st.GetProject(ctx, project.ID)
@@ -146,7 +146,7 @@ func TestSetThemePersistsThemeIDToProjectAndDesign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if refreshed.Theme != "tokyo-night" || refreshed.DesignRevision != 2 {
+	if refreshed.Theme != "tokyo-night" {
 		t.Fatalf("refreshed project=%+v", refreshed)
 	}
 	raw, err := os.ReadFile(filepath.Join(project.WorkDir, "design.json"))
@@ -157,7 +157,7 @@ func TestSetThemePersistsThemeIDToProjectAndDesign(t *testing.T) {
 	if err := json.Unmarshal(raw, &design); err != nil {
 		t.Fatal(err)
 	}
-	if design.Theme != "tokyo-night" || design.Revision != 2 {
+	if design.Theme != "tokyo-night" {
 		t.Fatalf("persisted design=%+v", design)
 	}
 }

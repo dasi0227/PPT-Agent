@@ -34,13 +34,14 @@ type ErrorDefinition struct {
 }
 
 var errorDefinitions = map[string]ErrorDefinition{
+	"RUN_REVISION_CONFLICT":          {Code: "RUN_REVISION_CONFLICT", Category: ErrorConflict, SafeMessage: "任务范围已更新，请重试。", ModelMessage: "Read the current RunScope before retrying the control input.", HTTPStatus: 409},
 	"BAD_REQUEST":                    {Code: "BAD_REQUEST", Category: ErrorUserActionRequired, SafeMessage: "请求内容不合法。", ModelMessage: "Correct the request and try again.", HTTPStatus: 400},
 	"NOT_FOUND":                      {Code: "NOT_FOUND", Category: ErrorUserActionRequired, SafeMessage: "未找到请求的内容。", ModelMessage: "Choose a resource that exists in the current project.", HTTPStatus: 404},
 	"CONFLICT":                       {Code: "CONFLICT", Category: ErrorConflict, SafeMessage: "请求与当前状态冲突，请刷新后重试。", ModelMessage: "Refresh authoritative state before the next action.", HTTPStatus: 409},
 	"VALIDATION_FAILED":              {Code: "VALIDATION_FAILED", Category: ErrorAgentRepairable, SafeMessage: "内容未通过校验。", ModelMessage: "Correct the reported validation issue before retrying.", HTTPStatus: 422},
 	"RUN_NOT_FOUND":                  {Code: "RUN_NOT_FOUND", Category: ErrorUserActionRequired, SafeMessage: "未找到当前任务。", ModelMessage: "The requested run does not exist.", HTTPStatus: 404},
 	"SLIDE_NOT_FOUND":                {Code: "SLIDE_NOT_FOUND", Category: ErrorUserActionRequired, SafeMessage: "未找到指定页面。", ModelMessage: "Choose a slide_id that belongs to the current project.", HTTPStatus: 400},
-	"SPEC_REVISION_CONFLICT":         {Code: "SPEC_REVISION_CONFLICT", Category: ErrorConflict, SafeMessage: "设计稿已被更新，请刷新后重试。", ModelMessage: "Read the current spec revision before applying another patch.", HTTPStatus: 409},
+	"SPEC_CONTENT_CONFLICT":          {Code: "SPEC_CONTENT_CONFLICT", Category: ErrorConflict, SafeMessage: "设计稿已被更新，请刷新后重试。", ModelMessage: "Read the current spec content and hash before applying another patch.", HTTPStatus: 409},
 	"SPEC_REFERENCE_BROKEN":          {Code: "SPEC_REFERENCE_BROKEN", Category: ErrorAgentRepairable, SafeMessage: "设计稿引用了不存在的内容。", ModelMessage: "Correct the broken slide or asset reference.", HTTPStatus: 422},
 	"SPEC_INVALID":                   {Code: "SPEC_INVALID", Category: ErrorAgentRepairable, SafeMessage: "设计稿未通过格式检查。", ModelMessage: "Correct the reported spec validation issue.", HTTPStatus: 422},
 	"INVALID_SCOPE":                  {Code: "INVALID_SCOPE", Category: ErrorUserActionRequired, SafeMessage: "任务范围不合法。", ModelMessage: "Correct scope.object and scope.selection using stable slide or section IDs.", HTTPStatus: 422},
@@ -86,8 +87,8 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"PATCH_PATH_DENIED":              {Code: "PATCH_PATH_DENIED", Category: ErrorAgentRepairable, SafeMessage: "PPT 修改位置不允许写入。", ModelMessage: "Choose a writable JSON Pointer disclosed by the mutate_ppt schema.", HTTPStatus: 422},
 	"EDIT_ANCHOR_NOT_FOUND":          {Code: "EDIT_ANCHOR_NOT_FOUND", Category: ErrorAgentRepairable, SafeMessage: "未找到要替换的内容。", ModelMessage: "Call read_ppt and use an exact current anchor.", HTTPStatus: 422},
 	"EDIT_ANCHOR_AMBIGUOUS":          {Code: "EDIT_ANCHOR_AMBIGUOUS", Category: ErrorAgentRepairable, SafeMessage: "要替换的内容不唯一。", ModelMessage: "Call read_ppt and choose a longer unique anchor.", HTTPStatus: 422},
-	"REVISION_CONFLICT":              {Code: "REVISION_CONFLICT", Category: ErrorConflict, SafeMessage: "PPT 已被其他操作更新，请重新读取后再试。", ModelMessage: "Read the current Resource revision before making another edit.", HTTPStatus: 409},
-	"RUN_REVISION_CONFLICT":          {Code: "RUN_REVISION_CONFLICT", Category: ErrorConflict, SafeMessage: "PPT 已被其他操作更新，请重新读取后再试。", ModelMessage: "Read the current Resource revision before making another edit.", HTTPStatus: 409},
+	"CONTENT_CONFLICT":               {Code: "CONTENT_CONFLICT", Category: ErrorConflict, SafeMessage: "PPT 已被其他操作更新，请重新读取后再试。", ModelMessage: "Read the current Resource content and hash before making another edit.", HTTPStatus: 409},
+	"RUN_CONTENT_CONFLICT":           {Code: "RUN_CONTENT_CONFLICT", Category: ErrorConflict, SafeMessage: "PPT 已被其他操作更新，请重新读取后再试。", ModelMessage: "Read the current Resource content and hash before making another edit.", HTTPStatus: 409},
 	"RENDER_FAILED":                  {Code: "RENDER_FAILED", Category: ErrorAgentRepairable, SafeMessage: "页面视觉检查未通过。", ModelMessage: "Fix the reported HTML or render diagnostics and render again.", HTTPStatus: 422},
 	"TARGET_ALREADY_EXISTS":          {Code: "TARGET_ALREADY_EXISTS", Category: ErrorAgentRepairable, SafeMessage: "目标内容已经存在。", ModelMessage: "Read the current Resource and edit it instead of creating it again.", HTTPStatus: 409},
 	"RUN_SESSION_REQUIRED":           {Code: "RUN_SESSION_REQUIRED", Category: ErrorAgentRepairable, SafeMessage: "当前操作需要活跃的写入会话。", ModelMessage: "Perform the write inside the active run session.", HTTPStatus: 422},

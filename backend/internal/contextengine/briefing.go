@@ -78,7 +78,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 		slide, ok := slides[loc.Slide.SlideID]
 		summary := slideSummary(loc, slide, ok)
 		if req.Kind == model.BriefingHandoff {
-			summary.State, _ = loadMaterializationState(project.WorkDir, summary.ID, deck, outline, slide, design)
+			summary.State = loadMaterializationState(project.WorkDir, summary.ID, deck, outline, slide, design)
 		}
 		pack.Resources = append(pack.Resources, BriefingResource{
 			Ref: model.SlideSpecPath(summary.ID), Content: string(stableJSON(summary)),
@@ -192,7 +192,7 @@ func briefingSelectionReference(text string) string {
 	}
 	return "<selected_dom_reference>" + string(stableJSON(map[string]any{
 		"selection_id": selection.SelectionID, "marker_no": selection.MarkerNo, "comment": selection.Comment,
-		"slide_id": selection.SlideID, "html_revision": selection.HTMLRevision, "status": selection.Status,
+		"slide_id": selection.SlideID, "status": selection.Status,
 		"dom_targets": targets, "chrome_targets": selection.ChromeTargets,
 	})) + "</selected_dom_reference>"
 }

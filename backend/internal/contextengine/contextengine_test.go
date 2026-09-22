@@ -68,12 +68,12 @@ func testAssembler(store ContextStore, registry *RefRegistry) *ContextAssembler 
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
-	deck := pptspec.Manifest{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Positioning: "thesis", Requirements: []string{}, Prohibitions: []string{}, Canvas: pptspec.CanvasSettings{AspectRatio: "16:9"}, Numbering: pptspec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 2}
+	deck := pptspec.Manifest{SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Positioning: "thesis", Requirements: []string{}, Prohibitions: []string{}, Canvas: pptspec.CanvasSettings{AspectRatio: "16:9"}, Numbering: pptspec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 2}
 	writeJSON(t, filepath.Join(dir, "manifest.json"), deck)
-	outline := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, Revision: 2, ProjectID: "p1", Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Title: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Title: "Three", Role: "evidence"}}}}}}, CreatedAt: 1, UpdatedAt: 2}
+	outline := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Title: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Title: "Three", Role: "evidence"}}}}}}, CreatedAt: 1, UpdatedAt: 2}
 	writeJSON(t, filepath.Join(dir, "outline.json"), outline)
 	design := pptspec.Design{
-		SchemaVersion: pptspec.SchemaVersion, Revision: 3, ProjectID: "p1", CreatedAt: 1, UpdatedAt: 2,
+		SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", CreatedAt: 1, UpdatedAt: 2,
 		Theme:     "swiss-modern",
 		Direction: "test direction",
 		Chrome: []pptspec.ChromeItem{
@@ -82,10 +82,10 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	}
 	writeJSON(t, filepath.Join(dir, "design.json"), design)
 	slides := map[string]model.Slide{}
-	for i, loc := range pptspec.FlattenOutline(outline) {
+	for _, loc := range pptspec.FlattenOutline(outline) {
 		id := loc.Slide.SlideID
 		bp := pptspec.SlideSpec{
-			SchemaVersion: pptspec.SchemaVersion, Revision: i + 1, ProjectID: "p1", SlideID: id,
+			SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", SlideID: id,
 			KeyMessage: "Message " + id,
 			Elements: []pptspec.Element{
 				{Type: "chart", Intent: "Show growth"},
@@ -98,7 +98,7 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 		if err := os.WriteFile(filepath.Join(dir, "slides", id, "index.html"), []byte(html), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		slides[id] = model.Slide{ID: id, ProjectID: "p1", CurrentVersion: 4}
+		slides[id] = model.Slide{ID: id, ProjectID: "p1"}
 	}
 	return model.Project{ID: "p1", Title: "Deck", WorkDir: dir}, &fakeStore{slides: slides}
 }
@@ -304,7 +304,7 @@ func TestPPTContextFailsClearlyWhenThemeCannotLoad(t *testing.T) {
 	}
 }
 
-func TestRevisionChangeChangesPackHash(t *testing.T) {
+func TestContentChangeChangesPackHash(t *testing.T) {
 	project, store := fixture(t)
 	assembler := testAssembler(store, nil)
 	req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ScopeObjectSpec, model.ScopeCurrentPage), Budget: DefaultBudget()}
@@ -318,14 +318,14 @@ func TestRevisionChangeChangesPackHash(t *testing.T) {
 	if err := json.Unmarshal(raw, &slide); err != nil {
 		t.Fatal(err)
 	}
-	slide.Revision++
+	slide.KeyMessage += " changed"
 	writeJSON(t, path, slide)
 	after, err := assembler.Assemble(context.Background(), req, project)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if before.Manifest.PackHash == after.Manifest.PackHash {
-		t.Fatal("revision change did not change pack hash")
+		t.Fatal("content change did not change pack hash")
 	}
 }
 
@@ -408,27 +408,16 @@ func TestBudgetDropsOptionalSegmentsBeforeRequiredTarget(t *testing.T) {
 	}
 }
 
-func TestRefStaleAfterRevisionChange(t *testing.T) {
+func TestRefStaleAfterHTMLContentChange(t *testing.T) {
 	project, store := fixture(t)
 	registry := NewRefRegistry()
 	pack, err := testAssembler(store, registry).Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ScopeObjectPresentation, model.ScopeCurrentPage), Budget: DefaultBudget()}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeJSON(t, filepath.Join(project.WorkDir, model.SlideMaterializationPath("sli_bbbbbb")), pptspec.MaterializationRecord{
-		SchemaVersion: pptspec.SchemaVersion,
-		Artifact: pptspec.MaterializationArtifact{
-			Revision: 5,
-			Hash:     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		},
-		Source: pptspec.MaterializationSource{
-			ManifestRevision: 2, OutlineNodeHash: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-			SpecRevision: 2, DesignContentHash: pptspec.DesignContentHash(pptspec.Design{Direction: "test"}),
-			Hash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		},
-		Frame:      pptspec.MaterializationFrame{ContextHash: "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
-		RenderedAt: 2,
-	})
+	if err := os.WriteFile(filepath.Join(project.WorkDir, model.SlideHTMLPath("sli_bbbbbb")), []byte("<html><body>Changed</body></html>"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	_, err = (&ContextRefResolver{Registry: registry}).Read(context.Background(), RefReadRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", RefID: pack.Target.SlideHTMLRef.ID, Detail: DetailFull, RemainingBudget: 100000})
 	if code(err) != CodeRefStale {
 		t.Fatalf("err=%v", err)

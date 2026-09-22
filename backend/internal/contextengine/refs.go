@@ -25,7 +25,6 @@ type ContextRef struct {
 	ThreadID        string              `json:"thread_id"`
 	ProjectID       string              `json:"project_id"`
 	TargetID        string              `json:"target_id"`
-	Revision        int                 `json:"revision"`
 	ContentHash     string              `json:"content_hash"`
 	Summary         string              `json:"summary"`
 	AvailableLevels []DetailLevel       `json:"available_levels"`
@@ -45,7 +44,7 @@ func (e *RefError) Error() string { return e.Code + ": " + e.Message }
 
 type refEntry struct {
 	ref  ContextRef
-	load func(context.Context, DetailLevel) ([]byte, int, string, error)
+	load func(context.Context, DetailLevel) ([]byte, string, error)
 }
 
 type RefRegistry struct {
@@ -55,7 +54,7 @@ type RefRegistry struct {
 
 func NewRefRegistry() *RefRegistry { return &RefRegistry{entries: map[string]refEntry{}} }
 
-func (r *RefRegistry) Register(ref ContextRef, load func(context.Context, DetailLevel) ([]byte, int, string, error)) {
+func (r *RefRegistry) Register(ref ContextRef, load func(context.Context, DetailLevel) ([]byte, string, error)) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.entries[ref.ID] = refEntry{ref: ref, load: load}
@@ -86,7 +85,6 @@ type RefReadRequest struct {
 type RefReadResult struct {
 	Content         string `json:"content"`
 	EstimatedTokens int    `json:"estimated_tokens"`
-	Revision        int    `json:"revision"`
 	ContentHash     string `json:"content_hash"`
 }
 
@@ -115,7 +113,7 @@ func (r ContextRefResolver) Read(ctx context.Context, req RefReadRequest) (RefRe
 	if entry.ref.EstimatedTokens[req.Detail] > req.RemainingBudget {
 		return RefReadResult{}, &RefError{Code: CodeBudgetExceeded, Message: "remaining context budget is insufficient"}
 	}
-	raw, revision, hash, err := entry.load(ctx, req.Detail)
+	raw, hash, err := entry.load(ctx, req.Detail)
 	if err != nil {
 		var re *RefError
 		if errors.As(err, &re) {
@@ -124,8 +122,8 @@ func (r ContextRefResolver) Read(ctx context.Context, req RefReadRequest) (RefRe
 		return RefReadResult{}, err
 	}
 	got := fmt.Sprintf("%x", sha256.Sum256(raw))
-	if revision != entry.ref.Revision || hash != entry.ref.ContentHash || (req.Detail == DetailFull && got != hash) {
-		return RefReadResult{}, &RefError{Code: CodeRefStale, Message: "source revision or hash changed"}
+	if hash != entry.ref.ContentHash || (req.Detail == DetailFull && got != hash) {
+		return RefReadResult{}, &RefError{Code: CodeRefStale, Message: "source content changed"}
 	}
-	return RefReadResult{Content: string(raw), EstimatedTokens: entry.ref.EstimatedTokens[req.Detail], Revision: revision, ContentHash: hash}, nil
+	return RefReadResult{Content: string(raw), EstimatedTokens: entry.ref.EstimatedTokens[req.Detail], ContentHash: hash}, nil
 }

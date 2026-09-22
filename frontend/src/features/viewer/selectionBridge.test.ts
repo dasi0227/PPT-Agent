@@ -24,7 +24,7 @@ function enterMode(window: JSDOM['window'], mode: 'element' | 'region') {
     source: window as unknown as Window,
     data: {
       bridge: 'ppt-dom-selection-v1', type: 'innerSetSelectionMode', session_id: 'session-one',
-      slide_id: 'sli_one', mode, html_revision: 2, html_hash: 'sha256:one',
+      slide_id: 'sli_one', mode, html_hash: 'sha256:one',
     },
   }));
 }

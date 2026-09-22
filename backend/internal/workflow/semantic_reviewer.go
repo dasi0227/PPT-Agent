@@ -71,7 +71,6 @@ type ReviewContextItem struct {
 	Kind        string      `json:"kind"`
 	Source      string      `json:"source"`
 	Target      Resource    `json:"target"`
-	Revision    int         `json:"revision"`
 	Hash        string      `json:"hash"`
 	DetailLevel DetailLevel `json:"detail_level"`
 	Summary     string      `json:"summary"`
@@ -243,7 +242,7 @@ func reviewContextItems(values []RetrievedContextItem) []ReviewContextItem {
 	for _, item := range values {
 		out = append(out, ReviewContextItem{
 			RefID: item.RefID, Kind: item.Kind, Source: item.Source, Target: item.Target,
-			Revision: item.Revision, Hash: item.Hash, DetailLevel: item.DetailLevel,
+			Hash: item.Hash, DetailLevel: item.DetailLevel,
 			Summary: item.Snippet, Reason: item.SelectionReason,
 		})
 	}

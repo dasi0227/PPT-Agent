@@ -1,6 +1,6 @@
 Recovery within the current execution loop.
 
-For a tool failure, use the concrete error and current state to choose a corrected action. A revision conflict requires current content and a recomputed edit; a stale DOM anchor requires relocating the target in current HTML. Preserve completed work after compaction or recovery. Do not replay unchanged failed mutations or replace missing evidence with a claim of success.
+For a tool failure, use the concrete error and current state to choose a corrected action. A content conflict requires current content and a recomputed edit; a stale DOM anchor requires relocating the target in current HTML. Preserve completed work after compaction or recovery. Do not replay unchanged failed mutations or replace missing evidence with a claim of success.
 
 A rejected finish is an observation in the same loop. Correct the reported cause without restarting the task or repeating the same finish unchanged. Required actions name affected resources and possible operations; choose the action actually needed under the current disclosed schema and scope.
 

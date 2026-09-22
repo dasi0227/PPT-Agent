@@ -37,6 +37,10 @@ func (b *Buffer) Delete(path string) error {
 	b.deletes[path] = true
 	return nil
 }
+func (b *Buffer) HasChanges() bool {
+	return len(b.writes) > 0 || len(b.deletes) > 0
+}
+
 func (b *Buffer) Commit() error {
 	paths := make([]string, 0, len(b.writes))
 	for path := range b.writes {

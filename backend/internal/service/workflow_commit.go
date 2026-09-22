@@ -99,37 +99,25 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			c.project.WorkDir,
 			filepath.FromSlash(model.SlideMaterializationPath(id)),
 		)
-		currentMaterialization, materializationErr := spec.ReadMaterialization(materializationPath)
-		expectedHTMLRevision := 1
-		if materializationErr == nil {
-			expectedHTMLRevision = currentMaterialization.Artifact.Revision
-			if currentMaterialization.Artifact.Hash != spec.ContentHash(htmlRaw) {
-				expectedHTMLRevision++
-			}
-		}
 		if hasProof {
 			artifactHash := spec.ContentHash(htmlRaw)[len("sha256:"):]
 			nodeHash := spec.SemanticSlideNodeHash(outline, id)
 			sourceHash := spec.SourceHash(manifestRaw, nodeHash, specRaw, designRaw)
 			if proof.ArtifactHash != artifactHash ||
 				proof.SourceHash != sourceHash ||
-				proof.HTMLRevision != expectedHTMLRevision ||
-				proof.ManifestRevision != manifest.Revision || proof.OutlineNodeHash != nodeHash ||
-				proof.SpecRevision != semantic.Revision || proof.DesignContentHash != spec.DesignContentHash(design) || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id) {
+				proof.ManifestHash != spec.ResourceHash(manifest) || proof.OutlineNodeHash != nodeHash ||
+				proof.SpecHash != spec.ResourceHash(semantic) || proof.DesignContentHash != spec.DesignContentHash(design) || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id) {
 				return fmt.Errorf("stale materialization proof for %s", id)
 			}
-		}
-		if htmlChanged {
-			meta.CurrentVersion++
 		}
 		if hasProof {
 			record, err := spec.ReadMaterialization(materializationPath)
 			if err != nil {
 				return err
 			}
-			if record.Artifact.Revision != proof.HTMLRevision || record.Artifact.Hash != "sha256:"+proof.ArtifactHash ||
-				record.Source.ManifestRevision != proof.ManifestRevision || record.Source.OutlineNodeHash != proof.OutlineNodeHash ||
-				record.Source.SpecRevision != proof.SpecRevision || record.Source.DesignContentHash != proof.DesignContentHash ||
+			if record.Artifact.Hash != "sha256:"+proof.ArtifactHash ||
+				record.Source.ManifestHash != proof.ManifestHash || record.Source.OutlineNodeHash != proof.OutlineNodeHash ||
+				record.Source.SpecHash != proof.SpecHash || record.Source.DesignContentHash != proof.DesignContentHash ||
 				record.Source.Hash != proof.SourceHash || record.Frame.ContextHash != proof.FrameContextHash {
 				return fmt.Errorf("materialization record does not match proof for %s", id)
 			}

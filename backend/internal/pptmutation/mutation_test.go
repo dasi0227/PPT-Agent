@@ -29,9 +29,9 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	t.Helper()
 	workspace := memoryWorkspace{}
 	write := func(path string, value any) { raw, _ := json.Marshal(value); workspace[path] = raw }
-	write("outline.json", spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 0, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1})
-	write("manifest.json", spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1})
-	write("design.json", spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1})
+	write("outline.json", spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1})
+	write("manifest.json", spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1})
+	write("design.json", spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1})
 	sequence := 0
 	service := &Service{Workspace: workspace, ProjectID: "pro_aaaaaa", Now: func() int64 { return 2 }, NewID: func(prefix string) string { sequence++; return fmt.Sprintf("%s_%06d", prefix, sequence) }, ValidateHTML: func(raw []byte) error {
 		if len(raw) == 0 {
@@ -155,7 +155,7 @@ func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 
 func TestDeckPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	if _, err := service.Apply(Request{Op: "manifest.patch", ExpectedRevision: 1, Patch: []Patch{{Op: "add", Path: "/requirements/-", Value: "必须包含案例"}}}); err != nil {
+	if _, err := service.Apply(Request{Op: "manifest.patch", Patch: []Patch{{Op: "add", Path: "/requirements/-", Value: "必须包含案例"}}}); err != nil {
 		t.Fatal(err)
 	}
 	var deck spec.Manifest
@@ -163,7 +163,7 @@ func TestDeckPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
 	if err := json.Unmarshal(raw, &deck); err != nil {
 		t.Fatal(err)
 	}
-	if deck.Revision != 2 || len(deck.Requirements) != 1 || deck.Requirements[0] != "必须包含案例" {
+	if len(deck.Requirements) != 1 || deck.Requirements[0] != "必须包含案例" {
 		t.Fatalf("deck=%+v", deck)
 	}
 }
@@ -180,5 +180,29 @@ func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticPageNumber(t *testing.T) {
 	}
 	if _, err := service.Apply(Request{Op: "slide.html.write", SlideID: id, HTML: `<main data-page-number="1"></main>`}); err == nil {
 		t.Fatal("static page number must fail")
+	}
+}
+
+func TestContentHashPreconditionAndNoop(t *testing.T) {
+	service, workspace := mutationFixture(t)
+	original := string(workspace["manifest.json"])
+	hash := spec.ResourceBytesHash([]byte(original))
+	request := Request{Op: "manifest.patch", ExpectedHash: hash, Patch: []Patch{{Op: "replace", Path: "/title", Value: "Deck"}}}
+	result, err := service.Apply(request)
+	if err != nil || result.Hashes["manifest"] != hash || len(result.InvalidatedSlideIDs) != 0 || string(workspace["manifest.json"]) != original {
+		t.Fatalf("no-op changed content: %+v %v", result, err)
+	}
+	request.Patch[0].Value = "New title"
+	result, err = service.Apply(request)
+	if err != nil || result.Hashes["manifest"] == hash {
+		t.Fatalf("content change missing: %+v %v", result, err)
+	}
+	saved := string(workspace["manifest.json"])
+	request.Patch[0].Value = "Stale title"
+	if _, err = service.Apply(request); !errors.Is(err, ErrContentConflict) {
+		t.Fatalf("stale write accepted: %v", err)
+	}
+	if string(workspace["manifest.json"]) != saved {
+		t.Fatal("rejected write changed content")
 	}
 }

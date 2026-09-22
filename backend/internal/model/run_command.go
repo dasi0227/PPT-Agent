@@ -391,10 +391,3 @@ const (
 	MaterializationDesignStale     MaterializationState = "design_stale"
 	MaterializationUnknown         MaterializationState = "unknown"
 )
-
-type MaterializationRevisions struct {
-	SlideHTML int `json:"slide_html"`
-	Outline   int `json:"source_outline"`
-	SlideSpec int `json:"source_spec"`
-	Design    int `json:"source_design"`
-}

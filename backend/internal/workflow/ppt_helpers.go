@@ -245,14 +245,7 @@ func currentMaterializationProof(pack contextengine.ContextPack, projectDir stri
 		return MaterializationProof{}, errors.New("render source is invalid")
 	}
 	nodeHash := spec.SemanticSlideNodeHash(outline, slideID)
-	revision := pack.Revisions.SlideHTML[slideID]
-	if tx != nil && tx.HasChange(slideHTMLRef(slideID)) {
-		revision++
-	}
-	if revision < 1 {
-		revision = 1
-	}
-	return MaterializationProof{SlideID: slideID, HTMLRevision: revision, ManifestRevision: deck.Revision, OutlineNodeHash: nodeHash, SpecRevision: slide.Revision, DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID)}, nil
+	return MaterializationProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID)}, nil
 }
 func MaterializationSourceHash(deckRaw []byte, nodeHash string, specRaw, designRaw []byte) string {
 	return spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw)
@@ -272,13 +265,6 @@ func newEvidence(kind string, target Resource, sourceHash string, values ...map[
 		data = values[0]
 	}
 	return Evidence{ID: fmt.Sprintf("evidence_%d_%s", time.Now().UnixNano(), kind), Kind: kind, Target: target, SourceHash: sourceHash, ProducedAt: time.Now().Unix(), Data: data}
-}
-func revisionFromModel(raw []byte) int {
-	var h struct {
-		Revision int `json:"revision"`
-	}
-	_ = json.Unmarshal(raw, &h)
-	return h.Revision
 }
 func uniqueTargets(values []Resource) []Resource {
 	out := []Resource{}

@@ -21,10 +21,9 @@ type Evidence struct {
 // exactly these persisted inputs. It is never projected into public events.
 type MaterializationProof struct {
 	SlideID           string
-	HTMLRevision      int
-	ManifestRevision  int
+	ManifestHash      string
 	OutlineNodeHash   string
-	SpecRevision      int
+	SpecHash          string
 	DesignContentHash string
 	ArtifactHash      string
 	SourceHash        string

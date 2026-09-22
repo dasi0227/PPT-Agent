@@ -1,6 +1,6 @@
 package spec
 
-const SchemaVersion = "4.0"
+const SchemaVersion = "5.0"
 
 type SlideRole string
 
@@ -38,7 +38,6 @@ func SlideRoleValues() []SlideRole {
 
 type Manifest struct {
 	SchemaVersion string          `json:"version"`
-	Revision      int             `json:"revision"`
 	ProjectID     string          `json:"project_id"`
 	Title         string          `json:"title"`
 	Goal          string          `json:"goal"`
@@ -63,7 +62,6 @@ type NumberingPolicy struct {
 
 type Outline struct {
 	SchemaVersion string    `json:"version"`
-	Revision      int       `json:"revision"`
 	ProjectID     string    `json:"project_id"`
 	Sections      []Section `json:"sections"`
 	CreatedAt     int64     `json:"created_at"`
@@ -90,7 +88,6 @@ type SlideNode struct {
 
 type SlideSpec struct {
 	SchemaVersion string    `json:"version"`
-	Revision      int       `json:"revision"`
 	ProjectID     string    `json:"project_id"`
 	SlideID       string    `json:"slide_id"`
 	KeyMessage    string    `json:"key_message"`
@@ -106,7 +103,6 @@ type Element struct {
 
 type Design struct {
 	SchemaVersion string       `json:"version"`
-	Revision      int          `json:"revision"`
 	ProjectID     string       `json:"project_id"`
 	Theme         string       `json:"theme"`
 	Direction     string       `json:"direction"`
@@ -144,6 +140,7 @@ type RuntimeFrameNumbering struct {
 }
 
 type ProjectContentSnapshot struct {
+	Hashes     map[string]string       `json:"hashes"`
 	Manifest   Manifest                `json:"manifest"`
 	Outline    Outline                 `json:"outline"`
 	Design     Design                  `json:"design"`
@@ -153,14 +150,13 @@ type SlideContent struct {
 	SpecState       string                 `json:"spec_state"`
 	Spec            *SlideSpec             `json:"spec"`
 	HTMLState       string                 `json:"html_state"`
-	HTMLRevision    int                    `json:"html_revision"`
+	HTMLHash        string                 `json:"html_hash"`
 	Materialization *MaterializationRecord `json:"materialization"`
 }
 
 // Materialization is a read-only per-slide status derived from materialization.json.
 type Materialization struct {
-	State     string `json:"state"`
-	Revisions any    `json:"revisions"`
+	State string `json:"state"`
 }
 
 type MaterializationRecord struct {
@@ -171,13 +167,12 @@ type MaterializationRecord struct {
 	RenderedAt    int64                   `json:"rendered_at"`
 }
 type MaterializationArtifact struct {
-	Revision int    `json:"revision"`
-	Hash     string `json:"hash"`
+	Hash string `json:"hash"`
 }
 type MaterializationSource struct {
-	ManifestRevision  int    `json:"manifest_revision"`
+	ManifestHash      string `json:"manifest_hash"`
 	OutlineNodeHash   string `json:"outline_node_hash"`
-	SpecRevision      int    `json:"spec_revision"`
+	SpecHash          string `json:"spec_hash"`
 	DesignContentHash string `json:"design_content_hash"`
 	Hash              string `json:"hash"`
 }

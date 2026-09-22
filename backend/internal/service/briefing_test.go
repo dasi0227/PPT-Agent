@@ -56,7 +56,7 @@ func newBriefingFixture(t *testing.T, responses ...string) briefingFixture {
 	}
 	writePolishFixture(t, project.WorkDir)
 	if err := st.ReplaceSlides(context.Background(), project.ID, []model.Slide{{
-		ID: "sli_aaaaaa", ProjectID: project.ID, CurrentVersion: 1,
+		ID: "sli_aaaaaa", ProjectID: project.ID,
 	}}); err != nil {
 		t.Fatal(err)
 	}

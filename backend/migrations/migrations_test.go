@@ -17,7 +17,7 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 		t.Fatalf("apply migrations: %v", err)
 	}
 	cols := tableColumns(t, db, "slides")
-	for _, want := range []string{"id", "project_id", "current_version", "last_export_at"} {
+	for _, want := range []string{"id", "project_id", "last_export_at"} {
 		if !cols[want] {
 			t.Fatalf("slides table missing column %q; got %v", want, cols)
 		}

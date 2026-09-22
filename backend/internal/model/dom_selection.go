@@ -112,7 +112,6 @@ type DOMSelection struct {
 	Kind          DOMSelectionKind   `json:"kind"`
 	Comment       string             `json:"comment"`
 	SlideID       string             `json:"slide_id"`
-	HTMLRevision  int                `json:"html_revision"`
 	HTMLHash      string             `json:"html_hash"`
 	Canvas        CanvasSize         `json:"canvas"`
 	Rect          CanvasRect         `json:"rect"`
@@ -158,7 +157,7 @@ func (s DOMSelection) Validate() error {
 	if !selectionIDPattern.MatchString(s.SelectionID) || s.MarkerNo <= 0 || !slideIDPattern.MatchString(s.SlideID) ||
 		(s.Kind != DOMSelectionElement && s.Kind != DOMSelectionRegion) ||
 		(s.Status != DOMSelectionActive && s.Status != DOMSelectionContentDeleted && s.Status != DOMSelectionPageDeleted) ||
-		s.HTMLRevision < 0 || strings.TrimSpace(s.HTMLHash) == "" || s.Canvas.Width != 1920 || s.Canvas.Height != 1080 || !s.Rect.valid() {
+		strings.TrimSpace(s.HTMLHash) == "" || s.Canvas.Width != 1920 || s.Canvas.Height != 1080 || !s.Rect.valid() {
 		return ErrDOMSelectionInvalid
 	}
 	if s.Rect.Width <= 0 || s.Rect.Height <= 0 {

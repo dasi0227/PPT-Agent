@@ -5,8 +5,7 @@ import { DesignSummary } from './DesignSummary';
 describe('DesignSummary', () => {
   it('renders global visual language without slide content', () => {
     render(<DesignSummary design={{
-      version: '4.0',
-      revision: 3,
+      version: '5.0',
       project_id: 'pro_aaaaaa',
       theme: 'swiss-modern',
       direction: 'minimal geometric accent',
@@ -25,7 +24,7 @@ describe('DesignSummary', () => {
 
   it('labels an undecided visual direction instead of implying one', () => {
     render(<DesignSummary design={{
-      version: '4.0', revision: 1, project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: '待确定',
+      version: '5.0', project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: '待确定',
       chrome: [], created_at: 1, updated_at: 1,
     }} />);
 

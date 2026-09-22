@@ -138,7 +138,7 @@ func compactDOMSelections(messages []llm.Message) []llm.Message {
 			for _, target := range selection.ChromeTargets {
 				chrome = append(chrome, map[string]any{"type": target.Type, "placement": target.Placement, "text": target.Text})
 			}
-			raw, _ := json.Marshal(map[string]any{"selection_id": selection.SelectionID, "marker_no": selection.MarkerNo, "comment": selection.Comment, "status": selection.Status, "slide_id": selection.SlideID, "html_revision": selection.HTMLRevision, "dom_targets": targets, "chrome_targets": chrome})
+			raw, _ := json.Marshal(map[string]any{"selection_id": selection.SelectionID, "marker_no": selection.MarkerNo, "comment": selection.Comment, "status": selection.Status, "slide_id": selection.SlideID, "html_hash": selection.HTMLHash, "dom_targets": targets, "chrome_targets": chrome})
 			part.Text = "<selected_dom_reference>" + string(raw) + "</selected_dom_reference>"
 		}
 	}

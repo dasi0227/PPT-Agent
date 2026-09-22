@@ -34,8 +34,8 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	ctx := context.Background()
 
 	slides := []model.Slide{
-		{ID: "s0", ProjectID: "p1", CurrentVersion: 1},
-		{ID: "s1", ProjectID: "p1", CurrentVersion: 1},
+		{ID: "s0", ProjectID: "p1"},
+		{ID: "s1", ProjectID: "p1"},
 	}
 	if err := s.ReplaceSlides(ctx, "p1", slides); err != nil {
 		t.Fatalf("replace: %v", err)
@@ -44,7 +44,7 @@ func TestReplaceSlidesAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(got) != 2 || got[0].ID != "s0" || got[1].ID != "s1" || got[0].CurrentVersion != 1 {
+	if len(got) != 2 || got[0].ID != "s0" || got[1].ID != "s1" {
 		t.Fatalf("bad slides: %+v", got)
 	}
 

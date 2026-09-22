@@ -14,7 +14,7 @@
 
 - 入参只保留 `slide_id`，删除 `visual_review`。
 - 渲染仍生成 PNG、执行布局诊断并产生 materialization evidence。
-- 模型 observation 只包含诊断、`image_path`、版本等文字信息，不自动附带图片，即使诊断失败也不附带。
+- 模型 observation 只包含诊断、`image_path`、来源 hash 等文字信息，不自动附带图片，即使诊断失败也不附带。
 - 截图文件成功生成、来源校验完成后，原子更新该页最新图片索引。失败不会覆盖之前成功生成的索引。
 - UI evidence 继续保留 screenshot URL；模型 Runtime evidence 不重复注入历史截图 URL、引用或路径。
 
@@ -26,7 +26,6 @@
 {
   "slide_id": "sli_example",
   "image_path": ".runtime/renders/<run_id>/<screenshot_id>.png",
-  "revision": 3,
   "source_hash": "<HTML hash>",
   "rendered_at": 1790000000,
   "stale": false

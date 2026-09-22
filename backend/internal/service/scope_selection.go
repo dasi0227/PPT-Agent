@@ -112,11 +112,10 @@ func validateSelectionProject(snapshot spec.ProjectContentSnapshot, selections [
 func reconcileSelectionMaterialization(snapshot spec.ProjectContentSnapshot, selections []model.DOMSelection) {
 	for index := range selections {
 		content, exists := snapshot.SlidesByID[selections[index].SlideID]
-		if !exists || content.Materialization == nil {
+		if !exists || content.HTMLHash == "" {
 			continue
 		}
-		artifact := content.Materialization.Artifact
-		if artifact.Revision != selections[index].HTMLRevision || artifact.Hash != selections[index].HTMLHash {
+		if content.HTMLHash != selections[index].HTMLHash {
 			continue
 		}
 		selections[index].Status = model.DOMSelectionActive

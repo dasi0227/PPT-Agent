@@ -144,14 +144,6 @@ type RecentTurn struct {
 	RunID string `json:"run_id,omitempty"`
 }
 
-type RevisionRefs struct {
-	Manifest   int            `json:"manifest"`
-	Outline    int            `json:"outline"`
-	Design     int            `json:"design"`
-	SlideSpecs map[string]int `json:"slide_specs"`
-	SlideHTML  map[string]int `json:"slide_html"`
-}
-
 type ContextPack struct {
 	SchemaVersion        string                      `json:"schema_version"`
 	Profile              ProfileID                   `json:"profile"`
@@ -166,7 +158,6 @@ type ContextPack struct {
 	SlideHTML            SlideHTMLContext            `json:"slide_html"`
 	Components           []ComponentCandidate        `json:"components"`
 	Skills               []SkillCandidate            `json:"skills"`
-	Revisions            RevisionRefs                `json:"revisions"`
 	Manifest             ContextManifest             `json:"manifest"`
 	RefResolver          *ContextRefResolver         `json:"-"`
 }
@@ -175,7 +166,6 @@ type ContextSegment struct {
 	ID              string      `json:"id"`
 	Kind            SegmentKind `json:"kind"`
 	SourceRef       string      `json:"source_ref"`
-	Revision        int         `json:"revision"`
 	ContentHash     string      `json:"content_hash"`
 	EstimatedTokens int         `json:"estimated_tokens"`
 	Priority        int         `json:"priority"`

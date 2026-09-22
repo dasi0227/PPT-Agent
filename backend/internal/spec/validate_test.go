@@ -7,10 +7,10 @@ import (
 )
 
 func validDeck() Manifest {
-	return Manifest{SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Title: "Manifest", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: CanvasSettings{AspectRatio: "16:9"}, Numbering: NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	return Manifest{SchemaVersion: SchemaVersion, ProjectID: "pro_aaaaaa", Title: "Manifest", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: CanvasSettings{AspectRatio: "16:9"}, Numbering: NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
 }
 func validOutline() Outline {
-	return Outline{SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", CreatedAt: 1, UpdatedAt: 1, Sections: []Section{
+	return Outline{SchemaVersion: SchemaVersion, ProjectID: "pro_aaaaaa", CreatedAt: 1, UpdatedAt: 1, Sections: []Section{
 		{ID: "sec_aaaaaa", Title: "Direct", Purpose: "Open", Slides: []SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Title: "Agenda", Role: "agenda"}}, Subsections: []Subsection{}},
 		{ID: "sec_bbbbbb", Title: "Grouped", Purpose: "Explain", Slides: []SlideNode{}, Subsections: []Subsection{{ID: "sub_aaaaaa", Title: "Part", Purpose: "Develop the argument", Slides: []SlideNode{{SlideID: "sli_cccccc", Title: "Body", Role: "content"}}}}},
 	}}
@@ -47,7 +47,7 @@ func TestOutlineRejectsUnknownSlideRole(t *testing.T) {
 }
 
 func TestSlideSpecHasNoPlacementContract(t *testing.T) {
-	valid := SlideSpec{SchemaVersion: SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", SlideID: "sli_aaaaaa", KeyMessage: "Message", Elements: []Element{{Type: "text", Intent: "Explain"}}, Layout: "hero", CreatedAt: 1, UpdatedAt: 1}
+	valid := SlideSpec{SchemaVersion: SchemaVersion, ProjectID: "pro_aaaaaa", SlideID: "sli_aaaaaa", KeyMessage: "Message", Elements: []Element{{Type: "text", Intent: "Explain"}}, Layout: "hero", CreatedAt: 1, UpdatedAt: 1}
 	if err := ValidateSlideSpec(valid); err != nil {
 		t.Fatal(err)
 	}

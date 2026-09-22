@@ -10,7 +10,7 @@ interface IsolatedSlidePreviewProps {
   className?: string;
   style?: React.CSSProperties;
   selectionMode?: 'element' | 'region' | 'none';
-  selectionSlide?: { id: string; revision: number; hash: string };
+  selectionSlide?: { id: string; hash: string };
   draftSelections?: DOMSelection[];
   onSelection?: (selection: DOMSelection) => void;
   onSelectionMessage?: (message: string) => void;
@@ -55,7 +55,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
     if (!selectionSlide) return;
     iframeRef.current?.contentWindow?.postMessage({
       type: 'setSelectionMode', session_id: sessionRef.current, slide_id: selectionSlide.id,
-      mode: selectionMode, html_revision: selectionSlide.revision, html_hash: selectionSlide.hash,
+      mode: selectionMode, html_hash: selectionSlide.hash,
     }, '*');
     iframeRef.current?.contentWindow?.postMessage({
       type: 'renderDraftSelections', session_id: sessionRef.current, slide_id: selectionSlide.id,
@@ -63,7 +63,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         selection_id: item.selection_id, marker_no: item.marker_no, rect: item.rect, status: item.status,
       })),
     }, '*');
-    const stale = draftSelections.filter((item) => item.slide_id === selectionSlide.id && (item.html_revision !== selectionSlide.revision || item.html_hash !== selectionSlide.hash));
+    const stale = draftSelections.filter((item) => item.slide_id === selectionSlide.id && (item.html_hash !== selectionSlide.hash));
     if (stale.length > 0) iframeRef.current?.contentWindow?.postMessage({ type: 'probeDraftSelections', session_id: sessionRef.current, slide_id: selectionSlide.id, selections: stale }, '*');
   }, [draftSelections, selectionMode, selectionSlide]);
 

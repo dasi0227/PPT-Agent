@@ -59,6 +59,28 @@ func ContentHash(raw []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
+// ResourceHash identifies authoring content, independently of JSON formatting and timestamps.
+func ResourceHash(value any) string {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return ResourceBytesHash(raw)
+}
+func ResourceBytesHash(raw []byte) string {
+	var value map[string]any
+	if json.Unmarshal(raw, &value) != nil || value == nil {
+		return ""
+	}
+	delete(value, "created_at")
+	delete(value, "updated_at")
+	canonical, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return ContentHash(canonical)
+}
+
 func SourceHash(manifestRaw []byte, outlineNodeHash string, specRaw, designRaw []byte) string {
 	var design Design
 	_ = json.Unmarshal(designRaw, &design)
@@ -69,9 +91,9 @@ func SourceHash(manifestRaw []byte, outlineNodeHash string, specRaw, designRaw [
 		name string
 		raw  []byte
 	}{
-		{name: "manifest", raw: manifestRaw},
+		{name: "manifest", raw: []byte(ResourceBytesHash(manifestRaw))},
 		{name: "outline_node", raw: []byte(outlineNodeHash)},
-		{name: "spec", raw: specRaw},
+		{name: "spec", raw: []byte(ResourceBytesHash(specRaw))},
 		{name: "design", raw: designRaw},
 	} {
 		combined = append(combined, item.name...)
@@ -114,7 +136,7 @@ func ReadMaterialization(path string) (MaterializationRecord, error) {
 func DeriveMaterializationState(
 	hasHTML bool,
 	record *MaterializationRecord,
-	currentManifest int, currentOutlineNodeHash string, currentSpec int, currentDesignHash string,
+	currentManifestHash, currentOutlineNodeHash, currentSpecHash, currentDesignHash string,
 	artifactHash, sourceHash, frameHash string,
 ) string {
 	if !hasHTML {
@@ -123,12 +145,10 @@ func DeriveMaterializationState(
 	if record == nil {
 		return "unknown"
 	}
-	if record.Artifact.Hash != artifactHash ||
-		record.Source.ManifestRevision > currentManifest ||
-		record.Source.SpecRevision > currentSpec {
+	if record.Artifact.Hash != artifactHash {
 		return "unknown"
 	}
-	if record.Source.ManifestRevision < currentManifest || record.Source.OutlineNodeHash != currentOutlineNodeHash || record.Source.SpecRevision < currentSpec {
+	if record.Source.ManifestHash != currentManifestHash || record.Source.OutlineNodeHash != currentOutlineNodeHash || record.Source.SpecHash != currentSpecHash {
 		return "spec_stale"
 	}
 	if record.Source.DesignContentHash != currentDesignHash {

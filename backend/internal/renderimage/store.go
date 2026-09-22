@@ -31,7 +31,6 @@ type Entry struct {
 	ImagePath      string `json:"image_path"`
 	SourceHash     string `json:"source_hash"`
 	DependencyHash string `json:"dependency_hash"`
-	Revision       int    `json:"revision"`
 	RenderedAt     int64  `json:"rendered_at"`
 }
 

@@ -67,16 +67,14 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	now := svc.clock()
 	workDir := filepath.Join(svc.workRoot, "projects", id, "artifacts")
 	proj := model.Project{
-		ID:              id,
-		Title:           title,
-		WorkDir:         workDir,
-		Theme:           "swiss-modern",
-		Status:          "draft",
-		OutlineRevision: 1,
-		DesignRevision:  1,
-		LayoutVersion:   6,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:            id,
+		Title:         title,
+		WorkDir:       workDir,
+		Theme:         "swiss-modern",
+		Status:        "draft",
+		LayoutVersion: 6,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	if err := svc.initWorkDir(proj, p); err != nil {
@@ -128,7 +126,7 @@ func (svc *ProjectService) RenameProject(ctx context.Context, id, title string) 
 	if err := svc.store.UpdateProjectTitle(ctx, p.ID, p.Title, p.UpdatedAt); err != nil {
 		return model.Project{}, err
 	}
-	return svc.projectWithFileRevisions(p)
+	return svc.projectWithFileMetadata(p)
 }
 
 func (svc *ProjectService) ListProjects(ctx context.Context) ([]model.Project, error) {
@@ -137,7 +135,7 @@ func (svc *ProjectService) ListProjects(ctx context.Context) ([]model.Project, e
 		return nil, err
 	}
 	for index := range projects {
-		projects[index], err = svc.projectWithFileRevisions(projects[index])
+		projects[index], err = svc.projectWithFileMetadata(projects[index])
 		if err != nil {
 			return nil, err
 		}
@@ -150,20 +148,18 @@ func (svc *ProjectService) GetProject(ctx context.Context, id string) (model.Pro
 	if err != nil {
 		return model.Project{}, err
 	}
-	return svc.projectWithFileRevisions(project)
+	return svc.projectWithFileMetadata(project)
 }
 
-func (svc *ProjectService) projectWithFileRevisions(project model.Project) (model.Project, error) {
+func (svc *ProjectService) projectWithFileMetadata(project model.Project) (model.Project, error) {
 	var outline spec.Outline
 	if err := readJSON(filepath.Join(project.WorkDir, "outline.json"), &outline); err != nil {
 		return model.Project{}, err
 	}
-	project.OutlineRevision = outline.Revision
 	var design spec.Design
 	if err := readJSON(filepath.Join(project.WorkDir, "design.json"), &design); err != nil {
 		return model.Project{}, err
 	}
-	project.DesignRevision = design.Revision
 	project.Theme = design.Theme
 	return project, nil
 }
@@ -232,7 +228,6 @@ func (svc *ProjectService) SetTheme(ctx context.Context, id, themeID string) (mo
 		return model.Project{}, err
 	}
 	design.Theme = themeID
-	design.Revision++
 	design.UpdatedAt = svc.clock()
 	next := mustJSON(design)
 	temp, err := os.CreateTemp(project.WorkDir, ".design-*.json")
@@ -257,7 +252,7 @@ func (svc *ProjectService) SetTheme(ctx context.Context, id, themeID string) (mo
 		_ = os.WriteFile(path, raw, 0o644)
 		return model.Project{}, err
 	}
-	project.Theme, project.DesignRevision, project.UpdatedAt = themeID, design.Revision, design.UpdatedAt
+	project.Theme, project.UpdatedAt = themeID, design.UpdatedAt
 	return project, nil
 }
 
@@ -293,7 +288,7 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err := sb.Write(filepath.Join(projectRel, "state.json"), raw); err != nil {
 		return err
 	}
-	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID,
+	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: proj.ID,
 		Title: proj.Title, Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
 		Language: firstNonEmpty(p.Language, "zh-CN"), Positioning: proj.Title,
 		Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: spec.CanvasAspectRatio},
@@ -302,7 +297,7 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 	if err := sb.Write(filepath.Join(projectRel, "manifest.json"), mustJSON(manifest)); err != nil {
 		return err
 	}
-	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: proj.ID,
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: proj.ID,
 		Sections: []spec.Section{}, CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt}
 	if err := sb.Write(filepath.Join(projectRel, "outline.json"), mustJSON(outline)); err != nil {
 		return err

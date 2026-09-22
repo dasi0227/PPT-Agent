@@ -2461,7 +2461,7 @@ func testPack(mode model.RunMode, object model.ScopeObject, selection model.Scop
 	if selection == model.ScopeCurrentPage {
 		target.SlideIDs = []string{"sli_1"}
 	}
-	slide := &spec.SlideSpec{SchemaVersion: spec.SchemaVersion, Revision: 1, SlideID: "sli_1"}
+	slide := &spec.SlideSpec{SchemaVersion: spec.SchemaVersion, SlideID: "sli_1"}
 	if empty || selection == model.ScopeAllPages {
 		slide = nil
 	}
@@ -2480,9 +2480,7 @@ func testPack(mode model.RunMode, object model.ScopeObject, selection model.Scop
 		},
 		SlideHTML:  contextengine.SlideHTMLContext{Summaries: map[string]contextengine.HTMLSummary{}},
 		Components: []contextengine.ComponentCandidate{}, RelatedSlides: []contextengine.SlideSummary{},
-		Revisions: contextengine.RevisionRefs{
-			SlideSpecs: map[string]int{"sli_1": 1}, SlideHTML: map[string]int{"sli_1": 1},
-		},
+
 		Manifest: contextengine.ContextManifest{
 			ContextID: "ctx", RunID: "run", ThreadID: "thread", ProjectID: "p1",
 			ReadOnly: mode != model.ModeExecute, BudgetTokens: 20000,

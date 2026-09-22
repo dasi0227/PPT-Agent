@@ -9,20 +9,20 @@ import (
 )
 
 func TestAPIErrorProjectionUsesSafeMessageAndWhitelistedDetails(t *testing.T) {
-	agentErr := model.NewAgentError("REVISION_CONFLICT", "mutate_ppt", errors.New(
+	agentErr := model.NewAgentError("CONTENT_CONFLICT", "mutate_ppt", errors.New(
 		"/Users/private/slide.html database error api_key=secret stack trace",
 	))
 	agentErr.Details = map[string]any{
-		"current_revision": 9,
-		"next_action":      "read the current resource",
-		"raw_html":         "<html>secret</html>",
-		"provider_result":  "reasoning",
+		"current_hash":    "sha256:content",
+		"next_action":     "read the current resource",
+		"raw_html":        "<html>secret</html>",
+		"provider_result": "reasoning",
 	}
 	projected := ProjectAgentError(agentErr, "INTERNAL", "mutate_ppt")
-	if projected.Code != "REVISION_CONFLICT" || projected.HTTPStatus != 409 || projected.Retryable {
+	if projected.Code != "CONTENT_CONFLICT" || projected.HTTPStatus != 409 || projected.Retryable {
 		t.Fatalf("API projection mismatch: %+v", projected)
 	}
-	if projected.Details["current_revision"] != 9 || projected.Details["next_action"] == "" ||
+	if projected.Details["current_hash"] != "sha256:content" || projected.Details["next_action"] == "" ||
 		projected.Details["raw_html"] != nil || projected.Details["provider_result"] != nil {
 		t.Fatalf("unsafe API details projection: %+v", projected.Details)
 	}

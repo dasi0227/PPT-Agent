@@ -30,7 +30,7 @@ func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	ctx := context.Background()
 	if err := st.CreateProject(ctx, model.Project{
 		ID: "p1", Title: "P", WorkDir: filepath.Join(root, "p1"),
-		Theme: "default", Status: "draft", OutlineRevision: 1, DesignRevision: 1,
+		Theme: "default", Status: "draft",
 		LayoutVersion: 6, CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)

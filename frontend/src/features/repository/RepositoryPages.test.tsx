@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   deleteSkill: vi.fn(),
   listSkills: vi.fn(),
   setTheme: vi.fn(),
+  getContent: vi.fn(),
   updateTheme: vi.fn(),
 }));
 
@@ -55,7 +56,7 @@ vi.mock('../../api/projects', () => ({
     create: vi.fn(),
     patch: vi.fn(),
     get: vi.fn(),
-    getContent: vi.fn(),
+    getContent: mocks.getContent,
     mutate: vi.fn(),
     setTheme: mocks.setTheme,
     delete: vi.fn(),
@@ -103,8 +104,7 @@ function project(theme: string): Project {
     status: 'ready',
     design_path: 'design.json',
     outline_path: 'outline.json',
-    outline_revision: 1,
-    design_revision: theme === 'swiss-modern' ? 1 : 2,
+
     created_at: 1,
     updated_at: theme === 'swiss-modern' ? 1 : 2,
   };
@@ -112,9 +112,10 @@ function project(theme: string): Project {
 
 function projectContent(theme: string): ProjectContentSnapshot {
   return {
-    manifest: { version: '4.0', revision: 1, project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
-    outline: { version: '4.0', revision: 1, project_id: 'project-7', sections: [], created_at: 1, updated_at: 1 },
-    design: { version: '4.0', revision: theme === 'swiss-modern' ? 1 : 2, project_id: 'project-7', theme, direction: '', chrome: [], created_at: 1, updated_at: theme === 'swiss-modern' ? 1 : 2 },
+    hashes: { outline: "outline-hash" },
+    manifest: { version: '5.0', project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
+    outline: { version: '5.0', project_id: 'project-7', sections: [], created_at: 1, updated_at: 1 },
+    design: { version: '5.0',  project_id: 'project-7', theme, direction: '', chrome: [], created_at: 1, updated_at: theme === 'swiss-modern' ? 1 : 2 },
     slides_by_id: {},
   };
 }
@@ -194,6 +195,7 @@ describe('personal repository pages', () => {
     mocks.listThemes.mockResolvedValue({ themes });
     mocks.getTheme.mockImplementation(async (id: string) => themes.find((theme) => theme.id === id));
     mocks.setTheme.mockResolvedValue(project('tokyo-night'));
+    mocks.getContent.mockResolvedValue(projectContent('tokyo-night'));
     useProjectStore.setState({
       projects: [project('swiss-modern')],
       openProjectIds: ['project-7'],
@@ -218,12 +220,10 @@ describe('personal repository pages', () => {
     expect(useProjectStore.getState().projects[0]).toMatchObject({
       id: 'project-7',
       theme: 'tokyo-night',
-      design_revision: 2,
-    });
+      });
     expect(useProjectStore.getState().contentByProjectId['project-7'].design).toMatchObject({
       theme: 'tokyo-night',
-      revision: 2,
-    });
+      });
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({ message: '已应用「Tokyo Night」主题', tone: 'success' }),
     ]);

@@ -159,7 +159,6 @@ type ChangedTarget struct {
 	Part        string   `json:"part"`
 	Path        string   `json:"path,omitempty"`
 	DisplayName string   `json:"display_name,omitempty"`
-	Revision    int      `json:"revision,omitempty"`
 	Hash        string   `json:"hash"`
 	Fields      []string `json:"fields,omitempty"`
 	Insertions  int      `json:"insertions,omitempty"`

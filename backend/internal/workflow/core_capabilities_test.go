@@ -62,7 +62,7 @@ func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
 	if len(result.Results) != 2 || result.Results[0].RefID != "target" || result.Results[1].RefID != "other-slide" {
 		t.Fatalf("unexpected retrieval result=%+v", result.Results)
 	}
-	if result.Results[0].Score <= 0 || !strings.Contains(result.Results[0].SelectionReason, "current revision") {
+	if result.Results[0].Score <= 0 || !strings.Contains(result.Results[0].SelectionReason, "current content") {
 		t.Fatalf("missing score/reason: %+v", result.Results[0])
 	}
 }

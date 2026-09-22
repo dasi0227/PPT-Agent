@@ -38,7 +38,7 @@ func (l staticThemeLoader) Get(string) (model.Theme, error) {
 }
 
 func mutationPack(projectID string, outline spec.Outline) contextengine.ContextPack {
-	return contextengine.ContextPack{Project: contextengine.ProjectContext{ID: projectID}, PresentationManifest: contextengine.PresentationManifestContext{Manifest: spec.Manifest{ProjectID: projectID}}, Outline: contextengine.OutlineContext{Outline: outline}, Revisions: contextengine.RevisionRefs{Manifest: 1, Outline: outline.Revision, Design: 1, SlideSpecs: map[string]int{}, SlideHTML: map[string]int{}}}
+	return contextengine.ContextPack{Project: contextengine.ProjectContext{ID: projectID}, PresentationManifest: contextengine.PresentationManifestContext{Manifest: spec.Manifest{ProjectID: projectID}}, Outline: contextengine.OutlineContext{Outline: outline}}
 }
 
 func mutationSchemaOps(schema ToolSchema) []string {
@@ -54,7 +54,7 @@ func mutationSchemaOps(schema ToolSchema) []string {
 }
 
 func TestMutatePPTExposesClosedScopedOperations(t *testing.T) {
-	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	tool := mutatePPTTool{pack: mutationPack("pro_aaaaaa", empty)}
 	if ops := mutationSchemaOps(tool.Schema()); len(ops) != 12 {
 		t.Fatalf("ops=%v", ops)
@@ -82,7 +82,7 @@ func TestMutatePPTExposesClosedScopedOperations(t *testing.T) {
 }
 
 func TestMutationPatchSchemaDisclosesTheRuntimePathPolicy(t *testing.T) {
-	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	variants := mutationSchema(mutationPack("pro_aaaaaa", empty))["oneOf"].([]any)
 	deck := variants[0].(map[string]any)
 	patch := deck["properties"].(map[string]any)["patch"].(map[string]any)
@@ -110,7 +110,7 @@ func TestMutationPatchSchemaDisclosesTheRuntimePathPolicy(t *testing.T) {
 }
 
 func TestOutlineInitSchemaIncludesDirectAndGroupedExamples(t *testing.T) {
-	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	variants := mutationSchema(mutationPack("pro_aaaaaa", empty))["oneOf"].([]any)
 	outlineInit := variants[1].(map[string]any)
 	examples, _ := outlineInit["examples"].([]any)
@@ -152,7 +152,7 @@ func TestOutlineInitSchemaIncludesDirectAndGroupedExamples(t *testing.T) {
 }
 
 func TestSlideSpecSchemaIncludesLegalComparisonExample(t *testing.T) {
-	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	schema := mutationSchema(mutationPack("pro_aaaaaa", empty))
 	variants := schema["oneOf"].([]any)
 	var slideSpecWrite map[string]any
@@ -197,7 +197,7 @@ func TestSlideSpecSchemaIncludesLegalComparisonExample(t *testing.T) {
 }
 
 func TestToolRegistryReportsPreciseMissingOutlineFieldBeforeExecution(t *testing.T) {
-	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	pack := mutationPack("pro_aaaaaa", empty)
 	pack.Command = model.RunCommand{
 		Scope: model.NewRunScope(model.ScopeObjectGlobal, model.ScopeAllPages),
@@ -223,7 +223,7 @@ func TestToolRegistryReportsPreciseMissingOutlineFieldBeforeExecution(t *testing
 
 func TestToolRegistryReportsPreciseInvalidSlideSpecFieldBeforeExecution(t *testing.T) {
 	outline := spec.Outline{
-		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", CreatedAt: 1, UpdatedAt: 1,
+		SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", CreatedAt: 1, UpdatedAt: 1,
 		Sections: []spec.Section{{
 			ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start",
 			Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}},
@@ -254,7 +254,7 @@ func TestToolRegistryReportsPreciseInvalidSlideSpecFieldBeforeExecution(t *testi
 }
 
 func TestSpecDeckScopeNeverDisclosesOrExecutesHTMLMutation(t *testing.T) {
-	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	tool := mutatePPTTool{pack: mutationPack("pro_aaaaaa", empty)}
 	registry := NewToolRegistry()
 	if err := registry.Register(tool, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
@@ -276,8 +276,8 @@ func TestSpecDeckScopeNeverDisclosesOrExecutesHTMLMutation(t *testing.T) {
 }
 
 func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
-	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
-	nonEmpty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}}}}, CreatedAt: 1, UpdatedAt: 1}
+	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	nonEmpty := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}}}}, CreatedAt: 1, UpdatedAt: 1}
 	plan := &Plan{ApprovalID: "approval-test", ID: "plan_1", Status: PlanActive}
 
 	for _, outline := range []spec.Outline{empty, nonEmpty} {
@@ -335,7 +335,7 @@ func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
 }
 
 func TestDefaultToolDisclosureUsesTheSamePolicyAsExecution(t *testing.T) {
-	pack := mutationPack("pro_aaaaaa", spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1})
+	pack := mutationPack("pro_aaaaaa", spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1})
 	registry := NewToolRegistry()
 	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
@@ -452,9 +452,9 @@ func assertNoNullRequired(t *testing.T, path string, value any) {
 func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 	dir := t.TempDir()
 	projectID := "pro_aaaaaa"
-	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
-	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
-	design := spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
+	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
@@ -502,11 +502,11 @@ func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 	dir := t.TempDir()
 	projectID := "pro_aaaaaa"
-	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{
-		"manifest.json": spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1},
+		"manifest.json": spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1},
 		"outline.json":  outline,
-		"design.json":   spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1},
+		"design.json":   spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1},
 	} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
@@ -529,9 +529,9 @@ func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	dir := t.TempDir()
 	projectID := "pro_aaaaaa"
-	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
-	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Title: "Body", Role: "content"}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
-	design := spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}, CreatedAt: 1, UpdatedAt: 1}
+	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Title: "Body", Role: "content"}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
+	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}, CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
@@ -551,10 +551,10 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	dir := t.TempDir()
 	projectID := "pro_aaaaaa"
 	slideID := "sli_attea2"
-	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
-	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: slideID, Title: "Cover", Role: spec.SlideRoleCover}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
-	design := spec.Design{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
-	slide := spec.SlideSpec{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID, SlideID: slideID, KeyMessage: "Hello", Elements: []spec.Element{}, CreatedAt: 1, UpdatedAt: 1}
+	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: slideID, Title: "Cover", Role: spec.SlideRoleCover}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
+	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
+	slide := spec.SlideSpec{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, SlideID: slideID, KeyMessage: "Hello", Elements: []spec.Element{}, CreatedAt: 1, UpdatedAt: 1}
 	html := []byte(`<!doctype html><html><body><section class="slide-stage"><h1>Hello</h1></section></body></html>`)
 	for path, value := range map[string]any{
 		"manifest.json":              deck,
@@ -587,8 +587,6 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	}
 	defer session.Discard()
 	pack := mutationPack(projectID, outline)
-	pack.Revisions.SlideHTML[slideID] = 1
-	pack.Revisions.SlideSpecs[slideID] = 1
 	result := (slideRenderTool{
 		pack:     pack,
 		renderer: successfulScreenshotRenderer{},
@@ -621,5 +619,25 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	}
 	if updated := latestRenderedImages(pack, dir, nil); len(updated) != 1 || !updated[0].Stale {
 		t.Fatalf("changed HTML did not invalidate render freshness: %+v", updated)
+	}
+}
+
+func TestNoopMutationDoesNotInvalidateRuntimeEvidence(t *testing.T) {
+	dir := t.TempDir()
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
+	raw, _ := json.Marshal(outline)
+	if err := os.WriteFile(filepath.Join(dir, "outline.json"), raw, 0644); err != nil {
+		t.Fatal(err)
+	}
+	session, err := NewRunSession(dir, "noop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Discard()
+	pack := mutationPack("pro_aaaaaa", outline)
+	tool := mutatePPTTool{pack: pack}
+	result := tool.Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Scope: model.NewRunScope(model.ScopeObjectGlobal, model.ScopeAllPages), Args: map[string]any{"op": "outline.init", "structure": []any{}}})
+	if !result.OK || len(result.ChangedTargets) != 0 || len(result.InvalidatedTargets) != 0 {
+		t.Fatalf("no-op reported a write: %+v", result)
 	}
 }

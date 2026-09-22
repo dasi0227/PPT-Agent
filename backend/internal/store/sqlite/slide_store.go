@@ -79,7 +79,7 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 			if err := tx.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
-					"project_id", "current_version", "last_export_at",
+					"project_id", "last_export_at",
 				}),
 			}).Create(&po).Error; err != nil {
 				return err

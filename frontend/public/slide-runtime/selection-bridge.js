@@ -14,7 +14,6 @@
   ];
   let mode = 'none';
   let sessionID = '';
-  let revision = 0;
   let htmlHash = '';
   let start = null;
 
@@ -212,7 +211,7 @@
     const regionIdentity = kind === 'region' ? `|${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}` : '';
     return {
       selection_id: '', marker_no: 0, kind, comment: '', slide_id: slideID,
-      html_revision: revision, html_hash: htmlHash, canvas: { width: 1920, height: 1080 },
+      html_hash: htmlHash, canvas: { width: 1920, height: 1080 },
       rect, status: 'active', dom_targets: targets, chrome_targets: [],
       dedupe_key: hashText(`${slideID}|${htmlHash}|${kind}${regionIdentity}|${fingerprints}`),
     };
@@ -354,7 +353,6 @@
     if (!['none', 'element', 'region'].includes(event.data.mode) || typeof event.data.session_id !== 'string') return;
     setMode(event.data.mode);
     sessionID = event.data.session_id;
-    revision = Number.isInteger(event.data.html_revision) ? event.data.html_revision : 0;
     htmlHash = typeof event.data.html_hash === 'string' ? event.data.html_hash : '';
     start = null;
     layer.replaceChildren();

@@ -13,9 +13,9 @@ vi.mock('../viewer/IsolatedSlidePreview', () => ({
 
 function snapshot(): ProjectContentSnapshot {
   return {
+    hashes: { outline: "outline-hash" },
     manifest: {
-      version: '4.0',
-      revision: 1,
+      version: '5.0',
       project_id: 'pro_1',
       title: '演示文稿',
       goal: '',
@@ -29,8 +29,7 @@ function snapshot(): ProjectContentSnapshot {
       updated_at: 1,
     },
     outline: {
-      version: '4.0',
-      revision: 4,
+      version: '5.0',
       project_id: 'pro_1',
       sections: [
         {
@@ -65,8 +64,7 @@ function snapshot(): ProjectContentSnapshot {
       updated_at: 1,
     },
     design: {
-      version: '4.0',
-      revision: 1,
+      version: '5.0',
       project_id: 'pro_1',
       theme: 'default',
       direction: '',
@@ -75,9 +73,9 @@ function snapshot(): ProjectContentSnapshot {
       updated_at: 1,
     },
     slides_by_id: {
-      slide_1: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_revision: 0, materialization: null },
-      slide_2: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_revision: 0, materialization: null },
-      slide_3: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_revision: 0, materialization: null },
+      slide_1: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },
+      slide_2: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },
+      slide_3: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },
     },
   };
 }
@@ -151,7 +149,7 @@ describe('DeckNavigator', () => {
 
     expect(mutateProject).toHaveBeenCalledWith('pro_1', expect.objectContaining({
       op: 'outline.insert',
-      expected_revision: 4,
+      expected_hash: 'outline-hash',
       position: { parent_id: 'sec_direct' },
       node: expect.objectContaining({ kind: 'slide', title: '新页面' }),
     }));

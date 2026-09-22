@@ -60,7 +60,7 @@
       slides: [],
       activeIndex: 0,
       activeExecution: null,
-      selection: { mode: 'none', sessionID: '', slideID: '', revision: 0, hash: '' },
+      selection: { mode: 'none', sessionID: '', slideID: '', hash: '' },
       drafts: new Map()
     };
 
@@ -121,7 +121,7 @@
     function isSelectionMode(value) {
       return value && value.type === 'setSelectionMode' && typeof value.session_id === 'string'
         && typeof value.slide_id === 'string' && ['none', 'element', 'region'].includes(value.mode)
-        && Number.isInteger(value.html_revision) && typeof value.html_hash === 'string';
+        && typeof value.html_hash === 'string';
     }
 
     function isDraftRender(value) {
@@ -137,7 +137,7 @@
 
     function validIncomingSelection(value) {
       if (!value || !['element', 'region'].includes(value.kind) || value.slide_id !== state.selection.slideID
-        || value.html_revision !== state.selection.revision || value.html_hash !== state.selection.hash
+        || value.html_hash !== state.selection.hash
         || value.canvas?.width !== 1920 || value.canvas?.height !== 1080 || value.status !== 'active'
         || !validRect(value.rect) || value.rect.width <= 0 || value.rect.height <= 0 || !Array.isArray(value.dom_targets) || value.dom_targets.length > 50
         || !Array.isArray(value.chrome_targets)) return false;
@@ -165,7 +165,7 @@
           const chrome = chromeTargets(container, rect).filter((target) => target.type === node.dataset.runtimeChrome);
           finishSelection({
             selection_id: '', marker_no: 0, kind: 'element', comment: '', slide_id: context.slide_id,
-            html_revision: state.selection.revision, html_hash: state.selection.hash,
+            html_hash: state.selection.hash,
             canvas: { width: 1920, height: 1080 }, rect, status: 'active', dom_targets: [], chrome_targets: chrome,
             dedupe_key: 'chrome|' + context.slide_id + '|' + state.selection.hash + '|' + node.dataset.runtimeChrome + '|' + node.dataset.placement
           });
@@ -325,7 +325,7 @@
       const frame = container && container.querySelector('iframe');
       if (frame) frame.contentWindow.postMessage({
         bridge: 'ppt-dom-selection-v1', type: 'innerSetSelectionMode', slide_id: config.slideID,
-        session_id: config.sessionID, mode: config.mode, html_revision: config.revision, html_hash: config.hash
+        session_id: config.sessionID, mode: config.mode, html_hash: config.hash
       }, '*');
       deck.querySelectorAll('[data-runtime-chrome]').forEach((node) => {
         const enabled = config.mode === 'element' && node.closest('[data-slide-frame]') === container;
@@ -424,7 +424,7 @@
         } else if (isSelectionMode(event.data)) {
           const current = state.slides[state.activeIndex];
           if (!current || current.id !== event.data.slide_id) return;
-          state.selection = { mode: event.data.mode, sessionID: event.data.session_id, slideID: event.data.slide_id, revision: event.data.html_revision, hash: event.data.html_hash };
+          state.selection = { mode: event.data.mode, sessionID: event.data.session_id, slideID: event.data.slide_id, hash: event.data.html_hash };
           postModeToInner();
         } else if (isDraftRender(event.data) && event.data.session_id === state.selection.sessionID) {
           state.drafts.set(event.data.slide_id, event.data.selections.filter((item) => validRect(item.rect)));

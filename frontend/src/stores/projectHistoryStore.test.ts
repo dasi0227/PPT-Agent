@@ -8,7 +8,7 @@ describe('project checkpoint composer scene', () => {
   it('restores full input and keeps subsequent text edits across refresh', () => {
     const selection = {
       selection_id: 'sel_one', marker_no: 3, kind: 'element' as const, comment: '缩小标题', slide_id: 's1',
-      html_revision: 2, html_hash: 'hash', canvas: { width: 1920 as const, height: 1080 as const },
+      html_hash: 'hash', canvas: { width: 1920 as const, height: 1080 as const },
       rect: { x: 10, y: 10, width: 100, height: 100 }, status: 'active' as const,
       dom_targets: [], chrome_targets: [],
     };

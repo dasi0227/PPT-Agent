@@ -5,9 +5,9 @@ import { useProjectStore } from '../../stores/projectStore';
 import { FinalChangeSummary } from './FinalMessage';
 
 const snapshot: ProjectContentSnapshot = {
+  hashes: { outline: "outline-hash" },
   manifest: {
-    version: '4.0',
-    revision: 1,
+    version: '5.0',
     project_id: 'p1',
     title: 'Demo',
     goal: 'Explain',
@@ -21,8 +21,7 @@ const snapshot: ProjectContentSnapshot = {
     updated_at: 1,
   },
   outline: {
-    version: '4.0',
-    revision: 1,
+    version: '5.0',
     project_id: 'p1',
     sections: [{
       id: 'sec-1',
@@ -38,8 +37,7 @@ const snapshot: ProjectContentSnapshot = {
     updated_at: 1,
   },
   design: {
-    version: '4.0',
-    revision: 1,
+    version: '5.0',
     project_id: 'p1',
     theme: 'clean',
     direction: 'minimal',

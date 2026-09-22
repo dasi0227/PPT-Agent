@@ -13,7 +13,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-var ErrRevisionConflict = errors.New("mutation revision conflict")
+var ErrContentConflict = errors.New("mutation content conflict")
 var ErrInvalid = errors.New("mutation invalid")
 
 var Operations = []string{"manifest.patch", "outline.init", "outline.insert", "outline.move", "outline.update", "outline.remove", "design.write", "design.patch", "slide.spec.write", "slide.spec.patch", "slide.html.write", "slide.html.patch"}
@@ -71,7 +71,7 @@ type DraftNode struct {
 }
 type Request struct {
 	Op                 string          `json:"op"`
-	ExpectedRevision   int             `json:"expected_revision,omitempty"`
+	ExpectedHash       string          `json:"expected_hash,omitempty"`
 	Patch              []Patch         `json:"patch,omitempty"`
 	Structure          []DraftSection  `json:"structure,omitempty"`
 	Node               DraftNode       `json:"node,omitempty"`
@@ -88,7 +88,7 @@ type Request struct {
 }
 type Result struct {
 	Operation           string            `json:"operation"`
-	Revisions           map[string]int    `json:"revisions"`
+	Hashes              map[string]string `json:"hashes"`
 	Created             map[string]string `json:"created"`
 	AffectedSlideIDs    []string          `json:"affected_slide_ids"`
 	InvalidatedSlideIDs []string          `json:"invalidated_slide_ids"`
@@ -102,7 +102,7 @@ func (s Service) Apply(req Request) (Result, error) {
 	if s.Now == nil {
 		s.Now = func() int64 { return time.Now().Unix() }
 	}
-	result := Result{Operation: req.Op, Revisions: map[string]int{}, Created: map[string]string{}, AffectedSlideIDs: []string{}, InvalidatedSlideIDs: []string{}, InvalidatedReasons: map[string]string{}}
+	result := Result{Operation: req.Op, Hashes: map[string]string{}, Created: map[string]string{}, AffectedSlideIDs: []string{}, InvalidatedSlideIDs: []string{}, InvalidatedReasons: map[string]string{}}
 	switch req.Op {
 	case "manifest.patch":
 		return s.patchManifest(req, result)
@@ -124,7 +124,7 @@ func (s Service) patchManifest(req Request, out Result) (Result, error) {
 	if err := s.readJSON("manifest.json", &current); err != nil {
 		return out, err
 	}
-	if err := checkRevision(req.ExpectedRevision, current.Revision); err != nil {
+	if err := checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
 		return out, err
 	}
 	raw, _ := json.Marshal(current)
@@ -138,16 +138,18 @@ func (s Service) patchManifest(req Request, out Result) (Result, error) {
 	}
 	next.SchemaVersion = spec.SchemaVersion
 	next.ProjectID = s.ProjectID
-	next.Revision = current.Revision + 1
 	next.CreatedAt = current.CreatedAt
 	next.UpdatedAt = s.Now()
 	if err = spec.ValidateManifest(next); err != nil {
 		return out, invalid(err)
 	}
+	out.Hashes["manifest"] = spec.ResourceHash(next)
+	if out.Hashes["manifest"] == spec.ResourceHash(current) {
+		return out, nil
+	}
 	if err = s.writeJSON("manifest.json", next); err != nil {
 		return out, err
 	}
-	out.Revisions["manifest"] = next.Revision
 	flat, _ := s.currentOutline()
 	for _, loc := range spec.FlattenOutline(flat) {
 		out.InvalidatedSlideIDs = append(out.InvalidatedSlideIDs, loc.Slide.SlideID)
@@ -161,9 +163,10 @@ func (s Service) mutateOutline(req Request, out Result) (Result, error) {
 	if err != nil {
 		return out, err
 	}
-	if err = checkRevision(req.ExpectedRevision, outline.Revision); err != nil {
+	if err = checkHash(req.ExpectedHash, spec.ResourceHash(outline)); err != nil {
 		return out, err
 	}
+	beforeHash := spec.ResourceHash(outline)
 	before := spec.FlattenOutline(outline)
 	beforeIDs := ids(before)
 	switch req.Op {
@@ -204,10 +207,13 @@ func (s Service) mutateOutline(req Request, out Result) (Result, error) {
 	}
 	outline.SchemaVersion = spec.SchemaVersion
 	outline.ProjectID = s.ProjectID
-	outline.Revision++
 	outline.UpdatedAt = s.Now()
 	if err = spec.ValidateOutline(outline); err != nil {
 		return out, invalid(err)
+	}
+	out.Hashes["outline"] = spec.ResourceHash(outline)
+	if out.Hashes["outline"] == beforeHash {
+		return out, nil
 	}
 	if err = s.writeJSON("outline.json", outline); err != nil {
 		return out, err
@@ -217,7 +223,6 @@ func (s Service) mutateOutline(req Request, out Result) (Result, error) {
 	if req.Op == "outline.move" || req.Op == "outline.update" {
 		out.AffectedSlideIDs = ids(after)
 	}
-	out.Revisions["outline"] = outline.Revision
 	return out, nil
 }
 
@@ -319,7 +324,7 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return out, err
 	}
-	if err = checkRevision(req.ExpectedRevision, current.Revision); err != nil {
+	if err = checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
 		return out, err
 	}
 	var next spec.Design
@@ -343,7 +348,6 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 	}
 	next.SchemaVersion = spec.SchemaVersion
 	next.ProjectID = s.ProjectID
-	next.Revision = max(current.Revision+1, 1)
 	next.CreatedAt = current.CreatedAt
 	if next.CreatedAt == 0 {
 		next.CreatedAt = s.Now()
@@ -352,10 +356,13 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 	if err = spec.ValidateDesign(next); err != nil {
 		return out, invalid(err)
 	}
+	out.Hashes["design"] = spec.ResourceHash(next)
+	if out.Hashes["design"] == spec.ResourceHash(current) {
+		return out, nil
+	}
 	if err = s.writeJSON("design.json", next); err != nil {
 		return out, err
 	}
-	out.Revisions["design"] = next.Revision
 	outline, _ := s.currentOutline()
 	out.InvalidatedSlideIDs = ids(spec.FlattenOutline(outline))
 	for _, id := range out.InvalidatedSlideIDs {
@@ -378,7 +385,7 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
 		return out, readErr
 	}
-	if err = checkRevision(req.ExpectedRevision, current.Revision); err != nil {
+	if err = checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
 		return out, err
 	}
 	var next spec.SlideSpec
@@ -402,7 +409,6 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 	next.SchemaVersion = spec.SchemaVersion
 	next.ProjectID = s.ProjectID
 	next.SlideID = req.SlideID
-	next.Revision = max(current.Revision+1, 1)
 	next.CreatedAt = current.CreatedAt
 	if next.CreatedAt == 0 {
 		next.CreatedAt = s.Now()
@@ -411,10 +417,13 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 	if err = spec.ValidateSlideSpec(next); err != nil {
 		return out, invalid(err)
 	}
+	out.Hashes["spec"] = spec.ResourceHash(next)
+	if out.Hashes["spec"] == spec.ResourceHash(current) {
+		return out, nil
+	}
 	if err = s.writeJSON(path, next); err != nil {
 		return out, err
 	}
-	out.Revisions["spec"] = next.Revision
 	out.AffectedSlideIDs = []string{req.SlideID}
 	out.InvalidatedSlideIDs = []string{req.SlideID}
 	out.InvalidatedReasons[req.SlideID] = "spec_changed"
@@ -429,6 +438,15 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 	}
 	if _, ok := spec.FindSlide(outline, req.SlideID); !ok {
 		return out, invalid(errors.New("slide_id is not in outline"))
+	}
+	if req.ExpectedHash != "" {
+		raw, readErr := s.Workspace.Read(path)
+		if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
+			return out, readErr
+		}
+		if readErr != nil || checkHash(req.ExpectedHash, spec.ContentHash(raw)) != nil {
+			return out, ErrContentConflict
+		}
 	}
 	candidate := req.HTML
 	if req.Op == "slide.html.patch" {
@@ -452,6 +470,10 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 		if err = s.ValidateHTML([]byte(candidate)); err != nil {
 			return out, invalid(err)
 		}
+	}
+	out.Hashes["html"] = spec.ContentHash([]byte(candidate))
+	if current, err := s.Workspace.Read(path); err == nil && spec.ContentHash(current) == out.Hashes["html"] {
+		return out, nil
 	}
 	if err = s.Workspace.Write(path, []byte(candidate)); err != nil {
 		return out, err
@@ -489,9 +511,9 @@ func strictJSON(raw []byte, out any) error {
 	}
 	return nil
 }
-func checkRevision(expected, current int) error {
-	if expected > 0 && expected != current {
-		return ErrRevisionConflict
+func checkHash(expected, current string) error {
+	if expected != "" && expected != current {
+		return ErrContentConflict
 	}
 	return nil
 }

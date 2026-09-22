@@ -97,7 +97,7 @@ function PreviewFrame({
   runtimeIndex?: number;
   fallbackFrame?: RuntimeSlide['frame'];
   selectionMode?: 'element' | 'region' | 'none';
-  selectionSlide?: { id: string; revision: number; hash: string };
+  selectionSlide?: { id: string; hash: string };
   draftSelections?: DOMSelection[];
   onSelection?: (selection: DOMSelection) => void;
   onSelectionMessage?: (message: string) => void;
@@ -373,9 +373,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const draftSelections = useMemo(() => activeThreadId
     ? (composer.threadReferences[activeThreadId] ?? []).flatMap((item) => item.kind === 'dom' ? [item.selection] : [])
     : [], [activeThreadId, composer.threadReferences]);
-  const currentMaterialization = currentSlide && snapshot ? snapshot.slides_by_id[currentSlide.id]?.materialization : null;
-  const selectionSlide = currentSlide && currentMaterialization ? {
-    id: currentSlide.id, revision: currentMaterialization.artifact.revision, hash: currentMaterialization.artifact.hash,
+  const selectionSlide = currentSlide?.html_hash ? {
+    id: currentSlide.id, hash: currentSlide.html_hash,
   } : undefined;
   const selectionEnabled = previewMode === 'main' && currentView === 'html' && currentHasHTML && !fullscreen
     && !['creating', 'waiting', 'paused', 'recovering', 'canceling'].includes(runSession.status);

@@ -9,7 +9,6 @@ import (
 type RenderedImageContext struct {
 	SlideID    string `json:"slide_id"`
 	ImagePath  string `json:"image_path"`
-	Revision   int    `json:"revision"`
 	SourceHash string `json:"source_hash"`
 	RenderedAt int64  `json:"rendered_at"`
 	Stale      bool   `json:"stale"`
@@ -28,7 +27,7 @@ func latestRenderedImages(pack contextengine.ContextPack, root string, session *
 		}
 		proof, proofErr := currentMaterializationProof(pack, root, session, entry.SlideID, entry.SourceHash)
 		images = append(images, RenderedImageContext{
-			SlideID: entry.SlideID, ImagePath: entry.ImagePath, Revision: entry.Revision,
+			SlideID: entry.SlideID, ImagePath: entry.ImagePath,
 			SourceHash: entry.SourceHash, RenderedAt: entry.RenderedAt,
 			Stale: proofErr != nil || entry.DependencyHash != proof.SourceHash+":"+proof.FrameContextHash,
 		})

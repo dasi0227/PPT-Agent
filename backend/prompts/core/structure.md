@@ -9,7 +9,7 @@ Resource ownership:
 
 Outline structure has exactly two levels: a section is direct (slides, no subsections) or grouped (empty section slides, pages under subsections). Never mix the two. For new nodes submit client_ref, then use returned IDs; never invent formal sec_*, sub_* or sli_* identities.
 
-Use canonical revisions returned by reads/mutations for expected_revision when concurrency protection matters. On a revision conflict, read current state and recompute the intended edit. Do not replay an obsolete patch. Runtime owns schema version, revision, identity and timestamps; never copy those fields into writable payloads.
+Use content hashes returned by read_ppt (content_hash) and mutations (hashes) for expected_hash when concurrency protection matters. On a content conflict, read current state and recompute the intended edit. Do not replay an obsolete patch. Runtime owns schema version, identity and timestamps; never copy those fields into writable payloads.
 
 The JSON below is derived from domain schemas for the current writable object classes; it is not a tool-call envelope or a grant of permission. HTML-only scope has no writable JSON model contracts. Tool descriptions and parameter schemas remain authoritative for operations, resource locators and payload shape. For example, read_ppt uses resource.kind; slide.html.patch uses edits of old_text/new_text, whereas semantic model patches use the disclosed JSON Patch paths.
 

@@ -20,11 +20,10 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
     return {
       id: node.slide_id, project_id: snapshot.outline.project_id,
       title: node.title, role: node.role,
-      layout: spec?.layout ?? '', html_path: content?.html_revision ? `slides/${node.slide_id}/index.html` : '',
-      spec_path: spec ? `slides/${node.slide_id}/spec.json` : '', current_version: content?.html_revision ?? 0,
-      spec_revision: spec?.revision ?? 0, html_revision: content?.html_revision ?? 0,
+      layout: spec?.layout ?? '', html_path: content?.html_hash ? `slides/${node.slide_id}/index.html` : '',
+      spec_path: spec ? `slides/${node.slide_id}/spec.json` : '', html_hash: content?.html_hash ?? '',
       sectionId: section.id, subsectionId: subsection?.id, spec,
-      materialization: { state: content?.html_state ?? 'not_materialized', revisions: { slide_html: content?.html_revision ?? 0, source_outline: snapshot.outline.revision, source_spec: content?.materialization?.source.spec_revision ?? 0, source_design: content?.materialization?.source.design_content_hash ?? '' } },
+      materialization: { state: content?.html_state ?? 'not_materialized' },
     };
   });
 }

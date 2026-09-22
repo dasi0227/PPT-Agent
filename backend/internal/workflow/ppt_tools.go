@@ -42,7 +42,12 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 		return failedToolResult(CodeContentTooLarge, "resource exceeds the read limit", false)
 	}
 	result := SuccessfulToolResult("resource read")
-	result.Observation = string(raw)
+	hash := spec.ResourceBytesHash(raw)
+	if resource.Part == "html" {
+		hash = spec.ContentHash(raw)
+	}
+	result.Data = map[string]any{"hash": hash}
+	result.Observation = "content_hash: " + hash + "\n" + string(raw)
 	return result
 }
 
@@ -83,8 +88,8 @@ func (t mutatePPTTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	if err != nil {
 		code := CodeContentInvalid
 		switch {
-		case errors.Is(err, pptmutation.ErrRevisionConflict):
-			code = CodeRevisionConflict
+		case errors.Is(err, pptmutation.ErrContentConflict):
+			code = CodeContentConflict
 		case errors.Is(err, pptmutation.ErrPatchPathDenied):
 			code = CodePatchPathDenied
 		case errors.Is(err, pptmutation.ErrPatchInvalid):
@@ -96,20 +101,22 @@ func (t mutatePPTTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		return writeFailure(err)
 	}
 	out := SuccessfulToolResult("PPT mutation applied")
-	out.Data = map[string]any{"operation": result.Operation, "revisions": result.Revisions, "created": result.Created, "affected_slide_ids": result.AffectedSlideIDs, "invalidated_slide_ids": result.InvalidatedSlideIDs}
+	out.Data = map[string]any{"operation": result.Operation, "hashes": result.Hashes, "created": result.Created, "affected_slide_ids": result.AffectedSlideIDs, "invalidated_slide_ids": result.InvalidatedSlideIDs}
+	if !buffer.HasChanges() {
+		out.Summary = "PPT content unchanged"
+		return out
+	}
 	resource := resourceForOperation(req)
 	if resource.Type != "" {
 		ref, _ := refForResource(t.pack, resource)
 		content, _, readErr := readArtifact(input.ProjectDir, input.Session, ref)
 		if readErr == nil {
 			kind := "schema"
-			revision := revisionFromModel(content)
 			if resource.Part == "html" {
 				kind = "static"
-				revision = presentationRevision(t.pack, input, resource.SlideID)
 			}
 			hash := hashBytes(content)
-			out.ChangedTargets = []ChangedTarget{{Type: resource.Type, SlideID: resource.SlideID, Part: resource.Part, Revision: revision, Hash: hash}}
+			out.ChangedTargets = []ChangedTarget{{Type: resource.Type, SlideID: resource.SlideID, Part: resource.Part, Hash: hash}}
 			out.Evidence = []Evidence{newEvidence(kind, resource, hash, map[string]any{"valid": true})}
 		}
 	}
@@ -207,7 +214,7 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	position := objectSchema(nil, map[string]any{"parent_id": map[string]any{"type": "string"}, "before_id": map[string]any{"type": "string"}, "after_id": map[string]any{"type": "string"}})
 	variant := func(op string, required []string, props map[string]any) any {
 		props["op"] = map[string]any{"const": op}
-		props["expected_revision"] = map[string]any{"type": "integer", "minimum": 0}
+		props["expected_hash"] = map[string]any{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
 		return objectSchema(append([]string{"op"}, required...), props)
 	}
 	text := func(max int) map[string]any {

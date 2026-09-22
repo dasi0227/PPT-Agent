@@ -1,19 +1,16 @@
 package model
 
-// Project is one PPT workspace. OutlineRevision and DesignRevision are
-// read-time projections from files; SQLite stores identity and orchestration
-// metadata only.
+// Project stores workspace identity and orchestration metadata.
+// Authoring content lives in project files.
 type Project struct {
-	ID              string
-	Title           string
-	WorkDir         string
-	Theme           string
-	Status          string
-	OutlineRevision int
-	DesignRevision  int
-	LayoutVersion   int
-	CreatedAt       int64
-	UpdatedAt       int64
+	ID            string
+	Title         string
+	WorkDir       string
+	Theme         string
+	Status        string
+	LayoutVersion int
+	CreatedAt     int64
+	UpdatedAt     int64
 }
 
 // Thread 是一条对话线程；Run 挂在其下，提供 project 归属。

@@ -11,7 +11,7 @@ import (
 
 func defaultDesign(projectID string, now int64) spec.Design {
 	return spec.Design{
-		SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: projectID,
+		SchemaVersion: spec.SchemaVersion, ProjectID: projectID,
 		Theme:     "swiss-modern",
 		Direction: "待确定",
 		Chrome: []spec.ChromeItem{

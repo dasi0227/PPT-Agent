@@ -535,7 +535,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		ProjectID: input.Context.Project.ID, SlideID: slideID, RunID: runID, ScreenshotID: screenshotID,
 		ImagePath:  filepath.ToSlash(filepath.Join(".runtime", "renders", runID, screenshotID+".png")),
 		SourceHash: sourceHash, DependencyHash: proof.SourceHash + ":" + proof.FrameContextHash,
-		Revision: presentationRevision(t.pack, input, slideID), RenderedAt: time.Now().Unix(),
+		RenderedAt: time.Now().Unix(),
 	}
 	if err := renderimage.Publish(input.ProjectDir, image); err != nil {
 		return failedToolResult(CodeRenderFailed, "could not publish rendered image reference", true)
@@ -546,7 +546,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		"screenshot_ref": screenshotRef, "screenshot_url": screenshotURL,
 		"image_path": image.ImagePath,
 		"slide_id":   slideID, "source": source,
-		"revision": presentationRevision(t.pack, input, slideID), "hash": sourceHash,
+		"hash":         sourceHash,
 		"viewport":     map[string]int{"width": frame.Canvas.Width, "height": frame.Canvas.Height},
 		"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
 		"clipping": diagnostics.Clipping, "runtime_chrome": diagnostics.RuntimeChrome, "console_errors": diagnostics.ConsoleErrors,
@@ -564,8 +564,8 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 			"clipping": diagnostics.Clipping, "runtime_chrome": diagnostics.RuntimeChrome, "console_errors": diagnostics.ConsoleErrors,
 			"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		},
-		"source_hash": sourceHash,
-		"image_path":  image.ImagePath, "revision": image.Revision,
+		"source_hash":       sourceHash,
+		"image_path":        image.ImagePath,
 		"visual_inspection": "Pixels are not included. Call read_image with image_path when visual judgement is needed.",
 	}
 	if len(blocking) == 0 {
@@ -629,13 +629,6 @@ func renderArtifactHash(input DomainToolInput, slideID string) (string, error) {
 		return "", err
 	}
 	return hashBytes(htmlRaw), nil
-}
-
-func presentationRevision(pack contextengine.ContextPack, input DomainToolInput, slideID string) int {
-	if input.Session != nil && input.Session.HasChange(slideHTMLRef(slideID)) {
-		return pack.Revisions.SlideHTML[slideID] + 1
-	}
-	return pack.Revisions.SlideHTML[slideID]
 }
 
 func renderIssues(target Resource, diagnostics RenderDiagnostics) ([]Issue, []Issue) {

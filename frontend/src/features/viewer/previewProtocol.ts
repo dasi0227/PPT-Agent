@@ -8,7 +8,7 @@ export type PreviewCommand =
   | { type: 'updateDeck'; slides: RuntimeSlide[]; index: number }
   | { type: 'gotoSlide'; index: number }
   | { type: 'replayCurrentSlide'; slide_id: string }
-  | { type: 'setSelectionMode'; session_id: string; slide_id: string; mode: 'element' | 'region' | 'none'; html_revision: number; html_hash: string }
+  | { type: 'setSelectionMode'; session_id: string; slide_id: string; mode: 'element' | 'region' | 'none'; html_hash: string }
   | { type: 'renderDraftSelections'; session_id: string; slide_id: string; selections: Array<{ selection_id: string; marker_no: number; rect: import('../../api/types').CanvasRect; status: import('../../api/types').DOMSelectionStatus }> }
   | { type: 'probeDraftSelections'; session_id: string; slide_id: string; selections: import('../../api/types').DOMSelection[] };
 
@@ -57,7 +57,7 @@ function isFingerprint(value: unknown, tag: string): boolean {
 
 function isDOMSelectionSnapshot(value: unknown): boolean {
   if (!isRecord(value) || !['element', 'region'].includes(String(value.kind)) || typeof value.slide_id !== 'string'
-    || !Number.isInteger(value.html_revision) || typeof value.html_hash !== 'string' || value.status !== 'active'
+    || typeof value.html_hash !== 'string' || value.status !== 'active'
     || !isRecord(value.canvas) || value.canvas.width !== 1920 || value.canvas.height !== 1080 || !isPositiveRect(value.rect)
     || !Array.isArray(value.dom_targets) || value.dom_targets.length > 50 || !Array.isArray(value.chrome_targets)
     || value.dom_targets.length + value.chrome_targets.length === 0) return false;
@@ -101,7 +101,7 @@ export function isPreviewCommand(value: unknown): value is PreviewCommand {
       && typeof value.slide_id === 'string'
       && value.slide_id.length > 0;
   }
-  if (value.type === 'setSelectionMode') return isSessionMessage(value) && ['element', 'region', 'none'].includes(String(value.mode)) && Number.isInteger(value.html_revision) && typeof value.html_hash === 'string';
+  if (value.type === 'setSelectionMode') return isSessionMessage(value) && ['element', 'region', 'none'].includes(String(value.mode)) && typeof value.html_hash === 'string';
   if (value.type === 'renderDraftSelections') return isSessionMessage(value) && Array.isArray(value.selections) && value.selections.every((item) => isRecord(item) && typeof item.selection_id === 'string' && Number.isInteger(item.marker_no) && isRect(item.rect) && ['active','content_deleted','page_deleted'].includes(String(item.status)));
   if (value.type === 'probeDraftSelections') return isSessionMessage(value) && Array.isArray(value.selections) && value.selections.length <= 8;
   if (value.type !== 'updateDeck' || !isIndex(value.index) || !Array.isArray(value.slides)) {

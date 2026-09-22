@@ -15,7 +15,7 @@ func validateRestoredDOM(project model.Project, snapshot spec.ProjectContentSnap
 	for _, selection := range selections {
 		raw, err := os.ReadFile(filepath.Join(project.WorkDir, model.SlideHTMLPath(selection.SlideID)))
 		content, ok := snapshot.SlidesByID[selection.SlideID]
-		if err != nil || spec.ContentHash(raw) != selection.HTMLHash || !ok || content.Materialization == nil || content.Materialization.Artifact.Revision != selection.HTMLRevision || content.Materialization.Artifact.Hash != selection.HTMLHash {
+		if err != nil || spec.ContentHash(raw) != selection.HTMLHash || !ok || content.HTMLHash != selection.HTMLHash {
 			return invalidRestoredReference("恢复的 DOM 引用已失效，请移除后重新选择")
 		}
 	}

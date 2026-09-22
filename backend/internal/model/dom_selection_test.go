@@ -10,7 +10,7 @@ func validDOMSelection() DOMSelection {
 	rect := CanvasRect{X: 10, Y: 20, Width: 300, Height: 120}
 	return DOMSelection{
 		SelectionID: "sel_one", MarkerNo: 1, Kind: DOMSelectionElement, SlideID: "sli_one",
-		HTMLRevision: 3, HTMLHash: "sha256:abc", Canvas: CanvasSize{Width: 1920, Height: 1080}, Rect: rect, Status: DOMSelectionActive,
+		HTMLHash: "sha256:abc", Canvas: CanvasSize{Width: 1920, Height: 1080}, Rect: rect, Status: DOMSelectionActive,
 		DOMTargets: []DOMTarget{{
 			TargetID: "target_one", Tag: "div", Rect: rect, TextSummary: "Quarterly plan",
 			Fingerprint: DOMFingerprint{Tag: "div", SiblingIndex: 0, TextSummaryHash: "fnv1a:1"},

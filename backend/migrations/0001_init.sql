@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS slides (
     id              TEXT PRIMARY KEY,
     project_id      TEXT NOT NULL,
-    current_version INTEGER NOT NULL DEFAULT 0,
     last_export_at  INTEGER,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );

@@ -275,7 +275,7 @@ const (
 	CodeAgentFailed             = "AGENT_FAILED"
 	CodeInvalidControlCall      = "INVALID_CONTROL_CALL"
 	CodeScopeExpansion          = "SCOPE_EXPANSION_REQUIRED"
-	CodeRevisionConflict        = "RUN_REVISION_CONFLICT"
+	CodeContentConflict         = "RUN_CONTENT_CONFLICT"
 	CodeCompletionGateBlocked   = "COMPLETION_GATE_BLOCK"
 	CodeCompletionReviewBlocked = "COMPLETION_REVIEW_BLOCK"
 	CodeFinishMessageEmpty      = "FINISH_MESSAGE_EMPTY"
