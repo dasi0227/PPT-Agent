@@ -69,7 +69,7 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
   const effectiveSelection = object === 'global' ? 'all_pages' : selection;
   const label = composerScopeLabel(effectiveSelection, object);
   const segmentClass = (active: boolean, unavailable = false) => [
-    'flex h-7 min-w-0 flex-1 items-center justify-center rounded-md px-2 text-[11px] font-medium outline-none transition-[color,background-color,box-shadow] focus-visible:ring-2 focus-visible:ring-accent',
+    'flex h-7 min-w-0 flex-1 items-center justify-center rounded-md px-2 text-[11px] font-medium outline-none transition-[color,background-color,box-shadow]',
     active ? 'bg-surface text-text-900 shadow-sm' : 'text-text-600 hover:bg-surface/70 hover:text-text-900',
     unavailable ? 'pointer-events-none opacity-35' : '',
   ].join(' ');
@@ -90,7 +90,7 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
       type="button"
       aria-label={`范围：${label}`}
       disabled={disabled}
-      className="composer-target-button inline-flex h-7 min-w-0 max-w-[168px] shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 data-[state=open]:bg-panel-muted data-[state=open]:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+      className="composer-target-button inline-flex h-7 min-w-0 max-w-[168px] shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 data-[state=open]:bg-panel-muted data-[state=open]:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
     >
       <Crosshair className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
       <span className="composer-target-label min-w-0 truncate">{label}</span>
@@ -116,7 +116,7 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
             <header className="flex h-9 items-center gap-2 border-b border-border/70 px-3">
               <strong className="text-xs font-semibold text-text-900">{effectiveSelection === 'custom_pages' ? '自选页' : '自选章'}</strong>
               <span className="rounded-full bg-panel-muted px-1.5 py-0.5 text-[10px] tabular-nums text-text-700">{effectiveSelection === 'custom_pages' ? selectedSlideIds.length : selectedSectionIds.length}</span>
-              <button type="button" aria-label="收起自选窗口" className="ml-auto flex h-6 w-6 items-center justify-center rounded-md text-text-500 hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeCustomWindow(); }}>
+              <button type="button" aria-label="收起自选窗口" className="ml-auto flex h-6 w-6 items-center justify-center rounded-md text-text-500 hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeCustomWindow(); }}>
                 <X className="h-3.5 w-3.5" />
               </button>
             </header>

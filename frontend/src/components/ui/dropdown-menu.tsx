@@ -1,6 +1,7 @@
 import * as React from "react"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { cn } from "../../lib/utils"
+import { dropdownItemClassName, dropdownItemHighlightClassName, dropdownSurfaceClassName } from "./dropdown-styles"
 
 const DropdownMenu = DropdownMenuPrimitive.Root
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
@@ -18,7 +19,9 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      "flex cursor-default select-none items-center rounded-sm px-3 py-1.5 text-xs outline-none focus:bg-black/5 data-[state=open]:bg-black/5 text-text-600",
+      dropdownItemClassName,
+      dropdownItemHighlightClassName,
+      "data-[state=open]:bg-accent-soft data-[state=open]:text-accent",
       inset && "pl-8",
       className
     )}
@@ -35,8 +38,10 @@ const DropdownMenuSubContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.SubContent
     ref={ref}
+    collisionPadding={12}
     className={cn(
-      "z-50 min-w-[160px] overflow-hidden rounded-md border border-border bg-surface p-1 shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+      dropdownSurfaceClassName,
+      "min-w-[160px] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto overscroll-contain data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
       className
     )}
     {...props}
@@ -47,7 +52,7 @@ DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayNam
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 4, onEscapeKeyDown, onCloseAutoFocus, ...props }, ref) => {
+>(({ className, sideOffset = 6, onEscapeKeyDown, onCloseAutoFocus, ...props }, ref) => {
   const dismissedByEscapeRef = React.useRef(false)
 
   return (
@@ -55,8 +60,10 @@ const DropdownMenuContent = React.forwardRef<
       <DropdownMenuPrimitive.Content
         ref={ref}
         sideOffset={sideOffset}
+        collisionPadding={12}
         className={cn(
-          "z-50 min-w-[160px] overflow-hidden rounded-md border border-border bg-surface py-1 shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          dropdownSurfaceClassName,
+          "min-w-[160px] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-y-auto overscroll-contain data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           className
         )}
         onEscapeKeyDown={(event) => {
@@ -85,8 +92,8 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "w-full px-3 py-1.5 text-xs cursor-pointer outline-none transition-colors",
-      destructive ? "text-danger hover:bg-danger-soft data-[highlighted]:bg-danger-soft" : "text-text-600 hover:bg-black/5 data-[highlighted]:bg-black/5",
+      dropdownItemClassName,
+      destructive ? "text-danger hover:bg-danger-soft data-[highlighted]:bg-danger-soft" : dropdownItemHighlightClassName,
       inset && "pl-8",
       className
     )}

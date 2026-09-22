@@ -128,7 +128,7 @@ function QuestionSlide({
                     customText: event.target.value,
                   })}
                   placeholder="输入自定义回答"
-                  className="mt-2 h-8 w-full rounded-md border border-border bg-surface px-2 text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  className="mt-2 h-8 w-full rounded-md border border-border bg-surface px-2 text-[13px] focus:outline-none"
                 />
               </span>
             </label>
@@ -140,7 +140,7 @@ function QuestionSlide({
           disabled={disabled}
           onChange={(event) => setDraft(question.id, { customText: event.target.value })}
           placeholder="输入你的回答"
-          className="mt-3 h-28 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="mt-3 h-28 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 focus:outline-none"
         />
       )}
     </div>
@@ -192,7 +192,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
         aria-expanded={expanded}
         aria-controls={detailsId}
         onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-8 w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] font-normal leading-5 text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="flex min-h-8 w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] font-normal leading-5 text-text-900 focus-visible:outline-none"
       >
         <MessageCircleQuestion className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
         <span className="min-w-0 flex-1 truncate">询问了 {questions.length} 个问题</span>
@@ -339,7 +339,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
     <fieldset
       ref={panelRef}
       tabIndex={-1}
-      className="rounded-[10px] border border-border-strong bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      className="rounded-[10px] border border-border-strong bg-surface focus:outline-none"
     >
       <legend className="sr-only">{currentQuestion.title}</legend>
       <div

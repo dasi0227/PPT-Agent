@@ -43,7 +43,7 @@ export const ProjectTabs: React.FC = () => {
                 aria-selected={isActive}
                 onClick={() => activateProject(proj.id)}
                 className={cn(
-                  "group h-10 px-3 pl-4 rounded-t-md text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer focus-visible:ring-inset",
+                  "group h-10 px-3 pl-4 rounded-t-md text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer",
                   isActive
                     ? "bg-panel text-text-900 border-border-strong border-b-panel relative top-[1px]"
                     : "bg-transparent text-text-600 border-transparent hover:bg-panel-muted"

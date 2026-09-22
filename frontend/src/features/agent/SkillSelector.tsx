@@ -43,7 +43,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
             aria-label="技能"
             disabled={disabled || loading}
             className={[
-              'composer-skill-button inline-flex h-7 min-w-0 max-w-[88px] shrink-0 items-center gap-1 rounded-md border border-transparent px-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45',
+              'composer-skill-button inline-flex h-7 min-w-0 max-w-[88px] shrink-0 items-center gap-1 rounded-md border border-transparent px-2 text-[11px] font-medium transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45',
               count > 0
                 ? 'bg-accent-soft text-accent'
                 : 'bg-transparent text-text-600 hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 data-[state=open]:bg-panel-muted data-[state=open]:text-text-900',
@@ -82,7 +82,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
                 }}
                 className={cn(
                   'flex items-start gap-2.5 rounded-sm px-2 py-1.5 text-xs',
-                  active ? 'bg-accent-soft/70' : 'hover:bg-panel-muted',
+                  active && 'bg-accent-soft',
                   optionDisabled ? 'cursor-not-allowed opacity-45' : '',
                 )}
               >

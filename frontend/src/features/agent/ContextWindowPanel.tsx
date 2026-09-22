@@ -2,10 +2,9 @@ import {
   Activity,
   Ellipsis,
   FileText,
-  Gauge,
   History,
   Loader2,
-  Minimize2,
+  Shrink,
   ShieldCheck,
   Terminal,
 } from 'lucide-react';
@@ -209,7 +208,7 @@ export function ContextWindowPanel() {
           onClick={() => setOpen((current) => !current)}
           className={open ? 'bg-panel-muted text-text-900' : undefined}
         >
-          <Gauge className="h-4 w-4" strokeWidth={1.75} />
+          <Shrink className="h-4 w-4" strokeWidth={1.75} />
         </IconButton>
         {(warning || compacting) && (
           <span
@@ -242,12 +241,12 @@ export function ContextWindowPanel() {
               type="button"
               onClick={() => void runCompact()}
               disabled={disabled}
-              className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[11px] font-semibold text-text-600 hover:border-border-strong hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+              className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[11px] font-semibold text-text-600 hover:border-border-strong hover:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
               title={runActive ? '运行中不可手动压缩' : '手动压缩上下文'}
             >
               {compacting
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                : <Minimize2 className="h-3.5 w-3.5" />}
+                : <Shrink className="h-3.5 w-3.5" />}
               {compacting ? '压缩中' : '压缩'}
             </button>
           </header>

@@ -236,7 +236,7 @@ export function ComponentRepositoryPage() {
                       disabled={pending === selected.id}
                       onClick={() => void toggle(selected)}
                       className={cn(
-                        'h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:opacity-50',
+                        'h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none disabled:opacity-50',
                         selected.disabled ? 'bg-border-strong' : 'bg-success',
                       )}
                     >

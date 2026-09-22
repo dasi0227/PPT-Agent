@@ -660,7 +660,7 @@ export function DeckNavigator() {
               type="text"
               value={value}
               onChange={(event) => setValue(event.target.value)}
-              className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:border-accent focus:outline-none"
+              className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:outline-none"
             />
             {error && <p className="mt-2 text-xs text-danger">{error}</p>}
           </div>
@@ -704,7 +704,7 @@ export function DeckNavigator() {
                 type="text"
                 value={value.title}
                 onChange={(event) => setValue({ ...value, title: event.target.value })}
-                className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:border-accent focus:outline-none"
+                className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:outline-none"
               />
             </label>
             <label className="block">
@@ -713,7 +713,7 @@ export function DeckNavigator() {
                 rows={3}
                 value={value.purpose}
                 onChange={(event) => setValue({ ...value, purpose: event.target.value })}
-                className="w-full resize-none rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:border-accent focus:outline-none"
+                className="w-full resize-none rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:outline-none"
               />
             </label>
             {newSubsectionTarget && newSubsectionTarget.section.slides.length > 0 && (

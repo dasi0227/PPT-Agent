@@ -221,7 +221,7 @@ export function ThemeRepositoryPage() {
                       aria-live="polite"
                       title={!projectId ? '请先打开一个项目' : undefined}
                       className={cn(
-                        'h-7 px-2.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1',
+                        'h-7 px-2.5 text-xs focus-visible:outline-none',
                         selectedIsCurrent && 'disabled:border-accent/20 disabled:bg-accent-soft disabled:text-accent disabled:opacity-100',
                         applyingThemeId && 'disabled:opacity-70',
                       )}

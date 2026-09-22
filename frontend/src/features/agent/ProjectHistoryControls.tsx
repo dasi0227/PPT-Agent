@@ -16,7 +16,7 @@ export function RollbackButton({ runId, steering }: { runId?: string; steering?:
   const busy = useProjectHistoryStore((s) => s.busy);
   if (!projectId || !runId || steering || !state?.checkpoints.some((cp) => cp.run_id === runId)) return null;
   return <button type="button" aria-label="回退到此消息发送前" title="回退到此消息发送前" disabled={busy}
-    className="inline-flex h-6 w-6 items-center justify-center rounded-md hover:bg-panel-muted hover:text-text-900 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+    className="inline-flex h-6 w-6 items-center justify-center rounded-md hover:bg-panel-muted hover:text-text-900 disabled:opacity-40 focus-visible:outline-none"
     onClick={() => void useProjectHistoryStore.getState().preview(projectId, runId)}><RotateCcw className="h-3.5 w-3.5" /></button>;
 }
 export function HistoryBanner() {

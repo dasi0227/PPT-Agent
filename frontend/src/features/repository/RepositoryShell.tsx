@@ -41,7 +41,7 @@ export function RepositoryShell({
         <button
           type="button"
           onClick={() => navigate(returnTo)}
-          className="flex min-w-0 items-center gap-2 rounded-md px-2 text-base font-bold transition-colors hover:bg-panel-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="flex min-w-0 items-center gap-2 rounded-md px-2 text-base font-bold transition-colors hover:bg-panel-muted focus-visible:outline-none"
           aria-label="返回项目"
         >
           <img src="/logo.jpg" alt="" className="h-10 w-10 rounded-sm object-cover" />
@@ -54,7 +54,7 @@ export function RepositoryShell({
         </IconButton>
         <Link
           to={returnTo}
-          className="expandable-icon-button ml-1 inline-flex h-8 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:translate-y-px"
+          className="expandable-icon-button ml-1 inline-flex h-8 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none active:translate-y-px"
           title="返回主页"
           aria-label="返回主页"
         >

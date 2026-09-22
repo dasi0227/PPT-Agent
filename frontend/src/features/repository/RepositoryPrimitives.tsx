@@ -18,7 +18,7 @@ export function RepositoryPageHeader({
   return (
     <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-5 md:px-6">
       <h1 className="text-lg font-bold tracking-[-0.01em] text-text-900">{title}</h1>
-      <label className="group flex h-9 w-full max-w-[280px] items-center gap-2 rounded-lg border border-border bg-panel px-3 text-text-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-colors focus-within:border-accent focus-within:bg-surface focus-within:ring-2 focus-within:ring-accent/10">
+      <label className="group flex h-9 w-full max-w-[280px] items-center gap-2 rounded-lg border border-border bg-panel px-3 text-text-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-colors focus-within:bg-surface">
         <Search className="h-4 w-4 shrink-0 transition-colors group-focus-within:text-accent" strokeWidth={1.75} />
         <input
           value={query}
@@ -37,7 +37,7 @@ export function RepositoryFileLink({ href }: { href?: string }) {
   return (
     <a
       href={href}
-      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none"
       title="查看文件"
       aria-label="查看文件"
     >
@@ -96,7 +96,7 @@ export function RepositoryFilterButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'h-7 shrink-0 rounded-md px-2.5 text-xs font-semibold transition-all active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1',
+        'h-7 shrink-0 rounded-md px-2.5 text-xs font-semibold transition-all active:translate-y-px focus-visible:outline-none',
         active
           ? 'bg-surface text-accent shadow-[0_1px_3px_rgba(51,65,85,0.12)] ring-1 ring-border'
           : 'text-text-600 hover:bg-panel-muted hover:text-text-900',
@@ -131,7 +131,7 @@ export function RepositoryDirectoryItem({
       type="button"
       onClick={onClick}
       className={cn(
-        'group mb-1 grid min-h-[66px] w-full grid-cols-[58px_minmax(0,1fr)_18px] items-center gap-2.5 rounded-lg border p-2 text-left transition-all active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset',
+        'group mb-1 grid min-h-[66px] w-full grid-cols-[58px_minmax(0,1fr)_18px] items-center gap-2.5 rounded-lg border p-2 text-left transition-all active:translate-y-px focus-visible:outline-none',
         active
           ? 'border-accent/30 bg-accent-soft shadow-[0_2px_8px_rgba(47,103,246,0.07)]'
           : 'border-transparent hover:border-border hover:bg-surface',
@@ -202,7 +202,7 @@ export function RepositoryDetail({
               <button
                 type="button"
                 onClick={onEdit}
-                className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-panel-muted hover:text-text-900 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-panel-muted hover:text-text-900 active:translate-y-px focus-visible:outline-none"
                 title={`编辑${deleteNoun}`}
                 aria-label={`编辑${title}`}
               >
@@ -325,7 +325,7 @@ export function SegmentedControl<T extends string>({
           type="button"
           onClick={() => onChange(option.value)}
           className={cn(
-            'h-7 rounded-md px-3 text-xs font-semibold transition-all active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1',
+            'h-7 rounded-md px-3 text-xs font-semibold transition-all active:translate-y-px focus-visible:outline-none',
             value === option.value
               ? 'bg-surface text-text-900 shadow-[0_1px_3px_rgba(51,65,85,0.14)] ring-1 ring-border/80'
               : 'text-text-600 hover:text-text-900',

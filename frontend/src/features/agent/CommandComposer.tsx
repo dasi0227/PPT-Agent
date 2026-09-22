@@ -651,7 +651,7 @@ export const CommandComposer: React.FC = () => {
 										onChange={(event) => activeThreadId && composer.updateThreadDOMSelection(activeThreadId, reference.selection.selection_id, { comment: Array.from(event.target.value).slice(0, 500).join('') })}
 										onBlur={() => activeThreadId && composer.setEditingDOMSelection(activeThreadId)}
 										onKeyDown={(event) => { if (!activeThreadId) return; if (event.key === 'Escape') { event.preventDefault(); composer.setEditingDOMSelection(activeThreadId); } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); composer.setEditingDOMSelection(activeThreadId); editorRef.current?.focusEnd(); } }}
-										className="mb-1 h-16 w-full resize-none rounded-md border border-border bg-surface p-2 text-xs outline-none focus:border-accent" placeholder="添加注释（可选）" />
+										className="mb-1 h-16 w-full resize-none rounded-md border border-border bg-surface p-2 text-xs outline-none" placeholder="添加注释（可选）" />
 							)}
 							<button type="button" onClick={() => {
 								if (!activeThreadId) return;
@@ -721,7 +721,7 @@ export const CommandComposer: React.FC = () => {
 				type="button"
 				onClick={() => fileInputRef.current?.click()}
 				disabled={disabled}
-				className="composer-attach-button inline-flex h-7 min-w-0 shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+				className="composer-attach-button inline-flex h-7 min-w-0 shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
 				aria-label="选择图片"
 				title="选择图片"
 			>

@@ -18,7 +18,7 @@ export function NextInputSuggestionsPanel({ items, onSelect }: NextInputSuggesti
             key={`${index}:${item}`}
             type="button"
             onClick={() => onSelect(item)}
-            className="group flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left text-sm leading-5 text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-accent-soft focus-visible:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+            className="group flex w-full items-start gap-2 rounded-md px-1.5 py-1 text-left text-sm leading-5 text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-accent-soft focus-visible:text-text-900 focus-visible:outline-none"
             aria-label={`${index + 1}. ${item}，按 ${modifier} 加 ${index + 1} 快捷填入`}
           >
             <span className="mt-px w-3.5 shrink-0 text-right text-[11px] font-semibold tabular-nums text-text-400 group-hover:text-accent" aria-hidden="true">

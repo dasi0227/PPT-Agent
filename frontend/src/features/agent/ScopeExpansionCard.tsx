@@ -59,15 +59,15 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
         </div>
       </div>
       <div className="flex flex-wrap justify-end gap-1.5 border-t border-border bg-panel-muted px-3 py-2" role="group" aria-label="范围扩权操作">
-        <button type="button" disabled={submitting !== null} onClick={() => void submit('reject')} className="inline-flex h-8 items-center gap-1 rounded-md bg-danger px-2.5 text-xs font-semibold text-white hover:bg-danger/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50">
+        <button type="button" disabled={submitting !== null} onClick={() => void submit('reject')} className="inline-flex h-8 items-center gap-1 rounded-md bg-danger px-2.5 text-xs font-semibold text-white hover:bg-danger/90 focus-visible:outline-none disabled:opacity-50">
           <X className="h-3.5 w-3.5" />{submitting === 'reject' ? '提交中' : '拒绝'}
         </button>
         {item.proposedScope.object !== 'global' && (
-          <button type="button" disabled={submitting !== null} onClick={() => void submit('adjust')} className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-2.5 text-xs font-semibold text-text-700 hover:bg-panel-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50">
+          <button type="button" disabled={submitting !== null} onClick={() => void submit('adjust')} className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-2.5 text-xs font-semibold text-text-700 hover:bg-panel-muted focus-visible:outline-none disabled:opacity-50">
             {submitting === 'adjust' ? '提交中' : '调整为全局'}
           </button>
         )}
-        <button type="button" disabled={submitting !== null} onClick={() => void submit('approve')} className="inline-flex h-8 items-center gap-1 rounded-md bg-success px-3 text-xs font-semibold text-white hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50">
+        <button type="button" disabled={submitting !== null} onClick={() => void submit('approve')} className="inline-flex h-8 items-center gap-1 rounded-md bg-success px-3 text-xs font-semibold text-white hover:bg-success/90 focus-visible:outline-none disabled:opacity-50">
           <Check className="h-3.5 w-3.5" />{submitting === 'approve' ? '提交中' : '批准'}
         </button>
       </div>

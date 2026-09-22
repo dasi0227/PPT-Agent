@@ -59,7 +59,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
                 type="button"
                 onClick={() => setMode('choose')}
                 disabled={isCreating}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="返回项目操作"
                 title="返回项目操作"
               >
@@ -74,7 +74,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
             <button
               type="button"
               onClick={() => setMode('create')}
-              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none"
             >
               <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-surface transition-colors group-hover:border-accent/30 group-hover:text-accent">
                 <FilePlus className="h-7 w-7 text-text-600 group-hover:text-accent" strokeWidth={1.75} />
@@ -88,7 +88,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
                 reset();
                 onOpenExisting();
               }}
-              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none"
             >
               <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-surface transition-colors group-hover:border-accent/30 group-hover:text-accent">
                 <FolderOpen className="h-7 w-7 text-text-600 group-hover:text-accent" strokeWidth={1.75} />
@@ -107,7 +107,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
                 onChange={(event) => setTitle(event.target.value)}
                 disabled={isCreating}
                 placeholder="例如：2026 品牌发布会"
-                className="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text-900 placeholder:text-text-400 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-10 w-full rounded-md border border-border bg-panel px-3 text-sm text-text-900 placeholder:text-text-400 transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
             <DialogFooter>

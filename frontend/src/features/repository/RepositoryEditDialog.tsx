@@ -104,7 +104,7 @@ export function RepositoryEditDialog<T extends string>({
               maxLength={80}
               value={draft.name}
               onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-              className="h-9 rounded-lg border border-border bg-surface px-3 text-[13px] text-text-900 outline-none focus:border-accent focus:ring-2 focus:ring-accent/10"
+              className="h-9 rounded-lg border border-border bg-surface px-3 text-[13px] text-text-900 outline-none"
             />
           </label>
           <fieldset className="grid gap-1.5">
@@ -120,7 +120,7 @@ export function RepositoryEditDialog<T extends string>({
                     disabled={!selected && draft.tags.length >= 2}
                     onClick={() => toggleTag(option.value)}
                     className={cn(
-                      'h-7 rounded-md border px-2.5 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40',
+                      'h-7 rounded-md border px-2.5 text-xs font-semibold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40',
                       selected ? 'border-accent/30 bg-accent-soft text-accent' : 'border-border bg-surface text-text-600 hover:bg-panel-muted',
                     )}
                   >
@@ -137,7 +137,7 @@ export function RepositoryEditDialog<T extends string>({
               rows={4}
               value={draft.description}
               onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-              className="resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 text-text-900 outline-none focus:border-accent focus:ring-2 focus:ring-accent/10"
+              className="resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 text-text-900 outline-none"
             />
           </label>
           <DialogFooter className="pt-2">

@@ -92,7 +92,7 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
       {...interactive}
       className={cn(
         'grid grid-cols-[16px_minmax(0,1fr)_16px] items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-600',
-        showToggle && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+        showToggle && 'cursor-pointer focus-visible:outline-none',
       )}
     >
       <span className="flex h-5 w-4 items-center justify-center" aria-hidden="true">
@@ -155,7 +155,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
       {...interactive}
       className={cn(
         'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5',
-        showToggle && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+        showToggle && 'cursor-pointer focus-visible:outline-none',
       )}
     >
       <Flag className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
