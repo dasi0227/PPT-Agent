@@ -61,9 +61,9 @@ func newBriefingFixture(t *testing.T, responses ...string) briefingFixture {
 	}
 	script := make([]llm.GenerateResponse, 0, len(responses))
 	for _, response := range responses {
-		script = append(script, llm.GenerateResponse{Content: llm.TextContent(response)})
+		script = append(script, llm.GenerateResponse{ToolCalls: []llm.ToolCall{{ID: "briefing-result", Name: "kickoff_thread", Args: map[string]any{"title": "启动当前任务", "content": response}}}})
 	}
-	provider := &llmtest.FakeProvider{ProviderName: "fake", ModelName: "briefing-model", Script: script}
+	provider := &llmtest.FakeProvider{ProviderName: "fake", ModelName: "briefing-model", Caps: llm.Capabilities{ToolCalls: true}, Script: script}
 	registry, err := llm.NewRegistryWithProfiles("Briefing", []llm.Profile{
 		llm.NewTestProfile("Briefing", "https://example.invalid", provider),
 	})
@@ -87,6 +87,7 @@ func TestKickoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 	}
 	if result.Briefing.Kind != model.BriefingKickoff ||
 		len(result.Briefing.Versions) != 1 ||
+		result.Briefing.Versions[0].Title != "启动当前任务" ||
 		result.Briefing.Versions[0].Content != "# Startup\nDo the work." {
 		t.Fatalf("unexpected result: %+v", result)
 	}
@@ -105,6 +106,19 @@ func TestKickoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 	}
 	if len(briefings) != 1 {
 		t.Fatalf("failed generation was persisted: %+v", briefings)
+	}
+	fixture.provider.GenerateErr = nil
+	fixture.provider.Script = []llm.GenerateResponse{{Content: llm.TextContent("# Old plain-text result")}}
+	_, err = NewKickoffService(fixture.store, fixture.registry, fixture.locks).Generate(
+		context.Background(), fixture.project.ID,
+		BriefingParams{ThreadID: fixture.thread.ID, BriefingID: result.Briefing.BriefingID},
+	)
+	if err == nil || model.AsAgentError(err, "INTERNAL", "test").Code != "BRIEFING_OUTPUT_INVALID" {
+		t.Fatalf("expected invalid result rejection, got %v", err)
+	}
+	versions, err := fixture.store.GetBriefingVersions(context.Background(), result.Briefing.BriefingID, 0)
+	if err != nil || len(versions) != 1 || versions[0].Title != "启动当前任务" {
+		t.Fatalf("invalid revision changed saved title/content: %+v, %v", versions, err)
 	}
 }
 
@@ -128,7 +142,7 @@ func TestBriefingRetryUsesTwoLatestVersionsAndAllFeedback(t *testing.T) {
 		t.Fatalf("expected four model calls, got %d", len(requests))
 	}
 	revisionPrompt := requests[3].Messages[1].Text()
-	for _, expected := range []string{"version-two", "version-three", "feedback-two", "feedback-three", "feedback-four"} {
+	for _, expected := range []string{"启动当前任务", "version-two", "version-three", "feedback-two", "feedback-three", "feedback-four"} {
 		if !strings.Contains(revisionPrompt, expected) {
 			t.Fatalf("revision prompt missing %q: %s", expected, revisionPrompt)
 		}
@@ -176,6 +190,7 @@ func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
 	for _, kind := range []model.BriefingKind{model.BriefingKickoff, model.BriefingHandoff} {
 		t.Run(string(kind), func(t *testing.T) {
 			f := newBriefingFixture(t, "brief")
+			f.provider.Script[0].ToolCalls[0].Name = string(kind) + "_thread"
 			params := BriefingParams{ThreadID: f.thread.ID}
 			var result BriefingResult
 			var err error
@@ -191,7 +206,7 @@ func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
 			if req.Messages[0].Text() != prompts.MustLoad("command."+string(kind)).Body || result.PromptVersion != prompts.Version {
 				t.Fatal("wrong catalog policy/version")
 			}
-			if strings.Contains(req.Messages[0].Text(), f.project.Title) || !strings.Contains(req.Messages[1].Text(), f.project.Title) || len(req.Tools) != 0 {
+			if strings.Contains(req.Messages[0].Text(), f.project.Title) || !strings.Contains(req.Messages[1].Text(), f.project.Title) || len(req.Tools) != 1 || req.Tools[0].Name != string(kind)+"_thread" {
 				t.Fatal("briefing context or tools crossed policy boundary")
 			}
 		})

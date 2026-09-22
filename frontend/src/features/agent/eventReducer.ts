@@ -177,7 +177,7 @@ export interface ContextCompactionTimelineItem extends BaseTimelineItem {
   compactionId: string;
   trigger: 'auto' | 'manual';
   title: string;
-  summary: string;
+  content: string;
   beforeTokens: number;
   afterTokens: number;
   maxTokens: number;
@@ -262,7 +262,7 @@ export function contextCompactionTimelineItem(
     compactionId: compaction.id,
     trigger: compaction.trigger,
     title: compaction.title,
-    summary: compaction.summary,
+    content: compaction.content,
     beforeTokens: compaction.before_tokens,
     afterTokens: compaction.after_tokens,
     maxTokens: compaction.max_tokens,

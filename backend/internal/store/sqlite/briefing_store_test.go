@@ -26,7 +26,7 @@ func TestBriefingStoreKeepsFullGroupsAndLimitsContextVersions(t *testing.T) {
 		if err := st.AppendBriefingVersion(ctx, model.BriefingVersion{
 			BriefingID: "b1", ThreadID: "t1", ProjectID: "p1",
 			Kind: model.BriefingKickoff, VersionNo: versionNo,
-			Content: "content", Feedback: "feedback", CreatedAt: int64(versionNo),
+			Title: "启动任务", Content: "content", Feedback: "feedback", CreatedAt: int64(versionNo),
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -43,7 +43,7 @@ func TestBriefingStoreKeepsFullGroupsAndLimitsContextVersions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(recent) != 2 || recent[0].VersionNo != 2 || recent[1].VersionNo != 3 {
+	if len(recent) != 2 || recent[0].VersionNo != 2 || recent[1].VersionNo != 3 || recent[1].Title != "启动任务" {
 		t.Fatalf("unexpected recent versions: %+v", recent)
 	}
 }

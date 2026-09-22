@@ -263,7 +263,7 @@ function validContextCompaction(value: unknown): boolean {
     && hasString(value, 'id')
     && ['auto', 'manual'].includes(String(value.trigger))
     && validCompactionTitle(value.title)
-    && hasString(value, 'summary')
+    && hasString(value, 'content')
     && isNonNegativeInteger(value.before_tokens)
     && isNonNegativeInteger(value.after_tokens)
     && typeof value.max_tokens === 'number' && Number.isInteger(value.max_tokens) && value.max_tokens > 0

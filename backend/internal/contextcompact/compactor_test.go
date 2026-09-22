@@ -16,7 +16,7 @@ const validSummary = "## 目标与意图\n目标\n\n## 已完成改动\n完成\n
 func compactResponse(title, summary string) llm.GenerateResponse {
 	return llm.GenerateResponse{ToolCalls: []llm.ToolCall{{
 		ID: "compact-1", Name: compactContextToolName,
-		Args: map[string]any{"title": title, "summary": summary},
+		Args: map[string]any{"title": title, "content": summary},
 	}}}
 }
 
@@ -48,10 +48,10 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 		t.Fatalf("unexpected compaction tools: %+v", request.Tools)
 	}
 	properties, _ := request.Tools[0].Parameters["properties"].(map[string]any)
-	if properties["title"] == nil || properties["summary"] == nil {
+	if properties["title"] == nil || properties["content"] == nil {
 		t.Fatalf("compact_context schema is incomplete: %+v", request.Tools[0])
 	}
-	if result.Title != "收敛上下文压缩协议" || result.Summary != validSummary {
+	if result.Title != "收敛上下文压缩协议" || result.Content != validSummary {
 		t.Fatalf("unexpected structured result: %+v", result)
 	}
 	if len(result.Messages) != 6 || !strings.Contains(result.Messages[0].Text(), "<context_summary>") {
@@ -89,9 +89,10 @@ func TestCompactorRejectsNonToolAndInvalidToolResponses(t *testing.T) {
 		response llm.GenerateResponse
 	}{
 		{name: "plain text", response: llm.GenerateResponse{Content: llm.TextContent(validSummary)}},
-		{name: "wrong tool", response: llm.GenerateResponse{ToolCalls: []llm.ToolCall{{Name: "context_compaction", Args: map[string]any{"title": "标题", "summary": validSummary}}}}},
+		{name: "wrong tool", response: llm.GenerateResponse{ToolCalls: []llm.ToolCall{{Name: "context_compaction", Args: map[string]any{"title": "标题", "content": validSummary}}}}},
 		{name: "multiple tools", response: llm.GenerateResponse{ToolCalls: []llm.ToolCall{{Name: compactContextToolName}, {Name: compactContextToolName}}}},
-		{name: "missing summary", response: compactResponse("有效标题", " ")},
+		{name: "invalid title", response: compactResponse("# invalid\ntitle", validSummary)},
+		{name: "missing content", response: compactResponse("有效标题", " ")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -109,22 +110,6 @@ func TestCompactorRejectsNonToolAndInvalidToolResponses(t *testing.T) {
 	}
 }
 
-func TestCompactorFallsBackForInvalidTitleWithoutRetry(t *testing.T) {
-	provider := &llmtest.FakeProvider{
-		Caps:   llm.Capabilities{ContextWindowTokens: 65536},
-		Script: []llm.GenerateResponse{compactResponse("# invalid\ntitle", validSummary)},
-	}
-	result, err := New(provider).Compact(context.Background(), []llm.Message{{
-		Role: llm.RoleAssistant, Content: llm.TextContent("old context"),
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Title != fallbackTitle || len(provider.Requests()) != 1 {
-		t.Fatalf("result=%+v calls=%d", result, len(provider.Requests()))
-	}
-}
-
 func TestCompactorSkipsModelForEmptyCompressionRegion(t *testing.T) {
 	provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 65536}}
 	result, err := New(provider).Compact(context.Background(), []llm.Message{{
@@ -134,7 +119,7 @@ func TestCompactorSkipsModelForEmptyCompressionRegion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Title != fallbackTitle || result.Summary != emptySummary() || len(provider.Requests()) != 0 {
+	if result.Title != fallbackTitle || result.Content != emptySummary() || len(provider.Requests()) != 0 {
 		t.Fatalf("unexpected empty result: %+v calls=%d", result, len(provider.Requests()))
 	}
 }

@@ -22,7 +22,7 @@ const response: CompactContextResponse = {
   },
   compaction: {
     id: 'cmp_1', thread_id: 't1', project_id: 'p1', trigger: 'manual',
-    title: '收敛上下文协议与前端实现', summary: '## 目标与意图\n继续',
+    title: '收敛上下文协议与前端实现', content: '## 目标与意图\n继续',
     before_tokens: 500, after_tokens: 100, max_tokens: 1000,
     reclaimed_tokens: 400, duration_ms: 20, created_at: 1,
   },

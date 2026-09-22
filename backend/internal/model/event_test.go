@@ -213,7 +213,7 @@ func TestContextCompactedRequiresSafeTitleAndCompleteMetrics(t *testing.T) {
 		Compaction: ContextCompaction{
 			ID: "cmp_1", ThreadID: "t1", ProjectID: "p1", RunID: "r1",
 			Trigger: ContextCompactionAuto, Title: "收敛上下文协议与前端实现",
-			Summary: "## 目标与意图\n继续", BeforeTokens: 56000,
+			Content: "## 目标与意图\n继续", BeforeTokens: 56000,
 			AfterTokens: 30000, MaxTokens: 65536, Reclaimed: 26000,
 			DurationMS: 4200, CreatedAt: 1,
 		},
@@ -225,6 +225,13 @@ func TestContextCompactedRequiresSafeTitleAndCompleteMetrics(t *testing.T) {
 	var data map[string]any
 	_ = json.Unmarshal(raw, &data)
 	compaction := data["compaction"].(map[string]any)
+	delete(compaction, "content")
+	compaction["summary"] = payload.Compaction.Content
+	if err := ValidatePublicEvent(EventContextCompacted, data); err == nil {
+		t.Fatal("legacy summary field was accepted without content")
+	}
+	delete(compaction, "summary")
+	compaction["content"] = payload.Compaction.Content
 	for _, invalid := range []any{"", "bad\ntitle", strings.Repeat("长", 49)} {
 		compaction["title"] = invalid
 		if err := ValidatePublicEvent(EventContextCompacted, data); err == nil {

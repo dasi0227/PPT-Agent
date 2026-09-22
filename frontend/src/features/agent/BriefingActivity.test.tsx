@@ -21,6 +21,7 @@ const briefing: BriefingTimelineItem = {
     project_id: 'project-1',
     kind: 'handoff',
     version_no: 2,
+    title: '交接剩余页面',
     content: '# Handoff v2\n\n继续完成当前项目。',
     feedback: '',
     created_at: 1,
@@ -43,7 +44,7 @@ describe('BriefingActivity', () => {
     });
 
     render(<BriefingActivity item={briefing} />);
-    fireEvent.click(screen.getByRole('button', { name: /handoff: Handoff v2/ }));
+    fireEvent.click(screen.getByRole('button', { name: /handoff: 交接剩余页面/ }));
     fireEvent.click(screen.getByRole('button', { name: '新建会话' }));
 
     await waitFor(() => expect(createThread).toHaveBeenCalledWith('project-1'));
@@ -63,7 +64,7 @@ describe('BriefingActivity', () => {
 
     try {
       render(<BriefingActivity item={briefing} />);
-      fireEvent.click(screen.getByRole('button', { name: /handoff: Handoff v2/ }));
+      fireEvent.click(screen.getByRole('button', { name: /handoff: 交接剩余页面/ }));
 
       fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
       const collapse = screen.getByRole('button', { name: '收起' });

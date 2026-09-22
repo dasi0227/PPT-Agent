@@ -16,10 +16,10 @@ import (
 
 func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
 	provider := &llmtest.FakeProvider{
-		ProviderName: "fake", ModelName: "briefing-model",
+		ProviderName: "fake", ModelName: "briefing-model", Caps: llm.Capabilities{ToolCalls: true},
 		Script: []llm.GenerateResponse{
-			{Content: llm.TextContent("# Kickoff\nBuild the feature.")},
-			{Content: llm.TextContent("# Handoff\nContinue the feature.")},
+			{ToolCalls: []llm.ToolCall{{ID: "kickoff-result", Name: "kickoff_thread", Args: map[string]any{"title": "启动功能开发", "content": "# Kickoff\nBuild the feature."}}}},
+			{ToolCalls: []llm.ToolCall{{ID: "handoff-result", Name: "handoff_thread", Args: map[string]any{"title": "交接功能开发", "content": "# Handoff\nContinue the feature."}}}},
 		},
 	}
 	registry, err := llm.NewRegistryWithProfiles("Briefing", []llm.Profile{
@@ -52,12 +52,15 @@ func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
 		response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/"+kind, body)
 		if response.Code != http.StatusOK ||
 			!strings.Contains(response.Body.String(), `"kind":"`+kind+`"`) ||
-			!strings.Contains(response.Body.String(), `"version_no":1`) {
+			!strings.Contains(response.Body.String(), `"version_no":1`) ||
+			!strings.Contains(response.Body.String(), `"title":`) {
 			t.Fatalf("%s response: %d %s", kind, response.Code, response.Body.String())
 		}
 	}
 	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
-	if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"type":"briefing"`) != 2 {
+	if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"type":"briefing"`) != 2 ||
+		!strings.Contains(response.Body.String(), `"title":"启动功能开发"`) ||
+		!strings.Contains(response.Body.String(), `"title":"交接功能开发"`) {
 		t.Fatalf("briefing history: %d %s", response.Code, response.Body.String())
 	}
 	if len(provider.Requests()) != 2 {
@@ -79,7 +82,7 @@ func (p *blockingBriefingProvider) Generate(ctx context.Context, _ llm.GenerateR
 }
 
 func TestBriefingProgressStreamsThroughHistoryGateAndDisconnectCancels(t *testing.T) {
-	provider := &blockingBriefingProvider{FakeProvider: &llmtest.FakeProvider{}, stopped: make(chan struct{})}
+	provider := &blockingBriefingProvider{FakeProvider: &llmtest.FakeProvider{Caps: llm.Capabilities{ToolCalls: true}}, stopped: make(chan struct{})}
 	registry, err := llm.NewRegistryWithProfiles("Briefing", []llm.Profile{llm.NewTestProfile("Briefing", "https://example.invalid", provider)})
 	if err != nil {
 		t.Fatal(err)

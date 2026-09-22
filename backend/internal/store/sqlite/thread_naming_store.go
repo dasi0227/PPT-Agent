@@ -287,7 +287,7 @@ func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (m
 		return model.ThreadRenameContextSource{}, result.Error
 	}
 	if result.RowsAffected > 0 {
-		source.ContextSummary = compaction.Summary
+		source.ContextSummary = compaction.Content
 	}
 	return source, nil
 }

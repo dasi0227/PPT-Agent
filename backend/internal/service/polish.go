@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandresult"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -29,7 +30,8 @@ type PolishParams struct {
 
 type PolishResult struct {
 	ModelExecution llm.ModelExecution
-	Instruction    string
+	Title          string
+	Content        string
 	Changed        bool
 	PromptVersion  string
 }
@@ -56,7 +58,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	}
 	instruction := strings.TrimSpace(params.Instruction)
 	if instruction == "" || utf8.RuneCountInString(instruction) > maxPolishInstructionRunes {
-		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_prompt", nil)
+		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", nil)
 	}
 	project, err := svc.store.GetProject(ctx, projectID)
 	if err != nil {
@@ -68,7 +70,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 			return PolishResult{}, threadErr
 		}
 		if thread.ProjectID != project.ID {
-			return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_prompt", errors.New("thread does not belong to project"))
+			return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", errors.New("thread does not belong to project"))
 		}
 	}
 	snapshot, err := NewPPTMutationService(svc.store).Snapshot(ctx, project.ID)
@@ -77,25 +79,25 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	}
 	scope, err := resolveRunScope(snapshot, params.ScopeInput)
 	if err != nil {
-		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_prompt", err)
+		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_instruction", err)
 	}
 	command := model.RunCommand{Scope: scope, Mode: params.Mode, Instruction: instruction}
 	if err := command.Validate(); err != nil {
-		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_prompt", err)
+		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_instruction", err)
 	}
 	if svc.registry == nil {
-		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_prompt", nil)
+		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_instruction", nil)
 	}
 	profile, err := svc.registry.RoutedProfile("polish", "")
 	if err != nil {
-		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_prompt", nil)
+		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_instruction", nil)
 	}
 	pack, err := svc.assembler.AssemblePolish(ctx, contextengine.PolishContextRequest{
 		ThreadID: params.ThreadID, Command: command,
 	}, project)
 	if err != nil {
 		if errors.Is(err, model.ErrInvalidRunCommand) || errors.Is(err, contextengine.ErrRequiredMissing) {
-			return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_prompt", err)
+			return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_instruction", err)
 		}
 		return PolishResult{}, err
 	}
@@ -115,25 +117,29 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
 		{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + instruction)},
-	}, MaxOutputTokens: maxPolishOutputTokens})
+	}, Tools: []llm.ToolSchema{commandresult.Schema("polish_instruction",
+		"Submit the refined instruction without executing it or changing the composer.",
+		"A short summary of the wording improvements, not a claim of completed project work.",
+		"The complete refined instruction as plain text, ready to send to the PPT creation Agent.", maxPolishOutputRunes)},
+		MaxOutputTokens: maxPolishOutputTokens})
 	if err != nil {
 		if errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {
 			return PolishResult{}, context.Canceled
 		}
 		if errors.Is(err, llm.ErrUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
-			return PolishResult{}, model.NewAgentError("PROVIDER_UNAVAILABLE", "polish_prompt", err)
+			return PolishResult{}, model.NewAgentError("PROVIDER_UNAVAILABLE", "polish_instruction", err)
 		}
-		return PolishResult{}, model.NewAgentError("AGENT_FAILED", "polish_prompt", err)
+		return PolishResult{}, model.NewAgentError("AGENT_FAILED", "polish_instruction", err)
 	}
 	if err := commandPhase(requestCtx, 2); err != nil {
 		return PolishResult{}, err
 	}
-	polished := strings.TrimSpace(response.Text())
-	if polished == "" || utf8.RuneCountInString(polished) > maxPolishOutputRunes {
-		return PolishResult{}, model.NewAgentError("POLISH_OUTPUT_INVALID", "polish_prompt", nil)
+	result, err := commandresult.Parse(response, "polish_instruction", maxPolishOutputRunes)
+	if err != nil {
+		return PolishResult{}, model.NewAgentError("POLISH_OUTPUT_INVALID", "polish_instruction", err)
 	}
 	return PolishResult{
 		ModelExecution: llm.ExecutionOf(profile.Adapter()),
-		Instruction:    polished, Changed: polished != instruction, PromptVersion: prompt.Version,
+		Title:          result.Title, Content: result.Content, Changed: result.Content != instruction, PromptVersion: prompt.Version,
 	}, nil
 }

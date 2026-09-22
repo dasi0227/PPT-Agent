@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandresult"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -167,6 +168,10 @@ func (svc *briefingGenerator) generate(
 			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
 			{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + userMessage)},
 		},
+		Tools: []llm.ToolSchema{commandresult.Schema(string(kind)+"_thread",
+			"Submit the complete project brief. This does not create a thread or start another Agent.",
+			"A short, task-specific timeline title in the user language.",
+			"The complete standalone Markdown brief for the receiving Agent.", maxBriefingOutputRunes)},
 		MaxOutputTokens: maxBriefingOutputTokens,
 	})
 	if err != nil {
@@ -182,9 +187,9 @@ func (svc *briefingGenerator) generate(
 	if err := requestCtx.Err(); err != nil {
 		return BriefingResult{}, err
 	}
-	content := strings.TrimSpace(response.Text())
-	if content == "" || utf8.RuneCountInString(content) > maxBriefingOutputRunes {
-		return BriefingResult{}, model.NewAgentError("BRIEFING_OUTPUT_INVALID", string(kind), nil)
+	result, err := commandresult.Parse(response, string(kind)+"_thread", maxBriefingOutputRunes)
+	if err != nil {
+		return BriefingResult{}, model.NewAgentError("BRIEFING_OUTPUT_INVALID", string(kind), err)
 	}
 	briefingID := params.BriefingID
 	if briefingID == "" {
@@ -193,7 +198,7 @@ func (svc *briefingGenerator) generate(
 	version := model.BriefingVersion{
 		BriefingID: briefingID, ThreadID: thread.ID, ProjectID: project.ID,
 		Kind: kind, VersionNo: len(versions) + 1,
-		Content: content, Feedback: params.Feedback, CreatedAt: time.Now().Unix(),
+		Title: result.Title, Content: result.Content, Feedback: params.Feedback, CreatedAt: time.Now().Unix(),
 	}
 	if err := svc.store.AppendBriefingVersion(ctx, version); err != nil {
 		return BriefingResult{}, err
@@ -240,6 +245,7 @@ type briefingRevisionContext struct {
 
 type briefingRevisionVersion struct {
 	VersionNo int    `json:"version_no"`
+	Title     string `json:"title"`
 	Content   string `json:"content"`
 }
 
@@ -261,7 +267,7 @@ func briefingUserMessage(kind model.BriefingKind, versions []model.BriefingVersi
 	}
 	for _, version := range versions[start:] {
 		revision.RecentVersions = append(revision.RecentVersions, briefingRevisionVersion{
-			VersionNo: version.VersionNo, Content: version.Content,
+			VersionNo: version.VersionNo, Title: version.Title, Content: version.Content,
 		})
 	}
 	for _, version := range versions {

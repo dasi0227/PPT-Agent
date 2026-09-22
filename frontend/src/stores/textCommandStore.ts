@@ -37,9 +37,9 @@ export async function polishCommand(
         polishRequests.set(id, {
           projectId,
           threadId,
-          request: { ...request, instruction: result.polished_instruction },
+          request: { ...request, instruction: result.content },
         });
-        return { ...initial, status: 'completed', content: result.polished_instruction };
+        return { ...initial, status: 'completed', title: result.title, content: result.content };
       },
       () => {
         void polishCommand(projectId, threadId, request, id);

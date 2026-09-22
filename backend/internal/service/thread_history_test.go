@@ -145,14 +145,14 @@ func TestHistoryMergesBriefingGroupWithoutWritingJSONL(t *testing.T) {
 		if err := st.AppendBriefingVersion(ctx, model.BriefingVersion{
 			BriefingID: "b1", ThreadID: "t1", ProjectID: "p1",
 			Kind: model.BriefingHandoff, VersionNo: versionNo + 1,
-			Content: content, CreatedAt: int64(199 + versionNo),
+			Title: "交接任务", Content: content, CreatedAt: int64(199 + versionNo),
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if err := st.CreateContextCompaction(ctx, model.ContextCompaction{
 		ID: "cmp_1", ThreadID: "t1", ProjectID: "p1",
-		Trigger: model.ContextCompactionManual, Title: "整理项目上下文", Summary: "summary",
+		Trigger: model.ContextCompactionManual, Title: "整理项目上下文", Content: "summary",
 		BeforeTokens: 56000, AfterTokens: 30000, MaxTokens: 65536,
 		Reclaimed: 26000, DurationMS: 3600, CreatedAt: 201,
 	}); err != nil {
@@ -166,7 +166,7 @@ func TestHistoryMergesBriefingGroupWithoutWritingJSONL(t *testing.T) {
 		t.Fatalf("sidecar events were not merged by timestamp: %+v", out)
 	}
 	compactionData, ok := out[2]["data"].(map[string]any)
-	if !ok || compactionData["title"] != "整理项目上下文" {
+	if !ok || compactionData["title"] != "整理项目上下文" || compactionData["content"] != "summary" {
 		t.Fatalf("compaction title missing: %+v", out[2])
 	}
 	data, ok := out[1]["data"].(map[string]any)
@@ -174,7 +174,7 @@ func TestHistoryMergesBriefingGroupWithoutWritingJSONL(t *testing.T) {
 		t.Fatalf("briefing data missing: %+v", out[1])
 	}
 	versions, ok := data["versions"].([]model.BriefingVersion)
-	if !ok || len(versions) != 2 {
+	if !ok || len(versions) != 2 || versions[1].Title != "交接任务" {
 		t.Fatalf("briefing versions missing: %+v", data)
 	}
 	after, err := os.ReadFile(historyPath)

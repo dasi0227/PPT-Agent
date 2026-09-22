@@ -827,7 +827,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if !ok || strings.TrimSpace(stringValue(compaction["id"])) == "" ||
 			!oneOf(stringValue(compaction["trigger"]), "auto", "manual") ||
 			!validPublicCompactionTitle(stringValue(compaction["title"])) ||
-			strings.TrimSpace(stringValue(compaction["summary"])) == "" ||
+			strings.TrimSpace(stringValue(compaction["content"])) == "" ||
 			!isInteger(compaction["before_tokens"]) || intValue(compaction["before_tokens"]) < 0 ||
 			!isInteger(compaction["after_tokens"]) || intValue(compaction["after_tokens"]) < 0 ||
 			!isInteger(compaction["max_tokens"]) || intValue(compaction["max_tokens"]) <= 0 ||

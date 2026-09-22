@@ -205,7 +205,7 @@ func (r *workflowExecution) recordAutoCompaction(
 	compaction := model.ContextCompaction{
 		ID: model.MustShortID("cmp"), ThreadID: r.pack.Manifest.ThreadID,
 		ProjectID: r.project.ID, RunID: r.runID, Trigger: model.ContextCompactionAuto,
-		Title: result.Title, Summary: result.Summary, BeforeTokens: before.Total, AfterTokens: after.Total,
+		Title: result.Title, Content: result.Content, BeforeTokens: before.Total, AfterTokens: after.Total,
 		MaxTokens: before.Max, Reclaimed: reclaimed,
 		DurationMS: duration.Milliseconds(), CreatedAt: time.Now().Unix(),
 	}

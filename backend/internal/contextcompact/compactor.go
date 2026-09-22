@@ -6,9 +6,8 @@ import (
 	"errors"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandresult"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -27,7 +26,7 @@ const (
 type Result struct {
 	Messages               []llm.Message
 	Title                  string
-	Summary                string
+	Content                string
 	BeforeTranscriptTokens int
 	AfterTranscriptTokens  int
 	DroppedInputTokens     int
@@ -58,7 +57,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	compressed, retained := splitTranscript(pruned)
 	if len(compressed) == 0 {
 		return Result{
-			Messages: retained, Title: fallbackTitle, Summary: emptySummary(),
+			Messages: retained, Title: fallbackTitle, Content: emptySummary(),
 			BeforeTranscriptTokens: before, AfterTranscriptTokens: messageTokens(retained),
 		}, nil
 	}
@@ -100,64 +99,22 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	next = compactProjectAttachmentImages(next)
 	next = compactDOMSelections(next)
 	return Result{
-		Messages: next, Title: title, Summary: summary,
+		Messages: next, Title: title, Content: summary,
 		BeforeTranscriptTokens: before, AfterTranscriptTokens: messageTokens(next),
 		DroppedInputTokens: dropped,
 	}, nil
 }
 
 func compactContextToolSchema() llm.ToolSchema {
-	return llm.ToolSchema{
-		Name:        compactContextToolName,
-		Description: "Return a short timeline title and the durable context summary.",
-		Parameters: map[string]any{
-			"type": "object", "additionalProperties": false,
-			"required": []string{"title", "summary"},
-			"properties": map[string]any{
-				"title":   map[string]any{"type": "string", "minLength": 1, "maxLength": 48},
-				"summary": map[string]any{"type": "string", "minLength": 1},
-			},
-		},
-	}
+	return commandresult.Schema(compactContextToolName,
+		"Submit the durable working context for the same continuing task.",
+		"A short, task-specific plain-text timeline title in the conversation language.",
+		"The complete Markdown context summary with goals, completed work, decisions, open questions and next steps.", 0)
 }
 
 func parseCompactContextResponse(response llm.GenerateResponse) (string, string, error) {
-	if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != compactContextToolName {
-		return "", "", errors.New("model must call compact_context exactly once")
-	}
-	call := response.ToolCalls[0]
-	summary, ok := call.Args["summary"].(string)
-	if !ok || strings.TrimSpace(summary) == "" {
-		return "", "", errors.New("compact summary is required")
-	}
-	summary = strings.TrimSpace(summary)
-	rawTitle, _ := call.Args["title"].(string)
-	title := strings.TrimSpace(rawTitle)
-	if !validCompactionTitle(rawTitle) || !validCompactionTitle(title) {
-		title = fallbackTitle
-	}
-	return title, summary, nil
-}
-
-func validCompactionTitle(title string) bool {
-	if title == "" || utf8.RuneCountInString(title) > 48 ||
-		strings.ContainsAny(title, "\r\n\t<>") ||
-		strings.Contains(strings.ToLower(title), "compact:") ||
-		strings.HasSuffix(title, ".") || strings.HasSuffix(title, "。") {
-		return false
-	}
-	for _, value := range title {
-		if unicode.IsControl(value) {
-			return false
-		}
-	}
-	trimmed := strings.TrimLeftFunc(title, unicode.IsSpace)
-	for _, prefix := range []string{"#", "- ", "* ", "+ ", "> ", "```"} {
-		if strings.HasPrefix(trimmed, prefix) {
-			return false
-		}
-	}
-	return true
+	result, err := commandresult.Parse(response, compactContextToolName, 0)
+	return result.Title, result.Content, err
 }
 
 func compactDOMSelections(messages []llm.Message) []llm.Message {

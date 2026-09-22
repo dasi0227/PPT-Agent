@@ -12,9 +12,9 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 )
 
-func TestPolishEndpointReturnsTextWithoutStartingRun(t *testing.T) {
-	provider := &llmtest.FakeProvider{ProviderName: "fake", ModelName: "polish-model", Script: []llm.GenerateResponse{{
-		Content: llm.TextContent("请在当前项目中强化核心信息层级，并保持整体视觉克制。"),
+func TestPolishEndpointReturnsTitleAndContentWithoutStartingRun(t *testing.T) {
+	provider := &llmtest.FakeProvider{ProviderName: "fake", ModelName: "polish-model", Caps: llm.Capabilities{ToolCalls: true}, Script: []llm.GenerateResponse{{
+		ToolCalls: []llm.ToolCall{{ID: "polish-result", Name: "polish_instruction", Args: map[string]any{"title": "明确核心信息与视觉层级", "content": "请在当前项目中强化核心信息层级，并保持整体视觉克制。"}}},
 	}}}
 	registry, err := llm.NewRegistryWithProfiles("Polish", []llm.Profile{llm.NewTestProfile("Polish", "https://example.invalid", provider)})
 	if err != nil {
@@ -35,10 +35,10 @@ func TestPolishEndpointReturnsTextWithoutStartingRun(t *testing.T) {
 	decodeResponse(t, response, &thread)
 	body := `{"instruction":"更有冲击力","thread_id":"` + thread.ID + `","scope":{"object":"presentation","selection":{"kind":"all_pages"}},"mode":"execute"}`
 	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/polish", body)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"changed":true`) || !strings.Contains(response.Body.String(), `"prompt_version":"`+prompt.Version+`"`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"title":"明确核心信息与视觉层级"`) || !strings.Contains(response.Body.String(), `"content":`) || !strings.Contains(response.Body.String(), `"changed":true`) || !strings.Contains(response.Body.String(), `"prompt_version":"`+prompt.Version+`"`) {
 		t.Fatalf("polish response: %d %s", response.Code, response.Body.String())
 	}
-	if len(provider.Requests()) != 1 || len(provider.Requests()[0].Tools) != 0 {
-		t.Fatalf("polish did not stay a single tool-free provider call: %+v", provider.Requests())
+	if len(provider.Requests()) != 1 || len(provider.Requests()[0].Tools) != 1 || provider.Requests()[0].Tools[0].Name != "polish_instruction" {
+		t.Fatalf("polish did not stay a single result-tool provider call: %+v", provider.Requests())
 	}
 }

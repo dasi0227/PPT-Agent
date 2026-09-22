@@ -72,7 +72,7 @@ function readContextCompaction(data: Record<string, unknown>): ContextCompaction
     typeof data.project_id !== 'string' || data.project_id === '' ||
     typeof title !== 'string' || title.trim() === '' || Array.from(title).length > 48 ||
     /[\r\n\t\p{Cc}<>]/u.test(title) ||
-    typeof data.summary !== 'string' || data.summary.trim() === '' ||
+    typeof data.content !== 'string' || data.content.trim() === '' ||
     !nonNegativeFields.every((value) => typeof value === 'number' && Number.isInteger(value) && value >= 0) ||
     typeof data.max_tokens !== 'number' || !Number.isInteger(data.max_tokens) || data.max_tokens <= 0 ||
     (data.run_id !== undefined && typeof data.run_id !== 'string')) return null;
@@ -83,7 +83,7 @@ function readContextCompaction(data: Record<string, unknown>): ContextCompaction
     run_id: data.run_id as string | undefined,
     trigger,
     title,
-    summary: data.summary,
+    content: data.content,
     before_tokens: data.before_tokens as number,
     after_tokens: data.after_tokens as number,
     max_tokens: data.max_tokens,
@@ -158,6 +158,7 @@ function readBriefingVersions(data: Record<string, unknown>): BriefingVersion[] 
       typeof value.project_id !== 'string' ||
       (value.kind !== 'kickoff' && value.kind !== 'handoff') ||
       typeof value.version_no !== 'number' ||
+      typeof value.title !== 'string' || value.title.trim() === '' ||
       typeof value.content !== 'string' ||
       typeof value.feedback !== 'string' ||
       typeof value.created_at !== 'number') return [];
@@ -167,6 +168,7 @@ function readBriefingVersions(data: Record<string, unknown>): BriefingVersion[] 
       project_id: value.project_id,
       kind: value.kind as BriefingKind,
       version_no: value.version_no,
+      title: value.title,
       content: value.content,
       feedback: value.feedback,
       created_at: value.created_at,

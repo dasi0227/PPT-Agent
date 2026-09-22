@@ -24,7 +24,7 @@ describe('history hydrator', () => {
 			project_id: 'p1',
         trigger: 'manual',
 			title: '整理当前任务上下文',
-        summary: '## 下一步\n继续',
+        content: '## 下一步\n继续',
         before_tokens: 50000,
         after_tokens: 24000,
         max_tokens: 65536,
@@ -45,7 +45,7 @@ describe('history hydrator', () => {
 	it('rejects legacy compaction history without a title', () => {
 		const hydrated = hydrateRunFromHistory([
 			entry(1, 'context_compaction', {
-				id: 'cmp_legacy', trigger: 'manual', summary: 'legacy',
+				id: 'cmp_legacy', trigger: 'manual', content: 'legacy',
 				before_tokens: 10, after_tokens: 5, max_tokens: 100,
 				reclaimed_tokens: 5, duration_ms: 1, created_at: 1,
 			}, 'cmp_legacy'),
@@ -378,11 +378,11 @@ describe('history hydrator', () => {
         versions: [
           {
             briefing_id: 'brf_1', project_id: 'p1', thread_id: 't1',
-            kind: 'handoff', version_no: 1, content: 'first', feedback: '', created_at: 10,
+            kind: 'handoff', version_no: 1, title: '首次简报', content: 'first', feedback: '', created_at: 10,
           },
           {
             briefing_id: 'brf_1', project_id: 'p1', thread_id: 't1',
-            kind: 'handoff', version_no: 2, content: 'second', feedback: 'expand', created_at: 20,
+            kind: 'handoff', version_no: 2, title: '修订简报', content: 'second', feedback: 'expand', created_at: 20,
           },
         ],
       }, 'brf_1'),
@@ -393,7 +393,7 @@ describe('history hydrator', () => {
       briefingId: 'brf_1',
       kind: 'handoff',
       status: 'completed',
-      versions: [{ version_no: 2, content: 'second' }],
+      versions: [{ version_no: 2, title: '修订简报', content: 'second' }],
     });
     expect(hydrated.session.status).toBe('idle');
   });

@@ -8,7 +8,7 @@ export function ContextCompactionActivity({ item }: { item: ContextCompactionTim
       kind="compact"
       title={item.title}
       timestamp={item.timestamp}
-      content={item.summary}
+      content={item.content}
       metadata={
         <>
           <span>{item.trigger === 'auto' ? '自动' : '手动'}</span>

@@ -14,7 +14,7 @@ type ContextCompaction struct {
 	RunID        string                   `json:"run_id,omitempty"`
 	Trigger      ContextCompactionTrigger `json:"trigger"`
 	Title        string                   `json:"title"`
-	Summary      string                   `json:"summary"`
+	Content      string                   `json:"content"`
 	BeforeTokens int                      `json:"before_tokens"`
 	AfterTokens  int                      `json:"after_tokens"`
 	MaxTokens    int                      `json:"max_tokens"`

@@ -9,7 +9,7 @@ const item: ContextCompactionTimelineItem = {
   compactionId: 'cmp_1',
   trigger: 'manual',
   title: '收敛上下文协议与前端实现',
-  summary: '## 目标与意图\n\n继续完成正式实现。',
+  content: '## 目标与意图\n\n继续完成正式实现。',
   beforeTokens: 0,
   afterTokens: 0,
   maxTokens: 65536,

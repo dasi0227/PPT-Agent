@@ -17,6 +17,7 @@ type BriefingVersion struct {
 	ProjectID  string       `json:"project_id"`
 	Kind       BriefingKind `json:"kind"`
 	VersionNo  int          `json:"version_no"`
+	Title      string       `json:"title"`
 	Content    string       `json:"content"`
 	Feedback   string       `json:"feedback"`
 	CreatedAt  int64        `json:"created_at"`

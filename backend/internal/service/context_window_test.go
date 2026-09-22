@@ -16,11 +16,11 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	fixture := newBriefingFixture(t,
 		"## 目标与意图\n继续任务\n\n## 已完成改动\n已读取页面\n\n## 关键决策\n保持设计\n\n## 未决问题\n无\n\n## 下一步\n继续",
 	)
-	fixture.provider.Caps = llm.Capabilities{ContextWindowTokens: 65536}
+	fixture.provider.Caps = llm.Capabilities{ToolCalls: true, ContextWindowTokens: 65536}
 	fixture.provider.Script = []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{
 		ID: "compact-1", Name: "compact_context", Args: map[string]any{
 			"title":   "收敛上下文协议与实现",
-			"summary": "## 目标与意图\n继续任务\n\n## 已完成改动\n已读取页面\n\n## 关键决策\n保持设计\n\n## 未决问题\n无\n\n## 下一步\n继续",
+			"content": "## 目标与意图\n继续任务\n\n## 已完成改动\n已读取页面\n\n## 关键决策\n保持设计\n\n## 未决问题\n无\n\n## 下一步\n继续",
 		},
 	}}}}
 	transcripts := contextengine.NewFSTranscriptStore()
@@ -41,7 +41,7 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	}
 	if result.Compaction.Trigger != model.ContextCompactionManual ||
 		result.Compaction.Title != "收敛上下文协议与实现" ||
-		result.Compaction.Summary == "" ||
+		result.Compaction.Content == "" ||
 		result.Snapshot.Status != "idle" {
 		t.Fatalf("unexpected compact result: %+v", result)
 	}
@@ -60,7 +60,7 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 
 func TestManualContextCompactRespectsProjectLock(t *testing.T) {
 	fixture := newBriefingFixture(t, "unused")
-	fixture.provider.Caps = llm.Capabilities{ContextWindowTokens: 65536}
+	fixture.provider.Caps = llm.Capabilities{ToolCalls: true, ContextWindowTokens: 65536}
 	release, acquired := fixture.locks.TryAcquire(fixture.project.ID)
 	if !acquired {
 		t.Fatal("failed to acquire fixture lock")
@@ -86,7 +86,7 @@ func TestAutoContextCompactPersistsGeneratedTitle(t *testing.T) {
 	}
 	compaction, err := execution.recordAutoCompaction(
 		context.Background(),
-		contextcompact.Result{Title: "收敛自动压缩结果", Summary: "## 目标与意图\n继续"},
+		contextcompact.Result{Title: "收敛自动压缩结果", Content: "## 目标与意图\n继续"},
 		testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
 			contextengine.BucketChatHistory: {"assistant messages": 600},
 		}),

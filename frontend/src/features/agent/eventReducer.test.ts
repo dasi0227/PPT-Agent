@@ -22,7 +22,7 @@ describe('public event reducer', () => {
 		run_id: 'r1',
 		trigger: 'auto' as const,
 		title: '收敛上下文协议与前端实现',
-		summary: '## 目标与意图\n继续任务',
+		content: '## 目标与意图\n继续任务',
 		before_tokens: 56000,
 		after_tokens: 30000,
 		max_tokens: 65536,
@@ -36,7 +36,7 @@ describe('public event reducer', () => {
       },
     }));
 		items = reduceSSEEvent(items, event('context.compacted', {
-			compaction: { ...compaction, summary: '## 目标与意图\n已更新' },
+			compaction: { ...compaction, content: '## 目标与意图\n已更新' },
 		}, '2'));
 		expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
@@ -44,7 +44,7 @@ describe('public event reducer', () => {
       compactionId: 'cmp_1',
       trigger: 'auto',
 			title: '收敛上下文协议与前端实现',
-			summary: '## 目标与意图\n已更新',
+			content: '## 目标与意图\n已更新',
       reclaimedTokens: 26000,
     });
   });

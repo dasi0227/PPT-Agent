@@ -43,8 +43,8 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 	if err := st.CreateRun(context.Background(), model.Run{ID: "active", ThreadID: "t1", ProjectID: "p1", Command: activeCommand, Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
-	provider := &llmtest.FakeProvider{ProviderName: "fake", ModelName: "polish-model", Script: []llm.GenerateResponse{{
-		Content: llm.TextContent("请强化当前页面的核心结论与视觉层级，同时保持董事会叙事的克制风格。"),
+	provider := &llmtest.FakeProvider{ProviderName: "fake", ModelName: "polish-model", Caps: llm.Capabilities{ToolCalls: true}, Script: []llm.GenerateResponse{{
+		ToolCalls: []llm.ToolCall{{ID: "polish-result", Name: "polish_instruction", Args: map[string]any{"title": "明确核心信息与视觉层级", "content": "请强化当前页面的核心结论与视觉层级，同时保持董事会叙事的克制风格。"}}},
 	}}}
 	defaultProvider := &llmtest.FakeProvider{ProviderName: "fake-default", ModelName: "default-model"}
 	registry, err := llm.NewRegistryWithProfiles("Default", []llm.Profile{
@@ -63,11 +63,11 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Changed || result.PromptVersion == "" || !strings.Contains(result.Instruction, "核心结论") {
+	if !result.Changed || result.Title != "明确核心信息与视觉层级" || result.PromptVersion == "" || !strings.Contains(result.Content, "核心结论") {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 	requests := provider.Requests()
-	if len(requests) != 1 || len(requests[0].Tools) != 0 || requests[0].Continuation != nil || len(requests[0].Messages) != 2 {
+	if len(requests) != 1 || len(requests[0].Tools) != 1 || requests[0].Tools[0].Name != "polish_instruction" || requests[0].Continuation != nil || len(requests[0].Messages) != 2 {
 		t.Fatalf("unexpected provider request: %+v", requests)
 	}
 	if len(defaultProvider.Requests()) != 0 {

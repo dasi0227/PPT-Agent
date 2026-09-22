@@ -40,6 +40,6 @@ func (h *PolishHandler) Polish(c *gin.Context) {
 		if err != nil {
 			return nil, err
 		}
-		return gin.H{"polished_instruction": result.Instruction, "changed": result.Changed, "model_execution": result.ModelExecution, "prompt_version": result.PromptVersion}, nil
+		return gin.H{"title": result.Title, "content": result.Content, "changed": result.Changed, "model_execution": result.ModelExecution, "prompt_version": result.PromptVersion}, nil
 	})
 }

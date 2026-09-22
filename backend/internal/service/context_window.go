@@ -188,7 +188,7 @@ func (svc *ContextWindowService) Compact(
 	}
 	compaction := model.ContextCompaction{
 		ID: model.MustShortID("cmp"), ThreadID: thread.ID, ProjectID: project.ID,
-		Trigger: model.ContextCompactionManual, Title: result.Title, Summary: result.Summary,
+		Trigger: model.ContextCompactionManual, Title: result.Title, Content: result.Content,
 		BeforeTokens: before.Total, AfterTokens: after.Total, MaxTokens: before.Max,
 		Reclaimed: reclaimed, DurationMS: time.Since(startedAt).Milliseconds(),
 		CreatedAt: time.Now().Unix(),

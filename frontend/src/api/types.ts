@@ -315,7 +315,8 @@ export interface PolishRequest {
 
 export interface PolishResponse {
   model_execution?: ModelExecution;
-  polished_instruction: string;
+  title: string;
+  content: string;
   changed: boolean;
   prompt_version: string;
 }
@@ -328,6 +329,7 @@ export interface BriefingVersion {
   project_id: string;
   kind: BriefingKind;
   version_no: number;
+  title: string;
   content: string;
   feedback: string;
   created_at: number;
@@ -553,7 +555,7 @@ export interface ContextCompaction {
   run_id?: string;
   trigger: 'auto' | 'manual';
   title: string;
-  summary: string;
+  content: string;
   before_tokens: number;
   after_tokens: number;
   max_tokens: number;
