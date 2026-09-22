@@ -448,7 +448,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
-		state.messages = append(state.messages, llm.WithoutRenderImages(messages)...)
+		state.messages = append(state.messages, llm.NormalizeHistory(messages)...)
 		instruction := currentRunInstructionMessage(input.RunID, input.Context.Command.Instruction)
 		if !containsRunInstruction(state.messages, input.RunID) {
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
@@ -2595,7 +2595,7 @@ func (r *Runtime) persistTranscript(input RuntimeInput, state *RunState) error {
 	if input.Transcript == nil || input.Context.Manifest.ThreadID == "" {
 		return nil
 	}
-	return input.Transcript.Replace(input.ProjectDir, input.Context.Manifest.ThreadID, llm.WithoutRenderImages(state.messages))
+	return input.Transcript.Replace(input.ProjectDir, input.Context.Manifest.ThreadID, llm.NormalizeHistory(state.messages))
 }
 
 func currentRunInstructionMessage(runID, instruction string) string {
@@ -2798,7 +2798,7 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 			pendingImages = append(pendingImages, llm.Message{Role: llm.RoleUser, Content: append([]llm.ContentPart{}, message.Content...)})
 		}
 	}
-	compactionInput := llm.WithoutRenderImages(state.messages)
+	compactionInput := llm.NormalizeHistory(state.messages)
 	progress.Phase = 1
 	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
 	result, err := r.Compactor.Compact(ctx, compactionInput)

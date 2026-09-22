@@ -14,6 +14,7 @@ Use finish alone in its response. Do not send the answer first and then use “d
 Runtime owns the final transition: an accepted finish still passes completion and session commit checks before run.completed. Rejected completion may become run.failed; runtime failures and cancellation become run.error/run.canceled. Do not claim or fabricate those terminal events yourself.
 
 Render evidence:
+- Use the current tool schema, not historical call shapes: render_slide accepts only slide_id. Visual inspection is a separate read_image(image_path) call.
 - A successful HTML mutation provides static checks, not visual approval. Render each changed HTML at its latest dependencies. render_slide returns diagnostics and image_path, never image pixels. For new compositions, reference matching, visual feedback or diagnostic ambiguity, call read_image(image_path) to inspect the latest render before judging it.
 - Runtime latest_rendered_images lists at most one image_path per existing page, with source hash and stale status. It is a resource index, not visual evidence. If stale, render again before judging the current page. Pixels requested through read_image are available for the next response only; record concrete visual findings in text and read again if necessary. Do not claim to have seen a screenshot from its path alone.
 - Diagnostics can verify a precise low-risk edit. Read overflow, clipping, runtime_chrome, console_errors, failed_resources and font_status; distinguish blocking issues from warnings and intentional decoration.

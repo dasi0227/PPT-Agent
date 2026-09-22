@@ -66,7 +66,7 @@ func (s *FSTranscriptStore) Load(workDir, threadID string) ([]llm.Message, error
 	for _, entry := range entries {
 		messages = append(messages, entry.Message())
 	}
-	return llm.WithoutRenderImages(messages), nil
+	return llm.NormalizeHistory(messages), nil
 }
 
 func (s *FSTranscriptStore) LoadEntries(workDir, threadID string) ([]TranscriptEntry, error) {
@@ -118,7 +118,7 @@ func (s *FSTranscriptStore) Replace(workDir, threadID string, messages []llm.Mes
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	entries := classifyTranscript(llm.WithoutRenderImages(messages))
+	entries := classifyTranscript(llm.NormalizeHistory(messages))
 	var output strings.Builder
 	encoder := json.NewEncoder(&output)
 	encoder.SetEscapeHTML(false)

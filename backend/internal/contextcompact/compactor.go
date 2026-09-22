@@ -54,7 +54,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		provider = captured
 	}
 	before := messageTokens(messages)
-	pruned := llm.WithoutRenderImages(messages)
+	pruned := llm.NormalizeHistory(messages)
 	compressed, retained := splitTranscript(pruned)
 	if len(compressed) == 0 {
 		return Result{
@@ -214,7 +214,7 @@ func messageTokens(messages []llm.Message) int {
 // replace. Retained instructions and the latest tool rounds do not make a
 // manual compaction worthwhile, even though they still occupy the window.
 func CompactableTokens(messages []llm.Message) int {
-	pruned := llm.WithoutRenderImages(messages)
+	pruned := llm.NormalizeHistory(messages)
 	compressed, _ := splitTranscript(pruned)
 	return messageTokens(compressed)
 }
