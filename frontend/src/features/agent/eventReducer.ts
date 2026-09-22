@@ -37,6 +37,7 @@ export type TimelineItemType =
   | 'terminal_notice';
 
 export interface BaseTimelineItem {
+  commandRecord?: import('../../api/types').CommandActivityRecord;
   id: string;
   type: TimelineItemType;
   timestamp: number;
@@ -154,7 +155,7 @@ export interface TerminalNoticeItem extends BaseTimelineItem {
 export interface GitCommitTimelineItem extends BaseTimelineItem {
   type: 'git_commit';
   operationId: string;
-  status: 'completed' | 'failed' | 'canceled';
+  status: 'loading' | 'completed' | 'failed' | 'canceled';
   title?: string;
   items?: string[];
   branch?: string;

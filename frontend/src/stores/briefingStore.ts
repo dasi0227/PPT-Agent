@@ -37,13 +37,15 @@ export const useBriefingStore = create<BriefingStore>((set, get) => ({
     const id = retryItemId ?? existing?.id ?? `briefing:${crypto.randomUUID()}`;
     const initial: BriefingTimelineItem = {
       ...existing,
+      commandRecord: undefined,
+      cancellable: true,
       id,
       type: 'briefing',
       kind,
       briefingId: briefingId ?? '',
       status: 'loading',
       versions: existing?.versions.slice(-1) ?? [],
-      timestamp: Date.now(),
+      timestamp: existing?.timestamp ?? Date.now(),
     };
     set((state) => ({
       sessions: {
@@ -69,12 +71,13 @@ export const useBriefingStore = create<BriefingStore>((set, get) => ({
             },
             signal,
             onProgress,
+            id,
           ),
         (result) => {
           notifyModelFallback(result.model_execution, kind === 'kickoff' ? '启动说明' : '交接内容');
           return {
             ...initial,
-            id: `briefing:${result.briefing.briefing_id}`,
+            id,
             status: 'completed',
             phase: 2,
             briefingId: result.briefing.briefing_id,

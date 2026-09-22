@@ -7,6 +7,7 @@ import { useThreadStore } from '../../stores/threadStore';
 import { cancelCommand, retryCommand } from '../../stores/commandRuntime';
 import type { BriefingTimelineItem } from './eventReducer';
 import { CommandActivity } from './CommandActivity';
+import { retryRecordedCommand } from '../../stores/commandRecovery';
 export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
   const projectId = useProjectStore((state) => state.activeProjectId);
   const generate = useBriefingStore((state) => state.generate);
@@ -37,7 +38,7 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
       phase={item.phase}
       cancellable={item.cancellable}
       onCancel={() => cancelCommand(item.id)}
-      onRetry={() => retryCommand(item.id)}
+      onRetry={() => item.commandRecord ? void retryRecordedCommand(item.commandRecord) : retryCommand(item.id)}
       content={content}
       copyText={content}
       busy={busy || runBusy || commitBusy || polishing}

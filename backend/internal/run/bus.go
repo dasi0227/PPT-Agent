@@ -77,11 +77,12 @@ func (b *Bus) Restore(events []model.Event) error {
 }
 
 // isWhitelistedForHistory persists only product history. Progress remains in the
-// run event store for Last-Event-ID replay but is modeionally transient here.
+// run event store for Last-Event-ID replay and compaction recovery.
 func isWhitelistedForHistory(evt model.EventType) bool {
 	switch evt {
 	case model.EventRunStarted, model.EventRunResumed, model.EventPlanUpdated,
 		model.EventPlanApprovalRequested, model.EventPlanApprovalAnswered, model.EventRunModeChanged,
+		model.EventCommandPermissionRequested, model.EventCommandPermissionAnswered,
 		model.EventScopeExpansionRequested, model.EventScopeExpansionAnswered, model.EventScopeUpdated,
 		model.EventMessageReasoning, model.EventMessageMilestone, model.EventMessageFinal,
 		model.EventToolStarted, model.EventToolCompleted,
@@ -118,6 +119,14 @@ func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
 		entry.Type = string(e.Type)
 	}
 	return entry, true
+}
+
+// PublicHistoryEntry rebuilds visible history from the authoritative event log.
+func PublicHistoryEntry(e model.Event) (HistoryEntry, bool) {
+	if !isWhitelistedForHistory(e.Type) {
+		return HistoryEntry{}, false
+	}
+	return buildHistoryEntry(e)
 }
 
 // Emit 分配下一个 seq，持久化后扇出。终态事件（done/error）只允许发一次。

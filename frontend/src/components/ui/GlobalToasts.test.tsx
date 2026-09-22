@@ -35,14 +35,14 @@ describe('GlobalToasts', () => {
     expect(screen.getByText('操作失败').closest('article')).toHaveClass('global-toast-error');
   });
 
-  it('dismisses a Toast five seconds after it appears', () => {
+  it('dismisses a Toast three seconds after it appears', () => {
     render(<GlobalToasts />);
     act(() => {
       useToastStore.getState().pushToast('自动关闭', 'error');
     });
 
     act(() => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(3_000);
     });
     expect(screen.getByRole('alert')).toHaveClass('global-toast-leaving');
 

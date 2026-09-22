@@ -31,7 +31,7 @@ export async function polishCommand(
     return await performCommand(
       threadId,
       initial,
-      (signal, onProgress) => polishApi.polish(projectId, request, signal, onProgress),
+      (signal, onProgress) => polishApi.polish(projectId, request, signal, onProgress, id),
       (result) => {
         notifyModelFallback(result.model_execution, '输入润色');
         polishRequests.set(id, {
@@ -73,7 +73,7 @@ export function generateNameCommand(
     id,
     type: 'command',
     kind: 'rename',
-    title: previousTitle,
+    title: previousTitle.trim() || '新会话',
     status: 'loading',
     method: 'auto',
     timestamp: Date.now(),
@@ -81,14 +81,18 @@ export function generateNameCommand(
   return performCommand(
     threadId,
     initial,
-    (signal, onProgress) => threadsApi.generateName(threadId, signal, onProgress),
+    (signal, onProgress) => threadsApi.generateName(threadId, signal, onProgress, id),
     (thread) => {
       apply(thread);
+      const currentTitle = thread.title.trim() || '新会话';
+      const unchanged = previousTitle.trim() === thread.title.trim();
       return {
         ...initial,
         status: 'completed',
-        title: thread.title,
-        content: `${previousTitle || '未命名会话'} → ${thread.title}`,
+        title: currentTitle,
+        content: unchanged
+          ? `保留当前名称：${currentTitle}`
+          : `${previousTitle.trim() || '新会话'} → ${currentTitle}`,
       };
     },
     () => {

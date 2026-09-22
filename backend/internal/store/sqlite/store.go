@@ -24,6 +24,9 @@ func NewStore(db *gorm.DB, log *zap.Logger) (*Store, error) {
 	if err := Migrate(db, log); err != nil {
 		return nil, err
 	}
+	if err := db.Model(&commandActivityPO{}).Where("status = ?", "loading").Updates(map[string]any{"status": "canceled", "updated_at": nowUnix() * 1000}).Error; err != nil {
+		return nil, err
+	}
 	if err := db.Model(&threadNamingOperationPO{}).
 		Where("status IN ?", []string{"in_progress", "accepted"}).
 		Updates(map[string]any{"status": "failed", "updated_at": nowUnix()}).Error; err != nil {

@@ -172,7 +172,7 @@ export function CommandActivity({
             <span className="command-activity-name">{kind}</span>
           </span>
           <span className="command-activity-title">
-            <span className="truncate font-semibold">{displayTitle}</span>
+            <span className="truncate font-normal">{displayTitle}</span>
           </span>
           <span className="command-activity-meta">
             <time dateTime={new Date(timestamp).toISOString()}>

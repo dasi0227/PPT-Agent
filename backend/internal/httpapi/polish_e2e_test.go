@@ -41,4 +41,9 @@ func TestPolishEndpointReturnsTitleAndContentWithoutStartingRun(t *testing.T) {
 	if len(provider.Requests()) != 1 || len(provider.Requests()[0].Tools) != 1 || provider.Requests()[0].Tools[0].Name != "polish_instruction" {
 		t.Fatalf("polish did not stay a single result-tool provider call: %+v", provider.Requests())
 	}
+	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"type":"command_activity"`) ||
+		!strings.Contains(response.Body.String(), `"title":"明确核心信息与视觉层级"`) || !strings.Contains(response.Body.String(), `"instruction":"更有冲击力"`) {
+		t.Fatalf("polish result and retry input were not persisted: %s", response.Body.String())
+	}
 }

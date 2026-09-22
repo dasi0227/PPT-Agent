@@ -50,6 +50,12 @@ func (h *ThreadHandler) Patch(c *gin.Context) {
 	}
 	switch {
 	case err == nil:
+		if record := commandRecord(c); record != nil {
+			if err := record.settle(toThreadResponse(t), nil); err != nil {
+				AbortWithError(c, ErrInternal("persist rename result"))
+				return
+			}
+		}
 		h.setEpochHeader(c, t.ProjectID)
 		c.JSON(http.StatusOK, toThreadResponse(t))
 	case errors.Is(err, run.ErrRunNotFound):
@@ -211,6 +217,12 @@ func (h *ThreadHandler) Naming(c *gin.Context) {
 		status := http.StatusOK
 		if response.Status == "accepted" {
 			status = http.StatusAccepted
+		}
+		if record := commandRecord(c); record != nil {
+			if err := record.settle(toThreadResponse(response.Thread), nil); err != nil {
+				AbortWithError(c, ErrInternal("persist rename result"))
+				return
+			}
 		}
 		c.JSON(status, gin.H{
 			"operation_id": response.OperationID, "request_id": response.RequestID,

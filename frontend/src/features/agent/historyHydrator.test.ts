@@ -16,6 +16,36 @@ const terminal = (runId = 'r1', data: Record<string, unknown> = {}) => ({
 });
 
 describe('history hydrator', () => {
+  it('restores keep using the same new-thread label as the tab', () => {
+    const record = {
+      id: 'rename:1', thread_id: 't1', project_id: 'p1', kind: 'rename', method: 'auto',
+      status: 'completed', phase: 2, previous_title: '', request: {}, result: { title: '' },
+      created_at: 1000, updated_at: 2000,
+    };
+    const { items } = hydrateRunFromHistory([entry(1, 'command_activity', record)]);
+    expect(items).toEqual([expect.objectContaining({
+      id: 'rename:1', title: '新会话', content: '保留当前名称：新会话', commandRecord: record,
+    })]);
+  });
+
+  it('keeps polish output and retry input after restoration without starting a run', () => {
+    const record = {
+      id: 'polish:1', thread_id: 't1', project_id: 'p1', kind: 'polish', method: 'auto',
+      status: 'completed', phase: 2, previous_title: '调研',
+      request: { instruction: '原始指令', thread_id: 't1', feedback: '简洁' },
+      result: { title: '明确目标', content: '完整指令' }, created_at: 1000, updated_at: 2000,
+    };
+    const hydrated = hydrateRunFromHistory([entry(1, 'command_activity', record)]);
+    expect(hydrated.items[0]).toMatchObject({ title: '明确目标', content: '完整指令', commandRecord: record });
+    expect(hydrated.session.activeRunId).toBeNull();
+    for (const kind of ['rename', 'polish', 'kickoff', 'handoff', 'compact']) {
+      const { items } = hydrateRunFromHistory([entry(1, 'command_activity', {
+        ...record, kind, status: 'canceled', result: null,
+      })]);
+      expect(items[0]).toMatchObject({ kind, status: 'canceled', commandRecord: { request: record.request } });
+    }
+  });
+
 	it('restores context compaction timeline items outside run grouping', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'context_compaction', {

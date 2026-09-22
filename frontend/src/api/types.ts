@@ -308,7 +308,7 @@ export interface LLMProfilesResponse {
 export interface PolishRequest {
   feedback?: string;
   instruction: string;
-  thread_id?: string;
+  thread_id: string;
   scope: CreateRunScopeInput;
   mode: RunMode;
 }
@@ -797,3 +797,18 @@ export type SSEEvent =
   | SSEEventBase<'context.compacted', PublicEventBase & { compaction: ContextCompaction }>;
 
 export interface ModelExecution { profile: string; provider: string; model: string; fallback_used: boolean }
+
+export interface CommandActivityRecord {
+  id: string;
+  thread_id: string;
+  project_id: string;
+  kind: 'rename' | 'polish' | 'kickoff' | 'handoff' | 'compact';
+  method: 'auto' | 'manual';
+  status: 'loading' | 'completed' | 'failed' | 'canceled';
+  phase: number;
+  previous_title: string;
+  request: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  created_at: number;
+  updated_at: number;
+}

@@ -11,7 +11,7 @@ import (
 
 // The ordered inventory is intentionally explicit: global libraries and real Git
 // history are excluded. Child rows precede their parents when deleting.
-var projectTables = []string{"projects", "slides", "threads", "thread_naming_inputs", "thread_naming_operations", "runs", "versions", "run_events", "run_contexts", "steering_inbox", "run_checkpoints", "context_index_snapshots", "semantic_reviews", "git_commit_operations", "git_commit_events", "briefing_versions", "context_compactions", "idempotency_records"}
+var projectTables = []string{"projects", "slides", "threads", "thread_naming_inputs", "thread_naming_operations", "runs", "versions", "run_events", "run_contexts", "steering_inbox", "run_checkpoints", "context_index_snapshots", "semantic_reviews", "git_commit_operations", "git_commit_events", "briefing_versions", "context_compactions", "command_activities", "idempotency_records"}
 
 func projectPredicate(table string) string {
 	switch table {
@@ -108,6 +108,9 @@ func (s *Store) RestoreProject(ctx context.Context, id string, raw json.RawMessa
 }
 
 func snapshotFilter(table string) string {
+	if table == "command_activities" {
+		return " AND status != 'loading'"
+	}
 	if table == "idempotency_records" {
 		return " AND NOT (scope = 'create_run' AND status = 'in_progress')"
 	}

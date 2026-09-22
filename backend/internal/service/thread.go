@@ -15,6 +15,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
@@ -138,7 +139,7 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 	}
 	raw, err := sb.Read(th.HistoryPath)
 	if os.IsNotExist(err) {
-		return []map[string]any{}, nil
+		raw, err = nil, nil
 	}
 	if err != nil {
 		return nil, err
@@ -161,12 +162,39 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
+	// JSONL is a projection: recover any missing entry from the durable event log.
+	events, eventErr := svc.store.ListThreadEvents(ctx, id)
+	if eventErr != nil {
+		return nil, eventErr
+	}
+	entryIndex := map[string]int{}
+	for index, entry := range out {
+		// Steering rows share a sequence with the next public run event.
+		if entry["type"] != "steering" {
+			entryIndex[fmt.Sprintf("%v:%d", entry["run_id"], int64(historySeq(entry)))] = index
+		}
+	}
+	for _, event := range events {
+		entry, visible := run.PublicHistoryEntry(event)
+		if !visible {
+			continue
+		}
+		data := map[string]any{"seq": entry.Seq, "ts": entry.TS, "run_id": entry.RunID, "turn": entry.Turn, "type": entry.Type, "data": entry.Data}
+		key := fmt.Sprintf("%s:%d", entry.RunID, entry.Seq)
+		if index, exists := entryIndex[key]; exists {
+			out[index] = data
+		} else {
+			entryIndex[key] = len(out)
+			out = append(out, data)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return historyTimestamp(out[i]) < historyTimestamp(out[j]) })
 	steering, steeringErr := svc.store.ListThreadSteering(ctx, id)
 	if steeringErr == nil {
 		existing := map[string]int{}
 		nextSyntheticSeq := float64(1)
 		for index, entry := range out {
-			if seq, ok := entry["seq"].(float64); ok && seq >= nextSyntheticSeq {
+			if seq := historySeq(entry); seq >= nextSyntheticSeq {
 				nextSyntheticSeq = seq + 1
 			}
 			if entry["type"] == "steering" {
@@ -214,9 +242,69 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 			out[insertAt] = entry
 		}
 	}
+	activities, activityErr := svc.store.ListThreadCommandActivities(ctx, id)
+	if activityErr != nil {
+		return nil, activityErr
+	}
+	compactions, compactionErr := listThreadContextCompactions(ctx, svc.store, id)
+	if compactionErr != nil {
+		return nil, compactionErr
+	}
+	completedCompactions := make(map[string]bool, len(compactions))
+	for _, compaction := range compactions {
+		completedCompactions["context-compaction:"+compaction.ID] = true
+	}
+	activityIDs := make(map[string]bool, len(activities))
+	for _, activity := range activities {
+		activityIDs[activity.ID] = true
+	}
+	for _, activity := range interruptedCompactionActivities(events, th) {
+		if !activityIDs[activity.ID] && !completedCompactions[activity.ID] {
+			activities = append(activities, activity)
+		}
+	}
+	briefingCommands, compactCommands := map[string]bool{}, map[string]bool{}
+	for _, activity := range activities {
+		var request struct {
+			BriefingID string `json:"briefing_id"`
+		}
+		var result struct {
+			Briefing struct {
+				ID string `json:"briefing_id"`
+			} `json:"briefing"`
+			Compaction struct {
+				ID string `json:"id"`
+			} `json:"compaction"`
+		}
+		_ = json.Unmarshal(activity.Request, &request)
+		_ = json.Unmarshal(activity.Result, &result)
+		if request.BriefingID != "" {
+			briefingCommands[request.BriefingID] = true
+		}
+		if result.Briefing.ID != "" {
+			briefingCommands[result.Briefing.ID] = true
+		}
+		if result.Compaction.ID != "" {
+			compactCommands[result.Compaction.ID] = true
+		}
+		entry := map[string]any{"seq": 1, "ts": activity.CreatedAt / 1000, "run_id": activity.ID, "turn": "agent", "type": "command_activity", "data": activity}
+		insertAt := len(out)
+		for index, existing := range out {
+			if historyTimestamp(existing) > activity.CreatedAt/1000 {
+				insertAt = index
+				break
+			}
+		}
+		out = append(out, nil)
+		copy(out[insertAt+1:], out[insertAt:])
+		out[insertAt] = entry
+	}
 	briefings, briefingErr := svc.store.ListThreadBriefings(ctx, id)
 	if briefingErr == nil {
 		for _, briefing := range briefings {
+			if briefingCommands[briefing.BriefingID] {
+				continue
+			}
 			entry := briefingHistoryEntry(briefing)
 			insertAt := len(out)
 			for index, existing := range out {
@@ -230,20 +318,21 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 			out[insertAt] = entry
 		}
 	}
-	if compactions, compactionErr := listThreadContextCompactions(ctx, svc.store, id); compactionErr == nil {
-		for _, compaction := range compactions {
-			entry := contextCompactionHistoryEntry(compaction)
-			insertAt := len(out)
-			for index, existing := range out {
-				if historyTimestamp(existing) > compaction.CreatedAt {
-					insertAt = index
-					break
-				}
-			}
-			out = append(out, nil)
-			copy(out[insertAt+1:], out[insertAt:])
-			out[insertAt] = entry
+	for _, compaction := range compactions {
+		if compactCommands[compaction.ID] {
+			continue
 		}
+		entry := contextCompactionHistoryEntry(compaction)
+		insertAt := len(out)
+		for index, existing := range out {
+			if historyTimestamp(existing) > compaction.CreatedAt {
+				insertAt = index
+				break
+			}
+		}
+		out = append(out, nil)
+		copy(out[insertAt+1:], out[insertAt:])
+		out[insertAt] = entry
 	}
 	runOrder := map[string]int{}
 	for _, entry := range out {
@@ -271,6 +360,10 @@ func gitCommitHistoryEntry(operation model.GitCommitOperation) map[string]any {
 		"schema_version": model.GitCommitEventSchemaVersion,
 		"operation_id":   operation.ID, "project_id": operation.ProjectID,
 		"thread_id": operation.ThreadID, "occurred_at": occurredAt,
+	}
+	if operation.Status == model.GitCommitAccepted || operation.Status == model.GitCommitRunning || operation.Status == model.GitCommitEmpty {
+		base["status"] = operation.Status
+		return map[string]any{"seq": 1, "ts": operation.CreatedAt, "run_id": operation.ID, "turn": "agent", "type": "git.commit.state", "data": base}
 	}
 	entryType := string(model.EventGitCommitFailed)
 	if operation.Status == model.GitCommitCompleted {
@@ -323,12 +416,8 @@ func listThreadContextCompactions(
 }
 
 func contextCompactionHistoryEntry(compaction model.ContextCompaction) map[string]any {
-	runID := compaction.RunID
-	if runID == "" {
-		runID = compaction.ID
-	}
 	return map[string]any{
-		"seq": 1, "ts": compaction.CreatedAt, "run_id": runID,
+		"seq": 1, "ts": compaction.CreatedAt, "run_id": compaction.ID,
 		"turn": "agent", "type": "context_compaction",
 		"data": map[string]any{
 			"id": compaction.ID, "thread_id": compaction.ThreadID,
@@ -355,8 +444,13 @@ func historyTimestamp(entry map[string]any) int64 {
 }
 
 func historySeq(entry map[string]any) float64 {
-	if value, ok := entry["seq"].(float64); ok {
+	switch value := entry["seq"].(type) {
+	case float64:
 		return value
+	case int64:
+		return float64(value)
+	case int:
+		return float64(value)
 	}
 	return 0
 }

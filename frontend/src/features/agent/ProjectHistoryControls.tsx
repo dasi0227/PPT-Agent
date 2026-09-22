@@ -1,7 +1,7 @@
 import { useComposerStore } from '../../stores/composerStore';
 import { useActiveThreadId } from './useActiveSession';
 import { useEffect, useRef } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { Undo2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/primitives';
 import { projectHistoryApi } from '../../api/projectHistory';
@@ -17,7 +17,7 @@ export function RollbackButton({ runId, steering }: { runId?: string; steering?:
   if (!projectId || !runId || steering || !state?.checkpoints.some((cp) => cp.run_id === runId)) return null;
   return <button type="button" aria-label="回退到此消息发送前" title="回退到此消息发送前" disabled={busy}
     className="inline-flex h-6 w-6 items-center justify-center rounded-md hover:bg-panel-muted hover:text-text-900 disabled:opacity-40 focus-visible:outline-none"
-    onClick={() => void useProjectHistoryStore.getState().preview(projectId, runId)}><RotateCcw className="h-3.5 w-3.5" /></button>;
+    onClick={() => void useProjectHistoryStore.getState().preview(projectId, runId)}><Undo2 className="h-3.5 w-3.5" /></button>;
 }
 export function HistoryBanner() {
   const projectId = useProjectStore((s) => s.activeProjectId);

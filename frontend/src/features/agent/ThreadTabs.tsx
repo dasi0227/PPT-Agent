@@ -48,7 +48,7 @@ export const ThreadTabs: React.FC = () => {
                     isActive ? "bg-black/5 text-text-900" : "text-text-600 hover:bg-black/5"
                   )}
                 >
-                  <span className="truncate flex-1">{th.title || '新会话'}</span>
+                  <span className="truncate flex-1" title={th.title || '新会话'}>{th.title || '新会话'}</span>
 
                   <ThreadMenu projectId={activeProjectId} thread={th}>
                     <button

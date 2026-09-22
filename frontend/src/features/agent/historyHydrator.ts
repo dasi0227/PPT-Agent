@@ -9,6 +9,7 @@ import type {
 	PublicDOMSelection,
 	ReferenceOrderItem,
   ContextCompaction,
+  CommandActivityRecord,
 } from '../../api/types';
 import { parsePublicEvent } from '../../api/sse';
 import { contextCompactionTimelineItem, reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
@@ -176,6 +177,46 @@ function readBriefingVersions(data: Record<string, unknown>): BriefingVersion[] 
   });
 }
 
+export function commandActivityTimelineItem(data: Record<string, unknown>): TimelineItem | null {
+  if (typeof data.id !== 'string' || typeof data.thread_id !== 'string' || typeof data.project_id !== 'string' ||
+    !['rename', 'polish', 'kickoff', 'handoff', 'compact'].includes(String(data.kind)) ||
+    !['loading', 'completed', 'failed', 'canceled'].includes(String(data.status)) ||
+    !['auto', 'manual'].includes(String(data.method)) || typeof data.created_at !== 'number' ||
+    typeof data.updated_at !== 'number' || typeof data.phase !== 'number' ||
+    typeof data.previous_title !== 'string' || !isRecord(data.request) ||
+    (data.result !== null && !isRecord(data.result))) return null;
+  const record = data as unknown as CommandActivityRecord;
+  const result = record.result ?? {};
+  const base = {
+    id: record.id, timestamp: record.created_at, commandRecord: record,
+    status: record.status, phase: record.phase, cancellable: false,
+  };
+  if (record.kind === 'kickoff' || record.kind === 'handoff') {
+    const briefing = isRecord(result.briefing) ? result.briefing : {};
+    return {
+      ...base, type: 'briefing', kind: record.kind,
+      briefingId: String(briefing.briefing_id ?? record.request.briefing_id ?? ''),
+      versions: readBriefingVersions(briefing).slice(-1),
+    };
+  }
+  if (record.kind === 'compact' && record.status === 'completed' && isRecord(result.compaction)) {
+    const compaction = readContextCompaction(result.compaction);
+    return compaction ? { ...contextCompactionTimelineItem(compaction), ...base } : null;
+  }
+  let title = '压缩上下文', content = '';
+  if (record.kind === 'polish') {
+    title = typeof result.title === 'string' ? result.title : '润色输入内容';
+    content = typeof result.content === 'string' ? result.content : '';
+  } else if (record.kind === 'rename') {
+    const next = typeof result.title === 'string' ? result.title.trim() : record.previous_title.trim();
+    title = next || '新会话';
+    content = next === record.previous_title.trim()
+      ? `保留当前名称：${title}`
+      : `${record.previous_title.trim() || '新会话'} → ${title}`;
+  }
+  return { ...base, type: 'command', kind: record.kind, title, content, method: record.method };
+}
+
 export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): HydratedRunView {
   const emptySession: HistorySessionState = {
     activeRunId: null,
@@ -236,6 +277,15 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       });
       continue;
     }
+    if (entry.type === 'git.commit.state') {
+      const empty = entry.data.status === 'empty';
+      items.push({ id: `git-commit:${String(entry.data.operation_id ?? entry.run_id)}`,
+        type: 'git_commit', operationId: String(entry.data.operation_id ?? entry.run_id),
+        status: empty ? 'completed' : 'loading',
+        title: empty ? '当前项目没有可提交的变更' : '提交项目版本',
+        timestamp: (entry.ts || 0) * 1000 });
+      continue;
+    }
     if (entry.type === 'git.commit.completed') {
       const commit = isRecord(entry.data.commit) ? entry.data.commit : null;
       if (!commit || typeof commit.title !== 'string' || typeof commit.committed_at !== 'string') continue;
@@ -265,6 +315,11 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         retryable: error?.retryable === true,
         timestamp: Date.parse(String(entry.data.occurred_at ?? '')) || (entry.ts || 0) * 1000,
       });
+      continue;
+    }
+    if (entry.type === 'command_activity') {
+      const item = commandActivityTimelineItem(entry.data);
+      if (item) items.push(item);
       continue;
     }
     if (entry.type === 'briefing') {

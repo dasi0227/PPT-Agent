@@ -44,14 +44,14 @@ describe('context window store', () => {
         t1: { snapshot: response.snapshot, loading: false, compacting: false },
       },
     });
-    await expect(useContextWindowStore.getState().compact('t1')).resolves.toBe(true);
-    await expect(useContextWindowStore.getState().compact('t1')).resolves.toBe(true);
+    await expect(useContextWindowStore.getState().compact('t1', 'compact:request1')).resolves.toBe(true);
+    await expect(useContextWindowStore.getState().compact('t1', 'compact:request1')).resolves.toBe(true);
 
     const session = useRunStore.getState().sessions.t1;
     expect(session).toBeDefined();
     expect(session.timelineItems).toHaveLength(1);
     expect(session.timelineItems[0]).toMatchObject({
-      id: 'context-compaction:cmp_1',
+      id: 'compact:request1',
       type: 'context_compaction',
       title: '收敛上下文协议与前端实现',
     });

@@ -42,7 +42,7 @@ export function GitCommitEvent({ item }: { item: GitCommitTimelineItem }) {
         if (projectId && threadId) void useGitCommitStore.getState().start(projectId, threadId);
       }}
       metadata={
-        item.status === 'completed' ? (
+        item.status === 'completed' && item.hash ? (
           <>
             <span>
               {item.branch} {item.hash}

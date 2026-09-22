@@ -58,7 +58,7 @@ func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
 		}
 	}
 	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
-	if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"type":"briefing"`) != 2 ||
+	if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"type":"command_activity"`) != 2 ||
 		!strings.Contains(response.Body.String(), `"title":"启动功能开发"`) ||
 		!strings.Contains(response.Body.String(), `"title":"交接功能开发"`) {
 		t.Fatalf("briefing history: %d %s", response.Code, response.Body.String())
@@ -109,6 +109,7 @@ func TestBriefingProgressStreamsThroughHistoryGateAndDisconnectCancels(t *testin
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Command-ID", "kickoff:disconnect")
 	stream, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -132,5 +133,16 @@ func TestBriefingProgressStreamsThroughHistoryGateAndDisconnectCancels(t *testin
 	case <-provider.stopped:
 	case <-time.After(time.Second):
 		t.Fatal("disconnect did not cancel provider")
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
+		if strings.Contains(response.Body.String(), `"id":"kickoff:disconnect"`) && strings.Contains(response.Body.String(), `"status":"canceled"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("canceled command was lost after rollback: %s", response.Body.String())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

@@ -25,6 +25,7 @@ func TestSnapshotRestoresEveryProjectTableAndIsolatesOtherProjects(t *testing.T)
 		`INSERT INTO git_commit_events VALUES ('git',1,'completed','{}',1)`,
 		`INSERT INTO briefing_versions(briefing_id,thread_id,project_id,kind,version_no,title,content,feedback,created_at) VALUES ('brief','t','p','handoff',1,'交接任务','summary','',1)`,
 		`INSERT INTO context_compactions(id,thread_id,project_id,run_id,trigger,title,content,before_tokens,after_tokens,max_tokens,reclaimed_tokens,duration_ms,created_at) VALUES ('compact','t','p','r','auto','整理项目上下文','future summary',500,100,1000,400,1,1)`,
+		`INSERT INTO command_activities(id,attempt_id,thread_id,project_id,kind,method,status,request,result,created_at,updated_at) VALUES ('cmd','attempt','t','p','polish','auto','completed','{}','{"title":"完善要求","content":"完整指令"}',1,1)`,
 		`INSERT INTO idempotency_records VALUES ('create_run','t','req','hash','completed','{}',1,1)`,
 		`INSERT INTO prompts VALUES ('global','global','global','','global library',1,1)`,
 	}

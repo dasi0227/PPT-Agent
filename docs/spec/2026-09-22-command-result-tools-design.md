@@ -20,7 +20,7 @@ title 与 content 均必填。title 是最多 48 个 Unicode 字符的非空单�
 ## 存储与前后端协议
 
 - BriefingVersion 新增 title，每个版本独立保存标题和正文；修订参考最近两个版本的 title、content 和全部反馈，生成完整替代结果。前端继续只展示最新版本。
-- polish 请求仍使用 instruction；响应改为 title、content、changed、model_execution、prompt_version。时间线属于当前前端会话，不新增 polish 持久化历史表。
+- polish 请求仍使用 instruction；响应改为 title、content、changed、model_execution、prompt_version。命令状态、结果及重试输入写入统一活动表，详见 [时间线持久化设计](2026-09-22-timeline-persistence-design.md)。
 - compact 的结果对象、数据库列、HTTP 响应、SSE 事件、历史恢复及前端类型统一使用 content。注入继续运行的 Agent 时，仅将 content 放入既有 context_summary 容器，title 不进入压缩正文。
 - 数据库通过 0014 调整现有表结构；不为历史简报生成标题，不添加旧格式双读或历史事件回填逻辑。
 

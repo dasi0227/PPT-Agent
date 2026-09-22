@@ -14,6 +14,7 @@ var (
 	ErrPromptNameConflict      = errors.New("store: prompt name conflict")
 	ErrTagNotFound             = errors.New("store: tag not found")
 	ErrNamingOperationConflict = errors.New("store: naming operation conflict")
+	ErrCommandActivityConflict = errors.New("store: command activity already running or belongs to another command")
 )
 
 type PromptNameConflictError struct {
@@ -73,6 +74,7 @@ type Store interface {
 	HasActiveRun(ctx context.Context, projectID string) (bool, error)
 	AppendEvent(ctx context.Context, e model.Event) error
 	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
+	ListThreadEvents(ctx context.Context, threadID string) ([]model.Event, error)
 	SaveRunContext(ctx context.Context, manifest model.RunContext) error
 	GetRunContext(ctx context.Context, runID string) (model.RunContext, error)
 
@@ -89,6 +91,9 @@ type Store interface {
 	AppendBriefingVersion(ctx context.Context, version model.BriefingVersion) error
 	ListThreadBriefings(ctx context.Context, threadID string) ([]model.Briefing, error)
 	GetBriefingVersions(ctx context.Context, briefingID string, limit int) ([]model.BriefingVersion, error)
+	BeginCommandActivity(ctx context.Context, activity model.CommandActivity) (model.CommandActivity, error)
+	SaveCommandActivity(ctx context.Context, activity model.CommandActivity) error
+	ListThreadCommandActivities(ctx context.Context, threadID string) ([]model.CommandActivity, error)
 
 	SetProjectStatus(ctx context.Context, id, status string) error
 	ReplaceSlides(ctx context.Context, projectID string, slides []model.Slide) error

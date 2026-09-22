@@ -186,7 +186,8 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 
   renameThread: async (projectId, threadId, title) => {
     const previousTitle=get().threadsByProjectId[projectId]?.find(thread=>thread.id===threadId)?.title ?? '';
-		const updated = await threadsApi.patch(threadId, { title });
+    const commandId = `rename:${newClientIdentity('rename')}`;
+		const updated = await threadsApi.patch(threadId, { title }, commandId);
     set((state) => {
       const threads = state.threadsByProjectId[projectId] || [];
       return {
@@ -196,7 +197,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         }
       };
     });
-    upsertCommand(threadId,{id:`rename:${newClientIdentity('rename')}`,type:'command',kind:'rename',status:'completed',title:updated.title,content:`${previousTitle || '未命名会话'} → ${updated.title}`,method:'manual',timestamp:Date.now()});
+    upsertCommand(threadId,{id:commandId,type:'command',kind:'rename',status:'completed',title:updated.title,content:`${previousTitle || '新会话'} → ${updated.title}`,method:'manual',timestamp:Date.now()});
   },
 
 	openRenamePanel: (projectId, threadId) => set({ renamePanelTarget: { projectId, threadId } }),
@@ -233,7 +234,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     apply(response.thread);
     if (action === 'manual') upsertCommand(threadId, {
       id: `rename:${operationId}`, type: 'command', kind: 'rename', status: 'completed',
-      title: response.thread.title, content: `${previousTitle || '未命名会话'} → ${response.thread.title}`,
+      title: response.thread.title, content: `${previousTitle || '新会话'} → ${response.thread.title}`,
       method: 'manual', timestamp: Date.now(),
     });
   },

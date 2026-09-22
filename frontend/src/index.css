@@ -159,7 +159,7 @@
   transform-origin: left;
   background: var(--toast-timer);
   pointer-events: none;
-  animation: global-toast-countdown 5s linear forwards;
+  animation: global-toast-countdown 3s linear forwards;
 }
 
 .timeline-disclosure {
@@ -179,6 +179,10 @@
 
 .timeline-disclosure-content {
   transform-origin: top;
+}
+
+.timeline-disclosure-rows {
+  @apply space-y-2;
 }
 
 .timeline-disclosure[data-state='open'] {
@@ -1157,7 +1161,7 @@
 .command-activity-summary:enabled:hover { background:#f0f3f7; }
 .command-activity-icon { grid-column:1; grid-row:1 / 3; display:flex; align-items:center; justify-content:center; gap:6px; padding:0 4px; align-self:stretch; border-radius:8px; }
 .command-activity-icon svg { display:block; flex:none; }
-.command-activity-name { flex:none; font-size:12px; line-height:20px; font-weight:700; }
+.command-activity-name { flex:none; font-size:12px; line-height:20px; font-weight:400; }
 .command-activity-title { grid-column:2; grid-row:1; display:flex; align-items:baseline; font-size:12px; line-height:20px; min-width:0; }
 .command-activity-meta { grid-column:2; grid-row:2; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#5f6b7a; font-size:10px; line-height:17px; font-variant-numeric:tabular-nums; }
 .command-activity-meta > * + * { margin-left:7px; }

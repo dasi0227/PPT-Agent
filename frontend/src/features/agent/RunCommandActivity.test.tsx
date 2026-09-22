@@ -88,7 +88,7 @@ describe('run command activity', () => {
       },
     })} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /已更新演示内容/ }));
+    fireEvent.click(screen.getByRole('button', { name: /已编辑演示内容/ }));
 
     expect(screen.getByRole('link', { name: /manifest.json/ })).toHaveAttribute(
       'href',
@@ -106,7 +106,6 @@ describe('run command activity', () => {
       command: { text: 'pwd', status: 'completed' },
     }));
     const { container } = render(<ToolGroupRow items={items} />);
-    expect(screen.getByText('pwd')).toHaveClass('font-semibold');
     expect(container.textContent).toContain('已执行 pwd 命令');
   });
 
@@ -122,7 +121,7 @@ describe('run command activity', () => {
     expect(screen.getByText('已执行 3 条命令')).toBeInTheDocument();
   });
 
-  it('bolds the deck object noun in read labels', () => {
+  it('preserves the complete read label for deck targets', () => {
     const { container } = render(<ToolActivityRow item={commandItem({
       tool: 'read_ppt',
       label: '已读取演示内容',
@@ -130,7 +129,6 @@ describe('run command activity', () => {
       command: undefined,
       target: { type: 'deck', part: 'manifest' },
     })} />);
-    expect(screen.getByText('演示内容')).toHaveClass('font-semibold');
     expect(container.textContent).toContain('已读取演示内容');
   });
 

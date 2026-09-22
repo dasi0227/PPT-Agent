@@ -64,7 +64,7 @@ function QuestionSlide({
       </div>
 
       {question.options.length > 0 ? (
-        <div className="mt-3 space-y-2 pl-6">
+        <div className="mt-3 space-y-2">
           {question.options.slice(0, 3).map((option) => {
             const checked = draft.selectedOptionId === option.id;
             return (
@@ -72,7 +72,7 @@ function QuestionSlide({
                 key={option.id}
                 className={cn(
                   'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
-                  checked ? 'border-border-strong bg-panel-muted' : 'border-border bg-surface',
+                  checked ? 'border-accent/20 bg-accent-soft' : 'border-border bg-surface',
                   disabled && 'cursor-default opacity-70',
                 )}
               >
@@ -83,10 +83,10 @@ function QuestionSlide({
                   checked={checked}
                   disabled={disabled}
                   onChange={() => setDraft(question.id, { selectedOptionId: option.id, customText: '' })}
-                  className="mt-1 accent-text-900"
+                  className="mt-1 accent-accent"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-medium text-text-900">{option.label}</span>
+                  <span className={cn('block text-[13px] font-medium', checked ? 'text-accent' : 'text-text-900')}>{option.label}</span>
                   {option.description && (
                     <span
                       title={option.description}
@@ -103,7 +103,7 @@ function QuestionSlide({
             <label
               className={cn(
                 'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
-                draft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-border-strong bg-panel-muted' : 'border-border bg-surface',
+                draft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-accent/20 bg-accent-soft' : 'border-border bg-surface',
                 disabled && 'cursor-default opacity-70',
               )}
             >
@@ -114,10 +114,10 @@ function QuestionSlide({
                 checked={draft.selectedOptionId === CUSTOM_OPTION_ID}
                 disabled={disabled}
                 onChange={() => setDraft(question.id, { selectedOptionId: CUSTOM_OPTION_ID })}
-                className="mt-1 accent-text-900"
+                className="mt-1 accent-accent"
               />
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium text-text-900">自定义回答</span>
+                <span className={cn('block text-[13px] font-medium', draft.selectedOptionId === CUSTOM_OPTION_ID ? 'text-accent' : 'text-text-900')}>自定义回答</span>
                 <input
                   type="text"
                   value={draft.customText}
@@ -218,7 +218,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
             </div>
           </div>
           {currentQuestion.options.length > 0 ? (
-            <div className="mt-3 space-y-2 pl-7">
+            <div className="mt-3 space-y-2">
               {currentQuestion.options.map((option) => (
                 <AnsweredQuestionOption
                   key={option.id}

@@ -594,6 +594,18 @@ func (s *Store) EventsSince(ctx context.Context, runID string, afterSeq int64) (
 	return out, nil
 }
 
+func (s *Store) ListThreadEvents(ctx context.Context, threadID string) ([]model.Event, error) {
+	var rows []runEventPO
+	if err := s.db.WithContext(ctx).Table("run_events").Select("run_events.*").Joins("JOIN runs ON runs.id = run_events.run_id").Where("runs.thread_id = ?", threadID).Order("runs.created_at ASC, runs.id ASC, run_events.seq ASC").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	result := make([]model.Event, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, row.toModel())
+	}
+	return result, nil
+}
+
 func (s *Store) SaveRunContext(ctx context.Context, m model.RunContext) error {
 	return s.db.WithContext(ctx).Create(contextToPO(m)).Error
 }

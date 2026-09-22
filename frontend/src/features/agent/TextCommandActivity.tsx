@@ -2,6 +2,7 @@ import type { CommandTimelineItem } from './eventReducer';
 import { CommandActivity } from './CommandActivity';
 import { cancelCommand, retryCommand } from '../../stores/commandRuntime';
 import { retryPolish } from '../../stores/textCommandStore';
+import { retryRecordedCommand } from '../../stores/commandRecovery';
 import { useComposerStore } from '../../stores/composerStore';
 import { useActiveThreadId } from './useActiveSession';
 export function TextCommandActivity({ item }: { item: CommandTimelineItem }) {
@@ -24,9 +25,10 @@ export function TextCommandActivity({ item }: { item: CommandTimelineItem }) {
       }
       content={item.kind === 'rename' ? undefined : item.content}
       onCancel={() => cancelCommand(item.id)}
-      onRetry={() => retryCommand(item.id)}
+      onRetry={() => item.commandRecord ? void retryRecordedCommand(item.commandRecord) : retryCommand(item.id)}
       busy={item.kind === 'polish' && polishing}
-      onRevise={item.kind === 'polish' ? (feedback) => retryPolish(item.id, feedback) : undefined}
+      onRevise={item.kind === 'polish' ? (feedback) => item.commandRecord
+        ? retryRecordedCommand(item.commandRecord, feedback) : retryPolish(item.id, feedback) : undefined}
       onPrimary={
         item.kind === 'polish'
           ? () => {

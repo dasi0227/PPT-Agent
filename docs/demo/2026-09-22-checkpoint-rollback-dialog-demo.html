@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>回退确认 · 弹窗原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #17202b;
+      background: #e9edf2;
+      font-synthesis: none;
+      -webkit-font-smoothing: antialiased;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100svh; }
+    button { font: inherit; cursor: pointer; }
+    .demo-return {
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 24px;
+      color: #5f6b7a;
+      font-size: 14px;
+    }
+    .demo-return p { margin: 0; }
+    .demo-return[hidden] { display: none; }
+    dialog {
+      width: min(480px, calc(100vw - 32px));
+      max-height: calc(100svh - 32px);
+      padding: 24px;
+      overflow-y: auto;
+      color: #17202b;
+      background: #fff;
+      border: 1px solid #bcc5d0;
+      border-radius: 8px;
+      box-shadow: 0 20px 25px -5px rgb(0 0 0 / 10%), 0 8px 10px -6px rgb(0 0 0 / 10%);
+    }
+    dialog::backdrop { background: rgb(0 0 0 / 40%); backdrop-filter: blur(2px); }
+    h1 { margin: 0; font-size: 18px; font-weight: 600; line-height: 28px; letter-spacing: -.2px; }
+    .description { margin: 8px 0 0; color: #5f6b7a; font-size: 14px; line-height: 22px; }
+    .target { margin-top: 20px; padding: 14px 16px; background: #f8f9fb; border-radius: 6px; }
+    .metadata { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; color: #5f6b7a; font-size: 12px; line-height: 20px; }
+    time, .count { font-variant-numeric: tabular-nums; }
+    .count { white-space: nowrap; }
+    .count strong { color: #17202b; font-size: 14px; font-weight: 600; }
+    blockquote { margin: 8px 0 0; color: #2f3945; font-size: 14px; line-height: 23px; overflow-wrap: anywhere; }
+    .note { margin: 14px 0 0; color: #5f6b7a; font-size: 12px; line-height: 20px; }
+    footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+    .button { min-height: 32px; padding: 5px 12px; border: 1px solid transparent; border-radius: 6px; font-size: 14px; font-weight: 500; line-height: 20px; transition: background-color 120ms, color 120ms; }
+    .secondary { color: #475260; background: #f8f9fb; border-color: #d5dbe3; }
+    .secondary:hover, .secondary:focus-visible { background: #f0f3f7; color: #17202b; }
+    .primary { color: #2f67f6; background: #e8efff; }
+    .primary:hover, .primary:focus-visible { background: #e8efff; color: #204dcc; }
+    .button:focus-visible { outline: none; text-decoration: underline; text-underline-offset: 4px; }
+    @media (max-width: 400px) { dialog { padding: 20px; } .target { padding: 12px; } }
+    @media (prefers-reduced-motion: reduce) { .button { transition: none; } }
+  </style>
+</head>
+<body>
+  <!-- 独立视觉原型：静态示例，无接口请求。正式实现复用项目公共 Dialog / Button。 -->
+  <main class="demo-return" id="demo-return" hidden>
+    <p id="demo-status" role="status"></p>
+    <button class="button secondary" id="reopen" type="button">重新查看弹窗</button>
+  </main>
+
+  <dialog id="rollback-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description dialog-note">
+    <h1 id="dialog-title">回到此任务发送前？</h1>
+    <p class="description" id="dialog-description">项目内容和所有对话将一并回退。</p>
+
+    <section class="target" aria-label="回退目标与影响范围">
+      <div class="metadata">
+        <time datetime="2026-09-22T14:32:00+08:00" aria-label="任务发送时间：2026年9月22日14点32分">2026-09-22 14:32</time>
+        <span class="count">撤回 <strong>3</strong> 个任务（含本次）</span>
+      </div>
+      <blockquote>将封面改为深色背景，并统一后续页面的标题样式。</blockquote>
+    </section>
+
+    <p class="note" id="dialog-note">这条指令将替换输入框草稿。回退后仍可恢复到最新状态。</p>
+    <footer>
+      <button class="button secondary" id="cancel" type="button" autofocus>取消</button>
+      <button class="button primary" id="confirm" type="button">确认回退</button>
+    </footer>
+  </dialog>
+
+  <script>
+    const dialog = document.getElementById('rollback-dialog');
+    const demoReturn = document.getElementById('demo-return');
+    const demoStatus = document.getElementById('demo-status');
+    const reopen = document.getElementById('reopen');
+    function openDemo() {
+      demoReturn.hidden = true;
+      dialog.returnValue = '';
+      dialog.showModal();
+    }
+    document.getElementById('cancel').addEventListener('click', () => dialog.close('cancel'));
+    document.getElementById('confirm').addEventListener('click', () => dialog.close('confirm'));
+    dialog.addEventListener('close', () => {
+      demoStatus.textContent = dialog.returnValue === 'confirm'
+        ? '已确认 · 仅演示交互，未修改项目'
+        : '已取消 · 仅演示交互';
+      demoReturn.hidden = false;
+      reopen.focus();
+    });
+    reopen.addEventListener('click', openDemo);
+    openDemo();
+  </script>
+</body>
+</html>

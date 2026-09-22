@@ -97,7 +97,7 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
         )}
       >
         <Sparkle className="h-4 w-4 text-success" strokeWidth={1.75} />
-        <span className="truncate text-sm font-semibold">{summaryText(changes)}</span>
+        <span className="truncate text-sm font-normal">{summaryText(changes)}</span>
         {(insertions > 0 || deletions > 0) && (
           <span className="font-mono text-xs">
             <span className="text-success">+{insertions}</span>{' '}

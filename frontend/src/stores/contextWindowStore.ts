@@ -1,5 +1,5 @@
 import { RequestCanceledError } from '../api/client';
-import { commandActive, performCommand } from './commandRuntime';
+import { performCommand } from './commandRuntime';
 import type { CommandTimelineItem } from '../features/agent/eventReducer';
 import { contextCompactionTimelineItem } from '../features/agent/eventReducer';
 import { notifyModelFallback } from '../lib/modelExecution';
@@ -16,7 +16,7 @@ interface ContextWindowSession {
 interface ContextWindowState {
   sessions: Record<string, ContextWindowSession>;
   load: (threadId: string, modelProfileName: string) => Promise<void>;
-  compact: (threadId: string) => Promise<boolean>;
+  compact: (threadId: string, commandId?: string) => Promise<boolean>;
   update: (threadId: string, snapshot: ContextWindowSnapshot) => void;
   drop: (threadId: string) => void;
 }
@@ -53,7 +53,7 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
       }));
     }
   },
-  compact: async (threadId) => {
+  compact: async (threadId, commandId) => {
     const current = get().sessions[threadId];
     if (current?.compacting || !current?.snapshot
       || current.snapshot.compact_threshold_tokens <= 0
@@ -64,7 +64,7 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
         [threadId]: { ...(state.sessions[threadId] ?? emptySession()), compacting: true },
       },
     }));
-    const id = `compact:${threadId}`;
+    const id = commandId ?? `compact:${crypto.randomUUID()}`;
     const initial: CommandTimelineItem = {
       id,
       type: 'command',
@@ -77,7 +77,7 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
       return await performCommand(
         threadId,
         initial,
-        (signal, onProgress) => threadsApi.compact(threadId, signal, onProgress),
+        (signal, onProgress) => threadsApi.compact(threadId, signal, onProgress, id),
         (result) => {
           notifyModelFallback(result.model_execution, '上下文压缩');
           set((state) => ({
@@ -86,10 +86,10 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
               [threadId]: { snapshot: result.snapshot, loading: false, compacting: false },
             },
           }));
-          return contextCompactionTimelineItem(result.compaction);
+          return { ...contextCompactionTimelineItem(result.compaction), id };
         },
         () => {
-          void get().compact(threadId);
+          void get().compact(threadId, id);
         },
       );
     } finally {
@@ -109,7 +109,7 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
         [threadId]: {
           snapshot,
           loading: false,
-          compacting: snapshot.status === 'compacting' || commandActive(`compact:${threadId}`),
+          compacting: snapshot.status === 'compacting' || state.sessions[threadId]?.compacting === true,
         },
       },
     })),
@@ -143,7 +143,7 @@ export function receiveCompactionEvent(threadId: string, event: SSEEvent): boole
       });
       const job = pending!;
       const initial: CommandTimelineItem = {
-        id: `compact:${progress.id}`,
+        id: `context-compaction:${progress.id}`,
         type: 'command',
         kind: 'compact',
         title: '压缩上下文',
@@ -161,7 +161,7 @@ export function receiveCompactionEvent(threadId: string, event: SSEEvent): boole
         },
         contextCompactionTimelineItem,
         () => {
-          void useContextWindowStore.getState().compact(threadId);
+          void useContextWindowStore.getState().compact(threadId, initial.id);
         },
       );
     }

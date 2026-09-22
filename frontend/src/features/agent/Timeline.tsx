@@ -25,6 +25,7 @@ import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { BriefingActivity } from './BriefingActivity';
 import { ContextCompactionActivity } from './ContextCompactionActivity';
 import { ScopeExpansionCard } from './ScopeExpansionCard';
+import { useCommandHistoryRecovery } from './useCommandHistoryRecovery';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -64,8 +65,9 @@ function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 
 
 export const Timeline: React.FC = () => {
   const session = useActiveSession();
-  const threadId=useActiveThreadId();
+  const threadId = useActiveThreadId();
   const { activeRunId, timelineItems, status, plan, progress } = session;
+  useCommandHistoryRecovery(threadId, timelineItems);
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const commitSession = useGitCommitStore((state) => (
@@ -180,7 +182,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'scope_expansion' && <ScopeExpansionCard item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
-        {item.type === 'git_commit' && <GitCommitEvent item={item} />}
+        {item.type === 'git_commit' && !(item.status === 'loading' && commitActive && commitSession?.operationId === item.operationId) && <GitCommitEvent item={item} />}
         {item.type === 'command' && <TextCommandActivity item={item} />}
         {item.type === 'briefing' && <BriefingActivity item={item} />}
         {item.type === 'context_compaction' && <ContextCompactionActivity item={item} />}
@@ -272,14 +274,14 @@ function RunSummaryBlock({
         className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-600"
       >
         <RunStatusIcon status={superseded ? 'paused' : entry.status} />
-        <span className="min-w-0 flex-1 truncate font-semibold">{label}</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
         <ChevronRight
           className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform duration-300 ease-out ${expanded ? 'rotate-90' : ''}`}
           strokeWidth={1.75}
         />
       </button>
       <TimelineDisclosure open={expanded && entry.processEntries.length > 0}>
-        {expanded && entry.processEntries.length > 0 && <div className="timeline-disclosure-rows mt-1.5 border-t border-border pt-1.5">
+        {expanded && entry.processEntries.length > 0 && <div className="timeline-disclosure-rows mt-2 border-t border-border pt-2">
           {entry.processEntries.map(renderEntry)}
         </div>}
       </TimelineDisclosure>

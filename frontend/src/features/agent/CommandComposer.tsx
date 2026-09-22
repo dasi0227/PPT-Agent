@@ -5,6 +5,7 @@ import { Code2, FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'luci
 import { attachmentsApi } from '../../api/attachments';
 import { llmApi } from '../../api/llm';
 import { polishCommand } from '../../stores/textCommandStore';
+import { showGlobalSuccess } from '../../stores/toastStore';
 import { skillsApi } from '../../api/skills';
 import type { CreateRunRequest, CreateRunScopeInput, LLMProfile, Skill } from '../../api/types';
 import { cn } from '../../lib/utils';
@@ -17,6 +18,7 @@ import { useThreadStore } from '../../stores/threadStore';
 import { isMac } from '../../lib/platform';
 import { newClientIdentity } from '../../lib/clientIdentity';
 import { ModeSelector } from './ModeSelector';
+import { MODE_META } from './modeMeta';
 import { ModelSelector } from './ModelSelector';
 import { SkillSelector } from './SkillSelector';
 import { TargetSelector } from './TargetSelector';
@@ -439,7 +441,8 @@ export const CommandComposer: React.FC = () => {
       ...((componentNames.length > 0 || restored?.component_names?.length) ? { component_names: [...new Set([...(restored?.component_names ?? []), ...componentNames])] } : {}),
       ...((mentionedSlideIds.length > 0 || restored?.mentioned_slide_ids?.length) ? { mentioned_slide_ids: [...new Set([...(restored?.mentioned_slide_ids ?? []), ...mentionedSlideIds])] } : {}),
     };
-    const selectedProfile = profiles.find((profile) => profile.name === request.model);
+    // Default routing omits request.model; validate the effective composer selection.
+    const selectedProfile = profiles.find((profile) => profile.name === composer.modelProfileName);
     const requiresVision = hasAttachments || (request.mode === 'execute' &&
       ['html', 'presentation', 'global'].includes(request.scope.object));
     if (!selectedProfile) {
@@ -501,6 +504,7 @@ export const CommandComposer: React.FC = () => {
     setSubmitError('');
     if (command === 'execute' || command === 'plan' || command === 'grill' || command === 'chat') {
       composer.setIntent(command);
+      showGlobalSuccess(`成功切换到${MODE_META[command].label}模式`);
       return;
     }
     if (command === 'polish') {

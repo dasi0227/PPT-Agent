@@ -437,11 +437,6 @@ export function DeckNavigator() {
           data-testid="deck-navigator-scroll"
           className="deck-navigator-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-8 pt-2"
         >
-          {runLocked && (
-            <div className="mx-1 mb-2 rounded-md bg-warning-soft px-3 py-2 text-xs text-warning">
-              {status === 'paused' ? '任务已暂停，目录暂不可编辑' : '任务运行中，目录暂不可编辑'}
-            </div>
-          )}
           {snapshot.outline.sections.length === 0 ? (
             <div
               data-testid="deck-navigator-empty"

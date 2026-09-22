@@ -51,6 +51,7 @@ export async function performCommand<T>(
   let live = true,
     current = {
       ...initial,
+      timestamp: useRunStore.getState().sessions[threadId]?.timelineItems.find((item) => item.id === initial.id)?.timestamp ?? initial.timestamp,
       phase: -1,
       cancellable: initial.cancellable ?? true,
     };
@@ -113,7 +114,7 @@ export async function performCommand<T>(
     await chain;
     await wait(450 - (Date.now() - paintedAt));
     if (!valid()) return false;
-    upsertCommand(threadId, complete(result), initial.id);
+    upsertCommand(threadId, { ...complete(result), timestamp: current.timestamp }, initial.id);
     live = false;
     retries.delete(initial.id);
     return true;

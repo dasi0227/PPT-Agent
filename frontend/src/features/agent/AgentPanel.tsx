@@ -19,7 +19,6 @@ export const AgentPanel: React.FC = () => {
   const toggleRightPanel = useUIStore((state) => state.toggleRightPanel);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const ensureActiveThread = useThreadStore((state) => state.ensureActiveThread);
-  const model = useComposerStore((state) => state.modelProfileName);
   const polishing = useComposerStore((state) => state.polishing);
   const startCommit = useGitCommitStore((state) => state.start);
   const commitSession = useGitCommitStore((state) => (
@@ -31,11 +30,11 @@ export const AgentPanel: React.FC = () => {
     activeProjectId ? state.sessions[activeProjectId]?.status === 'generating' : false
   ));
   const runActive = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(runStatus);
-  const commitDisabled = !activeProjectId || !model || commitActive || briefingActive || polishing || runActive;
+  const commitDisabled = !activeProjectId || commitActive || briefingActive || polishing || runActive;
   const commit = async () => {
-    if (!activeProjectId || !model || commitDisabled) return;
+    if (!activeProjectId || commitDisabled) return;
     const threadId = await ensureActiveThread(activeProjectId);
-    await startCommit(activeProjectId, threadId, model);
+    await startCommit(activeProjectId, threadId);
   };
 
   return (

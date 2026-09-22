@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,58 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
+
+func TestHistoryRecoversDatabaseEventsAndCommandsWithoutJSONL(t *testing.T) {
+	ctx := context.Background()
+	work := t.TempDir()
+	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(work, "test.db")}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	st, err := sqlitestore.NewStore(db, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	workDir := filepath.Join(work, "artifacts")
+	if err = os.MkdirAll(workDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err = st.CreateProject(ctx, model.Project{ID: "p", WorkDir: workDir, Title: "Project", Status: "ready", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err = st.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p", HistoryPath: model.UserHistoryPath("t"), Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Exec(`INSERT INTO runs(id,thread_id,project_id,scope_object,scope_slide_ids_json,scope_source_json,scope_revision,mode,run_command_json,status,created_at,updated_at) VALUES ('r','t','p','spec','[]','{}',1,'chat','{}','done',1,2)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []model.Event{
+		{RunID: "r", Seq: 1, Type: model.EventRunStarted, Payload: `{"user_input":"制作介绍","mode":"chat","scope":{}}`, CreatedAt: 1},
+		{RunID: "r", Seq: 2, Type: model.EventCommandPermissionRequested, Payload: `{"interaction_id":"permission"}`, CreatedAt: 1},
+		{RunID: "r", Seq: 3, Type: model.EventCommandPermissionAnswered, Payload: `{"interaction_id":"permission","decision":"allow"}`, CreatedAt: 1},
+	} {
+		if err = st.AppendEvent(ctx, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	activity := model.CommandActivity{ID: "rename:1", AttemptID: "first", ThreadID: "t", ProjectID: "p", Kind: "rename", Method: "auto", Status: "completed", Phase: 2, Request: json.RawMessage("{}"), Result: json.RawMessage(`{"title":""}`), CreatedAt: 2000, UpdatedAt: 2000}
+	if err = st.SaveCommandActivity(ctx, activity); err != nil {
+		t.Fatal(err)
+	}
+	history, err := service.NewThreadService(st).History(ctx, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 4 {
+		t.Fatalf("history missing persisted events: %+v", history)
+	}
+	for index, kind := range []string{"user_turn", "command.permission_requested", "command.permission_answered", "command_activity"} {
+		if history[index]["type"] != kind {
+			t.Fatalf("history order mismatch: %+v", history)
+		}
+	}
+}
 
 // TestHistorySkipsCorruptLinesAndSortsBySeq 断言 History：
 //   - json 解析失败的行跳过（不整体 500）

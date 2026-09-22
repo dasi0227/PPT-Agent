@@ -3,7 +3,7 @@ import { CircleCheck, CircleX, Info, TriangleAlert, X } from 'lucide-react';
 import { type ToastItem, useToastStore } from '../../stores/toastStore';
 import { cn } from '../../lib/utils';
 
-const DISPLAY_DURATION_MS = 5_000;
+const DISPLAY_DURATION_MS = 3_000;
 const EXIT_DURATION_MS = 220;
 
 function ToastIcon({ tone }: { tone: ToastItem['tone'] }) {

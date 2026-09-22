@@ -59,7 +59,7 @@ func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH 
 		attachments = attachmentH[0]
 	}
 	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, prompt: promptH, contextWindow: contextWindowH, attachment: attachments}
-	engine.Use(r.projectHistoryGate())
+	engine.Use(r.commandHistory(), r.projectHistoryGate())
 	r.register()
 	return r
 }

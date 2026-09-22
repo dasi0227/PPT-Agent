@@ -13,7 +13,7 @@ import {
   RotateCcw,
   Search,
   SquareTerminal,
-  Sparkles,
+  Pencil,
   Component as ComponentIcon,
   Blocks,
 } from 'lucide-react';
@@ -183,16 +183,16 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
 export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) => (
   <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-900">
     <RotateCcw className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
-    <span className="min-w-0 flex-1 truncate font-semibold">{item.text}</span>
+    <span className="min-w-0 flex-1 truncate">{item.text}</span>
   </div>
 );
 
-// 图标字形按工具区分（读取=eye，创建=sparkles，渲染=monitor，搜索=search），颜色由状态决定：
+// 图标字形按工具区分（读取=eye，编辑=pencil，渲染=monitor，搜索=search），颜色由状态决定：
 // 成功=success 绿、失败=danger 红；未知工具才使用通用状态图标兜底。
 function toolStatusIcon(tool: string, failed: boolean) {
   const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
   if (tool === 'read_ppt') return <Eye className={className} strokeWidth={1.75} />;
-  if (tool === 'mutate_ppt') return <Sparkles className={className} strokeWidth={1.75} />;
+  if (tool === 'mutate_ppt') return <Pencil className={className} strokeWidth={1.75} />;
   if (tool === 'render_slide') return <Monitor className={className} strokeWidth={1.75} />;
   if (tool === 'load_component') return <ComponentIcon className={className} strokeWidth={1.75} />;
   if (tool === 'load_skill') return <Blocks className={className} strokeWidth={1.75} />;
@@ -243,6 +243,9 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const slides = orderedSlides(snapshot);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const detailText = item.error?.message ?? item.detail;
+  const label = item.tool === 'mutate_ppt' && item.status === 'completed'
+    ? item.label.replace(/^已(?:创建|更新)/, '已编辑')
+    : item.label;
   const renderPassed = item.tool === 'render_slide' && item.status === 'completed';
   const showDetailText = Boolean(detailText) && !renderPassed;
   const hasDetails = Boolean(showDetailText || item.preview || item.command || item.resources?.length);
@@ -292,7 +295,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       >
         {icon}
         <span className="min-w-0 truncate text-[13px] font-normal text-text-900">
-          {renderActivityLabel(item.label, item.target, slides)}
+          {presentActivityText(label, item.target, slides)}
         </span>
         {hasDetails && (expanded
           ? <ChevronDown className="h-3.5 w-3.5 text-text-400" />
@@ -363,28 +366,24 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
 
 const groupVerbByTool: Record<string, string> = {
   read_ppt: '已读取',
+  mutate_ppt: '已编辑',
 };
 
-// deck 级产物（manifest/outline/design）对应的可读名词，在活动行中加粗突出对象。
+// deck 级产物（manifest/outline/design）对应的可读名词。
 const deckObjectNounByPart: Record<string, string> = {
   manifest: '演示内容',
   outline: '目录结构',
   design: '视觉设计',
 };
 
-interface ObjectName {
-  name: string;
-  bold: boolean;
-}
-
-function targetObjectName(target: PublicTarget | undefined): ObjectName {
+function targetObjectName(target: PublicTarget | undefined): string {
   if (target?.type === 'deck') {
     const noun = deckObjectNounByPart[target.part];
-    if (noun) return { name: noun, bold: true };
+    if (noun) return noun;
   }
-  if (target?.type === 'slide' && target.part === 'spec') return { name: '页面设计稿', bold: false };
-  if (target?.type === 'slide' && target.part === 'html') return { name: '幻灯片', bold: false };
-  return { name: '', bold: false };
+  if (target?.type === 'slide' && target.part === 'spec') return '页面设计稿';
+  if (target?.type === 'slide' && target.part === 'html') return '幻灯片';
+  return '';
 }
 
 // 从命令文本提取可执行程序名（首段空白分隔的词），供分组行展示具体命令。
@@ -395,64 +394,37 @@ function commandName(text?: string): string | null {
   return match ? match[0] : null;
 }
 
-// 渲染活动文本：对 deck 级产物名词加粗，突出「已读取演示内容」中的对象。
-function renderActivityLabel(text: string, target: PublicTarget | undefined, slides: Slide[]): React.ReactNode {
-  const label = presentActivityText(text, target, slides);
-  const { name, bold } = targetObjectName(target);
-  if (bold && label.endsWith(name)) {
-    return (
-      <>
-        {label.slice(0, label.length - name.length)}
-        <span className="font-semibold">{name}</span>
-      </>
-    );
-  }
-  return label;
-}
-
-function groupedVerb(items: ToolActivityItem[]): string {
-  if (items[0].tool !== 'mutate_ppt') return groupVerbByTool[items[0].tool] ?? '已完成';
-  const verbs = items.map((item) => item.label.startsWith('已创建') ? '已创建' : item.label.startsWith('已更新') ? '已更新' : '已完成');
-  return verbs.every((verb) => verb === verbs[0]) ? verbs[0] : '已完成';
-}
-
 interface GroupedObjectParts {
   prefix: string;
   noun: string | null;
-  bold: boolean;
 }
 
 function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
   const kinds = items.map((item) => targetObjectName(item.target));
   const first = kinds[0];
-  if (!first.name || kinds.some((kind) => kind.name !== first.name)) {
-    return { prefix: `${items.length} 项`, noun: null, bold: false };
+  if (!first || kinds.some((kind) => kind !== first)) {
+    return { prefix: `${items.length} 项`, noun: null };
   }
-  const unit = first.name === '幻灯片' ? '张' : first.name === '目录结构' ? '份' : first.name === '视觉设计' ? '套' : '个';
-  return { prefix: `${items.length} ${unit}`, noun: first.name, bold: first.bold };
+  const unit = first === '幻灯片' ? '张' : first === '目录结构' ? '份' : first === '视觉设计' ? '套' : '个';
+  return { prefix: `${items.length} ${unit}`, noun: first };
 }
 
-function groupLabel(items: ToolActivityItem[], verb: string): React.ReactNode {
+function groupLabel(items: ToolActivityItem[], verb: string): string {
   if (items[0].tool === 'run_command') {
     const name = commandName(items[0].command?.text);
     const uniform = name != null && items.every((item) => commandName(item.command?.text) === name);
     if (uniform) {
-      return <>已执行 <span className="font-semibold">{name}</span> 命令</>;
+      return `已执行 ${name} 命令`;
     }
     return `已执行 ${items.length} 条命令`;
   }
-  const { prefix, noun, bold } = groupedObjectParts(items);
-  return (
-    <>
-      {verb} {prefix}
-      {noun ? (bold ? <span className="font-semibold">{noun}</span> : noun) : null}
-    </>
-  );
+  const { prefix, noun } = groupedObjectParts(items);
+  return `${verb} ${prefix}${noun ?? ''}`;
 }
 
 export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items }) => {
   const [expanded, setExpanded] = useState(false);
-  const verb = groupedVerb(items);
+  const verb = groupVerbByTool[items[0].tool] ?? '已完成';
   return (
     <div>
       <button
@@ -472,7 +444,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
           : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />}
       </button>
       <TimelineDisclosure open={expanded}>
-        {expanded && <div className="timeline-disclosure-rows">
+        {expanded && <div className="timeline-disclosure-rows pt-2">
           {items.map((item) => <ToolActivityRow key={item.id} item={item} />)}
         </div>}
       </TimelineDisclosure>

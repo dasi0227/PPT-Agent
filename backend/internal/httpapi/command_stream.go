@@ -41,11 +41,27 @@ func commandStream(c *gin.Context, operation string, execute func(context.Contex
 		return nil
 	}
 	ctx = service.WithCommandProgress(ctx, func(phase int) error {
+		if record := commandRecord(c); record != nil {
+			record.activity.Phase = phase
+			if err := record.save(); err != nil {
+				return err
+			}
+		}
 		return send(gin.H{"type": "phase", "phase": phase})
 	})
 	result, err := execute(ctx)
+	if record := commandRecord(c); record != nil {
+		if persistErr := record.settle(result, err); persistErr != nil {
+			err = persistErr
+		}
+	}
 	if finishErr := finish(err == nil); finishErr != nil {
 		err = finishErr
+	}
+	if err != nil {
+		if record := commandRecord(c); record != nil {
+			_ = record.settle(nil, err)
+		}
 	}
 	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
 		return
