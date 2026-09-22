@@ -13,6 +13,8 @@ export interface ImageAttachment {
 }
 
 export const attachmentsApi = {
+  contentUrl: (projectId: string, attachmentId: string, variant: 'thumbnail' | 'original' = 'thumbnail') =>
+    `/api/v1/projects/${encodeURIComponent(projectId)}/attachments/${encodeURIComponent(attachmentId)}/content?variant=${variant}`,
   upload: (projectId: string, file: File) => {
     const body = new FormData();
     body.append('file', file, file.name);

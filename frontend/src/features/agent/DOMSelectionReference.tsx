@@ -59,15 +59,20 @@ export function DOMSelectionReference({ selection, editing, onEditingChange, onC
       }
       onEditingChange(open);
     }}>
-      <div className={cn('flex shrink-0 items-center self-center rounded-lg border hover:bg-accent-soft focus-within:bg-accent-soft', editing ? 'border-transparent bg-accent-soft' : 'border-border bg-surface')}>
+      <div className={cn('relative flex h-[52px] w-44 shrink-0 items-center rounded-lg border border-border hover:bg-accent-soft focus-within:bg-accent-soft', editing ? 'bg-accent-soft' : 'bg-surface')}>
         <AnchoredPopoverTrigger asChild>
           <button ref={anchorRef} type="button" title={`编辑标记 ${selection.marker_no} 的注释`}
-            className="flex h-[34px] items-center gap-1.5 rounded-md bg-transparent px-2 text-xs font-medium">
-            <Code2 className="h-[15px] w-[15px] text-accent" strokeWidth={1.75} />
-            标记 {selection.marker_no}
+            className="flex h-full w-full min-w-0 items-center gap-2 rounded-md bg-transparent p-1.5 pr-7 text-left">
+            <span className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-md bg-panel-muted" aria-hidden="true">
+              <Code2 className="h-5 w-5 text-accent" strokeWidth={1.75} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[11px] font-semibold leading-4 text-text-900">标记 {selection.marker_no}</span>
+              <span className="mt-0.5 block text-[11px] leading-3 text-text-600">{value.trim() ? '已注释' : '未注释'}</span>
+            </span>
           </button>
         </AnchoredPopoverTrigger>
-        <IconButton label={`移除标记 ${selection.marker_no}`} onClick={onRemove} className="mr-0.5 h-6 w-6 hover:bg-transparent hover:text-danger focus-visible:bg-transparent focus-visible:text-danger">
+        <IconButton label={`移除标记 ${selection.marker_no}`} onClick={onRemove} className="absolute right-1 top-1 h-5 w-5 hover:bg-transparent hover:text-danger focus-visible:bg-transparent focus-visible:text-danger">
           <X className="h-3.5 w-3.5" strokeWidth={1.75} />
         </IconButton>
       </div>

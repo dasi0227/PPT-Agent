@@ -1,8 +1,9 @@
 import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
+import { Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
+import { ImagePreview } from '../../components/ui/ImagePreview';
 import { llmApi } from '../../api/llm';
 import { polishCommand } from '../../stores/textCommandStore';
 import { showGlobalSuccess } from '../../stores/toastStore';
@@ -629,20 +630,24 @@ export const CommandComposer: React.FC = () => {
 		/>
         <div className="relative rounded-t-[22px]">
 			{activeReferences.length > 0 && (
-				<div className="flex gap-2 overflow-x-auto px-3 pb-1.5 pt-3" aria-label="当前消息引用">
+				<div className="scrollbar-none flex items-center gap-2 overflow-x-auto px-3 pb-1.5 pt-3" aria-label="当前消息引用">
 					{activeReferences.map((reference) => reference.kind === 'image' ? (
-						<div key={reference.attachment.attachmentId} className="relative grid w-44 shrink-0 grid-cols-[38px_minmax(0,1fr)] items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 shadow-sm">
-							<span className="grid h-[38px] w-[38px] place-items-center rounded-md bg-panel-muted text-text-600" aria-hidden="true">
-								<FileImage className="h-5 w-5" strokeWidth={1.75} />
-							</span>
-							<span className="min-w-0">
+						<div key={`${activeProjectId}:${activeThreadId}:${reference.attachment.attachmentId}`} className="relative flex h-[52px] w-44 shrink-0 items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 hover:bg-accent-soft focus-within:bg-accent-soft">
+							{activeProjectId && (
+								<ImagePreview
+									name={reference.attachment.name}
+									thumbnailSrc={attachmentsApi.contentUrl(activeProjectId, reference.attachment.attachmentId)}
+									src={attachmentsApi.contentUrl(activeProjectId, reference.attachment.attachmentId, 'original')}
+								/>
+							)}
+							<span className="min-w-0 flex-1">
 								<span className="block truncate text-[11px] font-semibold leading-4 text-text-900">{reference.attachment.name}</span>
 								<span className="mt-0.5 block text-[11px] leading-3 text-text-600">{formatFileSize(reference.attachment.size)}</span>
 							</span>
 							<button
 								type="button"
 								onClick={() => activeThreadId && composer.removeThreadAttachment(activeThreadId, reference.attachment.attachmentId)}
-								className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900"
+								className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-text-600 hover:bg-transparent hover:text-danger focus-visible:bg-transparent focus-visible:text-danger"
 								aria-label={`移除 ${reference.attachment.name}`}
 								title="从当前消息移除"
 							>
