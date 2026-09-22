@@ -76,7 +76,7 @@ func initApp() (*App, func(), error) {
 	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, fsTranscriptStore, calibrationStore, namingService)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
-	manager, cleanup5, err := provideExportManager(nodeSlideRenderer, workRoot)
+	manager, cleanup5, err := provideExportManager(nodeSlideRenderer, workRoot, zapLogger)
 	if err != nil {
 		cleanup4()
 		cleanup3()

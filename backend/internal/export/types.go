@@ -137,6 +137,7 @@ type Operation struct {
 	Error           *PublicError
 	Snapshot        Snapshot
 	CreatedAt       time.Time
+	lastHeartbeat   time.Time
 	cancel          context.CancelFunc
 	seq             int64
 	events          []Event
@@ -151,7 +152,7 @@ func (o *Operation) viewLocked() View {
 		copy := *o.Artifact
 		artifact = &copy
 	}
-	warnings := append([]string(nil), o.Warnings...)
+	warnings := append([]string{}, o.Warnings...)
 	return View{ID: o.ID, ProjectID: o.ProjectID, Format: o.Format, Status: o.Status, Phase: o.Phase,
 		CompletedPages: o.CompletedPages, TotalPages: o.TotalPages, CurrentSlideID: o.CurrentSlideID,
 		CurrentOrdinal: o.CurrentOrdinal, Warnings: warnings, Artifact: artifact, Error: o.Error,

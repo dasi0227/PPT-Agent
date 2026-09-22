@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
+	"go.uber.org/zap"
 )
 
 const defaultTTL = 30 * time.Minute
+const heartbeatGrace = 90 * time.Second
 
 type Manager struct {
 	mu        sync.Mutex
@@ -21,10 +23,29 @@ type Manager struct {
 	renderer  workflow.SlideRenderer
 	ttl       time.Duration
 	closed    bool
+	log       *zap.Logger
 }
 
 func NewManager(renderer workflow.SlideRenderer) *Manager {
-	return &Manager{byID: map[string]*Operation{}, byProject: map[string]string{}, requests: map[string]string{}, renderer: renderer, ttl: defaultTTL}
+	return &Manager{byID: map[string]*Operation{}, byProject: map[string]string{}, requests: map[string]string{}, renderer: renderer, ttl: defaultTTL, log: zap.NewNop()}
+}
+
+func (m *Manager) WithLogger(log *zap.Logger) *Manager { m.log = log; return m }
+
+// Only the page holding the export ID renews ownership. Status reads and SSE
+// reconnects do not keep an abandoned export alive.
+func (m *Manager) Heartbeat(id string) error {
+	op, err := m.Get(id)
+	if err != nil {
+		return err
+	}
+	op.mu.Lock()
+	defer op.mu.Unlock()
+	if op.Status.Terminal() {
+		return ErrGone
+	}
+	op.lastHeartbeat = time.Now()
+	return nil
 }
 
 func (m *Manager) Existing(projectID, requestID string) (*Operation, bool) {
@@ -39,6 +60,12 @@ func (m *Manager) Existing(projectID, requestID string) (*Operation, bool) {
 }
 
 func (m *Manager) Active(projectID string) bool {
+	m.mu.Lock()
+	id := m.byProject[projectID]
+	m.mu.Unlock()
+	if id != "" {
+		m.expireAt(id, time.Now())
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	_, ok := m.byProject[projectID]
@@ -59,13 +86,15 @@ func (m *Manager) Start(id, requestID string, format Format, snapshot Snapshot) 
 	op := &Operation{ID: id, ProjectID: snapshot.ProjectID, ClientRequestID: requestID, Format: format,
 		Status: StatusAccepted, Phase: PhaseSnapshotting, TotalPages: len(snapshot.Slides), Warnings: []string{},
 		Snapshot: snapshot, CreatedAt: time.Now(), cancel: cancel, subscribers: map[int]chan Event{}, done: make(chan struct{})}
+	op.lastHeartbeat = op.CreatedAt
 	m.byID[id] = op
 	m.byProject[snapshot.ProjectID] = id
 	m.requests[snapshot.ProjectID+"\x00"+requestID] = id
 	m.mu.Unlock()
 	op.publish("export.progress")
+	m.log.Info("export created", zap.String("export_id", id), zap.String("project_id", op.ProjectID), zap.String("format", string(format)))
 	go m.execute(ctx, op)
-	go m.expire(id, ctx)
+	go m.expire(id)
 	return op, nil
 }
 
@@ -130,12 +159,20 @@ func (m *Manager) Cancel(id string) error {
 		op.publishLocked("export.canceled")
 	}
 	op.mu.Unlock()
+	m.log.Info("export canceled", zap.String("export_id", id), zap.String("reason", "cancel_requested"))
+	m.finishCancel(op)
+	return nil
+}
+
+func (m *Manager) finishCancel(op *Operation) {
 	select {
 	case <-op.done:
 	case <-time.After(5 * time.Second):
+		// Do not release the project or remove files while a worker may still write.
+		go func() { <-op.done; m.cleanup(op, true) }()
+		return
 	}
 	m.cleanup(op, true)
-	return nil
 }
 
 func (m *Manager) CancelProject(projectID string) {
@@ -162,6 +199,7 @@ func (m *Manager) BeginDelivery(id string) (*Operation, error) {
 	}
 	op.Status = StatusDelivering
 	op.publishLocked("export.delivery_started")
+	m.log.Info("export delivery started", zap.String("export_id", id))
 	return op, nil
 }
 
@@ -170,6 +208,7 @@ func (m *Manager) DeliveryFailed(op *Operation) {
 	if op.Status == StatusDelivering {
 		op.Status = StatusReady
 		op.publishLocked("export.download_failed")
+		m.log.Warn("export delivery failed", zap.String("export_id", op.ID))
 	}
 	op.mu.Unlock()
 }
@@ -179,6 +218,7 @@ func (m *Manager) Consume(op *Operation) {
 	if op.Status == StatusDelivering {
 		op.Status = StatusConsumed
 		op.publishLocked("export.consumed")
+		m.log.Info("export consumed", zap.String("export_id", op.ID))
 	}
 	op.mu.Unlock()
 	op.cancel()
@@ -201,6 +241,10 @@ func (m *Manager) Close() {
 func (m *Manager) execute(ctx context.Context, op *Operation) {
 	defer close(op.done)
 	op.mu.Lock()
+	if ctx.Err() != nil || op.Status == StatusCanceled {
+		op.mu.Unlock()
+		return
+	}
 	op.Status, op.Phase = StatusRunning, PhasePackaging
 	if op.Format != FormatHTML {
 		op.Phase = PhaseRendering
@@ -213,6 +257,7 @@ func (m *Manager) execute(ctx context.Context, op *Operation) {
 		if op.Status != StatusCanceled {
 			op.Status, op.Error = StatusFailed, publicErr
 			op.publishLocked("export.failed")
+			m.log.Warn("export failed", zap.String("export_id", op.ID), zap.String("code", publicErr.Code), zap.String("message", publicErr.Message), zap.Any("details", publicErr.Details))
 		}
 		op.mu.Unlock()
 		op.cancel()
@@ -230,6 +275,7 @@ func (m *Manager) execute(ctx context.Context, op *Operation) {
 	op.Warnings = append(op.Warnings, warnings...)
 	op.Status, op.Phase, op.CompletedPages = StatusReady, PhasePackaging, op.TotalPages
 	op.publishLocked("export.ready")
+	m.log.Info("export ready", zap.String("export_id", op.ID), zap.Int("pages", op.TotalPages), zap.Int64("size_bytes", artifact.Size))
 	op.mu.Unlock()
 }
 
@@ -247,25 +293,55 @@ func (m *Manager) CleanupWorkRoot(workRoot string) error {
 		if !project.IsDir() {
 			continue
 		}
-		if err := os.RemoveAll(filepath.Join(projectsRoot, project.Name(), ".runtime", "exports")); err != nil {
+		if err := os.RemoveAll(filepath.Join(projectsRoot, project.Name(), "artifacts", ".runtime", "exports")); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (m *Manager) expire(id string, ctx context.Context) {
-	timer := time.NewTimer(m.ttl)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		_ = m.Cancel(id)
-	case <-ctx.Done():
+func (m *Manager) expire(id string) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for now := range ticker.C {
+		if m.expireAt(id, now) {
+			return
+		}
 	}
 }
 
+func (m *Manager) expireAt(id string, now time.Time) bool {
+	op, err := m.Get(id)
+	if err != nil {
+		return true
+	}
+	op.mu.Lock()
+	reason := ""
+	if now.Sub(op.CreatedAt) >= m.ttl {
+		reason = "ttl_expired"
+	} else if !op.Status.Terminal() && op.Status != StatusDelivering && now.Sub(op.lastHeartbeat) >= heartbeatGrace {
+		reason = "page_heartbeat_expired"
+	}
+	if reason == "" {
+		op.mu.Unlock()
+		return false
+	}
+	// Serialize expiry with heartbeats so a late renewal cannot resurrect the task.
+	if !op.Status.Terminal() {
+		op.Status, op.Error = StatusCanceled, &PublicError{Code: "EXPORT_EXPIRED", Message: "导出连接已失效，请重新导出。"}
+		op.publishLocked("export.canceled")
+	}
+	op.cancel()
+	op.mu.Unlock()
+	m.log.Info("export canceled", zap.String("export_id", id), zap.String("reason", reason))
+	m.finishCancel(op)
+	return true
+}
+
 func (m *Manager) cleanup(op *Operation, remove bool) {
-	_ = os.RemoveAll(filepath.Dir(op.Snapshot.Root))
+	if err := os.RemoveAll(filepath.Dir(op.Snapshot.Root)); err != nil {
+		m.log.Warn("export cleanup failed", zap.String("export_id", op.ID), zap.Error(err))
+	}
 	m.mu.Lock()
 	if remove {
 		delete(m.byID, op.ID)
@@ -275,6 +351,7 @@ func (m *Manager) cleanup(op *Operation, remove bool) {
 		delete(m.byProject, op.ProjectID)
 	}
 	m.mu.Unlock()
+	m.log.Info("export cleaned", zap.String("export_id", op.ID), zap.Bool("removed", remove))
 }
 
 func (o *Operation) progress(phase Phase, slideID string, ordinal, completed int) {

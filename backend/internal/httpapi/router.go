@@ -44,6 +44,7 @@ func (r *Router) registerExport() {
 	v1 := r.engine.Group("/api/v1")
 	v1.POST("/projects/:id/exports", r.export.Create)
 	v1.GET("/exports/:id", r.export.Get)
+	v1.POST("/exports/:id/heartbeat", r.export.Heartbeat)
 	v1.GET("/exports/:id/events", r.export.Events)
 	v1.GET("/exports/:id/download", r.export.Download)
 	v1.DELETE("/exports/:id", r.export.Cancel)

@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useExportStore } from '../../stores/exportStore';
 import { ExportProgressDialog } from './ExportProgressDialog';
+import { exportsApi, normalizeExport, type ExportOperation } from '../../api/exports';
 
 function readySession() {
   return {
@@ -15,9 +16,20 @@ function readySession() {
   };
 }
 
-afterEach(() => useExportStore.setState({ session: null }));
+beforeEach(() => {
+  vi.spyOn(exportsApi, 'heartbeat').mockResolvedValue(undefined);
+  vi.spyOn(exportsApi, 'get').mockResolvedValue(readySession().operation);
+});
+afterEach(() => { useExportStore.setState({ session: null }); vi.restoreAllMocks(); });
 
 describe('ExportProgressDialog', () => {
+  test('renders a downloadable export when the received warning list is null', () => {
+    const session = readySession();
+    const received = { ...session.operation, warnings: null } as unknown as ExportOperation;
+    useExportStore.setState({ session: { ...session, operation: normalizeExport(received) } });
+    render(<ExportProgressDialog />);
+    expect(screen.getByRole('button', { name: '下载' })).toBeInTheDocument();
+  });
   test('does not auto-download and hands the ready artifact to the browser only after a click', async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     useExportStore.setState({ session: readySession() });

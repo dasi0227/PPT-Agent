@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
@@ -112,6 +113,80 @@ func TestManagerAllowsOnlyOneActiveExportPerProject(t *testing.T) {
 	}
 	if _, err := m.Get(op.ID); !errors.Is(err, ErrGone) {
 		t.Fatalf("canceled export remained addressable: %v", err)
+	}
+}
+
+func TestExportViewSerializesEmptyWarningsAsArray(t *testing.T) {
+	op := &Operation{}
+	view := op.View()
+	if view.Warnings == nil || !strings.Contains(eventPayload(view), `"warnings":[]`) {
+		t.Fatalf("empty warning contract broken: %s", eventPayload(view))
+	}
+}
+
+func TestAbandonedExportReleasesProjectAndRemovesFiles(t *testing.T) {
+	for _, format := range []Format{FormatHTML, FormatPNG} {
+		t.Run(string(format), func(t *testing.T) {
+			m := NewManager(blockingRenderer{})
+			defer m.Close()
+			root := filepath.Join(t.TempDir(), "export", "snapshot")
+			snapshot := Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: root, Slides: []SlideSnapshot{{ID: "sli_one", Ordinal: 1, HTML: []byte("<html><body></body></html>"), Frame: exportFrame(), FileName: "001-One.png"}}}
+			op, err := m.Start("exp_one", "req_one", format, snapshot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if format == FormatHTML {
+				<-op.done
+				if op.View().Status != StatusReady {
+					t.Fatalf("view=%+v", op.View())
+				}
+			}
+			if err := m.Heartbeat(op.ID); err != nil {
+				t.Fatal(err)
+			}
+			if m.expireAt(op.ID, time.Now().Add(heartbeatGrace/2)) || !m.Active("pro_one") {
+				t.Fatal("live export must keep its project reservation")
+			}
+			if !m.expireAt(op.ID, time.Now().Add(heartbeatGrace+time.Second)) {
+				t.Fatal("abandoned export did not expire")
+			}
+			if m.Active("pro_one") {
+				t.Fatal("abandoned export blocked a fresh export")
+			}
+			if err := m.Heartbeat(op.ID); !errors.Is(err, ErrGone) {
+				t.Fatalf("late heartbeat=%v", err)
+			}
+			if _, err := os.Stat(filepath.Dir(root)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("orphan files remain: %v", err)
+			}
+			fresh, err := m.Start("exp_new", "req_new", FormatHTML, Snapshot{ProjectID: "pro_one", Root: filepath.Join(t.TempDir(), "new", "snapshot")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			<-fresh.done
+		})
+	}
+}
+
+func TestPageExpiryDoesNotInterruptDownloadButTTLStillCleansIt(t *testing.T) {
+	m := NewManager(nil)
+	defer m.Close()
+	op, err := m.Start("exp_one", "req_one", FormatHTML, Snapshot{ProjectID: "pro_one", Root: filepath.Join(t.TempDir(), "export", "snapshot")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-op.done
+	if _, err := m.BeginDelivery(op.ID); err != nil {
+		t.Fatal(err)
+	}
+	if m.expireAt(op.ID, time.Now().Add(heartbeatGrace+time.Second)) {
+		t.Fatal("page heartbeat interrupted download")
+	}
+	if !m.expireAt(op.ID, time.Now().Add(defaultTTL)) {
+		t.Fatal("TTL did not clean stalled download")
+	}
+	if m.Active("pro_one") {
+		t.Fatal("expired download kept project occupied")
 	}
 }
 

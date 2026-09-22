@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, LoaderCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/primitives';
 import { useExportStore } from '../../stores/exportStore';
+import { exportsApi } from '../../api/exports';
 
 const formatName = { png: 'PNG 图片', pdf: 'PDF', html: 'HTML 演示包' } as const;
 const phaseName = { snapshotting: '正在冻结演示文稿', rendering: '正在渲染页面', packaging: '正在打包文件' } as const;
@@ -12,20 +13,35 @@ export function ExportProgressDialog() {
   const download = useExportStore((state) => state.download);
   const retry = useExportStore((state) => state.retry);
   const close = useExportStore((state) => state.close);
+  const refresh = useExportStore((state) => state.refresh);
   const operation = session?.operation;
   const blocking = operation ? ['accepted', 'running', 'ready', 'delivering'].includes(operation.status) : false;
 
   useEffect(() => {
-    if (!blocking || !operation?.id) return;
+    if (!blocking) return;
     const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
-    const unload = () => { void fetch(`/api/v1/exports/${encodeURIComponent(operation.id)}`, { method: 'DELETE', keepalive: true }); };
+    const id = operation?.id;
+    const pagehide = () => {
+      if (id) void fetch(`/api/v1/exports/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive: true }).catch(() => {});
+    };
+    let pending = false;
+    const heartbeat = async () => {
+      if (!id || pending) return;
+      pending = true;
+      try { await exportsApi.heartbeat(id); } catch { /* Reconcile gone and terminal tasks below. */ }
+      await refresh(id);
+      pending = false;
+    };
+    void heartbeat();
+    const timer = window.setInterval(() => void heartbeat(), 15_000);
     window.addEventListener('beforeunload', beforeUnload);
-    window.addEventListener('unload', unload);
-    return () => { window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('unload', unload); };
-  }, [blocking, operation?.id]);
+    window.addEventListener('pagehide', pagehide);
+    return () => { window.clearInterval(timer); window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('pagehide', pagehide); };
+  }, [blocking, operation?.id, refresh]);
 
   if (!session || !operation) return null;
   const failed = operation.status === 'failed';
+  const conflict = failed && operation.error?.code === 'EXPORT_ALREADY_ACTIVE';
   const ready = operation.status === 'ready' || operation.status === 'delivering';
   const pages = operation.total_pages > 0 ? Math.round(operation.completed_pages / operation.total_pages * 90) : 4;
   const percent = ready ? 100 : operation.phase === 'snapshotting' ? 4 : operation.phase === 'packaging' ? Math.max(94, pages) : Math.max(8, pages);
@@ -42,7 +58,7 @@ export function ExportProgressDialog() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {failed ? <AlertTriangle className="h-5 w-5 text-danger" /> : ready ? <CheckCircle2 className="h-5 w-5 text-success" /> : <LoaderCircle className="h-5 w-5 animate-spin text-accent" />}
-            {failed ? '导出失败' : ready ? '导出完成' : `正在导出 ${formatName[session.format]}`}
+            {conflict ? '暂时无法导出' : failed ? '导出失败' : ready ? '导出完成' : `正在导出 ${formatName[session.format]}`}
           </DialogTitle>
           <DialogDescription>
             {failed ? operation.error?.message : ready ? '文件已准备好，点击下载后将交给浏览器保存。' : phaseName[operation.phase ?? 'snapshotting']}
@@ -74,7 +90,7 @@ export function ExportProgressDialog() {
 
         {(failed || ready) && <DialogFooter>
           {failed && <Button variant="secondary" onClick={() => void close()}>关闭</Button>}
-          {failed && <Button variant="primary" onClick={() => void retry()}>重新导出</Button>}
+          {failed && <Button variant="primary" onClick={() => void retry()}>{conflict ? '重试' : '重新导出'}</Button>}
           {ready && <Button variant="primary" disabled={operation.status === 'delivering'} onClick={download}>{operation.status === 'delivering' ? '正在交给浏览器…' : '下载'}</Button>}
         </DialogFooter>}
       </DialogContent>

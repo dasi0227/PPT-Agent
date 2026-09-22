@@ -16,33 +16,55 @@ interface ExportState {
   download: () => void;
   retry: () => Promise<void>;
   close: () => Promise<void>;
+  refresh: (id: string) => Promise<void>;
 }
 
 const terminal = new Set(['failed', 'canceled', 'consumed']);
 
 export const useExportStore = create<ExportState>((set, get) => {
-  const patchOperation = (operation: ExportOperation) => set((state) => state.session && state.session.projectId === operation.project_id
-    ? { session: { ...state.session, operation } }
-    : state);
+  const patchOperation = (operation: ExportOperation) => {
+    const session = get().session;
+    if (!session || session.operation.id !== operation.id) return;
+    if (terminal.has(session.operation.status) && !terminal.has(operation.status)) return;
+    if (terminal.has(operation.status)) session.streamClose?.();
+    if (operation.status === 'consumed') {
+      set({ session: null });
+      return;
+    }
+    const next = operation.status === 'canceled'
+      ? { ...operation, id: '', status: 'failed' as const, error: operation.error ?? { code: 'EXPORT_EXPIRED', message: '导出连接已失效，请重新导出。', retryable: true } }
+      : operation;
+    set({ session: { ...session, operation: next, streamClose: terminal.has(operation.status) ? null : session.streamClose } });
+  };
+
+  const refresh = async (id: string) => {
+    if (get().session?.operation.id !== id) return;
+    try {
+      patchOperation(await exportsApi.get(id));
+    } catch (error) {
+      const session = get().session;
+      if (session?.operation.id !== id) return;
+      if (error instanceof APIError && error.status === 410) {
+        session.streamClose?.();
+        if (session.operation.status === 'delivering') {
+          set({ session: null });
+        } else {
+          set({ session: { ...session, streamClose: null, operation: { ...session.operation, id: '', status: 'failed', error: exportError(error) } } });
+        }
+      }
+    }
+  };
 
   const subscribe = (operation: ExportOperation) => {
     get().session?.streamClose?.();
-    const close = subscribeExport(operation.id, (next) => {
-      patchOperation(next);
-      if (terminal.has(next.status)) {
-        close();
-        if (next.status === 'consumed' || next.status === 'canceled') window.setTimeout(() => set({ session: null }), 250);
-      }
-    }, () => {
-      void exportsApi.get(operation.id).then((latest) => {
-        patchOperation(latest);
-        if (terminal.has(latest.status)) close();
-      }).catch(() => {});
-    });
+    if (terminal.has(operation.status)) { patchOperation(operation); return; }
+    const close = subscribeExport(operation.id, patchOperation, () => { void refresh(operation.id); });
     set((state) => state.session ? { session: { ...state.session, streamClose: close } } : state);
   };
 
   const start = async (projectId: string, format: ExportFormat) => {
+    const current = get().session;
+    if (current && !terminal.has(current.operation.status)) return;
     get().session?.streamClose?.();
     const placeholder: ExportOperation = { id: '', project_id: projectId, format, status: 'accepted', phase: 'snapshotting', completed_pages: 0, total_pages: 0, warnings: [], events_url: '' };
     set({ session: { projectId, format, operation: placeholder, streamClose: null } });
@@ -70,6 +92,7 @@ export const useExportStore = create<ExportState>((set, get) => {
   return {
     session: null,
     start,
+    refresh,
     download: () => {
       const session = get().session;
       const url = session?.operation.artifact?.download_url;
@@ -84,15 +107,24 @@ export const useExportStore = create<ExportState>((set, get) => {
       window.setTimeout(() => {
         const current = get().session;
         if (!current || current.operation.id !== session.operation.id || current.operation.status !== 'delivering') return;
-        void exportsApi.get(session.operation.id).then(patchOperation).catch((error) => {
-          if (error instanceof APIError && error.status === 410) set({ session: null });
-        });
+        void refresh(session.operation.id);
       }, 4_000);
     },
     retry: async () => {
       const session = get().session;
       if (!session) return;
-      if (session.operation.id) await exportsApi.cancel(session.operation.id).catch(() => {});
+      session.streamClose?.();
+      if (session.operation.id) {
+        try { await exportsApi.cancel(session.operation.id); }
+        catch (error) {
+          if (!(error instanceof APIError && error.status === 410)) {
+            patchOperation({ ...session.operation, status: 'failed', error: { ...exportError(error), message: '未能清理上次导出，请检查连接后重试。' } });
+            return;
+          }
+        }
+      }
+      const current = get().session;
+      if (!current || current.projectId !== session.projectId || current.operation.id !== session.operation.id) return;
       await start(session.projectId, session.format);
     },
     close: async () => {

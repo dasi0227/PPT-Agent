@@ -23,12 +23,17 @@ export interface ExportOperation {
   events_url: string;
 }
 
+export function normalizeExport(operation: ExportOperation): ExportOperation {
+  return { ...operation, warnings: Array.isArray(operation.warnings) ? operation.warnings : [] };
+}
+
 export const exportsApi = {
   create: (projectId: string, format: ExportFormat, clientRequestId: string) => fetchClient<ExportOperation>(`/projects/${projectId}/exports`, {
-    method: 'POST', body: JSON.stringify({ format, client_request_id: clientRequestId }), timeoutMs: 30_000,
-  }),
-  get: (id: string) => fetchClient<ExportOperation>(`/exports/${id}`, { reportError: false }),
-  cancel: (id: string, keepalive = false) => fetch(`/api/v1/exports/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive }),
+    method: 'POST', body: JSON.stringify({ format, client_request_id: clientRequestId }), timeoutMs: 30_000, reportError: false,
+  }).then(normalizeExport),
+  get: (id: string) => fetchClient<ExportOperation>(`/exports/${id}`, { reportError: false }).then(normalizeExport),
+  heartbeat: (id: string) => fetchClient<void>(`/exports/${encodeURIComponent(id)}/heartbeat`, { method: 'POST', reportError: false }),
+  cancel: (id: string) => fetchClient<void>(`/exports/${encodeURIComponent(id)}`, { method: 'DELETE', reportError: false }),
 };
 
 const eventNames = ['export.progress', 'export.ready', 'export.delivery_started', 'export.download_failed', 'export.consumed', 'export.failed', 'export.canceled'] as const;
@@ -37,7 +42,7 @@ export function subscribeExport(id: string, onMessage: (operation: ExportOperati
   const source = new EventSource(`/api/v1/exports/${encodeURIComponent(id)}/events`);
   for (const name of eventNames) {
     source.addEventListener(name, (event) => {
-      try { onMessage(JSON.parse((event as MessageEvent).data) as ExportOperation); } catch { onError(); }
+      try { onMessage(normalizeExport(JSON.parse((event as MessageEvent).data) as ExportOperation)); } catch { onError(); }
     });
   }
   source.onerror = onError;

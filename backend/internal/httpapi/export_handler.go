@@ -44,6 +44,13 @@ func (h *ExportHandler) Get(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, exportView(operation.View()))
 }
+func (h *ExportHandler) Heartbeat(c *gin.Context) {
+	if err := h.svc.Manager().Heartbeat(c.Param("id")); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
 func exportView(view presentationexport.View) presentationexport.View {
 	if view.Artifact != nil {
 		view.Artifact.Download = "/api/v1/exports/" + view.ID + "/download"
@@ -140,7 +147,7 @@ func (h *ExportHandler) handleError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrGitCommitActive):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "EXPORT_GIT_COMMIT_ACTIVE", Message: "项目正在提交，暂时不能导出。"})
 	case errors.Is(err, presentationexport.ErrAlreadyActive):
-		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "EXPORT_ALREADY_ACTIVE", Message: "当前项目已有导出任务。"})
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "EXPORT_ALREADY_ACTIVE", Message: "当前项目已有导出任务，请在原页面完成下载。如果原页面已关闭或刷新，遗留任务会在约 90 秒内清理，请稍后重试。"})
 	case errors.Is(err, presentationexport.ErrDownloadInProgress):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "EXPORT_DOWNLOAD_IN_PROGRESS", Message: "文件正在下载。"})
 	case errors.Is(err, presentationexport.ErrNotReady):

@@ -106,8 +106,8 @@ func providePPTMutationService(s store.Store, locks *run.LockManager) *service.P
 	return service.NewPPTMutationServiceWithLocks(s, locks)
 }
 
-func provideExportManager(renderer *workflow.NodeSlideRenderer, workRoot service.WorkRoot) (*presentationexport.Manager, func(), error) {
-	manager := presentationexport.NewManager(renderer)
+func provideExportManager(renderer *workflow.NodeSlideRenderer, workRoot service.WorkRoot, log *zap.Logger) (*presentationexport.Manager, func(), error) {
+	manager := presentationexport.NewManager(renderer).WithLogger(log)
 	if err := manager.CleanupWorkRoot(string(workRoot)); err != nil {
 		return nil, nil, err
 	}
