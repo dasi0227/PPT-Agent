@@ -49,7 +49,6 @@
     .count { white-space: nowrap; }
     .count strong { color: #17202b; font-size: 14px; font-weight: 600; }
     blockquote { margin: 8px 0 0; color: #2f3945; font-size: 14px; line-height: 23px; overflow-wrap: anywhere; }
-    .note { margin: 14px 0 0; color: #5f6b7a; font-size: 12px; line-height: 20px; }
     footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
     .button { min-height: 32px; padding: 5px 12px; border: 1px solid transparent; border-radius: 6px; font-size: 14px; font-weight: 500; line-height: 20px; transition: background-color 120ms, color 120ms; }
     .secondary { color: #475260; background: #f8f9fb; border-color: #d5dbe3; }
@@ -68,19 +67,18 @@
     <button class="button secondary" id="reopen" type="button">重新查看弹窗</button>
   </main>
 
-  <dialog id="rollback-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description dialog-note">
+  <dialog id="rollback-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description">
     <h1 id="dialog-title">回到此任务发送前？</h1>
     <p class="description" id="dialog-description">项目内容和所有对话将一并回退。</p>
 
     <section class="target" aria-label="回退目标与影响范围">
       <div class="metadata">
         <time datetime="2026-09-22T14:32:00+08:00" aria-label="任务发送时间：2026年9月22日14点32分">2026-09-22 14:32</time>
-        <span class="count">撤回 <strong>3</strong> 个任务（含本次）</span>
+        <span class="count">撤回 <strong>3</strong> 个任务</span>
       </div>
       <blockquote>将封面改为深色背景，并统一后续页面的标题样式。</blockquote>
     </section>
 
-    <p class="note" id="dialog-note">这条指令将替换输入框草稿。回退后仍可恢复到最新状态。</p>
     <footer>
       <button class="button secondary" id="cancel" type="button" autofocus>取消</button>
       <button class="button primary" id="confirm" type="button">确认回退</button>

@@ -1,8 +1,7 @@
 import { useComposerStore } from '../../stores/composerStore';
 import { useActiveThreadId } from './useActiveSession';
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { Undo2 } from 'lucide-react';
-import { LongContent } from './LongContent';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/primitives';
 import { projectHistoryApi } from '../../api/projectHistory';
@@ -31,6 +30,8 @@ export function HistoryBanner() {
   </div>;
 }
 export function ProjectHistoryDialogs() {
+  const descriptionId = useId();
+  const impactId = useId();
   const projectId = useProjectStore((s) => s.activeProjectId);
   const threads = useThreadStore((s) => projectId ? s.threadsByProjectId[projectId] : undefined);
   const { dialog, busy, error } = useProjectHistoryStore();
@@ -72,21 +73,27 @@ export function ProjectHistoryDialogs() {
   const preview = dialog?.preview;
   return <>
     <Dialog open={Boolean(dialog)} onOpenChange={(open) => { if (!open) close(); }}>
-      <DialogContent className="w-[calc(100vw-2rem)] min-w-0 max-w-[480px] max-h-[calc(100dvh-2rem)] overflow-y-auto gap-0" onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onInteractOutside={(event) => { if (busy) event.preventDefault(); }}>
-        <DialogTitle className="leading-7">{dialog?.runId ? '回到此任务发送前？' : '恢复到最新现场？'}</DialogTitle>
-        <DialogDescription className="mt-2 text-text-600 leading-[22px]">{dialog?.runId ? '项目内容和所有对话将一并回退。' : '恢复首次回退前的项目内容和所有对话，并用当时的草稿替换当前草稿。'}</DialogDescription>
-        {preview && <section aria-label="回退目标与影响范围" className="mt-5 rounded-md bg-panel-muted px-4 py-3.5">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1.5 text-xs leading-5 text-text-600 tabular-nums">
-            <time dateTime={new Date(preview.time).toISOString()}>{new Date(preview.time).toLocaleString('sv-SE', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time>
-            <span className="whitespace-nowrap">{dialog?.runId ? '撤回' : '恢复'} <strong className="text-sm font-semibold text-text-900">{preview.runs}</strong> 个任务{dialog?.runId ? '（含本次）' : ''}</span>
-          </div>
-          {dialog?.runId && <LongContent key={dialog.runId} className="mt-2" maxHeight={160} fadeClassName="from-panel-muted/0 via-panel-muted/90 to-panel-muted">
-            <blockquote className="whitespace-pre-wrap break-words text-sm leading-[23px] text-text-900">{preview.input || '（无文字输入）'}</blockquote>
-          </LongContent>}
+      <DialogContent
+        className="w-[calc(100vw-2rem)] min-w-0 max-w-[460px] max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto rounded-[10px] border-[#c7ced7] shadow-[0_16px_40px_-12px_rgb(23_32_43_/_20%)] max-[380px]:p-5"
+        overlayClassName="bg-ink/[0.14] backdrop-blur-none"
+        aria-describedby={preview ? `${descriptionId} ${impactId}` : descriptionId}
+        onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}
+        onInteractOutside={(event) => { if (busy) event.preventDefault(); }}
+      >
+        <DialogTitle className="leading-[26px] tracking-[-0.2px]">{dialog?.runId ? '回到此任务发送前？' : '恢复到最新现场？'}</DialogTitle>
+        <DialogDescription id={descriptionId} className="mt-1.5 text-[13px] leading-[21px] text-text-600">{dialog?.runId ? '项目和所有对话将一并回退。' : '恢复首次回退前的项目内容和所有对话，并用当时的草稿替换当前草稿。'}</DialogDescription>
+        {preview && <section aria-label={dialog?.runId ? '目标任务' : '恢复目标'} className="mt-[22px] border-y border-border/60 pt-[17px] pb-5">
+          <time className="block text-xs leading-[18px] text-text-600 tabular-nums" dateTime={new Date(preview.time).toISOString()}>{new Date(preview.time).toLocaleString('sv-SE', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time>
+          {dialog?.runId && <blockquote className="mt-2 line-clamp-3 max-h-[69px] [overflow-wrap:anywhere] text-sm font-normal leading-[23px] text-text-800">{preview.input || '（无文字输入）'}</blockquote>}
         </section>}
-        {dialog?.runId && <p className="mt-3.5 text-xs leading-5 text-text-600">这条指令将替换输入框草稿。回退后仍可恢复到最新状态。</p>}
         {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
-        <DialogFooter className="mt-6 flex-row justify-end gap-2 sm:space-x-0"><Button variant="secondary" disabled={busy} onClick={close}>取消</Button><Button variant="primary" disabled={busy} onClick={() => void useProjectHistoryStore.getState().execute()}>{busy ? '正在恢复项目…' : dialog?.runId ? '确认回退' : '确认恢复'}</Button></DialogFooter>
+        <DialogFooter className="mt-5 flex-row items-center justify-between gap-4 sm:justify-between sm:space-x-0 max-[380px]:flex-wrap max-[380px]:gap-3">
+          {preview && <p id={impactId} className="whitespace-nowrap text-xs leading-5 text-text-600">{dialog?.runId ? '撤回' : '恢复'} <strong className="font-semibold text-text-800 tabular-nums">{preview.runs}</strong> 个任务</p>}
+          <div className="ml-auto flex gap-2">
+            <Button variant="secondary" className="h-auto min-h-[34px] border-border bg-surface px-[13px] py-1.5 text-[13px] leading-5 text-text-700 focus-visible:underline focus-visible:underline-offset-4" disabled={busy} onClick={close}>取消</Button>
+            <Button variant="primary" className="h-auto min-h-[34px] border border-transparent px-[13px] py-1.5 text-[13px] leading-5 focus-visible:underline focus-visible:underline-offset-4" disabled={busy} onClick={() => void useProjectHistoryStore.getState().execute()}>{busy ? '正在恢复项目…' : dialog?.runId ? '确认回退' : '确认恢复'}</Button>
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
     <Dialog open={Boolean(pending)} onOpenChange={(open) => { if (!open) pending?.resolve(false); }}>

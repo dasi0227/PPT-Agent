@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>回退确认 · 精简预览</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-synthesis: none;
+      -webkit-font-smoothing: antialiased;
+      color: #17202b;
+      background: #edf0f4;
+      --muted: #657181;
+      --line: #e7eaee;
+      --accent: #2f67f6;
+      --accent-soft: #e8efff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100svh; }
+    ::selection { color: #17202b; background: var(--accent-soft); }
+    dialog {
+      width: min(460px, calc(100vw - 32px));
+      max-height: calc(100svh - 32px);
+      margin: auto;
+      padding: 24px;
+      color: inherit;
+      background: #fff;
+      border: 1px solid #c7ced7;
+      border-radius: 10px;
+      box-shadow: 0 16px 40px -12px rgb(23 32 43 / 20%);
+      overflow-y: auto;
+    }
+    dialog::backdrop { background: rgb(23 32 43 / 14%); }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 26px;
+      font-weight: 600;
+      letter-spacing: -.2px;
+    }
+    .description {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 21px;
+    }
+    .target {
+      margin-top: 22px;
+      padding: 17px 0 20px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    time {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+    blockquote {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      max-height: 69px;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+      margin: 8px 0 0;
+      color: #35404f;
+      font-size: 14px;
+      line-height: 23px;
+      font-weight: 400;
+    }
+    footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 20px;
+    }
+    .impact {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 20px;
+      white-space: nowrap;
+    }
+    .impact strong {
+      color: #35404f;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .actions { display: flex; gap: 8px; }
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 6px 13px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      font: inherit;
+      font-size: 13px;
+      line-height: 20px;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background-color 120ms, color 120ms;
+    }
+    .secondary { color: #475260; border-color: #d5dbe3; background: #fff; }
+    .secondary:hover, .secondary:focus-visible { background: #f5f7fa; color: #17202b; }
+    .primary { color: var(--accent); background: var(--accent-soft); }
+    .primary:hover, .primary:focus-visible { color: #204dcc; background: var(--accent-soft); }
+    button:focus-visible { outline: none; text-decoration: underline; text-underline-offset: 4px; }
+    button:active { transform: translateY(1px); }
+    @media (max-width: 380px) {
+      dialog { padding: 20px; }
+      footer { flex-wrap: wrap; gap: 12px; }
+      .actions { margin-left: auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      button { transition: none; }
+      button:active { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 临时独立原型，无接口请求。长输入为截断演示，最多显示三行。 -->
+  <dialog id="rollback-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description dialog-impact">
+    <h1 id="dialog-title">回到此任务发送前？</h1>
+    <p class="description" id="dialog-description">项目和所有对话将一并回退。</p>
+    <section class="target" aria-label="目标任务">
+      <time datetime="2026-09-22T19:52:00+08:00" aria-label="任务发送时间：2026年9月22日19点52分">2026-09-22 19:52</time>
+      <blockquote>按照要求更改，然后把这个图片放在第一页的空白处。图片与右侧正文保持对齐，保留现有标题和段落之间的间距。后续页面延续当前的字体、颜色和排版，不需要增加新的装饰元素；如果空间不够，优先调整图片尺寸，避免挤压正文区域，确保投影时也能清晰阅读。</blockquote>
+    </section>
+    <footer>
+      <p class="impact" id="dialog-impact">撤回 <strong>2</strong> 个任务</p>
+      <div class="actions">
+        <button class="secondary" id="cancel" type="button" autofocus>取消</button>
+        <button class="primary" id="confirm" type="button">确认回退</button>
+      </div>
+    </footer>
+  </dialog>
+  <script>
+    const dialog = document.getElementById('rollback-dialog');
+    document.getElementById('cancel').addEventListener('click', () => dialog.close('cancel'));
+    document.getElementById('confirm').addEventListener('click', () => dialog.close('confirm'));
+    dialog.showModal();
+  </script>
+</body>
+</html>
