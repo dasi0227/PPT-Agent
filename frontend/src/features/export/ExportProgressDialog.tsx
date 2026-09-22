@@ -20,7 +20,6 @@ export function ExportProgressDialog() {
 
   useEffect(() => {
     if (!blocking) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     const id = operation?.id;
     const pagehide = () => {
       if (id) void fetch(`/api/v1/exports/${encodeURIComponent(id)}`, { method: 'DELETE', keepalive: true }).catch(() => {});
@@ -35,9 +34,8 @@ export function ExportProgressDialog() {
     };
     void heartbeat();
     const timer = window.setInterval(() => void heartbeat(), 15_000);
-    window.addEventListener('beforeunload', beforeUnload);
     window.addEventListener('pagehide', pagehide);
-    return () => { window.clearInterval(timer); window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('pagehide', pagehide); };
+    return () => { window.clearInterval(timer); window.removeEventListener('pagehide', pagehide); };
   }, [blocking, operation?.id, refresh]);
 
   if (!session || !operation || session.dismissed) return null;
