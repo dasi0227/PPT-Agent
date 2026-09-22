@@ -1,29 +1,30 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
-  BookOpenText,
   Check,
   Clipboard,
+  Gauge,
   GitCommitHorizontal,
+  Handshake,
   MessageSquarePlus,
   RefreshCw,
-  Rocket,
-  Shrink,
   Signature,
   Sparkles,
+  SportShoe,
   X,
 } from 'lucide-react';
 import type { CommandStatus } from '../../stores/commandRuntime';
 import { showGlobalError, showGlobalSuccess } from '../../stores/toastStore';
 import { cn } from '../../lib/utils';
+import { formatTimestamp } from '../../lib/formatTimestamp';
 import { MarkdownMessage } from './MarkdownMessage';
 import { LongContent } from './LongContent';
 import { TimelineDisclosure } from './TimelineDisclosure';
 export type CommandKind = 'kickoff' | 'handoff' | 'commit' | 'compact' | 'rename' | 'polish';
 const icons = {
-  kickoff: Rocket,
-  handoff: BookOpenText,
+  kickoff: SportShoe,
+  handoff: Handshake,
   commit: GitCommitHorizontal,
-  compact: Shrink,
+  compact: Gauge,
   rename: Signature,
   polish: Sparkles,
 };
@@ -161,33 +162,28 @@ export function CommandActivity({
             className={cn(
               'command-activity-icon',
               status === 'failed'
-                ? 'text-danger'
+                ? 'bg-danger-soft text-danger'
                 : status === 'canceled'
-                  ? 'text-text-600'
-                  : 'text-success',
+                  ? 'bg-panel-muted text-text-600'
+                  : 'bg-success-soft text-success',
             )}
           >
-            <Icon size={14} strokeWidth={1.75} />
+            <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
+            <span className="command-activity-name">{kind}</span>
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="command-activity-title">
-              <span className="shrink-0 text-[13px] font-bold text-text-600">{kind}</span>
-              <span className="truncate font-semibold">{displayTitle}</span>
-            </span>
-            <span className="command-activity-meta">
-              <time dateTime={new Date(timestamp).toISOString()}>
-                {new Date(timestamp).toLocaleTimeString('zh-CN', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </time>
-              {metadata && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  {metadata}
-                </>
-              )}
-            </span>
+          <span className="command-activity-title">
+            <span className="truncate font-semibold">{displayTitle}</span>
+          </span>
+          <span className="command-activity-meta">
+            <time dateTime={new Date(timestamp).toISOString()}>
+              {formatTimestamp(timestamp)}
+            </time>
+            {metadata && (
+              <>
+                <span aria-hidden="true">·</span>
+                {metadata}
+              </>
+            )}
           </span>
         </button>
         {running && cancellable && onCancel && (

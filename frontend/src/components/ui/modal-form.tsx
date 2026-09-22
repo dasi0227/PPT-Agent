@@ -82,7 +82,7 @@ export function FormModal<T>({
             <button
               type="submit"
               disabled={!canSubmit}
-              className="px-4 py-2 text-sm font-medium rounded-md bg-accent-soft text-accent hover:bg-accent/15 disabled:opacity-50 flex items-center justify-center min-w-[80px]"
+              className="px-4 py-2 text-sm font-medium rounded-md bg-accent-soft text-accent hover:bg-accent-soft disabled:opacity-50 flex items-center justify-center min-w-[80px]"
             >
               {loading ? "..." : confirmLabel}
             </button>

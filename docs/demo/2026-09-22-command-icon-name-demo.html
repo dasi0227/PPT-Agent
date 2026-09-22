@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>全部命令摘要 · 图标与命令名</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #f8f9fb; color: #17202b; font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif; }
+main { display: grid; gap: 12px; width: 100%; max-width: 560px; }
+.command { display: grid; grid-template-columns: 92px minmax(0, 1fr); grid-template-rows: 20px 17px; column-gap: 12px; row-gap: 1px; padding: 8px 8px 8px 4px; border-radius: 6px; }
+.command:hover { background: #f0f3f7; }
+.command-icon { grid-column: 1; grid-row: 1 / 3; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 4px; align-self: stretch; background: #e7f3ee; color: #2f7d65; border-radius: 8px; }
+.command-icon svg { display: block; flex: none; }
+.command-title { grid-column: 2; grid-row: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12px; line-height: 20px; }
+.command-name { flex: none; color: inherit; font-size: 12px; line-height: 20px; font-weight: 700; }
+.command-title strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
+.command-meta { grid-column: 2; grid-row: 2; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #5f6b7a; font-size: 10px; line-height: 17px; font-variant-numeric: tabular-nums; }
+.separator { margin: 0 7px; }
+.success { color: #2f7d65; }
+.danger { color: #c84953; }
+@media (max-width: 400px) { body { padding: 16px; } .command { column-gap: 10px; } .separator { margin: 0 4px; } }
+</style>
+</head>
+<body>
+<main aria-label="全部六种命令摘要样式预览，示例数据">
+  <article class="command" aria-label="kickoff 梳理项目目标与创作方向，已完成">
+    <span class="command-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sport-shoe" aria-hidden="true"><path d="m15 10.42 4.8-5.07"></path><path d="M19 18h3"></path><path d="M9.5 22 21.414 9.415A2 2 0 0 0 21.2 6.4l-5.61-4.208A1 1 0 0 0 14 3v2a2 2 0 0 1-1.394 1.906L8.677 8.053A1 1 0 0 0 8 9c-.155 6.393-2.082 9-4 9a2 2 0 0 0 0 4h14"></path></svg><span class="command-name">kickoff</span></span>
+    <div class="command-title"><strong>梳理项目目标与创作方向</strong></div>
+    <div class="command-meta"><time datetime="2026-09-22T10:20:00+08:00">09-22 10:20</time></div>
+  </article>
+  <article class="command" aria-label="handoff 整理当前进展与后续待办，已完成">
+    <span class="command-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-handshake" aria-hidden="true"><path d="m11 17 2 2a1 1 0 1 0 3-3"></path><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"></path><path d="m21 3 1 11h-2"></path><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"></path><path d="M3 4h8"></path></svg><span class="command-name">handoff</span></span>
+    <div class="command-title"><strong>整理当前进展与后续待办</strong></div>
+    <div class="command-meta"><time datetime="2026-09-22T10:28:00+08:00">09-22 10:28</time></div>
+  </article>
+  <article class="command" aria-label="commit 优化演示文稿布局与交互，已完成">
+    <span class="command-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-git-commit-horizontal" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><line x1="3" x2="9" y1="12" y2="12"></line><line x1="15" x2="21" y1="12" y2="12"></line></svg><span class="command-name">commit</span></span>
+    <div class="command-title"><strong>优化演示文稿布局与交互</strong></div>
+    <div class="command-meta"><time datetime="2026-09-22T10:35:00+08:00">09-22 10:35</time><span class="separator">·</span>main a1b2c3d<span class="separator">·</span>3 files<span class="separator">·</span><span class="success">+42</span> <span class="danger">−16</span></div>
+  </article>
+  <article class="command" aria-label="compact 整理当前任务上下文，已完成">
+    <span class="command-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gauge" aria-hidden="true"><path d="m12 14 4-4"></path><path d="M3.34 19a10 10 0 1 1 17.32 0"></path></svg><span class="command-name">compact</span></span>
+    <div class="command-title"><strong>整理当前任务上下文</strong></div>
+    <div class="command-meta"><time datetime="2026-09-22T10:43:00+08:00">09-22 10:43</time><span class="separator">·</span>手动<span class="separator">·</span>窗口 0% → <span class="success">0%</span><span class="separator">·</span>回收 <span class="danger">0.0k</span> Token</div>
+  </article>
+  <article class="command" aria-label="rename 产品发布演示文稿，已完成">
+    <span class="command-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-signature" aria-hidden="true"><path d="m21 17-2.156-1.868A.5.5 0 0 0 18 15.5v.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1c0-2.545-3.991-3.97-8.5-4a1 1 0 0 0 0 5c4.153 0 4.745-11.295 5.708-13.5a2.5 2.5 0 1 1 3.31 3.284"></path><path d="M3 21h18"></path></svg><span class="command-name">rename</span></span>
+    <div class="command-title"><strong>产品发布演示文稿</strong></div>
+    <div class="command-meta"><time datetime="2026-09-22T10:46:00+08:00">09-22 10:46</time><span class="separator">·</span>自动</div>
+  </article>
+  <article class="command" aria-label="polish 优化演示文稿的创作需求，已完成">
+    <span class="command-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkles" aria-hidden="true"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></svg><span class="command-name">polish</span></span>
+    <div class="command-title"><strong>优化演示文稿的创作需求</strong></div>
+    <div class="command-meta"><time datetime="2026-09-22T10:50:00+08:00">09-22 10:50</time></div>
+  </article>
+</main>
+</body>
+</html>

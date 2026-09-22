@@ -36,7 +36,7 @@ export const PausedRunCard: React.FC<{ runId: string }> = ({ runId }) => {
           type="button"
           onClick={() => void resume()}
           disabled={!threadId || resuming}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent-soft px-2.5 text-xs font-semibold text-accent hover:bg-accent/15 disabled:cursor-wait disabled:opacity-60"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent-soft px-2.5 text-xs font-semibold text-accent hover:bg-accent-soft disabled:cursor-wait disabled:opacity-60"
         >
           <Play className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
           {resuming ? '正在恢复' : '继续任务'}

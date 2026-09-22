@@ -2,6 +2,7 @@ import {
   Activity,
   Ellipsis,
   FileText,
+  Gauge,
   History,
   Loader2,
   Shrink,
@@ -208,7 +209,7 @@ export function ContextWindowPanel() {
           onClick={() => setOpen((current) => !current)}
           className={open ? 'bg-panel-muted text-text-900' : undefined}
         >
-          <Shrink className="h-4 w-4" strokeWidth={1.75} />
+          <Gauge className="h-4 w-4" strokeWidth={1.75} />
         </IconButton>
         {(warning || compacting) && (
           <span

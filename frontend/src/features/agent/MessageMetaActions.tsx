@@ -1,12 +1,7 @@
 import React from 'react';
 import { Check, Clipboard } from 'lucide-react';
 import { cn } from '../../lib/utils';
-
-function formatTimestamp(timestamp: number): string {
-  const date = new Date(timestamp);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+import { formatTimestamp } from '../../lib/formatTimestamp';
 
 export function MessageMetaActions({
   text,

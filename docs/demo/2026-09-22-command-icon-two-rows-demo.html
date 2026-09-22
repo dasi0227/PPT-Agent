@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>命令摘要 · 两行图标</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 24px; background: #f8f9fb; color: #17202b; font-family: Aptos, Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif; }
+main { width: 100%; max-width: 560px; }
+.command { display: grid; grid-template-columns: 38px minmax(0, 1fr); grid-template-rows: 20px 17px; column-gap: 12px; row-gap: 1px; padding: 8px; border-radius: 6px; }
+.command:hover { background: #f0f3f7; }
+.command-icon { grid-column: 1; grid-row: 1 / 3; display: grid; place-items: center; align-self: stretch; background: #e7f3ee; color: #2f7d65; border-radius: 8px; }
+.command-icon svg { display: block; }
+.command-title { grid-column: 2; grid-row: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12px; line-height: 20px; }
+.command-name { flex: none; color: #5f6b7a; font-weight: 700; }
+.command-title strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
+.command-meta { grid-column: 2; grid-row: 2; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #5f6b7a; font-size: 10px; line-height: 17px; font-variant-numeric: tabular-nums; }
+.separator { margin: 0 7px; }
+.success { color: #2f7d65; }
+.danger { color: #c84953; }
+@media (max-width: 400px) { body { padding: 16px; } .command { column-gap: 10px; } .separator { margin: 0 4px; } }
+</style>
+</head>
+<body>
+<main aria-label="命令摘要样式预览">
+  <article class="command" aria-label="compact 整理当前任务上下文，已完成">
+    <span class="command-icon"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gauge" aria-hidden="true"><path d="m12 14 4-4"></path><path d="M3.34 19a10 10 0 1 1 17.32 0"></path></svg></span>
+    <div class="command-title"><span class="command-name">compact</span><strong>整理当前任务上下文</strong></div>
+    <div class="command-meta"><time>10:43</time><span class="separator">·</span>手动<span class="separator">·</span>窗口 0% → <span class="success">0%</span><span class="separator">·</span>回收 <span class="danger">0.0k</span> Token</div>
+  </article>
+</main>
+</body>
+</html>
