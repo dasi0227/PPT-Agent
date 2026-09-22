@@ -301,10 +301,12 @@ function requestFromTimeline(
   };
 }
 
+type CreateRunResult = 'created' | 'canceled' | 'failed';
+
 interface RunStoreV2 {
   sessions: Record<string, RunSession>;
   getSession: (threadId: string) => RunSession;
-  createRun: (threadId: string, payload: CreateRunRequest, projectId?: string) => Promise<boolean>;
+  createRun: (threadId: string, payload: CreateRunRequest, projectId?: string) => Promise<CreateRunResult>;
   subscribeRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => void;
   recoverPersistedRuns: () => Promise<void>;
   reconcileRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => Promise<void>;
@@ -547,7 +549,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         if (run.model) useComposerStore.getState().setModelProfileName(run.model);
         writePersistedRun({ runId: run.id, threadId, projectId: run.project_id });
         get().subscribeRun(threadId, run.id, undefined, run.project_id);
-        return true;
+        return 'created';
       } catch (error) {
         if (error instanceof RequestCanceledError) {
           if (historyEpoch === currentHistoryEpoch()) {
@@ -558,7 +560,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               return { sessions };
             });
           }
-          return false;
+          return 'canceled';
         }
         const detail = errorMessage(error);
         updateSession(threadId, (prev) => ({
@@ -577,7 +579,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             timestamp: Date.now(),
           }],
         }));
-        return false;
+        return 'failed';
       }
     },
 
@@ -683,6 +685,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
                 ? [...(prev.processedEventIds ?? []), event.id].slice(-500)
                 : prev.processedEventIds,
               ...(event.event === 'scope.updated' ? { scope: event.data.scope } : {}),
+              ...(event.event === 'run.mode_changed' ? { mode: event.data.mode } : {}),
               nextInputSuggestions,
             };
           });
@@ -1118,11 +1121,11 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       const session = get().sessions[threadId];
       if (!session?.originalRequest || !session.projectId) return false;
       const selectedModel = useComposerStore.getState().modelProfileName;
-      return get().createRun(threadId, {
+      return (await get().createRun(threadId, {
         ...session.originalRequest,
         ...(selectedModel ? { model: selectedModel } : {}),
         client_request_id: newClientIdentity('req'),
-      }, session.projectId);
+      }, session.projectId)) === 'created';
     },
 
     upsertContextCompaction: (threadId, compaction) => {

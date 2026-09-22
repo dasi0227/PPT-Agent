@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useComposerStore } from './composerStore';
+import { composerScene, useComposerStore } from './composerStore';
 
 describe('composerStore', () => {
   beforeEach(() => {
@@ -14,7 +14,25 @@ describe('composerStore', () => {
       threadReferences: {},
       nextMarkerByThread: {},
       editingSelectionIdByThread: {},
+      appliedApprovalByThread: {},
     });
+  });
+
+  it('applies approval once and preserves later manual mode choices after draft recovery', () => {
+    const store = useComposerStore.getState();
+    store.setIntent('plan');
+    store.applyApprovedExecution('thread-one', 'run-one');
+    expect(useComposerStore.getState().mode).toBe('execute');
+
+    store.setIntent('plan');
+    const savedDraft = JSON.parse(JSON.stringify(composerScene()));
+    store.resetForProject();
+    useComposerStore.setState(savedDraft);
+    store.applyApprovedExecution('thread-one', 'run-one');
+    expect(useComposerStore.getState().mode).toBe('plan');
+
+    store.applyApprovedExecution('thread-one', 'run-two');
+    expect(useComposerStore.getState().mode).toBe('execute');
   });
 
   it('selects at most three Skills and allows selected Skills to be removed', () => {

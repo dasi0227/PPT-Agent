@@ -29,6 +29,8 @@ export interface ComposerState {
   customSlideIds: string[];
   customSectionIds: string[];
   mode: RunMode;
+  appliedApprovalByThread: Record<string, string>;
+  applyApprovedExecution: (threadId: string, runId: string) => void;
   modelProfileName: string | null;
   modelSelectionExplicit: boolean;
   reconcileModels: (names: string[], defaultName: string) => void;
@@ -77,6 +79,14 @@ export const useComposerStore = create<ComposerState>((set) => ({
   customSlideIds: [],
   customSectionIds: [],
   mode: 'execute',
+  appliedApprovalByThread: {},
+  applyApprovedExecution: (threadId, runId) => set((state) => {
+    if (state.appliedApprovalByThread[threadId] === runId) return state;
+    return {
+      mode: 'execute',
+      appliedApprovalByThread: { ...state.appliedApprovalByThread, [threadId]: runId },
+    };
+  }),
   modelProfileName: initialModelProfile(),
   modelSelectionExplicit: !!initialModelProfile(),
   polishing: false,
@@ -203,7 +213,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     restoredInputs: {},
     threadResourceMentions: {},
     scopeObject: 'global', scopeSelection: 'all_pages', lastNonGlobalSelection: 'current_page', customSlideIds: [], customSectionIds: [],
-    mode: 'execute', polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {}, userTouchedTarget: false,
+    mode: 'execute', appliedApprovalByThread: {}, polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {}, userTouchedTarget: false,
   }),
 }));
 
@@ -216,6 +226,7 @@ export function composerScene(): Partial<ComposerState> {
   return {
     scopeObject:s.scopeObject, scopeSelection:s.scopeSelection, lastNonGlobalSelection:s.lastNonGlobalSelection,
     customSlideIds:s.customSlideIds, customSectionIds:s.customSectionIds, mode:s.mode,
+    appliedApprovalByThread:s.appliedApprovalByThread,
     modelProfileName:s.modelProfileName, modelSelectionExplicit:s.modelSelectionExplicit, selectedSkillIds:s.selectedSkillIds,
     threadDrafts:s.threadDrafts, threadReferences:s.threadReferences, nextMarkerByThread:s.nextMarkerByThread,
     editingSelectionIdByThread:s.editingSelectionIdByThread, userTouchedTarget:s.userTouchedTarget, restoredInputs:s.restoredInputs,

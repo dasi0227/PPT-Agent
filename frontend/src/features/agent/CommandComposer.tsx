@@ -117,6 +117,8 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling';
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
   const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
+  const planApproved = activeSession.plan?.status === 'active' || activeSession.plan?.status === 'completed';
+  const initialRunMode = activeSession.originalRequest?.mode;
   const activeThreadDraft = activeThreadId ? composer.threadDrafts[activeThreadId] : undefined;
 	const activeReferences = activeThreadId ? composer.threadReferences[activeThreadId] ?? [] : [];
 	const activeAttachments = activeReferences.flatMap((item) => item.kind === 'image' ? [item.attachment] : []);
@@ -240,6 +242,14 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     editorRef.current?.setPlainText('');
     loadProjectComposer(activeProjectId);
   }, [activeProjectId, resetForProject]);
+  useEffect(() => {
+    // Apply after loading the project draft, once per approved run. History and
+    // reconnect recovery use the same path; background conversations cannot
+    // change the visible composer, nor overwrite a later manual mode choice.
+    if (activeProjectId && activeThreadId && activeSession.activeRunId && initialRunMode === 'plan' && activeSession.mode === 'execute' && planApproved) {
+      useComposerStore.getState().applyApprovedExecution(activeThreadId, activeSession.activeRunId);
+    }
+  }, [activeProjectId, activeThreadId, activeSession.activeRunId, activeSession.mode, initialRunMode, planApproved]);
   const loadedDraftThread = useRef<string | null | undefined>(null);
   useEffect(() => {
     const draft = activeThreadDraft ?? '';
@@ -466,13 +476,13 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
           return;
         }
       }
-      const created = await createRun(threadId, request, projectId);
-      if (created) {
+      const result = await createRun(threadId, request, projectId);
+      if (result === 'created') {
         setText('');
         editorRef.current?.setPlainText('');
 		composer.clearThreadDraft(threadId);
       }
-      else setSubmitError('运行创建失败，请检查时间线中的错误后重试');
+      else if (result === 'failed') setSubmitError('运行创建失败，请检查时间线中的错误后重试');
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
     }

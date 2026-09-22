@@ -163,7 +163,7 @@ describe('runStore public event sessions', () => {
 
   test('canceling future-discard confirmation leaves no speculative history', async () => {
     createMode = 'cancel';
-    expect(await useRunStore.getState().createRun('t1', request('draft'), 'p1')).toBe(false);
+    expect(await useRunStore.getState().createRun('t1', request('draft'), 'p1')).toBe('canceled');
     expect(useRunStore.getState().sessions.t1).toBeUndefined();
     expect(connections).toHaveLength(0);
   });
@@ -178,7 +178,7 @@ describe('runStore public event sessions', () => {
       id: 'run_1', thread_id: 't1', project_id: 'p1', status: 'running',
       scope: request('').scope, mode: request('').mode, events_url: '',
     });
-    await pending;
+    expect(await pending).toBe('created');
     expect(useRunStore.getState().sessions.t1.timelineItems[0]).toMatchObject({
       runId: 'run_1',
     });
@@ -212,7 +212,7 @@ describe('runStore public event sessions', () => {
 
   test('preserves the instruction and adds a compact local failure notice', async () => {
     createMode = 'reject';
-    expect(await useRunStore.getState().createRun('t1', request('keep me'), 'p1')).toBe(false);
+    expect(await useRunStore.getState().createRun('t1', request('keep me'), 'p1')).toBe('failed');
     expect(useRunStore.getState().sessions.t1.timelineItems.map((item) => item.type)).toEqual([
       'user_turn', 'terminal_notice',
     ]);
@@ -334,7 +334,7 @@ describe('runStore public event sessions', () => {
   });
 
   test('returns to running feedback after plan approval is answered', async () => {
-    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    await useRunStore.getState().createRun('t1', { ...request('go'), mode: 'plan' }, 'p1');
     const connection = connections[0];
     connection.onMessage({
       id: 'approval-requested',
@@ -361,7 +361,14 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1).toMatchObject({
       status: 'running',
       progress: null,
+      mode: 'plan',
     });
+    connection.onMessage({
+      id: 'mode-changed',
+      event: 'run.mode_changed',
+      data: { ...base, previous_mode: 'plan', mode: 'execute' },
+    });
+    expect(useRunStore.getState().sessions.t1.mode).toBe('execute');
   });
 
   test('keeps rejected steering text and retry creates a new request identity', async () => {
