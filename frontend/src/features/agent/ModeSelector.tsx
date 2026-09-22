@@ -31,7 +31,7 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({
           aria-label={`交互方式：${MODE_META[mode].label}`}
           title={title}
           disabled={disabled}
-          className="composer-mode-button inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-border bg-transparent px-1.5 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+          className="composer-mode-button inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md border border-transparent bg-transparent px-1.5 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 data-[state=open]:bg-panel-muted data-[state=open]:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
         >
           <CurrentIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
           <span className="composer-mode-label shrink-0 whitespace-nowrap">{MODE_META[mode].label}</span>

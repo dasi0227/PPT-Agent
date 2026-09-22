@@ -721,24 +721,24 @@ export const CommandComposer: React.FC = () => {
 				type="button"
 				onClick={() => fileInputRef.current?.click()}
 				disabled={disabled}
-				className="composer-attach-button inline-flex h-7 min-w-0 shrink-0 items-center gap-1 rounded-md border border-border bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
+				className="composer-attach-button inline-flex h-7 min-w-0 shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-45"
 				aria-label="选择图片"
 				title="选择图片"
 			>
 				<Paperclip className="h-3.5 w-3.5" strokeWidth={1.75} />
 				<span className="composer-attach-label shrink-0 whitespace-nowrap">附件</span>
 			</button>
-            <ModeSelector
-              mode={composer.mode}
-              onChange={composer.setIntent}
-              disabled={disabled || steering}
-            />
             <SkillSelector
               skills={skills}
               selectedIds={composer.selectedSkillIds}
               loading={skillsLoading}
               disabled={disabled || steering}
               onToggle={composer.toggleSkill}
+            />
+            <ModeSelector
+              mode={composer.mode}
+              onChange={composer.setIntent}
+              disabled={disabled || steering}
             />
           </div>
           <div data-composer-control-group="end" className="flex min-w-0 shrink-0 items-center gap-0.5">
