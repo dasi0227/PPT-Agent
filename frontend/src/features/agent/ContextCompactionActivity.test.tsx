@@ -19,7 +19,7 @@ const item: ContextCompactionTimelineItem = {
 };
 
 describe('context compaction timeline presentation', () => {
-  it('renders flat metadata and reveals the complete summary', () => {
+  it('renders command metadata and reveals the complete summary', () => {
     const { container } = render(<ContextCompactionActivity item={item} />);
     const button = screen.getByRole('button', { name: /compact: 收敛上下文协议与前端实现/ });
     expect(button).toHaveAttribute('aria-expanded', 'false');
@@ -27,7 +27,6 @@ describe('context compaction timeline presentation', () => {
     expect(screen.getByText('0.0k')).toHaveClass('text-danger');
     expect(screen.queryByText('继续完成正式实现。')).not.toBeInTheDocument();
     expect(container.querySelector('.context-compaction-card')).toBeNull();
-    expect(container.querySelector('.command-activity-icon')).toHaveClass('text-success');
 
     fireEvent.click(button);
     expect(button).toHaveAttribute('aria-expanded', 'true');

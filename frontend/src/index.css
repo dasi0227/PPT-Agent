@@ -1153,40 +1153,59 @@
   }
 }
 
-/* Unified command timeline: plain summaries and progress, cards only for results. */
-.command-activity { padding: 4px 0; min-width: 0; }
-.command-activity-head { display: flex; align-items: flex-start; gap: 12px; }
-.command-activity-summary { display:grid; flex:1; grid-template-columns:92px minmax(0,1fr); grid-template-rows:20px 17px; column-gap:12px; row-gap:1px; min-width:0; padding:8px 8px 8px 4px; text-align:left; border-radius:6px; }
+/* Commands keep one surface across progress, result, failure and cancellation. */
+.command-activity { min-width:0; overflow:hidden; border:1px solid #d5dbe3; border-radius:10px; background:#fff; container-type:inline-size; }
+.command-activity-head { display:flex; align-items:center; gap:12px; padding:14px 14px 14px 16px; }
+.command-activity-summary { flex:1; min-width:0; padding:0; border-radius:4px; text-align:left; }
 .command-activity-summary:disabled { cursor:default; opacity:1; }
-.command-activity-summary:enabled:hover { background:#f0f3f7; }
-.command-activity-icon { grid-column:1; grid-row:1 / 3; display:flex; align-items:center; justify-content:center; gap:6px; padding:0 4px; align-self:stretch; border-radius:8px; }
-.command-activity-icon svg { display:block; flex:none; }
-.command-activity-name { flex:none; font-size:12px; line-height:20px; font-weight:400; }
-.command-activity-title { grid-column:2; grid-row:1; display:flex; align-items:baseline; font-size:12px; line-height:20px; min-width:0; }
-.command-activity-meta { grid-column:2; grid-row:2; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#5f6b7a; font-size:10px; line-height:17px; font-variant-numeric:tabular-nums; }
-.command-activity-meta > * + * { margin-left:7px; }
-@media (max-width:400px) { .command-activity-summary { column-gap:10px; } .command-activity-meta > * + * { margin-left:4px; } }
-.command-action { display:inline-flex; align-items:center; justify-content:center; flex:none; gap:5px; min-height:32px; padding:5px 10px; border-radius:6px; color:#5f6b7a; font-size:12px; white-space:nowrap; }
+.command-activity-summary:enabled:hover .command-activity-title { color:#2f67f6; }
+.command-activity-summary:focus-visible { outline:none; background:#f0f3f7; }
+.command-activity-identity { display:flex; align-items:center; flex-wrap:wrap; column-gap:7px; row-gap:3px; color:#5f6b7a; font-size:12px; line-height:18px; }
+.command-activity-icon { display:block; flex:none; }
+.command-activity-name { flex:none; color:#475260; font-weight:400; }
+.command-activity-identity time { margin-left:5px; font-size:11px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.command-activity-title { display:block; margin-top:7px; color:#17202b; font-size:14px; font-weight:400; line-height:22px; overflow-wrap:anywhere; }
+.command-activity-meta { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px; min-width:0; max-width:100%; font-size:11px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.command-action { display:inline-flex; align-items:center; justify-content:center; flex:none; gap:5px; min-height:30px; padding:5px 8px; border-radius:6px; color:#5f6b7a; font-size:12px; white-space:nowrap; }
 .command-action:disabled { opacity:.45; cursor:default; }
-.command-stop:enabled:hover { color:#c84953; background:#fcecef; }
+.command-action:focus-visible { outline:none; background:#f0f3f7; }
+.command-action:enabled:active { transform:translateY(1px); }
+.command-stop { color:#c84953; }
+.command-stop:enabled:hover { background:#fcecef; }
 .command-retry:enabled:hover { color:#9a5918; background:#fff3df; }
 .command-copy:enabled:hover { color:#2f7d65; background:#e7f3ee; }
-.command-primary:enabled:hover { color:#2f67f6; background:#e8efff; }
+.command-primary { color:#2f67f6; background:#e8efff; }
+.command-primary:enabled:hover,.command-primary:focus-visible { background:#e8efff; }
+.command-disclosure { width:30px; padding:0; }
+.command-disclosure:enabled:hover { background:#f0f3f7; }
 .timeline-detail-card { width:100%; min-width:0; margin:8px 0 0; }
-.command-detail-card { padding:16px; border:1px solid #bcc5d0; border-radius:10px; background:#fff; overflow-wrap:anywhere; }
-.command-footer { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:16px; padding-top:12px; border-top:1px solid #d5dbe3; }
-.command-feedback { flex:1 1 170px; min-width:120px; }
-.command-feedback input { width:100%; min-width:0; height:34px; border:1px solid #d5dbe3; border-radius:6px; padding:5px 8px; background:#f8f9fb; font-size:12px; }
+.command-detail-card { border-top:1px solid #d5dbe3; overflow-wrap:anywhere; }
+.command-result-content { padding:15px 16px 17px; }
+.command-footer { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:12px 16px; border-top:1px solid #d5dbe3; }
+.command-footer-actions { display:contents; }
+.command-footer-actions .command-primary { margin-left:auto; }
+.command-feedback { flex:1 1 120px; min-width:120px; }
+.command-feedback input { flex:1; width:100%; min-width:0; height:33px; border:1px solid #d5dbe3; border-radius:6px; padding:6px 9px; background:#f8f9fb; color:#17202b; font-size:12px; }
 .command-feedback input::placeholder { color:#5f6b7a; }
-.command-footer .command-primary { margin-left:auto; }
-.command-progress { position:relative; display:flex; justify-content:space-between; margin:18px 0 12px; }
-.command-progress-line { position:absolute; left:30px; right:30px; top:5px; height:1px; background:#d5dbe3; }
-.command-progress-line>span { display:block; height:100%; background:#2f7d65; transition:width 350ms ease-out; }
-.command-step { position:relative; width:60px; padding-top:21px; text-align:center; color:#5f6b7a; font-size:10px; line-height:15px; }
-.command-step-node { position:absolute; top:0; left:calc(50% - 5.5px); width:11px; height:11px; border:1.5px solid #d5dbe3; border-radius:50%; background:#f8f9fb; }
-.command-step.is-complete,.command-step.is-current { color:#2f7d65; }
-.command-step.is-complete .command-step-node { border-color:#2f7d65; background:#2f7d65; }
-.command-step.is-current .command-step-node { border-color:#2f7d65; }
-.command-step.is-current .command-step-node::after { content:''; display:block; margin:2px; width:4px; height:4px; border-radius:50%; background:#2f7d65; animation:command-node-pulse 1.3s ease-in-out infinite; }
-@keyframes command-node-pulse { 50% { opacity:.2; } }
-@media (prefers-reduced-motion:reduce) { .command-progress-line>span { transition:none; } .command-step.is-current .command-step-node::after { animation:none; } }
+.command-feedback input:focus { outline:none; border-color:#bcc5d0; background:#fff; }
+.command-progress { padding:15px 16px 17px; border-top:1px solid #d5dbe3; }
+.command-progress-pending { display:flex; align-items:center; gap:7px; margin-bottom:12px; color:#2f67f6; font-size:12px; }
+.command-steps { display:flex; align-items:flex-start; margin:0; padding:0; list-style:none; }
+.command-step { display:flex; flex:1; flex-direction:column; gap:7px; min-width:0; color:#5f6b7a; font-size:11px; line-height:18px; }
+.command-step:last-child { flex:0 0 auto; }
+.command-step-track { display:flex; align-items:center; }
+.command-step:not(:last-child) .command-step-track::after { content:''; flex:1; height:1px; margin:0 9px; background:#d5dbe3; }
+.command-step-node { display:flex; flex:none; align-items:center; justify-content:center; width:18px; height:18px; color:#bcc5d0; }
+.command-step.is-complete,.command-step.is-complete .command-step-node { color:#2f7d65; }
+.command-step.is-current,.command-step.is-current .command-step-node { color:#2f67f6; }
+.command-spinner { animation:command-spin .85s linear infinite; }
+@keyframes command-spin { to { transform:rotate(360deg); } }
+@container (max-width:360px) {
+  .command-activity-head { padding:12px; gap:8px; }
+  .command-activity-identity time { font-size:10px; }
+  .command-progress { padding:13px 12px 15px; }
+  .command-result-content,.command-footer { padding:12px; }
+  .command-action { padding:5px 6px; }
+  .command-disclosure { padding:0; }
+}
+@media (prefers-reduced-motion:reduce) { .command-spinner { animation:none; } }

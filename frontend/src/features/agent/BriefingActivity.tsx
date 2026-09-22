@@ -34,7 +34,6 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
       title={title}
       timestamp={item.timestamp}
       status={item.status}
-      defaultOpen={item.phase === 2}
       phase={item.phase}
       cancellable={item.cancellable}
       onCancel={() => cancelCommand(item.id)}

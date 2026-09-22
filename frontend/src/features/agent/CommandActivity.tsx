@@ -1,10 +1,14 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import {
   Check,
+  ChevronDown,
+  ChevronRight,
+  Circle,
   Clipboard,
   Gauge,
   GitCommitHorizontal,
   Handshake,
+  LoaderCircle,
   MessageSquarePlus,
   RefreshCw,
   Signature,
@@ -77,7 +81,6 @@ export function CommandActivity({
   primaryLabel,
   copyText,
   busy = false,
-  defaultOpen = false,
 }: {
   kind: CommandKind;
   title: string;
@@ -95,19 +98,15 @@ export function CommandActivity({
   primaryLabel?: string;
   copyText?: string;
   busy?: boolean;
-  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen),
+  const [open, setOpen] = useState(false),
     [feedback, setFeedback] = useState(''),
     [acting, setActing] = useState(false);
-  const previous = useRef(status),
-    id = useId(),
+  const id = useId(),
     Icon = icons[kind];
   useEffect(() => {
-    if (previous.current === 'loading' && status === 'completed')
-      setOpen(Boolean(onRevise) || kind === 'rename');
-    previous.current = status;
-  }, [status, kind, onRevise]);
+    if (status !== 'completed') setOpen(false);
+  }, [status]);
   const ready = status === 'completed',
     running = status === 'loading';
   const displayTitle = running
@@ -152,48 +151,47 @@ export function CommandActivity({
           type="button"
           disabled={!ready}
           aria-label={`${kind}: ${displayTitle}`}
-          aria-expanded={ready && open}
-          aria-controls={id}
+          aria-expanded={ready ? open : undefined}
+          aria-controls={ready ? id : undefined}
           onClick={() => setOpen((value) => !value)}
           className="command-activity-summary"
           title={ready ? `${title} · 点击${open ? '收起' : '展开'}` : displayTitle}
         >
-          <span
-            className={cn(
-              'command-activity-icon',
-              status === 'failed'
-                ? 'bg-danger-soft text-danger'
-                : status === 'canceled'
-                  ? 'bg-panel-muted text-text-600'
-                  : 'bg-success-soft text-success',
-            )}
-          >
-            <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
+          <span className="command-activity-identity">
+            <Icon className="command-activity-icon" size={16} strokeWidth={1.75} aria-hidden="true" />
             <span className="command-activity-name">{kind}</span>
-          </span>
-          <span className="command-activity-title">
-            <span className="truncate font-normal">{displayTitle}</span>
-          </span>
-          <span className="command-activity-meta">
             <time dateTime={new Date(timestamp).toISOString()}>
               {formatTimestamp(timestamp)}
             </time>
             {metadata && (
-              <>
-                <span aria-hidden="true">·</span>
+              <span className="command-activity-meta">
                 {metadata}
-              </>
+              </span>
             )}
           </span>
+          <span className="command-activity-title">{displayTitle}</span>
         </button>
+        {ready && (
+          <button
+            type="button"
+            className="command-action command-disclosure"
+            aria-label={open ? '收起结果' : '展开结果'}
+            title={open ? '收起结果' : '展开结果'}
+            aria-expanded={open}
+            aria-controls={id}
+            onClick={() => setOpen((value) => !value)}
+          >
+            {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </button>
+        )}
         {running && cancellable && onCancel && (
-          <button className="command-action command-stop" onClick={onCancel}>
+          <button type="button" className="command-action command-stop" onClick={onCancel}>
             <X size={13} />
             停止
           </button>
         )}
         {(status === 'failed' || status === 'canceled') && onRetry && (
-          <button className="command-action command-retry" disabled={busy} onClick={onRetry}>
+          <button type="button" className="command-action command-retry" disabled={busy} onClick={onRetry}>
             <RefreshCw size={13} />
             重试
           </button>
@@ -201,29 +199,42 @@ export function CommandActivity({
       </div>
       {running && (
         <div className="command-progress" role="group" aria-label={`${kind}进度`}>
-          <span className="command-progress-line" aria-hidden="true">
-            <span style={{ width: `${Math.max(0, phase) * 50}%` }} />
-          </span>
-          {commandSteps[kind].map((label, index) => (
-            <span
-              key={label}
-              className={cn(
-                'command-step',
-                index < phase && 'is-complete',
-                index === phase && 'is-current',
-              )}
-              aria-current={index === phase ? 'step' : undefined}
-            >
-              <span className="command-step-node" aria-hidden="true" />
-              {label}
-            </span>
-          ))}
+          {phase < 0 && (
+            <div className="command-progress-pending" role="status">
+              <LoaderCircle className="command-spinner" size={16} aria-hidden="true" />
+              正在准备…
+            </div>
+          )}
+          <ol className="command-steps">
+            {commandSteps[kind].map((label, index) => (
+              <li
+                key={label}
+                className={cn(
+                  'command-step',
+                  index < phase && 'is-complete',
+                  index === phase && 'is-current',
+                )}
+                aria-current={index === phase ? 'step' : undefined}
+              >
+                <span className="command-step-track" aria-hidden="true">
+                  <span className="command-step-node">
+                    {index < phase ? <Check size={16} /> : index === phase
+                      ? <LoaderCircle className="command-spinner" size={16} />
+                      : <Circle size={16} />}
+                  </span>
+                </span>
+                {label}
+                <span className="sr-only">{index < phase ? '已完成' : index === phase ? '进行中' : '尚未开始'}</span>
+              </li>
+            ))}
+          </ol>
         </div>
       )}
       <TimelineDisclosure open={ready && open}>
         {ready && open && (
-          <div id={id} className="timeline-detail-card command-detail-card">
+          <div id={id} className="command-detail-card">
             <LongContent
+              className="command-result-content"
               contentClassName="text-[13px] leading-[1.85] text-text-700"
               testId="command-content-preview"
             >
@@ -232,28 +243,30 @@ export function CommandActivity({
             {(onRevise || onPrimary || copyText) && (
               <div className="command-footer">
                 {onRevise && (
-                  <>
-                    <form
-                      id={`${id}-retry`}
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void revise();
+                  <form
+                    id={`${id}-retry`}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void revise();
+                    }}
+                    className="command-feedback"
+                  >
+                    <input
+                      aria-label="调整建议，按 Enter 重试"
+                      placeholder="调整建议（可选）"
+                      value={feedback}
+                      onChange={(event) => setFeedback(event.target.value)}
+                      maxLength={4000}
+                      disabled={acting || busy}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && event.nativeEvent.isComposing)
+                          event.preventDefault();
                       }}
-                      className="command-feedback"
-                    >
-                      <input
-                        aria-label="调整建议，按 Enter 重试"
-                        placeholder="调整建议（可选），Enter 重试"
-                        value={feedback}
-                        onChange={(event) => setFeedback(event.target.value)}
-                        maxLength={4000}
-                        disabled={acting || busy}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' && event.nativeEvent.isComposing)
-                            event.preventDefault();
-                        }}
-                      />
-                    </form>
+                    />
+                  </form>
+                )}
+                <div className="command-footer-actions">
+                  {onRevise && (
                     <button
                       type="submit"
                       form={`${id}-retry`}
@@ -263,24 +276,25 @@ export function CommandActivity({
                       <RefreshCw size={13} />
                       重试
                     </button>
-                  </>
-                )}
-                {copyText && (
-                  <button className="command-action command-copy" onClick={() => void copy()}>
-                    <Clipboard size={13} />
-                    复制
-                  </button>
-                )}
-                {onPrimary && (
-                  <button
-                    className="command-action command-primary"
-                    disabled={acting || busy}
-                    onClick={() => void primary()}
-                  >
-                    {kind === 'polish' ? <Check size={13} /> : <MessageSquarePlus size={13} />}{' '}
-                    {primaryLabel}
-                  </button>
-                )}
+                  )}
+                  {copyText && (
+                    <button type="button" className="command-action command-copy" onClick={() => void copy()}>
+                      <Clipboard size={13} />
+                      复制
+                    </button>
+                  )}
+                  {onPrimary && (
+                    <button
+                      type="button"
+                      className="command-action command-primary"
+                      disabled={acting || busy}
+                      onClick={() => void primary()}
+                    >
+                      {kind === 'polish' ? <Check size={13} /> : <MessageSquarePlus size={13} />}{' '}
+                      {primaryLabel}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

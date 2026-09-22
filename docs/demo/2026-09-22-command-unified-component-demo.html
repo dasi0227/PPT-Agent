@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Command 命令组件原型</title>
+<style>
+/* Scoped redesign prototype. Existing product tokens, native HTML and inline Lucide icons.
+   DESIGN_VARIANCE: 3; MOTION_INTENSITY: 3; VISUAL_DENSITY: 5.
+   All timestamps, results and state transitions below are demonstration data.
+   Production stages remain driven by backend events; this demo never simulates progress with a timer. */
+:root { color-scheme: light; --panel:#f8f9fb; --surface:#fff; --hover:#f0f3f7; --ink:#17202b; --text:#475260; --muted:#5f6b7a; --line:#d5dbe3; --strong:#bcc5d0; --blue:#2f67f6; --blue-ink:#285cdb; --blue-soft:#e8efff; --green:#2f7d65; --green-soft:#e7f3ee; --red:#c84953; --red-soft:#fcecef; --amber:#9a5918; --amber-soft:#fff3df; }
+* { box-sizing:border-box; }
+body { margin:0; min-height:100dvh; background:var(--panel); color:var(--ink); font:13px/1.6 Aptos,Inter,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+button,input { font:inherit; }
+button { cursor:pointer; border:0; background:transparent; color:inherit; }
+button:disabled { cursor:default; }
+button:focus-visible { outline:2px solid var(--strong); outline-offset:2px; }
+svg { display:block; flex:none; width:16px; height:16px; }
+[hidden] { display:none!important; }
+main { width:min(100%,512px); padding:0 24px; margin:56px auto; }
+.prototype-heading { display:flex; align-items:baseline; gap:10px; margin-bottom:18px; }
+h1 { margin:0; font-size:16px; font-weight:500; }
+.prototype-heading span { font-size:11px; color:var(--muted); }
+.demo-controls { margin-bottom:24px; }
+.command-tabs { display:flex; flex-wrap:wrap; gap:3px; margin:0 0 14px; }
+.command-tabs button { font-size:12px; padding:5px 9px; border-radius:6px; color:var(--muted); }
+.command-tabs button:hover { background:var(--hover); }
+.command-tabs button[aria-pressed=true] { color:var(--blue-ink); background:var(--blue-soft); }
+.state-controls { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.control-label { font-size:11px; color:var(--muted); margin-right:4px; }
+.state-controls button { font-size:11px; color:var(--muted); padding:3px 7px; border-radius:4px; }
+.state-controls button[aria-pressed=true] { background:var(--hover); color:var(--ink); }
+.state-controls button:hover { color:var(--ink); }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+.card-header { display:flex; align-items:center; padding:14px 14px 14px 16px; gap:12px; }
+.summary { min-width:0; flex:1; text-align:left; padding:0; border-radius:4px; }
+.summary:disabled { opacity:1; }
+.summary:not(:disabled):hover .card-title { color:var(--blue-ink); }
+.identity { display:flex; align-items:center; flex-wrap:wrap; column-gap:7px; row-gap:3px; color:var(--muted); font-size:12px; line-height:18px; }
+.identity .command-name { color:var(--text); }
+.identity time { margin-left:5px; font-size:11px; font-variant-numeric:tabular-nums; }
+.card-title { display:block; margin-top:7px; font-size:14px; font-weight:400; line-height:22px; overflow-wrap:anywhere; }
+.header-action { display:flex; align-items:center; gap:4px; flex:none; }
+.action { display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:30px; padding:5px 8px; border-radius:6px; white-space:nowrap; font-size:12px; color:var(--muted); }
+.action:active { transform:translateY(1px); }
+.stop { color:var(--red); }
+.stop:hover { background:var(--red-soft); }
+.retry:hover { color:var(--amber); background:var(--amber-soft); }
+.copy:hover { color:var(--green); background:var(--green-soft); }
+.primary { color:var(--blue-ink); background:var(--blue-soft); }
+.primary:hover { background:#dce7ff; }
+.disclosure { width:30px; padding:0; }
+.disclosure:hover { background:var(--hover); }
+.status-icon { display:flex; align-items:center; color:var(--green); }
+.status-icon.failed { color:var(--red); }
+.status-icon.canceled { color:var(--muted); }
+.progress { margin:0; padding:15px 16px 17px; list-style:none; border-top:1px solid var(--line); display:flex; align-items:flex-start; }
+.step { min-width:0; flex:1; display:flex; flex-direction:column; gap:7px; font-size:11px; color:var(--muted); }
+.step-top { display:flex; align-items:center; }
+.step:not(:last-child) .step-top::after { content:""; flex:1; height:1px; background:var(--line); margin:0 9px; }
+.step:last-child { flex:0 0 auto; }
+.step.done { color:var(--green); }
+.step.current { color:var(--blue-ink); }
+.step-icon { display:flex; width:18px; height:18px; align-items:center; justify-content:center; }
+.step .step-icon svg { width:16px; height:16px; }
+.step:not(.current):not(.done) .step-icon { color:var(--strong); }
+.spin { animation:spin .85s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .spin { animation:none; } button { scroll-behavior:auto; } }
+.result { border-top:1px solid var(--line); }
+.result-copy { padding:15px 16px 17px; color:var(--text); font-size:13px; line-height:1.85; overflow-wrap:anywhere; }
+.result-copy h2 { font-size:13px; font-weight:400; color:var(--ink); margin:15px 0 5px; }
+.result-copy h2:first-child { margin-top:0; }
+.result-copy p { margin:0 0 8px; }
+.result-copy p:last-child { margin-bottom:0; }
+.result-copy ul { margin:0; padding-left:18px; }
+.result-copy li+li { margin-top:4px; }
+.long-copy { margin-top:12px; }
+.more { display:flex; align-items:center; gap:5px; padding:0; margin-top:12px; color:var(--muted); font-size:12px; }
+.more:hover { color:var(--ink); }
+.footer { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:12px 16px; border-top:1px solid var(--line); }
+.feedback { flex:1 1 120px; min-width:120px; margin:0; }
+.feedback input { width:100%; min-width:0; height:33px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:12px; outline:none; }
+.feedback input::placeholder { color:var(--muted); }
+.feedback input:focus { border-color:var(--strong); background:var(--surface); }
+.feedback button { flex:none; width:32px; height:32px; padding:0; }
+.footer-actions { display:contents; }
+.footer-actions .primary { margin-left:auto; }
+.stage-control { display:flex; justify-content:flex-end; min-height:34px; margin-top:10px; }
+.stage-control button { display:flex; align-items:center; gap:3px; color:var(--muted); font-size:11px; padding:4px 0 4px 8px; }
+.stage-control button:hover { color:var(--blue-ink); }
+.demo-note { color:var(--muted); font-size:11px; margin:16px 0 0; }
+.notice { min-height:20px; font-size:12px; color:var(--green); margin-top:12px; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
+@media(max-width:400px) { main { margin-top:28px; padding:0 14px; } .card-header { padding:12px; gap:8px; } .progress { padding:13px 12px 15px; } .result-copy,.footer { padding:12px; } .identity time { font-size:10px; } .action { padding:5px 6px; } .command-tabs button { padding:5px 7px; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="prototype-heading"><h1>命令组件</h1><span>交互原型</span></header>
+  <div class="demo-controls" aria-label="原型演示控制">
+    <div class="command-tabs" role="group" aria-label="选择命令"></div>
+    <div class="state-controls" role="group" aria-label="演示状态">
+      <span class="control-label">演示状态</span>
+      <button type="button" data-state="running">运行中</button>
+      <button type="button" data-state="completed">已完成</button>
+      <button type="button" data-state="failed">失败</button>
+      <button type="button" data-state="canceled">已停止</button>
+    </div>
+  </div>
+  <article class="card" aria-label="命令活动">
+    <div class="card-header">
+      <button type="button" class="summary" id="summary" aria-controls="result">
+        <span class="identity"><span id="command-icon"></span><span class="command-name" id="command-name"></span><time datetime="2026-09-22T16:51:00+08:00">09-22 16:51</time></span>
+        <span class="card-title" id="card-title"></span>
+      </button>
+      <div class="header-action" id="header-action"></div>
+    </div>
+    <ol class="progress" id="progress" aria-label="命令阶段"></ol>
+    <div class="result" id="result" hidden>
+      <div class="result-copy" id="result-copy"></div>
+      <div class="footer" id="footer">
+        <form class="feedback" id="feedback">
+          <label for="feedback-input" class="sr-only">调整建议</label>
+          <input id="feedback-input" placeholder="调整建议（可选）" autocomplete="off" maxlength="4000">
+        </form>
+        <div class="footer-actions">
+          <button type="button" class="action retry" id="retry-result"></button>
+          <button type="button" class="action copy" id="copy"></button>
+          <button type="button" class="action primary" id="primary"></button>
+        </div>
+      </div>
+    </div>
+  </article>
+  <div class="stage-control"><button type="button" id="advance"></button></div>
+  <p class="demo-note">示例内容。可切换状态、展开结果；操作仅在本页演示。</p>
+  <div class="notice" id="notice" role="status" aria-live="polite"></div>
+  <span class="sr-only" id="status-announcement" role="status" aria-live="polite"></span>
+</main>
+<script>
+const icons = {"SportShoe":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-sport-shoe\" aria-hidden=\"true\"><path d=\"m15 10.42 4.8-5.07\"></path><path d=\"M19 18h3\"></path><path d=\"M9.5 22 21.414 9.415A2 2 0 0 0 21.2 6.4l-5.61-4.208A1 1 0 0 0 14 3v2a2 2 0 0 1-1.394 1.906L8.677 8.053A1 1 0 0 0 8 9c-.155 6.393-2.082 9-4 9a2 2 0 0 0 0 4h14\"></path></svg>","Handshake":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-handshake\" aria-hidden=\"true\"><path d=\"m11 17 2 2a1 1 0 1 0 3-3\"></path><path d=\"m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4\"></path><path d=\"m21 3 1 11h-2\"></path><path d=\"M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3\"></path><path d=\"M3 4h8\"></path></svg>","GitCommitHorizontal":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-git-commit-horizontal\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"3\"></circle><line x1=\"3\" x2=\"9\" y1=\"12\" y2=\"12\"></line><line x1=\"15\" x2=\"21\" y1=\"12\" y2=\"12\"></line></svg>","Gauge":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-gauge\" aria-hidden=\"true\"><path d=\"m12 14 4-4\"></path><path d=\"M3.34 19a10 10 0 1 1 17.32 0\"></path></svg>","Signature":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-signature\" aria-hidden=\"true\"><path d=\"m21 17-2.156-1.868A.5.5 0 0 0 18 15.5v.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1c0-2.545-3.991-3.97-8.5-4a1 1 0 0 0 0 5c4.153 0 4.745-11.295 5.708-13.5a2.5 2.5 0 1 1 3.31 3.284\"></path><path d=\"M3 21h18\"></path></svg>","Sparkles":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-sparkles\" aria-hidden=\"true\"><path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"></path><path d=\"M20 2v4\"></path><path d=\"M22 4h-4\"></path><circle cx=\"4\" cy=\"20\" r=\"2\"></circle></svg>","LoaderCircle":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-loader-circle\" aria-hidden=\"true\"><path d=\"M21 12a9 9 0 1 1-6.219-8.56\"></path></svg>","Check":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-check\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"></path></svg>","X":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-x\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"></path><path d=\"m6 6 12 12\"></path></svg>","ChevronDown":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg>","ChevronRight":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-right\" aria-hidden=\"true\"><path d=\"m9 18 6-6-6-6\"></path></svg>","RefreshCw":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-refresh-cw\" aria-hidden=\"true\"><path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"></path><path d=\"M21 3v5h-5\"></path><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"></path><path d=\"M8 16H3v5\"></path></svg>","Clipboard":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-clipboard\" aria-hidden=\"true\"><rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\" ry=\"1\"></rect><path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\"></path></svg>","MessageSquarePlus":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-message-square-plus\" aria-hidden=\"true\"><path d=\"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z\"></path><path d=\"M12 8v6\"></path><path d=\"M9 11h6\"></path></svg>","ArrowUp":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-arrow-up\" aria-hidden=\"true\"><path d=\"m5 12 7-7 7 7\"></path><path d=\"M12 19V5\"></path></svg>","Circle":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle></svg>","CircleAlert":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-alert\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"></line><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"></line></svg>"};
+const commands = {
+  kickoff: { icon:'SportShoe', running:'正在生成启动简报', completed:'明确 PPT 创作目标与交付要求', failed:'启动简报生成失败', canceled:'启动简报已停止', steps:['读取项目','组织目标','生成简报'], revise:true, primary:'新建会话', body:'<h2>创作目标</h2><p>面向研发同学，讲清楚如何把团队经验整理成可复用的 Skill。</p><h2>内容安排</h2><ul><li>从一个真实任务切入，说明适用范围。</li><li>用完整案例串联目录、指令与辅助资源。</li><li>最后给出验证方法和维护建议。</li></ul>', text:'创作目标：面向研发同学，讲清楚如何把团队经验整理成可复用的 Skill。内容包括适用范围、完整案例、验证方法和维护建议。' },
+  handoff: { icon:'Handshake', running:'正在整理交接简报', completed:'继续完善命令组件的状态与交互', failed:'交接简报生成失败', canceled:'交接简报已停止', steps:['梳理进展','提炼待办','生成交接'], revise:true, primary:'新建会话', body:'<h2>当前进展</h2><p>已统一时间线的编辑文案、图标和分组间距。问答选项使用浅蓝选中态。</p><h2>接下来</h2><ul><li>让命令从运行到完成始终处于同一个容器。</li><li>当前阶段显示旋转图标，结束后切换为结果内容。</li><li>确认窄栏中的展开、停止与重试体验。</li></ul><div class="long-copy" id="long-copy" hidden><h2>需要保留</h2><p>六类命令的图标、时间、复制与后续操作。进度由真实阶段事件驱动；重试在原位置更新。</p></div><button type="button" class="more" id="more" aria-expanded="false" aria-controls="long-copy">展开全部</button>', text:'当前进展：已统一时间线的编辑文案、图标和分组间距。问答选项使用浅蓝选中态。\n接下来：统一命令容器，以旋转图标显示当前阶段，确认展开、停止与重试体验。\n需要保留：六类命令的图标、时间、复制与后续操作。进度由真实阶段事件驱动；重试在原位置更新。' },
+  commit: { icon:'GitCommitHorizontal', running:'正在提交项目版本', completed:'统一时间线与问答交互样式', failed:'项目版本提交失败', canceled:'项目版本提交已停止', steps:['整理变更','生成说明','写入版本'], revise:false, primary:null, body:'<p>统一编辑文案与图标，调整问答选中态和分组间距。</p><p>已保存当前项目版本。</p>', text:'统一时间线与问答交互样式：统一编辑文案与图标，调整问答选中态和分组间距。' },
+  compact: { icon:'Gauge', running:'正在压缩上下文', completed:'保留创作目标、已确认决定与待办', failed:'上下文压缩失败', canceled:'上下文压缩已停止', steps:['读取上下文','提炼摘要','更新上下文'], revise:false, primary:null, body:'<h2>保留的内容</h2><ul><li>演示文稿的目标、受众与内容结构。</li><li>已确认的视觉规范与交互决定。</li><li>当前进展、待办和必要的文件引用。</li></ul>', text:'保留创作目标、受众、内容结构、已确认的视觉规范与交互决定，以及当前进展、待办和必要的文件引用。' },
+  rename: { icon:'Signature', running:'正在生成会话名称', completed:'命令组件视觉与交互优化', failed:'会话名称生成失败', canceled:'会话命名已停止', steps:['理解会话','生成名称','更新名称'], revise:false, primary:null, body:'<p>新会话 → 命令组件视觉与交互优化</p>', text:'命令组件视觉与交互优化' },
+  polish: { icon:'Sparkles', running:'正在润色当前输入', completed:'明确命令组件的调整范围', failed:'输入润色失败', canceled:'输入润色已停止', steps:['理解意图','优化表达','生成建议'], revise:true, primary:'应用到输入框', body:'<p>请仅调整命令组件：统一运行、完成、失败和停止状态的容器，移除命令图标的大面积绿色背景，将当前阶段的闪烁圆点改为旋转指示。</p><p>保留命令名称、时间、结果展开，以及停止、重试和复制等操作。</p>', text:'请仅调整命令组件：统一运行、完成、失败和停止状态的容器，移除命令图标的大面积绿色背景，将当前阶段的闪烁圆点改为旋转指示。保留命令名称、时间、结果展开，以及停止、重试和复制等操作。' }
+};
+let kind='handoff', state='running', phase=2, expanded=false;
+const $=id=>document.getElementById(id);
+const icon=(name,spin=false)=>spin?'<span class="spin">'+icons[name]+'</span>':icons[name];
+const tabs=document.querySelector('.command-tabs');
+Object.keys(commands).forEach(key=>{
+ const b=document.createElement('button'); b.type='button'; b.textContent=key; b.dataset.kind=key;
+ b.addEventListener('click',()=>{ kind=key; phase=2; $('feedback-input').value=''; setState(state); }); tabs.append(b);
+});
+document.querySelectorAll('[data-state]').forEach(b=>b.addEventListener('click',()=>{ phase=2; setState(b.dataset.state); }));
+function announce(text){ $('status-announcement').textContent=text; }
+function setState(next){ state=next; expanded=next==='completed'; $('notice').textContent=''; render(); announce(commands[kind][state]); }
+function retry(){ phase=0; setState('running'); }
+function toggle(){ expanded=!expanded; render(); }
+function actionButton(label, glyph, className, fn){
+ const b=document.createElement('button'); b.type='button'; b.className='action '+className;
+ b.innerHTML=icon(glyph)+(className==='disclosure'?'':label); b.setAttribute('aria-label',label); b.title=label;
+ b.addEventListener('click',fn); return b;
+}
+function render(){
+ const c=commands[kind];
+ document.querySelectorAll('[data-kind]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.kind===kind)));
+ document.querySelectorAll('[data-state]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.state===state)));
+ $('command-icon').innerHTML=icon(c.icon); $('command-name').textContent=kind; $('card-title').textContent=c[state];
+ $('summary').disabled=state!=='completed';
+ if(state==='completed') $('summary').setAttribute('aria-expanded',String(expanded)); else $('summary').removeAttribute('aria-expanded');
+ const actions=$('header-action'); actions.replaceChildren();
+ if(state==='running') actions.append(actionButton('停止','X','stop',()=>setState('canceled')));
+ else if(state==='completed'){
+   const b=actionButton(expanded?'收起结果':'展开结果',expanded?'ChevronDown':'ChevronRight','disclosure',toggle); b.setAttribute('aria-expanded',String(expanded)); b.setAttribute('aria-controls','result'); actions.append(b);
+ } else actions.append(actionButton('重试','RefreshCw','retry',retry));
+ $('progress').hidden=state!=='running';
+ if(state==='running'){
+   $('progress').innerHTML=c.steps.map((name,i)=>'<li class="step '+(i<phase?'done':i===phase?'current':'')+'"'+(i===phase?' aria-current="step"':'')+'><span class="step-top"><span class="step-icon">'+icon(i<phase?'Check':i===phase?'LoaderCircle':'Circle',i===phase)+'</span></span><span>'+name+'</span><span class="sr-only">'+(i<phase?'已完成':i===phase?'进行中':'尚未开始')+'</span></li>').join('');
+ }
+ $('result').hidden=state!=='completed'||!expanded;
+ if(state==='completed'){
+   $('result-copy').innerHTML=c.body;
+   const more=$('more'); if(more) more.addEventListener('click',()=>{const open=$('long-copy').hidden; $('long-copy').hidden=!open; more.textContent=open?'收起长内容':'展开全部'; more.setAttribute('aria-expanded',String(open));});
+ }
+ $('feedback').hidden=!c.revise;
+ $('retry-result').hidden=!c.revise;
+ $('primary').hidden=!c.primary;
+ $('primary').innerHTML=c.primary?icon(kind==='polish'?'Check':'MessageSquarePlus')+c.primary:'';
+ $('advance').hidden=state!=='running';
+ $('advance').innerHTML=(phase<2?'演示下一阶段':'演示完成')+icon('ChevronRight');
+}
+$('summary').addEventListener('click',toggle);
+$('advance').addEventListener('click',()=>{if(phase<2){phase++;render();announce(commands[kind].steps[phase]+'，进行中');}else setState('completed');});
+$('feedback').addEventListener('submit',e=>{e.preventDefault();retry();});
+$('feedback-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.isComposing)e.preventDefault();});
+$('retry-result').innerHTML=icon('RefreshCw')+'重试'; $('retry-result').addEventListener('click',retry);
+$('copy').innerHTML=icon('Clipboard')+'复制';
+$('copy').addEventListener('click',async()=>{
+ const text=commands[kind].text;
+ try { await navigator.clipboard.writeText(text); $('notice').textContent='已复制结果正文'; }
+ catch { const area=document.createElement('textarea'); area.value=text; area.style.position='fixed'; area.style.opacity='0'; document.body.append(area); area.select(); const copied=document.execCommand('copy'); area.remove(); $('notice').textContent=copied?'已复制结果正文':'复制不可用，请选中正文复制'; }
+});
+$('primary').addEventListener('click',()=>{ $('notice').textContent=kind==='polish'?'已演示应用操作，实际输入框未修改':'已演示新建会话操作，实际会话未创建'; });
+render();
+</script>
+</body>
+</html>
