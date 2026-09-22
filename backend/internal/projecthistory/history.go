@@ -540,6 +540,19 @@ func (m *Manager) Preview(ctx context.Context, id, runID string) (Preview, error
 	if cp != nil {
 		v.Time = cp.Time
 		v.Input = cp.Input.Command.Instruction
+	} else if len(target.State.Scene) > 0 {
+		// Restore previews show the saved active thread's draft, not the
+		// rollback task's input or any draft edited after the first rollback.
+		var scene struct {
+			ActiveThreadID string `json:"active_thread_id"`
+			Composer       struct {
+				ThreadDrafts map[string]string `json:"threadDrafts"`
+			} `json:"composer"`
+		}
+		if err := json.Unmarshal(target.State.Scene, &scene); err != nil {
+			return v, err
+		}
+		v.Input = scene.Composer.ThreadDrafts[scene.ActiveThreadID]
 	}
 	currentDB, err := m.Store.CaptureProject(ctx, id)
 	if err != nil {

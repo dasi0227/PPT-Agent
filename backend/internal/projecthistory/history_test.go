@@ -399,3 +399,45 @@ func TestSnapshotWriteFailureAndConcurrentGate(t *testing.T) {
 	}
 	release()
 }
+
+func TestRestorePreviewUsesSavedActiveThreadDraft(t *testing.T) {
+	for _, draft := range []string{"首次回退前未发送的草稿", ""} {
+		name := "with_draft"
+		if draft == "" {
+			name = "empty_draft"
+		}
+		t.Run(name, func(t *testing.T) {
+			m, p := fixture(t)
+			ctx := context.Background()
+			cp(t, m, p, "cp1", model.RunDone)
+			cp(t, m, p, "cp2", model.RunDone)
+			scene, err := json.Marshal(map[string]any{
+				"active_thread_id": "t1",
+				"composer":         map[string]any{"threadDrafts": map[string]string{"t1": draft, "another": "不要展示其他会话的草稿"}},
+			})
+			must(t, err)
+			state, err := m.State(p.ID)
+			must(t, err)
+			_, err = m.Switch(ctx, p.ID, "cp2", state.Revision, "first", scene)
+			must(t, err)
+			preview, err := m.Preview(ctx, p.ID, "")
+			must(t, err)
+			if preview.Input != draft {
+				t.Fatalf("restore preview=%q want=%q", preview.Input, draft)
+			}
+			// A second rollback saves another current scene, but must retain the
+			// original latest scene for both preview and actual restoration.
+			state = switchTo(t, m, p, "cp1", "second")
+			preview, err = m.Preview(ctx, p.ID, "")
+			must(t, err)
+			if preview.Input != draft {
+				t.Fatalf("continuous rollback changed draft: %q", preview.Input)
+			}
+			restored, err := m.Switch(ctx, p.ID, "", state.Revision, "latest", json.RawMessage(`{"active_thread_id":"t1","composer":{"threadDrafts":{"t1":"current draft"}}}`))
+			must(t, err)
+			if string(restored.Scene) != string(scene) {
+				t.Fatalf("restored scene differs from preview source: %s", restored.Scene)
+			}
+		})
+	}
+}
