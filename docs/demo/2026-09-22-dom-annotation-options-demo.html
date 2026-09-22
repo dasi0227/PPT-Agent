@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>标记注释 · 三种局部方案</title>
+  <style>
+    :root { color-scheme:light; --panel:#F8F9FB; --muted-panel:#F0F3F7; --ink:#17202B; --muted:#5F6B7A; --subtle:#95A0AE; --border:#D5DBE3; --blue:#2F67F6; --soft:#E8EFFF; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:white; color:var(--ink); font:14px/1.6 Aptos,Inter,-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif; }
+    button,textarea { font:inherit; color:inherit; }
+    button { cursor:pointer; }
+    button:focus-visible { outline:2px solid #7A8694; outline-offset:2px; }
+    textarea:focus { outline:none; background:var(--panel); }
+    button,textarea { -webkit-tap-highlight-color:transparent; }
+    svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+    main { max-width:1280px; padding:44px 32px; margin:auto; }
+    h1 { margin:0 0 8px; font-size:24px; font-weight:600; letter-spacing:-.5px; }
+    .intro { margin:0; color:var(--muted); max-width:760px; }
+    .options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:28px; margin-top:36px; }
+    h2 { margin:0; font-size:16px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .recommend { font-size:11px; font-weight:500; background:var(--soft); color:var(--blue); padding:1px 7px; border-radius:4px; }
+    .sub { margin:8px 0 16px; color:var(--muted); font-size:12px; min-height:39px; }
+    .stage { min-height:390px; background:var(--panel); border:1px solid #E5E9EF; border-radius:12px; padding:18px 14px; display:flex; align-items:flex-end; }
+    .composer { width:100%; background:white; border:1px solid var(--border); border-radius:14px; padding:12px; position:relative; }
+    .references { display:flex; gap:6px; align-items:flex-start; flex-wrap:wrap; position:relative; }
+    .marker { display:inline-flex; align-items:center; border:1px solid var(--border); border-radius:7px; background:white; max-width:100%; }
+    .marker.active { background:var(--soft); border-color:transparent; }
+    .marker-main { display:flex; align-items:center; gap:7px; min-height:34px; padding:0 8px; border:0; background:transparent; font-size:12px; font-weight:500; border-radius:6px; }
+    .marker-main svg { color:var(--blue); width:15px; height:15px; }
+    .marker-main:hover { background:var(--muted-panel); }
+    .marker.active .marker-main:hover { background:var(--soft); }
+    .icon-button { display:inline-grid; place-items:center; width:26px; height:26px; padding:0; border:0; border-radius:5px; background:transparent; color:var(--muted); flex-shrink:0; }
+    .icon-button svg { width:14px; height:14px; }
+    .icon-button:hover { background:var(--muted-panel); color:var(--ink); }
+    .remove { margin-right:3px; }
+    .remove:hover { background:#FCECEF; color:#C84953; }
+    .main-input { display:block; width:100%; height:76px; resize:none; border:0; padding:16px 0 8px; font-size:13px; background:white; }
+    textarea::placeholder { color:var(--subtle); }
+    .tools { display:flex; align-items:center; justify-content:space-between; padding-top:3px; }
+    .tool-group { display:flex; gap:6px; color:var(--muted); }
+    .context-icon { display:grid; place-items:center; width:24px; height:26px; }
+    .send { color:var(--blue); background:var(--soft); width:28px; height:28px; display:grid; place-items:center; border-radius:6px; }
+    .editor { font-size:12px; }
+    .editor-head { display:flex; align-items:center; gap:7px; padding:10px 12px 4px; }
+    .editor-head svg { color:var(--blue); width:14px; height:14px; }
+    .editor-head .secondary { color:var(--muted); margin-left:2px; font-weight:400; }
+    .editor-head .icon-button { margin-left:auto; }
+    .annotation { display:block; resize:vertical; width:calc(100% - 24px); min-height:72px; height:80px; max-height:180px; border:0; border-radius:4px; margin:4px 12px 0; padding:6px 0; background:transparent; font-size:13px; line-height:1.65; }
+    .editor-foot { display:flex; align-items:center; justify-content:space-between; padding:4px 12px 10px; color:var(--subtle); font-size:10px; }
+    .done { background:var(--soft); border:0; border-radius:5px; color:var(--blue); padding:3px 10px; font-size:11px; }
+    .done:hover { background:var(--soft); color:#174ECF; }
+    .popover { position:absolute; bottom:calc(100% + 12px); left:0; width:min(280px,calc(100% + 0px)); border:1px solid var(--border); background:white; border-radius:10px; box-shadow:0 6px 20px rgb(23 32 43 / 9%); z-index:2; }
+    .popover:after { content:""; position:absolute; width:8px; height:8px; bottom:-5px; left:var(--anchor-x,30px); background:white; border-bottom:1px solid var(--border); border-right:1px solid var(--border); transform:rotate(45deg); }
+    .inline-card { border:1px solid var(--border); border-radius:8px; width:100%; background:white; }
+    .inline-card .marker { border:0; width:100%; background:transparent; justify-content:space-between; padding:3px 4px; }
+    .inline-card .editor { border-top:1px solid #E9EDF2; margin:0 10px; }
+    .inline-card .annotation { width:100%; margin:4px 0 0; }
+    .inline-card .editor-foot { padding:4px 0 10px; }
+    .inline-card.collapsed { width:auto; }
+    .shared-editor { margin-top:10px; background:var(--panel); border-radius:7px; }
+    .shared-editor .editor-head { padding-bottom:0; }
+    .shared-editor .annotation { min-height:58px; height:62px; }
+    .after { font-size:12px; margin:16px 0 0; color:var(--muted); }
+    .after strong { color:var(--ink); font-weight:500; }
+    .reset { border:0; background:transparent; padding:0; color:var(--muted); font-size:11px; text-decoration:underline; text-underline-offset:3px; margin-top:10px; }
+    .hint { margin-top:28px; font-size:12px; color:var(--muted); border-top:1px solid #E9EDF2; padding-top:18px; }
+    [hidden] { display:none !important; }
+    @media(max-width:1020px) { .options { grid-template-columns:1fr; gap:32px; } .option { max-width:480px; width:100%; margin:auto; } .stage { min-height:370px; } .sub { min-height:0; } }
+    @media(max-width:480px) { main { padding:26px 16px; } h1 { font-size:21px; } .stage { padding:14px 10px; } }
+  </style>
+</head>
+<body>
+  <svg style="display:none" aria-hidden="true"><defs>
+    <symbol id="code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6M14.5 4l-5 16"/></symbol>
+    <symbol id="x" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12"/></symbol>
+    <symbol id="down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="paperclip" viewBox="0 0 24 24"><path d="m21.4 11.6-9.2 9.2a6 6 0 0 1-8.5-8.5l10-10a4 4 0 0 1 5.6 5.6L9.4 17.8a2 2 0 0 1-2.8-2.8l9.2-9.2"/></symbol>
+    <symbol id="sliders" viewBox="0 0 24 24"><path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6"/></symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M12 19V5m-7 7 7-7 7 7"/></symbol>
+  </defs></svg>
+  <main>
+    <h1>把注释和标记的关系说清楚</h1>
+    <p class="intro">三种局部方案。保留主输入框作为尺寸参照，只比较标记的编辑与收起方式。</p>
+    <div class="options">
+      <section class="option" data-variant="a">
+        <h2>A · 锚定浮层 <span class="recommend">推荐</span></h2>
+        <p class="sub">点击标记，在它上方编辑。输入区保持原有高度。</p>
+        <div class="stage"><div class="composer"><div class="references"></div><div class="editor popover"></div><textarea class="main-input" aria-label="方案 A 主输入框" placeholder="描述整体修改需求…"></textarea><div class="tools"></div></div></div>
+        <p class="after"><strong>改动最少。</strong>标题明确“标记 1 · 注释”，浮层与标记之间有锚点。移除按钮始终留在标记上。</p>
+        <button class="reset">重置此方案</button>
+      </section>
+      <section class="option" data-variant="b">
+        <h2>B · 标记内展开</h2>
+        <p class="sub">标记和注释共用一个容器，上下归属最直接。</p>
+        <div class="stage"><div class="composer"><div class="references"></div><textarea class="main-input" aria-label="方案 B 主输入框" placeholder="描述整体修改需求…"></textarea><div class="tools"></div></div></div>
+        <p class="after"><strong>最好理解。</strong>不遮挡上方内容；编辑时会撑高输入区，多个标记时需要更多纵向空间。</p>
+        <button class="reset">重置此方案</button>
+      </section>
+      <section class="option" data-variant="c">
+        <h2>C · 共用编辑区</h2>
+        <p class="sub">上方切换标记，下方始终只编辑当前标记的注释。</p>
+        <div class="stage"><div class="composer"><div class="references"></div><div class="editor shared-editor"></div><textarea class="main-input" aria-label="方案 C 主输入框" placeholder="描述整体修改需求…"></textarea><div class="tools"></div></div></div>
+        <p class="after"><strong>适合多个标记。</strong>编辑宽度稳定、切换顺手；与主输入框相邻，需要保留明确的标记标题。</p>
+        <button class="reset">重置此方案</button>
+      </section>
+    </div>
+    <p class="hint">可直接输入、切换标记、收起与移除。点击外部或 Esc 保留注释并收起；⌘ / Ctrl + Enter 返回主输入框。每条最多 500 字。此页仅演示交互，刷新后重置。B、C 是对原“标记上方注释框”约定的替代提案。</p>
+  </main>
+  <script>
+    const icon = name => `<svg aria-hidden="true"><use href="#${name}"></use></svg>`;
+    document.querySelectorAll('.option').forEach(section => {
+      const variant = section.dataset.variant;
+      const composer = section.querySelector('.composer');
+      const references = section.querySelector('.references');
+      const mainInput = section.querySelector('.main-input');
+      let items, active;
+      section.querySelector('.tools').innerHTML = `<div class="tool-group" aria-hidden="true"><span class="context-icon">${icon('paperclip')}</span><span class="context-icon">${icon('sliders')}</span></div><span class="send" aria-hidden="true">${icon('arrow')}</span>`;
+
+      function close(focusMain = false) {
+        active = null;
+        render();
+        if (focusMain) mainInput.focus();
+      }
+      function open(id) {
+        active = id;
+        render();
+        const textarea = composer.querySelector('.annotation');
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      }
+      function marker(item) {
+        const el = document.createElement('div');
+        el.className = `marker${active === item.id ? ' active' : ''}`;
+        el.innerHTML = `<button class="marker-main" aria-expanded="${active === item.id}" title="编辑标记 ${item.id} 的注释">${icon('code')}<span>标记 ${item.id}</span></button><button class="icon-button remove" aria-label="移除标记 ${item.id}" title="移除标记 ${item.id}">${icon('x')}</button>`;
+        el.querySelector('.marker-main').onclick = () => active === item.id ? close() : open(item.id);
+        el.querySelector('.remove').onclick = () => {
+          items = items.filter(other => other.id !== item.id);
+          if (active === item.id) active = null;
+          render();
+          mainInput.focus();
+        };
+        return el;
+      }
+      function fillEditor(editor, item, heading = true) {
+        editor.innerHTML = `${heading ? `<div class="editor-head">${icon('code')}<span>标记 ${item.id}<span class="secondary">· 注释</span></span><button class="icon-button collapse" title="收起注释，保留内容" aria-label="收起注释">${icon('down')}</button></div>` : ''}<textarea class="annotation" aria-label="标记 ${item.id} 注释" placeholder="希望这里如何调整？（可选）"></textarea><div class="editor-foot"><span class="count"></span><button class="done">完成</button></div>`;
+        const textarea = editor.querySelector('textarea');
+        textarea.value = item.comment;
+        const updateCount = () => { editor.querySelector('.count').textContent = `${Array.from(item.comment).length} / 500`; };
+        updateCount();
+        textarea.oninput = () => {
+          if (textarea.composing) return;
+          item.comment = Array.from(textarea.value).slice(0, 500).join('');
+          if (textarea.value !== item.comment) textarea.value = item.comment;
+          updateCount();
+        };
+        textarea.oncompositionstart = () => { textarea.composing = true; };
+        textarea.oncompositionend = () => { textarea.composing = false; textarea.oninput(); };
+        textarea.onkeydown = event => {
+          if (event.isComposing) return;
+          if (event.key === 'Escape' || (event.key === 'Enter' && (event.metaKey || event.ctrlKey))) {
+            event.preventDefault();
+            close(true);
+          }
+        };
+        editor.querySelector('.done').onclick = () => close(true);
+        const collapse = editor.querySelector('.collapse');
+        if (collapse) collapse.onclick = () => close(true);
+      }
+      function render() {
+        references.replaceChildren();
+        if (variant === 'b') {
+          items.forEach(item => {
+            const card = document.createElement('div');
+            card.className = `inline-card${active !== item.id ? ' collapsed' : ''}`;
+            card.append(marker(item));
+            if (active === item.id) {
+              const editor = document.createElement('div');
+              editor.className = 'editor';
+              fillEditor(editor, item, false);
+              card.append(editor);
+            }
+            references.append(card);
+          });
+        } else {
+          items.forEach(item => references.append(marker(item)));
+          const editor = composer.querySelector('.editor');
+          const item = items.find(item => item.id === active);
+          editor.hidden = !item;
+          if (item) fillEditor(editor, item);
+          if (variant === 'a' && item) {
+            const selected = references.querySelector('.active');
+            const anchorX = selected.offsetLeft;
+            const left = Math.min(anchorX + 12, Math.max(12, composer.clientWidth - 292));
+            editor.style.left = `${left}px`;
+            editor.style.setProperty('--anchor-x', `${anchorX + 42 - left}px`);
+          }
+        }
+      }
+      function reset() {
+        items = [{id:1,comment:''},{id:2,comment:'与标记 1 左对齐，保持相同间距。'}];
+        active = 1;
+        mainInput.value = '';
+        render();
+      }
+      document.addEventListener('pointerdown', event => {
+        if (active !== null && !references.contains(event.target) && !composer.querySelector('.editor')?.contains(event.target)) close();
+      });
+      section.querySelector('.reset').onclick = reset;
+      reset();
+    });
+  </script>
+</body>
+</html>

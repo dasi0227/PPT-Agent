@@ -1,7 +1,7 @@
 import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Code2, FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
+import { FileImage, Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
 import { llmApi } from '../../api/llm';
 import { polishCommand } from '../../stores/textCommandStore';
@@ -35,6 +35,7 @@ import { NextInputSuggestionsPanel } from './NextInputSuggestionsPanel';
 import { projectHistoryApi } from '../../api/projectHistory';
 import { useProjectHistoryStore } from '../../stores/projectHistoryStore';
 import { nextInputShortcutIndex } from './nextInputSuggestions';
+import { DOMSelectionReference } from './DOMSelectionReference';
 
 function composerScopeInput(
   composer: ReturnType<typeof useComposerStore.getState>,
@@ -649,26 +650,22 @@ export const CommandComposer: React.FC = () => {
 							</button>
 						</div>
 					) : (
-						<div key={reference.selection.selection_id} className="relative w-36 shrink-0">
-							{composer.editingSelectionIdByThread[activeThreadId ?? ''] === reference.selection.selection_id && (
-									<textarea autoFocus value={reference.selection.comment} aria-label={`标记 ${reference.selection.marker_no} 注释`}
-										onChange={(event) => activeThreadId && composer.updateThreadDOMSelection(activeThreadId, reference.selection.selection_id, { comment: Array.from(event.target.value).slice(0, 500).join('') })}
-										onBlur={() => activeThreadId && composer.setEditingDOMSelection(activeThreadId)}
-										onKeyDown={(event) => { if (!activeThreadId) return; if (event.key === 'Escape') { event.preventDefault(); composer.setEditingDOMSelection(activeThreadId); } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); composer.setEditingDOMSelection(activeThreadId); editorRef.current?.focusEnd(); } }}
-										className="mb-1 h-16 w-full resize-none rounded-md border border-border bg-surface p-2 text-xs outline-none" placeholder="添加注释（可选）" />
-							)}
-							<button type="button" onClick={() => {
+						<DOMSelectionReference
+							key={reference.selection.selection_id}
+							selection={reference.selection}
+							editing={composer.editingSelectionIdByThread[activeThreadId ?? ''] === reference.selection.selection_id}
+							onEditingChange={(editing) => { if (activeThreadId) composer.setEditingDOMSelection(activeThreadId, editing ? reference.selection.selection_id : undefined); }}
+							onCommentChange={(comment) => { if (activeThreadId) composer.updateThreadDOMSelection(activeThreadId, reference.selection.selection_id, { comment }); }}
+							onNavigate={() => {
 								if (!activeThreadId) return;
 								if (reference.selection.status !== 'page_deleted') {
 									useDeckStore.getState().setCurrentSlideId(reference.selection.slide_id);
 									useDeckStore.getState().exitOverview();
 								}
-								composer.setEditingDOMSelection(activeThreadId, reference.selection.selection_id);
-							}} className="flex h-[52px] w-full items-center gap-2 rounded-lg border border-border bg-surface px-3 pr-7 text-xs font-semibold text-text-900 shadow-sm">
-								<Code2 className="h-4 w-4 text-accent" /> 标记 {reference.selection.marker_no}
-							</button>
-							<button type="button" onClick={() => activeThreadId && composer.removeThreadDOMSelection(activeThreadId, reference.selection.selection_id)} className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted" aria-label={`移除标记 ${reference.selection.marker_no}`}><X className="h-3.5 w-3.5" /></button>
-						</div>
+							}}
+							onRemove={() => { if (activeThreadId) composer.removeThreadDOMSelection(activeThreadId, reference.selection.selection_id); }}
+							onFocusComposer={() => editorRef.current?.focusEnd()}
+						/>
 					))}
 				</div>
           )}
