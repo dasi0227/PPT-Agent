@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,9 +10,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
@@ -210,5 +211,38 @@ func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
 				t.Fatal("briefing context or tools crossed policy boundary")
 			}
 		})
+	}
+}
+
+func TestBriefingReservesWindowForPolicyFeedbackAndOutput(t *testing.T) {
+	f := newBriefingFixture(t, "按已确认方向调整结论页", "继续保留原始数据")
+	f.provider.Caps.ContextWindowTokens = 12000
+	if err := contextengine.NewFSTranscriptStore().Replace(f.project.WorkDir, f.thread.ID, []llm.Message{
+		{Role: llm.RoleUser, Content: llm.TextContent("开场目标：改进结论页。" + strings.Repeat("需要保留原始数据。", 5000))},
+		{Role: llm.RoleAssistant, Content: llm.TextContent("最新方案：只调整结论层级。")},
+		{Role: llm.RoleUser, Content: llm.TextContent("就按这个方案，先给原型。")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewKickoffService(f.store, f.registry, f.locks)
+	result, err := svc.Generate(context.Background(), f.project.ID, BriefingParams{ThreadID: f.thread.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.Generate(context.Background(), f.project.ID, BriefingParams{
+		ThreadID: f.thread.ID, BriefingID: result.Briefing.BriefingID, Feedback: strings.Repeat("保留关键约束。", 400),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, req := range f.provider.Requests() {
+		if llm.EstimateRequestTokens(req)+req.MaxOutputTokens >= f.provider.Caps.ContextWindowTokens {
+			t.Fatal("briefing did not reserve room for policy, revision feedback and output")
+		}
+		for _, want := range []string{"最新方案", "先给原型"} {
+			if !strings.Contains(req.Messages[1].Text(), want) {
+				t.Errorf("request lost %q", want)
+			}
+		}
 	}
 }

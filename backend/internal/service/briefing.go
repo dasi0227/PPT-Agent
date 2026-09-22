@@ -22,6 +22,7 @@ const briefingTimeout = 45 * time.Second
 const maxBriefingFeedbackRunes = 4000
 const maxBriefingOutputRunes = 40000
 const maxBriefingOutputTokens = 6000
+const maxKickoffOutputTokens = 3000
 const briefingVersionWindow = 2
 
 type BriefingParams struct {
@@ -143,7 +144,35 @@ func (svc *briefingGenerator) generate(
 	if err != nil {
 		return BriefingResult{}, err
 	}
-	pack, err := svc.assembler.AssembleBriefing(ctx, contextengine.BriefingContextRequest{ThreadID: thread.ID}, project)
+	userMessage, err := briefingUserMessage(kind, versions, params.Feedback)
+	if err != nil {
+		return BriefingResult{}, err
+	}
+	outputTokens := maxBriefingOutputTokens
+	contentDescription := "A concise standalone handoff with actual progress, evidence limits and remaining work."
+	if kind == model.BriefingKickoff {
+		outputTokens = maxKickoffOutputTokens
+		contentDescription = "A concise ready-to-send first user message distilled from settled discussion, not a full plan or project report."
+	}
+	resultTools := []llm.ToolSchema{commandresult.Schema(string(kind)+"_thread",
+		"Submit the requested prompt. This does not create a thread or start another Agent.",
+		"A short, task-specific timeline title in the user language.", contentDescription, maxBriefingOutputRunes)}
+	inputBudget := contextengine.BriefingContextTokenBudget
+	if window := profile.Adapter().Capabilities().ContextWindowTokens; window > 0 {
+		overhead := llm.EstimateRequestTokens(llm.GenerateRequest{
+			Messages: []llm.Message{
+				{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
+				{Role: llm.RoleUser, Content: llm.TextContent(userMessage)},
+			}, Tools: resultTools,
+		})
+		inputBudget = min(inputBudget, window-outputTokens-overhead-1024)
+		if inputBudget < 1024 {
+			return BriefingResult{}, model.NewAgentError("AGENT_FAILED", string(kind), errors.New("model context window is too small for briefing discussion and revision feedback"))
+		}
+	}
+	pack, err := svc.assembler.AssembleBriefing(ctx, contextengine.BriefingContextRequest{
+		ThreadID: thread.ID, Kind: kind, TokenBudget: inputBudget,
+	}, project)
 	if err != nil {
 		return BriefingResult{}, err
 	}
@@ -151,10 +180,6 @@ func (svc *briefingGenerator) generate(
 		return BriefingResult{}, err
 	}
 	reference, err := contextengine.CompileBriefingContext(pack)
-	if err != nil {
-		return BriefingResult{}, err
-	}
-	userMessage, err := briefingUserMessage(kind, versions, params.Feedback)
 	if err != nil {
 		return BriefingResult{}, err
 	}
@@ -168,11 +193,8 @@ func (svc *briefingGenerator) generate(
 			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
 			{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + userMessage)},
 		},
-		Tools: []llm.ToolSchema{commandresult.Schema(string(kind)+"_thread",
-			"Submit the complete project brief. This does not create a thread or start another Agent.",
-			"A short, task-specific timeline title in the user language.",
-			"The complete standalone Markdown brief for the receiving Agent.", maxBriefingOutputRunes)},
-		MaxOutputTokens: maxBriefingOutputTokens,
+		Tools:           resultTools,
+		MaxOutputTokens: outputTokens,
 	})
 	if err != nil {
 		if errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {

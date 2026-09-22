@@ -2,6 +2,8 @@
 
 日期：2026-09-22。以本次用户确认的设计为准，替代 kickoff／handoff／polish 的纯文本模型输出约定，以及 compact_context 的 summary 字段。时间线布局、进度和取消行为继续遵循 2026-09-21 的命令时间线设计。
 
+后续修订：kickoff／handoff 的正文定位、上下文来源与生成预算以 [讨论结论提炼与接续上下文](2026-09-22-briefing-discussion-distillation-design.md) 为准；本文的结果工具和持久化协议继续有效。
+
 ## 模型输出协议
 
 | 命令 | 结果工具 | title | content |
