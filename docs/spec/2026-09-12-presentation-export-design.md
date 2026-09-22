@@ -3,6 +3,7 @@
 - 状态：已实现
 - 日期：2026-09-12
 - 生命周期修订：2026-09-22，修复空警告列表、页面失联占用与重试闭环。
+- HTML 显示修订：2026-09-22，以预览为准，不新增可见播放控件；公共标识与预览共用实现，放在页面 iframe 外。
 - 对应 TODO：【七、】导出可独立使用的 HTML、图片和 PDF
 - 关联设计：
   - `2026-09-08-unified-html-canvas-design.md`
@@ -100,7 +101,8 @@
 ├── index.html
 ├── runtime/
 │   ├── player.css
-│   └── player.js
+│   ├── player.js
+│   └── chrome.js
 ├── assets/
 │   ├── base.css
 │   └── theme.css
@@ -113,17 +115,16 @@
         └── original.<ext>
 ~~~
 
-播放器提供：
+独立 HTML 仅展示与预览一致的页面，不增加播放器界面。播放支持：
 
-- 上一页、下一页按钮；
 - `←`、`→`、Space、Home、End 键盘导航；
-- 当前页数与总页数；
-- 浏览器全屏；
-- Runtime Frame 公共装饰；
+- 使用浏览器自身的全屏功能，不提供页面内全屏按钮；
+- 仅按预览相同的 Runtime Frame 配置显示公共装饰；
 - 页面自身 JavaScript 执行。
 
 播放器不提供：
 
+- 翻页按钮、额外页数条、全屏按钮、常驻或自动隐藏控制栏；
 - 编辑器 DOM 选择桥接；
 - 页面编辑、设计稿或 Agent 能力；
 - Overview；
@@ -154,6 +155,8 @@
 - chrome type / placement / style。
 
 本次不借机扩展未完整实现的 chrome 语义；保持现有受支持集合。
+
+2026-09-22 修订：编辑器预览和 HTML 导出共同使用 `backend/internal/runtimeassets/chrome.js`，公共标识的文字、显隐、样式与定位不再维护两套规则。预览通过 `/api/v1/runtime/chrome.js` 加载，导出将同一资源复制为 `runtime/chrome.js`。它在外层文档中同时安装样式和生成标识，与页面 iframe 同属固定 1920×1080 画布；不向页面正文注入标识，也不依赖沙箱内加载外部装饰 CSS。本次不调整 PNG/PDF 的 Chromium 渲染路径。
 
 ### 4.3 项目正式素材范围
 
@@ -384,6 +387,7 @@ backend/internal/export/
 - 保留页面本身的 inline style、inline script、data/blob URL 和普通超链接；
 - 保留外部资源 URL，并把检测结果加入 warning；
 - 拒绝指向附件白名单之外的项目本地绝对或相对资源。
+- 注入仅转发翻页按键的播放桥接，焦点在 iframe 内时仍可导航；尊重输入框、可编辑内容和页面已处理的键盘事件，不提供 DOM 选择或父页面访问能力。
 
 每页由播放器放入独立 iframe：
 
@@ -391,7 +395,9 @@ backend/internal/export/
 <iframe sandbox="allow-scripts" src="slides/001.html"></iframe>
 ~~~
 
-不要加入 `allow-same-origin`、`allow-popups`、`allow-top-navigation` 或 `allow-downloads`。播放器拥有导航、全屏和公共装饰；页面脚本不能访问或替换播放器父文档。
+不要加入 `allow-same-origin`、`allow-popups`、`allow-top-navigation` 或 `allow-downloads`。外层负责键盘导航和公共装饰，不显示控制栏；页面脚本不能访问或替换播放器父文档。键盘桥接仅接受当前页面 iframe 发来的有限导航消息，切页后忽略旧页面消息。
+
+外层画布占满可用视口并等比缩放居中，不再为底栏预留空间；公共标识与页面一起缩放，页面 CSS 与标识样式互不影响。首尾页重复向外翻页不重载，避免无意重播页面动画。
 
 播放器的页面列表直接内联在 `index.html` 或 `player.js`，不得在 `file://` 环境通过 `fetch(deck.json)` 获取，否则会引入本地文件 CORS 差异。
 
@@ -693,14 +699,16 @@ failed 态：
 
 1. ZIP 解压后双击 `index.html`，无需本地 HTTP server；
 2. 所有页面可按顺序展示；
-3. 按钮、方向键、Space、Home、End 可导航；
+3. 方向键、Space、Home、End 可导航，点击页面后焦点在 iframe 内仍可导航；输入框及页面自有交互不被抢键；
 4. 页码、章节和公共装饰与编辑器/PNG 一致；
-5. 全屏可进入和退出；
+5. 不出现额外标题、播放器按钮、页数条或浮层，不预留底栏空间，浏览器自身全屏下仍能正常展示；
 6. 项目附件离线加载；
 7. 页面 inline JavaScript 可运行但不能控制父播放器；
 8. 包内没有应用 API 地址、开发源文件、缩略图或附件元数据；
 9. 外部资源存在时明确提示需要联网；
-10. 系统字体不同导致的 fallback 差异符合已声明限制。
+10. 系统字体不同导致的 fallback 差异符合已声明限制；
+11. 即使沙箱内包内 CSS 链接不可用，页面内联样式仍完整，外层公共标识保持预览的位置和字号，不变成正文；
+12. 首尾越界按键不重载，切页后旧 iframe 消息不影响新页面。
 
 ## 14. 实施顺序
 

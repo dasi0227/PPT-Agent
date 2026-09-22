@@ -25,6 +25,11 @@ func (h *RepositoryHandler) RuntimeBaseCSS(c *gin.Context) {
 	c.Data(http.StatusOK, "text/css; charset=utf-8", runtimeassets.BaseCSS())
 }
 
+func (h *RepositoryHandler) RuntimeChromeJS(c *gin.Context) {
+	c.Header("Cache-Control", "no-cache")
+	c.Data(http.StatusOK, "application/javascript; charset=utf-8", runtimeassets.ChromeJS())
+}
+
 func (h *RepositoryHandler) ListThemes(c *gin.Context) {
 	values, err := h.themes.List()
 	if err != nil {

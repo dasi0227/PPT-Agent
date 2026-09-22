@@ -28,17 +28,17 @@ func exportFrame() spec.RuntimeFrameContext {
 func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {
 	raw := []byte(`<!doctype html><html><head><link id="base-link" href="/api/v1/runtime/base.css"><link id="theme-link" href="/api/v1/themes/x/css"><script src="/slide-runtime/selection-bridge.js"></script></head><body><div class="slide-stage"><img src="/attachments/att_one/original.png"><div style="background:url('/attachments/att_one/original.png')"></div><a href="https://example.com/read">read</a><script src="https://cdn.example.com/app.js"></script></div></body></html>`)
 	attachmentData := map[string]string{"/attachments/att_one/original.png": "data:image/png;base64,eA==", "attachments/att_one/original.png": "data:image/png;base64,eA==", "../attachments/att_one/original.png": "data:image/png;base64,eA=="}
-	got, warnings, err := rewriteSlideHTML(raw, exportFrame(), []byte("body{}"), []byte(":root{}"), attachmentData)
+	got, warnings, err := rewriteSlideHTML(raw, []byte("body{}"), []byte(":root{}"), attachmentData)
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(got)
-	for _, want := range []string{`href="../assets/base.css"`, `href="../assets/theme.css"`, `src="data:image/png;base64,eA=="`, `url(&#39;data:image/png;base64,eA==&#39;)`, `data-runtime-chrome="page_number"`, `src="https://cdn.example.com/app.js"`} {
+	for _, want := range []string{`href="../assets/base.css"`, `href="../assets/theme.css"`, `src="data:image/png;base64,eA=="`, `url(&#39;data:image/png;base64,eA==&#39;)`, `<style id="export-base-inline">body{}</style>`, `<style id="export-theme-inline">:root{}</style>`, `src="https://cdn.example.com/app.js"`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in %s", want, text)
 		}
 	}
-	for _, forbidden := range []string{"/api/v1/runtime", "/api/v1/themes", "selection-bridge"} {
+	for _, forbidden := range []string{"/api/v1/runtime", "/api/v1/themes", "selection-bridge", "data-runtime-chrome"} {
 		if strings.Contains(text, forbidden) {
 			t.Errorf("standalone HTML retained %q", forbidden)
 		}
@@ -69,7 +69,7 @@ func TestBuildHTMLPackagesOnlyPlaybackFiles(t *testing.T) {
 	for _, entry := range reader.File {
 		entries[entry.Name] = true
 	}
-	for _, want := range []string{"index.html", "runtime/player.css", "runtime/player.js", "assets/base.css", "assets/theme.css", "slides/001.html", attachmentRel} {
+	for _, want := range []string{"index.html", "runtime/player.css", "runtime/player.js", "runtime/chrome.js", "assets/base.css", "assets/theme.css", "slides/001.html", attachmentRel} {
 		if !entries[want] {
 			t.Errorf("missing zip entry %s", want)
 		}
@@ -288,10 +288,15 @@ func TestStandaloneHTMLWorksFromFileURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	frame := exportFrame()
+	frame.Chrome = append(frame.Chrome,
+		spec.ChromeItem{Type: "section_marker", Placement: "top-left", Style: "compact label"},
+		spec.ChromeItem{Type: "deck_title", Placement: "bottom-left", Style: "tiny mono"})
+	frame.Numbering.Visible = false
 	second := frame
 	second.SlideID = "sli_two"
 	second.Ordinal = 2
 	second.Total = 2
+	second.Numbering.Visible = true
 	frame.Total = 2
 	op := &Operation{ID: "exp_file", ProjectID: "pro_one", Format: FormatHTML, Status: StatusRunning, TotalPages: 2, subscribers: map[int]chan Event{}, Snapshot: Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: snapshotRoot, BaseCSS: []byte("html,body{margin:0}.slide-stage{width:1920px;height:1080px}"), ThemeCSS: []byte(":root{--proof:green}"), Slides: []SlideSnapshot{{ID: "sli_one", Title: "One", Ordinal: 1, HTML: []byte(`<html><head></head><body><div class="slide-stage"><img id="asset" src="/attachments/att_one/original.png"><script>document.body.dataset.script='ok'</script></div></body></html>`), Frame: frame}, {ID: "sli_two", Title: "Two", Ordinal: 2, HTML: []byte(`<html><head></head><body><div class="slide-stage" id="second">two</div></body></html>`), Frame: second}}, Attachments: []string{attachmentRel}}}
 	artifact, _, failure := buildHTML(context.Background(), op)
@@ -327,7 +332,47 @@ func TestStandaloneHTMLWorksFromFileURL(t *testing.T) {
 		}
 	}
 	_ = reader.Close()
-	script := `import {chromium} from 'playwright-core';import {pathToFileURL} from 'node:url';const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});const page=await browser.newPage();await page.goto(pathToFileURL(process.argv[1]).href);await page.waitForTimeout(500);let frame=page.frames()[1];const first=await frame.evaluate(()=>({script:document.body.dataset.script,img:document.querySelector('#asset')?.naturalWidth,styles:document.styleSheets.length}));if(first.script!=='ok'||first.img!==1||first.styles<2)throw new Error(JSON.stringify(first));await page.keyboard.press('ArrowRight');await page.waitForTimeout(300);frame=page.frames()[1];if(!await frame.$('#second'))throw new Error('navigation failed');await browser.close();`
+	// Deliberately remove iframe-linked styles: the inline copy and outer chrome
+	// must still render correctly when local sandbox resource loading is unavailable.
+	for _, name := range []string{"base.css", "theme.css"} {
+		if err := os.Remove(filepath.Join(extracted, "assets", name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script := `
+import {chromium} from 'playwright-core';
+import {pathToFileURL} from 'node:url';
+const browser = await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+try {
+  const page = await browser.newPage();
+  await page.goto(pathToFileURL(process.argv[1]).href);
+  let frame = page.frames()[1];
+  await frame.waitForSelector('#asset');
+  const first = await frame.evaluate(() => ({
+    script: document.body.dataset.script, img: document.querySelector('#asset').naturalWidth,
+    width: getComputedStyle(document.querySelector('.slide-stage')).width,
+    chrome: document.querySelectorAll('[data-runtime-chrome]').length,
+  }));
+  if (first.script !== 'ok' || first.img !== 1 || first.width !== '1920px' || first.chrome !== 0) throw new Error(JSON.stringify(first));
+  const outer = await page.evaluate(() => {
+    const marker = document.querySelector('[data-runtime-chrome="section_marker"]');
+    return {position: getComputedStyle(marker).position, fontSize: getComputedStyle(marker).fontSize,
+      parent: marker.parentElement.id, controls: document.querySelectorAll('nav,button').length,
+      number: !!document.querySelector('[data-runtime-page-number]'),
+      stageHeight: document.getElementById('stage').clientHeight, viewportHeight: innerHeight};
+  });
+  if (outer.position !== 'absolute' || outer.fontSize !== '16px' || outer.parent !== 'canvas' || outer.controls || outer.number || outer.stageHeight !== outer.viewportHeight) throw new Error(JSON.stringify(outer));
+  // Keyboard navigation must keep working after the user clicks into the iframe.
+  await frame.locator('.slide-stage').click({position:{x:200,y:200}});
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => document.querySelector('[data-runtime-page-number]')?.textContent === '2');
+  frame = page.frames()[1];
+  await frame.waitForSelector('#second');
+  await frame.locator('#second').click({position:{x:200,y:200}});
+  await page.keyboard.press('Home');
+  await page.waitForFunction(() => document.getElementById('slide').getAttribute('src') === 'slides/001.html');
+} finally { await browser.close(); }
+`
 	command := exec.Command("node", "--input-type=module", "-e", script, filepath.Join(extracted, "index.html"))
 	command.Dir = filepath.Join("..", "..", "render-worker")
 	if output, err := command.CombinedOutput(); err != nil {

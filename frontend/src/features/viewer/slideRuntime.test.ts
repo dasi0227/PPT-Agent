@@ -8,7 +8,8 @@ function createRuntime() {
     resolve(process.cwd(), 'public/slide-runtime/index.html'),
     'utf8',
   );
-  return new JSDOM(html, {
+  const chrome = readFileSync(resolve(process.cwd(), '../backend/internal/runtimeassets/chrome.js'), 'utf8');
+  return new JSDOM(html.replace('<script src="/api/v1/runtime/chrome.js"></script>', () => `<script>${chrome}</script>`), {
     runScripts: 'dangerously',
     url: 'http://localhost/slide-runtime/index.html',
   });

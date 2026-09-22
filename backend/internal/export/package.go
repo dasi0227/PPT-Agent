@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -14,10 +15,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	xhtml "golang.org/x/net/html"
@@ -112,8 +113,7 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 			return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法准备 HTML 演示包。", true, err)
 		}
 	}
-	baseCSS := append(append([]byte(nil), op.Snapshot.BaseCSS...), []byte(exportChromeCSS)...)
-	if err := writeFile(filepath.Join(work, "assets", "base.css"), baseCSS); err != nil {
+	if err := writeFile(filepath.Join(work, "assets", "base.css"), op.Snapshot.BaseCSS); err != nil {
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入基础样式。", true, err)
 	}
 	if err := writeFile(filepath.Join(work, "assets", "theme.css"), op.Snapshot.ThemeCSS); err != nil {
@@ -124,12 +124,12 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 	if err != nil {
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法读取图片素材。", true, err)
 	}
-	slideFiles := make([]string, 0, len(op.Snapshot.Slides))
+	slides := make([]map[string]any, 0, len(op.Snapshot.Slides))
 	for _, slide := range op.Snapshot.Slides {
 		if ctx.Err() != nil {
 			return nil, nil, publicFailure("EXPORT_CANCELED", "导出已取消。", false, ctx.Err())
 		}
-		rewritten, external, err := rewriteSlideHTML(slide.HTML, slide.Frame, op.Snapshot.BaseCSS, op.Snapshot.ThemeCSS, attachmentData)
+		rewritten, external, err := rewriteSlideHTML(slide.HTML, op.Snapshot.BaseCSS, op.Snapshot.ThemeCSS, attachmentData)
 		if err != nil {
 			return nil, nil, resourceFailure(slide, err)
 		}
@@ -137,7 +137,16 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 		if err := writeFile(filepath.Join(work, "slides", name), rewritten); err != nil {
 			return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入页面文件。", true, err)
 		}
-		slideFiles = append(slideFiles, "slides/"+name)
+		// Playback context only: no project IDs, source manifests or editor metadata.
+		slides = append(slides, map[string]any{
+			"src": "slides/" + name,
+			"frame": map[string]any{
+				"ordinal": slide.Frame.Ordinal, "total": slide.Frame.Total,
+				"numbering":  map[string]bool{"visible": slide.Frame.Numbering.Visible},
+				"section":    map[string]string{"title": slide.Frame.Section.Title},
+				"deck_title": slide.Frame.DeckTitle, "chrome": slide.Frame.Chrome,
+			},
+		})
 		for _, resource := range external {
 			warnings = append(warnings, fmt.Sprintf("第 %d 页包含外部资源 %s，播放时需要联网。", slide.Ordinal, resource))
 		}
@@ -157,7 +166,10 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 	if err := writeFile(filepath.Join(work, "runtime", "player.js"), []byte(playerJS)); err != nil {
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入播放器。", true, err)
 	}
-	list, _ := json.Marshal(slideFiles)
+	if err := writeFile(filepath.Join(work, "runtime", "chrome.js"), runtimeassets.ChromeJS()); err != nil {
+		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入公共装饰。", true, err)
+	}
+	list, _ := json.Marshal(slides)
 	index := fmt.Sprintf(indexHTML, html.EscapeString(op.Snapshot.ProjectTitle), string(list))
 	if err := writeFile(filepath.Join(work, "index.html"), []byte(index)); err != nil {
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入播放器入口。", true, err)
@@ -191,7 +203,7 @@ func resourceFailure(slide SlideSnapshot, err error) *PublicError {
 	return &PublicError{Code: "EXPORT_RESOURCE_INVALID", Message: fmt.Sprintf("第 %d 页包含无法导出的本地资源。", slide.Ordinal), Details: map[string]any{"slides": []MissingSlide{{SlideID: slide.ID, Ordinal: slide.Ordinal, Title: slide.Title}}}, Retryable: false}
 }
 
-func rewriteSlideHTML(raw []byte, frame spec.RuntimeFrameContext, baseCSS, themeCSS []byte, attachmentData map[string]string) ([]byte, []string, error) {
+func rewriteSlideHTML(raw []byte, baseCSS, themeCSS []byte, attachmentData map[string]string) ([]byte, []string, error) {
 	doc, err := xhtml.Parse(bytes.NewReader(raw))
 	if err != nil {
 		return nil, nil, err
@@ -276,7 +288,9 @@ func rewriteSlideHTML(raw []byte, frame spec.RuntimeFrameContext, baseCSS, theme
 	head.AppendChild(styleNode("export-base-inline", string(baseCSS)))
 	head.AppendChild(styleNode("export-theme-inline", string(themeCSS)))
 	head.InsertBefore(attachmentPrelude(attachmentData), head.FirstChild)
-	injectChrome(body, frame)
+	bridge := &xhtml.Node{Type: xhtml.ElementNode, Data: "script", Attr: []xhtml.Attribute{{Key: "data-export-runtime", Val: "playback-input"}}}
+	bridge.AppendChild(&xhtml.Node{Type: xhtml.TextNode, Data: playerBridgeJS})
+	body.AppendChild(bridge)
 	var output bytes.Buffer
 	if err := xhtml.Render(&output, doc); err != nil {
 		return nil, nil, err
@@ -498,47 +512,6 @@ func findNode(n *xhtml.Node, name string) *xhtml.Node {
 func linkNode(id, href string) *xhtml.Node {
 	return &xhtml.Node{Type: xhtml.ElementNode, Data: "link", Attr: []xhtml.Attribute{{Key: "id", Val: id}, {Key: "rel", Val: "stylesheet"}, {Key: "href", Val: href}}}
 }
-func injectChrome(body *xhtml.Node, frame spec.RuntimeFrameContext) {
-	stage := findClassNode(body, "slide-stage")
-	for _, item := range frame.Chrome {
-		text := ""
-		switch item.Type {
-		case "page_number":
-			if frame.Numbering.Visible {
-				text = strconv.Itoa(frame.Ordinal)
-			}
-		case "section_marker":
-			text = frame.Section.Title
-		case "deck_title":
-			text = frame.DeckTitle
-		}
-		if text == "" {
-			continue
-		}
-		node := &xhtml.Node{Type: xhtml.ElementNode, Data: "div", Attr: []xhtml.Attribute{{Key: "data-runtime-chrome", Val: item.Type}, {Key: "data-chrome-placement", Val: item.Placement}, {Key: "data-chrome-style", Val: item.Style}}, FirstChild: &xhtml.Node{Type: xhtml.TextNode, Data: text}}
-		node.FirstChild.Parent = node
-		if stage != nil {
-			stage.AppendChild(node)
-		} else {
-			body.AppendChild(node)
-		}
-	}
-}
-func findClassNode(n *xhtml.Node, className string) *xhtml.Node {
-	if n.Type == xhtml.ElementNode {
-		for _, name := range strings.Fields(attrValue(n, "class")) {
-			if name == className {
-				return n
-			}
-		}
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if found := findClassNode(c, className); found != nil {
-			return found
-		}
-	}
-	return nil
-}
 func uniqueStrings(values []string) []string {
 	seen := map[string]bool{}
 	out := []string{}
@@ -644,10 +617,14 @@ func zipDirectory(target, root string) error {
 	return nil
 }
 
-const indexHTML = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>%s</title><link rel="stylesheet" href="runtime/player.css"></head><body><main id="stage"><iframe id="slide" title="演示页面" sandbox="allow-scripts"></iframe></main><nav aria-label="演示控制"><button id="prev" type="button">上一页</button><span id="counter"></span><button id="next" type="button">下一页</button><button id="fullscreen" type="button">全屏</button></nav><script>window.__PPT_SLIDES__=%s;</script><script src="runtime/player.js"></script></body></html>`
-const playerCSS = `html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;color:#fff;font-family:system-ui,sans-serif}#stage{position:fixed;inset:0 0 52px;overflow:hidden}#slide{position:absolute;width:1920px;height:1080px;border:0;transform-origin:0 0;background:#fff}nav{position:fixed;left:0;right:0;bottom:0;height:52px;display:flex;align-items:center;justify-content:center;gap:12px;background:#191919}button{border:1px solid #555;border-radius:6px;background:#292929;color:#fff;padding:7px 14px;cursor:pointer}button:disabled{opacity:.4;cursor:default}#counter{min-width:70px;text-align:center;font-variant-numeric:tabular-nums}`
-const playerJS = `(()=>{const slides=window.__PPT_SLIDES__||[];const frame=document.getElementById('slide');const counter=document.getElementById('counter');const prev=document.getElementById('prev');const next=document.getElementById('next');let index=0;function resize(){const stage=document.getElementById('stage');const scale=Math.min(stage.clientWidth/1920,stage.clientHeight/1080);frame.style.transform='translate('+((stage.clientWidth-1920*scale)/2)+'px,'+((stage.clientHeight-1080*scale)/2)+'px) scale('+scale+')'}function show(value){index=Math.max(0,Math.min(slides.length-1,value));frame.src=slides[index]||'about:blank';counter.textContent=slides.length?(index+1)+' / '+slides.length:'0 / 0';prev.disabled=index===0;next.disabled=index>=slides.length-1}prev.onclick=()=>show(index-1);next.onclick=()=>show(index+1);document.getElementById('fullscreen').onclick=()=>document.documentElement.requestFullscreen();addEventListener('resize',resize);addEventListener('keydown',event=>{if(event.key==='ArrowLeft')show(index-1);else if(event.key==='ArrowRight'||event.key===' '){event.preventDefault();show(index+1)}else if(event.key==='Home')show(0);else if(event.key==='End')show(slides.length-1)});resize();show(0)})();`
-const exportChromeCSS = `
-[data-runtime-chrome]{position:absolute!important;z-index:2!important;padding:3px 6px!important;color:rgba(20,25,35,.58)!important;font:500 14px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace!important;letter-spacing:.04em!important;pointer-events:none!important}
-[data-runtime-chrome][data-chrome-placement="top-left"]{top:3.2%;left:3.4%}[data-runtime-chrome][data-chrome-placement="top-center"]{top:3.2%;left:50%;transform:translateX(-50%)}[data-runtime-chrome][data-chrome-placement="top-right"]{top:3.2%;right:3.4%}[data-runtime-chrome][data-chrome-placement="bottom-left"]{bottom:3.2%;left:3.4%}[data-runtime-chrome][data-chrome-placement="bottom-center"]{bottom:3.2%;left:50%;transform:translateX(-50%)}[data-runtime-chrome][data-chrome-placement="bottom-right"]{bottom:3.2%;right:3.4%}[data-runtime-chrome][data-chrome-placement="left-edge"]{left:1.5%;top:50%;transform:translateY(-50%)}[data-runtime-chrome][data-chrome-placement="right-edge"]{right:1.5%;top:50%;transform:translateY(-50%)}
-[data-runtime-chrome][data-chrome-style~="compact"]{font-size:16px!important}[data-runtime-chrome][data-chrome-style~="label"]{font:700 16px/1.2 ui-sans-serif,system-ui,sans-serif!important;letter-spacing:.08em!important;text-transform:uppercase!important}`
+//go:embed player/index.html
+var indexHTML string
+
+//go:embed player/player.css
+var playerCSS string
+
+//go:embed player/player.js
+var playerJS string
+
+//go:embed player/bridge.js
+var playerBridgeJS string

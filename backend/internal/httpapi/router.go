@@ -75,6 +75,7 @@ func (r *Router) register() {
 		v1.POST("/settings/models/reload", r.llm.ReloadSettings)
 	}
 	v1.GET("/runtime/base.css", r.repository.RuntimeBaseCSS)
+	v1.GET("/runtime/chrome.js", r.repository.RuntimeChromeJS)
 	v1.GET("/themes", r.repository.ListThemes)
 	v1.GET("/themes/:id", r.repository.GetTheme)
 	v1.PATCH("/themes/:id", r.repository.PatchTheme)

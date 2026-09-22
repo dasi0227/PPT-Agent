@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Slide Runtime</title>
+  <script src="/api/v1/runtime/chrome.js"></script>
   <style>
     body {
       margin: 0;
@@ -44,27 +45,6 @@
       border: none;
       background: #fff;
     }
-    .runtime-chrome {
-      position: absolute;
-      z-index: 2;
-      padding: 3px 6px;
-      color: rgba(20, 25, 35, 0.58);
-      font: 500 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
-      letter-spacing: 0.04em;
-      pointer-events: none;
-    }
-    .runtime-chrome[data-placement^="top-"] { top: 3.2%; }
-    .runtime-chrome[data-placement^="bottom-"] { bottom: 3.2%; }
-    .runtime-chrome[data-placement$="-left"] { left: 3.4%; }
-    .runtime-chrome[data-placement$="-center"] { left: 50%; transform: translateX(-50%); }
-    .runtime-chrome[data-placement$="-right"] { right: 3.4%; }
-    .runtime-chrome[data-placement="left-edge"] { left: 1.5%; top: 50%; transform: translateY(-50%); }
-    .runtime-chrome[data-placement="right-edge"] { right: 1.5%; top: 50%; transform: translateY(-50%); }
-    .runtime-chrome[data-chrome-style~="compact"] { font-size: 16px; }
-    .runtime-chrome[data-chrome-style~="tiny"] { font-size: 14px; }
-    .runtime-chrome[data-chrome-style~="muted"] { color: rgba(20, 25, 35, 0.58); }
-    .runtime-chrome[data-chrome-style~="mono"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .runtime-chrome[data-chrome-style~="label"] { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
     .selection-overlay-layer { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
     .selection-draft-box { position: absolute; border: 3px solid #4f46e5; background: rgba(79,70,229,.08); box-sizing: border-box; }
     .selection-draft-box > span { position: absolute; left: -3px; top: -27px; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 7px 7px 7px 0; background: #4f46e5; color: white; font: 700 15px/26px ui-sans-serif,system-ui,sans-serif; text-align: center; }
@@ -176,22 +156,7 @@
     }
 
     function applyRuntimeFrame(container, context) {
-      container.querySelectorAll('[data-runtime-chrome]').forEach((node) => node.remove());
-      const chrome = Array.isArray(context.chrome) ? context.chrome : [];
-      chrome.forEach((item) => {
-        if (item.type === 'page_number' && context.numbering?.visible !== true) return;
-        const text = item.type === 'page_number' ? String(context.ordinal)
-          : item.type === 'section_marker' ? context.section?.title
-          : item.type === 'deck_title' ? context.deck_title : '';
-        if (!text) return;
-        const node = document.createElement('div');
-        node.className = 'runtime-chrome';
-        node.dataset.runtimeChrome = item.type;
-        if (item.type === 'page_number') node.dataset.runtimePageNumber = 'true';
-        node.textContent = text;
-        node.dataset.placement = item.placement || 'bottom-right';
-        node.dataset.chromeStyle = item.style || '';
-        if (item.type === 'page_number') node.setAttribute('aria-label', `第 ${context.ordinal} 页，共 ${context.total} 页`);
+      window.PPTChrome.render(container.querySelector('.runtime-canvas'), context).forEach(node => {
         node.addEventListener('click', (event) => {
           if (state.selection.mode !== 'element' || state.selection.slideID !== context.slide_id) return;
           event.preventDefault();
@@ -205,7 +170,6 @@
             dedupe_key: 'chrome|' + context.slide_id + '|' + state.selection.hash + '|' + node.dataset.runtimeChrome + '|' + node.dataset.placement
           });
         });
-        container.querySelector('.runtime-canvas').appendChild(node);
       });
     }
 
