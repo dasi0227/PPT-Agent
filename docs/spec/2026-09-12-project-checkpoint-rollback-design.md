@@ -1,5 +1,7 @@
 # 项目 Checkpoint 回退与恢复设计
 
+> 2026-09-22：创作内容 revision、HTML 缓存与 DOM 引用协议以[内容指纹与计划审批简化设计](2026-09-22-content-hash-and-plan-approval-design.md)为准。
+
 > 2026-09-22 更新：内容历史统一由项目 checkpoints 承担；旧单页版本、确认弹窗与元数据的最新约定见 [Checkpoint 内容历史统一设计](2026-09-22-checkpoint-content-history-design.md)。
 
 日期：2026-09-12。实施更新：2026-09-13。状态：已实现并完成自动化与本地浏览器验证。对应 TODO 第八项；实施协议、验收证据与边界见第 8 节。

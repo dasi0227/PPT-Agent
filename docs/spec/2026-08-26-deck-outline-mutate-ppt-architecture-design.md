@@ -1,5 +1,7 @@
 # Deck、Outline 与 `mutate_ppt` 整体重构设计
 
+> 2026-09-22：创作内容 revision、HTML 缓存与 DOM 引用协议以[内容指纹与计划审批简化设计](2026-09-22-content-hash-and-plan-approval-design.md)为准。
+
 **日期：** 2026-08-26  
 **状态：** 已实施；2026-08-28 补充 Runtime 工具契约对齐
 **范围：** 后端领域模型、项目文件持久化、Agent 工具面、Prompt/Context、物化与渲染、HTTP API、前端状态与目录交互、运行反馈  
