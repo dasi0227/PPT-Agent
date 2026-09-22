@@ -749,7 +749,7 @@ func TestCognitiveAgentPlacesTaskStateOnlyInUserMessage(t *testing.T) {
 	provider := &capturingProvider{}
 	pack := testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "把标题改成季度总结")
 	plan := &Plan{
-		ID: "plan-trust", Revision: 2, ApprovedRevision: 1, Status: PlanActive,
+		ApprovalID: "approval-test", ID: "plan-trust", Status: PlanActive,
 		Title: "批准计划", Content: "只修改标题",
 	}
 	plan.ApprovedContentHash = plan.ContentHash()
@@ -861,7 +861,7 @@ func TestEveryApprovedExecuteTurnInjectsTheFullPlanContract(t *testing.T) {
 	pack := testPack(model.ModeExecute, model.ScopeObjectPresentation, model.ScopeCurrentPage, false, "按批准计划执行")
 	for _, status := range []PlanStatus{PlanActive, PlanCompleted} {
 		plan := &Plan{
-			ID: "plan-1", Revision: 4, ApprovedRevision: 2, Status: status,
+			ApprovalID: "approval-test", ID: "plan-1", Status: status,
 			Title: "完整执行计划", Content: "## 权威正文\n\n不得由消息压缩删除。",
 			Steps: []PlanStep{{ID: "step-1", Title: "生成并验证页面", Status: PlanStepCompleted}},
 		}
@@ -875,7 +875,7 @@ func TestEveryApprovedExecuteTurnInjectsTheFullPlanContract(t *testing.T) {
 			t.Fatalf("status=%s approved plan leaked into system prompt:\n%s", status, prompt)
 		}
 		dynamic := runtimeTaskStateForRequest(req)
-		for _, expected := range []string{`"plan_authority":"approved_execution_contract"`, `"plan_id":"plan-1"`, `"approved_revision":2`, "## 权威正文", `"id":"step-1"`, `"status":"completed"`} {
+		for _, expected := range []string{`"plan_authority":"approved_execution_contract"`, `"plan_id":"plan-1"`, `"approval_id":"approval-test"`, "## 权威正文", `"id":"step-1"`, `"status":"completed"`} {
 			if !strings.Contains(dynamic, expected) {
 				t.Fatalf("status=%s approved plan runtime data missing %q:\n%s", status, expected, dynamic)
 			}
@@ -885,7 +885,7 @@ func TestEveryApprovedExecuteTurnInjectsTheFullPlanContract(t *testing.T) {
 
 func TestResumeRestoresModeAndFullApprovedPlanBeforeReasoning(t *testing.T) {
 	plan := &Plan{
-		ID: "plan-resume", Revision: 3, ApprovedRevision: 2, Status: PlanActive,
+		ApprovalID: "approval-test", ID: "plan-resume", Status: PlanActive,
 		Title: "恢复计划", Content: "## 恢复后仍需完整可见",
 		Steps: []PlanStep{{ID: "resume-step", Title: "继续执行", Status: PlanStepCompleted}},
 	}
@@ -912,7 +912,7 @@ func TestResumeRestoresModeAndFullApprovedPlanBeforeReasoning(t *testing.T) {
 
 func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 	plan := &Plan{
-		ID: "pending-plan", Revision: 3, Status: PlanAwaitingApproval,
+		ApprovalID: "approval-test", ID: "pending-plan", Status: PlanAwaitingApproval,
 		Title: "待批准计划", Content: "## 完整提案",
 		Steps: []PlanStep{{ID: "pending-step", Title: "执行任务", Status: PlanStepPending}},
 	}
@@ -931,7 +931,7 @@ func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 			return testPack(mode, model.ScopeObjectSpec, model.ScopeAllPages, false, "继续审批"), nil
 		},
 		CommitPlanApproval: func(_ context.Context, _ model.RunMode, _ contextengine.ContextPack, checkpoint RuntimeCheckpoint) error {
-			committed = checkpoint.Plan != nil && checkpoint.Plan.ApprovedRevision == 3
+			committed = checkpoint.Plan != nil && checkpoint.Plan.ApprovedContentHash == checkpoint.Plan.ContentHash()
 			return nil
 		},
 	})
@@ -1356,10 +1356,10 @@ func (p *advancingApprovalPrompter) AskPlanApproval(_ context.Context, request m
 	p.calls++
 	p.clock.Advance(p.wait)
 	return model.PlanApprovalAnswer{
-		InteractionID:    request.InteractionID,
-		PlanID:           request.Plan.PlanID,
-		ExpectedRevision: request.Plan.Revision,
-		Decision:         "approve",
+		InteractionID: request.InteractionID,
+		PlanID:        request.Plan.PlanID,
+
+		Decision: "approve",
 	}, nil
 }
 
@@ -1386,10 +1386,10 @@ func (p *approvingPrompter) Ask(context.Context, model.QuestionAskedPayload) (mo
 func (p *approvingPrompter) AskPlanApproval(_ context.Context, request model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
 	p.calls++
 	return model.PlanApprovalAnswer{
-		InteractionID:    request.InteractionID,
-		PlanID:           request.Plan.PlanID,
-		ExpectedRevision: request.Plan.Revision,
-		Decision:         "approve",
+		InteractionID: request.InteractionID,
+		PlanID:        request.Plan.PlanID,
+
+		Decision: "approve",
 	}, nil
 }
 
@@ -1489,7 +1489,7 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 	execute := agent.requests[1]
 	if execute.Mode != model.ModeExecute || execute.Phase != PhaseExecuting || execute.Context.Command.Mode != model.ModeExecute ||
 		execute.Context.Manifest.ReadOnly || execute.Context.Manifest.ContextID != "ctx_execute" || execute.Plan == nil ||
-		execute.Plan.ApprovedRevision != 1 || execute.Plan.ApprovedContentHash != execute.Plan.ContentHash() ||
+		execute.Plan.ApprovedContentHash != execute.Plan.ContentHash() ||
 		!strings.Contains(execute.ContextBriefing, "Plan:") || !schemasByName(execute.Tools)["mutate_ppt"] {
 		t.Fatalf("execute request did not use approved authority: %+v", execute)
 	}

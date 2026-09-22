@@ -90,7 +90,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
     case 'plan.approval_requested':
       return hasString(data, 'interaction_id') && validPlan(data.plan);
     case 'plan.approval_answered':
-      return hasString(data, 'interaction_id') && hasString(data, 'plan_id') && isNonNegativeInteger(data.revision)
+      return hasString(data, 'interaction_id') && hasString(data, 'plan_id')
         && ['approve', 'revise', 'cancel'].includes(String(data.decision))
         && (data.decision !== 'revise' || hasSafeString(data, 'feedback'));
     case 'command.permission_requested':
@@ -397,9 +397,6 @@ function validOptionalError(value: unknown): boolean {
 function validPlan(value: unknown): boolean {
   if (!isRecord(value)
     || !hasString(value, 'plan_id')
-    || typeof value.revision !== 'number'
-    || !Number.isInteger(value.revision)
-    || value.revision < 1
     || !hasSafeString(value, 'title') || !hasSafeString(value, 'content')
     || !['awaiting_approval', 'active', 'completed', 'canceled'].includes(String(value.status))
     || !Array.isArray(value.steps)

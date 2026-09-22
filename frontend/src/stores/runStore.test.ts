@@ -343,7 +343,7 @@ describe('runStore public event sessions', () => {
         ...base,
         interaction_id: 'i1',
         plan: {
-          plan_id: 'plan-1', revision: 1, title: '执行计划', content: '生成页面',
+          plan_id: 'plan-1', title: '执行计划', content: '生成页面',
           status: 'awaiting_approval', steps: [{ id: 'step-1', title: '生成页面', status: 'pending' }],
         },
       },
@@ -355,7 +355,7 @@ describe('runStore public event sessions', () => {
       event: 'plan.approval_answered',
       data: {
         ...base,
-        interaction_id: 'i1', plan_id: 'plan-1', revision: 1, decision: 'approve',
+        interaction_id: 'i1', plan_id: 'plan-1', decision: 'approve',
       },
     });
     expect(useRunStore.getState().sessions.t1).toMatchObject({

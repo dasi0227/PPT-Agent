@@ -91,7 +91,7 @@ func publicPlan(plan Plan) model.PublicPlan {
 		})
 	}
 	return model.PublicPlan{
-		PlanID: plan.ID, Revision: plan.Revision, ApprovedRevision: plan.ApprovedRevision,
+		PlanID: plan.ID,
 		Status: string(plan.Status), Title: sanitizePublicText(plan.Title, 180), Content: sanitizePublicMarkdown(plan.Content, 12000), Steps: steps,
 	}
 }

@@ -37,7 +37,7 @@ func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.
 	}
 	if err := first.Emit(context.Background(), model.EventPlanUpdated, model.PlanUpdatedPayload{
 		PublicEventBase: base,
-		Plan:            model.PublicPlan{PlanID: "p1", Revision: 1, Title: "计划", Content: "完整计划", Status: "awaiting_approval", Steps: []model.PublicPlanStep{{ID: "s1", Title: "执行", Status: "pending"}}},
+		Plan:            model.PublicPlan{PlanID: "p1", Title: "计划", Content: "完整计划", Status: "awaiting_approval", Steps: []model.PublicPlanStep{{ID: "s1", Title: "执行", Status: "pending"}}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.
 	}
 	if err := restored.Emit(context.Background(), model.EventPlanApprovalRequested, model.PlanApprovalRequestedPayload{
 		PublicEventBase: base, InteractionID: "i1",
-		Plan: model.PublicPlan{PlanID: "p1", Revision: 1, Title: "计划", Content: "完整计划", Status: "awaiting_approval", Steps: []model.PublicPlanStep{{ID: "s1", Title: "执行", Status: "pending"}}},
+		Plan: model.PublicPlan{PlanID: "p1", Title: "计划", Content: "完整计划", Status: "awaiting_approval", Steps: []model.PublicPlanStep{{ID: "s1", Title: "执行", Status: "pending"}}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 		}},
 		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}},
 		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: model.PublicPlan{
-			PlanID: "p1", Revision: 1, Title: "计划", Content: "完整计划", Status: "active",
+			PlanID: "p1", Title: "计划", Content: "完整计划", Status: "active",
 			Steps: []model.PublicPlanStep{{ID: "s1", Title: "生成", Status: "in_progress"}},
 		}}},
 		{model.EventMessageReasoning, model.MessageReasoningPayload{PublicEventBase: base(), MessageID: "m1", Text: "先确认全局设计。"}},
@@ -178,7 +178,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}
 	if err := bus.Emit(ctx, model.EventPlanUpdated, model.PlanUpdatedPayload{
 		PublicEventBase: base(), Plan: model.PublicPlan{
-			PlanID: "p1", Revision: 1, Title: "计划", Content: "完整计划", Status: "completed",
+			PlanID: "p1", Title: "计划", Content: "完整计划", Status: "completed",
 			Steps: []model.PublicPlanStep{{ID: "s1", Title: "完成", Status: "completed"}},
 		},
 	}); err != nil {
@@ -186,7 +186,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}
 	if err := bus.Emit(ctx, model.EventPlanUpdated, model.PlanUpdatedPayload{
 		PublicEventBase: base(), Plan: model.PublicPlan{
-			PlanID: "p1", Revision: 2, Title: "计划", Content: "完整计划", Status: "active",
+			PlanID: "p1", Title: "计划", Content: "完整计划", Status: "active",
 			Steps: []model.PublicPlanStep{{ID: "s1", Title: "完成", Status: "pending"}},
 		},
 	}); err == nil {

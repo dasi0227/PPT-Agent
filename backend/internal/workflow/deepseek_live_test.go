@@ -37,7 +37,7 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 			tools: disclosedToolsForLiveTest(
 				PhaseExecuting, model.ModeExecute,
 				model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
-				&Plan{ID: "plan_live", Revision: 1, Status: PlanActive},
+				&Plan{ApprovalID: "approval-test", ID: "plan_live", Status: PlanActive},
 			),
 		},
 		{
@@ -45,7 +45,7 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 			tools: disclosedToolsForLiveTest(
 				PhaseExecuting, model.ModeExecute,
 				model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages),
-				&Plan{ID: "plan_live", Revision: 1, Status: PlanActive},
+				&Plan{ApprovalID: "approval-test", ID: "plan_live", Status: PlanActive},
 			),
 		},
 	} {

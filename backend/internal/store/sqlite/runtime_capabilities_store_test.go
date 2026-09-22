@@ -194,7 +194,7 @@ func TestCommitPlanApprovalAtomicallyUpdatesCommandContextAndCheckpoint(t *testi
 	if err := s.SaveRunContext(ctx, model.RunContext{RunID: "plan-run", ContextID: "ctx_plan", Profile: "ppt/deck", PackHash: "plan", ManifestJSON: `{"read_only":true}`, CreatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	plan := &workflow.Plan{ID: "plan-1", Revision: 2, ApprovedRevision: 1, ApprovedContentHash: "hash", Status: workflow.PlanActive, Title: "Plan", Content: "Full plan", Steps: []workflow.PlanStep{{ID: "step-1", Title: "Do it", Status: workflow.PlanStepPending}}}
+	plan := &workflow.Plan{ApprovalID: "approval-test", ID: "plan-1", ApprovedContentHash: "hash", Status: workflow.PlanActive, Title: "Plan", Content: "Full plan", Steps: []workflow.PlanStep{{ID: "step-1", Title: "Do it", Status: workflow.PlanStepPending}}}
 	checkpoint := workflow.RuntimeCheckpoint{
 		RunID: "plan-run", LoopID: "loop-1", Boundary: "plan_updated", Phase: workflow.PhaseExecuting,
 		Mode: model.ModeExecute, Plan: plan, ContextBriefing: "mode=execute", ContextIndexRef: "ctxidx_execute",

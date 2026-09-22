@@ -29,7 +29,6 @@ type Bus struct {
 	started         bool
 	finalCount      int
 	planID          string
-	planRevision    int
 	planCompleted   map[string]bool
 	toolCalls       map[string]bool
 	toolNames       map[string]string
@@ -204,14 +203,11 @@ func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 	switch evt {
 	case model.EventPlanUpdated:
 		plan, _ := data["plan"].(map[string]any)
-		revision, _ := plan["revision"].(float64)
 		planID, _ := plan["plan_id"].(string)
 		if b.planID != "" && planID != b.planID {
 			return errors.New("plan_id cannot change")
 		}
-		if int(revision) <= b.planRevision {
-			return errors.New("plan revision must increase monotonically")
-		}
+
 		nextCompleted := map[string]bool{}
 		steps, _ := plan["steps"].([]any)
 		for _, raw := range steps {
@@ -310,9 +306,7 @@ func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
 		}
 	case model.EventPlanUpdated:
 		plan, _ := data["plan"].(map[string]any)
-		revision, _ := plan["revision"].(float64)
 		b.planID, _ = plan["plan_id"].(string)
-		b.planRevision = int(revision)
 		steps, _ := plan["steps"].([]any)
 		for _, raw := range steps {
 			step, _ := raw.(map[string]any)

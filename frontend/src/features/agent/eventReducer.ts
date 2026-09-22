@@ -219,8 +219,8 @@ function normalizeStepStatus(status: unknown): PlanStepStatus {
 export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState | null {
 	if (event.event !== 'plan.updated' && event.event !== 'plan.approval_requested') return prev;
 	const plan = event.data.plan;
-  const revision = Number(plan.revision);
-  if (prev && revision <= prev.revision) return prev;
+  const eventSequence = event.id ? Number(event.id) : undefined;
+  if (prev?.eventRunId === event.data.run_id && eventSequence !== undefined && prev.eventSequence !== undefined && eventSequence <= prev.eventSequence) return prev;
   const steps: PlanStep[] = plan.steps.map((step) => ({
     id: String(step.id ?? ''),
     title: String(step.title ?? ''),
@@ -230,9 +230,9 @@ export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState |
   return {
     id: String(plan.plan_id),
 		title: String(plan.title ?? '执行计划'), content: String(plan.content ?? ''),
-		approved_revision: Number(plan.approved_revision || 0) || undefined,
 		status: (String(plan.status) as PlanState['status']),
-    revision,
+    eventRunId: event.data.run_id,
+    eventSequence,
     steps,
   };
 }

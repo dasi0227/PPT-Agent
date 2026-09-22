@@ -475,7 +475,6 @@ export interface RunInputPayload {
 export interface PlanApprovalRequest {
   interaction_id: string;
   plan_id: string;
-  expected_revision: number;
   decision: 'approve' | 'revise' | 'cancel';
   feedback?: string;
   idempotency_key?: string;
@@ -586,8 +585,8 @@ export interface PlanState {
   id: string;
   title: string;
   content: string;
-  revision: number;
-  approved_revision?: number;
+  eventRunId?: string;
+  eventSequence?: number;
   status: 'awaiting_approval' | 'active' | 'completed' | 'canceled';
   steps: PlanStep[];
 }
@@ -714,10 +713,10 @@ export type SSEEvent =
   | SSEEventBase<'run.error', RunTerminalPayload>
   | SSEEventBase<'run.canceled', RunTerminalPayload>
   | SSEEventBase<'plan.updated', PublicEventBase & {
-	  plan: JsonRecord & { plan_id: string; revision: number; title: string; content: string; status: string; steps: JsonRecord[] };
+	  plan: JsonRecord & { plan_id: string; title: string; content: string; status: string; steps: JsonRecord[] };
     }>
-  | SSEEventBase<'plan.approval_requested', PublicEventBase & { interaction_id: string; plan: JsonRecord & { plan_id: string; revision: number; title: string; content: string; status: string; steps: JsonRecord[] } }>
-  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; plan_id: string; revision: number; decision: 'approve' | 'revise' | 'cancel'; feedback?: string }>
+  | SSEEventBase<'plan.approval_requested', PublicEventBase & { interaction_id: string; plan: JsonRecord & { plan_id: string; title: string; content: string; status: string; steps: JsonRecord[] } }>
+  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; plan_id: string; decision: 'approve' | 'revise' | 'cancel'; feedback?: string }>
   | SSEEventBase<'command.permission_requested', PublicEventBase & {
       interaction_id: string;
       call_id: string;

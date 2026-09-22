@@ -369,7 +369,6 @@ type RunState struct {
 	committedChanges        ChangeSet
 	lastProgress            string
 	lastReasoning           string
-	lastMilestoneRevision   int
 	suggestedNextInputs     []string
 	projectHistoryRevision  int64
 	trace                   TraceRecorder
@@ -614,7 +613,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.maybePeriodicCheckpoint(ctx, input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
-		if state.mode == model.ModeExecute && state.plan != nil && state.plan.ApprovedRevision > 0 &&
+		if state.mode == model.ModeExecute && state.plan != nil && state.plan.ApprovedContentHash != "" &&
 			(state.plan.Status == PlanActive || state.plan.Status == PlanCompleted) &&
 			state.plan.ApprovedContentHash != state.plan.ContentHash() {
 			return r.fail(input, state, CodeAgentFailed, errors.New("approved plan content hash mismatch"))
@@ -1554,9 +1553,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	candidate := *state
 	candidatePlan := *state.plan
 	candidatePlan.Status = PlanActive
-	candidatePlan.ApprovedRevision = candidatePlan.Revision
 	candidatePlan.ApprovedContentHash = candidatePlan.ContentHash()
-	candidatePlan.Revision++
 	candidatePlan.UpdatedAt = time.Now().Unix()
 	candidate.plan = &candidatePlan
 	candidate.mode = model.ModeExecute
@@ -1636,7 +1633,10 @@ func (r *Runtime) awaitPlanApproval(
 		return r.fail(input, state, CodeAgentFailed, errors.New("plan approval prompter is required")), true
 	}
 	plan := *state.plan
-	interactionID := "plan_approval_" + plan.ID + "_" + fmt.Sprint(plan.Revision)
+	interactionID := plan.ApprovalID
+	if interactionID == "" {
+		return r.fail(input, state, CodeAgentFailed, errors.New("plan approval identity is missing")), true
+	}
 	request := model.PlanApprovalRequestedPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, Plan: publicPlan(plan)}
 	for {
 		state.pauseActiveClock(r.clockNow())
@@ -1645,7 +1645,7 @@ func (r *Runtime) awaitPlanApproval(
 			return r.fail(input, state, CodeCanceled, err), true
 		}
 		state.resumeActiveClock(r.clockNow())
-		if answer.InteractionID != interactionID || answer.PlanID != plan.ID || answer.ExpectedRevision != plan.Revision ||
+		if answer.InteractionID != interactionID || answer.PlanID != plan.ID ||
 			(answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "cancel") ||
 			(answer.Decision == "revise" && strings.TrimSpace(answer.Feedback) == "") {
 			return r.fail(input, state, CodeInvalidControlCall, errors.New("invalid plan approval answer")), true
@@ -1653,10 +1653,9 @@ func (r *Runtime) awaitPlanApproval(
 		switch answer.Decision {
 		case "cancel":
 			state.plan.Status = PlanCanceled
-			state.plan.Revision++
 			state.plan.UpdatedAt = time.Now().Unix()
 			if input.Emitter != nil {
-				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Revision: plan.Revision, Decision: answer.Decision, Feedback: answer.Feedback})
+				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Decision: answer.Decision, Feedback: answer.Feedback})
 				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan)})
 			}
 			r.changePhase(input.Emitter, state, PhaseTerminal, "plan canceled")
@@ -1664,7 +1663,7 @@ func (r *Runtime) awaitPlanApproval(
 			return r.outcome(state, StatusCanceled, CodeCanceled, "plan canceled"), true
 		case "revise":
 			if input.Emitter != nil {
-				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Revision: plan.Revision, Decision: answer.Decision, Feedback: answer.Feedback})
+				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Decision: answer.Decision, Feedback: answer.Feedback})
 			}
 			r.changePhase(input.Emitter, state, PhasePlanning, "plan revision requested")
 			if resumer, ok := input.Prompter.(PlanApprovalResumer); ok {
@@ -1676,7 +1675,7 @@ func (r *Runtime) awaitPlanApproval(
 			candidate, transitionErr := r.prepareAndCommitPlanApproval(ctx, input, state)
 			if transitionErr != nil {
 				recordTrace(state.trace, state.runID, "plan.approval_transition_failed", map[string]any{
-					"loop_id": state.loopID, "plan_id": plan.ID, "revision": plan.Revision, "error": transitionErr.Error(),
+					"loop_id": state.loopID, "plan_id": plan.ID, "error": transitionErr.Error(),
 				})
 				continue
 			}
@@ -1699,7 +1698,7 @@ func (r *Runtime) awaitPlanApproval(
 				"loop_id": state.loopID, "from": PhaseWaitingInput, "phase": PhaseExecuting, "reason": "plan approved; execute mode enabled",
 			})
 			if input.Emitter != nil {
-				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Revision: plan.Revision, Decision: answer.Decision, Feedback: answer.Feedback})
+				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Decision: answer.Decision, Feedback: answer.Feedback})
 				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan)})
 				input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: previous, Mode: state.mode})
 			}
@@ -1782,7 +1781,7 @@ func (r *Runtime) executeControl(
 		}
 		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan proposal created; waiting for approval"))
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "plan approval required")
-		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, "plan_approval_"+next.ID); err != nil {
+		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, next.ApprovalID); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return r.awaitPlanApproval(ctx, input, state)
@@ -1846,7 +1845,7 @@ func (r *Runtime) executeControl(
 				PublicEventBase: publicBase(state.runID), Plan: publicPlan(next),
 			})
 			completed := completedPlanSteps(previous, next)
-			if len(completed) > 0 && state.lastMilestoneRevision != next.Revision {
+			if len(completed) > 0 {
 				ids := make([]string, 0, len(completed))
 				for _, step := range completed {
 					ids = append(ids, step.ID)
@@ -1855,7 +1854,6 @@ func (r *Runtime) executeControl(
 					PublicEventBase: publicBase(state.runID), MessageID: newMessageID(),
 					Text: milestoneText(next.Title, completed), CompletedStepIDs: ids,
 				})
-				state.lastMilestoneRevision = next.Revision
 			}
 		}
 		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan revision accepted"))
@@ -2412,7 +2410,6 @@ func (r *Runtime) logProviderRequest(input RuntimeInput, state *RunState, schema
 		zap.Int("tool_count", len(schemas)),
 		zap.Strings("tools", toolSchemaNames(schemas)),
 		zap.Bool("has_continuation", state.continuation != nil),
-		zap.Int("plan_revision", planRevision(state.plan)),
 		zap.String("plan_status", planStatus(state.plan)),
 	)
 }
@@ -2423,13 +2420,6 @@ func toolSchemaNames(schemas []ToolSchema) []string {
 		out = append(out, schema.Name)
 	}
 	return out
-}
-
-func planRevision(plan *Plan) int {
-	if plan == nil {
-		return 0
-	}
-	return plan.Revision
 }
 
 func planStatus(plan *Plan) string {
@@ -3039,7 +3029,7 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 		})})
 	}
 	if mode == model.ModePlan && phase == PhasePlanning && plan != nil && plan.Status == PlanAwaitingApproval {
-		out = append(out, ToolSchema{Name: "update_plan", Description: "Replace the complete proposed plan after user feedback. Runtime owns IDs and revisions.", Parameters: objectSchema([]string{"title", "content", "steps"}, map[string]any{
+		out = append(out, ToolSchema{Name: "update_plan", Description: "Replace the complete proposed plan after user feedback. Runtime owns IDs and approval state.", Parameters: objectSchema([]string{"title", "content", "steps"}, map[string]any{
 			"title": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"},
 			"steps": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"title"}, map[string]any{"title": map[string]any{"type": "string"}, "target_slide_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}})},
 		})})

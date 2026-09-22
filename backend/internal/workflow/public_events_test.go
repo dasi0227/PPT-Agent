@@ -119,7 +119,7 @@ func TestPublicToolTargetResolvesRenderSlideOrdinalFromOutline(t *testing.T) {
 func TestPublicPlanDoesNotTruncateLongUIText(t *testing.T) {
 	longTitle := strings.Repeat("很长的计划标题", 40)
 	plan := publicPlan(Plan{
-		ID: "p1", Revision: 1,
+		ApprovalID: "approval-test", ID: "p1",
 		Title: strings.Repeat("完整说明", 40), Content: "完整计划正文",
 		Steps: []PlanStep{{ID: "s1", Title: longTitle, Status: PlanStepPending}},
 	})

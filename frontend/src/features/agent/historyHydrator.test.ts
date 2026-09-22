@@ -107,7 +107,6 @@ describe('history hydrator', () => {
         ...base,
         plan: {
           plan_id: 'p1',
-          revision: 1,
           title: '执行计划',
           content: '## 完整计划',
           status: 'active',
@@ -122,7 +121,7 @@ describe('history hydrator', () => {
       entry(7, 'message.final', { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: ['优化第 1 页'], project_history_revision: 6 }),
       entry(8, 'run.completed', terminal()),
     ]);
-    expect(hydrated.plan).toMatchObject({ id: 'p1', revision: 1 });
+    expect(hydrated.plan).toMatchObject({ id: 'p1', eventSequence: 2 });
     expect(hydrated.items.map((item) => item.type)).toEqual(['user_turn', 'tool', 'question', 'final']);
     expect(hydrated.items[0]).toMatchObject({
       type: 'user_turn',
@@ -232,7 +231,7 @@ describe('history hydrator', () => {
 
   it('restores a submitted plan approval and the execute mode transition', () => {
     const plan = {
-      plan_id: 'p1', revision: 1, title: '执行计划', content: '## 完整计划',
+      plan_id: 'p1', title: '执行计划', content: '## 完整计划',
       status: 'awaiting_approval',
       steps: [{ id: 's1', title: '生成页面', status: 'pending' }],
     };
@@ -243,12 +242,11 @@ describe('history hydrator', () => {
       entry(2, 'plan.updated', { ...base, plan }),
       entry(3, 'plan.approval_requested', { ...base, interaction_id: 'i1', plan }),
       entry(4, 'plan.approval_answered', {
-        ...base, interaction_id: 'i1', plan_id: 'p1', revision: 1,
-        decision: 'approve', feedback: '',
+        ...base, interaction_id: 'i1', plan_id: 'p1', decision: 'approve', feedback: '',
       }),
       entry(5, 'plan.updated', {
         ...base,
-        plan: { ...plan, revision: 2, approved_revision: 1, status: 'active' },
+        plan: { ...plan, status: 'active' },
       }),
       entry(6, 'run.mode_changed', { ...base, previous_mode: 'plan', mode: 'execute' }),
     ]);
@@ -256,7 +254,7 @@ describe('history hydrator', () => {
     expect(hydrated.items.find((item) => item.type === 'plan_approval')).toMatchObject({
       interactionId: 'i1', answer: { decision: 'approve' },
     });
-    expect(hydrated.plan).toMatchObject({ id: 'p1', revision: 2, status: 'active', approved_revision: 1 });
+    expect(hydrated.plan).toMatchObject({ id: 'p1', eventSequence: 5, status: 'active' });
     expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'running', mode: 'execute' });
   });
 

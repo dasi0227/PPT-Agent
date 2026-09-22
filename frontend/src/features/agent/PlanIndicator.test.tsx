@@ -7,7 +7,6 @@ const plan: PlanState = {
   id: 'plan-1',
   title: '制作产品演示',
   content: '',
-  revision: 1,
   status: 'active',
   steps: [
     { id: 'step-1', title: '确认目标', detail: '不应显示的详情', status: 'completed' },

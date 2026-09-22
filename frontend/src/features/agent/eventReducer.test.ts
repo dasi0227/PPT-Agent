@@ -129,10 +129,10 @@ describe('public event reducer', () => {
     const progress = reduceSSEEvent([], event('run.progress', { activity: 'slide.creating' }));
     expect(progress).toEqual([]);
     const planEvent = event('plan.updated', {
-	  plan: { plan_id: 'p1', revision: 1, title: '执行', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] },
+	  plan: { plan_id: 'p1', title: '执行', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] },
     });
     expect(reduceSSEEvent([], planEvent)).toEqual([]);
-    expect(reducePlan(null, planEvent)).toMatchObject({ id: 'p1', revision: 1 });
+    expect(reducePlan(null, planEvent)).toMatchObject({ id: 'p1', eventSequence: 1 });
   });
 
   it('records a resumed run as a compact lifecycle row', () => {
@@ -157,15 +157,15 @@ describe('public event reducer', () => {
     ]);
   });
 
-  it('ignores stale plan revisions', () => {
+  it('ignores older plan events within the same run', () => {
     const revision2 = event('plan.updated', {
-	  plan: { plan_id: 'p1', revision: 2, title: '新', content: '完整计划', status: 'active', steps: [{ id: 's1', title: '生成', status: 'completed' }] },
-    });
+	  plan: { plan_id: 'p1', title: '新', content: '完整计划', status: 'active', steps: [{ id: 's1', title: '生成', status: 'completed' }] },
+    }, '2');
     const revision1 = event('plan.updated', {
-	  plan: { plan_id: 'p1', revision: 1, title: '旧', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'pending' }] },
+	  plan: { plan_id: 'p1', title: '旧', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'pending' }] },
     });
     const latest = reducePlan(reducePlan(null, revision2), revision1);
-    expect(latest).toMatchObject({ revision: 2, title: '新' });
+    expect(latest).toMatchObject({ eventSequence: 2, title: '新' });
   });
 
   it('shows one final message and no completed terminal card', () => {

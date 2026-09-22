@@ -95,7 +95,7 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
   const submit = async () => {
     if (!canSubmit || !item.runId) return;
     setSubmitting(true);
-    try { await runsApi.submitPlanApproval(item.runId, { interaction_id: item.interactionId, plan_id: item.plan.id, expected_revision: item.plan.revision, decision: decision as 'approve' | 'revise' | 'cancel', feedback: feedback.trim(), idempotency_key: `${item.interactionId}:${item.plan.revision}` }); }
+    try { await runsApi.submitPlanApproval(item.runId, { interaction_id: item.interactionId, plan_id: item.plan.id, decision: decision as 'approve' | 'revise' | 'cancel', feedback: feedback.trim(), idempotency_key: item.interactionId }); }
     catch { setSubmitting(false); }
   };
   if (answered) return <AnsweredPlanApproval item={item} decision={answered.decision} />;

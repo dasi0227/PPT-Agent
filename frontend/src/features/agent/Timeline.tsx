@@ -109,7 +109,7 @@ export const Timeline: React.FC = () => {
   useLayoutEffect(() => {
     if (followingRef.current) scrollToLatest(true);
     else setShowReturn(true);
-  }, [plan?.revision, scrollToLatest, timelineItems]);
+  }, [plan, scrollToLatest, timelineItems]);
 
   useEffect(() => {
     if (followingRef.current && progress) scrollToLatest(false);

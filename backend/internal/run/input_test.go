@@ -53,10 +53,10 @@ func TestPlanApprovalReplyIsIdempotentOnlyForIdenticalSubmission(t *testing.T) {
 	queue := NewInputQueue()
 	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{
 		InteractionID: "interaction-1",
-		Plan:          model.PublicPlan{PlanID: "plan-1", Revision: 3},
+		Plan:          model.PublicPlan{PlanID: "plan-1"},
 	})
 	answer := model.PlanApprovalAnswer{
-		InteractionID: "interaction-1", PlanID: "plan-1", ExpectedRevision: 3, Decision: "approve",
+		InteractionID: "interaction-1", PlanID: "plan-1", Decision: "approve",
 	}
 	if !queue.ReplyPlanApproval(answer) {
 		t.Fatal("first approval was rejected")
@@ -105,5 +105,25 @@ func TestCommandPermissionReplyRequiresExactMatchAndIsIdempotent(t *testing.T) {
 	changed.Decision = "deny"
 	if queue.ReplyCommandPermission(changed) {
 		t.Fatal("conflicting command permission replay was accepted")
+	}
+}
+
+func TestReplacementProposalInvalidatesOldApproval(t *testing.T) {
+	queue := NewInputQueue()
+	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "old", Plan: model.PublicPlan{PlanID: "plan"}})
+	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "new", Plan: model.PublicPlan{PlanID: "plan"}})
+	if queue.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "old", PlanID: "plan", Decision: "approve"}) {
+		t.Fatal("superseded proposal accepted")
+	}
+	if !queue.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "new", PlanID: "plan", Decision: "approve"}) {
+		t.Fatal("current proposal rejected")
+	}
+	select {
+	case answer := <-queue.PlanApprovalSignal():
+		if answer.InteractionID != "new" {
+			t.Fatal(answer)
+		}
+	default:
+		t.Fatal("approval not delivered")
 	}
 }

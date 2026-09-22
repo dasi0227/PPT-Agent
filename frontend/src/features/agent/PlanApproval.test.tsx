@@ -16,7 +16,6 @@ const item: PlanApprovalItem = {
   timestamp: 0,
   plan: {
     id: 'plan-1',
-    revision: 3,
     status: 'awaiting_approval',
     title: '演示文稿制作计划',
     content: '先完成结构，再生成页面。',
@@ -112,10 +111,9 @@ describe('PlanApproval', () => {
     expect(runsApi.submitPlanApproval).toHaveBeenCalledWith('run-1', {
       interaction_id: 'interaction-1',
       plan_id: 'plan-1',
-      expected_revision: 3,
       decision: 'approve',
       feedback: '',
-      idempotency_key: 'interaction-1:3',
+      idempotency_key: 'interaction-1',
     });
   });
 

@@ -132,7 +132,7 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 	if req.Plan != nil {
 		state.Plan = req.Plan
 		switch {
-		case mode == model.ModeExecute && req.Plan.ApprovedRevision > 0 &&
+		case mode == model.ModeExecute && req.Plan.ApprovedContentHash != "" &&
 			(req.Plan.Status == PlanActive || req.Plan.Status == PlanCompleted):
 			state.PlanAuthority = "approved_execution_contract"
 		case mode == model.ModePlan:

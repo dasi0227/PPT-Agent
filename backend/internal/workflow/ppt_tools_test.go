@@ -278,7 +278,7 @@ func TestSpecDeckScopeNeverDisclosesOrExecutesHTMLMutation(t *testing.T) {
 func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
 	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	nonEmpty := spec.Outline{SchemaVersion: spec.SchemaVersion, Revision: 1, ProjectID: "pro_aaaaaa", Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}}}}, CreatedAt: 1, UpdatedAt: 1}
-	plan := &Plan{ID: "plan_1", Revision: 1, Status: PlanActive}
+	plan := &Plan{ApprovalID: "approval-test", ID: "plan_1", Status: PlanActive}
 
 	for _, outline := range []spec.Outline{empty, nonEmpty} {
 		pack := mutationPack("pro_aaaaaa", outline)

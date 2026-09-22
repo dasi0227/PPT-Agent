@@ -179,13 +179,11 @@ type PublicPlanStep struct {
 }
 
 type PublicPlan struct {
-	PlanID           string           `json:"plan_id"`
-	Revision         int              `json:"revision"`
-	ApprovedRevision int              `json:"approved_revision,omitempty"`
-	Status           string           `json:"status"`
-	Title            string           `json:"title"`
-	Content          string           `json:"content"`
-	Steps            []PublicPlanStep `json:"steps"`
+	PlanID  string           `json:"plan_id"`
+	Status  string           `json:"status"`
+	Title   string           `json:"title"`
+	Content string           `json:"content"`
+	Steps   []PublicPlanStep `json:"steps"`
 }
 
 type PlanUpdatedPayload struct {
@@ -200,19 +198,17 @@ type PlanApprovalRequestedPayload struct {
 }
 
 type PlanApprovalAnswer struct {
-	InteractionID    string `json:"interaction_id"`
-	PlanID           string `json:"plan_id"`
-	ExpectedRevision int    `json:"expected_revision"`
-	Decision         string `json:"decision"`
-	Feedback         string `json:"feedback,omitempty"`
-	IdempotencyKey   string `json:"idempotency_key,omitempty"`
+	InteractionID  string `json:"interaction_id"`
+	PlanID         string `json:"plan_id"`
+	Decision       string `json:"decision"`
+	Feedback       string `json:"feedback,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 type PlanApprovalAnsweredPayload struct {
 	PublicEventBase
 	InteractionID string `json:"interaction_id"`
 	PlanID        string `json:"plan_id"`
-	Revision      int    `json:"revision"`
 	Decision      string `json:"decision"`
 	Feedback      string `json:"feedback,omitempty"`
 }
@@ -590,7 +586,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		}
 		return validatePlan(data["plan"])
 	case EventPlanApprovalAnswered:
-		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || strings.TrimSpace(stringValue(data["plan_id"])) == "" || intValue(data["revision"]) < 1 || !oneOf(stringValue(data["decision"]), "approve", "revise", "cancel") {
+		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || strings.TrimSpace(stringValue(data["plan_id"])) == "" || !oneOf(stringValue(data["decision"]), "approve", "revise", "cancel") {
 			return errors.New("invalid plan approval answer")
 		}
 		if stringValue(data["decision"]) == "revise" && strings.TrimSpace(stringValue(data["feedback"])) == "" {
@@ -1075,12 +1071,7 @@ func validatePlan(value any) error {
 	if err := requireString(plan, "plan_id"); err != nil {
 		return err
 	}
-	if intValue(plan["revision"]) < 1 {
-		return errors.New("plan revision must be positive")
-	}
-	if !isInteger(plan["revision"]) {
-		return errors.New("plan revision must be an integer")
-	}
+
 	if err := requireString(plan, "title", "content", "status"); err != nil {
 		return err
 	}

@@ -39,9 +39,8 @@ type PlanStep struct {
 // Plan is the only persisted plan snapshot. Events and checkpoints are the audit
 // trail; deliberately do not add an in-object history copy.
 type Plan struct {
+	ApprovalID          string     `json:"approval_id"`
 	ID                  string     `json:"plan_id"`
-	Revision            int        `json:"revision"`
-	ApprovedRevision    int        `json:"approved_revision,omitempty"`
 	ApprovedContentHash string     `json:"approved_content_hash,omitempty"`
 	Status              PlanStatus `json:"status"`
 	Title               string     `json:"title"`
@@ -52,7 +51,7 @@ type Plan struct {
 	CreatedByRun        string     `json:"created_by_run"`
 }
 
-// PlanUpdate is used in planning mode. IDs, revisions and statuses are Runtime-owned.
+// PlanUpdate is used in planning mode. IDs and statuses are Runtime-owned.
 type PlanUpdate struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
@@ -111,13 +110,13 @@ func ApplyPlanUpdate(current *Plan, update PlanUpdate, runID string, now time.Ti
 	}
 	ts := now.Unix()
 	if current == nil || current.ID == "" {
-		return Plan{ID: "plan_" + uuid.NewString(), Revision: 1, Status: PlanAwaitingApproval, Title: strings.TrimSpace(update.Title), Content: update.Content, Steps: steps, CreatedAt: ts, UpdatedAt: ts, CreatedByRun: runID}, true, nil
+		return Plan{ID: "plan_" + uuid.NewString(), ApprovalID: "approval_" + uuid.NewString(), Status: PlanAwaitingApproval, Title: strings.TrimSpace(update.Title), Content: update.Content, Steps: steps, CreatedAt: ts, UpdatedAt: ts, CreatedByRun: runID}, true, nil
 	}
 	next := *current
-	next.Revision++
 	next.Status = PlanAwaitingApproval
 	next.Title, next.Content, next.Steps, next.UpdatedAt = strings.TrimSpace(update.Title), update.Content, steps, ts
-	next.ApprovedRevision, next.ApprovedContentHash = 0, ""
+	next.ApprovalID = "approval_" + uuid.NewString()
+	next.ApprovedContentHash = ""
 	return next, false, nil
 }
 
@@ -160,7 +159,6 @@ func ApplyPlanProgress(current *Plan, update PlanProgressUpdate, now time.Time) 
 	if inProgress > 1 {
 		return Plan{}, fmt.Errorf("%w: at most one step may be in_progress", ErrPlanInvalid)
 	}
-	next.Revision++
 	next.UpdatedAt = now.Unix()
 	if !next.HasBlockingSteps() {
 		next.Status = PlanCompleted
