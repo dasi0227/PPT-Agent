@@ -246,7 +246,7 @@ func currentMaterializationProof(pack contextengine.ContextPack, projectDir stri
 	}
 	nodeHash := spec.SemanticSlideNodeHash(outline, slideID)
 	revision := pack.Revisions.SlideHTML[slideID]
-	if tx.HasChange(slideHTMLRef(slideID)) {
+	if tx != nil && tx.HasChange(slideHTMLRef(slideID)) {
 		revision++
 	}
 	if revision < 1 {

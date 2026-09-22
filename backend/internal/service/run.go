@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,6 +22,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
+	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -489,7 +489,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		pack:            pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		projectHistoryRevision: runModel.ProjectHistoryRevision,
 		renderer:               svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
-		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
+		imageResolver:    runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		semanticReviewer: workflow.LLMSemanticReviewer{Provider: selectedProfile.Adapter()},
 		transcripts:      svc.transcripts,
 		calibration:      svc.calibration,
@@ -588,7 +588,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 		runtime:         runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		projectHistoryRevision: runModel.ProjectHistoryRevision,
 		renderer:               svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
-		imageResolver:    runImageResolver{runID: runModel.ID, projectID: project.ID, projectDir: project.WorkDir},
+		imageResolver:    runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		semanticReviewer: workflow.LLMSemanticReviewer{Provider: provider},
 		transcripts:      svc.transcripts,
 		calibration:      svc.calibration,
@@ -668,7 +668,6 @@ func (svc *RunService) replayCreateRun(ctx context.Context, record model.Idempot
 }
 
 type runImageResolver struct {
-	runID      string
 	projectID  string
 	projectDir string
 }
@@ -677,25 +676,16 @@ func (r runImageResolver) ResolveImage(ctx context.Context, ref string) (llm.Ima
 	if err := ctx.Err(); err != nil {
 		return llm.ImageData{}, err
 	}
-	prefix := "run:" + r.runID + "/screenshot:"
-	if strings.HasPrefix(ref, prefix) {
-		screenshotID := strings.TrimPrefix(ref, prefix)
-		if !screenshotIDPattern.MatchString(screenshotID) || strings.TrimSpace(r.projectID) == "" {
-			return llm.ImageData{}, errors.New("invalid runtime screenshot reference")
-		}
-		path := filepath.Join(r.projectDir, ".runtime", "renders", r.runID, screenshotID+".png")
-		raw, err := readImageWithContext(ctx, path, 10*1024*1024)
+	if strings.HasPrefix(ref, "project:"+r.projectID+"/render:") {
+		_, raw, err := renderimage.Read(ctx, r.projectDir, r.projectID, ref)
 		if err != nil {
 			return llm.ImageData{}, err
-		}
-		if len(raw) < 8 || string(raw[:8]) != "\x89PNG\r\n\x1a\n" {
-			return llm.ImageData{}, errors.New("runtime screenshot MIME or size is invalid")
 		}
 		return llm.ImageData{Bytes: raw, MIMEType: "image/png"}, nil
 	}
 	attachmentID, variant, ok := attachment.ParseImageRef(r.projectID, ref)
 	if !ok {
-		return llm.ImageData{}, errors.New("image reference does not belong to the current run")
+		return llm.ImageData{}, errors.New("image reference is not a current project attachment or indexed render")
 	}
 	meta, raw, err := attachment.Read(ctx, r.projectDir, r.projectID, attachmentID, variant)
 	if err != nil {
@@ -706,38 +696,6 @@ func (r runImageResolver) ResolveImage(ctx context.Context, ref string) (llm.Ima
 		mimeType = "image/webp"
 	}
 	return llm.ImageData{Bytes: raw, MIMEType: mimeType}, nil
-}
-
-func readImageWithContext(ctx context.Context, path string, maxBytes int) ([]byte, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = file.Close() }()
-	raw := make([]byte, 0, min(maxBytes, 64*1024))
-	buffer := make([]byte, 64*1024)
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		count, readErr := file.Read(buffer)
-		if count > 0 {
-			if len(raw)+count > maxBytes {
-				return nil, errors.New("runtime screenshot MIME or size is invalid")
-			}
-			raw = append(raw, buffer[:count]...)
-		}
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil {
-			return nil, readErr
-		}
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return raw, nil
 }
 
 func (svc *RunService) InjectInput(ctx context.Context, runID, content, replyTo string) error {

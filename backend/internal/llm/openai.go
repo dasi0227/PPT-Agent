@@ -258,18 +258,21 @@ func (o *OpenAIAdapter) responsesContent(
 				return nil, fmt.Errorf("%w: model does not support image input", ErrBadRequest)
 			}
 			if resolver == nil {
-				return nil, fmt.Errorf("%w: image resolver is required", ErrBadRequest)
+				return nil, fmt.Errorf("%w: image resolver is required", ErrImageReference)
 			}
 			data, err := resolver.ResolveImage(ctx, part.ImageRef)
 			if err != nil {
-				if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+				if ctx.Err() != nil {
 					return nil, ctx.Err()
 				}
-				return nil, fmt.Errorf("%w: image reference is not authorized", ErrBadRequest)
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return nil, err
+				}
+				return nil, fmt.Errorf("%w: %v", ErrImageReference, err)
 			}
 			raw, mimeType, err := prepareProviderImage(data, o.capabilities)
 			if err != nil {
-				return nil, fmt.Errorf("%w: invalid image input", ErrBadRequest)
+				return nil, fmt.Errorf("%w: invalid image input", ErrImageReference)
 			}
 			detail := part.Detail
 			if detail != "low" && detail != "high" {

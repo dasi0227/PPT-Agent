@@ -20,6 +20,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -427,14 +428,10 @@ type slideRenderTool struct {
 
 func (slideRenderTool) Schema() ToolSchema {
 	return ToolSchema{
-		Name: "render_slide", Description: "Render one authorized slide in isolated Chromium and return screenshot-bound visual diagnostics.",
+		Name: "render_slide", Description: "Render one authorized slide in isolated Chromium. Return diagnostics and the latest image_path without image pixels. Use read_image(image_path) to inspect the rendered page visually.",
 		Parameters: objectSchema([]string{"slide_id"}, map[string]any{
 			"slide_id": map[string]any{
 				"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`,
-			},
-			"visual_review": map[string]any{
-				"type":        "boolean",
-				"description": "Request the high-detail screenshot back for visual judgement. Omit for a lightweight diagnostics-only render.",
 			},
 		}),
 	}
@@ -524,12 +521,31 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, err.Error(), true)
 	}
+	if sourceHash != hashBytes(html) {
+		_ = os.Remove(screenshotPath)
+		return failedToolResult(CodeRenderFailed, "slide HTML changed while rendering; render again", true)
+	}
 	blocking, warnings := renderIssues(target, diagnostics)
-	screenshotRef := "run:" + runID + "/screenshot:" + screenshotID
+	proof, err := currentMaterializationProof(t.pack, input.ProjectDir, input.Session, slideID, sourceHash)
+	if err != nil {
+		_ = os.Remove(screenshotPath)
+		return failedToolResult(CodeRenderFailed, err.Error(), true)
+	}
+	image := renderimage.Entry{
+		ProjectID: input.Context.Project.ID, SlideID: slideID, RunID: runID, ScreenshotID: screenshotID,
+		ImagePath:  filepath.ToSlash(filepath.Join(".runtime", "renders", runID, screenshotID+".png")),
+		SourceHash: sourceHash, DependencyHash: proof.SourceHash + ":" + proof.FrameContextHash,
+		Revision: presentationRevision(t.pack, input, slideID), RenderedAt: time.Now().Unix(),
+	}
+	if err := renderimage.Publish(input.ProjectDir, image); err != nil {
+		return failedToolResult(CodeRenderFailed, "could not publish rendered image reference", true)
+	}
+	screenshotRef := image.ImageRef()
 	screenshotURL := "/api/v1/runs/" + runID + "/screenshots/" + screenshotID
 	data := map[string]any{
 		"screenshot_ref": screenshotRef, "screenshot_url": screenshotURL,
-		"slide_id": slideID, "source": source,
+		"image_path": image.ImagePath,
+		"slide_id":   slideID, "source": source,
 		"revision": presentationRevision(t.pack, input, slideID), "hash": sourceHash,
 		"viewport":     map[string]int{"width": frame.Canvas.Width, "height": frame.Canvas.Height},
 		"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
@@ -549,26 +565,19 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 			"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		},
 		"source_hash": sourceHash,
+		"image_path":  image.ImagePath, "revision": image.Revision,
+		"visual_inspection": "Pixels are not included. Call read_image with image_path when visual judgement is needed.",
 	}
 	if len(blocking) == 0 {
 		delete(observationData, "code")
 	}
 	observationRaw, _ := json.Marshal(observationData)
 	parts := []llm.ContentPart{{Type: "text", Text: string(observationRaw)}}
-	visualReview, _ := input.Args["visual_review"].(bool)
-	if len(blocking) > 0 || visualReview {
-		parts = append(parts, llm.ContentPart{Type: "image", ImageRef: screenshotRef, MIMEType: "image/png", Detail: "high"})
-	}
 	result.ObservationParts = parts
 	if len(blocking) > 0 {
 		result.Evidence = []Evidence{newEvidence("render_diagnostic", target, sourceHash, data)}
 		result.OK, result.Code, result.Retryable = false, CodeRenderFailed, false
 		return result
-	}
-	proof, err := currentMaterializationProof(t.pack, input.ProjectDir, input.Session, slideID, sourceHash)
-	if err != nil {
-		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, err.Error(), true)
 	}
 	evidence := newEvidence("render", target, sourceHash, data)
 	evidence.Materialization = &proof

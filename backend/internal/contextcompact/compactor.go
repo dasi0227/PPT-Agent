@@ -54,7 +54,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		provider = captured
 	}
 	before := messageTokens(messages)
-	pruned := pruneSupersededRenderImages(cloneMessages(messages))
+	pruned := llm.WithoutRenderImages(messages)
 	compressed, retained := splitTranscript(pruned)
 	if len(compressed) == 0 {
 		return Result{
@@ -214,49 +214,9 @@ func messageTokens(messages []llm.Message) int {
 // replace. Retained instructions and the latest tool rounds do not make a
 // manual compaction worthwhile, even though they still occupy the window.
 func CompactableTokens(messages []llm.Message) int {
-	pruned := pruneSupersededRenderImages(cloneMessages(messages))
+	pruned := llm.WithoutRenderImages(messages)
 	compressed, _ := splitTranscript(pruned)
 	return messageTokens(compressed)
-}
-
-func cloneMessages(messages []llm.Message) []llm.Message {
-	out := make([]llm.Message, len(messages))
-	for index, message := range messages {
-		out[index] = message
-		out[index].Content = append([]llm.ContentPart(nil), message.Content...)
-		out[index].ToolCalls = append([]llm.ToolCall(nil), message.ToolCalls...)
-	}
-	return out
-}
-
-func pruneSupersededRenderImages(messages []llm.Message) []llm.Message {
-	seenSlides := map[string]bool{}
-	for index := len(messages) - 1; index >= 0; index-- {
-		message := &messages[index]
-		slideID := ""
-		for _, part := range message.Content {
-			if part.Type != "text" {
-				continue
-			}
-			var payload map[string]any
-			if json.Unmarshal([]byte(part.Text), &payload) == nil {
-				slideID, _ = payload["slide_id"].(string)
-			}
-		}
-		if slideID == "" {
-			continue
-		}
-		keepImage := !seenSlides[slideID]
-		seenSlides[slideID] = true
-		parts := make([]llm.ContentPart, 0, len(message.Content))
-		for _, part := range message.Content {
-			if part.Type != "image" || keepImage {
-				parts = append(parts, part)
-			}
-		}
-		message.Content = parts
-	}
-	return messages
 }
 
 func emptySummary() string {

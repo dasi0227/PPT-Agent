@@ -93,7 +93,7 @@ func TestKimiCannotReadUnauthorizedImageRef(t *testing.T) {
 		}}}},
 		ImageResolver: &staticImageResolver{err: errors.New("not authorized")},
 	})
-	if !errors.Is(err, ErrBadRequest) || providerCalled {
+	if !errors.Is(err, ErrImageReference) || providerCalled {
 		t.Fatalf("unauthorized image reached provider: err=%v called=%v", err, providerCalled)
 	}
 }

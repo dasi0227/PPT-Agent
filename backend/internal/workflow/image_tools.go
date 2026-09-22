@@ -6,22 +6,58 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 )
 
 type readImageTool struct{}
 
 func (readImageTool) Schema() ToolSchema {
+	parameters := objectSchema(nil, map[string]any{
+		"attachment_id": map[string]any{"type": "string", "pattern": "^att_[A-Za-z0-9_-]{1,128}$"},
+		"variant":       map[string]any{"type": "string", "enum": []string{"thumbnail", "original"}, "default": "thumbnail"},
+		"image_path":    map[string]any{"type": "string", "description": "Exact latest rendered image_path from runtime or render_slide. No arbitrary paths."},
+	})
+	parameters["oneOf"] = []any{
+		map[string]any{"required": []string{"attachment_id"}, "not": map[string]any{"required": []string{"image_path"}}},
+		map[string]any{"required": []string{"image_path"}, "not": map[string]any{"anyOf": []any{map[string]any{"required": []string{"attachment_id"}}, map[string]any{"required": []string{"variant"}}}}},
+	}
 	return ToolSchema{
 		Name:        "read_image",
-		Description: "Read one project image attachment by stable attachment_id. Use thumbnail for visual reference and original for fine detail. Returns the verified original_path for HTML embedding regardless of the viewed variant; image_ref is only for model vision.",
-		Parameters: objectSchema([]string{"attachment_id"}, map[string]any{
-			"attachment_id": map[string]any{"type": "string", "pattern": "^att_[A-Za-z0-9_-]{1,128}$"},
-			"variant":       map[string]any{"type": "string", "enum": []string{"thumbnail", "original"}, "default": "thumbnail"},
-		}),
+		Description: "Read either an uploaded attachment by attachment_id (thumbnail/original), or a latest slide render by exact image_path. Render pixels are available for the next model response only; record visual findings as text. Rendered images are not HTML assets. Attachments return their verified original_path for embedding.",
+		Parameters:  parameters,
 	}
 }
 
 func (readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
+	if path, ok := input.Args["image_path"].(string); ok {
+		if _, present := input.Args["attachment_id"]; present {
+			return failedToolResult(CodeContentInvalid, "choose attachment_id or image_path", false)
+		}
+		if _, present := input.Args["variant"]; present {
+			return failedToolResult(CodeContentInvalid, "variant is only valid for attachments", false)
+		}
+		for _, image := range latestRenderedImages(input.Context, input.ProjectDir, input.Session) {
+			if image.ImagePath != path {
+				continue
+			}
+			entry, err := renderimage.Latest(input.ProjectDir, input.Context.Project.ID, image.SlideID)
+			if err != nil || entry.ImagePath != path {
+				break
+			}
+			if _, _, err := renderimage.Read(ctx, input.ProjectDir, input.Context.Project.ID, entry.ImageRef()); err != nil {
+				break
+			}
+			raw, _ := json.Marshal(image)
+			result := SuccessfulToolResult("rendered slide image read")
+			result.Observation = string(raw)
+			result.ObservationParts = []llm.ContentPart{
+				{Type: "text", Text: "<rendered_image>" + string(raw) + "</rendered_image>"},
+				{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"},
+			}
+			return result
+		}
+		return failedToolResult(CodeResourceNotFound, "render image is unavailable or superseded; use the latest runtime image_path or render the slide again", false)
+	}
 	id, _ := input.Args["attachment_id"].(string)
 	variant, _ := input.Args["variant"].(string)
 	if variant == "" {

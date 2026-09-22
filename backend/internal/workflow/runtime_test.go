@@ -587,7 +587,7 @@ func TestToolCallIdempotencyReplaysEvidenceWithoutDuplicateSideEffects(t *testin
 	}
 }
 
-func TestContextCompactionDropsOnlySupersededSlideImages(t *testing.T) {
+func TestHistoryDropsAllRenderPixelsButPreservesDiagnostics(t *testing.T) {
 	messages := []llm.Message{
 		{Role: llm.RoleTool, ToolCallID: "old", Content: []llm.ContentPart{
 			{Type: "text", Text: `{"slide_id":"slide-1","source_hash":"old"}`},
@@ -602,12 +602,12 @@ func TestContextCompactionDropsOnlySupersededSlideImages(t *testing.T) {
 			{Type: "image", ImageRef: "run:r/screenshot:new"},
 		}},
 	}
-	got := pruneSupersededRenderImages(messages)
-	if len(got[0].Content) != 1 || len(got[1].Content) != 2 || len(got[2].Content) != 2 {
-		t.Fatalf("superseded image pruning mismatch: %+v", got)
+	got := llm.WithoutRenderImages(messages)
+	if len(got[0].Content) != 1 || len(got[1].Content) != 1 || len(got[2].Content) != 1 {
+		t.Fatalf("render image removal mismatch: %+v", got)
 	}
-	if got[0].Content[0].Type != "text" || got[2].Content[1].ImageRef != "run:r/screenshot:new" {
-		t.Fatalf("latest screenshot/source binding was not preserved: %+v", got)
+	if got[0].Text() != messages[0].Text() || got[2].Text() != messages[2].Text() || len(messages[2].Content) != 2 {
+		t.Fatalf("diagnostics or source messages changed: %+v", got)
 	}
 }
 

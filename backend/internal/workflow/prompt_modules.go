@@ -108,18 +108,20 @@ func finishDisclosed(phase RunPhase, mode model.RunMode) bool {
 func runtimeTaskStateForRequest(req AgentRequest) string {
 	mode := effectivePromptMode(req.Mode, req.Context.Command.Mode)
 	state := struct {
-		Mode            model.RunMode      `json:"mode"`
-		Phase           RunPhase           `json:"phase"`
-		ContextBriefing string             `json:"context_briefing,omitempty"`
-		Plan            *Plan              `json:"plan,omitempty"`
-		PlanAuthority   string             `json:"plan_authority,omitempty"`
-		Changes         ChangeSet          `json:"changes"`
-		Evidence        []Evidence         `json:"evidence"`
-		Requirements    *RequirementLedger `json:"requirements,omitempty"`
-		Work            []SlideWorkItem    `json:"work_ledger,omitempty"`
+		Mode            model.RunMode          `json:"mode"`
+		Phase           RunPhase               `json:"phase"`
+		ContextBriefing string                 `json:"context_briefing,omitempty"`
+		RenderedImages  []RenderedImageContext `json:"latest_rendered_images,omitempty"`
+		Plan            *Plan                  `json:"plan,omitempty"`
+		PlanAuthority   string                 `json:"plan_authority,omitempty"`
+		Changes         ChangeSet              `json:"changes"`
+		Evidence        []Evidence             `json:"evidence"`
+		Requirements    *RequirementLedger     `json:"requirements,omitempty"`
+		Work            []SlideWorkItem        `json:"work_ledger,omitempty"`
 	}{
 		Mode: mode, Phase: req.Phase, ContextBriefing: req.ContextBriefing,
-		Changes: req.Changes, Evidence: req.Evidence, Requirements: req.Requirements,
+		RenderedImages: req.RenderedImages,
+		Changes:        req.Changes, Evidence: promptEvidence(req.Evidence), Requirements: req.Requirements,
 		Work: func() []SlideWorkItem {
 			if req.Work == nil {
 				return nil
@@ -141,6 +143,25 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 	}
 	raw, _ := json.Marshal(state)
 	return string(raw)
+}
+
+// UI evidence retains screenshot links; the model discovers images exclusively
+// through the current per-slide index, not accumulated evidence paths.
+func promptEvidence(entries []Evidence) []Evidence {
+	out := append([]Evidence(nil), entries...)
+	for i, entry := range out {
+		if entry.Kind != "render" && entry.Kind != "render_diagnostic" {
+			continue
+		}
+		data := make(map[string]any, len(entry.Data))
+		for key, value := range entry.Data {
+			if key != "screenshot_ref" && key != "screenshot_url" && key != "image_path" {
+				data[key] = value
+			}
+		}
+		out[i].Data = data
+	}
+	return out
 }
 
 func loadPromptModule(id string) PromptModule {

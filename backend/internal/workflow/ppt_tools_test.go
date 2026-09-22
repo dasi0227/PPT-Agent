@@ -594,7 +594,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 		renderer: successfulScreenshotRenderer{},
 		themes:   staticThemeLoader{theme: model.Theme{ID: "clean", CSS: `:root{--accent:red}`}},
 	}).Execute(context.Background(), DomainToolInput{
-		Args: map[string]any{"slide_id": slideID}, RunID: "run_1", ProjectDir: dir, Session: session,
+		Args: map[string]any{"slide_id": slideID}, RunID: "run_1", ProjectDir: dir, Session: session, Context: pack,
 		Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
 	})
 	if !result.OK {
@@ -606,5 +606,20 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	}
 	if result.Evidence[0].Materialization == nil || result.Evidence[0].Materialization.ArtifactHash != wantHash {
 		t.Fatalf("materialization=%+v want artifact hash %s", result.Evidence[0].Materialization, wantHash)
+	}
+	for _, part := range result.ObservationParts {
+		if part.Type == "image" {
+			t.Fatal("render automatically attached image pixels")
+		}
+	}
+	images := latestRenderedImages(pack, dir, nil)
+	if len(images) != 1 || images[0].ImagePath != result.Data["image_path"] || images[0].Stale {
+		t.Fatalf("latest render index is missing or stale: %+v", images)
+	}
+	if err := os.WriteFile(htmlPath, append(html, []byte("\n<!-- changed -->")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if updated := latestRenderedImages(pack, dir, nil); len(updated) != 1 || !updated[0].Stale {
+		t.Fatalf("changed HTML did not invalidate render freshness: %+v", updated)
 	}
 }

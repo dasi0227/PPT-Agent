@@ -161,6 +161,7 @@ type AgentRequest struct {
 	Requirements          *RequirementLedger
 	Work                  *WorkLedger
 	ContextBriefing       string
+	RenderedImages        []RenderedImageContext
 	ActiveSkills          []model.RunSkill
 	Messages              []llm.Message
 	Tools                 []ToolSchema
@@ -380,6 +381,7 @@ type RunState struct {
 	retrievedContext        []RetrievedContextItem
 	lastRetrievalKey        string
 	contextBriefing         string
+	renderedImages          []RenderedImageContext
 	latestToolResults       []CheckpointToolResult
 	lastCheckpointTurn      int
 	lastCheckpointToolCalls int
@@ -447,7 +449,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
-		state.messages = append(state.messages, messages...)
+		state.messages = append(state.messages, llm.WithoutRenderImages(messages)...)
 		instruction := currentRunInstructionMessage(input.RunID, input.Context.Command.Instruction)
 		if !containsRunInstruction(state.messages, input.RunID) {
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
@@ -592,6 +594,16 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
 		schemas = append(schemas, controlSchemas(state.phase, state.mode, state.plan)...)
+		images := latestRenderedImages(state.pack, input.ProjectDir, state.tx)
+		if hashCheckpointValue(images) != hashCheckpointValue(state.renderedImages) {
+			state.continuation = nil
+		}
+		state.renderedImages = images
+		// A provider continuation may retain pixels or an outdated runtime index.
+		// Render reads use a complete prompt and must not leak into subsequent turns.
+		if llm.HasRenderImages(state.messages) {
+			state.continuation = nil
+		}
 		r.measureContextWindow(input, state, schemas)
 		if err := r.compactIfNeeded(ctx, input, state, schemas); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
@@ -620,6 +632,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			Evidence: state.ledger.Entries(state.changeSet()), Requirements: state.requirements,
 			Work:                  state.work,
 			ContextBriefing:       state.contextBriefing,
+			RenderedImages:        state.renderedImages,
 			ActiveSkills:          append([]model.RunSkill{}, state.activeSkills.Skills...),
 			Messages:              append([]llm.Message{}, state.messages...),
 			Tools:                 schemas,
@@ -642,6 +655,10 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeBudgetExceeded, err)
 		}
 		state.continuation = response.Continuation
+		if llm.HasRenderImages(state.messages) {
+			state.messages = llm.WithoutRenderImages(state.messages)
+			state.continuation = nil
+		}
 		if input.Calibration != nil && response.Usage.InputTokens > 0 {
 			rawEstimate := state.lastWindow.Total
 			if state.calibrationFactor > 0 {
@@ -2610,7 +2627,7 @@ func (r *Runtime) persistTranscript(input RuntimeInput, state *RunState) error {
 	if input.Transcript == nil || input.Context.Manifest.ThreadID == "" {
 		return nil
 	}
-	return input.Transcript.Replace(input.ProjectDir, input.Context.Manifest.ThreadID, state.messages)
+	return input.Transcript.Replace(input.ProjectDir, input.Context.Manifest.ThreadID, llm.WithoutRenderImages(state.messages))
 }
 
 func currentRunInstructionMessage(runID, instruction string) string {
@@ -2805,7 +2822,15 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	r.emitContextWindow(input.Emitter, state, state.lastWindow, "compacting", progress)
 	before := state.lastWindow
 	startedAt := r.clockNow()
-	compactionInput := pruneSupersededRenderImages(append([]llm.Message{}, state.messages...))
+	// Preserve only this turn's explicitly requested visual observations across
+	// compaction; the compactor and durable history operate on text references.
+	pendingImages := []llm.Message{}
+	for _, message := range state.messages {
+		if llm.HasRenderImages([]llm.Message{message}) {
+			pendingImages = append(pendingImages, llm.Message{Role: llm.RoleUser, Content: append([]llm.ContentPart{}, message.Content...)})
+		}
+	}
+	compactionInput := llm.WithoutRenderImages(state.messages)
 	progress.Phase = 1
 	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
 	result, err := r.Compactor.Compact(ctx, compactionInput)
@@ -2817,7 +2842,8 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	}
 	progress.Phase = 2
 	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
-	state.messages = result.Messages
+	state.messages = append(result.Messages, pendingImages...)
+	state.continuation = nil
 	if err := r.persistTranscript(input, state); err != nil {
 		return err
 	}
@@ -2847,6 +2873,7 @@ func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, sche
 		Context: state.pack, Mode: state.mode, Plan: state.plan, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Requirements: state.requirements,
 		ContextBriefing:       state.contextBriefing,
+		RenderedImages:        state.renderedImages,
 		ActiveSkills:          append([]model.RunSkill{}, state.activeSkills.Skills...),
 		Messages:              append([]llm.Message{}, state.messages...),
 		Tools:                 schemas,
@@ -2908,36 +2935,6 @@ func (r *Runtime) emitContextWindow(
 		CompactThresholdTokens: snapshot.CompactThresholdTokens,
 		Status:                 status, Buckets: buckets, Details: details, Compaction: compaction,
 	})
-}
-
-func pruneSupersededRenderImages(messages []llm.Message) []llm.Message {
-	seenSlides := map[string]bool{}
-	for index := len(messages) - 1; index >= 0; index-- {
-		message := &messages[index]
-		slideID := ""
-		for _, part := range message.Content {
-			if part.Type != "text" {
-				continue
-			}
-			var payload map[string]any
-			if json.Unmarshal([]byte(part.Text), &payload) == nil {
-				slideID = stringValue(payload["slide_id"])
-			}
-		}
-		if slideID == "" {
-			continue
-		}
-		keepImage := !seenSlides[slideID]
-		seenSlides[slideID] = true
-		parts := make([]llm.ContentPart, 0, len(message.Content))
-		for _, part := range message.Content {
-			if part.Type != "image" || keepImage {
-				parts = append(parts, part)
-			}
-		}
-		message.Content = parts
-	}
-	return messages
 }
 
 func (r *Runtime) appendControlObservation(
