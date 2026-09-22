@@ -1142,7 +1142,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             syncValue();
             requestAnimationFrame(updateTrigger);
           }}
-          className={`composer-prompt-editor max-h-32 w-full overflow-y-auto bg-transparent pl-3 pr-12 text-sm leading-5 text-text-900 focus:outline-none focus-visible:outline-none disabled:opacity-50 ${suggestionsVisible ? 'min-h-6 py-1' : 'min-h-[60px] py-3'}`}
+          className={`composer-prompt-editor max-h-32 w-full overflow-y-auto bg-transparent px-3 text-sm leading-5 text-text-900 focus:outline-none focus-visible:outline-none disabled:opacity-50 ${suggestionsVisible ? 'min-h-6 py-1' : 'min-h-[60px] py-3'}`}
         />
       </>
     );

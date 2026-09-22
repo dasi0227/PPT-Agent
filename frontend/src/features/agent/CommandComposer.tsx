@@ -1,9 +1,11 @@
 import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
 import { ImagePreview } from '../../components/ui/ImagePreview';
+import { IconButton } from '../../components/ui/primitives';
 import { llmApi } from '../../api/llm';
 import { polishCommand } from '../../stores/textCommandStore';
 import { showGlobalSuccess } from '../../stores/toastStore';
@@ -73,7 +75,7 @@ function supportedImageFile(file: File): boolean {
 	return ['image/png', 'image/jpeg', 'image/webp'].includes(file.type);
 }
 
-export const CommandComposer: React.FC = () => {
+export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement | null }> = ({ polishToolbarContainer }) => {
   const [text, setText] = useState('');
   const [submitError, setSubmitError] = useState('');
 	const [uploadingCount, setUploadingCount] = useState(0);
@@ -598,6 +600,20 @@ export const CommandComposer: React.FC = () => {
 
   return (
     <div className="bg-panel px-3 pb-3 pt-1">
+      {polishToolbarContainer && createPortal(
+        <IconButton
+          label={polishing ? '正在润色表达' : '润色表达'}
+          expandableLabel="润色"
+          onClick={() => void polishText()}
+          disabled={text.trim() === '' || disabled || polishing || commitActive || briefingActive}
+        >
+          <Sparkles
+            className={cn('h-4 w-4', polishing && 'polish-sparkles-active')}
+            strokeWidth={1.75}
+          />
+        </IconButton>,
+        polishToolbarContainer,
+      )}
       <HistoryBanner />
       <RestoredInputResources />
       {submitError && (
@@ -701,21 +717,6 @@ export const CommandComposer: React.FC = () => {
             onTargetOption={selectTargetOption}
 			onPasteFiles={(files) => { void uploadFiles(files); }}
           />
-          {text.trim() !== '' && !disabled && (
-            <button
-              type="button"
-              onClick={() => void polishText()}
-              disabled={polishing || commitActive || briefingActive}
-              aria-label={polishing ? '正在润色表达' : '润色表达'}
-              title={polishing ? '正在润色表达' : '润色表达'}
-              className="absolute right-2.5 top-2.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/80 bg-surface/90 text-accent shadow-sm backdrop-blur-sm hover:bg-accent-soft disabled:cursor-wait disabled:opacity-100"
-            >
-              <Sparkles
-                className={cn('h-3.5 w-3.5', polishing && 'polish-sparkles-active')}
-                strokeWidth={1.75}
-              />
-            </button>
-          )}
           {polishing && <span className="composer-polish-sweep" aria-hidden="true" />}
           <span className="sr-only" aria-live="polite">
 			{polishing ? '正在润色表达' : hasPendingUploads ? '正在上传图片' : hasAttachments ? `已添加 ${activeAttachments.length} 张图片` : ''}

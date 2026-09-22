@@ -26,6 +26,10 @@ import { BriefingActivity } from './BriefingActivity';
 import { ContextCompactionActivity } from './ContextCompactionActivity';
 import { ScopeExpansionCard } from './ScopeExpansionCard';
 import { useCommandHistoryRecovery } from './useCommandHistoryRecovery';
+import { attachmentsApi } from '../../api/attachments';
+import { ImagePreview } from '../../components/ui/ImagePreview';
+
+const messageReferenceClassName = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-text-900 hover:bg-accent-soft focus-visible:bg-accent-soft';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -128,17 +132,30 @@ export const Timeline: React.FC = () => {
               <div className="group flex max-w-[88%] flex-col items-end">
                 <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
 				  {item.referenceOrder && item.referenceOrder.length > 0 && (
-					<div className="mb-2 flex max-w-full gap-1.5 overflow-x-auto" aria-label="消息引用">
+					<div className="scrollbar-none mb-2 flex max-w-full gap-1.5 overflow-x-auto" aria-label="消息引用">
 					  {item.referenceOrder.map((reference) => {
-						if (reference.kind === 'image') return <span key={`image:${reference.ref_id}`} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] text-text-600"><FileImage className="h-3.5 w-3.5" /> 图片</span>;
+						if (reference.kind === 'image') {
+                          const projectId = session.projectId ?? activeProjectId;
+                          if (!projectId) return null;
+                          return (
+                            <ImagePreview
+                              key={`${projectId}:${threadId}:image:${reference.ref_id}`}
+                              name="图片"
+                              src={attachmentsApi.contentUrl(projectId, reference.ref_id, 'original')}
+                              className={messageReferenceClassName}
+                            >
+                              <FileImage className="h-3.5 w-3.5 text-accent" aria-hidden="true" />图片
+                            </ImagePreview>
+                          );
+                        }
 						const selection = item.domSelections?.find((candidate) => candidate.selection_id === reference.ref_id);
 						if (!selection) return null;
 						const key = `${item.id}:${selection.selection_id}`;
-						return <button key={key} type="button" onClick={() => setOpenDOMReference(openDOMReference?.key === key ? null : { key, marker:selection.marker_no, comment:selection.comment, status:selection.status })} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-text-900"><Code2 className="h-3.5 w-3.5 text-accent" />标记 {selection.marker_no}</button>;
+						return <button key={key} type="button" onClick={() => setOpenDOMReference(openDOMReference?.key === key ? null : { key, marker:selection.marker_no, comment:selection.comment, status:selection.status })} className={messageReferenceClassName}><Code2 className="h-3.5 w-3.5 text-accent" />标记 {selection.marker_no}</button>;
 					  })}
 					</div>
 				  )}
-				  {openDOMReference?.key.startsWith(`${item.id}:`) && <div className="mb-2 rounded-md border border-border bg-surface p-2 text-xs text-text-600"><div className="font-semibold text-text-900">标记 {openDOMReference.marker}</div><div className="mt-1 whitespace-pre-wrap">{openDOMReference.comment || '未填写注释'}</div>{openDOMReference.status !== 'active' && <div className="mt-1 text-warning">{openDOMReference.status === 'page_deleted' ? '页面已删除' : '内容已删除'}</div>}</div>}
+				  {openDOMReference?.key.startsWith(`${item.id}:`) && <div className="mb-2 rounded-md border border-border bg-surface p-2 text-xs text-text-600"><div className="whitespace-pre-wrap">{openDOMReference.comment || '未填写注释'}</div>{openDOMReference.status !== 'active' && <div className="mt-1 text-warning">{openDOMReference.status === 'page_deleted' ? '页面已删除' : '内容已删除'}</div>}</div>}
                   <MarkdownMessage content={item.text} />
                   {item.deliveryStatus && (
                     <div className={`mt-1 text-[10px] ${

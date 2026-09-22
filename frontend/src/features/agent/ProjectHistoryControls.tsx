@@ -4,6 +4,7 @@ import { useEffect, useId, useRef } from 'react';
 import { Undo2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/primitives';
+import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { projectHistoryApi } from '../../api/projectHistory';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
@@ -25,8 +26,8 @@ export function HistoryBanner() {
   const busy = useProjectHistoryStore((s) => s.busy);
   if (!projectId || !state?.latest) return null;
   return <div className="mb-2 flex items-center justify-between gap-3 rounded-md border border-border bg-panel-muted px-3 py-2 text-xs text-text-600">
-    <span>已回退 · 继续创作前会确认是否丢弃后续历史</span>
-    <button type="button" disabled={busy} onClick={() => void useProjectHistoryStore.getState().preview(projectId)} className="shrink-0 rounded px-1 py-1 font-semibold text-accent hover:bg-surface disabled:opacity-40">恢复到最新</button>
+    <span>已回退并保留原始目标范围</span>
+    <Button type="button" variant="primary" disabled={busy} onClick={() => void useProjectHistoryStore.getState().preview(projectId)} className="h-7 shrink-0 px-2 text-xs">恢复到最新</Button>
   </div>;
 }
 export function ProjectHistoryDialogs() {
@@ -81,10 +82,10 @@ export function ProjectHistoryDialogs() {
         onInteractOutside={(event) => { if (busy) event.preventDefault(); }}
       >
         <DialogTitle className="leading-[26px] tracking-[-0.2px]">{dialog?.runId ? '回到此任务发送前？' : '恢复到最新现场？'}</DialogTitle>
-        <DialogDescription id={descriptionId} className="mt-1.5 text-[13px] leading-[21px] text-text-600">{dialog?.runId ? '项目和所有对话将一并回退。' : '恢复首次回退前的项目内容和所有对话，并用当时的草稿替换当前草稿。'}</DialogDescription>
+        <DialogDescription id={descriptionId} className="mt-1.5 text-[13px] leading-[21px] text-text-600">{dialog?.runId ? '项目和所有对话将一并回退。' : '恢复首次回退前的项目、对话和草稿。'}</DialogDescription>
         {preview && <section aria-label={dialog?.runId ? '目标任务' : '恢复目标'} className="mt-[22px] border-y border-border/60 pt-[17px] pb-5">
           <time className="block text-xs leading-[18px] text-text-600 tabular-nums" dateTime={new Date(preview.time).toISOString()}>{new Date(preview.time).toLocaleString('sv-SE', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time>
-          {dialog?.runId && <blockquote className="mt-2 line-clamp-3 max-h-[69px] [overflow-wrap:anywhere] text-sm font-normal leading-[23px] text-text-800">{preview.input || '（无文字输入）'}</blockquote>}
+          <blockquote className="mt-2 line-clamp-3 max-h-[69px] [overflow-wrap:anywhere] text-sm font-normal leading-[23px] text-text-800">{preview.input.trim() || '（暂无输入）'}</blockquote>
         </section>}
         {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
         <DialogFooter className="mt-5 flex-row items-center justify-between gap-4 sm:justify-between sm:space-x-0 max-[380px]:flex-wrap max-[380px]:gap-3">
@@ -96,23 +97,25 @@ export function ProjectHistoryDialogs() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    <Dialog open={Boolean(pending)} onOpenChange={(open) => { if (!open) pending?.resolve(false); }}>
-      <DialogContent>
-        <DialogTitle>丢弃原来的后续历史？</DialogTitle>
-        <DialogDescription className="text-text-600">{pending?.message} 取消会保留当前草稿和恢复入口。</DialogDescription>
-        <DialogFooter><Button variant="secondary" onClick={() => pending?.resolve(false)}>取消</Button><Button variant="primary" onClick={() => pending?.resolve(true)}>丢弃并继续</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ConfirmModal
+      open={Boolean(pending)}
+      onOpenChange={(open) => {
+        if (!open && pending && useHistoryConfirmationStore.getState().pending === pending) pending.resolve(false);
+      }}
+      title="丢弃原来的后续历史？"
+      description="此操作不可撤销。继续创作将丢弃原来的后续历史，无法再恢复到最新现场。"
+      confirmLabel="丢弃并继续"
+      onConfirm={() => pending?.resolve(true)}
+    />
   </>;
 }
 
 export function RestoredInputResources() {
   const threadId = useActiveThreadId();
   const input = useComposerStore((s) => threadId ? s.restoredInputs[threadId] : undefined);
-  if (!input || !threadId) return null;
+  if (!input || !threadId || (!input.component_names?.length && !input.mentioned_slide_ids?.length)) return null;
   const update = (change: Partial<typeof input>) => useComposerStore.setState((s) => ({ restoredInputs: { ...s.restoredInputs, [threadId]: { ...input, ...change } } }));
   return <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-text-600">
-    {input.scope && <span>已保留原始目标范围 <button type="button" className="rounded px-1 py-1 text-accent hover:bg-panel-muted" onClick={() => update({ scope: undefined })}>按当前选择更新</button></span>}
     {input.component_names?.map((name) => <button key={name} type="button" className="rounded border border-border px-2 py-1 hover:bg-panel-muted" title="移除组件引用" onClick={() => update({ component_names: input.component_names?.filter((value) => value !== name) })}>组件 · {name} · 移除</button>)}
     {input.mentioned_slide_ids?.map((id) => <button key={id} type="button" className="rounded border border-border px-2 py-1 hover:bg-panel-muted" title="移除页面引用" onClick={() => update({ mentioned_slide_ids: input.mentioned_slide_ids?.filter((value) => value !== id) })}>页面 · {id} · 移除</button>)}
   </div>;

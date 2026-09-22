@@ -1,13 +1,16 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from './dialog';
 import { IconButton } from './primitives';
 
-interface ImagePreviewProps {
+type ImagePreviewProps = {
   name: string;
-  thumbnailSrc: string;
   src: string;
-}
+  className?: string;
+} & (
+  | { thumbnailSrc: string; children?: never }
+  | { thumbnailSrc?: never; children: ReactNode }
+);
 
 function PreviewImage({ src, name }: Pick<ImagePreviewProps, 'src' | 'name'>) {
   const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -32,7 +35,7 @@ function PreviewImage({ src, name }: Pick<ImagePreviewProps, 'src' | 'name'>) {
   );
 }
 
-export function ImagePreview({ name, thumbnailSrc, src }: ImagePreviewProps) {
+export function ImagePreview({ name, thumbnailSrc, src, children, className }: ImagePreviewProps) {
   const [open, setOpen] = useState(false);
   const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -47,15 +50,15 @@ export function ImagePreview({ name, thumbnailSrc, src }: ImagePreviewProps) {
           type="button"
           aria-label={`预览 ${name}`}
           title="查看原图"
-          className="grid h-[38px] w-[38px] shrink-0 cursor-zoom-in place-items-center overflow-hidden rounded-md bg-panel-muted hover:bg-accent-soft focus-visible:bg-accent-soft"
+          className={className ?? 'grid h-[38px] w-[38px] shrink-0 cursor-zoom-in place-items-center overflow-hidden rounded-md bg-panel-muted hover:bg-accent-soft focus-visible:bg-accent-soft'}
         >
-          <img
+          {thumbnailSrc ? <img
             src={thumbnailSrc}
             alt=""
             loading="lazy"
             onError={() => setFailedThumbnail(thumbnailSrc)}
             className="h-full w-full object-contain"
-          />
+          /> : children}
         </button>
       </DialogTrigger>
       <DialogContent

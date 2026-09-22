@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Bot, GitCommitHorizontal, Loader2, PanelRightClose } from 'lucide-react';
 import { IconButton } from '../../components/ui/primitives';
 import { useUIStore } from '../../stores/uiStore';
@@ -16,6 +16,7 @@ import { PlanIndicator } from './PlanIndicator';
 import { RenamePanel } from './RenamePanel';
 
 export const AgentPanel: React.FC = () => {
+  const [polishToolbarContainer, setPolishToolbarContainer] = useState<HTMLDivElement | null>(null);
   const toggleRightPanel = useUIStore((state) => state.toggleRightPanel);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const ensureActiveThread = useThreadStore((state) => state.ensureActiveThread);
@@ -47,6 +48,7 @@ export const AgentPanel: React.FC = () => {
         <div className="relative flex items-center gap-0.5">
           <PlanIndicator plan={plan} running={runActive} />
           <ContextWindowPanel />
+          <div ref={setPolishToolbarContainer} className="contents" />
           <IconButton
             label={commitActive ? '正在提交项目版本' : '提交项目版本'}
             expandableLabel="提交"
@@ -65,7 +67,7 @@ export const AgentPanel: React.FC = () => {
       <ThreadTabs />
       <Timeline />
 	  <RenamePanel />
-      <CommandComposer />
+      <CommandComposer polishToolbarContainer={polishToolbarContainer} />
     </div>
   );
 };
