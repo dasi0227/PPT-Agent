@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -23,10 +20,6 @@ type workflowCommitter struct {
 
 func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.CommitContext) error {
 	changes := commitContext.Changes
-	operationID := commitContext.OperationID
-	if operationID == "" {
-		operationID = "run"
-	}
 	var manifest spec.Manifest
 	if err := readJSON(filepath.Join(c.project.WorkDir, "manifest.json"), &manifest); err != nil {
 		return err
@@ -69,69 +62,6 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		}
 		proofs[proof.SlideID] = proof
 	}
-	versions := []model.Version{}
-	snapshotPaths := []string{}
-	cleanup := func() {
-		for _, path := range snapshotPaths {
-			_ = os.Remove(filepath.Join(c.project.WorkDir, filepath.FromSlash(path)))
-		}
-	}
-	findRunVersion := func(targetType, targetID string) (model.Version, bool, error) {
-		versionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(c.runID+"|"+operationID+"|"+targetType+"|"+targetID)).String()
-		existing, err := c.store.ListVersions(ctx, targetType, targetID)
-		if err != nil {
-			return model.Version{}, false, err
-		}
-		for _, version := range existing {
-			if version.ID == versionID {
-				return version, true, nil
-			}
-		}
-		return model.Version{ID: versionID}, false, nil
-	}
-	addVersion := func(targetType, targetID, path string, content []byte) (int, error) {
-		version, exists, err := findRunVersion(targetType, targetID)
-		if err != nil {
-			return 0, err
-		}
-		if exists {
-			return version.VersionNo, nil
-		}
-		number, err := c.store.NextVersionNo(ctx, targetType, targetID)
-		if err != nil {
-			return 0, err
-		}
-		if err := atomicWrite(filepath.Join(c.project.WorkDir, filepath.FromSlash(path)), content); err != nil {
-			return 0, err
-		}
-		snapshotPaths = append(snapshotPaths, path)
-		versions = append(versions, model.Version{
-			ID:         version.ID,
-			TargetType: targetType, TargetID: targetID,
-			VersionNo: number, SnapshotPath: path, RunID: c.runID, CreatedAt: time.Now().Unix(),
-		})
-		return number, nil
-	}
-	if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactOutline, ID: c.project.ID}).Key()]; ok {
-		if _, err := addVersion("outline", model.OutlineVersionTarget(c.project.ID),
-			model.OutlineVersionSnapshot(outline.Revision), mustJSON(outline)); err != nil {
-			cleanup()
-			return err
-		}
-	}
-	if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactManifest, ID: c.project.ID}).Key()]; ok {
-		if _, err := addVersion("manifest", model.ManifestVersionTarget(c.project.ID), model.ManifestVersionSnapshot(manifest.Revision), mustJSON(manifest)); err != nil {
-			cleanup()
-			return err
-		}
-	}
-	if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactDesign, ID: c.project.ID}).Key()]; ok {
-		if _, err := addVersion("design", model.DesignVersionTarget(c.project.ID),
-			model.DesignVersionSnapshot(design.Revision), mustJSON(design)); err != nil {
-			cleanup()
-			return err
-		}
-	}
 	flat := spec.FlattenOutline(outline)
 	nextSlides := make([]model.Slide, 0, len(flat))
 	inDeck := map[string]bool{}
@@ -144,27 +74,16 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		specPath := filepath.Join(c.project.WorkDir, filepath.FromSlash(model.SlideSpecPath(id)))
 		if err := readJSON(specPath, &semantic); os.IsNotExist(err) {
 			if _, hasProof := proofs[id]; hasProof {
-				cleanup()
 				return fmt.Errorf("materialization proof requires slide spec %s", id)
 			}
 			nextSlides = append(nextSlides, meta)
 			continue
 		} else if err != nil {
-			cleanup()
 			return err
 		}
 		specRaw, err := os.ReadFile(specPath)
 		if err != nil {
-			cleanup()
 			return err
-		}
-		if _, ok := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactSlideSpec, ID: id}).Key()]; ok {
-			target := model.SlideSpecVersionTarget(c.project.ID, id)
-			path := model.SlideSpecVersionSnapshot(id, semantic.Revision)
-			if _, err := addVersion("slide_spec", target, path, mustJSON(semantic)); err != nil {
-				cleanup()
-				return err
-			}
 		}
 		_, htmlChanged := changed[(workflow.ArtifactRef{Kind: workflow.ArtifactSlideHTML, ID: id}).Key()]
 		proof, hasProof := proofs[id]
@@ -172,7 +91,6 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		if htmlChanged || hasProof {
 			raw, readErr := os.ReadFile(filepath.Join(c.project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(id))))
 			if readErr != nil {
-				cleanup()
 				return readErr
 			}
 			htmlRaw = raw
@@ -198,49 +116,21 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 				proof.HTMLRevision != expectedHTMLRevision ||
 				proof.ManifestRevision != manifest.Revision || proof.OutlineNodeHash != nodeHash ||
 				proof.SpecRevision != semantic.Revision || proof.DesignContentHash != spec.DesignContentHash(design) || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id) {
-				cleanup()
 				return fmt.Errorf("stale materialization proof for %s", id)
 			}
 		}
 		if htmlChanged {
-			target := model.SlideHTMLVersionTarget(c.project.ID, id)
-			version, exists, versionErr := findRunVersion("slide_html", target)
-			if versionErr != nil {
-				cleanup()
-				return versionErr
-			}
-			number := version.VersionNo
-			if !exists {
-				number, versionErr = c.store.NextVersionNo(ctx, "slide_html", target)
-				if versionErr != nil {
-					cleanup()
-					return versionErr
-				}
-				path := model.SlideHTMLVersionSnapshot(id, number)
-				if err := atomicWrite(filepath.Join(c.project.WorkDir, filepath.FromSlash(path)), htmlRaw); err != nil {
-					cleanup()
-					return err
-				}
-				snapshotPaths = append(snapshotPaths, path)
-				versions = append(versions, model.Version{
-					ID:         version.ID,
-					TargetType: "slide_html", TargetID: target,
-					VersionNo: number, SnapshotPath: path, RunID: c.runID, CreatedAt: time.Now().Unix(),
-				})
-			}
-			meta.CurrentVersion = number
+			meta.CurrentVersion++
 		}
 		if hasProof {
 			record, err := spec.ReadMaterialization(materializationPath)
 			if err != nil {
-				cleanup()
 				return err
 			}
 			if record.Artifact.Revision != proof.HTMLRevision || record.Artifact.Hash != "sha256:"+proof.ArtifactHash ||
 				record.Source.ManifestRevision != proof.ManifestRevision || record.Source.OutlineNodeHash != proof.OutlineNodeHash ||
 				record.Source.SpecRevision != proof.SpecRevision || record.Source.DesignContentHash != proof.DesignContentHash ||
 				record.Source.Hash != proof.SourceHash || record.Frame.ContextHash != proof.FrameContextHash {
-				cleanup()
 				return fmt.Errorf("materialization record does not match proof for %s", id)
 			}
 		}
@@ -255,10 +145,9 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 	commit := model.ArtifactCommit{
 		ProjectID: c.project.ID, RunID: c.runID, OperationID: commitContext.OperationID,
 		RequestHash: commitContext.RequestHash, ToolResultJSON: commitContext.ToolResultJSON,
-		Slides: nextSlides, DeletedSlideIDs: deleted, Versions: versions,
+		Slides: nextSlides, DeletedSlideIDs: deleted,
 	}
 	if err := c.store.CommitWorkflow(ctx, commit); err != nil {
-		cleanup()
 		return err
 	}
 	return nil

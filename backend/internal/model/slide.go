@@ -1,21 +1,11 @@
 package model
 
-// Slide is one page's runtime identity and version pointer. Authoring content,
+// Slide is one page's runtime identity and HTML change counter. Authoring content,
 // hierarchy and order live only in project files.
 type Slide struct {
-	ID             string
-	ProjectID      string
+	ID        string
+	ProjectID string
+	// CurrentVersion invalidates HTML caches; it does not reference a historical file.
 	CurrentVersion int
 	LastExportAt   *int64
-}
-
-// Version 是一次可回滚快照的登记（DATA-VERSION）。
-type Version struct {
-	ID           string
-	TargetType   string // deck | outline | slide_spec | slide_html | design | asset
-	TargetID     string
-	VersionNo    int
-	SnapshotPath string
-	RunID        string
-	CreatedAt    int64
 }

@@ -1,5 +1,7 @@
 # Run 工具级持久化设计
 
+> 2026-09-22 更新：内容历史统一由项目 checkpoints 承担；旧单页版本、确认弹窗与元数据的最新约定见 [Checkpoint 内容历史统一设计](2026-09-22-checkpoint-content-history-design.md)。
+
 ## 背景
 
 当前执行模式把所有 PPT 与项目文件修改保存在 `RunSession` 内存 overlay 中，只有 Completion Gate 接受最终回复后才一次性写入项目目录。这个模型会造成三个直接问题：

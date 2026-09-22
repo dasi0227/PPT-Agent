@@ -478,7 +478,7 @@ type slidePO struct {
 
 func (slidePO) TableName() string { return "slides" }
 
-// toModel exposes runtime identity and version pointers only.
+// toModel exposes runtime identity and current HTML metadata only.
 func (s slidePO) toModel() model.Slide {
 	return model.Slide{
 		ID: s.ID, ProjectID: s.ProjectID,
@@ -492,39 +492,5 @@ func slideToPO(m model.Slide) slidePO {
 		ID: m.ID, ProjectID: m.ProjectID,
 		CurrentVersion: m.CurrentVersion,
 		LastExportAt:   m.LastExportAt,
-	}
-}
-
-type versionPO struct {
-	ID           string  `gorm:"column:id;primaryKey"`
-	TargetType   string  `gorm:"column:target_type"`
-	TargetID     string  `gorm:"column:target_id"`
-	VersionNo    int     `gorm:"column:version_no"`
-	SnapshotPath string  `gorm:"column:snapshot_path"`
-	RunID        *string `gorm:"column:run_id"`
-	CreatedAt    int64   `gorm:"column:created_at"`
-}
-
-func (versionPO) TableName() string { return "versions" }
-
-func (v versionPO) toModel() model.Version {
-	runID := ""
-	if v.RunID != nil {
-		runID = *v.RunID
-	}
-	return model.Version{
-		ID: v.ID, TargetType: v.TargetType, TargetID: v.TargetID, VersionNo: v.VersionNo,
-		SnapshotPath: v.SnapshotPath, RunID: runID, CreatedAt: v.CreatedAt,
-	}
-}
-
-func versionToPO(m model.Version) versionPO {
-	var runID *string
-	if m.RunID != "" {
-		runID = &m.RunID
-	}
-	return versionPO{
-		ID: m.ID, TargetType: m.TargetType, TargetID: m.TargetID, VersionNo: m.VersionNo,
-		SnapshotPath: m.SnapshotPath, RunID: runID, CreatedAt: m.CreatedAt,
 	}
 }

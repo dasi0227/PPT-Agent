@@ -151,10 +151,8 @@ func (r *Router) register() {
 	v1.POST("/runs/:id/resume", r.run.Resume)
 	v1.DELETE("/runs/:id", r.run.Cancel)
 
-	// Slide HTML preview and version operations use stable identities.
+	// Slide HTML preview uses stable identities.
 	v1.GET("/slides/:id/render", r.slide.RenderSlide)
-	v1.GET("/slides/:id/versions", r.slide.ListVersions)
-	v1.POST("/slides/:id/rollback", r.slide.Rollback)
 
 }
 

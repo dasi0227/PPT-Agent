@@ -11,14 +11,12 @@ import (
 
 // The ordered inventory is intentionally explicit: global libraries and real Git
 // history are excluded. Child rows precede their parents when deleting.
-var projectTables = []string{"projects", "slides", "threads", "thread_naming_inputs", "thread_naming_operations", "runs", "versions", "run_events", "run_contexts", "steering_inbox", "run_checkpoints", "context_index_snapshots", "semantic_reviews", "git_commit_operations", "git_commit_events", "briefing_versions", "context_compactions", "command_activities", "idempotency_records"}
+var projectTables = []string{"projects", "slides", "threads", "thread_naming_inputs", "thread_naming_operations", "runs", "deleted_slides", "run_events", "run_contexts", "steering_inbox", "run_checkpoints", "context_index_snapshots", "semantic_reviews", "git_commit_operations", "git_commit_events", "briefing_versions", "context_compactions", "command_activities", "idempotency_records"}
 
 func projectPredicate(table string) string {
 	switch table {
 	case "projects":
 		return "id = @project"
-	case "versions":
-		return "substr(target_id,1,length(@prefix)) = @prefix OR target_id = @design"
 	case "thread_naming_inputs", "thread_naming_operations":
 		return "thread_id IN (SELECT id FROM threads WHERE project_id = @project)"
 	case "run_events", "run_contexts", "steering_inbox", "run_checkpoints", "context_index_snapshots", "semantic_reviews":
@@ -32,7 +30,7 @@ func projectPredicate(table string) string {
 	}
 }
 func snapshotArgs(id string) map[string]any {
-	return map[string]any{"project": id, "prefix": "project/" + id + "/", "design": id + ":design"}
+	return map[string]any{"project": id}
 }
 func (s *Store) CaptureProject(ctx context.Context, id string) (json.RawMessage, error) {
 	data := map[string][]map[string]any{}
@@ -60,6 +58,11 @@ func (s *Store) RestoreProject(ctx context.Context, id string, raw json.RawMessa
 	}
 	if len(data) != len(projectTables) || len(data["projects"]) != 1 || data["projects"][0]["id"] != id {
 		return fmt.Errorf("invalid project snapshot inventory")
+	}
+	for _, table := range projectTables {
+		if _, present := data[table]; !present {
+			return fmt.Errorf("invalid project snapshot inventory: missing %s", table)
+		}
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Defer FK checks until all parents and children have been restored.

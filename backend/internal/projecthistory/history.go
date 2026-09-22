@@ -11,7 +11,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -62,14 +61,10 @@ type Snapshot struct {
 	State     State           `json:"state"`
 }
 type Preview struct {
-	Revision int64    `json:"revision"`
-	Time     int64    `json:"time"`
-	Input    string   `json:"input"`
-	Threads  int      `json:"threads"`
-	Runs     int      `json:"runs"`
-	Added    []string `json:"added"`
-	Modified []string `json:"modified"`
-	Deleted  []string `json:"deleted"`
+	Revision int64  `json:"revision"`
+	Time     int64  `json:"time"`
+	Input    string `json:"input"`
+	Runs     int    `json:"runs"`
 }
 type Journal struct {
 	Before    string `json:"before"`
@@ -168,7 +163,7 @@ func (m *Manager) Save(id string, s State) error {
 }
 func excluded(path string) bool {
 	first := strings.Split(filepath.ToSlash(path), "/")[0]
-	return first == ".git" || first == ".runtime" || first == ".run" || first == ".commit-tmp"
+	return first == "versions" || first == ".git" || first == ".runtime" || first == ".run" || first == ".commit-tmp"
 }
 func files(root string) (map[string]File, error) {
 	info, err := os.Lstat(root)
@@ -541,37 +536,16 @@ func (m *Manager) Preview(ctx context.Context, id, runID string) (Preview, error
 	if err != nil {
 		return Preview{}, err
 	}
-	p, err := m.Store.GetProject(ctx, id)
-	if err != nil {
-		return Preview{}, err
-	}
-	current, err := projectFiles(p.WorkDir)
-	if err != nil {
-		return Preview{}, err
-	}
-	v := Preview{Revision: s.Revision, Time: s.LatestTime, Added: []string{}, Modified: []string{}, Deleted: []string{}}
+	v := Preview{Revision: s.Revision, Time: s.LatestTime}
 	if cp != nil {
 		v.Time = cp.Time
 		v.Input = cp.Input.Command.Instruction
-	}
-	for name, f := range target.Files {
-		old, ok := current[name]
-		if !ok {
-			v.Added = append(v.Added, name)
-		} else if string(old.Data) != string(f.Data) || old.Mode != f.Mode {
-			v.Modified = append(v.Modified, name)
-		}
-	}
-	for name := range current {
-		if _, ok := target.Files[name]; !ok {
-			v.Deleted = append(v.Deleted, name)
-		}
 	}
 	currentDB, err := m.Store.CaptureProject(ctx, id)
 	if err != nil {
 		return v, err
 	}
-	// Restoring can bring back threads absent from the active project.
+	// Count tasks crossing the boundary, including the rollback target itself.
 	var targetRows map[string][]map[string]any
 	var currentRows map[string][]map[string]any
 	if err := json.Unmarshal(target.Database, &targetRows); err != nil {
@@ -580,21 +554,6 @@ func (m *Manager) Preview(ctx context.Context, id, runID string) (Preview, error
 	if err := json.Unmarshal(currentDB, &currentRows); err != nil {
 		return v, err
 	}
-	threadIDs := map[string]bool{}
-	for _, row := range currentRows["threads"] {
-		if threadID, ok := row["id"].(string); ok {
-			threadIDs[threadID] = true
-		}
-	}
-	for _, row := range targetRows["threads"] {
-		if threadID, ok := row["id"].(string); ok {
-			threadIDs[threadID] = true
-		}
-	}
-	v.Threads = len(threadIDs)
-	sort.Strings(v.Added)
-	sort.Strings(v.Modified)
-	sort.Strings(v.Deleted)
 	runIDs := map[string]int{}
 	for _, row := range currentRows["runs"] {
 		if runID, ok := row["id"].(string); ok {

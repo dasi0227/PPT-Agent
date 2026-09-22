@@ -90,9 +90,13 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	put(t, p, "outline.json", "initial")
 	put(t, p, "threads/t1/model.jsonl", "before first")
 	put(t, p, ".git/HEAD", "real git")
+	put(t, p, "versions/legacy.html", "untouched legacy")
+	must(t, m.Store.InsertSlide(ctx, model.Slide{ID: "slide", ProjectID: p.ID, CurrentVersion: 1}))
 	cp(t, m, p, "cp1", model.RunDone)
 	put(t, p, "outline.json", "manual before cp2")
+	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp1", OperationID: "html", RequestHash: "hash", Slides: []model.Slide{{ID: "slide", ProjectID: p.ID, CurrentVersion: 2}}}))
 	cp(t, m, p, "cp2", model.RunFailed)
+	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp2", OperationID: "delete", RequestHash: "hash", DeletedSlideIDs: []string{"slide"}}))
 	put(t, p, "threads/t1/model.jsonl", "future compacted summary")
 	must(t, m.Store.CreateThread(ctx, model.Thread{ID: "t2", ProjectID: p.ID, Status: "active", CreatedAt: 1, UpdatedAt: 1, HistoryPath: model.UserHistoryPath("t2")}))
 	put(t, p, "threads/t2/user.jsonl", "future conversation")
@@ -100,7 +104,38 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	cp(t, m, p, "cp4", model.RunDone)
 	put(t, p, "outline.json", "manual latest")
 	put(t, p, "attachments/new/original.png", "bytes")
+	preview, err := m.Preview(ctx, p.ID, "cp2")
+	must(t, err)
+	if preview.Runs != 3 || preview.Input != "cp2" {
+		t.Fatalf("target-inclusive preview: %+v", preview)
+	}
+	before, err := m.State(p.ID)
+	must(t, err)
+	for _, checkpoint := range before.Checkpoints {
+		snap, err := m.load(p.ID, checkpoint.Snapshot)
+		must(t, err)
+		for path := range snap.Files {
+			if strings.HasPrefix(path, "artifacts/versions/") {
+				t.Fatal("legacy copies included in checkpoint")
+			}
+		}
+	}
 	s := switchTo(t, m, p, "cp2", "rollback2")
+	slide, err := m.Store.GetSlide(ctx, "slide")
+	if err != nil || slide.CurrentVersion != 2 {
+		t.Fatalf("restored counter: %+v %v", slide, err)
+	}
+	deleted, err := m.Store.IsSlideDeleted(ctx, p.ID, "slide")
+	if err != nil || deleted {
+		t.Fatalf("future tombstone survived: %v %v", deleted, err)
+	}
+	if _, err := m.Store.GetIdempotency(ctx, "artifact_commit", "cp1", "html"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.GetIdempotency(ctx, "artifact_commit", "cp2", "delete"); err == nil {
+		t.Fatal("future receipt survived")
+	}
+	content(t, p, "versions/legacy.html", "untouched legacy")
 	content(t, p, "outline.json", "manual before cp2")
 	content(t, p, "threads/t1/model.jsonl", "before first")
 	if _, err := m.Store.GetRun(ctx, "cp2"); err == nil {
@@ -119,7 +154,19 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	if replay.Revision != s.Revision {
 		t.Fatal("duplicate switch")
 	}
+	preview, err = m.Preview(ctx, p.ID, "cp1")
+	must(t, err)
+	if preview.Runs != 1 {
+		t.Fatalf("continuous rollback counted hidden future: %+v", preview)
+	}
 	s = switchTo(t, m, p, "cp1", "rollback1")
+	slide, err = m.Store.GetSlide(ctx, "slide")
+	if err != nil || slide.CurrentVersion != 1 {
+		t.Fatalf("initial counter: %+v %v", slide, err)
+	}
+	if _, err := m.Store.GetIdempotency(ctx, "artifact_commit", "cp1", "html"); err == nil {
+		t.Fatal("continuous rollback retained receipt")
+	}
 	content(t, p, "outline.json", "initial")
 	if len(s.Checkpoints) != 0 {
 		t.Fatal("first run should remove all runs")
@@ -131,6 +178,14 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	content(t, p, "threads/t1/model.jsonl", "future compacted summary")
 	content(t, p, "attachments/new/original.png", "bytes")
 	content(t, p, ".git/HEAD", "real git")
+	content(t, p, "versions/legacy.html", "untouched legacy")
+	deleted, err = m.Store.IsSlideDeleted(ctx, p.ID, "slide")
+	if err != nil || !deleted {
+		t.Fatalf("latest tombstone missing: %v %v", deleted, err)
+	}
+	if _, err := m.Store.GetIdempotency(ctx, "artifact_commit", "cp2", "delete"); err != nil {
+		t.Fatal("latest receipt missing", err)
+	}
 	if string(s.Scene) != `{"draft":"original"}` {
 		t.Fatalf("draft not restored: %s", s.Scene)
 	}

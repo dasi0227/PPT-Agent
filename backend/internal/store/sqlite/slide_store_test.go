@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 )
 
 func activeRunSpec() model.RunCommand {
@@ -82,87 +83,6 @@ func TestGetSlideByID(t *testing.T) {
 	// 不存在的 id MUST 返回 gorm.ErrRecordNotFound（handler 映射 404）。
 	if _, err := s.GetSlide(ctx, "missing"); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("want ErrRecordNotFound, got %v", err)
-	}
-}
-
-func TestVersionNoMonotonic(t *testing.T) {
-	s := newTestStore(t)
-	seedProject(t, s)
-	ctx := context.Background()
-
-	for want := 0; want < 3; want++ {
-		no, err := s.NextVersionNo(ctx, "outline", "p1")
-		if err != nil {
-			t.Fatalf("next: %v", err)
-		}
-		if no != want {
-			t.Fatalf("want version %d, got %d", want, no)
-		}
-		if err := s.CreateVersion(ctx, model.Version{
-			ID: "v" + itoaLocal(no), TargetType: "outline", TargetID: "p1", VersionNo: no,
-			SnapshotPath: "versions/spec-deck/v" + itoaLocal(no) + ".json", CreatedAt: 1,
-		}); err != nil {
-			t.Fatalf("create version: %v", err)
-		}
-	}
-	vs, err := s.ListVersions(ctx, "outline", "p1")
-	if err != nil {
-		t.Fatalf("list versions: %v", err)
-	}
-	if len(vs) != 3 {
-		t.Fatalf("want 3 versions, got %d", len(vs))
-	}
-}
-
-func TestCommitWorkflowRetryReusesVersionRows(t *testing.T) {
-	s := newTestStore(t)
-	seedProject(t, s)
-	ctx := context.Background()
-	commit := model.ArtifactCommit{
-		ProjectID: "p1",
-		Versions: []model.Version{{
-			ID: "run-version", TargetType: "manifest", TargetID: "p1",
-			VersionNo: 0, SnapshotPath: "versions/manifest/v0.json", RunID: "run", CreatedAt: 1,
-		}},
-	}
-	if err := s.CommitWorkflow(ctx, commit); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.CommitWorkflow(ctx, commit); err != nil {
-		t.Fatalf("commit retry must be idempotent: %v", err)
-	}
-	versions, err := s.ListVersions(ctx, "manifest", "p1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(versions) != 1 || versions[0].ID != "run-version" {
-		t.Fatalf("versions=%+v", versions)
-	}
-}
-
-func TestCommitWorkflowAllowsDifferentCallsToVersionTheSameRunTarget(t *testing.T) {
-	s := newTestStore(t)
-	seedProject(t, s)
-	ctx := context.Background()
-	for index, versionID := range []string{"run-call-one", "run-call-two"} {
-		commit := model.ArtifactCommit{
-			ProjectID: "p1",
-			Versions: []model.Version{{
-				ID: versionID, TargetType: "slide_html", TargetID: "p1:sli_1",
-				VersionNo: index, SnapshotPath: "versions/slides/sli_1/html/v" + itoaLocal(index) + ".html",
-				RunID: "run", CreatedAt: int64(index + 1),
-			}},
-		}
-		if err := s.CommitWorkflow(ctx, commit); err != nil {
-			t.Fatalf("commit call %d: %v", index+1, err)
-		}
-	}
-	versions, err := s.ListVersions(ctx, "slide_html", "p1:sli_1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(versions) != 2 || versions[0].ID != "run-call-one" || versions[1].ID != "run-call-two" {
-		t.Fatalf("versions=%+v", versions)
 	}
 }
 
@@ -288,4 +208,56 @@ func itoaLocal(n int) string {
 		n /= 10
 	}
 	return string(b)
+}
+
+func TestDeletedSlideMetadataIsAtomicAndProjectScoped(t *testing.T) {
+	s := newTestStore(t)
+	seedProject(t, s)
+	ctx := context.Background()
+	slide := model.Slide{ID: "pending", ProjectID: "p1"}
+	if err := s.InsertSlide(ctx, slide); err != nil {
+		t.Fatal(err)
+	}
+	commit := model.ArtifactCommit{ProjectID: "p1", RunID: "run", OperationID: "delete", RequestHash: "hash", DeletedSlideIDs: []string{slide.ID}, Slides: []model.Slide{{ID: "invalid", ProjectID: "missing-project"}}}
+	if err := s.CommitWorkflow(ctx, commit); err == nil {
+		t.Fatal("invalid commit accepted")
+	}
+	if deleted, err := s.IsSlideDeleted(ctx, "p1", slide.ID); err != nil || deleted {
+		t.Fatalf("failed transaction left tombstone: %v %v", deleted, err)
+	}
+	if _, err := s.GetSlide(ctx, slide.ID); err != nil {
+		t.Fatal("failed transaction lost slide", err)
+	}
+	if _, err := s.GetIdempotency(ctx, "artifact_commit", "run", "delete"); !errors.Is(err, run.ErrRunNotFound) {
+		t.Fatalf("failed commit has receipt: %v", err)
+	}
+	commit.Slides = nil
+	if err := s.CommitWorkflow(ctx, commit); err != nil {
+		t.Fatal(err)
+	}
+	for _, project := range []string{"p1", "other"} {
+		deleted, err := s.IsSlideDeleted(ctx, project, slide.ID)
+		if err != nil || deleted != (project == "p1") {
+			t.Fatalf("project=%s deleted=%v err=%v", project, deleted, err)
+		}
+	}
+	if err := s.InsertSlide(ctx, slide); err != nil {
+		t.Fatal(err)
+	}
+	if deleted, err := s.IsSlideDeleted(ctx, "p1", slide.ID); err != nil || deleted {
+		t.Fatalf("recreated slide remains deleted: %v %v", deleted, err)
+	}
+	if err := s.CommitWorkflow(ctx, commit); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetSlide(ctx, slide.ID); err != nil {
+		t.Fatal("late replay deleted recreated slide", err)
+	}
+	commit.RequestHash = "conflict"
+	if err := s.CommitWorkflow(ctx, commit); err == nil {
+		t.Fatal("conflicting replay accepted")
+	}
+	if _, err := s.GetSlide(ctx, slide.ID); err != nil {
+		t.Fatal("conflicting replay changed metadata", err)
+	}
 }

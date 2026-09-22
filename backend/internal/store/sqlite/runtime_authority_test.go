@@ -23,7 +23,7 @@ func TestRuntimeAuthorityMigrationCreatesTablesAndIndexes(t *testing.T) {
 			t.Fatalf("missing table %s", name)
 		}
 	}
-	for _, name := range []string{"idx_runs_thread_client_request", "idx_versions_run_target"} {
+	for _, name := range []string{"idx_runs_thread_client_request"} {
 		var count int64
 		if err := s.db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?", name).Scan(&count).Error; err != nil {
 			t.Fatal(err)
@@ -32,13 +32,7 @@ func TestRuntimeAuthorityMigrationCreatesTablesAndIndexes(t *testing.T) {
 			t.Fatalf("missing index %s", name)
 		}
 	}
-	var versionIndexUnique int
-	if err := s.db.Raw("SELECT `unique` FROM pragma_index_list('versions') WHERE name = ?", "idx_versions_run_target").Scan(&versionIndexUnique).Error; err != nil {
-		t.Fatal(err)
-	}
-	if versionIndexUnique != 0 {
-		t.Fatal("idx_versions_run_target must allow multiple call_ids in one run")
-	}
+
 }
 
 func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {

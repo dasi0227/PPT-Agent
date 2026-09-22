@@ -20,7 +20,7 @@ describe('checkpoint controls', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
   it('previews before writing and cancellation sends no switch', async () => {
-    const preview = vi.spyOn(projectHistoryApi, 'preview').mockResolvedValue({ revision: 1, time: 1000, input: 'hello', threads: 2, runs: 3, added: [], modified: ['outline.json'], deleted: [] });
+    const preview = vi.spyOn(projectHistoryApi, 'preview').mockResolvedValue({ revision: 1, time: 1000, input: 'hello', runs: 3 });
     const execute = vi.spyOn(projectHistoryApi, 'switch');
     render(<><HistoryBanner /><ProjectHistoryDialogs /></>);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '恢复到最新' })); });
@@ -32,7 +32,7 @@ describe('checkpoint controls', () => {
   });
 
   it('closes the history preview with Escape when no operation is running', async () => {
-    vi.spyOn(projectHistoryApi, 'preview').mockResolvedValue({ revision: 1, time: 1000, input: 'hello', threads: 2, runs: 3, added: [], modified: [], deleted: [] });
+    vi.spyOn(projectHistoryApi, 'preview').mockResolvedValue({ revision: 1, time: 1000, input: 'hello', runs: 3 });
     render(<><HistoryBanner /><ProjectHistoryDialogs /></>);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '恢复到最新' })); });
 

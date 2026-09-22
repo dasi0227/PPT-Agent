@@ -42,11 +42,13 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 	`, "layout-v6", "Deck", "/tmp/layout-v6", "default", "draft", 6, 1, 1).Error; err != nil {
 		t.Fatalf("layout version 6 is not accepted: %v", err)
 	}
-	if err := db.Exec(`
-		INSERT INTO versions(id,target_type,target_id,version_no,snapshot_path,created_at)
-		VALUES(?,?,?,?,?,?)
-	`, "manifest-version", "manifest", "layout-v6", 0, "versions/manifest/v0.json", 1).Error; err != nil {
-		t.Fatalf("manifest version target is not accepted: %v", err)
+	if db.Migrator().HasTable("versions") {
+		t.Fatal("legacy content versions table still exists")
+	}
+	for _, col := range []string{"project_id", "slide_id"} {
+		if !tableColumns(t, db, "deleted_slides")[col] {
+			t.Fatalf("missing deleted slide identity %s", col)
+		}
 	}
 	runCols := tableColumns(t, db, "runs")
 	for _, want := range []string{"scope_object", "scope_slide_ids_json", "scope_source_json", "scope_include_run_created_slides", "scope_revision", "project_history_revision", "owner_instance_id", "pause_reason", "paused_at"} {

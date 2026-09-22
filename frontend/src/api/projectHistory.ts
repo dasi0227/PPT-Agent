@@ -20,8 +20,7 @@ export interface HistoryState {
   scene?: { thread_id?: string; input?: CheckpointInput; composer?: Record<string, unknown>; slide_id?: string; active_thread_id?: string; view?: 'html' | 'outline'; preview_mode?: 'main' | 'overview' };
 }
 export interface HistoryPreview {
-  revision: number; time: number; input: string; threads: number; runs: number;
-  added: string[]; modified: string[]; deleted: string[];
+  revision: number; time: number; input: string; runs: number;
 }
 export const projectHistoryApi = {
   state: (id: string) => fetchClient<HistoryState>(`/projects/${id}/history`, { reportError: false }),

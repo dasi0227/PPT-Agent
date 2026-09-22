@@ -875,11 +875,11 @@ func (svc *RunService) deletedSelectionSlideIDs(ctx context.Context, projectID s
 		if _, exists := snapshot.SlidesByID[selection.SlideID]; exists {
 			continue
 		}
-		versions, err := svc.store.ListVersions(ctx, "slide_html", model.SlideHTMLVersionTarget(projectID, selection.SlideID))
+		wasDeleted, err := svc.store.IsSlideDeleted(ctx, projectID, selection.SlideID)
 		if err != nil {
 			return nil, err
 		}
-		deleted[selection.SlideID] = len(versions) > 0
+		deleted[selection.SlideID] = wasDeleted
 	}
 	return deleted, nil
 }

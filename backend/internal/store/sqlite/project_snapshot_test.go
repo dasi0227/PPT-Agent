@@ -12,9 +12,11 @@ func TestSnapshotRestoresEveryProjectTableAndIsolatesOtherProjects(t *testing.T)
 	statements := []string{
 		`INSERT INTO projects(id,title,work_dir,created_at,updated_at) VALUES ('p','one','/p',1,1),('other','other','/other',1,1)`,
 		`INSERT INTO threads(id,project_id,history_path,created_at,updated_at) VALUES ('t','p','threads/t.jsonl',1,1)`,
+		`INSERT INTO thread_naming_inputs(thread_id,input_id,content,accepted_at) VALUES ('t','input','name this conversation',1)`,
+		`INSERT INTO thread_naming_operations(thread_id,operation_id,request_hash,action,status,created_at,updated_at) VALUES ('t','rename','hash','generate','completed',1,1)`,
 		`INSERT INTO slides(id,project_id,current_version) VALUES ('sl','p',3)`,
 		`INSERT INTO runs(id,thread_id,project_id,scope_object,scope_slide_ids_json,scope_source_json,scope_revision,mode,run_command_json,status,created_at,updated_at) VALUES ('r','t','p','spec','[]','{}',1,'chat','{}','done',1,2)`,
-		`INSERT INTO versions(id,target_type,target_id,version_no,snapshot_path,run_id,created_at) VALUES ('v','slide_html','project/p/slide-html-sl',1,'/p/versions/v','r',1),('d','design','p:design',1,'/p/versions/d','r',1),('o','design','other:design',1,'/other/d',NULL,1)`,
+		`INSERT INTO deleted_slides(project_id,slide_id) VALUES ('p','removed'),('other','removed')`,
 		`INSERT INTO run_events VALUES ('r',1,'run.started','{}',1)`,
 		`INSERT INTO run_contexts VALUES ('r','ctx','default','hash',100,1000,'{}',1)`,
 		`INSERT INTO steering_inbox(run_id,thread_id,client_message_id,request_hash,content,status,accepted_at) VALUES ('r','t','msg','hash','steering','injected',1)`,
@@ -65,14 +67,29 @@ func TestSnapshotRestoresEveryProjectTableAndIsolatesOtherProjects(t *testing.T)
 	if n != 1 {
 		t.Fatal("other project removed")
 	}
-	s.db.Raw("SELECT count(*) FROM versions WHERE id='o'").Scan(&n)
+	s.db.Raw("SELECT count(*) FROM deleted_slides WHERE project_id='other'").Scan(&n)
 	if n != 1 {
-		t.Fatal("other versions removed")
+		t.Fatal("other deleted identities removed")
 	}
 	s.db.Raw("SELECT count(*) FROM prompts WHERE id='global'").Scan(&n)
 	if n != 1 {
 		t.Fatal("global library removed")
 	}
+	// A legacy inventory with the same table count must not silently restore
+	// without the new deleted-page metadata.
+	legacyRows := original["deleted_slides"]
+	delete(original, "deleted_slides")
+	original["versions"] = legacyRows
+	legacy, _ := json.Marshal(original)
+	if err = s.RestoreProject(ctx, "p", legacy); err == nil {
+		t.Fatal("legacy inventory accepted")
+	}
+	after, _ = s.CaptureProject(ctx, "p")
+	if string(after) != string(raw) {
+		t.Fatal("legacy inventory changed project")
+	}
+	delete(original, "versions")
+	original["deleted_slides"] = legacyRows
 	// A bad DB payload rolls its entire replacement transaction back.
 	original["runs"][0]["status"] = "invalid"
 	broken, _ := json.Marshal(original)

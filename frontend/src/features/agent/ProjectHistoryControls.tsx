@@ -2,6 +2,7 @@ import { useComposerStore } from '../../stores/composerStore';
 import { useActiveThreadId } from './useActiveSession';
 import { useEffect, useRef } from 'react';
 import { Undo2 } from 'lucide-react';
+import { LongContent } from './LongContent';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '../../components/ui/dialog';
 import { Button } from '../../components/ui/primitives';
 import { projectHistoryApi } from '../../api/projectHistory';
@@ -71,18 +72,21 @@ export function ProjectHistoryDialogs() {
   const preview = dialog?.preview;
   return <>
     <Dialog open={Boolean(dialog)} onOpenChange={(open) => { if (!open) close(); }}>
-      <DialogContent onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onInteractOutside={(event) => { if (busy) event.preventDefault(); }}>
-        <DialogTitle>{dialog?.runId ? '回到此消息发送前？' : '恢复到最新现场？'}</DialogTitle>
-        <DialogDescription className="text-text-600">{dialog?.runId ? '项目文件、所有会话和上下文将一起回退。当前草稿会被目标输入替换，之后可恢复到首次回退前的最新现场。' : '恢复首次回退前的项目文件、所有会话与上下文，并用当时的草稿替换当前草稿。'}</DialogDescription>
-        {preview && <div className="space-y-3 text-sm text-text-600">
-          <p className="tabular-nums">{new Date(preview.time).toLocaleString()} · {preview.threads} 个会话 · {preview.runs} 个任务</p>
-          {preview.input && <p className="max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-md bg-panel-muted p-3 text-text-900">{preview.input}</p>}
-          <details className="rounded-md border border-border p-3"><summary className="cursor-pointer">文件变更：新增 {preview.added.length} · 修改 {preview.modified.length} · 删除 {preview.deleted.length}</summary>
-            <ul className="mt-2 max-h-40 space-y-1 overflow-auto text-xs">{[['新增', preview.added], ['修改', preview.modified], ['删除', preview.deleted]].flatMap(([label, paths]) => (paths as string[]).map((path) => <li key={`${label}:${path}`} className="break-all">{label} · {path}</li>))}</ul>
-          </details>
-        </div>}
-        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        <DialogFooter><Button variant="secondary" disabled={busy} onClick={close}>取消</Button><Button variant="primary" disabled={busy} onClick={() => void useProjectHistoryStore.getState().execute()}>{busy ? '正在恢复项目…' : dialog?.runId ? '确认回退' : '确认恢复'}</Button></DialogFooter>
+      <DialogContent className="w-[calc(100vw-2rem)] min-w-0 max-w-[480px] max-h-[calc(100dvh-2rem)] overflow-y-auto gap-0" onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onInteractOutside={(event) => { if (busy) event.preventDefault(); }}>
+        <DialogTitle className="leading-7">{dialog?.runId ? '回到此任务发送前？' : '恢复到最新现场？'}</DialogTitle>
+        <DialogDescription className="mt-2 text-text-600 leading-[22px]">{dialog?.runId ? '项目内容和所有对话将一并回退。' : '恢复首次回退前的项目内容和所有对话，并用当时的草稿替换当前草稿。'}</DialogDescription>
+        {preview && <section aria-label="回退目标与影响范围" className="mt-5 rounded-md bg-panel-muted px-4 py-3.5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1.5 text-xs leading-5 text-text-600 tabular-nums">
+            <time dateTime={new Date(preview.time).toISOString()}>{new Date(preview.time).toLocaleString('sv-SE', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</time>
+            <span className="whitespace-nowrap">{dialog?.runId ? '撤回' : '恢复'} <strong className="text-sm font-semibold text-text-900">{preview.runs}</strong> 个任务{dialog?.runId ? '（含本次）' : ''}</span>
+          </div>
+          {dialog?.runId && <LongContent key={dialog.runId} className="mt-2" maxHeight={160} fadeClassName="from-panel-muted/0 via-panel-muted/90 to-panel-muted">
+            <blockquote className="whitespace-pre-wrap break-words text-sm leading-[23px] text-text-900">{preview.input || '（无文字输入）'}</blockquote>
+          </LongContent>}
+        </section>}
+        {dialog?.runId && <p className="mt-3.5 text-xs leading-5 text-text-600">这条指令将替换输入框草稿。回退后仍可恢复到最新状态。</p>}
+        {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+        <DialogFooter className="mt-6 flex-row justify-end gap-2 sm:space-x-0"><Button variant="secondary" disabled={busy} onClick={close}>取消</Button><Button variant="primary" disabled={busy} onClick={() => void useProjectHistoryStore.getState().execute()}>{busy ? '正在恢复项目…' : dialog?.runId ? '确认回退' : '确认恢复'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
     <Dialog open={Boolean(pending)} onOpenChange={(open) => { if (!open) pending?.resolve(false); }}>

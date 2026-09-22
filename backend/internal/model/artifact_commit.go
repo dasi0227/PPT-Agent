@@ -8,5 +8,4 @@ type ArtifactCommit struct {
 	ToolResultJSON  string
 	Slides          []Slide
 	DeletedSlideIDs []string
-	Versions        []Version
 }
