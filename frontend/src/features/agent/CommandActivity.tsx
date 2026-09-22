@@ -169,7 +169,7 @@ export function CommandActivity({
               </span>
             )}
           </span>
-          <span className="command-activity-title">{displayTitle}</span>
+          <span className="command-activity-title" title={displayTitle}>{displayTitle}</span>
         </button>
         {ready && (
           <button

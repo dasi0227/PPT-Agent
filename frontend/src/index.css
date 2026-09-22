@@ -1164,7 +1164,7 @@
 .command-activity-icon { display:block; flex:none; }
 .command-activity-name { flex:none; color:#475260; font-weight:400; }
 .command-activity-identity time { margin-left:5px; font-size:11px; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.command-activity-title { display:block; margin-top:7px; color:#17202b; font-size:14px; font-weight:400; line-height:22px; overflow-wrap:anywhere; }
+.command-activity-title { display:block; margin-top:7px; color:#17202b; font-size:14px; font-weight:400; line-height:22px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .command-activity-meta { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px; min-width:0; max-width:100%; font-size:11px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .command-action { display:inline-flex; align-items:center; justify-content:center; flex:none; gap:5px; min-height:30px; padding:5px 8px; border-radius:6px; color:#5f6b7a; font-size:12px; white-space:nowrap; }
 .command-action:disabled { opacity:.45; cursor:default; }
