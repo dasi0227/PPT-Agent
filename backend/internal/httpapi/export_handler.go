@@ -119,6 +119,8 @@ func (h *ExportHandler) Download(c *gin.Context) {
 		manager.DeliveryFailed(operation)
 		return
 	}
+	// Release the handle before deleting the export directory (notably on Windows).
+	_ = file.Close()
 	manager.Consume(operation)
 }
 func (h *ExportHandler) Cancel(c *gin.Context) {

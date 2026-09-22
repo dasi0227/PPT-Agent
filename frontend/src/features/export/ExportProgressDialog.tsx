@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, LoaderCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, LoaderCircle, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
-import { Button } from '../../components/ui/primitives';
+import { Button, IconButton } from '../../components/ui/primitives';
 import { useExportStore } from '../../stores/exportStore';
 import { exportsApi } from '../../api/exports';
 
@@ -14,8 +14,9 @@ export function ExportProgressDialog() {
   const retry = useExportStore((state) => state.retry);
   const close = useExportStore((state) => state.close);
   const refresh = useExportStore((state) => state.refresh);
+  const cancel = useExportStore((state) => state.cancel);
   const operation = session?.operation;
-  const blocking = operation ? ['accepted', 'running', 'ready', 'delivering'].includes(operation.status) : false;
+  const blocking = !session?.dismissed && operation ? ['accepted', 'running', 'ready', 'delivering'].includes(operation.status) : false;
 
   useEffect(() => {
     if (!blocking) return;
@@ -39,29 +40,34 @@ export function ExportProgressDialog() {
     return () => { window.clearInterval(timer); window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('pagehide', pagehide); };
   }, [blocking, operation?.id, refresh]);
 
-  if (!session || !operation) return null;
+  if (!session || !operation || session.dismissed) return null;
   const failed = operation.status === 'failed';
   const conflict = failed && operation.error?.code === 'EXPORT_ALREADY_ACTIVE';
   const ready = operation.status === 'ready' || operation.status === 'delivering';
+  const canceling = !!session.canceling;
+  const canCancel = ['accepted', 'running'].includes(operation.status);
   const pages = operation.total_pages > 0 ? Math.round(operation.completed_pages / operation.total_pages * 90) : 4;
   const percent = ready ? 100 : operation.phase === 'snapshotting' ? 4 : operation.phase === 'packaging' ? Math.max(94, pages) : Math.max(8, pages);
   const issues = operation.error?.details?.slides ?? [];
 
   return (
-    <Dialog open onOpenChange={() => {}}>
+    <Dialog open onOpenChange={(open) => { if (!open) void close(); }}>
       <DialogContent
         className="max-w-md"
-        onEscapeKeyDown={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => { if (canceling) event.preventDefault(); }}
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
       >
-        <DialogHeader>
+        <IconButton label="关闭导出" className="absolute right-3 top-3" disabled={canceling} onClick={() => void close()}>
+          <X className="h-4 w-4" />
+        </IconButton>
+        <DialogHeader className="space-y-3 pr-6">
           <DialogTitle className="flex items-center gap-2">
-            {failed ? <AlertTriangle className="h-5 w-5 text-danger" /> : ready ? <CheckCircle2 className="h-5 w-5 text-success" /> : <LoaderCircle className="h-5 w-5 animate-spin text-accent" />}
-            {conflict ? '暂时无法导出' : failed ? '导出失败' : ready ? '导出完成' : `正在导出 ${formatName[session.format]}`}
+            {canceling ? <LoaderCircle className="h-5 w-5 animate-spin text-accent" /> : failed ? <AlertTriangle className="h-5 w-5 text-danger" /> : ready ? <CheckCircle2 className="h-5 w-5 text-success" /> : <LoaderCircle className="h-5 w-5 animate-spin text-accent" />}
+            {canceling ? (canCancel ? '正在终止导出' : '正在清理文件') : conflict ? '暂时无法导出' : failed ? '导出失败' : ready ? '导出完成' : `正在导出 ${formatName[session.format]}`}
           </DialogTitle>
           <DialogDescription>
-            {failed ? operation.error?.message : ready ? '文件已准备好，点击下载后将交给浏览器保存。' : phaseName[operation.phase ?? 'snapshotting']}
+            {canceling ? (canCancel ? '正在停止处理并清理临时文件…' : '正在清理临时文件…') : failed ? operation.error?.message : ready ? '文件已准备好，点击下载到本地。' : phaseName[operation.phase ?? 'snapshotting']}
           </DialogDescription>
         </DialogHeader>
 
@@ -88,11 +94,14 @@ export function ExportProgressDialog() {
 
         {operation.warnings.length > 0 && <div className="rounded-md border border-warning/25 bg-warning-soft px-3 py-2 text-xs text-text-700">{operation.warnings.join(' ')}</div>}
 
-        {(failed || ready) && <DialogFooter>
-          {failed && <Button variant="secondary" onClick={() => void close()}>关闭</Button>}
-          {failed && <Button variant="primary" onClick={() => void retry()}>{conflict ? '重试' : '重新导出'}</Button>}
-          {ready && <Button variant="primary" disabled={operation.status === 'delivering'} onClick={download}>{operation.status === 'delivering' ? '正在交给浏览器…' : '下载'}</Button>}
-        </DialogFooter>}
+        {session.cancelError && <p role="alert" className="text-sm text-danger">{session.cancelError}</p>}
+
+        <DialogFooter>
+          {canCancel && <Button variant="ghost" className="text-danger hover:bg-danger-soft hover:text-danger" disabled={canceling} onClick={() => void cancel()}>{canceling ? '正在终止…' : '终止'}</Button>}
+          {failed && <Button variant="secondary" disabled={canceling} onClick={() => void close()}>关闭</Button>}
+          {failed && <Button variant="primary" disabled={canceling} onClick={() => void retry()}>{conflict ? '重试' : '重新导出'}</Button>}
+          {ready && <Button variant="primary" disabled={canceling || operation.status === 'delivering'} onClick={download}>{operation.status === 'delivering' ? '正在交给浏览器…' : '下载'}</Button>}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

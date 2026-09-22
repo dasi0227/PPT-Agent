@@ -124,6 +124,48 @@ func TestExportViewSerializesEmptyWarningsAsArray(t *testing.T) {
 	}
 }
 
+func TestCompletedAndCanceledExportsRemoveEntireTemporaryDirectory(t *testing.T) {
+	for _, download := range []bool{false, true} {
+		name := "cancel"
+		if download {
+			name = "download"
+		}
+		t.Run(name, func(t *testing.T) {
+			m := NewManager(blockingRenderer{})
+			defer m.Close()
+			root := filepath.Join(t.TempDir(), "export", "snapshot")
+			if err := writeFile(filepath.Join(root, "marker"), []byte("snapshot")); err != nil {
+				t.Fatal(err)
+			}
+			op, err := m.Start("exp_cleanup", "req_cleanup", FormatHTML, Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: root})
+			if err != nil {
+				t.Fatal(err)
+			}
+			<-op.done
+			if op.View().Status != StatusReady {
+				t.Fatalf("view=%+v", op.View())
+			}
+			if download {
+				if _, err := m.BeginDelivery(op.ID); err != nil {
+					t.Fatal(err)
+				}
+				m.Consume(op)
+			} else if err := m.Cancel(op.ID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(filepath.Dir(root)); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("snapshot, intermediate files or artifact remain: %v", err)
+			}
+			if m.Active("pro_one") {
+				t.Fatal("project still reserved")
+			}
+			if _, err := m.Get(op.ID); !errors.Is(err, ErrGone) {
+				t.Fatalf("export still retained: %v", err)
+			}
+		})
+	}
+}
+
 func TestAbandonedExportReleasesProjectAndRemovesFiles(t *testing.T) {
 	for _, format := range []Format{FormatHTML, FormatPNG} {
 		t.Run(string(format), func(t *testing.T) {

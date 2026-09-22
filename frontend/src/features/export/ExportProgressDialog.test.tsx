@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useExportStore } from '../../stores/exportStore';
@@ -23,6 +23,17 @@ beforeEach(() => {
 afterEach(() => { useExportStore.setState({ session: null }); vi.restoreAllMocks(); });
 
 describe('ExportProgressDialog', () => {
+  test.each(['escape', 'close button'])('exits a ready export via %s and cancels its temporary artifact', async (action) => {
+    const cancel = vi.spyOn(exportsApi, 'cancel').mockResolvedValue(undefined);
+    useExportStore.setState({ session: readySession() });
+    render(<ExportProgressDialog />);
+    if (action === 'escape') await userEvent.keyboard('{Escape}');
+    else await userEvent.click(screen.getByRole('button', { name: '关闭导出' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(cancel).toHaveBeenCalledWith('exp_one');
+    expect(useExportStore.getState().session).toBeNull();
+  });
+
   test('renders a downloadable export when the received warning list is null', () => {
     const session = readySession();
     const received = { ...session.operation, warnings: null } as unknown as ExportOperation;
@@ -35,11 +46,29 @@ describe('ExportProgressDialog', () => {
     useExportStore.setState({ session: readySession() });
     render(<ExportProgressDialog />);
     expect(screen.getByText('导出完成')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '终止' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '关闭导出' })).toBeInTheDocument();
+    expect(screen.getByText('文件已准备好，点击下载到本地。')).toBeInTheDocument();
     expect(click).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: '下载' }));
     expect(click).toHaveBeenCalledTimes(1);
     expect(useExportStore.getState().session?.operation.status).toBe('delivering');
     click.mockRestore();
+  });
+
+  test('offers termination while rendering and closes only after the backend acknowledges it', async () => {
+    const session = { ...readySession(), operation: { ...readySession().operation, status: 'running' as const, phase: 'rendering' as const } };
+    vi.mocked(exportsApi.get).mockResolvedValue(session.operation);
+    let resolveCancel!: () => void;
+    const cancel = vi.spyOn(exportsApi, 'cancel').mockReturnValue(new Promise<void>((resolve) => { resolveCancel = resolve; }));
+    useExportStore.setState({ session });
+    render(<ExportProgressDialog />);
+    await userEvent.click(screen.getByRole('button', { name: '终止' }));
+    expect(screen.getByRole('button', { name: '正在终止…' })).toBeDisabled();
+    expect(screen.getByText('正在终止导出')).toBeInTheDocument();
+    expect(cancel).toHaveBeenCalledWith('exp_one');
+    resolveCancel();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   test('lists every missing page and never exposes a download action', () => {
