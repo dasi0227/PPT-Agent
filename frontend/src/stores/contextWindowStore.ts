@@ -54,7 +54,10 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
     }
   },
   compact: async (threadId) => {
-    if (get().sessions[threadId]?.compacting) return false;
+    const current = get().sessions[threadId];
+    if (current?.compacting || !current?.snapshot
+      || current.snapshot.compact_threshold_tokens <= 0
+      || current.snapshot.compactable_tokens < current.snapshot.compact_threshold_tokens) return false;
     set((state) => ({
       sessions: {
         ...state.sessions,

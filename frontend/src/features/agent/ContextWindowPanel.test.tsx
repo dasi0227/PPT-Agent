@@ -6,6 +6,26 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { ContextWindowPanel } from './ContextWindowPanel';
 
+const EMPTY_TEST_SNAPSHOT = {
+  total: 0,
+  max: 65536,
+  ratio: 0,
+  compactable_tokens: 0,
+  compact_threshold_tokens: 12000,
+  status: 'idle' as const,
+  buckets: {
+    system_prompt: 0, runtime: 0, chat_history: 0, read_file: 0, run_command: 0, other: 0,
+  },
+  details: {
+    system_prompt: [{ name: 'system prompts', tokens: 0 }, { name: 'tool definitions', tokens: 0 }],
+    runtime: [{ name: 'runtime state', tokens: 0 }, { name: 'runtime resources', tokens: 0 }, { name: 'runtime messages', tokens: 0 }],
+    chat_history: [{ name: 'user messages', tokens: 0 }, { name: 'assistant messages', tokens: 0 }, { name: 'other tools', tokens: 0 }, { name: 'context summary', tokens: 0 }],
+    read_file: [{ name: 'read_ppt', tokens: 0 }, { name: 'read_image', tokens: 0 }, { name: 'read_project', tokens: 0 }],
+    run_command: [{ name: 'run_command', tokens: 0 }],
+    other: [{ name: 'other', tokens: 0 }],
+  },
+};
+
 describe('ContextWindowPanel', () => {
   beforeEach(() => {
     useProjectStore.setState({ activeProjectId: null });
@@ -78,6 +98,8 @@ describe('ContextWindowPanel', () => {
             total: 1000,
             max: 65536,
             ratio: 1000 / 65536,
+            compactable_tokens: 12000,
+            compact_threshold_tokens: 12000,
             status: 'idle',
             buckets: {
               system_prompt: 0,
@@ -102,6 +124,7 @@ describe('ContextWindowPanel', () => {
 
     render(<ContextWindowPanel />);
     fireEvent.click(screen.getByRole('button', { name: /上下文窗口/ }));
+    expect(screen.getByRole('button', { name: '压缩' })).toBeEnabled();
     fireEvent.click(screen.getByRole('tab', { name: /跑命令/ }));
 
     const panel = screen.getByRole('tabpanel', { name: '跑命令明细' });
@@ -111,5 +134,26 @@ describe('ContextWindowPanel', () => {
     expect(within(panel).getByText('other command')).toBeInTheDocument();
     expect(within(panel).getByText('ls 命令的调用与返回结果')).toBeInTheDocument();
     expect(within(panel).getByText('其余命令的调用与返回结果')).toBeInTheDocument();
+  });
+
+  it('disables manual compaction until the compactable transcript reaches 12k tokens', () => {
+    useProjectStore.setState({ activeProjectId: 'p1' });
+    useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
+    const snapshot = {
+      ...EMPTY_TEST_SNAPSHOT,
+      compactable_tokens: 11_999,
+      compact_threshold_tokens: 12_000,
+    };
+    useContextWindowStore.setState({
+      sessions: { t1: { loading: false, compacting: false, snapshot } },
+    });
+
+    render(<ContextWindowPanel />);
+    fireEvent.click(screen.getByRole('button', { name: /上下文窗口/ }));
+
+    const compactButton = screen.getByRole('button', { name: '压缩' });
+    expect(compactButton).toBeDisabled();
+    expect(compactButton).toHaveClass('disabled:opacity-40');
+    expect(compactButton).toHaveAttribute('title', '可压缩历史达到 12.0 k 后可用，当前 11999 Token');
   });
 });

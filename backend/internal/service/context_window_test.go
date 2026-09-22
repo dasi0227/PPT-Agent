@@ -26,7 +26,7 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	transcripts := contextengine.NewFSTranscriptStore()
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent(`<run_user_instruction run_id="r1">first</run_user_instruction>`)},
-		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("analysis ", 100))},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("analysis ", 5_000))},
 	}
 	if err := transcripts.Replace(fixture.project.WorkDir, fixture.thread.ID, messages); err != nil {
 		t.Fatal(err)
@@ -42,7 +42,8 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	if result.Compaction.Trigger != model.ContextCompactionManual ||
 		result.Compaction.Title != "收敛上下文协议与实现" ||
 		result.Compaction.Content == "" ||
-		result.Snapshot.Status != "idle" {
+		result.Snapshot.Status != "idle" ||
+		result.Snapshot.CompactThresholdTokens != contextcompact.MinimumCompactableTokens {
 		t.Fatalf("unexpected compact result: %+v", result)
 	}
 	loaded, err := transcripts.Load(fixture.project.WorkDir, fixture.thread.ID)
@@ -55,6 +56,30 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	records, err := fixture.store.ListThreadContextCompactions(context.Background(), fixture.thread.ID)
 	if err != nil || len(records) != 1 || records[0].Title != result.Compaction.Title {
 		t.Fatalf("compaction record missing: records=%+v err=%v", records, err)
+	}
+}
+
+func TestManualContextCompactRejectsTranscriptBelowThreshold(t *testing.T) {
+	fixture := newBriefingFixture(t, "unused")
+	fixture.provider.Caps = llm.Capabilities{ToolCalls: true, ContextWindowTokens: 65536}
+	transcripts := contextengine.NewFSTranscriptStore()
+	if err := transcripts.Replace(fixture.project.WorkDir, fixture.thread.ID, []llm.Message{
+		{Role: llm.RoleUser, Content: llm.TextContent("short request")},
+		{Role: llm.RoleAssistant, Content: llm.TextContent("short response")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := NewContextWindowService(
+		fixture.store, fixture.registry, fixture.locks,
+		transcripts, contextengine.NewCalibrationStore(),
+	).Compact(context.Background(), fixture.thread.ID, "Briefing")
+	agentErr := model.AsAgentError(err, "INTERNAL", "test")
+	if agentErr.Code != "COMPACT_BELOW_THRESHOLD" {
+		t.Fatalf("error=%v", err)
+	}
+	if len(fixture.provider.Requests()) != 0 {
+		t.Fatalf("compactor model was called below threshold: %d requests", len(fixture.provider.Requests()))
 	}
 }
 

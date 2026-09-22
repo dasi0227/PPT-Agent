@@ -9,6 +9,8 @@ const response: CompactContextResponse = {
     total: 100,
     max: 1000,
     ratio: 0.1,
+    compactable_tokens: 12000,
+    compact_threshold_tokens: 12000,
     status: 'idle',
     buckets: { system_prompt: 10, runtime: 10, chat_history: 60, read_file: 10, run_command: 5, other: 5 },
     details: {
@@ -37,6 +39,11 @@ describe('context window store', () => {
 
   it('inserts a manual compaction immediately and deduplicates by id', async () => {
     vi.spyOn(threadsApi, 'compact').mockResolvedValue(response);
+    useContextWindowStore.setState({
+      sessions: {
+        t1: { snapshot: response.snapshot, loading: false, compacting: false },
+      },
+    });
     await expect(useContextWindowStore.getState().compact('t1')).resolves.toBe(true);
     await expect(useContextWindowStore.getState().compact('t1')).resolves.toBe(true);
 

@@ -164,6 +164,10 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
       return isNonNegativeInteger(data.total)
         && typeof data.max === 'number' && Number.isInteger(data.max) && data.max > 0
         && typeof data.ratio === 'number' && data.ratio >= 0
+        && isNonNegativeInteger(data.compactable_tokens)
+        && typeof data.compact_threshold_tokens === 'number'
+        && Number.isInteger(data.compact_threshold_tokens)
+        && data.compact_threshold_tokens > 0
         && ['idle', 'compacting'].includes(String(data.status))
         && (data.compaction === undefined || (isRecord(data.compaction) && hasString(data.compaction, 'id')
           && isNonNegativeInteger(data.compaction.phase) && Number(data.compaction.phase) <= 2))

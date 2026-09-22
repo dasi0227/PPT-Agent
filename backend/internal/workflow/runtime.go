@@ -2863,6 +2863,8 @@ func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, sche
 		System: system, User: user, Messages: request.Messages, Tools: tools,
 		Max: r.ContextWindowTokens, Factor: state.calibrationFactor,
 	})
+	snapshot.CompactableTokens = contextcompact.CompactableTokens(state.messages)
+	snapshot.CompactThresholdTokens = contextcompact.MinimumCompactableTokens
 	state.tokens = snapshot.Total
 	state.lastWindow = snapshot
 	if snapshots, ok := input.Calibration.(interface {
@@ -2902,7 +2904,9 @@ func (r *Runtime) emitContextWindow(
 	}
 	emitter.Emit(model.EventContextWindowUpdated, model.ContextWindowUpdatedPayload{
 		PublicEventBase: publicBase(state.runID), Total: snapshot.Total, Max: snapshot.Max,
-		Ratio: snapshot.Ratio, Status: status, Buckets: buckets, Details: details, Compaction: compaction,
+		Ratio: snapshot.Ratio, CompactableTokens: snapshot.CompactableTokens,
+		CompactThresholdTokens: snapshot.CompactThresholdTokens,
+		Status:                 status, Buckets: buckets, Details: details, Compaction: compaction,
 	})
 }
 

@@ -15,12 +15,13 @@ import (
 )
 
 const (
-	compactionTimeout      = 45 * time.Second
-	maxSummaryTokens       = 4000
-	outputSafetyTokens     = 1024
-	retainedToolRoundCount = 2
-	compactContextToolName = "compact_context"
-	fallbackTitle          = "整理当前任务上下文"
+	compactionTimeout        = 45 * time.Second
+	maxSummaryTokens         = 4000
+	outputSafetyTokens       = 1024
+	retainedToolRoundCount   = 2
+	compactContextToolName   = "compact_context"
+	fallbackTitle            = "整理当前任务上下文"
+	MinimumCompactableTokens = 12_000
 )
 
 type Result struct {
@@ -207,6 +208,15 @@ func messageTokens(messages []llm.Message) int {
 		total += contextengine.EstimateMessageTokens(message)
 	}
 	return total
+}
+
+// CompactableTokens measures only the older transcript that a compaction can
+// replace. Retained instructions and the latest tool rounds do not make a
+// manual compaction worthwhile, even though they still occupy the window.
+func CompactableTokens(messages []llm.Message) int {
+	pruned := pruneSupersededRenderImages(cloneMessages(messages))
+	compressed, _ := splitTranscript(pruned)
+	return messageTokens(compressed)
 }
 
 func cloneMessages(messages []llm.Message) []llm.Message {

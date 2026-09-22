@@ -408,13 +408,15 @@ type ContextCompactionProgress struct {
 
 type ContextWindowUpdatedPayload struct {
 	PublicEventBase
-	Compaction *ContextCompactionProgress             `json:"compaction,omitempty"`
-	Total      int                                    `json:"total"`
-	Max        int                                    `json:"max"`
-	Ratio      float64                                `json:"ratio"`
-	Status     string                                 `json:"status"`
-	Buckets    map[string]int                         `json:"buckets"`
-	Details    map[string][]ContextWindowBucketDetail `json:"details"`
+	Compaction             *ContextCompactionProgress             `json:"compaction,omitempty"`
+	Total                  int                                    `json:"total"`
+	Max                    int                                    `json:"max"`
+	Ratio                  float64                                `json:"ratio"`
+	CompactableTokens      int                                    `json:"compactable_tokens"`
+	CompactThresholdTokens int                                    `json:"compact_threshold_tokens"`
+	Status                 string                                 `json:"status"`
+	Buckets                map[string]int                         `json:"buckets"`
+	Details                map[string][]ContextWindowBucketDetail `json:"details"`
 }
 
 func validateRunCommandContextDetails(items []any) (int, error) {
@@ -756,6 +758,10 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if !isInteger(data["total"]) || !isInteger(data["max"]) ||
 			intValue(data["total"]) < 0 || intValue(data["max"]) <= 0 {
 			return errors.New("invalid context window totals")
+		}
+		if !isInteger(data["compactable_tokens"]) || intValue(data["compactable_tokens"]) < 0 ||
+			!isInteger(data["compact_threshold_tokens"]) || intValue(data["compact_threshold_tokens"]) <= 0 {
+			return errors.New("invalid context compaction capacity")
 		}
 		ratio, ok := data["ratio"].(float64)
 		if !ok || ratio < 0 {

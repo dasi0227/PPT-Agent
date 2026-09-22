@@ -108,6 +108,7 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"PROJECT_EMPTY":                  {Code: "PROJECT_EMPTY", Category: ErrorUserActionRequired, SafeMessage: "当前项目暂无内容，请先创建页面。", ModelMessage: "Add project content before generating a briefing.", HTTPStatus: 409},
 	"BRIEFING_ACTIVE":                {Code: "BRIEFING_ACTIVE", Category: ErrorConflict, SafeMessage: "项目有其他操作正在进行，请稍后重试。", ModelMessage: "Wait for the active project operation to finish.", HTTPStatus: 409},
 	"COMPACT_ACTIVE":                 {Code: "COMPACT_ACTIVE", Category: ErrorConflict, SafeMessage: "项目有其他操作正在进行，请稍后重试。", ModelMessage: "Wait for the active project operation to finish.", HTTPStatus: 409},
+	"COMPACT_BELOW_THRESHOLD":        {Code: "COMPACT_BELOW_THRESHOLD", Category: ErrorUserActionRequired, SafeMessage: "可压缩历史不足 12k Token，继续对话后再试。", ModelMessage: "Wait until the compactable transcript reaches 12000 tokens.", HTTPStatus: 409},
 	"BRIEFING_OUTPUT_INVALID":        {Code: "BRIEFING_OUTPUT_INVALID", Category: ErrorTransient, SafeMessage: "简报结果暂时不可用，请重试。", ModelMessage: "Retry briefing generation.", Retryable: true, HTTPStatus: 503},
 	"RENDER_WORKER_UNAVAILABLE":      {Code: "RENDER_WORKER_UNAVAILABLE", Category: ErrorTransient, SafeMessage: "页面渲染服务暂时不可用。", ModelMessage: "Restart the render worker and retry once.", Retryable: true, HTTPStatus: 503},
 	"COMMIT_FAILED":                  {Code: "COMMIT_FAILED", Category: ErrorTerminal, SafeMessage: "修改未能安全保存，请重新发起任务。", ModelMessage: "Do not retry an unconfirmed commit without querying its idempotency record.", HTTPStatus: 500},

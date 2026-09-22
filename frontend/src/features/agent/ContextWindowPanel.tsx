@@ -90,6 +90,8 @@ const EMPTY_SNAPSHOT: ContextWindowSnapshot = {
   total: 0,
   max: 0,
   ratio: 0,
+  compactable_tokens: 0,
+  compact_threshold_tokens: 0,
   status: 'idle',
   buckets: EMPTY_BUCKETS,
   details: EMPTY_DETAILS,
@@ -173,8 +175,21 @@ export function ContextWindowPanel() {
   const runActive = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(runStatus);
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const compacting = session?.compacting || snapshot.status === 'compacting';
+  const compactionCapacityUnavailable = !session?.snapshot || snapshot.compact_threshold_tokens <= 0;
+  const belowCompactThreshold = !compactionCapacityUnavailable
+    && snapshot.compactable_tokens < snapshot.compact_threshold_tokens;
   const warning = snapshot.ratio >= 0.8;
-  const disabled = !threadId || runActive || commitActive || briefingActive || polishing || compacting;
+  const disabled = !threadId || runActive || commitActive || briefingActive || polishing || compacting
+    || compactionCapacityUnavailable || belowCompactThreshold;
+  let compactButtonTitle = '手动压缩上下文';
+  if (!threadId) compactButtonTitle = '请先选择任务';
+  else if (compacting) compactButtonTitle = '正在压缩上下文';
+  else if (runActive || commitActive || briefingActive || polishing) {
+    compactButtonTitle = '当前操作完成后可手动压缩';
+  } else if (compactionCapacityUnavailable) compactButtonTitle = '正在读取可压缩上下文';
+  else if (belowCompactThreshold) {
+    compactButtonTitle = `可压缩历史达到 ${formatParentTokens(snapshot.compact_threshold_tokens)} 后可用，当前 ${snapshot.compactable_tokens} Token`;
+  }
   const percent = Math.round(snapshot.ratio * 100);
   const details = snapshot.details[activeBucket];
   const activeBucketMeta = BUCKETS.find((bucket) => bucket.key === activeBucket) ?? BUCKETS[0];
@@ -243,7 +258,7 @@ export function ContextWindowPanel() {
               onClick={() => void runCompact()}
               disabled={disabled}
               className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[11px] font-semibold text-text-600 hover:border-border-strong hover:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
-              title={runActive ? '运行中不可手动压缩' : '手动压缩上下文'}
+              title={compactButtonTitle}
             >
               {compacting
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />

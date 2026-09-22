@@ -543,6 +543,8 @@ export interface ContextWindowSnapshot {
   total: number;
   max: number;
   ratio: number;
+  compactable_tokens: number;
+  compact_threshold_tokens: number;
   status: 'idle' | 'compacting';
   buckets: Record<ContextBucketKey, number>;
   details: Record<ContextBucketKey, ContextWindowDetail[]>;

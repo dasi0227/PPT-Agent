@@ -39,7 +39,7 @@ Agent Run 活动状态继续由 Run Store 管理。运行期间上下文窗口�
 
 接近阈值不是生命周期状态。前端直接从 `ratio` 推导压力提示和橙色视觉反馈，不写入或持久化 `warning` 状态。
 
-手动压缩按钮是否可用继续由 Run、提交、简报、润色和压缩操作的互斥状态决定，不由上下文窗口状态推导。
+手动压缩按钮是否可用由两部分共同决定：Run、提交、简报、润色和压缩操作的互斥状态，以及后端下发的可压缩旧 transcript 是否达到 12k Token。该能力不由 `idle / compacting` 状态或整个窗口占用率推导，详细协议以 `2026-09-17-context-compaction-timeline-and-title-design.md` 为准。
 
 ## 4. 协议切换
 

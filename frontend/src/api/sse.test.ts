@@ -49,6 +49,8 @@ const payloads: Record<string, unknown> = {
     total: 32000,
     max: 65536,
     ratio: 32000 / 65536,
+    compactable_tokens: 14000,
+    compact_threshold_tokens: 12000,
     status: 'idle',
     buckets: { system_prompt: 8000, runtime: 2000, chat_history: 9000, read_file: 11024, run_command: 1000, other: 976 },
     details: {
@@ -97,6 +99,16 @@ describe('SSE parser', () => {
     expect(parsePublicEvent('context.window.updated', { ...snapshot, status: 'compacting' })).not.toBeNull();
     expect(parsePublicEvent('context.window.updated', { ...snapshot, status: 'running' })).toBeNull();
     expect(parsePublicEvent('context.window.updated', { ...snapshot, status: 'warning' })).toBeNull();
+  });
+
+  it('requires manual compaction capacity in context window events', () => {
+    const snapshot = payloads['context.window.updated'] as Record<string, unknown>;
+    expect(parsePublicEvent('context.window.updated', {
+      ...snapshot,
+      compact_threshold_tokens: 0,
+    })).toBeNull();
+    const { compactable_tokens: _removed, ...legacy } = snapshot;
+    expect(parsePublicEvent('context.window.updated', legacy)).toBeNull();
   });
 
 	it('requires a safe bounded title for context compaction events', () => {

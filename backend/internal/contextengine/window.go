@@ -47,11 +47,13 @@ type WindowBucketDetail struct {
 }
 
 type WindowSnapshot struct {
-	Total   int                                    `json:"total"`
-	Max     int                                    `json:"max"`
-	Ratio   float64                                `json:"ratio"`
-	Buckets map[ContextBucket]int                  `json:"buckets"`
-	Details map[ContextBucket][]WindowBucketDetail `json:"details"`
+	Total                  int                                    `json:"total"`
+	Max                    int                                    `json:"max"`
+	Ratio                  float64                                `json:"ratio"`
+	CompactableTokens      int                                    `json:"compactable_tokens"`
+	CompactThresholdTokens int                                    `json:"compact_threshold_tokens"`
+	Buckets                map[ContextBucket]int                  `json:"buckets"`
+	Details                map[ContextBucket][]WindowBucketDetail `json:"details"`
 }
 
 type PromptEstimateInput struct {

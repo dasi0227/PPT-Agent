@@ -119,7 +119,9 @@ func loadPersistedWindowSnapshot(ctx context.Context, value any, threadID string
 	}
 	return contextengine.WindowSnapshot{
 		Total: payload.Total, Max: payload.Max, Ratio: payload.Ratio,
-		Buckets: buckets, Details: details,
+		CompactableTokens:      payload.CompactableTokens,
+		CompactThresholdTokens: payload.CompactThresholdTokens,
+		Buckets:                buckets, Details: details,
 	}, true
 }
 
@@ -129,10 +131,6 @@ func (svc *ContextWindowService) Compact(
 	modelProfile string,
 ) (CompactContextResult, error) {
 	if err := commandPhase(ctx, 0); err != nil {
-		return CompactContextResult{}, err
-	}
-	side, err := svc.registry.RoutedProfile("compact", "")
-	if err != nil {
 		return CompactContextResult{}, err
 	}
 	thread, project, profile, messages, err := svc.load(ctx, threadID, modelProfile)
@@ -156,6 +154,13 @@ func (svc *ContextWindowService) Compact(
 		return CompactContextResult{}, activeErr
 	} else if active {
 		return CompactContextResult{}, model.NewAgentError("COMPACT_ACTIVE", "compact", nil)
+	}
+	if contextcompact.CompactableTokens(messages) < contextcompact.MinimumCompactableTokens {
+		return CompactContextResult{}, model.NewAgentError("COMPACT_BELOW_THRESHOLD", "compact", nil)
+	}
+	side, err := svc.registry.RoutedProfile("compact", "")
+	if err != nil {
+		return CompactContextResult{}, err
 	}
 
 	before, ok := svc.calibration.Snapshot(thread.ID)
@@ -238,10 +243,13 @@ func (svc *ContextWindowService) transcriptOnlySnapshot(
 	profile llm.Profile,
 	messages []llm.Message,
 ) contextengine.WindowSnapshot {
-	return (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{
+	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{
 		Messages: messages, Max: profile.Capabilities().ContextWindowTokens,
 		Factor: svc.calibration.Factor(threadID),
 	})
+	snapshot.CompactableTokens = contextcompact.CompactableTokens(messages)
+	snapshot.CompactThresholdTokens = contextcompact.MinimumCompactableTokens
+	return snapshot
 }
 
 func replaceTranscriptSnapshot(
@@ -249,7 +257,11 @@ func replaceTranscriptSnapshot(
 	before contextengine.WindowSnapshot,
 	after contextengine.WindowSnapshot,
 ) contextengine.WindowSnapshot {
-	next := contextengine.WindowSnapshot{Max: base.Max}
+	next := contextengine.WindowSnapshot{
+		Max:                    base.Max,
+		CompactableTokens:      after.CompactableTokens,
+		CompactThresholdTokens: after.CompactThresholdTokens,
+	}
 	next.Buckets = map[contextengine.ContextBucket]int{}
 	next.Details = map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{}
 	for _, bucket := range contextengine.ContextBuckets {

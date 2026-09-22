@@ -151,6 +151,7 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 	payload := ContextWindowUpdatedPayload{
 		PublicEventBase: NewPublicEventBase("r1"),
 		Total:           10, Max: 100, Ratio: 0.1, Status: "idle",
+		CompactableTokens: 0, CompactThresholdTokens: 12_000,
 		Buckets: map[string]int{
 			"system_prompt": 0, "runtime": 0, "chat_history": 0,
 			"read_file": 0, "run_command": 0, "other": 10,
@@ -167,6 +168,11 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err != nil {
 		t.Fatal(err)
 	}
+	payload.CompactThresholdTokens = 0
+	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err == nil {
+		t.Fatal("zero compact threshold was accepted")
+	}
+	payload.CompactThresholdTokens = 12_000
 	payload.Status = "compacting"
 	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err != nil {
 		t.Fatal(err)

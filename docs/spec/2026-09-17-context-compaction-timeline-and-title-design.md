@@ -52,6 +52,17 @@
 - 自动压缩：Runtime 阈值触发 Compactor，完成后发出 `context.compacted` SSE。
 - 两条路径都持久化同一个必填 `title` 字段，并生成相同的 timeline item。
 
+### 2.4 手动压缩设置 12k Token 收益下限
+
+手动压缩是否值得执行，不按整个上下文窗口的占用率判断，而按 Compactor 实际能够替换的旧 transcript 判断。该值复用正式压缩前的裁剪与分段规则：先移除已被新版替代的渲染图片，再排除需要长期保留的用户指令和最近两轮工具调用。
+
+- `compactable_tokens >= 12000`：允许手动压缩。
+- `compactable_tokens < 12000`：按钮禁用并置灰，后端同时拒绝直接请求。
+- 12k 是固定产品阈值，由后端通过快照协议下发；前端不自行根据窗口比例推断。
+- 自动压缩仍只由现有 85% 窗口阈值触发，不受手动压缩收益下限限制。
+
+这样可以避免在窗口总量看似较高、但绝大多数内容属于系统提示词、运行时资源或必须保留的新近交互时，发起一次几乎无法回收 token 的模型调用。
+
 ## 3. 压缩模型输出协议
 
 ### 3.1 局部 Tool Schema
@@ -218,6 +229,24 @@ Title string `json:"title"`
 - 其它数字字段继续要求非负整数，`max_tokens` 必须大于 0。
 
 本次不为手动压缩新增独立 SSE 通道。手动压缩以 REST response 为完成事实；自动压缩继续以当前 Run SSE 为完成事实，避免同一操作从 REST 和 SSE 重复插入。
+
+### 5.3 Context Window 压缩能力字段
+
+REST 快照与 `context.window.updated` SSE 同步增加两个必填整数：
+
+```json
+{
+  "compactable_tokens": 14320,
+  "compact_threshold_tokens": 12000
+}
+```
+
+- `compactable_tokens` 必须为非负整数，表示当前旧 transcript 中实际可被替换的估算 token。
+- `compact_threshold_tokens` 必须为正整数，当前固定为 `12000`。
+- 前端只比较这两个服务端事实来决定按钮是否可用。
+- 缺少字段的旧快照和旧 SSE 事件直接拒绝，不保留兼容分支。
+
+`POST /threads/:id/compact` 在模型调用前重新计算 `compactable_tokens`。若低于阈值，返回 `COMPACT_BELOW_THRESHOLD`，不调用压缩模型、不替换 transcript，也不创建压缩记录。该后端校验用于处理多窗口、事件延迟和绕过 UI 直接调用等竞态。
 
 ## 6. Timeline 即时展示修复
 
@@ -453,6 +482,8 @@ SSE reducer、history hydrator 和手动 compact store 必须复用这份映射�
 - 元信息顺序、箭头空格、after 百分比绿色、仅 token 数值红色符合本规范。
 - `0%` 和 `0.0k Token` 不被省略。
 - DOM 中不存在旧富卡片的指标卡、徽标头或嵌套摘要卡片。
+- 可压缩旧 transcript 少于 12k Token 时，手动压缩按钮禁用并置灰。
+- 前端 SSE 校验要求压缩能力字段完整，不接受缺少字段的旧协议。
 
 ## 12. 验收标准
 
@@ -463,10 +494,11 @@ SSE reducer、history hydrator 和手动 compact store 必须复用这份映射�
 5. 压缩事件视觉结构与 commit 一致：扁平、整行可展开、展开区仅由水平分隔线隔开。
 6. 标题、图标、元信息、颜色和数字格式严格符合第 7 节。
 7. 后端模型、持久化、REST、公开事件、前端类型、SSE 校验、history hydration 与测试一次性切换到新协议，不保留旧结构兼容层。
+8. 可压缩旧 transcript 未达到 12k Token 时，前端无法点击手动压缩；绕过前端的请求也会在模型调用前被后端拒绝。
 
 ## 13. 非目标
 
-- 不改变 85% 自动压缩阈值和六桶 token 估算协议。
+- 不改变 85% 自动压缩阈值和六桶 token 估算协议；12k 下限只约束手动压缩。
 - 不改变摘要五小节的业务语义。
 - 不让主 Agent 决定何时压缩，也不新增 `/compact` Agent 命令。
 - 不新增手动压缩 SSE 通道。
