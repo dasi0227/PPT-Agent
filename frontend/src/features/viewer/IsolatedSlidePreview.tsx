@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RuntimeSlide, runtimeEventFromFrame } from './previewProtocol';
 import { Button } from '../../components/ui/primitives';
 import type { DOMSelection } from '../../api/types';
+import { DraftSelectionControls } from './DraftSelectionControls';
 
 interface IsolatedSlidePreviewProps {
   slides: RuntimeSlide[];
@@ -15,6 +16,7 @@ interface IsolatedSlidePreviewProps {
   onSelection?: (selection: DOMSelection) => void;
   onSelectionMessage?: (message: string) => void;
   onSelectionCanceled?: () => void;
+  onSelectionRemove?: (selectionId: string) => void;
   onSelectionPresence?: (statuses: Array<{ selection_id: string; status: 'active' | 'content_deleted'; targets?: Array<{ target_id: string; status: 'active' | 'content_deleted' }> }>) => void;
   replayRequest?: { id: number; slideId: string };
 }
@@ -31,6 +33,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   onSelection,
   onSelectionMessage,
   onSelectionCanceled,
+  onSelectionRemove,
   onSelectionPresence,
   replayRequest,
 }) => {
@@ -123,6 +126,9 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         title={title}
         onLoad={sendDeck}
       />
+      {selectionSlide && slides[index]?.id === selectionSlide.id && onSelectionRemove && !renderError && (
+        <DraftSelectionControls slideId={selectionSlide.id} selections={draftSelections} onRemove={onSelectionRemove} />
+      )}
       {renderError && (
         <div
           role="alert"

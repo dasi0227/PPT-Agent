@@ -85,6 +85,7 @@ function PreviewFrame({
   onSelection,
   onSelectionMessage,
   onSelectionCanceled,
+  onSelectionRemove,
   onSelectionPresence,
   replayRequest,
 }: {
@@ -102,6 +103,7 @@ function PreviewFrame({
   onSelection?: (selection: DOMSelection) => void;
   onSelectionMessage?: (message: string) => void;
   onSelectionCanceled?: () => void;
+  onSelectionRemove?: (selectionId: string) => void;
   onSelectionPresence?: (statuses: Array<{ selection_id: string; status: 'active' | 'content_deleted'; targets?: Array<{ target_id: string; status: 'active' | 'content_deleted' }> }>) => void;
   replayRequest?: { id: number; slideId: string };
 }) {
@@ -132,6 +134,7 @@ function PreviewFrame({
           onSelection={onSelection}
           onSelectionMessage={onSelectionMessage}
           onSelectionCanceled={onSelectionCanceled}
+          onSelectionRemove={onSelectionRemove}
           onSelectionPresence={onSelectionPresence}
           replayRequest={replayRequest}
         />
@@ -649,6 +652,15 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                 onSelection={(selection) => { void acceptSelection(selection); }}
                 onSelectionMessage={showGlobalWarning}
                 onSelectionCanceled={() => setSelectionMode('none')}
+                onSelectionRemove={fullscreen ? undefined : (selectionId) => {
+                  if (!activeThreadId) return;
+                  const state = useComposerStore.getState();
+                  const belongsToPage = (state.threadReferences[activeThreadId] ?? []).some((reference) => (
+                    reference.kind === 'dom' && reference.selection.selection_id === selectionId
+                    && reference.selection.slide_id === currentSlide.id
+                  ));
+                  if (belongsToPage) state.removeThreadDOMSelection(activeThreadId, selectionId);
+                }}
                 replayRequest={replayRequest}
                 onSelectionPresence={(statuses) => {
                   if (!activeThreadId) return;
