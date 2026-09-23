@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
+	"go.uber.org/zap"
 )
 
 func writeRepositoryFile(t *testing.T, path, content string) {
@@ -216,20 +220,55 @@ func TestFactoryComponentsFollowTheComponentContract(t *testing.T) {
 }
 
 func TestFactorySkillsFollowTheSkillContract(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "seed", "assets", "skills", "*", "SKILL.md"))
-	if err != nil || len(paths) != 3 {
-		t.Fatalf("factory skill paths=%v err=%v", paths, err)
+	root := t.TempDir()
+	// Exercise the same initializer used after restart.sh --reset, not just the parser.
+	script := filepath.Join("..", "..", "..", "scripts", "init-workroot.sh")
+	if output, err := exec.Command("bash", script, root).CombinedOutput(); err != nil {
+		t.Fatalf("initialize fresh work root: %v\n%s", err, output)
 	}
-	for _, path := range paths {
-		raw, readErr := os.ReadFile(path)
-		if readErr != nil {
-			t.Fatalf("read %s: %v", path, readErr)
+	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "db", "app.db")}, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	store, err := sqlitestore.NewStore(db, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompts := NewPromptService(store)
+	if count, err := prompts.SeedDefaults(context.Background()); err != nil || count != 6 {
+		t.Fatalf("fresh prompt seeds=%d want=6 err=%v", count, err)
+	}
+	svc := NewSkillService(WorkRoot(root), store)
+	skills, err := svc.List()
+	if err != nil || len(skills) != 2 {
+		t.Fatalf("fresh skills=%+v err=%v", skills, err)
+	}
+	ids := []string{"design-taste-frontend", "frontend-design"}
+	resolved, err := svc.ResolveDynamic(ids)
+	if err != nil || len(resolved) != 2 {
+		t.Fatalf("resolve seeded skills: count=%d err=%v", len(resolved), err)
+	}
+	for _, id := range ids {
+		skill, err := svc.Get(id)
+		if err != nil || skill.Disabled || len(skill.Tags) != 1 || skill.Tags[0] != model.SkillTagMethodology {
+			t.Fatalf("seed skill %s metadata=%+v err=%v", id, skill, err)
 		}
-		meta, body, parseErr := parseSkillMarkdown(raw)
-		if parseErr != nil || meta.Name == "" || meta.Description == "" || body == "" {
-			t.Fatalf("factory skill %s meta=%+v err=%v", path, meta, parseErr)
+		path := filepath.Join(root, "assets", "skills", id, "SKILL.md")
+		before, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, body, err := parseRepositoryFrontmatter(before, mdFrontmatterStyle)
+		if err != nil {
+			t.Fatal(err)
+		}
+		updated, err := svc.UpdateMetadata(id, "Edited "+skill.Name, skill.Description, skill.Tags)
+		if err != nil || updated.Content != strings.TrimSpace(body) {
+			t.Fatalf("edit seed skill %s: body changed or error: %v", id, err)
 		}
 	}
+
 }
 
 func TestRepositoryServicesRejectTraversalSymlinksAndOversizeFiles(t *testing.T) {

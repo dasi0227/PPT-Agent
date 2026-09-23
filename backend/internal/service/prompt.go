@@ -49,14 +49,34 @@ type PromptWriteParams struct {
 
 var defaultPromptSeeds = []PromptWriteParams{
 	{
+		Name: "演示策划师", Desc: "从受众与演示目标出发组织内容。",
+		Value: "请以演示策划师的身份协助我，先明确受众、演示目标与核心结论，再组织叙事、页面内容和表达方式。",
+		Tags:  []model.PromptTag{model.PromptTagIdentity},
+	},
+	{
 		Name: "叙事大纲", Desc: "梳理整份演示的叙事主线与逐页表达任务。",
 		Value: "请先梳理整份演示的叙事主线，明确开场、论证、转折与结论，并给出逐页标题和每页唯一表达任务。",
 		Tags:  []model.PromptTag{model.PromptTagDeliverable},
 	},
 	{
+		Name: "事实边界", Desc: "使用已有材料，明确区分事实、推断与缺失信息。",
+		Value: "请仅依据我提供的材料和可核实的信息创作，不编造数据、案例或引用；推断需要明确标注，缺失信息请列出待确认项。",
+		Tags:  []model.PromptTag{model.PromptTagConstraint},
+	},
+	{
+		Name: "检查并提交", Desc: "检查工作区改动后生成中文提交信息并提交。",
+		Value: "请先检查当前工作区状态和具体改动，再用简洁的中文提交信息概括本次变更并提交；没有改动时不要创建空提交，不推送远程。",
+		Tags:  []model.PromptTag{model.PromptTagGit},
+	},
+	{
 		Name: "视觉审查", Desc: "检查并修复页面的视觉层级与排版问题。",
 		Value: "请审查当前页面的视觉层级、网格对齐、留白比例、文字换行和内容密度，并直接修复影响阅读的问题。",
 		Tags:  []model.PromptTag{model.PromptTagReview},
+	},
+	{
+		Name: "澄清需求", Desc: "找出影响创作方向的关键信息缺口。",
+		Value: "请先整理已知需求，只针对会影响创作方向的信息缺口提出简短问题，避免重复询问已有信息。",
+		Tags:  []model.PromptTag{model.PromptTagOther},
 	},
 }
 

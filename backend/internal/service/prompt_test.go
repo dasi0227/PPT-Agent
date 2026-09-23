@@ -92,20 +92,24 @@ func TestPromptServiceSeedsDefaultsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list seeded prompts: %v", err)
 	}
-	if len(prompts) != len(defaultPromptSeeds) {
-		t.Fatalf("seeded prompts=%d want=%d", len(prompts), len(defaultPromptSeeds))
+	if len(prompts) != 6 {
+		t.Fatalf("seeded prompts=%d want=6", len(prompts))
 	}
-	covered := map[model.PromptTag]bool{}
+	covered := map[model.PromptTag]int{}
 	for _, prompt := range prompts {
+		if len(prompt.Tags) != 1 {
+			t.Fatalf("seed prompt %q must belong to exactly one category", prompt.Name)
+		}
 		for _, tag := range prompt.Tags {
-			covered[tag] = true
+			covered[tag]++
 		}
 	}
 	for _, tag := range []model.PromptTag{
-		model.PromptTagDeliverable, model.PromptTagReview,
+		model.PromptTagIdentity, model.PromptTagDeliverable, model.PromptTagConstraint,
+		model.PromptTagGit, model.PromptTagReview, model.PromptTagOther,
 	} {
-		if !covered[tag] {
-			t.Errorf("default prompts do not cover tag %q", tag)
+		if covered[tag] != 1 {
+			t.Errorf("default prompts for tag %q=%d want=1", tag, covered[tag])
 		}
 	}
 }

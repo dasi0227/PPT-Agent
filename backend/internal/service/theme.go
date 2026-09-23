@@ -112,6 +112,7 @@ func (s *ThemeService) UpdateMetadata(id, name, description string, values []mod
 		body,
 		cssFrontmatterStyle,
 		repositoryFileMetadata{Name: name, Description: description},
+		maxRepositoryFileSize,
 		func() error {
 			return s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeTheme, id, raw)
 		},

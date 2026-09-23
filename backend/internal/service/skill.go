@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxSkillFileBytes       = maxRepositoryFileSize
+	maxSkillFileBytes       = 256 << 10
 	maxDynamicSkillsPerCall = 8
 	maxDynamicSkillBytes    = 192 << 10
 )
@@ -130,7 +130,7 @@ func (s *SkillService) UpdateMetadata(id, name, description string, values []mod
 	if err != nil {
 		return model.RepositorySkill{}, repositoryReadError("skill", id, err)
 	}
-	_, body, err := parseRepositoryFrontmatter(original, mdFrontmatterStyle)
+	metadata, body, err := parseRepositoryFrontmatter(original, mdFrontmatterStyle)
 	if err != nil {
 		return model.RepositorySkill{}, repositoryReadError("skill", id, err)
 	}
@@ -149,12 +149,14 @@ func (s *SkillService) UpdateMetadata(id, name, description string, values []mod
 	for _, tag := range tags {
 		raw = append(raw, string(tag))
 	}
+	metadata.Name, metadata.Description = name, description
 	if err := replaceRepositoryFileMetadata(
 		path,
 		original,
 		body,
 		mdFrontmatterStyle,
-		repositoryFileMetadata{Name: name, Description: description},
+		metadata,
+		maxSkillFileBytes,
 		func() error {
 			return s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeSkill, id, raw)
 		},

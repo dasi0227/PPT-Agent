@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -64,5 +65,53 @@ func writeSkillFixture(t *testing.T, root, id, name, description, body string) {
 	raw := "---\nname: " + name + "\ndescription: " + description + "\n---\n" + body + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSkillFileLimitsApplyToReadsAndMetadataUpdates(t *testing.T) {
+	root := t.TempDir()
+	body := strings.Repeat("x", maxSkillFileBytes-100)
+	writeSkillFixture(t, root, "large", "Large", "Description", body)
+	svc := NewSkillService(WorkRoot(root))
+	if _, err := svc.Get("large"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "assets", "skills", "large", "SKILL.md")
+	before, _ := os.ReadFile(path)
+	if _, err := svc.UpdateMetadata("large", "Large", strings.Repeat("d", 500), nil); !errors.Is(err, ErrRepositoryFileTooLarge) {
+		t.Fatalf("oversized metadata update: %v", err)
+	}
+	after, _ := os.ReadFile(path)
+	if string(after) != string(before) {
+		t.Fatal("failed update changed the skill file")
+	}
+	writeSkillFixture(t, root, "oversized", "Oversized", "Description", strings.Repeat("x", maxSkillFileBytes))
+	if _, err := svc.Get("oversized"); !errors.Is(err, ErrRepositoryFileTooLarge) {
+		t.Fatalf("oversized skill read: %v", err)
+	}
+}
+
+func TestSkillMetadataEditsPreserveExtensionFields(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "assets", "skills", "extended", "SKILL.md")
+	writeRepositoryFile(t, path, "---\nname: Extended\ndescription: Description\nmetadata:\n  version: '1.0'\nallowed-tools: Read\n---\nKeep this body.\n")
+	svc := NewSkillService(WorkRoot(root))
+	if _, err := svc.UpdateMetadata("extended", "Renamed", "New description", nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata, body, err := parseRepositoryFrontmatter(raw, mdFrontmatterStyle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Name != "Renamed" || metadata.Description != "New description" || metadata.Extra["allowed-tools"].Value != "Read" || strings.TrimSpace(body) != "Keep this body." {
+		t.Fatalf("metadata edit lost content: %s", raw)
+	}
+	version := metadata.Extra["metadata"]
+	if len(version.Content) != 2 || version.Content[1].Value != "1.0" {
+		t.Fatal("metadata extension was lost")
 	}
 }

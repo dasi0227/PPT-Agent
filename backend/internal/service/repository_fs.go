@@ -50,7 +50,7 @@ func readRepositoryFile(root, id, filename string, maxBytes int64) ([]byte, stri
 		return nil, "", ErrUnsafeRepositoryPath
 	}
 	if maxBytes > 0 && info.Size() > maxBytes {
-		return nil, "", ErrRepositoryFileTooLarge
+		return nil, "", fmt.Errorf("%w (%d bytes)", ErrRepositoryFileTooLarge, maxBytes)
 	}
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -69,7 +69,7 @@ func readRepositoryFile(root, id, filename string, maxBytes int64) ([]byte, stri
 		return nil, "", err
 	}
 	if maxBytes > 0 && int64(len(raw)) > maxBytes {
-		return nil, "", ErrRepositoryFileTooLarge
+		return nil, "", fmt.Errorf("%w (%d bytes)", ErrRepositoryFileTooLarge, maxBytes)
 	}
 	return raw, resolvedPath, nil
 }
@@ -136,7 +136,7 @@ func repositoryOpenURL(path string) string {
 var (
 	ErrInvalidRepositoryID    = errors.New("invalid repository id")
 	ErrUnsafeRepositoryPath   = errors.New("unsafe repository path")
-	ErrRepositoryFileTooLarge = errors.New("repository file exceeds 64KB")
+	ErrRepositoryFileTooLarge = errors.New("repository file exceeds size limit")
 	ErrRepositoryCorrupt      = errors.New("repository metadata is invalid")
 )
 

@@ -218,6 +218,7 @@ func (s *ComponentService) UpdateMetadata(id, name, description string, values [
 		body,
 		htmlFrontmatterStyle,
 		repositoryFileMetadata{Name: name, Description: description},
+		maxRepositoryFileSize,
 		func() error {
 			return s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeComponent, id, raw)
 		},

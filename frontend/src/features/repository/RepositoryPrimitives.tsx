@@ -112,6 +112,7 @@ export function RepositoryDirectoryItem({
   disabled = false,
   name,
   description,
+  descriptionLines = 2,
   visual,
   visualClassName,
   visualBare = false,
@@ -122,6 +123,7 @@ export function RepositoryDirectoryItem({
   disabled?: boolean;
   name: ReactNode;
   description: string;
+  descriptionLines?: 2 | 3;
   visual: ReactNode;
   visualClassName?: string;
   visualBare?: boolean;
@@ -156,7 +158,7 @@ export function RepositoryDirectoryItem({
         <span className={cn('block min-w-0 truncate text-[13px] font-bold', disabled ? 'text-text-400' : 'text-text-900')}>
           {name}
         </span>
-        <span className="mt-0.5 block line-clamp-2 text-[11px] leading-4 text-text-600">{description}</span>
+        <span className={cn('mt-0.5 text-[11px] leading-4 text-text-600', descriptionLines === 3 ? 'line-clamp-3' : 'line-clamp-2')}>{description}</span>
       </span>
       <ChevronRight
         className={cn(

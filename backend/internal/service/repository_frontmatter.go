@@ -12,8 +12,9 @@ import (
 )
 
 type repositoryFileMetadata struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
+	Name        string               `yaml:"name"`
+	Description string               `yaml:"description"`
+	Extra       map[string]yaml.Node `yaml:",inline"`
 }
 
 type repositoryFrontmatterStyle struct {
@@ -45,6 +46,10 @@ func parseRepositoryFrontmatter(raw []byte, style repositoryFrontmatterStyle) (r
 	var metadata repositoryFileMetadata
 	if err := decoder.Decode(&metadata); err != nil {
 		return repositoryFileMetadata{}, "", fmt.Errorf("%w: %v", ErrRepositoryCorrupt, err)
+	}
+	// Skill frontmatter may contain extension fields such as metadata and allowed-tools. Preserve them when editing the display metadata.
+	if style != mdFrontmatterStyle && len(metadata.Extra) > 0 {
+		return repositoryFileMetadata{}, "", fmt.Errorf("%w: unsupported repository metadata fields", ErrRepositoryCorrupt)
 	}
 	metadata.Name = strings.TrimSpace(metadata.Name)
 	metadata.Description = strings.TrimSpace(metadata.Description)
@@ -81,14 +86,15 @@ func replaceRepositoryFileMetadata(
 	body string,
 	style repositoryFrontmatterStyle,
 	metadata repositoryFileMetadata,
+	maxBytes int,
 	persistTags func() error,
 ) error {
 	next, err := renderRepositoryFrontmatter(metadata, body, style)
 	if err != nil {
 		return err
 	}
-	if len(next) > maxRepositoryFileSize {
-		return ErrRepositoryFileTooLarge
+	if len(next) > maxBytes {
+		return fmt.Errorf("%w (%d bytes)", ErrRepositoryFileTooLarge, maxBytes)
 	}
 	if err := atomicRewriteRepositoryFile(path, next); err != nil {
 		return err
