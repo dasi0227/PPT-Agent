@@ -1,6 +1,7 @@
+import { HomeLogo } from '../../components/ui/HomeLogo';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom';
-import { Cpu, Eye, EyeOff, Loader2, Plus, Presentation, RefreshCw, Route, Trash2 } from 'lucide-react';
+import { Cpu, Eye, EyeOff, Loader2, Plus, RefreshCw, Route, Trash2 } from 'lucide-react';
 import { settingsApi, SIDE_PURPOSES, type SidePurpose } from '../../api/settings';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { IconButton } from '../../components/ui/primitives';
@@ -263,7 +264,7 @@ export function SettingsPage() {
         </button>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" /><span className="flex-1 font-bold">设置</span>
         <IconButton label="刷新设置" expandableLabel="刷新" disabled={loading || saving} onClick={() => dirty ? setReloadPrompt(true) : void load()}><RefreshCw size={16} className={loading ? 'animate-spin motion-reduce:animate-none' : undefined} /></IconButton>
-        <IconButton label="返回主页" expandableLabel="主页" onClick={() => navigate(returnTo)} disabled={saving} className="ml-1"><Presentation size={16} /></IconButton>
+        <IconButton label="返回主页" expandableLabel="主页" onClick={() => navigate(returnTo)} disabled={saving} className="ml-1"><HomeLogo /></IconButton>
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav className="flex shrink-0 gap-1 border-b border-border bg-panel p-3 md:w-52 md:flex-col md:border-b-0 md:border-r" aria-label="设置栏目">

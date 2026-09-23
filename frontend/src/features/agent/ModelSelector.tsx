@@ -49,7 +49,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             className="composer-model-button inline-flex h-7 min-w-0 max-w-[176px] shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 data-[state=open]:bg-panel-muted data-[state=open]:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
           >
             <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-            <span className="composer-model-label min-w-0 truncate">{triggerLabel}</span>
+            <span className="min-w-0 truncate">{triggerLabel}</span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="max-h-64 w-[196px] overflow-y-auto p-1">

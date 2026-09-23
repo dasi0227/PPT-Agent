@@ -7,6 +7,7 @@ import { useToastStore } from '../../stores/toastStore';
 import { ComponentRepositoryPage } from './ComponentRepositoryPage';
 import { SkillRepositoryPage } from './SkillRepositoryPage';
 import { ThemeRepositoryPage } from './ThemeRepositoryPage';
+import { ThemeSelector } from '../viewer/ThemeSelector';
 import { clearThemeExampleCache } from './ThemePreview';
 
 const mocks = vi.hoisted(() => ({
@@ -159,6 +160,7 @@ describe('personal repository pages', () => {
     expect(preview).toHaveAttribute('sandbox', 'allow-scripts');
     expect(preview).toHaveAttribute('src', '/slide-runtime/index.html');
     expect(screen.getByRole('main')).toHaveClass('h-[100dvh]', 'overflow-hidden');
+    expect(screen.queryByRole('button', { name: /应用主题|已保存主题|项目不可用|无当前项目/ })).not.toBeInTheDocument();
     expect(screen.queryByText('色板')).not.toBeInTheDocument();
     expect(screen.queryByText('字体')).not.toBeInTheDocument();
     const editButton = screen.getByRole('button', { name: '编辑Editorial Serif' });
@@ -218,40 +220,27 @@ describe('personal repository pages', () => {
     finish({ themes });
   });
 
-  it('applies the previewed theme to the active project and synchronizes project state', async () => {
-    const themes = themeFixtures();
-    mocks.listThemes.mockResolvedValue({ themes });
-    mocks.getTheme.mockImplementation(async (id: string) => themes.find((theme) => theme.id === id));
+  it('applies a theme from the canvas selector and synchronizes project state', async () => {
+    mocks.listThemes.mockResolvedValue({ themes: themeFixtures() });
     mocks.setTheme.mockResolvedValue(project('blueprint'));
     mocks.getContent.mockResolvedValue(projectContent('blueprint'));
     useProjectStore.setState({
       projects: [project('editorial-serif')],
-      openProjectIds: ['project-7'],
-      activeProjectId: null,
+      activeProjectId: 'project-7',
       contentByProjectId: { 'project-7': projectContent('editorial-serif') },
     });
-
-    renderPage(<ThemeRepositoryPage />, {
-      pathname: '/warehouse/theme',
-      state: { returnTo: '/projects/project-7?slide=slide-2' },
-    });
-
-    const currentButton = await screen.findByRole('button', { name: '已保存主题' });
-    expect(currentButton).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: /Blueprint/ }));
+    render(<ThemeSelector projectId="project-7" />);
+    const trigger = screen.getByRole('button', { name: '切换主题' });
+    await waitFor(() => expect(trigger).toHaveTextContent('Editorial Serif'));
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    expect(screen.getByRole('menuitemradio', { name: 'Editorial Serif' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Editorial Serif' }));
     expect(mocks.setTheme).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: '应用主题' }));
-
-    await waitFor(() => expect(mocks.setTheme).toHaveBeenCalledWith('project-7', 'blueprint'));
-    await waitFor(() => expect(screen.getByRole('button', { name: '已保存主题' })).toBeDisabled());
-    expect(useProjectStore.getState().projects[0]).toMatchObject({
-      id: 'project-7',
-      theme: 'blueprint',
-      });
-    expect(useProjectStore.getState().contentByProjectId['project-7'].design).toMatchObject({
-      theme: 'blueprint',
-      });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Blueprint' }));
+    await waitFor(() => expect(trigger).toHaveTextContent('Blueprint'));
+    expect(mocks.setTheme).toHaveBeenCalledWith('project-7', 'blueprint');
+    expect(useProjectStore.getState().contentByProjectId['project-7'].design.theme).toBe('blueprint');
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({ message: '已保存「Blueprint」主题，画布将加载新外观', tone: 'success' }),
     ]);
@@ -288,35 +277,26 @@ describe('personal repository pages', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('keeps the preview and original project theme when applying fails, and blocks duplicate submissions', async () => {
-    const themes = themeFixtures();
-    let rejectRequest: (reason: Error) => void = () => undefined;
-    const request = new Promise<Project>((_, reject) => { rejectRequest = reject; });
-    mocks.listThemes.mockResolvedValue({ themes });
-    mocks.getTheme.mockImplementation(async (id: string) => themes.find((theme) => theme.id === id));
-    mocks.setTheme.mockReturnValue(request);
+  it('keeps the original theme when applying fails and blocks duplicate submissions', async () => {
+    let rejectRequest!: (reason: Error) => void;
+    mocks.listThemes.mockResolvedValue({ themes: themeFixtures() });
+    mocks.setTheme.mockReturnValue(new Promise<Project>((_, reject) => { rejectRequest = reject; }));
     useProjectStore.setState({
       projects: [project('editorial-serif')],
-      openProjectIds: ['project-7'],
       activeProjectId: 'project-7',
       contentByProjectId: { 'project-7': projectContent('editorial-serif') },
     });
-
-    renderPage(<ThemeRepositoryPage />);
-
-    await screen.findByRole('button', { name: '已保存主题' });
-    fireEvent.click(screen.getByRole('button', { name: /Blueprint/ }));
-    const applyButton = screen.getByRole('button', { name: '应用主题' });
-    fireEvent.click(applyButton);
-    fireEvent.click(applyButton);
-
+    render(<ThemeSelector projectId="project-7" />);
+    const trigger = screen.getByRole('button', { name: '切换主题' });
+    await waitFor(() => expect(trigger).toHaveTextContent('Editorial Serif'));
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Blueprint' }));
+    expect(trigger).toBeDisabled();
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     expect(mocks.setTheme).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: '应用中' })).toBeDisabled();
     rejectRequest(new Error('theme write failed'));
-
-    await waitFor(() => expect(screen.getByRole('button', { name: '应用主题' })).toBeEnabled());
-    expect(screen.getByTitle('Blueprint 主题预览')).toBeInTheDocument();
-    expect(useProjectStore.getState().projects[0].theme).toBe('editorial-serif');
+    await waitFor(() => expect(trigger).toBeEnabled());
+    expect(trigger).toHaveTextContent('Editorial Serif');
     expect(useProjectStore.getState().contentByProjectId['project-7'].design.theme).toBe('editorial-serif');
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({ message: 'theme write failed', tone: 'error' }),

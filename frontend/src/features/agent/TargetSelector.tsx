@@ -53,8 +53,8 @@ export function TargetSelector({
     <DropdownMenu open={open} onOpenChange={(value) => { setOpen(value); if (!value) setDetail(null); }}>
       <DropdownMenuTrigger asChild>
         <button type="button" aria-label={`范围：${label}`} title={label} disabled={disabled} className="composer-context-trigger composer-target-button">
-          <Crosshair className="h-3.5 w-3.5 shrink-0 text-text-600" strokeWidth={1.75} />
-          <span className="min-w-0 truncate">{label}</span>
+          <Crosshair className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
+          <span className="min-w-0 truncate font-medium">{label}</span>
           <ChevronDown className="composer-context-chevron" strokeWidth={1.75} aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>

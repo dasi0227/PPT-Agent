@@ -570,16 +570,15 @@
 .composer-context-trigger:disabled { opacity:.45; cursor:not-allowed; }
 .composer-context-chevron { @apply text-text-600; width:12px; height:12px; flex-shrink:0; margin-left:3px; }
 .composer-context-trigger[data-state='open'] .composer-context-chevron { transform:rotate(180deg); }
-.composer-target-button { @apply text-text-700; min-width:0; max-width:65%; flex-shrink:1; gap:6px; font-size:12px; }
+.composer-target-button { min-width:0; max-width:65%; flex-shrink:1; }
 @media (prefers-reduced-motion:no-preference) {
   .composer-context-trigger { transition:background-color 140ms; }
   .composer-context-chevron { transition:transform 160ms; }
 }
 
-/* Auxiliary controls retain their hover labels in the bottom toolbar. */
+/* Attachment and skill controls reveal their labels on hover. */
 .composer-attach-button,
-.composer-skill-button,
-.composer-model-button {
+.composer-skill-button {
   width: auto;
   min-width: 28px;
   justify-content: center;
@@ -591,8 +590,7 @@
 }
 
 .composer-attach-label,
-.composer-skill-label,
-.composer-model-label {
+.composer-skill-label {
   display: inline-block;
   max-width: 0;
   overflow: hidden;
@@ -614,11 +612,6 @@
   padding-inline: 0.25rem;
 }
 
-.composer-model-button:is(:hover, :focus-visible, [data-state='open']) {
-  gap: 0.25rem;
-  padding-inline: 0.5rem;
-}
-
 .composer-attach-button:is(:hover, :focus-visible) .composer-attach-label {
   max-width: 3rem;
   opacity: 1;
@@ -631,20 +624,12 @@
   transform: translateX(0);
 }
 
-.composer-model-button:is(:hover, :focus-visible, [data-state='open']) .composer-model-label {
-  max-width: 10rem;
-  opacity: 1;
-  transform: translateX(0);
-}
-
 .agent-panel {
   container: agent-panel / inline-size;
 }
 
 @container agent-panel (max-width: 380px) {
   .composer-context-bar { gap:6px; }
-  .composer-target-button { gap:5px; padding-inline:7px; font-size:11px; }
-  .composer-target-button .composer-context-chevron { margin-left:0; }
   .composer-model-button {
     max-width: 140px;
   }

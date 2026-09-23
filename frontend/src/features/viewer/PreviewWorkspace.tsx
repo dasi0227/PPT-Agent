@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Code,
+  FileText,
   Layers,
   LayoutGrid,
   List,
@@ -11,6 +12,7 @@ import {
   MousePointer2,
   PanelLeftOpen,
   PanelRightOpen,
+  Presentation,
   Quote,
   Scan,
   Table,
@@ -47,6 +49,7 @@ import { useExportStore } from '../../stores/exportStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useRunStore } from '../../stores/runStore';
 import { useCanvasPan } from './useCanvasPan';
+import { ThemeSelector } from './ThemeSelector';
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
@@ -280,7 +283,7 @@ function OverviewSlide({
 function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof Element
     && !!target.closest(
-      'input, textarea, select, button, a, [contenteditable="true"], [role="separator"], [role="menuitem"], [role="tab"]',
+      'input, textarea, select, button, a, [contenteditable="true"], [role="separator"], [role="menuitem"], [role="menuitemradio"], [role="tab"]',
     );
 }
 
@@ -509,8 +512,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
 
   return (
     <div className="relative flex h-full flex-col bg-canvas">
-      <div className="flex h-12 shrink-0 items-center justify-between gap-2 overflow-x-auto whitespace-nowrap border-b border-border bg-panel px-3">
-        <div className="flex shrink-0 items-center gap-1">
+      <div className="grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 whitespace-nowrap border-b border-border bg-panel px-3">
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-none">
           {leftPanelHidden && (
             <IconButton
               label="展开左侧目录"
@@ -521,91 +524,101 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
               <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
           )}
-          <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML}>
-            <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
-          </IconButton>
-          <IconButton
-            label={previewMode === 'overview' ? '切换到单页视图' : '切换到概览视图'}
-            onClick={previewMode === 'overview' ? exitOverview : enterOverview}
-            className={previewMode === 'overview' ? 'bg-accent-soft text-accent' : undefined}
-          >
-            <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
-          </IconButton>
+          <ThemeSelector key={projectId} projectId={projectId} />
           <div className="ml-1.5 flex shrink-0 items-center rounded-full bg-panel-muted p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setGlobalView('outline')}
               aria-pressed={globalView === 'outline'}
               className={cn(
-                'h-7 shrink-0 whitespace-nowrap rounded-full px-3 font-medium transition-colors',
+                'inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 font-medium transition-colors',
                 globalView === 'outline' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-600',
               )}
-            >设计稿</button>
+            >
+              <FileText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              <span>设计稿</span>
+            </button>
             <button
               type="button"
               onClick={() => setGlobalView('html')}
               aria-pressed={globalView === 'html'}
               className={cn(
-                'h-7 shrink-0 whitespace-nowrap rounded-full px-3 font-medium transition-colors',
+                'inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 font-medium transition-colors',
                 globalView === 'html' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-600',
               )}
-            >幻灯片</button>
-          </div>
-          <div className="ml-1.5 flex shrink-0 items-center gap-0.5 rounded-full bg-panel-muted p-0.5">
-            <IconButton
-              label="上一页"
-              onClick={goPrev}
-              disabled={!hasSlides || safePage === 0}
-              className="h-7 w-7 rounded-full transition-colors hover:bg-accent-soft hover:text-accent"
             >
-              <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
-            </IconButton>
-            <span
-              className="flex h-7 min-w-14 shrink-0 items-center justify-center gap-1 px-2 text-[13px] tabular-nums"
-              aria-label={hasSlides ? `第 ${safePage + 1} 页，共 ${slides.length} 页` : '暂无页面'}
-            >
-              <span aria-hidden="true" className="font-semibold text-text-900">{hasSlides ? safePage + 1 : 0}</span>
-              <span aria-hidden="true" className="text-text-600">/ {hasSlides ? slides.length : 0}</span>
-            </span>
-            <IconButton
-              label="下一页"
-              onClick={goNext}
-              disabled={!hasSlides || safePage >= slides.length - 1}
-              className="h-7 w-7 rounded-full transition-colors hover:bg-accent-soft hover:text-accent"
-            >
-              <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
-            </IconButton>
+              <Presentation className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              <span>幻灯片</span>
+            </button>
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          <IconButton label="选择元素" aria-pressed={selectionMode === 'element'} onClick={() => setSelectionMode((value) => value === 'element' ? 'none' : 'element')} disabled={!selectionEnabled} className={selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}>
-            <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
+        <div className="flex items-center gap-0.5 rounded-full bg-panel-muted p-0.5">
+          <IconButton
+            label="上一页"
+            onClick={goPrev}
+            disabled={!hasSlides || safePage === 0}
+            className="h-7 w-7 rounded-full transition-colors hover:bg-accent-soft hover:text-accent"
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
-          <IconButton label="框选区域" aria-pressed={selectionMode === 'region'} onClick={() => setSelectionMode((value) => value === 'region' ? 'none' : 'region')} disabled={!selectionEnabled} className={selectionMode === 'region' ? 'bg-accent-soft text-accent' : undefined}>
-            <Scan className="h-4 w-4" strokeWidth={1.75} />
+          <span
+            className="flex h-7 min-w-14 shrink-0 items-center justify-center gap-1 px-2 text-[13px] tabular-nums"
+            aria-label={hasSlides ? `第 ${safePage + 1} 页，共 ${slides.length} 页` : '暂无页面'}
+          >
+            <span aria-hidden="true" className="font-semibold text-text-900">{hasSlides ? safePage + 1 : 0}</span>
+            <span aria-hidden="true" className="text-text-600">/ {hasSlides ? slides.length : 0}</span>
+          </span>
+          <IconButton
+            label="下一页"
+            onClick={goNext}
+            disabled={!hasSlides || safePage >= slides.length - 1}
+            className="h-7 w-7 rounded-full transition-colors hover:bg-accent-soft hover:text-accent"
+          >
+            <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
-          <div className="ml-1.5 flex items-center gap-1">
-            <IconButton label="缩小" onClick={zoomOut} disabled={!zoomEnabled || zoom <= ZOOM_MIN}>
-              <ZoomOut className="h-4 w-4" strokeWidth={1.75} />
+        </div>
+
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-none">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <IconButton label="选择元素" aria-pressed={selectionMode === 'element'} onClick={() => setSelectionMode((value) => value === 'element' ? 'none' : 'element')} disabled={!selectionEnabled} className={selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}>
+              <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
-            <IconButton label="放大" onClick={zoomIn} disabled={!zoomEnabled || zoom >= ZOOM_MAX}>
-              <ZoomIn className="h-4 w-4" strokeWidth={1.75} />
+            <IconButton label="框选区域" aria-pressed={selectionMode === 'region'} onClick={() => setSelectionMode((value) => value === 'region' ? 'none' : 'region')} disabled={!selectionEnabled} className={selectionMode === 'region' ? 'bg-accent-soft text-accent' : undefined}>
+              <Scan className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
-          </div>
-          <div className="ml-1.5">
-            <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
-          </div>
-          {rightPanelHidden && (
+            <div className="ml-1.5 flex items-center gap-1">
+              <IconButton label="缩小" onClick={zoomOut} disabled={!zoomEnabled || zoom <= ZOOM_MIN}>
+                <ZoomOut className="h-4 w-4" strokeWidth={1.75} />
+              </IconButton>
+              <IconButton label="放大" onClick={zoomIn} disabled={!zoomEnabled || zoom >= ZOOM_MAX}>
+                <ZoomIn className="h-4 w-4" strokeWidth={1.75} />
+              </IconButton>
+            </div>
             <IconButton
-              label="展开右侧对话"
-              onClick={sidebarControls?.onExpandRight ?? ui.toggleRightPanel}
-              disabled={sidebarControls && !sidebarControls.canExpandRight}
-              title={sidebarControls && !sidebarControls.canExpandRight ? '加宽窗口后可展开右侧对话' : '展开右侧对话'}
+              label={previewMode === 'overview' ? '切换到单页视图' : '切换到概览视图'}
+              onClick={previewMode === 'overview' ? exitOverview : enterOverview}
+              className={previewMode === 'overview' ? 'bg-accent-soft text-accent' : undefined}
             >
-              <PanelRightOpen className="h-4 w-4" strokeWidth={1.75} />
+              <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
-          )}
+            <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML}>
+              <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
+            </IconButton>
+            <div className="ml-1.5">
+              <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
+            </div>
+            {rightPanelHidden && (
+              <IconButton
+                label="展开右侧对话"
+                onClick={sidebarControls?.onExpandRight ?? ui.toggleRightPanel}
+                disabled={sidebarControls && !sidebarControls.canExpandRight}
+                title={sidebarControls && !sidebarControls.canExpandRight ? '加宽窗口后可展开右侧对话' : '展开右侧对话'}
+              >
+                <PanelRightOpen className="h-4 w-4" strokeWidth={1.75} />
+              </IconButton>
+            )}
+          </div>
         </div>
       </div>
 

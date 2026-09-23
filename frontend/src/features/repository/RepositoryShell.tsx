@@ -1,5 +1,6 @@
+import { HomeLogo } from '../../components/ui/HomeLogo';
 import type { ReactNode } from 'react';
-import { BookOpenText, Component, NotebookText, Palette, Presentation, RefreshCw } from 'lucide-react';
+import { BookOpenText, Component, NotebookText, Palette, RefreshCw } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
@@ -58,7 +59,7 @@ export function RepositoryShell({
           title="返回主页"
           aria-label="返回主页"
         >
-          <Presentation className="h-4 w-4" strokeWidth={1.75} />
+          <HomeLogo />
           <span aria-hidden="true" className="expandable-icon-label">主页</span>
         </Link>
       </header>
