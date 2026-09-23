@@ -16,6 +16,7 @@ import { useProjectStore } from './projectStore';
 
 function snapshot(revision: number): ProjectContentSnapshot {
   return {
+    appearance: null,
     hashes: { outline: `outline-${revision}` },
     manifest: { version: '5.0', project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
     outline: { version: '5.0', project_id: 'pro_1', sections: [], created_at: 1, updated_at: 1 },

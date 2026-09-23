@@ -200,3 +200,27 @@ func TestThemeHandlerRejectsIncompleteTokens(t *testing.T) {
 		t.Fatalf("incomplete theme response = %d %s", response.Code, response.Body.String())
 	}
 }
+
+func TestThemeCSSRejectsStaleStyleVersion(t *testing.T) {
+	root := t.TempDir()
+	path := "assets/themes/editorial-serif/theme.css"
+	css := "/*\n---\nname: Editorial Serif\ndescription: Theme\n---\n*/\n" + completeThemeFixtureCSS()
+	writeRepositoryFixture(t, root, path, css)
+	engine := repositoryTestRouter(t, root)
+	response := performRepositoryRequest(t, engine, http.MethodGet, "/api/v1/themes/editorial-serif", "")
+	var theme struct {
+		StyleHash  string         `json:"style_hash"`
+		Appearance map[string]any `json:"appearance"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &theme); err != nil || theme.StyleHash == "" || theme.Appearance["hash"] == nil {
+		t.Fatalf("missing appearance: %s", response.Body.String())
+	}
+	url := "/api/v1/themes/editorial-serif/css?v=" + strings.TrimPrefix(theme.StyleHash, "sha256:")
+	if got := performRepositoryRequest(t, engine, http.MethodGet, url, ""); got.Code != http.StatusOK {
+		t.Fatalf("current CSS rejected: %d", got.Code)
+	}
+	writeRepositoryFixture(t, root, path, css+"\n.card { border-style:dashed; }")
+	if got := performRepositoryRequest(t, engine, http.MethodGet, url, ""); got.Code != http.StatusConflict {
+		t.Fatalf("obsolete CSS version served as current: %d", got.Code)
+	}
+}

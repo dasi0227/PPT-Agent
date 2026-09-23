@@ -524,7 +524,7 @@ func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 }
 
 func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
-	dir := t.TempDir()
+	dir, _ := renderThemeFixture(t)
 	projectID := "pro_aaaaaa"
 	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Title: "Body", Role: "content"}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
@@ -545,7 +545,7 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 }
 
 func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
-	dir := t.TempDir()
+	dir, themeCSS := renderThemeFixture(t)
 	projectID := "pro_aaaaaa"
 	slideID := "sli_attea2"
 	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
@@ -587,7 +587,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	result := (slideRenderTool{
 		pack:     pack,
 		renderer: successfulScreenshotRenderer{},
-		themes:   staticThemeLoader{theme: model.Theme{ID: "clean", CSS: `:root{--accent:red}`}},
+		themes:   staticThemeLoader{theme: model.Theme{ID: "clean", CSS: themeCSS}},
 	}).Execute(context.Background(), DomainToolInput{
 		Args: map[string]any{"slide_id": slideID}, RunID: "run_1", ProjectDir: dir, Session: session, Context: pack,
 		Scope: model.NewRunScope(model.ScopeAllPages, slideID),
@@ -610,6 +610,16 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	images := latestRenderedImages(pack, dir, nil)
 	if len(images) != 1 || images[0].ImagePath != result.Data["image_path"] || images[0].Stale {
 		t.Fatalf("latest render index is missing or stale: %+v", images)
+	}
+	themePath := filepath.Join(dir, "..", "..", "..", "assets", "themes", "clean", "theme.css")
+	if err := os.WriteFile(themePath, []byte(themeCSS+"\n.slide-title {color:red}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if changed := latestRenderedImages(pack, dir, nil); len(changed) != 1 || !changed[0].Stale {
+		t.Fatal("CSS change under the same theme ID did not invalidate the screenshot")
+	}
+	if err := os.WriteFile(themePath, []byte(themeCSS), 0644); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.WriteFile(htmlPath, append(html, []byte("\n<!-- changed -->")...), 0o644); err != nil {
 		t.Fatal(err)
@@ -685,4 +695,25 @@ func TestToolSchemasRemainStableAcrossPageScopeAndKeepAuthorization(t *testing.T
 	if result := tool.Execute(context.Background(), DomainToolInput{Session: &RunSession{}, Scope: first, Args: map[string]any{"op": "slide.spec.write", "slide_id": "sli_b", "spec": map[string]any{}}}); result.Code != CodeTargetOutOfScope {
 		t.Fatalf("out-of-scope mutation was not rejected: %+v", result)
 	}
+}
+
+func renderThemeFixture(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	dir := filepath.Join(root, "projects", "pro_aaaaaa", "artifacts")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "seed", "assets", "themes", "editorial-serif", "theme.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	themePath := filepath.Join(root, "assets", "themes", "clean", "theme.css")
+	if err := os.MkdirAll(filepath.Dir(themePath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(themePath, raw, 0644); err != nil {
+		t.Fatal(err)
+	}
+	return dir, string(raw)
 }

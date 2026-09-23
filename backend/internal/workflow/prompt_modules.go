@@ -8,6 +8,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 )
 
 type PromptModule = prompts.Module
@@ -146,6 +147,17 @@ func promptEvidence(entries []Evidence) []Evidence {
 
 func loadPromptModule(id string) PromptModule {
 	module := prompts.MustLoad(id)
+	if id == "core.html" {
+		body := module.Body
+		for _, name := range []string{"cover", "content", "chart"} {
+			example, err := runtimeassets.Example(name)
+			if err != nil {
+				panic(err)
+			}
+			body += "\n\nShared composition reference (" + name + "):\n```html\n" + string(example) + "\n```"
+		}
+		module, _ = module.WithBody(body)
+	}
 	return PromptModule{
 		ID: module.ID, Version: module.Version, Path: module.Path,
 		Hash: module.Hash, Body: module.Body,

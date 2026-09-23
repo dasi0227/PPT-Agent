@@ -1,53 +1,50 @@
 /*
 ---
-name: "Blueprint"
-description: "坐标网格与等宽字体，适合架构、流程和技术方案"
+name: Blueprint
+description: 深蓝图纸、暖黄标注，低对比网格与细虚线节点。
 ---
 */
-/* theme: blueprint - adapted from the html-ppt system preset. */
 :root {
-  --color-bg: #0b3a6f;
-  --color-fg: #e8f3ff;
-  --color-primary: #aee1ff;
-  --color-accent: #ffd27a;
-  --color-muted: rgba(255, 255, 255, 0.06);
-  --color-surface: rgba(255, 255, 255, 0.045);
-  --color-border: rgba(190, 220, 255, 0.38);
-  --color-good: #8ef0a6;
-  --color-warn: #ffd27a;
-  --color-bad: #ff8a96;
-  --font-sans: "JetBrains Mono", "IBM Plex Mono", monospace;
-  --font-serif: "Noto Serif SC", Georgia, serif;
-  --font-mono: "JetBrains Mono", "IBM Plex Mono", monospace;
-  --font-display: "JetBrains Mono", "IBM Plex Mono", monospace;
-  --text-title: 76px;
-  --text-h1: 54px;
-  --text-body: 28px;
-  --text-caption: 20px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
+  --font-sans: "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "Noto Sans SC", monospace;
+  --text-body: 30px;
+  --text-subtitle: 36px;
+  --text-caption: 22px;
+  --weight-body: 400;
+  --leading-body: 1.65;
+  --leading-title: 1.22;
   --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 40px;
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 4px;
+  --stage-w: 1920px;
+  --stage-h: 1080px;
+  --stage-padding-x: 112px;
+  --stage-padding-y: 100px;
+  --border-width: 1px;
+  --border-style: dashed;
+  --quote-border-width: 3px;
+  --color-bg: #10283e;
+  --color-fg: #eaf3f8;
+  --color-secondary: #b7ccda;
+  --color-caption: #98b4c7;
+  --color-primary: #a9dbef;
+  --color-accent: #f0cd70;
+  --color-on-accent: #10283e;
+  --color-surface: #18354d;
+  --color-surface-soft: #142f46;
+  --color-border: #416079;
+  --font-display: "Noto Sans SC", sans-serif;
+  --text-title: 76px;
+  --text-section: 42px;
+  --text-metric: 92px;
+  --weight-title: 600;
+  --tracking-title: -.02em;
+  --radius-md: 0px;
   --shadow-card: none;
-  --shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.3);
-  --theme-background:
-    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px) 0 0 / 40px 40px,
-    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px) 0 0 / 40px 40px,
-    #0b3a6f;
-  --stage-w: 1920;
-  --stage-h: 1080;
+  --chart-primary: #a9dbef;
+  --chart-secondary: #6494b3;
+  --chart-accent: #f0cd70;
 }
-
-.slide-stage {
-  background: var(--theme-background);
-}
-
-.card {
-  border: 1px dashed var(--color-border);
-  box-shadow: none;
-}
+.slide-stage::before { content:""; position:absolute; inset:0; z-index:-1; pointer-events:none; background-image:linear-gradient(#a9dbef0b 1px,transparent 1px),linear-gradient(90deg,#a9dbef0b 1px,transparent 1px); background-size:40px 40px; }
+.kicker, .metric-value { font-family:var(--font-mono); }
+.kicker { color:var(--color-accent); }
+.diagram-node { stroke-dasharray:8 5; }
+.data-table td { border-bottom-style:dashed; }

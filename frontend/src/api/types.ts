@@ -239,7 +239,11 @@ export interface PromptWriteRequest {
   tags: PromptTag[];
 }
 
+export interface RuntimeAppearance { hash: string; theme_css_url: string; chrome_tokens: Record<string, string> }
+
 export interface Theme {
+  style_hash: string;
+  appearance: RuntimeAppearance;
   id: string;
   name: string;
   description: string;
@@ -411,6 +415,8 @@ export interface CancelRunResponse {
 export type RunCancelReason = 'user_requested' | 'superseded';
 
 export interface ProjectContentSnapshot {
+  appearance: RuntimeAppearance | null;
+  theme_error?: string;
   hashes: Record<string, string>;
   manifest: Manifest;
   outline: Outline;

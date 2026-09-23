@@ -1,21 +1,25 @@
 package spec
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
+)
 
 func TestRuntimeFrameAndMaterializationFreshnessAreIndependent(t *testing.T) {
 	deck, outline := validDeck(), validOutline()
 	design := Design{SchemaVersion: SchemaVersion, ProjectID: deck.ProjectID, Theme: "clean", Direction: "minimal", Chrome: []ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono"}}, CreatedAt: 1, UpdatedAt: 1}
-	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa")
+	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa", nil)
 	if !ok || cover.Canvas != CanonicalCanvas() || cover.Numbering.Visible || cover.Ordinal != 1 {
 		t.Fatalf("unexpected cover frame: %#v", cover)
 	}
-	second, _ := BuildRuntimeFrame(deck, outline, design, "sli_bbbbbb")
+	second, _ := BuildRuntimeFrame(deck, outline, design, "sli_bbbbbb", nil)
 	if !second.Numbering.Visible || second.Ordinal != 2 || second.Total != 3 {
 		t.Fatalf("unexpected second frame: %#v", second)
 	}
 
 	artifactHash, sourceHash := ContentHash([]byte("html")), ContentHash([]byte("source"))
-	record := &MaterializationRecord{SchemaVersion: SchemaVersion, Artifact: MaterializationArtifact{Hash: artifactHash}, Source: MaterializationSource{ManifestHash: ResourceHash(deck), OutlineNodeHash: SemanticSlideNodeHash(outline, "sli_bbbbbb"), SpecHash: ContentHash([]byte("spec")), DesignContentHash: DesignContentHash(design), Hash: sourceHash}, Frame: MaterializationFrame{ContextHash: FrameContextHash(deck, outline, design, "sli_bbbbbb")}, RenderedAt: 1}
+	record := &MaterializationRecord{SchemaVersion: SchemaVersion, Artifact: MaterializationArtifact{Hash: artifactHash}, Source: MaterializationSource{ManifestHash: ResourceHash(deck), OutlineNodeHash: SemanticSlideNodeHash(outline, "sli_bbbbbb"), SpecHash: ContentHash([]byte("spec")), DesignContentHash: DesignContentHash(design), Hash: sourceHash}, Frame: MaterializationFrame{ContextHash: FrameContextHash(deck, outline, design, "sli_bbbbbb", nil)}, RenderedAt: 1}
 	if state := DeriveMaterializationState(true, record, record.Source.ManifestHash, record.Source.OutlineNodeHash, record.Source.SpecHash, DesignContentHash(design), artifactHash, sourceHash, record.Frame.ContextHash); state != "fresh" {
 		t.Fatalf("state=%s", state)
 	}
@@ -24,7 +28,7 @@ func TestRuntimeFrameAndMaterializationFreshnessAreIndependent(t *testing.T) {
 	if SemanticSlideNodeHash(reordered, "sli_bbbbbb") != record.Source.OutlineNodeHash {
 		t.Fatal("reorder changed semantic node hash")
 	}
-	if state := DeriveMaterializationState(true, record, record.Source.ManifestHash, record.Source.OutlineNodeHash, record.Source.SpecHash, DesignContentHash(design), artifactHash, sourceHash, FrameContextHash(deck, reordered, design, "sli_bbbbbb")); state != "frame_stale" {
+	if state := DeriveMaterializationState(true, record, record.Source.ManifestHash, record.Source.OutlineNodeHash, record.Source.SpecHash, DesignContentHash(design), artifactHash, sourceHash, FrameContextHash(deck, reordered, design, "sli_bbbbbb", nil)); state != "frame_stale" {
 		t.Fatalf("state=%s", state)
 	}
 }
@@ -60,5 +64,18 @@ func TestResourceHashIgnoresFormattingAndTimestamps(t *testing.T) {
 	}
 	if SourceHash(manifest, "node", first, design) == SourceHash(manifest, "node", changed, design) {
 		t.Fatal("render source missed content change")
+	}
+}
+
+func TestAppearanceChangeInvalidatesFrameWithoutChangingSource(t *testing.T) {
+	deck, outline := validDeck(), validOutline()
+	design := Design{Theme: "editorial-serif", Direction: "clear"}
+	a := runtimeassets.Appearance(design.Theme, []byte(":root{--color-bg:#fff;}"))
+	b := runtimeassets.Appearance(design.Theme, []byte(":root{--color-bg:#eee;}"))
+	oldFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", a)
+	newFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", b)
+	record := &MaterializationRecord{Artifact: MaterializationArtifact{Hash: "html"}, Source: MaterializationSource{ManifestHash: "m", OutlineNodeHash: "o", SpecHash: "s", DesignContentHash: "d", Hash: "source"}, Frame: MaterializationFrame{ContextHash: oldFrame}}
+	if state := DeriveMaterializationState(true, record, "m", "o", "s", "d", "html", "source", newFrame); state != "frame_stale" {
+		t.Fatalf("state=%s", state)
 	}
 }

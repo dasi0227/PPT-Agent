@@ -107,13 +107,13 @@ type ThemeToken struct {
 }
 
 type ThemeContext struct {
-	ID               string       `json:"id"`
-	Name             string       `json:"name"`
-	Description      string       `json:"description"`
-	Tokens           []ThemeToken `json:"tokens"`
-	AllowedSelectors []string     `json:"allowed_selectors"`
-	Source           string       `json:"source"`
-	Trust            string       `json:"trust"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	Tokens      []ThemeToken `json:"tokens"`
+	PublicRoles []string     `json:"public_roles"`
+	Source      string       `json:"source"`
+	Trust       string       `json:"trust"`
 }
 
 type SlideHTMLContext struct {

@@ -9,6 +9,7 @@ import { SkillRepositoryPage } from './SkillRepositoryPage';
 import { ThemeRepositoryPage } from './ThemeRepositoryPage';
 
 const mocks = vi.hoisted(() => ({
+  themeExample: vi.fn(),
   listThemes: vi.fn(),
   getTheme: vi.fn(),
   listProjects: vi.fn(),
@@ -30,6 +31,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../api/repositories', () => ({
   repositoriesApi: {
+    themeExample:mocks.themeExample,
     listThemes: mocks.listThemes,
     getTheme: mocks.getTheme,
     listComponents: mocks.listComponents,
@@ -75,22 +77,24 @@ function renderPage(page: React.ReactNode, initialEntry: string | { pathname: st
 function themeFixtures(): Theme[] {
   return [
     {
-      id: 'swiss-modern',
-      name: 'Swiss Modern',
+      id: 'editorial-serif',
+      style_hash:'css-1', appearance:{hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}},
+      name: 'Editorial Serif',
       description: 'Clean grid',
       tags: ['minimal'],
       css: ':root{--color-bg:#fff;--color-fg:#111;--color-primary:#d0021b;--color-accent:#1c1c1c;--font-sans:Aptos;--font-serif:Georgia}',
-      css_url: '/api/v1/themes/swiss-modern/css',
-      open_url: 'vscode://file/themes/swiss-modern/theme.css',
+      css_url: '/api/v1/themes/editorial-serif/css',
+      open_url: 'vscode://file/themes/editorial-serif/theme.css',
     },
     {
-      id: 'tokyo-night',
-      name: 'Tokyo Night',
+      id: 'blueprint',
+      style_hash:'css-2', appearance:{hash:'appearance-2',theme_css_url:'/api/v1/themes/blueprint/css',chrome_tokens:{}},
+      name: 'Blueprint',
       description: 'Dark presentation',
       tags: ['cool'],
       css: ':root{--color-bg:#111;--color-fg:#eee;--color-primary:#7aa2f7;--color-accent:#bb9af7;--font-sans:Inter;--font-serif:Georgia}',
-      css_url: '/api/v1/themes/tokyo-night/css',
-      open_url: 'vscode://file/themes/tokyo-night/theme.css',
+      css_url: '/api/v1/themes/blueprint/css',
+      open_url: 'vscode://file/themes/blueprint/theme.css',
     },
   ];
 }
@@ -106,16 +110,17 @@ function project(theme: string): Project {
     outline_path: 'outline.json',
 
     created_at: 1,
-    updated_at: theme === 'swiss-modern' ? 1 : 2,
+    updated_at: theme === 'editorial-serif' ? 1 : 2,
   };
 }
 
 function projectContent(theme: string): ProjectContentSnapshot {
   return {
+    appearance: null,
     hashes: { outline: "outline-hash" },
     manifest: { version: '5.0', project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
     outline: { version: '5.0', project_id: 'project-7', sections: [], created_at: 1, updated_at: 1 },
-    design: { version: '5.0',  project_id: 'project-7', theme, direction: '', chrome: [], created_at: 1, updated_at: theme === 'swiss-modern' ? 1 : 2 },
+    design: { version: '5.0',  project_id: 'project-7', theme, direction: '', chrome: [], created_at: 1, updated_at: theme === 'editorial-serif' ? 1 : 2 },
     slides_by_id: {},
   };
 }
@@ -123,6 +128,9 @@ function projectContent(theme: string): ProjectContentSnapshot {
 describe('personal repository pages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.themeExample.mockImplementation(async (name:string)=>({html:`<main class="slide-stage">${name}</main>`}));
+    mocks.getTheme.mockImplementation(async(id:string)=>themeFixtures().find(theme=>theme.id===id));
+    vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} unobserve() {} });
     mocks.listProjects.mockResolvedValue([]);
     useToastStore.getState().clearToasts();
     useProjectStore.setState({
@@ -145,23 +153,19 @@ describe('personal repository pages', () => {
 
     renderPage(<ThemeRepositoryPage />);
 
-    const preview = await screen.findByTitle('Swiss Modern 主题预览');
-    expect(preview).toHaveAttribute('sandbox', '');
-    expect(preview.getAttribute('srcdoc')).toContain('IDEA<br>TO<br>SLIDES');
-    expect(preview.getAttribute('srcdoc')).toContain('class="specimen-word">Dasi');
-    expect(preview.getAttribute('srcdoc')).toContain('transform:translateY(-2%)');
-    expect(preview.getAttribute('srcdoc')).not.toContain('>Aa<');
+    const preview = await screen.findByTitle('Editorial Serif 主题预览');
+    expect(preview).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(preview).toHaveAttribute('src', '/slide-runtime/index.html');
     expect(screen.getByRole('main')).toHaveClass('h-[100dvh]', 'overflow-hidden');
     expect(screen.queryByText('色板')).not.toBeInTheDocument();
     expect(screen.queryByText('字体')).not.toBeInTheDocument();
-    const editButton = screen.getByRole('button', { name: '编辑Swiss Modern' });
-    const deleteButton = screen.getByRole('button', { name: '删除Swiss Modern' });
+    const editButton = screen.getByRole('button', { name: '编辑Editorial Serif' });
+    const deleteButton = screen.getByRole('button', { name: '删除Editorial Serif' });
     const fileLink = screen.getByRole('link', { name: '查看文件' });
     expect(editButton.nextElementSibling).toBe(deleteButton);
     expect(deleteButton.nextElementSibling).toBe(fileLink);
     expect(screen.getByRole('region', { name: '主题详情' }).querySelector('footer')).not.toBeInTheDocument();
     expect(screen.getByLabelText('标签')).toHaveTextContent('极简');
-    expect(screen.getAllByText('Dasi')).toHaveLength(2);
     expect(screen.queryByText('Aa')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '封面页' })).toBeInTheDocument();
     expect(screen.getAllByText('Clean grid')).toHaveLength(2);
@@ -174,33 +178,32 @@ describe('personal repository pages', () => {
     expect(repositoryBrand).toHaveClass('px-2', 'text-base');
     expect(repositoryBrand.querySelector('img')).toHaveClass('h-10', 'w-10', 'rounded-sm');
     expect(screen.getByRole('link', { name: '组件' })).toHaveAttribute('href', '/warehouse/component');
-    fireEvent.click(screen.getByRole('button', { name: /Tokyo Night/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Blueprint/ }));
     expect(mocks.setTheme).not.toHaveBeenCalled();
     expect(useToastStore.getState().toasts).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: '内容页' }));
-    expect(screen.getByTitle('Tokyo Night 主题预览').getAttribute('srcdoc')).toContain('好页面先回答一个问题');
-    expect(screen.getByTitle('Tokyo Night 主题预览').getAttribute('srcdoc')).not.toContain('<main class="showcase chart-page">');
+    await waitFor(()=>expect(mocks.themeExample).toHaveBeenCalledWith('content'));
     fireEvent.click(screen.getByRole('button', { name: '图表页' }));
-    expect(screen.getByTitle('Tokyo Night 主题预览').getAttribute('srcdoc')).toContain('交付节奏持续提升');
-    expect(screen.getByTitle('Tokyo Night 主题预览').getAttribute('srcdoc')).toContain('accent-bar');
+    await waitFor(()=>expect(mocks.themeExample).toHaveBeenCalledWith('chart'));
+    await screen.findByTitle('Blueprint 主题预览');
     fireEvent.change(screen.getByLabelText('搜索主题'), { target: { value: 'dark' } });
-    expect(screen.getByTitle('Tokyo Night 主题预览')).toBeInTheDocument();
-    expect(screen.queryByTitle('Swiss Modern 主题预览')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Blueprint 主题预览')).toBeInTheDocument();
+    expect(screen.queryByTitle('Editorial Serif 主题预览')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('搜索主题'), { target: { value: 'minimal' } });
-    expect(screen.getByTitle('Swiss Modern 主题预览')).toBeInTheDocument();
+    expect(screen.getByTitle('Editorial Serif 主题预览')).toBeInTheDocument();
   });
 
   it('applies the previewed theme to the active project and synchronizes project state', async () => {
     const themes = themeFixtures();
     mocks.listThemes.mockResolvedValue({ themes });
     mocks.getTheme.mockImplementation(async (id: string) => themes.find((theme) => theme.id === id));
-    mocks.setTheme.mockResolvedValue(project('tokyo-night'));
-    mocks.getContent.mockResolvedValue(projectContent('tokyo-night'));
+    mocks.setTheme.mockResolvedValue(project('blueprint'));
+    mocks.getContent.mockResolvedValue(projectContent('blueprint'));
     useProjectStore.setState({
-      projects: [project('swiss-modern')],
+      projects: [project('editorial-serif')],
       openProjectIds: ['project-7'],
       activeProjectId: null,
-      contentByProjectId: { 'project-7': projectContent('swiss-modern') },
+      contentByProjectId: { 'project-7': projectContent('editorial-serif') },
     });
 
     renderPage(<ThemeRepositoryPage />, {
@@ -208,24 +211,24 @@ describe('personal repository pages', () => {
       state: { returnTo: '/projects/project-7?slide=slide-2' },
     });
 
-    const currentButton = await screen.findByRole('button', { name: '当前主题' });
+    const currentButton = await screen.findByRole('button', { name: '已保存主题' });
     expect(currentButton).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: /Tokyo Night/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Blueprint/ }));
     expect(mocks.setTheme).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: '应用主题' }));
 
-    await waitFor(() => expect(mocks.setTheme).toHaveBeenCalledWith('project-7', 'tokyo-night'));
-    await waitFor(() => expect(screen.getByRole('button', { name: '当前主题' })).toBeDisabled());
+    await waitFor(() => expect(mocks.setTheme).toHaveBeenCalledWith('project-7', 'blueprint'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '已保存主题' })).toBeDisabled());
     expect(useProjectStore.getState().projects[0]).toMatchObject({
       id: 'project-7',
-      theme: 'tokyo-night',
+      theme: 'blueprint',
       });
     expect(useProjectStore.getState().contentByProjectId['project-7'].design).toMatchObject({
-      theme: 'tokyo-night',
+      theme: 'blueprint',
       });
     expect(useToastStore.getState().toasts).toEqual([
-      expect.objectContaining({ message: '已应用「Tokyo Night」主题', tone: 'success' }),
+      expect.objectContaining({ message: '已保存「Blueprint」主题，画布将加载新外观', tone: 'success' }),
     ]);
   });
 
@@ -243,7 +246,7 @@ describe('personal repository pages', () => {
 
     renderPage(<ThemeRepositoryPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '编辑Swiss Modern' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑Editorial Serif' }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveTextContent('编辑主题');
     fireEvent.change(within(dialog).getByLabelText('名称'), { target: { value: updated.name } });
@@ -251,7 +254,7 @@ describe('personal repository pages', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '商务' }));
     fireEvent.click(within(dialog).getByRole('button', { name: '保存' }));
 
-    await waitFor(() => expect(mocks.updateTheme).toHaveBeenCalledWith('swiss-modern', {
+    await waitFor(() => expect(mocks.updateTheme).toHaveBeenCalledWith('editorial-serif', {
       name: updated.name,
       description: updated.description,
       tags: updated.tags,
@@ -268,16 +271,16 @@ describe('personal repository pages', () => {
     mocks.getTheme.mockImplementation(async (id: string) => themes.find((theme) => theme.id === id));
     mocks.setTheme.mockReturnValue(request);
     useProjectStore.setState({
-      projects: [project('swiss-modern')],
+      projects: [project('editorial-serif')],
       openProjectIds: ['project-7'],
       activeProjectId: 'project-7',
-      contentByProjectId: { 'project-7': projectContent('swiss-modern') },
+      contentByProjectId: { 'project-7': projectContent('editorial-serif') },
     });
 
     renderPage(<ThemeRepositoryPage />);
 
-    await screen.findByRole('button', { name: '当前主题' });
-    fireEvent.click(screen.getByRole('button', { name: /Tokyo Night/ }));
+    await screen.findByRole('button', { name: '已保存主题' });
+    fireEvent.click(screen.getByRole('button', { name: /Blueprint/ }));
     const applyButton = screen.getByRole('button', { name: '应用主题' });
     fireEvent.click(applyButton);
     fireEvent.click(applyButton);
@@ -287,9 +290,9 @@ describe('personal repository pages', () => {
     rejectRequest(new Error('theme write failed'));
 
     await waitFor(() => expect(screen.getByRole('button', { name: '应用主题' })).toBeEnabled());
-    expect(screen.getByTitle('Tokyo Night 主题预览')).toBeInTheDocument();
-    expect(useProjectStore.getState().projects[0].theme).toBe('swiss-modern');
-    expect(useProjectStore.getState().contentByProjectId['project-7'].design.theme).toBe('swiss-modern');
+    expect(screen.getByTitle('Blueprint 主题预览')).toBeInTheDocument();
+    expect(useProjectStore.getState().projects[0].theme).toBe('editorial-serif');
+    expect(useProjectStore.getState().contentByProjectId['project-7'].design.theme).toBe('editorial-serif');
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({ message: 'theme write failed', tone: 'error' }),
     ]);
@@ -335,17 +338,10 @@ describe('personal repository pages', () => {
 
     const detail = await screen.findByTitle('Feature Card 组件预览');
     const thumbnail = screen.getByTitle('Feature Card 缩略预览');
+    expect(thumbnail).toHaveAttribute('src', '/slide-runtime/index.html');
     expect(screen.getByPlaceholderText('搜索组件')).toBeInTheDocument();
-    expect(detail).toHaveAttribute('sandbox', '');
-    expect(detail).toHaveAttribute('width', '960');
-    expect(detail).toHaveAttribute('height', '540');
-    expect(thumbnail).toHaveAttribute('width', '960');
-    expect(thumbnail).toHaveAttribute('height', '540');
-    expect(thumbnail.getAttribute('srcdoc')).toBe(detail.getAttribute('srcdoc'));
-    expect(detail.getAttribute('srcdoc')).toContain('<script>window.parent.bad=true</script>');
-    expect(detail.getAttribute('srcdoc')).toContain('.component-stage{display:grid;place-items:center');
-    expect(detail.getAttribute('srcdoc')).toContain('--text-h1:36px');
-    expect(detail.parentElement).toHaveClass('aspect-video');
+    expect(detail).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(detail.parentElement?.parentElement).toHaveClass('aspect-video');
     expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '卡片' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '其它' }));

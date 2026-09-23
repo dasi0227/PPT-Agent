@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
+	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	presentationexport "github.com/dasi0227/PPT-Agent/backend/internal/export"
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -70,7 +71,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 		ID:            id,
 		Title:         title,
 		WorkDir:       workDir,
-		Theme:         "swiss-modern",
+		Theme:         designsystem.DefaultTheme,
 		Status:        "draft",
 		LayoutVersion: 6,
 		CreatedAt:     now,

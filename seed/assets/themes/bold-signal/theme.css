@@ -1,42 +1,50 @@
 /*
 ---
-name: "Bold Signal"
-description: "强对比单一强调色，适合路演与发布冲击力"
+name: Bold Signal
+description: 近黑底与明黄强调，粗重标题、硬边和偏移硬阴影。
 ---
 */
-/* theme: bold-signal —— 高对比信号：强对比、单一强调色。
-   提供 design-tokens.md 必需 token 全集（DS-THEMES-001）。 */
 :root {
-  /* 颜色 */
-  --color-bg: #0a0a0a;
-  --color-fg: #fafafa;
-  --color-primary: #ffe600;
-  --color-accent: #ff2e63;
-  --color-muted: #1f1f1f;
-  /* 字体（含中文回退，DS-THEMES-004） */
-  --font-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
-  --font-serif: "Noto Serif SC", Georgia, serif;
-  --font-mono: "JetBrains Mono", monospace;
-  /* 字号 */
-  --text-title: 104px;
-  --text-h1: 72px;
-  --text-body: 34px;
-  --text-caption: 24px;
-  /* 间距 */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
+  --font-sans: "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "Noto Sans SC", monospace;
+  --text-body: 30px;
+  --text-subtitle: 36px;
+  --text-caption: 22px;
+  --weight-body: 400;
+  --leading-body: 1.65;
+  --leading-title: 1.22;
   --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 48px;
-  /* 圆角 */
-  --radius-sm: 0px;
-  --radius-md: 2px;
-  --radius-lg: 4px;
-  /* 阴影 */
-  --shadow-card: 0 0 0 2px rgba(255, 230, 0, 0.35);
-  --shadow-pop: 0 8px 0 rgba(255, 46, 99, 0.9);
-  /* 舞台（16:9 基准，无单位数值） */
-  --stage-w: 1920;
-  --stage-h: 1080;
+  --stage-w: 1920px;
+  --stage-h: 1080px;
+  --stage-padding-x: 112px;
+  --stage-padding-y: 100px;
+  --border-width: 2px;
+  --border-style: solid;
+  --quote-border-width: 8px;
+  --color-bg: #151515;
+  --color-fg: #f8f7f2;
+  --color-secondary: #d0d0c8;
+  --color-caption: #afafa7;
+  --color-primary: #ffe34b;
+  --color-accent: #ffe34b;
+  --color-on-accent: #151515;
+  --color-surface: #242424;
+  --color-surface-soft: #30302c;
+  --color-border: #74746a;
+  --font-display: "Noto Sans SC", sans-serif;
+  --text-title: 86px;
+  --text-section: 46px;
+  --text-metric: 104px;
+  --weight-title: 900;
+  --tracking-title: -.045em;
+  --radius-md: 0px;
+  --shadow-card: 8px 8px 0 #050505;
+  --chart-primary: #ffe34b;
+  --chart-secondary: #f8f7f2;
+  --chart-accent: #ff9d5c;
 }
+.slide-title { text-transform:uppercase; }
+.kicker { display:inline-block; align-self:flex-start; color:var(--color-on-accent); background:var(--color-accent); padding:6px 12px; font-weight:800; }
+.card-accent { box-shadow:8px 8px 0 #66604b; }
+.data-table th { border-top:3px solid var(--color-primary); }
+.pill { border-color:var(--color-primary); font-weight:700; }

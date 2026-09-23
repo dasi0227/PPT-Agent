@@ -8,6 +8,7 @@ const sharedChrome = asset('runtimeassets/chrome.js');
 const player = asset('export/player/player.js');
 const css = asset('export/player/player.css');
 const context = {
+  appearance: { hash: "snapshot-appearance", chrome_tokens: { "--color-caption": "#78695b", "--color-fg": "#302820", "--font-sans": "Noto Sans SC", "--font-mono": "JetBrains Mono" } },
   ordinal: 1, total: 2, numbering: { visible: false }, section: { title: '开场' }, deck_title: 'Deck',
   chrome: [
     { type: 'section_marker', placement: 'top-left', style: 'compact label' },

@@ -3,6 +3,8 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"path"
+	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
@@ -78,6 +80,10 @@ func (h *RepositoryHandler) ThemeCSS(c *gin.Context) {
 	raw, err := h.themes.CSS(c.Param("id"))
 	if err != nil {
 		h.repositoryError(c, err, "theme not found")
+		return
+	}
+	if version := c.Query("v"); version != "" && version != strings.TrimPrefix(runtimeassets.Hash(raw), "sha256:") {
+		c.Status(http.StatusConflict)
 		return
 	}
 	c.Header("Cache-Control", "no-cache")
@@ -213,4 +219,44 @@ func (h *RepositoryHandler) repositoryError(c *gin.Context, err error, notFound 
 	default:
 		AbortWithError(c, ErrNotFound(notFound))
 	}
+}
+
+// These endpoints expose only embedded public resources, never arbitrary workspace paths.
+func (h *RepositoryHandler) RuntimeAsset(c *gin.Context) {
+	h.runtimeResource(c, path.Base(c.Request.URL.Path))
+}
+func (h *RepositoryHandler) RuntimeFont(c *gin.Context) {
+	h.runtimeResource(c, "fonts/"+path.Base(c.Param("name")))
+}
+func (h *RepositoryHandler) runtimeResource(c *gin.Context, name string) {
+	raw, err := runtimeassets.Read(name)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	contentType := "text/plain; charset=utf-8"
+	switch path.Ext(name) {
+	case ".css":
+		contentType = "text/css; charset=utf-8"
+	case ".js":
+		contentType = "application/javascript; charset=utf-8"
+	case ".ttf":
+		contentType = "font/ttf"
+	}
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Data(http.StatusOK, contentType, raw)
+}
+func (h *RepositoryHandler) RuntimeExample(c *gin.Context) {
+	name := c.Param("name")
+	if strings.ContainsAny(name, "./\\") {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	raw, err := runtimeassets.Example(name)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"html": string(raw)})
 }

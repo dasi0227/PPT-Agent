@@ -7,7 +7,7 @@ const labels: Record<MaterializationState, string> = {
   fresh: '已同步',
   spec_stale: '设计稿有更新',
   design_stale: '风格有更新',
-  frame_stale: '页码已更新',
+  frame_stale: '外观待更新',
   unknown: '状态未知',
 };
 

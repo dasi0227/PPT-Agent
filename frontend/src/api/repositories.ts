@@ -11,6 +11,7 @@ import type {
 } from './types';
 
 export const repositoriesApi = {
+  themeExample: (name: string) => fetchClient<{ html: string }>(`/runtime/theme-examples/${encodeURIComponent(name)}`, { reportError: false }),
   listThemes: () => fetchClient<ThemesResponse>('/themes', { reportError: false }),
   getTheme: (id: string) => fetchClient<Theme>(`/themes/${encodeURIComponent(id)}`, { reportError: false }),
   updateTheme: (id: string, request: { name: string; description: string; tags: ThemeTag[] }) => fetchClient<Theme>(`/themes/${encodeURIComponent(id)}`, {

@@ -13,6 +13,7 @@ vi.mock('../viewer/IsolatedSlidePreview', () => ({
 
 function snapshot(): ProjectContentSnapshot {
   return {
+    appearance: null,
     hashes: { outline: "outline-hash" },
     manifest: {
       version: '5.0',

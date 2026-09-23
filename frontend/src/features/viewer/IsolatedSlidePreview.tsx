@@ -9,6 +9,7 @@ interface IsolatedSlidePreviewProps {
   index: number;
   title: string;
   className?: string;
+  passive?: boolean;
   style?: React.CSSProperties;
   selectionMode?: 'element' | 'region' | 'none';
   selectionSlide?: { id: string; hash: string };
@@ -17,7 +18,7 @@ interface IsolatedSlidePreviewProps {
   onSelectionMessage?: (message: string) => void;
   onSelectionCanceled?: () => void;
   onSelectionRemove?: (selectionId: string) => void;
-  onSelectionPresence?: (statuses: Array<{ selection_id: string; status: 'active' | 'content_deleted'; targets?: Array<{ target_id: string; status: 'active' | 'content_deleted' }> }>) => void;
+  onSelectionPresence?: (statuses: import('./previewProtocol').SelectionPresence[]) => void;
   replayRequest?: { id: number; slideId: string };
 }
 
@@ -26,6 +27,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   index,
   title,
   className,
+  passive = false,
   style,
   selectionMode = 'none',
   selectionSlide,
@@ -40,6 +42,9 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const indexRef = useRef(index);
   const [renderError, setRenderError] = useState('');
+  const [themeError, setThemeError] = useState('');
+  const [themeLoading, setThemeLoading] = useState(false);
+  const appearanceHash = slides[index]?.frame.appearance?.hash || '';
   const [runtimeVersion, setRuntimeVersion] = useState(0);
   const [runtimeReady, setRuntimeReady] = useState(false);
   const deliveredReplayRef = useRef(replayRequest?.id);
@@ -84,6 +89,15 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         sendDeck();
         setRuntimeReady(true);
         sendSelectionState();
+      } else if (message.type === 'themeApplying' || message.type === 'themeApplied' || message.type === 'themeApplyFailed') {
+        if (message.slide_id !== activeSlideId || message.appearance_hash !== appearanceHash) return;
+        setThemeLoading(message.type === 'themeApplying');
+        setThemeError(message.type === 'themeApplyFailed' ? message.message : '');
+        if (message.type === 'themeApplied' && selectionSlide) {
+          sendSelectionState();
+          const selections = draftSelections.filter(item => item.slide_id === selectionSlide.id && item.html_hash === selectionSlide.hash);
+          if (selections.length) iframeRef.current?.contentWindow?.postMessage({type:'probeDraftSelections',session_id:sessionID,slide_id:selectionSlide.id,selections,refresh:true},'*');
+        }
       } else if (message.type === 'renderError') {
         setRenderError(message.message);
       } else if (message.type === 'selectionCreated') {
@@ -99,7 +113,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
+  }, [activeSlideId, appearanceHash, draftSelections, onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
 
   useEffect(() => {
     sendDeck();
@@ -130,12 +144,22 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         className={className}
         style={style}
         title={title}
+        tabIndex={passive ? -1 : undefined}
         onLoad={sendDeck}
       />
       {selectionSlide && slides[index]?.id === selectionSlide.id && onSelectionRemove && !renderError && (
         <DraftSelectionControls slideId={selectionSlide.id} selections={draftSelections} onRemove={onSelectionRemove} />
       )}
-      {renderError && (
+      {!passive && (themeError || themeLoading) && (
+        <div role={themeError ? 'alert' : 'status'} className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded bg-surface/95 px-3 py-2 text-xs text-text-700 shadow-sm">
+          <span>{themeError ? `主题预览未应用：${themeError}` : '正在加载主题外观…'}</span>
+          {themeError && <Button variant="secondary" className="h-7 px-2 text-xs" onClick={() => {
+            setThemeError(''); setThemeLoading(true);
+            iframeRef.current?.contentWindow?.postMessage({type:'retryTheme',slide_id:activeSlideId},'*');
+          }}>重试</Button>}
+        </div>
+      )}
+      {!passive && renderError && (
         <div
           role="alert"
           className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded bg-danger/95 px-3 py-2 text-xs text-white"

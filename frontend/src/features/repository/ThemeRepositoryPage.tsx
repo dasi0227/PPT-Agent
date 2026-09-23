@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, Paintbrush } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
@@ -23,12 +22,10 @@ import {
 import { RepositoryEditDialog } from './RepositoryEditDialog';
 import { RepositoryShell } from './RepositoryShell';
 import {
-  buildThemeShowcase,
-  themePalette,
   themeShowcaseModes,
-  themeTypography,
   type ThemeShowcaseMode,
 } from './themeShowcase';
+import { ThemePreview } from './ThemePreview';
 
 const themeTagLabels: Record<ThemeTag, string> = {
   minimal: '极简',
@@ -50,36 +47,6 @@ function projectIdFromReturnTo(returnTo: unknown): string | null {
   } catch {
     return null;
   }
-}
-
-function ThemeMiniature({ theme, active }: { theme: Theme; active: boolean }) {
-  const colors = themePalette(theme);
-  const typography = themeTypography(theme);
-  const [background = '#ffffff', foreground = '#17202b', primary = '#2f67f6', accent = '#c84953'] = colors;
-  const style = {
-    '--mini-bg': background,
-    '--mini-fg': foreground,
-    '--mini-primary': primary,
-    '--mini-accent': accent,
-    '--mini-font': typography.displayStack,
-  } as CSSProperties;
-
-  return (
-    <div
-      style={style}
-      className={cn(
-        'relative h-full w-full overflow-hidden rounded-md bg-[var(--mini-bg)] shadow-[inset_0_0_0_1px_rgba(23,32,43,0.12)]',
-        active && 'shadow-[inset_0_0_0_1px_rgba(47,103,246,0.28)]',
-      )}
-      aria-hidden="true"
-    >
-      <span className="absolute left-[11%] top-[18%] text-[18px] font-extrabold leading-none tracking-[-0.06em] text-[var(--mini-primary)]" style={{ fontFamily: 'var(--mini-font)' }}>Dasi</span>
-      <span className="absolute right-[11%] top-[17%] h-[8px] w-[8px] bg-[var(--mini-accent)]" />
-      <span className="absolute bottom-[25%] left-[11%] h-[4%] w-[62%] bg-[var(--mini-fg)] opacity-80" />
-      <span className="absolute bottom-[14%] left-[11%] h-[3%] w-[42%] bg-[var(--mini-fg)] opacity-35" />
-      <span className="absolute bottom-0 left-0 h-[5%] w-full bg-[var(--mini-primary)]" />
-    </div>
-  );
 }
 
 export function ThemeRepositoryPage() {
@@ -113,7 +80,7 @@ export function ThemeRepositoryPage() {
     setError('');
     try {
       const response = await repositoriesApi.listThemes();
-      const details = await Promise.all(response.themes.map((theme) => repositoriesApi.getTheme(theme.id)));
+      const details = response.themes;
       setThemes(details);
       setSelectedId((value) => value || details[0]?.id || '');
     } catch (cause) {
@@ -143,7 +110,7 @@ export function ThemeRepositoryPage() {
     setApplyingThemeId(selected.id);
     try {
       await setProjectTheme(projectId, selected.id);
-      showGlobalSuccess(`已应用「${selected.name}」主题`);
+      showGlobalSuccess(`已保存「${selected.name}」主题，画布将加载新外观`);
     } catch (cause) {
       showGlobalError(cause instanceof Error ? cause.message : '主题应用失败');
     } finally {
@@ -197,7 +164,7 @@ export function ThemeRepositoryPage() {
                       active={active}
                       name={theme.name}
                       description={theme.description}
-                      visual={<ThemeMiniature theme={theme} active={active} />}
+                      visual={<ThemePreview theme={theme} miniature />}
                       onClick={() => setSelectedId(theme.id)}
                     />
                   );
@@ -234,7 +201,7 @@ export function ThemeRepositoryPage() {
                       {applyingThemeId
                         ? '应用中'
                         : selectedIsCurrent
-                          ? '当前主题'
+                          ? '已保存主题'
                             : projectId && loadingProjects && !projectReady
                             ? '读取项目'
                             : projectReady
@@ -250,12 +217,9 @@ export function ThemeRepositoryPage() {
                 onEdit={() => setEditOpen(true)}
                 onDelete={() => deleteTheme(selected)}
               >
-                <iframe
-                  title={`${selected.name} 主题预览`}
-                  sandbox=""
-                  srcDoc={buildThemeShowcase(selected, mode)}
-                  className="aspect-video max-h-full w-full max-w-5xl rounded-lg border border-border-strong bg-white shadow-[0_18px_44px_rgba(51,65,85,0.18)]"
-                />
+                <div className="aspect-video max-h-full w-full max-w-5xl overflow-hidden rounded-lg border border-border-strong">
+                  <ThemePreview theme={selected} mode={mode} />
+                </div>
               </RepositoryDetail>
             )}
             {!selected && <RepositoryState text="请选择一个主题" className="min-h-[420px] bg-canvas/70" />}

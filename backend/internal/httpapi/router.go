@@ -2,11 +2,10 @@
 package httpapi
 
 import (
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 )
 
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
@@ -76,6 +75,11 @@ func (r *Router) register() {
 	}
 	v1.GET("/runtime/base.css", r.repository.RuntimeBaseCSS)
 	v1.GET("/runtime/chrome.js", r.repository.RuntimeChromeJS)
+	v1.GET("/runtime/fonts.css", r.repository.RuntimeAsset)
+	v1.GET("/runtime/font-loader.js", r.repository.RuntimeAsset)
+	v1.GET("/runtime/theme-bridge.js", r.repository.RuntimeAsset)
+	v1.GET("/runtime/fonts/:name", r.repository.RuntimeFont)
+	v1.GET("/runtime/theme-examples/:name", r.repository.RuntimeExample)
 	v1.GET("/themes", r.repository.ListThemes)
 	v1.GET("/themes/:id", r.repository.GetTheme)
 	v1.PATCH("/themes/:id", r.repository.PatchTheme)

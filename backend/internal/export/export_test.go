@@ -17,12 +17,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 func exportFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Numbering: spec.RuntimeFrameNumbering{Visible: true, Format: "number"}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("theme", []byte(`:root{--font-mono:"JetBrains Mono";--font-sans:"Noto Sans SC";--color-caption:#666;--color-fg:#222;}`)), SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Numbering: spec.RuntimeFrameNumbering{Visible: true, Format: "number"}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}}
 }
 
 func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {
@@ -33,7 +34,7 @@ func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(got)
-	for _, want := range []string{`href="../assets/base.css"`, `href="../assets/theme.css"`, `src="data:image/png;base64,eA=="`, `url(&#39;data:image/png;base64,eA==&#39;)`, `<style id="export-base-inline">body{}</style>`, `<style id="export-theme-inline">:root{}</style>`, `src="https://cdn.example.com/app.js"`} {
+	for _, want := range []string{`href="../assets/fonts.css"`, `src="data:image/png;base64,eA=="`, `url(&#39;data:image/png;base64,eA==&#39;)`, `<style id="export-base-inline">body{}</style>`, `<style id="export-theme-inline">:root{}</style>`, `src="https://cdn.example.com/app.js"`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in %s", want, text)
 		}
@@ -51,6 +52,9 @@ func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {
 func TestBuildHTMLPackagesOnlyPlaybackFiles(t *testing.T) {
 	root := t.TempDir()
 	snapshotRoot := filepath.Join(root, "snapshot")
+	if err := runtimeassets.Materialize(filepath.Join(snapshotRoot, "runtime-assets")); err != nil {
+		t.Fatal(err)
+	}
 	attachmentRel := "attachments/att_one/original.png"
 	if err := writeFile(filepath.Join(snapshotRoot, filepath.FromSlash(attachmentRel)), []byte("image")); err != nil {
 		t.Fatal(err)
@@ -69,7 +73,7 @@ func TestBuildHTMLPackagesOnlyPlaybackFiles(t *testing.T) {
 	for _, entry := range reader.File {
 		entries[entry.Name] = true
 	}
-	for _, want := range []string{"index.html", "runtime/player.css", "runtime/player.js", "runtime/chrome.js", "assets/base.css", "assets/theme.css", "slides/001.html", attachmentRel} {
+	for _, want := range []string{"index.html", "runtime/player.css", "runtime/player.js", "runtime/chrome.js", "assets/base.css", "assets/theme.css", "assets/fonts.css", "assets/fonts/notosanssc-OFL.txt", "slides/001.html", attachmentRel} {
 		if !entries[want] {
 			t.Errorf("missing zip entry %s", want)
 		}
@@ -319,6 +323,9 @@ func TestStandaloneHTMLWorksFromFileURL(t *testing.T) {
 	}
 	root := t.TempDir()
 	snapshotRoot := filepath.Join(root, "snapshot")
+	if err := runtimeassets.Materialize(filepath.Join(snapshotRoot, "runtime-assets")); err != nil {
+		t.Fatal(err)
+	}
 	attachmentRel := "attachments/att_one/original.png"
 	pixelImage := image.NewRGBA(image.Rect(0, 0, 1, 1))
 	pixelImage.Set(0, 0, color.White)
@@ -419,5 +426,32 @@ try {
 	command.Dir = filepath.Join("..", "..", "render-worker")
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("file player failed: %v: %s", err, output)
+	}
+}
+
+func TestOfflineFontsEmbedSnapshotBytesAndKeepLicenses(t *testing.T) {
+	source, target := t.TempDir(), t.TempDir()
+	if err := writeFile(filepath.Join(source, "fonts.css"), []byte(`@font-face{src:url("fonts/Test.ttf")}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(filepath.Join(source, "fonts", "Test.ttf"), []byte("frozen-font")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(filepath.Join(source, "fonts", "OFL.txt"), []byte("license")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeOfflineFonts(source, target); err != nil {
+		t.Fatal(err)
+	}
+	css, err := os.ReadFile(filepath.Join(target, "fonts.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(css), "data:font/ttf;base64,ZnJvemVuLWZvbnQ=") || strings.Contains(string(css), "fonts/Test.ttf") {
+		t.Fatal("offline CSS does not contain the snapshot font")
+	}
+	license, err := os.ReadFile(filepath.Join(target, "fonts", "OFL.txt"))
+	if err != nil || string(license) != "license" {
+		t.Fatal("font license missing")
 	}
 }

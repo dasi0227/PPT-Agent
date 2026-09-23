@@ -5,6 +5,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { FinalChangeSummary } from './FinalMessage';
 
 const snapshot: ProjectContentSnapshot = {
+  appearance: null,
   hashes: { outline: "outline-hash" },
   manifest: {
     version: '5.0',

@@ -20,7 +20,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-const RuntimeVersion = "export-runtime-v1"
+const RuntimeVersion = "export-runtime-v2"
 
 type SnapshotInput struct {
 	ExportID, ProjectID, ProjectTitle, ProjectDir, ThemeID string
@@ -95,6 +95,11 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 			return Snapshot{}, err
 		}
 	}
+	assetsDir := filepath.Join(snapshotRoot, "runtime-assets")
+	if err := runtimeassets.Materialize(assetsDir); err != nil {
+		return Snapshot{}, err
+	}
+	appearance := runtimeassets.Appearance(design.Theme, input.ThemeCSS)
 	slides := make([]SlideSnapshot, 0, len(flat))
 	for _, loc := range flat {
 		raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, "slides", loc.Slide.SlideID, "index.html"))
@@ -105,7 +110,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 		if normalizeErr != nil {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面 HTML 无法解析。")
 		}
-		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.SlideID)
+		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.SlideID, appearance)
 		if !ok {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面运行框架无法构建。")
 		}

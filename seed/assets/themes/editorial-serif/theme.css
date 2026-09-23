@@ -1,42 +1,48 @@
 /*
 ---
-name: "Editorial Serif"
-description: "浅色衬线编辑感，适合内容与观点表达"
+name: Editorial Serif
+description: 奶油纸色与锈红强调，衬线标题、细线和轻容器。
 ---
 */
-/* theme: editorial-serif —— 杂志衬线：浅色、衬线、编辑感。
-   提供 design-tokens.md 必需 token 全集（DS-THEMES-001）。 */
 :root {
-  /* 颜色 */
-  --color-bg: #faf7f2;
-  --color-fg: #2b2622;
-  --color-primary: #8a5a2b;
-  --color-accent: #b03a2e;
-  --color-muted: #efe9df;
-  /* 字体（衬线为主，含中文回退，DS-THEMES-004） */
-  --font-sans: "Inter", "Noto Sans SC", system-ui, sans-serif;
-  --font-serif: "Noto Serif SC", "Songti SC", Georgia, serif;
-  --font-mono: "JetBrains Mono", monospace;
-  /* 字号 */
-  --text-title: 88px;
-  --text-h1: 62px;
-  --text-body: 34px;
-  --text-caption: 24px;
-  /* 间距 */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 18px;
-  --space-6: 28px;
-  --space-8: 44px;
-  /* 圆角 */
-  --radius-sm: 2px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  /* 阴影 */
-  --shadow-card: 0 1px 4px rgba(43, 38, 34, 0.14);
-  --shadow-pop: 0 10px 28px rgba(43, 38, 34, 0.2);
-  /* 舞台（16:9 基准，无单位数值） */
-  --stage-w: 1920;
-  --stage-h: 1080;
+  --font-sans: "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "Noto Sans SC", monospace;
+  --text-body: 30px;
+  --text-subtitle: 36px;
+  --text-caption: 22px;
+  --weight-body: 400;
+  --leading-body: 1.65;
+  --leading-title: 1.22;
+  --space-4: 16px;
+  --stage-w: 1920px;
+  --stage-h: 1080px;
+  --stage-padding-x: 112px;
+  --stage-padding-y: 100px;
+  --border-width: 1px;
+  --border-style: solid;
+  --quote-border-width: 3px;
+  --color-bg: #f5f0e6;
+  --color-fg: #302820;
+  --color-secondary: #66574a;
+  --color-caption: #78695b;
+  --color-primary: #9d3f2c;
+  --color-accent: #ad4933;
+  --color-on-accent: #fff9ef;
+  --color-surface: #fcf9f2;
+  --color-surface-soft: #eae3d6;
+  --color-border: #c8bbab;
+  --font-display: "Noto Serif SC", serif;
+  --text-title: 80px;
+  --text-section: 44px;
+  --text-metric: 96px;
+  --weight-title: 650;
+  --tracking-title: -.035em;
+  --radius-md: 2px;
+  --shadow-card: none;
+  --chart-primary: #9d3f2c;
+  --chart-secondary: #897863;
+  --chart-accent: #bc8837;
 }
+.slide-title { max-width: 21em; }
+.kicker { text-transform:uppercase; }
+.quote { font-style:normal; }

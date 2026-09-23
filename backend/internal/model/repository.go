@@ -1,5 +1,7 @@
 package model
 
+import "github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
+
 type ThemeTag string
 
 const (
@@ -21,14 +23,16 @@ func (tag ThemeTag) Valid() bool {
 }
 
 type Theme struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Tags        []ThemeTag `json:"tags"`
-	CSS         string     `json:"css,omitempty"`
-	CSSURL      string     `json:"css_url"`
-	LocalPath   string     `json:"-"`
-	OpenURL     string     `json:"open_url"`
+	StyleHash   string                   `json:"style_hash"`
+	Appearance  *designsystem.Appearance `json:"appearance"`
+	ID          string                   `json:"id"`
+	Name        string                   `json:"name"`
+	Description string                   `json:"description"`
+	Tags        []ThemeTag               `json:"tags"`
+	CSS         string                   `json:"css,omitempty"`
+	CSSURL      string                   `json:"css_url"`
+	LocalPath   string                   `json:"-"`
+	OpenURL     string                   `json:"open_url"`
 }
 
 type ComponentTag string

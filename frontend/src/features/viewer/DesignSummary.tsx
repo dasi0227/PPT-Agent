@@ -4,17 +4,18 @@ import type { Design } from '../../api/types';
 import { chromeLabel } from './semanticLabels';
 
 export function DesignSummary({ design }: { design: Design }) {
+  const [themeError, setThemeError] = useState(false);
   const [theme, setTheme] = useState<{ id: string; name: string }>();
   useEffect(() => {
-    let active = true;
+    let active = true; setThemeError(false);
     if (design.theme) {
       void repositoriesApi.getTheme(design.theme).then((value) => {
-        if (active) setTheme({ id: value.id, name: value.name });
-      }).catch(() => { if (active) setTheme(undefined); });
+        if (active) {setTheme({ id: value.id, name: value.name });setThemeError(false);}
+      }).catch(() => { if (active) {setTheme(undefined);setThemeError(true);} });
     }
     return () => { active = false; };
   }, [design.theme]);
-  const themeName = theme?.id === design.theme ? theme.name : '当前主题';
+  const themeName = themeError ? '主题不可用，请从主题仓库选择现有主题' : theme?.id === design.theme ? theme.name : '当前主题';
   const direction = design.direction.trim();
   const directionLabel = direction && direction !== '待确定' ? direction : '视觉方向待确定';
 

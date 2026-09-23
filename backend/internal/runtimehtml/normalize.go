@@ -17,8 +17,9 @@ func Normalize(raw []byte, themeID string) ([]byte, error) {
 		return raw, nil
 	}
 	removeStylesheetLinks(head)
-	appendLink(head, "base-link", "/api/v1/runtime/base.css")
-	appendLink(head, "theme-link", "/api/v1/themes/"+themeID+"/css")
+	prependLink(head, "theme-link", "/api/v1/themes/"+themeID+"/css")
+	prependLink(head, "base-link", "/api/v1/runtime/base.css")
+	prependLink(head, "fonts-link", "/api/v1/runtime/fonts.css")
 	var output bytes.Buffer
 	if err := html.Render(&output, document); err != nil {
 		return nil, err
@@ -43,7 +44,7 @@ func removeStylesheetLinks(head *html.Node) {
 		next := child.NextSibling
 		if child.Type == html.ElementNode && child.Data == "link" {
 			id, href := attr(child, "id"), attr(child, "href")
-			if id == "base-link" || id == "theme-link" ||
+			if id == "fonts-link" || id == "base-link" || id == "theme-link" ||
 				strings.HasSuffix(href, "/common/base.css") || strings.HasSuffix(href, "/common/tokens.css") {
 				head.RemoveChild(child)
 			}
@@ -61,9 +62,9 @@ func attr(node *html.Node, name string) string {
 	return ""
 }
 
-func appendLink(head *html.Node, id, href string) {
-	head.AppendChild(&html.Node{
+func prependLink(head *html.Node, id, href string) {
+	head.InsertBefore(&html.Node{
 		Type: html.ElementNode, Data: "link",
 		Attr: []html.Attribute{{Key: "id", Val: id}, {Key: "rel", Val: "stylesheet"}, {Key: "href", Val: href}},
-	})
+	}, head.FirstChild)
 }

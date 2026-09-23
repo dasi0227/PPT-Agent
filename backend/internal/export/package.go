@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	xhtml "golang.org/x/net/html"
@@ -58,7 +57,7 @@ func buildRaster(ctx context.Context, op *Operation, renderer workflow.SlideRend
 			return nil, nil, &PublicError{Code: "EXPORT_EXTERNAL_RESOURCE", Message: "图片或 PDF 导出不能使用外部网络资源。", Details: map[string]any{"slides": []MissingSlide{{SlideID: slide.ID, Ordinal: slide.Ordinal, Title: slide.Title}}}, Retryable: false}
 		}
 		path := filepath.Join(work, slide.FileName)
-		diagnostics, err := renderer.Render(ctx, workflow.RenderRequest{RunID: op.ID, ProjectDir: op.Snapshot.Root, SlideID: slide.ID, HTML: string(slide.HTML), ScreenshotPath: path, ViewportWidth: spec.CanvasWidth, ViewportHeight: spec.CanvasHeight, TimeoutMS: 15000, Frame: slide.Frame, BaseCSS: string(op.Snapshot.BaseCSS), ThemeID: op.Snapshot.ThemeID, ThemeCSS: string(op.Snapshot.ThemeCSS)})
+		diagnostics, err := renderer.Render(ctx, workflow.RenderRequest{RuntimeAssetsDir: filepath.Join(op.Snapshot.Root, "runtime-assets"), RunID: op.ID, ProjectDir: op.Snapshot.Root, SlideID: slide.ID, HTML: string(slide.HTML), ScreenshotPath: path, ViewportWidth: spec.CanvasWidth, ViewportHeight: spec.CanvasHeight, TimeoutMS: 15000, Frame: slide.Frame, BaseCSS: string(op.Snapshot.BaseCSS), ThemeID: op.Snapshot.ThemeID, ThemeCSS: string(op.Snapshot.ThemeCSS)})
 		if err != nil {
 			return nil, nil, &PublicError{Code: "EXPORT_RENDER_FAILED", Message: fmt.Sprintf("第 %d 页渲染失败。", slide.Ordinal), Details: map[string]any{"slides": []MissingSlide{{SlideID: slide.ID, Ordinal: slide.Ordinal, Title: slide.Title}}}, Retryable: true}
 		}
@@ -119,6 +118,9 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 	if err := writeFile(filepath.Join(work, "assets", "theme.css"), op.Snapshot.ThemeCSS); err != nil {
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入主题样式。", true, err)
 	}
+	if err := writeOfflineFonts(filepath.Join(op.Snapshot.Root, "runtime-assets"), filepath.Join(work, "assets")); err != nil {
+		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法打包本地字体。", true, err)
+	}
 	warnings := []string{}
 	attachmentData, err := htmlAttachmentData(op.Snapshot)
 	if err != nil {
@@ -137,11 +139,15 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 		if err := writeFile(filepath.Join(work, "slides", name), rewritten); err != nil {
 			return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入页面文件。", true, err)
 		}
-		// Playback context only: no project IDs, source manifests or editor metadata.
+		// Playback context only: no project IDs, live API URLs or editor metadata.
+		var playbackAppearance any
+		if appearance := slide.Frame.Appearance; appearance != nil {
+			playbackAppearance = map[string]any{"hash": appearance.Hash, "chrome_tokens": appearance.ChromeTokens}
+		}
 		slides = append(slides, map[string]any{
 			"src": "slides/" + name,
 			"frame": map[string]any{
-				"ordinal": slide.Frame.Ordinal, "total": slide.Frame.Total,
+				"ordinal": slide.Frame.Ordinal, "total": slide.Frame.Total, "appearance": playbackAppearance,
 				"numbering":  map[string]bool{"visible": slide.Frame.Numbering.Visible},
 				"section":    map[string]string{"title": slide.Frame.Section.Title},
 				"deck_title": slide.Frame.DeckTitle, "chrome": slide.Frame.Chrome,
@@ -166,7 +172,11 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 	if err := writeFile(filepath.Join(work, "runtime", "player.js"), []byte(playerJS)); err != nil {
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入播放器。", true, err)
 	}
-	if err := writeFile(filepath.Join(work, "runtime", "chrome.js"), runtimeassets.ChromeJS()); err != nil {
+	chromeJS, chromeErr := os.ReadFile(filepath.Join(op.Snapshot.Root, "runtime-assets", "chrome.js"))
+	if chromeErr != nil {
+		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法读取公共装饰快照。", true, chromeErr)
+	}
+	if err := writeFile(filepath.Join(work, "runtime", "chrome.js"), chromeJS); err != nil {
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入公共装饰。", true, err)
 	}
 	list, _ := json.Marshal(slides)
@@ -219,7 +229,7 @@ func rewriteSlideHTML(raw []byte, baseCSS, themeCSS []byte, attachmentData map[s
 		for child := node.FirstChild; child != nil; {
 			next := child.NextSibling
 			if child.Type == xhtml.ElementNode {
-				if child.Data == "script" && strings.Contains(attrValue(child, "src"), "selection-bridge") {
+				if child.Data == "script" && (strings.Contains(attrValue(child, "src"), "selection-bridge") || strings.Contains(attrValue(child, "src"), "theme-bridge") || strings.Contains(attrValue(child, "src"), "font-loader")) {
 					node.RemoveChild(child)
 					child = next
 					continue
@@ -283,10 +293,9 @@ func rewriteSlideHTML(raw []byte, baseCSS, themeCSS []byte, attachmentData map[s
 	if err := walk(doc); err != nil {
 		return nil, nil, err
 	}
-	head.AppendChild(linkNode("base-link", "../assets/base.css"))
-	head.AppendChild(linkNode("theme-link", "../assets/theme.css"))
-	head.AppendChild(styleNode("export-base-inline", string(baseCSS)))
-	head.AppendChild(styleNode("export-theme-inline", string(themeCSS)))
+	head.InsertBefore(styleNode("export-theme-inline", string(themeCSS)), head.FirstChild)
+	head.InsertBefore(styleNode("export-base-inline", string(baseCSS)), head.FirstChild)
+	head.InsertBefore(linkNode("fonts-link", "../assets/fonts.css"), head.FirstChild)
 	head.InsertBefore(attachmentPrelude(attachmentData), head.FirstChild)
 	bridge := &xhtml.Node{Type: xhtml.ElementNode, Data: "script", Attr: []xhtml.Attribute{{Key: "data-export-runtime", Val: "playback-input"}}}
 	bridge.AppendChild(&xhtml.Node{Type: xhtml.TextNode, Data: playerBridgeJS})
@@ -488,7 +497,7 @@ func attachmentPrelude(attachments map[string]string) *xhtml.Node {
 }
 func isRuntimeStyle(n *xhtml.Node) bool {
 	id, href := attrValue(n, "id"), attrValue(n, "href")
-	return id == "base-link" || id == "theme-link" || strings.Contains(href, "/api/v1/runtime/base.css") || strings.Contains(href, "/api/v1/themes/") || strings.HasSuffix(href, "/common/base.css") || strings.HasSuffix(href, "/common/tokens.css")
+	return id == "fonts-link" || strings.Contains(href, "/api/v1/runtime/fonts.css") || id == "base-link" || id == "theme-link" || strings.Contains(href, "/api/v1/runtime/base.css") || strings.Contains(href, "/api/v1/themes/") || strings.HasSuffix(href, "/common/base.css") || strings.HasSuffix(href, "/common/tokens.css")
 }
 func attrValue(n *xhtml.Node, key string) string {
 	for _, a := range n.Attr {
@@ -628,3 +637,31 @@ var playerJS string
 
 //go:embed player/bridge.js
 var playerBridgeJS string
+
+// Data URLs in a shared stylesheet work even when opening the bundle over file://
+// inside opaque sandboxed iframes. Fonts are embedded once, not in each slide/JSON.
+func writeOfflineFonts(snapshotDir, targetDir string) error {
+	css, err := os.ReadFile(filepath.Join(snapshotDir, "fonts.css"))
+	if err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(filepath.Join(snapshotDir, "fonts"))
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(snapshotDir, "fonts", entry.Name()))
+		if err != nil {
+			return err
+		}
+		if strings.HasSuffix(entry.Name(), ".ttf") {
+			css = []byte(strings.ReplaceAll(string(css), "fonts/"+entry.Name(), "data:font/ttf;base64,"+base64.StdEncoding.EncodeToString(raw)))
+		} else if err := writeFile(filepath.Join(targetDir, "fonts", entry.Name()), raw); err != nil {
+			return err
+		}
+	}
+	return writeFile(filepath.Join(targetDir, "fonts.css"), css)
+}

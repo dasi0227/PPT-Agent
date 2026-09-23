@@ -127,7 +127,7 @@ func ModelSections(pack ContextPack) map[string]any {
 		sections["related_context"] = ids
 	}
 	if theme := pack.Theme; theme != nil {
-		sections["theme_context"] = map[string]any{"name": theme.Name, "description": theme.Description, "tokens": theme.Tokens, "allowed_selectors": theme.AllowedSelectors}
+		sections["theme_context"] = map[string]any{"name": theme.Name, "description": theme.Description, "tokens": theme.Tokens, "public_roles": theme.PublicRoles}
 	}
 	return sections
 }

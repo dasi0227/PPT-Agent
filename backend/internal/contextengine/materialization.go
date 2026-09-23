@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -23,7 +24,8 @@ func loadMaterializationState(workDir, slideID string, deck pptspec.Manifest, ou
 	if deckErr != nil || specErr != nil || designErr != nil {
 		return string(model.MaterializationUnknown)
 	}
+	appearance, _ := runtimeassets.ProjectAppearance(workDir, design.Theme)
 	nodeHash := pptspec.SemanticSlideNodeHash(outline, slideID)
 	return pptspec.DeriveMaterializationState(true, &record, pptspec.ResourceHash(deck), nodeHash, pptspec.ResourceHash(slide), pptspec.DesignContentHash(design),
-		pptspec.ContentHash(htmlRaw), pptspec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), pptspec.FrameContextHash(deck, outline, design, slideID))
+		pptspec.ContentHash(htmlRaw), pptspec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), pptspec.FrameContextHash(deck, outline, design, slideID, appearance))
 }

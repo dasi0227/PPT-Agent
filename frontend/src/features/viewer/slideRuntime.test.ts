@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 function createRuntime() {
@@ -15,11 +15,23 @@ function createRuntime() {
   });
 }
 
+async function applyCurrentTheme(window: ReturnType<typeof createRuntime>['window']) {
+  window.PPTFonts={prepare:()=>Promise.resolve()};
+  const iframe=window.document.querySelector('iframe')!;
+  const spy=vi.spyOn(iframe.contentWindow!,'postMessage');
+  const slideID=window.document.querySelector('[data-slide-frame]')!.getAttribute('data-slide-id');
+  window.dispatchEvent(new window.MessageEvent('message',{source:iframe.contentWindow,data:{bridge:'ppt-theme-v1',type:'themeBridgeReady',slide_id:slideID}}));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  const request=spy.mock.calls.map(([message])=>message).reverse().find(message=>message.type==='applyTheme');
+  window.dispatchEvent(new window.MessageEvent('message',{source:iframe.contentWindow,data:{bridge:'ppt-theme-v1',type:'themeApplied',slide_id:slideID,request_id:request.request_id,appearance_hash:request.appearance.hash}}));
+  spy.mockRestore();
+}
+
 describe('slide runtime', () => {
   const frame = (id: string, ordinal: number, visible = true) => ({
     slide_id: id, ordinal, total: 2, role: ordinal === 1 ? 'cover' : 'content',
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
-    theme_id: 'swiss-modern',
+    theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}},
     section: { id: 'sec_1', title: '正文', index: 1 }, numbering: { visible, format: 'number' },
     deck_title: 'Deck',
     chrome: [
@@ -37,7 +49,7 @@ describe('slide runtime', () => {
     runtimeWindow.dispatchEvent(new runtimeWindow.MessageEvent('message', { source, data }));
   };
 
-  it('executes only the current slide and creates fresh frames when navigating away and back', () => {
+  it('executes only the current slide and creates fresh frames when navigating away and back', async () => {
     const dom = createRuntime();
     const { window } = dom;
     const slides = [
@@ -55,7 +67,7 @@ describe('slide runtime', () => {
     const initialFrame = initialFrames[0];
     const srcdoc = initialFrame.querySelector('iframe')?.getAttribute('srcdoc') ?? '';
     expect(srcdoc).toContain('id="base-link"');
-    expect(srcdoc).toContain('/api/v1/themes/swiss-modern/css');
+    expect(srcdoc).toContain('/api/v1/themes/editorial-serif/css');
     expect(srcdoc).toContain('/slide-runtime/selection-bridge.js');
     expect(srcdoc).not.toContain('<title>two</title>');
     expect(initialFrames[0]?.querySelector('.runtime-canvas')).not.toBeNull();
@@ -65,6 +77,7 @@ describe('slide runtime', () => {
 
     send(window, { type: 'gotoSlide', index: 1 });
 
+    await applyCurrentTheme(window);
     const afterGotoFrames = Array.from(
       window.document.querySelectorAll('[data-slide-frame]'),
     ) as HTMLElement[];
@@ -95,7 +108,7 @@ describe('slide runtime', () => {
     dom.window.close();
   });
 
-  it('keeps the current execution for prefetch, repeated navigation, and frame metadata updates', () => {
+  it('keeps the current execution for prefetch, repeated navigation, and frame metadata updates', async () => {
     const dom = createRuntime();
     const { window } = dom;
 
@@ -104,6 +117,7 @@ describe('slide runtime', () => {
       slides: [{ id: 's1', html: '<!doctype html><title>one</title>', frame: frame('s1', 1) }],
       index: 0,
     });
+    await applyCurrentTheme(window);
     const firstFrame = window.document.querySelector('[data-slide-frame]') as HTMLElement;
     send(window, { type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'element', html_hash: 'sha256:a' });
 
@@ -136,7 +150,7 @@ describe('slide runtime', () => {
     dom.window.close();
   });
 
-  it('rebuilds only for current HTML, theme, or a matching replay request', () => {
+  it('keeps the iframe for theme changes and rebuilds only for HTML or matching replay', () => {
     const dom = createRuntime();
     const { window } = dom;
     const html = '<!doctype html><title>one</title>';
@@ -149,10 +163,10 @@ describe('slide runtime', () => {
     const htmlChanged = window.document.querySelector('[data-slide-frame]');
     expect(htmlChanged).not.toBe(initial);
 
-    const themed = { ...slide, html: '<!doctype html><title>changed</title>', frame: { ...slide.frame, theme_id: 'editorial' } };
+    const themed = { ...slide, html: '<!doctype html><title>changed</title>', frame: { ...slide.frame, theme_id: 'blueprint',appearance:{hash:'appearance-2',theme_css_url:'/api/v1/themes/blueprint/css',chrome_tokens:{}} } };
     send(window, { type: 'updateDeck', slides: [themed], index: 0 });
     const themeChanged = window.document.querySelector('[data-slide-frame]');
-    expect(themeChanged).not.toBe(htmlChanged);
+    expect(themeChanged).toBe(htmlChanged);
 
     send(window, { type: 'replayCurrentSlide', slide_id: 'other' });
     expect(window.document.querySelector('[data-slide-frame]')).toBe(themeChanged);
@@ -160,6 +174,33 @@ describe('slide runtime', () => {
     expect(window.document.querySelector('[data-slide-frame]')).toBe(themeChanged);
     send(window, { type: 'replayCurrentSlide', slide_id: 's1' });
     expect(window.document.querySelector('[data-slide-frame]')).not.toBe(themeChanged);
+    dom.window.close();
+  });
+
+  it('ignores obsolete completion and retains the iframe on failure and retry', async () => {
+    const dom=createRuntime(),window=dom.window;
+    const slide={id:'s1',html:'<p>persistent</p>',frame:frame('s1',1)};
+    send(window,{type:'updateDeck',slides:[slide],index:0});
+    await applyCurrentTheme(window);
+    const iframe=window.document.querySelector('iframe')!;
+    const requests=vi.spyOn(iframe.contentWindow!,'postMessage');
+    const events=vi.spyOn(window,'postMessage');
+    const changed={...slide,frame:{...slide.frame,appearance:{...slide.frame.appearance,hash:'next',theme_css_url:'/next.css'}}};
+    send(window,{type:'updateDeck',slides:[changed],index:0});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    const request=requests.mock.calls.map(([message])=>message).reverse().find(message=>message.type==='applyTheme');
+    const reply=(type:string,requestID:number,hash='next')=>send(window,{bridge:'ppt-theme-v1',type,request_id:requestID,appearance_hash:hash,slide_id:'s1',message:'load failed'},iframe.contentWindow! as unknown as Window);
+    reply('themeApplied',request.request_id-1,'old');
+    expect(events.mock.calls.some(([message])=>message.type==='themeApplied'&&message.appearance_hash==='old')).toBe(false);
+    reply('themeApplyFailed',request.request_id);
+    expect(window.document.querySelector('iframe')).toBe(iframe);
+    expect(events.mock.calls.some(([message])=>message.type==='themeApplyFailed')).toBe(true);
+    send(window,{type:'retryTheme',slide_id:'s1'});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    const retry=requests.mock.calls.map(([message])=>message).reverse().find(message=>message.type==='applyTheme');
+    expect(retry.request_id).toBeGreaterThan(request.request_id);
+    reply('themeApplied',retry.request_id);
+    expect(window.document.querySelector('iframe')).toBe(iframe);
     dom.window.close();
   });
 

@@ -5,30 +5,12 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 var themeTokenPattern = regexp.MustCompile(`(?m)(--[A-Za-z0-9_-]+)\s*:\s*([^;{}]+);`)
 var cssCommentPattern = regexp.MustCompile(`(?s)/\*.*?\*/`)
-
-var themeAllowedSelectors = []string{
-	"html",
-	"body",
-	".slide-scaler",
-	".slide-stage",
-	".slide-content",
-	".slide-title",
-	".slide-subtitle",
-	".slide-body",
-	".card",
-	".kicker",
-	".metric",
-	".metric-value",
-	".metric-label",
-	".quote",
-	".data-table",
-	"a",
-}
 
 func buildThemeContext(theme model.Theme) (ThemeContext, error) {
 	tokens := make([]ThemeToken, 0)
@@ -47,12 +29,12 @@ func buildThemeContext(theme model.Theme) (ThemeContext, error) {
 		return ThemeContext{}, fmt.Errorf("theme %q has no CSS token declarations", theme.ID)
 	}
 	return ThemeContext{
-		ID:               theme.ID,
-		Name:             theme.Name,
-		Description:      theme.Description,
-		Tokens:           tokens,
-		AllowedSelectors: append([]string(nil), themeAllowedSelectors...),
-		Source:           "theme_repository",
-		Trust:            "untrusted_read_only_reference",
+		ID:          theme.ID,
+		Name:        theme.Name,
+		Description: theme.Description,
+		Tokens:      tokens,
+		PublicRoles: append([]string(nil), designsystem.PublicRoles...),
+		Source:      "theme_repository",
+		Trust:       "untrusted_read_only_reference",
 	}, nil
 }

@@ -104,7 +104,7 @@ function PreviewFrame({
   onSelectionMessage?: (message: string) => void;
   onSelectionCanceled?: () => void;
   onSelectionRemove?: (selectionId: string) => void;
-  onSelectionPresence?: (statuses: Array<{ selection_id: string; status: 'active' | 'content_deleted'; targets?: Array<{ target_id: string; status: 'active' | 'content_deleted' }> }>) => void;
+  onSelectionPresence?: (statuses: import('./previewProtocol').SelectionPresence[]) => void;
   replayRequest?: { id: number; slideId: string };
 }) {
   const visibleHtml = visibleHTML(state);
@@ -669,6 +669,10 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                   statuses.forEach((item) => {
                     const current = references.find((reference) => reference.kind === 'dom' && reference.selection.selection_id === item.selection_id);
                     if (current?.kind !== 'dom') return;
+                    if (item.snapshot) {
+                      state.updateThreadDOMSelection(activeThreadId, item.selection_id, { rect:item.snapshot.rect, dom_targets:item.snapshot.dom_targets, chrome_targets:item.snapshot.chrome_targets, status:item.status });
+                      return;
+                    }
                     const targetStatuses = new Map((item.targets ?? []).map((target) => [target.target_id, target.status]));
                     const domTargets = current.selection.dom_targets?.map((target) => ({ ...target, status: targetStatuses.get(target.target_id) ?? target.status }));
                     const targetsChanged = domTargets?.some((target, index) => target.status !== current.selection.dom_targets?.[index]?.status) ?? false;

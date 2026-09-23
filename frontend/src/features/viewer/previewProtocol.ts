@@ -1,3 +1,10 @@
+export interface SelectionPresence {
+  selection_id: string;
+  status: 'active' | 'content_deleted';
+  targets?: Array<{ target_id: string; status: 'active' | 'content_deleted' }>;
+  snapshot?: import('../../api/types').DOMSelection;
+}
+
 export interface RuntimeSlide {
   id: string;
   html: string;
@@ -6,6 +13,7 @@ export interface RuntimeSlide {
 
 export type PreviewCommand =
   | { type: 'updateDeck'; slides: RuntimeSlide[]; index: number }
+  | { type: 'retryTheme'; slide_id: string }
   | { type: 'gotoSlide'; index: number }
   | { type: 'replayCurrentSlide'; slide_id: string }
   | { type: 'setSelectionMode'; session_id: string; slide_id: string; mode: 'element' | 'region' | 'none'; html_hash: string }
@@ -14,10 +22,12 @@ export type PreviewCommand =
 
 export type RuntimeEvent =
   | { type: 'runtimeReady' }
+  | { type: 'themeApplying' | 'themeApplied'; slide_id: string; appearance_hash: string }
+  | { type: 'themeApplyFailed'; slide_id: string; appearance_hash: string; message: string }
   | { type: 'renderError'; message: string; index?: number }
   | { type: 'selectionCreated'; session_id: string; slide_id: string; selection: import('../../api/types').DOMSelection }
   | { type: 'selectionCanceled'; session_id: string; slide_id: string }
-  | { type: 'selectionPresence'; session_id: string; slide_id: string; statuses: Array<{ selection_id: string; status: 'active' | 'content_deleted'; targets?: Array<{ target_id: string; status: 'active' | 'content_deleted' }> }> }
+  | { type: 'selectionPresence'; session_id: string; slide_id: string; statuses: SelectionPresence[] }
   | { type: 'selectionEmpty' | 'selectionRejected'; session_id: string; slide_id: string; message: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -88,6 +98,7 @@ export function isRuntimeSlide(value: unknown): value is RuntimeSlide {
     && value.frame.canvas.height === 1080
     && value.frame.canvas.aspect_ratio === '16:9'
 		&& (value.frame.project_id === undefined || typeof value.frame.project_id === 'string')
+    && (value.frame.appearance === null || (isRecord(value.frame.appearance) && typeof value.frame.appearance.hash === 'string' && typeof value.frame.appearance.theme_css_url === 'string' && isStringRecord(value.frame.appearance.chrome_tokens)))
     && typeof value.frame.theme_id === 'string'
     && typeof value.frame.ordinal === 'number'
     && typeof value.frame.total === 'number';
@@ -95,6 +106,7 @@ export function isRuntimeSlide(value: unknown): value is RuntimeSlide {
 
 export function isPreviewCommand(value: unknown): value is PreviewCommand {
   if (!isRecord(value) || typeof value.type !== 'string') return false;
+  if (value.type === 'retryTheme') return typeof value.slide_id === 'string';
   if (value.type === 'gotoSlide') return isIndex(value.index);
   if (value.type === 'replayCurrentSlide') {
     return Object.keys(value).length === 2
@@ -113,6 +125,9 @@ export function isPreviewCommand(value: unknown): value is PreviewCommand {
 export function parseRuntimeEvent(value: unknown): RuntimeEvent | null {
   if (!isRecord(value) || typeof value.type !== 'string') return null;
   if (value.type === 'runtimeReady') return { type: 'runtimeReady' };
+  if (['themeApplying','themeApplied','themeApplyFailed'].includes(value.type)) {
+    return typeof value.slide_id === 'string' && typeof value.appearance_hash === 'string' && (value.type !== 'themeApplyFailed' || typeof value.message === 'string') ? value as RuntimeEvent : null;
+  }
   if (value.type === 'selectionEmpty' || value.type === 'selectionRejected') {
     return isSessionMessage(value) && typeof value.message === 'string' ? value as RuntimeEvent : null;
   }
@@ -123,7 +138,7 @@ export function parseRuntimeEvent(value: unknown): RuntimeEvent | null {
     return value as RuntimeEvent;
   }
   if (value.type === 'selectionCanceled' && isSessionMessage(value)) return value as RuntimeEvent;
-  if (value.type === 'selectionPresence' && isSessionMessage(value) && Array.isArray(value.statuses) && value.statuses.every((item) => isRecord(item) && typeof item.selection_id === 'string' && (item.status === 'active' || item.status === 'content_deleted') && (item.targets === undefined || (Array.isArray(item.targets) && item.targets.every((target) => isRecord(target) && typeof target.target_id === 'string' && (target.status === 'active' || target.status === 'content_deleted')))))) return value as RuntimeEvent;
+  if (value.type === 'selectionPresence' && isSessionMessage(value) && Array.isArray(value.statuses) && value.statuses.every((item) => isRecord(item) && typeof item.selection_id === 'string' && (item.snapshot === undefined || isDOMSelectionSnapshot(item.snapshot)) && (item.status === 'active' || item.status === 'content_deleted') && (item.targets === undefined || (Array.isArray(item.targets) && item.targets.every((target) => isRecord(target) && typeof target.target_id === 'string' && (target.status === 'active' || target.status === 'content_deleted')))))) return value as RuntimeEvent;
   if (value.type !== 'renderError' || typeof value.message !== 'string') return null;
   if (value.index !== undefined && !isIndex(value.index)) return null;
   return {

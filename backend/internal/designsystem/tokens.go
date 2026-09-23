@@ -9,13 +9,53 @@ import (
 	"regexp"
 )
 
-// requiredTokens 是「必需 token 清单」（校验基线）。
-// 权威源：docs/60-design-system/design-tokens.md「必需 token 清单」小节。
-// 变更 MUST 同步更新该文档与本列表（DS-TOKENS-004）。
+const DefaultTheme = "editorial-serif"
+
+// Required token semantics are documented in the shared HTML authoring contract.
 var requiredTokens = []string{
-	"--color-bg", "--color-fg", "--color-primary", "--color-accent", "--color-muted",
-	"--font-sans", "--text-title", "--text-body", "--space-4", "--radius-md",
-	"--shadow-card", "--stage-w", "--stage-h",
+	"--font-sans",
+	"--font-mono",
+	"--text-body",
+	"--text-subtitle",
+	"--text-caption",
+	"--weight-body",
+	"--leading-body",
+	"--leading-title",
+	"--space-4",
+	"--stage-w",
+	"--stage-h",
+	"--stage-padding-x",
+	"--stage-padding-y",
+	"--border-width",
+	"--border-style",
+	"--quote-border-width",
+	"--color-bg",
+	"--color-fg",
+	"--color-secondary",
+	"--color-caption",
+	"--color-primary",
+	"--color-accent",
+	"--color-on-accent",
+	"--color-surface",
+	"--color-surface-soft",
+	"--color-border",
+	"--font-display",
+	"--text-title",
+	"--text-section",
+	"--text-metric",
+	"--weight-title",
+	"--tracking-title",
+	"--radius-md",
+	"--shadow-card",
+	"--chart-primary",
+	"--chart-secondary",
+	"--chart-accent",
+}
+
+var PublicRoles = []string{
+	".slide-stage", ".slide-content", ".slide-title", ".section-title", ".slide-subtitle", ".slide-body", ".caption", ".kicker",
+	".card", ".card-soft", ".card-outline", ".card-accent", ".metric", ".metric-value", ".metric-label", ".quote", ".data-table", ".pill", ".divider",
+	".chart-primary", ".chart-secondary", ".chart-accent", ".chart-line", ".chart-grid", ".chart-label", ".diagram-node", ".diagram-edge", ".diagram-label",
 }
 
 // RequiredTokens 返回必需 token 清单副本。

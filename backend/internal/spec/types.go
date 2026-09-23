@@ -1,5 +1,7 @@
 package spec
 
+import "github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
+
 const SchemaVersion = "5.0"
 
 type SlideRole string
@@ -117,17 +119,18 @@ type ChromeItem struct {
 }
 
 type RuntimeFrameContext struct {
-	SlideID    string                `json:"slide_id"`
-	Canvas     RuntimeCanvas         `json:"canvas"`
-	ThemeID    string                `json:"theme_id"`
-	DeckTitle  string                `json:"deck_title"`
-	Ordinal    int                   `json:"ordinal"`
-	Total      int                   `json:"total"`
-	Role       string                `json:"role"`
-	Section    RuntimeFrameAncestor  `json:"section"`
-	Subsection *RuntimeFrameAncestor `json:"subsection,omitempty"`
-	Numbering  RuntimeFrameNumbering `json:"numbering"`
-	Chrome     []ChromeItem          `json:"chrome"`
+	Appearance *designsystem.Appearance `json:"appearance"`
+	SlideID    string                   `json:"slide_id"`
+	Canvas     RuntimeCanvas            `json:"canvas"`
+	ThemeID    string                   `json:"theme_id"`
+	DeckTitle  string                   `json:"deck_title"`
+	Ordinal    int                      `json:"ordinal"`
+	Total      int                      `json:"total"`
+	Role       string                   `json:"role"`
+	Section    RuntimeFrameAncestor     `json:"section"`
+	Subsection *RuntimeFrameAncestor    `json:"subsection,omitempty"`
+	Numbering  RuntimeFrameNumbering    `json:"numbering"`
+	Chrome     []ChromeItem             `json:"chrome"`
 }
 type RuntimeFrameAncestor struct {
 	ID    string `json:"id"`
@@ -140,11 +143,13 @@ type RuntimeFrameNumbering struct {
 }
 
 type ProjectContentSnapshot struct {
-	Hashes     map[string]string       `json:"hashes"`
-	Manifest   Manifest                `json:"manifest"`
-	Outline    Outline                 `json:"outline"`
-	Design     Design                  `json:"design"`
-	SlidesByID map[string]SlideContent `json:"slides_by_id"`
+	Appearance *designsystem.Appearance `json:"appearance"`
+	ThemeError string                   `json:"theme_error,omitempty"`
+	Hashes     map[string]string        `json:"hashes"`
+	Manifest   Manifest                 `json:"manifest"`
+	Outline    Outline                  `json:"outline"`
+	Design     Design                   `json:"design"`
+	SlidesByID map[string]SlideContent  `json:"slides_by_id"`
 }
 type SlideContent struct {
 	SpecState       string                 `json:"spec_state"`

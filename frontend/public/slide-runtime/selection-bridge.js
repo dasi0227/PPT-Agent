@@ -339,10 +339,27 @@
     return resolvedSelector ? 'missing' : 'unknown';
   }
 
+  function refreshSelection(selection) {
+    const targets=[];
+    for (const target of selection.dom_targets || []) {
+      let found=null;
+      for (const selector of target.candidate_selectors || []) {
+        try {
+          const matches=[...document.querySelectorAll(selector)].filter(element=>matchesFingerprint(element,target.fingerprint));
+          if(matches.length===1 && visible(matches[0])) {found=matches[0];break;}
+        } catch { /* Unresolvable selections require a new user selection. */ }
+      }
+      if(!found)return {selection_id:selection.selection_id,status:'content_deleted',needs_reselect:true};
+      targets.push({...targetSnapshot(found),target_id:target.target_id,parent_target_id:target.parent_target_id});
+    }
+    return {selection_id:selection.selection_id,status:'active',snapshot:{...selection,dom_targets:targets,status:'active'}};
+  }
+
   window.addEventListener('message', (event) => {
     if (event.source !== window.parent || event.data?.bridge !== 'ppt-dom-selection-v1' || event.data?.slide_id !== slideID) return;
     if (event.data.type === 'innerProbeSelections' && event.data.session_id === sessionID && Array.isArray(event.data.selections)) {
       const statuses = event.data.selections.map((selection) => {
+        if(event.data.refresh)return refreshSelection(selection);
         const targets = (selection.dom_targets || []).map((target) => ({ target_id: target.target_id, status: targetPresence(target) === 'missing' ? 'content_deleted' : 'active' }));
         return { selection_id: selection.selection_id, status: (selection.chrome_targets || []).length > 0 || targets.some((target) => target.status === 'active') ? 'active' : 'content_deleted', targets };
       });

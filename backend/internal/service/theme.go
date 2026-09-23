@@ -11,6 +11,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 )
 
 type ThemeService struct {
@@ -68,6 +69,7 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 		return model.Theme{}, repositoryReadError("theme", id, err)
 	}
 	return model.Theme{
+		StyleHash: runtimeassets.Hash(cssRaw), Appearance: runtimeassets.Appearance(id, cssRaw),
 		ID: id, Name: metadata.Name, Description: metadata.Description,
 		Tags: tags,
 		CSS:  string(cssRaw), CSSURL: "/api/v1/themes/" + id + "/css",

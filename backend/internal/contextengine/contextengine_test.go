@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -249,8 +250,8 @@ func TestPPTContextLoadsCurrentThemeContract(t *testing.T) {
 	if tokenValues["--color-primary"] != "#d0021b" || tokenValues["--stage-w"] != "1920" || tokenValues["--stage-h"] != "1080" {
 		t.Fatalf("theme tokens=%v", tokenValues)
 	}
-	if strings.Join(pack.Theme.AllowedSelectors, ",") != "html,body,.slide-scaler,.slide-stage,.slide-content,.slide-title,.slide-subtitle,.slide-body,.card,.kicker,.metric,.metric-value,.metric-label,.quote,.data-table,a" {
-		t.Fatalf("allowed selectors=%v", pack.Theme.AllowedSelectors)
+	if strings.Join(pack.Theme.PublicRoles, ",") != strings.Join(designsystem.PublicRoles, ",") {
+		t.Fatalf("public roles=%v", pack.Theme.PublicRoles)
 	}
 	foundThemeSegment := false
 	for _, segment := range pack.Manifest.Segments {
@@ -450,9 +451,9 @@ func TestPromptCompilerIncludesThemeContractOnlyInUserContext(t *testing.T) {
 		Project:       ProjectContext{ID: "p1"},
 		Theme: &ThemeContext{
 			ID: "swiss-modern", Name: "Swiss Modern", Description: "Grid-led",
-			Tokens:           []ThemeToken{{Name: "--color-primary", Value: "#d0021b"}},
-			AllowedSelectors: []string{".slide-stage", ".card"},
-			Source:           "theme_repository", Trust: "untrusted_read_only_reference",
+			Tokens:      []ThemeToken{{Name: "--color-primary", Value: "#d0021b"}},
+			PublicRoles: []string{".slide-stage", ".card"},
+			Source:      "theme_repository", Trust: "untrusted_read_only_reference",
 		},
 	}
 	got, err := (PromptCompiler{}).Compile(p, "SYSTEM POLICY")
@@ -463,7 +464,7 @@ func TestPromptCompilerIncludesThemeContractOnlyInUserContext(t *testing.T) {
 		"<theme_context>",
 		`"name":"Swiss Modern"`,
 		`"name":"--color-primary"`,
-		`"allowed_selectors":[".slide-stage",".card"]`,
+		`"public_roles":[".slide-stage",".card"]`,
 	} {
 		if !strings.Contains(got.User, expected) {
 			t.Fatalf("compiled user context missing %q: %s", expected, got.User)

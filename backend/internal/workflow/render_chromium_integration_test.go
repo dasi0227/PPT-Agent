@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -20,7 +21,7 @@ const (
 )
 
 func testRenderFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Numbering: spec.RuntimeFrameNumbering{Visible: true, Format: "number"}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}, {Type: "section_marker", Placement: "top-left", Style: "muted"}, {Type: "deck_title", Placement: "top-right", Style: "muted"}}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Numbering: spec.RuntimeFrameNumbering{Visible: true, Format: "number"}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}, {Type: "section_marker", Placement: "top-left", Style: "muted"}, {Type: "deck_title", Placement: "top-right", Style: "muted"}}}
 }
 
 func TestNodeSlideRendererWithRealChromium(t *testing.T) {
@@ -44,7 +45,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	_, invalidViewportErr := renderer.Render(context.Background(), RenderRequest{
+	_, invalidViewportErr := renderer.Render(context.Background(), RenderRequest{RuntimeAssetsDir: testRuntimeAssets(t),
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: validToolHTML,
 		ScreenshotPath: filepath.Join(dir, "invalid-viewport.png"),
 		ViewportWidth:  1600, ViewportHeight: 900, TimeoutMS: 15000, Frame: testRenderFrame(),
@@ -54,9 +55,9 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 		t.Fatalf("non-canonical viewport accepted: %v", invalidViewportErr)
 	}
 	screenshot := filepath.Join(dir, "shot.png")
-	diagnostics, err := renderer.Render(context.Background(), RenderRequest{
+	diagnostics, err := renderer.Render(context.Background(), RenderRequest{RuntimeAssetsDir: testRuntimeAssets(t),
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01",
-		HTML:           strings.Replace(validToolHTML, "</body>", `<script>localStorage.setItem('leak','yes')</script></body>`, 1),
+		HTML:           strings.Replace(validToolHTML, "</body>", `<script>window.pageState='yes'</script></body>`, 1),
 		ScreenshotPath: screenshot, ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
 	})
@@ -101,8 +102,8 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	}
 
 	secondScreenshot := filepath.Join(dir, "shot-2.png")
-	secondHTML := `<!doctype html><html><body><section class="slide-stage"><h1>Second</h1><script>if(localStorage.getItem('leak'))console.error('context leaked')</script></section></body></html>`
-	diagnostics, err = renderer.Render(context.Background(), RenderRequest{
+	secondHTML := `<!doctype html><html><body><section class="slide-stage"><h1>Second</h1><script>if(window.pageState)console.error('context leaked');try{void parent.document.body;console.error('iframe not isolated')}catch{}</script></section></body></html>`
+	diagnostics, err = renderer.Render(context.Background(), RenderRequest{RuntimeAssetsDir: testRuntimeAssets(t),
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: secondHTML,
 		ScreenshotPath: secondScreenshot, ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
@@ -117,7 +118,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 		t.Fatalf("browser worker was not reused: first=%d second=%d", initialPID, reusedPID)
 	}
 	runtimeCSSHTML := `<!doctype html><html><head><link id="base-link" rel="stylesheet" href="/api/v1/runtime/base.css"><link id="theme-link" rel="stylesheet" href="/api/v1/themes/swiss-modern/css"></head><body><section class="slide-stage"><div id="proof" style="width:var(--theme-proof)">Runtime CSS</div></section><script>if(getComputedStyle(document.querySelector('#proof')).width!=='37px')console.error('runtime css missing')</script></body></html>`
-	runtimeCSSDiagnostics, runtimeCSSErr := renderer.Render(context.Background(), RenderRequest{
+	runtimeCSSDiagnostics, runtimeCSSErr := renderer.Render(context.Background(), RenderRequest{RuntimeAssetsDir: testRuntimeAssets(t),
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: runtimeCSSHTML,
 		ScreenshotPath: filepath.Join(dir, "overlay.png"), ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
@@ -127,7 +128,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	_, timeoutErr := renderer.Render(timeoutCtx, RenderRequest{
+	_, timeoutErr := renderer.Render(timeoutCtx, RenderRequest{RuntimeAssetsDir: testRuntimeAssets(t),
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01",
 		HTML:           `<html><body><section class="slide-stage"><script>while(true){}</script></section></body></html>`,
 		ScreenshotPath: filepath.Join(dir, "timeout.png"), ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 1000, Frame: testRenderFrame(),
@@ -138,7 +139,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 		t.Fatal("render timeout was not enforced")
 	}
 	postCancelScreenshot := filepath.Join(dir, "post-cancel.png")
-	if _, err := renderer.Render(context.Background(), RenderRequest{
+	if _, err := renderer.Render(context.Background(), RenderRequest{RuntimeAssetsDir: testRuntimeAssets(t),
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: validToolHTML,
 		ScreenshotPath: postCancelScreenshot, ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
@@ -169,11 +170,20 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	recoveryScreenshot := filepath.Join(dir, "shot-recovered.png")
-	if _, err := renderer.Render(context.Background(), RenderRequest{
+	if _, err := renderer.Render(context.Background(), RenderRequest{RuntimeAssetsDir: testRuntimeAssets(t),
 		RunID: "integration", ProjectDir: dir, SlideID: "slide-01", HTML: validToolHTML,
 		ScreenshotPath: recoveryScreenshot, ViewportWidth: 1920, ViewportHeight: 1080, TimeoutMS: 15000, Frame: testRenderFrame(),
 		BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
 	}); err != nil {
 		t.Fatalf("worker did not restart after crash: %v", err)
 	}
+}
+
+func testRuntimeAssets(t *testing.T) string {
+	t.Helper()
+	dir, err := runtimeassets.RenderAssetDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }

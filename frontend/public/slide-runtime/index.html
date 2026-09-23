@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="stylesheet" href="/api/v1/runtime/fonts.css">
+  <script src="/api/v1/runtime/font-loader.js"></script>
   <meta charset="UTF-8">
   <title>Slide Runtime</title>
   <script src="/api/v1/runtime/chrome.js"></script>
@@ -82,6 +84,7 @@
         && value.frame.canvas.width === 1920
         && value.frame.canvas.height === 1080
         && value.frame.canvas.aspect_ratio === '16:9'
+        && (value.frame.appearance === null || (value.frame.appearance && typeof value.frame.appearance.hash === 'string' && typeof value.frame.appearance.theme_css_url === 'string' && value.frame.appearance.chrome_tokens))
         && typeof value.frame.theme_id === 'string'
         && Number.isInteger(value.frame.ordinal)
         && Number.isInteger(value.frame.total);
@@ -188,26 +191,24 @@
       ));
     }
 
-    function normalizeSlideHTML(source, themeID, projectID, slideID) {
+    function normalizeSlideHTML(source, appearance, projectID, slideID) {
 		const document = new DOMParser().parseFromString(bridgeAttachmentPaths(source, projectID), 'text/html');
       const head = document.head;
       head.querySelectorAll('link').forEach((link) => {
         const id = link.getAttribute('id');
         const href = link.getAttribute('href') || '';
-        if (id === 'base-link' || id === 'theme-link' || href.endsWith('/common/base.css') || href.endsWith('/common/tokens.css')) {
+        if (id === 'fonts-link' || id === 'base-link' || id === 'theme-link' || href.endsWith('/common/base.css') || href.endsWith('/common/tokens.css')) {
           link.remove();
         }
       });
-      const base = document.createElement('link');
-      base.id = 'base-link';
-      base.rel = 'stylesheet';
-      base.href = '/api/v1/runtime/base.css';
-      head.appendChild(base);
-      const theme = document.createElement('link');
-      theme.id = 'theme-link';
-      theme.rel = 'stylesheet';
-      theme.href = `/api/v1/themes/${encodeURIComponent(themeID)}/css`;
-      head.appendChild(theme);
+      const links = [
+        ['fonts-link','/api/v1/runtime/fonts.css'], ['base-link','/api/v1/runtime/base.css'],
+        ['theme-link',appearance?.theme_css_url || '']
+      ].map(([id,href])=>{const link=document.createElement('link');link.id=id;link.rel='stylesheet';if(href)link.href=href;return link;});
+      head.prepend(...links);
+      const fontLoader=document.createElement('script');fontLoader.src='/api/v1/runtime/font-loader.js';head.appendChild(fontLoader);
+      const themeBridge=document.createElement('script');themeBridge.src='/api/v1/runtime/theme-bridge.js';themeBridge.dataset.slideId=slideID;
+      document.body.appendChild(themeBridge);
 		document.querySelectorAll('img[src], source[src]').forEach((node) => {
 			const bridged = attachmentContentURL(projectID, node.getAttribute('src'));
 			if (bridged) node.setAttribute('src', bridged);
@@ -237,20 +238,20 @@
         && execution
         && execution.container.isConnected
         && execution.slideID === slide.id
-        && execution.html === slide.html
-        && execution.themeID === slide.frame.theme_id;
+        && execution.html === slide.html;
 
       if (canReuse) {
         state.activeIndex = index;
         execution.container.dataset.index = String(index);
         execution.container.querySelector('iframe').title = `Slide ${index + 1}`;
-        applyRuntimeFrame(execution.container, slide.frame);
+        if (execution.requestedHash !== (slide.frame.appearance?.hash || 'unavailable')) requestAppearance(slide);
+        else if(execution.appliedHash===slide.frame.appearance?.hash && execution.appliedHash) applyRuntimeFrame(execution.container,slide.frame);
         fitCanvas(execution.container, slide.frame.canvas);
         postModeToInner();
         return true;
       }
 
-      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.theme_id, slide.frame.project_id, slide.id);
+      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.appearance, slide.frame.project_id, slide.id);
       const container = document.createElement('div');
       container.className = 'runtime-slide';
       container.dataset.slideFrame = 'true';
@@ -286,13 +287,13 @@
       overlays.style.cssText = 'position:absolute;inset:0;z-index:3;pointer-events:none';
       canvas.appendChild(overlays);
       container.appendChild(canvas);
-      applyRuntimeFrame(container, slide.frame);
+
 
       state.activeIndex = index;
       state.activeExecution = {
         slideID: slide.id,
         html: slide.html,
-        themeID: slide.frame.theme_id,
+        appliedHash: null, requestedHash: null, requestID:0, ready:false,
         container
       };
       deck.replaceChildren(container);
@@ -300,6 +301,25 @@
       renderDrafts(slide.id);
       postModeToInner();
       return true;
+    }
+
+    let appearanceSequence=0;
+    async function requestAppearance(slide, force=false) {
+      const execution=state.activeExecution;
+      if(!execution || execution.slideID!==slide.id || !execution.ready) return;
+      const hash=slide.frame.appearance?.hash || 'unavailable';
+      if(!force && execution.requestedHash===hash)return;
+      const request=++appearanceSequence;execution.requestID=request;execution.requestedHash=hash;
+      execution.container.querySelector('iframe').contentWindow.postMessage({bridge:'ppt-theme-v1',type:'cancelTheme',slide_id:slide.id,request_id:request},'*');
+      window.parent.postMessage({type:'themeApplying',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || ''},'*');
+      try {
+        if(!slide.frame.appearance)throw new Error('当前主题不可用，请从主题仓库选择现有主题');
+        await window.PPTFonts.prepare();
+        if(state.activeExecution!==execution || request!==execution.requestID)return;
+        execution.container.querySelector('iframe').contentWindow.postMessage({bridge:'ppt-theme-v1',type:'applyTheme',slide_id:slide.id,request_id:request,appearance:slide.frame.appearance,theme_id:slide.frame.theme_id},'*');
+      }catch(error){
+        if(state.activeExecution===execution&&request===execution.requestID)window.parent.postMessage({type:'themeApplyFailed',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || '',message:error.message},'*');
+      }
     }
 
     function updateDeck(slides, index) {
@@ -387,6 +407,21 @@
       const inner = active && active.querySelector('iframe');
       if (inner && event.source === inner.contentWindow) {
         const message = event.data;
+        if (message?.bridge === 'ppt-theme-v1' && message.slide_id === state.activeExecution?.slideID) {
+          const execution=state.activeExecution;
+          const current=state.slides[state.activeIndex];
+          if(message.type==='themeBridgeReady') {execution.ready=true;requestAppearance(current,true);}
+          else if(message.request_id===execution.requestID && execution.requestedHash===(current.frame.appearance?.hash || 'unavailable')) {
+            if(message.type==='themeApplied') {
+              execution.appliedHash=message.appearance_hash;
+              applyRuntimeFrame(execution.container,current.frame);postModeToInner();
+              window.parent.postMessage({type:'themeApplied',slide_id:current.id,appearance_hash:message.appearance_hash},'*');
+            } else if(message.type==='themeApplyFailed') {
+              window.parent.postMessage({type:'themeApplyFailed',slide_id:current.id,appearance_hash:current.frame.appearance?.hash || '',message:message.message},'*');
+            }
+          }
+          return;
+        }
         if (!message || message.bridge !== 'ppt-dom-selection-v1' || message.slide_id !== state.selection.slideID || message.session_id !== state.selection.sessionID) return;
         if (message.type === 'innerSelectionCreated') {
           const selection = message.selection;
@@ -405,7 +440,24 @@
           postModeToInner();
           window.parent.postMessage({ type: 'selectionCanceled', session_id: message.session_id, slide_id: message.slide_id }, '*');
         } else if (message.type === 'innerSelectionPresence' && Array.isArray(message.statuses)) {
-          window.parent.postMessage({ type: 'selectionPresence', session_id: message.session_id, slide_id: message.slide_id, statuses: message.statuses }, '*');
+          let unresolved=false;
+          const statuses=message.statuses.map(item=>{
+            if(item.needs_reselect)unresolved=true;
+            if(!item.snapshot)return item;
+            const snapshot=item.snapshot;
+            const available=chromeTargets(active);
+            const chrome=(snapshot.chrome_targets || []).map(old=>available.find(current=>current.type===old.type&&current.placement===old.placement));
+            if(chrome.some(target=>!target)){unresolved=true;return {selection_id:item.selection_id,status:'content_deleted'};}
+            snapshot.chrome_targets=chrome;
+            const rects=[...(snapshot.dom_targets || []),...chrome].map(target=>target.rect);
+            if(!rects.length){unresolved=true;return {selection_id:item.selection_id,status:'content_deleted'};}
+            const x=Math.min(...rects.map(r=>r.x)),y=Math.min(...rects.map(r=>r.y));
+            snapshot.rect={x,y,width:Math.max(...rects.map(r=>r.x+r.width))-x,height:Math.max(...rects.map(r=>r.y+r.height))-y};
+            if(!validIncomingSelection(snapshot)){unresolved=true;return {selection_id:item.selection_id,status:'content_deleted'};}
+            return item;
+          });
+          window.parent.postMessage({ type:'selectionPresence',session_id:message.session_id,slide_id:message.slide_id,statuses },'*');
+          if(unresolved)window.parent.postMessage({type:'selectionRejected',session_id:message.session_id,slide_id:message.slide_id,message:'外观变化后部分选择无法可靠恢复，请重新选择。'},'*');
         }
         return;
       }
@@ -418,6 +470,8 @@
           updateDeck(event.data.slides, event.data.index);
         } else if (isGotoSlide(event.data)) {
           renderSlide(event.data.index);
+        } else if (event.data?.type === 'retryTheme') {
+          const current=state.slides[state.activeIndex];if(current?.id===event.data.slide_id)requestAppearance(current,true);
         } else if (isReplayCurrentSlide(event.data)) {
           const current = state.slides[state.activeIndex];
           if (current?.id === event.data.slide_id) renderSlide(state.activeIndex, true);
@@ -431,7 +485,7 @@
           renderDrafts(event.data.slide_id);
         } else if (isSelectionProbe(event.data) && event.data.session_id === state.selection.sessionID) {
           const container = containerFor(event.data.slide_id);
-          container?.querySelector('iframe')?.contentWindow?.postMessage({ bridge: 'ppt-dom-selection-v1', type: 'innerProbeSelections', slide_id: event.data.slide_id, session_id: event.data.session_id, selections: event.data.selections }, '*');
+          container?.querySelector('iframe')?.contentWindow?.postMessage({ bridge: 'ppt-dom-selection-v1', type: 'innerProbeSelections', slide_id: event.data.slide_id, session_id: event.data.session_id, selections: event.data.selections, refresh: event.data.refresh===true }, '*');
         }
       } catch (error) {
         window.parent.postMessage({

@@ -16,14 +16,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	"github.com/google/uuid"
 )
 
 const maxRenderOutputBytes = 1024 * 1024
@@ -61,20 +60,21 @@ func renderWorkerError(operation string, cause error) error {
 }
 
 type RenderRequest struct {
-	Type           string                   `json:"type,omitempty"`
-	RequestID      string                   `json:"request_id,omitempty"`
-	RunID          string                   `json:"run_id"`
-	ProjectDir     string                   `json:"project_dir"`
-	SlideID        string                   `json:"slide_id"`
-	HTML           string                   `json:"html"`
-	ScreenshotPath string                   `json:"screenshot_path"`
-	ViewportWidth  int                      `json:"viewport_width"`
-	ViewportHeight int                      `json:"viewport_height"`
-	TimeoutMS      int                      `json:"timeout_ms"`
-	Frame          spec.RuntimeFrameContext `json:"frame"`
-	BaseCSS        string                   `json:"base_css"`
-	ThemeID        string                   `json:"theme_id"`
-	ThemeCSS       string                   `json:"theme_css"`
+	RuntimeAssetsDir string                   `json:"runtime_assets_dir"`
+	Type             string                   `json:"type,omitempty"`
+	RequestID        string                   `json:"request_id,omitempty"`
+	RunID            string                   `json:"run_id"`
+	ProjectDir       string                   `json:"project_dir"`
+	SlideID          string                   `json:"slide_id"`
+	HTML             string                   `json:"html"`
+	ScreenshotPath   string                   `json:"screenshot_path"`
+	ViewportWidth    int                      `json:"viewport_width"`
+	ViewportHeight   int                      `json:"viewport_height"`
+	TimeoutMS        int                      `json:"timeout_ms"`
+	Frame            spec.RuntimeFrameContext `json:"frame"`
+	BaseCSS          string                   `json:"base_css"`
+	ThemeID          string                   `json:"theme_id"`
+	ThemeCSS         string                   `json:"theme_css"`
 }
 
 type RenderDiagnostics struct {
@@ -488,8 +488,14 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
 	screenshotPath := filepath.Join(screenshotDir, screenshotID+".png")
+	assetsDir, err := runtimeassets.RenderAssetDir()
+	if err != nil {
+		return failedToolResult(CodeRenderFailed, err.Error(), true)
+	}
+	frame.Appearance = runtimeassets.Appearance(theme.ID, []byte(theme.CSS))
 	request := RenderRequest{
-		RunID: runID, ProjectDir: input.ProjectDir, SlideID: slideID, HTML: string(normalizedHTML),
+		RuntimeAssetsDir: assetsDir,
+		RunID:            runID, ProjectDir: input.ProjectDir, SlideID: slideID, HTML: string(normalizedHTML),
 		ScreenshotPath: screenshotPath, ViewportWidth: frame.Canvas.Width,
 		ViewportHeight: frame.Canvas.Height, TimeoutMS: 15000,
 		Frame: frame, BaseCSS: string(baseCSS), ThemeID: theme.ID, ThemeCSS: theme.CSS,
@@ -530,6 +536,10 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, err.Error(), true)
+	}
+	if proof.FrameContextHash != spec.RuntimeFrameHash(frame) {
+		_ = os.Remove(screenshotPath)
+		return failedToolResult(CodeRenderFailed, "slide appearance changed while rendering; render again", true)
 	}
 	image := renderimage.Entry{
 		ProjectID: input.Context.Project.ID, SlideID: slideID, RunID: runID, ScreenshotID: screenshotID,
@@ -604,7 +614,11 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {
 		return spec.RuntimeFrameContext{}, errors.New("runtime frame source is invalid")
 	}
-	frame, ok := spec.BuildRuntimeFrame(deck, outline, design, slideID)
+	appearance, err := runtimeassets.ProjectAppearance(projectDir, design.Theme)
+	if err != nil {
+		return spec.RuntimeFrameContext{}, err
+	}
+	frame, ok := spec.BuildRuntimeFrame(deck, outline, design, slideID, appearance)
 	if !ok {
 		return spec.RuntimeFrameContext{}, errors.New("slide is not present in the current outline")
 	}

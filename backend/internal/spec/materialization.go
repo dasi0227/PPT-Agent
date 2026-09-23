@@ -5,18 +5,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 )
 
-func FrameContextHash(manifest Manifest, outline Outline, design Design, slideID string) string {
-	frame, ok := BuildRuntimeFrame(manifest, outline, design, slideID)
+func FrameContextHash(manifest Manifest, outline Outline, design Design, slideID string, appearance *designsystem.Appearance) string {
+	frame, ok := BuildRuntimeFrame(manifest, outline, design, slideID, appearance)
 	if !ok {
 		return ""
 	}
+	return RuntimeFrameHash(frame)
+}
+
+func RuntimeFrameHash(frame RuntimeFrameContext) string {
 	raw, _ := json.Marshal(frame)
 	return ContentHash(raw)
 }
 
-func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideID string) (RuntimeFrameContext, bool) {
+func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideID string, appearance *designsystem.Appearance) (RuntimeFrameContext, bool) {
 	loc, ok := FindSlide(outline, slideID)
 	if !ok {
 		return RuntimeFrameContext{}, false
@@ -47,7 +53,7 @@ func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideI
 		}
 	}
 	return RuntimeFrameContext{
-		SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: design.Theme, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: string(loc.Slide.Role),
+		Appearance: appearance, SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: design.Theme, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: string(loc.Slide.Role),
 		Section:    RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
 		Subsection: subsection, Numbering: RuntimeFrameNumbering{Visible: visible, Format: manifest.Numbering.Format},
 		Chrome: append([]ChromeItem(nil), design.Chrome...),

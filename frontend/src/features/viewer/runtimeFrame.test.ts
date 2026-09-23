@@ -3,6 +3,7 @@ import type { ProjectContentSnapshot } from '../../api/types';
 import { buildRuntimeFrame } from './runtimeFrame';
 
 const snapshot: ProjectContentSnapshot = {
+  appearance: null,
   hashes: { outline: "outline-hash" },
   manifest: { version: '5.0', project_id: 'p', title: 'T', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: ['cover'], format: 'number' }, created_at: 1, updated_at: 1 },
   outline: { version: '5.0', project_id: 'p', created_at: 1, updated_at: 1, sections: [{ id: 'sec', title: '开场', purpose: '', slides: [{ slide_id: 'cover', title: '封面', role: 'cover' }, { slide_id: 'body', title: '正文', role: 'content' }], subsections: [] }] },

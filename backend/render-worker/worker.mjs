@@ -56,6 +56,7 @@ function mime(path) {
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.webp': 'image/webp',
+    '.ttf': 'font/ttf',
     '.woff': 'font/woff',
     '.woff2': 'font/woff2',
   }[extname(path).toLowerCase()] ?? 'application/octet-stream';
@@ -93,40 +94,7 @@ async function injectRuntimeFrame(page, frame) {
       !frame.canvas || frame.canvas.width !== 1920 || frame.canvas.height !== 1080 || frame.canvas.aspect_ratio !== '16:9') {
     throw new Error('invalid runtime frame context');
   }
-  await page.evaluate(context => {
-    document.querySelectorAll('[data-runtime-chrome]').forEach(node => node.remove());
-    const positions = {
-      'top-left': ['top:3.2%', 'left:3.4%'], 'top-center': ['top:3.2%', 'left:50%', 'transform:translateX(-50%)'],
-      'top-right': ['top:3.2%', 'right:3.4%'], 'bottom-left': ['bottom:3.2%', 'left:3.4%'],
-      'bottom-center': ['bottom:3.2%', 'left:50%', 'transform:translateX(-50%)'], 'bottom-right': ['bottom:3.2%', 'right:3.4%'],
-      'left-edge': ['left:1.5%', 'top:50%', 'transform:translateY(-50%)'], 'right-edge': ['right:1.5%', 'top:50%', 'transform:translateY(-50%)'],
-    };
-    const chrome = Array.isArray(context.chrome) ? context.chrome : [];
-    for (const item of chrome) {
-      if (item.type === 'page_number' && context.numbering?.visible !== true) continue;
-      const text = item.type === 'page_number' ? String(context.ordinal)
-        : item.type === 'section_marker' ? context.section?.title
-        : item.type === 'deck_title' ? context.deck_title : '';
-      if (!text) continue;
-      const node = document.createElement('div');
-      node.dataset.runtimeChrome = item.type;
-      if (item.type === 'page_number') node.dataset.runtimePageNumber = 'true';
-      node.dataset.chromeStyle = item.style || '';
-      node.textContent = text;
-      if (item.type === 'page_number') node.setAttribute('aria-label', `第 ${context.ordinal} 页，共 ${context.total} 页`);
-      const styleTokens = new Set(String(item.style || '').toLowerCase().split(/\s+/));
-      const font = styleTokens.has('label')
-        ? '700 16px/1.2 ui-sans-serif,system-ui,sans-serif'
-        : `500 ${styleTokens.has('compact') ? '16px' : '14px'}/1.2 ui-monospace,SFMono-Regular,Menlo,monospace`;
-      const extra = styleTokens.has('label') ? ['letter-spacing:.08em!important', 'text-transform:uppercase!important'] : ['letter-spacing:.04em!important'];
-      node.style.cssText = [
-        'position:absolute!important', 'z-index:2!important', 'padding:3px 6px!important',
-        'color:rgba(20,25,35,.58)!important', `font:${font}!important`,
-        'pointer-events:none!important', ...extra, ...(positions[item.placement] || positions['bottom-right']),
-      ].join(';');
-      (document.querySelector('.slide-stage') || document.body).appendChild(node);
-    }
-  }, frame);
+  await page.evaluate(context => window.PPTChrome.render(document.querySelector('.runtime-canvas'), context), frame);
 }
 
 async function render(input, browser, handles = new Map()) {
@@ -134,7 +102,7 @@ async function render(input, browser, handles = new Map()) {
   if (!input || typeof input.html !== 'string' || typeof input.project_dir !== 'string' ||
       typeof input.slide_id !== 'string' || typeof input.screenshot_path !== 'string' ||
       typeof input.base_css !== 'string' || typeof input.theme_id !== 'string' ||
-      typeof input.theme_css !== 'string') {
+      typeof input.theme_css !== 'string' || typeof input.runtime_assets_dir !== 'string') {
     throw new Error('invalid render request');
   }
   if (!input.frame?.canvas || input.viewport_width !== input.frame.canvas.width ||
@@ -158,12 +126,18 @@ async function render(input, browser, handles = new Map()) {
   };
   handles.set(input.request_id, handle);
   const server = createServer(async (request, response) => {
+    response.setHeader('access-control-allow-origin','*');
     try {
       const path = request.url?.split('?')[0] ?? '/';
+      if (path === '/') {
+        response.writeHead(200, {'content-type':'text/html; charset=utf-8','cache-control':'no-store'});
+        response.end(`<!doctype html><html><head><link rel="stylesheet" href="/api/v1/runtime/fonts.css"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}.runtime-canvas{position:relative;width:1920px;height:1080px}.slide-frame{position:absolute;inset:0;width:1920px;height:1080px;border:0}</style></head><body><div class="runtime-canvas"><iframe class="slide-frame" sandbox="allow-scripts" src="${slidePath}"></iframe></div><script src="/api/v1/runtime/chrome.js"></script></body></html>`);
+        return;
+      }
       if (path === slidePath) {
         response.writeHead(200, {
           'content-type': 'text/html; charset=utf-8',
-          'content-security-policy': "default-src 'self' data: blob:; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'",
+          'content-security-policy': `default-src ${origin} data: blob:; img-src ${origin} data: blob:; font-src ${origin} data:; style-src ${origin} 'unsafe-inline'; script-src ${origin} 'unsafe-inline'`,
           'cache-control': 'no-store',
         });
         response.end(input.html);
@@ -178,6 +152,13 @@ async function render(input, browser, handles = new Map()) {
         response.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'no-store' });
         response.end(input.theme_css);
         return;
+      }
+      if (path.startsWith('/api/v1/runtime/')) {
+        const name=path.slice('/api/v1/runtime/'.length);
+        if(!/^(fonts\.css|chrome\.js|fonts\/[A-Za-z0-9_-]+\.(ttf|txt))$/.test(name))throw new Error('unknown runtime resource');
+        const asset=safeProjectPath(input.runtime_assets_dir,name);
+        const data=await fs.readFile(asset);
+        response.writeHead(200,{'content-type':mime(asset),'cache-control':'no-store'});response.end(data);return;
       }
       let absolute;
       let data;
@@ -239,9 +220,12 @@ async function render(input, browser, handles = new Map()) {
       }
     });
     page.setDefaultTimeout(timeout);
-    await page.goto(`${origin}${slidePath}`, { waitUntil: 'networkidle', timeout });
+    await page.goto(`${origin}/`, { waitUntil: 'networkidle', timeout });
     await injectRuntimeFrame(page, input.frame);
-    const fontStatus = await page.evaluate(async () => {
+    const slidePage = page.frames().find(frame => frame.url() === `${origin}${slidePath}`);
+    if(!slidePage)throw new Error('slide iframe is unavailable');
+    await page.evaluate(()=>document.fonts.ready);
+    const fontStatus = await slidePage.evaluate(async () => {
       if (!document.fonts) return 'unsupported';
       await document.fonts.ready;
       return document.fonts.status;
@@ -250,7 +234,7 @@ async function render(input, browser, handles = new Map()) {
       requestAnimationFrame(() => requestAnimationFrame(resolveFrame));
     }));
     await page.waitForTimeout(100);
-    const metrics = await page.evaluate(maxItems => {
+    const metrics = await slidePage.evaluate(maxItems => {
       const stage = document.querySelector('.slide-stage') ?? document.documentElement;
       const stageRect = stage.getBoundingClientRect();
       const root = document.documentElement;
@@ -279,7 +263,6 @@ async function render(input, browser, handles = new Map()) {
         content_size: { width: scrollWidth, height: scrollHeight },
         overflow: { horizontal: scrollWidth > window.innerWidth + 1, vertical: scrollHeight > window.innerHeight + 1 },
         clipping,
-        runtime_chrome: Array.from(document.querySelectorAll('[data-runtime-chrome]')).map(node => node.dataset.runtimeChrome),
       };
     }, MAX_CLIPPING_ITEMS);
     const screenshot = await page.screenshot({
@@ -294,7 +277,7 @@ async function render(input, browser, handles = new Map()) {
       content_size: metrics.content_size,
       overflow: metrics.overflow,
       clipping: metrics.clipping,
-      runtime_chrome: metrics.runtime_chrome,
+      runtime_chrome: await page.evaluate(()=>Array.from(document.querySelectorAll('[data-runtime-chrome]')).map(node=>node.dataset.runtimeChrome)),
       console_errors: consoleErrors,
       failed_resources: [...new Set(failedResources)].slice(0, 50),
       font_status: fontStatus,

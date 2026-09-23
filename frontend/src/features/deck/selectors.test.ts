@@ -17,6 +17,7 @@ const outline: Outline = {
 };
 
 const snapshot: ProjectContentSnapshot = {
+  appearance: null,
   hashes: { outline: "outline-hash" },
   manifest: { version: '5.0', project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: ['cover'], format: 'number' }, created_at: 1, updated_at: 1 },
   outline,

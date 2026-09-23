@@ -6,6 +6,7 @@ export interface RuntimeFrameContext {
   slide_id: string;
   canvas: { width: 1920; height: 1080; aspect_ratio: '16:9' };
   theme_id: string;
+  appearance: import("../../api/types").RuntimeAppearance | null;
   deck_title: string;
   ordinal: number;
   total: number;
@@ -27,6 +28,7 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
 	slide_id: slideId,
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
     theme_id: snapshot.design.theme,
+    appearance: snapshot.appearance,
     deck_title: snapshot.manifest.title,
     ordinal: item.ordinal,
     total: flat.length,

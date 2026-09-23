@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
@@ -100,13 +101,17 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			filepath.FromSlash(model.SlideMaterializationPath(id)),
 		)
 		if hasProof {
+			appearance, appearanceErr := runtimeassets.ProjectAppearance(c.project.WorkDir, design.Theme)
+			if appearanceErr != nil {
+				return appearanceErr
+			}
 			artifactHash := spec.ContentHash(htmlRaw)[len("sha256:"):]
 			nodeHash := spec.SemanticSlideNodeHash(outline, id)
 			sourceHash := spec.SourceHash(manifestRaw, nodeHash, specRaw, designRaw)
 			if proof.ArtifactHash != artifactHash ||
 				proof.SourceHash != sourceHash ||
 				proof.ManifestHash != spec.ResourceHash(manifest) || proof.OutlineNodeHash != nodeHash ||
-				proof.SpecHash != spec.ResourceHash(semantic) || proof.DesignContentHash != spec.DesignContentHash(design) || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id) {
+				proof.SpecHash != spec.ResourceHash(semantic) || proof.DesignContentHash != spec.DesignContentHash(design) || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id, appearance) {
 				return fmt.Errorf("stale materialization proof for %s", id)
 			}
 		}
