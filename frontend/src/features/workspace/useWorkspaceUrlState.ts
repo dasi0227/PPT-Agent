@@ -20,7 +20,8 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
   const navigate = useNavigate();
   const [hydratedLocationKey, setHydratedLocationKey] = React.useState<string | null>(null);
   const snapshot = useProjectStore((state) => projectId ? state.contentByProjectId[projectId] : undefined);
-  const slides = orderedSlides(snapshot);
+  const slides = React.useMemo(() => orderedSlides(snapshot), [snapshot]);
+  const previousSlides = React.useRef<{ projectId?: string; ids: string[] }>({ ids: [] });
   const contentReady = Boolean(snapshot);
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const globalView = useDeckStore((state) => state.globalView);
@@ -31,7 +32,7 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
   const exitOverview = useDeckStore((state) => state.exitOverview);
 
   React.useLayoutEffect(() => {
-    if (!projectId || !contentReady) return;
+    if (!projectId || !contentReady || hydratedLocationKey === location.key) return;
     const params = new URLSearchParams(location.search);
     const nextView = parseView(params.get('view'));
     if (nextView !== useDeckStore.getState().globalView) {
@@ -52,15 +53,24 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
       setCurrentSlideId(nextSlideId);
     }
     setHydratedLocationKey(location.key);
-  }, [contentReady, enterOverview, exitOverview, location.key, location.search, projectId, setCurrentSlideId, setGlobalView, slides]);
+  }, [contentReady, enterOverview, exitOverview, hydratedLocationKey, location.key, location.search, projectId, setCurrentSlideId, setGlobalView, slides]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!projectId || !contentReady || hydratedLocationKey !== location.key) return;
     const current = `${location.pathname}${location.search}`;
     const selectedSlideExists = currentSlideId
       ? slides.some((slide) => slide.id === currentSlideId)
       : false;
-    const selectedSlideId = selectedSlideExists && currentSlideId ? currentSlideId : slides[0]?.id;
+    const oldIndex = previousSlides.current.projectId === projectId
+      ? previousSlides.current.ids.indexOf(currentSlideId ?? '')
+      : -1;
+    const selectedSlideId = selectedSlideExists && currentSlideId
+      ? currentSlideId
+      : slides[Math.min(Math.max(oldIndex, 0), slides.length - 1)]?.id;
+    previousSlides.current = { projectId, ids: slides.map((slide) => slide.id) };
+    if (!selectedSlideExists && currentSlideId !== (selectedSlideId ?? null)) {
+      setCurrentSlideId(selectedSlideId ?? null);
+    }
     const target = projectWorkspaceRoute(projectId, {
       slideId: selectedSlideId,
       view: globalView,
@@ -69,5 +79,5 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
     if (target !== current) {
       navigate(target, { replace: true });
     }
-  }, [contentReady, currentSlideId, globalView, hydratedLocationKey, location.key, location.pathname, location.search, navigate, previewMode, projectId, slides]);
+  }, [contentReady, currentSlideId, globalView, hydratedLocationKey, location.key, location.pathname, location.search, navigate, previewMode, projectId, setCurrentSlideId, slides]);
 }

@@ -7,6 +7,7 @@ vi.mock('./projectStore', () => ({
     getState: () => ({
       activeProjectId: 'p1',
       loadProjectContent: async (projectId: string) => { slideLoads.push(projectId); },
+      checkProjectContent: async (projectId: string) => { slideLoads.push(projectId); },
     }),
   },
 }));
@@ -160,6 +161,25 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'paused' |
 
 describe('runStore public event sessions', () => {
   beforeEach(reset);
+
+  test('adopts another window’s completed run without rolling back newer local events', () => {
+    const scope = { slide_ids: ['s1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 };
+    const history = [
+      { seq: 1, ts: 1, run_id: 'remote', turn: 'user' as const, type: 'user_turn', data: { text: '新增一页', scope, mode: 'execute' } },
+      { seq: 2, ts: 2, run_id: 'remote', turn: 'agent' as const, type: 'run.completed', data: { ...terminal({ run_id: 'remote' }) } },
+    ];
+
+    useRunStore.getState().syncThreadHistory('t1', history);
+    expect(useRunStore.getState().getSession('t1')).toMatchObject({ activeRunId: 'remote', status: 'done', lastEventId: '2' });
+    expect(useRunStore.getState().getSession('t1').timelineItems[0]).toMatchObject({ type: 'user_turn', text: '新增一页' });
+
+    useRunStore.setState((state) => ({ sessions: {
+      ...state.sessions,
+      t1: { ...state.sessions.t1, status: 'running', lastEventId: '3' },
+    } }));
+    useRunStore.getState().syncThreadHistory('t1', history);
+    expect(useRunStore.getState().getSession('t1')).toMatchObject({ status: 'running', lastEventId: '3' });
+  });
 
   test('consumes suggestions only after acceptance, before SSE, and leaves other threads alone', async () => {
     const suggestions = { runId: 'old', messageId: 'final-old', items: ['继续优化'], status: 'eligible' as const };

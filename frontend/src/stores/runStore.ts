@@ -307,6 +307,7 @@ interface RunStoreV2 {
   createRun: (threadId: string, payload: CreateRunRequest, projectId?: string) => Promise<CreateRunResult>;
   subscribeRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => void;
   recoverPersistedRuns: () => Promise<void>;
+  syncThreadHistory: (threadId: string, entries: HistoryEntry[], projectId?: string) => boolean;
   reconcileRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => Promise<void>;
   resumeRun: (threadId: string, runId: string) => Promise<boolean>;
   answerQuestion: (threadId: string, runId: string, replyTo: string, content: string) => Promise<boolean>;
@@ -354,6 +355,7 @@ function endPausedRun(items: TimelineItem[], runId: string): TimelineItem[] {
 
 export const useRunStore = create<RunStoreV2>((set, get) => {
   const cancelReconciliations = new Map<string, CancelReconciliation>();
+  const reconcilingRuns = new Set<string>();
 
   const patchSession = (threadId: string, patch: Partial<RunSession>) => {
     set((state) => {
@@ -398,7 +400,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       eventSourceClose: null,
     });
     const resolvedProjectId = projectId ?? session.projectId ?? undefined;
-    if (resolvedProjectId) void useProjectStore.getState().loadProjectContent(resolvedProjectId);
+    if (resolvedProjectId) void useProjectStore.getState().checkProjectContent(resolvedProjectId);
     void threadsApi.history(threadId)
       .then((history) => {
         const current = get().sessions[threadId];
@@ -469,7 +471,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     if (!session.projectId) return;
     const structuredMutation = event.event === 'tool.completed' && event.data.tool === 'mutate_ppt' && event.data.status === 'completed';
     const terminal = event.event === 'run.completed' || event.event === 'run.failed' || event.event === 'run.error' || event.event === 'run.canceled';
-    if (structuredMutation || terminal) void useProjectStore.getState().loadProjectContent(session.projectId);
+    if (structuredMutation || terminal) void useProjectStore.getState().checkProjectContent(session.projectId);
   };
 
   return {
@@ -824,9 +826,62 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       }));
     },
 
+    syncThreadHistory: (threadId, entries, projectId) => {
+      const hydrated = hydrateRunFromHistory(entries);
+      const runId = hydrated.session.activeRunId;
+      const current = get().sessions[threadId] ?? IDLE_SESSION;
+      if (current.status === 'creating') return false;
+      if (!runId) {
+        if (hydrated.items.length > 0 && JSON.stringify(hydrated.items) !== JSON.stringify(current.timelineItems)) {
+          updateSession(threadId, (prev) => ({
+            timelineItems: mergeAuthoritativeTimeline(prev.timelineItems, hydrated.items),
+          }));
+        }
+        return true;
+      }
+      const sameRun = current.activeRunId === runId;
+      if (!sameRun && current.activeRunId
+        && ['creating', 'running', 'waiting', 'recovering', 'canceling', 'paused'].includes(current.status)) return false;
+      const serverSequence = Number(hydrated.lastEventId ?? 0);
+      const localSequence = Number(current.lastEventId ?? 0);
+      if (sameRun && serverSequence < localSequence) return false;
+      if (sameRun && serverSequence === localSequence && current.status === hydrated.session.status
+        && JSON.stringify(current.timelineItems) === JSON.stringify(hydrated.items)
+        && JSON.stringify(current.plan) === JSON.stringify(hydrated.plan)
+        && JSON.stringify(current.nextInputSuggestions) === JSON.stringify(hydrated.session.nextInputSuggestions)) return true;
+      if (!sameRun) {
+        current.eventSourceClose?.();
+        stopCancelReconciliation(threadId);
+      }
+      updateSession(threadId, (prev) => ({
+        activeRunId: runId,
+        projectId: projectId ?? prev.projectId,
+        status: hydrated.session.status,
+        scope: hydrated.session.scope ?? prev.scope,
+        mode: hydrated.session.mode ?? prev.mode,
+        timelineItems: sameRun ? mergeAuthoritativeTimeline(prev.timelineItems, hydrated.items) : hydrated.items,
+        plan: hydrated.plan,
+        pendingQuestion: hydrated.session.pendingQuestion,
+        nextInputSuggestions: hydrated.session.nextInputSuggestions,
+        lastEventId: hydrated.lastEventId,
+        streamStatus: sameRun ? prev.streamStatus : 'closed',
+        eventSourceClose: sameRun ? prev.eventSourceClose : null,
+        progress: sameRun ? prev.progress : null,
+      }));
+      if (!sameRun && ['running', 'waiting', 'recovering', 'paused'].includes(hydrated.session.status)) {
+        void get().reconcileRun(threadId, runId, hydrated.lastEventId, projectId);
+      }
+      return true;
+    },
+
     reconcileRun: async (threadId, runId, lastEventId, projectId) => {
+      const key = `${threadId}:${runId}`;
+      if (reconcilingRuns.has(key)) return;
+      reconcilingRuns.add(key);
       try {
         const run = await runsApi.get(runId);
+        const currentRunId = get().sessions[threadId]?.activeRunId;
+        if (currentRunId && currentRunId !== runId) return;
         const status = terminalStatus(run.status);
         patchSession(threadId, {
           activeRunId: run.id,
@@ -849,6 +904,11 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         }
       } catch {
         // History remains visible. A later refresh can retry authoritative reconciliation.
+        if (get().sessions[threadId]?.activeRunId === runId && !get().sessions[threadId]?.eventSourceClose) {
+          patchSession(threadId, { streamStatus: 'closed' });
+        }
+      } finally {
+        reconcilingRuns.delete(key);
       }
     },
 

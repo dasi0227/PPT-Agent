@@ -45,6 +45,37 @@ describe('projectStore canonical content snapshots', () => {
     expect(useProjectStore.getState().contentByProjectId.pro_1).toEqual(snapshot(1));
   });
 
+  it('checks content silently and keeps the same snapshot when nothing changed', async () => {
+    const original = snapshot(1);
+    useProjectStore.setState({ contentByProjectId: { pro_1: original } });
+    getContent.mockResolvedValue(snapshot(1));
+
+    await Promise.all([
+      useProjectStore.getState().checkProjectContent('pro_1'),
+      useProjectStore.getState().checkProjectContent('pro_1'),
+    ]);
+
+    expect(useProjectStore.getState().contentByProjectId.pro_1).toBe(original);
+    expect(useProjectStore.getState().contentLoadingByProjectId.pro_1).toBeUndefined();
+    expect(getContent).toHaveBeenCalledTimes(1);
+    getContent.mockResolvedValue(snapshot(2));
+    await useProjectStore.getState().checkProjectContent('pro_1');
+    expect(useProjectStore.getState().contentByProjectId.pro_1.hashes.outline).toBe('outline-2');
+  });
+
+  it('does not let an older background check overwrite a local mutation', async () => {
+    let finishCheck!: (value: ProjectContentSnapshot) => void;
+    getContent.mockReturnValue(new Promise<ProjectContentSnapshot>((resolve) => { finishCheck = resolve; }));
+    mutate.mockResolvedValue({ mutation: { operation: 'outline.insert' }, content: snapshot(3) });
+
+    const check = useProjectStore.getState().checkProjectContent('pro_1');
+    await useProjectStore.getState().mutateProject('pro_1', { op: 'outline.insert', node: { kind: 'section', client_ref: 'section', title: 'Section', purpose: 'Purpose', slides: [], subsections: [] }, position: {} });
+    finishCheck(snapshot(2));
+    await check;
+
+    expect(useProjectStore.getState().contentByProjectId.pro_1.hashes.outline).toBe('outline-3');
+  });
+
   it('applies a mutation response directly without a duplicate refresh', async () => {
     mutate.mockResolvedValue({ mutation: { operation: 'outline.insert' }, content: snapshot(2) });
     await useProjectStore.getState().mutateProject('pro_1', { op: 'outline.insert', node: { kind: 'section', client_ref: 'section', title: 'Section', purpose: 'Purpose', slides: [], subsections: [] }, position: {} });
