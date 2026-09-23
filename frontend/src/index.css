@@ -540,11 +540,45 @@
   transform: translateX(0);
 }
 
-/* Composer control chips are icon-only by default; the label expands on hover/focus/open. */
-.composer-mode-button,
+/* Task context stays visible above the writing surface. */
+.composer-context-bar {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:5px 7px 6px;
+}
+.composer-context-trigger {
+  @apply text-text-900;
+  display:inline-flex;
+  align-items:center;
+  flex-shrink:0;
+  gap:8px;
+  min-height:32px;
+  padding:7px 9px;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  font-size:13px;
+  line-height:18px;
+  white-space:nowrap;
+}
+.composer-context-trigger:is(:hover, :focus-visible, [data-state='open']):not(:disabled) {
+  @apply bg-accent-soft;
+  outline:none;
+}
+.composer-context-trigger:disabled { opacity:.45; cursor:not-allowed; }
+.composer-context-chevron { @apply text-text-600; width:12px; height:12px; flex-shrink:0; margin-left:3px; }
+.composer-context-trigger[data-state='open'] .composer-context-chevron { transform:rotate(180deg); }
+.composer-target-button { @apply text-text-700; min-width:0; max-width:65%; flex-shrink:1; gap:6px; font-size:12px; }
+@media (prefers-reduced-motion:no-preference) {
+  .composer-context-trigger { transition:background-color 140ms; }
+  .composer-context-chevron { transition:transform 160ms; }
+}
+
+/* Auxiliary controls retain their hover labels in the bottom toolbar. */
 .composer-attach-button,
 .composer-skill-button,
-.composer-target-button,
 .composer-model-button {
   width: auto;
   min-width: 28px;
@@ -556,10 +590,8 @@
   transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.composer-mode-label,
 .composer-attach-label,
 .composer-skill-label,
-.composer-target-label,
 .composer-model-label {
   display: inline-block;
   max-width: 0;
@@ -572,11 +604,6 @@
   white-space: nowrap;
 }
 
-.composer-mode-button:is(:hover, :focus-visible, [data-state='open']) {
-  gap: 0.125rem;
-  padding-inline: 0.25rem;
-}
-
 .composer-attach-button:is(:hover, :focus-visible) {
   gap: 0.125rem;
   padding-inline: 0.25rem;
@@ -587,16 +614,9 @@
   padding-inline: 0.25rem;
 }
 
-.composer-target-button:is(:hover, :focus-visible, [data-state='open']),
 .composer-model-button:is(:hover, :focus-visible, [data-state='open']) {
   gap: 0.25rem;
   padding-inline: 0.5rem;
-}
-
-.composer-mode-button:is(:hover, :focus-visible, [data-state='open']) .composer-mode-label {
-  max-width: 3rem;
-  opacity: 1;
-  transform: translateX(0);
 }
 
 .composer-attach-button:is(:hover, :focus-visible) .composer-attach-label {
@@ -607,12 +627,6 @@
 
 .composer-skill-button:is(:hover, :focus-visible, [data-state='open']) .composer-skill-label {
   max-width: 3.5rem;
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.composer-target-button:is(:hover, :focus-visible, [data-state='open']) .composer-target-label {
-  max-width: 7rem;
   opacity: 1;
   transform: translateX(0);
 }
@@ -628,6 +642,9 @@
 }
 
 @container agent-panel (max-width: 380px) {
+  .composer-context-bar { gap:6px; }
+  .composer-target-button { gap:5px; padding-inline:7px; font-size:11px; }
+  .composer-target-button .composer-context-chevron { margin-left:0; }
   .composer-model-button {
     max-width: 140px;
   }

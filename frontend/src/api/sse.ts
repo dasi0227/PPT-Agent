@@ -55,7 +55,7 @@ const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
 function validBase(data: Record<string, unknown>): boolean {
-  return data.schema_version === 5
+  return data.schema_version === 6
     && hasString(data, 'run_id')
     && hasString(data, 'occurred_at')
     && String(data.occurred_at).endsWith('Z')
@@ -127,7 +127,6 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && hasSafeString(data, 'text')
         && Array.isArray(data.affected_targets)
         && validTargets(data.affected_targets)
-        && isPositiveInteger(data.project_history_revision)
         && validSuggestedNextInputs(data.suggested_next_inputs);
     case 'message.milestone':
       return hasString(data, 'message_id')

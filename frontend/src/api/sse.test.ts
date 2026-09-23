@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parsePublicEvent, parseSSEEvent, SSE_EVENT_NAMES } from './sse';
 
 const base = {
-  schema_version: 5,
+  schema_version: 6,
   run_id: 'r1',
   occurred_at: '2026-08-02T10:30:00.000Z',
 };
@@ -39,7 +39,7 @@ const payloads: Record<string, unknown> = {
   'run.mode_changed': { ...base, previous_mode: 'plan', mode: 'execute' },
   'message.reasoning': { ...base, message_id: 'm1', text: '先确认全局设计。' },
   'message.milestone': { ...base, message_id: 'm2', text: '全局设计已完成。', completed_step_ids: ['s1'] },
-  'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [], suggested_next_inputs: [], project_history_revision: 1 },
+  'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [], suggested_next_inputs: [] },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_ppt', display: { label: '读取全局蓝图' } },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_ppt', status: 'completed', display: { label: '已读取全局设计' } },
   'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', options: [], allow_custom: true }] },
@@ -220,7 +220,7 @@ describe('SSE parser', () => {
     expect(parseSSEEvent('run.started', '{')).toBeNull();
     expect(parseSSEEvent('run.started', JSON.stringify({
       ...(payloads['run.started'] as Record<string, unknown>),
-      schema_version: 2,
+      schema_version: 5,
     }))).toBeNull();
     expect(parseSSEEvent('run.started', JSON.stringify({
       ...base,
@@ -244,7 +244,7 @@ describe('SSE parser', () => {
     }))).toBeNull();
     expect(parseSSEEvent('message.final', JSON.stringify({
       ...(payloads['message.final'] as Record<string, unknown>),
-      project_history_revision: 0,
+      suggested_next_inputs: null,
     }))).toBeNull();
     expect(parseSSEEvent('run.completed', JSON.stringify({
       ...(payloads['run.completed'] as Record<string, unknown>),
@@ -272,7 +272,7 @@ describe('SSE parser', () => {
 
   it('parses tool events with local file target fields', () => {
     const started = parseSSEEvent('tool.started', JSON.stringify({
-      schema_version: 5,
+      schema_version: 6,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:16.051323Z',
       call_id: 'mutate_ppt_4',
@@ -294,7 +294,7 @@ describe('SSE parser', () => {
     expect(started).not.toBeNull();
 
     const completed = parseSSEEvent('tool.completed', JSON.stringify({
-      schema_version: 5,
+      schema_version: 6,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:17.051323Z',
       call_id: 'mutate_ppt_4',
@@ -319,7 +319,7 @@ describe('SSE parser', () => {
 
   it('parses final and completed events with local affected targets', () => {
     const finalEvent = parseSSEEvent('message.final', JSON.stringify({
-      schema_version: 5,
+      schema_version: 6,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:06:31.781954Z',
       message_id: 'm1',
@@ -333,13 +333,12 @@ describe('SSE parser', () => {
         deletions: 9,
       }],
       suggested_next_inputs: ['继续优化大纲结构'],
-      project_history_revision: 7,
     }), '2');
 
     expect(finalEvent).not.toBeNull();
 
     const completedEvent = parseSSEEvent('run.completed', JSON.stringify({
-      schema_version: 5,
+      schema_version: 6,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:06:31.791303Z',
       duration_ms: 1000,

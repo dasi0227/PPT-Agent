@@ -4,7 +4,6 @@ export interface NextInputSuggestionsState {
   runId: string;
   messageId: string;
   items: string[];
-  projectHistoryRevision: number;
   status: 'staged' | 'eligible';
 }
 
@@ -42,7 +41,6 @@ export function reduceNextInputSuggestions(
             runId: event.data.run_id,
             messageId: event.data.message_id,
             items: event.data.suggested_next_inputs,
-            projectHistoryRevision: event.data.project_history_revision,
             status: 'staged',
           }
         : null;

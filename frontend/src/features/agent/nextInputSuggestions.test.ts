@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SSEEvent } from '../../api/types';
 import { nextInputShortcutIndex, reduceNextInputSuggestions } from './nextInputSuggestions';
 
-const base = { schema_version: 5 as const, run_id: 'run-1', occurred_at: '2026-09-14T00:00:00Z' };
+const base = { schema_version: 6 as const, run_id: 'run-1', occurred_at: '2026-09-14T00:00:00Z' };
 const event = (name: SSEEvent['event'], data: Record<string, unknown> = {}) => ({
   event: name,
   data: { ...base, ...data },
@@ -12,11 +12,11 @@ describe('next input suggestion state', () => {
   it('stages final suggestions, activates them on completion, and consumes them on the next accepted run', () => {
     let state = reduceNextInputSuggestions(null, event('message.final', {
       message_id: 'final-1', text: '完成', affected_targets: [],
-      suggested_next_inputs: ['优化第 2 页'], project_history_revision: 8,
+      suggested_next_inputs: ['优化第 2 页'],
     }));
     expect(state).toMatchObject({
       runId: 'run-1', messageId: 'final-1', status: 'staged',
-      items: ['优化第 2 页'], projectHistoryRevision: 8,
+      items: ['优化第 2 页'],
     });
 
     state = reduceNextInputSuggestions(state, event('run.completed', {
@@ -36,11 +36,11 @@ describe('next input suggestion state', () => {
   it('ignores late final and terminal events from a run that is no longer active', () => {
     const current = {
       runId: 'run-2', messageId: 'final-2', items: ['检查整套叙事'],
-      projectHistoryRevision: 9, status: 'eligible' as const,
+      status: 'eligible' as const,
     };
     const lateFinal = event('message.final', {
       message_id: 'final-1', text: '旧结果', affected_targets: [],
-      suggested_next_inputs: ['旧候选'], project_history_revision: 8,
+      suggested_next_inputs: ['旧候选'],
     });
     const lateFailure = event('run.failed', {
       duration_ms: 1, affected_targets: [], error: {}, trace_id: 'run-1',

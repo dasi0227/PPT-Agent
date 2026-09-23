@@ -582,7 +582,7 @@ export interface PlanState {
 }
 
 export interface PublicEventBase {
-  schema_version: 5;
+  schema_version: 6;
   run_id: string;
   occurred_at: string;
 }
@@ -751,7 +751,6 @@ export type SSEEvent =
       text: string;
       affected_targets: PublicTarget[];
       suggested_next_inputs: string[];
-      project_history_revision: number;
     }>
   | SSEEventBase<'tool.started', PublicEventBase & {
       call_id: string;

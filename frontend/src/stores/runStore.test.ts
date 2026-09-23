@@ -104,7 +104,7 @@ vi.mock('../api/threads', () => ({
   threadsApi: { history: async () => historyEntries },
 }));
 
-import { useRunStore } from './runStore';
+import { IDLE_SESSION, useRunStore } from './runStore';
 import { useComposerStore } from './composerStore';
 import type { TimelineItem } from '../features/agent/eventReducer';
 
@@ -113,7 +113,7 @@ const request = (instruction: string) => ({
   mode: 'execute' as const ,
   instruction,
 });
-const base = { schema_version: 5, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
+const base = { schema_version: 6, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
 const terminal = (data: Record<string, unknown> = {}) => ({
   ...base,
   duration_ms: 5,
@@ -160,6 +160,27 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'paused' |
 
 describe('runStore public event sessions', () => {
   beforeEach(reset);
+
+  test('consumes suggestions only after acceptance, before SSE, and leaves other threads alone', async () => {
+    const suggestions = { runId: 'old', messageId: 'final-old', items: ['继续优化'], status: 'eligible' as const };
+    useRunStore.setState({ sessions: {
+      t1: { ...IDLE_SESSION, activeRunId: 'old', projectId: 'p1', status: 'done', nextInputSuggestions: suggestions },
+      t2: { ...IDLE_SESSION, activeRunId: 'other', projectId: 'p1', status: 'done', nextInputSuggestions: { ...suggestions, runId: 'other' } },
+    } });
+    createMode = 'reject';
+    expect(await useRunStore.getState().createRun('t1', request('继续'), 'p1')).toBe('failed');
+    expect(useRunStore.getState().sessions.t1.nextInputSuggestions).toEqual(suggestions);
+
+    createMode = 'pending';
+    const pending = useRunStore.getState().createRun('t1', request('继续'), 'p1');
+    expect(useRunStore.getState().sessions.t1.nextInputSuggestions).toEqual(suggestions);
+    resolveCreate?.(authoritativeRun('running'));
+    expect(await pending).toBe('created');
+    expect(useRunStore.getState().sessions.t1.nextInputSuggestions).toBeNull();
+    expect(useRunStore.getState().sessions.t2.nextInputSuggestions?.items).toEqual(suggestions.items);
+    connections[0].onMessage({ id: '2', event: 'run.failed', data: terminal({ error: { code: 'INTERNAL', user_message: '失败' } }) });
+    expect(useRunStore.getState().sessions.t1.nextInputSuggestions).toBeNull();
+  });
 
   test('canceling future-discard confirmation leaves no speculative history', async () => {
     createMode = 'cancel';
@@ -558,7 +579,7 @@ describe('runStore public event sessions', () => {
   test('completed run closes its stream and refreshes the committed project once', async () => {
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
     const connection = connections[0];
-    connection.onMessage({ id: '1', event: 'message.final', data: { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: [], project_history_revision: 1 } });
+    connection.onMessage({ id: '1', event: 'message.final', data: { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: [] } });
     connection.onMessage({
       id: '2', event: 'run.completed',
       data: terminal({

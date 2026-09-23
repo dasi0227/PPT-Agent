@@ -1,5 +1,5 @@
 import React from 'react';
-import { Blocks, BookOpenText, Check } from 'lucide-react';
+import { BookOpenText, Check } from 'lucide-react';
 import type { Skill } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { MAX_SELECTED_SKILLS } from '../../stores/composerStore';
@@ -49,7 +49,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
                 : 'bg-transparent text-text-600 hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 data-[state=open]:bg-panel-muted data-[state=open]:text-text-900',
             ].join(' ')}
           >
-            <Blocks className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            <BookOpenText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             <span className="composer-skill-label min-w-0 truncate">{label}</span>
           </button>
         </DropdownMenuTrigger>

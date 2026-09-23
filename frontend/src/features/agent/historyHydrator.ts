@@ -244,7 +244,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         scope,
         mode,
         pendingQuestion: null,
-        nextInputSuggestions: session.nextInputSuggestions,
+        // A persisted user turn is an accepted Run, even if it never emitted run.started.
+        nextInputSuggestions: null,
       };
       items.push({
         id: `${entry.run_id}:${entry.seq}`,

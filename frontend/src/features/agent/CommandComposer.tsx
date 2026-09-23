@@ -35,8 +35,6 @@ import {
 } from './PromptComposerEditor';
 import { resolveSlashCommands, type SlashCommandId } from './promptMatching';
 import { NextInputSuggestionsPanel } from './NextInputSuggestionsPanel';
-import { projectHistoryApi } from '../../api/projectHistory';
-import { useProjectHistoryStore } from '../../stores/projectHistoryStore';
 import { nextInputShortcutIndex } from './nextInputSuggestions';
 import { DOMSelectionReference } from './DOMSelectionReference';
 
@@ -76,6 +74,7 @@ function supportedImageFile(file: File): boolean {
 }
 
 export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement | null }> = ({ polishToolbarContainer }) => {
+  const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
   const [text, setText] = useState('');
   const [submitError, setSubmitError] = useState('');
 	const [uploadingCount, setUploadingCount] = useState(0);
@@ -89,7 +88,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
-  const [verifiedSuggestionKey, setVerifiedSuggestionKey] = useState<string | null>(null);
   const editorRef = useRef<PromptComposerEditorHandle>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
   const { activeProjectId, contentByProjectId, contentLoadingByProjectId, contentErrorByProjectId } = useProjectStore();
@@ -137,10 +135,8 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 		&& (activeResourceMentions?.component_names?.length ?? 0) === 0
 		&& (activeResourceMentions?.mentioned_slide_ids?.length ?? 0) === 0;
 	const suggestionKey = nextInputSuggestions
-		? `${activeProjectId ?? ''}:${activeThreadId ?? ''}:${nextInputSuggestions.runId}:${nextInputSuggestions.messageId}:${nextInputSuggestions.projectHistoryRevision}`
+		? `${activeProjectId ?? ''}:${activeThreadId ?? ''}:${nextInputSuggestions.runId}:${nextInputSuggestions.messageId}`
 		: null;
-	const historyState = useProjectHistoryStore((state) => activeProjectId ? state.states[activeProjectId] : undefined);
-	const historyStateFailed = useProjectHistoryStore((state) => activeProjectId ? state.stateErrorByProjectId[activeProjectId] === true : true);
 	const projectContentReady = Boolean(
 		activeProjectId
 		&& contentByProjectId[activeProjectId]
@@ -149,16 +145,13 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 	);
 	const suggestionsVisible = Boolean(
 		suggestionKey
-		&& verifiedSuggestionKey === suggestionKey
 		&& nextInputSuggestions?.status === 'eligible'
 		&& nextInputSuggestions.items.length > 0
 		&& nextInputSuggestions.items.length <= 3
-		&& runStatus === 'done'
+		&& !runActive
+		&& activeThreadId
 		&& activeProjectId
 		&& activeSession.projectId === activeProjectId
-		&& historyState?.revision === nextInputSuggestions.projectHistoryRevision
-		&& !historyStateFailed
-		&& projectContentReady
 		&& draftPristine
 		&& !disabled
 		&& !polishing
@@ -263,35 +256,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 	useEffect(() => {
 		setSuggestionsDismissed(false);
 	}, [suggestionKey]);
-	useEffect(() => {
-		setVerifiedSuggestionKey(null);
-		if (!suggestionKey || !activeProjectId || nextInputSuggestions?.status !== 'eligible' || historyStateFailed) return;
-		let canceled = false;
-		Promise.all([
-			projectHistoryApi.state(activeProjectId),
-			useProjectStore.getState().loadProjectContent(activeProjectId),
-		]).then(([state]) => {
-			if (canceled) return;
-			useProjectHistoryStore.setState((current) => ({
-				states: { ...current.states, [activeProjectId]: state },
-				stateErrorByProjectId: { ...current.stateErrorByProjectId, [activeProjectId]: false },
-			}));
-			const project = useProjectStore.getState();
-			if (state.revision === nextInputSuggestions.projectHistoryRevision
-				&& project.contentByProjectId[activeProjectId]
-				&& !project.contentLoadingByProjectId[activeProjectId]
-				&& !project.contentErrorByProjectId[activeProjectId]) {
-				setVerifiedSuggestionKey(suggestionKey);
-			}
-		}).catch(() => {
-			if (canceled) return;
-			setVerifiedSuggestionKey(null);
-			useProjectHistoryStore.setState((current) => ({
-				stateErrorByProjectId: { ...current.stateErrorByProjectId, [activeProjectId]: true },
-			}));
-		});
-		return () => { canceled = true; };
-	}, [activeProjectId, historyStateFailed, nextInputSuggestions, suggestionKey]);
   useEffect(() => {
     if (!projectContentReady) return;
     applyContextDefault(slides.length > 0);
@@ -641,7 +605,29 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
           {skillsError}
         </div>
       )}
-      <div className="relative rounded-[22px] border border-border/80 bg-panel shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
+      <div ref={setMenuContainer} className="relative rounded-[18px] border border-border bg-panel-muted shadow-[0_2px_4px_rgba(36,55,84,0.03)] focus-within:border-border-strong">
+        <div className="composer-context-bar" role="group" aria-label="模式与范围">
+          <ModeSelector
+            mode={composer.mode}
+            onChange={composer.setIntent}
+            disabled={disabled || steering}
+          />
+          <TargetSelector
+            object={composer.scopeObject}
+            selection={composer.scopeSelection}
+            selectedSlideIds={composer.customSlideIds}
+            selectedSectionIds={composer.customSectionIds}
+            pages={scopePages}
+            sections={scopeSections}
+            onObjectChange={composer.setScopeObject}
+            onSelectionChange={composer.setScopeSelection}
+            onToggleSlide={composer.toggleCustomSlide}
+            onToggleSection={composer.toggleCustomSection}
+            disabled={disabled || steering}
+            emptyProject={isEmptyProject}
+          />
+        </div>
+        <div className="rounded-[15px_15px_17px_17px] border-t border-border/70 bg-surface">
 		<input
 			ref={fileInputRef}
 			type="file"
@@ -654,9 +640,9 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 				void uploadFiles(files);
 			}}
 		/>
-        <div className="relative rounded-t-[22px]">
+        <div className="relative rounded-t-[15px]">
 			{activeReferences.length > 0 && (
-				<div className="scrollbar-none flex items-center gap-2 overflow-x-auto px-3 pb-1.5 pt-3" aria-label="当前消息引用">
+				<div className="scrollbar-none flex items-center gap-2 overflow-x-auto px-4 pb-1.5 pt-3" aria-label="当前消息引用">
 					{activeReferences.map((reference) => reference.kind === 'image' ? (
 						<div key={`${activeProjectId}:${activeThreadId}:${reference.attachment.attachmentId}`} className="relative flex h-[52px] w-44 shrink-0 items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 hover:bg-accent-soft focus-within:bg-accent-soft">
 							{activeProjectId && (
@@ -705,6 +691,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 		  )}
           <PromptComposerEditor
             ref={editorRef}
+            menuContainer={menuContainer}
             value={text}
             onChange={setComposerText}
             onKeyDown={handleKeyDown}
@@ -752,27 +739,8 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
               disabled={disabled || steering}
               onToggle={composer.toggleSkill}
             />
-            <ModeSelector
-              mode={composer.mode}
-              onChange={composer.setIntent}
-              disabled={disabled || steering}
-            />
           </div>
           <div data-composer-control-group="end" className="flex min-w-0 shrink-0 items-center gap-0.5">
-            <TargetSelector
-              object={composer.scopeObject}
-              selection={composer.scopeSelection}
-              selectedSlideIds={composer.customSlideIds}
-              selectedSectionIds={composer.customSectionIds}
-              pages={scopePages}
-              sections={scopeSections}
-              onObjectChange={composer.setScopeObject}
-              onSelectionChange={composer.setScopeSelection}
-              onToggleSlide={composer.toggleCustomSlide}
-              onToggleSection={composer.toggleCustomSection}
-              disabled={disabled || steering}
-              emptyProject={isEmptyProject}
-            />
             <ModelSelector
               profiles={profiles}
               value={composer.modelProfileName}
@@ -803,6 +771,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
               </button>
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>

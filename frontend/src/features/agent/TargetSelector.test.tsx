@@ -27,10 +27,10 @@ describe('TargetSelector', () => {
     expect(base.onSelectionChange).toHaveBeenCalledWith('custom_pages');
   });
 
-  it('shows page titles in the stacked custom window without a count in the trigger', () => {
+  it('shows selected page count in the trigger and page titles in the custom list', () => {
     render(<TargetSelector {...base} selection="custom_pages" selectedSlideIds={['sli_2']} />);
-    const trigger = screen.getByRole('button', { name: '范围：自选页 · 演示文稿' });
-    expect(trigger).toHaveTextContent('自选页 · 演示文稿');
+    const trigger = screen.getByRole('button', { name: '范围：自选 1 页 · 演示文稿' });
+    expect(trigger).toHaveTextContent('自选 1 页 · 演示文稿');
     expect(trigger).not.toHaveTextContent('2 页');
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
@@ -42,7 +42,7 @@ describe('TargetSelector', () => {
 
   it('closes the custom window first and the selector second with Escape', async () => {
     render(<TargetSelector {...base} selection="custom_pages" selectedSlideIds={['sli_2']} />);
-    const trigger = screen.getByRole('button', { name: '范围：自选页 · 演示文稿' });
+    const trigger = screen.getByRole('button', { name: '范围：自选 1 页 · 演示文稿' });
     trigger.focus();
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
@@ -59,7 +59,7 @@ describe('TargetSelector', () => {
 
   it('locks global resources to all pages', () => {
     render(<TargetSelector {...base} object="global" selection="all_pages" />);
-    const trigger = screen.getByRole('button', { name: '范围：全部页 · 全局资源' });
+    const trigger = screen.getByRole('button', { name: '范围：全局资源' });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
     const customSection = screen.getByRole('radio', { name: '页面范围：自选章' });
@@ -69,7 +69,7 @@ describe('TargetSelector', () => {
 
   it('keeps the selector open in an empty project and disables unavailable targets', () => {
     render(<TargetSelector {...base} object="global" selection="all_pages" pages={[]} sections={[]} emptyProject />);
-    const trigger = screen.getByRole('button', { name: '范围：全部页 · 全局资源' });
+    const trigger = screen.getByRole('button', { name: '范围：全局资源' });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
     expect(screen.getByRole('radiogroup', { name: '修改对象' })).toBeInTheDocument();

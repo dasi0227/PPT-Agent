@@ -234,21 +234,20 @@ function ensureTerminalTimelineItem(
     return reduceSSEEvent(items, {
       event: 'message.final',
       data: {
-        schema_version: 5,
+        schema_version: 6,
         run_id: runId,
         occurred_at: occurredAt,
         message_id: `${runId}:reconciled-final`,
         text: '任务已完成。',
         affected_targets: [],
         suggested_next_inputs: [],
-        project_history_revision: 1,
       },
     });
   }
   return reduceSSEEvent(items, {
     event: status === 'canceled' ? 'run.canceled' : 'run.error',
     data: {
-      schema_version: 5,
+      schema_version: 6,
       run_id: runId,
       occurred_at: occurredAt,
       duration_ms: 0,
@@ -342,7 +341,7 @@ function endPausedRun(items: TimelineItem[], runId: string): TimelineItem[] {
   return reduceSSEEvent(items, {
     event: 'run.canceled',
     data: {
-      schema_version: 5,
+      schema_version: 6,
       run_id: runId,
       occurred_at: new Date().toISOString(),
       duration_ms: 0,
@@ -528,6 +527,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         patchSession(threadId, {
           activeRunId: run.id,
           projectId: run.project_id,
+          // The HTTP response already confirms acceptance, even before SSE starts.
+          nextInputSuggestions: null,
           status: run.status === 'waiting' ? 'waiting' : 'running',
           originalRequest: {
             ...payload,
@@ -865,7 +866,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           timelineItems: reduceSSEEvent(prev.timelineItems, {
             event: 'run.resumed',
             data: {
-              schema_version: 5,
+              schema_version: 6,
               run_id: runId,
               occurred_at: new Date().toISOString(),
             },

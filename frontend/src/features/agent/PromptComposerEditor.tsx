@@ -10,6 +10,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   Blocks,
@@ -82,6 +83,7 @@ const SUMMARY_COLUMNS = [
 ];
 
 interface PromptComposerEditorProps {
+  menuContainer?: HTMLDivElement | null;
   value: string;
   onChange: (value: string) => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
@@ -221,6 +223,7 @@ function pageStatus(page: PageMentionCandidate) {
 
 export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, PromptComposerEditorProps>(
   function PromptComposerEditor({
+    menuContainer,
     value,
     onChange,
     onKeyDown,
@@ -785,12 +788,12 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       return <Icon className="h-[15px] w-[15px]" strokeWidth={1.75} />;
     };
 
-    return (
+    const menus = (
       <>
         {trigger && trigger.kind === 'summary' && (
           <div
             ref={menuRef}
-            className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 grid grid-cols-3 overflow-hidden rounded-lg border border-border-strong bg-surface shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
+            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 grid grid-cols-3 overflow-hidden rounded-lg border border-border-strong bg-surface shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="grid"
             aria-label="汇总检索候选"
           >
@@ -863,7 +866,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         {trigger && trigger.kind === 'command' && (
           <div
             ref={menuRef}
-            className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 flex max-h-[286px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
+            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex max-h-[286px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="listbox"
             aria-label={commandLevel === 'root' ? '命令' : commandLevel === 'model' ? '选择模型' : '选择目标'}
           >
@@ -974,7 +977,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         {trigger && trigger.kind !== 'summary' && trigger.kind !== 'command' && (
           <div
             ref={menuRef}
-            className="absolute bottom-[calc(100%+4px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
+            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="listbox"
             aria-label={trigger.kind === 'component' ? '组件候选' : trigger.kind === 'page' ? '页面候选' : '提示词候选'}
           >
@@ -1100,6 +1103,12 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             </div>
           </div>
         )}
+      </>
+    );
+
+    return (
+      <>
+        {menuContainer ? createPortal(menus, menuContainer) : menus}
         <div
           ref={editorRef}
           contentEditable={!disabled && !readOnly}
@@ -1142,7 +1151,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             syncValue();
             requestAnimationFrame(updateTrigger);
           }}
-          className={`composer-prompt-editor max-h-32 w-full overflow-y-auto bg-transparent px-3 text-sm leading-5 text-text-900 focus:outline-none focus-visible:outline-none disabled:opacity-50 ${suggestionsVisible ? 'min-h-6 py-1' : 'min-h-[60px] py-3'}`}
+          className={`composer-prompt-editor max-h-32 w-full overflow-y-auto bg-transparent px-4 text-sm leading-5 text-text-900 focus:outline-none focus-visible:outline-none disabled:opacity-50 ${suggestionsVisible ? 'min-h-6 py-1' : 'min-h-[60px] py-3'}`}
         />
       </>
     );

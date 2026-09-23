@@ -1,8 +1,8 @@
 import type React from 'react';
 import { useRef, useState } from 'react';
-import { Check, Crosshair, X } from 'lucide-react';
+import { Check, ChevronDown, Crosshair, X } from 'lucide-react';
 import type { ScopeObject, ScopeSelectionKind } from '../../api/types';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 
 export interface ScopePageOption { id: string; ordinal: number; title: string }
 export interface ScopeSectionOption { id: string; title: string; pageCount: number }
@@ -67,9 +67,15 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
   const customPageTriggerRef = useRef<HTMLDivElement>(null);
   const customSectionTriggerRef = useRef<HTMLDivElement>(null);
   const effectiveSelection = object === 'global' ? 'all_pages' : selection;
-  const label = composerScopeLabel(effectiveSelection, object);
+  const label = object === 'global'
+    ? scopeObjectLabel(object)
+    : effectiveSelection === 'custom_pages'
+      ? `自选 ${selectedSlideIds.length} 页 · ${scopeObjectLabel(object)}`
+      : effectiveSelection === 'custom_sections'
+        ? `自选 ${selectedSectionIds.length} 章 · ${scopeObjectLabel(object)}`
+        : composerScopeLabel(effectiveSelection, object);
   const segmentClass = (active: boolean, unavailable = false) => [
-    'flex h-7 min-w-0 flex-1 items-center justify-center rounded-md px-2 text-[11px] font-medium outline-none transition-[color,background-color,box-shadow]',
+    'flex h-7 min-w-0 flex-1 items-center justify-center whitespace-nowrap rounded-md px-0.5 text-[11px] font-medium outline-none transition-colors',
     active ? 'bg-surface text-text-900 shadow-sm' : 'text-text-600 hover:bg-surface/70 hover:text-text-900',
     unavailable ? 'pointer-events-none opacity-35' : '',
   ].join(' ');
@@ -89,11 +95,13 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
     <button
       type="button"
       aria-label={`范围：${label}`}
+      title={label}
       disabled={disabled}
-      className="composer-target-button inline-flex h-7 min-w-0 max-w-[168px] shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 data-[state=open]:bg-panel-muted data-[state=open]:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
+      className="composer-context-trigger composer-target-button"
     >
-      <Crosshair className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-      <span className="composer-target-label min-w-0 truncate">{label}</span>
+      <Crosshair className="h-3.5 w-3.5 shrink-0 text-text-600" strokeWidth={1.75} />
+      <span className="min-w-0 truncate">{label}</span>
+      <ChevronDown className="composer-context-chevron" strokeWidth={1.75} aria-hidden="true" />
     </button>
   );
 
@@ -104,55 +112,20 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
         side="top"
         align="end"
         sideOffset={8}
-        className="w-[340px] border-0 bg-transparent p-0 shadow-none"
+        avoidCollisions
+        collisionPadding={12}
+        className="w-[352px] rounded-xl p-2"
         onEscapeKeyDown={(event) => {
           if (!customMode || !customOpen) return;
           event.preventDefault();
           closeCustomWindow(false);
         }}
       >
-        {customMode && customOpen && (
-          <section className="mb-2 overflow-hidden rounded-xl bg-surface shadow-lg">
-            <header className="flex h-9 items-center gap-2 border-b border-border/70 px-3">
-              <strong className="text-xs font-semibold text-text-900">{effectiveSelection === 'custom_pages' ? '自选页' : '自选章'}</strong>
-              <span className="rounded-full bg-panel-muted px-1.5 py-0.5 text-[10px] tabular-nums text-text-700">{effectiveSelection === 'custom_pages' ? selectedSlideIds.length : selectedSectionIds.length}</span>
-              <button type="button" aria-label="收起自选窗口" className="ml-auto flex h-6 w-6 items-center justify-center rounded-md text-text-500 hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeCustomWindow(); }}>
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </header>
-            <div className="bg-panel-muted/50 p-1">
-              <div role="listbox" aria-label={effectiveSelection === 'custom_pages' ? '选择页面' : '选择章节'} aria-multiselectable="true" className="max-h-[208px] overflow-y-auto overscroll-contain pr-0.5 [scrollbar-color:var(--color-border)_transparent] [scrollbar-width:thin]">
-                {customItems.length === 0 ? (
-                  <div className="px-2.5 py-5 text-center text-xs text-text-600">暂无可选内容</div>
-                ) : customItems.map((item) => (
-                  <DropdownMenuItem
-                    key={item.id}
-                    role="option"
-                    aria-selected={item.checked}
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      if (effectiveSelection === 'custom_pages') onToggleSlide(item.id);
-                      else onToggleSection(item.id);
-                    }}
-                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-xs text-text-800 focus:bg-surface"
-                  >
-                    <span className="w-7 shrink-0 text-right tabular-nums text-text-500">{item.meta}</span>
-                    <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                    <span className={[
-                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-                      item.checked ? 'border-accent bg-accent text-white' : 'border-border bg-surface text-transparent',
-                    ].join(' ')} aria-hidden="true">
-                      <Check className="h-3 w-3" strokeWidth={2.5} />
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-        <section className="overflow-hidden rounded-xl bg-surface p-2 shadow-lg">
+        <DropdownMenuLabel className="px-1 pb-3 text-[11px] font-normal text-text-600">选择范围</DropdownMenuLabel>
+
+        <section>
           <div className="flex items-center gap-2">
-            <span className="w-8 shrink-0 text-[11px] font-medium text-text-700">对象</span>
+            <span className="w-7 shrink-0 text-[11px] text-text-600">对象</span>
             <div role="radiogroup" aria-label="修改对象" className="grid min-w-0 flex-1 grid-cols-4 gap-1 rounded-lg bg-panel-muted p-1">
               {objectModes.map((item) => {
                 const unavailable = emptyProject && item.value !== 'global';
@@ -174,7 +147,7 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
             </div>
           </div>
           <div className="mt-1.5 flex items-center gap-2">
-            <span className="w-8 shrink-0 text-[11px] font-medium text-text-700">页面</span>
+            <span className="w-7 shrink-0 text-[11px] text-text-600">页面</span>
             <div role="radiogroup" aria-label="页面范围" className="grid min-w-0 flex-1 grid-cols-4 gap-1 rounded-lg bg-panel-muted p-1">
               {pageModes.map((item) => {
                 const unavailable = (object === 'global' || emptyProject) && item.value !== 'all_pages';
@@ -201,6 +174,45 @@ export const TargetSelector: React.FC<TargetSelectorProps> = ({
             </div>
           </div>
         </section>
+        {customMode && customOpen && (
+          <section className="mt-3 border-t border-border/70 pt-2">
+            <header className="flex h-8 items-center gap-2 px-1">
+              <strong className="text-xs font-semibold text-text-900">{effectiveSelection === 'custom_pages' ? '自选页' : '自选章'}</strong>
+              <span className="rounded-full bg-panel-muted px-1.5 py-0.5 text-[10px] tabular-nums text-text-700">{effectiveSelection === 'custom_pages' ? selectedSlideIds.length : selectedSectionIds.length}</span>
+              <button type="button" aria-label="收起自选窗口" className="ml-auto flex h-6 w-6 items-center justify-center rounded-md text-text-500 hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeCustomWindow(); }}>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </header>
+            <div>
+              <div role="listbox" aria-label={effectiveSelection === 'custom_pages' ? '选择页面' : '选择章节'} aria-multiselectable="true" className="max-h-[208px] overflow-y-auto overscroll-contain pr-0.5 [scrollbar-color:var(--color-border)_transparent] [scrollbar-width:thin]">
+                {customItems.length === 0 ? (
+                  <div className="px-2.5 py-5 text-center text-xs text-text-600">暂无可选内容</div>
+                ) : customItems.map((item) => (
+                  <DropdownMenuItem
+                    key={item.id}
+                    role="option"
+                    aria-selected={item.checked}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      if (effectiveSelection === 'custom_pages') onToggleSlide(item.id);
+                      else onToggleSection(item.id);
+                    }}
+                    className={`flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-xs text-text-800 ${item.checked ? 'bg-accent-soft' : ''}`}
+                  >
+                    <span className="w-7 shrink-0 text-right tabular-nums text-text-500">{item.meta}</span>
+                    <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                    <span className={[
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
+                      item.checked ? 'border-accent/30 bg-accent-soft text-accent' : 'border-border bg-surface text-transparent',
+                    ].join(' ')} aria-hidden="true">
+                      <Check className="h-3 w-3" strokeWidth={2.5} />
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
