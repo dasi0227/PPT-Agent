@@ -3,8 +3,11 @@ import { X } from 'lucide-react';
 import type { DOMSelection } from '../../api/types';
 import { IconButton } from '../../components/ui/primitives';
 
-const BUTTON_SIZE = 24;
-const GAP = 4;
+// Match the Runtime number badge: 24px content + 5px padding on each side,
+// 24px tall with 5px corners, all measured in the 1920×1080 canvas space.
+const BADGE_WIDTH = 34;
+const BADGE_HEIGHT = 24;
+const BADGE_RADIUS = 5;
 
 export function DraftSelectionControls({ slideId, selections, onRemove }: {
   slideId: string;
@@ -31,25 +34,27 @@ export function DraftSelectionControls({ slideId, selections, onRemove }: {
   const height = 1080 * scale;
   const left = (size.width - width) / 2;
   const top = (size.height - height) / 2;
-  const clamp = (value: number, extent: number) => Math.max(GAP, Math.min(value, extent - BUTTON_SIZE - GAP));
+  const buttonWidth = BADGE_WIDTH * scale;
+  const buttonHeight = BADGE_HEIGHT * scale;
+  const radius = BADGE_RADIUS * scale;
+  const clamp = (value: number, extent: number, controlSize: number) => Math.max(0, Math.min(value, extent - controlSize));
 
   return (
     <div ref={layerRef} className="pointer-events-none absolute inset-0">
-      {width >= BUTTON_SIZE + GAP * 2 && height >= BUTTON_SIZE + GAP * 2 && selections
+      {scale > 0 && selections
         .filter((selection) => selection.slide_id === slideId && selection.status !== 'page_deleted')
         .map((selection) => {
-          const y = selection.rect.y * scale;
-          // Small selections need their number badge's space above the box.
-          const fitsAbove = y >= BUTTON_SIZE + GAP && selection.rect.width * scale >= BUTTON_SIZE * 2 + GAP;
-          const buttonTop = fitsAbove ? y - BUTTON_SIZE - GAP : y + GAP;
           return (
             <IconButton
               key={selection.selection_id}
               label={`移除标记 ${selection.marker_no}`}
-              className="pointer-events-auto absolute h-6 w-6 cursor-pointer border border-border bg-surface hover:bg-danger-soft hover:text-danger focus-visible:bg-danger-soft focus-visible:text-danger"
+              className="pointer-events-auto absolute cursor-pointer border-0 bg-danger p-0 text-white hover:bg-danger hover:text-white hover:brightness-95 focus-visible:bg-danger focus-visible:text-white focus-visible:brightness-90"
               style={{
-                left: left + clamp((selection.rect.x + selection.rect.width) * scale - BUTTON_SIZE, width),
-                top: top + clamp(buttonTop, height),
+                left: left + clamp((selection.rect.x + selection.rect.width) * scale - buttonWidth, width, buttonWidth),
+                top: top + clamp(selection.rect.y * scale - buttonHeight, height, buttonHeight),
+                width: buttonWidth,
+                height: buttonHeight,
+                borderRadius: `${radius}px ${radius}px 0 ${radius}px`,
               }}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
@@ -57,7 +62,7 @@ export function DraftSelectionControls({ slideId, selections, onRemove }: {
                 onRemove(selection.selection_id);
               }}
             >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              <X width={13 * scale} height={13 * scale} aria-hidden="true" />
             </IconButton>
           );
         })}

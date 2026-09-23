@@ -27,6 +27,7 @@
 config.yaml
 
 # 编辑器/系统
+.idea/
 .DS_Store
 *.swp
 
