@@ -8,7 +8,7 @@ import { ImagePreview } from '../../components/ui/ImagePreview';
 import { IconButton } from '../../components/ui/primitives';
 import { llmApi } from '../../api/llm';
 import { polishCommand } from '../../stores/textCommandStore';
-import { showGlobalSuccess } from '../../stores/toastStore';
+import { showGlobalError, showGlobalSuccess, showGlobalWarning } from '../../stores/toastStore';
 import { skillsApi } from '../../api/skills';
 import type { CreateRunRequest, CreateRunScopeInput, LLMProfile, Skill } from '../../api/types';
 import { cn } from '../../lib/utils';
@@ -74,7 +74,6 @@ function supportedImageFile(file: File): boolean {
 export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement | null }> = ({ polishToolbarContainer }) => {
   const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
   const [text, setText] = useState('');
-  const [submitError, setSubmitError] = useState('');
 	const [uploadingCount, setUploadingCount] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
   const [profiles, setProfiles] = useState<LLMProfile[]>([]);
@@ -82,7 +81,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   const [profilesError, setProfilesError] = useState('');
   const [skills, setSkills] = useState<Skill[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
-  const [skillsError, setSkillsError] = useState('');
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
@@ -272,16 +270,21 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   useEffect(() => {
     let current = true;
     let request = 0;
+    let failureNotified = false;
     const loadModels = () => {
       const id = ++request;
       setProfilesLoading(true); setProfilesError('');
       void llmApi.profiles().then((response) => {
         if (!current || id !== request) return;
+        failureNotified = false;
         setProfiles(response.profiles);
         useComposerStore.getState().reconcileModels(response.profiles.map((profile) => profile.name), response.default);
       }).catch(() => {
         if (!current || id !== request) return;
-        setProfilesError('模型列表加载失败，请刷新后重试');
+        const message = '模型列表加载失败，请刷新后重试';
+        setProfilesError(message);
+        if (!failureNotified) showGlobalError(message);
+        failureNotified = true;
       }).finally(() => { if (current && id === request) setProfilesLoading(false); });
     };
     loadModels();
@@ -293,7 +296,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   useEffect(() => {
     let current = true;
     setSkillsLoading(true);
-    setSkillsError('');
     void skillsApi.list()
       .then((response) => {
         if (!current) return;
@@ -304,7 +306,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       .catch(() => {
         if (!current) return;
         setSkills([]);
-        setSkillsError('技能列表加载失败');
+        showGlobalWarning('技能列表加载失败');
         useComposerStore.getState().reconcileSkills([]);
       })
       .finally(() => {
@@ -318,24 +320,23 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 		if (!activeProjectId || disabled || files.length === 0) return;
 		const unsupported = files.find((file) => !supportedImageFile(file));
 		if (unsupported) {
-			setSubmitError('仅支持 PNG、JPG 和 WebP 图片');
+			showGlobalError('仅支持 PNG、JPG 和 WebP 图片');
 			return;
 		}
 		const oversized = files.find((file) => file.size > 10 * 1024 * 1024);
 		if (oversized) {
-			setSubmitError('图片超过 10 MiB，请压缩后重试');
+			showGlobalError('图片超过 10 MiB，请压缩后重试');
 			return;
 		}
 		if (activeAttachments.length + uploadingCount + files.length > MAX_MESSAGE_ATTACHMENTS) {
-			setSubmitError('每条消息最多添加 8 张图片');
+			showGlobalError('每条消息最多添加 8 张图片');
 			return;
 		}
-		setSubmitError('');
 		let threadId: string;
 		try {
 			threadId = activeThreadId ?? await ensureActiveThread(activeProjectId);
 		} catch (error) {
-			setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+			showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
 			return;
 		}
 		setUploadingCount((count) => count + files.length);
@@ -354,7 +355,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 		}));
 		setUploadingCount((count) => Math.max(0, count - files.length));
 		const failure = results.find((result): result is string => Boolean(result));
-		if (failure) setSubmitError(failure);
+		if (failure) showGlobalError(failure);
 	};
 
   const submit = async () => {
@@ -366,7 +367,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 	if (/^\/rename(?:\s|$)/i.test(raw)) {
 		if (!activeProjectId) return;
 		if (raw.toLocaleLowerCase() !== '/rename') {
-			setSubmitError('/rename 不支持参数，请直接使用 /rename 立即生成名称');
+			showGlobalError('/rename 不支持参数，请直接使用 /rename 立即生成名称');
 			return;
 		}
 		try {
@@ -375,18 +376,17 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 			setText('');
 			editorRef.current?.setPlainText('');
 		} catch (error) {
-			setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+			showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
 		}
 		return;
 	}
 	if (disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!raw && (hasDOMSelections ? !hasDOMIntent : !hasAttachments))) return;
-    setSubmitError('');
     const projectId = activeProjectId;
     let threadId: string;
     try {
       threadId = await ensureActiveThread(projectId);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+      showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
       return;
     }
     if (steering && activeRunId) {
@@ -396,17 +396,17 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
         editorRef.current?.setPlainText('');
 		composer.clearThreadDraft(threadId);
       }
-      else setSubmitError('追加要求未能加入当前任务；文本已保留，可在任务结束后作为新请求发送');
+      else showGlobalError('追加要求未能加入当前任务；文本已保留，可在任务结束后作为新请求发送');
       return;
     }
     if (profilesError || profilesLoading || !composer.modelProfileName) {
-      setSubmitError(profilesError || '模型列表仍在加载，请稍候');
+      showGlobalError(profilesError || '模型列表仍在加载，请稍候');
       return;
     }
     const restored = composer.restoredInputs[threadId];
     const scope = restored?.scope ?? composerScopeInput(composer, currentSlide?.id);
     if (!scope) {
-      setSubmitError(composer.scopeSelection === 'custom_pages' ? '请至少选择一页' : '请至少选择一章');
+      showGlobalError(composer.scopeSelection === 'custom_pages' ? '请至少选择一页' : '请至少选择一章');
       return;
     }
     const request: CreateRunRequest = {
@@ -428,11 +428,11 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     const selectedProfile = profiles.find((profile) => profile.name === composer.modelProfileName);
     const requiresVision = hasAttachments || (request.mode === 'execute');
     if (!selectedProfile) {
-      setSubmitError('所选模型已不可用，请重新选择');
+      showGlobalError('所选模型已不可用，请重新选择');
       return;
     }
     if (requiresVision && !selectedProfile.capabilities.vision) {
-      setSubmitError('当前任务需要页面图片观察，请选择支持页面观察的模型');
+      showGlobalError('当前任务需要页面图片观察，请选择支持页面观察的模型');
       return;
     }
 
@@ -440,7 +440,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       if (runStatus === 'paused' && activeRunId) {
         const ended = await cancelRun(threadId, activeRunId, 'superseded');
         if (!ended) {
-          setSubmitError('此前任务未能结束，暂时无法发送新消息');
+          showGlobalError('此前任务未能结束，暂时无法发送新消息');
           return;
         }
       }
@@ -450,15 +450,14 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
         editorRef.current?.setPlainText('');
 		composer.clearThreadDraft(threadId);
       }
-      else if (result === 'failed') setSubmitError('运行创建失败，请检查时间线中的错误后重试');
+      else if (result === 'failed') showGlobalError('运行创建失败，请检查时间线中的错误后重试');
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+      showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
     }
   };
 
   const cancelActiveRun = async () => {
     if (!activeThreadId || !activeRunId || runStatus === 'canceling') return;
-    setSubmitError('');
     await cancelRun(activeThreadId, activeRunId);
   };
 
@@ -468,22 +467,20 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     const restored = activeThreadId ? composer.restoredInputs[activeThreadId] : undefined;
     const scope = restored?.scope ?? composerScopeInput(composer, currentSlide?.id);
     if (!scope) {
-      setSubmitError('请先选择要处理的页面或章节');
+      showGlobalError('请先选择要处理的页面或章节');
       return;
     }
-    setSubmitError('');
     try {
       const threadId = await ensureActiveThread(activeProjectId);
       await polishCommand(activeProjectId, threadId, {
         instruction, thread_id: threadId, scope, mode: composer.mode,
       });
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '润色失败，请重试');
+      showGlobalError(error instanceof Error ? error.message : '润色失败，请重试');
     }
   };
 
   const executeSlashCommand = async (command: SlashCommandId) => {
-    setSubmitError('');
     if (command === 'execute' || command === 'plan' || command === 'grill' || command === 'chat') {
       composer.setIntent(command);
       showGlobalSuccess(`成功切换到${MODE_META[command].label}模式`);
@@ -499,7 +496,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 			const threadId = await ensureActiveThread(activeProjectId);
 			void performNamingAction(activeProjectId, threadId, 'generate');
 		} catch (error) {
-			setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+			showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
 		}
 		return;
 	}
@@ -508,7 +505,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     try {
       threadId = await ensureActiveThread(activeProjectId);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '创建会话失败，请重试');
+      showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
       return;
     }
     if (command === 'commit') {
@@ -592,21 +589,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       )}
       <HistoryBanner />
       <RestoredInputResources />
-      {submitError && (
-        <div role="alert" className="mb-2 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">
-          {submitError}
-        </div>
-      )}
-      {!submitError && profilesError && (
-        <div role="alert" className="mb-2 rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">
-          {profilesError}
-        </div>
-      )}
-      {!submitError && !profilesError && skillsError && (
-        <div role="alert" className="mb-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-xs text-warning">
-          {skillsError}
-        </div>
-      )}
       <div ref={setMenuContainer} className="relative rounded-[18px] border border-border bg-panel-muted shadow-[0_2px_4px_rgba(36,55,84,0.03)] focus-within:border-border-strong">
         <div className="composer-context-bar" role="group" aria-label="模式与范围">
           <ModeSelector

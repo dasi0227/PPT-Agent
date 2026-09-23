@@ -7,6 +7,7 @@ import { useThreadStore } from './threadStore';
 import { useDeckStore } from './deckStore';
 import { useRunStore } from './runStore';
 import { useGitCommitStore } from './gitCommitStore';
+import { showGlobalSuccess } from './toastStore';
 
 interface HistoryUI {
   states: Record<string, HistoryState>;
@@ -37,13 +38,32 @@ export const useProjectHistoryStore = create<HistoryUI>((set, get) => ({
         view: useDeckStore.getState().globalView, preview_mode: useDeckStore.getState().previewMode,
         active_thread_id: useThreadStore.getState().getActiveThreadId(projectId),
       }, runId);
+      // Reflect the confirmed history state before navigation replaces this document.
+      // Keep busy until then so polling and new actions cannot race the scene reload.
+      set((current) => ({
+        states: { ...current.states, [projectId]: state },
+        stateErrorByProjectId: { ...current.stateErrorByProjectId, [projectId]: false },
+        dialog: null,
+        error: null,
+      }));
       applyHistoryScene(projectId, state);
+      // Carry this action's feedback across the full document reload, in this tab only.
+      sessionStorage.setItem(historyNoticeKey(projectId), String(state.scene_revision));
       reloadHistory(projectId, state);
     } catch (error) { set({ busy: false, error: error instanceof Error ? error.message : '项目历史切换失败，请重试' }); }
   },
 }));
 const appliedKey = (id: string) => `ppt-agent-history-scene-${id}`;
 const threadKey = (id: string) => `ppt-agent-history-thread-${id}`;
+const historyNoticeKey = (id: string) => `ppt-agent-history-notice-${id}`;
+export function consumeHistoryNotice(projectId: string, state: HistoryState) {
+  const revision = sessionStorage.getItem(historyNoticeKey(projectId));
+  if (revision === null) return;
+  sessionStorage.removeItem(historyNoticeKey(projectId));
+  if (revision === String(state.scene_revision)) {
+    showGlobalSuccess(state.latest ? '已回退，原始目标范围已保留' : '已恢复到最新');
+  }
+}
 export function applyHistoryScene(projectId: string, state: HistoryState) {
   loadProjectComposer(projectId);
   const scene = state.scene;

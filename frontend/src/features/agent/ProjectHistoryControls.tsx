@@ -8,7 +8,7 @@ import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { projectHistoryApi } from '../../api/projectHistory';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
-import { applyHistoryScene, reloadHistory, selectHistoryThread, useProjectHistoryStore } from '../../stores/projectHistoryStore';
+import { applyHistoryScene, consumeHistoryNotice, reloadHistory, selectHistoryThread, useProjectHistoryStore } from '../../stores/projectHistoryStore';
 import { useHistoryConfirmationStore } from '../../stores/historyConfirmationStore';
 
 export function RollbackButton({ runId, steering }: { runId?: string; steering?: boolean }) {
@@ -25,9 +25,8 @@ export function HistoryBanner() {
   const state = useProjectHistoryStore((s) => projectId ? s.states[projectId] : undefined);
   const busy = useProjectHistoryStore((s) => s.busy);
   if (!projectId || !state?.latest) return null;
-  return <div className="mb-2 flex items-center justify-between gap-3 rounded-md border border-border bg-panel-muted px-3 py-2 text-xs text-text-600">
-    <span>已回退并保留原始目标范围</span>
-    <Button type="button" variant="primary" disabled={busy} onClick={() => void useProjectHistoryStore.getState().preview(projectId)} className="h-7 shrink-0 px-2 text-xs">恢复到最新</Button>
+  return <div className="mb-2 flex justify-center">
+    <Button type="button" variant="primary" disabled={busy} onClick={() => void useProjectHistoryStore.getState().preview(projectId)} className="h-7 rounded-full px-3 text-xs">恢复到最新</Button>
   </div>;
 }
 export function ProjectHistoryDialogs() {
@@ -57,6 +56,7 @@ export function ProjectHistoryDialogs() {
           stateErrorByProjectId: { ...s.stateErrorByProjectId, [projectId]: false },
         }));
         selectHistoryThread(projectId);
+        consumeHistoryNotice(projectId, state);
       } catch {
         useProjectHistoryStore.setState((s) => ({
           stateErrorByProjectId: { ...s.stateErrorByProjectId, [projectId]: true },
