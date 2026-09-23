@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { AlertCircle, ChevronRight, ExternalLink, Pencil, Search, Trash2 } from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { cn } from '../../lib/utils';
@@ -115,6 +115,7 @@ export function RepositoryDirectoryItem({
   visual,
   visualClassName,
   visualBare = false,
+  visualAspect,
   onClick,
 }: {
   active: boolean;
@@ -124,6 +125,7 @@ export function RepositoryDirectoryItem({
   visual: ReactNode;
   visualClassName?: string;
   visualBare?: boolean;
+  visualAspect?: 'video';
   onClick: () => void;
 }) {
   return (
@@ -140,8 +142,10 @@ export function RepositoryDirectoryItem({
     >
       <span
         className={cn(
-          'grid h-[42px] w-[58px] place-items-center justify-self-center overflow-hidden',
+          'grid w-[58px] place-items-center justify-self-center overflow-hidden',
+          visualAspect === 'video' ? 'aspect-video' : 'h-[42px]',
           !visualBare && 'rounded-md border border-border bg-surface',
+          !visualBare && visualAspect === 'video' && 'border-0 ring-1 ring-inset ring-border',
           visualClassName,
         )}
         aria-hidden="true"
@@ -166,6 +170,7 @@ export function RepositoryDirectoryItem({
 }
 
 export function RepositoryDetail({
+  active = true,
   label,
   title,
   description,
@@ -178,6 +183,7 @@ export function RepositoryDetail({
   onEdit,
   onDelete,
 }: {
+  active?: boolean;
   label: string;
   title: string;
   description?: string;
@@ -191,6 +197,7 @@ export function RepositoryDetail({
   onDelete: () => void | Promise<void>;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
+  useEffect(() => { if (!active) setDeleteOpen(false); }, [active]);
 
   return (
     <section className="flex min-h-[420px] min-w-0 flex-col bg-surface md:min-h-0" aria-label={label}>
@@ -231,7 +238,7 @@ export function RepositoryDetail({
       </header>
       <div className={cn('min-h-0 flex-1 overflow-auto bg-canvas/70', contentClassName)}>{children}</div>
       <ConfirmModal
-        open={deleteOpen}
+        open={active && deleteOpen}
         onOpenChange={setDeleteOpen}
         title={`删除${deleteNoun}`}
         description={`确定删除「${title}」吗？该操作不可撤销。`}

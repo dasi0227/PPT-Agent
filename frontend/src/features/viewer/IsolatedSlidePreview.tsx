@@ -3,6 +3,7 @@ import { RuntimeSlide, runtimeEventFromFrame } from './previewProtocol';
 import { Button } from '../../components/ui/primitives';
 import type { DOMSelection } from '../../api/types';
 import { DraftSelectionControls } from './DraftSelectionControls';
+import { PreviewLoading } from '../../components/ui/PreviewLoading';
 
 interface IsolatedSlidePreviewProps {
   slides: RuntimeSlide[];
@@ -43,12 +44,15 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   const indexRef = useRef(index);
   const [renderError, setRenderError] = useState('');
   const [themeError, setThemeError] = useState('');
-  const [themeLoading, setThemeLoading] = useState(false);
+  const [themeLoading, setThemeLoading] = useState(true);
+  const [displayedDocument, setDisplayedDocument] = useState<{ id: string; html: string } | null>(null);
   const appearanceHash = slides[index]?.frame.appearance?.hash || '';
   const [runtimeVersion, setRuntimeVersion] = useState(0);
   const [runtimeReady, setRuntimeReady] = useState(false);
   const deliveredReplayRef = useRef(replayRequest?.id);
   const activeSlideId = slides[index]?.id;
+  const activeHTML = slides[index]?.html;
+  const hasDisplay = displayedDocument?.id === activeSlideId && displayedDocument?.html === activeHTML;
   const selectionHash = selectionSlide?.hash;
   // A response from an older displayed artifact must not reach the composer,
   // including presence probes that do not carry a hash themselves.
@@ -81,6 +85,16 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   }, [activeSlideId, draftSelections, selectionMode, selectionSlide, sessionID]);
 
   useEffect(() => {
+    const frame = iframeRef.current;
+    if (!frame || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      frame.contentWindow?.postMessage({ type: 'setPreviewVisibility', active: entries.some(entry => entry.isIntersecting) }, '*');
+    });
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [runtimeVersion, runtimeReady]);
+
+  useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const message = runtimeEventFromFrame(event, iframeRef.current?.contentWindow ?? null);
       if (!message) return;
@@ -93,6 +107,9 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         if (message.slide_id !== activeSlideId || message.appearance_hash !== appearanceHash) return;
         setThemeLoading(message.type === 'themeApplying');
         setThemeError(message.type === 'themeApplyFailed' ? message.message : '');
+        if (message.type === 'themeApplied' && activeSlideId && activeHTML !== undefined) {
+          setDisplayedDocument({ id: activeSlideId, html: activeHTML });
+        }
         if (message.type === 'themeApplied' && selectionSlide) {
           sendSelectionState();
           const selections = draftSelections.filter(item => item.slide_id === selectionSlide.id && item.html_hash === selectionSlide.hash);
@@ -100,6 +117,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         }
       } else if (message.type === 'renderError') {
         setRenderError(message.message);
+        setThemeLoading(false);
       } else if (message.type === 'selectionCreated') {
         if (selectionMode !== 'none' && selectionSlide && message.session_id === sessionID && message.slide_id === selectionSlide.id
           && message.selection.slide_id === selectionSlide.id && message.selection.html_hash === selectionSlide.hash) onSelection?.(message.selection);
@@ -113,11 +131,26 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [activeSlideId, appearanceHash, draftSelections, onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
+  }, [activeHTML, activeSlideId, appearanceHash, draftSelections, onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
+
+  useEffect(() => {
+    setThemeError('');
+    setRenderError('');
+    setThemeLoading(Boolean(activeSlideId));
+  }, [activeSlideId, activeHTML, appearanceHash]);
 
   useEffect(() => {
     sendDeck();
   }, [sendDeck]);
+
+  useEffect(() => {
+    if (runtimeReady) return;
+    const timer = window.setTimeout(() => {
+      setThemeLoading(false);
+      setRenderError('预览初始化超时，请重试');
+    }, 30000);
+    return () => window.clearTimeout(timer);
+  }, [runtimeReady, runtimeVersion]);
 
   useEffect(() => {
     iframeRef.current?.contentWindow?.postMessage({ type: 'gotoSlide', index }, '*');
@@ -142,21 +175,23 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         src="/slide-runtime/index.html"
         sandbox="allow-scripts"
         className={className}
-        style={style}
+        style={{ ...style, opacity: hasDisplay ? style?.opacity : 0, pointerEvents: hasDisplay ? style?.pointerEvents : 'none' }}
         title={title}
-        tabIndex={passive ? -1 : undefined}
+        aria-hidden={!hasDisplay || undefined}
+        tabIndex={passive || !hasDisplay ? -1 : undefined}
         onLoad={sendDeck}
       />
       {selectionSlide && slides[index]?.id === selectionSlide.id && onSelectionRemove && !renderError && (
         <DraftSelectionControls slideId={selectionSlide.id} selections={draftSelections} onRemove={onSelectionRemove} />
       )}
-      {!passive && (themeError || themeLoading) && (
-        <div role={themeError ? 'alert' : 'status'} className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded bg-surface/95 px-3 py-2 text-xs text-text-700 shadow-sm">
-          <span>{themeError ? `主题预览未应用：${themeError}` : '正在加载主题外观…'}</span>
-          {themeError && <Button variant="secondary" className="h-7 px-2 text-xs" onClick={() => {
+      {themeLoading && !themeError && !renderError && <PreviewLoading label="正在加载主题外观" miniature={passive} />}
+      {!passive && themeError && !renderError && (
+        <div role="alert" className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded bg-surface/95 px-3 py-2 text-xs text-text-700 shadow-sm">
+          <span>主题预览未应用：{themeError}</span>
+          <Button variant="secondary" className="h-7 px-2 text-xs" onClick={() => {
             setThemeError(''); setThemeLoading(true);
             iframeRef.current?.contentWindow?.postMessage({type:'retryTheme',slide_id:activeSlideId},'*');
-          }}>重试</Button>}
+          }}>重试</Button>
         </div>
       )}
       {!passive && renderError && (
@@ -171,6 +206,8 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
             onClick={() => {
               setRenderError('');
               setRuntimeReady(false);
+              setDisplayedDocument(null);
+              setThemeLoading(true);
               setRuntimeVersion((value) => value + 1);
             }}
           >重试</Button>

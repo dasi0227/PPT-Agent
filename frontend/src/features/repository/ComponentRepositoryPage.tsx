@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pause } from 'lucide-react';
 import { repositoriesApi } from '../../api/repositories';
-import type { ComponentReference, ComponentTag, Theme } from '../../api/types';
+import type { ComponentReference, ComponentTag } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { showGlobalError } from '../../stores/toastStore';
 import {
@@ -17,17 +17,11 @@ import {
 } from './RepositoryPrimitives';
 import { RepositoryEditDialog } from './RepositoryEditDialog';
 import { RepositoryShell } from './RepositoryShell';
-import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
-import type { RuntimeSlide } from '../viewer/previewProtocol';
+import { ComponentPreview } from './ComponentPreview';
+import { RepositoryPreviewCache } from './RepositoryPreviewCache';
 
-function ScaledComponentPreview({html,title,className,theme}: {html:string;title:string;className?:string;theme:Theme|null}) {
-  const slides=useMemo<RuntimeSlide[]>(()=>theme?[{
-    id:'component-preview',html:`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>.component-content{display:grid;place-items:center}.component-stage{width:100%;max-width:1200px}.component-stage>svg{width:100%}</style></head><body><main class="slide-stage"><section class="slide-content component-content"><div class="component-stage">${html}</div></section></main></body></html>`,
-    frame:{slide_id:'component-preview',theme_id:theme.id,appearance:theme.appearance,canvas:{width:1920,height:1080,aspect_ratio:'16:9'},deck_title:'组件',ordinal:1,total:1,role:'content',section:{id:'components',title:'组件',index:1},numbering:{visible:false,format:'number'},chrome:[]},
-  }]:[],[html,theme]);
-  return <div className={cn('relative overflow-hidden',className)}>
-    {theme && <IsolatedSlidePreview slides={slides} index={0} title={title} className="h-full w-full border-0" />}
-  </div>;
+function previewKey(component: ComponentReference) {
+  return JSON.stringify([component.id, component.html]);
 }
 
 const componentTagLabels: Record<ComponentTag, string> = {
@@ -47,7 +41,6 @@ function componentTagLabel(tag: ComponentTag): string {
 const componentTagOrder = Object.keys(componentTagLabels) as ComponentTag[];
 
 export function ComponentRepositoryPage() {
-  const [theme, setTheme] = useState<Theme | null>(null);
   const [components, setComponents] = useState<ComponentReference[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
@@ -61,8 +54,7 @@ export function ComponentRepositoryPage() {
     setLoading(true);
     setError('');
     try {
-      const [response, previewTheme] = await Promise.all([repositoriesApi.listComponents(), repositoriesApi.getTheme("editorial-serif")]);
-      setTheme(previewTheme);
+      const response = await repositoriesApi.listComponents();
       const details = await Promise.all(response.components.map((component) => repositoriesApi.getComponent(component.id)));
       setComponents(details);
       setSelectedId((value) => value || details[0]?.id || '');
@@ -83,6 +75,10 @@ export function ComponentRepositoryPage() {
     (filter === 'all' || component.tags.includes(filter)) &&
     `${component.name} ${component.description} ${component.tags.flatMap((tag) => [tag, componentTagLabel(tag)]).join(' ')}`.toLowerCase().includes(query.toLowerCase())), [components, filter, query]);
   const selected = visible.find((component) => component.id === selectedId) ?? visible[0];
+  const previews = useMemo(() => components.map(component => ({
+    key: previewKey(component),
+    content: <ComponentPreview title={`${component.name} 组件预览`} html={component.html ?? ''} />,
+  })), [components]);
 
   const deleteComponent = async (component: ComponentReference) => {
     try {
@@ -140,28 +136,31 @@ export function ComponentRepositoryPage() {
             >
               {visible.length === 0
                 ? <RepositoryState text="没有匹配的组件" className="min-h-40" />
-                : visible.map((component) => {
+                : components.map((component) => {
                   const active = selected?.id === component.id;
                   return (
-                    <RepositoryDirectoryItem
-                      key={component.id}
-                      active={active}
-                      disabled={component.disabled}
-                      name={component.name}
-                      description={component.description}
-                      visual={component.disabled ? (
-                        <Pause className="h-4 w-4" strokeWidth={1.75} />
-                      ) : (
-                        <ScaledComponentPreview
-                  theme={theme}
-                          title={`${component.name} 缩略预览`}
-                          html={component.html ?? ''}
-                          className="h-full w-full"
-                        />
-                      )}
-                      visualClassName={component.disabled ? 'h-9 w-9 rounded-full border-0 bg-panel-muted text-text-400' : undefined}
-                      onClick={() => setSelectedId(component.id)}
-                    />
+                    <div key={component.id} hidden={!visible.includes(component)}>
+                      <RepositoryDirectoryItem
+                        active={active}
+                        disabled={component.disabled}
+                        name={component.name}
+                        description={component.description}
+                        visual={component.disabled ? (
+                          <Pause className="h-4 w-4" strokeWidth={1.75} />
+                        ) : (
+                          <ComponentPreview
+                            key={previewKey(component)}
+                            miniature
+                            title={`${component.name} 缩略预览`}
+                            html={component.html ?? ''}
+                            className="h-full w-full"
+                          />
+                        )}
+                        visualAspect={component.disabled ? undefined : 'video'}
+                        visualClassName={component.disabled ? 'h-9 w-9 rounded-full border-0 bg-panel-muted text-text-400' : undefined}
+                        onClick={() => setSelectedId(component.id)}
+                      />
+                    </div>
                   );
                 })}
             </RepositoryCatalog>
@@ -198,12 +197,9 @@ export function ComponentRepositoryPage() {
                 onEdit={() => setEditOpen(true)}
                 onDelete={() => deleteComponent(selected)}
               >
-                <ScaledComponentPreview
-                  theme={theme}
-                  title={`${selected.name} 组件预览`}
-                  html={selected.html ?? ''}
-                  className="aspect-video max-h-full w-full max-w-5xl rounded-lg border border-border-strong bg-white shadow-[0_18px_44px_rgba(51,65,85,0.18)]"
-                />
+                <div className="aspect-video max-h-full w-full max-w-5xl overflow-hidden rounded-lg border border-border-strong bg-white">
+                  <RepositoryPreviewCache entries={previews} activeKey={previewKey(selected)} />
+                </div>
               </RepositoryDetail>
             )}
             {!selected && <RepositoryState text="请选择一个组件" className="min-h-[420px] bg-canvas/70" />}

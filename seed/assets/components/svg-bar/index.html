@@ -1,7 +1,21 @@
 <!--
 ---
 name: "柱状图"
-description: "以公共 SVG 语义角色呈现主次数据"
+description: "带数值与分类标签的独立 SVG 图表，可通过 --svg-bar-* 调整数据系列和文字"
 ---
 -->
-<svg viewBox="0 0 760 360" role="img" aria-label="示例数据：42、68、91"><path class="chart-grid" d="M60 20V300H740"/><rect class="chart-secondary" x="120" y="185" width="120" height="115"/><rect class="chart-primary" x="335" y="113" width="120" height="187"/><rect class="chart-accent" x="550" y="50" width="120" height="250"/><g class="chart-label" text-anchor="middle"><text x="180" y="170">42</text><text x="395" y="98">68</text><text x="610" y="35">91</text><text x="180" y="345">探索</text><text x="395" y="345">验证</text><text x="610" y="345">交付</text></g></svg>
+<style>
+.ppt-svg-bar { display: block; width: 100%; max-width: 820px; height: auto; overflow: visible; }
+.ppt-svg-bar__grid { fill: none; stroke: var(--svg-bar-grid, #d9e0e8); stroke-width: 1; }
+.ppt-svg-bar__bar { fill: var(--svg-bar-series, #859bb9); }
+.ppt-svg-bar__bar--highlight { fill: var(--svg-bar-highlight, #325fa8); }
+.ppt-svg-bar__label { fill: var(--svg-bar-label, #526175); font: 20px var(--svg-bar-font, "Noto Sans SC", sans-serif); }
+.ppt-svg-bar__value { fill: var(--svg-bar-ink, #263241); font: 600 22px var(--svg-bar-font, "Noto Sans SC", sans-serif); }
+</style>
+<svg class="ppt-svg-bar" viewBox="0 0 760 360" role="img" aria-label="示例数据：探索 42、验证 68、交付 91">
+  <path class="ppt-svg-bar__grid" d="M60 20V300H740"/>
+  <g class="ppt-svg-bar__bar"><rect x="120" y="185" width="120" height="115"/><rect x="335" y="113" width="120" height="187"/></g>
+  <rect class="ppt-svg-bar__bar--highlight" x="550" y="50" width="120" height="250"/>
+  <g class="ppt-svg-bar__value" text-anchor="middle"><text x="180" y="170">42</text><text x="395" y="98">68</text><text x="610" y="35">91</text></g>
+  <g class="ppt-svg-bar__label" text-anchor="middle"><text x="180" y="345">探索</text><text x="395" y="345">验证</text><text x="610" y="345">交付</text></g>
+</svg>

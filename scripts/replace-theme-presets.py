@@ -6,12 +6,16 @@ import shutil
 
 parser = argparse.ArgumentParser(description="替换三个预置主题和五个预置组件，并移除五个退役主题；不修改项目或附件。")
 parser.add_argument("--work-root", type=Path, default=Path.home() / ".dasi/ppt")
+parser.add_argument("--components-only", action="store_true", help="仅替换五个预置组件，不修改或移除主题")
 args = parser.parse_args()
 source = Path(__file__).resolve().parents[1] / "seed/assets"
 root = args.work_root.expanduser().resolve()
 active = ("editorial-serif", "blueprint", "bold-signal")
 retired = ("swiss-modern", "corporate-clean", "warm-pastel", "tokyo-night", "xiaohongshu-white")
 components = ("feature-card", "quote-block", "svg-bar", "kv-list", "stat-badge")
+if args.components_only:
+    active = ()
+    retired = ()
 # Preflight all destinations before mutating anything. Never follow repository symlinks.
 for folder, names in (("themes", active + retired), ("components", components)):
     for name in names:
@@ -35,4 +39,4 @@ for name in retired:
     if target.exists():
         shutil.rmtree(target)
 print(f"预置资源已替换：{root}")
-print("保留全部项目、附件及其他资源；引用退役主题的项目需手动重新选择主题。")
+print("保留全部项目、附件及其他资源。" if args.components_only else "保留全部项目、附件及其他资源；引用退役主题的项目需手动重新选择主题。")

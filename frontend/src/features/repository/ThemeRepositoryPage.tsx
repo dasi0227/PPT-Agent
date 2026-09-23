@@ -25,7 +25,7 @@ import {
   themeShowcaseModes,
   type ThemeShowcaseMode,
 } from './themeShowcase';
-import { ThemePreview } from './ThemePreview';
+import { clearThemeExampleCache, ThemePreview, ThemePreviewGallery } from './ThemePreview';
 
 const themeTagLabels: Record<ThemeTag, string> = {
   minimal: '极简',
@@ -49,7 +49,7 @@ function projectIdFromReturnTo(returnTo: unknown): string | null {
   }
 }
 
-export function ThemeRepositoryPage() {
+export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
   const location = useLocation();
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const projects = useProjectStore((state) => state.projects);
@@ -67,6 +67,8 @@ export function ThemeRepositoryPage() {
   const [applyingThemeId, setApplyingThemeId] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const applyingRef = useRef(false);
+  const loadedRef = useRef(false);
+  const requestRef = useRef(0);
   const requestedProjectIds = useRef(new Set<string>());
   const projectId = activeProjectId ?? projectIdFromReturnTo(location.state?.returnTo);
   const currentProject = projects.find((project) => project.id === projectId);
@@ -76,26 +78,35 @@ export function ThemeRepositoryPage() {
   const projectReady = Boolean(projectId && (currentProject || contentByProjectId[projectId]));
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const request = ++requestRef.current;
+    if (!loadedRef.current) setLoading(true);
     setError('');
     try {
       const response = await repositoriesApi.listThemes();
+      if (request !== requestRef.current) return;
       const details = response.themes;
-      setThemes(details);
+      loadedRef.current = true;
+      setThemes(current => JSON.stringify(current) === JSON.stringify(details) ? current : details);
       setSelectedId((value) => value || details[0]?.id || '');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '主题仓库加载失败');
+      if (request !== requestRef.current) return;
+      const message = cause instanceof Error ? cause.message : '主题仓库加载失败';
+      if (loadedRef.current) showGlobalError(message);
+      else setError(message);
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    if (!projectId || currentProject || requestedProjectIds.current.has(projectId)) return;
+    if (active) void load();
+    else setEditOpen(false);
+  }, [active, load]);
+  useEffect(() => {
+    if (!active || !projectId || currentProject || requestedProjectIds.current.has(projectId)) return;
     requestedProjectIds.current.add(projectId);
     void loadProjects();
-  }, [currentProject, loadProjects, projectId]);
+  }, [active, currentProject, loadProjects, projectId]);
 
   const visible = useMemo(() => themes.filter((theme) =>
     (filter === 'all' || theme.tags.includes(filter)) &&
@@ -141,7 +152,7 @@ export function ThemeRepositoryPage() {
   };
 
   return (
-    <RepositoryShell section="theme" onRefresh={() => void load()}>
+    <RepositoryShell section="theme" onRefresh={() => { clearThemeExampleCache(); void load(); }}>
       <div className="flex h-full min-h-0 flex-col">
         <RepositoryPageHeader title="主题" query={query} onQueryChange={setQuery} searchLabel="搜索主题" />
         {loading ? <RepositoryLoading aside /> : error ? <RepositoryState text={error} error /> : (
@@ -156,22 +167,26 @@ export function ThemeRepositoryPage() {
             >
               {visible.length === 0
                 ? <RepositoryState text="没有匹配的主题" className="min-h-40" />
-                : visible.map((theme) => {
+                : themes.map((theme) => {
                   const active = selected?.id === theme.id;
                   return (
-                    <RepositoryDirectoryItem
-                      key={theme.id}
-                      active={active}
-                      name={theme.name}
-                      description={theme.description}
-                      visual={<ThemePreview theme={theme} miniature />}
-                      onClick={() => setSelectedId(theme.id)}
-                    />
+                    <div key={theme.id} hidden={!visible.includes(theme)}>
+                      <RepositoryDirectoryItem
+                        active={active}
+                        name={theme.name}
+                        description={theme.description}
+                        visual={<ThemePreview key={theme.appearance?.hash ?? theme.style_hash} theme={theme} miniature />}
+                        visualAspect="video"
+                        visualClassName="rounded-sm"
+                        onClick={() => setSelectedId(theme.id)}
+                      />
+                    </div>
                   );
                 })}
             </RepositoryCatalog>
             {selected && (
               <RepositoryDetail
+                active={active}
                 label="主题详情"
                 title={selected.name}
                 description={selected.description}
@@ -218,7 +233,7 @@ export function ThemeRepositoryPage() {
                 onDelete={() => deleteTheme(selected)}
               >
                 <div className="aspect-video max-h-full w-full max-w-5xl overflow-hidden rounded-lg border border-border-strong">
-                  <ThemePreview theme={selected} mode={mode} />
+                  <ThemePreviewGallery themes={themes} selected={selected} mode={mode} />
                 </div>
               </RepositoryDetail>
             )}
@@ -228,7 +243,7 @@ export function ThemeRepositoryPage() {
       </div>
       {selected && (
         <RepositoryEditDialog
-          open={editOpen}
+          open={active && editOpen}
           title="编辑主题"
           value={{ name: selected.name, description: selected.description, tags: selected.tags }}
           tagOptions={themeTagOrder.map((tag) => ({ value: tag, label: themeTagLabels[tag] }))}

@@ -1,8 +1,19 @@
 <!--
 ---
 name: "观点引用"
-description: "使用公共引用和辅助文字角色"
+description: "开放式引文与来源署名，保留独立排版，可通过 --quote-block-* 调整外观"
 ---
 -->
-<style>.quote-example {display:grid;gap:28px;max-width:1000px}</style>
-<figure class="quote-example"><blockquote class="quote">先统一表达，再扩大创作自由。</blockquote><figcaption class="caption">产品设计原则</figcaption></figure>
+<style>
+.ppt-quote-block, .ppt-quote-block * { box-sizing: border-box; }
+.ppt-quote-block {
+  width: 100%; max-width: 800px; margin: 0; padding: 32px 0;
+  color: var(--quote-block-ink, #263241); font-family: var(--quote-block-font, "Noto Sans SC", sans-serif);
+}
+.ppt-quote-block__text { margin: 0; font-size: 36px; font-weight: 500; line-height: 1.7; }
+.ppt-quote-block__source { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--quote-block-border, #d9e0e8); color: var(--quote-block-secondary, #526175); font-size: 18px; line-height: 1.5; }
+</style>
+<figure class="ppt-quote-block">
+  <blockquote class="ppt-quote-block__text">“先统一表达，再扩大创作自由。”</blockquote>
+  <figcaption class="ppt-quote-block__source">产品设计原则</figcaption>
+</figure>

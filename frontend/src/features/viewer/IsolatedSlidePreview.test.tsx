@@ -4,6 +4,37 @@ import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import type { RuntimeSlide } from './previewProtocol';
 
 describe('IsolatedSlidePreview runtime errors', () => {
+  it('delays loading feedback and retries failure without replacing the iframe', async () => {
+    const frameWindow = { postMessage: vi.fn() } as unknown as Window;
+    Object.defineProperty(window.HTMLIFrameElement.prototype, 'contentWindow', { configurable: true, get: () => frameWindow });
+    const slide: RuntimeSlide = { id: 's1', html: '<h1>Slide</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: { hash: 'a', theme_css_url: '/a.css', chrome_tokens: {} }, deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, numbering: { visible: true, format: 'number' }, chrome: [] } };
+    const { rerender } = render(<IsolatedSlidePreview slides={[slide]} index={0} title="主题预览" />);
+    const iframe = screen.getByTitle('主题预览');
+    const reply = (type: string, hash: string) => act(() => {
+      window.dispatchEvent(new MessageEvent('message', { source: frameWindow, data: { type, slide_id: 's1', appearance_hash: hash, message: '字体加载失败' } }));
+    });
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(await screen.findByRole('status')).toHaveAccessibleName('正在加载主题外观');
+    expect(screen.getByRole('status')).toHaveTextContent('');
+    reply('themeApplied', 'a');
+    expect(screen.queryByRole('status')).toBeNull();
+
+    const updated = { ...slide, frame: { ...slide.frame, appearance: { hash: 'b', theme_css_url: '/b.css', chrome_tokens: {} } } };
+    rerender(<IsolatedSlidePreview slides={[updated]} index={0} title="主题预览" />);
+    reply('themeApplied', 'a');
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+    reply('themeApplyFailed', 'b');
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('alert')).toHaveTextContent('字体加载失败');
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(frameWindow.postMessage).toHaveBeenCalledWith({ type: 'retryTheme', slide_id: 's1' }, '*');
+    expect(await screen.findByRole('status')).toBeInTheDocument();
+    reply('themeApplied', 'b');
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByTitle('主题预览')).toBe(iframe);
+  });
+
   it('disables selection while showing fallback HTML and rejects replies from an older artifact', () => {
     const postMessage = vi.fn();
     const frameWindow = { postMessage } as unknown as Window;

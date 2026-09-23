@@ -3,6 +3,32 @@
   const slideID = document.currentScript.dataset.slideId;
   let latest = 0;
   let pending = [];
+  let visible = document.documentElement.dataset.previewActive !== 'false';
+  const pausedMedia = new Set();
+  const pausedAnimations = new Set();
+  function setVisibility(active) {
+    visible = active;
+    document.documentElement.dataset.previewActive = String(active);
+    if (!active) {
+      for (const animation of document.getAnimations?.() || []) {
+        if (animation.playState === 'running') { pausedAnimations.add(animation); animation.pause(); }
+      }
+      document.querySelectorAll('video,audio').forEach(media => {
+        if (!media.paused) { pausedMedia.add(media); media.pause(); }
+      });
+    } else {
+      pausedAnimations.forEach(animation => animation.play());
+      pausedAnimations.clear();
+      pausedMedia.forEach(media => { media.play()?.catch(() => {}); });
+      pausedMedia.clear();
+    }
+  }
+  document.addEventListener('play', event => {
+    if (!visible && event.target instanceof HTMLMediaElement) {
+      pausedMedia.add(event.target);
+      event.target.pause();
+    }
+  }, true);
 
   function send(type, detail) {
     parent.postMessage({ bridge: 'ppt-theme-v1', slide_id: slideID, type, ...detail }, '*');
@@ -41,23 +67,36 @@
     }
     const previous = document.getElementById('theme-link');
     const previousBase = document.getElementById('base-link');
-    const link = stagedLink(message.appearance.theme_css_url);
-    const base = stagedLink('/api/v1/runtime/base.css');
-    pending = [base, link];
+    // Initial HTML already links the same theme. Reuse successful loads instead
+    // of requesting both stylesheets a second time during the bridge handshake.
+    const currentHash = document.documentElement.dataset.appearance;
+    const reuse = previous?.sheet && previousBase?.sheet
+      && previous.href === new URL(message.appearance.theme_css_url, document.baseURI).href
+      && (!currentHash || currentHash === message.appearance.hash);
+    const link = reuse ? previous : stagedLink(message.appearance.theme_css_url);
+    const base = reuse ? previousBase : stagedLink('/api/v1/runtime/base.css');
+    pending = reuse ? [] : [base, link];
     const ready = Promise.all(pending.map(waitForLink));
-    previousBase.after(base);
-    previous.after(link);
+    if (!reuse) {
+      previousBase.after(base);
+      previous.after(link);
+    }
     try {
       await ready;
       await window.PPTFonts.prepare();
-      if (request !== latest) { base.remove(); link.remove(); return; }
+      if (request !== latest) {
+        if (!reuse) { base.remove(); link.remove(); }
+        return;
+      }
       // One synchronous commit; page CSS remains last in the cascade.
-      previousBase.remove();
-      previous.remove();
-      base.id = 'base-link';
-      link.id = 'theme-link';
-      base.media = 'all';
-      link.media = 'all';
+      if (!reuse) {
+        previousBase.remove();
+        previous.remove();
+        base.id = 'base-link';
+        link.id = 'theme-link';
+        base.media = 'all';
+        link.media = 'all';
+      }
       pending = [];
       document.documentElement.dataset.theme = message.theme_id;
       document.documentElement.dataset.appearance = message.appearance.hash;
@@ -66,8 +105,7 @@
       }));
       send('themeApplied', { request_id: request, appearance_hash: message.appearance.hash });
     } catch (error) {
-      base.remove();
-      link.remove();
+      if (!reuse) { base.remove(); link.remove(); }
       if (request === latest) {
         pending = [];
         send('themeApplyFailed', { request_id: request, message: error.message || '主题资源加载失败' });
@@ -77,7 +115,9 @@
   window.addEventListener('message', event => {
     const message = event.data;
     if (event.source !== parent || message?.bridge !== 'ppt-theme-v1' || message.slide_id !== slideID) return;
-    if (message.type === 'cancelTheme') {
+    if (message.type === 'setPreviewVisibility' && typeof message.active === 'boolean') {
+      setVisibility(message.active);
+    } else if (message.type === 'cancelTheme') {
       latest = message.request_id;
       cancelPending();
     } else if (message.type === 'applyTheme' && Number.isInteger(message.request_id)) {

@@ -171,8 +171,7 @@ export function PromptRepositoryPage() {
                 onEdit={() => setEditOpen(true)}
                 onDelete={() => remove(selected)}
               >
-                <article className="relative w-fit max-w-full rounded-xl border border-border bg-surface px-8 pb-8 pt-10 shadow-[0_18px_42px_rgba(51,65,85,0.11)] md:px-11 md:pb-10 md:pt-12">
-                  <span aria-hidden="true" className="absolute left-6 top-5 h-[3px] w-7 rounded-full bg-accent md:left-7 md:top-6" />
+                <article className="w-fit max-w-full rounded-xl border border-border bg-surface px-8 py-8 shadow-[0_18px_42px_rgba(51,65,85,0.11)] md:px-11 md:py-10">
                   <p className="m-0 whitespace-pre-wrap break-words text-lg font-semibold leading-8 tracking-[0.01em] text-[#243142] md:text-xl md:leading-9">
                     {selected.value}
                   </p>

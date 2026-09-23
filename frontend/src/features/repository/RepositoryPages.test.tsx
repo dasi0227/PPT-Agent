@@ -7,6 +7,7 @@ import { useToastStore } from '../../stores/toastStore';
 import { ComponentRepositoryPage } from './ComponentRepositoryPage';
 import { SkillRepositoryPage } from './SkillRepositoryPage';
 import { ThemeRepositoryPage } from './ThemeRepositoryPage';
+import { clearThemeExampleCache } from './ThemePreview';
 
 const mocks = vi.hoisted(() => ({
   themeExample: vi.fn(),
@@ -117,7 +118,7 @@ function project(theme: string): Project {
 function projectContent(theme: string): ProjectContentSnapshot {
   return {
     appearance: null,
-    hashes: { outline: "outline-hash" },
+    hashes: { outline: "outline-hash", design: `design-${theme}` },
     manifest: { version: '5.0', project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
     outline: { version: '5.0', project_id: 'project-7', sections: [], created_at: 1, updated_at: 1 },
     design: { version: '5.0',  project_id: 'project-7', theme, direction: '', chrome: [], created_at: 1, updated_at: theme === 'editorial-serif' ? 1 : 2 },
@@ -128,6 +129,7 @@ function projectContent(theme: string): ProjectContentSnapshot {
 describe('personal repository pages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearThemeExampleCache();
     mocks.themeExample.mockImplementation(async (name:string)=>({html:`<main class="slide-stage">${name}</main>`}));
     mocks.getTheme.mockImplementation(async(id:string)=>themeFixtures().find(theme=>theme.id===id));
     vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} unobserve() {} });
@@ -185,12 +187,35 @@ describe('personal repository pages', () => {
     await waitFor(()=>expect(mocks.themeExample).toHaveBeenCalledWith('content'));
     fireEvent.click(screen.getByRole('button', { name: '图表页' }));
     await waitFor(()=>expect(mocks.themeExample).toHaveBeenCalledWith('chart'));
-    await screen.findByTitle('Blueprint 主题预览');
+    const activePreview = () => document.querySelector('[data-preview-active="true"] iframe');
+    await waitFor(() => expect(activePreview()).toHaveAttribute('title', 'Blueprint 主题预览'));
     fireEvent.change(screen.getByLabelText('搜索主题'), { target: { value: 'dark' } });
-    expect(screen.getByTitle('Blueprint 主题预览')).toBeInTheDocument();
-    expect(screen.queryByTitle('Editorial Serif 主题预览')).not.toBeInTheDocument();
+    expect(activePreview()).toHaveAttribute('title', 'Blueprint 主题预览');
+    expect(preview).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('搜索主题'), { target: { value: 'minimal' } });
-    expect(screen.getByTitle('Editorial Serif 主题预览')).toBeInTheDocument();
+    await waitFor(() => expect(activePreview()).toHaveAttribute('title', 'Editorial Serif 主题预览'));
+    fireEvent.click(screen.getByRole('button', { name: '封面页' }));
+    expect(activePreview()).toBe(preview);
+  });
+
+  it('retains the selected preview while revalidating after a return or refresh', async () => {
+    const themes = themeFixtures();
+    mocks.listThemes.mockResolvedValue({ themes });
+    const { rerender } = render(<MemoryRouter><ThemeRepositoryPage active /></MemoryRouter>);
+    await screen.findByTitle('Editorial Serif 主题预览');
+    fireEvent.click(screen.getByRole('button', { name: /Blueprint/ }));
+    const preview = await screen.findByTitle('Blueprint 主题预览');
+    let finish!: (value: { themes: Theme[] }) => void;
+    mocks.listThemes.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    rerender(<MemoryRouter><ThemeRepositoryPage active={false} /></MemoryRouter>);
+    rerender(<MemoryRouter><ThemeRepositoryPage active /></MemoryRouter>);
+    expect(screen.getByTitle('Blueprint 主题预览')).toBe(preview);
+    finish({ themes: themes.map(theme => ({ ...theme })) });
+    await waitFor(() => expect(mocks.listThemes).toHaveBeenCalledTimes(2));
+    expect(screen.getByTitle('Blueprint 主题预览')).toBe(preview);
+    fireEvent.click(screen.getByRole('button', { name: '刷新仓库' }));
+    expect(screen.getByTitle('Blueprint 主题预览')).toBe(preview);
+    finish({ themes });
   });
 
   it('applies the previewed theme to the active project and synchronizes project state', async () => {
@@ -311,6 +336,7 @@ describe('personal repository pages', () => {
   });
 
   it('filters components by tags and previews HTML only in sandboxed iframes', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
     const components = [
       {
         id: 'feature-card',
@@ -338,15 +364,23 @@ describe('personal repository pages', () => {
 
     const detail = await screen.findByTitle('Feature Card 组件预览');
     const thumbnail = screen.getByTitle('Feature Card 缩略预览');
-    expect(thumbnail).toHaveAttribute('src', '/slide-runtime/index.html');
+    expect(thumbnail).toHaveAttribute('srcdoc');
+    expect(mocks.getTheme).not.toHaveBeenCalled();
+    expect(mocks.listThemes).not.toHaveBeenCalled();
+    expect(detail.getAttribute('srcdoc')).toContain(components[0].html);
+    expect(detail.getAttribute('srcdoc')).not.toContain('/api/v1/themes/');
+    expect(detail.getAttribute('srcdoc')).not.toContain('/api/v1/runtime/base.css');
     expect(screen.getByPlaceholderText('搜索组件')).toBeInTheDocument();
     expect(detail).toHaveAttribute('sandbox', 'allow-scripts');
-    expect(detail.parentElement?.parentElement).toHaveClass('aspect-video');
+    expect(detail.closest('.aspect-video')).toBeInTheDocument();
     expect(document.querySelector('[data-repository-workspace]')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '卡片' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '其它' }));
-    expect(screen.getByTitle('Quote Block 组件预览')).toHaveAttribute('sandbox', '');
-    expect(screen.queryByTitle('Feature Card 组件预览')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Quote Block 组件预览')).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(detail.closest('[data-preview-active]')).toHaveAttribute('aria-hidden', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '卡片' }));
+    expect(screen.getByTitle('Feature Card 组件预览')).toBe(detail);
+    expect(detail.closest('[data-preview-active]')).toHaveAttribute('data-preview-active', 'true');
   });
 
   it('rolls back a failed optimistic Skill toggle and reports the error', async () => {

@@ -11,6 +11,7 @@ const advance = (id: string) => { const next = (requestVersions.get(id) ?? 0) + 
 const contentChecks = new Map<string, Promise<void>>();
 
 function sameContent(a: ProjectContentSnapshot, b: ProjectContentSnapshot): boolean {
+  if (a.appearance?.hash !== b.appearance?.hash) return false;
   const aHashes = Object.entries(a.hashes);
   if (aHashes.length !== Object.keys(b.hashes).length || aHashes.some(([key, value]) => b.hashes[key] !== value)) return false;
   const aSlides = Object.entries(a.slides_by_id);

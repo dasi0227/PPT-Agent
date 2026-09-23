@@ -1,8 +1,18 @@
 <!--
 ---
 name: "键值列表"
-description: "采用开放列表呈现名称、数值与状态"
+description: "名称、数值与状态组成的开放列表，可通过 --kv-list-* 调整外观"
 ---
 -->
-<style>.kv-list {max-width:900px;margin:0}.kv-row {display:grid;grid-template-columns:1fr 1fr auto;gap:24px;padding:24px 0;border-bottom:var(--border-width) solid var(--color-border)}.kv-row dd {margin:0}</style>
-<dl class="kv-list"><div class="kv-row"><dt class="caption">项目阶段</dt><dd class="slide-body">视觉定稿</dd><dd class="pill">进行中</dd></div><div class="kv-row"><dt class="caption">页面数量</dt><dd class="slide-body">18 页</dd><dd class="pill">已确认</dd></div></dl>
+<style>
+.ppt-kv-list, .ppt-kv-list * { box-sizing: border-box; }
+.ppt-kv-list { width: 100%; max-width: 820px; margin: 0; color: var(--kv-list-ink, #263241); font: 22px/1.5 var(--kv-list-font, "Noto Sans SC", sans-serif); }
+.ppt-kv-list__row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 24px; align-items: center; padding: 28px 0; border-bottom: 1px solid var(--kv-list-border, #d9e0e8); }
+.ppt-kv-list__row dt { color: var(--kv-list-secondary, #526175); }
+.ppt-kv-list__row dd { margin: 0; }
+.ppt-kv-list__status { padding: 4px 12px; border-radius: 4px; font-size: 16px; color: var(--kv-list-status-ink, #335a4d); background: var(--kv-list-status-surface, #edf4ef); }
+</style>
+<dl class="ppt-kv-list">
+  <div class="ppt-kv-list__row"><dt>项目阶段</dt><dd>视觉定稿</dd><dd class="ppt-kv-list__status">进行中</dd></div>
+  <div class="ppt-kv-list__row"><dt>页面数量</dt><dd>18 页</dd><dd class="ppt-kv-list__status">已确认</dd></div>
+</dl>

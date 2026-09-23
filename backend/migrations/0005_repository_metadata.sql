@@ -71,6 +71,5 @@ INSERT INTO resource_tags(resource_type, resource_id, tag_id) VALUES
     ('component', 'kv-list', 'tag_component_list'),
     ('component', 'stat-badge', 'tag_component_metric'),
     ('component', 'quote-block', 'tag_component_other'),
-    ('skill', 'story-architect', 'tag_skill_methodology'),
-    ('skill', 'executive-summary', 'tag_skill_workflow'),
-    ('skill', 'visual-hierarchy-review', 'tag_skill_manual');
+    ('skill', 'frontend-design', 'tag_skill_methodology'),
+    ('skill', 'design-taste-frontend', 'tag_skill_methodology');

@@ -1,7 +1,12 @@
 <!--
 ---
 name: "关键指标"
-description: "公共指标角色与强调容器组合"
+description: "开放式大数字指标与说明，可通过 --stat-badge-* 调整外观，无强制容器"
 ---
 -->
-<div class="card card-accent metric"><span class="metric-value">42%</span><span class="metric-label">流程效率提升 · 示例数据</span></div>
+<style>
+.ppt-stat-badge { display: grid; gap: 16px; width: 100%; max-width: 600px; padding: 24px 0; color: var(--stat-badge-ink, #263241); font-family: var(--stat-badge-font, "Noto Sans SC", sans-serif); }
+.ppt-stat-badge__value { color: var(--stat-badge-accent, #325fa8); font-size: 92px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.ppt-stat-badge__label { color: var(--stat-badge-secondary, #526175); font-size: 22px; line-height: 1.6; }
+</style>
+<div class="ppt-stat-badge"><strong class="ppt-stat-badge__value">42%</strong><span class="ppt-stat-badge__label">流程效率提升 · 示例数据</span></div>

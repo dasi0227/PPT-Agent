@@ -1,6 +1,6 @@
 import { ProjectHistoryDialogs } from './features/agent/ProjectHistoryControls';
-import { useEffect } from 'react';
-import { createBrowserRouter, Outlet, RouterProvider } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { createBrowserRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { GlobalToasts } from './components/ui/GlobalToasts';
 import { GlobalModals } from './features/workspace/GlobalModals';
@@ -27,7 +27,18 @@ export function App() {
 }
 
 function AppLayout() {
-  return <><Outlet /><ProjectHistoryDialogs /><GlobalModals /><GlobalToasts /></>;
+  const { pathname } = useLocation();
+  const themeActive = pathname.replace(/\/+$/, '').toLowerCase() === '/warehouse/theme';
+  const [themeVisited, setThemeVisited] = useState(themeActive);
+  useEffect(() => { if (themeActive) setThemeVisited(true); }, [themeActive]);
+  return <>
+    {(themeActive || themeVisited) && (
+      <div hidden={!themeActive} {...(!themeActive ? { inert: '' } : {})}>
+        <ThemeRepositoryPage active={themeActive} />
+      </div>
+    )}
+    <Outlet /><ProjectHistoryDialogs /><GlobalModals /><GlobalToasts />
+  </>;
 }
 
 const router = createBrowserRouter([{
@@ -35,7 +46,7 @@ const router = createBrowserRouter([{
   children: [
     { path: '/', element: <WorkspaceRoute /> },
     { path: '/projects/:projectId', element: <WorkspaceRoute /> },
-    { path: '/warehouse/theme', element: <ThemeRepositoryPage /> },
+    { path: '/warehouse/theme', element: null },
     { path: '/warehouse/component', element: <ComponentRepositoryPage /> },
     { path: '/warehouse/skill', element: <SkillRepositoryPage /> },
     { path: '/warehouse/prompt', element: <PromptRepositoryPage /> },

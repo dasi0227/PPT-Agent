@@ -224,3 +224,25 @@ func TestThemeCSSRejectsStaleStyleVersion(t *testing.T) {
 		t.Fatalf("obsolete CSS version served as current: %d", got.Code)
 	}
 }
+
+func TestRuntimeResourceCacheValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/resource", func(c *gin.Context) {
+		serveRuntimeResource(c, "text/css", []byte("body{}"), c.Query("v") != "")
+	})
+	initial := performRepositoryRequest(t, engine, http.MethodGet, "/resource?v=hash", "")
+	if initial.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" || initial.Header().Get("ETag") == "" {
+		t.Fatalf("missing versioned caching headers: %v", initial.Header())
+	}
+	request := httptest.NewRequest(http.MethodGet, "/resource", nil)
+	request.Header.Set("If-None-Match", initial.Header().Get("ETag"))
+	response := httptest.NewRecorder()
+	engine.ServeHTTP(response, request)
+	if response.Code != http.StatusNotModified || response.Body.Len() != 0 {
+		t.Fatalf("unchanged resource resent: %d %s", response.Code, response.Body.String())
+	}
+	if response.Header().Get("Cache-Control") != "public, no-cache" {
+		t.Fatalf("unversioned resource must revalidate: %v", response.Header())
+	}
+}

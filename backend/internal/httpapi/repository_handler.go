@@ -23,13 +23,11 @@ func NewRepositoryHandler(themes *service.ThemeService, components *service.Comp
 }
 
 func (h *RepositoryHandler) RuntimeBaseCSS(c *gin.Context) {
-	c.Header("Cache-Control", "no-cache")
-	c.Data(http.StatusOK, "text/css; charset=utf-8", runtimeassets.BaseCSS())
+	serveRuntimeResource(c, "text/css; charset=utf-8", runtimeassets.BaseCSS(), false)
 }
 
 func (h *RepositoryHandler) RuntimeChromeJS(c *gin.Context) {
-	c.Header("Cache-Control", "no-cache")
-	c.Data(http.StatusOK, "application/javascript; charset=utf-8", runtimeassets.ChromeJS())
+	serveRuntimeResource(c, "application/javascript; charset=utf-8", runtimeassets.ChromeJS(), false)
 }
 
 func (h *RepositoryHandler) ListThemes(c *gin.Context) {
@@ -86,8 +84,7 @@ func (h *RepositoryHandler) ThemeCSS(c *gin.Context) {
 		c.Status(http.StatusConflict)
 		return
 	}
-	c.Header("Cache-Control", "no-cache")
-	c.Data(http.StatusOK, "text/css; charset=utf-8", raw)
+	serveRuntimeResource(c, "text/css; charset=utf-8", raw, c.Query("v") != "")
 }
 
 func (h *RepositoryHandler) ListComponents(c *gin.Context) {
@@ -243,9 +240,8 @@ func (h *RepositoryHandler) runtimeResource(c *gin.Context, name string) {
 	case ".ttf":
 		contentType = "font/ttf"
 	}
-	c.Header("Cache-Control", "no-cache")
 	c.Header("Access-Control-Allow-Origin", "*")
-	c.Data(http.StatusOK, contentType, raw)
+	serveRuntimeResource(c, contentType, raw, false)
 }
 func (h *RepositoryHandler) RuntimeExample(c *gin.Context) {
 	name := c.Param("name")
@@ -259,4 +255,23 @@ func (h *RepositoryHandler) RuntimeExample(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"html": string(raw)})
+}
+
+// Content-addressed theme URLs remain reusable; unversioned runtime assets revalidate.
+func serveRuntimeResource(c *gin.Context, contentType string, raw []byte, immutable bool) {
+	cacheControl := "public, no-cache"
+	if immutable {
+		cacheControl = "public, max-age=31536000, immutable"
+	}
+	c.Header("Cache-Control", cacheControl)
+	etag := `"` + runtimeassets.Hash(raw) + `"`
+	c.Header("ETag", etag)
+	for _, candidate := range strings.Split(c.GetHeader("If-None-Match"), ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "*" || strings.TrimPrefix(candidate, "W/") == etag {
+			c.Status(http.StatusNotModified)
+			return
+		}
+	}
+	c.Data(http.StatusOK, contentType, raw)
 }

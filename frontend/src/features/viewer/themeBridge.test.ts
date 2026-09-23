@@ -14,7 +14,7 @@ function fixture() {
   const messages = vi.spyOn(dom.window, 'postMessage');
   const original = dom.window.document.getElementById('theme-link');
   const apply = (request: number) => {
-    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { source: dom.window, data: {
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', { source: dom.window as unknown as Window, data: {
       bridge:'ppt-theme-v1',type:'applyTheme',slide_id:'s1',request_id:request,theme_id:`theme-${request}`,
       appearance:{hash:`hash-${request}`,theme_css_url:`/theme-${request}.css`,chrome_tokens:{}},
     } }));
@@ -40,6 +40,21 @@ describe('resource-only theme application', () => {
       expect(f.dom.window.executions).toBe(1);
       const applied=f.messages.mock.calls.map(([message])=>message).filter(message=>message.type==='themeApplied');
       expect(applied.map(message=>message.appearance_hash)).toEqual(['hash-2']);
+    } finally { f.dom.window.close(); }
+  });
+
+  it('reuses already loaded initial styles without staging duplicate links', async () => {
+    const f = fixture();
+    try {
+      const base = f.dom.window.document.getElementById('base-link')!;
+      f.original!.setAttribute('href', '/theme-1.css');
+      Object.defineProperty(f.original, 'sheet', { value: {} });
+      Object.defineProperty(base, 'sheet', { value: {} });
+      f.apply(1);
+      await flush();
+      expect(f.dom.window.document.querySelectorAll('link')).toHaveLength(2);
+      expect(f.dom.window.document.getElementById('theme-link')).toBe(f.original);
+      expect(f.messages.mock.calls.some(([message]) => message.type === 'themeApplied')).toBe(true);
     } finally { f.dom.window.close(); }
   });
 

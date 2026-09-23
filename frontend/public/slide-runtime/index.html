@@ -61,7 +61,9 @@
     const state = {
       slides: [],
       activeIndex: 0,
+      visible: true,
       activeExecution: null,
+      executions: new Map(),
       selection: { mode: 'none', sessionID: '', slideID: '', hash: '' },
       drafts: new Map()
     };
@@ -191,9 +193,13 @@
       ));
     }
 
-    function normalizeSlideHTML(source, appearance, projectID, slideID) {
+    function normalizeSlideHTML(source, appearance, projectID, slideID, visible) {
 		const document = new DOMParser().parseFromString(bridgeAttachmentPaths(source, projectID), 'text/html');
       const head = document.head;
+      document.documentElement.dataset.previewActive = String(visible);
+      const suspension = document.createElement('style');
+      suspension.textContent = 'html[data-preview-active="false"] *,html[data-preview-active="false"] *::before,html[data-preview-active="false"] *::after{animation-play-state:paused!important}';
+      head.appendChild(suspension);
       head.querySelectorAll('link').forEach((link) => {
         const id = link.getAttribute('id');
         const href = link.getAttribute('href') || '';
@@ -230,32 +236,95 @@
       wrapper.style.setProperty('--runtime-canvas-scale', String(Math.min(availableWidth / canvas.width, availableHeight / canvas.height)));
     }
 
+    const MAX_EXECUTIONS = 5;
+    let preloadTimer;
+
+    function matches(execution, slide) {
+      return execution && execution.container.isConnected && execution.html === slide.html
+        && execution.projectID === slide.frame.project_id;
+    }
+
+    function evictExecutions() {
+      for (const [id, execution] of state.executions) {
+        if (state.executions.size <= MAX_EXECUTIONS) break;
+        if (execution === state.activeExecution) continue;
+        execution.container.remove();
+        state.executions.delete(id);
+      }
+    }
+
+    function prepareNeighbors() {
+      clearTimeout(preloadTimer);
+      if (!state.activeExecution?.appliedHash) return;
+      preloadTimer = setTimeout(() => {
+        for (const index of [state.activeIndex + 1, state.activeIndex - 1]) {
+          const slide = state.slides[index];
+          if (!slide) continue;
+          let execution = state.executions.get(slide.id);
+          if (!matches(execution, slide)) {
+            execution?.container.remove();
+            state.executions.delete(slide.id);
+            execution = createExecution(slide, index);
+          }
+          if (execution.ready && execution.requestedHash !== (slide.frame.appearance?.hash || 'unavailable')) {
+            requestAppearance(slide, false, execution);
+          }
+        }
+        evictExecutions();
+      }, 150);
+    }
+
     function renderSlide(index, forceReplay = false) {
       if (!isIndex(index) || index >= state.slides.length) return false;
+      clearTimeout(preloadTimer);
       const slide = state.slides[index];
-      const execution = state.activeExecution;
-      const canReuse = !forceReplay
-        && execution
-        && execution.container.isConnected
-        && execution.slideID === slide.id
-        && execution.html === slide.html;
-
-      if (canReuse) {
-        state.activeIndex = index;
-        execution.container.dataset.index = String(index);
-        execution.container.querySelector('iframe').title = `Slide ${index + 1}`;
-        if (execution.requestedHash !== (slide.frame.appearance?.hash || 'unavailable')) requestAppearance(slide);
-        else if(execution.appliedHash===slide.frame.appearance?.hash && execution.appliedHash) applyRuntimeFrame(execution.container,slide.frame);
-        fitCanvas(execution.container, slide.frame.canvas);
-        postModeToInner();
-        return true;
+      let execution = state.executions.get(slide.id);
+      if (forceReplay || !matches(execution, slide)) {
+        execution?.container.remove();
+        state.executions.delete(slide.id);
+        execution = createExecution(slide, index, state.visible);
       }
+      // Keep the iframe connected. Moving or detaching it would restart the document.
+      state.activeIndex = index;
+      state.activeExecution = execution;
+      state.executions.delete(slide.id);
+      state.executions.set(slide.id, execution);
+      for (const cached of state.executions.values()) {
+        const active = cached === execution;
+        cached.container.dataset.active = String(active);
+        cached.container.style.visibility = active ? '' : 'hidden';
+        cached.container.style.pointerEvents = active ? '' : 'none';
+        cached.container.toggleAttribute('inert', !active);
+        cached.container.setAttribute('aria-hidden', String(!active));
+        sendVisibility(cached);
+      }
+      execution.container.dataset.index = String(index);
+      execution.container.querySelector('iframe').title = `Slide ${index + 1}`;
+      const hash = slide.frame.appearance?.hash || 'unavailable';
+      if (execution.appliedHash === hash) {
+        applyRuntimeFrame(execution.container, slide.frame);
+        window.parent.postMessage({type:'themeApplied',slide_id:slide.id,appearance_hash:hash}, '*');
+        prepareNeighbors();
+      } else {
+        window.parent.postMessage({type:'themeApplying',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || ''}, '*');
+        if (execution.requestedHash !== hash || execution.error) requestAppearance(slide, false, execution);
+      }
+      fitCanvas(execution.container, slide.frame.canvas);
+      renderDrafts(slide.id);
+      postModeToInner();
+      evictExecutions();
+      return true;
+    }
 
-      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.appearance, slide.frame.project_id, slide.id);
+    function createExecution(slide, index, visible = false) {
+      const normalizedHTML = normalizeSlideHTML(slide.html, slide.frame.appearance, slide.frame.project_id, slide.id, visible);
       const container = document.createElement('div');
       container.className = 'runtime-slide';
       container.dataset.slideFrame = 'true';
-      container.dataset.active = 'true';
+      container.dataset.active = 'false';
+      container.style.visibility = 'hidden';
+      container.style.pointerEvents = 'none';
+      container.setAttribute('inert', '');
       container.dataset.slideId = slide.id;
       container.dataset.index = String(index);
 
@@ -289,40 +358,57 @@
       container.appendChild(canvas);
 
 
-      state.activeIndex = index;
-      state.activeExecution = {
-        slideID: slide.id,
+      const execution = {
+        slideID: slide.id, projectID: slide.frame.project_id,
         html: slide.html,
         appliedHash: null, requestedHash: null, requestID:0, ready:false,
         container
       };
-      deck.replaceChildren(container);
+      state.executions.set(slide.id, execution);
+      deck.appendChild(container);
       fitCanvas(container, slide.frame.canvas);
       renderDrafts(slide.id);
-      postModeToInner();
-      return true;
+      return execution;
+    }
+
+    function sendVisibility(execution) {
+      execution.container.querySelector('iframe').contentWindow.postMessage({
+        bridge: 'ppt-theme-v1', type: 'setPreviewVisibility', slide_id: execution.slideID,
+        active: state.visible && execution === state.activeExecution,
+      }, '*');
     }
 
     let appearanceSequence=0;
-    async function requestAppearance(slide, force=false) {
-      const execution=state.activeExecution;
+    async function requestAppearance(slide, force=false, execution=state.activeExecution) {
       if(!execution || execution.slideID!==slide.id || !execution.ready) return;
       const hash=slide.frame.appearance?.hash || 'unavailable';
-      if(!force && execution.requestedHash===hash)return;
+      if(!force && execution.requestedHash===hash && !execution.error)return;
+      execution.error = null;
       const request=++appearanceSequence;execution.requestID=request;execution.requestedHash=hash;
       execution.container.querySelector('iframe').contentWindow.postMessage({bridge:'ppt-theme-v1',type:'cancelTheme',slide_id:slide.id,request_id:request},'*');
-      window.parent.postMessage({type:'themeApplying',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || ''},'*');
+      if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplying',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || ''},'*');
       try {
         if(!slide.frame.appearance)throw new Error('当前主题不可用，请从主题仓库选择现有主题');
         await window.PPTFonts.prepare();
-        if(state.activeExecution!==execution || request!==execution.requestID)return;
+        if(state.executions.get(slide.id)!==execution || request!==execution.requestID)return;
         execution.container.querySelector('iframe').contentWindow.postMessage({bridge:'ppt-theme-v1',type:'applyTheme',slide_id:slide.id,request_id:request,appearance:slide.frame.appearance,theme_id:slide.frame.theme_id},'*');
       }catch(error){
-        if(state.activeExecution===execution&&request===execution.requestID)window.parent.postMessage({type:'themeApplyFailed',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || '',message:error.message},'*');
+        if(state.executions.get(slide.id)===execution && request===execution.requestID) {
+          execution.error = error.message;
+          if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplyFailed',slide_id:slide.id,appearance_hash:slide.frame.appearance?.hash || '',message:error.message},'*');
+        }
       }
     }
 
     function updateDeck(slides, index) {
+      clearTimeout(preloadTimer);
+      for (const [id, execution] of state.executions) {
+        const slide = slides.find(slide => slide.id === id);
+        if (!slide || !matches(execution, slide)) {
+          execution.container.remove();
+          state.executions.delete(id);
+        }
+      }
       if (slides.length === 0) {
         state.slides = [];
         state.activeIndex = 0;
@@ -403,25 +489,36 @@
     }
 
     window.addEventListener('message', (event) => {
-      const active = deck.querySelector('[data-slide-frame][data-active="true"]');
-      const inner = active && active.querySelector('iframe');
-      if (inner && event.source === inner.contentWindow) {
-        const message = event.data;
-        if (message?.bridge === 'ppt-theme-v1' && message.slide_id === state.activeExecution?.slideID) {
-          const execution=state.activeExecution;
-          const current=state.slides[state.activeIndex];
-          if(message.type==='themeBridgeReady') {execution.ready=true;requestAppearance(current,true);}
-          else if(message.request_id===execution.requestID && execution.requestedHash===(current.frame.appearance?.hash || 'unavailable')) {
-            if(message.type==='themeApplied') {
-              execution.appliedHash=message.appearance_hash;
-              applyRuntimeFrame(execution.container,current.frame);postModeToInner();
-              window.parent.postMessage({type:'themeApplied',slide_id:current.id,appearance_hash:message.appearance_hash},'*');
-            } else if(message.type==='themeApplyFailed') {
-              window.parent.postMessage({type:'themeApplyFailed',slide_id:current.id,appearance_hash:current.frame.appearance?.hash || '',message:message.message},'*');
+      const execution = Array.from(state.executions.values()).find(value =>
+        value.container.querySelector('iframe').contentWindow === event.source);
+      const message = event.data;
+      if (execution && message?.bridge === 'ppt-theme-v1' && message.slide_id === execution.slideID) {
+        const current = state.slides.find(slide => slide.id === execution.slideID);
+        if (!current) return;
+        if (message.type === 'themeBridgeReady') {
+          execution.ready = true;
+          sendVisibility(execution);
+          requestAppearance(current, true, execution);
+        } else if (message.request_id === execution.requestID
+          && execution.requestedHash === (current.frame.appearance?.hash || 'unavailable')) {
+          if (message.type === 'themeApplied' && message.appearance_hash === execution.requestedHash) {
+            execution.appliedHash = message.appearance_hash;
+            execution.error = null;
+            applyRuntimeFrame(execution.container, current.frame);
+            if (execution === state.activeExecution) {
+              postModeToInner();
+              window.parent.postMessage({type:'themeApplied',slide_id:current.id,appearance_hash:message.appearance_hash}, '*');
+              prepareNeighbors();
             }
+          } else if (message.type === 'themeApplyFailed') {
+            execution.error = message.message;
+            if (execution === state.activeExecution) window.parent.postMessage({type:'themeApplyFailed',slide_id:current.id,appearance_hash:current.frame.appearance?.hash || '',message:message.message}, '*');
           }
-          return;
         }
+        return;
+      }
+      const active = state.activeExecution?.container;
+      if (execution && execution === state.activeExecution) {
         if (!message || message.bridge !== 'ppt-dom-selection-v1' || message.slide_id !== state.selection.slideID || message.session_id !== state.selection.sessionID) return;
         if (message.type === 'innerSelectionCreated') {
           const selection = message.selection;
@@ -470,6 +567,9 @@
           updateDeck(event.data.slides, event.data.index);
         } else if (isGotoSlide(event.data)) {
           renderSlide(event.data.index);
+        } else if (event.data?.type === 'setPreviewVisibility' && typeof event.data.active === 'boolean') {
+          state.visible = event.data.active;
+          for (const execution of state.executions.values()) sendVisibility(execution);
         } else if (event.data?.type === 'retryTheme') {
           const current=state.slides[state.activeIndex];if(current?.id===event.data.slide_id)requestAppearance(current,true);
         } else if (isReplayCurrentSlide(event.data)) {

@@ -1,8 +1,27 @@
 <!--
 ---
 name: "能力卡片"
-description: "聚焦一项能力，组合公共容器与文字角色"
+description: "带独立标记与说明的能力卡片，可通过 --feature-card-* 调整外观"
 ---
 -->
-<style>.feature { display:grid; grid-template-columns:auto 1fr; gap:32px; max-width:880px; }.feature-copy {display:grid;gap:20px}</style>
-<article class="card feature"><span class="pill">AI</span><div class="feature-copy"><p class="kicker">核心能力</p><h3 class="section-title">从需求到完整表达</h3><p class="slide-body">理解目标、组织叙事，生成可以继续编辑的页面。</p></div></article>
+<style>
+.ppt-feature-card, .ppt-feature-card * { box-sizing: border-box; }
+.ppt-feature-card {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 28px;
+  width: 100%; max-width: 800px; padding: 36px;
+  border: 1px solid var(--feature-card-border, #d9e0e8); border-radius: 12px;
+  background: var(--feature-card-surface, #fff); color: var(--feature-card-ink, #263241);
+  font-family: var(--feature-card-font, "Noto Sans SC", sans-serif); line-height: 1.5;
+}
+.ppt-feature-card__mark {
+  display: grid; place-items: center; width: 56px; height: 56px; border-radius: 8px;
+  background: var(--feature-card-accent, #325fa8); color: var(--feature-card-on-accent, #fff);
+  font-size: 20px; font-weight: 700;
+}
+.ppt-feature-card__title { margin: 0; font: 700 30px/1.35 var(--feature-card-font, "Noto Sans SC", sans-serif); color: inherit; }
+.ppt-feature-card__body { margin: 16px 0 0; font-size: 20px; line-height: 1.65; color: var(--feature-card-secondary, #526175); }
+</style>
+<article class="ppt-feature-card">
+  <span class="ppt-feature-card__mark">AI</span>
+  <div><h3 class="ppt-feature-card__title">从需求到完整表达</h3><p class="ppt-feature-card__body">理解目标、组织叙事，生成可以继续编辑的页面。</p></div>
+</article>

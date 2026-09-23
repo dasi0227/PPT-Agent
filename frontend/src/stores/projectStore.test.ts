@@ -46,6 +46,15 @@ describe('projectStore canonical content snapshots', () => {
     expect(useProjectStore.getState().contentByProjectId.pro_1).toEqual(snapshot(1));
   });
 
+  it('refreshes appearance even when project content hashes are unchanged', async () => {
+    const original = { ...snapshot(1), appearance: { hash: 'old', theme_css_url: '/theme.css?v=old', chrome_tokens: {} } };
+    const changed = { ...original, appearance: { ...original.appearance, hash: 'new', theme_css_url: '/theme.css?v=new' } };
+    useProjectStore.setState({ contentByProjectId: { pro_1: original } });
+    getContent.mockResolvedValue(changed);
+    await useProjectStore.getState().checkProjectContent('pro_1');
+    expect(useProjectStore.getState().contentByProjectId.pro_1.appearance?.hash).toBe('new');
+  });
+
   it('checks content silently and keeps the same snapshot when nothing changed', async () => {
     const original = snapshot(1);
     useProjectStore.setState({ contentByProjectId: { pro_1: original } });
