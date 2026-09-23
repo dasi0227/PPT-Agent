@@ -35,5 +35,4 @@ config.yaml
 /tmp/
 
 # 第三方参考（体积过大，本地保留不入库）
-docs/thirdparty/deepseek-harness/
-docs/thirdparty/zcode/
+/docs/thirdparty/
