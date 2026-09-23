@@ -4,6 +4,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"strings"
 )
 
 // Role is the normalized message role used by every provider adapter.
@@ -57,13 +58,21 @@ func TextContent(text string) []ContentPart {
 	return []ContentPart{{Type: "text", Text: text}}
 }
 
+// Text returns every text part in order, separated by paragraph boundaries.
+// It is a text-only projection; multimodal adapters must preserve Content to
+// retain images and their position relative to the text.
 func (m Message) Text() string {
-	for _, part := range m.Content {
-		if part.Type == "text" {
-			return part.Text
+	return contentText(m.Content)
+}
+
+func contentText(content []ContentPart) string {
+	texts := make([]string, 0, len(content))
+	for _, part := range content {
+		if part.Type == "text" && part.Text != "" {
+			texts = append(texts, part.Text)
 		}
 	}
-	return ""
+	return strings.Join(texts, "\n\n")
 }
 
 // Capabilities are the fixed product contract for every configured model.
@@ -132,12 +141,7 @@ type GenerateResponse struct {
 }
 
 func (r GenerateResponse) Text() string {
-	for _, part := range r.Content {
-		if part.Type == "text" {
-			return part.Text
-		}
-	}
-	return ""
+	return contentText(r.Content)
 }
 
 // Provider is the only model protocol used by the core ReAct Runtime.

@@ -40,7 +40,28 @@ func PublicSourceText(messages []llm.Message) string {
 	parts := []string{}
 	for _, message := range messages {
 		if message.Role == llm.RoleUser && (message.Metadata == nil || message.Metadata.Origin == "user") {
-			parts = append(parts, message.Text())
+			for _, part := range message.Content {
+				if part.Type != "text" || attachmentDescriptionKind(part.Text) != "" {
+					continue
+				}
+				text := part.Text
+				// Only the comment is user-authored. Snapshot IDs and page data
+				// must not exempt internal vocabulary from display sanitization.
+				for _, tag := range []string{"selected_dom", "selected_dom_reference"} {
+					open, close := "<"+tag+">", "</"+tag+">"
+					if strings.HasPrefix(text, open) && strings.HasSuffix(text, close) {
+						var selection struct {
+							Comment string `json:"comment"`
+						}
+						_ = json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimPrefix(text, open), close)), &selection)
+						text = selection.Comment
+						break
+					}
+				}
+				if text != "" {
+					parts = append(parts, text)
+				}
+			}
 		}
 	}
 	return strings.Join(parts, "\n")

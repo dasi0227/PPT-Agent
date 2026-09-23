@@ -30,7 +30,10 @@ func prepareAgentRequest(req AgentRequest) AgentRequest {
 	req.Context.Command.Mode = req.Mode
 	req.Messages = append([]llm.Message{}, req.Messages...)
 	if !req.InstructionInMessages && !containsRunInstruction(req.Messages, req.RunID) {
-		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(req.Context.Command.Instruction), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: req.RunID}})
+		command := req.Context.Command
+		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
+			command.Instruction, req.Context.Project.ID, command.Attachments, command.DOMSelections, command.ReferenceOrder,
+		), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: req.RunID}})
 	}
 	sections := contextengine.ModelSections(req.Context)
 	var state map[string]any
