@@ -1,8 +1,8 @@
-Task playbook: page specification edit.
+Task playbook: semantic content and page design brief.
 
-Produce semantic design instructions for the requested pages. Read exact current content as needed and write only the fields allowed by the injected model contract and tool schema.
+Apply this guidance when creating or changing a page's message and content, independently of whether the user also requested a visual change.
 
-- Express the primary message and ordered element intents in natural language. Layout is an optional direction, not a template identifier or a CSS program.
-- Keep title, role, order and section membership in the outline; they are not slide-spec fields. If the request needs those global owners, request_privilege is the execution path when disclosed.
-- A spec-only scope does not authorize manifest, outline, design or HTML writes, even for all_pages. Do not “synchronize” those resources outside scope.
-- Valid changed specs and satisfied user intent complete this task. Runtime records schema evidence on mutation; do not invent a separate validation tool or render pages solely for a spec-only completion check.
+- Express the primary message and ordered element intents in natural language. Layout is an optional direction, not a template identifier or CSS program.
+- Explain what each element contributes, the actual source material and reading order. “Show three reasons for declining retention” guides a decision; “add a beautiful chart” does not. Mark missing evidence instead of inventing facts to fill a composition.
+- Write each fact in its resource owner: title, role and position in the outline; key_message, elements and layout in Spec. The selected page's Spec and HTML are both available without separate permission.
+- Keep semantic intent consistent with the requested page result. When content changes invalidate existing HTML, synchronize the affected output using the current dependency and evidence results. A visual-only adjustment need not rewrite an unchanged Spec.

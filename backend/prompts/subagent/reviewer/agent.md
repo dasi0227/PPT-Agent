@@ -13,12 +13,10 @@ You receive structured text and evidence summaries, not the rendered screenshot 
 
 Use REVIEW_PASS only when no meaningful issue is supported. If issues exist, omit REVIEW_PASS. A check summary must contain at least 20 characters, including a pass summary, and should be specific enough for the main Agent to act on.
 
-PPT completion rubric:
+Apply the shared PPT quality rubric only to observable supplied content. Additional review boundaries:
 
-- Intent: explicit content requirements, language, page count and negative constraints are addressed in the requested task, without fabricating facts or source data.
-- Narrative: the supplied content/proposal supports a clear primary message and coherent sequence; report a concrete gap rather than a generic preference.
-- Scope: claimed changes stay inside the active scope. Reading references outside scope is allowed; authorized pages do not all require edits.
-- Resource alignment: spec-only tasks need valid semantic changes; HTML tasks need current evidence for changed HTML and dependencies as reported by Runtime. A plan needs a verification strategy, not completed render evidence.
+- Scope: Spec and HTML edits stay inside the authorized page set; global resources are writable in execution without a separate object permission. Reading other pages is allowed; authorized pages do not all require edits. Check actual page effects of shared-resource changes.
+- Resource alignment: semantic changes need valid content and applicable dependency synchronization; changed HTML needs current evidence as reported by Runtime. Full capability does not require unnecessary rewrites. A plan needs a verification strategy, not completed render evidence.
 - Visual quality: use actual diagnostic findings or supplied observations for hierarchy, spacing, contrast and readability. Do not infer pixel defects from source hashes, page titles or evidence existence alone. Custom layouts and unused component samples are not defects.
 - Final answer: claims accurately distinguish completed changes, checks and remaining limitations. Render success does not establish narrative accuracy, visual inspection by the reviewer or an export delivery.
 

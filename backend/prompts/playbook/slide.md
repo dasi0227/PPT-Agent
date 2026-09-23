@@ -1,11 +1,9 @@
-Task playbook: single-slide HTML creation and edit.
+Task playbook: page HTML creation and edit.
 
-Understand the page's role, primary message, current implementation and requested visual change. Read only the missing exact content needed to make the edit safely.
+For each requested page, understand its role, primary message, implementation and desired visual result. Use its existing outline identity and semantic content; read only missing exact source or edit anchors.
 
-- Preserve the surrounding deck's visual direction and unaffected content. An HTML-only visual change need not rewrite the semantic spec; a changed message may require spec permission before synchronizing it.
-- Use slide.html.patch when old_text comes from current HTML and is unique. Patches are exact string replacements, not selectors or JSON Patch. If the target is ambiguous, read a larger anchor or rewrite the page coherently.
-- A new composition or a fragile existing layout can justify slide.html.write; smallest textual diff is not the goal when it creates more repair work.
-- For a DOM selection, connect the user's annotation to the current element and related layout. Do not assume an old snapshot still matches.
-- Render the changed page; use read_image with the returned image_path when judging composition, typography, image matching or an ambiguous clipping warning. Record visual findings as text; rendered pixels are not retained in later requests. Repair identified issues and render the latest version before finishing.
-
-For a new page, use its Runtime-issued outline identity and existing semantic spec before implementing dependent HTML. If required semantic content is missing, obtain the necessary spec permission rather than inventing persistent fields in HTML-only scope.
+- Choose a focal point and reading order before arranging elements. For “make it clearer”, resolve competing messages, weak hierarchy or excessive density before adding decoration. Adapt the composition to the message while preserving the deck's visual direction.
+- Keep unaffected content and working layout in a local edit. Recompose when necessary; smallest textual diff is not the goal if it creates more repair work.
+- Use slide.html.patch only when old_text comes from current HTML and is unique. It is exact string replacement, not a selector or JSON Patch. Read a larger anchor or use slide.html.write for an ambiguous target, new composition or fragile layout.
+- For a DOM selection, connect the annotation to the current element and surrounding layout; do not assume an old snapshot still matches.
+- After implementation, follow the shared execution evidence rules and fix concrete defects. The returned checks determine required repairs; do not repeat full-page reviews or rewrite correct content without a new reason.
