@@ -7,7 +7,7 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
-import { showGlobalError, showGlobalSuccess } from '../../stores/toastStore';
+import { showGlobalError } from '../../stores/toastStore';
 
 export function ThemeSelector({ projectId }: { projectId: string | null }) {
   const themeId = useProjectStore(state => projectId
@@ -45,7 +45,6 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
     setApplying(true);
     try {
       await setProjectTheme(projectId, theme.id);
-      showGlobalSuccess(`已保存「${theme.name}」主题，画布将加载新外观`);
     } catch (cause) {
       showGlobalError(cause instanceof Error ? cause.message : '主题应用失败');
     } finally {

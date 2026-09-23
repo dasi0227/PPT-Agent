@@ -241,9 +241,7 @@ describe('personal repository pages', () => {
     await waitFor(() => expect(trigger).toHaveTextContent('Blueprint'));
     expect(mocks.setTheme).toHaveBeenCalledWith('project-7', 'blueprint');
     expect(useProjectStore.getState().contentByProjectId['project-7'].design.theme).toBe('blueprint');
-    expect(useToastStore.getState().toasts).toEqual([
-      expect.objectContaining({ message: '已保存「Blueprint」主题，画布将加载新外观', tone: 'success' }),
-    ]);
+    expect(useToastStore.getState().toasts).toEqual([]);
   });
 
   it('edits theme metadata and tags in a dialog', async () => {
