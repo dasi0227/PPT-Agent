@@ -16,8 +16,8 @@ describe('SlideSpecCard', () => {
     expect(screen.getByText('论据')).toBeInTheDocument();
     expect(screen.getByText('预算正在增长')).toBeInTheDocument();
     expect(screen.getByText('投入正在转为正式预算')).toBeInTheDocument();
-    expect(screen.getByText('Layout: data-story')).toBeInTheDocument();
-    expect(screen.getByText('chart')).toBeInTheDocument();
+    expect(screen.getByText('布局建议：data-story')).toBeInTheDocument();
+    expect(screen.getByText('图表')).toBeInTheDocument();
     expect(screen.getByText('设计稿有更新')).toBeInTheDocument();
   });
 });

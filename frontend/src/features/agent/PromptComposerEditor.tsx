@@ -9,6 +9,7 @@ import {
   type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -91,7 +92,7 @@ interface PromptComposerEditorProps {
   placeholder: string;
   disabled: boolean;
   readOnly: boolean;
-	suggestionsVisible?: boolean;
+  placeholderContent?: ReactNode;
   pages?: PageMentionCandidate[];
   slashCommands?: ResolvedSlashCommand[];
   modelOptions?: SlashMenuOption[];
@@ -231,7 +232,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     placeholder,
     disabled,
     readOnly,
-		suggestionsVisible = false,
+    placeholderContent,
     pages = [],
     slashCommands = [],
     modelOptions = [],
@@ -1109,6 +1110,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     return (
       <>
         {menuContainer ? createPortal(menus, menuContainer) : menus}
+        <div className="composer-input-surface" data-placeholder-overlay={Boolean(placeholderContent)}>
         <div
           ref={editorRef}
           contentEditable={!disabled && !readOnly}
@@ -1151,8 +1153,12 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             syncValue();
             requestAnimationFrame(updateTrigger);
           }}
-          className={`composer-prompt-editor max-h-32 w-full overflow-y-auto bg-transparent px-4 text-sm leading-5 text-text-900 focus:outline-none focus-visible:outline-none disabled:opacity-50 ${suggestionsVisible ? 'min-h-6 py-1' : 'min-h-[60px] py-3'}`}
+          className="composer-prompt-editor min-h-[60px] max-h-32 w-full overflow-y-auto bg-transparent px-4 py-3 text-sm leading-5 text-text-900 caret-accent focus:outline-none focus-visible:outline-none disabled:opacity-50"
         />
+        {placeholderContent && (
+          <div className="composer-placeholder-layer">{placeholderContent}</div>
+        )}
+        </div>
       </>
     );
   },

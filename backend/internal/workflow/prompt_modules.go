@@ -8,7 +8,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
-	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 type PromptModule = prompts.Module
@@ -50,6 +49,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core.agent"),
 		loadPromptModule("core.output"),
 		loadPromptModule("core.reference"),
+		loadPromptModule("core.quality"),
 		loadPromptModule(modePolicyID(input.Mode)),
 	}
 	for _, id := range playbookIDs(input.Mode) {
@@ -59,21 +59,16 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	case model.ModeChat, model.ModeGrill:
 		modules = append(modules, loadPromptModule("runtime.completion"))
 	case model.ModePlan:
-		modules = append(modules, loadPromptModule("core.quality"))
-		if module, ok := resourceContractsModule(input.Context); ok {
-			modules = append(modules, module)
-		}
+		modules = append(modules, loadPromptModule("core.structure"))
 	case model.ModeExecute:
 		modules = append(modules,
 			loadPromptModule("runtime.recovery"),
 			loadPromptModule("runtime.completion"),
-			loadPromptModule("core.quality"),
+			loadPromptModule("runtime.execution"),
+			loadPromptModule("core.structure"),
 		)
-		if module, ok := resourceContractsModule(input.Context); ok {
-			modules = append(modules, module)
-		}
 	}
-	if finishDisclosed(input.Phase, input.Mode) {
+	if input.Mode == model.ModeChat || input.Mode == model.ModeGrill || input.Mode == model.ModeExecute {
 		modules = append(modules, loadPromptModule("runtime.next-input-suggestions"))
 	}
 	if input.Mode == model.ModePlan || input.Mode == model.ModeExecute {
@@ -81,67 +76,52 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "<runtime_prompt_manifest version=\"%s\" mode=\"%s\" phase=\"%s\">\n",
-		prompts.Version, input.Mode, input.Phase)
 	for _, module := range modules {
 		if strings.TrimSpace(module.Body) == "" {
 			continue
 		}
-		fmt.Fprintf(&b, "<prompt_module id=\"%s\" version=\"%s\"", module.ID, module.Version)
-		if module.Path != "" {
-			fmt.Fprintf(&b, " path=\"%s\"", module.Path)
-		}
-		if module.Hash != "" {
-			fmt.Fprintf(&b, " hash=\"%s\"", module.Hash)
-		}
-		fmt.Fprintf(&b, ">\n%s\n</prompt_module>\n", strings.TrimSpace(module.Body))
+		fmt.Fprintf(&b, "<prompt_module id=%q>\n%s\n</prompt_module>\n", module.ID, strings.TrimSpace(module.Body))
 	}
-	b.WriteString("</runtime_prompt_manifest>")
-	return b.String()
-}
-
-func finishDisclosed(phase RunPhase, mode model.RunMode) bool {
-	return (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeGrill)) ||
-		(phase == PhaseExecuting && mode == model.ModeExecute)
+	return strings.TrimSpace(b.String())
 }
 
 func runtimeTaskStateForRequest(req AgentRequest) string {
 	mode := effectivePromptMode(req.Mode, req.Context.Command.Mode)
-	state := struct {
-		Mode            model.RunMode          `json:"mode"`
-		Phase           RunPhase               `json:"phase"`
-		ContextBriefing string                 `json:"context_briefing,omitempty"`
-		RenderedImages  []RenderedImageContext `json:"latest_rendered_images,omitempty"`
-		Plan            *Plan                  `json:"plan,omitempty"`
-		PlanAuthority   string                 `json:"plan_authority,omitempty"`
-		Changes         ChangeSet              `json:"changes"`
-		Evidence        []Evidence             `json:"evidence"`
-		Requirements    *RequirementLedger     `json:"requirements,omitempty"`
-		Work            []SlideWorkItem        `json:"work_ledger,omitempty"`
-	}{
-		Mode: mode, Phase: req.Phase, ContextBriefing: req.ContextBriefing,
-		RenderedImages: req.RenderedImages,
-		Changes:        req.Changes, Evidence: promptEvidence(req.Evidence), Requirements: req.Requirements,
-		Work: func() []SlideWorkItem {
-			if req.Work == nil {
-				return nil
-			}
-			return req.Work.Snapshot()
-		}(),
+	changes := make([]any, 0, req.Changes.Count())
+	for _, change := range req.Changes.All() {
+		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "content_hash": change.AfterHash, "affects_html": change.AffectsHTML})
+	}
+	evidence := []any{}
+	// Only the latest evidence of each kind for a target informs the next action.
+	seen := map[string]bool{}
+	entries := promptEvidence(req.Evidence)
+	for i := len(entries) - 1; i >= 0; i-- {
+		entry := entries[i]
+		key := entry.Target.Key() + ":" + entry.Kind
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		evidence = append(evidence, map[string]any{"kind": entry.Kind, "target": entry.Target, "source_hash": entry.SourceHash, "fresh": entry.Fresh, "data": entry.Data})
+	}
+	state := map[string]any{
+		"mode": mode, "phase": req.Phase, "context_briefing": req.ContextBriefing,
+		"latest_rendered_images": req.RenderedImages, "plan": req.Plan, "plan_authority": nil,
+		"changes": changes, "evidence": evidence, "requirements": req.Requirements, "work_ledger": nil,
+	}
+	if req.Work != nil {
+		state["work_ledger"] = req.Work.Snapshot()
 	}
 	if req.Plan != nil {
-		state.Plan = req.Plan
-		switch {
-		case mode == model.ModeExecute && req.Plan.ApprovedContentHash != "" &&
-			(req.Plan.Status == PlanActive || req.Plan.Status == PlanCompleted):
-			state.PlanAuthority = "approved_execution_contract"
-		case mode == model.ModePlan:
-			state.PlanAuthority = "planning_proposal"
-		default:
-			state.PlanAuthority = "execution_progress_checklist"
+		authority := "execution_progress_checklist"
+		if mode == model.ModePlan {
+			authority = "planning_proposal"
+		} else if mode == model.ModeExecute && req.Plan.ApprovedContentHash != "" && (req.Plan.Status == PlanActive || req.Plan.Status == PlanCompleted) {
+			authority = "approved_execution_contract"
 		}
+		state["plan_authority"] = authority
 	}
-	raw, _ := json.Marshal(state)
+	raw, _ := json.Marshal(contextengine.ModelValue(state))
 	return string(raw)
 }
 
@@ -188,27 +168,4 @@ func playbookIDs(mode model.RunMode) []string {
 	// All execute runs share the same capabilities. Scope changes page targets,
 	// never the static policy; each playbook owns a different authoring decision.
 	return []string{"playbook.deck", "playbook.spec", "playbook.slide"}
-}
-
-func resourceContractsModule(pack contextengine.ContextPack) (PromptModule, bool) {
-	module := loadPromptModule("core.structure")
-	contracts := map[string]any{}
-	for _, name := range resourceContractNames(pack) {
-		contract, err := pptschema.AgentContract(name)
-		if err != nil {
-			panic(err)
-		}
-		contracts[name] = contract
-	}
-	contractJSON, _ := json.Marshal(contracts)
-	var err error
-	module, err = module.WithBody(strings.ReplaceAll(module.Body, "{{CONTRACTS_JSON}}", string(contractJSON)))
-	if err != nil {
-		panic(err)
-	}
-	return module, true
-}
-
-func resourceContractNames(pack contextengine.ContextPack) []string {
-	return []string{pptschema.ManifestName, pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}
 }

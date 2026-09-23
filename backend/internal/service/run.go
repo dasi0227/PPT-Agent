@@ -122,24 +122,23 @@ func NewRunServiceWithExecutionFactoryAndRegistry(
 }
 
 type workflowExecution struct {
-	releaseSnapshot        func()
-	runtime                *workflow.Runtime
-	pack                   contextengine.ContextPack
-	assembler              *contextengine.ContextAssembler
-	project                model.Project
-	store                  store.Store
-	runID                  string
-	projectHistoryRevision int64
-	renderer               workflow.SlideRenderer
-	components             *ComponentService
-	skills                 *SkillService
-	themes                 *ThemeService
-	imageResolver          llm.ImageRefResolver
-	semanticReviewer       workflow.SemanticReviewer
-	transcripts            *contextengine.FSTranscriptStore
-	calibration            *contextengine.CalibrationStore
-	resumeCheckpoint       *workflow.RuntimeCheckpoint
-	reconciliation         workflow.RecoverySnapshot
+	releaseSnapshot  func()
+	runtime          *workflow.Runtime
+	pack             contextengine.ContextPack
+	assembler        *contextengine.ContextAssembler
+	project          model.Project
+	store            store.Store
+	runID            string
+	renderer         workflow.SlideRenderer
+	components       *ComponentService
+	skills           *SkillService
+	themes           *ThemeService
+	imageResolver    llm.ImageRefResolver
+	semanticReviewer workflow.SemanticReviewer
+	transcripts      *contextengine.FSTranscriptStore
+	calibration      *contextengine.CalibrationStore
+	resumeCheckpoint *workflow.RuntimeCheckpoint
+	reconciliation   workflow.RecoverySnapshot
 }
 
 type planApprovalCommitStore interface {
@@ -205,7 +204,7 @@ func (r *workflowExecution) recordAutoCompaction(
 	compaction := model.ContextCompaction{
 		ID: model.MustShortID("cmp"), ThreadID: r.pack.Manifest.ThreadID,
 		ProjectID: r.project.ID, RunID: r.runID, Trigger: model.ContextCompactionAuto,
-		Title: result.Title, Content: result.Content, BeforeTokens: before.Total, AfterTokens: after.Total,
+		Title: model.PublicText(result.Title, contextengine.ProjectPublicTextContext(r.project, contextengine.PublicSourceText(result.Messages))), Content: model.PublicText(result.Content, contextengine.ProjectPublicTextContext(r.project, contextengine.PublicSourceText(result.Messages))), BeforeTokens: before.Total, AfterTokens: after.Total,
 		MaxTokens: before.Max, Reclaimed: reclaimed,
 		DurationMS: duration.Milliseconds(), CreatedAt: time.Now().Unix(),
 	}
@@ -222,8 +221,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 	committer := workflowCommitter{store: r.store, project: r.project, runID: r.runID}
 	outcome := r.runtime.Run(ctx, workflow.RuntimeInput{
 		RunID: r.runID, ProjectDir: r.project.WorkDir, Context: r.pack,
-		ProjectHistoryRevision: r.projectHistoryRevision,
-		Emitter:                emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
+		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
 		CommitMetadata: committer.Commit,
 		Logger:         zap.L().Named("ppt-runtime"),
 		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
@@ -427,12 +425,11 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		ClientRequestID: p.ClientRequestID, Command: command,
 	}
 	if svc.history != nil {
-		projectHistoryRevision, baselineErr := svc.history.Baseline(ctx, project, runModel.ID, thread.ID, p)
+		_, baselineErr := svc.history.Baseline(ctx, project, runModel.ID, thread.ID, p)
 		if baselineErr != nil {
 			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "CHECKPOINT_FAILED")
 			return model.Run{}, baselineErr
 		}
-		runModel.ProjectHistoryRevision = projectHistoryRevision
 	}
 	if selectedProfile.Adapter() != nil {
 		runModel.Model = model.ModelSelection{
@@ -487,8 +484,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime,
 		pack:            pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
-		projectHistoryRevision: runModel.ProjectHistoryRevision,
-		renderer:               svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
+		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
 		imageResolver:    runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		semanticReviewer: workflow.LLMSemanticReviewer{Provider: selectedProfile.Adapter()},
 		transcripts:      svc.transcripts,
@@ -586,8 +582,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	execution := &workflowExecution{
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
-		projectHistoryRevision: runModel.ProjectHistoryRevision,
-		renderer:               svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
+		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
 		imageResolver:    runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		semanticReviewer: workflow.LLMSemanticReviewer{Provider: provider},
 		transcripts:      svc.transcripts,

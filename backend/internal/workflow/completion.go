@@ -16,6 +16,7 @@ type CompletionIssue struct {
 	Code            string           `json:"code"`
 	Summary         string           `json:"summary"`
 	RequiredActions []RequiredAction `json:"required_actions,omitempty"`
+	NextAction      string           `json:"next_action,omitempty"`
 }
 
 type RequiredAction struct {
@@ -255,10 +256,7 @@ func operationForTarget(target Resource, patch bool) string {
 func htmlEvidenceIssue(target Resource) CompletionIssue {
 	return CompletionIssue{
 		Code: "EVIDENCE_HTML_MISSING", Summary: "HTML evidence is missing or stale for " + target.Key(),
-		RequiredActions: []RequiredAction{
-			{Tool: "mutate_ppt", Op: "slide.html.patch", Target: target},
-			{Tool: "render_slide", Target: target},
-		},
+		RequiredActions: []RequiredAction{{Tool: "render_slide", Target: target}},
 	}
 }
 

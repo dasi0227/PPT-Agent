@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -83,16 +82,16 @@ func publicChangedTargets(projectDir string, changes []ChangedTarget) []model.Pu
 	return out
 }
 
-func publicPlan(plan Plan) model.PublicPlan {
+func publicPlan(plan Plan, display ...model.PublicTextContext) model.PublicPlan {
 	steps := make([]model.PublicPlanStep, 0, len(plan.Steps))
 	for _, step := range plan.Steps {
 		steps = append(steps, model.PublicPlanStep{
-			ID: step.ID, Title: sanitizePublicText(step.Title, 120), Status: string(step.Status), TargetSlideIDs: append([]string{}, step.TargetSlideIDs...),
+			ID: step.ID, Title: model.PublicText(step.Title, display...), Status: string(step.Status), TargetSlideIDs: append([]string{}, step.TargetSlideIDs...),
 		})
 	}
 	return model.PublicPlan{
 		PlanID: plan.ID,
-		Status: string(plan.Status), Title: sanitizePublicText(plan.Title, 180), Content: sanitizePublicMarkdown(plan.Content, 12000), Steps: steps,
+		Status: string(plan.Status), Title: model.PublicText(plan.Title, display...), Content: model.PublicText(plan.Content, display...), Steps: steps,
 	}
 }
 
@@ -121,86 +120,29 @@ func planStepIDs(steps []PlanStep) []string {
 	return ids
 }
 
-func milestoneText(title string, completed []PlanStep) string {
+func milestoneText(title string, completed []PlanStep, display ...model.PublicTextContext) string {
 	titles := make([]string, 0, len(completed))
 	for _, step := range completed {
 		if t := strings.TrimSpace(step.Title); t != "" {
-			titles = append(titles, sanitizePublicText(t, 120))
+			titles = append(titles, model.PublicText(t, display...))
 		}
 	}
 	if len(titles) > 0 {
 		return "已完成「" + strings.Join(titles, "」、「") + "」"
 	}
-	return sanitizePublicText(title, 180)
+	return model.PublicText(title, display...)
 }
 
-func sanitizePublicReasoning(text string) string {
-	// Reasoning tolerates engineering vocabulary more than final delivery does;
-	// the frontend already frames it as a collapsed thinking trace. Keep it lenient
-	// and only normalize whitespace, so we never distort the model's own wording.
-	return normalizePublicText(text)
-}
-
-func sanitizePublicText(text string, _ int) string {
-	return redactInternalTerms(normalizePublicText(text))
-}
-
-func sanitizePublicMarkdown(text string, _ int) string {
-	return redactInternalTerms(normalizePublicText(text))
-}
-
-func normalizePublicText(text string) string {
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-	text = strings.ReplaceAll(text, "\r", "\n")
-	return strings.TrimSpace(text)
-}
-
-// internalTermReplacements is the Layer 3 fallback: when a leak slips past the
-// user-facing output law (Layer 2), we still translate the highest-signal
-// engineering tokens into product language before they reach the user. Patterns
-// are ordered specific-before-generic and only match shapes that cannot collide
-// with ordinary Chinese prose (resource keys, snake_case identifiers, ALL_CAPS
-// error codes, RunX jargon).
-var internalTermReplacements = []struct {
-	pattern     *regexp.Regexp
-	replacement string
-}{
-	// Resource display keys — match the compound slide forms before deck forms.
-	{regexp.MustCompile(`(?i)\bslide:[A-Za-z0-9_-]+:spec\b`), "页面设计稿"},
-	{regexp.MustCompile(`(?i)\bslide:[A-Za-z0-9_-]+:html\b`), "幻灯片页面"},
-	{regexp.MustCompile(`(?i)\bdeck:manifest\b`), "演示内容"},
-	{regexp.MustCompile(`(?i)\bdeck:outline\b`), "目录结构"},
-	{regexp.MustCompile(`(?i)\bdeck:design\b`), "视觉设计"},
-	// Tool and control action identifiers.
-	{regexp.MustCompile(`\b(?:read_ppt|mutate_ppt)\b`), "PPT 内容操作"},
-	{regexp.MustCompile(`\brender_slide\b`), "页面渲染检查"},
-	{regexp.MustCompile(`\b(?:create_plan|update_plan)\b`), "计划"},
-	{regexp.MustCompile(`\breview_completion\b`), "完成检查"},
-	{regexp.MustCompile(`\bask_user\b`), "提问"},
-	// Runtime jargon.
-	{regexp.MustCompile(`\bRun(?:Command|Scope|Mode|Phase)\b`), "任务设置"},
-	{regexp.MustCompile(`(?i)\bcompletion gate\b`), "完成检查"},
-	// Raw error codes such as EVIDENCE_HTML_MISSING (2+ underscore-joined caps).
-	{regexp.MustCompile(`\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b`), ""},
-}
-
-func redactInternalTerms(text string) string {
-	if text == "" {
-		return text
-	}
-	for _, rule := range internalTermReplacements {
-		text = rule.pattern.ReplaceAllString(text, rule.replacement)
-	}
-	return text
-}
+func sanitizePublicText(text string, _ int) string { return model.PublicText(text) }
 
 type ToolPublicProjector struct {
-	ProjectDir string
+	ProjectDir  string
+	TextContext model.PublicTextContext
 }
 
 func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string]any, planStepID string, decision *ToolDecision) (model.ToolStartedPayload, bool) {
 	target := publicToolTarget(p.ProjectDir, tool, args)
-	label, detail, ok := toolDisplay(p.ProjectDir, tool, args, true, ToolResult{})
+	label, detail, ok := toolDisplay(p.ProjectDir, tool, args, true, ToolResult{}, p.TextContext)
 	if !ok {
 		return model.ToolStartedPayload{}, false
 	}
@@ -210,7 +152,7 @@ func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string
 		Target: target, Display: model.PublicDisplay{Label: label, Detail: detail},
 	}
 	if tool == "run_command" && decision != nil {
-		payload.Command = &model.CommandProjection{Text: sanitizePublicText(decision.Command, 4096)}
+		payload.Command = &model.CommandProjection{Text: decision.Command}
 	}
 	return payload, true
 }
@@ -219,7 +161,7 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 	if result.Code == CodeDependencyFailed {
 		return model.ToolCompletedPayload{}, false
 	}
-	label, detail, ok := toolDisplay(p.ProjectDir, tool, args, false, result)
+	label, detail, ok := toolDisplay(p.ProjectDir, tool, args, false, result, p.TextContext)
 	if !ok {
 		return model.ToolCompletedPayload{}, false
 	}
@@ -236,9 +178,9 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 	if tool == "run_command" && result.Command != nil {
 		exitCode := result.Command.ExitCode
 		durationMS := result.Command.DurationMS
-		stdoutPreview, stderrPreview := publicCommandPreviews(result.Command)
+		stdoutPreview, stderrPreview := publicCommandPreviews(result.Command, p.TextContext)
 		payload.Command = &model.CommandProjection{
-			Text: sanitizePublicText(result.Command.Text, 4096), Status: result.Command.Status,
+			Text: result.Command.Text, Status: result.Command.Status,
 			ExitCode: &exitCode, DurationMS: &durationMS,
 			OutputTruncated: result.Command.OutputTruncated,
 			StdoutPreview:   stdoutPreview,
@@ -266,7 +208,7 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 		}
 		payload.Resources = append(payload.Resources, model.PublicLoadedResource{
 			Kind: resource.Kind, ID: resource.ID, Name: sanitizePublicText(resource.Name, 200),
-			OpenURL: sanitizePublicText(resource.OpenURL, 2048),
+			OpenURL: resource.OpenURL,
 		})
 	}
 	return payload, true
@@ -333,15 +275,15 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 	return nil
 }
 
-func toolDisplay(projectDir string, tool string, args map[string]any, started bool, result ToolResult) (string, string, bool) {
+func toolDisplay(projectDir string, tool string, args map[string]any, started bool, result ToolResult, display ...model.PublicTextContext) (string, string, bool) {
 	target := publicToolTarget(projectDir, tool, args)
 	targetName := "内容"
 	if target != nil && target.Type == "deck" && target.Part == "manifest" {
-		targetName = "演示内容"
+		targetName = "演示要求"
 	} else if target != nil && target.Type == "deck" && target.Part == "outline" {
 		targetName = "目录结构"
 	} else if target != nil && target.Type == "deck" && target.Part == "design" {
-		targetName = "视觉设计"
+		targetName = "全局设计"
 	} else if target != nil && target.Type == "slide" {
 		pageName := target.DisplayName
 		if pageName == "" {
@@ -396,12 +338,12 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		if result.Command != nil {
 			switch result.Command.Status {
 			case "completed":
-				stdoutPreview, _ := publicCommandPreviews(result.Command)
+				stdoutPreview, _ := publicCommandPreviews(result.Command, display...)
 				return "已执行 1 条命令", stdoutPreview, true
 			case "blocked":
-				return "命令已被安全策略拦截", sanitizePublicText(result.Command.Reason, 300), true
+				return "命令已被安全策略拦截", model.PublicText(result.Command.Reason, display...), true
 			default:
-				return "命令执行失败", sanitizePublicText(result.Command.Reason, 300), true
+				return "命令执行失败", model.PublicText(result.Command.Reason, display...), true
 			}
 		}
 		return "命令执行失败", publicToolError(result), true
@@ -426,7 +368,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 	}
 }
 
-func publicCommandPreviews(command *CommandExecution) (string, string) {
+func publicCommandPreviews(command *CommandExecution, display ...model.PublicTextContext) (string, string) {
 	if command == nil {
 		return "", ""
 	}
@@ -440,47 +382,21 @@ func publicCommandPreviews(command *CommandExecution) (string, string) {
 		}
 		return stdout, stderr
 	}
-	return sanitizeCommandPreview(command.Stdout, 8<<10), sanitizeCommandPreview(command.Stderr, 4<<10)
+	return sanitizeCommandPreview(command.Stdout, 8<<10, display...), sanitizeCommandPreview(command.Stderr, 4<<10, display...)
 }
 
 var terminalEscape = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
 
-func sanitizeCommandPreview(value string, limit int) string {
+func sanitizeCommandPreview(value string, limit int, display ...model.PublicTextContext) string {
 	value = terminalEscape.ReplaceAllString(strings.ToValidUTF8(value, "\uFFFD"), "")
-	value = sanitizePublicText(value, limit)
+	value = model.PublicText(value, display...)
 	if len(value) <= limit {
 		return value
 	}
-	return value[:limit]
+	return strings.ToValidUTF8(value[:limit], "")
 }
 
-func safeToolDetail(result ToolResult, fallback string) string {
-	if !result.OK {
-		return publicToolError(result)
-	}
-	text := sanitizePublicText(result.Summary, 100)
-	normalized := strings.ToLower(strings.TrimSpace(text))
-	if text == "" || internalToolSummary(normalized) {
-		return fallback
-	}
-	return text
-}
-
-func internalToolSummary(value string) bool {
-	switch value {
-	case "resource staged", "resource read", "resource written", "resource edited atomically":
-		return true
-	default:
-		return false
-	}
-}
-
-func targetDetail(target *model.PublicTarget, fallback string) string {
-	if target != nil && target.LocalPath != "" {
-		return target.LocalPath
-	}
-	return fallback
-}
+func targetDetail(_ *model.PublicTarget, fallback string) string { return fallback }
 
 func attachLocalOpenTarget(projectDir string, target *model.PublicTarget) {
 	if target == nil || strings.TrimSpace(projectDir) == "" {
@@ -573,20 +489,7 @@ func publicWarnings(result ToolResult) []string {
 	return out
 }
 
-var trailingSlideNumber = regexp.MustCompile(`(\d+)$`)
-
-func slideDisplayName(slideID string) string {
-	match := trailingSlideNumber.FindStringSubmatch(slideID)
-	if len(match) == 2 {
-		if index, err := strconv.Atoi(match[1]); err == nil && index > 0 {
-			return fmt.Sprintf("第 %d 页", index)
-		}
-	}
-	if strings.TrimSpace(slideID) == "" {
-		return "页面"
-	}
-	return "页面"
-}
+func slideDisplayName(_ string) string { return "相关页面" }
 
 func runtimeSlideDisplayName(projectDir, slideID string) string {
 	var outline spec.Outline
@@ -609,21 +512,21 @@ func newMessageID() string {
 	return "msg_" + uuid.NewString()
 }
 
-func publicQuestion(runID, questionID string, args map[string]any) model.QuestionAskedPayload {
-	questions := publicQuestionFields(args)
+func publicQuestion(runID, questionID string, args map[string]any, display ...model.PublicTextContext) model.QuestionAskedPayload {
+	questions := publicQuestionFields(args, display...)
 	return model.QuestionAskedPayload{
 		PublicEventBase: publicBase(runID), QuestionID: questionID,
-		Header: sanitizePublicText(stringValue(args["header"]), 24), Questions: questions,
+		Header: model.PublicText(stringValue(args["header"]), display...), Questions: questions,
 	}
 }
 
-func publicQuestionFields(args map[string]any) []model.QuestionField {
+func publicQuestionFields(args map[string]any, display ...model.PublicTextContext) []model.QuestionField {
 	rawQuestions, _ := args["questions"].([]any)
 	questions := []model.QuestionField{}
 	seen := map[string]bool{}
 	for index, raw := range rawQuestions {
 		question, _ := raw.(map[string]any)
-		id := sanitizePublicText(stringValue(question["id"]), 64)
+		id := strings.TrimSpace(stringValue(question["id"]))
 		if id == "" {
 			id = fmt.Sprintf("question-%d", index+1)
 		}
@@ -631,7 +534,7 @@ func publicQuestionFields(args map[string]any) []model.QuestionField {
 			id = fmt.Sprintf("%s-%d", id, index+1)
 		}
 		seen[id] = true
-		field := publicQuestionField(question, id)
+		field := publicQuestionField(question, id, display...)
 		if field.Title == "" {
 			continue
 		}
@@ -640,21 +543,21 @@ func publicQuestionFields(args map[string]any) []model.QuestionField {
 	return questions
 }
 
-func publicQuestionField(args map[string]any, fallbackID string) model.QuestionField {
-	options := publicQuestionOptions(args)
+func publicQuestionField(args map[string]any, fallbackID string, display ...model.PublicTextContext) model.QuestionField {
+	options := publicQuestionOptions(args, display...)
 	allowCustom, _ := args["allow_custom"].(bool)
 	if len(options) == 0 {
 		allowCustom = true
 	}
-	title := sanitizePublicText(stringValue(args["title"]), 120)
-	description := sanitizePublicText(stringValue(args["description"]), 260)
+	title := model.PublicText(stringValue(args["title"]), display...)
+	description := model.PublicText(stringValue(args["description"]), display...)
 	return model.QuestionField{
 		ID: fallbackID, Title: title, Description: description,
 		Options: options, AllowCustom: allowCustom,
 	}
 }
 
-func publicQuestionOptions(args map[string]any) []model.QuestionOption {
+func publicQuestionOptions(args map[string]any, display ...model.PublicTextContext) []model.QuestionOption {
 	options := []model.QuestionOption{}
 	rawOptions, _ := args["options"].([]any)
 	for index, raw := range rawOptions {
@@ -662,17 +565,17 @@ func publicQuestionOptions(args map[string]any) []model.QuestionOption {
 			break
 		}
 		option, _ := raw.(map[string]any)
-		label := sanitizePublicText(stringValue(option["label"]), 80)
+		label := model.PublicText(stringValue(option["label"]), display...)
 		if label == "" {
 			continue
 		}
-		id := sanitizePublicText(stringValue(option["id"]), 64)
+		id := strings.TrimSpace(stringValue(option["id"]))
 		if id == "" {
 			id = fmt.Sprintf("option-%d", index+1)
 		}
 		options = append(options, model.QuestionOption{
 			ID: id, Label: label,
-			Description: sanitizePublicText(stringValue(option["description"]), 220),
+			Description: model.PublicText(stringValue(option["description"]), display...),
 		})
 	}
 	return options
@@ -690,8 +593,8 @@ func currentPlanStepID(plan *Plan) string {
 	return ""
 }
 
-func safeFinalMessage(message string, mode model.RunMode, affected int) string {
-	if text := sanitizePublicMarkdown(message, 0); text != "" {
+func safeFinalMessage(message string, mode model.RunMode, affected int, contexts ...model.PublicTextContext) string {
+	if text := model.PublicText(message, contexts...); text != "" {
 		return text
 	}
 	if mode == model.ModeChat || mode == model.ModeGrill {
@@ -701,7 +604,7 @@ func safeFinalMessage(message string, mode model.RunMode, affected int) string {
 		return "已完成本次计划。"
 	}
 	if affected > 0 {
-		return fmt.Sprintf("已完成本次修改并检查了 %d 个受影响目标。", affected)
+		return fmt.Sprintf("已保存 %d 项修改。", affected)
 	}
 	return "已完成本次任务。"
 }

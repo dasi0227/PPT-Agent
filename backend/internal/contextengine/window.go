@@ -190,15 +190,23 @@ func messagePartBucket(
 	part llm.ContentPart,
 	attribution toolWindowAttribution,
 ) (ContextBucket, string) {
+	if m := message.Metadata; m != nil && m.Origin == "runtime" {
+		if m.Kind == "summary" {
+			return BucketChatHistory, "context summary"
+		}
+		if m.Kind == "context" {
+			return BucketRuntime, "runtime state"
+		}
+		if message.Role != llm.RoleTool {
+			return BucketRuntime, "runtime messages"
+		}
+	}
+
 	if attribution.detail != "" {
 		return attribution.bucket, attribution.detail
 	}
 	if part.Type == "image" || attachmentDescriptionKind(part.Text) != "" {
 		return BucketReadFile, "read_image"
-	}
-	text := strings.TrimSpace(part.Text)
-	if strings.HasPrefix(text, "<context_summary>") {
-		return BucketChatHistory, "context summary"
 	}
 	switch message.Role {
 	case llm.RoleSystem:
@@ -206,9 +214,6 @@ func messagePartBucket(
 	case llm.RoleAssistant:
 		return BucketChatHistory, "assistant messages"
 	case llm.RoleUser:
-		if isRuntimeControlMessage(text) {
-			return BucketRuntime, "runtime messages"
-		}
 		return BucketChatHistory, "user messages"
 	case llm.RoleTool:
 		return BucketChatHistory, "other tools"
@@ -294,12 +299,6 @@ func normalizeRunCommandDetails(details []WindowBucketDetail) []WindowBucketDeta
 		return []WindowBucketDetail{{Name: runCommandFallbackDetail}}
 	}
 	return commands
-}
-
-func isRuntimeControlMessage(text string) bool {
-	return strings.HasPrefix(text, "Ordinary assistant text cannot submit a plan.") ||
-		strings.HasPrefix(text, "Ordinary assistant text is not a completion signal.") ||
-		strings.HasPrefix(text, "The user approved the plan. Approval is complete")
 }
 
 func attachmentDescriptionKind(text string) string {

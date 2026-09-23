@@ -1,7 +1,7 @@
 package prompt
 
 // Version identifies this coordinated prompt release; Hash identifies exact content.
-const Version = "2026-09-22.v2"
+const Version = "2026-09-23.v1"
 
 type entry struct{ Path, Version string }
 
@@ -25,6 +25,7 @@ var catalog = map[string]entry{
 	"playbook.deck":                  {"prompts/playbook/deck.md", Version},
 	"playbook.slide":                 {"prompts/playbook/slide.md", Version},
 	"playbook.spec":                  {"prompts/playbook/spec.md", Version},
+	"runtime.execution":              {"prompts/runtime/execution.md", Version},
 	"runtime.completion":             {"prompts/runtime/completion.md", Version},
 	"runtime.next-input-suggestions": {"prompts/runtime/next-input-suggestions.md", Version},
 	"runtime.recovery":               {"prompts/runtime/recovery.md", Version},

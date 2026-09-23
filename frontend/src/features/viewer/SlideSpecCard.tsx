@@ -1,7 +1,7 @@
 import { Eye, MessageSquareText } from 'lucide-react';
 import type { MaterializationState, SlideRole, SlideSpec } from '../../api/types';
 import { MaterializationBadge } from './MaterializationBadge';
-import { slideRoleLabel } from './semanticLabels';
+import { elementTypeLabel, slideRoleLabel } from './semanticLabels';
 
 export function SlideSpecCard({ title, spec, state, role }: {
   title: string;
@@ -23,12 +23,12 @@ export function SlideSpecCard({ title, spec, state, role }: {
         <strong>{spec.key_message}</strong>
       </div>
       <div className="mt-5 space-y-3 border-t border-border pt-4">
-        {spec.layout && <p className="font-mono text-xs text-text-400">Layout: {spec.layout}</p>}
+        {spec.layout && <p className="font-mono text-xs text-text-400">布局建议：{spec.layout}</p>}
         {spec.elements.map((element, index) => (
           <div key={`${element.type}-${index}`} className="flex gap-2 text-sm text-text-600">
             <Eye className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
             <div>
-              <strong className="font-mono text-xs uppercase">{element.type}</strong>
+              <strong className="font-mono text-xs uppercase">{elementTypeLabel(element.type)}</strong>
               <p className="mt-1">{element.intent}</p>
             </div>
           </div>

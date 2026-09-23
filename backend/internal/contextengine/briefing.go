@@ -70,9 +70,9 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 		return BriefingContext{}, err
 	}
 	pack.Resources = []BriefingResource{
-		{Ref: "manifest.json", Content: string(stableJSON(deck))},
-		{Ref: "outline.json", Content: string(stableJSON(outline))},
-		{Ref: "design.json", Content: string(stableJSON(design))},
+		{Ref: "演示要求", Content: string(stableJSON(ModelValue(deck)))},
+		{Ref: "目录结构", Content: string(stableJSON(ModelValue(outline)))},
+		{Ref: "全局设计", Content: string(stableJSON(ModelValue(design)))},
 	}
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		slide, ok := slides[loc.Slide.SlideID]
@@ -81,7 +81,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 			summary.State = loadMaterializationState(project.WorkDir, summary.ID, deck, outline, slide, design)
 		}
 		pack.Resources = append(pack.Resources, BriefingResource{
-			Ref: model.SlideSpecPath(summary.ID), Content: string(stableJSON(summary)),
+			Ref: fmt.Sprintf("第 %d 页《%s》页面设计稿", summary.Ordinal, summary.Title), Content: string(stableJSON(summary)),
 		})
 	}
 	limit := req.TokenBudget
@@ -106,12 +106,12 @@ func (pack *BriefingContext) loadDiscussion(entries []TranscriptEntry) {
 		text := briefingMessageText(entry.Content)
 		switch entry.Role {
 		case llm.RoleUser:
-			if strings.HasPrefix(text, "<context_summary>") {
+			if entry.Metadata != nil && entry.Metadata.Origin == "runtime" && entry.Metadata.Kind == "summary" {
 				pack.HistorySummary = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(text, "<context_summary>"), "</context_summary>"))
 				continue
 			}
-			if isRuntimeControlMessage(text) {
-				if strings.HasPrefix(text, "The user approved the plan.") {
+			if entry.Metadata != nil && entry.Metadata.Origin == "runtime" {
+				if entry.Metadata.Kind == "approval" {
 					appendTurn("runtime", "historical_approval", "The user approved the preceding plan in the source conversation.")
 				}
 				continue
@@ -278,7 +278,9 @@ func (pack *BriefingContext) warn(message string) {
 }
 
 func CompileBriefingContext(pack BriefingContext) (string, error) {
-	raw, err := json.Marshal(pack)
+	value := ModelValue(pack).(map[string]any)
+	value["project"] = map[string]any{"title": pack.Project.Title}
+	raw, err := json.Marshal(value)
 	if err != nil {
 		return "", err
 	}

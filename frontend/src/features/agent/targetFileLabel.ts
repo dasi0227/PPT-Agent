@@ -1,25 +1,10 @@
 import type { PublicTarget } from '../../api/types';
+import { partLabel } from '../viewer/semanticLabels';
 
-const deckFileNames: Partial<Record<PublicTarget['part'], string>> = {
-  manifest: 'manifest.json',
-  outline: 'outline.json',
-  design: 'design.json',
-};
-
-const slideFileNames: Partial<Record<PublicTarget['part'], string>> = {
-  spec: 'spec.json',
-  html: 'index.html',
-};
-
-export function targetFileLabel(target: PublicTarget | undefined): string | undefined {
-  if (!target) return undefined;
-
-  if (target.type === 'deck') return deckFileNames[target.part];
-
-  if (target.type === 'slide' && target.slide_id) {
-    const fileName = slideFileNames[target.part];
-    if (fileName) return `${target.slide_id}/${fileName}`;
-  }
-
+export function targetFileLabel(target: PublicTarget | undefined, pageName?: string): string | undefined {
+  if (!target || target.type === 'file') return undefined;
+  const part = partLabel(target.part);
+  if (target.type === 'deck') return part;
+  if (target.type === 'slide') return `${pageName || target.display_name || '相关页面'} · ${part}`;
   return undefined;
 }

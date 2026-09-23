@@ -581,7 +581,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	evidence := newEvidence("render", target, sourceHash, data)
 	evidence.Materialization = &proof
-	result.Evidence = []Evidence{evidence}
+	result.Evidence = []Evidence{evidence, newEvidence("static", target, sourceHash, map[string]any{"valid": true})}
 	return result
 }
 

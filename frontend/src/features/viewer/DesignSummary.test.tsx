@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DesignSummary } from './DesignSummary';
 
+vi.mock('../../api/repositories', () => ({ repositoriesApi: { getTheme: vi.fn().mockResolvedValue({ id: 'swiss-modern', name: '瑞士现代' }) } }));
+
 describe('DesignSummary', () => {
-  it('renders global visual language without slide content', () => {
+  it('renders global visual language without slide content', async () => {
     render(<DesignSummary design={{
       version: '5.0',
       project_id: 'pro_aaaaaa',
@@ -15,7 +17,8 @@ describe('DesignSummary', () => {
     }} />);
     expect(screen.getByText('全局视觉规范')).toBeInTheDocument();
     expect(screen.getByText('主题')).toBeInTheDocument();
-    expect(screen.getByText('swiss-modern')).toBeInTheDocument();
+    expect(await screen.findByText('瑞士现代')).toBeInTheDocument();
+    expect(screen.queryByText('swiss-modern')).not.toBeInTheDocument();
     expect(screen.getByText('视觉方向')).toBeInTheDocument();
     expect(screen.getByText('minimal geometric accent')).toBeInTheDocument();
     expect(screen.getByText('页面装饰')).toBeInTheDocument();

@@ -2,7 +2,7 @@ import type { Design } from '../../api/types';
 
 // 结构化枚举字段 -> 人类可读中文标签的统一映射层。
 // 目的：面向用户的展示层永远不直接渲染内部字段值（role/part/chrome.type 等），
-// 所有映射集中在此，避免跨组件双写。未知值一律回退为原值，保证不崩且可观测。
+// 所有映射集中在此，避免跨组件双写。未知枚举使用中文回退名称；自由文本不在此翻译。
 
 type ChromeItem = Design['chrome'][number];
 
@@ -24,9 +24,10 @@ const SLIDE_ROLE_LABELS: Record<string, string> = {
 
 // 资源部位（PublicTarget.part）。
 const PART_LABELS: Record<string, string> = {
+  manifest: '演示要求',
   outline: '目录结构',
   design: '全局设计',
-  spec: '设计稿',
+  spec: '页面设计稿',
   html: '幻灯片',
 };
 
@@ -64,19 +65,19 @@ const ELEMENT_TYPE_LABELS: Record<string, string> = {
 };
 
 export function slideRoleLabel(role: string): string {
-  return SLIDE_ROLE_LABELS[role.trim().toLowerCase()] ?? role;
+  return SLIDE_ROLE_LABELS[role.trim().toLowerCase()] ?? '内容';
 }
 
 export function partLabel(part: string): string {
-  return PART_LABELS[part.trim().toLowerCase()] ?? part;
+  return PART_LABELS[part.trim().toLowerCase()] ?? '演示内容';
 }
 
 export function elementTypeLabel(type: string): string {
-  return ELEMENT_TYPE_LABELS[type.trim().toLowerCase()] ?? type;
+  return ELEMENT_TYPE_LABELS[type.trim().toLowerCase()] ?? '内容元素';
 }
 
 export function chromeLabel(item: ChromeItem): string {
-  const type = CHROME_TYPE_LABELS[item.type] ?? item.type;
-  const placement = CHROME_PLACEMENT_LABELS[item.placement] ?? item.placement;
+  const type = CHROME_TYPE_LABELS[item.type] ?? '页面装饰';
+  const placement = CHROME_PLACEMENT_LABELS[item.placement] ?? '自定义位置';
   return `${type}（${placement}）`;
 }

@@ -51,10 +51,11 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 		}
 	}
 	runCols := tableColumns(t, db, "runs")
-	if runCols["scope_object"] {
-		t.Fatal("object scope column still exists")
+	if runCols["project_history_revision"] {
+		t.Fatal("suggestions must not persist a project history revision on runs")
 	}
-	for _, want := range []string{"scope_slide_ids_json", "scope_source_json", "scope_include_run_created_slides", "scope_revision", "project_history_revision", "owner_instance_id", "pause_reason", "paused_at"} {
+	if runCols["scope_object"] { t.Fatal("object scope column still exists") }
+	for _, want := range []string{"scope_slide_ids_json", "scope_source_json", "scope_include_run_created_slides", "scope_revision", "owner_instance_id", "pause_reason", "paused_at"} {
 		if !runCols[want] {
 			t.Fatalf("runs table missing lifecycle column %q; got %v", want, runCols)
 		}

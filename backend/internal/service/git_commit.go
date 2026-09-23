@@ -454,7 +454,7 @@ func generateGitCommitMessage(
 	projectTitle string,
 	changes gitcommit.ChangeSet,
 ) (generatedCommitMessage, error) {
-	prompt := prompts.MustLoad("command.commit")
+	policy := prompts.PublicPolicy("command.commit")
 	user := fmt.Sprintf(
 		"Project: %s\n\nFile status:\n%s\n\nLine statistics:\n%s\n\nStaged diff:\n%s",
 		projectTitle, changes.NameStatus, changes.NumStat, changes.Diff,
@@ -482,7 +482,7 @@ func generateGitCommitMessage(
 		}
 		response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{
 			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
+				{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
 				{Role: llm.RoleUser, Content: llm.TextContent(user)},
 			},
 			Tools: []llm.ToolSchema{tool}, MaxOutputTokens: 1024,
@@ -499,6 +499,10 @@ func generateGitCommitMessage(
 		}
 		message, validateErr := validateGitCommitResponse(response)
 		if validateErr == nil {
+			message.Title = model.PublicText(message.Title)
+			for i := range message.Items {
+				message.Items[i] = model.PublicText(message.Items[i])
+			}
 			return message, nil
 		}
 		lastErr = validateErr

@@ -3,25 +3,35 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func BuildContextBriefing(_ contextengine.ContextPack, state *RunState) string {
+func BuildContextBriefing(pack contextengine.ContextPack, state *RunState) string {
 	if state == nil {
 		return ""
 	}
-	sections := []string{}
-	if len(state.retrievedContext) > 0 {
-		sections = append(sections, "Retrieved context:\n"+retrievedContextBrief(state.retrievedContext))
+	if len(state.retrievedContext) == 0 {
+		return ""
 	}
-	sections = append(sections, "Working set:\n"+workingSetSummary(state))
-	if focus := nextFocus(state, state.mode); focus != "" {
-		sections = append(sections, "Next focus: "+focus)
+	changed := map[string]bool{}
+	for _, change := range state.changeSet().All() {
+		changed[change.Artifact.Resource().SlideID] = true
 	}
-	return strings.Join(sections, "\n")
+	additional := []RetrievedContextItem{}
+	for _, item := range state.retrievedContext {
+		// Segment selection reasons describe bookkeeping, not retrieved content.
+		if item.Source != "context_manifest" || item.Snippet == "" || changed[item.Target.SlideID] {
+			continue
+		}
+		if pack.Target.SlideHTMLSummary != nil && len(pack.Target.SlideIDs) == 1 && item.Target.SlideID == pack.Target.SlideIDs[0] {
+			continue
+		}
+		additional = append(additional, item)
+	}
+	return retrievedContextBrief(additional)
 }
 
 func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, state *RunState) error {
@@ -79,82 +89,12 @@ func retrievedContextBrief(items []RetrievedContextItem) string {
 		if item.Target.Type == "" {
 			target = "global"
 		}
-		line := fmt.Sprintf(
-			"- %s kind=%s target=%s hash=%s score=%.2f reason=%s",
-			item.RefID, item.Kind, target, shortHash(item.Hash), item.Score, item.SelectionReason,
-		)
+		line := fmt.Sprintf("- %s", target)
 		if item.Snippet != "" {
 			line += "\n  summary: " + item.Snippet
 		}
 		lines = append(lines, line)
 	}
+	sort.Strings(lines)
 	return strings.Join(lines, "\n")
-}
-
-func shortHash(value string) string {
-	if len(value) <= 12 {
-		return value
-	}
-	return value[:12]
-}
-
-func workingSetSummary(state *RunState) string {
-	lines := []string{}
-	if state.plan != nil {
-		lines = append(lines, "- Plan: "+state.plan.Brief())
-	} else {
-		lines = append(lines, "- Plan: none")
-	}
-	changes := state.changeSet().All()
-	if len(changes) == 0 {
-		lines = append(lines, "- Changes: none")
-	} else {
-		values := make([]string, 0, len(changes))
-		for _, change := range changes {
-			target := resourceForArtifact(change.Artifact)
-			values = append(values, fmt.Sprintf("%s via %s", target.Key(), change.Source))
-		}
-		lines = append(lines, "- Changes: "+strings.Join(values, "; "))
-	}
-	evidence := state.ledger.Entries(state.changeSet())
-	if len(evidence) == 0 {
-		lines = append(lines, "- Evidence: none")
-	} else {
-		start := len(evidence) - 4
-		if start < 0 {
-			start = 0
-		}
-		values := make([]string, 0, len(evidence)-start)
-		for _, entry := range evidence[start:] {
-			fresh := "stale"
-			if entry.Fresh {
-				fresh = "fresh"
-			}
-			values = append(values, fmt.Sprintf("%s:%s:%s", entry.Kind, entry.Target.Key(), fresh))
-		}
-		lines = append(lines, "- Evidence: "+strings.Join(values, "; "))
-	}
-	if len(state.issues) == 0 {
-		lines = append(lines, "- Issues: none")
-	} else {
-		latest := state.issues[len(state.issues)-1]
-		lines = append(lines, "- Latest issue: "+latest.Code+" - "+latest.Summary)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func nextFocus(state *RunState, mode model.RunMode) string {
-	if mode == model.ModeExecute && state.plan != nil && state.plan.HasBlockingSteps() {
-		return "complete the next pending plan step and keep the plan statuses current."
-	}
-	if mode == model.ModeExecute && len(state.changeSet().All()) > 0 {
-		return "ensure latest changed targets have fresh required evidence, then finish with complete message."
-	}
-	if mode == model.ModePlan {
-		if state.plan == nil {
-			return "complete the full proposal with create_plan, then wait for explicit approval without calling finish."
-		}
-		return "revise the complete proposal with update_plan when feedback is present, then wait for approval."
-	}
-	return "use the next disclosed tool or finish(message) when complete."
 }

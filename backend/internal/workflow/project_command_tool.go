@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -74,8 +73,7 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 	toolResult := SuccessfulToolResult("command completed")
 	toolResult.Data = commandResultData(result)
 	toolResult.Command = publicCommandExecution(decision, result, "completed", "")
-	observation, _ := json.Marshal(toolResult)
-	toolResult.Observation = string(observation)
+	toolResult.Observation = modelToolObservation(toolResult)
 	return toolResult
 }
 
@@ -113,8 +111,7 @@ func executeProjectFileEdit(
 		Hash: change.AfterHash, Insertions: change.Insertions, Deletions: change.Deletions,
 	}}
 	toolResult.Command = publicCommandExecution(decision, execution, "completed", "")
-	observation, _ := json.Marshal(toolResult)
-	toolResult.Observation = string(observation)
+	toolResult.Observation = modelToolObservation(toolResult)
 	return toolResult
 }
 

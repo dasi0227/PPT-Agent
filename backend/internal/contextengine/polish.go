@@ -127,7 +127,13 @@ func (a *ContextAssembler) AssemblePolish(
 }
 
 func CompilePolishContext(pack PolishContext) (string, error) {
-	raw, err := json.Marshal(pack)
+	value := ModelValue(pack).(map[string]any)
+	value["project"] = map[string]any{"title": pack.Project.Title}
+	// The page list already carries section names and ordering.
+	if outline, ok := value["outline"].(map[string]any); ok {
+		delete(outline, "sections")
+	}
+	raw, err := json.Marshal(value)
 	if err != nil {
 		return "", err
 	}

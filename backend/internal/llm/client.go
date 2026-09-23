@@ -23,6 +23,23 @@ type Message struct {
 	Content    []ContentPart
 	ToolCallID string
 	ToolCalls  []ToolCall
+	Metadata   *MessageMetadata `json:"-"`
+}
+
+// MessageMetadata is local provenance, persisted by the transcript store but
+// never sent to providers. User text cannot manufacture this authority.
+type MessageMetadata struct {
+	Origin    string          `json:"origin"`
+	Kind      string          `json:"kind"`
+	Key       string          `json:"key,omitempty"`
+	Hash      string          `json:"hash,omitempty"`
+	RunID     string          `json:"run_id,omitempty"`
+	Resources []ResourceStamp `json:"resources,omitempty"`
+}
+
+type ResourceStamp struct {
+	Key  string `json:"key"`
+	Hash string `json:"hash"`
 }
 
 type ContentPart struct {
@@ -97,13 +114,14 @@ type Usage struct {
 }
 
 type GenerateRequest struct {
-	PauseOnFallback bool // Runtime rebuilds context before invoking the activated fallback.
-	Messages        []Message
-	Tools           []ToolSchema
-	ImageResolver   ImageRefResolver
-	Continuation    *ProviderContinuation
-	OnRetry         func(attempt int)
-	MaxOutputTokens int
+	PauseOnFallback     bool // Runtime rebuilds context before invoking the activated fallback.
+	Messages            []Message
+	Tools               []ToolSchema
+	ImageResolver       ImageRefResolver
+	Continuation        *ProviderContinuation
+	OnRetry             func(attempt int)
+	MaxOutputTokens     int
+	OnContinuationReset func(string)
 }
 
 type GenerateResponse struct {

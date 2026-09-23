@@ -69,12 +69,12 @@ func newBriefingGenerator(s store.Store, registry *llm.Registry, locks *run.Lock
 
 func (svc *KickoffService) Generate(ctx context.Context, projectID string, params BriefingParams) (BriefingResult, error) {
 	prompt := prompts.MustLoad("command.kickoff")
-	return svc.generator.generate(ctx, projectID, model.BriefingKickoff, params, prompt.Body, prompt.Version)
+	return svc.generator.generate(ctx, projectID, model.BriefingKickoff, params, prompts.PublicPolicy("command."+string(model.BriefingKickoff)), prompt.Version)
 }
 
 func (svc *HandoffService) Generate(ctx context.Context, projectID string, params BriefingParams) (BriefingResult, error) {
 	prompt := prompts.MustLoad("command.handoff")
-	return svc.generator.generate(ctx, projectID, model.BriefingHandoff, params, prompt.Body, prompt.Version)
+	return svc.generator.generate(ctx, projectID, model.BriefingHandoff, params, prompts.PublicPolicy("command."+string(model.BriefingHandoff)), prompt.Version)
 }
 
 func (svc *briefingGenerator) generate(
@@ -213,6 +213,15 @@ func (svc *briefingGenerator) generate(
 	if err != nil {
 		return BriefingResult{}, model.NewAgentError("BRIEFING_OUTPUT_INVALID", string(kind), err)
 	}
+	var userSource strings.Builder
+	for _, turn := range pack.Conversation {
+		if turn.Role == "user" {
+			userSource.WriteString(turn.Text + "\n")
+		}
+	}
+	display := contextengine.ProjectPublicTextContext(project, userSource.String())
+	result.Title = model.PublicText(result.Title, display)
+	result.Content = model.PublicText(result.Content, display)
 	briefingID := params.BriefingID
 	if briefingID == "" {
 		briefingID = model.MustShortID("brf")

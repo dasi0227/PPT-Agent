@@ -5,6 +5,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 
@@ -52,6 +53,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="max-h-64 w-[196px] overflow-y-auto p-1">
+          <DropdownMenuLabel className="px-2 pb-2 text-[11px] font-normal text-text-600">模型选择</DropdownMenuLabel>
           {profiles.map((profile) => {
             const optionDisabled = requiresVision && !profile.capabilities.vision;
             const active = profile.name === value;

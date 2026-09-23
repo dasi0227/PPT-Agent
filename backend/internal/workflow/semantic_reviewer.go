@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
@@ -98,7 +99,14 @@ func (r LLMSemanticReviewer) Review(ctx context.Context, input SemanticReviewInp
 	if r.Provider == nil {
 		return SemanticReviewResult{}, errors.New("semantic reviewer provider is unavailable")
 	}
-	raw, err := json.Marshal(input)
+	value := contextengine.ModelValue(input).(map[string]any)
+	delete(value, "finish_call_id")
+	changes := []any{}
+	for _, change := range input.Changes.All() {
+		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "content_hash": change.AfterHash})
+	}
+	value["changes"] = changes
+	raw, err := json.Marshal(value)
 	if err != nil {
 		return SemanticReviewResult{}, err
 	}
@@ -250,15 +258,15 @@ func reviewContextItems(values []RetrievedContextItem) []ReviewContextItem {
 }
 
 func semanticReviewerPrompt() string {
-	m := prompts.MustLoad("subagent.reviewer.agent")
-	return fmt.Sprintf("<semantic_reviewer_prompt_manifest version=%q>\n<prompt_module id=%q version=%q path=%q hash=%q>\n%s\n</prompt_module>\n</semantic_reviewer_prompt_manifest>", m.Version, m.ID, m.Version, m.Path, m.Hash, m.Body)
+	return prompts.MustLoad("core.quality").Body + "\n\n" + prompts.MustLoad("subagent.reviewer.agent").Body
 }
 
 func semanticReviewerPromptManifest() string {
-	m := prompts.MustLoad("subagent.reviewer.agent")
-	raw, _ := json.Marshal(map[string]any{
-		"version": m.Version,
-		"modules": []map[string]string{{"id": m.ID, "path": m.Path, "version": m.Version, "hash": m.Hash}},
-	})
+	modules := []map[string]string{}
+	for _, id := range []string{"core.quality", "subagent.reviewer.agent"} {
+		m := prompts.MustLoad(id)
+		modules = append(modules, map[string]string{"id": m.ID, "path": m.Path, "version": m.Version, "hash": m.Hash})
+	}
+	raw, _ := json.Marshal(map[string]any{"modules": modules})
 	return string(raw)
 }

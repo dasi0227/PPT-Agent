@@ -19,7 +19,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	}
 	req := p.Requests()[0]
 	m := prompts.MustLoad("subagent.reviewer.agent")
-	if strings.Count(req.Messages[0].Text(), "<prompt_module ") != 1 || !strings.Contains(req.Messages[0].Text(), m.Body) || !strings.Contains(req.Messages[0].Text(), m.Hash) {
+	if !strings.Contains(req.Messages[0].Text(), prompts.MustLoad("core.quality").Body) || !strings.Contains(req.Messages[0].Text(), m.Body) || strings.Contains(req.Messages[0].Text(), m.Hash) {
 		t.Fatal("reviewer policy was not merged/manifested")
 	}
 	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 0 {
@@ -31,7 +31,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if err := json.Unmarshal([]byte(semanticReviewerPromptManifest()), &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Modules) != 1 || manifest.Modules[0]["hash"] != m.Hash || manifest.Modules[0]["path"] != m.Path {
+	if len(manifest.Modules) != 2 || manifest.Modules[1]["hash"] != m.Hash || manifest.Modules[1]["path"] != m.Path {
 		t.Fatal("persisted manifest does not describe policy")
 	}
 }

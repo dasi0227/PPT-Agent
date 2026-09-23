@@ -7,6 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 
@@ -61,6 +62,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
             skills.length === 0 ? 'w-[220px]' : 'w-[280px]',
           ].join(' ')}
         >
+          <DropdownMenuLabel className="px-2 pb-2 text-[11px] font-normal text-text-600">技能选择</DropdownMenuLabel>
           {skills.length === 0 && (
             <div className="flex min-h-16 items-center justify-center px-4 py-3 text-xs text-text-400">
               暂无技能

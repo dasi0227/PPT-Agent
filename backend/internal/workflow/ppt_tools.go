@@ -10,9 +10,11 @@ import (
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 const maxPPTContentBytes = 2 * 1024 * 1024
@@ -47,7 +49,33 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 		hash = spec.ContentHash(raw)
 	}
 	result.Data = map[string]any{"hash": hash}
-	result.Observation = "content_hash: " + hash + "\n" + string(raw)
+	var content any = string(raw)
+	if resource.Part == "outline" {
+		var outline spec.Outline
+		if err = json.Unmarshal(raw, &outline); err != nil {
+			return readFailure(err)
+		}
+		content = contextengine.ModelOutline(contextengine.ContextPack{Outline: contextengine.OutlineContext{Outline: outline}})
+	} else if resource.Part != "html" {
+		content, err = contextengine.ModelResource(raw)
+		if err != nil {
+			return readFailure(err)
+		}
+	}
+	stamp := llm.ResourceStamp{Key: "ppt/" + resource.Key(), Hash: hash}
+	target := map[string]any{"resource": resource, "content_hash": hash}
+	if visibleResourceHashes(input.Messages)[stamp.Key] == stamp.Hash {
+		target["already_available"] = true
+	} else {
+		target["content"] = content
+		target["replaces_previous"] = true
+		result.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: []llm.ResourceStamp{stamp}}
+	}
+	if resource.SlideID != "" {
+		target["display_name"] = runtimeSlideDisplayName(input.ProjectDir, resource.SlideID)
+	}
+	observation, _ := json.Marshal(target)
+	result.Observation = string(observation)
 	return result
 }
 
@@ -187,29 +215,17 @@ func operationAllowed(scope model.RunScope, req pptmutation.Request) bool {
 }
 
 func mutationSchema(pack contextengine.ContextPack) map[string]any {
+	definitions := map[string]any{
+		"manifest": pptschema.AuthoringSchema(pptschema.ManifestName),
+		"design":   pptschema.AuthoringSchema(pptschema.DesignName),
+		"spec":     pptschema.AuthoringSchema(pptschema.SlideSpecName),
+	}
 	patch := func(operation string) map[string]any {
-		pathSchema := func(patchOp string) map[string]any {
-			rules := pptmutation.PatchPathRules(operation, patchOp)
-			patterns := make([]any, 0, len(rules))
-			for _, rule := range rules {
-				patterns = append(patterns, map[string]any{
-					"type": "string", "pattern": rule.Pattern, "description": rule.Description,
-				})
-			}
-			return map[string]any{"oneOf": patterns}
+		name := strings.Split(operation, ".")[0]
+		if name == "slide" {
+			name = "spec"
 		}
-		withValue := func(patchOp string) map[string]any {
-			return objectSchema([]string{"op", "path", "value"}, map[string]any{
-				"op": map[string]any{"const": patchOp}, "path": pathSchema(patchOp), "value": map[string]any{},
-			})
-		}
-		remove := objectSchema([]string{"op", "path"}, map[string]any{
-			"op": map[string]any{"const": "remove"}, "path": pathSchema("remove"),
-		})
-		return map[string]any{
-			"type": "array", "minItems": 1, "maxItems": 32,
-			"items": map[string]any{"oneOf": []any{withValue("add"), remove, withValue("replace")}},
-		}
+		return mutationPatchSchema(operation, name, definitions[name].(map[string]any))
 	}
 	position := objectSchema(nil, map[string]any{"parent_id": map[string]any{"type": "string"}, "before_id": map[string]any{"type": "string"}, "after_id": map[string]any{"type": "string"}})
 	variant := func(op string, required []string, props map[string]any) any {
@@ -220,43 +236,28 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	text := func(max int) map[string]any {
 		return map[string]any{"type": "string", "minLength": 1, "maxLength": max}
 	}
-	roles := make([]string, 0, len(spec.SlideRoleValues()))
-	for _, role := range spec.SlideRoleValues() {
-		roles = append(roles, string(role))
+	draftSlide := pptschema.OutlineDraftSchema("slide")
+	draftSubsection := pptschema.OutlineDraftSchema("subsection")
+	draftSection := pptschema.OutlineDraftSchema("section")
+	withKind := func(kind string, node map[string]any) map[string]any {
+		props := node["properties"].(map[string]any)
+		props["kind"] = map[string]any{"const": kind}
+		node["required"] = append(node["required"].([]string), "kind")
+		return node
 	}
-	role := map[string]any{"enum": roles}
-	draftSlide := objectSchema([]string{"client_ref", "title", "role"}, map[string]any{"client_ref": text(120), "title": text(160), "role": role})
-	subsectionTitle := text(160)
-	subsectionTitle["description"] = "Required human-readable subsection title. Every subsection must include this field."
-	draftSubsection := objectSchema([]string{"client_ref", "title", "purpose", "slides"}, map[string]any{"client_ref": text(120), "title": subsectionTitle, "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}})
-	draftSubsection["description"] = "Grouped outline node. client_ref, title, purpose, and slides are all required."
-	draftSubsections := map[string]any{"type": "array", "items": draftSubsection, "description": "Subsections of a grouped section. Each subsection must include client_ref, title, purpose, and slides."}
-	draftSection := objectSchema([]string{"client_ref", "title", "purpose", "slides", "subsections"}, map[string]any{"client_ref": text(120), "title": text(160), "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}, "subsections": draftSubsections})
-	draftNode := map[string]any{"oneOf": []any{
-		objectSchema([]string{"kind", "client_ref", "title", "purpose", "slides", "subsections"}, map[string]any{"kind": map[string]any{"const": "section"}, "client_ref": text(120), "title": text(160), "purpose": text(400), "slides": map[string]any{"type": "array", "items": draftSlide}, "subsections": map[string]any{"type": "array", "items": draftSubsection}}),
-		objectSchema([]string{"kind", "client_ref", "title", "purpose"}, map[string]any{"kind": map[string]any{"const": "subsection"}, "client_ref": text(120), "title": text(160), "purpose": text(400)}),
-		objectSchema([]string{"kind", "client_ref", "title", "role"}, map[string]any{"kind": map[string]any{"const": "slide"}, "client_ref": text(120), "title": text(160), "role": role}),
-	}}
-	changes := objectSchema(nil, map[string]any{"title": text(160), "purpose": text(400), "role": role})
+	// Inserting a subsection creates an empty parent; slides are separate inserts.
+	subProps := draftSubsection["properties"].(map[string]any)
+	delete(subProps, "slides")
+	draftSubsection["required"] = []string{"client_ref", "title", "purpose"}
+	draftNode := map[string]any{"oneOf": []any{withKind("section", pptschema.OutlineDraftSchema("section")), withKind("subsection", draftSubsection), withKind("slide", draftSlide)}}
+	slideProps := pptschema.OutlineDraftSchema("slide")["properties"].(map[string]any)
+	sectionProps := draftSection["properties"].(map[string]any)
+	changes := objectSchema(nil, map[string]any{"title": slideProps["title"], "purpose": sectionProps["purpose"], "role": slideProps["role"]})
 	changes["minProperties"] = 1
-	chrome := objectSchema([]string{"type", "placement", "style"}, map[string]any{"type": map[string]any{"enum": []string{"page_number", "section_marker", "key_message", "deck_title"}}, "placement": map[string]any{"enum": []string{"top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right", "left-edge", "right-edge"}}, "style": text(160)})
-	design := objectSchema([]string{"direction", "chrome"}, map[string]any{"direction": text(600), "chrome": map[string]any{"type": "array", "maxItems": 12, "items": chrome}})
-	elementType := map[string]any{
-		"enum":        []string{"text", "list", "metric", "quote", "table", "chart", "diagram", "code", "asset"},
-		"description": "Semantic content primitive. For comparison slides, use text, list, table, or diagram and express the comparison in intent/layout; comparison is a slide role, not an element type.",
-	}
-	element := objectSchema([]string{"type", "intent"}, map[string]any{"type": elementType, "intent": text(1200)})
-	slideSpec := objectSchema([]string{"key_message", "elements"}, map[string]any{"key_message": text(500), "elements": map[string]any{"type": "array", "items": element}, "layout": text(80)})
-	slideSpec["examples"] = []any{map[string]any{
-		"key_message": "Option A is faster while option B offers more control.",
-		"elements": []any{
-			map[string]any{"type": "text", "intent": "Present the two options side by side with their primary trade-off."},
-			map[string]any{"type": "table", "intent": "Compare speed, control, and setup effort for option A and option B."},
-		},
-		"layout": "split-comparison",
-	}}
+	design := map[string]any{"$ref": "#/$defs/design"}
+	slideSpec := map[string]any{"$ref": "#/$defs/spec"}
 	edits := map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{"old_text": text(maxPPTContentBytes), "new_text": map[string]any{"type": "string", "maxLength": maxPPTContentBytes}})}
-	outlineInit := variant("outline.init", []string{"structure"}, map[string]any{"structure": map[string]any{"type": "array", "minItems": 1, "items": draftSection}}).(map[string]any)
+	outlineInit := variant("outline.init", []string{"structure"}, map[string]any{"structure": map[string]any{"type": "array", "minItems": 1, "maxItems": pptschema.AuthoringSchema(pptschema.OutlineName)["properties"].(map[string]any)["sections"].(map[string]any)["maxItems"], "items": draftSection}}).(map[string]any)
 	outlineInit["examples"] = []any{map[string]any{
 		"op": "outline.init",
 		"structure": []any{map[string]any{
@@ -286,10 +287,7 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 		variant("slide.spec.write", []string{"slide_id", "spec"}, map[string]any{"slide_id": slideIDSchema(pack), "spec": slideSpec}), variant("slide.spec.patch", []string{"slide_id", "patch"}, map[string]any{"slide_id": slideIDSchema(pack), "patch": patch("slide.spec.patch")}),
 		variant("slide.html.write", []string{"slide_id", "html"}, map[string]any{"slide_id": slideIDSchema(pack), "html": map[string]any{"type": "string", "minLength": 1, "maxLength": maxPPTContentBytes}}), variant("slide.html.patch", []string{"slide_id", "edits"}, map[string]any{"slide_id": slideIDSchema(pack), "edits": edits}),
 	}
-	if len(spec.FlattenOutline(pack.Outline.Outline)) > 0 || len(pack.Outline.Outline.Sections) > 0 {
-		variants = append(variants[:1], variants[2:]...)
-	}
-	return map[string]any{"type": "object", "oneOf": variants, "description": "Closed discriminated union of the 12 supported PPT mutations."}
+	return map[string]any{"type": "object", "oneOf": variants, "$defs": definitions, "description": "Closed discriminated union of the 12 supported PPT mutations."}
 }
 func slideIDSchema(pack contextengine.ContextPack) map[string]any {
 	_ = pack

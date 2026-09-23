@@ -43,12 +43,12 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 	for _, payload := range []map[string]any{
 		{
-			"schema_version": 5, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 6, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"call_id": "c1", "tool": "mutate_ppt", "display": map[string]any{"label": "生成"},
 			"args": map[string]any{"html": "<section />"},
 		},
 		{
-			"schema_version": 5, "run_id": "r1", "occurred_at": base.OccurredAt,
+			"schema_version": 6, "run_id": "r1", "occurred_at": base.OccurredAt,
 			"message_id": "m1", "text": "安全摘要", "reasoning_content": "hidden",
 		},
 	} {
@@ -66,7 +66,7 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 }
 
-func TestRunStartedPayloadUsesV5RunCommandFields(t *testing.T) {
+func TestRunStartedPayloadUsesRunCommandFields(t *testing.T) {
 	payload := RunStartedPayload{
 		PublicEventBase: NewPublicEventBase("r1"),
 		Scope:           NewRunScope(ScopeCurrentPage, "sli_1"),
@@ -89,7 +89,7 @@ func TestRunStartedPayloadUsesV5RunCommandFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	value := string(raw)
-	for _, want := range []string{`"schema_version":5`, `"scope":`, `"object":"presentation"`, `"mode":"execute"`} {
+	for _, want := range []string{`"schema_version":6`, `"scope":`, `"slide_ids":["sli_1"]`, `"mode":"execute"`} {
 		if !strings.Contains(value, want) {
 			t.Fatalf("run.started missing %s: %s", want, value)
 		}
@@ -97,7 +97,7 @@ func TestRunStartedPayloadUsesV5RunCommandFields(t *testing.T) {
 	if !strings.Contains(value, `"kind":"component"`) || strings.Contains(value, `"html"`) {
 		t.Fatalf("run.started component projection is unsafe: %s", value)
 	}
-	for _, legacy := range []string{`"target":`, `"interaction":`, `"artifact":`, `"level":`} {
+	for _, legacy := range []string{`"target":`, `"interaction":`, `"artifact":`, `"level":`, `"object":`} {
 		if strings.Contains(value, legacy) {
 			t.Fatalf("run.started contains legacy field %s: %s", legacy, value)
 		}
@@ -251,10 +251,10 @@ func TestContextCompactedRequiresSafeTitleAndCompleteMetrics(t *testing.T) {
 	}
 }
 
-func TestMessageFinalV4RequiresBoundedSuggestionsAndHistoryRevision(t *testing.T) {
+func TestMessageFinalRequiresBoundedSuggestions(t *testing.T) {
 	payload := MessageFinalPayload{
 		PublicEventBase: NewPublicEventBase("r1"), MessageID: "m1", Text: "完成。",
-		AffectedTargets: []PublicTarget{}, SuggestedNextInputs: []string{"继续优化第 2 页"}, ProjectHistoryRevision: 4,
+		AffectedTargets: []PublicTarget{}, SuggestedNextInputs: []string{"继续优化第 2 页"},
 	}
 	if err := ValidatePublicEvent(EventMessageFinal, payload); err != nil {
 		t.Fatal(err)
@@ -264,9 +264,8 @@ func TestMessageFinalV4RequiresBoundedSuggestionsAndHistoryRevision(t *testing.T
 		t.Fatal("duplicate suggestions were accepted")
 	}
 	payload.SuggestedNextInputs = []string{}
-	payload.ProjectHistoryRevision = 0
-	if err := ValidatePublicEvent(EventMessageFinal, payload); err == nil {
-		t.Fatal("missing history revision was accepted")
+	if err := ValidatePublicEvent(EventMessageFinal, payload); err != nil {
+		t.Fatalf("empty suggestions must remain valid: %v", err)
 	}
 }
 

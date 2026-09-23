@@ -3,6 +3,7 @@ package contextengine
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -38,45 +39,21 @@ func (PromptCompiler) compile(pack ContextPack, systemPolicy, runtimeState strin
 		if string(raw) == "null" || string(raw) == "{}" || string(raw) == "[]" {
 			return
 		}
-		fmt.Fprintf(&contextPack, "<%s>\n%s\n</%s>\n", name, raw, name)
+		if strings.HasPrefix(name, "page/") {
+			fmt.Fprintf(&contextPack, "<page_context slide_id=%q>\n%s\n</page_context>\n", strings.TrimPrefix(name, "page/"), raw)
+		} else {
+			fmt.Fprintf(&contextPack, "<%s>\n%s\n</%s>\n", name, raw, name)
+		}
 	}
-	writeSection("run_command", map[string]any{
-		"scope": pack.Command.Scope, "mode": pack.Command.Mode, "options": pack.Command.Options,
-	})
-	projectContext := map[string]any{"project": pack.Project}
-	if pack.PresentationManifest.Manifest.SchemaVersion != "" {
-		projectContext["manifest"] = pack.PresentationManifest
+	sections := ModelSections(pack)
+	keys := make([]string, 0, len(sections))
+	for key := range sections {
+		keys = append(keys, key)
 	}
-	if pack.Outline.Outline.SchemaVersion != "" {
-		projectContext["outline"] = pack.Outline
+	sort.Strings(keys)
+	for _, name := range keys {
+		writeSection(name, sections[name])
 	}
-	writeSection("project_context", projectContext)
-	if len(pack.Target.SlideIDs) > 0 {
-		writeSection("target_context", pack.Target)
-	}
-	writeSection("related_context", pack.RelatedSlides)
-	writeSection("design_context", pack.Design)
-	if pack.Theme != nil {
-		writeSection("theme_context", map[string]any{
-			"theme": pack.Theme,
-			"usage_contract": []string{
-				"The current theme is read-only. Do not select, replace, or modify the theme or design.theme.",
-				"Prefer the current theme's var(--token) values when writing page CSS.",
-				"Theme helper selectors are optional. Author custom layouts, SVG, charts and interactions that preserve the selected visual direction; no template copying is required.",
-			},
-		})
-	}
-	if len(pack.Components) > 0 || len(pack.Skills) > 0 {
-		writeSection("available_resources", map[string]any{
-			"components": pack.Components,
-			"skills":     pack.Skills,
-			"usage_contract": []string{
-				"Use only the exact stable IDs listed here with load_component and load_skill.",
-				"load_component returns the component HTML; load_skill returns the skill instructions.",
-			},
-		})
-	}
-	writeSection("available_context_refs", pack.Manifest.Refs)
 
 	var user strings.Builder
 	user.WriteString("<runtime_input>\n")

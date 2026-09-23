@@ -115,7 +115,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 		reference += "\n\n<revision_feedback>\n" + params.Feedback + "\n</revision_feedback>"
 	}
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{Messages: []llm.Message{
-		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
+		{Role: llm.RoleSystem, Content: llm.TextContent(prompts.PublicPolicy("command.polish"))},
 		{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + instruction)},
 	}, Tools: []llm.ToolSchema{commandresult.Schema("polish_instruction",
 		"Submit the refined instruction without executing it or changing the composer.",
@@ -138,6 +138,9 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if err != nil {
 		return PolishResult{}, model.NewAgentError("POLISH_OUTPUT_INVALID", "polish_instruction", err)
 	}
+	display := contextengine.ProjectPublicTextContext(project, instruction)
+	result.Title = model.PublicText(result.Title, display)
+	result.Content = model.PublicText(result.Content, display)
 	return PolishResult{
 		ModelExecution: llm.ExecutionOf(profile.Adapter()),
 		Title:          result.Title, Content: result.Content, Changed: result.Content != instruction, PromptVersion: prompt.Version,

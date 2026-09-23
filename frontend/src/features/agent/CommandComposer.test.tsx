@@ -41,6 +41,44 @@ describe('CommandComposer suggestions', () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
+  it('keeps a real editable caret with suggestions and hides them during typing and IME composition', async () => {
+    render(<CommandComposer />);
+    const editor = screen.getByRole('textbox');
+    const suggestion = () => screen.queryByRole('button', { name: /1\. 优化第一页/ });
+    await waitFor(() => expect(editor).toHaveFocus());
+    expect(editor).toHaveAttribute('contenteditable', 'true');
+    expect(editor.textContent).toBe('');
+    expect(editor.contains(window.getSelection()?.anchorNode ?? null)).toBe(true);
+    expect(suggestion()).toBeVisible();
+
+    editor.textContent = '自己的需求';
+    fireEvent.input(editor);
+    expect(suggestion()).not.toBeInTheDocument();
+    expect(useComposerStore.getState().threadDrafts.t1).toBe('自己的需求');
+    editor.textContent = '';
+    fireEvent.input(editor);
+    expect(editor).toHaveFocus();
+    expect(suggestion()).toBeVisible();
+
+    fireEvent.compositionStart(editor);
+    expect(suggestion()).not.toBeInTheDocument();
+    fireEvent.compositionEnd(editor, { data: '' });
+    expect(suggestion()).toBeVisible();
+    expect(editor).toHaveFocus();
+
+    fireEvent.compositionStart(editor);
+    editor.textContent = '修改标题';
+    fireEvent.compositionEnd(editor, { data: '修改标题' });
+    expect(suggestion()).not.toBeInTheDocument();
+    expect(useComposerStore.getState().threadDrafts.t1).toBe('修改标题');
+  });
+
+  it('does not steal focus from another input when suggestions appear', async () => {
+    render(<><input aria-label="其它输入" autoFocus /><CommandComposer /></>);
+    await waitFor(() => expect(screen.getByRole('button', { name: /1\. 优化第一页/ })).toBeVisible());
+    expect(screen.getByRole('textbox', { name: '其它输入' })).toHaveFocus();
+  });
+
   it('shows persisted suggestions without project validation, survives project changes, and fills only a draft', async () => {
     const history = vi.spyOn(projectHistoryApi, 'state');
     const content = vi.spyOn(projectsApi, 'getContent');

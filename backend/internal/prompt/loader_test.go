@@ -58,7 +58,7 @@ func TestLoadRejectsUnknownMissingAndEmpty(t *testing.T) {
 
 func TestRenderedBodyRefreshesHash(t *testing.T) {
 	source := MustLoad("core.structure")
-	rendered, err := source.WithBody(strings.ReplaceAll(source.Body, "{{CONTRACTS_JSON}}", "{}"))
+	rendered, err := source.WithBody(source.Body + "\nAn additional rule.")
 	if err != nil || rendered.Hash == source.Hash || rendered.Path != source.Path || rendered.Version != source.Version {
 		t.Fatalf("render metadata: %+v, %v", rendered, err)
 	}

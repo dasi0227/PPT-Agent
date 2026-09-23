@@ -40,15 +40,15 @@ function safeReasoningMarkdown(text: string): string {
 
 function pageName(slideId: string, slides: Slide[]): string {
   const index = slides.findIndex((slide) => slide.id === slideId);
-  return index >= 0 ? `第 ${index + 1} 页` : `页面 ${slideId}`;
+  return index >= 0 ? `第 ${index + 1} 页` : '已删除页面';
 }
 
 export function presentActivityText(text: string, target: PublicTarget | undefined, slides: Slide[]): string {
   const presented = presentUserText(text);
   if (!target || target.type !== 'slide' || !target.slide_id) return presented;
   const index = slides.findIndex((slide) => slide.id === target.slide_id);
-  // 页码随 outline 顺序实时换算；新页尚未进入有序列表时，使用后端给出的安全展示名，避免泄露 slide_id。
-  const replacement = index >= 0 ? `第 ${index + 1} 页` : target.display_name || '页面';
+  // 当前快照确定页面顺序；已不在目录中的目标使用明确回退名称。
+  const replacement = index >= 0 ? `第 ${index + 1} 页` : '已删除页面';
   const candidates = [`页面 ${target.slide_id}`, target.display_name].filter(
     (candidate): candidate is string => Boolean(candidate && candidate !== replacement),
   );
@@ -313,10 +313,10 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
               <a
                 href={item.target.open_url}
                 className="inline-flex max-w-full items-center gap-1 text-text-600 underline decoration-border underline-offset-2 hover:text-text-900"
-                title={item.target.local_path ?? detailText}
+                title={targetFileLabel(item.target, item.target.slide_id ? pageName(item.target.slide_id, slides) : undefined) ?? detailText}
               >
                 <span className="truncate">
-                  {targetFileLabel(item.target) ?? presentActivityText(detailText, item.target, slides)}
+                  {targetFileLabel(item.target, item.target.slide_id ? pageName(item.target.slide_id, slides) : undefined) ?? presentActivityText(detailText, item.target, slides)}
                 </span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
               </a>

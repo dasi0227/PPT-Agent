@@ -89,6 +89,9 @@ type responsesResponse struct {
 type openAIContinuation struct {
 	PreviousResponseID string `json:"previous_response_id"`
 	MessageCount       int    `json:"message_count"`
+	InputHash          string `json:"input_hash"`
+	ToolsHash          string `json:"tools_hash"`
+	OutputHash         string `json:"output_hash"`
 }
 
 func (o *OpenAIAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
@@ -101,10 +104,13 @@ func (o *OpenAIAdapter) Generate(ctx context.Context, req GenerateRequest) (Gene
 	}
 	start := 0
 	if continuation.PreviousResponseID != "" {
-		if continuation.MessageCount < 0 || continuation.MessageCount > len(req.Messages) {
+		if reason := openAIContinuationMismatch(continuation, req); reason != "" {
 			// Compaction changed the normalized history. Fall back to a full
 			// stateless request instead of attaching mismatched response state.
 			continuation = openAIContinuation{}
+			if req.OnContinuationReset != nil {
+				req.OnContinuationReset(reason)
+			}
 		} else {
 			start = continuation.MessageCount
 		}
@@ -148,6 +154,8 @@ func (o *OpenAIAdapter) Generate(ctx context.Context, req GenerateRequest) (Gene
 	if wire.ID != "" {
 		raw, err := json.Marshal(openAIContinuation{
 			PreviousResponseID: wire.ID, MessageCount: len(req.Messages),
+			InputHash: continuationFingerprint(req.Messages), ToolsHash: continuationFingerprint(req.Tools),
+			OutputHash: continuationMessageFingerprint(Message{Role: RoleAssistant, Content: content, ToolCalls: toolCalls}),
 		})
 		if err != nil {
 			return GenerateResponse{}, fmt.Errorf("%w: encode continuation", ErrBadRequest)

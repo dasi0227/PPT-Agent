@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 )
 
-const PublicEventSchemaVersion = 5
+const PublicEventSchemaVersion = 6
 
 var PublicEventTypes = [...]EventType{
 	EventRunStarted,
@@ -239,7 +239,7 @@ type CommandPermissionAnsweredPayload struct {
 }
 
 type ScopeExpansionAddition struct {
-	SlideIDs []string `json:"slide_ids,omitempty"`
+	SlideIDs []string    `json:"slide_ids,omitempty"`
 }
 
 type ScopeExpansionRequestedPayload struct {
@@ -300,11 +300,10 @@ type MessageMilestonePayload struct {
 
 type MessageFinalPayload struct {
 	PublicEventBase
-	MessageID              string         `json:"message_id"`
-	Text                   string         `json:"text"`
-	AffectedTargets        []PublicTarget `json:"affected_targets"`
-	SuggestedNextInputs    []string       `json:"suggested_next_inputs"`
-	ProjectHistoryRevision int64          `json:"project_history_revision"`
+	MessageID           string         `json:"message_id"`
+	Text                string         `json:"text"`
+	AffectedTargets     []PublicTarget `json:"affected_targets"`
+	SuggestedNextInputs []string       `json:"suggested_next_inputs"`
 }
 
 type ToolStartedPayload struct {
@@ -634,9 +633,6 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if event == EventMessageFinal {
 			if err := validateTargets(data["affected_targets"]); err != nil {
 				return err
-			}
-			if !isInteger(data["project_history_revision"]) || int64Value(data["project_history_revision"]) < 1 {
-				return errors.New("project_history_revision must be a positive integer")
 			}
 			if err := validateSuggestedNextInputs(data["suggested_next_inputs"]); err != nil {
 				return err

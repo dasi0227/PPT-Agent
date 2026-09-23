@@ -1,17 +1,12 @@
 package workflow
 
 import (
-	"crypto/sha256"
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"regexp"
-	"sort"
 	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 // Inspect the final provider-facing manifest, not just source templates.
@@ -25,20 +20,17 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					pack.Command.Scope.SlideIDs = append(pack.Command.Scope.SlideIDs, "sli_2", "sli_3")
 				}
 				prompt := runtimeSystemPromptForRequest(AgentRequest{Mode: mode, Context: pack})
-				modules := regexp.MustCompile(`(?s)<prompt_module id="([^"]+)"[^>]*hash="([^"]+)">\n(.*?)\n</prompt_module>`).FindAllStringSubmatch(prompt, -1)
+				modules := regexp.MustCompile(`(?s)<prompt_module id="([^"]+)">\n(.*?)\n</prompt_module>`).FindAllStringSubmatch(prompt, -1)
 				if len(modules) == 0 {
 					t.Fatal("no manifested modules")
 				}
 				seen := map[string]bool{}
 				for _, module := range modules {
-					id, hash, body := module[1], module[2], module[3]
+					id := module[1]
 					if seen[id] {
 						t.Fatalf("duplicate module %s", id)
 					}
 					seen[id] = true
-					if want := fmt.Sprintf("%x", sha256.Sum256([]byte(body))); hash != want {
-						t.Fatalf("%s hash does not describe injected content", id)
-					}
 				}
 				modeCount, playbookCount := 0, 0
 				for id := range seen {
@@ -62,25 +54,11 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 				if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {
 					t.Fatal("unexpanded contract placeholder")
 				}
-				if !writableMode {
-					return
+				if !seen["core.quality"] || seen["runtime.execution"] != (mode == model.ModeExecute) {
+					t.Fatalf("quality/evidence modules do not match mode: %v", seen)
 				}
-				prefix := "Authoritative writable model contracts:\n"
-				body := strings.SplitN(prompt, prefix, 2)[1]
-				body = strings.SplitN(body, "\n</prompt_module>", 2)[0]
-				var contracts map[string]json.RawMessage
-				if err := json.Unmarshal([]byte(body), &contracts); err != nil {
-					t.Fatal(err)
-				}
-				got, want := []string{}, []string{}
-				for name := range contracts {
-					got = append(got, name)
-				}
-				want = []string{pptschema.DesignName, pptschema.ManifestName, pptschema.OutlineName, pptschema.SlideSpecName}
-				sort.Strings(got)
-				sort.Strings(want)
-				if !reflect.DeepEqual(got, want) {
-					t.Fatalf("writable contracts = %v, want %v", got, want)
+				if strings.Contains(prompt, "Authoritative writable model contracts:") || strings.Contains(prompt, "hash=") || strings.Contains(prompt, "path=") {
+					t.Fatal("system prompt repeats schemas or debug metadata")
 				}
 			})
 		}
@@ -111,13 +89,22 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 	}
 }
 
-func TestPromptKeepsContractsAfterScopeExpansion(t *testing.T) {
+func TestPromptKeepsOwnershipPolicyStableAcrossPageChanges(t *testing.T) {
 	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "update chrome")
-	before, _ := resourceContractsModule(pack)
-	pack.Command.Scope.SlideIDs = []string{"sli_1", "sli_2"}
-	pack.Command.Scope.Revision++
-	after, _ := resourceContractsModule(pack)
-	if before.Hash != after.Hash || !strings.Contains(before.Body, `"name":"design"`) {
-		t.Fatal("page expansion changed resource contracts/hash")
+	pack.Command.Scope.SlideIDs = []string{"sli_1"}
+	before := runtimeSystemPromptForRequest(AgentRequest{Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack})
+	for _, scope := range []model.RunScope{
+		model.NewRunScope(model.ScopeAllPages),
+		model.NewRunScope(model.ScopeCustomPages, "sli_other", "sli_new"),
+		model.NewRunScope(model.ScopeAllPages, "sli_new", "sli_other", "sli_third"),
+	} {
+		pack.Command.Scope = scope
+		pack.Command.Scope.Revision++
+		for _, phase := range []RunPhase{PhaseExecuting, PhaseCompletionCheck} {
+			after := runtimeSystemPromptForRequest(AgentRequest{Phase: phase, Mode: model.ModeExecute, Context: pack})
+			if before != after {
+				t.Fatal("page count, selection or transient phase changed static policy")
+			}
+		}
 	}
 }

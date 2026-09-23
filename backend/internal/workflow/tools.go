@@ -9,6 +9,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -125,16 +126,21 @@ type DomainToolInput struct {
 	Mode         model.RunMode
 	Decision     *ToolDecision
 	ActiveSkills *ActiveSkillSet
+	Messages     []llm.Message
 }
 
 type ActiveSkillSet struct {
-	Skills []model.RunSkill `json:"skills"`
+	Skills     []model.RunSkill     `json:"skills"`
+	Components []model.RunComponent `json:"components,omitempty"`
+	mu         sync.Mutex
 }
 
 func (s *ActiveSkillSet) Add(values []model.RunSkill) []model.RunSkill {
 	if s == nil {
 		return nil
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	seen := make(map[string]bool, len(s.Skills))
 	for _, skill := range s.Skills {
 		seen[skill.ID] = true
@@ -142,6 +148,15 @@ func (s *ActiveSkillSet) Add(values []model.RunSkill) []model.RunSkill {
 	added := make([]model.RunSkill, 0, len(values))
 	for _, skill := range values {
 		if seen[skill.ID] {
+			for i, current := range s.Skills {
+				if current.ID == skill.ID {
+					s.Skills[i] = skill
+					if current.Content != skill.Content || current.Name != skill.Name || current.Description != skill.Description {
+						added = append(added, skill)
+					}
+					break
+				}
+			}
 			continue
 		}
 		seen[skill.ID] = true
@@ -170,17 +185,18 @@ func (c ChangedTarget) Target() Resource {
 }
 
 type ToolResult struct {
-	OK               bool              `json:"ok"`
-	Summary          string            `json:"summary"`
-	Data             map[string]any    `json:"data,omitempty"`
-	ChangedTargets   []ChangedTarget   `json:"changed_targets"`
-	Issues           []Issue           `json:"issues"`
-	Retryable        bool              `json:"retryable"`
-	Code             string            `json:"code,omitempty"`
-	Observation      string            `json:"-"`
-	ObservationParts []llm.ContentPart `json:"-"`
-	Command          *CommandExecution `json:"-"`
-	LoadedResources  []LoadedResource  `json:"-"`
+	OK                  bool                 `json:"ok"`
+	Summary             string               `json:"summary"`
+	Data                map[string]any       `json:"data,omitempty"`
+	ChangedTargets      []ChangedTarget      `json:"changed_targets"`
+	Issues              []Issue              `json:"issues"`
+	Retryable           bool                 `json:"retryable"`
+	Code                string               `json:"code,omitempty"`
+	Observation         string               `json:"-"`
+	ObservationParts    []llm.ContentPart    `json:"-"`
+	ObservationMetadata *llm.MessageMetadata `json:"-"`
+	Command             *CommandExecution    `json:"-"`
+	LoadedResources     []LoadedResource     `json:"-"`
 	// Evidence and invalidation are runtime-internal. They are recorded in the
 	// Evidence Ledger and SSE but are not duplicated in model observations.
 	Evidence           []Evidence `json:"-"`
@@ -395,6 +411,7 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) (To
 			return ToolSchema{}, false
 		}
 		schema.Parameters["oneOf"] = filtered
+		pruneSchemaDefinitions(schema.Parameters)
 		return schema, true
 	}
 	properties, _ := schema.Parameters["properties"].(map[string]any)
@@ -407,9 +424,7 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) (To
 	return schema, true
 }
 
-// mutationOperationAllowed is the single scope rule used both to disclose a
-// mutate_ppt schema variant and to authorize the decoded mutation request.
-// All resource kinds are available; page mutations are bounded by stable slide IDs.
+// All resource kinds are available; page IDs are authorized at execution time.
 func mutationOperationClassAllowed(op string) bool {
 	if strings.HasPrefix(op, "manifest.") || strings.HasPrefix(op, "outline.") || strings.HasPrefix(op, "design.") {
 		return true
@@ -517,7 +532,14 @@ func discriminatedArgumentSchema(parameters map[string]any, args map[string]any)
 		properties, _ := variant["properties"].(map[string]any)
 		opSchema, _ := properties["op"].(map[string]any)
 		if opSchema["const"] == op {
-			return variant
+			copy := make(map[string]any, len(variant)+1)
+			for key, value := range variant {
+				copy[key] = value
+			}
+			if definitions, ok := parameters["$defs"]; ok {
+				copy["$defs"] = definitions
+			}
+			return copy
 		}
 	}
 	return parameters

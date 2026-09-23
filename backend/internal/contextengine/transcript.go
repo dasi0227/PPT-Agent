@@ -15,17 +15,19 @@ import (
 )
 
 type TranscriptEntry struct {
-	Role       llm.Role          `json:"role"`
-	Content    []llm.ContentPart `json:"content"`
-	ToolCallID string            `json:"tool_call_id,omitempty"`
-	ToolCalls  []llm.ToolCall    `json:"tool_calls,omitempty"`
-	Type       ContextBucket     `json:"type"`
+	Role       llm.Role             `json:"role"`
+	Content    []llm.ContentPart    `json:"content"`
+	ToolCallID string               `json:"tool_call_id,omitempty"`
+	ToolCalls  []llm.ToolCall       `json:"tool_calls,omitempty"`
+	Type       ContextBucket        `json:"type"`
+	Metadata   *llm.MessageMetadata `json:"metadata,omitempty"`
 }
 
 func (entry TranscriptEntry) Message() llm.Message {
 	return llm.Message{
 		Role: entry.Role, Content: append([]llm.ContentPart(nil), entry.Content...),
 		ToolCallID: entry.ToolCallID, ToolCalls: append([]llm.ToolCall(nil), entry.ToolCalls...),
+		Metadata: entry.Metadata,
 	}
 }
 
@@ -175,7 +177,7 @@ func classifyTranscript(messages []llm.Message) []TranscriptEntry {
 			bucket, _ = toolBucket(toolNames[message.ToolCallID], nil)
 		} else if message.Role == llm.RoleSystem {
 			bucket = BucketSystemPrompt
-		} else if message.Role == llm.RoleUser && isRuntimeControlMessage(strings.TrimSpace(message.Text())) {
+		} else if message.Metadata != nil && message.Metadata.Origin == "runtime" {
 			bucket = BucketRuntime
 		}
 		if messageContainsUploadedFile(message) {
@@ -184,7 +186,8 @@ func classifyTranscript(messages []llm.Message) []TranscriptEntry {
 		entries = append(entries, TranscriptEntry{
 			Role: message.Role, Content: append([]llm.ContentPart(nil), message.Content...),
 			ToolCallID: message.ToolCallID, ToolCalls: append([]llm.ToolCall(nil), message.ToolCalls...),
-			Type: bucket,
+			Type:     bucket,
+			Metadata: message.Metadata,
 		})
 	}
 	return entries
@@ -206,7 +209,7 @@ func loadTranscriptTurns(workDir, threadID string, limit int) []RecentTurn {
 	}
 	out := []RecentTurn{}
 	for _, entry := range entries {
-		if entry.Role != llm.RoleUser && entry.Role != llm.RoleAssistant {
+		if (entry.Metadata != nil && entry.Metadata.Origin == "runtime") || (entry.Role != llm.RoleUser && entry.Role != llm.RoleAssistant) {
 			continue
 		}
 		text := compactText(entry.Message().Text(), 500)

@@ -19,7 +19,7 @@ func TestFSTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("make a deck")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "read-1", Name: "read_ppt"}}},
-		{Role: llm.RoleTool, ToolCallID: "read-1", Content: llm.TextContent("<html>")},
+		{Role: llm.RoleTool, ToolCallID: "read-1", Content: llm.TextContent("<html>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: []llm.ResourceStamp{{Key: "ppt/slide:sli_a:html", Hash: "hash"}}}},
 	}
 	if err := store.Replace(workDir, "thread", messages); err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestFSTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 		t.Fatalf("unexpected entries: %+v", entries)
 	}
 	loaded, err := store.Load(workDir, "thread")
-	if err != nil || loaded[2].Text() != "<html>" {
+	if err != nil || loaded[2].Text() != "<html>" || loaded[2].Metadata == nil || loaded[2].Metadata.Resources[0].Hash != "hash" {
 		t.Fatalf("round trip failed: messages=%+v err=%v", loaded, err)
 	}
 	if TranscriptPath("thread") != "threads/thread/model.jsonl" {

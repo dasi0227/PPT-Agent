@@ -48,3 +48,9 @@ func MustLoad(id string) Module {
 	}
 	return m
 }
+
+// PublicPolicy gives user-visible command results the same disclosure rules as
+// the main agent, without pulling execution protocols into a side command.
+func PublicPolicy(id string) string {
+	return MustLoad("core.output").Body + "\n\n" + MustLoad(id).Body
+}

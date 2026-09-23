@@ -539,7 +539,7 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 		if err == nil {
 			response, err = provider.Generate(ctx, llm.GenerateRequest{
 				Messages: []llm.Message{
-					{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.rename").Body)},
+					{Role: llm.RoleSystem, Content: llm.TextContent(prompts.PublicPolicy("command.rename"))},
 					{Role: llm.RoleUser, Content: llm.TextContent("<rename_context>\n" + contextValue + "\n</rename_context>")},
 				},
 				Tools: []llm.ToolSchema{renameThreadToolSchema()}, MaxOutputTokens: 128,
@@ -551,6 +551,18 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 		if err == nil {
 			var action, title string
 			action, title, err = parseRenameResponse(response)
+			display := model.PublicTextContext{HiddenValues: []string{task.projectID, task.threadID}}
+			if project, projectErr := svc.store.GetProject(ctx, task.projectID); projectErr == nil {
+				display = contextengine.ProjectPublicTextContext(project, "")
+				display.HiddenValues = append(display.HiddenValues, task.threadID)
+			}
+			var source struct {
+				First  string   `json:"first_user_request"`
+				Recent []string `json:"recent_user_inputs"`
+			}
+			_ = json.Unmarshal([]byte(contextValue), &source)
+			display.SourceText = source.First + "\n" + strings.Join(source.Recent, "\n")
+			title = model.PublicText(title, display)
 			if err == nil {
 				projectLock := svc.projectLock(task.projectID)
 				projectLock.RLock()
@@ -707,7 +719,7 @@ func (svc *NamingService) renameContext(ctx context.Context, threadID string, tr
 		"recent_user_inputs": inputs, "recent_assistant_replies": source.AssistantReplies,
 	}
 	if source.Plan != nil {
-		value["plan"] = source.Plan
+		value["plan"] = contextengine.ModelValue(source.Plan)
 	}
 	if strings.TrimSpace(source.ContextSummary) != "" {
 		value["context_summary"] = source.ContextSummary
@@ -716,7 +728,7 @@ func (svc *NamingService) renameContext(ctx context.Context, threadID string, tr
 }
 
 func fitRenameContext(value map[string]any) (string, error) {
-	systemTokens := contextengine.EstimateTextTokens(prompts.MustLoad("command.rename").Body)
+	systemTokens := contextengine.EstimateTextTokens(prompts.PublicPolicy("command.rename"))
 	toolTokens := contextengine.EstimateValueTokens([]llm.ToolSchema{renameThreadToolSchema()})
 	budget := renameInputBudget - systemTokens - toolTokens - 32
 	if budget < 256 {

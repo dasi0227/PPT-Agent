@@ -150,8 +150,8 @@ func TestMutationFailureLabelUsesTheActualAction(t *testing.T) {
 		want string
 	}{
 		{name: "create outline", op: "outline.init", want: "创建目录结构失败"},
-		{name: "create slide spec", op: "slide.spec.write", want: "创建页面设计稿失败"},
-		{name: "update slide html", op: "slide.html.patch", want: "更新页面幻灯片失败"},
+		{name: "create slide spec", op: "slide.spec.write", want: "创建相关页面设计稿失败"},
+		{name: "update slide html", op: "slide.html.patch", want: "更新相关页面幻灯片失败"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got, _, ok := toolDisplay(t.TempDir(), "mutate_ppt", map[string]any{"op": test.op}, false, failed)

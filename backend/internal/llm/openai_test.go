@@ -53,7 +53,7 @@ func TestOpenAIResponsesMapsImageFunctionOutputAndContinuation(t *testing.T) {
 	}}
 	_, err = adapter.Generate(context.Background(), GenerateRequest{
 		Messages: []Message{
-			{Role: RoleSystem, Content: TextContent("updated system policy")},
+			{Role: RoleSystem, Content: TextContent("system policy")},
 			{Role: RoleUser, Content: TextContent("make slides")},
 			{Role: RoleAssistant, Content: TextContent("checking"), ToolCalls: first.ToolCalls},
 			{Role: RoleTool, ToolCallID: "call-1", Content: []ContentPart{
@@ -71,7 +71,7 @@ func TestOpenAIResponsesMapsImageFunctionOutputAndContinuation(t *testing.T) {
 	}
 	second := requests[1]
 	if second["previous_response_id"] != "resp-1" ||
-		second["instructions"] != "updated system policy" {
+		second["instructions"] != "system policy" {
 		t.Fatalf("Responses continuation or instructions missing: %#v", second)
 	}
 	input := second["input"].([]any)

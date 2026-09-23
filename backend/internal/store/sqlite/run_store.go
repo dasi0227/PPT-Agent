@@ -110,13 +110,13 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	return mapProjectWriteErr(s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
 			 scope_slide_ids_json, scope_source_json, scope_include_run_created_slides, scope_revision, mode, run_command_json,
-			 client_request_id, project_history_revision, model_profile_name, model_provider, model_name, model_url,
+			 client_request_id, model_profile_name, model_provider, model_name, model_url,
 			 cancel_requested_at, owner_instance_id, pause_reason, paused_at,
 			 status, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		po.ID, po.ThreadID, po.ProjectID, po.ScopeSlideIDsJSON,
 		po.ScopeSourceJSON, po.ScopeIncludeRunCreatedSlides, po.ScopeRevision, po.Mode, po.RunCommandJSON,
-		nullIfEmpty(po.ClientRequestID), po.ProjectHistoryRevision, nullIfEmpty(po.ModelProfileName),
+		nullIfEmpty(po.ClientRequestID), nullIfEmpty(po.ModelProfileName),
 		nullIfEmpty(po.ModelProvider), nullIfEmpty(po.ModelName), nullIfEmpty(po.ModelURL),
 		po.CancelRequestedAt, po.OwnerInstanceID, po.PauseReason, po.PausedAt,
 		po.Status, po.CreatedAt, po.UpdatedAt,
@@ -465,7 +465,7 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 			scopeSource, _ := json.Marshal(message.Scope.Source)
 			result := tx.Model(&runPO{}).Where("id = ? AND scope_revision = ?", message.RunID, previousRevision).Updates(map[string]any{
 				"scope_slide_ids_json": string(scopeSlideIDs),
-				"scope_source_json":    string(scopeSource), "scope_include_run_created_slides": message.Scope.IncludeRunCreatedSlides,
+				"scope_source_json": string(scopeSource), "scope_include_run_created_slides": message.Scope.IncludeRunCreatedSlides,
 				"scope_revision": message.Scope.Revision, "run_command_json": string(rawCommand), "updated_at": time.Now().Unix(),
 			})
 			if result.Error != nil {

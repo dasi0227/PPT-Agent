@@ -1,14 +1,69 @@
+.composer-input-surface {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.composer-input-surface > .composer-prompt-editor,
+.composer-placeholder-layer {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+/* The placeholder sets the empty editor's height; both share the same origin.
+   Only suggestion buttons intercept pointers, so the rest focuses the editor. */
+.composer-placeholder-layer {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.composer-input-surface[data-placeholder-overlay='true'] > .composer-prompt-editor {
+  max-height: none;
+  overflow-y: visible;
+}
+
 .composer-prompt-editor {
   position: relative;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+/* Only the empty suggestion state uses a thicker visual caret. Typing and IME
+   composition remove the overlay and restore the native insertion caret. */
+.composer-input-surface[data-placeholder-overlay='true'] > .composer-prompt-editor[data-empty='true'][contenteditable='true']:focus {
+  caret-color: transparent;
+}
+
+.composer-input-surface[data-placeholder-overlay='true'] > .composer-prompt-editor[data-empty='true'][contenteditable='true']:focus::after {
+  position: absolute;
+  top: calc(0.75rem + 1px);
+  left: 1rem;
+  z-index: 2;
+  width: 3px;
+  height: calc(1.25rem - 2px);
+  background: #000;
+  content: '';
+  pointer-events: none;
+  animation: composer-empty-caret-blink 1s step-end infinite;
+}
+
+@keyframes composer-empty-caret-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-input-surface[data-placeholder-overlay='true'] > .composer-prompt-editor[data-empty='true'][contenteditable='true']:focus::after {
+    animation: none;
+  }
+}
+
 .composer-prompt-editor[data-empty='true']::before {
   position: absolute;
   top: 0.75rem;
-  left: 0.75rem;
-  color: #95a0ae;
+  left: 1rem;
+  color: theme('colors.text.600');
   content: attr(data-placeholder);
   pointer-events: none;
 }

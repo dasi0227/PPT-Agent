@@ -40,7 +40,7 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" sideOffset={8} avoidCollisions collisionPadding={12} className="w-[304px] rounded-xl p-1.5">
-        <DropdownMenuLabel className="px-2.5 pb-2 text-[11px] font-normal text-text-600">切换模式</DropdownMenuLabel>
+        <DropdownMenuLabel className="px-2.5 pb-2 text-[11px] font-normal text-text-600">模式选择</DropdownMenuLabel>
         {MODE_ORDER.map((candidate) => {
           const meta = MODE_META[candidate];
           const Icon = meta.icon;

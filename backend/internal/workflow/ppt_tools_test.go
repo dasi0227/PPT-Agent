@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -85,30 +86,22 @@ func TestMutatePPTExposesClosedScopedOperations(t *testing.T) {
 }
 
 func TestMutationPatchSchemaDisclosesTheRuntimePathPolicy(t *testing.T) {
-	empty := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
-	variants := mutationSchema(mutationPack("pro_aaaaaa", empty))["oneOf"].([]any)
-	deck := variants[0].(map[string]any)
-	patch := deck["properties"].(map[string]any)["patch"].(map[string]any)
-	if patch["maxItems"] != 32 {
-		t.Fatalf("patch schema=%v", patch)
-	}
-	items := patch["items"].(map[string]any)["oneOf"].([]any)
-	if len(items) != 3 {
-		t.Fatalf("patch variants=%v", items)
-	}
-	add := items[0].(map[string]any)
-	required := fmt.Sprint(add["required"])
-	if !strings.Contains(required, "value") {
-		t.Fatalf("add.required=%v", add["required"])
-	}
-	path := add["properties"].(map[string]any)["path"].(map[string]any)
-	raw, _ := json.Marshal(path)
-	if !strings.Contains(string(raw), "requirements") {
-		t.Fatalf("deck path policy missing from schema: %s", raw)
-	}
-	remove := items[1].(map[string]any)
-	if _, exists := remove["properties"].(map[string]any)["value"]; exists {
-		t.Fatal("remove schema disclosed value")
+	schema := ToolSchema{Parameters: mutationSchema(mutationPack("pro_aaaaaa", spec.Outline{}))}
+	for _, tc := range []struct {
+		path  string
+		value any
+		valid bool
+	}{
+		{"/goal", "明确目标", true}, {"/requirements/-", "用中文", true},
+		{"/goal", 42, false}, {"/goal", strings.Repeat("长", 2001), false}, {"/project_id", "other", false},
+	} {
+		args := map[string]any{"op": "manifest.patch", "patch": []any{map[string]any{"op": "replace", "path": tc.path, "value": tc.value}}}
+		if tc.path == "/requirements/-" {
+			args["patch"].([]any)[0].(map[string]any)["op"] = "add"
+		}
+		if err := validateToolArguments(schema, args); (err == nil) != tc.valid {
+			t.Fatalf("%s valid=%t error=%v", tc.path, tc.valid, err)
+		}
 	}
 }
 
@@ -171,7 +164,7 @@ func TestSlideSpecSchemaIncludesLegalComparisonExample(t *testing.T) {
 	if slideSpecWrite == nil {
 		t.Fatal("slide.spec.write schema is missing")
 	}
-	slideSpec := slideSpecWrite["properties"].(map[string]any)["spec"].(map[string]any)
+	slideSpec := schema["$defs"].(map[string]any)["spec"].(map[string]any)
 	examples, _ := slideSpec["examples"].([]any)
 	if len(examples) != 1 {
 		t.Fatalf("slide spec examples=%v", examples)
@@ -603,7 +596,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 		t.Fatalf("render result=%+v", result)
 	}
 	wantHash := hashBytes(html)
-	if result.Data["hash"] != wantHash || len(result.Evidence) != 1 || result.Evidence[0].SourceHash != wantHash {
+	if result.Data["hash"] != wantHash || len(result.Evidence) != 2 || result.Evidence[0].SourceHash != wantHash || result.Evidence[1].Kind != "static" || result.Evidence[1].SourceHash != wantHash {
 		t.Fatalf("render hash=%v evidence=%+v want=%s", result.Data["hash"], result.Evidence, wantHash)
 	}
 	if result.Evidence[0].Materialization == nil || result.Evidence[0].Materialization.ArtifactHash != wantHash {
@@ -643,5 +636,53 @@ func TestNoopMutationDoesNotInvalidateRuntimeEvidence(t *testing.T) {
 	result := tool.Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Scope: model.NewRunScope(model.ScopeAllPages), Args: map[string]any{"op": "outline.init", "structure": []any{}}})
 	if !result.OK || len(result.ChangedTargets) != 0 || len(result.InvalidatedTargets) != 0 {
 		t.Fatalf("no-op reported a write: %+v", result)
+	}
+}
+
+func TestReadProjectionPreservesWriteHashAndDeduplicatesVisibleContent(t *testing.T) {
+	dir := t.TempDir()
+	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_private", CreatedAt: 1, UpdatedAt: 2,
+		Sections: []spec.Section{{ID: "sec_a", Title: "开场", Purpose: "说明目标", Slides: []spec.SlideNode{{SlideID: "sli_a", Title: "业务目标", Role: "cover"}}, Subsections: []spec.Subsection{}}}}
+	raw, _ := json.Marshal(outline)
+	if err := os.WriteFile(filepath.Join(dir, "outline.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tool := pptReadTool{pack: mutationPack("pro_private", outline)}
+	input := DomainToolInput{ProjectDir: dir, Args: map[string]any{"resource": map[string]any{"kind": "outline"}}}
+	first := tool.Execute(context.Background(), input)
+	var observation map[string]any
+	if err := json.Unmarshal([]byte(first.Observation), &observation); err != nil {
+		t.Fatal(err)
+	}
+	if !first.OK || observation["content_hash"] != spec.ResourceBytesHash(raw) || strings.Contains(first.Observation, "pro_private") || !strings.Contains(first.Observation, `"ordinal":1`) {
+		t.Fatalf("incorrect model projection: %s", first.Observation)
+	}
+	input.Messages = []llm.Message{{Role: llm.RoleTool, Content: llm.TextContent(first.Observation), Metadata: first.ObservationMetadata}}
+	second := tool.Execute(context.Background(), input)
+	if strings.Contains(second.Observation, `"content":`) || !strings.Contains(second.Observation, `"already_available":true`) {
+		t.Fatal(second.Observation)
+	}
+	input.Messages = nil
+	if restored := tool.Execute(context.Background(), input); !strings.Contains(restored.Observation, `"content":`) {
+		t.Fatal("lost body was treated as visible")
+	}
+}
+
+func TestToolSchemasRemainStableAcrossPageScopeAndKeepAuthorization(t *testing.T) {
+	tool := mutatePPTTool{pack: mutationPack("pro_a", spec.Outline{})}
+	base := tool.Schema()
+	before, _ := json.Marshal(base)
+	first := model.NewRunScope(model.ScopeCurrentPage, "sli_a")
+	second := model.NewRunScope(model.ScopeCustomPages, "sli_b", "sli_c")
+	a, _ := scopeToolSchema(base, first, false)
+	b, _ := scopeToolSchema(base, second, false)
+	aRaw, _ := json.Marshal(a)
+	bRaw, _ := json.Marshal(b)
+	after, _ := json.Marshal(base)
+	if string(aRaw) != string(bRaw) || string(before) != string(after) {
+		t.Fatal("scope filtering changed a stable/shared schema")
+	}
+	if result := tool.Execute(context.Background(), DomainToolInput{Session: &RunSession{}, Scope: first, Args: map[string]any{"op": "slide.spec.write", "slide_id": "sli_b", "spec": map[string]any{}}}); result.Code != CodeTargetOutOfScope {
+		t.Fatalf("out-of-scope mutation was not rejected: %+v", result)
 	}
 }

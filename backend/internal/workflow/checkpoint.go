@@ -89,7 +89,7 @@ func (r *Runtime) checkpointForBoundary(state *RunState, boundary checkpointBoun
 	cp.ContextBriefing = state.contextBriefing
 	cp.ContextIndexRef = state.contextIndexRef
 	cp.LatestToolResults = append([]CheckpointToolResult{}, state.latestToolResults...)
-	cp.ActiveSkills = append([]model.RunSkill{}, state.activeSkills.Skills...)
+	cp.ActiveSkills, cp.ActiveComponents = state.activeSkills.Snapshot()
 	cp.MessageSummary = summarizeCheckpointMessages(state.messages)
 	cp.ProviderContinuation = safeContinuationSnapshot(state.continuation)
 	cp.DOMSelections = append([]model.DOMSelection{}, state.pack.Command.DOMSelections...)

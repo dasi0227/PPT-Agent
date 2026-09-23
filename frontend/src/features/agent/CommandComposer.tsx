@@ -151,6 +151,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 		&& activeProjectId
 		&& activeSession.projectId === activeProjectId
 		&& draftPristine
+		&& !isComposing
 		&& !disabled
 		&& !polishing
 		&& !commitActive
@@ -252,6 +253,14 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 	useEffect(() => {
 		setSuggestionsDismissed(false);
 	}, [suggestionKey]);
+	useEffect(() => {
+		// Show the real caret when suggestions arrive, without taking focus from
+		// another control, an open dialog, or a text selection in the workspace.
+		if (!suggestionsVisible || document.activeElement !== document.body
+			|| document.querySelector('[role="dialog"][data-state="open"], [role="menu"][data-state="open"]')
+			|| window.getSelection()?.isCollapsed === false) return;
+		editorRef.current?.focusEnd();
+	}, [suggestionKey, suggestionsVisible]);
   useEffect(() => {
     if (!projectContentReady) return;
     applyContextDefault(slides.length > 0);
@@ -677,9 +686,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 					))}
 				</div>
           )}
-		  {suggestionsVisible && nextInputSuggestions && (
-			<NextInputSuggestionsPanel items={nextInputSuggestions.items} onSelect={selectSuggestion} />
-		  )}
           <PromptComposerEditor
             ref={editorRef}
             menuContainer={menuContainer}
@@ -690,7 +696,9 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
             placeholder={suggestionsVisible ? '' : composerPlaceholder}
             disabled={disabled}
             readOnly={polishing}
-			suggestionsVisible={suggestionsVisible}
+            placeholderContent={suggestionsVisible && nextInputSuggestions
+              ? <NextInputSuggestionsPanel items={nextInputSuggestions.items} onSelect={selectSuggestion} />
+              : undefined}
 			onFocusChange={(focused) => {
 				setComposerFocused(focused);
 				if (!focused) setSuggestionsDismissed(false);

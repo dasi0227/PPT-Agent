@@ -26,7 +26,7 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 		Script: []llm.GenerateResponse{compactResponse("收敛上下文压缩协议", validSummary)},
 	}
 	messages := []llm.Message{
-		{Role: llm.RoleUser, Content: llm.TextContent("<run_user_instruction run_id=\"r1\">\nfirst instruction\n</run_user_instruction>")},
+		{Role: llm.RoleUser, Content: llm.TextContent("first instruction"), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: "r1"}},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("old analysis")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "one", Name: "read_ppt"}}},
 		{Role: llm.RoleTool, ToolCallID: "one", Content: llm.TextContent("first result")},
@@ -114,7 +114,7 @@ func TestCompactorSkipsModelForEmptyCompressionRegion(t *testing.T) {
 	provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 65536}}
 	result, err := New(provider).Compact(context.Background(), []llm.Message{{
 		Role:    llm.RoleUser,
-		Content: llm.TextContent("<run_user_instruction run_id=\"r1\">keep</run_user_instruction>"),
+		Content: llm.TextContent("keep"), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: "r1"},
 	}})
 	if err != nil {
 		t.Fatal(err)

@@ -17,7 +17,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 	project, store := fixture(t)
 	proposal := "第二种方案：\n" + strings.Repeat("保留关键结论与参考资料。", 80) + "\n仅改结论页，不修改其他页面。"
 	messages := []llm.Message{
-		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>早期讨论：面向董事会，重点是投资决策。</context_summary>")},
+		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>早期讨论：面向董事会，重点是投资决策。</context_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
 		{Role: llm.RoleUser, Content: llm.TextContent("需要改进结论页，请先讨论方案。")},
 		{Role: llm.RoleAssistant, Content: llm.TextContent(proposal)},
 	}
@@ -50,7 +50,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"投资决策", "先出原型", "att_1", "参考配色", "sel_1", "放大结论标题", "slides/sli_aaaaaa/spec.json"} {
+	for _, want := range []string{"投资决策", "先出原型", "att_1", "参考配色", "sel_1", "放大结论标题", "第 1 页"} {
 		if !strings.Contains(compiled, want) {
 			t.Errorf("briefing lost %q", want)
 		}
@@ -66,14 +66,14 @@ func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
 		{Role: llm.RoleUser, Content: llm.TextContent("先确认方案")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "plan", Name: "create_plan", Args: map[string]any{"content": "只修改结论页"}}}},
 		{Role: llm.RoleTool, ToolCallID: "plan", Content: llm.TextContent("Plan saved; awaiting approval")},
-		{Role: llm.RoleUser, Content: llm.TextContent("The user approved the plan. Approval is complete and the runtime is now in execute mode.")},
+		{Role: llm.RoleUser, Content: llm.TextContent("The user approved the plan. Approval is complete and the runtime is now in execute mode."), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "approval"}},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "question", Name: "ask_user", Args: map[string]any{"question": "是否保留数据？"}}}},
 		{Role: llm.RoleTool, ToolCallID: "question", Content: llm.TextContent("用户选择：保留数据")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "read", Name: "read_ppt"}}},
 		{Role: llm.RoleTool, ToolCallID: "read", Content: llm.TextContent("PRIVATE_READ_SNAPSHOT")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "edit", Name: "run_command", Args: map[string]any{"command": "edit conclusion", "content": "PRIVATE_WRITE_PAYLOAD"}}}},
 		{Role: llm.RoleTool, ToolCallID: "edit", Content: llm.TextContent("write failed: permission denied")},
-		{Role: llm.RoleUser, Content: llm.TextContent("Ordinary assistant text is not a completion signal. INTERNAL_GUIDANCE")},
+		{Role: llm.RoleUser, Content: llm.TextContent("Ordinary assistant text is not a completion signal. INTERNAL_GUIDANCE"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "guidance"}},
 	}
 	if err := NewFSTranscriptStore().Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)

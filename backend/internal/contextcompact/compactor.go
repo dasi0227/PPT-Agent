@@ -54,7 +54,13 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		provider = captured
 	}
 	before := messageTokens(messages)
-	pruned := llm.NormalizeHistory(messages)
+	pruned := []llm.Message{}
+	for _, message := range llm.NormalizeHistory(messages) {
+		if m := message.Metadata; m != nil && m.Origin == "runtime" && m.Kind == "context" {
+			continue
+		}
+		pruned = append(pruned, message)
+	}
 	compressed, retained := splitTranscript(pruned)
 	if len(compressed) == 0 {
 		return Result{
@@ -94,8 +100,9 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		return Result{}, err
 	}
 	next := append([]llm.Message{{
-		Role:    llm.RoleUser,
-		Content: llm.TextContent("<context_summary>\n" + summary + "\n</context_summary>"),
+		Role:     llm.RoleUser,
+		Content:  llm.TextContent("<context_summary>\n" + summary + "\n</context_summary>"),
+		Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"},
 	}}, retained...)
 	next = compactProjectAttachmentImages(next)
 	next = compactDOMSelections(next)
@@ -173,8 +180,14 @@ func splitTranscript(messages []llm.Message) (compressed, retained []llm.Message
 			}
 		}
 	}
+	activeRun := ""
+	for _, message := range messages {
+		if m := message.Metadata; m != nil && m.Origin == "user" && m.RunID != "" {
+			activeRun = m.RunID
+		}
+	}
 	for index, message := range messages {
-		if shouldRetainUser(message) || index >= boundary {
+		if shouldRetainUser(message, activeRun) || index >= boundary {
 			retained = append(retained, message)
 		} else {
 			compressed = append(compressed, message)
@@ -183,14 +196,10 @@ func splitTranscript(messages []llm.Message) (compressed, retained []llm.Message
 	return compressed, retained
 }
 
-func shouldRetainUser(message llm.Message) bool {
-	if message.Role != llm.RoleUser {
-		return false
-	}
-	text := strings.TrimSpace(message.Text())
-	return strings.HasPrefix(text, "<run_user_instruction ") ||
-		strings.HasPrefix(text, "User steering:") ||
-		strings.HasPrefix(text, "Plan revision feedback:")
+func shouldRetainUser(message llm.Message, activeRun string) bool {
+	m := message.Metadata
+	return message.Role == llm.RoleUser && m != nil && m.Origin == "user" && m.RunID == activeRun &&
+		(m.Kind == "instruction" || m.Kind == "steering" || m.Kind == "feedback")
 }
 
 func compactRequestTokens(messages []llm.Message) int {
@@ -214,9 +223,21 @@ func messageTokens(messages []llm.Message) int {
 // replace. Retained instructions and the latest tool rounds do not make a
 // manual compaction worthwhile, even though they still occupy the window.
 func CompactableTokens(messages []llm.Message) int {
-	pruned := llm.NormalizeHistory(messages)
+	pruned := []llm.Message{}
+	obsolete := 0
+	latest := map[string]llm.Message{}
+	for _, message := range llm.NormalizeHistory(messages) {
+		if m := message.Metadata; m != nil && m.Origin == "runtime" && m.Kind == "context" {
+			if previous, ok := latest[m.Key]; ok {
+				obsolete += contextengine.EstimateMessageTokens(previous)
+			}
+			latest[m.Key] = message
+			continue
+		}
+		pruned = append(pruned, message)
+	}
 	compressed, _ := splitTranscript(pruned)
-	return messageTokens(compressed)
+	return obsolete + messageTokens(compressed)
 }
 
 func emptySummary() string {

@@ -150,7 +150,8 @@ func AgentContract(name string) (Contract, error) {
 	for key, value := range properties {
 		property, _ := value.(map[string]any)
 		managed, _ := property["x-runtime-managed"].(bool)
-		if !managed {
+		readOnly, _ := property["x-agent-readonly"].(bool)
+		if !managed && !readOnly {
 			fields = append(fields, key)
 			fieldSchema[key] = stripRuntimeManaged(value)
 		}
@@ -163,6 +164,110 @@ func AgentContract(name string) (Contract, error) {
 		Name: name, Description: strings.TrimSpace(stringValue(schema["description"])),
 		Fields: fields, Required: required, FieldSchema: fieldSchema, Example: example,
 	}, nil
+}
+
+// AuthoringSchema resolves local references and returns an independent schema
+// for tool payloads. The persisted resource contract is never modified.
+func AuthoringSchema(name string) map[string]any {
+	root, err := RuntimeContract(name)
+	if err != nil {
+		panic(err)
+	}
+	var resolve func(any) any
+	resolve = func(value any) any {
+		switch v := value.(type) {
+		case map[string]any:
+			if ref, ok := v["$ref"].(string); ok {
+				var target any = root
+				for _, part := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
+					target = target.(map[string]any)[part]
+				}
+				return resolve(target)
+			}
+			out := map[string]any{}
+			for k, item := range v {
+				if k != "$defs" && k != "$id" && k != "$schema" && k != "x-agent-example" {
+					out[k] = resolve(item)
+				}
+			}
+			if example, ok := v["x-agent-example"]; ok {
+				out["examples"] = []any{cloneValue(example)}
+			}
+			return out
+		case []any:
+			out := make([]any, len(v))
+			for i, item := range v {
+				out[i] = resolve(item)
+			}
+			return out
+		default:
+			return value
+		}
+	}
+	resolved := resolve(root).(map[string]any)
+	resolved = stripRuntimeManaged(resolved).(map[string]any)
+	properties := resolved["properties"].(map[string]any)
+	fields := []string{}
+	for key, raw := range properties {
+		field := raw.(map[string]any)
+		if field["x-agent-readonly"] == true {
+			delete(properties, key)
+		} else {
+			fields = append(fields, key)
+		}
+	}
+	resolved["required"] = filterStrings(stringList(resolved["required"]), fields)
+	if examples, ok := resolved["examples"].([]any); ok {
+		for i, example := range examples {
+			if m, ok := example.(map[string]any); ok {
+				examples[i] = filterMap(m, fields)
+			}
+		}
+	}
+	return resolved
+}
+
+// OutlineDraftSchema retains the canonical field/array constraints, replacing
+// server identities with per-operation client references.
+func OutlineDraftSchema(kind string) map[string]any {
+	outline := AuthoringSchema(OutlineName)
+	section := outline["properties"].(map[string]any)["sections"].(map[string]any)["items"].(map[string]any)
+	subsection := section["properties"].(map[string]any)["subsections"].(map[string]any)["items"].(map[string]any)
+	slide := section["properties"].(map[string]any)["slides"].(map[string]any)["items"].(map[string]any)
+	node := map[string]map[string]any{"section": section, "subsection": subsection, "slide": slide}[kind]
+	if node == nil {
+		panic("invalid outline draft kind")
+	}
+	var convert func(any)
+	convert = func(value any) {
+		switch v := value.(type) {
+		case map[string]any:
+			if props, ok := v["properties"].(map[string]any); ok {
+				for _, id := range []string{"id", "slide_id"} {
+					if _, exists := props[id]; exists {
+						delete(props, id)
+						props["client_ref"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 120}
+						required := stringList(v["required"])
+						for i := range required {
+							if required[i] == id {
+								required[i] = "client_ref"
+							}
+						}
+						v["required"] = required
+					}
+				}
+			}
+			for _, child := range v {
+				convert(child)
+			}
+		case []any:
+			for _, child := range v {
+				convert(child)
+			}
+		}
+	}
+	convert(node)
+	return node
 }
 
 func RuntimeManagedFields(name string) (map[string]bool, error) {
