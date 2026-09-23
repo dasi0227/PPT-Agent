@@ -376,10 +376,10 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const draftSelections = useMemo(() => activeThreadId
     ? (composer.threadReferences[activeThreadId] ?? []).flatMap((item) => item.kind === 'dom' ? [item.selection] : [])
     : [], [activeThreadId, composer.threadReferences]);
-  const selectionSlide = currentSlide?.html_hash ? {
+  const selectionSlide = currentState.status === 'ready' && currentSlide?.html_hash ? {
     id: currentSlide.id, hash: currentSlide.html_hash,
   } : undefined;
-  const selectionEnabled = previewMode === 'main' && currentView === 'html' && currentHasHTML && !fullscreen
+  const selectionEnabled = previewMode === 'main' && currentView === 'html' && Boolean(selectionSlide) && !fullscreen
     && !['creating', 'waiting', 'paused', 'recovering', 'canceling'].includes(runSession.status);
   const zoomEnabled = hasSlides && previewMode === 'main' && currentView === 'html' && currentHasHTML;
   const canvasPan = useCanvasPan({
@@ -646,7 +646,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                 runtimeSlides={runtimeSlides}
                 runtimeIndex={runtimeIndex}
                 fallbackFrame={snapshot ? buildRuntimeFrame(snapshot, currentSlide.id) : undefined}
-                selectionMode={selectionMode}
+                selectionMode={selectionEnabled ? selectionMode : 'none'}
                 selectionSlide={selectionSlide}
                 draftSelections={draftSelections}
                 onSelection={(selection) => { void acceptSelection(selection); }}

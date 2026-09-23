@@ -89,7 +89,7 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 	mode := effectivePromptMode(req.Mode, req.Context.Command.Mode)
 	changes := make([]any, 0, req.Changes.Count())
 	for _, change := range req.Changes.All() {
-		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "content_hash": change.AfterHash, "affects_html": change.AffectsHTML})
+		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "artifact_hash": change.AfterHash, "affects_html": change.AffectsHTML})
 	}
 	evidence := []any{}
 	// Only the latest evidence of each kind for a target informs the next action.

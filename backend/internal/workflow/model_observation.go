@@ -18,7 +18,7 @@ func modelToolObservation(result ToolResult) string {
 	if len(result.ChangedTargets) > 0 {
 		targets := []any{}
 		for _, target := range result.ChangedTargets {
-			targets = append(targets, map[string]any{"resource": target.Target(), "content_hash": target.Hash})
+			targets = append(targets, map[string]any{"resource": target.Target(), "artifact_hash": target.Hash})
 		}
 		value["changed_targets"] = targets
 	}

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Slide } from '../../api/types';
-import { RequestCanceledError } from '../../api/client';
+import { APIError, RequestCanceledError } from '../../api/client';
 import { slidesApi } from '../../api/slides';
+import { useProjectStore } from '../../stores/projectStore';
 
 export type ResourceState<T> =
   | { status: 'idle' }
@@ -70,7 +71,8 @@ export function useSlideRenderCache(projectId: string | null) {
     controllers.current.set(key, controller);
     setStates((current) => ({ ...current, [key]: { status: 'loading', previous: previousData } }));
     try {
-      const html = await slidesApi.render(slide.id, controller.signal);
+      const html = await slidesApi.render(slide.id, slide.html_hash, controller.signal);
+      if (controller.signal.aborted) return;
       htmlCache.set(key, html);
       setStates((current) => ({ ...current, [key]: { status: 'ready', data: html } }));
     } catch (error) {
@@ -83,9 +85,14 @@ export function useSlideRenderCache(projectId: string | null) {
           previous: previousData,
         },
       }));
+      if (error instanceof APIError && error.code === 'CONTENT_CONFLICT') {
+        void useProjectStore.getState().loadProjectContent(projectId);
+      }
     } finally {
-      controllers.current.delete(key);
-      if (currentRequestKey.current === key) currentRequestKey.current = null;
+      if (controllers.current.get(key) === controller) {
+        controllers.current.delete(key);
+        if (currentRequestKey.current === key) currentRequestKey.current = null;
+      }
     }
   }, [projectId]);
 

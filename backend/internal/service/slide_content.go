@@ -13,8 +13,9 @@ import (
 )
 
 var ErrSlideHTMLMissing = errors.New("service: slide html not rendered")
+var ErrSlideHTMLChanged = errors.New("service: slide html changed")
 
-func (svc *SlideService) ReadHTML(ctx context.Context, slideID string) ([]byte, error) {
+func (svc *SlideService) ReadHTML(ctx context.Context, slideID, expectedHash string) ([]byte, error) {
 	slide, err := svc.store.GetSlide(ctx, slideID)
 	if err != nil {
 		return nil, err
@@ -33,6 +34,11 @@ func (svc *SlideService) ReadHTML(ctx context.Context, slideID string) ([]byte, 
 	}
 	if err != nil {
 		return nil, err
+	}
+	// Check the same source bytes that will be normalized and returned. The
+	// normalized preview itself is not the authored HTML's content identity.
+	if expectedHash != "" && spec.ContentHash(raw) != expectedHash {
+		return nil, ErrSlideHTMLChanged
 	}
 	designRaw, err := sandbox.Read("design.json")
 	if err != nil {

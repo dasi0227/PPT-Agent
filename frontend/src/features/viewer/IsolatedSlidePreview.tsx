@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RuntimeSlide, runtimeEventFromFrame } from './previewProtocol';
 import { Button } from '../../components/ui/primitives';
 import type { DOMSelection } from '../../api/types';
@@ -43,7 +43,11 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   const [runtimeVersion, setRuntimeVersion] = useState(0);
   const [runtimeReady, setRuntimeReady] = useState(false);
   const deliveredReplayRef = useRef(replayRequest?.id);
-  const sessionRef = useRef(`selection_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`);
+  const activeSlideId = slides[index]?.id;
+  const selectionHash = selectionSlide?.hash;
+  // A response from an older displayed artifact must not reach the composer,
+  // including presence probes that do not carry a hash themselves.
+  const sessionID = useMemo(() => `selection_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`, [activeSlideId, selectionHash]);
   indexRef.current = index;
 
   const sendDeck = useCallback(() => {
@@ -55,20 +59,21 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   }, [slides]);
 
   const sendSelectionState = useCallback(() => {
+    if (!activeSlideId) return;
+    iframeRef.current?.contentWindow?.postMessage({
+      type: 'setSelectionMode', session_id: sessionID, slide_id: activeSlideId,
+      mode: selectionSlide ? selectionMode : 'none', html_hash: selectionSlide?.hash ?? '',
+    }, '*');
     if (!selectionSlide) return;
     iframeRef.current?.contentWindow?.postMessage({
-      type: 'setSelectionMode', session_id: sessionRef.current, slide_id: selectionSlide.id,
-      mode: selectionMode, html_hash: selectionSlide.hash,
-    }, '*');
-    iframeRef.current?.contentWindow?.postMessage({
-      type: 'renderDraftSelections', session_id: sessionRef.current, slide_id: selectionSlide.id,
+      type: 'renderDraftSelections', session_id: sessionID, slide_id: selectionSlide.id,
       selections: draftSelections.filter((item) => item.slide_id === selectionSlide.id).map((item) => ({
         selection_id: item.selection_id, marker_no: item.marker_no, rect: item.rect, status: item.status,
       })),
     }, '*');
     const stale = draftSelections.filter((item) => item.slide_id === selectionSlide.id && (item.html_hash !== selectionSlide.hash));
-    if (stale.length > 0) iframeRef.current?.contentWindow?.postMessage({ type: 'probeDraftSelections', session_id: sessionRef.current, slide_id: selectionSlide.id, selections: stale }, '*');
-  }, [draftSelections, selectionMode, selectionSlide]);
+    if (stale.length > 0) iframeRef.current?.contentWindow?.postMessage({ type: 'probeDraftSelections', session_id: sessionID, slide_id: selectionSlide.id, selections: stale }, '*');
+  }, [activeSlideId, draftSelections, selectionMode, selectionSlide, sessionID]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -78,22 +83,23 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         setRenderError('');
         sendDeck();
         setRuntimeReady(true);
-        window.setTimeout(sendSelectionState, 0);
+        sendSelectionState();
       } else if (message.type === 'renderError') {
         setRenderError(message.message);
       } else if (message.type === 'selectionCreated') {
-        if (message.session_id === sessionRef.current && message.slide_id === selectionSlide?.id) onSelection?.(message.selection);
-      } else if (message.type === 'selectionCanceled' && message.session_id === sessionRef.current) {
+        if (selectionMode !== 'none' && selectionSlide && message.session_id === sessionID && message.slide_id === selectionSlide.id
+          && message.selection.slide_id === selectionSlide.id && message.selection.html_hash === selectionSlide.hash) onSelection?.(message.selection);
+      } else if (message.type === 'selectionCanceled' && message.session_id === sessionID) {
         onSelectionCanceled?.();
-      } else if (message.type === 'selectionPresence' && message.session_id === sessionRef.current) {
+      } else if (message.type === 'selectionPresence' && selectionSlide && message.session_id === sessionID && message.slide_id === selectionSlide.id) {
         onSelectionPresence?.(message.statuses);
-      } else if ((message.type === 'selectionEmpty' || message.type === 'selectionRejected') && message.session_id === sessionRef.current) {
+      } else if ((message.type === 'selectionEmpty' || message.type === 'selectionRejected') && message.session_id === sessionID) {
         onSelectionMessage?.(message.message);
       }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionSlide?.id, sendDeck, sendSelectionState]);
+  }, [onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
 
   useEffect(() => {
     sendDeck();

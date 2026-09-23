@@ -19,11 +19,11 @@ func NewSlideHandler(svc *service.SlideService) *SlideHandler {
 	return &SlideHandler{svc: svc}
 }
 
-// RenderSlide GET /slides/:id/render：返回单页 index.html 原始字节，供预览 iframe 加载。
-// 使用稳定的 slide_id 作为唯一入参，避免暴露任意文件路径。
-// 未找到 → 404；产物未生成 → 404 HTML_NOT_READY。
+// RenderSlide GET /slides/:id/render：返回规范化单页 HTML，供预览 iframe 加载。
+// 使用稳定的 slide_id 定位页面，避免暴露任意文件路径。
+// 可选 expected_hash 校验源文件；未找到 → 404；内容已变 → 409。
 func (h *SlideHandler) RenderSlide(c *gin.Context) {
-	raw, err := h.svc.ReadHTML(c.Request.Context(), c.Param("id"))
+	raw, err := h.svc.ReadHTML(c.Request.Context(), c.Param("id"), c.Query("expected_hash"))
 	switch {
 	case err == nil:
 		c.Header("Cache-Control", "no-store")
@@ -33,6 +33,8 @@ func (h *SlideHandler) RenderSlide(c *gin.Context) {
 		AbortWithError(c, ErrNotFound("slide not found"))
 	case errors.Is(err, service.ErrSlideHTMLMissing):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusNotFound, Code: "HTML_NOT_READY", Message: "slide html not rendered yet"})
+	case errors.Is(err, service.ErrSlideHTMLChanged):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "CONTENT_CONFLICT", Message: "页面内容已更新，请重新加载。"})
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}

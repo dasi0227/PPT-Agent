@@ -22,7 +22,11 @@
 - HTML 内容不符为 unknown；manifest/spec/当前大纲节点不符为 spec_stale；设计内容不符为 design_stale；运行时页框不符为 frame_stale。
 - SQLite slides 删除 current_version；上下文 revision 索引、引用 revision、工具变更目标 revision 和渲染图片 revision 一并删除。上下文引用与截图沿用已有 hash 校验。
 - 前端 HTML 缓存使用 project_id + slide_id + html_hash；DOM 标记、预览父子窗口通信和 checkpoint 恢复引用统一绑定当前 HTML hash，不再依赖上一次渲染证明的编号。
+- 预览请求携带 expected_hash；后端对本次读取的源字节校验后再规范化返回，不对注入主题样式后的 HTML 计算内容身份。源内容已变化返回 409 CONTENT_CONFLICT，前端刷新快照，不缓存冲突响应。
+- 新 HTML 加载中或失败时可以继续展示旧页面，但关闭选择和引用探测。只有当前 hash 对应的内容 ready 后才允许选择；页面或内容身份变化时更换选择会话，拒绝旧会话及 hash 不匹配的选择结果。
 - 修改主题后重新读取权威内容快照，以更新 design hash，前端不自行合成文件元数据。
+
+2026-09-23 复核补充：模型工具观察、任务状态及 Reviewer 的变更记录使用 artifact_hash 表示内部原始文件字节指纹。该值用于变更追踪，不作为 expected_hash；写入前置条件仅使用 read_ppt.content_hash 或 mutation.hashes，避免与规范化内容指纹混用。
 
 ## Plan 审批
 
@@ -37,3 +41,18 @@
 覆盖规范化 hash、元数据/格式不影响渲染来源、重复写入不失效、旧 hash 拒绝写入、HTML 引用过期、审批 ID 恢复与替换、旧审批拒绝、事件排序及计划执行恢复。更新受协议变化影响的原有测试。
 
 不使用浏览器或计算机自动化；主预览、DOM 标记、主题切换及历史恢复交互由用户手动验收。
+
+2026-09-23 补充了源文件变化时拒绝预览读取、冲突刷新且不污染缓存、旧页面选择回包拒绝及模型指纹字段区分的定向回归用例。本轮只做代码静态复核，未执行测试、构建或交互验收。用户可在 backend 目录执行：
+
+```sh
+go test ./internal/service ./internal/workflow -run 'Test(ReadHTMLBindsPreviewToSourceHash|ModelObservationDistinguishesWriteTokenFromArtifactHash)$'
+```
+
+在 frontend 目录执行：
+
+```sh
+pnpm exec tsc --noEmit
+pnpm exec vitest run src/features/viewer/useSlideRenderCache.test.ts src/features/viewer/IsolatedSlidePreview.test.tsx
+```
+
+交互验收重点：页面更新且新 HTML 请求延迟或失败时，旧页面可见但不可标记；请求与快照冲突后重新加载最新内容；切换内容后迟到的选择或探测结果不进入当前草稿。

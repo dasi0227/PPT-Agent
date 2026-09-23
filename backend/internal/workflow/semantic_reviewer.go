@@ -103,7 +103,7 @@ func (r LLMSemanticReviewer) Review(ctx context.Context, input SemanticReviewInp
 	delete(value, "finish_call_id")
 	changes := []any{}
 	for _, change := range input.Changes.All() {
-		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "content_hash": change.AfterHash})
+		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "artifact_hash": change.AfterHash})
 	}
 	value["changes"] = changes
 	raw, err := json.Marshal(value)
