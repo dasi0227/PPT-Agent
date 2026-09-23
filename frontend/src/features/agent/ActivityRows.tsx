@@ -15,7 +15,7 @@ import {
   SquareTerminal,
   Pencil,
   Component as ComponentIcon,
-  Blocks,
+  BookOpenText,
 } from 'lucide-react';
 import type {
   MilestoneItem,
@@ -195,7 +195,7 @@ function toolStatusIcon(tool: string, failed: boolean) {
   if (tool === 'mutate_ppt') return <Pencil className={className} strokeWidth={1.75} />;
   if (tool === 'render_slide') return <Monitor className={className} strokeWidth={1.75} />;
   if (tool === 'load_component') return <ComponentIcon className={className} strokeWidth={1.75} />;
-  if (tool === 'load_skill') return <Blocks className={className} strokeWidth={1.75} />;
+  if (tool === 'load_skill') return <BookOpenText className={className} strokeWidth={1.75} />;
   if (tool === 'search_reference' || tool.startsWith('search') || tool.includes('reference')) {
     return <Search className={className} strokeWidth={1.75} />;
   }
@@ -212,23 +212,23 @@ function CommandCard({ command, commandOutput, status }: {
 }) {
   return (
     <LongContent
+      className="overflow-hidden rounded-md bg-[#EDF0F3]"
+      contentClassName="px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]"
       fadeClassName="from-[#EDF0F3]/0 via-[#EDF0F3]/90 to-[#EDF0F3]"
       buttonClassName="h-6 text-[11px]"
-      controlsClassName="mt-2"
+      controlsClassName="mt-0 pb-[9px]"
     >
-      <div className="rounded-md bg-[#EDF0F3] px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]">
-        <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
-          {command.text}
-        </code>
-        {commandOutput && (
-          <pre className={cn(
-            'mt-[7px] whitespace-pre-wrap break-words border-t border-[#D7DCE3] pt-[7px] font-mono text-[11px] font-normal text-[#758191]',
-            status === 'failed' && 'text-[#A34851]',
-          )}>
-            {commandOutput}
-          </pre>
-        )}
-      </div>
+      <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
+        {command.text}
+      </code>
+      {commandOutput && (
+        <pre className={cn(
+          'mt-[7px] whitespace-pre-wrap break-words border-t border-[#D7DCE3] pt-[7px] font-mono text-[11px] font-normal text-[#758191]',
+          status === 'failed' && 'text-[#A34851]',
+        )}>
+          {commandOutput}
+        </pre>
+      )}
     </LongContent>
   );
 }
@@ -243,7 +243,17 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const slides = orderedSlides(snapshot);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const detailText = item.error?.message ?? item.detail;
-  const label = item.tool === 'mutate_ppt' && item.status === 'completed'
+  const renderSlideId = item.target?.slide_id ?? item.preview?.slide_id;
+  const renderPage = renderSlideId ? pageName(renderSlideId, slides) : '页面';
+  const renderObject = renderPage === '已删除页面' ? '幻灯片（页面已删除）' : `${renderPage}幻灯片`;
+  const name = item.tool === 'run_command' ? commandName(item.command?.text) : null;
+  const label = item.tool === 'render_slide'
+    ? item.status === 'completed' ? `已渲染${renderObject}`
+      : item.status === 'running' ? `正在渲染${renderObject}`
+        : `渲染${renderPage === '已删除页面' ? renderObject : renderPage}失败`
+    : item.tool === 'run_command' && item.status === 'completed'
+    ? name ? `已执行 ${name} 命令` : '已执行命令'
+    : item.tool === 'mutate_ppt' && item.status === 'completed'
     ? item.label.replace(/^已(?:创建|更新)/, '已编辑')
     : item.label;
   const renderPassed = item.tool === 'render_slide' && item.status === 'completed';
@@ -386,7 +396,7 @@ function targetObjectName(target: PublicTarget | undefined): string {
   return '';
 }
 
-// 从命令文本提取可执行程序名（首段空白分隔的词），供分组行展示具体命令。
+// 从命令文本提取可执行程序名，供单条调用展示；完整命令保留在展开详情中。
 function commandName(text?: string): string | null {
   const trimmed = text?.trim();
   if (!trimmed) return null;
@@ -410,12 +420,10 @@ function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
 }
 
 function groupLabel(items: ToolActivityItem[], verb: string): string {
+  if (items[0].tool === 'render_slide') {
+    return `已渲染 ${items.length} 张幻灯片`;
+  }
   if (items[0].tool === 'run_command') {
-    const name = commandName(items[0].command?.text);
-    const uniform = name != null && items.every((item) => commandName(item.command?.text) === name);
-    if (uniform) {
-      return `已执行 ${name} 命令`;
-    }
     return `已执行 ${items.length} 条命令`;
   }
   const { prefix, noun } = groupedObjectParts(items);

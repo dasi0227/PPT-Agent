@@ -38,7 +38,7 @@ export const runActivityLabels: Record<RunActivity, string> = {
   'presentation.design.updating': 'Dasi 正在统一演示文稿的视觉设计',
   'slide.creating': 'Dasi 正在制作页面',
   'slide.updating': 'Dasi 正在优化页面',
-  'slide.layout.checking': 'Dasi 正在检查页面布局',
+  'slide.layout.checking': 'Dasi 正在渲染幻灯片',
   'resource.preparing': 'Dasi 正在准备创作资源',
   'command.executing': 'Dasi 正在执行辅助操作',
   'completion.reviewing': 'Dasi 正在进行最终检查',

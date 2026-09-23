@@ -71,7 +71,7 @@ describe('PlanApproval', () => {
       fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
       expect(screen.getByTestId('plan-content-preview')).not.toHaveStyle({ maxHeight: '320px' });
       expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '收起' }).closest('[data-testid="plan-content-preview"]')).toBeNull();
+      expect(screen.getByTestId('plan-content-preview')).toContainElement(screen.getByRole('button', { name: '收起' }));
       expect(approve).toHaveAttribute('aria-pressed', 'true');
 
       fireEvent.click(screen.getByRole('button', { name: '收起' }));

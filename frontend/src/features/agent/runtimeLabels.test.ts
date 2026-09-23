@@ -12,7 +12,7 @@ describe('runtime product labels', () => {
 
   it('maps every run activity to Dasi-authored user-facing copy', () => {
     expect(runActivityLabels['run.analyzing']).toBe('Dasi 正在确定下一步操作');
-    expect(runActivityLabels['slide.layout.checking']).toBe('Dasi 正在检查页面布局');
+    expect(runActivityLabels['slide.layout.checking']).toBe('Dasi 正在渲染幻灯片');
     expect(Object.values(runActivityLabels).every((label) => label.startsWith('Dasi '))).toBe(true);
   });
 });

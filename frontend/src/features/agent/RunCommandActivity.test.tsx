@@ -46,7 +46,7 @@ describe('run command activity', () => {
   });
 
   it('renders tool results as normal-weight black text', () => {
-    render(<ToolActivityRow item={commandItem({ label: '已读取演示内容', status: 'completed' })} />);
+    render(<ToolActivityRow item={commandItem({ tool: 'read_ppt', command: undefined, label: '已读取演示内容', status: 'completed' })} />);
 
     expect(screen.getByText('已读取演示内容')).toHaveClass(
       'font-normal',
@@ -56,7 +56,7 @@ describe('run command activity', () => {
 
   it('renders completed command details in one collapsed box', () => {
     render(<ToolActivityRow item={commandItem({
-      label: '已确认当前仓库状态',
+      label: '已执行 1 条命令',
       status: 'completed',
       command: {
         text: 'git status --short',
@@ -66,7 +66,8 @@ describe('run command activity', () => {
     })} />);
 
     expect(screen.queryByText('M notes.txt')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /已确认当前仓库状态/ }));
+    expect(screen.queryByText('已执行 1 条命令')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '已执行 git 命令' }));
     expect(screen.getByText('git status --short')).toBeInTheDocument();
     expect(screen.getByText('M notes.txt')).toBeInTheDocument();
     expect(screen.queryByText('命令')).toBeNull();
@@ -97,7 +98,7 @@ describe('run command activity', () => {
     expect(screen.queryByText('/Users/test/project/manifest.json')).toBeNull();
   });
 
-  it('uses the confirmed command name for grouped rows', () => {
+  it('shows the count for identical grouped commands and names for their individual rows', () => {
     const items = ['1', '2', '3'].map((id) => commandItem({
       id: `r1:tool:${id}`,
       callId: id,
@@ -105,11 +106,12 @@ describe('run command activity', () => {
       label: '已执行命令',
       command: { text: 'pwd', status: 'completed' },
     }));
-    const { container } = render(<ToolGroupRow items={items} />);
-    expect(container.textContent).toContain('已执行 pwd 命令');
+    render(<ToolGroupRow items={items} />);
+    fireEvent.click(screen.getByRole('button', { name: '已执行 3 条命令' }));
+    expect(screen.getAllByRole('button', { name: '已执行 pwd 命令' })).toHaveLength(3);
   });
 
-  it('falls back to the command count when grouped commands differ', () => {
+  it('shows each command name when a mixed command group is expanded', () => {
     const items = ['1', '2', '3'].map((id, index) => commandItem({
       id: `r1:tool:${id}`,
       callId: id,
@@ -119,6 +121,9 @@ describe('run command activity', () => {
     }));
     render(<ToolGroupRow items={items} />);
     expect(screen.getByText('已执行 3 条命令')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '已执行 3 条命令' }));
+    expect(screen.getByRole('button', { name: '已执行 pwd 命令' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '已执行 ls 命令' })).toHaveLength(2);
   });
 
   it('preserves the complete read label for deck targets', () => {
@@ -163,7 +168,8 @@ describe('run command activity', () => {
       },
     })} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /第 3 页渲染通过/ }));
+    expect(screen.queryByText('第 3 页渲染通过')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^已渲染/ }));
 
     expect(screen.getByRole('img', { name: /渲染预览/ })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /index.html/ })).not.toBeInTheDocument();

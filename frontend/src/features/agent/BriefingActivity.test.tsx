@@ -69,7 +69,7 @@ describe('BriefingActivity', () => {
       fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
       const collapse = screen.getByRole('button', { name: '收起' });
       expect(collapse).toBeInTheDocument();
-      expect(collapse.closest('[data-testid="command-content-preview"]')).toBeNull();
+      expect(screen.getByTestId('command-content-preview')).toContainElement(collapse);
       expect(screen.getByRole('button', { name: '复制' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: '新建会话' })).toBeInTheDocument();
     } finally {

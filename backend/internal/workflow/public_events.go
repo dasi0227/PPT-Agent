@@ -325,12 +325,12 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		return "更新" + targetName + "失败", publicToolError(result), true
 	case "render_slide":
 		if started {
-			return "检查" + targetName + "布局", "", true
+			return "正在渲染" + targetName, "", true
 		}
 		if result.OK {
-			return targetName + "渲染通过", renderDetail(result), true
+			return "已渲染" + targetName, renderDetail(result), true
 		}
-		return targetName + "渲染未通过", publicToolError(result), true
+		return "渲染" + strings.TrimSuffix(targetName, "幻灯片") + "失败", publicToolError(result), true
 	case "run_command":
 		if started {
 			return "正在执行", "", true

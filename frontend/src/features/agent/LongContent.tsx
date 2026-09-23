@@ -84,24 +84,24 @@ export function LongContent({
             </button>
           </div>
         )}
+        {expanded && overflowing && (
+          <div className={cn('mt-3 flex justify-center', controlsClassName)}>
+            <button
+              type="button"
+              aria-expanded="true"
+              aria-controls={contentId}
+              onClick={(event) => {
+                event.stopPropagation();
+                setExpanded(false);
+              }}
+              className={controlClassName}
+            >
+              <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+              收起
+            </button>
+          </div>
+        )}
       </div>
-      {expanded && overflowing && (
-        <div className={cn('mt-3 flex justify-center', controlsClassName)}>
-          <button
-            type="button"
-            aria-expanded="true"
-            aria-controls={contentId}
-            onClick={(event) => {
-              event.stopPropagation();
-              setExpanded(false);
-            }}
-            className={controlClassName}
-          >
-            <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-            收起
-          </button>
-        </div>
-      )}
     </div>
   );
 }

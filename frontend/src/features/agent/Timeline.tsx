@@ -19,7 +19,6 @@ import { PausedRunCard } from './PausedRunCard';
 import { TimelineDisclosure } from './TimelineDisclosure';
 import { CommandPermissionCard } from './CommandPermissionCard';
 import { GitCommitEvent, GitCommitProgress } from './GitCommitActivity';
-import { ComponentActivity, SkillActivity } from './SkillActivity';
 import { useProjectStore } from '../../stores/projectStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { BriefingActivity } from './BriefingActivity';
@@ -177,16 +176,7 @@ export const Timeline: React.FC = () => {
                 ><RollbackButton runId={item.runId} steering={Boolean(item.deliveryStatus)} /></MessageMetaActions>
               </div>
             </div>
-            {item.skills && item.skills.length > 0 && (
-              <div className="mt-1">
-                <SkillActivity skills={item.skills} />
-              </div>
-            )}
-            {item.components && item.components.length > 0 && (
-              <div className="mt-1">
-                <ComponentActivity components={item.components} />
-              </div>
-            )}
+
           </>
         )}
         {item.type === 'run_lifecycle' && <RunLifecycleRow item={item} />}

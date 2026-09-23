@@ -14,13 +14,13 @@ import {
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
-  Blocks,
+  Component as ComponentIcon,
   Check,
   ChevronRight,
   ClipboardList,
   Cpu,
   Crosshair,
-  Footprints,
+  SportShoe,
   GalleryThumbnails,
   GitCommitHorizontal,
   Hammer,
@@ -29,7 +29,7 @@ import {
   MessagesSquare,
   NotebookText,
   Signature,
-  WandSparkles,
+  Sparkles,
 } from 'lucide-react';
 import type { ComponentReference, Prompt } from '../../api/types';
 import { useComponentStore } from '../../stores/componentStore';
@@ -760,7 +760,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const SummaryColumnIcon = ({ colIndex }: { colIndex: number }) => {
       const kind = SUMMARY_COLUMNS[colIndex].kind;
-      const Icon = kind === 'page' ? GalleryThumbnails : kind === 'component' ? Blocks : NotebookText;
+      const Icon = kind === 'page' ? GalleryThumbnails : kind === 'component' ? ComponentIcon : NotebookText;
       return <Icon className="h-[15px] w-[15px]" strokeWidth={1.75} />;
     };
 
@@ -774,13 +774,13 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             : id === 'chat'
               ? MessagesSquare
               : id === 'kickoff'
-                ? Footprints
+                ? SportShoe
                 : id === 'handoff'
                   ? Handshake
                   : id === 'commit'
                     ? GitCommitHorizontal
                     : id === 'polish'
-                      ? WandSparkles
+                      ? Sparkles
                       : id === 'rename'
                         ? Signature
                       : id === 'model'
@@ -1018,7 +1018,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                 }`}
               >
                 <span className="grid h-6 w-5 place-items-center text-accent" aria-hidden="true">
-                  <Blocks className="h-[15px] w-[15px]" strokeWidth={1.75} />
+                  <ComponentIcon className="h-[15px] w-[15px]" strokeWidth={1.75} />
                 </span>
                 <span className="flex min-w-0 items-baseline gap-1.5">
                   <span className="max-w-[48%] truncate text-xs font-bold text-text-900">{component.name}</span>
