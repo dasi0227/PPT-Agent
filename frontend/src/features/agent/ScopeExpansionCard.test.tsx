@@ -18,15 +18,13 @@ const item: ScopeExpansionItem = {
   callId: 'c1',
   baseRevision: 1,
   currentScope: {
-    object: 'html',
     slide_ids: ['sli_one'],
     source: { kind: 'current_page' },
     include_run_created_slides: false,
     revision: 1,
   },
-  requestedAddition: { slide_ids: ['sli_two'], object: 'spec' },
+  requestedAddition: { slide_ids: ['sli_two'] },
   proposedScope: {
-    object: 'presentation',
     slide_ids: ['sli_one', 'sli_two'],
     source: { kind: 'custom_pages' },
     include_run_created_slides: false,
@@ -44,7 +42,7 @@ afterEach(() => {
 });
 
 describe('ScopeExpansionCard', () => {
-  it('submits a global adjustment with the pending interaction identity', async () => {
+  it('submits an all-page adjustment with the pending interaction identity', async () => {
     const submit = vi.spyOn(runsApi, 'submitScopeExpansion').mockResolvedValue(undefined);
     useRunStore.setState({
       sessions: {
@@ -58,7 +56,7 @@ describe('ScopeExpansionCard', () => {
     });
 
     render(<ScopeExpansionCard item={item} />);
-    fireEvent.click(screen.getByRole('button', { name: '调整为全局' }));
+    fireEvent.click(screen.getByRole('button', { name: '调整为全部页' }));
 
     await waitFor(() => {
       expect(submit).toHaveBeenCalledWith('r1', {
@@ -66,7 +64,7 @@ describe('ScopeExpansionCard', () => {
         call_id: 'c1',
         base_revision: 1,
         decision: 'adjust',
-        adjusted_scope: { object: 'global', selection: { kind: 'all_pages' } },
+        adjusted_scope: { selection: { kind: 'all_pages' } },
       });
     });
   });

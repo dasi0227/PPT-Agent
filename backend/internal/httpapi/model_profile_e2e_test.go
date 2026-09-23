@@ -101,7 +101,7 @@ func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 	explicit := `{
 		"client_request_id":"req-model-explicit",
 		"model":"Text Profile",
-		"scope":{"object":"spec","selection":{"kind":"all_pages"}},
+		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"execute",
 		"instruction":"write spec"
 	}`
@@ -132,7 +132,7 @@ func TestCreateRunRejectsMissingProfileButTrustsConfiguredModels(t *testing.T) {
 	missing := `{
 		"client_request_id":"req-model-missing",
 		"model":"Removed Profile",
-		"scope":{"object":"spec","selection":{"kind":"all_pages"}},
+		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"chat",
 		"instruction":"inspect"
 	}`
@@ -144,7 +144,7 @@ func TestCreateRunRejectsMissingProfileButTrustsConfiguredModels(t *testing.T) {
 	configured := `{
 		"client_request_id":"req-model-mismatch",
 		"model":"Text Profile",
-		"scope":{"object":"presentation","selection":{"kind":"all_pages"}},
+		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"execute",
 		"instruction":"make presentation"
 	}`
@@ -159,7 +159,7 @@ func TestCreateRunIdempotencyHashIncludesResolvedProfile(t *testing.T) {
 	request := `{
 		"client_request_id":"req-model-idempotency",
 		"model":"Text Profile",
-		"scope":{"object":"spec","selection":{"kind":"all_pages"}},
+		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"execute",
 		"instruction":"write spec"
 	}`

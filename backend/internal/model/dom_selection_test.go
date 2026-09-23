@@ -82,5 +82,5 @@ func TestDOMSelectionRequiresTextIntentEvenWhenAnImageIsAttached(t *testing.T) {
 }
 
 func modelScopeForDOMTest() RunScope {
-	return NewRunScope(ScopeObjectPresentation, ScopeCurrentPage, "sli_one")
+	return NewRunScope(ScopeCurrentPage, "sli_one")
 }

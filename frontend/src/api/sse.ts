@@ -321,7 +321,7 @@ function hasSafeString(data: Record<string, unknown>, key: string): boolean {
 
 function validRunScope(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  if (!['spec', 'html', 'presentation', 'global'].includes(String(value.object))) return false;
+  if ('object' in value) return false;
   if (!Array.isArray(value.slide_ids) || !value.slide_ids.every((id) => typeof id === 'string' && id.startsWith('sli_'))) return false;
   if (!isRecord(value.source) || !['current_page', 'all_pages', 'custom_pages', 'custom_sections'].includes(String(value.source.kind))) return false;
   return typeof value.include_run_created_slides === 'boolean' && isPositiveInteger(value.revision);
@@ -330,8 +330,7 @@ function validRunScope(value: unknown): boolean {
 function validScopeAddition(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const slidesValid = value.slide_ids === undefined || (Array.isArray(value.slide_ids) && value.slide_ids.every((id) => typeof id === 'string' && id.startsWith('sli_')));
-  const objectValid = value.object === undefined || ['spec', 'html', 'presentation', 'global'].includes(String(value.object));
-  return slidesValid && objectValid;
+  return slidesValid && !('object' in value);
 }
 
 function validOptionalPublicTarget(value: unknown): boolean {

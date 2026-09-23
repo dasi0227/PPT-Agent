@@ -76,7 +76,7 @@ export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   projectId: null,
   status: 'idle',
   streamStatus: 'idle',
-  scope: { object: 'presentation', selection: { kind: 'current_page' } },
+  scope: { selection: { kind: 'current_page' } },
   mode: 'execute',
   timelineItems: [],
   pendingQuestion: null,
@@ -279,8 +279,7 @@ function requestFromTimeline(
     const normalized = original.scope;
     const source = normalized.source;
     scope = {
-      object: normalized.object,
-      selection: normalized.object === 'global' || source.kind === 'all_pages'
+      selection: source.kind === 'all_pages'
         ? { kind: 'all_pages' }
         : source.kind === 'current_page'
           ? { kind: 'current_page', current_slide_id: normalized.slide_ids[0] }

@@ -4,9 +4,7 @@ import { composerScene, useComposerStore } from './composerStore';
 describe('composerStore', () => {
   beforeEach(() => {
     useComposerStore.setState({
-      scopeObject: 'presentation',
       scopeSelection: 'current_page',
-      lastNonGlobalSelection: 'current_page',
       customSlideIds: [],
       customSectionIds: [],
       selectedSkillIds: [],
@@ -63,22 +61,19 @@ describe('composerStore', () => {
     expect(useComposerStore.getState().threadDrafts).toEqual({});
   });
 
-  it('restores the previous page selection after leaving global resources', () => {
+  it('preserves custom selections when switching page ranges', () => {
     useComposerStore.getState().setScopeSelection('custom_sections');
     useComposerStore.getState().toggleCustomSection('sec_one');
-    useComposerStore.getState().setScopeObject('global');
+    useComposerStore.getState().setScopeSelection('all_pages');
     expect(useComposerStore.getState().scopeSelection).toBe('all_pages');
-    useComposerStore.getState().setScopeObject('global');
-
-    useComposerStore.getState().setScopeObject('presentation');
+    useComposerStore.getState().setScopeSelection('custom_sections');
     expect(useComposerStore.getState().scopeSelection).toBe('custom_sections');
     expect(useComposerStore.getState().customSectionIds).toEqual(['sec_one']);
   });
 
-  it('uses all resources for an empty project even after restoring a stale target', () => {
-    useComposerStore.setState({ scopeObject: 'presentation', scopeSelection: 'current_page', userTouchedTarget: true });
+  it('uses all pages for an empty project even after restoring a stale target', () => {
+    useComposerStore.setState({ scopeSelection: 'current_page', userTouchedTarget: true });
     useComposerStore.getState().applyContextDefault(false);
-    expect(useComposerStore.getState().scopeObject).toBe('global');
     expect(useComposerStore.getState().scopeSelection).toBe('all_pages');
   });
 

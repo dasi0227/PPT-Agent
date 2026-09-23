@@ -593,7 +593,7 @@ func (e *Engine) SteerWithReferences(ctx context.Context, runID, expectedRunID, 
 	if created && e.hw != nil {
 		_ = a.bus.AppendSteeringHistory(ctx, message)
 	}
-	if created && scope.Object != "" {
+	if created && scope.Source.Kind != "" {
 		a.run.Command.Scope = scope
 	}
 	return existing, nil

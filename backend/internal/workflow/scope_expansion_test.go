@@ -13,14 +13,14 @@ func scopeExpansionPack() contextengine.ContextPack {
 	}}}
 }
 
-func TestProposeScopeExpansionMergesPagesAndObjectAsCartesianScope(t *testing.T) {
-	current := model.NewRunScope(model.ScopeObjectHTML, model.ScopeCustomPages, "sli_one")
-	next, addition, err := proposeScopeExpansion(current, scopeExpansionPack(), []string{"sli_three"}, model.ScopeObjectSpec)
+func TestProposeScopeExpansionMergesPages(t *testing.T) {
+	current := model.NewRunScope(model.ScopeCustomPages, "sli_one")
+	next, addition, err := proposeScopeExpansion(current, scopeExpansionPack(), []string{"sli_three"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if next.Object != model.ScopeObjectPresentation || next.Revision != 2 {
-		t.Fatalf("unexpected object/revision: %#v", next)
+	if next.Revision != 2 {
+		t.Fatalf("unexpected revision: %#v", next)
 	}
 	if len(next.SlideIDs) != 2 || next.SlideIDs[0] != "sli_one" || next.SlideIDs[1] != "sli_three" {
 		t.Fatalf("unexpected slides: %#v", next.SlideIDs)
@@ -31,8 +31,8 @@ func TestProposeScopeExpansionMergesPagesAndObjectAsCartesianScope(t *testing.T)
 }
 
 func TestProposeScopeExpansionNoopsForContainedPrivileges(t *testing.T) {
-	current := model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCustomPages, "sli_one")
-	next, _, err := proposeScopeExpansion(current, scopeExpansionPack(), []string{"sli_one"}, model.ScopeObjectHTML)
+	current := model.NewRunScope(model.ScopeCustomPages, "sli_one")
+	next, _, err := proposeScopeExpansion(current, scopeExpansionPack(), []string{"sli_one"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,9 +42,9 @@ func TestProposeScopeExpansionNoopsForContainedPrivileges(t *testing.T) {
 }
 
 func TestAdjustedScopeCannotShrinkCurrentPrivileges(t *testing.T) {
-	current := model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCustomPages, "sli_one", "sli_two")
-	candidate := model.NewRunScope(model.ScopeObjectHTML, model.ScopeCustomPages, "sli_one")
+	current := model.NewRunScope(model.ScopeCustomPages, "sli_one", "sli_two")
+	candidate := model.NewRunScope(model.ScopeCustomPages, "sli_one")
 	if scopeContains(candidate, current) {
-		t.Fatal("shrinking pages or object capabilities must be rejected")
+		t.Fatal("shrinking pages must be rejected")
 	}
 }

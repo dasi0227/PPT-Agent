@@ -55,7 +55,7 @@ func TestRenderReadIsVisibleForOneResponseAndNeverPersisted(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "image-lifecycle", ProjectDir: t.TempDir(), Transcript: transcript,
-		Context:     testPack(model.ModeChat, model.ScopeObjectSpec, model.ScopeCurrentPage, false, "inspect the slide"),
+		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect the slide"),
 		DomainTools: ephemeralImageProvider{},
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 3 {

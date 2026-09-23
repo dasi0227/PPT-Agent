@@ -243,7 +243,7 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 		queryText = query.Command.Instruction
 	}
 	scope := r.Scope
-	if scope.Object == "" {
+	if scope.Source.Kind == "" {
 		scope = query.Command.Scope
 	}
 	allowedKinds := map[string]bool{}
@@ -346,16 +346,9 @@ func retrievalScopeAllows(scope model.RunScope, target Resource) bool {
 
 func resourceForRunScope(target model.RunScope) Resource {
 	if target.IsSinglePage() {
-		part := "spec"
-		if target.AllowsHTML() {
-			part = "html"
-		}
-		return Resource{Type: "slide", SlideID: target.SlideIDs[0], Part: part}
+		return Resource{Type: "slide", SlideID: target.SlideIDs[0], Part: "html"}
 	}
-	if target.AllowsHTML() {
-		return Resource{Type: "deck", Part: "design"}
-	}
-	return Resource{Type: "deck", Part: "outline"}
+	return Resource{Type: "deck", Part: "design"}
 }
 
 func normalizedKeywordScore(query, text string) float64 {

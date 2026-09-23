@@ -131,7 +131,7 @@ export interface ScopeExpansionItem extends BaseTimelineItem {
   callId: string;
   baseRevision: number;
   currentScope: RunScope;
-  requestedAddition: { slide_ids?: string[]; object?: RunScope['object'] };
+  requestedAddition: { slide_ids?: string[] };
   proposedScope: RunScope;
   affectedPageCount: number;
   reason: string;

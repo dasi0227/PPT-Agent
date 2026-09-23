@@ -24,10 +24,7 @@ func resolveRunScope(snapshot spec.ProjectContentSnapshot, input model.CreateRun
 		knownSections[section.ID] = section
 	}
 
-	if input.Object == model.ScopeObjectGlobal {
-		input.Selection = model.ScopeSelectionInput{Kind: model.ScopeAllPages}
-	}
-	result := model.RunScope{Object: input.Object, Revision: 1}
+	result := model.RunScope{Revision: 1}
 	switch input.Selection.Kind {
 	case model.ScopeCurrentPage:
 		id := strings.TrimSpace(input.Selection.CurrentSlideID)
@@ -135,27 +132,12 @@ func mergeSelectionScope(scope model.RunScope, snapshot spec.ProjectContentSnaps
 	for _, id := range scope.SlideIDs {
 		selected[id] = true
 	}
-	hasChrome := false
 	for _, selection := range selections {
 		if selection.Status != model.DOMSelectionPageDeleted {
 			selected[selection.SlideID] = true
 		}
-		if len(selection.ChromeTargets) > 0 {
-			hasChrome = true
-		}
 	}
-	if hasChrome {
-		scope.Object = model.ScopeObjectGlobal
-		scope.Source = model.ScopeSource{Kind: model.ScopeAllPages}
-		scope.SlideIDs = scope.SlideIDs[:0]
-		for _, location := range ordered {
-			scope.SlideIDs = append(scope.SlideIDs, location.Slide.SlideID)
-		}
-		scope.IncludeRunCreatedSlides = true
-	} else {
-		if scope.Object == model.ScopeObjectSpec {
-			scope.Object = model.ScopeObjectPresentation
-		}
+	{
 		next := make([]string, 0, len(selected))
 		for _, location := range ordered {
 			if selected[location.Slide.SlideID] {
@@ -170,7 +152,7 @@ func mergeSelectionScope(scope model.RunScope, snapshot spec.ProjectContentSnaps
 			}
 		}
 	}
-	semanticEqual := original.Object == scope.Object && original.Source.Kind == scope.Source.Kind && slices.Equal(original.Source.SectionIDs, scope.Source.SectionIDs) && slices.Equal(original.SlideIDs, scope.SlideIDs) && original.IncludeRunCreatedSlides == scope.IncludeRunCreatedSlides
+	semanticEqual := original.Source.Kind == scope.Source.Kind && slices.Equal(original.Source.SectionIDs, scope.Source.SectionIDs) && slices.Equal(original.SlideIDs, scope.SlideIDs) && original.IncludeRunCreatedSlides == scope.IncludeRunCreatedSlides
 	if !semanticEqual {
 		scope.Revision = original.Revision + 1
 	}

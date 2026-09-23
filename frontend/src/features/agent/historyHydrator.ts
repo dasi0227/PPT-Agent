@@ -97,13 +97,10 @@ function readContextCompaction(data: Record<string, unknown>): ContextCompaction
 function readHistoryScope(data: Record<string, unknown>): RunScope | undefined {
   const raw = data.scope;
   if (!isRecord(raw)) return undefined;
-  const object = raw.object;
   const source = raw.source;
-  if (!['spec', 'html', 'presentation', 'global'].includes(String(object)) ||
-    !isRecord(source) || !['current_page', 'all_pages', 'custom_pages', 'custom_sections'].includes(String(source.kind)) ||
+  if ('object' in raw || !isRecord(source) || !['current_page', 'all_pages', 'custom_pages', 'custom_sections'].includes(String(source.kind)) ||
     !Array.isArray(raw.slide_ids) || typeof raw.revision !== 'number') return undefined;
   return {
-    object: object as RunScope['object'],
     slide_ids: raw.slide_ids.filter((id): id is string => typeof id === 'string'),
     source: {
       kind: source.kind as RunScope['source']['kind'],

@@ -141,13 +141,13 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 			return ContextPack{}, fmt.Errorf("%w: slide %s is not present in outline", ErrRequiredMissing, targetID)
 		}
 		target, ok := slides[targetID]
-		pack.Target = TargetContext{Object: req.Command.Scope.Object, SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
+		pack.Target = TargetContext{SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
 		if ok {
 			pack.Target.SlideSpec = &target
 			pack.RelatedSlides = (RelatedSlideLoader{}).Load(outline, slides, target)
 		}
 	} else {
-		pack.Target = TargetContext{Object: req.Command.Scope.Object, SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
+		pack.Target = TargetContext{SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
 		for _, summary := range pack.Outline.Summaries {
 			if mentionedIDs[summary.ID] {
 				pack.RelatedSlides = append(pack.RelatedSlides, summary)

@@ -50,7 +50,7 @@ func TestProjectHistoryHTTPConfirmationAndBranch(t *testing.T) {
 		ID string `json:"id"`
 	}
 	_ = json.Unmarshal(raw, &thread)
-	payload := `{"client_request_id":"cp1","instruction":"hello","mode":"chat","scope":{"object":"spec","selection":{"kind":"all_pages"}}}`
+	payload := `{"client_request_id":"cp1","instruction":"hello","mode":"chat","scope":{"selection":{"kind":"all_pages"}}}`
 	code, raw = historyRequest(t, srv, "POST", "/threads/"+thread.ID+"/runs", payload, 0)
 	if code != 201 {
 		t.Fatalf("run: %d %s", code, raw)

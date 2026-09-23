@@ -109,7 +109,7 @@ import { useComposerStore } from './composerStore';
 import type { TimelineItem } from '../features/agent/eventReducer';
 
 const request = (instruction: string) => ({
-  scope: { object: 'presentation' as const, selection: { kind: 'current_page' as const, current_slide_id: 's1' } },
+  scope: { selection: { kind: 'current_page' as const, current_slide_id: 's1' } },
   mode: 'execute' as const ,
   instruction,
 });

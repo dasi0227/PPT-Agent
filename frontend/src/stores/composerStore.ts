@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CreateRunRequest, DOMSelection, RunMode, ScopeObject, ScopeSelectionKind } from '../api/types';
+import type { CreateRunRequest, DOMSelection, RunMode, ScopeSelectionKind } from '../api/types';
 
 const RECENT_MODEL_KEY = 'ppt-agent-recent-model-profile-v2';
 export const MAX_SELECTED_SKILLS = 3;
@@ -23,9 +23,7 @@ function initialModelProfile(): string | null {
 export interface ComposerState {
   restoredInputs: Record<string, Partial<CreateRunRequest>>;
   threadResourceMentions: Record<string, Pick<CreateRunRequest, 'component_names' | 'mentioned_slide_ids'>>;
-  scopeObject: ScopeObject;
   scopeSelection: ScopeSelectionKind;
-  lastNonGlobalSelection: ScopeSelectionKind;
   customSlideIds: string[];
   customSectionIds: string[];
   mode: RunMode;
@@ -41,7 +39,6 @@ export interface ComposerState {
   nextMarkerByThread: Record<string, number>;
   editingSelectionIdByThread: Record<string, string | undefined>;
   userTouchedTarget: boolean;
-  setScopeObject: (object: ScopeObject) => void;
   setScopeSelection: (selection: ScopeSelectionKind) => void;
   toggleCustomSlide: (slideId: string) => void;
   toggleCustomSection: (sectionId: string) => void;
@@ -73,9 +70,7 @@ const toggleId = (ids: string[], id: string) => (
 export const useComposerStore = create<ComposerState>((set) => ({
   restoredInputs: {},
   threadResourceMentions: {},
-  scopeObject: 'global',
   scopeSelection: 'all_pages',
-  lastNonGlobalSelection: 'current_page',
   customSlideIds: [],
   customSectionIds: [],
   mode: 'execute',
@@ -96,22 +91,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   nextMarkerByThread: {},
   editingSelectionIdByThread: {},
   userTouchedTarget: false,
-  setScopeObject: (scopeObject) => set((state) => {
-    if (scopeObject === 'global') {
-      return state.scopeObject === 'global'
-        ? { userTouchedTarget: true, restoredInputs: clearRestoredScopes(state) }
-        : { restoredInputs: clearRestoredScopes(state), scopeObject, scopeSelection: 'all_pages', lastNonGlobalSelection: state.scopeSelection, userTouchedTarget: true };
-    }
-    return {
-      restoredInputs: clearRestoredScopes(state),
-      scopeObject,
-      ...(state.scopeObject === 'global' ? { scopeSelection: state.lastNonGlobalSelection } : {}),
-      userTouchedTarget: true,
-    };
-  }),
-  setScopeSelection: (scopeSelection) => set((state) => (
-    state.scopeObject === 'global' ? state : { restoredInputs: clearRestoredScopes(state), scopeSelection, lastNonGlobalSelection: scopeSelection, userTouchedTarget: true }
-  )),
+  setScopeSelection: (scopeSelection) => set((state) => ({ restoredInputs: clearRestoredScopes(state), scopeSelection, userTouchedTarget: true })),
   toggleCustomSlide: (slideId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSlideIds: toggleId(state.customSlideIds, slideId), userTouchedTarget: true })),
   toggleCustomSection: (sectionId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSectionIds: toggleId(state.customSectionIds, sectionId), userTouchedTarget: true })),
   setIntent: (mode) => set({ mode }),
@@ -202,17 +182,16 @@ export const useComposerStore = create<ComposerState>((set) => ({
   }),
   applyContextDefault: (hasSlides) => set((state) => {
     if (state.userTouchedTarget && hasSlides) return state;
-    const scopeObject: ScopeObject = hasSlides ? 'presentation' : 'global';
     const scopeSelection: ScopeSelectionKind = hasSlides ? 'current_page' : 'all_pages';
     const userTouchedTarget = hasSlides ? state.userTouchedTarget : false;
-    return state.scopeObject === scopeObject && state.scopeSelection === scopeSelection && state.userTouchedTarget === userTouchedTarget
+    return state.scopeSelection === scopeSelection && state.userTouchedTarget === userTouchedTarget
       ? state
-      : { scopeObject, scopeSelection, lastNonGlobalSelection: scopeSelection, userTouchedTarget };
+      : { scopeSelection, userTouchedTarget };
   }),
   resetForProject: () => set({
     restoredInputs: {},
     threadResourceMentions: {},
-    scopeObject: 'global', scopeSelection: 'all_pages', lastNonGlobalSelection: 'current_page', customSlideIds: [], customSectionIds: [],
+    scopeSelection: 'all_pages', customSlideIds: [], customSectionIds: [],
     mode: 'execute', appliedApprovalByThread: {}, polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {}, userTouchedTarget: false,
   }),
 }));
@@ -220,11 +199,11 @@ export const useComposerStore = create<ComposerState>((set) => ({
 // Pure composer edits persist per project without entering model history or
 // invalidating the server's restore point.
 let draftProject: string | null = null;
-const draftKey = (id: string) => `ppt-agent-composer-project-${id}`;
+const draftKey = (id: string) => `ppt-agent-composer-pages-v2-${id}`;
 export function composerScene(): Partial<ComposerState> {
   const s = useComposerStore.getState();
   return {
-    scopeObject:s.scopeObject, scopeSelection:s.scopeSelection, lastNonGlobalSelection:s.lastNonGlobalSelection,
+    scopeSelection: s.scopeSelection,
     customSlideIds:s.customSlideIds, customSectionIds:s.customSectionIds, mode:s.mode,
     appliedApprovalByThread:s.appliedApprovalByThread,
     modelProfileName:s.modelProfileName, modelSelectionExplicit:s.modelSelectionExplicit, selectedSkillIds:s.selectedSkillIds,

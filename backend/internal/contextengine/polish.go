@@ -104,7 +104,7 @@ func (a *ContextAssembler) AssemblePolish(
 		}
 		pack.Target.Spec = &target
 		pack.RelatedSlides = (RelatedSlideLoader{}).Load(outline, slides, target)
-		if req.Command.Scope.AllowsHTML() {
+		{
 			path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(target.SlideID)))
 			if summary, _, loadErr := (SlideHTMLSummaryLoader{}).Load(path); loadErr == nil {
 				pack.Target.HTMLTitle = summary.Title

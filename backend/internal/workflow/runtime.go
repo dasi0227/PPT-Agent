@@ -803,7 +803,7 @@ func (r *Runtime) executeToolBatch(
 	disclosed map[string]bool,
 	calls []llm.ToolCall,
 ) []ToolResult {
-	if state.pack.Command.Scope.Object == "" {
+	if state.pack.Command.Scope.Source.Kind == "" {
 		state.pack = input.Context
 	}
 	if state.mode == "" {
@@ -1882,16 +1882,15 @@ func (r *Runtime) executeControl(
 			return StructuredOutcome{}, false
 		}
 		var request struct {
-			AddSlideIDs []string          `json:"add_slide_ids"`
-			AddObject   model.ScopeObject `json:"add_object"`
-			Reason      string            `json:"reason"`
+			AddSlideIDs []string `json:"add_slide_ids"`
+			Reason      string   `json:"reason"`
 		}
 		raw, _ := json.Marshal(call.Args)
-		if err := json.Unmarshal(raw, &request); err != nil || strings.TrimSpace(request.Reason) == "" || (len(request.AddSlideIDs) == 0 && request.AddObject == "") {
+		if err := json.Unmarshal(raw, &request); err != nil || strings.TrimSpace(request.Reason) == "" || len(request.AddSlideIDs) == 0 {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege requires a reason and at least one scope addition", true))
 			return StructuredOutcome{}, false
 		}
-		proposed, addition, err := proposeScopeExpansion(state.scope, state.pack, request.AddSlideIDs, request.AddObject)
+		proposed, addition, err := proposeScopeExpansion(state.scope, state.pack, request.AddSlideIDs)
 		if err != nil {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, err.Error(), true))
 			return StructuredOutcome{}, false
@@ -2003,7 +2002,6 @@ func (r *Runtime) awaitScopeExpansion(
 		candidate := *state
 		candidate.scope = *applied
 		candidate.pack.Command.Scope = *applied
-		candidate.pack.Target.Object = applied.Object
 		candidate.pack.Target.SlideIDs = append([]string{}, applied.SlideIDs...)
 		candidate.pendingScopeExpansion = nil
 		candidate.phase = PhaseExecuting
@@ -2016,7 +2014,6 @@ func (r *Runtime) awaitScopeExpansion(
 		}
 		state.scope = *applied
 		state.pack.Command.Scope = *applied
-		state.pack.Target.Object = applied.Object
 		state.pack.Target.SlideIDs = append([]string{}, applied.SlideIDs...)
 		registry, registryErr := buildDomainToolRegistry(input, state.pack)
 		if registryErr != nil {
@@ -2048,10 +2045,7 @@ func (r *Runtime) awaitScopeExpansion(
 	return StructuredOutcome{}, false
 }
 
-func proposeScopeExpansion(current model.RunScope, pack contextengine.ContextPack, addSlideIDs []string, addObject model.ScopeObject) (model.RunScope, model.ScopeExpansionAddition, error) {
-	if current.Object == model.ScopeObjectGlobal {
-		return current, model.ScopeExpansionAddition{}, nil
-	}
+func proposeScopeExpansion(current model.RunScope, pack contextengine.ContextPack, addSlideIDs []string) (model.RunScope, model.ScopeExpansionAddition, error) {
 	known, ordered := runtimeSlideOrder(pack)
 	requested := make(map[string]bool)
 	for _, raw := range addSlideIDs {
@@ -2061,12 +2055,7 @@ func proposeScopeExpansion(current model.RunScope, pack contextengine.ContextPac
 		}
 		requested[id] = true
 	}
-	object, err := mergeScopeObject(current.Object, addObject)
-	if err != nil {
-		return model.RunScope{}, model.ScopeExpansionAddition{}, err
-	}
 	next := current
-	next.Object = object
 	selected := make(map[string]bool, len(current.SlideIDs)+len(requested))
 	for _, id := range current.SlideIDs {
 		selected[id] = true
@@ -2074,41 +2063,16 @@ func proposeScopeExpansion(current model.RunScope, pack contextengine.ContextPac
 	for id := range requested {
 		selected[id] = true
 	}
-	if object == model.ScopeObjectGlobal {
-		next.Source = model.ScopeSource{Kind: model.ScopeAllPages}
-		next.IncludeRunCreatedSlides = true
-		for _, id := range ordered {
-			selected[id] = true
-		}
-	} else if current.Source.Kind != model.ScopeAllPages && len(requested) > 0 {
+	if current.Source.Kind != model.ScopeAllPages && len(selected) > len(current.SlideIDs) {
 		next.Source = model.ScopeSource{Kind: model.ScopeCustomPages}
 		next.IncludeRunCreatedSlides = false
 	}
 	next.SlideIDs = orderedSelection(ordered, selected)
 	next.Revision = current.Revision
-	if next.Object != current.Object || !slices.Equal(next.SlideIDs, current.SlideIDs) || next.Source.Kind != current.Source.Kind {
+	if !slices.Equal(next.SlideIDs, current.SlideIDs) || next.Source.Kind != current.Source.Kind {
 		next.Revision++
 	}
-	return next, model.ScopeExpansionAddition{SlideIDs: orderedSelection(ordered, requested), Object: addObject}, next.Validate()
-}
-
-func mergeScopeObject(current, addition model.ScopeObject) (model.ScopeObject, error) {
-	if addition == "" || addition == current {
-		return current, nil
-	}
-	if addition == model.ScopeObjectGlobal {
-		return model.ScopeObjectGlobal, nil
-	}
-	if addition != model.ScopeObjectSpec && addition != model.ScopeObjectHTML && addition != model.ScopeObjectPresentation {
-		return "", fmt.Errorf("unsupported scope object %q", addition)
-	}
-	if current == model.ScopeObjectPresentation || addition == model.ScopeObjectPresentation {
-		return model.ScopeObjectPresentation, nil
-	}
-	if current != addition {
-		return model.ScopeObjectPresentation, nil
-	}
-	return current, nil
+	return next, model.ScopeExpansionAddition{SlideIDs: orderedSelection(ordered, requested)}, next.Validate()
 }
 
 func runtimeSlideOrder(pack contextengine.ContextPack) (map[string]bool, []string) {
@@ -2133,9 +2097,6 @@ func orderedSelection(ordered []string, selected map[string]bool) []string {
 
 func resolveRuntimeScopeSelection(pack contextengine.ContextPack, input model.CreateRunScopeInput) (model.RunScope, error) {
 	known, ordered := runtimeSlideOrder(pack)
-	if input.Object == model.ScopeObjectGlobal {
-		input.Selection = model.ScopeSelectionInput{Kind: model.ScopeAllPages}
-	}
 	selected := map[string]bool{}
 	source := model.ScopeSource{Kind: input.Selection.Kind}
 	switch input.Selection.Kind {
@@ -2181,21 +2142,13 @@ func resolveRuntimeScopeSelection(pack contextengine.ContextPack, input model.Cr
 	default:
 		return model.RunScope{}, errors.New("adjusted scope selection is invalid")
 	}
-	next := model.RunScope{Object: input.Object, SlideIDs: orderedSelection(ordered, selected), Source: source, IncludeRunCreatedSlides: source.Kind == model.ScopeAllPages, Revision: 1}
+	next := model.RunScope{SlideIDs: orderedSelection(ordered, selected), Source: source, IncludeRunCreatedSlides: source.Kind == model.ScopeAllPages, Revision: 1}
 	return next, next.Validate()
 }
 
 func scopeContains(candidate, current model.RunScope) bool {
-	if current.Object == model.ScopeObjectGlobal {
-		return candidate.Object == model.ScopeObjectGlobal
-	}
-	if candidate.Object != model.ScopeObjectGlobal {
-		if current.AllowsSpec() && !candidate.AllowsSpec() {
-			return false
-		}
-		if current.AllowsHTML() && !candidate.AllowsHTML() {
-			return false
-		}
+	if current.IncludeRunCreatedSlides && !candidate.IncludeRunCreatedSlides {
+		return false
 	}
 	for _, id := range current.SlideIDs {
 		if !candidate.ContainsSlide(id) {
@@ -2580,7 +2533,7 @@ func (r *Runtime) appendSteering(ctx context.Context, state *RunState, steering 
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
 				"User steering: "+message.Content, message.ProjectID, message.Attachments, message.DOMSelections, message.ReferenceOrder,
 			)})
-			if message.Scope.Object != "" {
+			if message.Scope.Source.Kind != "" {
 				state.scope = message.Scope
 				state.pack.Command.Scope = message.Scope
 			}
@@ -3014,10 +2967,9 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
 		out = append(out, ToolSchema{
-			Name: "request_privilege", Description: "Request a user-approved expansion of the active write scope. Provide only the incremental pages/object needed and explain why. This call must be the only call in the response.",
-			Parameters: objectSchema([]string{"reason"}, map[string]any{
-				"add_slide_ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-				"add_object":    map[string]any{"type": "string", "enum": []string{"spec", "html", "presentation", "global"}},
+			Name: "request_privilege", Description: "Request a user-approved expansion of the active write scope. Provide only the additional pages needed and explain why. This call must be the only call in the response.",
+			Parameters: objectSchema([]string{"add_slide_ids", "reason"}, map[string]any{
+				"add_slide_ids": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}},
 				"reason":        map[string]any{"type": "string"},
 			}),
 		})

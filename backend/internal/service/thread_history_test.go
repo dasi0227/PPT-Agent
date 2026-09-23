@@ -39,7 +39,7 @@ func TestHistoryRecoversDatabaseEventsAndCommandsWithoutJSONL(t *testing.T) {
 	if err = st.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p", HistoryPath: model.UserHistoryPath("t"), Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err = db.Exec(`INSERT INTO runs(id,thread_id,project_id,scope_object,scope_slide_ids_json,scope_source_json,scope_revision,mode,run_command_json,status,created_at,updated_at) VALUES ('r','t','p','spec','[]','{}',1,'chat','{}','done',1,2)`).Error; err != nil {
+	if err = db.Exec(`INSERT INTO runs(id,thread_id,project_id,scope_slide_ids_json,scope_source_json,scope_revision,mode,run_command_json,status,created_at,updated_at) VALUES ('r','t','p','[]','{}',1,'chat','{}','done',1,2)`).Error; err != nil {
 		t.Fatal(err)
 	}
 	for _, event := range []model.Event{

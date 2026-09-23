@@ -8,15 +8,6 @@ import (
 	"strings"
 )
 
-type ScopeObject string
-
-const (
-	ScopeObjectSpec         ScopeObject = "spec"
-	ScopeObjectHTML         ScopeObject = "html"
-	ScopeObjectPresentation ScopeObject = "presentation"
-	ScopeObjectGlobal       ScopeObject = "global"
-)
-
 type ScopeSelectionKind string
 
 const (
@@ -34,7 +25,6 @@ type ScopeSelectionInput struct {
 }
 
 type CreateRunScopeInput struct {
-	Object    ScopeObject         `json:"object"`
 	Selection ScopeSelectionInput `json:"selection"`
 }
 
@@ -69,26 +59,20 @@ const (
 )
 
 type RunScope struct {
-	Object                  ScopeObject `json:"object"`
 	SlideIDs                []string    `json:"slide_ids"`
 	Source                  ScopeSource `json:"source"`
 	IncludeRunCreatedSlides bool        `json:"include_run_created_slides"`
 	Revision                int64       `json:"revision"`
 }
 
-func NewRunScope(object ScopeObject, kind ScopeSelectionKind, slideIDs ...string) RunScope {
+func NewRunScope(kind ScopeSelectionKind, slideIDs ...string) RunScope {
 	return RunScope{
-		Object: object, SlideIDs: append([]string{}, slideIDs...), Source: ScopeSource{Kind: kind},
+		SlideIDs: append([]string{}, slideIDs...), Source: ScopeSource{Kind: kind},
 		IncludeRunCreatedSlides: kind == ScopeAllPages, Revision: 1,
 	}
 }
 
 func (s RunScope) Validate() error {
-	switch s.Object {
-	case ScopeObjectSpec, ScopeObjectHTML, ScopeObjectPresentation, ScopeObjectGlobal:
-	default:
-		return fmt.Errorf("unsupported scope object %q", s.Object)
-	}
 	switch s.Source.Kind {
 	case ScopeCurrentPage, ScopeAllPages, ScopeCustomPages, ScopeCustomSections:
 	default:
@@ -97,7 +81,7 @@ func (s RunScope) Validate() error {
 	if s.Revision < 1 {
 		return errors.New("scope revision must be at least 1")
 	}
-	if len(s.SlideIDs) == 0 && s.Object != ScopeObjectGlobal && s.Source.Kind != ScopeAllPages {
+	if len(s.SlideIDs) == 0 && s.Source.Kind != ScopeAllPages {
 		return errors.New("scope requires at least one slide_id")
 	}
 	seen := make(map[string]bool, len(s.SlideIDs))
@@ -116,9 +100,6 @@ func (s RunScope) Validate() error {
 	if s.Source.Kind != ScopeCustomSections && len(s.Source.SectionIDs) > 0 {
 		return errors.New("section_ids are only valid for custom_sections scope")
 	}
-	if s.Object == ScopeObjectGlobal && s.Source.Kind != ScopeAllPages {
-		return errors.New("global scope must use all_pages")
-	}
 	if s.IncludeRunCreatedSlides != (s.Source.Kind == ScopeAllPages) {
 		return errors.New("include_run_created_slides must match all_pages scope")
 	}
@@ -126,9 +107,6 @@ func (s RunScope) Validate() error {
 }
 
 func (s RunScope) ContainsSlide(slideID string) bool {
-	if s.Object == ScopeObjectGlobal {
-		return true
-	}
 	for _, candidate := range s.SlideIDs {
 		if candidate == slideID {
 			return true
@@ -137,20 +115,10 @@ func (s RunScope) ContainsSlide(slideID string) bool {
 	return false
 }
 
-func (s RunScope) AllowsSpec() bool {
-	return s.Object == ScopeObjectSpec || s.Object == ScopeObjectPresentation || s.Object == ScopeObjectGlobal
-}
-
-func (s RunScope) AllowsHTML() bool {
-	return s.Object == ScopeObjectHTML || s.Object == ScopeObjectPresentation || s.Object == ScopeObjectGlobal
-}
-
-func (s RunScope) AllowsGlobal() bool { return s.Object == ScopeObjectGlobal }
-
-func (s RunScope) IsSinglePage() bool { return !s.AllowsGlobal() && len(s.SlideIDs) == 1 }
+func (s RunScope) IsSinglePage() bool { return len(s.SlideIDs) == 1 }
 
 func (s RunScope) Equal(other RunScope) bool {
-	return s.Object == other.Object && s.Source.Kind == other.Source.Kind &&
+	return s.Source.Kind == other.Source.Kind &&
 		slices.Equal(s.Source.SectionIDs, other.Source.SectionIDs) &&
 		slices.Equal(s.SlideIDs, other.SlideIDs) &&
 		s.IncludeRunCreatedSlides == other.IncludeRunCreatedSlides && s.Revision == other.Revision

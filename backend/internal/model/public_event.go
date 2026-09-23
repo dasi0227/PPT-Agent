@@ -239,8 +239,7 @@ type CommandPermissionAnsweredPayload struct {
 }
 
 type ScopeExpansionAddition struct {
-	SlideIDs []string    `json:"slide_ids,omitempty"`
-	Object   ScopeObject `json:"object,omitempty"`
+	SlideIDs []string `json:"slide_ids,omitempty"`
 }
 
 type ScopeExpansionRequestedPayload struct {

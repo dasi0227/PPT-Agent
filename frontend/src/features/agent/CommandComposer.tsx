@@ -42,25 +42,23 @@ function composerScopeInput(
   composer: ReturnType<typeof useComposerStore.getState>,
   currentSlideId: string | undefined,
 ): CreateRunScopeInput | null {
-  if (composer.scopeObject === 'global') {
-    return { object: 'global', selection: { kind: 'all_pages' } };
-  }
+
   if (composer.scopeSelection === 'current_page') {
     return currentSlideId
-      ? { object: composer.scopeObject, selection: { kind: 'current_page', current_slide_id: currentSlideId } }
-      : { object: composer.scopeObject, selection: { kind: 'all_pages' } };
+      ? { selection: { kind: 'current_page', current_slide_id: currentSlideId } }
+      : { selection: { kind: 'all_pages' } };
   }
   if (composer.scopeSelection === 'custom_pages') {
     return composer.customSlideIds.length > 0
-      ? { object: composer.scopeObject, selection: { kind: 'custom_pages', slide_ids: composer.customSlideIds } }
+      ? { selection: { kind: 'custom_pages', slide_ids: composer.customSlideIds } }
       : null;
   }
   if (composer.scopeSelection === 'custom_sections') {
     return composer.customSectionIds.length > 0
-      ? { object: composer.scopeObject, selection: { kind: 'custom_sections', section_ids: composer.customSectionIds } }
+      ? { selection: { kind: 'custom_sections', section_ids: composer.customSectionIds } }
       : null;
   }
-  return { object: composer.scopeObject, selection: { kind: 'all_pages' } };
+  return { selection: { kind: 'all_pages' } };
 }
 
 function formatFileSize(size: number): string {
@@ -186,7 +184,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     : steering
       ? '追加对当前任务的要求'
       : '输入你的想法与目标';
-	const requiresVision = hasAttachments || (composer.mode === 'execute' && ['html', 'presentation', 'global'].includes(composer.scopeObject));
+	const requiresVision = hasAttachments || (composer.mode === 'execute');
 
   const activeSnapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const slides = useMemo(() => orderedSlides(activeSnapshot), [activeSnapshot]);
@@ -222,11 +220,9 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     disabled: requiresVision && !profile.capabilities.vision,
   })), [composer.modelProfileName, profiles, requiresVision]);
   const targetOptions = useMemo<SlashMenuOption[]>(() => [
-    { id: 'object:spec', label: '设计稿', selected: composer.scopeObject === 'spec', disabled: isEmptyProject },
-    { id: 'object:html', label: '幻灯片', selected: composer.scopeObject === 'html', disabled: isEmptyProject },
-    { id: 'object:presentation', label: '演示文稿', selected: composer.scopeObject === 'presentation', disabled: isEmptyProject },
-    { id: 'object:global', label: '全局资源', selected: composer.scopeObject === 'global' },
-  ], [composer.scopeObject, isEmptyProject]);
+    { id: 'current_page', label: '当前页', selected: composer.scopeSelection === 'current_page', disabled: isEmptyProject },
+    { id: 'all_pages', label: '全部页', selected: composer.scopeSelection === 'all_pages' },
+  ], [composer.scopeSelection, isEmptyProject]);
 
   useEffect(() => {
     if (previousProjectId.current === activeProjectId) return;
@@ -421,8 +417,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     };
     // Default routing omits request.model; validate the effective composer selection.
     const selectedProfile = profiles.find((profile) => profile.name === composer.modelProfileName);
-    const requiresVision = hasAttachments || (request.mode === 'execute' &&
-      ['html', 'presentation', 'global'].includes(request.scope.object));
+    const requiresVision = hasAttachments || (request.mode === 'execute');
     if (!selectedProfile) {
       setSubmitError('所选模型已不可用，请重新选择');
       return;
@@ -517,9 +512,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   };
 
   const selectTargetOption = (id: string) => {
-    const [kind, object] = id.split(':');
-    if (kind !== 'object' || !['spec', 'html', 'presentation', 'global'].includes(object)) return;
-    composer.setScopeObject(object as 'spec' | 'html' | 'presentation' | 'global');
+    if (id === 'current_page' || id === 'all_pages') composer.setScopeSelection(id);
   };
 
 	const selectSuggestion = useCallback((value: string) => {
@@ -613,13 +606,11 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
             disabled={disabled || steering}
           />
           <TargetSelector
-            object={composer.scopeObject}
             selection={composer.scopeSelection}
             selectedSlideIds={composer.customSlideIds}
             selectedSectionIds={composer.customSectionIds}
             pages={scopePages}
             sections={scopeSections}
-            onObjectChange={composer.setScopeObject}
             onSelectionChange={composer.setScopeSelection}
             onToggleSlide={composer.toggleCustomSlide}
             onToggleSection={composer.toggleCustomSection}

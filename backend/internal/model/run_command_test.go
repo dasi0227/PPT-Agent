@@ -7,7 +7,7 @@ import (
 
 func TestRunCommandValidation(t *testing.T) {
 	valid := RunCommand{
-		Scope:       NewRunScope(ScopeObjectPresentation, ScopeCurrentPage, "sli_stable"),
+		Scope:       NewRunScope(ScopeCurrentPage, "sli_stable"),
 		Mode:        ModeExecute,
 		Instruction: "revise",
 	}
@@ -15,16 +15,16 @@ func TestRunCommandValidation(t *testing.T) {
 		t.Fatalf("valid command rejected: %v", err)
 	}
 	cases := []RunCommand{
-		{Scope: NewRunScope("generate", ScopeAllPages), Mode: valid.Mode, Instruction: "x"},
-		{Scope: NewRunScope(ScopeObjectSpec, "current"), Mode: valid.Mode, Instruction: "x"},
-		{Scope: NewRunScope(ScopeObjectSpec, ScopeCurrentPage), Mode: valid.Mode, Instruction: "x"},
-		{Scope: NewRunScope(ScopeObjectSpec, ScopeCurrentPage, "current"), Mode: valid.Mode, Instruction: "x"},
-		{Scope: NewRunScope(ScopeObjectSpec, ScopeCustomPages, "stable"), Mode: valid.Mode, Instruction: "x"},
-		{Scope: NewRunScope(ScopeObjectSpec, ScopeAllPages), Mode: "consult", Instruction: "x"},
-		{Scope: NewRunScope(ScopeObjectSpec, ScopeAllPages), Mode: valid.Mode, Instruction: "  "},
-		{Scope: NewRunScope(ScopeObjectSpec, ScopeAllPages), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Language: "fr-FR"}},
-		{Scope: NewRunScope(ScopeObjectSpec, ScopeAllPages), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: "8-15"}},
-		{Scope: NewRunScope(ScopeObjectSpec, ScopeCurrentPage, "sli_stable"), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: SlideRangeFiveToEight}},
+		{Scope: NewRunScope("generate"), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope("current"), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope(ScopeCurrentPage), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope(ScopeCurrentPage, "current"), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope(ScopeCustomPages, "stable"), Mode: valid.Mode, Instruction: "x"},
+		{Scope: NewRunScope(ScopeAllPages), Mode: "consult", Instruction: "x"},
+		{Scope: NewRunScope(ScopeAllPages), Mode: valid.Mode, Instruction: "  "},
+		{Scope: NewRunScope(ScopeAllPages), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Language: "fr-FR"}},
+		{Scope: NewRunScope(ScopeAllPages), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: "8-15"}},
+		{Scope: NewRunScope(ScopeCurrentPage, "sli_stable"), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: SlideRangeFiveToEight}},
 	}
 	for i, command := range cases {
 		if err := command.Validate(); err == nil {
@@ -35,7 +35,7 @@ func TestRunCommandValidation(t *testing.T) {
 
 func TestRunCommandValidationForMentionedPages(t *testing.T) {
 	valid := RunCommand{
-		Scope: NewRunScope(ScopeObjectPresentation, ScopeAllPages), Mode: ModeExecute, Instruction: "sync",
+		Scope: NewRunScope(ScopeAllPages), Mode: ModeExecute, Instruction: "sync",
 		MentionedPages: []MentionedPage{{
 			Kind: "slide", SlideID: "sli_a-1", Ordinal: 2, Title: "融资历程",
 			SpecState: "ready", HTMLState: "fresh",
@@ -64,7 +64,7 @@ func TestRunCommandValidationForMentionedPages(t *testing.T) {
 
 func TestRunCommandValidationAcceptsPlanIntentAndOptions(t *testing.T) {
 	command := RunCommand{
-		Scope:       NewRunScope(ScopeObjectSpec, ScopeAllPages),
+		Scope:       NewRunScope(ScopeAllPages),
 		Mode:        ModePlan,
 		Instruction: "plan the work",
 		Options:     RunOptions{Language: LanguageChinese, Range: SlideRangeNineToFifteen},
@@ -76,7 +76,7 @@ func TestRunCommandValidationAcceptsPlanIntentAndOptions(t *testing.T) {
 
 func TestRunCommandValidationAcceptsAtMostThreeCompleteUniqueSkills(t *testing.T) {
 	command := RunCommand{
-		Scope: NewRunScope(ScopeObjectPresentation, ScopeAllPages),
+		Scope: NewRunScope(ScopeAllPages),
 		Mode:  ModeExecute, Instruction: "build",
 		Skills: []RunSkill{
 			{ID: "one", Name: "One", Description: "First", Content: "Use one."},
@@ -102,7 +102,7 @@ func TestRunCommandValidationAcceptsAtMostThreeCompleteUniqueSkills(t *testing.T
 
 func TestRunCommandValidationRequiresAtMostEightCompleteUniqueComponentNames(t *testing.T) {
 	command := RunCommand{
-		Scope: NewRunScope(ScopeObjectPresentation, ScopeAllPages),
+		Scope: NewRunScope(ScopeAllPages),
 		Mode:  ModeExecute, Instruction: "build",
 	}
 	for index := 0; index < MaxRunComponents; index++ {

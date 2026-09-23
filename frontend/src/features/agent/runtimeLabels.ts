@@ -1,12 +1,6 @@
-import type { CreateRunScopeInput, RunActivity, RunScope, ScopeObject, ScopeSelectionKind } from '../../api/types';
+import type { CreateRunScopeInput, RunActivity, RunScope, ScopeSelectionKind } from '../../api/types';
 import type { RunStatus } from '../../stores/runStore';
 
-export const scopeObjectLabels: Record<ScopeObject, string> = {
-  spec: '设计稿',
-  html: '幻灯片',
-  presentation: '演示文稿',
-  global: '全局资源',
-};
 
 export const scopeSelectionLabels: Record<ScopeSelectionKind, string> = {
   current_page: '当前页',
@@ -52,7 +46,7 @@ export const runActivityLabels: Record<RunActivity, string> = {
 
 export function targetLabel(scope: RunScope | CreateRunScopeInput): string {
   const selection = 'source' in scope ? scope.source.kind : scope.selection.kind;
-  return `${scopeSelectionLabels[selection]} · ${scopeObjectLabels[scope.object]}`;
+  return scopeSelectionLabels[selection];
 }
 
 export function presentUserText(text: string): string {

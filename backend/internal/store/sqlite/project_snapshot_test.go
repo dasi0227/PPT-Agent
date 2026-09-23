@@ -15,7 +15,7 @@ func TestSnapshotRestoresEveryProjectTableAndIsolatesOtherProjects(t *testing.T)
 		`INSERT INTO thread_naming_inputs(thread_id,input_id,content,accepted_at) VALUES ('t','input','name this conversation',1)`,
 		`INSERT INTO thread_naming_operations(thread_id,operation_id,request_hash,action,status,created_at,updated_at) VALUES ('t','rename','hash','generate','completed',1,1)`,
 		`INSERT INTO slides(id,project_id) VALUES ('sl','p')`,
-		`INSERT INTO runs(id,thread_id,project_id,scope_object,scope_slide_ids_json,scope_source_json,scope_revision,mode,run_command_json,status,created_at,updated_at) VALUES ('r','t','p','spec','[]','{}',1,'chat','{}','done',1,2)`,
+		`INSERT INTO runs(id,thread_id,project_id,scope_slide_ids_json,scope_source_json,scope_revision,mode,run_command_json,status,created_at,updated_at) VALUES ('r','t','p','[]','{}',1,'chat','{}','done',1,2)`,
 		`INSERT INTO deleted_slides(project_id,slide_id) VALUES ('p','removed'),('other','removed')`,
 		`INSERT INTO run_events VALUES ('r',1,'run.started','{}',1)`,
 		`INSERT INTO run_contexts VALUES ('r','ctx','default','hash',100,1000,'{}',1)`,

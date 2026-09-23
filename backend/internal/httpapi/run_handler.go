@@ -82,7 +82,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
-	if body.Scope.Object == "" {
+	if body.Scope.Selection.Kind == "" {
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "INVALID_SCOPE", Message: "scope is required"})
 		return
 	}

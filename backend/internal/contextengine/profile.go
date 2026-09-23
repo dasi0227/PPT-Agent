@@ -1,8 +1,6 @@
 package contextengine
 
 import (
-	"fmt"
-
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
@@ -16,27 +14,15 @@ type ContextProfileResolver struct{}
 
 func (ContextProfileResolver) Resolve(command model.RunCommand) (ContextProfile, error) {
 	var id ProfileID
-	switch {
-	case command.Scope.Object == model.ScopeObjectSpec && command.Scope.IsSinglePage():
-		id = ProfileSpecSlide
-	case command.Scope.Object == model.ScopeObjectSpec:
-		id = ProfileSpecDeck
-	case command.Scope.AllowsHTML() && command.Scope.IsSinglePage():
+	if command.Scope.IsSinglePage() {
 		id = ProfilePPTSlide
-	case command.Scope.AllowsHTML() || command.Scope.AllowsGlobal():
+	} else {
 		id = ProfilePPTDeck
-	default:
-		return ContextProfile{}, fmt.Errorf("unsupported context profile: %s", command.Scope.Object)
 	}
 	p := ContextProfile{ID: id, Required: map[SegmentKind]bool{
 		SegmentPolicy: true, SegmentRunCommand: true, SegmentPresentationManifest: true, SegmentOutline: true, SegmentDesign: true,
 		SegmentTarget: command.Scope.IsSinglePage(),
 	}, Forbidden: map[SegmentKind]bool{}}
-	if id == ProfileSpecDeck || id == ProfileSpecSlide {
-		p.Forbidden[SegmentSlideHTML] = true
-		p.Forbidden[SegmentTheme] = true
-	} else {
-		p.Required[SegmentTheme] = true
-	}
+	p.Required[SegmentTheme] = true
 	return p, nil
 }

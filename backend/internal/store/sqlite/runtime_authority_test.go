@@ -58,7 +58,7 @@ func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
 			Model: "kimi-k3", URL: "https://gateway.example/v1",
 		},
 		Command: model.RunCommand{
-			Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages),
+			Scope: model.NewRunScope(model.ScopeAllPages),
 			Mode:  model.ModeChat, Instruction: "inspect",
 		},
 		Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1,
@@ -149,7 +149,7 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	if err := s.CreateRun(ctx, model.Run{
 		ID: "run-1", ThreadID: "thread-1", ProjectID: "project-1",
 		Command: model.RunCommand{
-			Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages),
+			Scope: model.NewRunScope(model.ScopeAllPages),
 			Mode:  model.ModeExecute, Instruction: "test",
 		},
 		Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1,
@@ -199,7 +199,7 @@ func TestSteeringAtomicallyAdvancesScopeAndCheckpoint(t *testing.T) {
 	if err := s.CreateThread(ctx, model.Thread{ID: "steering-thread", ProjectID: "steering-project", HistoryPath: "thread.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	initial := model.RunScope{Object: model.ScopeObjectSpec, SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCurrentPage}, Revision: 1}
+	initial := model.RunScope{SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCurrentPage}, Revision: 1}
 	if err := s.CreateRun(ctx, model.Run{
 		ID: "steering-run", ThreadID: "steering-thread", ProjectID: "steering-project",
 		Command: model.RunCommand{Scope: initial, Mode: model.ModeExecute, Instruction: "test"},
@@ -213,7 +213,7 @@ func TestSteeringAtomicallyAdvancesScopeAndCheckpoint(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	expanded := model.RunScope{Object: model.ScopeObjectPresentation, SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCustomPages}, Revision: 2}
+	expanded := model.RunScope{SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCustomPages}, Revision: 2}
 	_, created, err := s.CreateSteering(ctx, model.SteeringMessage{
 		RunID: "steering-run", ThreadID: "steering-thread", ClientMessageID: "msg-scope",
 		RequestHash: "hash-scope", Content: "change", Scope: expanded, Status: model.SteeringAccepted, AcceptedAt: 3,
@@ -222,7 +222,7 @@ func TestSteeringAtomicallyAdvancesScopeAndCheckpoint(t *testing.T) {
 		t.Fatalf("create steering: created=%v err=%v", created, err)
 	}
 	storedRun, err := s.GetRun(ctx, "steering-run")
-	if err != nil || storedRun.Command.Scope.Revision != 2 || storedRun.Command.Scope.Object != model.ScopeObjectPresentation {
+	if err != nil || storedRun.Command.Scope.Revision != 2 {
 		t.Fatalf("scope was not advanced atomically: run=%+v err=%v", storedRun.Command.Scope, err)
 	}
 	checkpoint, err := s.LatestCheckpoint(ctx, "steering-run")

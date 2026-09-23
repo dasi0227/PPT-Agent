@@ -28,7 +28,7 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 			name: "plan",
 			tools: disclosedToolsForLiveTest(
 				PhasePlanning, model.ModePlan,
-				model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
+				model.NewRunScope(model.ScopeAllPages),
 				nil,
 			),
 		},
@@ -36,7 +36,7 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 			name: "execute-ppt",
 			tools: disclosedToolsForLiveTest(
 				PhaseExecuting, model.ModeExecute,
-				model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
+				model.NewRunScope(model.ScopeAllPages),
 				&Plan{ApprovalID: "approval-test", ID: "plan_live", Status: PlanActive},
 			),
 		},
@@ -44,7 +44,7 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 			name: "execute-spec",
 			tools: disclosedToolsForLiveTest(
 				PhaseExecuting, model.ModeExecute,
-				model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages),
+				model.NewRunScope(model.ScopeAllPages),
 				&Plan{ApprovalID: "approval-test", ID: "plan_live", Status: PlanActive},
 			),
 		},
@@ -178,7 +178,7 @@ func deepSeekProfile(profiles []config.LLMProfile) (config.LLMProfile, bool) {
 }
 
 func disclosedToolsForLiveTest(phase RunPhase, mode model.RunMode, scope model.RunScope, plan *Plan) []ToolSchema {
-	pack := testPack(mode, scope.Object, scope.Source.Kind, false, "live schema validation")
+	pack := testPack(mode, scope.Source.Kind, false, "live schema validation")
 	pack.Command.Scope = scope
 	registry := NewToolRegistry()
 	_ = (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry)

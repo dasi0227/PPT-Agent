@@ -23,31 +23,31 @@ func TestResolveRunScopeNormalizesSelectionSources(t *testing.T) {
 	}{
 		{
 			name: "current page",
-			input: model.CreateRunScopeInput{Object: model.ScopeObjectHTML, Selection: model.ScopeSelectionInput{
+			input: model.CreateRunScopeInput{Selection: model.ScopeSelectionInput{
 				Kind: model.ScopeCurrentPage, CurrentSlideID: "sli_2",
 			}},
-			want: model.NewRunScope(model.ScopeObjectHTML, model.ScopeCurrentPage, "sli_2"),
+			want: model.NewRunScope(model.ScopeCurrentPage, "sli_2"),
 		},
 		{
 			name: "custom pages follow outline order and deduplicate",
-			input: model.CreateRunScopeInput{Object: model.ScopeObjectPresentation, Selection: model.ScopeSelectionInput{
+			input: model.CreateRunScopeInput{Selection: model.ScopeSelectionInput{
 				Kind: model.ScopeCustomPages, SlideIDs: []string{"sli_3", "sli_1", "sli_3"},
 			}},
-			want: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCustomPages, "sli_1", "sli_3"),
+			want: model.NewRunScope(model.ScopeCustomPages, "sli_1", "sli_3"),
 		},
 		{
 			name: "section includes subsection pages",
-			input: model.CreateRunScopeInput{Object: model.ScopeObjectSpec, Selection: model.ScopeSelectionInput{
+			input: model.CreateRunScopeInput{Selection: model.ScopeSelectionInput{
 				Kind: model.ScopeCustomSections, SectionIDs: []string{"sec_a"},
 			}},
-			want: model.RunScope{Object: model.ScopeObjectSpec, SlideIDs: []string{"sli_1", "sli_2"}, Source: model.ScopeSource{
+			want: model.RunScope{SlideIDs: []string{"sli_1", "sli_2"}, Source: model.ScopeSource{
 				Kind: model.ScopeCustomSections, SectionIDs: []string{"sec_a"},
 			}, Revision: 1},
 		},
 		{
-			name:  "global forces all pages",
-			input: model.CreateRunScopeInput{Object: model.ScopeObjectGlobal, Selection: model.ScopeSelectionInput{Kind: model.ScopeCurrentPage, CurrentSlideID: "sli_1"}},
-			want:  model.NewRunScope(model.ScopeObjectGlobal, model.ScopeAllPages, "sli_1", "sli_2", "sli_3"),
+			name:  "all pages includes future run-created pages",
+			input: model.CreateRunScopeInput{Selection: model.ScopeSelectionInput{Kind: model.ScopeAllPages}},
+			want:  model.NewRunScope(model.ScopeAllPages, "sli_1", "sli_2", "sli_3"),
 		},
 	}
 	for _, test := range tests {
@@ -66,9 +66,9 @@ func TestResolveRunScopeNormalizesSelectionSources(t *testing.T) {
 func TestResolveRunScopeRejectsUnknownAndEmptySelections(t *testing.T) {
 	snapshot := scopeSnapshot()
 	for _, input := range []model.CreateRunScopeInput{
-		{Object: model.ScopeObjectPresentation, Selection: model.ScopeSelectionInput{Kind: model.ScopeCurrentPage, CurrentSlideID: "sli_missing"}},
-		{Object: model.ScopeObjectPresentation, Selection: model.ScopeSelectionInput{Kind: model.ScopeCustomPages}},
-		{Object: model.ScopeObjectPresentation, Selection: model.ScopeSelectionInput{Kind: model.ScopeCustomSections, SectionIDs: []string{"sec_missing"}}},
+		{Selection: model.ScopeSelectionInput{Kind: model.ScopeCurrentPage, CurrentSlideID: "sli_missing"}},
+		{Selection: model.ScopeSelectionInput{Kind: model.ScopeCustomPages}},
+		{Selection: model.ScopeSelectionInput{Kind: model.ScopeCustomSections, SectionIDs: []string{"sec_missing"}}},
 	} {
 		if _, err := resolveRunScope(snapshot, input); err == nil {
 			t.Fatalf("invalid scope accepted: %+v", input)
@@ -77,10 +77,10 @@ func TestResolveRunScopeRejectsUnknownAndEmptySelections(t *testing.T) {
 }
 
 func TestMergeSelectionScopeIsMonotonicAndSingleRevision(t *testing.T) {
-	base := model.NewRunScope(model.ScopeObjectSpec, model.ScopeCurrentPage, "sli_1")
+	base := model.NewRunScope(model.ScopeCurrentPage, "sli_1")
 	selection := model.DOMSelection{SlideID: "sli_2", Status: model.DOMSelectionActive}
 	got := mergeSelectionScope(base, scopeSnapshot(), []model.DOMSelection{selection, selection})
-	if got.Object != model.ScopeObjectPresentation || got.Source.Kind != model.ScopeCustomPages || got.Revision != 2 {
+	if got.Source.Kind != model.ScopeCustomPages || got.Revision != 2 {
 		t.Fatalf("scope = %+v", got)
 	}
 	if len(got.SlideIDs) != 2 || got.SlideIDs[0] != "sli_1" || got.SlideIDs[1] != "sli_2" {
@@ -88,11 +88,11 @@ func TestMergeSelectionScopeIsMonotonicAndSingleRevision(t *testing.T) {
 	}
 }
 
-func TestMergeChromeSelectionUpgradesToGlobal(t *testing.T) {
-	base := model.NewRunScope(model.ScopeObjectHTML, model.ScopeCurrentPage, "sli_2")
+func TestMergeChromeSelectionPreservesPageBoundary(t *testing.T) {
+	base := model.NewRunScope(model.ScopeCurrentPage, "sli_2")
 	selection := model.DOMSelection{SlideID: "sli_2", Status: model.DOMSelectionActive, ChromeTargets: []model.ChromeTarget{{Type: "page_number"}}}
 	got := mergeSelectionScope(base, scopeSnapshot(), []model.DOMSelection{selection})
-	if got.Object != model.ScopeObjectGlobal || got.Source.Kind != model.ScopeAllPages || !got.IncludeRunCreatedSlides || got.Revision != 2 || len(got.SlideIDs) != 3 {
+	if !got.Equal(base) {
 		t.Fatalf("scope = %+v", got)
 	}
 }

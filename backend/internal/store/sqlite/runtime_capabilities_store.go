@@ -143,7 +143,7 @@ func (s *Store) CommitScopeExpansion(ctx context.Context, runID string, scope mo
 			return err
 		}
 		result := tx.Model(&runPO{}).Where("id = ? AND scope_revision = ?", runID, command.Scope.Revision-1).Updates(map[string]any{
-			"scope_object": string(scope.Object), "scope_slide_ids_json": string(slideIDs), "scope_source_json": string(source),
+			"scope_slide_ids_json": string(slideIDs), "scope_source_json": string(source),
 			"scope_include_run_created_slides": boolInt(scope.IncludeRunCreatedSlides), "scope_revision": scope.Revision,
 			"run_command_json": string(rawCommand), "status": string(model.RunRunning), "updated_at": nowUnix(),
 		})

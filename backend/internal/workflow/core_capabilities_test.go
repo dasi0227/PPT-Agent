@@ -21,7 +21,7 @@ func (p *countingEmbeddingProvider) Embed(_ context.Context, input []string) ([]
 }
 
 func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
-	scope := model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_1")
+	scope := model.NewRunScope(model.ScopeCurrentPage, "sli_1")
 	index := ContextIndex{RunID: "r", ID: "idx", Items: []ContextIndexItem{
 		{
 			RefID: "target", Kind: "slide_html", Source: "context_index",
@@ -52,7 +52,7 @@ func TestHybridRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
 		Index: index, Scope: scope, Embedder: HashEmbeddingProvider{},
 	}).Retrieve(context.Background(), RetrievalQuery{
 		Command: model.RunCommand{
-			Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_1"),
+			Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_1"),
 		},
 		QueryText: "pricing roadmap", Limit: 10, DetailBudget: 300,
 	})
@@ -73,7 +73,7 @@ func TestTurnContextRetrievalReusesStableQueryAndInjectsSummary(t *testing.T) {
 	runtime.Embedder = embedder
 	state := &RunState{
 		runID: "r", loopID: "loop", phase: PhaseChat,
-		scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
+		scope: model.NewRunScope(model.ScopeAllPages),
 		pack: contextengine.ContextPack{
 			Command: model.RunCommand{Instruction: "pricing roadmap"},
 		},

@@ -52,7 +52,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core.reference"),
 		loadPromptModule(modePolicyID(input.Mode)),
 	}
-	if id := playbookID(input.Context); id != "" {
+	for _, id := range playbookIDs(input.Mode) {
 		modules = append(modules, loadPromptModule(id))
 	}
 	switch input.Mode {
@@ -76,7 +76,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	if finishDisclosed(input.Phase, input.Mode) {
 		modules = append(modules, loadPromptModule("runtime.next-input-suggestions"))
 	}
-	if (input.Mode == model.ModePlan || input.Mode == model.ModeExecute) && input.Context.Command.Scope.AllowsHTML() {
+	if input.Mode == model.ModePlan || input.Mode == model.ModeExecute {
 		modules = append(modules, loadPromptModule("core.html"))
 	}
 
@@ -181,22 +181,13 @@ func modePolicyID(mode model.RunMode) string {
 	}
 }
 
-func playbookID(pack contextengine.ContextPack) string {
-	if pack.Command.Mode != model.ModeExecute {
-		return ""
+func playbookIDs(mode model.RunMode) []string {
+	if mode != model.ModeExecute {
+		return nil
 	}
-	switch {
-	case pack.Command.Scope.AllowsGlobal():
-		return "playbook.deck"
-	case pack.Command.Scope.Object == model.ScopeObjectSpec:
-		return "playbook.spec"
-	case pack.Command.Scope.AllowsHTML() && pack.Command.Scope.IsSinglePage():
-		return "playbook.slide"
-	case pack.Command.Scope.AllowsHTML():
-		return "playbook.deck"
-	default:
-		return ""
-	}
+	// All execute runs share the same capabilities. Scope changes page targets,
+	// never the static policy; each playbook owns a different authoring decision.
+	return []string{"playbook.deck", "playbook.spec", "playbook.slide"}
 }
 
 func resourceContractsModule(pack contextengine.ContextPack) (PromptModule, bool) {
@@ -219,11 +210,5 @@ func resourceContractsModule(pack contextengine.ContextPack) (PromptModule, bool
 }
 
 func resourceContractNames(pack contextengine.ContextPack) []string {
-	if pack.Command.Scope.AllowsGlobal() {
-		return []string{pptschema.ManifestName, pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}
-	}
-	if pack.Command.Scope.AllowsSpec() {
-		return []string{pptschema.SlideSpecName}
-	}
-	return nil
+	return []string{pptschema.ManifestName, pptschema.OutlineName, pptschema.DesignName, pptschema.SlideSpecName}
 }

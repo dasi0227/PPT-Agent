@@ -166,7 +166,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
 			}
-			if ctx.Context.Command.Scope.AllowsHTML() && ctx.Session != nil {
+			if ctx.Session != nil {
 				htmlTarget := Resource{Type: "slide", SlideID: change.Artifact.ID, Part: "html"}
 				if change.AffectsHTML {
 					if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, change.Artifact.ID) {
@@ -178,7 +178,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
 			}
-			if ctx.Context.Command.Scope.AllowsHTML() && ctx.Session != nil {
+			if ctx.Session != nil {
 				if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
 					for _, location := range spec.FlattenOutline(deck) {
 						slideID := location.Slide.SlideID

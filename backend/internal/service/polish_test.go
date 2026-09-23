@@ -39,7 +39,7 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	writePolishFixture(t, projectDir)
-	activeCommand := model.RunCommand{Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeCurrentPage, "sli_aaaaaa"), Mode: model.ModeExecute, Instruction: "build"}
+	activeCommand := model.RunCommand{Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_aaaaaa"), Mode: model.ModeExecute, Instruction: "build"}
 	if err := st.CreateRun(context.Background(), model.Run{ID: "active", ThreadID: "t1", ProjectID: "p1", Command: activeCommand, Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 	}
 	result, err := NewPolishService(st, registry).Polish(context.Background(), "p1", PolishParams{
 		Instruction: "这一页更有冲击力", ThreadID: "t1",
-		ScopeInput: model.CreateRunScopeInput{Object: model.ScopeObjectPresentation, Selection: model.ScopeSelectionInput{
+		ScopeInput: model.CreateRunScopeInput{Selection: model.ScopeSelectionInput{
 			Kind: model.ScopeCurrentPage, CurrentSlideID: "sli_aaaaaa",
 		}},
 		Mode: model.ModeExecute})

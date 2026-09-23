@@ -21,7 +21,7 @@ it('uses generated titles in the timeline and only the latest content for revisi
     .mockResolvedValueOnce({ title: '补充验收要求', content: '第二版完整指令', changed: true, prompt_version: 'test' });
   const request: PolishRequest = {
     instruction: '原始草稿', thread_id: 't1', mode: 'chat',
-    scope: { object: 'global', selection: { kind: 'all_pages' } },
+    scope: { selection: { kind: 'all_pages' } },
   };
   const first = polishCommand('p1', 't1', request, 'polish:result-contract');
   await vi.runAllTimersAsync();

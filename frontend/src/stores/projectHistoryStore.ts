@@ -69,7 +69,7 @@ export function applyHistoryScene(projectId: string, state: HistoryState) {
       threadDrafts: { [threadId]: input.command.instruction }, threadReferences: { [threadId]: refs },
       nextMarkerByThread: { [threadId]: Math.max(0, ...selections.map((s) => s.marker_no)) + 1 },
       mode: input.command.mode, modelProfileName: input.model, modelSelectionExplicit: !!input.model, selectedSkillIds: input.skill_ids ?? [],
-      scopeObject: scope.object, scopeSelection: scope.selection.kind, lastNonGlobalSelection: scope.selection.kind,
+      scopeSelection: scope.selection.kind,
       customSlideIds: scope.selection.slide_ids ?? [], customSectionIds: scope.selection.section_ids ?? [], userTouchedTarget: true,
       restoredInputs: { [threadId]: { scope: input.scope_input, options: input.command.options, component_names: input.component_names ?? [], mentioned_slide_ids: input.mentioned_slide_ids ?? [] } },
     });

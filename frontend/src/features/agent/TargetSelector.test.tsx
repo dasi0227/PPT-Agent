@@ -3,49 +3,66 @@ import { describe, expect, it, vi } from 'vitest';
 import { TargetSelector } from './TargetSelector';
 
 const base = {
-  object: 'presentation' as const,
   selection: 'current_page' as const,
   selectedSlideIds: [],
   selectedSectionIds: [],
   pages: [{ id: 'sli_1', ordinal: 1, title: '封面' }, { id: 'sli_2', ordinal: 2, title: '结论' }],
   sections: [{ id: 'sec_1', title: '开场', pageCount: 2 }],
-  onObjectChange: vi.fn(),
   onSelectionChange: vi.fn(),
   onToggleSlide: vi.fn(),
   onToggleSection: vi.fn(),
 };
 
 describe('TargetSelector', () => {
-  it('renders the compact two-row selector', () => {
+  it('renders page-only entries and opens a second-level list', () => {
     render(<TargetSelector {...base} />);
-    const trigger = screen.getByRole('button', { name: '范围：当前页 · 演示文稿' });
+    const trigger = screen.getByRole('button', { name: '范围：当前页' });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
-    expect(screen.getByRole('radiogroup', { name: '页面范围' })).toBeInTheDocument();
-    expect(screen.getByRole('radiogroup', { name: '修改对象' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('radio', { name: '页面范围：自选页' }));
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(4);
+    expect(screen.queryByText('修改对象')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '自选页' }));
+    expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument();
+    expect(screen.getByRole('listbox', { name: '选择页面' })).toBeInTheDocument();
     expect(base.onSelectionChange).toHaveBeenCalledWith('custom_pages');
   });
 
-  it('shows selected page count in the trigger and page titles in the custom list', () => {
+  it('keeps the trigger simple and shows page ordinals and titles in the custom list', () => {
     render(<TargetSelector {...base} selection="custom_pages" selectedSlideIds={['sli_2']} />);
-    const trigger = screen.getByRole('button', { name: '范围：自选 1 页 · 演示文稿' });
-    expect(trigger).toHaveTextContent('自选 1 页 · 演示文稿');
+    const trigger = screen.getByRole('button', { name: '范围：自选页' });
+    expect(trigger).toHaveTextContent('自选页');
     expect(trigger).not.toHaveTextContent('2 页');
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '自选页' }));
     expect(screen.getByText('封面')).toBeInTheDocument();
     expect(screen.getByText('结论')).toBeInTheDocument();
+    expect(screen.getByText('第 1 页')).toBeInTheDocument();
+    expect(screen.getByText('第 2 页')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: /封面/ }));
     expect(base.onToggleSlide).toHaveBeenCalledWith('sli_1');
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '返回范围选择' }));
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(4);
+  });
+
+  it('labels custom sections by chapter order instead of page count', () => {
+    render(<TargetSelector {...base} selection="custom_sections" />);
+    const trigger = screen.getByRole('button', { name: '范围：自选章' });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '自选章' }));
+    expect(screen.getByText('第 1 章')).toBeInTheDocument();
+    expect(screen.queryByText('2 页')).not.toBeInTheDocument();
   });
 
   it('closes the custom window first and the selector second with Escape', async () => {
     render(<TargetSelector {...base} selection="custom_pages" selectedSlideIds={['sli_2']} />);
-    const trigger = screen.getByRole('button', { name: '范围：自选 1 页 · 演示文稿' });
+    const trigger = screen.getByRole('button', { name: '范围：自选页' });
     trigger.focus();
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '自选页' }));
     const menu = screen.getByRole('menu');
 
     fireEvent.keyDown(menu, { key: 'Escape' });
@@ -57,25 +74,14 @@ describe('TargetSelector', () => {
     expect(trigger).not.toHaveFocus();
   });
 
-  it('locks global resources to all pages', () => {
-    render(<TargetSelector {...base} object="global" selection="all_pages" />);
-    const trigger = screen.getByRole('button', { name: '范围：全局资源' });
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
-    fireEvent.click(trigger);
-    const customSection = screen.getByRole('radio', { name: '页面范围：自选章' });
-    expect(customSection).toHaveAttribute('aria-disabled', 'true');
-    expect(customSection).toHaveAttribute('data-disabled');
-  });
-
   it('keeps the selector open in an empty project and disables unavailable targets', () => {
-    render(<TargetSelector {...base} object="global" selection="all_pages" pages={[]} sections={[]} emptyProject />);
-    const trigger = screen.getByRole('button', { name: '范围：全局资源' });
+    render(<TargetSelector {...base} selection="all_pages" pages={[]} sections={[]} emptyProject />);
+    const trigger = screen.getByRole('button', { name: '范围：全部页' });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
-    expect(screen.getByRole('radiogroup', { name: '修改对象' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: '修改对象：设计稿' })).toHaveAttribute('data-disabled');
-    expect(screen.getByRole('radio', { name: '修改对象：全局资源' })).not.toHaveAttribute('data-disabled');
-    expect(screen.getByRole('radio', { name: '页面范围：当前页' })).toHaveAttribute('data-disabled');
-    expect(screen.getByRole('radio', { name: '页面范围：全部页' })).not.toHaveAttribute('data-disabled');
+    expect(screen.getByRole('menuitemradio', { name: '当前页' })).toHaveAttribute('data-disabled');
+    expect(screen.getByRole('menuitemradio', { name: '自选页' })).toHaveAttribute('data-disabled');
+    expect(screen.getByRole('menuitemradio', { name: '自选章' })).toHaveAttribute('data-disabled');
+    expect(screen.getByRole('menuitemradio', { name: '全部页' })).not.toHaveAttribute('data-disabled');
   });
 });

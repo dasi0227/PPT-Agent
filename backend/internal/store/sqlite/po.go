@@ -117,7 +117,6 @@ type runPO struct {
 	ID                           string `gorm:"column:id;primaryKey"`
 	ThreadID                     string `gorm:"column:thread_id"`
 	ProjectID                    string `gorm:"column:project_id"`
-	ScopeObject                  string `gorm:"column:scope_object"`
 	ScopeSlideIDsJSON            string `gorm:"column:scope_slide_ids_json"`
 	ScopeSourceJSON              string `gorm:"column:scope_source_json"`
 	ScopeIncludeRunCreatedSlides int    `gorm:"column:scope_include_run_created_slides"`
@@ -169,8 +168,8 @@ func runToPO(m model.Run) runPO {
 	source, _ := json.Marshal(m.Command.Scope.Source)
 	return runPO{
 		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID,
-		ScopeObject: string(m.Command.Scope.Object), ScopeSlideIDsJSON: string(slideIDs),
-		ScopeSourceJSON: string(source), ScopeIncludeRunCreatedSlides: boolInt(m.Command.Scope.IncludeRunCreatedSlides),
+		ScopeSlideIDsJSON: string(slideIDs),
+		ScopeSourceJSON:   string(source), ScopeIncludeRunCreatedSlides: boolInt(m.Command.Scope.IncludeRunCreatedSlides),
 		ScopeRevision:          m.Command.Scope.Revision,
 		Mode:                   string(m.Command.Mode),
 		RunCommandJSON:         string(raw),

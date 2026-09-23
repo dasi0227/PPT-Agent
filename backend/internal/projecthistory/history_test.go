@@ -66,7 +66,7 @@ func projectPath(p model.Project, path string) string {
 func cp(t *testing.T, m *Manager, p model.Project, id string, status model.RunStatus) {
 	t.Helper()
 	ctx := context.Background()
-	cmd := model.RunCommand{Instruction: id, Mode: model.ModeChat, Scope: model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages)}
+	cmd := model.RunCommand{Instruction: id, Mode: model.ModeChat, Scope: model.NewRunScope(model.ScopeAllPages)}
 	revision, err := m.Baseline(ctx, p, id, "t1", model.CreateRunParams{Command: cmd})
 	must(t, err)
 	state, err := m.State(p.ID)

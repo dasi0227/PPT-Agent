@@ -16,7 +16,7 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
     slide.id,
     `第 ${index + 1} 页 · ${slide.title || '未命名页面'}`,
   ])), [snapshot]);
-  const requestedPages = item.requestedAddition.slide_ids?.map((id) => pageLabels[id] ?? `已删除页面 · ${id}`) ?? [];
+  const requestedPages = item.requestedAddition.slide_ids?.map((id) => pageLabels[id] ?? '已删除页面') ?? [];
 
   if (item.answer) {
     const accepted = item.answer.decision !== 'reject';
@@ -39,7 +39,7 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
       call_id: item.callId,
       base_revision: item.baseRevision,
       decision,
-      ...(decision === 'adjust' ? { adjusted_scope: { object: 'global' as const, selection: { kind: 'all_pages' as const } } } : {}),
+      ...(decision === 'adjust' ? { adjusted_scope: { selection: { kind: 'all_pages' as const } } } : {}),
     });
     if (!accepted) setSubmitting(null);
   };
@@ -62,9 +62,9 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
         <button type="button" disabled={submitting !== null} onClick={() => void submit('reject')} className="inline-flex h-8 items-center gap-1 rounded-md bg-danger px-2.5 text-xs font-semibold text-white hover:bg-danger/90 focus-visible:outline-none disabled:opacity-50">
           <X className="h-3.5 w-3.5" />{submitting === 'reject' ? '提交中' : '拒绝'}
         </button>
-        {item.proposedScope.object !== 'global' && (
+        {item.proposedScope.source.kind !== 'all_pages' && (
           <button type="button" disabled={submitting !== null} onClick={() => void submit('adjust')} className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-2.5 text-xs font-semibold text-text-700 hover:bg-panel-muted focus-visible:outline-none disabled:opacity-50">
-            {submitting === 'adjust' ? '提交中' : '调整为全局'}
+            {submitting === 'adjust' ? '提交中' : '调整为全部页'}
           </button>
         )}
         <button type="button" disabled={submitting !== null} onClick={() => void submit('approve')} className="inline-flex h-8 items-center gap-1 rounded-md bg-success px-3 text-xs font-semibold text-white hover:bg-success/90 focus-visible:outline-none disabled:opacity-50">

@@ -304,13 +304,12 @@ func AllowsWrite(scope model.RunScope, target Resource) bool {
 		return true
 	}
 	if target.Type == "deck" {
-		return scope.AllowsGlobal()
+		return true
 	}
 	if target.Type != "slide" || !scope.ContainsSlide(target.SlideID) {
 		return false
 	}
-	return (target.Part == "spec" && scope.AllowsSpec()) ||
-		(target.Part == "html" && scope.AllowsHTML())
+	return target.Part == "spec" || target.Part == "html"
 }
 
 func AllowsRead(model.RunScope, Resource) bool { return true }
@@ -338,10 +337,8 @@ func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode, scope model.
 
 func toolRelevantToRun(name string, mode model.RunMode, scope model.RunScope) bool {
 	if name == "render_slide" {
-		// A slide-specific render schema cannot name a target when a deck scope
-		// contains no slides. Do not expose an enum: [] to the provider.
-		return mode == model.ModeExecute && scope.AllowsHTML() &&
-			(scope.AllowsGlobal() || len(scope.SlideIDs) > 0)
+		// Rendering capability is stable; actual page authorization is checked at execution.
+		return mode == model.ModeExecute
 	}
 	return true
 }
@@ -370,6 +367,10 @@ func toolAvailable(desc ToolDescriptor, phase RunPhase, mode model.RunMode, scop
 }
 
 func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) (ToolSchema, bool) {
+	// Scope-specific filtering must never mutate a cached base schema.
+	raw, _ := json.Marshal(schema.Parameters)
+	schema.Parameters = map[string]any{}
+	_ = json.Unmarshal(raw, &schema.Parameters)
 	if schema.Name == "mutate_ppt" {
 		variants, scoped := schema.Parameters["oneOf"].([]any)
 		if !scoped {
@@ -383,15 +384,8 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) (To
 			props, _ := variant["properties"].(map[string]any)
 			opSchema, _ := props["op"].(map[string]any)
 			op, _ := opSchema["const"].(string)
-			probeSlideID := ""
-			if len(scope.SlideIDs) > 0 {
-				probeSlideID = scope.SlideIDs[0]
-			}
-			allowed := mutationOperationAllowed(scope, op, probeSlideID)
+			allowed := mutationOperationClassAllowed(op)
 			if allowed {
-				if _, ok := props["slide_id"]; ok && !scope.AllowsGlobal() {
-					props["slide_id"] = map[string]any{"type": "string", "enum": scope.SlideIDs}
-				}
 				filtered = append(filtered, raw)
 			}
 		}
@@ -408,30 +402,29 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) (To
 		return schema, true
 	}
 	if _, ok := properties["resource"]; ok {
-		properties["resource"] = resourceSchemaForScope(scope, !readOnly)
-	}
-	if schema.Name == "render_slide" && !scope.AllowsGlobal() {
-		properties["slide_id"] = map[string]any{
-			"type": "string", "enum": scope.SlideIDs,
-			"description": "A slide authorized by the current run scope.",
-		}
+		properties["resource"] = resourceSchema()
 	}
 	return schema, true
 }
 
 // mutationOperationAllowed is the single scope rule used both to disclose a
 // mutate_ppt schema variant and to authorize the decoded mutation request.
-// Page coverage and object capabilities are independent: spec-only runs must
-// never receive or execute slide HTML mutations, even when every page is in scope.
+// All resource kinds are available; page mutations are bounded by stable slide IDs.
+func mutationOperationClassAllowed(op string) bool {
+	if strings.HasPrefix(op, "manifest.") || strings.HasPrefix(op, "outline.") || strings.HasPrefix(op, "design.") {
+		return true
+	}
+	return strings.HasPrefix(op, "slide.spec.") || strings.HasPrefix(op, "slide.html.")
+}
+
 func mutationOperationAllowed(scope model.RunScope, op, slideID string) bool {
 	if strings.HasPrefix(op, "manifest.") || strings.HasPrefix(op, "outline.") || strings.HasPrefix(op, "design.") {
-		return scope.AllowsGlobal()
+		return true
 	}
 	if !scope.ContainsSlide(slideID) {
 		return false
 	}
-	return (strings.HasPrefix(op, "slide.spec.") && scope.AllowsSpec()) ||
-		(strings.HasPrefix(op, "slide.html.") && scope.AllowsHTML())
+	return strings.HasPrefix(op, "slide.spec.") || strings.HasPrefix(op, "slide.html.")
 }
 
 func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {

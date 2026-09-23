@@ -69,7 +69,7 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 func TestRunStartedPayloadUsesV5RunCommandFields(t *testing.T) {
 	payload := RunStartedPayload{
 		PublicEventBase: NewPublicEventBase("r1"),
-		Scope:           NewRunScope(ScopeObjectPresentation, ScopeCurrentPage, "sli_1"),
+		Scope:           NewRunScope(ScopeCurrentPage, "sli_1"),
 		Mode:            ModeExecute,
 		UserInput:       "revise",
 		Skills: []PublicSkill{{

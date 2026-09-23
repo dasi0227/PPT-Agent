@@ -13,7 +13,7 @@ import (
 
 func activeRunSpec() model.RunCommand {
 	return model.RunCommand{
-		Scope:       model.NewRunScope(model.ScopeObjectSpec, model.ScopeAllPages),
+		Scope:       model.NewRunScope(model.ScopeAllPages),
 		Mode:        model.ModeExecute,
 		Instruction: "test",
 	}

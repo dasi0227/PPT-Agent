@@ -17,7 +17,7 @@ import (
 
 func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	root := t.TempDir()
-	pack := testPack(model.ModeChat, model.ScopeObjectPresentation, model.ScopeCurrentPage, false, "inspect")
+	pack := testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect")
 	outline, err := json.Marshal(pack.Outline.Outline)
 	if err != nil {
 		t.Fatal(err)

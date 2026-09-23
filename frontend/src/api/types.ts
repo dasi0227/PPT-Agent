@@ -130,7 +130,6 @@ export interface Run {
   paused_at?: number;
 }
 
-export type ScopeObject = 'spec' | 'html' | 'presentation' | 'global';
 export type ScopeSelectionKind = 'current_page' | 'all_pages' | 'custom_pages' | 'custom_sections';
 export type RunMode = 'chat' | 'grill' | 'plan' | 'execute';
 export type RunLanguage = 'zh-CN' | 'en-US';
@@ -143,10 +142,9 @@ export interface ScopeSelectionInput {
   section_ids?: string[];
 }
 
-export interface CreateRunScopeInput { object: ScopeObject; selection: ScopeSelectionInput }
+export interface CreateRunScopeInput { selection: ScopeSelectionInput }
 export interface ScopeSource { kind: ScopeSelectionKind; section_ids?: string[] }
 export interface RunScope {
-  object: ScopeObject;
   slide_ids: string[];
   source: ScopeSource;
   include_run_created_slides: boolean;
@@ -721,7 +719,7 @@ export type SSEEvent =
       call_id: string;
       base_revision: number;
       current_scope: RunScope;
-      requested_addition: { slide_ids?: string[]; object?: ScopeObject };
+      requested_addition: { slide_ids?: string[] };
       proposed_scope: RunScope;
       affected_page_count: number;
       reason: string;

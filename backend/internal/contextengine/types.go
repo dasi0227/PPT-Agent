@@ -12,10 +12,8 @@ const SchemaVersion = "2.0"
 type ProfileID string
 
 const (
-	ProfileSpecDeck  ProfileID = "spec/deck"
-	ProfileSpecSlide ProfileID = "spec/slide"
-	ProfilePPTDeck   ProfileID = "ppt/deck"
-	ProfilePPTSlide  ProfileID = "ppt/slide"
+	ProfilePPTDeck  ProfileID = "ppt/deck"
+	ProfilePPTSlide ProfileID = "ppt/slide"
 )
 
 type SegmentKind string
@@ -91,7 +89,6 @@ type SlideSummary struct {
 }
 
 type TargetContext struct {
-	Object           model.ScopeObject        `json:"object"`
 	SlideIDs         []string                 `json:"slide_ids"`
 	SlideSpec        *pptspec.SlideSpec       `json:"slide_spec,omitempty"`
 	Materialization  *pptspec.Materialization `json:"materialization,omitempty"`

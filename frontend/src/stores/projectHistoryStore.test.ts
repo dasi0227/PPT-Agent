@@ -14,7 +14,7 @@ describe('project checkpoint composer scene', () => {
     };
     const state: HistoryState = { revision: 9, scene_revision: 9, checkpoints: [], latest: 'latest', scene: { thread_id: 't', input: {
       command: { instruction: 'input', mode: 'grill', options: { language: 'zh-CN' }, attachments: [{ id: 'img', original_name: 'reference.png', media_type: 'image/png', size_bytes: 42 }] },
-      scope_input: { object: 'presentation', selection: { kind: 'custom_pages', slide_ids: ['s1', 's2'] } },
+      scope_input: { selection: { kind: 'custom_pages', slide_ids: ['s1', 's2'] } },
       model: 'model', skill_ids: ['skill'], component_names: ['chart'], mentioned_slide_ids: ['s2'], dom_selections: [selection], reference_order: [{ kind: 'dom', ref_id: 'sel_one' }, { kind: 'image', ref_id: 'img' }],
     } } };
     applyHistoryScene('p', state);

@@ -109,12 +109,12 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 	po := runToPO(r)
 	return mapProjectWriteErr(s.db.WithContext(ctx).Exec(
 		`INSERT INTO runs (id, thread_id, project_id,
-			 scope_object, scope_slide_ids_json, scope_source_json, scope_include_run_created_slides, scope_revision, mode, run_command_json,
+			 scope_slide_ids_json, scope_source_json, scope_include_run_created_slides, scope_revision, mode, run_command_json,
 			 client_request_id, project_history_revision, model_profile_name, model_provider, model_name, model_url,
 			 cancel_requested_at, owner_instance_id, pause_reason, paused_at,
 			 status, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		po.ID, po.ThreadID, po.ProjectID, po.ScopeObject, po.ScopeSlideIDsJSON,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		po.ID, po.ThreadID, po.ProjectID, po.ScopeSlideIDsJSON,
 		po.ScopeSourceJSON, po.ScopeIncludeRunCreatedSlides, po.ScopeRevision, po.Mode, po.RunCommandJSON,
 		nullIfEmpty(po.ClientRequestID), po.ProjectHistoryRevision, nullIfEmpty(po.ModelProfileName),
 		nullIfEmpty(po.ModelProvider), nullIfEmpty(po.ModelName), nullIfEmpty(po.ModelURL),
@@ -406,7 +406,7 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 		var runRow runPO
 		var command model.RunCommand
 		var checkpoint workflow.RuntimeCheckpoint
-		if message.Scope.Object != "" {
+		if message.Scope.Source.Kind != "" {
 			if err := tx.First(&runRow, "id = ?", message.RunID).Error; err != nil {
 				return mapErr(err)
 			}
@@ -454,7 +454,7 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 			return res.Error
 		}
 		created = res.RowsAffected == 1
-		if created && message.Scope.Object != "" {
+		if created && message.Scope.Source.Kind != "" {
 			previousRevision := command.Scope.Revision
 			command.Scope = message.Scope
 			rawCommand, err := json.Marshal(command)
@@ -464,8 +464,8 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 			scopeSlideIDs, _ := json.Marshal(message.Scope.SlideIDs)
 			scopeSource, _ := json.Marshal(message.Scope.Source)
 			result := tx.Model(&runPO{}).Where("id = ? AND scope_revision = ?", message.RunID, previousRevision).Updates(map[string]any{
-				"scope_object": message.Scope.Object, "scope_slide_ids_json": string(scopeSlideIDs),
-				"scope_source_json": string(scopeSource), "scope_include_run_created_slides": message.Scope.IncludeRunCreatedSlides,
+				"scope_slide_ids_json": string(scopeSlideIDs),
+				"scope_source_json":    string(scopeSource), "scope_include_run_created_slides": message.Scope.IncludeRunCreatedSlides,
 				"scope_revision": message.Scope.Revision, "run_command_json": string(rawCommand), "updated_at": time.Now().Unix(),
 			})
 			if result.Error != nil {
@@ -505,8 +505,7 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 }
 
 func sameRunScope(left, right model.RunScope) bool {
-	return left.Object == right.Object &&
-		left.Revision == right.Revision &&
+	return left.Revision == right.Revision &&
 		left.IncludeRunCreatedSlides == right.IncludeRunCreatedSlides &&
 		left.Source.Kind == right.Source.Kind &&
 		slices.Equal(left.Source.SectionIDs, right.Source.SectionIDs) &&

@@ -34,7 +34,7 @@ func TestProjectWriteTriggersSerializeRunsAndGitCommits(t *testing.T) {
 	runModel := model.Run{
 		ID: "r1", ThreadID: "t1", ProjectID: "p1", Status: model.RunPending,
 		Command: model.RunCommand{
-			Scope: model.NewRunScope(model.ScopeObjectPresentation, model.ScopeAllPages),
+			Scope: model.NewRunScope(model.ScopeAllPages),
 			Mode:  model.ModeExecute, Instruction: "build",
 		},
 		CreatedAt: 2, UpdatedAt: 2,

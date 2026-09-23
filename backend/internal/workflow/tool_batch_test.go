@@ -86,7 +86,7 @@ func (t timedBatchTool) Execute(ctx context.Context, input DomainToolInput) Tool
 }
 
 func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testing.T) {
-	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeObjectPresentation, model.ScopeAllPages, true, "batch")
+	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeAllPages, true, "batch")
 	registry := NewToolRegistry()
 	var mu sync.Mutex
 	order := []string{}
@@ -119,7 +119,7 @@ func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testin
 }
 
 func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
-	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeAllPages, true, "batch")
+	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeAllPages, true, "batch")
 	tx, err := NewRunSession(dir, "batch-write")
 	if err != nil {
 		t.Fatal(err)
@@ -163,7 +163,7 @@ func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 }
 
 func TestSuccessfulWriteIsVisibleToNextDiskTool(t *testing.T) {
-	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeObjectSpec, model.ScopeAllPages, true, "batch")
+	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeAllPages, true, "batch")
 	tx, err := NewRunSession(dir, "batch-durable")
 	if err != nil {
 		t.Fatal(err)
