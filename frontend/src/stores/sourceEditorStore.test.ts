@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectHistoryApi } from '../api/projectHistory';
-import { slideSourcesApi } from '../api/slideSources';
-import { assertProjectSourcesSaved, useSourceEditorStore } from './sourceEditorStore';
+import { slideSourcesApi, type SourceKind, type SlideSourceDocument } from '../api/slideSources';
+import { assertProjectSourcesSaved, showSourceFile, sourceKey, useSourceEditorStore } from './sourceEditorStore';
+import { useDeckStore } from './deckStore';
+import { useProjectStore } from './projectStore';
 import { sourceDraftId, sourceSessionId, type StoredSourceDraft } from '../lib/sourceDraftStorage';
-import { NetworkError } from '../api/client';
+import { APIError, NetworkError } from '../api/client';
 
 vi.mock('../lib/sourceDraftStorage', async (importOriginal) => ({
   ...await importOriginal<typeof import('../lib/sourceDraftStorage')>(),
@@ -19,6 +21,43 @@ describe('project source launch gate', () => {
     useSourceEditorStore.setState({ files: {}, drafts: {}, indexReady: true, indexError: null });
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it.each(['manifest', 'design'] as const)('keeps %s drafts in the project launch gate and opens the right document', async (kind) => {
+    const id = sourceDraftId('project', '', kind);
+    useSourceEditorStore.setState({ drafts: { [id]: {
+      id, sessionId: sourceSessionId(), projectId: 'project', slideId: '', kind,
+      sceneRevision: 0, baseSourceHash: 'sha256:old', baseText: '{}', draftText: '{"changed":true}', updatedAt: 1,
+    } } });
+    await expect(assertProjectSourcesSaved('project')).rejects.toThrow('有 1 个源文件尚未保存');
+    useDeckStore.setState({ currentSlideId: null, activeDocument: null, contentMode: 'preview' });
+    showSourceFile({ slideId: '', kind });
+    expect(useDeckStore.getState()).toMatchObject({ currentSlideId: null, activeDocument: kind, contentMode: 'source' });
+  });
+
+  it('formats project JSON during save-all and stops on the failed project document', async () => {
+    const documents = new Map<SourceKind, SlideSourceDocument>();
+    const drafts: Record<string, StoredSourceDraft> = {};
+    for (const kind of ['design', 'manifest'] as const) {
+      const id = sourceDraftId('project', '', kind);
+      drafts[id] = { id, sessionId: sourceSessionId(), projectId: 'project', slideId: '', kind,
+        sceneRevision: 0, baseSourceHash: kind, baseText: '{"value":1}', draftText: '{"value":2}', updatedAt: 1 };
+      documents.set(kind, { project_id: 'project', slide_id: '', kind, path: `${kind}.json`, language: 'json',
+        content: drafts[id].baseText, source_hash: kind, content_hash: kind, scene_revision: 0, writable: true, readonly_reason: null });
+    }
+    useSourceEditorStore.setState({ drafts });
+    vi.spyOn(slideSourcesApi, 'get').mockImplementation(async (_project, _slide, kind) => documents.get(kind)!);
+    vi.spyOn(useProjectStore.getState(), 'loadProjectContent').mockResolvedValue();
+    const save = vi.spyOn(slideSourcesApi, 'save').mockImplementation(async (_project, _slide, kind, text) => {
+      if (kind === 'design') throw new APIError(422, 'SOURCE_VALIDATION_FAILED', '装饰位置无效');
+      return { changed: true, document: { ...documents.get(kind)!, content: text, source_hash: 'saved' } };
+    });
+    expect(await useSourceEditorStore.getState().saveAll('project')).toBe(false);
+    expect(save.mock.calls.map((call) => call[2])).toEqual(['manifest', 'design']);
+    expect(save.mock.calls[0][3]).toBe('{\n  "value": 2\n}\n');
+    expect(useSourceEditorStore.getState().files[sourceKey('project', '', 'manifest')].baseSourceHash).toBe('saved');
+    expect(useSourceEditorStore.getState().files[sourceKey('project', '', 'design')].draftText).toBe('{"value":2}');
+    expect(useDeckStore.getState()).toMatchObject({ activeDocument: 'design', contentMode: 'source' });
+  });
 
   it('blocks a draft on another page and permits launch once it is cleared', async () => {
     const id = sourceDraftId('project', 'another-slide', 'html');

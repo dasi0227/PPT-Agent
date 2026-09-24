@@ -69,21 +69,30 @@ function isDOMSelectionSnapshot(value: unknown): boolean {
   if (!isRecord(value) || !['element', 'region'].includes(String(value.kind)) || typeof value.slide_id !== 'string'
     || typeof value.html_hash !== 'string' || value.status !== 'active'
     || !isRecord(value.canvas) || value.canvas.width !== 1920 || value.canvas.height !== 1080 || !isPositiveRect(value.rect)
-    || !Array.isArray(value.dom_targets) || value.dom_targets.length > 50 || !Array.isArray(value.chrome_targets)
-    || value.dom_targets.length + value.chrome_targets.length === 0) return false;
+    || !Array.isArray(value.dom_targets) || value.dom_targets.length > 50 || !Array.isArray(value.decoration_targets)
+    || value.dom_targets.length + value.decoration_targets.length === 0) return false;
   const domValid = value.dom_targets.every((target) => isRecord(target) && typeof target.target_id === 'string' && target.target_id.length > 0
     && typeof target.tag === 'string' && target.tag.length > 0 && isPositiveRect(target.rect)
     && isFingerprint(target.fingerprint, target.tag)
     && Array.isArray(target.candidate_selectors) && target.candidate_selectors.length <= 3 && target.candidate_selectors.every((item) => typeof item === 'string')
     && isRecord(target.box_model) && isRect(target.box_model.content) && isEdges(target.box_model.padding) && isEdges(target.box_model.border) && isEdges(target.box_model.margin)
     && isStringRecord(target.attributes ?? {}) && isStringRecord(target.computed_style ?? {}));
-  const chromeValid = value.chrome_targets.every((target) => isRecord(target) && ['page_number', 'section_marker', 'key_message', 'deck_title'].includes(String(target.type))
-    && typeof target.placement === 'string' && typeof target.style === 'string' && typeof target.text === 'string' && isPositiveRect(target.rect));
-  return domValid && chromeValid;
+  const decorationsValid = value.decoration_targets.every((target) => isRecord(target) && ['page_number', 'section_title', 'key_message', 'deck_title'].includes(String(target.type))
+    && typeof target.placement === 'string' && typeof target.text === 'string' && isPositiveRect(target.rect));
+  return domValid && decorationsValid;
 }
 
 function isSessionMessage(value: Record<string, unknown>): boolean {
   return typeof value.session_id === 'string' && value.session_id.length > 0 && typeof value.slide_id === 'string' && value.slide_id.length > 0;
+}
+
+function isDecorations(value: unknown): boolean {
+  if (!isRecord(value) || Object.keys(value).length !== 4) return false;
+  const placements = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right', 'left-edge', 'right-edge'];
+  return ['page_number', 'deck_title', 'section_title', 'key_message'].every((key) => {
+    const item = value[key];
+    return typeof item === 'string' && (placements.includes(item) || (key !== 'page_number' && item === 'none'));
+  });
 }
 
 export function isRuntimeSlide(value: unknown): value is RuntimeSlide {
@@ -98,7 +107,9 @@ export function isRuntimeSlide(value: unknown): value is RuntimeSlide {
     && value.frame.canvas.height === 1080
     && value.frame.canvas.aspect_ratio === '16:9'
 		&& (value.frame.project_id === undefined || typeof value.frame.project_id === 'string')
-    && (value.frame.appearance === null || (isRecord(value.frame.appearance) && typeof value.frame.appearance.hash === 'string' && typeof value.frame.appearance.theme_css_url === 'string' && isStringRecord(value.frame.appearance.chrome_tokens)))
+    && (value.frame.appearance === null || (isRecord(value.frame.appearance) && typeof value.frame.appearance.hash === 'string' && typeof value.frame.appearance.theme_css_url === 'string' && isStringRecord(value.frame.appearance.decoration_tokens)))
+    && typeof value.frame.key_message === 'string'
+    && isDecorations(value.frame.decorations)
     && typeof value.frame.theme_id === 'string'
     && typeof value.frame.ordinal === 'number'
     && typeof value.frame.total === 'number';
@@ -134,7 +145,7 @@ export function parseRuntimeEvent(value: unknown): RuntimeEvent | null {
   if (value.type === 'selectionCreated') {
     if (!isSessionMessage(value) || !isDOMSelectionSnapshot(value.selection)) return null;
     const selection = value.selection as Record<string, unknown>;
-    if (new TextEncoder().encode(JSON.stringify({ dom_targets: selection.dom_targets, chrome_targets: selection.chrome_targets })).byteLength > 128 * 1024) return null;
+    if (new TextEncoder().encode(JSON.stringify({ dom_targets: selection.dom_targets, decoration_targets: selection.decoration_targets })).byteLength > 128 * 1024) return null;
     return value as RuntimeEvent;
   }
   if (value.type === 'selectionCanceled' && isSessionMessage(value)) return value as RuntimeEvent;

@@ -3,9 +3,9 @@ import { MutationResponse, PPTMutation, Project, ProjectContentSnapshot } from '
 
 export const projectsApi = {
   list: () => fetchClient<Project[]>('/projects'),
-  create: (topic: string, brief: string = '', slide_count: number = 10, language: string = 'zh') => fetchClient<Project>('/projects', {
+  create: (topic: string) => fetchClient<Project>('/projects', {
     method: 'POST',
-    body: JSON.stringify({ topic, brief, slide_count, language })
+    body: JSON.stringify({ topic })
   }),
   patch: (id: string, patch: {title?: string}) => fetchClient<Project>(`/projects/${id}`, {
     method: 'PATCH',

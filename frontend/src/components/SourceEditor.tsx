@@ -7,7 +7,7 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { json, jsonParseLinter } from '@codemirror/lang-json';
 import { html } from '@codemirror/lang-html';
 import { lintGutter, linter, setDiagnostics } from '@codemirror/lint';
-import type { SourceKind } from '../api/slideSources';
+import { SOURCE_META, type SourceKind } from '../api/slideSources';
 import { fixedBindings, matchesShortcut } from '../lib/shortcuts';
 
 const sessions = new Map<string, { state: EditorState; scrollTop: number }>();
@@ -49,8 +49,8 @@ export function SourceEditor({ resourceKey, kind, text, resetVersion, readOnly, 
         lineNumbers(), highlightActiveLine(), drawSelection(), highlightSpecialChars(),
         history(), indentOnInput(), bracketMatching(), highlightSelectionMatches(), lintGutter(),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-        kind === 'spec' ? json() : html(),
-        kind === 'spec' ? linter(jsonParseLinter()) : [],
+        kind !== 'html' ? json() : html(),
+        kind !== 'html' ? linter(jsonParseLinter()) : [],
         sourceTheme,
         permission.current.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),
         EditorView.domEventHandlers({ blur() { latest.current.onFlush(); }, keydown(event) {
@@ -62,7 +62,7 @@ export function SourceEditor({ resourceKey, kind, text, resetVersion, readOnly, 
         keymap.of([indentWithTab, ...searchKeymap, ...historyKeymap, ...defaultKeymap]),
         EditorView.updateListener.of((update) => {
           if ((!update.docChanged && !update.selectionSet) || sync.current) return;
-          if (kind === 'spec' && update.docChanged && update.transactions.some((transaction) => transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) && latest.current.systemUpdatedAt !== undefined) {
+          if (kind !== 'html' && update.docChanged && update.transactions.some((transaction) => transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) && latest.current.systemUpdatedAt !== undefined) {
             const currentText = update.state.doc.toString();
             const match = /"updated_at"\s*:\s*(\d+)/.exec(currentText);
             if (match && Number(match[1]) !== latest.current.systemUpdatedAt) {
@@ -117,5 +117,5 @@ export function SourceEditor({ resourceKey, kind, text, resetVersion, readOnly, 
     }))));
   }, [diagnostics, resourceKey, resetVersion]);
 
-  return <div ref={host} className="h-full min-h-0 min-w-0 overflow-hidden" aria-label={`${kind === 'spec' ? '设计稿 JSON' : '幻灯片 HTML'} 源文件编辑器`} />;
+  return <div ref={host} className="h-full min-h-0 min-w-0 overflow-hidden" aria-label={`${SOURCE_META[kind].label} ${SOURCE_META[kind].language} 源文件编辑器`} />;
 }

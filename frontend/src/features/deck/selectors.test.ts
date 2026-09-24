@@ -17,11 +17,12 @@ const outline: Outline = {
 };
 
 const snapshot: ProjectContentSnapshot = {
+  theme: 'default',
   appearance: null,
   hashes: { outline: "outline-hash" },
   manifest: { version: '5.0', project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], created_at: 1, updated_at: 1 },
   outline,
-  design: { version: '5.0', project_id: 'pro_1', theme: 'default', direction: '', chrome: [], created_at: 1, updated_at: 1 },
+  design: { version: '5.0', project_id: 'pro_1', direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' }, created_at: 1, updated_at: 1 },
   slides_by_id: {
     sli_1: { spec_state: 'pending', spec: null, html_state: 'pending', html_hash: '', materialization: null },
     sli_2: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },

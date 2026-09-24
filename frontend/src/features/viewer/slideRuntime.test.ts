@@ -8,8 +8,8 @@ function createRuntime() {
     resolve(process.cwd(), 'public/slide-runtime/index.html'),
     'utf8',
   );
-  const chrome = readFileSync(resolve(process.cwd(), '../backend/internal/runtimeassets/chrome.js'), 'utf8');
-  return new JSDOM(html.replace('<script src="/api/v1/runtime/chrome.js"></script>', () => `<script>${chrome}</script>`), {
+  const decorations = readFileSync(resolve(process.cwd(), '../backend/internal/runtimeassets/decorations.js'), 'utf8');
+  return new JSDOM(html.replace('<script src="/api/v1/runtime/decorations.js"></script>', () => `<script>${decorations}</script>`), {
     runScripts: 'dangerously',
     url: 'http://localhost/slide-runtime/index.html',
   });
@@ -31,14 +31,10 @@ describe('slide runtime', () => {
   const frame = (id: string, ordinal: number) => ({
     slide_id: id, ordinal, total: 2, role: ordinal === 1 ? 'cover' : 'content',
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
-    theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}},
+    theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}},
     section: { id: 'sec_1', title: '正文', index: 1 },
-    deck_title: 'Deck',
-    chrome: [
-      { type: 'page_number', placement: 'bottom-right', style: 'tiny muted mono counter' },
-      { type: 'section_marker', placement: 'top-left', style: 'muted label' },
-      { type: 'deck_title', placement: 'top-right', style: 'muted label' },
-    ],
+    key_message: '', deck_title: 'Deck',
+    decorations: { page_number: 'bottom-right', deck_title: 'top-right', section_title: 'top-left', key_message: 'none' },
   });
 
   const send = (
@@ -87,8 +83,8 @@ describe('slide runtime', () => {
     const current = afterGotoFrames.find(frame => frame.dataset.active === 'true')!;
     expect(current?.dataset.slideId).toBe('s2');
     expect(current?.querySelector('[data-runtime-page-number]')?.textContent).toBe('2');
-    expect(current?.querySelector('[data-runtime-chrome="section_marker"]')?.textContent).toBe('正文');
-    expect(current?.querySelector('[data-runtime-chrome="deck_title"]')?.textContent).toBe('Deck');
+    expect(current?.querySelector('[data-runtime-decoration="section_title"]')?.textContent).toBe('正文');
+    expect(current?.querySelector('[data-runtime-decoration="deck_title"]')?.textContent).toBe('Deck');
 
     send(window, { type: 'gotoSlide', index: 0 });
     const returnedFrame = window.document.querySelector('[data-active="true"]') as HTMLElement;
@@ -156,7 +152,7 @@ describe('slide runtime', () => {
       ...frame('s1', 1),
       ordinal: 2,
       total: 3,
-      deck_title: 'Renamed Deck',
+      key_message: '', deck_title: 'Renamed Deck',
     };
     send(window, {
       type: 'updateDeck',
@@ -175,7 +171,7 @@ describe('slide runtime', () => {
     expect(frames[0]).toBe(firstFrame);
     expect(frames[0]?.dataset.active).toBe('true');
     expect(frames[0]?.querySelector('[data-runtime-page-number]')?.textContent).toBe('2');
-    expect(frames[0]?.querySelector('[data-runtime-chrome="deck_title"]')?.textContent).toBe('Renamed Deck');
+    expect(frames[0]?.querySelector('[data-runtime-decoration="deck_title"]')?.textContent).toBe('Renamed Deck');
     expect((frames[0]?.querySelector('[data-runtime-page-number]') as HTMLElement)?.style.pointerEvents).toBe('auto');
     expect(frames[0]?.querySelector('iframe')?.getAttribute('srcdoc')).not.toContain('prefetched');
     dom.window.close();
@@ -194,7 +190,7 @@ describe('slide runtime', () => {
     const htmlChanged = window.document.querySelector('[data-slide-frame]');
     expect(htmlChanged).not.toBe(initial);
 
-    const themed = { ...slide, html: '<!doctype html><title>changed</title>', frame: { ...slide.frame, theme_id: 'blueprint',appearance:{hash:'appearance-2',theme_css_url:'/api/v1/themes/blueprint/css',chrome_tokens:{}} } };
+    const themed = { ...slide, html: '<!doctype html><title>changed</title>', frame: { ...slide.frame, theme_id: 'blueprint',appearance:{hash:'appearance-2',theme_css_url:'/api/v1/themes/blueprint/css',decoration_tokens:{}} } };
     send(window, { type: 'updateDeck', slides: [themed], index: 0 });
     const themeChanged = window.document.querySelector('[data-slide-frame]');
     expect(themeChanged).toBe(htmlChanged);
@@ -251,7 +247,7 @@ describe('slide runtime', () => {
     dom.window.close();
   });
 
-  it('forwards configured shortcuts from runtime chrome and only the active slide', () => {
+  it('forwards configured shortcuts from runtime decorations and only the active slide', () => {
     const dom = createRuntime(), { window } = dom;
     try {
       send(window, { type: 'updateDeck', slides: [

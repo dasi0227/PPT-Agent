@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chromeLabel, elementTypeLabel, partLabel, slideRoleLabel } from './semanticLabels';
+import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, partLabel, slideRoleLabel } from './semanticLabels';
 
 describe('semanticLabels', () => {
   it('maps known slide roles to Chinese labels and falls back on unknown', () => {
@@ -12,7 +12,7 @@ describe('semanticLabels', () => {
   });
 
   it('maps resource parts', () => {
-    expect(partLabel('design')).toBe('全局设计');
+    expect(partLabel('design')).toBe('视觉要求');
     expect(partLabel('html')).toBe('幻灯片');
     expect(partLabel('unknown')).toBe('演示内容');
   });
@@ -24,8 +24,10 @@ describe('semanticLabels', () => {
     expect(elementTypeLabel('unknown-type')).toBe('内容元素');
   });
 
-  it('describes chrome item as type（placement）', () => {
-    expect(chromeLabel({ type: 'page_number', placement: 'bottom-right', style: 'x' })).toBe('页码（右下）');
-    expect(chromeLabel({ type: 'section_marker', placement: 'top-left', style: 'x' })).toBe('章节标记（左上）');
+  it('describes decoration names, placements and disabled state', () => {
+    expect(decorationTypeLabel('page_number')).toBe('页码');
+    expect(decorationTypeLabel('section_title')).toBe('章节标题');
+    expect(decorationPlacementLabel('bottom-right')).toBe('右下');
+    expect(decorationPlacementLabel('none')).toBe('暂不展示');
   });
 });

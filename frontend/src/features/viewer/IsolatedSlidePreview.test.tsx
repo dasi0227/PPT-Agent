@@ -7,7 +7,7 @@ describe('IsolatedSlidePreview runtime errors', () => {
   it('delays loading feedback and retries failure without replacing the iframe', async () => {
     const frameWindow = { postMessage: vi.fn() } as unknown as Window;
     Object.defineProperty(window.HTMLIFrameElement.prototype, 'contentWindow', { configurable: true, get: () => frameWindow });
-    const slide: RuntimeSlide = { id: 's1', html: '<h1>Slide</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: { hash: 'a', theme_css_url: '/a.css', chrome_tokens: {} }, deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, chrome: [] } };
+    const slide: RuntimeSlide = { id: 's1', html: '<h1>Slide</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: { hash: 'a', theme_css_url: '/a.css', decoration_tokens: {} }, key_message: '', deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } } };
     const { rerender } = render(<IsolatedSlidePreview slides={[slide]} index={0} title="主题预览" />);
     const iframe = screen.getByTitle('主题预览');
     const reply = (type: string, hash: string) => act(() => {
@@ -19,7 +19,7 @@ describe('IsolatedSlidePreview runtime errors', () => {
     reply('themeApplied', 'a');
     expect(screen.queryByRole('status')).toBeNull();
 
-    const updated = { ...slide, frame: { ...slide.frame, appearance: { hash: 'b', theme_css_url: '/b.css', chrome_tokens: {} } } };
+    const updated = { ...slide, frame: { ...slide.frame, appearance: { hash: 'b', theme_css_url: '/b.css', decoration_tokens: {} } } };
     rerender(<IsolatedSlidePreview slides={[updated]} index={0} title="主题预览" />);
     reply('themeApplied', 'a');
     expect(await screen.findByRole('status')).toBeInTheDocument();
@@ -39,7 +39,7 @@ describe('IsolatedSlidePreview runtime errors', () => {
     const postMessage = vi.fn();
     const frameWindow = { postMessage } as unknown as Window;
     Object.defineProperty(window.HTMLIFrameElement.prototype, 'contentWindow', { configurable: true, get: () => frameWindow });
-    const slide: RuntimeSlide = { id: 's1', html: '<h1>old</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}}, deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, chrome: [] } };
+    const slide: RuntimeSlide = { id: 's1', html: '<h1>old</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}}, key_message: '', deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } } };
     const onSelection = vi.fn();
     const onPresence = vi.fn();
     const props = { slides: [slide], index: 0, title: '预览', selectionMode: 'element' as const, onSelection, onSelectionPresence: onPresence };
@@ -50,7 +50,7 @@ describe('IsolatedSlidePreview runtime errors', () => {
     };
     const oldSession = latestMode().session_id;
     const rect = { x: 0, y: 0, width: 10, height: 10 };
-    const selection = { kind: 'element', slide_id: 's1', html_hash: 'sha256:old', canvas: { width: 1920, height: 1080 }, status: 'active', rect, dom_targets: [], chrome_targets: [{ type: 'page_number', placement: 'bottom-right', style: '', text: '1', rect }] };
+    const selection = { kind: 'element', slide_id: 's1', html_hash: 'sha256:old', canvas: { width: 1920, height: 1080 }, status: 'active', rect, dom_targets: [], decoration_targets: [{ type: 'page_number', placement: 'bottom-right', text: '1', rect }] };
     const sendSelection = (session: string, hash: string) => {
       act(() => {
         window.dispatchEvent(new MessageEvent('message', { source: frameWindow,
@@ -89,7 +89,7 @@ describe('IsolatedSlidePreview runtime errors', () => {
     });
     const { container } = render(
       <IsolatedSlidePreview
-        slides={[{ id: 's1', html: '<h1>Slide</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}}, deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, chrome: [] } }]}
+        slides={[{ id: 's1', html: '<h1>Slide</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}}, key_message: '', deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } } }]}
         index={0}
         title="安全预览"
       />,
@@ -115,7 +115,7 @@ describe('IsolatedSlidePreview runtime errors', () => {
       configurable: true,
       get: () => frameWindow,
     });
-    const slide: RuntimeSlide = { id: 's1', html: '<h1>Slide</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}}, deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, chrome: [] } };
+    const slide: RuntimeSlide = { id: 's1', html: '<h1>Slide</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}}, key_message: '', deck_title: 'Deck', ordinal: 1, total: 1, role: 'content', section: { id: 'sec_1', title: '正文', index: 1 }, decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } } };
     const { rerender } = render(
       <IsolatedSlidePreview slides={[slide]} index={0} title="安全预览" replayRequest={{ id: 1, slideId: 's1' }} />,
     );

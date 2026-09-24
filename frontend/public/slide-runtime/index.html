@@ -5,7 +5,7 @@
   <script src="/api/v1/runtime/font-loader.js"></script>
   <meta charset="UTF-8">
   <title>Slide Runtime</title>
-  <script src="/api/v1/runtime/chrome.js"></script>
+  <script src="/api/v1/runtime/decorations.js"></script>
   <style>
     body {
       margin: 0;
@@ -86,7 +86,9 @@
         && value.frame.canvas.width === 1920
         && value.frame.canvas.height === 1080
         && value.frame.canvas.aspect_ratio === '16:9'
-        && (value.frame.appearance === null || (value.frame.appearance && typeof value.frame.appearance.hash === 'string' && typeof value.frame.appearance.theme_css_url === 'string' && value.frame.appearance.chrome_tokens))
+        && (value.frame.appearance === null || (value.frame.appearance && typeof value.frame.appearance.hash === 'string' && typeof value.frame.appearance.theme_css_url === 'string' && value.frame.appearance.decoration_tokens))
+        && typeof value.frame.key_message === 'string'
+        && window.PPTDecorations.isValid(value.frame.decorations)
         && typeof value.frame.theme_id === 'string'
         && Number.isInteger(value.frame.ordinal)
         && Number.isInteger(value.frame.total);
@@ -145,34 +147,34 @@
         || value.html_hash !== state.selection.hash
         || value.canvas?.width !== 1920 || value.canvas?.height !== 1080 || value.status !== 'active'
         || !validRect(value.rect) || value.rect.width <= 0 || value.rect.height <= 0 || !Array.isArray(value.dom_targets) || value.dom_targets.length > 50
-        || !Array.isArray(value.chrome_targets)) return false;
-      if (new TextEncoder().encode(JSON.stringify({ dom_targets: value.dom_targets, chrome_targets: value.chrome_targets })).byteLength > 128 * 1024) return false;
+        || !Array.isArray(value.decoration_targets)) return false;
+      if (new TextEncoder().encode(JSON.stringify({ dom_targets: value.dom_targets, decoration_targets: value.decoration_targets })).byteLength > 128 * 1024) return false;
       const targetsValid = value.dom_targets.every((target) => target && typeof target.target_id === 'string' && target.target_id.length > 0
         && typeof target.tag === 'string' && target.tag.length > 0 && validRect(target.rect) && target.rect.width > 0 && target.rect.height > 0
         && target.fingerprint && typeof target.fingerprint === 'object' && target.fingerprint.tag === target.tag
         && Array.isArray(target.candidate_selectors) && target.candidate_selectors.length <= 3
         && target.box_model && validRect(target.box_model.content)
         && target.computed_style && typeof target.computed_style === 'object');
-      const chromeTypes = ['page_number', 'section_marker', 'key_message', 'deck_title'];
-      const chromeValid = value.chrome_targets.every((target) => target && chromeTypes.includes(target.type)
-        && typeof target.placement === 'string' && typeof target.style === 'string' && typeof target.text === 'string'
+      const decorationTypes = ['page_number', 'section_title', 'key_message', 'deck_title'];
+      const decorationsValid = value.decoration_targets.every((target) => target && decorationTypes.includes(target.type)
+        && typeof target.placement === 'string' && typeof target.text === 'string'
         && validRect(target.rect) && target.rect.width > 0 && target.rect.height > 0);
-      return targetsValid && chromeValid && value.dom_targets.length + value.chrome_targets.length > 0;
+      return targetsValid && decorationsValid && value.dom_targets.length + value.decoration_targets.length > 0;
     }
 
     function applyRuntimeFrame(container, context) {
-      window.PPTChrome.render(container.querySelector('.runtime-canvas'), context).forEach(node => {
+      window.PPTDecorations.render(container.querySelector('.runtime-canvas'), context).forEach(node => {
         node.addEventListener('click', (event) => {
           if (state.selection.mode !== 'element' || state.selection.slideID !== context.slide_id) return;
           event.preventDefault();
           event.stopPropagation();
           const rect = rectForNode(node);
-          const chrome = chromeTargets(container, rect).filter((target) => target.type === node.dataset.runtimeChrome);
+          const decorations = decorationTargets(container, rect).filter((target) => target.type === node.dataset.runtimeDecoration);
           finishSelection({
             selection_id: '', marker_no: 0, kind: 'element', comment: '', slide_id: context.slide_id,
             html_hash: state.selection.hash,
-            canvas: { width: 1920, height: 1080 }, rect, status: 'active', dom_targets: [], chrome_targets: chrome,
-            dedupe_key: 'chrome|' + context.slide_id + '|' + state.selection.hash + '|' + node.dataset.runtimeChrome + '|' + node.dataset.placement
+            canvas: { width: 1920, height: 1080 }, rect, status: 'active', dom_targets: [], decoration_targets: decorations,
+            dedupe_key: 'decorations|' + context.slide_id + '|' + state.selection.hash + '|' + node.dataset.runtimeDecoration + '|' + node.dataset.placement
           });
         });
       });
@@ -433,7 +435,7 @@
         bridge: 'ppt-dom-selection-v1', type: 'innerSetSelectionMode', slide_id: config.slideID,
         session_id: config.sessionID, mode: config.mode, html_hash: config.hash
       }, '*');
-      deck.querySelectorAll('[data-runtime-chrome]').forEach((node) => {
+      deck.querySelectorAll('[data-runtime-decoration]').forEach((node) => {
         const enabled = config.mode === 'element' && node.closest('[data-slide-frame]') === container;
         node.style.pointerEvents = enabled ? 'auto' : 'none';
         node.style.cursor = enabled ? 'crosshair' : '';
@@ -474,11 +476,11 @@
       return { x: (raw.left - canvas.left) / scale, y: (raw.top - canvas.top) / scale, width: raw.width / scale, height: raw.height / scale };
     }
 
-    function chromeTargets(container, region) {
-      return Array.from(container.querySelectorAll('[data-runtime-chrome]')).flatMap((node) => {
+    function decorationTargets(container, region) {
+      return Array.from(container.querySelectorAll('[data-runtime-decoration]')).flatMap((node) => {
         const rect = rectForNode(node);
         if (region && !(rect.x >= region.x && rect.y >= region.y && rect.x + rect.width <= region.x + region.width && rect.y + rect.height <= region.y + region.height)) return [];
-        return [{ type: node.dataset.runtimeChrome, placement: node.dataset.placement || '', style: node.dataset.chromeStyle || '', text: node.textContent || '', rect }];
+        return [{ type: node.dataset.runtimeDecoration, placement: node.dataset.placement || '', text: node.textContent || '', rect }];
       });
     }
 
@@ -548,7 +550,7 @@
         if (!message || message.bridge !== 'ppt-dom-selection-v1' || message.slide_id !== state.selection.slideID || message.session_id !== state.selection.sessionID) return;
         if (message.type === 'innerSelectionCreated') {
           const selection = message.selection;
-          if (selection.kind === 'region') selection.chrome_targets = chromeTargets(active, selection.rect);
+          if (selection.kind === 'region') selection.decoration_targets = decorationTargets(active, selection.rect);
           if (validIncomingSelection(selection)) finishSelection(selection);
           else {
             window.parent.postMessage({ type: 'selectionRejected', session_id: message.session_id, slide_id: message.slide_id, message: '选择内容无效或过大，请缩小范围。' }, '*');
@@ -568,11 +570,11 @@
             if(item.needs_reselect)unresolved=true;
             if(!item.snapshot)return item;
             const snapshot=item.snapshot;
-            const available=chromeTargets(active);
-            const chrome=(snapshot.chrome_targets || []).map(old=>available.find(current=>current.type===old.type&&current.placement===old.placement));
-            if(chrome.some(target=>!target)){unresolved=true;return {selection_id:item.selection_id,status:'content_deleted'};}
-            snapshot.chrome_targets=chrome;
-            const rects=[...(snapshot.dom_targets || []),...chrome].map(target=>target.rect);
+            const available=decorationTargets(active);
+            const decorations=(snapshot.decoration_targets || []).map(old=>available.find(current=>current.type===old.type&&current.placement===old.placement));
+            if(decorations.some(target=>!target)){unresolved=true;return {selection_id:item.selection_id,status:'content_deleted'};}
+            snapshot.decoration_targets=decorations;
+            const rects=[...(snapshot.dom_targets || []),...decorations].map(target=>target.rect);
             if(!rects.length){unresolved=true;return {selection_id:item.selection_id,status:'content_deleted'};}
             const x=Math.min(...rects.map(r=>r.x)),y=Math.min(...rects.map(r=>r.y));
             snapshot.rect={x,y,width:Math.max(...rects.map(r=>r.x+r.width))-x,height:Math.max(...rects.map(r=>r.y+r.height))-y};

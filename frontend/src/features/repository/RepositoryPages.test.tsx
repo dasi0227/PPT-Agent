@@ -83,7 +83,7 @@ function themeFixtures(): Theme[] {
     {
       id: 'editorial-serif',
       disabled: false,
-      style_hash:'css-1', appearance:{hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}},
+      style_hash:'css-1', appearance:{hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}},
       name: 'Editorial Serif',
       description: 'Clean grid',
       tags: ['minimal'],
@@ -94,7 +94,7 @@ function themeFixtures(): Theme[] {
     {
       id: 'blueprint',
       disabled: false,
-      style_hash:'css-2', appearance:{hash:'appearance-2',theme_css_url:'/api/v1/themes/blueprint/css',chrome_tokens:{}},
+      style_hash:'css-2', appearance:{hash:'appearance-2',theme_css_url:'/api/v1/themes/blueprint/css',decoration_tokens:{}},
       name: 'Blueprint',
       description: 'Dark presentation',
       tags: ['cool'],
@@ -122,11 +122,12 @@ function project(theme: string): Project {
 
 function projectContent(theme: string): ProjectContentSnapshot {
   return {
+    theme,
     appearance: null,
-    hashes: { outline: "outline-hash", design: `design-${theme}` },
+    hashes: { outline: "outline-hash", design: 'design-hash' },
     manifest: { version: '5.0', project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], created_at: 1, updated_at: 1 },
     outline: { version: '5.0', project_id: 'project-7', sections: [], created_at: 1, updated_at: 1 },
-    design: { version: '5.0',  project_id: 'project-7', theme, direction: '', chrome: [], created_at: 1, updated_at: theme === 'editorial-serif' ? 1 : 2 },
+    design: { version: '5.0', project_id: 'project-7', direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' }, created_at: 1, updated_at: 1 },
     slides_by_id: {},
   };
 }
@@ -244,7 +245,7 @@ describe('personal repository pages', () => {
     fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Blueprint' }));
     await waitFor(() => expect(trigger).toHaveTextContent('Blueprint'));
     expect(mocks.setTheme).toHaveBeenCalledWith('project-7', 'blueprint');
-    expect(useProjectStore.getState().contentByProjectId['project-7'].design.theme).toBe('blueprint');
+    expect(useProjectStore.getState().contentByProjectId['project-7'].theme).toBe('blueprint');
     expect(useToastStore.getState().toasts).toEqual([]);
   });
 
@@ -314,7 +315,7 @@ describe('personal repository pages', () => {
     rejectRequest(new Error('theme write failed'));
     await waitFor(() => expect(trigger).toBeEnabled());
     expect(trigger).toHaveTextContent('Editorial Serif');
-    expect(useProjectStore.getState().contentByProjectId['project-7'].design.theme).toBe('editorial-serif');
+    expect(useProjectStore.getState().contentByProjectId['project-7'].theme).toBe('editorial-serif');
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({ message: 'theme write failed', tone: 'error' }),
     ]);

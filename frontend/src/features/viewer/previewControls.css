@@ -18,7 +18,7 @@
 }
 
 /* Use the actual center pane width, including when the sidebars are resized. */
-@container preview-workspace (max-width: 650px) {
+@container preview-workspace (max-width: 480px) {
   .preview-theme-trigger {
     width: auto;
   }
@@ -37,9 +37,17 @@
 .preview-status-bar-content {
   display: grid;
   height: 100%;
-  min-width: 400px;
+  min-width: 504px;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 0 12px;
+}
+
+/* Keep pagination centered when both sides fit; give the mode sliders their
+   intrinsic width in narrower panes instead of overlapping the page controls. */
+@container preview-workspace (max-width: 640px) {
+  .preview-status-bar-content {
+    grid-template-columns: auto minmax(max-content, 1fr) auto;
+  }
 }

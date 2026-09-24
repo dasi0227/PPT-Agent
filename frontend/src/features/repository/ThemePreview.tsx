@@ -56,10 +56,10 @@ export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', 
     id: `example-${mode}`, html,
     frame: {
       slide_id: `example-${mode}`, theme_id: theme.id, appearance: theme.appearance,
-      canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, deck_title: '主题契约研究',
+      canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, key_message: '', deck_title: '主题契约研究',
       ordinal: mode === 'cover' ? 1 : mode === 'content' ? 2 : 3, total: 3, role: mode === 'cover' ? 'cover' : 'content',
       section: { id: 'examples', title: '内容与表达', index: 1 },
-      chrome: [{ type: 'page_number', placement: 'bottom-right', style: 'mono compact' }],
+      decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' },
     },
   }] : [], [html, mode, theme]);
   return <div ref={host} className={`relative h-full w-full overflow-hidden ${miniature ? 'pointer-events-none' : ''}`} aria-hidden={miniature || undefined}>

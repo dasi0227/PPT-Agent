@@ -1,18 +1,9 @@
-import type { ReactNode } from 'react';
 import type { Manifest, ProjectContentSnapshot } from '../../api/types';
 import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import type { ProjectDocument } from '../../stores/deckStore';
 import { DesignDetails } from './DesignSummary';
+import { DocumentSection } from './DocumentSection';
 import { partLabel } from './semanticLabels';
-
-function DocumentSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section>
-      <h2 className="mb-2 text-lg font-semibold leading-7 text-text-900">{title}</h2>
-      {children}
-    </section>
-  );
-}
 
 function TextList({ items, empty }: { items: string[]; empty: string }) {
   const values = items.map((item) => item.trim()).filter(Boolean);
@@ -20,7 +11,7 @@ function TextList({ items, empty }: { items: string[]; empty: string }) {
     <ul className="list-disc space-y-2 pl-5 marker:text-text-400">
       {values.map((item, index) => <li key={index} className="whitespace-pre-wrap break-words pl-1">{item}</li>)}
     </ul>
-  ) : <p className="text-text-400">{empty}</p>;
+  ) : <p>{empty}</p>;
 }
 
 function languageLabel(language: string) {
@@ -35,7 +26,7 @@ function languageLabel(language: string) {
 
 function ManifestDetails({ manifest }: { manifest: Manifest }) {
   return (
-    <div className="space-y-7 text-sm leading-7 text-text-700">
+    <div className="space-y-7 text-sm font-normal leading-7 text-text-700">
       {[
         ['演示标题', manifest.title.trim() || '未命名演示'],
         ['演示目标', manifest.goal.trim() || '待明确'],

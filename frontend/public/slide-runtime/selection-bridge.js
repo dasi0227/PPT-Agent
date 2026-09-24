@@ -212,7 +212,7 @@
     return {
       selection_id: '', marker_no: 0, kind, comment: '', slide_id: slideID,
       html_hash: htmlHash, canvas: { width: 1920, height: 1080 },
-      rect, status: 'active', dom_targets: targets, chrome_targets: [],
+      rect, status: 'active', dom_targets: targets, decoration_targets: [],
       dedupe_key: hashText(`${slideID}|${htmlHash}|${kind}${regionIdentity}|${fingerprints}`),
     };
   }
@@ -230,7 +230,7 @@
       if (parent) targets[index].parent_target_id = ids.get(parent);
     });
     const value = selection(kind, rect, targets);
-    const bytes = new TextEncoder().encode(JSON.stringify({ dom_targets: targets, chrome_targets: [] })).byteLength;
+    const bytes = new TextEncoder().encode(JSON.stringify({ dom_targets: targets, decoration_targets: [] })).byteLength;
     if (bytes > 128 * 1024) {
       send('innerSelectionRejected', { message: '选择内容过大，请缩小范围。' });
       return false;
@@ -361,7 +361,7 @@
       const statuses = event.data.selections.map((selection) => {
         if(event.data.refresh)return refreshSelection(selection);
         const targets = (selection.dom_targets || []).map((target) => ({ target_id: target.target_id, status: targetPresence(target) === 'missing' ? 'content_deleted' : 'active' }));
-        return { selection_id: selection.selection_id, status: (selection.chrome_targets || []).length > 0 || targets.some((target) => target.status === 'active') ? 'active' : 'content_deleted', targets };
+        return { selection_id: selection.selection_id, status: (selection.decoration_targets || []).length > 0 || targets.some((target) => target.status === 'active') ? 'active' : 'content_deleted', targets };
       });
       send('innerSelectionPresence', { statuses });
       return;

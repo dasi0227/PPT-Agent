@@ -36,7 +36,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
 
     setIsCreating(true);
     try {
-      const project = await createProject(projectTitle, '', 10, 'zh-CN');
+      const project = await createProject(projectTitle);
       openProject(project.id);
       navigate(projectRoute(project.id));
       reset();

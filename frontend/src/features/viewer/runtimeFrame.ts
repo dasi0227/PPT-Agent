@@ -1,4 +1,4 @@
-import type { ProjectContentSnapshot } from '../../api/types';
+import type { Decorations, ProjectContentSnapshot } from '../../api/types';
 import { flattenOutline } from '../deck/selectors';
 
 export interface RuntimeFrameContext {
@@ -13,7 +13,8 @@ export interface RuntimeFrameContext {
   role: string;
   section: { id: string; title: string; index: number };
   subsection?: { id: string; title: string; index: number };
-  chrome: Array<{ type: 'page_number' | 'section_marker' | 'key_message' | 'deck_title'; placement: string; style: string }>;
+  decorations: Decorations;
+  key_message: string;
 }
 
 export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: string): RuntimeFrameContext | undefined {
@@ -26,7 +27,7 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
 	project_id: snapshot.manifest.project_id,
 	slide_id: slideId,
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
-    theme_id: snapshot.design.theme,
+    theme_id: snapshot.theme,
     appearance: snapshot.appearance,
     deck_title: snapshot.manifest.title,
     ordinal: item.ordinal,
@@ -34,6 +35,7 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
     role: item.node.role,
     section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 },
     ...(item.subsection ? { subsection: { id: item.subsection.id, title: item.subsection.title, index: subsectionIndex + 1 } } : {}),
-    chrome: snapshot.design.chrome.map((entry) => ({ ...entry })),
+    decorations: { ...snapshot.design.decorations },
+    key_message: snapshot.slides_by_id[slideId]?.spec?.key_message ?? '',
   };
 }

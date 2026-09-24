@@ -1,10 +1,8 @@
-import type { Design } from '../../api/types';
+import type { DecorationPlacement, DecorationType } from '../../api/types';
 
 // 结构化枚举字段 -> 人类可读中文标签的统一映射层。
-// 目的：面向用户的展示层永远不直接渲染内部字段值（role/part/chrome.type 等），
+// 目的：面向用户的展示层永远不直接渲染内部字段值（role/part/装饰键等），
 // 所有映射集中在此，避免跨组件双写。未知枚举使用中文回退名称；自由文本不在此翻译。
-
-type ChromeItem = Design['chrome'][number];
 
 // 幻灯片语义角色（outline slide node 的 role 字段）。
 const SLIDE_ROLE_LABELS: Record<string, string> = {
@@ -26,21 +24,22 @@ const SLIDE_ROLE_LABELS: Record<string, string> = {
 const PART_LABELS: Record<string, string> = {
   manifest: '内容要求',
   outline: '目录结构',
-  design: '全局设计',
+  design: '视觉要求',
   spec: '页面设计稿',
   html: '幻灯片',
 };
 
-// 页面装饰件类型（chrome.type）。
-const CHROME_TYPE_LABELS: Record<ChromeItem['type'], string> = {
+// 页面装饰对象的固定键。
+const DECORATION_TYPE_LABELS: Record<DecorationType, string> = {
   page_number: '页码',
-  section_marker: '章节标记',
+  section_title: '章节标题',
   key_message: '核心信息',
   deck_title: '演示标题',
 };
 
-// 页面装饰件位置（chrome.placement）。
-const CHROME_PLACEMENT_LABELS: Record<ChromeItem['placement'], string> = {
+// 页面装饰件位置。
+const DECORATION_PLACEMENT_LABELS: Record<DecorationPlacement | 'none', string> = {
+  none: '暂不展示',
   'top-left': '左上',
   'top-center': '顶部居中',
   'top-right': '右上',
@@ -76,8 +75,10 @@ export function elementTypeLabel(type: string): string {
   return ELEMENT_TYPE_LABELS[type.trim().toLowerCase()] ?? '内容元素';
 }
 
-export function chromeLabel(item: ChromeItem): string {
-  const type = CHROME_TYPE_LABELS[item.type] ?? '页面装饰';
-  const placement = CHROME_PLACEMENT_LABELS[item.placement] ?? '自定义位置';
-  return `${type}（${placement}）`;
+export function decorationTypeLabel(type: DecorationType): string {
+  return DECORATION_TYPE_LABELS[type] ?? '页面装饰';
+}
+
+export function decorationPlacementLabel(placement: DecorationPlacement | 'none'): string {
+  return DECORATION_PLACEMENT_LABELS[placement] ?? '自定义位置';
 }

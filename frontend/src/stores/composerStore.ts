@@ -50,7 +50,7 @@ export interface ComposerState {
 	addThreadAttachment: (threadId: string, attachment: ComposerAttachment) => void;
 	removeThreadAttachment: (threadId: string, attachmentId: string) => void;
   addThreadDOMSelection: (threadId: string, selection: DOMSelection) => void;
-  updateThreadDOMSelection: (threadId: string, selectionId: string, update: Partial<Pick<DOMSelection, 'comment' | 'status' | 'rect' | 'dom_targets' | 'chrome_targets'>>) => void;
+  updateThreadDOMSelection: (threadId: string, selectionId: string, update: Partial<Pick<DOMSelection, 'comment' | 'status' | 'rect' | 'dom_targets' | 'decoration_targets'>>) => void;
   removeThreadDOMSelection: (threadId: string, selectionId: string) => void;
   setEditingDOMSelection: (threadId: string, selectionId?: string) => void;
   toggleSkill: (id: string) => void;

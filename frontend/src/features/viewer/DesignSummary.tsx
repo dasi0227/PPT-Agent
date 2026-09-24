@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { repositoriesApi } from '../../api/repositories';
-import type { Design } from '../../api/types';
-import { chromeLabel } from './semanticLabels';
+import type { DecorationType, Design } from '../../api/types';
+import { decorationPlacementLabel, decorationTypeLabel } from './semanticLabels';
+import { DocumentSection } from './DocumentSection';
+
+const decorationOrder: DecorationType[] = ['page_number', 'section_title', 'deck_title', 'key_message'];
 
 export function DesignSummary({ design }: { design: Design }) {
   return (
@@ -13,49 +14,34 @@ export function DesignSummary({ design }: { design: Design }) {
 }
 
 export function DesignDetails({ design, compact = false }: { design: Design; compact?: boolean }) {
-  const [themeError, setThemeError] = useState(false);
-  const [theme, setTheme] = useState<{ id: string; name: string }>();
-  useEffect(() => {
-    let active = true; setThemeError(false); setTheme(undefined);
-    if (design.theme) {
-      void repositoriesApi.getTheme(design.theme).then((value) => {
-        if (active) {setTheme({ id: value.id, name: value.name });setThemeError(false);}
-      }).catch(() => { if (active) {setTheme(undefined);setThemeError(true);} });
-    }
-    return () => { active = false; };
-  }, [design.theme]);
-  const themeName = !design.theme ? '尚未选择主题' : themeError ? '主题不可用，请从主题仓库选择现有主题' : theme?.id === design.theme ? theme.name : '正在加载主题…';
   const direction = design.direction.trim();
-  const directionLabel = direction && direction !== '待确定' ? direction : '视觉方向待确定';
+  const directionLabel = direction || '暂无视觉方向';
 
   return (
-    <dl className={compact ? 'space-y-3' : 'space-y-6'}>
-      <div className="flex gap-4">
-        <dt className="w-16 shrink-0 text-xs leading-6 text-text-400">主题</dt>
-        <dd className="min-w-0 break-words text-sm font-semibold leading-6 text-text-900">{themeName}</dd>
-      </div>
-      <div className="flex gap-4">
-        <dt className="w-16 shrink-0 text-xs leading-6 text-text-400">视觉方向</dt>
-        <dd className="min-w-0 whitespace-pre-wrap break-words text-sm leading-7 text-text-700">{directionLabel}</dd>
-      </div>
-      {(!compact || design.chrome.length > 0) && (
-        <div className="flex gap-4">
-          <dt className="w-16 shrink-0 text-xs leading-6 text-text-400">页面装饰</dt>
-          <dd className={compact ? 'flex flex-wrap gap-2' : 'min-w-0 flex-1 space-y-4 text-sm leading-6'}>
-            {design.chrome.map((item, index) => compact ? (
-              <span key={index} className="inline-flex items-center rounded-full border border-border bg-panel-muted px-2.5 py-0.5 text-xs text-text-900">
-                {chromeLabel(item)}
-              </span>
-            ) : (
-              <div key={index}>
-                <p className="font-medium text-text-900">{chromeLabel(item)}</p>
-                <p className="mt-1 whitespace-pre-wrap break-words text-text-600">{item.style.trim() || '样式待确定'}</p>
-              </div>
-            ))}
-            {design.chrome.length === 0 && <p className="text-text-400">尚未设置页面装饰</p>}
-          </dd>
+    <div className={`${compact ? 'space-y-5' : 'space-y-7'} text-sm font-normal leading-7 text-text-700`}>
+      <DocumentSection title="视觉方向" compact={compact}>
+        <p className="whitespace-pre-wrap break-words">{directionLabel}</p>
+      </DocumentSection>
+      <DocumentSection title="排版偏好" compact={compact}>
+        {design.layout_preferences.length ? (
+          <ul className="space-y-1">
+            {design.layout_preferences.map((preference, index) => <li key={index} className="whitespace-pre-wrap break-words">{preference}</li>)}
+          </ul>
+        ) : <p>暂无排版偏好</p>}
+      </DocumentSection>
+      <DocumentSection title="页面装饰" compact={compact}>
+        <div className="space-y-4">
+          {decorationOrder.map((type) => {
+            const placement = design.decorations[type];
+            return (
+              <section key={type}>
+                <h3 className="mb-1 text-sm font-semibold leading-6 text-text-900">{decorationTypeLabel(type)}</h3>
+                <p>{decorationPlacementLabel(placement)}</p>
+              </section>
+            );
+          })}
         </div>
-      )}
-    </dl>
+      </DocumentSection>
+    </div>
   );
 }

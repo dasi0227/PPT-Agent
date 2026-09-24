@@ -13,6 +13,7 @@ vi.mock('../viewer/IsolatedSlidePreview', () => ({
 
 function snapshot(): ProjectContentSnapshot {
   return {
+    theme: 'default',
     appearance: null,
     hashes: { outline: "outline-hash" },
     manifest: {
@@ -65,9 +66,9 @@ function snapshot(): ProjectContentSnapshot {
     design: {
       version: '5.0',
       project_id: 'pro_1',
-      theme: 'default',
       direction: '',
-      chrome: [],
+      layout_preferences: [],
+      decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' },
       created_at: 1,
       updated_at: 1,
     },

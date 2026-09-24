@@ -56,16 +56,21 @@ export interface Manifest {
   created_at: number; updated_at: number;
 }
 
+export type DecorationPlacement = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' | 'left-edge' | 'right-edge';
+export interface Decorations {
+  page_number: DecorationPlacement;
+  deck_title: DecorationPlacement | 'none';
+  section_title: DecorationPlacement | 'none';
+  key_message: DecorationPlacement | 'none';
+}
+export type DecorationType = keyof Decorations;
+
 export interface Design {
   version: '5.0';
   project_id: string;
-  theme: string;
   direction: string;
-  chrome: Array<{
-    type: 'page_number' | 'section_marker' | 'key_message' | 'deck_title';
-    placement: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' | 'left-edge' | 'right-edge';
-    style: string;
-  }>;
+  layout_preferences: string[];
+  decorations: Decorations;
   created_at: number;
   updated_at: number;
 }
@@ -164,11 +169,11 @@ export interface DOMTarget {
   ancestors?: DOMAncestor[]; parent_target_id?: string; rect: CanvasRect; box_model: DOMBoxModel;
   computed_style?: Record<string, string>; status?: DOMSelectionStatus;
 }
-export interface ChromeTarget { type: 'page_number' | 'section_marker' | 'key_message' | 'deck_title'; placement: string; style: string; text: string; rect: CanvasRect }
+export interface DecorationTarget { type: 'page_number' | 'section_title' | 'key_message' | 'deck_title'; placement: string; text: string; rect: CanvasRect }
 export interface DOMSelection {
   selection_id: string; marker_no: number; kind: 'element' | 'region'; comment: string;
   slide_id: string; html_hash: string; canvas: { width: 1920; height: 1080 };
-  rect: CanvasRect; status: DOMSelectionStatus; dom_targets?: DOMTarget[]; chrome_targets?: ChromeTarget[];
+  rect: CanvasRect; status: DOMSelectionStatus; dom_targets?: DOMTarget[]; decoration_targets?: DecorationTarget[];
   dedupe_key?: string;
 }
 export interface PublicDOMSelection { selection_id: string; marker_no: number; comment: string; status: DOMSelectionStatus }
@@ -237,7 +242,7 @@ export interface PromptWriteRequest {
   tags: PromptTag[];
 }
 
-export interface RuntimeAppearance { hash: string; theme_css_url: string; chrome_tokens: Record<string, string> }
+export interface RuntimeAppearance { hash: string; theme_css_url: string; decoration_tokens: Record<string, string> }
 
 export interface Theme {
   disabled: boolean;
@@ -416,6 +421,7 @@ export interface CancelRunResponse {
 export type RunCancelReason = 'user_requested' | 'superseded';
 
 export interface ProjectContentSnapshot {
+  theme: string;
   appearance: RuntimeAppearance | null;
   theme_error?: string;
   hashes: Record<string, string>;

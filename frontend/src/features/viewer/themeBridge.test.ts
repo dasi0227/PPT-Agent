@@ -16,7 +16,7 @@ function fixture() {
   const apply = (request: number) => {
     dom.window.dispatchEvent(new dom.window.MessageEvent('message', { source: dom.window as unknown as Window, data: {
       bridge:'ppt-theme-v1',type:'applyTheme',slide_id:'s1',request_id:request,theme_id:`theme-${request}`,
-      appearance:{hash:`hash-${request}`,theme_css_url:`/theme-${request}.css`,chrome_tokens:{}},
+      appearance:{hash:`hash-${request}`,theme_css_url:`/theme-${request}.css`,decoration_tokens:{}},
     } }));
     return dom.window.document.querySelector(`link[href="/theme-${request}.css"]`)!;
   };

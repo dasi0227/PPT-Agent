@@ -48,7 +48,3 @@ export function targetLabel(scope: RunScope | CreateRunScopeInput): string {
   const selection = 'source' in scope ? scope.source.kind : scope.selection.kind;
   return scopeSelectionLabels[selection];
 }
-
-export function presentUserText(text: string): string {
-  return text.replace(/蓝图/g, '设计稿');
-}

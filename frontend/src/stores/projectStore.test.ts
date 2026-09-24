@@ -16,11 +16,12 @@ import { useProjectStore } from './projectStore';
 
 function snapshot(revision: number): ProjectContentSnapshot {
   return {
+    theme: 'default',
     appearance: null,
     hashes: { outline: `outline-${revision}` },
     manifest: { version: '5.0', project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], created_at: 1, updated_at: 1 },
     outline: { version: '5.0', project_id: 'pro_1', sections: [], created_at: 1, updated_at: 1 },
-    design: { version: '5.0', project_id: 'pro_1', theme: 'default', direction: '', chrome: [], created_at: 1, updated_at: 1 },
+    design: { version: '5.0', project_id: 'pro_1', direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' }, created_at: 1, updated_at: 1 },
     slides_by_id: {},
   };
 }
@@ -47,7 +48,7 @@ describe('projectStore canonical content snapshots', () => {
   });
 
   it('refreshes appearance even when project content hashes are unchanged', async () => {
-    const original = { ...snapshot(1), appearance: { hash: 'old', theme_css_url: '/theme.css?v=old', chrome_tokens: {} } };
+    const original = { ...snapshot(1), appearance: { hash: 'old', theme_css_url: '/theme.css?v=old', decoration_tokens: {} } };
     const changed = { ...original, appearance: { ...original.appearance, hash: 'new', theme_css_url: '/theme.css?v=new' } };
     useProjectStore.setState({ contentByProjectId: { pro_1: original } });
     getContent.mockResolvedValue(changed);
@@ -95,7 +96,7 @@ describe('projectStore canonical content snapshots', () => {
     expect(useProjectStore.getState().mutationPendingByProjectId.pro_1).toBe(false);
   });
 
-  it('applies a theme response to project metadata and cached design state', async () => {
+  it('applies a theme response to project metadata and runtime snapshot', async () => {
     const content = snapshot(1);
     setTheme.mockResolvedValue({
       id: 'pro_1', title: '项目', work_dir: '/projects/pro_1', theme: 'tokyo-night',
@@ -111,17 +112,15 @@ describe('projectStore canonical content snapshots', () => {
       contentByProjectId: { pro_1: content },
     });
 
-    getContent.mockResolvedValue({ ...content, hashes: { ...content.hashes, design: 'design-new' }, design: { ...content.design, theme: 'tokyo-night', updated_at: 2 } });
+    getContent.mockResolvedValue({ ...content, theme: 'tokyo-night' });
     await useProjectStore.getState().setProjectTheme('pro_1', 'tokyo-night');
 
     expect(setTheme).toHaveBeenCalledWith('pro_1', 'tokyo-night');
     expect(useProjectStore.getState().projects[0]).toMatchObject({
       theme: 'tokyo-night',
       });
-    expect(useProjectStore.getState().contentByProjectId.pro_1.design).toMatchObject({
-      theme: 'tokyo-night',
-      updated_at: 2,
-    });
+    expect(useProjectStore.getState().contentByProjectId.pro_1.theme).toBe('tokyo-night');
+    expect(useProjectStore.getState().contentByProjectId.pro_1.design).toEqual(content.design);
   });
 
   it('closes a project tab without dropping project-local threads or cached content', () => {

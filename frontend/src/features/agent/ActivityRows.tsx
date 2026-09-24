@@ -26,7 +26,6 @@ import type {
 import type { PublicTarget, Slide } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { MarkdownMessage } from './MarkdownMessage';
-import { presentUserText } from './runtimeLabels';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
@@ -44,8 +43,7 @@ function pageName(slideId: string, slides: Slide[]): string {
 }
 
 export function presentActivityText(text: string, target: PublicTarget | undefined, slides: Slide[]): string {
-  const presented = presentUserText(text);
-  if (!target || target.type !== 'slide' || !target.slide_id) return presented;
+  if (!target || target.type !== 'slide' || !target.slide_id) return text;
   const index = slides.findIndex((slide) => slide.id === target.slide_id);
   // 当前快照确定页面顺序；已不在目录中的目标使用明确回退名称。
   const replacement = index >= 0 ? `第 ${index + 1} 页` : '已删除页面';
@@ -53,9 +51,9 @@ export function presentActivityText(text: string, target: PublicTarget | undefin
     (candidate): candidate is string => Boolean(candidate && candidate !== replacement),
   );
   for (const candidate of candidates) {
-    if (presented.includes(candidate)) return presented.replace(candidate, replacement);
+    if (text.includes(candidate)) return text.replace(candidate, replacement);
   }
-  return presented;
+  return text;
 }
 
 export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {

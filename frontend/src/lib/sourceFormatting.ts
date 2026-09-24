@@ -13,7 +13,7 @@ export async function formatStrictJSON(text: string): Promise<string> {
     const from = position ? Number(position[1]) : undefined;
     throw new SourceFormatError(raw, from, from === undefined ? undefined : Math.min(text.length, from + 1));
   }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('设计稿必须是 JSON 对象');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('源文件必须是 JSON 对象');
   const { jsonLanguage } = await import('@codemirror/lang-json');
   const tree = jsonLanguage.parser.parse(text);
   tree.iterate({ enter(node) {

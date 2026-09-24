@@ -1,36 +1,33 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { DesignSummary } from './DesignSummary';
 
-vi.mock('../../api/repositories', () => ({ repositoriesApi: { getTheme: vi.fn().mockResolvedValue({ id: 'swiss-modern', name: '瑞士现代' }) } }));
-
 describe('DesignSummary', () => {
-  it('renders global visual language without slide content', async () => {
+  it('shows visual direction, ordered layout preferences and decoration placements', () => {
     render(<DesignSummary design={{
-      version: '5.0',
-      project_id: 'pro_aaaaaa',
-      theme: 'swiss-modern',
-      direction: 'minimal geometric accent',
-      chrome: [{ type: 'page_number', placement: 'bottom-right', style: 'tiny muted mono counter' }],
-      created_at: 1,
-      updated_at: 2,
+      version: '5.0', project_id: 'pro_aaaaaa', direction: 'Use engineering diagrams',
+      layout_preferences: ['Keep a spacious grid', 'Use fewer cards'],
+      decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', key_message: 'none' },
+      created_at: 1, updated_at: 2,
     }} />);
     expect(screen.getByText('全局视觉规范')).toBeInTheDocument();
-    expect(screen.getByText('主题')).toBeInTheDocument();
-    expect(await screen.findByText('瑞士现代')).toBeInTheDocument();
-    expect(screen.queryByText('swiss-modern')).not.toBeInTheDocument();
-    expect(screen.getByText('视觉方向')).toBeInTheDocument();
-    expect(screen.getByText('minimal geometric accent')).toBeInTheDocument();
-    expect(screen.getByText('页面装饰')).toBeInTheDocument();
-    expect(screen.getByText('页码（右下）')).toBeInTheDocument();
+    expect(screen.queryByText('主题')).not.toBeInTheDocument();
+    expect(screen.getByText('Use engineering diagrams')).toBeInTheDocument();
+    expect(screen.getByText('Keep a spacious grid')).toBeInTheDocument();
+    expect(screen.getByText('Use fewer cards')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '页码' })).toBeInTheDocument();
+    expect(screen.getByText('右下')).toBeInTheDocument();
+    expect(screen.getByText('左上')).toBeInTheDocument();
+    expect(screen.getAllByText('暂不展示')).toHaveLength(2);
   });
 
-  it('labels an undecided visual direction instead of implying one', () => {
+  it('shows empty visual direction and layout preferences without stored placeholders', () => {
     render(<DesignSummary design={{
-      version: '5.0', project_id: 'pro_aaaaaa', theme: 'swiss-modern', direction: '待确定',
-      chrome: [], created_at: 1, updated_at: 1,
+      version: '5.0', project_id: 'pro_aaaaaa', direction: '', layout_preferences: [],
+      decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', key_message: 'none' },
+      created_at: 1, updated_at: 1,
     }} />);
-
-    expect(screen.getByText('视觉方向待确定')).toBeInTheDocument();
+    expect(screen.getByText('暂无视觉方向')).toBeInTheDocument();
+    expect(screen.getByText('暂无排版偏好')).toBeInTheDocument();
   });
 });

@@ -1,6 +1,19 @@
 import { fetchClient } from './client';
 
-export type SourceKind = 'spec' | 'html';
+export type SourceKind = 'manifest' | 'design' | 'spec' | 'html';
+export const SOURCE_META = {
+  manifest: { filename: 'manifest.json', label: '内容要求', language: 'JSON' },
+  design: { filename: 'design.json', label: '视觉要求', language: 'JSON' },
+  spec: { filename: 'spec.json', label: '设计稿', language: 'JSON' },
+  html: { filename: 'index.html', label: '幻灯片', language: 'HTML' },
+} as const;
+export const isProjectSource = (kind: SourceKind): kind is 'manifest' | 'design' => kind === 'manifest' || kind === 'design';
+export function sourceOrder(file: { kind: SourceKind; slideId: string }, slideIds: string[]) {
+  if (file.kind === 'manifest') return -2;
+  if (file.kind === 'design') return -1;
+  const index = slideIds.indexOf(file.slideId);
+  return (index < 0 ? slideIds.length : index) * 2 + (file.kind === 'html' ? 1 : 0);
+}
 export interface SlideSourceDocument {
   project_id: string;
   slide_id: string;
@@ -16,7 +29,8 @@ export interface SlideSourceDocument {
 }
 
 const path = (projectId: string, slideId: string, kind: SourceKind) =>
-  `/projects/${encodeURIComponent(projectId)}/slides/${encodeURIComponent(slideId)}/source?kind=${kind}`;
+  isProjectSource(kind) ? `/projects/${encodeURIComponent(projectId)}/source?kind=${kind}`
+    : `/projects/${encodeURIComponent(projectId)}/slides/${encodeURIComponent(slideId)}/source?kind=${kind}`;
 
 export const slideSourcesApi = {
   get: (projectId: string, slideId: string, kind: SourceKind) =>

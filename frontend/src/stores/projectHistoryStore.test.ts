@@ -10,7 +10,7 @@ describe('project checkpoint composer scene', () => {
       selection_id: 'sel_one', marker_no: 3, kind: 'element' as const, comment: '缩小标题', slide_id: 's1',
       html_hash: 'hash', canvas: { width: 1920 as const, height: 1080 as const },
       rect: { x: 10, y: 10, width: 100, height: 100 }, status: 'active' as const,
-      dom_targets: [], chrome_targets: [],
+      dom_targets: [], decoration_targets: [],
     };
     const state: HistoryState = { revision: 9, scene_revision: 9, checkpoints: [], latest: 'latest', scene: { thread_id: 't', input: {
       command: { instruction: 'input', mode: 'grill', options: { language: 'zh-CN' }, attachments: [{ id: 'img', original_name: 'reference.png', media_type: 'image/png', size_bytes: 42 }] },

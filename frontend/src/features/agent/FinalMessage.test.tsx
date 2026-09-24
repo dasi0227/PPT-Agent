@@ -5,6 +5,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { FinalChangeSummary } from './FinalMessage';
 
 const snapshot: ProjectContentSnapshot = {
+  theme: 'clean',
   appearance: null,
   hashes: { outline: "outline-hash" },
   manifest: {
@@ -38,9 +39,9 @@ const snapshot: ProjectContentSnapshot = {
   design: {
     version: '5.0',
     project_id: 'p1',
-    theme: 'clean',
     direction: 'minimal',
-    chrome: [],
+    layout_preferences: [],
+    decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' },
     created_at: 1,
     updated_at: 1,
   },

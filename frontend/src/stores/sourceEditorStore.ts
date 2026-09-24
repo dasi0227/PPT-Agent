@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { APIError, NetworkError, RequestTimeoutError } from '../api/client';
 import { projectHistoryApi } from '../api/projectHistory';
-import { slideSourcesApi, type SlideSourceDocument, type SourceKind } from '../api/slideSources';
+import { slideSourcesApi, isProjectSource, sourceOrder, type SlideSourceDocument, type SourceKind } from '../api/slideSources';
 import { backupProjectSourceDrafts, enqueueSourceDraft, flushSourceDrafts, listSourceDrafts, sourceDraftId, sourceSessionId, type StoredSourceDraft } from '../lib/sourceDraftStorage';
 import { formatHTML, formatStrictJSON, SourceFormatError } from '../lib/sourceFormatting';
 import { useDeckStore } from './deckStore';
@@ -197,7 +197,7 @@ export const useSourceEditorStore = create<SourceEditorState>((set, get) => ({
     await get().flush(key);
     let candidate: string | undefined;
     try {
-      candidate = kind === 'spec' ? await formatStrictJSON(draftText) : await formatHTML(draftText);
+      candidate = kind !== 'html' ? await formatStrictJSON(draftText) : await formatHTML(draftText);
       const current = get().files[key];
       if (current?.editGeneration !== editGeneration || current.sceneRevision !== sceneRevision || current.phase !== 'formatting') return false;
       set((state) => ({ files: { ...state.files, [key]: { ...state.files[key], phase: 'saving' } } }));
@@ -258,15 +258,12 @@ export const useSourceEditorStore = create<SourceEditorState>((set, get) => ({
     const rows = Object.values(get().drafts).filter((item) => item.projectId === projectId && item.draftText !== item.baseText);
     const order = useProjectStore.getState().contentByProjectId[projectId]?.outline;
     const slideIds = order ? order.sections.flatMap((section) => [...section.slides.map((item) => item.slide_id), ...section.subsections.flatMap((sub) => sub.slides.map((item) => item.slide_id))]) : [];
-    const position = (id: string) => { const found = slideIds.indexOf(id); return found < 0 ? Number.MAX_SAFE_INTEGER : found; };
-    rows.sort((a, b) => (position(a.slideId) - position(b.slideId)) || (a.kind === b.kind ? 0 : a.kind === 'spec' ? -1 : 1));
+    rows.sort((a, b) => sourceOrder(a, slideIds) - sourceOrder(b, slideIds));
     for (const row of rows) {
       const key = sourceKey(projectId, row.slideId, row.kind);
       await get().load(projectId, row.slideId, row.kind);
       if (!(await get().save(key))) {
-        useDeckStore.getState().setCurrentSlideId(row.slideId);
-        useDeckStore.getState().setGlobalView(row.kind === 'spec' ? 'outline' : 'html');
-        useDeckStore.getState().setContentMode('source');
+        showSourceFile(row);
         return false;
       }
     }
@@ -336,4 +333,11 @@ export async function assertProjectSourcesSaved(projectId: string) {
   const count = projectSourceDraftCount(projectId);
   const pending = Object.values(useSourceEditorStore.getState().files).some((file) => file.projectId === projectId && ['formatting', 'saving', 'reloading', 'loading'].includes(file.phase));
   if (count || pending) throw new SourceDraftBlockedError(count || 1);
+}
+
+export function showSourceFile(file: { slideId: string; kind: SourceKind }) {
+  const deck = useDeckStore.getState();
+  if (isProjectSource(file.kind)) deck.setActiveDocument(file.kind);
+  else { deck.setCurrentSlideId(file.slideId); deck.setGlobalView(file.kind === 'spec' ? 'outline' : 'html'); }
+  deck.setContentMode('source');
 }

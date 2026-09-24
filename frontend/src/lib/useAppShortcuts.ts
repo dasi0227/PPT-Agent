@@ -11,6 +11,9 @@ export function useAppShortcuts(actions: Record<string, () => void>) {
       const state = useShortcutStore.getState();
       if (event.defaultPrevented || event.isComposing || shortcutOverlayOpen()) return;
       const target = event.target instanceof Element ? event.target : null;
+      // A focused slider owns its unmodified navigation and activation keys.
+      if (target?.closest('[role="slider"]') && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
+        && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', ' ', 'Enter'].includes(event.key)) return;
       const editing = target?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]');
       for (const [id, run] of Object.entries(latest.current)) {
         if (editing && !(target?.closest('.cm-content') && (id === 'deck.view' || id === 'deck.form'))) continue;

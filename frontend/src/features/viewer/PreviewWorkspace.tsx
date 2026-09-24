@@ -345,11 +345,12 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const selectedIndex = currentSlideId ? slides.findIndex((slide) => slide.id === currentSlideId) : -1;
   const safePage = selectedIndex >= 0 ? selectedIndex : 0;
   const currentSlide = slides[safePage];
-  const sourceKind = globalView === 'outline' ? 'spec' : 'html';
-  const selectedSource = useSourceEditorStore((state) => projectId && currentSlide ? state.files[sourceKey(projectId, currentSlide.id, sourceKind)] : undefined);
+  const sourceKind = activeDocument ?? (globalView === 'outline' ? 'spec' : 'html');
+  const sourceSlideId = activeDocument ? '' : currentSlide?.id;
+  const selectedSource = useSourceEditorStore((state) => projectId && sourceSlideId !== undefined ? state.files[sourceKey(projectId, sourceSlideId, sourceKind)] : undefined);
   useEffect(() => {
-    if (!activeDocument && contentMode === 'preview' && projectId && currentSlide) void useSourceEditorStore.getState().load(projectId, currentSlide.id, sourceKind);
-  }, [activeDocument, contentMode, projectId, currentSlide?.id, sourceKind]);
+    if (contentMode === 'preview' && projectId && sourceSlideId !== undefined) void useSourceEditorStore.getState().load(projectId, sourceSlideId, sourceKind);
+  }, [contentMode, projectId, sourceSlideId, sourceKind]);
   const goPrev = useCallback(() => {
     if (!activeDocument && safePage > 0) setCurrentSlideId(slides[safePage - 1].id);
   }, [activeDocument, safePage, setCurrentSlideId, slides]);
@@ -418,7 +419,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     const selectionID = `sel_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
     const next: DOMSelection = { ...raw, selection_id: selectionID, marker_no: state.nextMarkerByThread[threadId] ?? 1 };
     const encoder = new TextEncoder();
-    const totalBytes = [...selections, next].reduce((sum, item) => sum + encoder.encode(JSON.stringify({ dom_targets: item.dom_targets ?? [], chrome_targets: item.chrome_targets ?? [] })).byteLength, 0);
+    const totalBytes = [...selections, next].reduce((sum, item) => sum + encoder.encode(JSON.stringify({ dom_targets: item.dom_targets ?? [], decoration_targets: item.decoration_targets ?? [] })).byteLength, 0);
     if (totalBytes > 256 * 1024) {
       showGlobalWarning('选择内容过大，请缩小范围。');
       const retry = selectionMode; setSelectionMode('none'); window.setTimeout(() => setSelectionMode(retry), 0);
@@ -494,8 +495,13 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     else enterOverview();
   }, [hasSlides, setContentMode, previewMode, exitOverview, enterOverview]);
 
-  useAppShortcuts(!projectId || !hasSlides ? {} : activeDocument ? {
+  const saveSelectedSource = () => {
+    if (projectId && sourceSlideId !== undefined && !runBlocking && !commitBlocking && !exportBlocking && !historyBusy) void useSourceEditorStore.getState().save(sourceKey(projectId, sourceSlideId, sourceKind));
+  };
+  useAppShortcuts(!projectId || (!hasSlides && !activeDocument) ? {} : activeDocument ? {
     'deck.overview': toggleOverview,
+    'deck.form': () => setContentMode(contentMode === 'preview' ? 'source' : 'preview'),
+    'deck.save': () => { if (contentMode === 'source') saveSelectedSource(); },
   } : {
     'deck.overview': toggleOverview,
     'deck.previous': goPrev,
@@ -504,7 +510,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     'deck.zoom_out': () => { if (zoomEnabled) zoomOut(); },
     'deck.view': () => setGlobalView(globalView === 'html' ? 'outline' : 'html'),
     'deck.form': () => setContentMode(contentMode === 'preview' ? 'source' : 'preview'),
-    'deck.save': () => { if (contentMode === 'source' && projectId && currentSlide && !runBlocking && !commitBlocking && !exportBlocking && !historyBusy) void useSourceEditorStore.getState().save(sourceKey(projectId, currentSlide.id, sourceKind)); },
+    'deck.save': () => { if (contentMode === 'source') saveSelectedSource(); },
   });
 
   const present = useCallback(async () => {
@@ -533,10 +539,15 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
       <PreviewToolbar
         projectId={projectId}
         pageControlsDisabled={Boolean(activeDocument) || !hasSlides}
-        view={globalView}
-        onViewChange={setGlobalView}
+        hasPages={hasSlides}
         contentMode={contentMode}
-        onContentModeChange={setContentMode}
+        overview={!activeDocument && previewMode === 'overview'}
+        onToggleOverview={toggleOverview}
+        canPresent={Boolean(presentationSlide)}
+        onPresent={present}
+        exportDisabled={exportDisabled}
+        exportDisabledReason={exportDisabledReason}
+        onExport={(format) => { if (projectId) void startExport(projectId, format); }}
         selectionMode={selectionMode}
         selectionEnabled={selectionEnabled}
         onSelectionModeChange={setSelectionMode}
@@ -550,7 +561,12 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         }}
       />
 
-      {activeDocument ? (
+      {contentMode === 'preview' && selectedSource && sourceDirty(selectedSource) && <div className="flex flex-wrap items-center justify-center gap-2 border-b border-border bg-panel px-3 py-1.5 text-xs text-text-700">有未保存修改，当前为已保存内容 <button type="button" className="text-accent" onClick={() => setContentMode('source')}>编辑源文件</button><button type="button" className="text-accent disabled:opacity-40" disabled={runBlocking || commitBlocking || exportBlocking || historyBusy || !selectedSource.writable} onClick={saveSelectedSource}>保存</button></div>}
+      {contentMode === 'source' && projectId && sourceSlideId !== undefined ? (
+        <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码编辑器…</div>}>
+          <SourceWorkspace projectId={projectId} slideId={sourceSlideId} kind={sourceKind} blocked={runBlocking || commitBlocking || exportBlocking || historyBusy} />
+        </React.Suspense>
+      ) : activeDocument ? (
         <ProjectDocumentView
           key={`${projectId}:${activeDocument}`}
           document={activeDocument}
@@ -558,10 +574,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
           error={specError}
           onRetry={() => { if (projectId) void loadProjectContent(projectId); }}
         />
-      ) : contentMode === 'source' && projectId && currentSlide ? (
-        <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码编辑器…</div>}>
-          <SourceWorkspace projectId={projectId} slideId={currentSlide.id} kind={sourceKind} blocked={runBlocking || commitBlocking || exportBlocking || historyBusy} />
-        </React.Suspense>
       ) : <div
         ref={canvasRef}
         data-fullscreen={fullscreen || undefined}
@@ -572,7 +584,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         )}
         {...canvasPan.pointerHandlers}
       >
-        {contentMode === 'preview' && selectedSource && sourceDirty(selectedSource) && <div className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center gap-2 rounded border border-border bg-panel px-3 py-1.5 text-xs text-text-700 shadow-sm">有未保存修改，当前为已保存内容 <button type="button" className="text-accent" onClick={() => setContentMode('source')}>编辑源码</button><button type="button" className="text-accent disabled:opacity-40" disabled={runBlocking || commitBlocking || exportBlocking || !selectedSource.writable} onClick={() => void useSourceEditorStore.getState().save(sourceKey(projectId!, currentSlide!.id, sourceKind))}>保存</button></div>}
         {previewMode === 'main' ? (
           <div
             ref={canvasPan.stageRef}
@@ -624,7 +635,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                     const current = references.find((reference) => reference.kind === 'dom' && reference.selection.selection_id === item.selection_id);
                     if (current?.kind !== 'dom') return;
                     if (item.snapshot) {
-                      state.updateThreadDOMSelection(activeThreadId, item.selection_id, { rect:item.snapshot.rect, dom_targets:item.snapshot.dom_targets, chrome_targets:item.snapshot.chrome_targets, status:item.status });
+                      state.updateThreadDOMSelection(activeThreadId, item.selection_id, { rect:item.snapshot.rect, dom_targets:item.snapshot.dom_targets, decoration_targets:item.snapshot.decoration_targets, status:item.status });
                       return;
                     }
                     const targetStatuses = new Map((item.targets ?? []).map((target) => [target.target_id, target.status]));
@@ -701,13 +712,11 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
       </div>}
       <PreviewStatusBar
         documentOpen={Boolean(activeDocument)}
-        overview={!activeDocument && previewMode === 'overview'}
-        onToggleOverview={toggleOverview}
-        canPresent={Boolean(presentationSlide)}
-        onPresent={present}
-        exportDisabled={exportDisabled}
-        exportDisabledReason={exportDisabledReason}
-        onExport={(format) => { if (projectId) void startExport(projectId, format); }}
+        view={globalView}
+        onViewChange={setGlobalView}
+        contentMode={contentMode}
+        onContentModeChange={setContentMode}
+        pageControlsDisabled={Boolean(activeDocument) || !hasSlides}
         pageIndex={safePage}
         pageCount={slides.length}
         onPrevious={goPrev}

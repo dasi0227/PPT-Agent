@@ -3,11 +3,12 @@ import type { ProjectContentSnapshot } from '../../api/types';
 import { buildRuntimeFrame } from './runtimeFrame';
 
 const snapshot: ProjectContentSnapshot = {
+  theme: 'editorial-serif',
   appearance: null,
   hashes: { outline: "outline-hash" },
   manifest: { version: '5.0', project_id: 'p', title: 'T', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], created_at: 1, updated_at: 1 },
   outline: { version: '5.0', project_id: 'p', created_at: 1, updated_at: 1, sections: [{ id: 'sec', title: '开场', purpose: '', slides: [{ slide_id: 'cover', title: '封面', role: 'cover' }, { slide_id: 'body', title: '正文', role: 'content' }], subsections: [] }] },
-  design: { version: '5.0', project_id: 'p', theme: '', direction: '', chrome: [{ type: 'page_number', placement: 'bottom-right', style: 'tiny muted mono' }], created_at: 1, updated_at: 1 },
+  design: { version: '5.0', project_id: 'p', direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' }, created_at: 1, updated_at: 1 },
   slides_by_id: {},
 };
 
@@ -15,6 +16,7 @@ describe('runtime frame builder', () => {
   it('derives every page ordinal and the fixed canvas without manifest rendering settings', () => {
     expect(buildRuntimeFrame(snapshot, 'cover')).toMatchObject({ ordinal: 1, total: 2, canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' } });
     expect(buildRuntimeFrame(snapshot, 'body')).toMatchObject({ ordinal: 2, total: 2, canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' } });
+    expect(buildRuntimeFrame(snapshot, 'body')?.theme_id).toBe('editorial-serif');
   });
 
   it('recomputes ordinals from reordered outline without touching HTML', () => {

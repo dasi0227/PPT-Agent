@@ -11,6 +11,8 @@ const advance = (id: string) => { const next = (requestVersions.get(id) ?? 0) + 
 const contentChecks = new Map<string, Promise<void>>();
 
 function sameContent(a: ProjectContentSnapshot, b: ProjectContentSnapshot): boolean {
+  if (a.theme !== b.theme) return false;
+  if (a.theme_error !== b.theme_error) return false;
   if (a.appearance?.hash !== b.appearance?.hash) return false;
   const aHashes = Object.entries(a.hashes);
   if (aHashes.length !== Object.keys(b.hashes).length || aHashes.some(([key, value]) => b.hashes[key] !== value)) return false;
@@ -29,7 +31,7 @@ interface ProjectState {
   contentLoadingByProjectId: Record<string, boolean>; contentErrorByProjectId: Record<string, string | undefined>;
   mutationPendingByProjectId: Record<string, boolean>; loadingProjects: boolean; projectError: string | null;
   loadProjects: () => Promise<void>; openProject: (id: string) => void;
-  createProject: (topic: string, brief?: string, slideCount?: number, language?: string) => Promise<Project>;
+  createProject: (topic: string) => Promise<Project>;
   closeProject: (id: string) => string | null; renameProject: (id: string, title: string) => Promise<void>; deleteProject: (id: string) => Promise<void>; selectProject: (id: string) => void;
   setProjectTheme: (projectId: string, themeId: string) => Promise<Project>;
   loadProjectContent: (projectId: string) => Promise<void>; mutateProject: (projectId: string, mutation: PPTMutation) => Promise<ProjectContentSnapshot>;
@@ -41,7 +43,7 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => ({
   projects: [], openProjectIds: [], activeProjectId: null, contentByProjectId: {}, contentLoadingByProjectId: {}, contentErrorByProjectId: {}, mutationPendingByProjectId: {}, loadingProjects: false, projectError: null,
   loadProjects: async () => { set({ loadingProjects:true,projectError:null });try{const projects=await projectsApi.list();set((state)=>{const ids=new Set(projects.map((p)=>p.id));const openProjectIds=state.openProjectIds.filter((id)=>ids.has(id));const activeProjectId=state.activeProjectId&&openProjectIds.includes(state.activeProjectId)?state.activeProjectId:null;return{projects,openProjectIds,activeProjectId,loadingProjects:false}});const id=get().activeProjectId;if(id){void get().loadProjectContent(id);void useThreadStore.getState().loadThreads(id)}}catch(error){set({loadingProjects:false,projectError:error instanceof Error?error.message:'项目加载失败，请重试'})}},
   openProject: (id) => { set((state)=>({openProjectIds:state.openProjectIds.includes(id)?state.openProjectIds:[...state.openProjectIds,id]}));get().selectProject(id) },
-  createProject: async (topic,brief='',slideCount=10,language='zh-CN') => { const project=await projectsApi.create(topic,brief,slideCount,language);set((state)=>({projects:[...state.projects,project]}));return project },
+  createProject: async (topic) => { const project=await projectsApi.create(topic);set((state)=>({projects:[...state.projects,project]}));return project },
   closeProject: (id) => { if(isProjectExportBlocking(id))return get().activeProjectId;let nextActiveProjectId: string | null = null;advance(id);useThreadStore.getState().closeProjectThreads(id);set((state)=>{const openProjectIds=state.openProjectIds.filter((value)=>value!==id);nextActiveProjectId=state.activeProjectId===id?openProjectIds[openProjectIds.length-1]??null:state.activeProjectId;return{openProjectIds,activeProjectId:nextActiveProjectId}});return nextActiveProjectId },
   renameProject: async (id,title) => { await projectsApi.patch(id,{title});set((state)=>({projects:state.projects.map((project)=>project.id===id?{...project,title}:project)})) },
   deleteProject: async (id) => { await projectsApi.delete(id);advance(id);useThreadStore.getState().dropProject(id);set((state)=>{const contentByProjectId={...state.contentByProjectId};delete contentByProjectId[id];const openProjectIds=state.openProjectIds.filter((value)=>value!==id);return{projects:state.projects.filter((project)=>project.id!==id),openProjectIds,activeProjectId:state.activeProjectId===id?openProjectIds[openProjectIds.length-1]??null:state.activeProjectId,contentByProjectId}}) },

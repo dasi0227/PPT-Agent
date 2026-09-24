@@ -38,7 +38,7 @@ import { resolveSlashCommands, type SlashCommandId } from './promptMatching';
 import { NextInputSuggestionsPanel } from './NextInputSuggestionsPanel';
 import { nextInputShortcutIndex } from './nextInputSuggestions';
 import { DOMSelectionReference } from './DOMSelectionReference';
-import { assertProjectSourcesSaved, useSourceEditorStore } from '../../stores/sourceEditorStore';
+import { assertProjectSourcesSaved, showSourceFile, useSourceEditorStore } from '../../stores/sourceEditorStore';
 import { sourceDraftId } from '../../lib/sourceDraftStorage';
 
 function composerScopeInput(
@@ -608,9 +608,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
           const dirty = Object.values(sourceFiles).find((file) => file.projectId === activeProjectId && file.draftText !== file.baseText)
             ?? Object.values(sourceDrafts).find((row) => row.projectId === activeProjectId && row.draftText !== row.baseText);
           if (!dirty) return;
-          useDeckStore.getState().setCurrentSlideId(dirty.slideId);
-          useDeckStore.getState().setGlobalView(dirty.kind === 'spec' ? 'outline' : 'html');
-          useDeckStore.getState().setContentMode('source');
+          showSourceFile(dirty);
         }}>查看</button>
         <button type="button" className="text-accent hover:underline" onClick={() => void useSourceEditorStore.getState().saveAll(activeProjectId)}>保存全部</button>
       </div>}

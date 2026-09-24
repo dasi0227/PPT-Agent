@@ -5,7 +5,7 @@ describe('preview protocol validation', () => {
   it('accepts only declared commands with schema-valid payloads', () => {
     expect(isPreviewCommand({
       type: 'updateDeck',
-      slides: [{ id: 's1', html: '<h1>one</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}}, ordinal: 1, total: 1 } }],
+      slides: [{ id: 's1', html: '<h1>one</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}}, ordinal: 1, total: 1, key_message: '', decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } } }],
       index: 0,
     })).toBe(true);
     expect(isPreviewCommand({ type: 'gotoSlide', index: 2 })).toBe(true);
@@ -27,7 +27,7 @@ describe('preview protocol validation', () => {
     });
     expect(parseRuntimeEvent({ type: 'renderError', message: 42 })).toBeNull();
     expect(parseRuntimeEvent({ type: 'arbitraryCallback', fn: 'x' })).toBeNull();
-    const selection = { kind: 'element', slide_id: 's1', html_hash: 'sha256:a', canvas: { width: 1920, height: 1080 }, status: 'active', rect: { x: 0, y: 0, width: 10, height: 10 }, dom_targets: [], chrome_targets: [{ type: 'page_number', placement: 'bottom-right', style: '', text: '1', rect: { x: 0, y: 0, width: 10, height: 10 } }] };
+    const selection = { kind: 'element', slide_id: 's1', html_hash: 'sha256:a', canvas: { width: 1920, height: 1080 }, status: 'active', rect: { x: 0, y: 0, width: 10, height: 10 }, dom_targets: [], decoration_targets: [{ type: 'page_number', placement: 'bottom-right', text: '1', rect: { x: 0, y: 0, width: 10, height: 10 } }] };
     expect(parseRuntimeEvent({ type: 'selectionCreated', session_id: 'session-one', slide_id: 's1', selection })?.type).toBe('selectionCreated');
     expect(parseRuntimeEvent({ type: 'selectionCreated', session_id: 'session-one', slide_id: 's1', selection: { ...selection, rect: { x: -1, y: 0, width: 10, height: 10 } } })).toBeNull();
   });

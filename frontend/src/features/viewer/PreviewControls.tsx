@@ -24,15 +24,21 @@ export interface PreviewSidebarControls {
 type SelectionMode = 'element' | 'region' | 'none';
 
 export function PreviewToolbar({
-  projectId, view, onViewChange, contentMode, onContentModeChange,
+  projectId, contentMode, hasPages, overview, onToggleOverview,
+  canPresent, onPresent, exportDisabled, exportDisabledReason, onExport,
   selectionMode, selectionEnabled, onSelectionModeChange, sidebarControls,
   pageControlsDisabled,
 }: {
   projectId: string | null;
-  view: PageView;
-  onViewChange: (view: PageView) => void;
   contentMode: ContentMode;
-  onContentModeChange: (mode: ContentMode) => void;
+  hasPages: boolean;
+  overview: boolean;
+  onToggleOverview: () => void;
+  canPresent: boolean;
+  onPresent: () => void;
+  exportDisabled: boolean;
+  exportDisabledReason?: string;
+  onExport: (format: ExportFormat) => void;
   selectionMode: SelectionMode;
   selectionEnabled: boolean;
   onSelectionModeChange: (mode: SelectionMode) => void;
@@ -40,7 +46,7 @@ export function PreviewToolbar({
   pageControlsDisabled: boolean;
 }) {
   return (
-    <header className="preview-toolbar border-b border-border bg-panel" aria-label="工作区查看与选择">
+    <header className="preview-toolbar border-b border-border bg-panel" aria-label="演示操作与选择">
       <div className="flex shrink-0 items-center gap-2">
         {sidebarControls.leftHidden && (
           <IconButton
@@ -54,26 +60,22 @@ export function PreviewToolbar({
         )}
         <ThemeSelector key={projectId} projectId={projectId} />
         <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />
-        <ModeToggleButton
-          label="切换视图"
-          value={view}
-          disabled={pageControlsDisabled}
-          options={[
-            { value: 'outline', label: '设计稿', icon: FileText },
-            { value: 'html', label: '幻灯片', icon: Presentation },
-          ]}
-          onValueChange={value => onViewChange(value === 'html' ? 'html' : 'outline')}
-        />
-        <ModeToggleButton
-          label="切换形态"
-          value={contentMode}
-          disabled={pageControlsDisabled}
-          options={[
-            { value: 'preview', label: '预览', icon: AppWindow },
-            { value: 'source', label: '源码', icon: FilePen },
-          ]}
-          onValueChange={value => onContentModeChange(value === 'source' ? 'source' : 'preview')}
-        />
+        <div role="group" aria-label="总览与交付" className="flex items-center gap-1 justify-self-start">
+          <IconButton
+            label="总览"
+            title={overview ? '返回单页视图' : '查看全部页面'}
+            aria-pressed={overview}
+            onClick={onToggleOverview}
+            disabled={!hasPages}
+            className={hasPages && overview ? 'bg-accent-soft text-accent' : undefined}
+          >
+            <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
+          <IconButton label="全屏放映" onClick={onPresent} disabled={!canPresent}>
+            <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
+          <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={onExport} />
+        </div>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <div
@@ -116,20 +118,17 @@ export function PreviewToolbar({
 }
 
 export function PreviewStatusBar({
-  overview, onToggleOverview, canPresent, onPresent,
-  exportDisabled, exportDisabledReason, onExport,
+  view, onViewChange, contentMode, onContentModeChange, pageControlsDisabled,
   pageIndex, pageCount, onPrevious, onNext,
   zoom, zoomMin, zoomMax, zoomEnabled, onZoomOut, onZoomIn,
   documentOpen,
 }: {
   documentOpen: boolean;
-  overview: boolean;
-  onToggleOverview: () => void;
-  canPresent: boolean;
-  onPresent: () => void;
-  exportDisabled: boolean;
-  exportDisabledReason?: string;
-  onExport: (format: ExportFormat) => void;
+  view: PageView;
+  onViewChange: (view: PageView) => void;
+  contentMode: ContentMode;
+  onContentModeChange: (mode: ContentMode) => void;
+  pageControlsDisabled: boolean;
   pageIndex: number;
   pageCount: number;
   onPrevious: () => void;
@@ -145,23 +144,29 @@ export function PreviewStatusBar({
   const zoomPercent = Math.round(zoom * 100);
 
   return (
-    <footer className="preview-status-bar border-t border-border bg-panel" aria-label="演示浏览与交付">
+    <footer className="preview-status-bar border-t border-border bg-panel" aria-label="画布展示控制">
       <div className="preview-status-bar-content">
-        <div role="group" aria-label="总览与交付" className="flex items-center gap-1 justify-self-start">
-          <IconButton
-            label="总览"
-            title={overview ? '返回单页视图' : '查看全部页面'}
-            aria-pressed={overview}
-            onClick={onToggleOverview}
-            disabled={!hasPages}
-            className={hasPages && overview ? 'bg-accent-soft text-accent' : undefined}
-          >
-            <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
-          </IconButton>
-          <IconButton label="全屏放映" onClick={onPresent} disabled={!canPresent}>
-            <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
-          </IconButton>
-          <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={onExport} />
+        <div role="group" aria-label="画布展示模式" className="flex items-center gap-2 justify-self-start">
+          <ModeToggleButton
+            label="切换视图"
+            value={view}
+            disabled={pageControlsDisabled}
+            options={[
+              { value: 'outline', label: '设计稿', icon: FileText },
+              { value: 'html', label: '幻灯片', icon: Presentation },
+            ]}
+            onValueChange={value => onViewChange(value === 'html' ? 'html' : 'outline')}
+          />
+          <ModeToggleButton
+            label="切换形态"
+            value={contentMode}
+            disabled={pageControlsDisabled && !documentOpen}
+            options={[
+              { value: 'preview', label: '预览图', icon: AppWindow },
+              { value: 'source', label: '源文件', icon: FilePen },
+            ]}
+            onValueChange={value => onContentModeChange(value === 'source' ? 'source' : 'preview')}
+          />
         </div>
 
         <div role="group" aria-label="翻页" className="flex items-center gap-0.5 justify-self-center">

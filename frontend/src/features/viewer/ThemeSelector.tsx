@@ -12,7 +12,7 @@ import { showGlobalError } from '../../stores/toastStore';
 
 export function ThemeSelector({ projectId }: { projectId: string | null }) {
   const themeId = useProjectStore(state => projectId
-    ? state.contentByProjectId[projectId]?.design.theme ?? state.projects.find(project => project.id === projectId)?.theme ?? ''
+    ? state.contentByProjectId[projectId]?.theme ?? state.projects.find(project => project.id === projectId)?.theme ?? ''
     : '');
   const setProjectTheme = useProjectStore(state => state.setProjectTheme);
   const [open, setOpen] = useState(false);
