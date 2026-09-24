@@ -9,7 +9,7 @@ const player = asset('export/player/player.js');
 const css = asset('export/player/player.css');
 const context = {
   appearance: { hash: "snapshot-appearance", chrome_tokens: { "--color-caption": "#78695b", "--color-fg": "#302820", "--font-sans": "Noto Sans SC", "--font-mono": "JetBrains Mono" } },
-  ordinal: 1, total: 2, numbering: { visible: false }, section: { title: '开场' }, deck_title: 'Deck',
+  ordinal: 1, total: 2, section: { title: '开场' }, deck_title: 'Deck',
   chrome: [
     { type: 'section_marker', placement: 'top-left', style: 'compact label' },
     { type: 'deck_title', placement: 'bottom-left', style: 'tiny mono' },
@@ -17,10 +17,10 @@ const context = {
   ],
 };
 
-function createPlayer() {
+function createPlayer(chrome = context.chrome) {
   const slides = [
-    { src: 'slides/001.html', frame: context },
-    { src: 'slides/002.html', frame: { ...context, ordinal: 2, numbering: { visible: true } } },
+    { src: 'slides/001.html', frame: { ...context, chrome } },
+    { src: 'slides/002.html', frame: { ...context, chrome, ordinal: 2 } },
   ];
   const html = asset('export/player/index.html').replace('%s', 'Deck').replace('%s', () => JSON.stringify(slides));
   const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'file:///deck/index.html' });
@@ -45,9 +45,23 @@ describe('standalone HTML player', () => {
       expect(dom.window.getComputedStyle(marker).position).toBe('absolute');
       expect(dom.window.getComputedStyle(marker).fontSize).toBe('16px');
       expect(dom.window.getComputedStyle(title).bottom).toBe('3.2%');
-      expect(document.querySelector('[data-runtime-page-number]')).toBeNull();
+      expect(document.querySelector('[data-runtime-page-number]')?.textContent).toBe('1');
+      expect(document.querySelectorAll('[data-runtime-page-number]')).toHaveLength(1);
       expect(document.querySelector('iframe')?.getAttribute('sandbox')).toBe('allow-scripts');
       expect(document.querySelector('nav,button,#controls,#counter')).toBeNull();
+    } finally { dom.window.close(); }
+  });
+
+  it('shows a default page number when design does not specify one', () => {
+    const dom = createPlayer([]);
+    try {
+      dom.window.eval(player);
+      const number = dom.window.document.querySelector('[data-runtime-page-number]');
+      expect(number?.textContent).toBe('1');
+      expect(number?.getAttribute('data-placement')).toBe('bottom-right');
+      dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'ArrowRight' }));
+      expect(dom.window.document.querySelector('[data-runtime-page-number]')?.textContent).toBe('2');
+      expect(dom.window.document.querySelectorAll('[data-runtime-page-number]')).toHaveLength(1);
     } finally { dom.window.close(); }
   });
 
@@ -71,7 +85,7 @@ describe('standalone HTML player', () => {
       }));
       expect(window.document.querySelector('iframe')?.getAttribute('src')).toBe('slides/002.html');
       key('Home');
-      expect(window.document.querySelector('[data-runtime-page-number]')).toBeNull();
+      expect(window.document.querySelector('[data-runtime-page-number]')?.textContent).toBe('1');
     } finally { dom.window.close(); }
   });
 });

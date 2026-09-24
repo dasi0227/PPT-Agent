@@ -28,11 +28,11 @@ async function applyCurrentTheme(window: ReturnType<typeof createRuntime>['windo
 }
 
 describe('slide runtime', () => {
-  const frame = (id: string, ordinal: number, visible = true) => ({
+  const frame = (id: string, ordinal: number) => ({
     slide_id: id, ordinal, total: 2, role: ordinal === 1 ? 'cover' : 'content',
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
     theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}},
-    section: { id: 'sec_1', title: '正文', index: 1 }, numbering: { visible, format: 'number' },
+    section: { id: 'sec_1', title: '正文', index: 1 },
     deck_title: 'Deck',
     chrome: [
       { type: 'page_number', placement: 'bottom-right', style: 'tiny muted mono counter' },
@@ -53,7 +53,7 @@ describe('slide runtime', () => {
     const dom = createRuntime();
     const { window } = dom;
     const slides = [
-      { id: 's1', html: '<!doctype html><title>one</title>', frame: frame('s1', 1, false) },
+      { id: 's1', html: '<!doctype html><title>one</title>', frame: frame('s1', 1) },
       { id: 's2', html: '<!doctype html><title>two</title>', frame: frame('s2', 2) },
     ];
 
@@ -72,7 +72,7 @@ describe('slide runtime', () => {
     expect(srcdoc).not.toContain('<title>two</title>');
     expect(initialFrames[0]?.querySelector('.runtime-canvas')).not.toBeNull();
     expect(initialFrames.every((container) => container.querySelector('iframe')?.getAttribute('sandbox') === 'allow-scripts')).toBe(true);
-    expect(initialFrames[0]?.querySelector('[data-runtime-page-number]')).toBeNull();
+    expect(initialFrames[0]?.querySelector('[data-runtime-page-number]')?.textContent).toBe('1');
     expect(initialFrames[0]?.dataset.active).toBe('true');
 
     send(window, { type: 'gotoSlide', index: 1 });

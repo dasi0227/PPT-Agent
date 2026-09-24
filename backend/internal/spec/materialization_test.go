@@ -10,11 +10,11 @@ func TestRuntimeFrameAndMaterializationFreshnessAreIndependent(t *testing.T) {
 	deck, outline := validDeck(), validOutline()
 	design := Design{SchemaVersion: SchemaVersion, ProjectID: deck.ProjectID, Theme: "clean", Direction: "minimal", Chrome: []ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono"}}, CreatedAt: 1, UpdatedAt: 1}
 	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa", nil)
-	if !ok || cover.Canvas != CanonicalCanvas() || cover.Numbering.Visible || cover.Ordinal != 1 {
+	if !ok || cover.Canvas != CanonicalCanvas() || cover.Ordinal != 1 {
 		t.Fatalf("unexpected cover frame: %#v", cover)
 	}
 	second, _ := BuildRuntimeFrame(deck, outline, design, "sli_bbbbbb", nil)
-	if !second.Numbering.Visible || second.Ordinal != 2 || second.Total != 3 {
+	if second.Canvas != CanonicalCanvas() || second.Ordinal != 2 || second.Total != 3 {
 		t.Fatalf("unexpected second frame: %#v", second)
 	}
 

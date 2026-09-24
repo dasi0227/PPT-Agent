@@ -21,7 +21,7 @@ const (
 )
 
 func testRenderFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Numbering: spec.RuntimeFrameNumbering{Visible: true, Format: "number"}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}, {Type: "section_marker", Placement: "top-left", Style: "muted"}, {Type: "deck_title", Placement: "top-right", Style: "muted"}}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}, {Type: "section_marker", Placement: "top-left", Style: "muted"}, {Type: "deck_title", Placement: "top-right", Style: "muted"}}}
 }
 
 func TestNodeSlideRendererWithRealChromium(t *testing.T) {

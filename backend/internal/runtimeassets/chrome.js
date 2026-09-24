@@ -29,9 +29,12 @@
       }
       canvas.querySelectorAll('[data-runtime-chrome]').forEach(node => node.remove());
       const nodes = [];
-      const chrome = Array.isArray(context.chrome) ? context.chrome : [];
+      const chrome = Array.isArray(context.chrome) ? [...context.chrome] : [];
+      // Page numbers are a fixed product rule; design only controls their appearance.
+      if (!chrome.some(item => item.type === 'page_number')) {
+        chrome.push({ type: 'page_number', placement: 'bottom-right', style: 'tiny muted mono counter' });
+      }
       for (const item of chrome) {
-        if (item.type === 'page_number' && context.numbering?.visible !== true) continue;
         const text = item.type === 'page_number' ? String(context.ordinal)
           : item.type === 'section_marker' ? context.section?.title
           : item.type === 'deck_title' ? context.deck_title : '';

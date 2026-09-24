@@ -286,7 +286,7 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 		"current_state": "draft",
 		"theme":         proj.Theme,
 		"slide_count":   p.SlideCount,
-		"language":      p.Language,
+		"language":      "待明确",
 		"updated_at":    proj.UpdatedAt,
 	}
 	raw, err := json.MarshalIndent(state, "", "  ")
@@ -297,10 +297,9 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 		return err
 	}
 	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: proj.ID,
-		Title: proj.Title, Goal: firstNonEmpty(p.Brief, proj.Title), Audience: "待明确",
-		Language: firstNonEmpty(p.Language, "zh-CN"), Positioning: proj.Title,
-		Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: spec.CanvasAspectRatio},
-		Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover", "conclusion"}, Format: "number"},
+		Title: proj.Title, Goal: "待明确", Audience: "待明确",
+		Language:     "待明确",
+		Requirements: []string{}, Prohibitions: []string{},
 		CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt}
 	if err := sb.Write(filepath.Join(projectRel, "manifest.json"), mustJSON(manifest)); err != nil {
 		return err

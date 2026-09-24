@@ -80,19 +80,16 @@ type PatchPathRule struct {
 var patchPathRules = map[string]map[string][]PatchPathRule{
 	"manifest.patch": {
 		"add": {
-			{Pattern: `^/(?:title|goal|audience|language|positioning|requirements|prohibitions)$`, Description: "deck author fields"},
-			{Pattern: `^/(?:canvas/aspect_ratio|numbering/(?:enabled|hidden_roles|format))$`, Description: "deck settings"},
-			{Pattern: `^/(?:requirements|prohibitions|numbering/hidden_roles)/(?:-|0|[1-9][0-9]*)$`, Description: "deck list item or append position"},
+			{Pattern: `^/(?:title|goal|audience|language|requirements|prohibitions)$`, Description: "deck author fields"},
+			{Pattern: `^/(?:requirements|prohibitions)/(?:-|0|[1-9][0-9]*)$`, Description: "deck list item or append position"},
 		},
 		"remove": {
-			{Pattern: `^/(?:title|goal|audience|language|positioning|requirements|prohibitions)$`, Description: "deck author fields"},
-			{Pattern: `^/(?:canvas/aspect_ratio|numbering/(?:enabled|hidden_roles|format))$`, Description: "deck settings"},
-			{Pattern: `^/(?:requirements|prohibitions|numbering/hidden_roles)/(?:0|[1-9][0-9]*)$`, Description: "existing deck list item"},
+			{Pattern: `^/(?:title|goal|audience|language|requirements|prohibitions)$`, Description: "deck author fields"},
+			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing deck list item"},
 		},
 		"replace": {
-			{Pattern: `^/(?:title|goal|audience|language|positioning|requirements|prohibitions)$`, Description: "deck author fields"},
-			{Pattern: `^/(?:canvas/aspect_ratio|numbering/(?:enabled|hidden_roles|format))$`, Description: "deck settings"},
-			{Pattern: `^/(?:requirements|prohibitions|numbering/hidden_roles)/(?:0|[1-9][0-9]*)$`, Description: "existing deck list item"},
+			{Pattern: `^/(?:title|goal|audience|language|requirements|prohibitions)$`, Description: "deck author fields"},
+			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing deck list item"},
 		},
 	},
 	"design.patch": {

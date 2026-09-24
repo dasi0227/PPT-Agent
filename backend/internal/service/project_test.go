@@ -77,6 +77,26 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if err := spec.ValidateDesign(design); err != nil {
 		t.Fatalf("new project design must satisfy the schema: %v", err)
 	}
+	var manifest spec.Manifest
+	raw, err = os.ReadFile(filepath.Join(project.WorkDir, "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Title != project.Title {
+		t.Fatalf("presentation title must come from the project title: %q", manifest.Title)
+	}
+	if manifest.Goal != "待明确" || manifest.Audience != "待明确" || manifest.Language != "待明确" {
+		t.Fatalf("new project content must remain unresolved: %+v", manifest)
+	}
+	if manifest.Requirements == nil || len(manifest.Requirements) != 0 || manifest.Prohibitions == nil || len(manifest.Prohibitions) != 0 {
+		t.Fatalf("new project must have empty requirements and prohibitions: %+v", manifest)
+	}
+	if err := spec.ValidateManifest(manifest); err != nil {
+		t.Fatalf("new project manifest must satisfy the schema: %v", err)
+	}
 
 	changed, cleanup, err := gitcommit.NewExecutor().StageAll(ctx, project.WorkDir, "verify-empty")
 	if err != nil {

@@ -69,7 +69,7 @@ func testAssembler(store ContextStore, registry *RefRegistry) *ContextAssembler 
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
-	deck := pptspec.Manifest{SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Positioning: "thesis", Requirements: []string{}, Prohibitions: []string{}, Canvas: pptspec.CanvasSettings{AspectRatio: "16:9"}, Numbering: pptspec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 2}
+	deck := pptspec.Manifest{SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 2}
 	writeJSON(t, filepath.Join(dir, "manifest.json"), deck)
 	outline := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Title: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Title: "Three", Role: "evidence"}}}}}}, CreatedAt: 1, UpdatedAt: 2}
 	writeJSON(t, filepath.Join(dir, "outline.json"), outline)

@@ -39,27 +39,16 @@ func SlideRoleValues() []SlideRole {
 }
 
 type Manifest struct {
-	SchemaVersion string          `json:"version"`
-	ProjectID     string          `json:"project_id"`
-	Title         string          `json:"title"`
-	Goal          string          `json:"goal"`
-	Audience      string          `json:"audience"`
-	Language      string          `json:"language"`
-	Positioning   string          `json:"positioning,omitempty"`
-	Requirements  []string        `json:"requirements"`
-	Prohibitions  []string        `json:"prohibitions"`
-	Canvas        CanvasSettings  `json:"canvas"`
-	Numbering     NumberingPolicy `json:"numbering"`
-	CreatedAt     int64           `json:"created_at"`
-	UpdatedAt     int64           `json:"updated_at"`
-}
-type CanvasSettings struct {
-	AspectRatio string `json:"aspect_ratio"`
-}
-type NumberingPolicy struct {
-	Enabled     bool     `json:"enabled"`
-	HiddenRoles []string `json:"hidden_roles"`
-	Format      string   `json:"format"`
+	SchemaVersion string   `json:"version"`
+	ProjectID     string   `json:"project_id"`
+	Title         string   `json:"title"`
+	Goal          string   `json:"goal"`
+	Audience      string   `json:"audience"`
+	Language      string   `json:"language"`
+	Requirements  []string `json:"requirements"`
+	Prohibitions  []string `json:"prohibitions"`
+	CreatedAt     int64    `json:"created_at"`
+	UpdatedAt     int64    `json:"updated_at"`
 }
 
 type Outline struct {
@@ -129,17 +118,12 @@ type RuntimeFrameContext struct {
 	Role       string                   `json:"role"`
 	Section    RuntimeFrameAncestor     `json:"section"`
 	Subsection *RuntimeFrameAncestor    `json:"subsection,omitempty"`
-	Numbering  RuntimeFrameNumbering    `json:"numbering"`
 	Chrome     []ChromeItem             `json:"chrome"`
 }
 type RuntimeFrameAncestor struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 	Index int    `json:"index"`
-}
-type RuntimeFrameNumbering struct {
-	Visible bool   `json:"visible"`
-	Format  string `json:"format"`
 }
 
 type ProjectContentSnapshot struct {

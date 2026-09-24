@@ -20,7 +20,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-const RuntimeVersion = "export-runtime-v2"
+const RuntimeVersion = "export-runtime-v3"
 
 type SnapshotInput struct {
 	ExportID, ProjectID, ProjectTitle, ProjectDir, ThemeID string
@@ -54,8 +54,8 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	var manifest spec.Manifest
 	var outline spec.Outline
 	var design spec.Design
-	if json.Unmarshal(manifestRaw, &manifest) != nil || spec.ValidateManifest(manifest) != nil || manifest.Canvas.AspectRatio != spec.CanvasAspectRatio {
-		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "演示文稿画布无效。")
+	if json.Unmarshal(manifestRaw, &manifest) != nil || spec.ValidateManifest(manifest) != nil {
+		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "内容要求无效。")
 	}
 	if json.Unmarshal(outlineRaw, &outline) != nil || spec.ValidateOutline(outline) != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面目录无效。")

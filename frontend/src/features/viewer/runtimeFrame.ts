@@ -13,7 +13,6 @@ export interface RuntimeFrameContext {
   role: string;
   section: { id: string; title: string; index: number };
   subsection?: { id: string; title: string; index: number };
-  numbering: { visible: boolean; format: 'number' };
   chrome: Array<{ type: 'page_number' | 'section_marker' | 'key_message' | 'deck_title'; placement: string; style: string }>;
 }
 
@@ -35,10 +34,6 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
     role: item.node.role,
     section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 },
     ...(item.subsection ? { subsection: { id: item.subsection.id, title: item.subsection.title, index: subsectionIndex + 1 } } : {}),
-    numbering: {
-      visible: snapshot.manifest.numbering.enabled && !snapshot.manifest.numbering.hidden_roles.includes(item.node.role),
-      format: snapshot.manifest.numbering.format,
-    },
     chrome: snapshot.design.chrome.map((entry) => ({ ...entry })),
   };
 }

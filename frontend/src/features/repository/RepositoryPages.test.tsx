@@ -124,7 +124,7 @@ function projectContent(theme: string): ProjectContentSnapshot {
   return {
     appearance: null,
     hashes: { outline: "outline-hash", design: `design-${theme}` },
-    manifest: { version: '5.0', project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], canvas: { aspect_ratio: '16:9' }, numbering: { enabled: true, hidden_roles: [], format: 'number' }, created_at: 1, updated_at: 1 },
+    manifest: { version: '5.0', project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], created_at: 1, updated_at: 1 },
     outline: { version: '5.0', project_id: 'project-7', sections: [], created_at: 1, updated_at: 1 },
     design: { version: '5.0',  project_id: 'project-7', theme, direction: '', chrome: [], created_at: 1, updated_at: theme === 'editorial-serif' ? 1 : 2 },
     slides_by_id: {},

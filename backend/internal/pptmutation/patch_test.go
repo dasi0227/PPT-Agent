@@ -48,6 +48,7 @@ func TestRestrictedPatchRejectsDeniedAndNonStandardPaths(t *testing.T) {
 	raw := []byte(`{"requirements":[]}`)
 	cases := []Patch{
 		{Op: "replace", Path: "/revision", Value: 2},
+		{Op: "add", Path: "/positioning", Value: "redundant positioning"},
 		{Op: "add", Path: "/requirements/-1", Value: "negative"},
 		{Op: "add", Path: "/requirements/~2", Value: "bad escape"},
 		{Op: "remove", Path: "/requirements/0", Value: "unexpected"},
@@ -81,6 +82,17 @@ func TestPatchDecodeDistinguishesMissingAndExplicitNull(t *testing.T) {
 	}
 	if err := validatePatchOperation("slide.spec.patch", missing); !errors.Is(err, ErrPatchInvalid) {
 		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestManifestPatchRejectsRuntimeSettings(t *testing.T) {
+	for _, path := range []string{"/canvas", "/canvas/aspect_ratio", "/numbering", "/numbering/enabled", "/numbering/hidden_roles", "/numbering/hidden_roles/-", "/numbering/format"} {
+		t.Run(path, func(t *testing.T) {
+			_, err := applyPatch([]byte(`{"requirements":[]}`), []Patch{{Op: "add", Path: path, Value: true}}, "manifest.patch")
+			if !errors.Is(err, ErrPatchPathDenied) {
+				t.Fatalf("runtime setting was not denied: %v", err)
+			}
+		})
 	}
 }
 

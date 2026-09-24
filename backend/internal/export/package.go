@@ -148,7 +148,6 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 			"src": "slides/" + name,
 			"frame": map[string]any{
 				"ordinal": slide.Frame.Ordinal, "total": slide.Frame.Total, "appearance": playbackAppearance,
-				"numbering":  map[string]bool{"visible": slide.Frame.Numbering.Visible},
 				"section":    map[string]string{"title": slide.Frame.Section.Title},
 				"deck_title": slide.Frame.DeckTitle, "chrome": slide.Frame.Chrome,
 			},

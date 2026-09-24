@@ -7,7 +7,7 @@ import (
 )
 
 func validDeck() Manifest {
-	return Manifest{SchemaVersion: SchemaVersion, ProjectID: "pro_aaaaaa", Title: "Manifest", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: CanvasSettings{AspectRatio: "16:9"}, Numbering: NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	return Manifest{SchemaVersion: SchemaVersion, ProjectID: "pro_aaaaaa", Title: "Manifest", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
 }
 func validOutline() Outline {
 	return Outline{SchemaVersion: SchemaVersion, ProjectID: "pro_aaaaaa", CreatedAt: 1, UpdatedAt: 1, Sections: []Section{

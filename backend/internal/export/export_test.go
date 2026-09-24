@@ -23,7 +23,7 @@ import (
 )
 
 func exportFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("theme", []byte(`:root{--font-mono:"JetBrains Mono";--font-sans:"Noto Sans SC";--color-caption:#666;--color-fg:#222;}`)), SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Numbering: spec.RuntimeFrameNumbering{Visible: true, Format: "number"}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("theme", []byte(`:root{--font-mono:"JetBrains Mono";--font-sans:"Noto Sans SC";--color-caption:#666;--color-fg:#222;}`)), SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}}
 }
 
 func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {
@@ -294,7 +294,7 @@ func TestSnapshotIsFrozenAndDigestChangesWithHTML(t *testing.T) {
 func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Manifest, spec.Outline, spec.Design) {
 	t.Helper()
 	dir := t.TempDir()
-	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: spec.CanvasAspectRatio}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: manifest.ProjectID, CreatedAt: 1, UpdatedAt: 1, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: spec.SlideRoleContent}, {SlideID: "sli_bbbbbb", Title: "Two", Role: spec.SlideRoleContent}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: manifest.ProjectID, Theme: "theme-one", Direction: "Clear", Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}, CreatedAt: 1, UpdatedAt: 1}
 	for name, value := range map[string]any{"manifest.json": manifest, "outline.json": outline, "design.json": design} {
@@ -340,12 +340,10 @@ func TestStandaloneHTMLWorksFromFileURL(t *testing.T) {
 	frame.Chrome = append(frame.Chrome,
 		spec.ChromeItem{Type: "section_marker", Placement: "top-left", Style: "compact label"},
 		spec.ChromeItem{Type: "deck_title", Placement: "bottom-left", Style: "tiny mono"})
-	frame.Numbering.Visible = false
 	second := frame
 	second.SlideID = "sli_two"
 	second.Ordinal = 2
 	second.Total = 2
-	second.Numbering.Visible = true
 	frame.Total = 2
 	op := &Operation{ID: "exp_file", ProjectID: "pro_one", Format: FormatHTML, Status: StatusRunning, TotalPages: 2, subscribers: map[int]chan Event{}, Snapshot: Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: snapshotRoot, BaseCSS: []byte("html,body{margin:0}.slide-stage{width:1920px;height:1080px}"), ThemeCSS: []byte(":root{--proof:green}"), Slides: []SlideSnapshot{{ID: "sli_one", Title: "One", Ordinal: 1, HTML: []byte(`<html><head></head><body><div class="slide-stage"><img id="asset" src="/attachments/att_one/original.png"><script>document.body.dataset.script='ok'</script></div></body></html>`), Frame: frame}, {ID: "sli_two", Title: "Two", Ordinal: 2, HTML: []byte(`<html><head></head><body><div class="slide-stage" id="second">two</div></body></html>`), Frame: second}}, Attachments: []string{attachmentRel}}}
 	artifact, _, failure := buildHTML(context.Background(), op)
@@ -407,10 +405,10 @@ try {
     const marker = document.querySelector('[data-runtime-chrome="section_marker"]');
     return {position: getComputedStyle(marker).position, fontSize: getComputedStyle(marker).fontSize,
       parent: marker.parentElement.id, controls: document.querySelectorAll('nav,button').length,
-      number: !!document.querySelector('[data-runtime-page-number]'),
+      number: document.querySelector('[data-runtime-page-number]')?.textContent,
       stageHeight: document.getElementById('stage').clientHeight, viewportHeight: innerHeight};
   });
-  if (outer.position !== 'absolute' || outer.fontSize !== '16px' || outer.parent !== 'canvas' || outer.controls || outer.number || outer.stageHeight !== outer.viewportHeight) throw new Error(JSON.stringify(outer));
+  if (outer.position !== 'absolute' || outer.fontSize !== '16px' || outer.parent !== 'canvas' || outer.controls || outer.number !== '1' || outer.stageHeight !== outer.viewportHeight) throw new Error(JSON.stringify(outer));
   // Keyboard navigation must keep working after the user clicks into the iframe.
   await frame.locator('.slide-stage').click({position:{x:200,y:200}});
   await page.keyboard.press('ArrowRight');

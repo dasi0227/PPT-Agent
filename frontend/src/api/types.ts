@@ -52,9 +52,7 @@ export interface OutlineSection { id: string; title: string; purpose: string; sl
 
 export interface Manifest {
   version: '5.0'; project_id: string; title: string; goal: string;
-  audience: string; language: string; positioning?: string; requirements: string[]; prohibitions: string[];
-  canvas: { aspect_ratio: '16:9' | '4:3' };
-  numbering: { enabled: boolean; hidden_roles: SlideRole[]; format: 'number' };
+  audience: string; language: string; requirements: string[]; prohibitions: string[];
   created_at: number; updated_at: number;
 }
 

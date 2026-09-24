@@ -1,11 +1,15 @@
 Resource ownership and dependencies.
 
 Resource ownership:
-- Manifest owns presentation intent, audience, language, requirements, prohibitions, 16:9 canvas policy and numbering behavior.
+- Manifest owns presentation title, intent, audience, language, requirements and prohibitions.
 - Outline owns the strict section/subsection tree, stable node references, canonical page title, semantic role and the only slide order.
 - Design owns direction and shared chrome. The user-selected theme is read-only to the Agent, including design.theme; this is a field-level product rule, independent of page selection.
 - Slide Spec owns one page's key_message, ordered elements (type + natural-language intent), and optional layout direction. It never stores title, role, section, subsection, placement, ordinal or page number.
 - Slide HTML is the Agent-authored page body. Runtime owns the frame, equal-ratio fitting, shared chrome and derived numbering. Materialization records and render proof are Runtime-managed, never author-written.
+
+New projects initialize only the presentation title from the project title. Manifest goal, audience and language start as "待明确"; these are unresolved placeholders, not user requirements. Empty requirements and prohibitions mean no additional requirements or restrictions. Resolve these fields from the user's request and available context; do not copy the title into goal or add a positioning field.
+
+The canvas is always 1920×1080 CSS px (16:9). Runtime always displays the numeric page number derived from outline order, including cover and conclusion pages. Design chrome may customize its placement and style; when omitted, Runtime uses its default page-number appearance. Do not add canvas, numbering, visibility, hidden-role or page-number-format settings to Manifest, and do not draw page numbers into slide HTML.
 
 Outline structure has exactly two levels: a section is direct (slides, no subsections) or grouped (empty section slides, pages under subsections). Never mix the two. For new nodes submit client_ref, then use returned IDs; never invent formal sec_*, sub_* or sli_* identities.
 

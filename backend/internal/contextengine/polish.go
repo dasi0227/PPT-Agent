@@ -28,7 +28,6 @@ type PolishOutlineContext struct {
 	Goal         string            `json:"goal"`
 	Audience     string            `json:"audience"`
 	Language     string            `json:"language"`
-	Positioning  string            `json:"positioning,omitempty"`
 	Requirements []string          `json:"requirements"`
 	Prohibitions []string          `json:"prohibitions"`
 	Sections     []pptspec.Section `json:"sections"`
@@ -83,7 +82,7 @@ func (a *ContextAssembler) AssemblePolish(
 		Project:       (ProjectLoader{}).Load(project),
 		Outline: PolishOutlineContext{
 			Title: deck.Title, Goal: deck.Goal, Audience: deck.Audience,
-			Language: deck.Language, Positioning: deck.Positioning,
+			Language:     deck.Language,
 			Requirements: append([]string(nil), deck.Requirements...),
 			Prohibitions: append([]string(nil), deck.Prohibitions...),
 			Sections:     append([]pptspec.Section(nil), outline.Sections...),

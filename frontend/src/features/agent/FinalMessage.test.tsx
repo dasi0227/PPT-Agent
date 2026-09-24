@@ -16,8 +16,6 @@ const snapshot: ProjectContentSnapshot = {
     language: 'zh-CN',
     requirements: [],
     prohibitions: [],
-    canvas: { aspect_ratio: '16:9' },
-    numbering: { enabled: true, hidden_roles: [], format: 'number' },
     created_at: 1,
     updated_at: 1,
   },

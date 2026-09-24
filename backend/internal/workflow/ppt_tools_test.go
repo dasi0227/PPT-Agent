@@ -449,7 +449,7 @@ func assertNoNullRequired(t *testing.T, path string, value any) {
 func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 	dir := t.TempDir()
 	projectID := "pro_aaaaaa"
-	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
@@ -501,7 +501,7 @@ func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 	projectID := "pro_aaaaaa"
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{
-		"manifest.json": spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1},
+		"manifest.json": spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1},
 		"outline.json":  outline,
 		"design.json":   spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1},
 	} {
@@ -526,7 +526,7 @@ func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	dir, _ := renderThemeFixture(t)
 	projectID := "pro_aaaaaa"
-	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{"cover"}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Title: "Body", Role: "content"}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
 	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}, CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
@@ -539,7 +539,7 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if frame.Ordinal != 2 || frame.Total != 2 || !frame.Numbering.Visible {
+	if frame.Ordinal != 2 || frame.Total != 2 || frame.Canvas != spec.CanonicalCanvas() {
 		t.Fatalf("frame=%#v", frame)
 	}
 }
@@ -548,7 +548,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	dir, themeCSS := renderThemeFixture(t)
 	projectID := "pro_aaaaaa"
 	slideID := "sli_attea2"
-	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, Canvas: spec.CanvasSettings{AspectRatio: "16:9"}, Numbering: spec.NumberingPolicy{Enabled: true, HiddenRoles: []string{}, Format: "number"}, CreatedAt: 1, UpdatedAt: 1}
+	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: slideID, Title: "Cover", Role: spec.SlideRoleCover}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
 	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
 	slide := spec.SlideSpec{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, SlideID: slideID, KeyMessage: "Hello", Elements: []spec.Element{}, CreatedAt: 1, UpdatedAt: 1}
