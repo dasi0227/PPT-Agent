@@ -205,22 +205,15 @@ describe('DeckNavigator', () => {
     }));
   });
 
-  it('centers a clickable create action when the directory is empty', async () => {
-    const user = userEvent.setup();
+  it('shows a plain empty hint without a create action when the directory is empty', () => {
     const empty = emptySnapshot();
     useProjectStore.setState({ contentByProjectId: { pro_1: empty } });
     render(<DeckNavigator />);
 
     const emptyState = screen.getByTestId('deck-navigator-empty');
     expect(emptyState).toHaveClass('flex-1', 'justify-center');
-    expect(screen.getByText('目录为空，先新增章节')).toBeInTheDocument();
-
-    await user.click(within(emptyState).getByRole('button', { name: '新增章节' }));
-    expect(mutateProject).toHaveBeenCalledWith('pro_1', expect.objectContaining({
-      op: 'outline.insert',
-      position: {},
-      node: expect.objectContaining({ kind: 'section', slides: [], subsections: [] }),
-    }));
+    expect(emptyState).toHaveTextContent('内容为空');
+    expect(within(emptyState).queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('locks structure controls without flashing a warning banner during mutations', () => {

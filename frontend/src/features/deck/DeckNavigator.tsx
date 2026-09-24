@@ -143,7 +143,7 @@ function DeckNavigatorChrome({
         data-testid="deck-navigator-summary-row"
         className="flex h-9 shrink-0 items-center border-b border-border bg-surface px-3"
       >
-        <span className="text-xs tabular-nums text-text-400">
+        <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-text-400">
           {sectionCount} 章 · {pageCount} 页
         </span>
         <button
@@ -448,17 +448,9 @@ export function DeckNavigator({ actionsRef }: { actionsRef?: Ref<HTMLDivElement>
           {snapshot.outline.sections.length === 0 ? (
             <div
               data-testid="deck-navigator-empty"
-              className="flex min-h-32 flex-1 flex-col items-center justify-center gap-3 text-center text-xs text-text-400"
+              className="flex min-h-32 flex-1 items-center justify-center text-center text-xs text-text-400"
             >
-              <IconButton
-                label="新增章节"
-                onClick={() => void insertSection()}
-                disabled={locked}
-                className="h-10 w-10"
-              >
-                <FolderPlus className="h-5 w-5" strokeWidth={1.7} />
-              </IconButton>
-              <span>目录为空，先新增章节</span>
+              内容为空
             </div>
           ) : (
             <>
