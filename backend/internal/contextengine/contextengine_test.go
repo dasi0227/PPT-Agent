@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -17,12 +16,6 @@ import (
 
 type fakeStore struct {
 	slides map[string]model.Slide
-}
-
-type fakeThemeLoader struct {
-	themes    map[string]model.Theme
-	err       error
-	requested []string
 }
 
 type fakeComponentLoader struct{ values []model.Component }
@@ -37,18 +30,6 @@ func (l fakeSkillLoader) LoadSkills(context.Context) ([]model.RepositorySkill, e
 	return l.values, nil
 }
 
-func (l *fakeThemeLoader) Get(id string) (model.Theme, error) {
-	l.requested = append(l.requested, id)
-	if l.err != nil {
-		return model.Theme{}, l.err
-	}
-	theme, ok := l.themes[id]
-	if !ok {
-		return model.Theme{}, errors.New("missing theme")
-	}
-	return theme, nil
-}
-
 func (s *fakeStore) GetSlide(_ context.Context, id string) (model.Slide, error) {
 	v, ok := s.slides[id]
 	if !ok {
@@ -58,12 +39,7 @@ func (s *fakeStore) GetSlide(_ context.Context, id string) (model.Slide, error) 
 }
 
 func testAssembler(store ContextStore, registry *RefRegistry) *ContextAssembler {
-	return NewContextAssembler(store, registry).WithThemeLoader(&fakeThemeLoader{themes: map[string]model.Theme{
-		"swiss-modern": {
-			ID: "swiss-modern", Name: "Swiss Modern", Description: "Grid-led modern theme",
-			CSS: `:root{--color-bg:#fff;--color-fg:#111;--font-sans:Inter,sans-serif;--stage-w:1920;--stage-h:1080;}`,
-		},
-	}})
+	return NewContextAssembler(store, registry)
 }
 
 func fixture(t *testing.T) (model.Project, *fakeStore) {
@@ -75,11 +51,9 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	writeJSON(t, filepath.Join(dir, "outline.json"), outline)
 	design := pptspec.Design{
 		SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", CreatedAt: 1, UpdatedAt: 2,
-		Theme:     "swiss-modern",
-		Direction: "test direction",
-		Chrome: []pptspec.ChromeItem{
-			{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono counter"},
-		},
+		Direction:         "test direction",
+		LayoutPreferences: []string{"Prefer open grids"},
+		Decorations:       pptspec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"},
 	}
 	writeJSON(t, filepath.Join(dir, "design.json"), design)
 	slides := map[string]model.Slide{}
@@ -101,7 +75,7 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 		}
 		slides[id] = model.Slide{ID: id, ProjectID: "p1"}
 	}
-	return model.Project{ID: "p1", Title: "Deck", WorkDir: dir}, &fakeStore{slides: slides}
+	return model.Project{ID: "p1", Title: "Deck", Theme: "swiss-modern", WorkDir: dir}, &fakeStore{slides: slides}
 }
 
 func writeJSON(t *testing.T, path string, v any) {
@@ -158,8 +132,8 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 					}
 				}
 			}
-			if pack.Theme == nil {
-				t.Fatal("ppt profile missing required theme context")
+			if pack.Project.ThemeID != project.Theme {
+				t.Fatal("runtime project theme was not retained")
 			}
 			again, err := assembler.Assemble(context.Background(), req, project)
 			if err != nil {
@@ -219,83 +193,31 @@ func TestMentionedPagesKeepSummarySegmentAndHTMLRefUnderTightBudget(t *testing.T
 	}
 }
 
-func TestPPTContextLoadsCurrentThemeContract(t *testing.T) {
+func TestPPTContextKeepsThemeOutOfModelInput(t *testing.T) {
 	project, store := fixture(t)
-	loader := &fakeThemeLoader{themes: map[string]model.Theme{
-		"swiss-modern": {
-			ID: "swiss-modern", Name: "Swiss Modern", Description: "Grid-led modern theme",
-			CSS:       `:root{--color-bg:#fff;--color-primary:#d0021b;--stage-w:1920;--stage-h:1080;}`,
-			LocalPath: "/private/theme.css", OpenURL: "file:///private/theme.css",
-		},
-	}}
-	pack, err := NewContextAssembler(store, nil).WithThemeLoader(loader).Assemble(
-		context.Background(),
-		ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ScopeCurrentPage), Budget: DefaultBudget()},
-		project,
-	)
+	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
+		RunID: "r1", ThreadID: "t1", ProjectID: "p1",
+		Command: spec(model.ScopeCurrentPage), Budget: DefaultBudget(),
+	}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(loader.requested, ",") != "swiss-modern" {
-		t.Fatalf("requested themes=%v", loader.requested)
+	if pack.Project.ThemeID != project.Theme {
+		t.Fatal("runtime theme missing")
 	}
-	if pack.Theme == nil || pack.Theme.ID != "swiss-modern" || pack.Theme.Name != "Swiss Modern" ||
-		pack.Theme.Source != "theme_repository" || pack.Theme.Trust != "untrusted_read_only_reference" {
-		t.Fatalf("theme context=%+v", pack.Theme)
-	}
-	tokenValues := map[string]string{}
-	for _, token := range pack.Theme.Tokens {
-		tokenValues[token.Name] = token.Value
-	}
-	if tokenValues["--color-primary"] != "#d0021b" || tokenValues["--stage-w"] != "1920" || tokenValues["--stage-h"] != "1080" {
-		t.Fatalf("theme tokens=%v", tokenValues)
-	}
-	if strings.Join(pack.Theme.PublicRoles, ",") != strings.Join(designsystem.PublicRoles, ",") {
-		t.Fatalf("public roles=%v", pack.Theme.PublicRoles)
-	}
-	foundThemeSegment := false
-	for _, segment := range pack.Manifest.Segments {
-		if segment.Kind == SegmentTheme {
-			foundThemeSegment = segment.Required && segment.SourceRef == "theme://swiss-modern/contract"
-		}
-	}
-	if !foundThemeSegment {
-		t.Fatalf("required theme segment missing: %+v", pack.Manifest.Segments)
-	}
-	raw, _ := json.Marshal(pack.Theme)
-	if strings.Contains(string(raw), "/private/") || strings.Contains(string(raw), "open_url") {
-		t.Fatalf("theme context leaked repository location: %s", raw)
-	}
-}
-
-func TestPageScopeAlwaysLoadsThemeForHTMLAuthoring(t *testing.T) {
-	project, store := fixture(t)
-	loader := &fakeThemeLoader{themes: map[string]model.Theme{
-		"swiss-modern": {ID: "swiss-modern", Name: "Swiss Modern", CSS: ":root{--color-bg:#fff;}"},
-	}}
-	pack, err := NewContextAssembler(store, nil).WithThemeLoader(loader).Assemble(
-		context.Background(),
-		ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ScopeAllPages), Budget: DefaultBudget()},
-		project,
-	)
+	raw, err := json.Marshal(pack)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loader.requested) != 1 || pack.Theme == nil || pack.Theme.Name != "Swiss Modern" {
-		t.Fatalf("page scope is missing the HTML theme contract: requested=%v theme=%+v", loader.requested, pack.Theme)
+	if strings.Contains(string(raw), project.Theme) || strings.Contains(string(raw), "theme_context") {
+		t.Fatalf("selected theme leaked into serialized context: %s", raw)
 	}
-}
-
-func TestPPTContextFailsClearlyWhenThemeCannotLoad(t *testing.T) {
-	project, store := fixture(t)
-	_, err := NewContextAssembler(store, nil).
-		WithThemeLoader(&fakeThemeLoader{err: errors.New("repository offline")}).
-		Assemble(context.Background(), ContextRequest{
-			RunID: "r1", ThreadID: "t1", ProjectID: "p1",
-			Command: spec(model.ScopeAllPages), Budget: DefaultBudget(),
-		}, project)
-	if !errors.Is(err, ErrRequiredMissing) || !strings.Contains(err.Error(), `theme "swiss-modern"`) {
-		t.Fatalf("theme load error=%v", err)
+	compiled, err := (PromptCompiler{}).Compile(pack, "SYSTEM")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(compiled.User, project.Theme) || strings.Contains(compiled.User, "theme_context") {
+		t.Fatalf("selected theme leaked into model context: %s", compiled.User)
 	}
 }
 
@@ -382,18 +304,6 @@ func TestBudgetDropsOptionalSegmentsBeforeRequiredTarget(t *testing.T) {
 	if pack.Target.SlideSpec == nil || pack.Command.Instruction == "" {
 		t.Fatal("required target or RunCommand was cropped")
 	}
-	if pack.Theme == nil || pack.Theme.ID != "swiss-modern" {
-		t.Fatal("required theme context was dropped")
-	}
-	themeSegmentFound := false
-	for _, segment := range pack.Manifest.Segments {
-		if segment.Kind == SegmentTheme {
-			themeSegmentFound = segment.Required
-		}
-	}
-	if !themeSegmentFound {
-		t.Fatal("required theme segment was dropped")
-	}
 	if len(pack.Manifest.Dropped) == 0 || len(pack.Manifest.Warnings) == 0 {
 		t.Fatalf("manifest lacks budget diagnosis: %+v", pack.Manifest)
 	}
@@ -441,37 +351,6 @@ func TestPromptCompilerSnapshotSeparatesUserInstruction(t *testing.T) {
 		if strings.Contains(got.User, forbidden) {
 			t.Fatalf("model projection leaked %s: %s", forbidden, got.User)
 		}
-	}
-}
-
-func TestPromptCompilerIncludesThemeContractOnlyInUserContext(t *testing.T) {
-	p := ContextPack{
-		SchemaVersion: SchemaVersion,
-		Command:       spec(model.ScopeCurrentPage),
-		Project:       ProjectContext{ID: "p1"},
-		Theme: &ThemeContext{
-			ID: "swiss-modern", Name: "Swiss Modern", Description: "Grid-led",
-			Tokens:      []ThemeToken{{Name: "--color-primary", Value: "#d0021b"}},
-			PublicRoles: []string{".slide-stage", ".card"},
-			Source:      "theme_repository", Trust: "untrusted_read_only_reference",
-		},
-	}
-	got, err := (PromptCompiler{}).Compile(p, "SYSTEM POLICY")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, expected := range []string{
-		"<theme_context>",
-		`"name":"Swiss Modern"`,
-		`"name":"--color-primary"`,
-		`"public_roles":[".slide-stage",".card"]`,
-	} {
-		if !strings.Contains(got.User, expected) {
-			t.Fatalf("compiled user context missing %q: %s", expected, got.User)
-		}
-	}
-	if got.System != "SYSTEM POLICY" || strings.Contains(got.System, "swiss-modern") || strings.Contains(got.System, "theme_context") {
-		t.Fatalf("theme context entered system policy: %q", got.System)
 	}
 }
 

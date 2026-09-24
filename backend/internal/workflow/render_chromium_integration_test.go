@@ -21,7 +21,7 @@ const (
 )
 
 func testRenderFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}, {Type: "section_marker", Placement: "top-left", Style: "muted"}, {Type: "deck_title", Placement: "top-right", Style: "muted"}}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "top-right", SectionTitle: "top-left", KeyMessage: "none"}}
 }
 
 func TestNodeSlideRendererWithRealChromium(t *testing.T) {
@@ -71,8 +71,8 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 		diagnostics.Overflow["horizontal"] || diagnostics.Overflow["vertical"] {
 		t.Fatalf("canonical stage diagnostics=%+v", diagnostics)
 	}
-	if strings.Join(diagnostics.RuntimeChrome, ",") != "page_number,section_marker,deck_title" {
-		t.Fatalf("runtime chrome was not injected: %#v", diagnostics.RuntimeChrome)
+	if strings.Join(diagnostics.RuntimeDecorations, ",") != "page_number,deck_title,section_title" {
+		t.Fatalf("runtime decorations was not injected: %#v", diagnostics.RuntimeDecorations)
 	}
 	if _, err := os.Stat(screenshot); err != nil {
 		t.Fatal(err)

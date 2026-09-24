@@ -2,17 +2,13 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	presentationexport "github.com/dasi0227/PPT-Agent/backend/internal/export"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
@@ -77,17 +73,15 @@ func (svc *ExportService) Start(ctx context.Context, projectID string, format pr
 	if err != nil {
 		return nil, err
 	}
-	var design spec.Design
-	designRaw, err := os.ReadFile(filepath.Join(project.WorkDir, "design.json"))
-	if err != nil || json.Unmarshal(designRaw, &design) != nil || strings.TrimSpace(design.Theme) == "" {
+	if strings.TrimSpace(project.Theme) == "" {
 		return nil, &presentationexport.SnapshotError{Code: "EXPORT_THEME_UNAVAILABLE", Message: "导出主题不可用。"}
 	}
-	themeCSS, err := svc.themes.CSS(design.Theme)
+	themeCSS, err := svc.themes.CSS(project.Theme)
 	if err != nil {
 		return nil, &presentationexport.SnapshotError{Code: "EXPORT_THEME_UNAVAILABLE", Message: "导出主题不可用。"}
 	}
 	id := model.MustShortID("exp")
-	snapshot, err := presentationexport.CreateSnapshot(ctx, presentationexport.SnapshotInput{ExportID: id, ProjectID: project.ID, ProjectTitle: project.Title, ProjectDir: project.WorkDir, ThemeID: design.Theme, ThemeCSS: themeCSS})
+	snapshot, err := presentationexport.CreateSnapshot(ctx, presentationexport.SnapshotInput{ExportID: id, ProjectID: project.ID, ProjectTitle: project.Title, ProjectDir: project.WorkDir, ThemeID: project.Theme, ThemeCSS: themeCSS})
 	if err != nil {
 		return nil, err
 	}

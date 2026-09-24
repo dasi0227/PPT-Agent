@@ -26,8 +26,8 @@ func (h *RepositoryHandler) RuntimeBaseCSS(c *gin.Context) {
 	serveRuntimeResource(c, "text/css; charset=utf-8", runtimeassets.BaseCSS(), false)
 }
 
-func (h *RepositoryHandler) RuntimeChromeJS(c *gin.Context) {
-	serveRuntimeResource(c, "application/javascript; charset=utf-8", runtimeassets.ChromeJS(), false)
+func (h *RepositoryHandler) RuntimeDecorationsJS(c *gin.Context) {
+	serveRuntimeResource(c, "application/javascript; charset=utf-8", runtimeassets.DecorationsJS(), false)
 }
 
 func (h *RepositoryHandler) ListThemes(c *gin.Context) {

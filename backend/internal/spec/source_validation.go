@@ -8,29 +8,42 @@ import (
 	"io"
 	"strings"
 
+	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 	nethtml "golang.org/x/net/html"
 )
 
 var ErrSlideStageMissing = errors.New("slide HTML must contain a slide-stage element")
 var ErrStaticPageNumber = errors.New("page numbers belong to the runtime frame")
 
-// ParseStrictSlideSpec rejects ambiguous source before decoding into the
-// authoring schema. In particular, encoding/json.Unmarshal accepts duplicate
-// keys and would silently discard an earlier value.
-func ParseStrictSlideSpec(raw []byte) (SlideSpec, error) {
-	var slide SlideSpec
+// ParseStrictSourceJSON validates the submitted source before typed decoding,
+// preserving required-field and null checks that decoding alone would erase.
+func ParseStrictSourceJSON(raw []byte, kind string) (any, error) {
 	if err := ValidateJSONSource(raw); err != nil {
-		return slide, err
+		return nil, err
 	}
-	strict := json.NewDecoder(bytes.NewReader(raw))
-	strict.DisallowUnknownFields()
-	if err := strict.Decode(&slide); err != nil {
-		return slide, err
+	var name string
+	var value any
+	switch kind {
+	case "spec":
+		name, value = pptschema.SlideSpecName, &SlideSpec{}
+	case "manifest":
+		name, value = pptschema.ManifestName, &Manifest{}
+	case "design":
+		name, value = pptschema.DesignName, &Design{}
+	default:
+		return nil, errors.New("unsupported JSON source kind")
 	}
-	if err := ValidateSlideSpec(slide); err != nil {
-		return slide, err
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, err
 	}
-	return slide, nil
+	if err := pptschema.Validate(name, decoded); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(raw, value); err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 func ValidateJSONSource(raw []byte) error {
@@ -48,32 +61,50 @@ func ValidateJSONSource(raw []byte) error {
 	return nil
 }
 
-// SlideSpecSystemFields permits repair of invalid business fields while still
-// proving which file and immutable metadata the source belongs to.
-func SlideSpecSystemFields(raw []byte) (SlideSpec, error) {
-	var slide SlideSpec
+type SourceSystemMetadata struct {
+	SchemaVersion string
+	ProjectID     string
+	SlideID       string
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+// SourceSystemFields permits repair of invalid business fields while proving
+// the immutable identity and metadata of an existing source file.
+func SourceSystemFields(raw []byte, kind string) (SourceSystemMetadata, error) {
+	var metadata SourceSystemMetadata
 	if err := ValidateJSONSource(raw); err != nil {
-		return slide, err
+		return metadata, err
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
-		return slide, errors.New("spec must be a JSON object")
+		return metadata, errors.New("source must be a JSON object")
 	}
-	for _, item := range []struct {
+	targets := []struct {
 		name   string
 		target any
 	}{
-		{"version", &slide.SchemaVersion}, {"project_id", &slide.ProjectID}, {"slide_id", &slide.SlideID},
-		{"created_at", &slide.CreatedAt}, {"updated_at", &slide.UpdatedAt},
-	} {
+		{"version", &metadata.SchemaVersion}, {"project_id", &metadata.ProjectID},
+		{"created_at", &metadata.CreatedAt}, {"updated_at", &metadata.UpdatedAt},
+	}
+	if kind == "spec" {
+		targets = append(targets, struct {
+			name   string
+			target any
+		}{"slide_id", &metadata.SlideID})
+	}
+	for _, item := range targets {
+		if bytes.Equal(bytes.TrimSpace(fields[item.name]), []byte("null")) {
+			return metadata, fmt.Errorf("invalid system field %s", item.name)
+		}
 		if err := json.Unmarshal(fields[item.name], item.target); err != nil {
-			return slide, fmt.Errorf("invalid system field %s: %w", item.name, err)
+			return metadata, fmt.Errorf("invalid system field %s: %w", item.name, err)
 		}
 	}
-	if slide.SchemaVersion != SchemaVersion || slide.ProjectID == "" || slide.SlideID == "" || slide.CreatedAt < 0 || slide.UpdatedAt < 0 {
-		return slide, errors.New("spec system fields are invalid")
+	if metadata.SchemaVersion != SchemaVersion || metadata.ProjectID == "" || (kind == "spec" && metadata.SlideID == "") || metadata.CreatedAt < 0 || metadata.UpdatedAt < 0 {
+		return metadata, errors.New("source system fields are invalid")
 	}
-	return slide, nil
+	return metadata, nil
 }
 
 func scanJSONValue(decoder *json.Decoder, pointer string) error {

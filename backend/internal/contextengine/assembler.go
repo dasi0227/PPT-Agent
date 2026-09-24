@@ -26,10 +26,6 @@ type SkillIndexLoader interface {
 	LoadSkills(context.Context) ([]model.RepositorySkill, error)
 }
 
-type ThemeLoader interface {
-	Get(string) (model.Theme, error)
-}
-
 type ContextStore interface {
 	GetSlide(context.Context, string) (model.Slide, error)
 }
@@ -38,7 +34,6 @@ type ContextAssembler struct {
 	store      ContextStore
 	components ComponentIndexLoader
 	skills     SkillIndexLoader
-	themes     ThemeLoader
 	estimator  TokenEstimator
 	profiles   ContextProfileResolver
 	registry   *RefRegistry
@@ -59,11 +54,6 @@ func (a *ContextAssembler) WithComponentLoader(loader ComponentIndexLoader) *Con
 
 func (a *ContextAssembler) WithSkillLoader(loader SkillIndexLoader) *ContextAssembler {
 	a.skills = loader
-	return a
-}
-
-func (a *ContextAssembler) WithThemeLoader(loader ThemeLoader) *ContextAssembler {
-	a.themes = loader
 	return a
 }
 
@@ -104,29 +94,12 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		SlideHTML:  SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
 		Components: []ComponentCandidate{}, Skills: []SkillCandidate{},
 	}
-	if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
-		if a.themes == nil {
-			return ContextPack{}, fmt.Errorf("%w: theme loader is unavailable", ErrRequiredMissing)
-		}
-		theme, themeErr := a.themes.Get(design.Theme)
-		if themeErr != nil {
-			return ContextPack{}, fmt.Errorf("%w: theme %q: %v", ErrRequiredMissing, design.Theme, themeErr)
-		}
-		if theme.ID != design.Theme {
-			return ContextPack{}, fmt.Errorf("%w: loaded theme %q does not match design theme %q", ErrSourceInvalid, theme.ID, design.Theme)
-		}
-		themeContext, buildErr := buildThemeContext(theme)
-		if buildErr != nil {
-			return ContextPack{}, fmt.Errorf("%w: %v", ErrSourceInvalid, buildErr)
-		}
-		pack.Theme = &themeContext
-	}
 	for _, location := range pptspec.FlattenOutline(outline) {
 		id := location.Slide.SlideID
 		s, ready := slides[id]
 		summary := slideSummary(location, s, ready)
 		if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
-			state := loadMaterializationState(project.WorkDir, id, deck, outline, s, design)
+			state := loadMaterializationState(project.WorkDir, project.Theme, id, deck, outline, s, design)
 			summary.State = state
 		}
 		pack.Outline.Summaries = append(pack.Outline.Summaries, summary)
@@ -181,9 +154,6 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		addSegment(SegmentTarget, "slide://"+pack.Target.SlideSpec.SlideID+"/spec", 100, "exact target artifact", true, DetailFull, pack.Target.SlideSpec)
 	}
 	addSegment(SegmentDesign, "project://"+project.ID+"/design", 85, "profile design contract", true, DetailFull, design)
-	if pack.Theme != nil {
-		addSegment(SegmentTheme, "theme://"+pack.Theme.ID+"/contract", 88, "current theme metadata and CSS contract", true, DetailFull, pack.Theme)
-	}
 	if len(pack.RelatedSlides) > 0 && len(mentionedIDs) == 0 {
 		if cap := budget.SegmentCaps[SegmentRelated]; cap > 0 && a.estimator.Estimate(pack.RelatedSlides) > cap {
 			manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentRelated), Reason: "segment cap exceeded"})
@@ -289,7 +259,7 @@ func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextReque
 	for _, id := range ids {
 		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(id)))
 		summary, raw, err := (SlideHTMLSummaryLoader{}).Load(path)
-		state := loadMaterializationState(project.WorkDir, id, pack.PresentationManifest.Manifest, pack.Outline.Outline, slides[id], *pack.Design.Design)
+		state := loadMaterializationState(project.WorkDir, project.Theme, id, pack.PresentationManifest.Manifest, pack.Outline.Outline, slides[id], *pack.Design.Design)
 		if req.Command.Scope.IsSinglePage() && id == req.Command.Scope.SlideIDs[0] {
 			pack.Target.Materialization = &pptspec.Materialization{State: state}
 		}

@@ -283,7 +283,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 	} else if target != nil && target.Type == "deck" && target.Part == "outline" {
 		targetName = "目录结构"
 	} else if target != nil && target.Type == "deck" && target.Part == "design" {
-		targetName = "全局设计"
+		targetName = "视觉要求"
 	} else if target != nil && target.Type == "slide" {
 		pageName := target.DisplayName
 		if pageName == "" {

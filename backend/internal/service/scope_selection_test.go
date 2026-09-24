@@ -88,9 +88,9 @@ func TestMergeSelectionScopeIsMonotonicAndSingleRevision(t *testing.T) {
 	}
 }
 
-func TestMergeChromeSelectionPreservesPageBoundary(t *testing.T) {
+func TestMergeDecorationSelectionPreservesPageBoundary(t *testing.T) {
 	base := model.NewRunScope(model.ScopeCurrentPage, "sli_2")
-	selection := model.DOMSelection{SlideID: "sli_2", Status: model.DOMSelectionActive, ChromeTargets: []model.ChromeTarget{{Type: "page_number"}}}
+	selection := model.DOMSelection{SlideID: "sli_2", Status: model.DOMSelectionActive, DecorationTargets: []model.DecorationTarget{{Type: "page_number"}}}
 	got := mergeSelectionScope(base, scopeSnapshot(), []model.DOMSelection{selection})
 	if !got.Equal(base) {
 		t.Fatalf("scope = %+v", got)

@@ -6,20 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 func defaultDesign(projectID string, now int64) spec.Design {
 	return spec.Design{
 		SchemaVersion: spec.SchemaVersion, ProjectID: projectID,
-		Theme:     designsystem.DefaultTheme,
-		Direction: "待确定",
-		Chrome: []spec.ChromeItem{
-			{Type: "page_number", Placement: "bottom-right", Style: "tiny muted mono counter"},
-			{Type: "section_marker", Placement: "top-left", Style: "compact section label"},
-		},
-		CreatedAt: now, UpdatedAt: now,
+		Direction:         "",
+		LayoutPreferences: []string{},
+		Decorations:       spec.DefaultDecorations(),
+		CreatedAt:         now, UpdatedAt: now,
 	}
 }
 

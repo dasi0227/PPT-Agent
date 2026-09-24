@@ -94,19 +94,17 @@ var patchPathRules = map[string]map[string][]PatchPathRule{
 	},
 	"design.patch": {
 		"add": {
-			{Pattern: `^/(?:direction|chrome)$`, Description: "agent-owned design fields"},
-			{Pattern: `^/chrome/(?:-|0|[1-9][0-9]*)$`, Description: "chrome item or append position"},
-			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)/(?:type|placement|style)$`, Description: "chrome item fields"},
+			{Pattern: `^/(?:direction|layout_preferences|decorations)$`, Description: "agent-owned design fields"},
+			{Pattern: `^/layout_preferences/(?:-|0|[1-9][0-9]*)$`, Description: "layout preference or append position"},
+			{Pattern: `^/decorations/(?:page_number|deck_title|section_title|key_message)$`, Description: "fixed decoration placement"},
 		},
 		"remove": {
-			{Pattern: `^/(?:direction|chrome)$`, Description: "agent-owned design fields"},
-			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)$`, Description: "existing chrome item"},
-			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)/(?:type|placement|style)$`, Description: "chrome item fields"},
+			{Pattern: `^/layout_preferences/(?:0|[1-9][0-9]*)$`, Description: "existing layout preference"},
 		},
 		"replace": {
-			{Pattern: `^/(?:direction|chrome)$`, Description: "agent-owned design fields"},
-			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)$`, Description: "existing chrome item"},
-			{Pattern: `^/chrome/(?:0|[1-9][0-9]*)/(?:type|placement|style)$`, Description: "chrome item fields"},
+			{Pattern: `^/(?:direction|layout_preferences|decorations)$`, Description: "agent-owned design fields"},
+			{Pattern: `^/layout_preferences/(?:0|[1-9][0-9]*)$`, Description: "existing layout preference"},
+			{Pattern: `^/decorations/(?:page_number|deck_title|section_title|key_message)$`, Description: "fixed decoration placement"},
 		},
 	},
 	"slide.spec.patch": {

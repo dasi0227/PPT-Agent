@@ -112,8 +112,8 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 	if json.Unmarshal(manifestRaw, &manifest) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {
 		return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
 	}
-	out := spec.ProjectContentSnapshot{Hashes: map[string]string{"manifest": spec.ResourceHash(manifest), "outline": spec.ResourceHash(outline), "design": spec.ResourceHash(design)}, Manifest: manifest, Outline: outline, Design: design, SlidesByID: map[string]spec.SlideContent{}}
-	out.Appearance, err = runtimeassets.ProjectAppearance(project.WorkDir, design.Theme)
+	out := spec.ProjectContentSnapshot{Theme: project.Theme, Hashes: map[string]string{"manifest": spec.ResourceHash(manifest), "outline": spec.ResourceHash(outline), "design": spec.ResourceHash(design)}, Manifest: manifest, Outline: outline, Design: design, SlidesByID: map[string]spec.SlideContent{}}
+	out.Appearance, err = runtimeassets.ProjectAppearance(project.WorkDir, project.Theme)
 	if err != nil {
 		out.ThemeError = err.Error()
 	} else {
@@ -144,7 +144,7 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 		}
 		if content.SpecState == "ready" {
 			nodeHash := spec.SemanticSlideNodeHash(outline, id)
-			content.HTMLState = spec.DeriveMaterializationState(htmlErr == nil, recordPtr, spec.ResourceHash(manifest), nodeHash, spec.ResourceHash(slide), spec.DesignContentHash(design), spec.ContentHash(htmlRaw), spec.SourceHash(manifestRaw, nodeHash, specRaw, designRaw), spec.FrameContextHash(manifest, outline, design, id, out.Appearance))
+			content.HTMLState = spec.DeriveMaterializationState(htmlErr == nil, recordPtr, spec.ResourceHash(manifest), nodeHash, spec.ResourceHash(slide), spec.DesignContentHash(design), spec.ContentHash(htmlRaw), spec.SourceHash(manifestRaw, nodeHash, specRaw, designRaw), spec.FrameContextHash(manifest, outline, design, id, slide.KeyMessage, out.Appearance))
 		} else if htmlErr == nil {
 			content.HTMLState = "unknown"
 		}

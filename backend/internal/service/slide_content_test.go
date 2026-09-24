@@ -40,15 +40,14 @@ func TestReadHTMLBindsPreviewToSourceHash(t *testing.T) {
 		}
 	}
 	write(path, original)
-	write(filepath.Join(dir, "design.json"), []byte(`{"theme":"swiss-modern"}`))
-	svc := NewSlideService(previewContentStore{project: model.Project{ID: "pro_one", WorkDir: dir}})
+	svc := NewSlideService(previewContentStore{project: model.Project{ID: "pro_one", WorkDir: dir, Theme: "swiss-modern"}})
 	hash := spec.ContentHash(original)
 	preview, err := svc.ReadHTML(context.Background(), "sli_one", hash)
 	if err != nil || string(preview) != string(original) {
 		t.Fatalf("matching source must return authored HTML: %s, %v", preview, err)
 	}
-	write(filepath.Join(dir, "design.json"), []byte(`{"theme":"blueprint"}`))
-	afterTheme, err := svc.ReadHTML(context.Background(), "sli_one", hash)
+	themedService := NewSlideService(previewContentStore{project: model.Project{ID: "pro_one", WorkDir: dir, Theme: "blueprint"}})
+	afterTheme, err := themedService.ReadHTML(context.Background(), "sli_one", hash)
 	if err != nil || string(afterTheme) != string(original) {
 		t.Fatal("theme update changed HTML identity")
 	}

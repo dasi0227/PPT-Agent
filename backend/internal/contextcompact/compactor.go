@@ -141,11 +141,11 @@ func compactDOMSelections(messages []llm.Message) []llm.Message {
 			for _, target := range selection.DOMTargets {
 				targets = append(targets, map[string]any{"fingerprint": target.Fingerprint, "tag": target.Tag, "text_summary": target.TextSummary, "status": target.Status})
 			}
-			chrome := make([]map[string]any, 0, len(selection.ChromeTargets))
-			for _, target := range selection.ChromeTargets {
-				chrome = append(chrome, map[string]any{"type": target.Type, "placement": target.Placement, "text": target.Text})
+			decorations := make([]map[string]any, 0, len(selection.DecorationTargets))
+			for _, target := range selection.DecorationTargets {
+				decorations = append(decorations, map[string]any{"type": target.Type, "placement": target.Placement, "text": target.Text})
 			}
-			raw, _ := json.Marshal(map[string]any{"selection_id": selection.SelectionID, "marker_no": selection.MarkerNo, "comment": selection.Comment, "status": selection.Status, "slide_id": selection.SlideID, "html_hash": selection.HTMLHash, "dom_targets": targets, "chrome_targets": chrome})
+			raw, _ := json.Marshal(map[string]any{"selection_id": selection.SelectionID, "marker_no": selection.MarkerNo, "comment": selection.Comment, "status": selection.Status, "slide_id": selection.SlideID, "html_hash": selection.HTMLHash, "dom_targets": targets, "decoration_targets": decorations})
 			part.Text = "<selected_dom_reference>" + string(raw) + "</selected_dom_reference>"
 		}
 	}

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -342,10 +341,6 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 		if err = json.Unmarshal(raw, &next); err != nil {
 			return out, invalid(err)
 		}
-	}
-	next.Theme = current.Theme
-	if next.Theme == "" {
-		next.Theme = designsystem.DefaultTheme
 	}
 	next.SchemaVersion = spec.SchemaVersion
 	next.ProjectID = s.ProjectID

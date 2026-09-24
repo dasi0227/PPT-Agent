@@ -20,7 +20,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-const RuntimeVersion = "export-runtime-v3"
+const RuntimeVersion = "export-runtime-v4"
 
 type SnapshotInput struct {
 	ExportID, ProjectID, ProjectTitle, ProjectDir, ThemeID string
@@ -38,6 +38,9 @@ func (e *SnapshotError) Error() string { return e.Message }
 func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) {
 	if ctx.Err() != nil {
 		return Snapshot{}, context.Cause(ctx)
+	}
+	if strings.TrimSpace(input.ThemeID) == "" || len(input.ThemeCSS) == 0 {
+		return Snapshot{}, snapshotError("EXPORT_THEME_UNAVAILABLE", "导出主题不可用。")
 	}
 	manifestRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, "manifest.json"))
 	if err != nil {
@@ -62,9 +65,6 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	}
 	if json.Unmarshal(designRaw, &design) != nil || spec.ValidateDesign(design) != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "视觉设计无效。")
-	}
-	if design.Theme != input.ThemeID {
-		return Snapshot{}, snapshotError("EXPORT_THEME_UNAVAILABLE", "导出主题在快照期间发生变化。")
 	}
 	flat := spec.FlattenOutline(outline)
 	if len(flat) == 0 {
@@ -99,18 +99,26 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	if err := runtimeassets.Materialize(assetsDir); err != nil {
 		return Snapshot{}, err
 	}
-	appearance := runtimeassets.Appearance(design.Theme, input.ThemeCSS)
+	appearance := runtimeassets.Appearance(input.ThemeID, input.ThemeCSS)
 	slides := make([]SlideSnapshot, 0, len(flat))
 	for _, loc := range flat {
 		raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, "slides", loc.Slide.SlideID, "index.html"))
 		if readErr != nil {
 			return Snapshot{}, readErr
 		}
-		normalized, normalizeErr := runtimehtml.Normalize(raw, design.Theme)
+		normalized, normalizeErr := runtimehtml.Normalize(raw, input.ThemeID)
 		if normalizeErr != nil {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面 HTML 无法解析。")
 		}
-		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.SlideID, appearance)
+		var slide spec.SlideSpec
+		specRaw, specErr := os.ReadFile(filepath.Join(input.ProjectDir, "slides", loc.Slide.SlideID, "spec.json"))
+		if specErr != nil && !os.IsNotExist(specErr) {
+			return Snapshot{}, specErr
+		}
+		if specErr == nil && json.Unmarshal(specRaw, &slide) != nil {
+			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面设计稿无法解析。")
+		}
+		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.SlideID, slide.KeyMessage, appearance)
 		if !ok {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面运行框架无法构建。")
 		}
@@ -134,7 +142,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	}
 	digest := digestSnapshot(manifestRaw, outlineRaw, designRaw, baseCSS, themeCSS, slides, attachmentDigests(attachments, snapshotRoot))
 	cleanup = false
-	return Snapshot{ProjectID: input.ProjectID, ProjectTitle: input.ProjectTitle, Root: snapshotRoot, ManifestRaw: manifestRaw, OutlineRaw: outlineRaw, DesignRaw: designRaw, BaseCSS: baseCSS, ThemeCSS: themeCSS, ThemeID: design.Theme, Slides: slides, Attachments: attachments, SourceDigest: digest}, nil
+	return Snapshot{ProjectID: input.ProjectID, ProjectTitle: input.ProjectTitle, Root: snapshotRoot, ManifestRaw: manifestRaw, OutlineRaw: outlineRaw, DesignRaw: designRaw, BaseCSS: baseCSS, ThemeCSS: themeCSS, ThemeID: input.ThemeID, Slides: slides, Attachments: attachments, SourceDigest: digest}, nil
 }
 
 func attachmentDigests(paths []string, root string) []string {

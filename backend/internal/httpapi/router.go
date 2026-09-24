@@ -76,7 +76,7 @@ func (r *Router) register() {
 		v1.POST("/settings/models/reload", r.llm.ReloadSettings)
 	}
 	v1.GET("/runtime/base.css", r.repository.RuntimeBaseCSS)
-	v1.GET("/runtime/chrome.js", r.repository.RuntimeChromeJS)
+	v1.GET("/runtime/decorations.js", r.repository.RuntimeDecorationsJS)
 	v1.GET("/runtime/fonts.css", r.repository.RuntimeAsset)
 	v1.GET("/runtime/font-loader.js", r.repository.RuntimeAsset)
 	v1.GET("/runtime/theme-bridge.js", r.repository.RuntimeAsset)

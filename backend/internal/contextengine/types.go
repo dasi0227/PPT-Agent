@@ -26,7 +26,6 @@ const (
 	SegmentTarget               SegmentKind = "target_artifact"
 	SegmentRelated              SegmentKind = "related_slides"
 	SegmentDesign               SegmentKind = "design"
-	SegmentTheme                SegmentKind = "theme"
 	SegmentSlideHTML            SegmentKind = "slide_html"
 	SegmentComponents           SegmentKind = "components"
 	SegmentSkills               SegmentKind = "skills"
@@ -50,7 +49,7 @@ type TokenBudget struct {
 func DefaultBudget() TokenBudget {
 	return TokenBudget{ContextWindow: 32768, InputLimit: 20000, OutputReserve: 8000, SegmentCaps: map[SegmentKind]int{
 		SegmentPolicy: 3000, SegmentRunCommand: 1200, SegmentPresentationManifest: 1600, SegmentOutline: 3000, SegmentTarget: 6000,
-		SegmentRelated: 2400, SegmentDesign: 3000, SegmentTheme: 2400, SegmentSlideHTML: 6000,
+		SegmentRelated: 2400, SegmentDesign: 3000, SegmentSlideHTML: 6000,
 		SegmentComponents: 1800, SegmentSkills: 1800,
 	}}
 }
@@ -64,8 +63,9 @@ type ContextRequest struct {
 }
 
 type ProjectContext struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	ThemeID string `json:"-"`
 }
 
 type OutlineContext struct {
@@ -99,21 +99,6 @@ type TargetContext struct {
 
 type DesignContext struct {
 	Design *pptspec.Design `json:"design,omitempty"`
-}
-
-type ThemeToken struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-type ThemeContext struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Tokens      []ThemeToken `json:"tokens"`
-	PublicRoles []string     `json:"public_roles"`
-	Source      string       `json:"source"`
-	Trust       string       `json:"trust"`
 }
 
 type SlideHTMLContext struct {
@@ -151,7 +136,6 @@ type ContextPack struct {
 	Target               TargetContext               `json:"target"`
 	RelatedSlides        []SlideSummary              `json:"related_slides"`
 	Design               DesignContext               `json:"design"`
-	Theme                *ThemeContext               `json:"theme,omitempty"`
 	SlideHTML            SlideHTMLContext            `json:"slide_html"`
 	Components           []ComponentCandidate        `json:"components"`
 	Skills               []SkillCandidate            `json:"skills"`

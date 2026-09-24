@@ -106,7 +106,7 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 			PlanID: "p1", Title: "计划", Content: "完整计划", Status: "active",
 			Steps: []model.PublicPlanStep{{ID: "s1", Title: "生成", Status: "in_progress"}},
 		}}},
-		{model.EventMessageReasoning, model.MessageReasoningPayload{PublicEventBase: base(), MessageID: "m1", Text: "先确认全局设计。"}},
+		{model.EventMessageReasoning, model.MessageReasoningPayload{PublicEventBase: base(), MessageID: "m1", Text: "先确认视觉要求。"}},
 		{model.EventToolStarted, model.ToolStartedPayload{
 			PublicEventBase: base(), CallID: "c1", Tool: "read_ppt", Display: model.PublicDisplay{Label: "读取 PPT"},
 		}},

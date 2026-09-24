@@ -93,32 +93,43 @@ type Element struct {
 }
 
 type Design struct {
-	SchemaVersion string       `json:"version"`
-	ProjectID     string       `json:"project_id"`
-	Theme         string       `json:"theme"`
-	Direction     string       `json:"direction"`
-	Chrome        []ChromeItem `json:"chrome"`
-	CreatedAt     int64        `json:"created_at"`
-	UpdatedAt     int64        `json:"updated_at"`
+	SchemaVersion     string      `json:"version"`
+	ProjectID         string      `json:"project_id"`
+	Direction         string      `json:"direction"`
+	LayoutPreferences []string    `json:"layout_preferences"`
+	Decorations       Decorations `json:"decorations"`
+	CreatedAt         int64       `json:"created_at"`
+	UpdatedAt         int64       `json:"updated_at"`
 }
-type ChromeItem struct {
-	Type      string `json:"type"`
-	Placement string `json:"placement"`
-	Style     string `json:"style"`
+type Decorations struct {
+	PageNumber   string `json:"page_number"`
+	DeckTitle    string `json:"deck_title"`
+	SectionTitle string `json:"section_title"`
+	KeyMessage   string `json:"key_message"`
+}
+
+func DefaultDecorations() Decorations {
+	return Decorations{
+		PageNumber:   "bottom-right",
+		DeckTitle:    "none",
+		SectionTitle: "top-left",
+		KeyMessage:   "none",
+	}
 }
 
 type RuntimeFrameContext struct {
-	Appearance *designsystem.Appearance `json:"appearance"`
-	SlideID    string                   `json:"slide_id"`
-	Canvas     RuntimeCanvas            `json:"canvas"`
-	ThemeID    string                   `json:"theme_id"`
-	DeckTitle  string                   `json:"deck_title"`
-	Ordinal    int                      `json:"ordinal"`
-	Total      int                      `json:"total"`
-	Role       string                   `json:"role"`
-	Section    RuntimeFrameAncestor     `json:"section"`
-	Subsection *RuntimeFrameAncestor    `json:"subsection,omitempty"`
-	Chrome     []ChromeItem             `json:"chrome"`
+	KeyMessage  string                   `json:"key_message"`
+	Appearance  *designsystem.Appearance `json:"appearance"`
+	SlideID     string                   `json:"slide_id"`
+	Canvas      RuntimeCanvas            `json:"canvas"`
+	ThemeID     string                   `json:"theme_id"`
+	DeckTitle   string                   `json:"deck_title"`
+	Ordinal     int                      `json:"ordinal"`
+	Total       int                      `json:"total"`
+	Role        string                   `json:"role"`
+	Section     RuntimeFrameAncestor     `json:"section"`
+	Subsection  *RuntimeFrameAncestor    `json:"subsection,omitempty"`
+	Decorations Decorations              `json:"decorations"`
 }
 type RuntimeFrameAncestor struct {
 	ID    string `json:"id"`
@@ -127,6 +138,7 @@ type RuntimeFrameAncestor struct {
 }
 
 type ProjectContentSnapshot struct {
+	Theme      string                   `json:"theme"`
 	Appearance *designsystem.Appearance `json:"appearance"`
 	ThemeError string                   `json:"theme_error,omitempty"`
 	Hashes     map[string]string        `json:"hashes"`

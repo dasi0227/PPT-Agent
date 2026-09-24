@@ -169,3 +169,57 @@ func TestSlideSourceHTMLRejectsCommentStageAndNeverCreatesMissingFile(t *testing
 		t.Fatalf("file appeared: %v", err)
 	}
 }
+
+func TestProjectSourceValidationAndFormatting(t *testing.T) {
+	svc, project := sourceFixture(t)
+	ctx := context.Background()
+	// Project sources must not depend on an outline or any slide membership.
+	if err := os.Remove(filepath.Join(project.WorkDir, "outline.json")); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []struct{ kind, raw, invalid string }{
+		{"manifest", `{"version":"5.0","project_id":"pro_source","title":"标题","goal":"目标","audience":"受众","language":"zh-CN","requirements":[],"prohibitions":[],"created_at":1,"updated_at":1}`, `"requirements":null`},
+		{"design", `{"version":"5.0","project_id":"pro_source","direction":"","layout_preferences":[],"decorations":{"page_number":"bottom-right","section_title":"top-left","deck_title":"none","key_message":"none"},"created_at":1,"updated_at":1}`, `"layout_preferences":null`},
+	} {
+		t.Run(item.kind, func(t *testing.T) {
+			path := filepath.Join(project.WorkDir, item.kind+".json")
+			if err := os.WriteFile(path, []byte(item.raw), 0644); err != nil {
+				t.Fatal(err)
+			}
+			initial, err := svc.Read(ctx, project.ID, "", item.kind)
+			if err != nil || !initial.Writable {
+				t.Fatalf("read: %+v %v", initial, err)
+			}
+			formatted, changed, err := svc.Save(ctx, project.ID, "", item.kind, item.raw, initial.SourceHash, initial.SceneRevision, 0)
+			if err != nil || !changed || *formatted.ContentHash != *initial.ContentHash {
+				t.Fatalf("format-only save: %+v %v", formatted, err)
+			}
+			metadata, err := spec.SourceSystemFields([]byte(formatted.Content), item.kind)
+			if err != nil || metadata.UpdatedAt != 1 {
+				t.Fatalf("format changed timestamps: %+v %v", metadata, err)
+			}
+			invalidSources := []string{
+				strings.Replace(item.raw, `"project_id":"pro_source"`, `"project_id":"pro_other"`, 1),
+				strings.Replace(item.raw, `"updated_at":1`, `"updated_at":2`, 1),
+				strings.Replace(item.raw, `"created_at":1`, `"created_at":null`, 1),
+				strings.Replace(item.raw, `"version":"5.0"`, `"version":"5.0","version":"5.0"`, 1),
+				strings.Replace(item.raw, `"updated_at":1`, `"updated_at":1,"theme":"light"`, 1),
+				strings.Replace(item.raw, strings.Split(item.invalid, ":")[0]+":[]", item.invalid, 1),
+			}
+			for _, invalid := range invalidSources {
+				if _, _, err := svc.Save(ctx, project.ID, "", item.kind, invalid, formatted.SourceHash, formatted.SceneRevision, 0); sourceCode(err) != "SOURCE_VALIDATION_FAILED" {
+					t.Fatalf("accepted invalid source %s: %v", invalid, err)
+				}
+			}
+			if _, err := svc.Read(ctx, project.ID, "sli_source", item.kind); sourceCode(err) != "SOURCE_REQUEST_INVALID" {
+				t.Fatalf("accepted wrong scope: %v", err)
+			}
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := svc.Save(ctx, project.ID, "", item.kind, formatted.Content, formatted.SourceHash, formatted.SceneRevision, 0); sourceCode(err) != "SOURCE_NOT_FOUND" {
+				t.Fatalf("recreated missing source: %v", err)
+			}
+		})
+	}
+}

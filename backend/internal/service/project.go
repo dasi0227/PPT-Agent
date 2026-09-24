@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -46,10 +45,7 @@ func NewProjectServiceWithRepositories(s store.Store, workRoot WorkRoot, locks *
 }
 
 type CreateProjectParams struct {
-	Topic      string
-	Brief      string
-	SlideCount int
-	Language   string
+	Topic string
 }
 
 func NewProjectService(s store.Store, workRoot WorkRoot) *ProjectService {
@@ -78,7 +74,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 		UpdatedAt:     now,
 	}
 
-	if err := svc.initWorkDir(proj, p); err != nil {
+	if err := svc.initWorkDir(proj); err != nil {
 		return model.Project{}, err
 	}
 	if err := svc.initializeRepository(ctx, workDir); err != nil {
@@ -127,19 +123,13 @@ func (svc *ProjectService) RenameProject(ctx context.Context, id, title string) 
 	if err := svc.store.UpdateProjectTitle(ctx, p.ID, p.Title, p.UpdatedAt); err != nil {
 		return model.Project{}, err
 	}
-	return svc.projectWithFileMetadata(p)
+	return p, nil
 }
 
 func (svc *ProjectService) ListProjects(ctx context.Context) ([]model.Project, error) {
 	projects, err := svc.store.ListProjects(ctx)
 	if err != nil {
 		return nil, err
-	}
-	for index := range projects {
-		projects[index], err = svc.projectWithFileMetadata(projects[index])
-		if err != nil {
-			return nil, err
-		}
 	}
 	return projects, nil
 }
@@ -149,19 +139,6 @@ func (svc *ProjectService) GetProject(ctx context.Context, id string) (model.Pro
 	if err != nil {
 		return model.Project{}, err
 	}
-	return svc.projectWithFileMetadata(project)
-}
-
-func (svc *ProjectService) projectWithFileMetadata(project model.Project) (model.Project, error) {
-	var outline spec.Outline
-	if err := readJSON(filepath.Join(project.WorkDir, "outline.json"), &outline); err != nil {
-		return model.Project{}, err
-	}
-	var design spec.Design
-	if err := readJSON(filepath.Join(project.WorkDir, "design.json"), &design); err != nil {
-		return model.Project{}, err
-	}
-	project.Theme = design.Theme
 	return project, nil
 }
 
@@ -214,10 +191,6 @@ func (svc *ProjectService) SetTheme(ctx context.Context, id, themeID string) (mo
 	if theme.Disabled {
 		return model.Project{}, ErrThemeDisabled
 	}
-	project, err := svc.store.GetProject(ctx, id)
-	if err != nil {
-		return model.Project{}, err
-	}
 	release := func() {}
 	if svc.locks != nil {
 		release, err = svc.locks.Acquire(ctx, id, 5*time.Second)
@@ -226,45 +199,19 @@ func (svc *ProjectService) SetTheme(ctx context.Context, id, themeID string) (mo
 		}
 	}
 	defer release()
-	path := filepath.Join(project.WorkDir, "design.json")
-	raw, err := os.ReadFile(path)
+	project, err := svc.store.GetProject(ctx, id)
 	if err != nil {
 		return model.Project{}, err
 	}
-	var design spec.Design
-	if err := json.Unmarshal(raw, &design); err != nil {
+	updatedAt := svc.clock()
+	if err = svc.store.UpdateProjectTheme(ctx, id, themeID, updatedAt); err != nil {
 		return model.Project{}, err
 	}
-	design.Theme = themeID
-	design.UpdatedAt = svc.clock()
-	next := mustJSON(design)
-	temp, err := os.CreateTemp(project.WorkDir, ".design-*.json")
-	if err != nil {
-		return model.Project{}, err
-	}
-	tempPath := temp.Name()
-	defer os.Remove(tempPath)
-	if _, err = temp.Write(next); err == nil {
-		err = temp.Sync()
-	}
-	if closeErr := temp.Close(); err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = os.Rename(tempPath, path)
-	}
-	if err != nil {
-		return model.Project{}, err
-	}
-	if err = svc.store.UpdateProjectTheme(ctx, id, themeID, design.UpdatedAt); err != nil {
-		_ = os.WriteFile(path, raw, 0o644)
-		return model.Project{}, err
-	}
-	project.Theme, project.UpdatedAt = themeID, design.UpdatedAt
+	project.Theme, project.UpdatedAt = themeID, updatedAt
 	return project, nil
 }
 
-func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams) error {
+func (svc *ProjectService) initWorkDir(proj model.Project) error {
 	sb, err := artifactfs.NewSandbox(svc.workRoot)
 	if err != nil {
 		return err
@@ -279,22 +226,6 @@ func (svc *ProjectService) initWorkDir(proj model.Project, p CreateProjectParams
 		if err := os.MkdirAll(abs, 0o755); err != nil {
 			return err
 		}
-	}
-	state := map[string]any{
-		"project_id":    proj.ID,
-		"title":         proj.Title,
-		"current_state": "draft",
-		"theme":         proj.Theme,
-		"slide_count":   p.SlideCount,
-		"language":      "待明确",
-		"updated_at":    proj.UpdatedAt,
-	}
-	raw, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := sb.Write(filepath.Join(projectRel, "state.json"), raw); err != nil {
-		return err
 	}
 	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: proj.ID,
 		Title: proj.Title, Goal: "待明确", Audience: "待明确",

@@ -57,20 +57,29 @@ func (s *SlideSourceService) target(ctx context.Context, projectID, slideID, kin
 		rel = model.SlideSpecPath(slideID)
 	case "html":
 		rel = model.SlideHTMLPath(slideID)
+	case "manifest", "design":
+		rel = kind + ".json"
 	default:
 		return nil, "", sourceError("SOURCE_REQUEST_INVALID", "文件类型无效")
+	}
+	projectSource := kind == "manifest" || kind == "design"
+	if projectSource != (slideID == "") {
+		return nil, "", sourceError("SOURCE_REQUEST_INVALID", "文件类型与资源范围不匹配")
 	}
 	project, err := s.History.Store.GetProject(ctx, projectID)
 	if err != nil {
 		return nil, "", sourceError("SOURCE_NOT_FOUND", "项目不存在")
 	}
-	slide, err := s.History.Store.GetSlide(ctx, slideID)
-	if err != nil || slide.ProjectID != projectID {
-		return nil, "", sourceError("SOURCE_NOT_FOUND", "页面不存在")
-	}
 	sandbox, err := artifactfs.NewSandbox(project.WorkDir)
 	if err != nil {
 		return nil, "", err
+	}
+	if projectSource {
+		return sandbox, rel, nil
+	}
+	slide, err := s.History.Store.GetSlide(ctx, slideID)
+	if err != nil || slide.ProjectID != projectID {
+		return nil, "", sourceError("SOURCE_NOT_FOUND", "页面不存在")
 	}
 	outlineRaw, err := sandbox.Read("outline.json")
 	if err != nil {
@@ -145,16 +154,16 @@ func (s *SlideSourceService) Read(ctx context.Context, projectID, slideID, kind 
 	if busy != "" {
 		document.ReadonlyReason = &busy
 	}
-	if kind == "spec" {
+	if kind != "html" {
 		document.Language = "json"
-		if parsed, parseErr := spec.SlideSpecSystemFields(raw); parseErr == nil && parsed.ProjectID == projectID && parsed.SlideID == slideID {
-			if valid, validErr := spec.ParseStrictSlideSpec(raw); validErr == nil {
+		if parsed, parseErr := spec.SourceSystemFields(raw, kind); parseErr == nil && parsed.ProjectID == projectID && parsed.SlideID == slideID {
+			if valid, validErr := spec.ParseStrictSourceJSON(raw, kind); validErr == nil {
 				hash := spec.ResourceHash(valid)
 				document.ContentHash = &hash
 			}
 		} else {
 			document.Writable = false
-			reason := "SPEC_INVALID"
+			reason := "SOURCE_INVALID"
 			document.ReadonlyReason = &reason
 		}
 	} else {
@@ -220,32 +229,44 @@ func (s *SlideSourceService) Save(ctx context.Context, projectID, slideID, kind,
 		return zero, false, sourceError("CONTENT_CONFLICT", "源文件已更新")
 	}
 	var candidate []byte
-	if kind == "spec" {
-		baseline, baseErr := spec.SlideSpecSystemFields(current)
+	if kind != "html" {
+		baseline, baseErr := spec.SourceSystemFields(current, kind)
 		if baseErr != nil || baseline.ProjectID != projectID || baseline.SlideID != slideID {
-			return zero, false, sourceError("SOURCE_VALIDATION_FAILED", "现有设计稿字段损坏，请由 Agent 修复")
+			return zero, false, sourceError("SOURCE_VALIDATION_FAILED", "现有文件系统字段损坏，请由 Agent 修复")
 		}
-		next, parseErr := spec.ParseStrictSlideSpec([]byte(content))
+		next, parseErr := spec.ParseStrictSourceJSON([]byte(content), kind)
 		if parseErr != nil {
 			return zero, false, sourceValidationError([]byte(content), parseErr)
 		}
-		if next.SchemaVersion != baseline.SchemaVersion || next.ProjectID != baseline.ProjectID || next.SlideID != baseline.SlideID || next.CreatedAt != baseline.CreatedAt || next.UpdatedAt != baseline.UpdatedAt {
+		metadata, parseErr := spec.SourceSystemFields([]byte(content), kind)
+		if parseErr != nil {
+			return zero, false, sourceValidationError([]byte(content), parseErr)
+		}
+		if metadata != baseline {
 			pointer := "/updated_at"
 			switch {
-			case next.SchemaVersion != baseline.SchemaVersion:
+			case metadata.SchemaVersion != baseline.SchemaVersion:
 				pointer = "/version"
-			case next.ProjectID != baseline.ProjectID:
+			case metadata.ProjectID != baseline.ProjectID:
 				pointer = "/project_id"
-			case next.SlideID != baseline.SlideID:
+			case metadata.SlideID != baseline.SlideID:
 				pointer = "/slide_id"
-			case next.CreatedAt != baseline.CreatedAt:
+			case metadata.CreatedAt != baseline.CreatedAt:
 				pointer = "/created_at"
 			}
 			return zero, false, &SlideSourceError{Code: "SOURCE_VALIDATION_FAILED", DiagnosticCode: "SYSTEM_FIELD_IMMUTABLE", Message: "系统字段不可修改", Pointer: pointer}
 		}
-		previous, previousErr := spec.ParseStrictSlideSpec(current)
+		previous, previousErr := spec.ParseStrictSourceJSON(current, kind)
 		if previousErr != nil || spec.ResourceHash(next) != spec.ResourceHash(previous) {
-			next.UpdatedAt = max(time.Now().Unix(), baseline.UpdatedAt+1)
+			updatedAt := max(time.Now().Unix(), baseline.UpdatedAt+1)
+			switch value := next.(type) {
+			case *spec.SlideSpec:
+				value.UpdatedAt = updatedAt
+			case *spec.Manifest:
+				value.UpdatedAt = updatedAt
+			case *spec.Design:
+				value.UpdatedAt = updatedAt
+			}
 		}
 		candidate, err = json.MarshalIndent(next, "", "  ")
 		if err != nil {
@@ -281,7 +302,7 @@ func (s *SlideSourceService) Save(ctx context.Context, projectID, slideID, kind,
 }
 
 func sourceValidationError(raw []byte, err error) error {
-	issue := &SlideSourceError{Code: "SOURCE_VALIDATION_FAILED", DiagnosticCode: "SPEC_INVALID", Message: err.Error()}
+	issue := &SlideSourceError{Code: "SOURCE_VALIDATION_FAILED", DiagnosticCode: "SOURCE_INVALID", Message: err.Error()}
 	if strings.HasPrefix(issue.Message, "duplicate JSON key at ") {
 		issue.DiagnosticCode = "JSON_DUPLICATE_KEY"
 		issue.Pointer = strings.TrimPrefix(issue.Message, "duplicate JSON key at ")

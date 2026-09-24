@@ -94,7 +94,7 @@ async function injectRuntimeFrame(page, frame) {
       !frame.canvas || frame.canvas.width !== 1920 || frame.canvas.height !== 1080 || frame.canvas.aspect_ratio !== '16:9') {
     throw new Error('invalid runtime frame context');
   }
-  await page.evaluate(context => window.PPTChrome.render(document.querySelector('.runtime-canvas'), context), frame);
+  await page.evaluate(context => window.PPTDecorations.render(document.querySelector('.runtime-canvas'), context), frame);
 }
 
 async function render(input, browser, handles = new Map()) {
@@ -131,7 +131,7 @@ async function render(input, browser, handles = new Map()) {
       const path = request.url?.split('?')[0] ?? '/';
       if (path === '/') {
         response.writeHead(200, {'content-type':'text/html; charset=utf-8','cache-control':'no-store'});
-        response.end(`<!doctype html><html><head><link rel="stylesheet" href="/api/v1/runtime/fonts.css"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}.runtime-canvas{position:relative;width:1920px;height:1080px}.slide-frame{position:absolute;inset:0;width:1920px;height:1080px;border:0}</style></head><body><div class="runtime-canvas"><iframe class="slide-frame" sandbox="allow-scripts" src="${slidePath}"></iframe></div><script src="/api/v1/runtime/chrome.js"></script></body></html>`);
+        response.end(`<!doctype html><html><head><link rel="stylesheet" href="/api/v1/runtime/fonts.css"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}.runtime-canvas{position:relative;width:1920px;height:1080px}.slide-frame{position:absolute;inset:0;width:1920px;height:1080px;border:0}</style></head><body><div class="runtime-canvas"><iframe class="slide-frame" sandbox="allow-scripts" src="${slidePath}"></iframe></div><script src="/api/v1/runtime/decorations.js"></script></body></html>`);
         return;
       }
       if (path === slidePath) {
@@ -155,7 +155,7 @@ async function render(input, browser, handles = new Map()) {
       }
       if (path.startsWith('/api/v1/runtime/')) {
         const name=path.slice('/api/v1/runtime/'.length);
-        if(!/^(fonts\.css|chrome\.js|fonts\/[A-Za-z0-9_-]+\.(ttf|txt))$/.test(name))throw new Error('unknown runtime resource');
+        if(!/^(fonts\.css|decorations\.js|fonts\/[A-Za-z0-9_-]+\.(ttf|txt))$/.test(name))throw new Error('unknown runtime resource');
         const asset=safeProjectPath(input.runtime_assets_dir,name);
         const data=await fs.readFile(asset);
         response.writeHead(200,{'content-type':mime(asset),'cache-control':'no-store'});response.end(data);return;
@@ -277,7 +277,7 @@ async function render(input, browser, handles = new Map()) {
       content_size: metrics.content_size,
       overflow: metrics.overflow,
       clipping: metrics.clipping,
-      runtime_chrome: await page.evaluate(()=>Array.from(document.querySelectorAll('[data-runtime-chrome]')).map(node=>node.dataset.runtimeChrome)),
+      runtime_decorations: await page.evaluate(()=>Array.from(document.querySelectorAll('[data-runtime-decoration]')).map(node=>node.dataset.runtimeDecoration)),
       console_errors: consoleErrors,
       failed_resources: [...new Set(failedResources)].slice(0, 50),
       font_status: fontStatus,

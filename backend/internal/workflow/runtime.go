@@ -1224,7 +1224,7 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 		agentErr.Details["html_checks"] = checks
 	}
 	if call.Name == "render_slide" {
-		for _, key := range []string{"image_path", "hash", "content_size", "overflow", "clipping", "runtime_chrome", "console_errors", "failed_resources", "font_status"} {
+		for _, key := range []string{"image_path", "hash", "content_size", "overflow", "clipping", "runtime_decorations", "console_errors", "failed_resources", "font_status"} {
 			if value, exists := result.Data[key]; exists {
 				agentErr.Details[key] = value
 			}

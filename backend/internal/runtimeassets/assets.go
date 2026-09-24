@@ -16,7 +16,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 )
 
-//go:embed base.css fonts.css font-loader.js chrome.js theme-bridge.js fonts/* examples/*.html
+//go:embed base.css fonts.css font-loader.js decorations.js theme-bridge.js fonts/* examples/*.html
 var files embed.FS
 
 func mustRead(name string) []byte {
@@ -27,7 +27,7 @@ func mustRead(name string) []byte {
 	return raw
 }
 func BaseCSS() []byte                     { return mustRead("base.css") }
-func ChromeJS() []byte                    { return mustRead("chrome.js") }
+func DecorationsJS() []byte               { return mustRead("decorations.js") }
 func Read(name string) ([]byte, error)    { return files.ReadFile(name) }
 func Example(name string) ([]byte, error) { return files.ReadFile("examples/" + name + ".html") }
 func Hash(raw []byte) string {
@@ -64,15 +64,15 @@ func Appearance(themeID string, css []byte) *designsystem.Appearance {
 			tokens[match[1]] = strings.TrimSpace(match[2])
 		}
 	}
-	chrome := map[string]string{}
+	decorations := map[string]string{}
 	for _, key := range []string{"--color-caption", "--color-fg", "--font-sans", "--font-mono"} {
 		value := tokens[key]
 		for i := 0; i < 8 && strings.Contains(value, "var("); i++ {
 			value = references.ReplaceAllStringFunc(value, func(ref string) string { return tokens[references.FindStringSubmatch(ref)[1]] })
 		}
-		chrome[key] = value
+		decorations[key] = value
 	}
-	return &designsystem.Appearance{Hash: Hash([]byte(resourcesHash() + "\x00" + themeID + "\x00" + string(css))), ThemeCSSURL: "/api/v1/themes/" + themeID + "/css?v=" + strings.TrimPrefix(Hash(css), "sha256:"), ChromeTokens: chrome}
+	return &designsystem.Appearance{ThemeID: themeID, Hash: Hash([]byte(resourcesHash() + "\x00" + themeID + "\x00" + string(css))), ThemeCSSURL: "/api/v1/themes/" + themeID + "/css?v=" + strings.TrimPrefix(Hash(css), "sha256:"), DecorationTokens: decorations}
 }
 
 // ProjectAppearance reads the actual CSS on every dependency check, including edits under the same theme ID.

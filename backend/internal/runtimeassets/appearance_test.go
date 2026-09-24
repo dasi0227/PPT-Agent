@@ -17,7 +17,7 @@ func TestAppearanceTracksCSSAndFrozenRuntimeResources(t *testing.T) {
 	if err := Materialize(dir); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"fonts.css", "base.css", "chrome.js", "theme-bridge.js", "fonts/NotoSansSC-Variable.ttf", "fonts/NotoSerifSC-Variable.ttf", "fonts/JetBrainsMono-Variable.ttf", "fonts/notosanssc-OFL.txt"} {
+	for _, name := range []string{"fonts.css", "base.css", "decorations.js", "theme-bridge.js", "fonts/NotoSansSC-Variable.ttf", "fonts/NotoSerifSC-Variable.ttf", "fonts/JetBrainsMono-Variable.ttf", "fonts/notosanssc-OFL.txt"} {
 		frozen, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
 		if err != nil {
 			t.Fatal(err)

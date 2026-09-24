@@ -39,7 +39,7 @@ func (l staticThemeLoader) Get(string) (model.Theme, error) {
 }
 
 func mutationPack(projectID string, outline spec.Outline) contextengine.ContextPack {
-	return contextengine.ContextPack{Project: contextengine.ProjectContext{ID: projectID}, PresentationManifest: contextengine.PresentationManifestContext{Manifest: spec.Manifest{ProjectID: projectID}}, Outline: contextengine.OutlineContext{Outline: outline}}
+	return contextengine.ContextPack{Project: contextengine.ProjectContext{ID: projectID, ThemeID: "clean"}, PresentationManifest: contextengine.PresentationManifestContext{Manifest: spec.Manifest{ProjectID: projectID}}, Outline: contextengine.OutlineContext{Outline: outline}}
 }
 
 func mutationSchemaOps(schema ToolSchema) []string {
@@ -451,7 +451,7 @@ func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 	projectID := "pro_aaaaaa"
 	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1}
-	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
+	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations(), CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
@@ -503,7 +503,7 @@ func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 	for path, value := range map[string]any{
 		"manifest.json": spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1},
 		"outline.json":  outline,
-		"design.json":   spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1},
+		"design.json":   spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations(), CreatedAt: 1, UpdatedAt: 1},
 	} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
@@ -528,7 +528,7 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	projectID := "pro_aaaaaa"
 	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Title: "Body", Role: "content"}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
-	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}, CreatedAt: 1, UpdatedAt: 1}
+	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}, CreatedAt: 1, UpdatedAt: 1}
 	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
@@ -550,7 +550,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	slideID := "sli_attea2"
 	deck := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: slideID, Title: "Cover", Role: spec.SlideRoleCover}}, Subsections: []spec.Subsection{}}}, CreatedAt: 1, UpdatedAt: 1}
-	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, Theme: "clean", Direction: "minimal", Chrome: []spec.ChromeItem{}, CreatedAt: 1, UpdatedAt: 1}
+	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations(), CreatedAt: 1, UpdatedAt: 1}
 	slide := spec.SlideSpec{SchemaVersion: spec.SchemaVersion, ProjectID: projectID, SlideID: slideID, KeyMessage: "Hello", Elements: []spec.Element{}, CreatedAt: 1, UpdatedAt: 1}
 	html := []byte(`<!doctype html><html><body><section class="slide-stage"><h1>Hello</h1></section></body></html>`)
 	for path, value := range map[string]any{

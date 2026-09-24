@@ -23,6 +23,5 @@ func (ContextProfileResolver) Resolve(command model.RunCommand) (ContextProfile,
 		SegmentPolicy: true, SegmentRunCommand: true, SegmentPresentationManifest: true, SegmentOutline: true, SegmentDesign: true,
 		SegmentTarget: command.Scope.IsSinglePage(),
 	}, Forbidden: map[SegmentKind]bool{}}
-	p.Required[SegmentTheme] = true
 	return p, nil
 }

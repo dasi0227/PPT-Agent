@@ -36,7 +36,7 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	}
 
 	project, err := NewProjectService(st, WorkRoot(root)).CreateProject(ctx, CreateProjectParams{
-		Topic: "Initialization baseline", Language: "zh-CN",
+		Topic: "Initialization baseline",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -71,11 +71,23 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if err := json.Unmarshal(raw, &design); err != nil {
 		t.Fatal(err)
 	}
-	if design.Direction != "待确定" {
-		t.Fatalf("new project must mark its visual direction as undecided: %q", design.Direction)
+	if strings.Contains(string(raw), `"theme"`) {
+		t.Fatal("new design must not store the selected theme")
+	}
+	if _, err := os.Stat(filepath.Join(project.WorkDir, "state.json")); !os.IsNotExist(err) {
+		t.Fatalf("project must not create obsolete state.json: %v", err)
+	}
+	if design.Direction != "" || design.LayoutPreferences == nil || len(design.LayoutPreferences) != 0 {
+		t.Fatalf("new project must leave visual direction and layout preferences empty: %+v", design)
 	}
 	if err := spec.ValidateDesign(design); err != nil {
 		t.Fatalf("new project design must satisfy the schema: %v", err)
+	}
+	if design.Decorations.PageNumber != "bottom-right" || design.Decorations.SectionTitle != "top-left" {
+		t.Fatalf("new project decoration defaults are incorrect: %+v", design.Decorations)
+	}
+	if design.Decorations.DeckTitle != "none" || design.Decorations.KeyMessage != "none" {
+		t.Fatalf("title and key message must start hidden: %+v", design.Decorations)
 	}
 	var manifest spec.Manifest
 	raw, err = os.ReadFile(filepath.Join(project.WorkDir, "manifest.json"))
@@ -127,7 +139,7 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	}
 }
 
-func TestSetThemePersistsThemeIDToProjectAndDesign(t *testing.T) {
+func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	db, cleanupDB, err := sqlitestore.Open(&config.Config{
@@ -144,7 +156,11 @@ func TestSetThemePersistsThemeIDToProjectAndDesign(t *testing.T) {
 	}
 	writeRepositoryFile(t, filepath.Join(root, "assets/themes/tokyo-night/theme.css"), themeFile("Tokyo Night", "Dark presentation", completeThemeCSS()))
 	svc := NewProjectServiceWithRepositories(st, WorkRoot(root), nil, NewThemeService(WorkRoot(root)))
-	project, err := svc.CreateProject(ctx, CreateProjectParams{Topic: "Theme persistence", Language: "zh-CN"})
+	project, err := svc.CreateProject(ctx, CreateProjectParams{Topic: "Theme persistence"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeDesign, err := os.ReadFile(filepath.Join(project.WorkDir, "design.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,12 +190,8 @@ func TestSetThemePersistsThemeIDToProjectAndDesign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var design spec.Design
-	if err := json.Unmarshal(raw, &design); err != nil {
-		t.Fatal(err)
-	}
-	if design.Theme != "tokyo-night" {
-		t.Fatalf("persisted design=%+v", design)
+	if string(raw) != string(beforeDesign) || strings.Contains(string(raw), `"theme"`) {
+		t.Fatal("theme change rewrote or leaked into design.json")
 	}
 	if _, err := svc.themes.SetDisabled("tokyo-night", true); err != nil {
 		t.Fatal(err)

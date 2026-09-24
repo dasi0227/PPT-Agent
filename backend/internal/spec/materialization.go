@@ -9,8 +9,8 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 )
 
-func FrameContextHash(manifest Manifest, outline Outline, design Design, slideID string, appearance *designsystem.Appearance) string {
-	frame, ok := BuildRuntimeFrame(manifest, outline, design, slideID, appearance)
+func FrameContextHash(manifest Manifest, outline Outline, design Design, slideID string, keyMessage string, appearance *designsystem.Appearance) string {
+	frame, ok := BuildRuntimeFrame(manifest, outline, design, slideID, keyMessage, appearance)
 	if !ok {
 		return ""
 	}
@@ -22,7 +22,7 @@ func RuntimeFrameHash(frame RuntimeFrameContext) string {
 	return ContentHash(raw)
 }
 
-func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideID string, appearance *designsystem.Appearance) (RuntimeFrameContext, bool) {
+func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideID string, keyMessage string, appearance *designsystem.Appearance) (RuntimeFrameContext, bool) {
 	loc, ok := FindSlide(outline, slideID)
 	if !ok {
 		return RuntimeFrameContext{}, false
@@ -45,11 +45,15 @@ func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideI
 		}
 		subsection = &RuntimeFrameAncestor{ID: loc.Subsection.ID, Title: loc.Subsection.Title, Index: index}
 	}
+	themeID := ""
+	if appearance != nil {
+		themeID = appearance.ThemeID
+	}
 	return RuntimeFrameContext{
-		Appearance: appearance, SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: design.Theme, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: string(loc.Slide.Role),
-		Section:    RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
-		Subsection: subsection,
-		Chrome:     append([]ChromeItem(nil), design.Chrome...),
+		KeyMessage: keyMessage, Appearance: appearance, SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: themeID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: string(loc.Slide.Role),
+		Section:     RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
+		Subsection:  subsection,
+		Decorations: design.Decorations,
 	}, true
 }
 
@@ -109,10 +113,11 @@ func DesignContentHash(design Design) string {
 
 func designContentBytes(design Design) []byte {
 	raw, _ := json.Marshal(struct {
-		Direction string       `json:"direction"`
-		Chrome    []ChromeItem `json:"chrome"`
+		Direction         string      `json:"direction"`
+		LayoutPreferences []string    `json:"layout_preferences"`
+		Decorations       Decorations `json:"decorations"`
 	}{
-		Direction: design.Direction, Chrome: design.Chrome,
+		Direction: design.Direction, LayoutPreferences: design.LayoutPreferences, Decorations: design.Decorations,
 	})
 	return raw
 }

@@ -101,7 +101,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			filepath.FromSlash(model.SlideMaterializationPath(id)),
 		)
 		if hasProof {
-			appearance, appearanceErr := runtimeassets.ProjectAppearance(c.project.WorkDir, design.Theme)
+			appearance, appearanceErr := runtimeassets.ProjectAppearance(c.project.WorkDir, c.project.Theme)
 			if appearanceErr != nil {
 				return appearanceErr
 			}
@@ -111,7 +111,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			if proof.ArtifactHash != artifactHash ||
 				proof.SourceHash != sourceHash ||
 				proof.ManifestHash != spec.ResourceHash(manifest) || proof.OutlineNodeHash != nodeHash ||
-				proof.SpecHash != spec.ResourceHash(semantic) || proof.DesignContentHash != spec.DesignContentHash(design) || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id, appearance) {
+				proof.SpecHash != spec.ResourceHash(semantic) || proof.DesignContentHash != spec.DesignContentHash(design) || proof.FrameContextHash != spec.FrameContextHash(manifest, outline, design, id, semantic.KeyMessage, appearance) {
 				return fmt.Errorf("stale materialization proof for %s", id)
 			}
 		}

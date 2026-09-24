@@ -175,7 +175,7 @@ func TestGitCommitServiceReturnsEmptyAfterProjectInitialization(t *testing.T) {
 		t.Fatal(err)
 	}
 	project, err := NewProjectService(st, WorkRoot(root)).CreateProject(ctx, CreateProjectParams{
-		Topic: "Empty after initialization", Language: "zh-CN",
+		Topic: "Empty after initialization",
 	})
 	if err != nil {
 		t.Fatal(err)

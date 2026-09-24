@@ -24,7 +24,7 @@ var publicErrorToken = regexp.MustCompile(`\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b`)
 var publicTerms = map[string]string{
 	"completion gate": "完成检查", "deck:manifest": "内容要求", "manifest.json": "内容要求",
 	"deck:outline": "目录结构", "outline.json": "目录结构",
-	"deck:design": "全局设计", "design.json": "全局设计", "spec.json": "页面设计稿",
+	"deck:design": "视觉要求", "design.json": "视觉要求", "spec.json": "页面设计稿",
 	"read_ppt": "读取演示内容", "mutate_ppt": "修改演示内容", "render_slide": "页面渲染检查",
 	"create_plan": "制定计划", "update_plan": "更新计划", "review_completion": "完成检查", "ask_user": "提问",
 	"RunCommand": "任务设置", "RunScope": "修改范围", "RunMode": "工作模式", "RunPhase": "任务阶段",

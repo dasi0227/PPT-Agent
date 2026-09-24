@@ -103,7 +103,6 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 		{name: "target_context", bucket: BucketReadFile, detail: "read_project"},
 		{name: "related_context", bucket: BucketReadFile, detail: "read_project"},
 		{name: "design_context", bucket: BucketReadFile, detail: "read_project"},
-		{name: "theme_context", bucket: BucketReadFile, detail: "read_project"},
 		{name: "available_resources", bucket: BucketRuntime, detail: "runtime resources"},
 		{name: "available_context_refs", bucket: BucketRuntime, detail: "runtime resources"},
 		{name: "active_run_skills", bucket: BucketRuntime, detail: "runtime resources"},

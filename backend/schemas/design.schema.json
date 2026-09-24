@@ -2,15 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ppt-agent.local/schemas/design.schema.json",
   "title": "PPT Design",
-  "description": "Deck-wide theme selection, visual direction, and shared chrome.",
+  "description": "Deck-wide visual direction, layout preferences, and shared decoration placement.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "version",
     "project_id",
-    "theme",
     "direction",
-    "chrome",
+    "layout_preferences",
+    "decorations",
     "created_at",
     "updated_at"
   ],
@@ -24,57 +24,74 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
       "x-runtime-managed": true
     },
-    "theme": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9-]{0,80}$",
-      "minLength": 1,
-      "maxLength": 80,
-      "x-agent-readonly": true
-    },
     "direction": {
       "type": "string",
-      "minLength": 1,
       "maxLength": 600
     },
-    "chrome": {
-      "type": "array",
-      "maxItems": 12,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "type",
-          "placement",
-          "style"
-        ],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "page_number",
-              "section_marker",
-              "key_message",
-              "deck_title"
-            ]
-          },
-          "placement": {
-            "type": "string",
-            "enum": [
-              "top-left",
-              "top-center",
-              "top-right",
-              "bottom-left",
-              "bottom-center",
-              "bottom-right",
-              "left-edge",
-              "right-edge"
-            ]
-          },
-          "style": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 160
-          }
+    "decorations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "page_number",
+        "deck_title",
+        "section_title",
+        "key_message"
+      ],
+      "properties": {
+        "page_number": {
+          "type": "string",
+          "enum": [
+            "top-left",
+            "top-center",
+            "top-right",
+            "bottom-left",
+            "bottom-center",
+            "bottom-right",
+            "left-edge",
+            "right-edge"
+          ]
+        },
+        "section_title": {
+          "type": "string",
+          "enum": [
+            "none",
+            "top-left",
+            "top-center",
+            "top-right",
+            "bottom-left",
+            "bottom-center",
+            "bottom-right",
+            "left-edge",
+            "right-edge"
+          ]
+        },
+        "deck_title": {
+          "type": "string",
+          "enum": [
+            "none",
+            "top-left",
+            "top-center",
+            "top-right",
+            "bottom-left",
+            "bottom-center",
+            "bottom-right",
+            "left-edge",
+            "right-edge"
+          ]
+        },
+        "key_message": {
+          "type": "string",
+          "enum": [
+            "none",
+            "top-left",
+            "top-center",
+            "top-right",
+            "bottom-left",
+            "bottom-center",
+            "bottom-right",
+            "left-edge",
+            "right-edge"
+          ]
         }
       }
     },
@@ -87,27 +104,27 @@
       "type": "integer",
       "minimum": 0,
       "x-runtime-managed": true
+    },
+    "layout_preferences": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 600
+      }
     }
   },
   "x-agent-example": {
-    "theme": "tokyo-night",
-    "direction": "偏云原生控制台感，而不是赛博朋克海报感",
-    "chrome": [
-      {
-        "type": "page_number",
-        "placement": "bottom-right",
-        "style": "tiny muted mono counter"
-      },
-      {
-        "type": "section_marker",
-        "placement": "left-edge",
-        "style": "vertical thin-line label with section keyword"
-      },
-      {
-        "type": "key_message",
-        "placement": "bottom-center",
-        "style": "low-contrast single-line takeaway"
-      }
-    ]
+    "direction": "以结构示意图和流程关系解释概念",
+    "layout_preferences": [
+      "少用卡片，优先通过留白和对齐区分内容"
+    ],
+    "decorations": {
+      "page_number": "bottom-right",
+      "section_title": "top-left",
+      "deck_title": "none",
+      "key_message": "none"
+    }
   }
 }

@@ -23,7 +23,7 @@
     replacement.src = slide.src;
     frame.replaceWith(replacement);
     frame = replacement;
-    window.PPTChrome.render(canvas, slide.frame);
+    window.PPTDecorations.render(canvas, slide.frame);
   }
   function navigate(key) {
     if (key === 'ArrowLeft') show(index - 1);

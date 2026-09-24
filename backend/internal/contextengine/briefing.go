@@ -72,13 +72,13 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 	pack.Resources = []BriefingResource{
 		{Ref: "内容要求", Content: string(stableJSON(ModelValue(deck)))},
 		{Ref: "目录结构", Content: string(stableJSON(ModelValue(outline)))},
-		{Ref: "全局设计", Content: string(stableJSON(ModelValue(design)))},
+		{Ref: "视觉要求", Content: string(stableJSON(ModelValue(design)))},
 	}
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		slide, ok := slides[loc.Slide.SlideID]
 		summary := slideSummary(loc, slide, ok)
 		if req.Kind == model.BriefingHandoff {
-			summary.State = loadMaterializationState(project.WorkDir, summary.ID, deck, outline, slide, design)
+			summary.State = loadMaterializationState(project.WorkDir, project.Theme, summary.ID, deck, outline, slide, design)
 		}
 		pack.Resources = append(pack.Resources, BriefingResource{
 			Ref: fmt.Sprintf("第 %d 页《%s》页面设计稿", summary.Ordinal, summary.Title), Content: string(stableJSON(summary)),
@@ -193,7 +193,7 @@ func briefingSelectionReference(text string) string {
 	return "<selected_dom_reference>" + string(stableJSON(map[string]any{
 		"selection_id": selection.SelectionID, "marker_no": selection.MarkerNo, "comment": selection.Comment,
 		"slide_id": selection.SlideID, "status": selection.Status,
-		"dom_targets": targets, "chrome_targets": selection.ChromeTargets,
+		"dom_targets": targets, "decoration_targets": selection.DecorationTargets,
 	})) + "</selected_dom_reference>"
 }
 

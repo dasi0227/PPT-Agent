@@ -98,26 +98,25 @@ type DOMTarget struct {
 	Status             DOMSelectionStatus `json:"status,omitempty"`
 }
 
-type ChromeTarget struct {
+type DecorationTarget struct {
 	Type      string     `json:"type"`
 	Placement string     `json:"placement"`
-	Style     string     `json:"style"`
 	Text      string     `json:"text"`
 	Rect      CanvasRect `json:"rect"`
 }
 
 type DOMSelection struct {
-	SelectionID   string             `json:"selection_id"`
-	MarkerNo      int                `json:"marker_no"`
-	Kind          DOMSelectionKind   `json:"kind"`
-	Comment       string             `json:"comment"`
-	SlideID       string             `json:"slide_id"`
-	HTMLHash      string             `json:"html_hash"`
-	Canvas        CanvasSize         `json:"canvas"`
-	Rect          CanvasRect         `json:"rect"`
-	Status        DOMSelectionStatus `json:"status"`
-	DOMTargets    []DOMTarget        `json:"dom_targets,omitempty"`
-	ChromeTargets []ChromeTarget     `json:"chrome_targets,omitempty"`
+	SelectionID       string             `json:"selection_id"`
+	MarkerNo          int                `json:"marker_no"`
+	Kind              DOMSelectionKind   `json:"kind"`
+	Comment           string             `json:"comment"`
+	SlideID           string             `json:"slide_id"`
+	HTMLHash          string             `json:"html_hash"`
+	Canvas            CanvasSize         `json:"canvas"`
+	Rect              CanvasRect         `json:"rect"`
+	Status            DOMSelectionStatus `json:"status"`
+	DOMTargets        []DOMTarget        `json:"dom_targets,omitempty"`
+	DecorationTargets []DecorationTarget `json:"decoration_targets,omitempty"`
 }
 
 type ReferenceOrderItem struct {
@@ -169,7 +168,7 @@ func (s DOMSelection) Validate() error {
 	if len(s.DOMTargets) > MaxDOMTargets {
 		return ErrDOMSelectionLimit
 	}
-	if len(s.DOMTargets)+len(s.ChromeTargets) == 0 && s.Status == DOMSelectionActive {
+	if len(s.DOMTargets)+len(s.DecorationTargets) == 0 && s.Status == DOMSelectionActive {
 		return ErrDOMSelectionInvalid
 	}
 	seen := map[string]bool{}
@@ -187,16 +186,16 @@ func (s DOMSelection) Validate() error {
 			return ErrDOMSelectionInvalid
 		}
 	}
-	allowedChrome := map[string]bool{"page_number": true, "section_marker": true, "key_message": true, "deck_title": true}
-	for _, target := range s.ChromeTargets {
-		if !allowedChrome[target.Type] || !target.Rect.valid() || target.Rect.Width <= 0 || target.Rect.Height <= 0 || len(target.Text) > 1000 || len(target.Placement) > 64 || len(target.Style) > 256 {
+	allowedDecorations := map[string]bool{"page_number": true, "section_title": true, "key_message": true, "deck_title": true}
+	for _, target := range s.DecorationTargets {
+		if !allowedDecorations[target.Type] || !target.Rect.valid() || target.Rect.Width <= 0 || target.Rect.Height <= 0 || len(target.Text) > 1000 || len(target.Placement) > 64 {
 			return ErrDOMSelectionInvalid
 		}
 	}
 	raw, _ := json.Marshal(struct {
-		DOM    []DOMTarget    `json:"dom_targets"`
-		Chrome []ChromeTarget `json:"chrome_targets"`
-	}{s.DOMTargets, s.ChromeTargets})
+		DOM         []DOMTarget        `json:"dom_targets"`
+		Decorations []DecorationTarget `json:"decoration_targets"`
+	}{s.DOMTargets, s.DecorationTargets})
 	if len(raw) > MaxDOMSelectionBytes {
 		return ErrDOMSelectionTooLarge
 	}
@@ -305,9 +304,9 @@ func ValidateDOMSelections(selections []DOMSelection, attachments []AttachmentRe
 		}
 		seenSelections[selection.SelectionID], seenMarkers[selection.MarkerNo] = true, true
 		raw, _ := json.Marshal(struct {
-			DOM    []DOMTarget    `json:"dom_targets"`
-			Chrome []ChromeTarget `json:"chrome_targets"`
-		}{selection.DOMTargets, selection.ChromeTargets})
+			DOM         []DOMTarget        `json:"dom_targets"`
+			Decorations []DecorationTarget `json:"decoration_targets"`
+		}{selection.DOMTargets, selection.DecorationTargets})
 		total += len(raw)
 	}
 	if total > MaxDOMSelectionsBytes {

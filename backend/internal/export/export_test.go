@@ -23,7 +23,7 @@ import (
 )
 
 func exportFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("theme", []byte(`:root{--font-mono:"JetBrains Mono";--font-sans:"Noto Sans SC";--color-caption:#666;--color-fg:#222;}`)), SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("theme", []byte(`:root{--font-mono:"JetBrains Mono";--font-sans:"Noto Sans SC";--color-caption:#666;--color-fg:#222;}`)), SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
 }
 
 func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {
@@ -39,7 +39,7 @@ func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {
 			t.Errorf("missing %q in %s", want, text)
 		}
 	}
-	for _, forbidden := range []string{"/api/v1/runtime", "/api/v1/themes", "selection-bridge", "data-runtime-chrome"} {
+	for _, forbidden := range []string{"/api/v1/runtime", "/api/v1/themes", "selection-bridge", "data-runtime-decoration"} {
 		if strings.Contains(text, forbidden) {
 			t.Errorf("standalone HTML retained %q", forbidden)
 		}
@@ -73,7 +73,7 @@ func TestBuildHTMLPackagesOnlyPlaybackFiles(t *testing.T) {
 	for _, entry := range reader.File {
 		entries[entry.Name] = true
 	}
-	for _, want := range []string{"index.html", "runtime/player.css", "runtime/player.js", "runtime/chrome.js", "assets/base.css", "assets/theme.css", "assets/fonts.css", "assets/fonts/notosanssc-OFL.txt", "slides/001.html", attachmentRel} {
+	for _, want := range []string{"index.html", "runtime/player.css", "runtime/player.js", "runtime/decorations.js", "assets/base.css", "assets/theme.css", "assets/fonts.css", "assets/fonts/notosanssc-OFL.txt", "slides/001.html", attachmentRel} {
 		if !entries[want] {
 			t.Errorf("missing zip entry %s", want)
 		}
@@ -253,8 +253,8 @@ func TestExternalResourceScanIgnoresOrdinaryLinks(t *testing.T) {
 }
 
 func TestSnapshotReportsAllMissingSlidesBeforeStarting(t *testing.T) {
-	dir, manifest, outline, design := writeSnapshotFixture(t, false)
-	_, err := CreateSnapshot(context.Background(), SnapshotInput{ExportID: "exp_one", ProjectID: manifest.ProjectID, ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: design.Theme, ThemeCSS: []byte(":root{}")})
+	dir, manifest, outline, _ := writeSnapshotFixture(t, false)
+	_, err := CreateSnapshot(context.Background(), SnapshotInput{ExportID: "exp_one", ProjectID: manifest.ProjectID, ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: "theme-one", ThemeCSS: []byte(":root{}")})
 	var snapshotErr *SnapshotError
 	if !errors.As(err, &snapshotErr) || snapshotErr.Code != "EXPORT_SLIDES_MISSING" || len(snapshotErr.Missing) != 2 {
 		t.Fatalf("err=%#v", err)
@@ -266,8 +266,8 @@ func TestSnapshotReportsAllMissingSlidesBeforeStarting(t *testing.T) {
 }
 
 func TestSnapshotIsFrozenAndDigestChangesWithHTML(t *testing.T) {
-	dir, manifest, _, design := writeSnapshotFixture(t, true)
-	input := SnapshotInput{ExportID: "exp_one", ProjectID: manifest.ProjectID, ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: design.Theme, ThemeCSS: []byte(":root{}")}
+	dir, manifest, _, _ := writeSnapshotFixture(t, true)
+	input := SnapshotInput{ExportID: "exp_one", ProjectID: manifest.ProjectID, ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: "theme-one", ThemeCSS: []byte(":root{}")}
 	first, err := CreateSnapshot(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
@@ -296,7 +296,7 @@ func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Manifest, s
 	dir := t.TempDir()
 	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
 	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: manifest.ProjectID, CreatedAt: 1, UpdatedAt: 1, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: spec.SlideRoleContent}, {SlideID: "sli_bbbbbb", Title: "Two", Role: spec.SlideRoleContent}}, Subsections: []spec.Subsection{}}}}
-	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: manifest.ProjectID, Theme: "theme-one", Direction: "Clear", Chrome: []spec.ChromeItem{{Type: "page_number", Placement: "bottom-right", Style: "muted"}}, CreatedAt: 1, UpdatedAt: 1}
+	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: manifest.ProjectID, Direction: "Clear", LayoutPreferences: []string{}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}, CreatedAt: 1, UpdatedAt: 1}
 	for name, value := range map[string]any{"manifest.json": manifest, "outline.json": outline, "design.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
@@ -337,9 +337,8 @@ func TestStandaloneHTMLWorksFromFileURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	frame := exportFrame()
-	frame.Chrome = append(frame.Chrome,
-		spec.ChromeItem{Type: "section_marker", Placement: "top-left", Style: "compact label"},
-		spec.ChromeItem{Type: "deck_title", Placement: "bottom-left", Style: "tiny mono"})
+	frame.Decorations.SectionTitle = "top-left"
+	frame.Decorations.DeckTitle = "bottom-left"
 	second := frame
 	second.SlideID = "sli_two"
 	second.Ordinal = 2
@@ -379,7 +378,7 @@ func TestStandaloneHTMLWorksFromFileURL(t *testing.T) {
 		}
 	}
 	_ = reader.Close()
-	// Deliberately remove iframe-linked styles: the inline copy and outer chrome
+	// Deliberately remove iframe-linked styles: the inline copy and outer decorations
 	// must still render correctly when local sandbox resource loading is unavailable.
 	for _, name := range []string{"base.css", "theme.css"} {
 		if err := os.Remove(filepath.Join(extracted, "assets", name)); err != nil {
@@ -398,11 +397,11 @@ try {
   const first = await frame.evaluate(() => ({
     script: document.body.dataset.script, img: document.querySelector('#asset').naturalWidth,
     width: getComputedStyle(document.querySelector('.slide-stage')).width,
-    chrome: document.querySelectorAll('[data-runtime-chrome]').length,
+    decorations: document.querySelectorAll('[data-runtime-decoration]').length,
   }));
-  if (first.script !== 'ok' || first.img !== 1 || first.width !== '1920px' || first.chrome !== 0) throw new Error(JSON.stringify(first));
+  if (first.script !== 'ok' || first.img !== 1 || first.width !== '1920px' || first.decorations !== 0) throw new Error(JSON.stringify(first));
   const outer = await page.evaluate(() => {
-    const marker = document.querySelector('[data-runtime-chrome="section_marker"]');
+    const marker = document.querySelector('[data-runtime-decoration="section_title"]');
     return {position: getComputedStyle(marker).position, fontSize: getComputedStyle(marker).fontSize,
       parent: marker.parentElement.id, controls: document.querySelectorAll('nav,button').length,
       number: document.querySelector('[data-runtime-page-number]')?.textContent,

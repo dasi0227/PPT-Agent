@@ -58,3 +58,28 @@ func TestSlideSpecHasNoPlacementContract(t *testing.T) {
 		}
 	}
 }
+
+func TestDesignDecorationsRequireFixedSlotsAndVisiblePageNumber(t *testing.T) {
+	design := Design{SchemaVersion: SchemaVersion, ProjectID: "pro_aaaaaa", Direction: "", LayoutPreferences: []string{}, Decorations: DefaultDecorations(), CreatedAt: 1, UpdatedAt: 1}
+	if err := ValidateDesign(design); err != nil {
+		t.Fatal(err)
+	}
+	design.Decorations.PageNumber = "none"
+	if err := ValidateDesign(design); err == nil {
+		t.Fatal("page number cannot be hidden")
+	}
+	design.Decorations = DefaultDecorations()
+	design.Decorations.SectionTitle = ""
+	if err := ValidateDesign(design); err == nil {
+		t.Fatal("decoration slots require an explicit placement")
+	}
+	design.Decorations = DefaultDecorations()
+	design.Decorations.KeyMessage = "bottom-center"
+	if err := ValidateDesign(design); err != nil {
+		t.Fatal(err)
+	}
+	design.LayoutPreferences = []string{"Use fewer cards", "Prefer spacious alignment"}
+	if err := ValidateDesign(design); err != nil {
+		t.Fatal(err)
+	}
+}

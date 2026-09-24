@@ -90,7 +90,7 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 }
 
 func TestPromptKeepsOwnershipPolicyStableAcrossPageChanges(t *testing.T) {
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "update chrome")
+	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "update decorations")
 	pack.Command.Scope.SlideIDs = []string{"sli_1"}
 	before := runtimeSystemPromptForRequest(AgentRequest{Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack})
 	for _, scope := range []model.RunScope{

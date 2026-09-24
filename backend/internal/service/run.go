@@ -95,8 +95,7 @@ func NewRunService(
 		store: s, engine: engine,
 		assembler: contextengine.NewContextAssembler(s, refRegistry).
 			WithComponentLoader(components).
-			WithSkillLoader(skills).
-			WithThemeLoader(themes),
+			WithSkillLoader(skills),
 		renderer:    renderer,
 		registry:    registry,
 		skills:      skills,

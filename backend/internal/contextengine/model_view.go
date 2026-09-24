@@ -90,7 +90,7 @@ func ModelSections(pack ContextPack) map[string]any {
 		"project_context": map[string]any{"title": pack.Project.Title, "manifest": ModelValue(pack.PresentationManifest.Manifest)},
 		"outline":         ModelOutline(pack),
 		"target_context":  nil, "related_context": nil, "design_context": ModelValue(pack.Design.Design),
-		"theme_context": nil, "available_resources": map[string]any{"components": pack.Components, "skills": pack.Skills},
+		"available_resources": map[string]any{"components": pack.Components, "skills": pack.Skills},
 	}
 	pages := map[string]map[string]any{}
 	for _, summary := range pack.Outline.Summaries {
@@ -126,9 +126,6 @@ func ModelSections(pack ContextPack) map[string]any {
 		}
 		sections["related_context"] = ids
 	}
-	if theme := pack.Theme; theme != nil {
-		sections["theme_context"] = map[string]any{"name": theme.Name, "description": theme.Description, "tokens": theme.Tokens, "public_roles": theme.PublicRoles}
-	}
 	return sections
 }
 
@@ -152,7 +149,7 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 			ready := err == nil && json.Unmarshal(raw, &slide) == nil
 			summary = slideSummary(loc, slide, ready)
 			if pack.Design.Design != nil {
-				summary.State = loadMaterializationState(workDir, id, pack.PresentationManifest.Manifest, pack.Outline.Outline, slide, *pack.Design.Design)
+				summary.State = loadMaterializationState(workDir, pack.Project.ThemeID, id, pack.PresentationManifest.Manifest, pack.Outline.Outline, slide, *pack.Design.Design)
 			}
 			if len(pack.Target.SlideIDs) == 1 && pack.Target.SlideIDs[0] == id {
 				pack.Target.SlideSpec = nil

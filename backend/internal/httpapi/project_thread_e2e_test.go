@@ -114,7 +114,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 
 func TestCanonicalMutationHTTPReturnsAuthoritativeSnapshot(t *testing.T) {
 	srv, _ := setupProjectThreadServer(t)
-	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Rename directory","language":"zh-CN"}`)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Rename directory"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
 	}
@@ -200,7 +200,7 @@ func TestCommandPermissionHTTPAuthority(t *testing.T) {
 	srv, _ := setupProjectThreadServerWithFactory(t, func(runModel model.Run, _ model.CreateRunParams, _ model.Project) run.Execution {
 		return commandPermissionRunner{runID: runModel.ID}
 	})
-	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Command permission","language":"zh-CN"}`)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Command permission"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
 	}
@@ -271,7 +271,7 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 	srv, _ := setupProjectThreadServerWithFactory(t, func(model.Run, model.CreateRunParams, model.Project) run.Execution {
 		return blockingRunner{started: started}
 	})
-	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Authority","language":"zh-CN"}`)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Authority"}`)
 	var project map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &project)
 	projectID := project["id"].(string)
@@ -345,7 +345,7 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 
 func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	srv, _ := setupProjectThreadServer(t)
-	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Artifact R0","language":"zh-CN"}`)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Artifact R0"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
 	}
@@ -439,7 +439,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 
 func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
 	srv, root := setupProjectThreadServer(t)
-	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Screenshots","language":"zh-CN"}`)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Screenshots"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
 	}
@@ -484,7 +484,7 @@ func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
 func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 	srv, root := setupProjectThreadServer(t)
 
-	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"云原生可观测性实践","language":"zh"}`)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"云原生可观测性实践"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /projects want 201, got %d: %s", resp.Code, resp.Body.String())
 	}
@@ -497,8 +497,8 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 	if projectID == "" || workDir != filepath.Join(root, "projects", projectID, "artifacts") {
 		t.Fatalf("bad project response: %+v", project)
 	}
-	if _, err := os.Stat(filepath.Join(workDir, "state.json")); err != nil {
-		t.Fatalf("project creation must initialize state.json: %v", err)
+	if _, err := os.Stat(filepath.Join(workDir, "state.json")); !os.IsNotExist(err) {
+		t.Fatalf("project creation must not create obsolete state.json: %v", err)
 	}
 
 	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID+"/content", "")
@@ -536,7 +536,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 
 func TestDeleteProjectPurgesPrivateContainerAfterHistoryAccepts(t *testing.T) {
 	srv, root := setupProjectThreadServer(t)
-	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Delete me","language":"zh-CN"}`)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Delete me"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("create project: %d %s", resp.Code, resp.Body.String())
 	}
@@ -559,7 +559,7 @@ func TestRenameProjectAndThread(t *testing.T) {
 	srv, _ := setupProjectThreadServer(t)
 
 	// Create Project
-	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Test Project","language":"zh"}`)
+	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Test Project"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /projects want 201, got %d: %s", resp.Code, resp.Body.String())
 	}

@@ -9,7 +9,7 @@ import (
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func loadMaterializationState(workDir, slideID string, deck pptspec.Manifest, outline pptspec.Outline, slide pptspec.SlideSpec, design pptspec.Design) string {
+func loadMaterializationState(workDir, themeID, slideID string, deck pptspec.Manifest, outline pptspec.Outline, slide pptspec.SlideSpec, design pptspec.Design) string {
 	htmlRaw, htmlErr := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideHTMLPath(slideID))))
 	if htmlErr != nil {
 		return string(model.MaterializationNotMaterialized)
@@ -24,8 +24,8 @@ func loadMaterializationState(workDir, slideID string, deck pptspec.Manifest, ou
 	if deckErr != nil || specErr != nil || designErr != nil {
 		return string(model.MaterializationUnknown)
 	}
-	appearance, _ := runtimeassets.ProjectAppearance(workDir, design.Theme)
+	appearance, _ := runtimeassets.ProjectAppearance(workDir, themeID)
 	nodeHash := pptspec.SemanticSlideNodeHash(outline, slideID)
 	return pptspec.DeriveMaterializationState(true, &record, pptspec.ResourceHash(deck), nodeHash, pptspec.ResourceHash(slide), pptspec.DesignContentHash(design),
-		pptspec.ContentHash(htmlRaw), pptspec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), pptspec.FrameContextHash(deck, outline, design, slideID, appearance))
+		pptspec.ContentHash(htmlRaw), pptspec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), pptspec.FrameContextHash(deck, outline, design, slideID, slide.KeyMessage, appearance))
 }

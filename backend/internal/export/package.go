@@ -142,14 +142,14 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 		// Playback context only: no project IDs, live API URLs or editor metadata.
 		var playbackAppearance any
 		if appearance := slide.Frame.Appearance; appearance != nil {
-			playbackAppearance = map[string]any{"hash": appearance.Hash, "chrome_tokens": appearance.ChromeTokens}
+			playbackAppearance = map[string]any{"hash": appearance.Hash, "decoration_tokens": appearance.DecorationTokens}
 		}
 		slides = append(slides, map[string]any{
 			"src": "slides/" + name,
 			"frame": map[string]any{
 				"ordinal": slide.Frame.Ordinal, "total": slide.Frame.Total, "appearance": playbackAppearance,
 				"section":    map[string]string{"title": slide.Frame.Section.Title},
-				"deck_title": slide.Frame.DeckTitle, "chrome": slide.Frame.Chrome,
+				"deck_title": slide.Frame.DeckTitle, "key_message": slide.Frame.KeyMessage, "decorations": slide.Frame.Decorations,
 			},
 		})
 		for _, resource := range external {
@@ -171,11 +171,11 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 	if err := writeFile(filepath.Join(work, "runtime", "player.js"), []byte(playerJS)); err != nil {
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入播放器。", true, err)
 	}
-	chromeJS, chromeErr := os.ReadFile(filepath.Join(op.Snapshot.Root, "runtime-assets", "chrome.js"))
-	if chromeErr != nil {
-		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法读取公共装饰快照。", true, chromeErr)
+	decorationsJS, decorationsErr := os.ReadFile(filepath.Join(op.Snapshot.Root, "runtime-assets", "decorations.js"))
+	if decorationsErr != nil {
+		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法读取公共装饰快照。", true, decorationsErr)
 	}
-	if err := writeFile(filepath.Join(work, "runtime", "chrome.js"), chromeJS); err != nil {
+	if err := writeFile(filepath.Join(work, "runtime", "decorations.js"), decorationsJS); err != nil {
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入公共装饰。", true, err)
 	}
 	list, _ := json.Marshal(slides)

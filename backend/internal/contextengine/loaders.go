@@ -13,7 +13,7 @@ import (
 type ProjectLoader struct{}
 
 func (ProjectLoader) Load(project model.Project) ProjectContext {
-	return ProjectContext{ID: project.ID, Title: project.Title}
+	return ProjectContext{ID: project.ID, Title: project.Title, ThemeID: project.Theme}
 }
 
 type OutlineLoader struct{}

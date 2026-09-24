@@ -78,15 +78,15 @@ type RenderRequest struct {
 }
 
 type RenderDiagnostics struct {
-	ScreenshotBytes int              `json:"screenshot_bytes"`
-	ContentSize     map[string]int   `json:"content_size"`
-	Overflow        map[string]bool  `json:"overflow"`
-	Clipping        []map[string]any `json:"clipping"`
-	RuntimeChrome   []string         `json:"runtime_chrome"`
-	ConsoleErrors   []string         `json:"console_errors"`
-	FailedResources []string         `json:"failed_resources"`
-	FontStatus      string           `json:"font_status"`
-	DurationMS      int64            `json:"duration_ms"`
+	ScreenshotBytes    int              `json:"screenshot_bytes"`
+	ContentSize        map[string]int   `json:"content_size"`
+	Overflow           map[string]bool  `json:"overflow"`
+	Clipping           []map[string]any `json:"clipping"`
+	RuntimeDecorations []string         `json:"runtime_decorations"`
+	ConsoleErrors      []string         `json:"console_errors"`
+	FailedResources    []string         `json:"failed_resources"`
+	FontStatus         string           `json:"font_status"`
+	DurationMS         int64            `json:"duration_ms"`
 }
 
 type PDFRequest struct {
@@ -464,11 +464,10 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		agentErr := classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable))
 		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
 	}
-	design, designErr := currentDesignForRender(t.pack, input.ProjectDir, input.Session)
-	if designErr != nil || t.themes == nil {
+	if t.themes == nil {
 		return failedToolResult(CodeRenderFailed, "theme runtime is unavailable", true)
 	}
-	theme, themeErr := t.themes.Get(design.Theme)
+	theme, themeErr := t.themes.Get(t.pack.Project.ThemeID)
 	if themeErr != nil {
 		return failedToolResult(CodeRenderFailed, "theme is unavailable", false)
 	}
@@ -559,7 +558,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		"hash":         sourceHash,
 		"viewport":     map[string]int{"width": frame.Canvas.Width, "height": frame.Canvas.Height},
 		"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
-		"clipping": diagnostics.Clipping, "runtime_chrome": diagnostics.RuntimeChrome, "console_errors": diagnostics.ConsoleErrors,
+		"clipping": diagnostics.Clipping, "runtime_decorations": diagnostics.RuntimeDecorations, "console_errors": diagnostics.ConsoleErrors,
 		"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		"duration_ms": diagnostics.DurationMS, "blocking_issues": blocking, "warnings": warnings,
 	}
@@ -571,7 +570,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		"tool_call_id": input.CallID,
 		"resource":     target, "slide_id": slideID, "diagnostics": map[string]any{
 			"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
-			"clipping": diagnostics.Clipping, "runtime_chrome": diagnostics.RuntimeChrome, "console_errors": diagnostics.ConsoleErrors,
+			"clipping": diagnostics.Clipping, "runtime_decorations": diagnostics.RuntimeDecorations, "console_errors": diagnostics.ConsoleErrors,
 			"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		},
 		"source_hash":       sourceHash,
@@ -614,27 +613,23 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {
 		return spec.RuntimeFrameContext{}, errors.New("runtime frame source is invalid")
 	}
-	appearance, err := runtimeassets.ProjectAppearance(projectDir, design.Theme)
+	specRaw, _, err := readArtifact(projectDir, session, specSlideRef(slideID))
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
 	}
-	frame, ok := spec.BuildRuntimeFrame(deck, outline, design, slideID, appearance)
+	var slide spec.SlideSpec
+	if err := json.Unmarshal(specRaw, &slide); err != nil {
+		return spec.RuntimeFrameContext{}, err
+	}
+	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)
+	if err != nil {
+		return spec.RuntimeFrameContext{}, err
+	}
+	frame, ok := spec.BuildRuntimeFrame(deck, outline, design, slideID, slide.KeyMessage, appearance)
 	if !ok {
 		return spec.RuntimeFrameContext{}, errors.New("slide is not present in the current outline")
 	}
 	return frame, nil
-}
-
-func currentDesignForRender(pack contextengine.ContextPack, projectDir string, session *RunSession) (spec.Design, error) {
-	raw, _, err := readArtifact(projectDir, session, designRef(pack))
-	if err != nil {
-		return spec.Design{}, err
-	}
-	var design spec.Design
-	if err := json.Unmarshal(raw, &design); err != nil {
-		return spec.Design{}, err
-	}
-	return design, nil
 }
 
 func renderArtifactHash(input DomainToolInput, slideID string) (string, error) {

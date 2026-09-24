@@ -28,10 +28,7 @@ type patchProjectRequest struct {
 	Title *string `json:"title"`
 }
 type createProjectRequest struct {
-	Topic      string `json:"topic"`
-	Brief      string `json:"brief"`
-	SlideCount int    `json:"slide_count"`
-	Language   string `json:"language"`
+	Topic string `json:"topic"`
 }
 type projectResponse struct {
 	ID          string `json:"id"`
@@ -63,7 +60,7 @@ func (h *ProjectHandler) Create(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
-	p, err := h.svc.CreateProject(c.Request.Context(), service.CreateProjectParams{Topic: req.Topic, Brief: req.Brief, SlideCount: req.SlideCount, Language: req.Language})
+	p, err := h.svc.CreateProject(c.Request.Context(), service.CreateProjectParams{Topic: req.Topic})
 	if err == nil {
 		c.JSON(http.StatusCreated, toProjectResponse(p))
 		return

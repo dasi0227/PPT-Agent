@@ -319,7 +319,7 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 
 func targetForSegment(segment contextengine.ContextSegment) Resource {
 	source := segment.SourceRef
-	if strings.Contains(source, "/design") || strings.HasPrefix(source, "theme://") {
+	if strings.Contains(source, "/design") {
 		return Resource{Type: "deck", Part: "design"}
 	}
 	if strings.Contains(source, "/outline") || strings.Contains(source, "related-slides") {
