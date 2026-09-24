@@ -277,7 +277,3 @@ func parseComponentMeta(raw []byte) (componentMeta, error) {
 	}
 	return componentMeta{Name: metadata.Name, Description: metadata.Description}, nil
 }
-
-func componentNotFound(err error) bool {
-	return errors.Is(err, os.ErrNotExist)
-}

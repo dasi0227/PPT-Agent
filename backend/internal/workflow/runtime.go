@@ -2536,10 +2536,6 @@ func (r *Runtime) persistTranscript(input RuntimeInput, state *RunState) error {
 	return input.Transcript.Replace(input.ProjectDir, input.Context.Manifest.ThreadID, llm.NormalizeHistory(state.messages))
 }
 
-func attachmentMessageParts(text, projectID string, attachments []model.AttachmentReference) []llm.ContentPart {
-	return referenceMessageParts(text, projectID, attachments, nil, model.NormalizeReferenceOrder(nil, attachments, nil))
-}
-
 func referenceMessageParts(text, projectID string, attachments []model.AttachmentReference, selections []model.DOMSelection, order []model.ReferenceOrderItem) []llm.ContentPart {
 	parts := llm.TextContent(text)
 	attachmentByID := map[string]model.AttachmentReference{}
@@ -2575,15 +2571,6 @@ func referenceMessageParts(text, projectID string, attachments []model.Attachmen
 		)
 	}
 	return parts
-}
-
-func containsMessageText(messages []llm.Message, text string) bool {
-	for _, message := range messages {
-		if message.Role == llm.RoleUser && message.Text() == text {
-			return true
-		}
-	}
-	return false
 }
 
 func containsRunInstruction(messages []llm.Message, runID string) bool {
@@ -2903,18 +2890,6 @@ func approximateTokens(value string) int {
 		return 0
 	}
 	return len([]rune(value))/4 + 1
-}
-
-func approximateMessageTokens(messages []llm.Message) int {
-	total := 0
-	for _, message := range messages {
-		for _, part := range message.Content {
-			if part.Type == "text" {
-				total += approximateTokens(part.Text)
-			}
-		}
-	}
-	return total
 }
 
 func isControlTool(name string) bool {

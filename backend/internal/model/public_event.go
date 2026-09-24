@@ -917,39 +917,6 @@ func validateLoadedResources(value any) error {
 	return nil
 }
 
-func validateQuestionOptions(data map[string]any) error {
-	options, ok := data["options"].([]any)
-	if !ok {
-		return errors.New("question options are required")
-	}
-	if len(options) > 3 {
-		return errors.New("question options cannot exceed 3")
-	}
-	allowCustom, ok := data["allow_custom"].(bool)
-	if !ok {
-		return errors.New("allow_custom is required")
-	}
-	if len(options) == 0 && !allowCustom {
-		return errors.New("question requires options or a custom answer")
-	}
-	seen := map[string]bool{}
-	for _, raw := range options {
-		option, ok := raw.(map[string]any)
-		if !ok {
-			return errors.New("invalid question option")
-		}
-		if err := requireString(option, "id", "label"); err != nil {
-			return err
-		}
-		id := stringValue(option["id"])
-		if seen[id] {
-			return errors.New("question option ids must be unique")
-		}
-		seen[id] = true
-	}
-	return nil
-}
-
 func validateQuestionFields(questions []any) error {
 	seenQuestions := map[string]bool{}
 	for _, raw := range questions {
@@ -1251,15 +1218,6 @@ func validateStringList(values []any, field string) error {
 		_, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("%s must contain strings", field)
-		}
-	}
-	return nil
-}
-
-func require(data map[string]any, keys ...string) error {
-	for _, key := range keys {
-		if value, ok := data[key]; !ok || value == nil {
-			return fmt.Errorf("%s is required", key)
 		}
 	}
 	return nil

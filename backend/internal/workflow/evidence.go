@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"sort"
 	"sync"
 	"time"
 )
@@ -110,10 +109,4 @@ func (l *EvidenceLedger) Version() int64 {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	return l.version
-}
-
-func sortedEvidenceKinds(values []string) []string {
-	out := append([]string{}, values...)
-	sort.Strings(out)
-	return out
 }

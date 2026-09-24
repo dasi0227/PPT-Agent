@@ -295,16 +295,6 @@ func stringValue(value any) string {
 	return text
 }
 
-func cloneMap(value map[string]any) map[string]any {
-	if value == nil {
-		return map[string]any{}
-	}
-	raw, _ := json.Marshal(value)
-	out := map[string]any{}
-	_ = json.Unmarshal(raw, &out)
-	return out
-}
-
 func cloneValue(value any) any {
 	raw, _ := json.Marshal(value)
 	var out any

@@ -17,8 +17,6 @@ const (
 	maxDynamicSkillBytes    = 192 << 10
 )
 
-var skillIDPattern = repositoryIDPattern
-
 type SkillService struct {
 	root     string
 	metadata repositoryMetadataStore

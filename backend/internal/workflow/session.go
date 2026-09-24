@@ -309,17 +309,6 @@ func (s *RunSession) ReadBaseline(ref ArtifactRef) ([]byte, error) {
 	return os.ReadFile(filepath.Join(s.projectDir, relative))
 }
 
-func (s *RunSession) baselineForChange(ref ArtifactRef) []byte {
-	relative, err := s.resolveRelative(ref)
-	if err != nil {
-		return nil
-	}
-	if entry, ok := s.artifacts[relative]; ok && entry.Existed {
-		return append([]byte(nil), entry.BeforeContent...)
-	}
-	return nil
-}
-
 func (s *RunSession) ProjectDir() string { return s.projectDir }
 
 func (s *RunSession) ChangeSet() ChangeSet {

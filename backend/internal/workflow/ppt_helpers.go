@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -102,20 +101,6 @@ func resourceSchema() map[string]any {
 	variants = append(variants, objectSchema([]string{"kind", "slide_id", "part"}, map[string]any{"kind": map[string]any{"const": "slide"}, "slide_id": id, "part": map[string]any{"enum": parts}}))
 	return map[string]any{"oneOf": variants}
 }
-func intValue(value any, fallback int) int {
-	switch v := value.(type) {
-	case float64:
-		return int(v)
-	case int:
-		return v
-	case string:
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return fallback
-}
-
 func validateHTML(raw []byte) ([]Issue, error) {
 	if err := spec.ValidateSlideHTML(raw); err != nil {
 		code := "HTML_PARSE"
@@ -147,15 +132,6 @@ func currentOutline(pack contextengine.ContextPack, tx *RunSession) (spec.Outlin
 	err = json.Unmarshal(raw, &value)
 	return value, err
 }
-func currentDesign(pack contextengine.ContextPack, tx *RunSession) (spec.Design, error) {
-	raw, _, err := readArtifact(tx.ProjectDir(), tx, designRef(pack))
-	if err != nil {
-		return spec.Design{}, err
-	}
-	var value spec.Design
-	err = json.Unmarshal(raw, &value)
-	return value, err
-}
 func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string, error) {
 	outline, err := currentOutline(pack, tx)
 	if err != nil {
@@ -177,15 +153,6 @@ func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string,
 		combined = append(combined, raw...)
 	}
 	return hashBytes(combined), nil
-}
-func readSlideModel(pack contextengine.ContextPack, tx *RunSession, id string) (spec.SlideSpec, []byte, string, error) {
-	raw, source, err := readArtifact(tx.ProjectDir(), tx, specSlideRef(id))
-	if err != nil {
-		return spec.SlideSpec{}, nil, "", err
-	}
-	var slide spec.SlideSpec
-	err = json.Unmarshal(raw, &slide)
-	return slide, raw, source, err
 }
 func targetHash(pack contextengine.ContextPack, tx *RunSession, target Resource) (string, error) {
 	ref, err := refForResource(pack, target)
@@ -239,15 +206,6 @@ func currentMaterializationProof(pack contextengine.ContextPack, projectDir stri
 }
 func MaterializationSourceHash(deckRaw []byte, nodeHash string, specRaw, designRaw []byte) string {
 	return spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw)
-}
-func schemaEvidence(target Resource, hash string) Evidence {
-	return newEvidence("schema", target, hash, map[string]any{"valid": true})
-}
-func staticEvidence(target Resource, hash string) Evidence {
-	return newEvidence("static", target, hash, map[string]any{"valid": true})
-}
-func referenceEvidence(hash string) Evidence {
-	return newEvidence("reference", Resource{Type: "deck", Part: "outline"}, hash, map[string]any{"valid": true})
 }
 func newEvidence(kind string, target Resource, sourceHash string, values ...map[string]any) Evidence {
 	data := map[string]any{}

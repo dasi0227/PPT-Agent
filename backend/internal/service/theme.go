@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -182,10 +181,6 @@ func (s *ThemeService) Delete(id string) error {
 		return err
 	}
 	return s.metadata.DeleteResourceMetadata(context.Background(), resourceTypeTheme, id)
-}
-
-func themeNotFound(err error) bool {
-	return errors.Is(err, os.ErrNotExist)
 }
 
 func validateThemeTokens(css []byte) error {

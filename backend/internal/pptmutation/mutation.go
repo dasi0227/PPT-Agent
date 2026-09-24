@@ -521,12 +521,6 @@ func clientRef(ref string, seen map[string]bool) error {
 	seen[ref] = true
 	return nil
 }
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 func ids(flat []spec.SlideLocation) []string {
 	out := make([]string, 0, len(flat))
 	for _, loc := range flat {

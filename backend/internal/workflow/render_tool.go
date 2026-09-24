@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -386,24 +385,6 @@ func (r *NodeSlideRenderer) Close() error {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 	}
 	return nil
-}
-
-type limitedBuffer struct {
-	bytes.Buffer
-	limit    int
-	exceeded bool
-}
-
-func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if b.Buffer.Len()+len(p) > b.limit {
-		remaining := b.limit - b.Buffer.Len()
-		if remaining > 0 {
-			_, _ = b.Buffer.Write(p[:remaining])
-		}
-		b.exceeded = true
-		return len(p), nil
-	}
-	return b.Buffer.Write(p)
 }
 
 func minDuration(a, b time.Duration) time.Duration {

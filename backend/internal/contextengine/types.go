@@ -177,13 +177,6 @@ type ContextManifest struct {
 	Warnings        []string         `json:"warnings"`
 }
 
-type candidate struct {
-	segment ContextSegment
-	value   any
-	apply   func(*ContextPack)
-	drop    func(*ContextPack)
-}
-
 func stableJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
