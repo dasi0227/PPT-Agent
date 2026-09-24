@@ -1,3 +1,5 @@
+import { useShortcutStore } from '../../stores/shortcutStore';
+import { isMac } from '../../lib/platform';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RuntimeSlide, runtimeEventFromFrame } from './previewProtocol';
 import { Button } from '../../components/ui/primitives';
@@ -12,6 +14,7 @@ interface IsolatedSlidePreviewProps {
   className?: string;
   passive?: boolean;
   style?: React.CSSProperties;
+  keyboardShortcuts?: boolean;
   selectionMode?: 'element' | 'region' | 'none';
   selectionSlide?: { id: string; hash: string };
   draftSelections?: DOMSelection[];
@@ -30,6 +33,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   className,
   passive = false,
   style,
+  keyboardShortcuts = false,
   selectionMode = 'none',
   selectionSlide,
   draftSelections = [],
@@ -48,6 +52,8 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   const [displayedDocument, setDisplayedDocument] = useState<{ id: string; html: string } | null>(null);
   const appearanceHash = slides[index]?.frame.appearance?.hash || '';
   const [runtimeVersion, setRuntimeVersion] = useState(0);
+  const shortcutBindings = useShortcutStore(state => state.bindings);
+  const shortcutsReady = useShortcutStore(state => state.ready);
   const [runtimeReady, setRuntimeReady] = useState(false);
   const deliveredReplayRef = useRef(replayRequest?.id);
   const activeSlideId = slides[index]?.id;
@@ -95,7 +101,21 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
   }, [runtimeVersion, runtimeReady]);
 
   useEffect(() => {
+    if (!runtimeReady) return;
+    iframeRef.current?.contentWindow?.postMessage({ type: 'setKeyboardShortcuts', mac: isMac(),
+      bindings: keyboardShortcuts && shortcutsReady ? Object.fromEntries(Object.entries(shortcutBindings).filter(([id]) => id.startsWith('deck.'))) : {},
+    }, '*');
+  }, [runtimeReady, runtimeVersion, keyboardShortcuts, shortcutsReady, shortcutBindings]);
+
+  useEffect(() => {
     const onMessage = (event: MessageEvent) => {
+      if (event.source === iframeRef.current?.contentWindow && event.data?.type === 'shortcutRequested') {
+        const id = event.data.id;
+        if (keyboardShortcuts && event.data.slide_id === activeSlideId && typeof id === 'string' && id.startsWith('deck.') && useShortcutStore.getState().bindings[id]) {
+          window.dispatchEvent(new CustomEvent('ppt-deck-shortcut', { detail: id }));
+        }
+        return;
+      }
       const message = runtimeEventFromFrame(event, iframeRef.current?.contentWindow ?? null);
       if (!message) return;
       if (message.type === 'runtimeReady') {
@@ -131,7 +151,7 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [activeHTML, activeSlideId, appearanceHash, draftSelections, onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
+  }, [keyboardShortcuts, activeHTML, activeSlideId, appearanceHash, draftSelections, onSelection, onSelectionCanceled, onSelectionMessage, onSelectionPresence, selectionMode, selectionSlide, sessionID, sendDeck, sendSelectionState]);
 
   useEffect(() => {
     setThemeError('');

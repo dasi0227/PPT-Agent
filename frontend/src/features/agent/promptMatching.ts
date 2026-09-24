@@ -91,64 +91,30 @@ export interface PageMentionCandidate {
   htmlState: MaterializationState;
 }
 
-export function findPromptTrigger(text: string, caret: number): PromptTrigger | null {
-  if (caret < 0 || caret > text.length) return null;
+function findInputTrigger(text: string, caret: number, symbol: string): PromptTrigger | null {
+  if (caret < 0 || caret > text.length || !symbol) return null;
   const before = text.slice(0, caret);
-  const match = before.match(/(?:^|[ \n])([%％])([^ \n%％]*)$/);
-  if (!match) return null;
-  return {
-    start: caret - match[1].length - match[2].length,
-    end: caret,
-    query: match[2],
-  };
+  const start = Math.max(before.lastIndexOf(' '), before.lastIndexOf('\n')) + 1;
+  const token = before.slice(start);
+  // Input-method variants belong to the same configurable trigger, not separate bindings.
+  const aliases = symbol === '$' ? ['$', '¥'] : symbol === '%' ? ['%', '％'] : [symbol];
+  if (!aliases.includes(token[0]) || aliases.some(value => token.slice(1).includes(value))) return null;
+  return { start, end: caret, query: token.slice(1) };
 }
-
-export function findComponentTrigger(text: string, caret: number): ComponentTrigger | null {
-  if (caret < 0 || caret > text.length) return null;
-  const before = text.slice(0, caret);
-  const match = before.match(/(?:^|[ \n])([¥$])([^ \n¥$]*)$/);
-  if (!match) return null;
-  return {
-    start: caret - match[1].length - match[2].length,
-    end: caret,
-    query: match[2],
-  };
+export function findPromptTrigger(text: string, caret: number, symbol = '%'): PromptTrigger | null {
+  return findInputTrigger(text, caret, symbol);
 }
-
-export function findPageTrigger(text: string, caret: number): PageTrigger | null {
-  if (caret < 0 || caret > text.length) return null;
-  const before = text.slice(0, caret);
-  const match = before.match(/(?:^|[ \n])(#)([^ \n#]*)$/);
-  if (!match) return null;
-  return {
-    start: caret - match[1].length - match[2].length,
-    end: caret,
-    query: match[2],
-  };
+export function findComponentTrigger(text: string, caret: number, symbol = '$'): ComponentTrigger | null {
+  return findInputTrigger(text, caret, symbol);
 }
-
-export function findSummaryTrigger(text: string, caret: number): SummaryTrigger | null {
-  if (caret < 0 || caret > text.length) return null;
-  const before = text.slice(0, caret);
-  const match = before.match(/(?:^|[ \n])(@)([^ \n@]*)$/);
-  if (!match) return null;
-  return {
-    start: caret - match[1].length - match[2].length,
-    end: caret,
-    query: match[2],
-  };
+export function findPageTrigger(text: string, caret: number, symbol = '#'): PageTrigger | null {
+  return findInputTrigger(text, caret, symbol);
 }
-
-export function findCommandTrigger(text: string, caret: number): CommandTrigger | null {
-  if (caret < 0 || caret > text.length) return null;
-  const before = text.slice(0, caret);
-  const match = before.match(/(?:^|[ \n])(\/)([^ \n/]*)$/);
-  if (!match) return null;
-  return {
-    start: caret - match[1].length - match[2].length,
-    end: caret,
-    query: match[2],
-  };
+export function findSummaryTrigger(text: string, caret: number, symbol = '@'): SummaryTrigger | null {
+  return findInputTrigger(text, caret, symbol);
+}
+export function findCommandTrigger(text: string, caret: number, symbol = '/'): CommandTrigger | null {
+  return findInputTrigger(text, caret, symbol);
 }
 
 export function resolveSlashCommands(availability: SlashCommandAvailability): ResolvedSlashCommand[] {

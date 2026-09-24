@@ -1,3 +1,5 @@
+import { useShortcutStore } from './stores/shortcutStore';
+import { showGlobalError } from './stores/toastStore';
 import { ProjectHistoryDialogs } from './features/agent/ProjectHistoryControls';
 import { useEffect, useState } from 'react';
 import { createBrowserRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom';
@@ -13,6 +15,16 @@ import { SkillRepositoryPage } from './features/repository/SkillRepositoryPage';
 import { PromptRepositoryPage } from './features/repository/PromptRepositoryPage';
 
 export function App() {
+  useEffect(() => {
+    const refresh = () => { void useShortcutStore.getState().load().catch(() => {}); };
+    const storage = (event: StorageEvent) => { if (event.key === 'ppt-shortcuts-updated') refresh(); };
+    const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+    void useShortcutStore.getState().load().catch(() => showGlobalError('快捷键设置加载失败，可在设置中重试'));
+    window.addEventListener('focus', refresh);
+    window.addEventListener('storage', storage);
+    document.addEventListener('visibilitychange', visible);
+    return () => { window.removeEventListener('focus', refresh); window.removeEventListener('storage', storage); document.removeEventListener('visibilitychange', visible); };
+  }, []);
   useEffect(() => {
     void useRunStore.getState().recoverPersistedRuns();
     void useGitCommitStore.getState().recover();

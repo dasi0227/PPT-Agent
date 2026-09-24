@@ -488,10 +488,36 @@
       window.parent.postMessage({ type: 'selectionCreated', session_id: state.selection.sessionID, slide_id: state.selection.slideID, selection }, '*');
     }
 
+    let keyboardShortcuts = { bindings: {}, mac: false };
+    document.addEventListener('keydown', (event) => {
+      if (event.isComposing || !state.visible || event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+      if (keyboardShortcuts.mac ? event.ctrlKey : event.metaKey) return;
+      for (const [id, binding] of Object.entries(keyboardShortcuts.bindings)) {
+        if (!id.startsWith('deck.') || binding.code !== event.code || !!binding.primary !== (keyboardShortcuts.mac ? event.metaKey : event.ctrlKey)
+          || !!binding.alt !== event.altKey || !!binding.shift !== (event.code !== 'Equal' && event.shiftKey)) continue;
+        event.preventDefault(); event.stopImmediatePropagation();
+        const slide = state.slides[state.activeIndex];
+        if (slide && !event.repeat) window.parent.postMessage({ type: 'shortcutRequested', slide_id: slide.id, id }, '*');
+        break;
+      }
+    }, true);
+    function sendKeyboardShortcuts(execution) {
+      execution.container.querySelector('iframe').contentWindow?.postMessage({
+        ...keyboardShortcuts, bridge: 'ppt-shortcuts-v1', type: 'configure', slide_id: execution.slideID,
+      }, '*');
+    }
+
     window.addEventListener('message', (event) => {
       const execution = Array.from(state.executions.values()).find(value =>
         value.container.querySelector('iframe').contentWindow === event.source);
       const message = event.data;
+      if (execution && message?.bridge === 'ppt-shortcuts-v1' && message.slide_id === execution.slideID) {
+        if (message.type === 'ready') sendKeyboardShortcuts(execution);
+        if (message.type === 'invoke' && execution === state.activeExecution && state.visible && keyboardShortcuts.bindings[message.id]) {
+          window.parent.postMessage({ type: 'shortcutRequested', slide_id: execution.slideID, id: message.id }, '*');
+        }
+        return;
+      }
       if (execution && message?.bridge === 'ppt-theme-v1' && message.slide_id === execution.slideID) {
         const current = state.slides.find(slide => slide.id === execution.slideID);
         if (!current) return;
@@ -563,7 +589,10 @@
       }
 
       try {
-        if (isUpdateDeck(event.data)) {
+        if (event.data?.type === 'setKeyboardShortcuts' && event.data.bindings && typeof event.data.bindings === 'object') {
+          keyboardShortcuts = { bindings: event.data.bindings, mac: event.data.mac === true };
+          for (const execution of state.executions.values()) sendKeyboardShortcuts(execution);
+        } else if (isUpdateDeck(event.data)) {
           updateDeck(event.data.slides, event.data.index);
         } else if (isGotoSlide(event.data)) {
           renderSlide(event.data.index);

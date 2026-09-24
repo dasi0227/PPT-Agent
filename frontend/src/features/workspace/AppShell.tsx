@@ -11,6 +11,7 @@ import { workspacePanelLayout } from './panelLayout';
 
 export const AppShell: React.FC = () => {
   const preferences = useUIStore();
+  const [deckActionsTarget, setDeckActionsTarget] = React.useState<HTMLDivElement | null>(null);
   const { activeProjectId } = useProjectStore();
   const shellRef = React.useRef<HTMLDivElement>(null);
   const [workspaceWidth, setWorkspaceWidth] = React.useState(() =>
@@ -62,14 +63,14 @@ export const AppShell: React.FC = () => {
             {!leftPanelHidden && (
               <>
                 <Panel id="left" order={1} defaultSize={layout.leftDefault} minSize={layout.leftMin} maxSize={26} collapsible={false} className="bg-panel border-r border-border">
-                  <DeckNavigator />
+                  <DeckNavigator actionsRef={setDeckActionsTarget} />
                 </Panel>
                 <PanelResizeHandle aria-label="调整左栏宽度" className="w-[3px] bg-border hover:bg-accent transition-colors" />
               </>
             )}
             
             <Panel id="center" order={2} defaultSize={layout.centerDefault} minSize={layout.centerMin} className="bg-canvas flex flex-col">
-              <PreviewWorkspace sidebarControls={{
+              <PreviewWorkspace deckActionsTarget={deckActionsTarget} sidebarControls={{
                 leftHidden: leftPanelHidden,
                 rightHidden: rightPanelHidden,
                 canExpandLeft,

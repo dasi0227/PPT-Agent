@@ -1,3 +1,4 @@
+import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Loader2, Palette } from 'lucide-react';
 import { repositoriesApi } from '../../api/repositories';
@@ -14,27 +15,30 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
     ? state.contentByProjectId[projectId]?.design.theme ?? state.projects.find(project => project.id === projectId)?.theme ?? ''
     : '');
   const setProjectTheme = useProjectStore(state => state.setProjectTheme);
+  const [open, setOpen] = useState(false);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [applying, setApplying] = useState(false);
-  const loadingRef = useRef(false);
+  const loadingRef = useRef<Promise<Theme[] | null> | null>(null);
   const applyingRef = useRef(false);
+  const cyclingRef = useRef(false);
 
-  const load = useCallback(async () => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
+  const load = useCallback(() => {
+    if (loadingRef.current) return loadingRef.current;
     setLoading(true);
     setError(false);
-    try {
-      const response = await repositoriesApi.listThemes();
+    loadingRef.current = repositoriesApi.listThemes().then(response => {
       setThemes(response.themes);
-    } catch {
+      return response.themes;
+    }).catch(() => {
       setError(true);
-    } finally {
-      loadingRef.current = false;
+      return null;
+    }).finally(() => {
+      loadingRef.current = null;
       setLoading(false);
-    }
+    });
+    return loadingRef.current;
   }, []);
 
   useEffect(() => { if (projectId) void load(); }, [projectId, load]);
@@ -53,9 +57,25 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
     }
   };
 
+  const cycleTheme = async () => {
+    if (applyingRef.current || cyclingRef.current) return;
+    cyclingRef.current = true;
+    try {
+      const available = themes.length && !error ? themes : await load();
+      if (!available) { showGlobalError('主题加载失败'); return; }
+      if (!available.length) return;
+      const nextIndex = (available.findIndex(theme => theme.id === themeId) + 1) % available.length;
+      await apply(available[nextIndex]);
+    } finally {
+      cyclingRef.current = false;
+    }
+  };
+
+  useAppShortcuts(projectId ? { 'deck.theme': () => { void cycleTheme(); } } : {});
+
   const name = themes.find(theme => theme.id === themeId)?.name || themeId || '选择主题';
   return (
-    <DropdownMenu onOpenChange={open => { if (open) void load(); }}>
+    <DropdownMenu open={open} onOpenChange={value => { setOpen(value); if (value) void load(); }}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"

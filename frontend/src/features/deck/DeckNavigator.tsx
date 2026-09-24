@@ -6,6 +6,7 @@ import {
   useState,
   type ComponentPropsWithoutRef,
   type ReactNode,
+  type Ref,
 } from 'react';
 import {
   ArrowDown,
@@ -110,11 +111,13 @@ function DeckNavigatorChrome({
   sectionCount,
   onInsertSection,
   insertDisabled,
+  actionsRef,
 }: {
   pageCount: number;
   sectionCount: number;
   onInsertSection: () => void;
   insertDisabled: boolean;
+  actionsRef?: Ref<HTMLDivElement>;
 }) {
   const toggleLeftPanel = useUIStore((state) => state.toggleLeftPanel);
 
@@ -124,13 +127,16 @@ function DeckNavigatorChrome({
         data-testid="deck-navigator-title-row"
         className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3"
       >
-        <div className="flex items-center text-sm font-semibold text-text-900">
-          <List className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} aria-hidden="true" />
-          <h2>目录</h2>
+        <div className="flex min-w-0 items-center text-sm font-semibold text-text-900">
+          <List className="mr-2 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+          <h2 className="truncate">目录</h2>
         </div>
-        <IconButton label="隐藏左侧目录" onClick={toggleLeftPanel}>
-          <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
-        </IconButton>
+        <div className="ml-2 flex shrink-0 items-center gap-1">
+          <div ref={actionsRef} />
+          <IconButton label="隐藏左侧目录" onClick={toggleLeftPanel}>
+            <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
+        </div>
       </header>
 
       <div
@@ -320,7 +326,7 @@ function SlideRow({
   );
 }
 
-export function DeckNavigator() {
+export function DeckNavigator({ actionsRef }: { actionsRef?: Ref<HTMLDivElement> } = {}) {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
   const mutateProject = useProjectStore((state) => state.mutateProject);
@@ -411,6 +417,7 @@ export function DeckNavigator() {
     return (
       <aside className="flex h-full min-h-0 flex-col border-r border-border-strong bg-panel" aria-label="演示目录">
         <DeckNavigatorChrome
+          actionsRef={actionsRef}
           pageCount={0}
           sectionCount={0}
           onInsertSection={() => {}}
@@ -427,6 +434,7 @@ export function DeckNavigator() {
     <>
       <aside className="flex h-full min-h-0 flex-col border-r border-border-strong bg-panel" aria-label="演示目录">
         <DeckNavigatorChrome
+          actionsRef={actionsRef}
           pageCount={slides.length}
           sectionCount={snapshot.outline.sections.length}
           onInsertSection={() => void insertSection()}

@@ -118,14 +118,6 @@ export function DOMSelectionReference({ selection, editing, onEditingChange, onC
               setCompositionDraft(null);
               saveComment(event.currentTarget.value);
             }}
-            onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing || composing.current) return;
-              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                event.preventDefault();
-                event.stopPropagation();
-                finish();
-              }
-            }}
             className="mx-3 mt-1 block h-20 w-[calc(100%-24px)] resize-none overflow-y-auto overscroll-contain rounded border-0 bg-transparent px-2.5 py-2 text-[13px] leading-relaxed outline-none placeholder:text-text-400 focus:bg-panel"
           />
           <div className="flex items-center justify-between px-3 pb-2.5 pt-1">

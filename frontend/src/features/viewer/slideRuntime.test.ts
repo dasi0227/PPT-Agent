@@ -250,4 +250,32 @@ describe('slide runtime', () => {
     expect(window.document.querySelectorAll('[data-slide-frame]')).toHaveLength(0);
     dom.window.close();
   });
+
+  it('forwards configured shortcuts from runtime chrome and only the active slide', () => {
+    const dom = createRuntime(), { window } = dom;
+    try {
+      send(window, { type: 'updateDeck', slides: [
+        { id: 's1', html: '<p>one</p>', frame: frame('s1', 1) },
+        { id: 's2', html: '<p>two</p>', frame: frame('s2', 2) },
+      ], index: 0 });
+      const oldFrame = window.document.querySelector('iframe')!;
+      send(window, { type: 'gotoSlide', index: 1 });
+      send(window, { type: 'setKeyboardShortcuts', mac: true, bindings: { 'deck.next': { code: 'ArrowRight', primary: true } } });
+      const events = vi.spyOn(window, 'postMessage');
+      const invoke = { bridge: 'ppt-shortcuts-v1', type: 'invoke', slide_id: 's1', id: 'deck.next' };
+      send(window, invoke, oldFrame.contentWindow! as unknown as Window);
+      send(window, { ...invoke, slide_id: 's2' }, {} as Window);
+      expect(events).not.toHaveBeenCalled();
+      window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowRight', metaKey: true }));
+      expect(events).toHaveBeenCalledWith({ type: 'shortcutRequested', slide_id: 's2', id: 'deck.next' }, '*');
+      events.mockClear();
+      const input = window.document.createElement('input');
+      window.document.body.append(input);
+      input.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowRight', metaKey: true, bubbles: true }));
+      window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowRight', metaKey: true, repeat: true }));
+      send(window, { type: 'setKeyboardShortcuts', mac: true, bindings: {} });
+      window.document.dispatchEvent(new window.KeyboardEvent('keydown', { code: 'ArrowRight', metaKey: true }));
+      expect(events).not.toHaveBeenCalled();
+    } finally { window.close(); }
+  });
 });

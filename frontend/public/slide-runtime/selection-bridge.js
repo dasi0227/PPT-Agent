@@ -383,4 +383,22 @@
       send('innerSelectionCanceled');
     }
   }, true);
+  // Forward only configured presentation actions; native text editing stays inside the slide.
+  let shortcuts = { bindings: {}, mac: false };
+  window.addEventListener('message', (event) => {
+    if (event.source !== window.parent || event.data?.bridge !== 'ppt-shortcuts-v1' || event.data?.type !== 'configure' || event.data?.slide_id !== slideID) return;
+    shortcuts = { bindings: event.data.bindings || {}, mac: event.data.mac === true };
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.isComposing || event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    if (shortcuts.mac ? event.ctrlKey : event.metaKey) return;
+    for (const [id, binding] of Object.entries(shortcuts.bindings)) {
+      if (!id.startsWith('deck.') || binding.code !== event.code || !!binding.primary !== (shortcuts.mac ? event.metaKey : event.ctrlKey)
+        || !!binding.alt !== event.altKey || !!binding.shift !== (event.code !== 'Equal' && event.shiftKey)) continue;
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (!event.repeat) window.parent.postMessage({ bridge: 'ppt-shortcuts-v1', type: 'invoke', slide_id: slideID, id }, '*');
+      break;
+    }
+  }, true);
+  window.parent.postMessage({ bridge: 'ppt-shortcuts-v1', type: 'ready', slide_id: slideID }, '*');
 })();

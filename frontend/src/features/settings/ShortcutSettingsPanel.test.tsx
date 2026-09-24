@@ -1,0 +1,67 @@
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { defaultBindings } from '../../lib/shortcuts';
+import { useShortcutStore } from '../../stores/shortcutStore';
+import { ShortcutSettingsPanel } from './ShortcutSettingsPanel';
+const { fetchClient } = vi.hoisted(() => ({ fetchClient: vi.fn() }));
+vi.mock('../../api/client', () => ({ fetchClient }));
+const saves = () => fetchClient.mock.calls.filter(([,options]) => options?.method === 'PUT');
+const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
+beforeEach(() => {
+  fetchClient.mockReset();
+  useShortcutStore.setState({ bindings: defaultBindings, revision:0, ready:false });
+  fetchClient.mockImplementation(async (_url, options) => {
+    if (options?.method !== 'PUT') return { revision:0, bindings:defaultBindings };
+    const edit = JSON.parse(options.body);
+    return { ...edit, revision:edit.revision + 1 };
+  });
+});
+it('automatically saves valid edits and all defaults, but not empty or conflicting bindings', async () => {
+  const dirty=vi.fn();
+  render(<ShortcutSettingsPanel refreshKey={0} onDirtyChange={dirty} onSavingChange={vi.fn()} />);
+  const command=await screen.findByLabelText('命令菜单');
+  expect(screen.queryByRole('button',{name:'保存快捷键'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:/^恢复默认：/})).not.toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'全部恢复至默认'})).toBeDisabled();
+  fireEvent.change(command,{target:{value:'!'}});
+  fireEvent.change(command,{target:{value:''}});
+  await settle();
+  expect(saves()).toHaveLength(0);
+  fireEvent.change(command,{target:{value:'@'}});
+  expect(screen.getByRole('alert')).toHaveTextContent('冲突');
+  await settle();
+  expect(saves()).toHaveLength(0);
+  expect(useShortcutStore.getState().bindings['trigger.command'].trigger).toBe('/');
+  fireEvent.change(command,{target:{value:'!'}});
+  await waitFor(()=>expect(useShortcutStore.getState().bindings['trigger.command'].trigger).toBe('!'));
+  expect(saves()).toHaveLength(1);
+  expect(dirty).toHaveBeenLastCalledWith(false);
+  fireEvent.click(screen.getByRole('button',{name:'全部恢复至默认'}));
+  await waitFor(()=>expect(useShortcutStore.getState().bindings['trigger.command'].trigger).toBe('/'));
+  expect(saves()).toHaveLength(2);
+  expect(JSON.parse(saves()[1][1].body).revision).toBe(1);
+  expect(useShortcutStore.getState().bindings).toEqual(defaultBindings);
+});
+it('cancels pending autosave when another window updates the configuration', async () => {
+  render(<ShortcutSettingsPanel refreshKey={0} onDirtyChange={vi.fn()} onSavingChange={vi.fn()} />);
+  const command=await screen.findByLabelText('命令菜单');
+  fireEvent.change(command,{target:{value:'!'}});
+  act(()=>useShortcutStore.setState({revision:1}));
+  expect(screen.getByRole('alert')).toHaveTextContent('其它窗口');
+  await settle();
+  expect(saves()).toHaveLength(0);
+  expect(command).toHaveValue('!');
+});
+it('retains saved bindings on failure without retrying indefinitely, and retries on a new edit', async () => {
+  render(<ShortcutSettingsPanel refreshKey={0} onDirtyChange={vi.fn()} onSavingChange={vi.fn()} />);
+  const command=await screen.findByLabelText('命令菜单');
+  fetchClient.mockRejectedValueOnce(new Error('保存失败'));
+  fireEvent.change(command,{target:{value:'!'}});
+  await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('保存失败'));
+  await settle();
+  expect(saves()).toHaveLength(1);
+  expect(useShortcutStore.getState().bindings['trigger.command'].trigger).toBe('/');
+  fireEvent.change(command,{target:{value:'?'}});
+  await waitFor(()=>expect(useShortcutStore.getState().bindings['trigger.command'].trigger).toBe('?'));
+  expect(saves()).toHaveLength(2);
+});

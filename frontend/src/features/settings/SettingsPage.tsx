@@ -1,7 +1,8 @@
+import { ShortcutSettingsPanel } from './ShortcutSettingsPanel';
 import { HomeLogo } from '../../components/ui/HomeLogo';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom';
-import { Cpu, Eye, EyeOff, Loader2, Plus, RefreshCw, Route, Trash2 } from 'lucide-react';
+import { Cpu, Eye, EyeOff, Keyboard, Loader2, Plus, RefreshCw, Route, Trash2 } from 'lucide-react';
 import { settingsApi, SIDE_PURPOSES, type SidePurpose } from '../../api/settings';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { IconButton } from '../../components/ui/primitives';
@@ -96,7 +97,11 @@ export function SettingsPage() {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const returnTo = typeof location.state?.returnTo === 'string' && !location.state.returnTo.startsWith('/settings')
     ? location.state.returnTo : activeProjectId ? projectRoute(activeProjectId) : homeRoute;
-  const [section, setSection] = useState<'models' | 'routing'>('models');
+  const [section, setSection] = useState<'models' | 'routing' | 'shortcuts'>('models');
+  const [shortcutDirty, setShortcutDirty] = useState(false);
+  const [shortcutSaving, setShortcutSaving] = useState(false);
+  const [shortcutRefresh, setShortcutRefresh] = useState(0);
+  const [shortcutsVisited, setShortcutsVisited] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [edits, setEdits] = useState<Record<string, Editable>>({});
   const [openCard, setOpenCard] = useState<string | null>(null);
@@ -110,11 +115,11 @@ export function SettingsPage() {
   const [reloadPrompt, setReloadPrompt] = useState(false);
   const grid = useRef<HTMLDivElement>(null);
   const leaving = useRef(false);
-  const dirty = !!draft?.llm.some((row) => modelChanged(row, edits[row.id]));
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => (dirty || saving) && currentLocation.pathname !== nextLocation.pathname);
+  const dirty = shortcutDirty || !!draft?.llm.some((row) => modelChanged(row, edits[row.id]));
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => (dirty || saving || shortcutSaving) && currentLocation.pathname !== nextLocation.pathname);
   useEffect(() => {
-    if (blocker.state === 'blocked' && !dirty && !saving) blocker.proceed();
-  }, [blocker, dirty, saving]);
+    if (blocker.state === 'blocked' && !dirty && !saving && !shortcutSaving) blocker.proceed();
+  }, [blocker, dirty, saving, shortcutSaving]);
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
@@ -127,10 +132,10 @@ export function SettingsPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    const unload = (event: BeforeUnloadEvent) => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } };
+    const unload = (event: BeforeUnloadEvent) => { if (dirty || saving || shortcutSaving) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', unload);
     return () => window.removeEventListener('beforeunload', unload);
-  }, [dirty, saving]);
+  }, [dirty, saving, shortcutSaving]);
   useEffect(() => {
     const close = (event: PointerEvent) => {
       if (saveInFlight.current) return;
@@ -242,9 +247,11 @@ export function SettingsPage() {
     }
   }
 
+  const refreshSettings = () => section === 'shortcuts' ? setShortcutRefresh(value => value + 1) : void load();
+
   const modelSelect = (value: string | null, change: (value: string) => void, label: string, empty?: string) => (
     <Select
-      className="settings-model-select"
+      className="settings-value"
       aria-label={label}
       value={value ?? ''}
       onValueChange={change}
@@ -263,22 +270,24 @@ export function SettingsPage() {
           <img src="/logo.jpg" alt="" className="h-10 w-10 rounded-sm object-cover" /><span className="hidden sm:inline">Dasi PPT Agent</span>
         </button>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" /><span className="flex-1 font-bold">设置</span>
-        <IconButton label="刷新设置" expandableLabel="刷新" disabled={loading || saving} onClick={() => dirty ? setReloadPrompt(true) : void load()}><RefreshCw size={16} className={loading ? 'animate-spin motion-reduce:animate-none' : undefined} /></IconButton>
-        <IconButton label="返回主页" expandableLabel="主页" onClick={() => navigate(returnTo)} disabled={saving} className="ml-1"><HomeLogo /></IconButton>
+        <IconButton label="刷新设置" expandableLabel="刷新" disabled={(section !== 'shortcuts' && loading) || saving || shortcutSaving} onClick={() => dirty ? setReloadPrompt(true) : refreshSettings()}><RefreshCw size={16} className={loading ? 'animate-spin motion-reduce:animate-none' : undefined} /></IconButton>
+        <IconButton label="返回主页" expandableLabel="主页" onClick={() => navigate(returnTo)} disabled={saving || shortcutSaving} className="ml-1"><HomeLogo /></IconButton>
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav className="flex shrink-0 gap-1 border-b border-border bg-panel p-3 md:w-52 md:flex-col md:border-b-0 md:border-r" aria-label="设置栏目">
-          {([['models', '模型配置', Cpu], ['routing', '模型分配', Route]] as const).map(([id, label, Icon]) => (
-            <button key={id} type="button" disabled={saving} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); setOpenCard(null); }}
+          {([['models', '模型配置', Cpu], ['routing', '模型分配', Route], ['shortcuts', '快捷键', Keyboard]] as const).map(([id, label, Icon]) => (
+            <button key={id} type="button" disabled={saving || shortcutSaving} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); if (id === 'shortcuts') setShortcutsVisited(true); setOpenCard(null); }}
               className={cn('flex h-10 flex-1 items-center gap-2.5 rounded-lg px-3 text-sm md:flex-none', section === id ? 'bg-accent-soft font-semibold text-accent' : 'text-text-600 hover:bg-panel-muted')}><Icon size={17} />{label}</button>
           ))}
         </nav>
         <section className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           <div className="settings-content">
-            <div className="settings-heading">
+            {section !== 'shortcuts' && <div className="settings-heading">
               <h1>{section === 'models' ? '模型配置' : '模型分配'}</h1>
-              <span role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-text-600">{saving && <><Loader2 size={14} className="animate-spin" />保存中…</>}</span>
-            </div>
+              <span role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-text-600">{(saving || shortcutSaving) && <><Loader2 size={14} className="animate-spin" />保存中…</>}</span>
+            </div>}
+            <div hidden={section !== 'shortcuts'}>{shortcutsVisited && <ShortcutSettingsPanel refreshKey={shortcutRefresh} onDirtyChange={setShortcutDirty} onSavingChange={setShortcutSaving} />}</div>
+            <div hidden={section === 'shortcuts'}>
             {error && <div className="mb-5 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">{error}</div>}
             {loading ? <div className="flex items-center gap-2 py-16 text-sm text-text-600"><Loader2 size={17} className="animate-spin" />正在读取设置…</div> : draft && (
               section === 'models' ? <>
@@ -302,11 +311,12 @@ export function SettingsPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </section>
       </div>
-      <ConfirmModal open={blocker.state === 'blocked' && !saving} onOpenChange={(open) => { if (!open && !leaving.current && blocker.state === 'blocked') blocker.reset(); }} title="离开设置？" description="还有未保存的修改，离开后将丢弃这些修改。" confirmLabel="丢弃并离开" cancelLabel="继续编辑" onConfirm={() => { if (blocker.state === 'blocked') { leaving.current = true; blocker.proceed(); } }} />
-      <ConfirmModal open={reloadPrompt} onOpenChange={setReloadPrompt} title="重新读取设置？" description="重新读取会丢弃当前页面的未保存修改。" confirmLabel="重新读取" cancelLabel="继续编辑" onConfirm={load} />
+      <ConfirmModal open={blocker.state === 'blocked' && !saving && !shortcutSaving} onOpenChange={(open) => { if (!open && !leaving.current && blocker.state === 'blocked') blocker.reset(); }} title="离开设置？" description="还有未保存的修改，离开后将丢弃这些修改。" confirmLabel="丢弃并离开" cancelLabel="继续编辑" onConfirm={() => { if (blocker.state === 'blocked') { leaving.current = true; blocker.proceed(); } }} />
+      <ConfirmModal open={reloadPrompt} onOpenChange={setReloadPrompt} title="重新读取设置？" description="重新读取会丢弃当前页面的未保存修改。" confirmLabel="重新读取" cancelLabel="继续编辑" onConfirm={refreshSettings} />
       <ConfirmModal open={!!deleting} onOpenChange={(open) => { if (!open && !saveInFlight.current) setDeleting(null); }} title="删除模型？" description={`删除「${deleting?.name || '新模型'}」后立即生效。`} confirmLabel="删除" onConfirm={confirmDelete} />
     </main>
   );

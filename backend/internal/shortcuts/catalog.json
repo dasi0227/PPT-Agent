@@ -1,0 +1,167 @@
+[
+  {
+    "id": "trigger.command",
+    "group": "输入触发符",
+    "label": "命令菜单",
+    "kind": "trigger",
+    "default": {
+      "trigger": "/"
+    }
+  },
+  {
+    "id": "trigger.summary",
+    "group": "输入触发符",
+    "label": "综合引用",
+    "kind": "trigger",
+    "default": {
+      "trigger": "@"
+    }
+  },
+  {
+    "id": "trigger.component",
+    "group": "输入触发符",
+    "label": "组件引用",
+    "kind": "trigger",
+    "default": {
+      "trigger": "$"
+    }
+  },
+  {
+    "id": "trigger.page",
+    "group": "输入触发符",
+    "label": "页面引用",
+    "kind": "trigger",
+    "default": {
+      "trigger": "#"
+    }
+  },
+  {
+    "id": "trigger.prompt",
+    "group": "输入触发符",
+    "label": "提示词",
+    "kind": "trigger",
+    "default": {
+      "trigger": "%"
+    }
+  },
+  {
+    "id": "deck.previous",
+    "group": "演示文稿",
+    "label": "上一页",
+    "kind": "shortcut",
+    "default": {
+      "code": "ArrowLeft",
+      "primary": true
+    }
+  },
+  {
+    "id": "deck.next",
+    "group": "演示文稿",
+    "label": "下一页",
+    "kind": "shortcut",
+    "default": {
+      "code": "ArrowRight",
+      "primary": true
+    }
+  },
+  {
+    "id": "deck.zoom_in",
+    "group": "演示文稿",
+    "label": "放大",
+    "kind": "shortcut",
+    "default": {
+      "code": "Equal",
+      "primary": true
+    }
+  },
+  {
+    "id": "deck.zoom_out",
+    "group": "演示文稿",
+    "label": "缩小",
+    "kind": "shortcut",
+    "default": {
+      "code": "Minus",
+      "primary": true
+    }
+  },
+  {
+    "id": "deck.overview",
+    "group": "演示文稿",
+    "label": "总览",
+    "kind": "shortcut",
+    "default": {
+      "code": "KeyO",
+      "primary": true
+    }
+  },
+  {
+    "id": "deck.export",
+    "group": "演示文稿",
+    "label": "导出",
+    "kind": "shortcut",
+    "default": {
+      "code": "KeyP",
+      "primary": true
+    }
+  },
+  {
+    "id": "deck.view",
+    "group": "演示文稿",
+    "label": "切换视图",
+    "kind": "shortcut",
+    "default": {
+      "code": "KeyI",
+      "primary": true
+    }
+  },
+  {
+    "id": "deck.theme",
+    "group": "演示文稿",
+    "label": "切换主题",
+    "kind": "shortcut",
+    "default": {
+      "code": "KeyT",
+      "primary": true
+    }
+  },
+  {
+    "id": "composer.submit",
+    "group": "输入框",
+    "label": "提交请求",
+    "kind": "shortcut",
+    "default": {
+      "code": "Enter",
+      "primary": true
+    }
+  },
+  {
+    "id": "composer.suggestion1",
+    "group": "输入框",
+    "label": "填入第 1 条建议",
+    "kind": "shortcut",
+    "default": {
+      "code": "Digit1",
+      "alt": true
+    }
+  },
+  {
+    "id": "composer.suggestion2",
+    "group": "输入框",
+    "label": "填入第 2 条建议",
+    "kind": "shortcut",
+    "default": {
+      "code": "Digit2",
+      "alt": true
+    }
+  },
+  {
+    "id": "composer.suggestion3",
+    "group": "输入框",
+    "label": "填入第 3 条建议",
+    "kind": "shortcut",
+    "default": {
+      "code": "Digit3",
+      "alt": true
+    }
+  }
+]

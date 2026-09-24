@@ -72,3 +72,20 @@ describe('inner DOM selection bridge', () => {
     dom.window.close();
   });
 });
+
+it('forwards only configured presentation shortcuts and protects slide text inputs', () => {
+  const {dom,messages}=createBridge('<input id="text"><div>slide</div>');
+  const w=dom.window;
+  const configure=(source: MessageEventSource,data:unknown)=>w.dispatchEvent(new w.MessageEvent('message',{source,data}));
+  const config={bridge:'ppt-shortcuts-v1',type:'configure',slide_id:'sli_one',mac:true,bindings:{'deck.next':{code:'ArrowRight',primary:true}}};
+  configure({} as Window,config);
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown',{code:'ArrowRight',metaKey:true,bubbles:true,cancelable:true}));
+  expect(messages.filter(m=>m.type==='invoke')).toHaveLength(0);
+  configure(w as unknown as Window,config);
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown',{code:'ArrowRight',metaKey:true,bubbles:true,cancelable:true}));
+  expect(messages.filter(m=>m.type==='invoke')).toEqual([expect.objectContaining({id:'deck.next'})]);
+  w.document.getElementById('text')!.dispatchEvent(new w.KeyboardEvent('keydown',{code:'ArrowRight',metaKey:true,bubbles:true,cancelable:true}));
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown',{code:'ArrowRight',metaKey:true,repeat:true,bubbles:true,cancelable:true}));
+  expect(messages.filter(m=>m.type==='invoke')).toHaveLength(1);
+  dom.window.close();
+});

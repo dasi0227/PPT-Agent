@@ -18,7 +18,8 @@ import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
 import { useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
-import { isMac } from '../../lib/platform';
+import { useShortcutStore } from '../../stores/shortcutStore';
+import { matchesShortcut } from '../../lib/shortcuts';
 import { newClientIdentity } from '../../lib/clientIdentity';
 import { ModeSelector } from './ModeSelector';
 import { MODE_META } from './modeMeta';
@@ -364,10 +365,11 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     const componentNames = editor?.getComponentNames() ?? [];
     const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
 	const apiDOMSelections = activeDOMSelections.map(({ dedupe_key: _dedupeKey, ...selection }) => selection);
-	if (/^\/rename(?:\s|$)/i.test(raw)) {
+	const renameCommand = `${useShortcutStore.getState().bindings['trigger.command'].trigger}rename`;
+	if (raw.toLowerCase() === renameCommand || raw.toLowerCase().startsWith(`${renameCommand} `)) {
 		if (!activeProjectId) return;
-		if (raw.toLocaleLowerCase() !== '/rename') {
-			showGlobalError('/rename 不支持参数，请直接使用 /rename 立即生成名称');
+		if (raw.toLocaleLowerCase() !== renameCommand) {
+			showGlobalError(`${renameCommand} 不支持参数，请直接使用 ${renameCommand} 立即生成名称`);
 			return;
 		}
 		try {
@@ -542,12 +544,12 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 				metaKey: event.metaKey,
 				ctrlKey: event.ctrlKey,
 				shiftKey: event.shiftKey,
-				isComposing: event.isComposing || isComposing,
+				isComposing: event.isComposing || isComposing || event.repeat,
 				code: event.code,
-				blocked,
+				blocked: blocked || !useShortcutStore.getState().ready,
 				targetEditable: Boolean(editable),
 				targetIsComposer: Boolean(target?.closest('.composer-prompt-editor')),
-			});
+			}, useShortcutStore.getState().bindings);
 			if (index === null || !nextInputSuggestions?.items[index]) return;
 			event.preventDefault();
 			selectSuggestion(nextInputSuggestions.items[index]);
@@ -563,9 +565,9 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 			setSuggestionsDismissed(true);
 			return;
 		}
-    if (event.key === 'Enter' && (isMac() ? event.metaKey : event.ctrlKey)) {
+    if (useShortcutStore.getState().ready && matchesShortcut(event.nativeEvent, useShortcutStore.getState().bindings['composer.submit'])) {
       event.preventDefault();
-      void submit();
+      if (!event.repeat) void submit();
     }
   };
 	const selectedProfile = profiles.find((profile) => profile.name === composer.modelProfileName);

@@ -1,9 +1,33 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PromptComposerEditor } from './PromptComposerEditor';
 import { resolveSlashCommands } from './promptMatching';
+import { defaultBindings } from '../../lib/shortcuts';
+import { useShortcutStore } from '../../stores/shortcutStore';
+
+afterEach(() => { act(() => useShortcutStore.setState({ bindings: defaultBindings })); });
 
 describe('PromptComposerEditor slash command menu', () => {
+  it('uses a newly configured command trigger immediately', async () => {
+    render(<PromptComposerEditor value="" onChange={vi.fn()} onKeyDown={vi.fn()} onCompositionChange={vi.fn()}
+      placeholder="输入命令" disabled={false} readOnly={false}
+      slashCommands={resolveSlashCommands({runActive:false,emptyProject:false,operationBusy:false,hasPolishText:true})} onSlashCommand={vi.fn()} />);
+    const editor = screen.getByRole('textbox');
+    const type = (text: string) => act(() => {
+      editor.focus(); editor.textContent = text;
+      const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false);
+      window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
+      fireEvent.input(editor);
+    });
+    type('/');
+    await screen.findByRole('listbox', {name:'命令'});
+    act(() => useShortcutStore.setState({bindings:{...defaultBindings,'trigger.command':{trigger:'!'}}}));
+    type('/create');
+    await waitFor(() => expect(screen.queryByRole('listbox', {name:'命令'})).not.toBeInTheDocument());
+    type('!create');
+    await screen.findByRole('option', {name:'开发模式'});
+    expect(screen.queryByRole('option', {name:'讨论模式'})).not.toBeInTheDocument();
+  });
   it('renders the aligned mode icons and the selected polish icon', async () => {
     render(
       <div className="relative">
@@ -43,11 +67,11 @@ describe('PromptComposerEditor slash command menu', () => {
     expect(screen.getByRole('option', { name: '盘问模式' }).querySelector('svg'))
       .toHaveClass('lucide-message-circle-question-mark');
     expect(screen.getByRole('option', { name: '启动简报' }).querySelector('svg'))
-      .toHaveClass('lucide-footprints');
+      .toHaveClass('lucide-sport-shoe');
     expect(screen.getByRole('option', { name: '交接简报' }).querySelector('svg'))
       .toHaveClass('lucide-handshake');
     expect(screen.getByRole('option', { name: '润色' }).querySelector('svg'))
-      .toHaveClass('lucide-wand-sparkles');
+      .toHaveClass('lucide-sparkles');
   });
 
   it('keeps the keyboard selection when ArrowDown and ArrowUp are pressed', async () => {
@@ -132,7 +156,7 @@ describe('PromptComposerEditor slash command menu', () => {
     fireEvent.keyDown(editor, { key: 'ArrowDown' });
     fireEvent.keyDown(editor, { key: 'ArrowDown' });
     fireEvent.keyDown(editor, { key: 'ArrowDown' });
-    await waitFor(() => expect(screen.getByRole('option', { name: '切换模型' }))
+    await waitFor(() => expect(screen.getByRole('option', { name: '会话命名' }))
       .toHaveAttribute('aria-selected', 'true'));
 
     fireEvent.keyDown(editor, { key: 'ArrowUp' });

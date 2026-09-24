@@ -36,8 +36,8 @@
 .settings-row + .settings-row { border-top: 1px solid #edf0f4; }
 .settings-row h3 { font-size: 14px; font-weight: 550; }
 .settings-row p { margin-top: 5px; color: #5f6b7a; font-size: 12px; line-height: 1.6; }
-.settings-model-select { flex: 0 0 235px; font-size: 13px; }
+.settings-value { flex: 0 0 235px; width: 235px; min-width: 0; font-size: 13px; }
 @media (min-width: 1510px) { .settings-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 1130px) { .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-content { padding: 28px 22px; } }
-@media (max-width: 600px) { .settings-grid { grid-template-columns: minmax(0, 1fr); } .settings-content { padding: 24px 18px; } .settings-heading { align-items: flex-start; gap: 12px; } .settings-heading h1 { font-size: 22px; } .settings-row { align-items: stretch; flex-direction: column; gap: 12px; } .settings-model-select { flex-basis: auto; } }
+@media (max-width: 600px) { .settings-grid { grid-template-columns: minmax(0, 1fr); } .settings-content { padding: 24px 18px; } .settings-heading { align-items: flex-start; gap: 12px; } .settings-heading h1 { font-size: 22px; } .settings-row { align-items: stretch; flex-direction: column; gap: 12px; } .settings-value { flex-basis: auto; width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .model-settings *, .model-settings *::before, .model-settings *::after { transition: none !important; } }

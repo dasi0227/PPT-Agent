@@ -1,3 +1,5 @@
+import { useShortcutStore } from '../../stores/shortcutStore';
+import { matchesShortcut } from '../../lib/shortcuts';
 import {
   forwardRef,
   useCallback,
@@ -244,6 +246,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 		onMenuOpenChange,
 		onPasteFiles,
   }, forwardedRef) {
+    const shortcutBindings = useShortcutStore(state => state.bindings);
     const editorRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
@@ -313,11 +316,11 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         return;
       }
       const text = serializeComposerText(editor);
-      const promptTrigger = findPromptTrigger(text, offset);
-      const componentTrigger = findComponentTrigger(text, offset);
-      const pageTrigger = findPageTrigger(text, offset);
-      const summaryTrigger = findSummaryTrigger(text, offset);
-      const commandTrigger = findCommandTrigger(text, offset);
+      const promptTrigger = findPromptTrigger(text, offset, shortcutBindings['trigger.prompt'].trigger);
+      const componentTrigger = findComponentTrigger(text, offset, shortcutBindings['trigger.component'].trigger);
+      const pageTrigger = findPageTrigger(text, offset, shortcutBindings['trigger.page'].trigger);
+      const summaryTrigger = findSummaryTrigger(text, offset, shortcutBindings['trigger.summary'].trigger);
+      const commandTrigger = findCommandTrigger(text, offset, shortcutBindings['trigger.command'].trigger);
       const next: ComposerTrigger | null = commandTrigger
         ? { ...commandTrigger, kind: 'command' }
         : promptTrigger
@@ -357,7 +360,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       }
       triggerRef.current = next;
       setTrigger(next);
-    }, [components, disabled, pages, prompts, readOnly]);
+    }, [components, disabled, pages, prompts, readOnly, shortcutBindings]);
 
     useEffect(() => {
       triggerRef.current = trigger;
@@ -621,6 +624,10 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     };
 
     const handleEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+      if (matchesShortcut(event.nativeEvent, shortcutBindings['composer.submit'])) {
+        onKeyDown(event);
+        return;
+      }
       if (trigger && !event.nativeEvent.isComposing && !composingRef.current) {
         if (trigger.kind === 'command' && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) {
           const result = navigateCommandMenu(
@@ -793,7 +800,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       <>
         {trigger && trigger.kind === 'summary' && (
           <div
-            ref={menuRef}
+            ref={menuRef} data-composer-menu="true"
             className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 grid grid-cols-3 overflow-hidden rounded-lg border border-border-strong bg-surface shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="grid"
             aria-label="汇总检索候选"
@@ -866,7 +873,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         )}
         {trigger && trigger.kind === 'command' && (
           <div
-            ref={menuRef}
+            ref={menuRef} data-composer-menu="true"
             className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex max-h-[286px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="listbox"
             aria-label={commandLevel === 'root' ? '命令' : commandLevel === 'model' ? '选择模型' : '选择目标'}
@@ -977,7 +984,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         )}
         {trigger && trigger.kind !== 'summary' && trigger.kind !== 'command' && (
           <div
-            ref={menuRef}
+            ref={menuRef} data-composer-menu="true"
             className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="listbox"
             aria-label={trigger.kind === 'component' ? '组件候选' : trigger.kind === 'page' ? '页面候选' : '提示词候选'}

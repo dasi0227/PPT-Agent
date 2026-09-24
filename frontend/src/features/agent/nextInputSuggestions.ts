@@ -1,3 +1,4 @@
+import { defaultBindings, matchesShortcut, type ShortcutBindings } from '../../lib/shortcuts';
 import type { SSEEvent } from '../../api/types';
 
 export interface NextInputSuggestionsState {
@@ -19,10 +20,10 @@ export interface NextInputShortcutInput {
   targetIsComposer: boolean;
 }
 
-export function nextInputShortcutIndex(input: NextInputShortcutInput): number | null {
-  if (!input.altKey || input.metaKey || input.ctrlKey || input.shiftKey || input.isComposing || input.blocked) return null;
+export function nextInputShortcutIndex(input: NextInputShortcutInput, bindings: ShortcutBindings = defaultBindings): number | null {
+  if (input.isComposing || input.blocked) return null;
   if (input.targetEditable && !input.targetIsComposer) return null;
-  const index = ['Digit1', 'Digit2', 'Digit3'].indexOf(input.code);
+  const index = [1, 2, 3].findIndex(number => matchesShortcut(input, bindings[`composer.suggestion${number}`]));
   return index < 0 ? null : index;
 }
 

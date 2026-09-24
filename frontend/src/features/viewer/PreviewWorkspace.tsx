@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
@@ -26,6 +27,7 @@ import {
 import type { Slide } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
+import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -127,6 +129,7 @@ function PreviewFrame({
     )}>
       {deck.length > 0 && (
         <IsolatedSlidePreview
+          keyboardShortcuts
           slides={deck}
           index={deckIndex}
           className="h-full w-full border-0"
@@ -288,6 +291,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 interface PreviewWorkspaceProps {
+  deckActionsTarget?: HTMLDivElement | null;
   sidebarControls?: {
     leftHidden: boolean;
     rightHidden: boolean;
@@ -298,7 +302,7 @@ interface PreviewWorkspaceProps {
   };
 }
 
-export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarControls }) => {
+export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarControls, deckActionsTarget }) => {
   const {
     currentSlideId,
     previewMode,
@@ -349,8 +353,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const runBlocking = projectThreads.some((thread) => ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(allRunSessions[thread.id]?.status ?? 'idle'));
   const commitBlocking = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const exportBlocking = exportSession?.projectId === projectId && ['accepted', 'running', 'ready', 'delivering'].includes(exportSession.operation.status);
-  const exportDisabled = !projectId || runBlocking || commitBlocking || exportBlocking;
-  const exportDisabledReason = !projectId ? '请先打开项目' : runBlocking ? 'Agent 任务运行中，暂时不能导出' : commitBlocking ? '项目正在提交，暂时不能导出' : exportBlocking ? '当前项目已有导出任务' : undefined;
+  const exportDisabled = !projectId || !hasSlides || runBlocking || commitBlocking || exportBlocking;
+  const exportDisabledReason = !projectId ? '请先打开项目' : !hasSlides ? '暂无幻灯片可导出' : runBlocking ? 'Agent 任务运行中，暂时不能导出' : commitBlocking ? '项目正在提交，暂时不能导出' : exportBlocking ? '当前项目已有导出任务' : undefined;
   const selectedIndex = currentSlideId ? slides.findIndex((slide) => slide.id === currentSlideId) : -1;
   const safePage = selectedIndex >= 0 ? selectedIndex : 0;
   const currentSlide = slides[safePage];
@@ -482,19 +486,22 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         return;
       }
       if (isEditableTarget(event.target)) return;
-      if (event.key === 'ArrowLeft' && safePage > 0) {
-        event.preventDefault();
-        goPrev();
-      } else if (event.key === 'ArrowRight' && safePage < slides.length - 1) {
-        event.preventDefault();
-        goNext();
-      } else if (event.key === 'Escape' && document.fullscreenElement) {
+      if (event.key === 'Escape' && document.fullscreenElement) {
         void document.exitFullscreen();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [goNext, goPrev, safePage, selectionMode, slides.length]);
+  }, [selectionMode]);
+
+  useAppShortcuts(projectId ? {
+    'deck.previous': goPrev,
+    'deck.next': goNext,
+    'deck.overview': () => { if (hasSlides) { if (previewMode === 'overview') exitOverview(); else enterOverview(); } },
+    'deck.zoom_in': () => { if (zoomEnabled) zoomIn(); },
+    'deck.zoom_out': () => { if (zoomEnabled) zoomOut(); },
+    'deck.view': () => setGlobalView(globalView === 'html' ? 'outline' : 'html'),
+  } : {});
 
   const present = useCallback(async () => {
     const canvas = canvasRef.current;
@@ -510,10 +517,33 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     setReplayRequest({ id: replayRequestIDRef.current, slideId: expectedSlideID });
   }, [currentSlide?.id, setGlobalView]);
 
+  // Keep canvas/fullscreen handlers here while displaying their controls in the directory header.
+  const deckActions = (
+    <div className="flex shrink-0 items-center gap-1">
+      <IconButton
+        label={previewMode === 'overview' ? '切换到单页视图' : '切换到概览视图'}
+        onClick={previewMode === 'overview' ? exitOverview : enterOverview}
+        disabled={!hasSlides}
+        className={hasSlides && previewMode === 'overview' ? 'bg-accent-soft text-accent' : undefined}
+      >
+        <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
+      </IconButton>
+      <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML}>
+        <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
+      </IconButton>
+      <div>
+        <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
+      </div>
+    </div>
+  );
+  const showActionsInDirectory = !leftPanelHidden && Boolean(deckActionsTarget);
+
   return (
     <div className="relative flex h-full flex-col bg-canvas">
+      {showActionsInDirectory && createPortal(deckActions, deckActionsTarget!)}
       <div className="grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 whitespace-nowrap border-b border-border bg-panel px-3">
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-none">
+          {!showActionsInDirectory && deckActions}
           {leftPanelHidden && (
             <IconButton
               label="展开左侧目录"
@@ -594,19 +624,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
               <IconButton label="放大" onClick={zoomIn} disabled={!zoomEnabled || zoom >= ZOOM_MAX}>
                 <ZoomIn className="h-4 w-4" strokeWidth={1.75} />
               </IconButton>
-            </div>
-            <IconButton
-              label={previewMode === 'overview' ? '切换到单页视图' : '切换到概览视图'}
-              onClick={previewMode === 'overview' ? exitOverview : enterOverview}
-              className={previewMode === 'overview' ? 'bg-accent-soft text-accent' : undefined}
-            >
-              <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
-            </IconButton>
-            <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML}>
-              <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
-            </IconButton>
-            <div className="ml-1.5">
-              <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
             </div>
             {rightPanelHidden && (
               <IconButton

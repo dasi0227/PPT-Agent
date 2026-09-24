@@ -16,7 +16,9 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/shortcuts"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
@@ -114,8 +116,8 @@ func provideExportManager(renderer *workflow.NodeSlideRenderer, workRoot service
 	return manager, manager.Close, nil
 }
 
-func provideRouter(cfg *config.Config, log *zap.Logger, health *httpapi.HealthHandler, runH *httpapi.RunHandler, projectH *httpapi.ProjectHandler, threadH *httpapi.ThreadHandler, slideH *httpapi.SlideHandler, repositoryH *httpapi.RepositoryHandler, llmH *httpapi.LLMHandler, polishH *httpapi.PolishHandler, briefingH *httpapi.BriefingHandler, gitCommitH *httpapi.GitCommitHandler, promptH *httpapi.PromptHandler, contextWindowH *httpapi.ContextWindowHandler, attachmentH *httpapi.AttachmentHandler, exportH *httpapi.ExportHandler) (*httpapi.Router, error) {
-	return httpapi.NewRouter(cfg, log, health, runH, projectH, threadH, slideH, repositoryH, llmH, polishH, briefingH, gitCommitH, promptH, contextWindowH, attachmentH).WithExportHandler(exportH).WithProjectHistory()
+func provideRouter(cfg *config.Config, log *zap.Logger, health *httpapi.HealthHandler, runH *httpapi.RunHandler, projectH *httpapi.ProjectHandler, threadH *httpapi.ThreadHandler, slideH *httpapi.SlideHandler, repositoryH *httpapi.RepositoryHandler, llmH *httpapi.LLMHandler, polishH *httpapi.PolishHandler, briefingH *httpapi.BriefingHandler, gitCommitH *httpapi.GitCommitHandler, promptH *httpapi.PromptHandler, contextWindowH *httpapi.ContextWindowHandler, attachmentH *httpapi.AttachmentHandler, exportH *httpapi.ExportHandler, dbStore *sqlitestore.Store) (*httpapi.Router, error) {
+	return httpapi.NewRouter(cfg, log, health, runH, projectH, threadH, slideH, repositoryH, llmH, polishH, briefingH, gitCommitH, promptH, contextWindowH, attachmentH).WithExportHandler(exportH).WithShortcutSettings(shortcuts.NewService(dbStore)).WithProjectHistory()
 }
 
 func provideSlideService(s store.Store, themes *service.ThemeService) *service.SlideService {

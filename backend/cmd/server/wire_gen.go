@@ -126,7 +126,7 @@ func initApp() (*App, func(), error) {
 	attachmentHandler := httpapi.NewAttachmentHandler(attachmentService)
 	exportService := service.NewExportService(store, lockManager, themeService, manager)
 	exportHandler := httpapi.NewExportHandler(exportService)
-	router, err := provideRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler, contextWindowHandler, attachmentHandler, exportHandler)
+	router, err := provideRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler, contextWindowHandler, attachmentHandler, exportHandler, store)
 	if err != nil {
 		cleanup5()
 		cleanup4()
