@@ -7,6 +7,7 @@ func TestShortcutValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, binding := range map[string]Binding{
+		"fixed save":  {Code: "KeyS", Primary: true},
 		"no modifier": {Code: "KeyJ"}, "unknown key": {Code: "Escape", Primary: true},
 		"editing conflict": {Code: "KeyC", Primary: true}, "browser close": {Code: "KeyW", Primary: true},
 		"ambiguous plus": {Code: "Equal", Primary: true, Shift: true},

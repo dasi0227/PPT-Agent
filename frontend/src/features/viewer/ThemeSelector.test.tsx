@@ -33,13 +33,14 @@ it('applies the next theme, wraps to the first, and ignores concurrent requests 
   render(<ThemeSelector projectId="p1" />);
   await screen.findByText('Beta');
   press(); press();
+  await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
   expect(apply).toHaveBeenCalledTimes(1);
   expect(apply).toHaveBeenLastCalledWith('p1','c');
   expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   await act(async () => finish());
   expect(screen.getByText('Gamma')).toBeInTheDocument();
   press();
-  expect(apply).toHaveBeenLastCalledWith('p1','a');
+  await waitFor(() => expect(apply).toHaveBeenLastCalledWith('p1','a'));
   await act(async () => finish());
   expect(screen.getByText('Alpha')).toBeInTheDocument();
 });
@@ -56,4 +57,19 @@ it('waits for the initial theme list before cycling', async () => {
   await waitFor(() => expect(apply).toHaveBeenCalledWith('p1','b'));
   expect(load).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+});
+
+it('excludes disabled themes from the menu and cycles using fresh availability', async () => {
+  const load = vi.spyOn(repositoriesApi,'listThemes').mockResolvedValue({themes});
+  const apply = vi.fn().mockResolvedValue({id:'p1',theme:'c'});
+  useProjectStore.setState({projects:[{id:'p1',theme:'a'} as Project],contentByProjectId:{},setProjectTheme:apply});
+  useShortcutStore.setState({ready:true,bindings:defaultBindings});
+  render(<ThemeSelector projectId="p1" />);
+  await screen.findByText('Alpha');
+  load.mockResolvedValue({themes:themes.map(theme => ({...theme,disabled:theme.id==='b'}))});
+  press();
+  await waitFor(() => expect(apply).toHaveBeenCalledWith('p1','c'));
+  fireEvent.pointerDown(screen.getByRole('button',{name:'切换主题'}),{button:0,ctrlKey:false});
+  await screen.findByRole('menuitemradio',{name:'Gamma'});
+  expect(screen.queryByRole('menuitemradio',{name:'Beta'})).not.toBeInTheDocument();
 });

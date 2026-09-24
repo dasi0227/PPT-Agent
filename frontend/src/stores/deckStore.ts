@@ -1,16 +1,19 @@
 import { create } from 'zustand';
 
 export type PageView = 'outline' | 'html';
+export type ContentMode = 'preview' | 'source';
 
 interface DeckState {
   currentSlideId: string | null;
   previewMode: 'main' | 'overview';
   globalView: PageView;
+  contentMode: ContentMode;
 
   setCurrentSlideId: (slideId: string | null) => void;
   enterOverview: () => void;
   exitOverview: () => void;
   setGlobalView: (view: PageView) => void;
+  setContentMode: (mode: ContentMode) => void;
   effectiveView: (slideId: string, hasHtml: boolean) => PageView;
 }
 
@@ -18,12 +21,14 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   currentSlideId: null,
   previewMode: 'main',
   globalView: 'html',
+  contentMode: 'preview',
 
   setCurrentSlideId: (slideId) => set({ currentSlideId: slideId }),
   enterOverview: () => set({ previewMode: 'overview' }),
   exitOverview: () => set({ previewMode: 'main' }),
 
   setGlobalView: (view) => set({ globalView: view }),
+  setContentMode: (mode) => set({ contentMode: mode, ...(mode === 'source' ? { previewMode: 'main' as const } : {}) }),
 
   // 全局视图优先：用户点“幻灯片”时即使当前页未生成 HTML，也保持幻灯片视图并展示空态。
   effectiveView: (_slideId, _hasHtml) => {

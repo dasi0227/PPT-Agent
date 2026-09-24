@@ -16,7 +16,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
-	nethtml "golang.org/x/net/html"
 )
 
 var stableSlideID = regexp.MustCompile(`^sli_[A-Za-z0-9_-]+$`)
@@ -118,20 +117,17 @@ func intValue(value any, fallback int) int {
 }
 
 func validateHTML(raw []byte) ([]Issue, error) {
-	issues := []Issue{}
-	if _, err := nethtml.Parse(strings.NewReader(string(raw))); err != nil {
-		issues = append(issues, Issue{Code: "HTML_PARSE", Severity: SeverityError, Summary: err.Error()})
+	if err := spec.ValidateSlideHTML(raw); err != nil {
+		code := "HTML_PARSE"
+		if errors.Is(err, spec.ErrSlideStageMissing) {
+			code = "stage-16-9"
+		}
+		if errors.Is(err, spec.ErrStaticPageNumber) {
+			code = "STATIC_PAGE_NUMBER"
+		}
+		return []Issue{{Code: code, Severity: SeverityError, Summary: err.Error()}}, err
 	}
-	if !strings.Contains(string(raw), "slide-stage") {
-		issues = append(issues, Issue{Code: "stage-16-9", Severity: SeverityError, Summary: "slide HTML must contain a slide-stage element"})
-	}
-	if strings.Contains(string(raw), "data-page-number") || strings.Contains(string(raw), "data-runtime-page-number") {
-		issues = append(issues, Issue{Code: "STATIC_PAGE_NUMBER", Severity: SeverityError, Summary: "page numbers belong to the runtime frame"})
-	}
-	if len(issues) > 0 {
-		return issues, errors.New(issues[0].Summary)
-	}
-	return issues, nil
+	return []Issue{}, nil
 }
 func currentManifest(pack contextengine.ContextPack, tx *RunSession) (spec.Manifest, error) {
 	raw, _, err := readArtifact(tx.ProjectDir(), tx, manifestRef(pack))

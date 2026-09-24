@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { RequestCanceledError } from '../api/client';
 
+vi.mock('./sourceEditorStore', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./sourceEditorStore')>(),
+  assertProjectSourcesSaved: async () => {},
+}));
+
 const slideLoads: string[] = [];
 vi.mock('./projectStore', () => ({
   useProjectStore: {
@@ -194,6 +199,7 @@ describe('runStore public event sessions', () => {
     createMode = 'pending';
     const pending = useRunStore.getState().createRun('t1', request('继续'), 'p1');
     expect(useRunStore.getState().sessions.t1.nextInputSuggestions).toEqual(suggestions);
+    await vi.waitFor(() => expect(resolveCreate).not.toBeNull());
     resolveCreate?.(authoritativeRun('running'));
     expect(await pending).toBe('created');
     expect(useRunStore.getState().sessions.t1.nextInputSuggestions).toBeNull();
@@ -212,6 +218,7 @@ describe('runStore public event sessions', () => {
   test('optimistically inserts a user turn before create resolves', async () => {
     createMode = 'pending';
     const pending = useRunStore.getState().createRun('t1', request('hello'));
+    await vi.waitFor(() => expect(useRunStore.getState().sessions.t1).toBeDefined());
     expect(useRunStore.getState().sessions.t1.timelineItems).toMatchObject([
       { type: 'user_turn', text: 'hello' },
     ]);

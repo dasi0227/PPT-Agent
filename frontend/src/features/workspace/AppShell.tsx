@@ -1,6 +1,7 @@
 import React from 'react';
 import { ProjectTabs } from './ProjectTabs';
 import { DeckNavigator } from '../deck/DeckNavigator';
+import { ThemeSelector } from '../viewer/ThemeSelector';
 import { PreviewWorkspace } from '../viewer/PreviewWorkspace';
 import { AgentPanel } from '../agent/AgentPanel';
 import { useUIStore } from '../../stores/uiStore';
@@ -12,6 +13,7 @@ import { workspacePanelLayout } from './panelLayout';
 export const AppShell: React.FC = () => {
   const preferences = useUIStore();
   const [deckActionsTarget, setDeckActionsTarget] = React.useState<HTMLDivElement | null>(null);
+  const [themeTarget, setThemeTarget] = React.useState<HTMLDivElement | null>(null);
   const { activeProjectId } = useProjectStore();
   const shellRef = React.useRef<HTMLDivElement>(null);
   const [workspaceWidth, setWorkspaceWidth] = React.useState(() =>
@@ -50,6 +52,7 @@ export const AppShell: React.FC = () => {
   return (
     <div ref={shellRef} className="flex flex-col h-[100dvh] w-screen bg-workspace text-text-900 overflow-hidden font-sans relative">
       {activeProjectId !== null && <ProjectTabs />}
+      {activeProjectId !== null && <ThemeSelector key={activeProjectId} projectId={activeProjectId} container={themeTarget} />}
       
       <div className="flex flex-1 overflow-hidden relative">
         {activeProjectId === null ? (
@@ -70,7 +73,7 @@ export const AppShell: React.FC = () => {
             )}
             
             <Panel id="center" order={2} defaultSize={layout.centerDefault} minSize={layout.centerMin} className="bg-canvas flex flex-col">
-              <PreviewWorkspace deckActionsTarget={deckActionsTarget} sidebarControls={{
+              <PreviewWorkspace themeRef={setThemeTarget} deckActionsTarget={deckActionsTarget} sidebarControls={{
                 leftHidden: leftPanelHidden,
                 rightHidden: rightPanelHidden,
                 canExpandLeft,

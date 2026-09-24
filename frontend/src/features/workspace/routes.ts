@@ -11,12 +11,13 @@ export function projectRoute(projectId: string): string {
 
 export function projectWorkspaceRoute(
   projectId: string,
-  params: { slideId?: string; view?: 'html' | 'outline'; mode?: 'main' | 'overview' } = {},
+  params: { slideId?: string; view?: 'html' | 'outline'; mode?: 'main' | 'overview'; content?: 'preview' | 'source' } = {},
 ): string {
   const search = new URLSearchParams();
   if (params.slideId) search.set('slide', params.slideId);
   if (params.view && params.view !== 'html') search.set('view', params.view);
   if (params.mode && params.mode !== 'main') search.set('mode', params.mode);
+  if (params.content === 'source') search.set('content', 'source');
   const query = search.toString();
   return `${projectRoute(projectId)}${query ? `?${query}` : ''}`;
 }

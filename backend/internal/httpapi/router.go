@@ -4,6 +4,7 @@ package httpapi
 import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
+	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -11,6 +12,7 @@ import (
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
 	history       *projecthistory.Manager
+	source        *service.SlideSourceService
 	engine        *gin.Engine
 	cfg           *config.Config
 	log           *zap.Logger

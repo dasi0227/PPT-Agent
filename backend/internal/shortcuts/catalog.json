@@ -110,6 +110,16 @@
     "label": "切换视图",
     "kind": "shortcut",
     "default": {
+      "code": "KeyU",
+      "primary": true
+    }
+  },
+  {
+    "id": "deck.form",
+    "group": "演示文稿",
+    "label": "切换形态",
+    "kind": "shortcut",
+    "default": {
       "code": "KeyI",
       "primary": true
     }

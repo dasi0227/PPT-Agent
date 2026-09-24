@@ -76,6 +76,14 @@ type Manager struct {
 	ExportActive func(string) bool
 	root         string
 	gates        sync.Map
+	switching    sync.Map
+}
+
+// Switching reports the short interval in which restored files may precede
+// publication of their new scene revision.
+func (m *Manager) Switching(id string) bool {
+	value, ok := m.switching.Load(id)
+	return ok && value.(bool)
 }
 
 func New(s SnapshotStore, locks *run.LockManager, root string) *Manager {
@@ -586,6 +594,8 @@ func (m *Manager) Preview(ctx context.Context, id, runID string) (Preview, error
 	return v, nil
 }
 func (m *Manager) Switch(ctx context.Context, id, runID string, revision int64, operation string, scene json.RawMessage) (State, error) {
+	m.switching.Store(id, true)
+	defer m.switching.Delete(id)
 	release, ok := m.Locks.TryAcquire(id)
 	if !ok {
 		return State{}, ErrBusy

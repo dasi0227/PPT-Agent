@@ -2,10 +2,12 @@ import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart3,
+  AppWindow,
   ChevronLeft,
   ChevronRight,
   Code,
   FileText,
+  FilePen,
   Layers,
   LayoutGrid,
   List,
@@ -26,6 +28,7 @@ import {
 } from 'lucide-react';
 import type { Slide } from '../../api/types';
 import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
+import { ModeToggleButton } from '../../components/ui/ModeToggleButton';
 import { cn } from '../../lib/utils';
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useDeckStore } from '../../stores/deckStore';
@@ -51,9 +54,11 @@ import { useExportStore } from '../../stores/exportStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useRunStore } from '../../stores/runStore';
 import { useCanvasPan } from './useCanvasPan';
-import { ThemeSelector } from './ThemeSelector';
+import { sourceDirty, sourceKey, useSourceEditorStore } from '../../stores/sourceEditorStore';
+import { useProjectHistoryStore } from '../../stores/projectHistoryStore';
 
 const ZOOM_MIN = 0.5;
+const SourceWorkspace = React.lazy(() => import('./SourceWorkspace').then((module) => ({ default: module.SourceWorkspace })));
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.15;
 
@@ -291,6 +296,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 interface PreviewWorkspaceProps {
+  themeRef?: React.Ref<HTMLDivElement>;
   deckActionsTarget?: HTMLDivElement | null;
   sidebarControls?: {
     leftHidden: boolean;
@@ -302,7 +308,7 @@ interface PreviewWorkspaceProps {
   };
 }
 
-export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarControls, deckActionsTarget }) => {
+export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarControls, deckActionsTarget, themeRef }) => {
   const {
     currentSlideId,
     previewMode,
@@ -310,6 +316,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     exitOverview,
     effectiveView,
     globalView,
+    contentMode,
+    setContentMode,
     setGlobalView,
     setCurrentSlideId,
   } = useDeckStore();
@@ -331,6 +339,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const projectThreads = useThreadStore((state) => projectId ? state.threadsByProjectId[projectId] ?? [] : []);
   const commitSession = useGitCommitStore((state) => projectId ? state.sessions[projectId] : undefined);
   const exportSession = useExportStore((state) => state.session);
+  const historyBusy = useProjectHistoryStore((state) => state.busy);
   const startExport = useExportStore((state) => state.start);
   const composer = useComposerStore();
   const ensureActiveThread = useThreadStore((state) => state.ensureActiveThread);
@@ -358,6 +367,11 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const selectedIndex = currentSlideId ? slides.findIndex((slide) => slide.id === currentSlideId) : -1;
   const safePage = selectedIndex >= 0 ? selectedIndex : 0;
   const currentSlide = slides[safePage];
+  const sourceKind = globalView === 'outline' ? 'spec' : 'html';
+  const selectedSource = useSourceEditorStore((state) => projectId && currentSlide ? state.files[sourceKey(projectId, currentSlide.id, sourceKind)] : undefined);
+  useEffect(() => {
+    if (contentMode === 'preview' && projectId && currentSlide) void useSourceEditorStore.getState().load(projectId, currentSlide.id, sourceKind);
+  }, [contentMode, projectId, currentSlide?.id, sourceKind]);
   const goPrev = useCallback(() => {
     if (safePage > 0) setCurrentSlideId(slides[safePage - 1].id);
   }, [safePage, setCurrentSlideId, slides]);
@@ -386,9 +400,9 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const selectionSlide = currentState.status === 'ready' && currentSlide?.html_hash ? {
     id: currentSlide.id, hash: currentSlide.html_hash,
   } : undefined;
-  const selectionEnabled = previewMode === 'main' && currentView === 'html' && Boolean(selectionSlide) && !fullscreen
+  const selectionEnabled = contentMode === 'preview' && previewMode === 'main' && currentView === 'html' && Boolean(selectionSlide) && !fullscreen
     && !['creating', 'waiting', 'paused', 'recovering', 'canceling'].includes(runSession.status);
-  const zoomEnabled = hasSlides && previewMode === 'main' && currentView === 'html' && currentHasHTML;
+  const zoomEnabled = contentMode === 'preview' && hasSlides && previewMode === 'main' && currentView === 'html' && currentHasHTML;
   const canvasPan = useCanvasPan({
     viewportRef: canvasRef,
     enabled: zoomEnabled && !fullscreen,
@@ -497,10 +511,12 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   useAppShortcuts(projectId ? {
     'deck.previous': goPrev,
     'deck.next': goNext,
-    'deck.overview': () => { if (hasSlides) { if (previewMode === 'overview') exitOverview(); else enterOverview(); } },
+    'deck.overview': () => { if (hasSlides) { setContentMode('preview'); if (previewMode === 'overview') exitOverview(); else enterOverview(); } },
     'deck.zoom_in': () => { if (zoomEnabled) zoomIn(); },
     'deck.zoom_out': () => { if (zoomEnabled) zoomOut(); },
     'deck.view': () => setGlobalView(globalView === 'html' ? 'outline' : 'html'),
+    'deck.form': () => setContentMode(contentMode === 'preview' ? 'source' : 'preview'),
+    'deck.save': () => { if (contentMode === 'source' && projectId && currentSlide && !runBlocking && !commitBlocking && !exportBlocking && !historyBusy) void useSourceEditorStore.getState().save(sourceKey(projectId, currentSlide.id, sourceKind)); },
   } : {});
 
   const present = useCallback(async () => {
@@ -508,6 +524,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     const expectedSlideID = currentSlide?.id;
     if (!canvas || !expectedSlideID) return;
     setGlobalView('html');
+    setContentMode('preview');
     try {
       await canvas.requestFullscreen();
     } catch {
@@ -515,22 +532,22 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     }
     replayRequestIDRef.current += 1;
     setReplayRequest({ id: replayRequestIDRef.current, slideId: expectedSlideID });
-  }, [currentSlide?.id, setGlobalView]);
+  }, [currentSlide?.id, setContentMode, setGlobalView]);
 
   // Keep canvas/fullscreen handlers here while displaying their controls in the directory header.
   const deckActions = (
     <div className="flex shrink-0 items-center gap-1">
       <IconButton
         label={previewMode === 'overview' ? '切换到单页视图' : '切换到概览视图'}
-        onClick={previewMode === 'overview' ? exitOverview : enterOverview}
+        onClick={() => { setContentMode('preview'); if (previewMode === 'overview') exitOverview(); else enterOverview(); }}
         disabled={!hasSlides}
         className={hasSlides && previewMode === 'overview' ? 'bg-accent-soft text-accent' : undefined}
       >
         <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
       </IconButton>
-      <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML}>
+      {contentMode === 'preview' && <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML}>
         <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
-      </IconButton>
+      </IconButton>}
       <div>
         <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
       </div>
@@ -541,9 +558,9 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   return (
     <div className="relative flex h-full flex-col bg-canvas">
       {showActionsInDirectory && createPortal(deckActions, deckActionsTarget!)}
-      <div className="grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 whitespace-nowrap border-b border-border bg-panel px-3">
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-none">
-          {!showActionsInDirectory && deckActions}
+      <div className="grid min-h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-border bg-panel px-3 py-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          {!leftPanelHidden && !showActionsInDirectory && deckActions}
           {leftPanelHidden && (
             <IconButton
               label="展开左侧目录"
@@ -554,33 +571,24 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
               <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
           )}
-          <ThemeSelector key={projectId} projectId={projectId} />
-          <div className="ml-1.5 flex shrink-0 items-center rounded-full bg-panel-muted p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setGlobalView('outline')}
-              aria-pressed={globalView === 'outline'}
-              className={cn(
-                'inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 font-medium transition-colors',
-                globalView === 'outline' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-600',
-              )}
-            >
-              <FileText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-              <span>设计稿</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setGlobalView('html')}
-              aria-pressed={globalView === 'html'}
-              className={cn(
-                'inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 font-medium transition-colors',
-                globalView === 'html' ? 'bg-accent-soft text-accent' : 'text-text-400 hover:text-text-600',
-              )}
-            >
-              <Presentation className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-              <span>幻灯片</span>
-            </button>
-          </div>
+          <ModeToggleButton
+            label="切换视图"
+            value={globalView}
+            options={[
+              { value: 'outline', label: '设计稿', icon: FileText },
+              { value: 'html', label: '幻灯片', icon: Presentation },
+            ]}
+            onValueChange={value => setGlobalView(value === 'html' ? 'html' : 'outline')}
+          />
+          <ModeToggleButton
+            label="切换形态"
+            value={contentMode}
+            options={[
+              { value: 'preview', label: '预览', icon: AppWindow },
+              { value: 'source', label: '源码', icon: FilePen },
+            ]}
+            onValueChange={value => setContentMode(value === 'source' ? 'source' : 'preview')}
+          />
         </div>
 
         <div className="flex items-center gap-0.5 rounded-full bg-panel-muted p-0.5">
@@ -593,7 +601,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
             <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
           <span
-            className="flex h-7 min-w-14 shrink-0 items-center justify-center gap-1 px-2 text-[13px] tabular-nums"
+            className="flex h-7 min-w-10 shrink-0 items-center justify-center gap-1 px-1 text-[13px] tabular-nums"
             aria-label={hasSlides ? `第 ${safePage + 1} 页，共 ${slides.length} 页` : '暂无页面'}
           >
             <span aria-hidden="true" className="font-semibold text-text-900">{hasSlides ? safePage + 1 : 0}</span>
@@ -609,9 +617,9 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
           </IconButton>
         </div>
 
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-none">
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            <IconButton label="选择元素" aria-pressed={selectionMode === 'element'} onClick={() => setSelectionMode((value) => value === 'element' ? 'none' : 'element')} disabled={!selectionEnabled} className={selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}>
+        <div className="flex min-w-0 items-center gap-1">
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
+            {contentMode === 'preview' && <><IconButton label="选择元素" aria-pressed={selectionMode === 'element'} onClick={() => setSelectionMode((value) => value === 'element' ? 'none' : 'element')} disabled={!selectionEnabled} className={selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}>
               <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
             </IconButton>
             <IconButton label="框选区域" aria-pressed={selectionMode === 'region'} onClick={() => setSelectionMode((value) => value === 'region' ? 'none' : 'region')} disabled={!selectionEnabled} className={selectionMode === 'region' ? 'bg-accent-soft text-accent' : undefined}>
@@ -624,7 +632,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
               <IconButton label="放大" onClick={zoomIn} disabled={!zoomEnabled || zoom >= ZOOM_MAX}>
                 <ZoomIn className="h-4 w-4" strokeWidth={1.75} />
               </IconButton>
-            </div>
+            </div></>}
             {rightPanelHidden && (
               <IconButton
                 label="展开右侧对话"
@@ -639,7 +647,11 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         </div>
       </div>
 
-      <div
+      {contentMode === 'source' && projectId && currentSlide ? (
+        <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码编辑器…</div>}>
+          <SourceWorkspace projectId={projectId} slideId={currentSlide.id} kind={sourceKind} blocked={runBlocking || commitBlocking || exportBlocking || historyBusy} />
+        </React.Suspense>
+      ) : <div
         ref={canvasRef}
         data-fullscreen={fullscreen || undefined}
         className={cn(
@@ -649,6 +661,13 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         )}
         {...canvasPan.pointerHandlers}
       >
+        <div
+          ref={themeRef}
+          hidden={fullscreen}
+          className="absolute left-3 top-3 z-20 w-52 max-w-[calc(100%-1.5rem)] cursor-default rounded-lg border border-border bg-panel p-1 shadow-sm"
+          onPointerDown={event => event.stopPropagation()}
+        />
+        {contentMode === 'preview' && selectedSource && sourceDirty(selectedSource) && <div className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center gap-2 rounded border border-border bg-panel px-3 py-1.5 text-xs text-text-700 shadow-sm">有未保存修改，当前为已保存内容 <button type="button" className="text-accent" onClick={() => setContentMode('source')}>编辑源码</button><button type="button" className="text-accent disabled:opacity-40" disabled={runBlocking || commitBlocking || exportBlocking || !selectedSource.writable} onClick={() => void useSourceEditorStore.getState().save(sourceKey(projectId!, currentSlide!.id, sourceKind))}>保存</button></div>}
         {previewMode === 'main' ? (
           <div
             ref={canvasPan.stageRef}
@@ -774,7 +793,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
             </div>
           </div>
         )}
-      </div>
+      </div>}
       <ExportProgressDialog />
     </div>
   );

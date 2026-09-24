@@ -1,19 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { useShortcutStore } from '../stores/shortcutStore';
-import { matchesShortcut, shortcutOverlayOpen } from './shortcuts';
+import { fixedBindings, matchesShortcut, shortcutOverlayOpen } from './shortcuts';
 
-/** Application actions only run outside text editing and modal/menu interactions. */
+/** Protect text input; the source editor also allows switching its view and form. */
 export function useAppShortcuts(actions: Record<string, () => void>) {
   const latest = useRef(actions);
   latest.current = actions;
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const state = useShortcutStore.getState();
-      if (!state.ready || event.defaultPrevented || event.isComposing || shortcutOverlayOpen()) return;
+      if (event.defaultPrevented || event.isComposing || shortcutOverlayOpen()) return;
       const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return;
+      const editing = target?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]');
       for (const [id, run] of Object.entries(latest.current)) {
-        if (!matchesShortcut(event, state.bindings[id])) continue;
+        if (editing && !(target?.closest('.cm-content') && (id === 'deck.view' || id === 'deck.form'))) continue;
+        const binding = fixedBindings[id] ?? (state.ready ? state.bindings[id] : undefined);
+        if (!matchesShortcut(event, binding)) continue;
         event.preventDefault();
         event.stopPropagation();
         if (!event.repeat) run();

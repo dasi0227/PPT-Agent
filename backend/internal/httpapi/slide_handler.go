@@ -19,7 +19,7 @@ func NewSlideHandler(svc *service.SlideService) *SlideHandler {
 	return &SlideHandler{svc: svc}
 }
 
-// RenderSlide GET /slides/:id/render：返回规范化单页 HTML，供预览 iframe 加载。
+// RenderSlide GET /slides/:id/render：返回磁盘中的原始单页 HTML，供预览 iframe 加载。
 // 使用稳定的 slide_id 定位页面，避免暴露任意文件路径。
 // 可选 expected_hash 校验源文件；未找到 → 404；内容已变 → 409。
 func (h *SlideHandler) RenderSlide(c *gin.Context) {

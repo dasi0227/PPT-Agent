@@ -26,6 +26,8 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const globalView = useDeckStore((state) => state.globalView);
   const previewMode = useDeckStore((state) => state.previewMode);
+  const contentMode = useDeckStore((state) => state.contentMode);
+  const setContentMode = useDeckStore((state) => state.setContentMode);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const setGlobalView = useDeckStore((state) => state.setGlobalView);
   const enterOverview = useDeckStore((state) => state.enterOverview);
@@ -44,6 +46,9 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
       if (nextMode === 'overview') enterOverview();
       else exitOverview();
     }
+    const remembered = sessionStorage.getItem(`ppt-agent-content-mode-${projectId}`);
+    const nextContent = params.get('content') === 'source' || (!params.has('content') && remembered === 'source') ? 'source' : 'preview';
+    if (nextContent !== useDeckStore.getState().contentMode) setContentMode(nextContent);
     const requestedSlideId = params.get('slide');
     const requestedSlideExists = requestedSlideId
       ? slides.some((slide) => slide.id === requestedSlideId)
@@ -53,7 +58,9 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
       setCurrentSlideId(nextSlideId);
     }
     setHydratedLocationKey(location.key);
-  }, [contentReady, enterOverview, exitOverview, hydratedLocationKey, location.key, location.search, projectId, setCurrentSlideId, setGlobalView, slides]);
+  }, [contentReady, enterOverview, exitOverview, hydratedLocationKey, location.key, location.search, projectId, setContentMode, setCurrentSlideId, setGlobalView, slides]);
+
+  React.useEffect(() => { if (projectId && hydratedLocationKey === location.key) sessionStorage.setItem(`ppt-agent-content-mode-${projectId}`, contentMode); }, [contentMode, hydratedLocationKey, location.key, projectId]);
 
   React.useLayoutEffect(() => {
     if (!projectId || !contentReady || hydratedLocationKey !== location.key) return;
@@ -75,9 +82,10 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
       slideId: selectedSlideId,
       view: globalView,
       mode: previewMode,
+      content: contentMode,
     });
     if (target !== current) {
       navigate(target, { replace: true });
     }
-  }, [contentReady, currentSlideId, globalView, hydratedLocationKey, location.key, location.pathname, location.search, navigate, previewMode, projectId, setCurrentSlideId, slides]);
+  }, [contentMode, contentReady, currentSlideId, globalView, hydratedLocationKey, location.key, location.pathname, location.search, navigate, previewMode, projectId, setCurrentSlideId, slides]);
 }

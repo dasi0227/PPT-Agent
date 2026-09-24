@@ -21,6 +21,10 @@ func (r *Router) WithProjectHistory() (*Router, error) {
 		return nil, err
 	}
 	r.history = manager
+	r.source = service.NewSlideSourceService(manager)
+	sourceGroup := r.engine.Group("/api/v1/projects/:id/slides/:slide_id/source")
+	sourceGroup.GET("", r.slideSourceGet)
+	sourceGroup.PUT("", r.slideSourcePut)
 	if r.export != nil {
 		manager.ExportActive = r.export.svc.Manager().Active
 	}
@@ -233,6 +237,12 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			return
 		}
 		if readOnly || isHistory {
+			c.Next()
+			return
+		}
+		// Source PUT decides whether bytes actually change before creating a
+		// history mutation. The project gate remains held through that decision.
+		if c.Request.Method == http.MethodPut && len(parts) == 5 && parts[0] == "projects" && parts[2] == "slides" && parts[4] == "source" {
 			c.Next()
 			return
 		}

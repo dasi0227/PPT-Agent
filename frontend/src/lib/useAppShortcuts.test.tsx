@@ -19,3 +19,23 @@ it('updates live and protects editing, overlays, and held keys', () => {
   fireEvent.keyDown(window,{code:'KeyO',...modifiers}); expect(run).toHaveBeenCalledTimes(1);
   fireEvent.keyDown(window,{code:'KeyB',...modifiers}); expect(run).toHaveBeenCalledTimes(2);
 });
+
+it('keeps saving fixed and allows view switches from source content only', () => {
+  const view = vi.fn(), form = vi.fn(), save = vi.fn();
+  function EditorProbe() {
+    useAppShortcuts({ 'deck.view': view, 'deck.form': form, 'deck.save': save });
+    return <><div className="cm-content" contentEditable aria-label="源码内容" /><input aria-label="普通输入" /></>;
+  }
+  const { getByLabelText } = render(<EditorProbe />);
+  const modifiers = isMac() ? { metaKey: true } : { ctrlKey: true };
+  useShortcutStore.setState({ ready: false });
+  fireEvent.keyDown(window, { code: 'KeyS', ...modifiers });
+  expect(save).toHaveBeenCalledTimes(1);
+  useShortcutStore.setState({ ready: true, bindings: defaultBindings });
+  fireEvent.keyDown(getByLabelText('源码内容'), { code: 'KeyU', ...modifiers });
+  fireEvent.keyDown(getByLabelText('源码内容'), { code: 'KeyI', ...modifiers });
+  expect(view).toHaveBeenCalledTimes(1);
+  expect(form).toHaveBeenCalledTimes(1);
+  fireEvent.keyDown(getByLabelText('普通输入'), { code: 'KeyI', ...modifiers });
+  expect(form).toHaveBeenCalledTimes(1);
+});

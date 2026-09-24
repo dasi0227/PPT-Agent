@@ -10,6 +10,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { applyHistoryScene, consumeHistoryNotice, reloadHistory, selectHistoryThread, useProjectHistoryStore } from '../../stores/projectHistoryStore';
 import { useHistoryConfirmationStore } from '../../stores/historyConfirmationStore';
+import { prepareProjectSourceHistorySwitch, reconcileProjectSourceScene } from '../../stores/sourceEditorStore';
 
 export function RollbackButton({ runId, steering }: { runId?: string; steering?: boolean }) {
   const projectId = useProjectStore((s) => s.activeProjectId);
@@ -49,7 +50,11 @@ export function ProjectHistoryDialogs() {
         if (stopped) return;
         const previous = seen.current;
         applyHistoryScene(projectId, state);
-        if (previous?.id === projectId && previous.scene !== state.scene_revision) { reloadHistory(projectId, state); return; }
+        if (previous?.id === projectId && previous.scene !== state.scene_revision) {
+          await prepareProjectSourceHistorySwitch(projectId);
+          reloadHistory(projectId, state); return;
+        }
+        await reconcileProjectSourceScene(projectId, state.scene_revision);
         seen.current = { id: projectId, scene: state.scene_revision };
         useProjectHistoryStore.setState((s) => ({
           states: { ...s.states, [projectId]: state },

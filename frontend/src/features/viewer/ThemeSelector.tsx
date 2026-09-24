@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Loader2, Palette } from 'lucide-react';
@@ -10,12 +11,13 @@ import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
 import { showGlobalError } from '../../stores/toastStore';
 
-export function ThemeSelector({ projectId }: { projectId: string | null }) {
+export function ThemeSelector({ projectId, container }: { projectId: string | null; container?: HTMLDivElement | null }) {
   const themeId = useProjectStore(state => projectId
     ? state.contentByProjectId[projectId]?.design.theme ?? state.projects.find(project => project.id === projectId)?.theme ?? ''
     : '');
   const setProjectTheme = useProjectStore(state => state.setProjectTheme);
   const [open, setOpen] = useState(false);
+  useEffect(() => { setOpen(false); }, [container]);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -44,7 +46,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
   useEffect(() => { if (projectId) void load(); }, [projectId, load]);
 
   const apply = async (theme: Theme) => {
-    if (!projectId || theme.id === themeId || applyingRef.current) return;
+    if (!projectId || theme.disabled || theme.id === themeId || applyingRef.current) return;
     applyingRef.current = true;
     setApplying(true);
     try {
@@ -61,8 +63,9 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
     if (applyingRef.current || cyclingRef.current) return;
     cyclingRef.current = true;
     try {
-      const available = themes.length && !error ? themes : await load();
-      if (!available) { showGlobalError('主题加载失败'); return; }
+      const current = await load();
+      if (!current) { showGlobalError('主题加载失败'); return; }
+      const available = current.filter(theme => !theme.disabled);
       if (!available.length) return;
       const nextIndex = (available.findIndex(theme => theme.id === themeId) + 1) % available.length;
       await apply(available[nextIndex]);
@@ -74,7 +77,8 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
   useAppShortcuts(projectId ? { 'deck.theme': () => { void cycleTheme(); } } : {});
 
   const name = themes.find(theme => theme.id === themeId)?.name || themeId || '选择主题';
-  return (
+  const enabledThemes = themes.filter(theme => !theme.disabled);
+  const selector = (
     <DropdownMenu open={open} onOpenChange={value => { setOpen(value); if (value) void load(); }}>
       <DropdownMenuTrigger asChild>
         <button
@@ -83,22 +87,24 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
           aria-busy={applying}
           disabled={!projectId || applying}
           title={applying ? '正在应用主题' : `切换主题：${name}`}
-          className="ml-1.5 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-panel-muted px-3 text-xs font-medium text-text-600 transition-colors hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft data-[state=open]:bg-accent-soft data-[state=open]:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md bg-transparent px-2 text-left text-xs font-medium text-text-600 transition-colors hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft focus-visible:outline-none data-[state=open]:bg-accent-soft data-[state=open]:text-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           {applying
             ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
             : <Palette className="h-3.5 w-3.5 shrink-0" />}
-          <span className="max-w-24 truncate">{name}</span>
+          <span className="min-w-0 flex-1 truncate">{name}</span>
           <ChevronDown className="h-3 w-3 shrink-0" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-60">
+      <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-52">
         <DropdownMenuLabel className="text-[11px] font-normal text-text-500">主题选择</DropdownMenuLabel>
         {error ? (
           <DropdownMenuItem onSelect={event => { event.preventDefault(); void load(); }}>加载失败，点击重试</DropdownMenuItem>
-        ) : themes.length === 0 ? (
-          <DropdownMenuItem disabled>{loading ? '正在加载主题…' : '暂无可用主题'}</DropdownMenuItem>
-        ) : themes.map(theme => (
+        ) : loading ? (
+          <DropdownMenuItem disabled>正在加载主题…</DropdownMenuItem>
+        ) : enabledThemes.length === 0 ? (
+          <DropdownMenuItem disabled>暂无可用主题</DropdownMenuItem>
+        ) : enabledThemes.map(theme => (
           <DropdownMenuItem
             key={theme.id}
             role="menuitemradio"
@@ -114,4 +120,6 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
       </DropdownMenuContent>
     </DropdownMenu>
   );
+  // Keep the keyboard action mounted when the canvas control is not visible.
+  return container === undefined ? selector : container ? createPortal(selector, container) : null;
 }

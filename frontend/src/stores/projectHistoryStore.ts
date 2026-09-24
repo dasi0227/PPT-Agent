@@ -8,6 +8,7 @@ import { useDeckStore } from './deckStore';
 import { useRunStore } from './runStore';
 import { useGitCommitStore } from './gitCommitStore';
 import { showGlobalSuccess } from './toastStore';
+import { prepareProjectSourceHistorySwitch } from './sourceEditorStore';
 
 interface HistoryUI {
   states: Record<string, HistoryState>;
@@ -33,9 +34,11 @@ export const useProjectHistoryStore = create<HistoryUI>((set, get) => ({
     set({ busy: true, error: null });
     const { projectId, preview, runId, operation } = dialog;
     try {
+      await prepareProjectSourceHistorySwitch(projectId);
       const state = await projectHistoryApi.switch(projectId, preview, operation, {
         composer: composerScene(), slide_id: useDeckStore.getState().currentSlideId,
         view: useDeckStore.getState().globalView, preview_mode: useDeckStore.getState().previewMode,
+        content_mode: useDeckStore.getState().contentMode,
         active_thread_id: useThreadStore.getState().getActiveThreadId(projectId),
       }, runId);
       // Reflect the confirmed history state before navigation replaces this document.
@@ -124,5 +127,6 @@ export function historyWorkspaceRoute(projectId: string, state: HistoryState) {
     slideId: state.scene?.input?.scope_input.selection.current_slide_id ?? state.scene?.slide_id,
     view: state.scene?.view,
     mode: state.scene?.preview_mode,
+    content: state.scene?.content_mode,
   });
 }

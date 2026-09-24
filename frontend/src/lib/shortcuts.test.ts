@@ -14,6 +14,10 @@ describe('configurable shortcuts', () => {
   });
   it('rejects collisions across groups, malformed bindings, and native editing shortcuts', () => {
     expect(validateBindings(defaultBindings)).toBeNull();
+    expect(defaultBindings['deck.save']).toBeUndefined();
+    expect(defaultBindings['deck.view']).toEqual({ code: 'KeyU', primary: true });
+    expect(defaultBindings['deck.form']).toEqual({ code: 'KeyI', primary: true });
+    expect(validateBindings({ ...defaultBindings, 'deck.theme': { code: 'KeyS', primary: true } })).toContain('保留给源码保存');
     expect(validateBindings({ ...defaultBindings, 'deck.theme': defaultBindings['composer.submit'] })).toContain('冲突');
     expect(validateBindings({ ...defaultBindings, 'trigger.page': { trigger: '/' } })).toContain('冲突');
     expect(validateBindings({ ...defaultBindings, 'trigger.page': { trigger: 'x' } })).not.toBeNull();
