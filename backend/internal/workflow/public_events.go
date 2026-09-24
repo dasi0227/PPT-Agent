@@ -279,7 +279,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 	target := publicToolTarget(projectDir, tool, args)
 	targetName := "内容"
 	if target != nil && target.Type == "deck" && target.Part == "manifest" {
-		targetName = "演示要求"
+		targetName = "内容要求"
 	} else if target != nil && target.Type == "deck" && target.Part == "outline" {
 		targetName = "目录结构"
 	} else if target != nil && target.Type == "deck" && target.Part == "design" {

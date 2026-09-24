@@ -22,7 +22,7 @@ var publicVocabulary = regexp.MustCompile(`\b(?:completion gate|deck:manifest|de
 var publicErrorToken = regexp.MustCompile(`\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b`)
 
 var publicTerms = map[string]string{
-	"completion gate": "完成检查", "deck:manifest": "演示要求", "manifest.json": "演示要求",
+	"completion gate": "完成检查", "deck:manifest": "内容要求", "manifest.json": "内容要求",
 	"deck:outline": "目录结构", "outline.json": "目录结构",
 	"deck:design": "全局设计", "design.json": "全局设计", "spec.json": "页面设计稿",
 	"read_ppt": "读取演示内容", "mutate_ppt": "修改演示内容", "render_slide": "页面渲染检查",

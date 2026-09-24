@@ -70,7 +70,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 		return BriefingContext{}, err
 	}
 	pack.Resources = []BriefingResource{
-		{Ref: "演示要求", Content: string(stableJSON(ModelValue(deck)))},
+		{Ref: "内容要求", Content: string(stableJSON(ModelValue(deck)))},
 		{Ref: "目录结构", Content: string(stableJSON(ModelValue(outline)))},
 		{Ref: "全局设计", Content: string(stableJSON(ModelValue(design)))},
 	}

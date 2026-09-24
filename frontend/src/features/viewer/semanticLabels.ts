@@ -24,7 +24,7 @@ const SLIDE_ROLE_LABELS: Record<string, string> = {
 
 // 资源部位（PublicTarget.part）。
 const PART_LABELS: Record<string, string> = {
-  manifest: '演示要求',
+  manifest: '内容要求',
   outline: '目录结构',
   design: '全局设计',
   spec: '页面设计稿',
