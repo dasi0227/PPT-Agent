@@ -63,14 +63,20 @@ func validConfig(secret string) string {
 	return `llm:
   - name: Kimi Vision
     provider: kimi
+    protocol: anthropic
+    base_url: https://api.moonshot.cn/anthropic/v1
     model: kimi-k3
     key: ` + secret + `
   - name: Kimi Text
     provider: kimi
+    protocol: anthropic
+    base_url: https://api.moonshot.cn/anthropic/v1
     model: kimi-k2
     key: another-secret
   - name: Rename Mini
     provider: kimi
+    protocol: anthropic
+    base_url: https://api.moonshot.cn/anthropic/v1
     model: kimi-k2
     key: rename-secret
 main-road:
@@ -153,14 +159,14 @@ func TestLLMConfigValidationAndSecretRedaction(t *testing.T) {
 		name   string
 		config string
 	}{
-		{"duplicate name", configWithMainRoad("default: Same\nprofiles:\n  - {name: Same, provider: kimi, model: kimi-k3, key: " + secret + "}\n  - {name: Same, provider: openai, model: gpt-5, key: other}")},
-		{"blank name", configWithMainRoad("default: \" \"\nprofiles:\n  - {name: \" \", provider: kimi, model: kimi-k3, key: " + secret + "}")},
-		{"control name", configWithMainRoad("default: \"bad\\u0001name\"\nprofiles:\n  - {name: \"bad\\u0001name\", provider: kimi, model: kimi-k3, key: " + secret + "}")},
-		{"long name", configWithMainRoad("default: " + strings.Repeat("名", 81) + "\nprofiles:\n  - {name: " + strings.Repeat("名", 81) + ", provider: kimi, model: kimi-k3, key: " + secret + "}")},
+		{"duplicate name", configWithMainRoad("default: Same\nprofiles:\n  - {name: Same, provider: kimi, protocol: anthropic, base_url: https://api.moonshot.cn/anthropic/v1, model: kimi-k3, key: " + secret + "}\n  - {name: Same, provider: openai, protocol: responses, base_url: https://api.openai.com/v1, model: gpt-5, key: other}")},
+		{"blank name", configWithMainRoad("default: \" \"\nprofiles:\n  - {name: \" \", provider: kimi, protocol: anthropic, base_url: https://api.moonshot.cn/anthropic/v1, model: kimi-k3, key: " + secret + "}")},
+		{"control name", configWithMainRoad("default: \"bad\\u0001name\"\nprofiles:\n  - {name: \"bad\\u0001name\", provider: kimi, protocol: anthropic, base_url: https://api.moonshot.cn/anthropic/v1, model: kimi-k3, key: " + secret + "}")},
+		{"long name", configWithMainRoad("default: " + strings.Repeat("名", 81) + "\nprofiles:\n  - {name: " + strings.Repeat("名", 81) + ", provider: kimi, protocol: anthropic, base_url: https://api.moonshot.cn/anthropic/v1, model: kimi-k3, key: " + secret + "}")},
 		{"unknown provider", configWithMainRoad("default: Bad\nprofiles:\n  - {name: Bad, provider: unknown, model: x, key: " + secret + "}")},
-		{"missing default", configWithMainRoad("default: Missing\nprofiles:\n  - {name: Present, provider: kimi, model: kimi-k3, key: " + secret + "}")},
-		{"empty model", configWithMainRoad("default: Bad\nprofiles:\n  - {name: Bad, provider: kimi, model: \"\", key: " + secret + "}")},
-		{"empty key", configWithMainRoad("default: Bad\nprofiles:\n  - {name: Bad, provider: kimi, model: kimi-k3, key: \"\"}")},
+		{"missing default", configWithMainRoad("default: Missing\nprofiles:\n  - {name: Present, provider: kimi, protocol: anthropic, base_url: https://api.moonshot.cn/anthropic/v1, model: kimi-k3, key: " + secret + "}")},
+		{"empty model", configWithMainRoad("default: Bad\nprofiles:\n  - {name: Bad, provider: kimi, protocol: anthropic, base_url: https://api.moonshot.cn/anthropic/v1, model: \"\", key: " + secret + "}")},
+		{"empty key", configWithMainRoad("default: Bad\nprofiles:\n  - {name: Bad, provider: kimi, protocol: anthropic, base_url: https://api.moonshot.cn/anthropic/v1, model: kimi-k3, key: \"\"}")},
 	}
 
 	for _, test := range cases {

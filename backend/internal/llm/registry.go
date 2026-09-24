@@ -5,17 +5,23 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 )
 
 const (
-	ProviderDeepSeek = "deepseek"
-	ProviderKimi     = "kimi"
-	ProviderOpenAI   = "openai"
+	ProviderDeepSeek  = "deepseek"
+	ProviderKimi      = "kimi"
+	ProviderOpenAI    = "openai"
+	ProtocolResponses = config.ProtocolResponses
+	ProtocolAnthropic = config.ProtocolAnthropic
 )
 
 type ProfileConfig struct {
 	Name     string
 	Provider string
+	Protocol string
+	BaseURL  string
 	Model    string
 	Key      string
 	Timeout  time.Duration
@@ -24,6 +30,7 @@ type ProfileConfig struct {
 type Profile struct {
 	name     string
 	provider string
+	protocol string
 	model    string
 	url      string
 	adapter  Provider
@@ -31,12 +38,13 @@ type Profile struct {
 
 func (p Profile) Name() string               { return p.name }
 func (p Profile) ProviderName() string       { return p.provider }
+func (p Profile) Protocol() string           { return p.protocol }
 func (p Profile) Model() string              { return p.model }
 func (p Profile) URL() string                { return p.url }
 func (p Profile) Adapter() Provider          { return p.adapter }
 func (p Profile) Capabilities() Capabilities { return p.adapter.Capabilities() }
 func (p Profile) String() string {
-	return fmt.Sprintf("LLMProfile{Name:%q,Provider:%q,Model:%q}", p.name, p.provider, p.model)
+	return fmt.Sprintf("LLMProfile{Name:%q,Provider:%q,Protocol:%q,Model:%q}", p.name, p.provider, p.protocol, p.model)
 }
 func (p Profile) GoString() string { return p.String() }
 
@@ -50,6 +58,8 @@ type PublicCapabilities struct {
 type PublicProfile struct {
 	Name         string             `json:"name"`
 	Model        string             `json:"model"`
+	Provider     string             `json:"provider"`
+	Protocol     string             `json:"protocol"`
 	Capabilities PublicCapabilities `json:"capabilities"`
 }
 
@@ -82,27 +92,20 @@ func (r *Registry) GoString() string { return r.String() }
 func NewRegistry(defaultName string, configs []ProfileConfig) (*Registry, error) {
 	registered := make([]Profile, 0, len(configs))
 	for _, cfg := range configs {
-		baseURL, err := providerBaseURL(cfg.Provider)
-		if err != nil {
+		baseURL := config.NormalizeModelBaseURL(cfg.BaseURL)
+		if err := config.ValidateModelAccess(cfg.Provider, cfg.Protocol, baseURL); err != nil {
 			return nil, err
 		}
+		adapterConfig := AdapterConfig{Provider: cfg.Provider, APIKey: cfg.Key, BaseURL: baseURL, Model: cfg.Model, Timeout: cfg.Timeout}
 		var adapter Provider
-		switch cfg.Provider {
-		case ProviderDeepSeek:
-			adapter = NewDeepSeekAdapter(DeepSeekConfig{
-				APIKey: cfg.Key, BaseURL: baseURL, Model: cfg.Model, Timeout: cfg.Timeout,
-			})
-		case ProviderKimi:
-			adapter = NewKimiAdapter(KimiConfig{
-				APIKey: cfg.Key, BaseURL: baseURL, Model: cfg.Model, Timeout: cfg.Timeout,
-			})
-		case ProviderOpenAI:
-			adapter = NewOpenAIAdapter(OpenAIConfig{
-				APIKey: cfg.Key, BaseURL: baseURL, Model: cfg.Model, Timeout: cfg.Timeout,
-			})
+		switch cfg.Protocol {
+		case ProtocolResponses:
+			adapter = NewResponsesAdapter(adapterConfig)
+		case ProtocolAnthropic:
+			adapter = NewAnthropicAdapter(adapterConfig)
 		}
 		registered = append(registered, Profile{
-			name: cfg.Name, provider: cfg.Provider, model: cfg.Model, url: baseURL, adapter: adapter,
+			name: cfg.Name, provider: cfg.Provider, protocol: cfg.Protocol, model: cfg.Model, url: baseURL, adapter: adapter,
 		})
 	}
 	return NewRegistryWithProfiles(defaultName, registered)
@@ -187,7 +190,7 @@ func (r *Registry) Public() PublicProfiles {
 		profile := r.profiles[name]
 		capabilities := profile.Capabilities()
 		out.Profiles = append(out.Profiles, PublicProfile{
-			Name: profile.name, Model: profile.model,
+			Name: profile.name, Model: profile.model, Provider: profile.provider, Protocol: profile.protocol,
 			Capabilities: PublicCapabilities{
 				Vision: capabilities.Vision, ToolCalls: capabilities.ToolCalls,
 				MultipleToolCalls:   capabilities.MultipleToolCalls,
@@ -196,19 +199,6 @@ func (r *Registry) Public() PublicProfiles {
 		})
 	}
 	return out
-}
-
-func providerBaseURL(provider string) (string, error) {
-	switch provider {
-	case ProviderDeepSeek:
-		return "https://api.deepseek.com", nil
-	case ProviderKimi:
-		return "https://api.moonshot.cn/v1", nil
-	case ProviderOpenAI:
-		return "https://api.openai.com/v1", nil
-	default:
-		return "", fmt.Errorf("MODEL_PROVIDER_UNSUPPORTED: unsupported provider %q", provider)
-	}
 }
 
 func productCapabilities() Capabilities {

@@ -136,10 +136,18 @@ func configuredDeepSeekAdapter(t *testing.T) llm.Provider {
 	if !ok {
 		t.Skip("no DeepSeek profile configured")
 	}
-	return llm.NewDeepSeekAdapter(llm.DeepSeekConfig{
-		APIKey: profile.Key, Model: profile.Model,
-		Timeout: 90 * time.Second,
-	})
+	registry, err := llm.NewRegistry(profile.Name, []llm.ProfileConfig{{
+		Name: profile.Name, Provider: profile.Provider, Protocol: profile.Protocol,
+		BaseURL: profile.BaseURL, Key: profile.Key, Model: profile.Model, Timeout: 90 * time.Second,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := registry.Resolve(profile.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolved.Adapter()
 }
 
 func findBackendConfig(t *testing.T) string {

@@ -26,11 +26,21 @@ const (
 	defaultMaxRetries      = 5
 )
 
+// AdapterConfig binds a protocol implementation to an independently selected brand and endpoint.
+type AdapterConfig struct {
+	Provider string
+	APIKey   string
+	BaseURL  string
+	Model    string
+	Timeout  time.Duration
+}
+
 type adapterHTTP struct {
 	client     *http.Client
 	apiKey     string
 	baseURL    string
 	maxRetries int
+	protocol   string
 }
 
 func newAdapterHTTP(apiKey, baseURL string, timeout time.Duration) adapterHTTP {
@@ -38,7 +48,7 @@ func newAdapterHTTP(apiKey, baseURL string, timeout time.Duration) adapterHTTP {
 		timeout = defaultProviderTimeout
 	}
 	return adapterHTTP{
-		client: &http.Client{Timeout: timeout}, apiKey: apiKey,
+		client: &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, apiKey: apiKey,
 		baseURL: strings.TrimRight(baseURL, "/"), maxRetries: defaultMaxRetries,
 	}
 }
@@ -77,7 +87,12 @@ func (h adapterHTTP) doJSON(
 			return fmt.Errorf("%w: create request", ErrBadRequest)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+h.apiKey)
+		if h.protocol == ProtocolAnthropic {
+			req.Header.Set("x-api-key", h.apiKey)
+			req.Header.Set("anthropic-version", "2023-06-01")
+		} else {
+			req.Header.Set("Authorization", "Bearer "+h.apiKey)
+		}
 		resp, err := h.client.Do(req)
 		if err != nil {
 			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
@@ -157,10 +172,9 @@ func providerEndpoint(baseURL, path string) (string, error) {
 	}
 	want := "/" + strings.TrimLeft(path, "/")
 	basePath := strings.TrimRight(parsed.Path, "/")
-	if basePath == "/v1" && strings.HasPrefix(want, "/v1/") {
-		want = strings.TrimPrefix(want, "/v1")
-	}
+	escapedBasePath := strings.TrimRight(parsed.EscapedPath(), "/")
 	parsed.Path = basePath + want
+	parsed.RawPath = escapedBasePath + want
 	return parsed.String(), nil
 }
 
@@ -255,6 +269,37 @@ func validateContinuation(continuation *ProviderContinuation, provider, model st
 		return fmt.Errorf("%w: continuation belongs to another provider or model", ErrBadRequest)
 	}
 	return nil
+}
+
+func resolveProviderImage(ctx context.Context, ref string, resolver ImageRefResolver, capabilities Capabilities) ([]byte, string, error) {
+	if !capabilities.Vision {
+		return nil, "", fmt.Errorf("%w: model does not support image input", ErrBadRequest)
+	}
+	if resolver == nil {
+		return nil, "", fmt.Errorf("%w: image resolver is required", ErrImageReference)
+	}
+	data, err := resolver.ResolveImage(ctx, ref)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, "", ctx.Err()
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, "", err
+		}
+		return nil, "", fmt.Errorf("%w: %v", ErrImageReference, err)
+	}
+	raw, mimeType, err := prepareProviderImage(data, capabilities)
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: invalid image input", ErrImageReference)
+	}
+	return raw, mimeType, nil
+}
+
+func toolParameters(parameters map[string]any) map[string]any {
+	if parameters == nil {
+		return map[string]any{"type": "object", "properties": map[string]any{}}
+	}
+	return parameters
 }
 
 func prepareProviderImage(data ImageData, capabilities Capabilities) ([]byte, string, error) {

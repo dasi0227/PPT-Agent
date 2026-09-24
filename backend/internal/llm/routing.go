@@ -16,6 +16,7 @@ type RouteState struct {
 	Initial      string `json:"initial"`
 	Active       string `json:"active"`
 	Provider     string `json:"provider"`
+	Protocol     string `json:"protocol"`
 	Model        string `json:"model"`
 	FallbackUsed bool   `json:"fallback_used"`
 }
@@ -85,7 +86,7 @@ func (p *RoutedProvider) Name() string               { return p.active.ProviderN
 func (p *RoutedProvider) Model() string              { return p.active.Model() }
 func (p *RoutedProvider) Capabilities() Capabilities { return p.active.Capabilities() }
 func (p *RoutedProvider) State() RouteState {
-	return RouteState{Revision: p.snapshot.revision, ConfigHash: p.snapshot.routing.Fingerprint, Purpose: p.purpose, Initial: p.initial.Name(), Active: p.active.Name(), Provider: p.Name(), Model: p.Model(), FallbackUsed: p.switched}
+	return RouteState{Revision: p.snapshot.revision, ConfigHash: p.snapshot.routing.Fingerprint, Purpose: p.purpose, Initial: p.initial.Name(), Active: p.active.Name(), Provider: p.Name(), Protocol: p.active.Protocol(), Model: p.Model(), FallbackUsed: p.switched}
 }
 func (p *RoutedProvider) Snapshot() *Registry { return p.snapshot }
 func (p *RoutedProvider) Restore(state RouteState) error {
@@ -93,7 +94,7 @@ func (p *RoutedProvider) Restore(state RouteState) error {
 		return errors.New("模型配置已改变，无法恢复原任务，请新建一轮。")
 	}
 	if state.FallbackUsed {
-		if p.fallback == nil || state.Active != p.fallback.Name() || state.Provider != p.fallback.ProviderName() || state.Model != p.fallback.Model() {
+		if p.fallback == nil || state.Active != p.fallback.Name() || state.Provider != p.fallback.ProviderName() || state.Protocol != p.fallback.Protocol() || state.Model != p.fallback.Model() {
 			return errors.New("备用模型配置已改变，请新建一轮。")
 		}
 		p.active = *p.fallback

@@ -9,9 +9,12 @@ import (
 	"testing"
 )
 
-func TestOpenAIResponsesMapsImageFunctionOutputAndContinuation(t *testing.T) {
+func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
 	var requests []map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v1/responses" || request.Header.Get("Authorization") != "Bearer secret" {
+			t.Errorf("wrong Responses endpoint or authentication")
+		}
 		var body map[string]any
 		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 			t.Fatal(err)
@@ -19,7 +22,8 @@ func TestOpenAIResponsesMapsImageFunctionOutputAndContinuation(t *testing.T) {
 		requests = append(requests, body)
 		if len(requests) == 1 {
 			_, _ = w.Write([]byte(`{"id":"resp-1","output":[
-				{"type":"message","content":[{"type":"output_text","text":"checking"}]},
+				{"type":"reasoning","encrypted_content":"opaque-reasoning","summary":[]},
+                {"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"checking"}]},
 				{"id":"fc-1","type":"function_call","call_id":"call-1","name":"render_slide","arguments":"{\"slide_id\":\"slide-1\"}"},
 				{"id":"fc-2","type":"function_call","call_id":"call-2","name":"read_ppt","arguments":"{}"}
 			],"usage":{"input_tokens":7,"output_tokens":3,"total_tokens":10}}`))
@@ -28,7 +32,7 @@ func TestOpenAIResponsesMapsImageFunctionOutputAndContinuation(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"resp-2","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}]}`))
 	}))
 	defer server.Close()
-	adapter := NewOpenAIAdapter(OpenAIConfig{
+	adapter := NewResponsesAdapter(AdapterConfig{Provider: "openai",
 		APIKey: "secret", BaseURL: server.URL + "/v1", Model: "gpt-5",
 	})
 	first, err := adapter.Generate(context.Background(), GenerateRequest{
@@ -70,15 +74,20 @@ func TestOpenAIResponsesMapsImageFunctionOutputAndContinuation(t *testing.T) {
 		t.Fatal(err)
 	}
 	second := requests[1]
-	if second["previous_response_id"] != "resp-1" ||
-		second["instructions"] != "system policy" {
-		t.Fatalf("Responses continuation or instructions missing: %#v", second)
+	if _, exists := second["previous_response_id"]; exists {
+		t.Fatal("server-side response chaining remains")
+	}
+	if _, exists := second["conversation"]; exists {
+		t.Fatal("server-side conversation remains")
+	}
+	if second["store"] != false || second["instructions"] != "system policy" {
+		t.Fatalf("stateless request policy missing: %#v", second)
 	}
 	input := second["input"].([]any)
-	if len(input) != 2 {
-		t.Fatalf("expected only function outputs after native continuation: %#v", input)
+	if len(input) != 7 || input[0].(map[string]any)["role"] != "user" || input[1].(map[string]any)["encrypted_content"] != "opaque-reasoning" || input[2].(map[string]any)["phase"] != "commentary" {
+		t.Fatalf("history or protocol replay metadata was lost: %#v", input)
 	}
-	firstOutput := input[0].(map[string]any)
+	firstOutput := input[5].(map[string]any)
 	if firstOutput["type"] != "function_call_output" || firstOutput["call_id"] != "call-1" {
 		t.Fatalf("function output pairing was lost: %#v", firstOutput)
 	}
@@ -88,10 +97,24 @@ func TestOpenAIResponsesMapsImageFunctionOutputAndContinuation(t *testing.T) {
 		strings.Contains(imageURL, "run:run-1") {
 		t.Fatalf("unsafe Responses image input: %q", imageURL)
 	}
+	resets := 0
+	_, err = adapter.Generate(context.Background(), GenerateRequest{
+		Messages:            []Message{{Role: RoleSystem, Content: TextContent("new policy")}, {Role: RoleUser, Content: TextContent("compacted history")}},
+		Tools:               []ToolSchema{{Name: "render_slide"}, {Name: "read_ppt"}},
+		Continuation:        first.Continuation,
+		OnContinuationReset: func(string) { resets++ },
+	})
+	if err != nil || resets != 1 {
+		t.Fatalf("history rewrite did not reset replay: %v resets=%d", err, resets)
+	}
+	if len(requests[2]["input"].([]any)) != 1 {
+		t.Fatal("stale replay leaked into compacted request")
+	}
+
 }
 
 func TestContinuationCannotCrossProviders(t *testing.T) {
-	adapter := NewOpenAIAdapter(OpenAIConfig{
+	adapter := NewResponsesAdapter(AdapterConfig{Provider: "openai",
 		APIKey: "secret", BaseURL: "https://api.openai.com/v1", Model: "gpt-5",
 	})
 	_, err := adapter.Generate(context.Background(), GenerateRequest{

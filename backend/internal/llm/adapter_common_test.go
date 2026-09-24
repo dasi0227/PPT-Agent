@@ -3,7 +3,6 @@ package llm
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
@@ -55,117 +54,7 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-func TestDeepSeekGeneratePreservesMultipleToolCallsWithThinkingDisabled(t *testing.T) {
-	var requests []map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		var body map[string]any
-		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
-			t.Fatal(err)
-		}
-		requests = append(requests, body)
-		if len(requests) == 1 {
-			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"checking","reasoning_content":"private-state","tool_calls":[
-				{"id":"call-1","type":"function","function":{"name":"read_ppt","arguments":"{\"resource\":{\"type\":\"deck\",\"part\":\"outline\"}}"}},
-					{"id":"call-2","type":"function","function":{"name":"render_slide","arguments":"{\"slide_id\":\"sli_aaaaaa\"}"}}
-			]}}],"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14}}`))
-			return
-		}
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"done","tool_calls":[]}}]}`))
-	}))
-	defer server.Close()
-	adapter := NewDeepSeekAdapter(DeepSeekConfig{
-		APIKey: "sk-test-secret", BaseURL: server.URL, Model: "deepseek-v4-pro",
-	})
-	first, err := adapter.Generate(context.Background(), GenerateRequest{
-		Messages: []Message{{Role: RoleUser, Content: TextContent("inspect")}},
-		Tools:    []ToolSchema{{Name: "read_ppt"}, {Name: "render_slide"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(first.ToolCalls) != 2 || first.ToolCalls[0].ID != "call-1" ||
-		first.ToolCalls[1].ID != "call-2" || first.Usage.TotalTokens != 14 ||
-		first.Continuation != nil {
-		t.Fatalf("normalized response is incomplete: %+v", first)
-	}
-	if requests[0]["thinking"].(map[string]any)["type"] != "disabled" {
-		t.Fatalf("DeepSeek thinking must be disabled: %#v", requests[0])
-	}
-	_, err = adapter.Generate(context.Background(), GenerateRequest{
-		Messages: []Message{
-			{Role: RoleUser, Content: TextContent("inspect")},
-			{Role: RoleAssistant, Content: TextContent("checking"), ToolCalls: first.ToolCalls},
-			{Role: RoleTool, ToolCallID: "call-1", Content: TextContent("outline")},
-			{Role: RoleTool, ToolCallID: "call-2", Content: TextContent("rendered")},
-		},
-		Tools: []ToolSchema{{Name: "read_ppt"}, {Name: "render_slide"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestDeepSeekGenerateAlwaysDisablesThinking(t *testing.T) {
-	var requestBody map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if err := json.NewDecoder(request.Body).Decode(&requestBody); err != nil {
-			t.Fatal(err)
-		}
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"polished"}}]}`))
-	}))
-	defer server.Close()
-	adapter := NewDeepSeekAdapter(DeepSeekConfig{
-		APIKey: "secret", BaseURL: server.URL, Model: "deepseek-v4-pro",
-	})
-	_, err := adapter.Generate(context.Background(), GenerateRequest{
-		Messages:        []Message{{Role: RoleUser, Content: TextContent("polish")}},
-		MaxOutputTokens: 1024,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	thinking, ok := requestBody["thinking"].(map[string]any)
-	if !ok || thinking["type"] != "disabled" {
-		t.Fatalf("DeepSeek reasoning was not disabled: %#v", requestBody)
-	}
-	if _, exists := requestBody["reasoning_effort"]; exists {
-		t.Fatalf("disabled reasoning retained reasoning_effort: %#v", requestBody)
-	}
-	if requestBody["max_tokens"] != float64(1024) {
-		t.Fatalf("DeepSeek output limit missing: %#v", requestBody)
-	}
-}
-
-func TestDeepSeekSupportsConfiguredImageInput(t *testing.T) {
-	adapter := NewDeepSeekAdapter(DeepSeekConfig{
-		APIKey: "secret", BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-pro",
-	})
-	if !adapter.Capabilities().Vision {
-		t.Fatal("configured models must support the product image contract")
-	}
-	var received bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		received = true
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
-	}))
-	defer server.Close()
-	adapter = NewDeepSeekAdapter(DeepSeekConfig{
-		APIKey: "secret", BaseURL: server.URL, Model: "deepseek-v4-pro",
-	})
-	_, err := adapter.Generate(context.Background(), GenerateRequest{
-		Messages: []Message{{Role: RoleUser, Content: []ContentPart{{
-			Type: "image", ImageRef: "run:r/screenshot:shot-1",
-		}}}},
-		ImageResolver: &staticImageResolver{data: ImageData{
-			Bytes: testPNG(t, 2, 2), MIMEType: "image/png",
-		}},
-	})
-	if err != nil || !received {
-		t.Fatalf("image input was not sent: err=%v received=%v", err, received)
-	}
-}
-
-func TestDeepSeekProviderErrorMappingAndCancellation(t *testing.T) {
+func TestAdapterProviderErrorMappingAndCancellation(t *testing.T) {
 	t.Run("transient", func(t *testing.T) {
 		var hits atomic.Int32
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -173,7 +62,7 @@ func TestDeepSeekProviderErrorMappingAndCancellation(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}))
 		defer server.Close()
-		adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: "secret", BaseURL: server.URL, Model: "deepseek-chat"})
+		adapter := NewResponsesAdapter(AdapterConfig{Provider: "custom", APIKey: "secret", BaseURL: server.URL, Model: "test-model"})
 		adapter.http.maxRetries = 1
 		retries := 0
 		_, err := adapter.Generate(context.Background(), GenerateRequest{OnRetry: func(int) { retries++ }})
@@ -187,7 +76,7 @@ func TestDeepSeekProviderErrorMappingAndCancellation(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 		}))
 		defer server.Close()
-		adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: "secret", BaseURL: server.URL, Model: "deepseek-chat"})
+		adapter := NewResponsesAdapter(AdapterConfig{Provider: "custom", APIKey: "secret", BaseURL: server.URL, Model: "test-model"})
 		_, err := adapter.Generate(context.Background(), GenerateRequest{})
 		if !errors.Is(err, ErrBadRequest) {
 			t.Fatalf("expected non-transient error, got %v", err)
@@ -206,7 +95,7 @@ func TestDeepSeekProviderErrorMappingAndCancellation(t *testing.T) {
 		}))
 		defer server.Close()
 		defer close(release)
-		adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: "secret", BaseURL: server.URL, Model: "deepseek-chat"})
+		adapter := NewResponsesAdapter(AdapterConfig{Provider: "custom", APIKey: "secret", BaseURL: server.URL, Model: "test-model"})
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
 		go func() {
@@ -228,11 +117,11 @@ func TestDeepSeekProviderErrorMappingAndCancellation(t *testing.T) {
 	t.Run("timeout", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			time.Sleep(80 * time.Millisecond)
-			_, _ = w.Write([]byte(`{"choices":[]}`))
+			_, _ = w.Write([]byte(`{"output":[]}`))
 		}))
 		defer server.Close()
-		adapter := NewDeepSeekAdapter(DeepSeekConfig{
-			APIKey: "secret", BaseURL: server.URL, Model: "deepseek-chat",
+		adapter := NewResponsesAdapter(AdapterConfig{Provider: "custom",
+			APIKey: "secret", BaseURL: server.URL, Model: "test-model",
 			Timeout: 10 * time.Millisecond,
 		})
 		adapter.http.maxRetries = 0
@@ -251,7 +140,7 @@ func TestAdapterProviderErrorCarriesSanitizedDiagnostic(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":{"message":"bad schema api_key=sk-body-secret Authorization=Bearer hidden","type":"invalid_request_error","code":"invalid_request"}}`))
 	}))
 	defer server.Close()
-	adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: secret, BaseURL: server.URL, Model: "deepseek-chat"})
+	adapter := NewResponsesAdapter(AdapterConfig{Provider: "custom", APIKey: secret, BaseURL: server.URL, Model: "test-model"})
 	_, err := adapter.Generate(context.Background(), GenerateRequest{})
 	var providerErr *ProviderError
 	if !errors.As(err, &providerErr) || providerErr.StatusCode != http.StatusUnauthorized ||
@@ -274,10 +163,10 @@ func TestAdapterRetriesMalformedSuccessfulResponseOnceWithDiagnostics(t *testing
 			_, _ = w.Write([]byte("upstream temporarily returned html"))
 			return
 		}
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"recovered"}}]}`))
+		_, _ = w.Write([]byte(`{"output":[{"type":"message","content":[{"type":"output_text","text":"recovered"}]}]}`))
 	}))
 	defer server.Close()
-	adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: "secret", BaseURL: server.URL, Model: "deepseek-chat"})
+	adapter := NewResponsesAdapter(AdapterConfig{Provider: "custom", APIKey: "secret", BaseURL: server.URL, Model: "test-model"})
 	response, err := adapter.Generate(context.Background(), GenerateRequest{})
 	if err != nil || response.Text() != "recovered" || hits.Load() != 2 {
 		t.Fatalf("malformed 2xx response was not recovered: response=%+v err=%v hits=%d", response, err, hits.Load())
@@ -290,7 +179,7 @@ func TestAdapterMalformedSuccessfulResponseFailsWithSafeDiagnostics(t *testing.T
 		_, _ = w.Write([]byte("<html>gateway failure</html>"))
 	}))
 	defer server.Close()
-	adapter := NewDeepSeekAdapter(DeepSeekConfig{APIKey: "secret", BaseURL: server.URL, Model: "deepseek-chat"})
+	adapter := NewResponsesAdapter(AdapterConfig{Provider: "custom", APIKey: "secret", BaseURL: server.URL, Model: "test-model"})
 	adapter.http.maxRetries = 0
 	_, err := adapter.Generate(context.Background(), GenerateRequest{})
 	var providerErr *ProviderError
@@ -317,5 +206,39 @@ func TestPrepareProviderImageCompressesToProviderLimit(t *testing.T) {
 	}
 	if mimeType != "image/jpeg" || len(raw) == 0 || len(raw) > 24*1024 {
 		t.Fatalf("compression did not honor the provider limit: mime=%s bytes=%d", mimeType, len(raw))
+	}
+}
+
+func TestProtocolEndpointPreservesGatewayPrefix(t *testing.T) {
+	for _, tc := range []struct{ base, path, want string }{
+		{"https://gateway.example/v1/", "/responses", "https://gateway.example/v1/responses"},
+		{"https://gateway.example/team/anthropic/v1", "/messages", "https://gateway.example/team/anthropic/v1/messages"},
+		{"https://gateway.example/team%2Fone/v1", "/responses", "https://gateway.example/team%2Fone/v1/responses"},
+	} {
+		got, err := providerEndpoint(tc.base, tc.path)
+		if err != nil || got != tc.want {
+			t.Fatalf("endpoint=%s error=%v", got, err)
+		}
+	}
+}
+
+func TestProtocolsDoNotForwardCredentialsOnRedirect(t *testing.T) {
+	for _, protocol := range []string{ProtocolResponses, ProtocolAnthropic} {
+		t.Run(protocol, func(t *testing.T) {
+			var hits atomic.Int32
+			target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
+			defer target.Close()
+			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+			}))
+			defer gateway.Close()
+			h := newAdapterHTTP("secret", gateway.URL, time.Second)
+			h.protocol = protocol
+			var response any
+			err := h.doJSON(context.Background(), "/messages", map[string]any{}, nil, &response)
+			if !errors.Is(err, ErrBadRequest) || hits.Load() != 0 {
+				t.Fatalf("redirect forwarded credentials: %v hits=%d", err, hits.Load())
+			}
+		})
 	}
 }

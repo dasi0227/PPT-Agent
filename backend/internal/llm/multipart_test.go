@@ -32,7 +32,7 @@ func TestAdaptersPreserveMultipartMessagesOnWire(t *testing.T) {
 		{Role: RoleAssistant, Content: []ContentPart{{Type: "text", Text: "先读取页面"}, {Type: "text", Text: "再复述选中内容"}}, ToolCalls: []ToolCall{{ID: "call-one", Name: "read_ppt", Args: map[string]any{}}}},
 		{Role: RoleTool, ToolCallID: "call-one", Content: []ContentPart{{Type: "text", Text: "页面内容"}, {Type: "text", Text: "补充定位信息"}}},
 	}
-	for _, name := range []string{"deepseek", "kimi", "openai"} {
+	for _, name := range []string{"responses"} {
 		t.Run(name, func(t *testing.T) {
 			received := make(chan map[string]any, 1)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -43,18 +43,10 @@ func TestAdaptersPreserveMultipartMessagesOnWire(t *testing.T) {
 					return
 				}
 				received <- body
-				_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"done"}}],"output":[{"type":"message","content":[{"type":"output_text","text":"第一段回复"},{"type":"output_text","text":"第二段回复"}]}]}`))
+				_, _ = w.Write([]byte(`{"output":[{"type":"message","content":[{"type":"output_text","text":"第一段回复"},{"type":"output_text","text":"第二段回复"}]}]}`))
 			}))
 			defer server.Close()
-			var provider Provider
-			switch name {
-			case "deepseek":
-				provider = NewDeepSeekAdapter(DeepSeekConfig{APIKey: "test", BaseURL: server.URL, Model: "test"})
-			case "kimi":
-				provider = NewKimiAdapter(KimiConfig{APIKey: "test", BaseURL: server.URL, Model: "test"})
-			case "openai":
-				provider = NewOpenAIAdapter(OpenAIConfig{APIKey: "test", BaseURL: server.URL, Model: "test"})
-			}
+			provider := NewResponsesAdapter(AdapterConfig{Provider: "custom", APIKey: "test", BaseURL: server.URL, Model: "test"})
 			response, err := provider.Generate(context.Background(), GenerateRequest{
 				Messages: messages,
 				ImageResolver: &staticImageResolver{data: ImageData{
@@ -66,7 +58,7 @@ func TestAdaptersPreserveMultipartMessagesOnWire(t *testing.T) {
 			}
 			body := <-received
 			var wire []any
-			if name == "openai" {
+			if name == "responses" {
 				wire = append(wire, map[string]any{"role": "system", "content": body["instructions"]})
 				for _, value := range body["input"].([]any) {
 					item := value.(map[string]any)

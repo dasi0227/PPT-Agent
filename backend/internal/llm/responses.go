@@ -4,55 +4,45 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
-	"time"
 )
 
-type OpenAIConfig struct {
-	APIKey  string
-	BaseURL string
-	Model   string
-	Timeout time.Duration
-}
-
-// OpenAIAdapter maps normalized Runtime messages to the Responses API.
-type OpenAIAdapter struct {
+// ResponsesAdapter maps normalized Runtime messages to the Responses API.
+type ResponsesAdapter struct {
+	provider     string
 	model        string
 	capabilities Capabilities
 	http         adapterHTTP
 }
 
-var _ Provider = (*OpenAIAdapter)(nil)
+var _ Provider = (*ResponsesAdapter)(nil)
 
-func NewOpenAIAdapter(cfg OpenAIConfig) *OpenAIAdapter {
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = "https://api.openai.com/v1"
-	}
-	return &OpenAIAdapter{
-		model: cfg.Model, capabilities: productCapabilities(),
+func NewResponsesAdapter(cfg AdapterConfig) *ResponsesAdapter {
+	return &ResponsesAdapter{
+		provider: cfg.Provider, model: cfg.Model, capabilities: productCapabilities(),
 		http: newAdapterHTTP(cfg.APIKey, cfg.BaseURL, cfg.Timeout),
 	}
 }
 
-func (o *OpenAIAdapter) Name() string  { return "openai" }
-func (o *OpenAIAdapter) Model() string { return o.model }
-func (o *OpenAIAdapter) String() string {
-	return fmt.Sprintf("OpenAIAdapter{Model:%q}", o.model)
+func (o *ResponsesAdapter) Name() string  { return o.provider }
+func (o *ResponsesAdapter) Model() string { return o.model }
+func (o *ResponsesAdapter) String() string {
+	return fmt.Sprintf("ResponsesAdapter{Model:%q}", o.model)
 }
-func (o *OpenAIAdapter) GoString() string { return o.String() }
-func (o *OpenAIAdapter) Capabilities() Capabilities {
+func (o *ResponsesAdapter) GoString() string { return o.String() }
+func (o *ResponsesAdapter) Capabilities() Capabilities {
 	return cloneCapabilities(o.capabilities)
 }
 
 type responsesRequest struct {
-	Model              string          `json:"model"`
-	Instructions       string          `json:"instructions,omitempty"`
-	Input              []any           `json:"input"`
-	Tools              []responsesTool `json:"tools,omitempty"`
-	PreviousResponseID string          `json:"previous_response_id,omitempty"`
-	MaxOutputTokens    int             `json:"max_output_tokens,omitempty"`
+	Model           string          `json:"model"`
+	Instructions    string          `json:"instructions,omitempty"`
+	Input           []any           `json:"input"`
+	Tools           []responsesTool `json:"tools,omitempty"`
+	Store           bool            `json:"store"`
+	Include         []string        `json:"include,omitempty"`
+	MaxOutputTokens int             `json:"max_output_tokens,omitempty"`
 }
 
 type responsesTool struct {
@@ -81,57 +71,44 @@ type responsesUsage struct {
 }
 
 type responsesResponse struct {
-	ID     string                `json:"id"`
-	Output []responsesOutputItem `json:"output"`
-	Usage  responsesUsage        `json:"usage"`
+	ID     string            `json:"id"`
+	Output []json.RawMessage `json:"output"`
+	Status string            `json:"status"`
+	Usage  responsesUsage    `json:"usage"`
 }
 
-type openAIContinuation struct {
-	PreviousResponseID string `json:"previous_response_id"`
-	MessageCount       int    `json:"message_count"`
-	InputHash          string `json:"input_hash"`
-	ToolsHash          string `json:"tools_hash"`
-	OutputHash         string `json:"output_hash"`
-}
-
-func (o *OpenAIAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
+func (o *ResponsesAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
 	if err := validateContinuation(req.Continuation, o.Name(), o.Model()); err != nil {
 		return GenerateResponse{}, err
 	}
-	continuation, err := decodeOpenAIContinuation(req.Continuation)
+	replay, err := responsesReplay(req, o.http.baseURL)
 	if err != nil {
 		return GenerateResponse{}, err
 	}
-	start := 0
-	if continuation.PreviousResponseID != "" {
-		if reason := openAIContinuationMismatch(continuation, req); reason != "" {
-			// Compaction changed the normalized history. Fall back to a full
-			// stateless request instead of attaching mismatched response state.
-			continuation = openAIContinuation{}
-			if req.OnContinuationReset != nil {
-				req.OnContinuationReset(reason)
-			}
-		} else {
-			start = continuation.MessageCount
-		}
-	}
 	instructions := collectSystemInstructions(req.Messages)
-	input, err := o.responsesInput(ctx, req.Messages[start:], req.ImageResolver, continuation.PreviousResponseID != "")
+	input, err := o.responsesInput(ctx, req.Messages, req.ImageResolver, replay)
 	if err != nil {
 		return GenerateResponse{}, err
 	}
 	body := responsesRequest{
 		Model: o.model, Instructions: instructions, Input: input,
-		Tools: responsesTools(req.Tools), PreviousResponseID: continuation.PreviousResponseID,
+		Tools: responsesTools(req.Tools), Store: false, Include: []string{"reasoning.encrypted_content"},
 		MaxOutputTokens: req.MaxOutputTokens,
 	}
 	var wire responsesResponse
-	if err := o.http.doJSON(ctx, "/v1/responses", body, req.OnRetry, &wire); err != nil {
+	if err := o.http.doJSON(ctx, "/responses", body, req.OnRetry, &wire); err != nil {
 		return GenerateResponse{}, err
+	}
+	if wire.Status == "failed" || wire.Status == "incomplete" || len(wire.Output) == 0 {
+		return GenerateResponse{}, fmt.Errorf("%w: response is incomplete or empty", ErrUnavailable)
 	}
 	content := make([]ContentPart, 0)
 	toolCalls := make([]ToolCall, 0)
-	for _, item := range wire.Output {
+	for _, raw := range wire.Output {
+		var item responsesOutputItem
+		if err := json.Unmarshal(raw, &item); err != nil {
+			return GenerateResponse{}, fmt.Errorf("%w: invalid response item", ErrUnavailable)
+		}
 		switch item.Type {
 		case "message":
 			for _, part := range item.Content {
@@ -150,18 +127,10 @@ func (o *OpenAIAdapter) Generate(ctx context.Context, req GenerateRequest) (Gene
 			toolCalls = append(toolCalls, ToolCall{ID: item.CallID, Name: item.Name, Args: args})
 		}
 	}
-	var next *ProviderContinuation
-	if wire.ID != "" {
-		raw, err := json.Marshal(openAIContinuation{
-			PreviousResponseID: wire.ID, MessageCount: len(req.Messages),
-			InputHash: continuationFingerprint(req.Messages), ToolsHash: continuationFingerprint(req.Tools),
-			OutputHash: continuationMessageFingerprint(Message{Role: RoleAssistant, Content: content, ToolCalls: toolCalls}),
-		})
-		if err != nil {
-			return GenerateResponse{}, fmt.Errorf("%w: encode continuation", ErrBadRequest)
-		}
-		next = &ProviderContinuation{Provider: o.Name(), Model: o.Model(), Opaque: raw}
+	if len(content) == 0 && len(toolCalls) == 0 {
+		return GenerateResponse{}, fmt.Errorf("%w: response contains no text or tool calls", ErrUnavailable)
 	}
+	next := newResponsesState(req, replay, wire.Output, content, toolCalls, o.provider, o.model, o.http.baseURL)
 	return GenerateResponse{
 		Content: content, ToolCalls: toolCalls, Continuation: next,
 		Usage: Usage{
@@ -169,17 +138,6 @@ func (o *OpenAIAdapter) Generate(ctx context.Context, req GenerateRequest) (Gene
 			TotalTokens: wire.Usage.TotalTokens,
 		},
 	}, nil
-}
-
-func decodeOpenAIContinuation(value *ProviderContinuation) (openAIContinuation, error) {
-	if value == nil || len(value.Opaque) == 0 {
-		return openAIContinuation{}, nil
-	}
-	var out openAIContinuation
-	if err := json.Unmarshal(value.Opaque, &out); err != nil {
-		return openAIContinuation{}, fmt.Errorf("%w: invalid continuation", ErrBadRequest)
-	}
-	return out, nil
 }
 
 func collectSystemInstructions(messages []Message) string {
@@ -192,20 +150,21 @@ func collectSystemInstructions(messages []Message) string {
 	return strings.Join(instructions, "\n\n")
 }
 
-func (o *OpenAIAdapter) responsesInput(
+func (o *ResponsesAdapter) responsesInput(
 	ctx context.Context,
 	messages []Message,
 	resolver ImageRefResolver,
-	nativeContinuation bool,
+	replay []responsesTurn,
 ) ([]any, error) {
 	out := make([]any, 0, len(messages))
-	for _, message := range messages {
+	for index, message := range messages {
 		if message.Role == RoleSystem {
 			continue
 		}
-		if nativeContinuation && message.Role == RoleAssistant {
-			// The prior Responses output is already referenced by
-			// previous_response_id.
+		if items := replayItems(replay, index); len(items) > 0 {
+			for _, item := range items {
+				out = append(out, item)
+			}
 			continue
 		}
 		switch message.Role {
@@ -251,7 +210,7 @@ func (o *OpenAIAdapter) responsesInput(
 	return out, nil
 }
 
-func (o *OpenAIAdapter) responsesContent(
+func (o *ResponsesAdapter) responsesContent(
 	ctx context.Context,
 	parts []ContentPart,
 	resolver ImageRefResolver,
@@ -262,25 +221,9 @@ func (o *OpenAIAdapter) responsesContent(
 		case "text":
 			out = append(out, map[string]any{"type": "input_text", "text": part.Text})
 		case "image":
-			if !o.capabilities.Vision {
-				return nil, fmt.Errorf("%w: model does not support image input", ErrBadRequest)
-			}
-			if resolver == nil {
-				return nil, fmt.Errorf("%w: image resolver is required", ErrImageReference)
-			}
-			data, err := resolver.ResolveImage(ctx, part.ImageRef)
+			raw, mimeType, err := resolveProviderImage(ctx, part.ImageRef, resolver, o.capabilities)
 			if err != nil {
-				if ctx.Err() != nil {
-					return nil, ctx.Err()
-				}
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					return nil, err
-				}
-				return nil, fmt.Errorf("%w: %v", ErrImageReference, err)
-			}
-			raw, mimeType, err := prepareProviderImage(data, o.capabilities)
-			if err != nil {
-				return nil, fmt.Errorf("%w: invalid image input", ErrImageReference)
+				return nil, err
 			}
 			detail := part.Detail
 			if detail != "low" && detail != "high" {
@@ -301,7 +244,7 @@ func responsesTools(tools []ToolSchema) []responsesTool {
 	for i, tool := range tools {
 		out[i] = responsesTool{
 			Type: "function", Name: tool.Name,
-			Description: tool.Description, Parameters: tool.Parameters,
+			Description: tool.Description, Parameters: toolParameters(tool.Parameters),
 		}
 	}
 	return out

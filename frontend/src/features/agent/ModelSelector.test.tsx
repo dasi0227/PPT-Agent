@@ -9,7 +9,7 @@ describe('ModelSelector', () => {
       <ModelSelector
         profiles={[{
           name: '文本模型',
-          model: 'text-model',
+          provider: 'custom', protocol: 'responses', model: 'text-model',
           capabilities: { vision: false, tool_calls: true, multiple_tool_calls: true, context_window_tokens: 65536 },
         }]}
         value="文本模型"
@@ -33,12 +33,12 @@ describe('ModelSelector', () => {
         profiles={[
           {
             name: 'DeepSeek Flash',
-            model: 'deepseek-flash',
+            provider: 'custom', protocol: 'responses', model: 'deepseek-flash',
             capabilities: { vision: false, tool_calls: true, multiple_tool_calls: true, context_window_tokens: 65536 },
           },
           {
             name: 'Kimi K2',
-            model: 'kimi-k2',
+            provider: 'custom', protocol: 'responses', model: 'kimi-k2',
             capabilities: { vision: false, tool_calls: true, multiple_tool_calls: true, context_window_tokens: 65536 },
           },
         ]}

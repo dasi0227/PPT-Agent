@@ -27,6 +27,8 @@ const (
 type LLMProfile struct {
 	Name     string `yaml:"name"`
 	Provider string `yaml:"provider"`
+	Protocol string `yaml:"protocol"`
+	BaseURL  string `yaml:"base_url"`
 	Model    string `yaml:"model"`
 	Key      string `yaml:"key"`
 }
@@ -135,6 +137,8 @@ func NormalizeLLMConfig(cfg *LLMConfig) {
 		p := &cfg.Profiles[i]
 		p.Name = strings.TrimSpace(p.Name)
 		p.Provider = strings.TrimSpace(p.Provider)
+		p.Protocol = strings.TrimSpace(p.Protocol)
+		p.BaseURL = NormalizeModelBaseURL(p.BaseURL)
 		p.Model = strings.TrimSpace(p.Model)
 		p.Key = strings.TrimSpace(p.Key)
 	}
@@ -190,10 +194,8 @@ func validateLLMProfile(profile LLMProfile, label string) error {
 			return fmt.Errorf("%s.name must not contain control characters", label)
 		}
 	}
-	switch profile.Provider {
-	case "deepseek", "kimi", "openai":
-	default:
-		return fmt.Errorf("MODEL_PROVIDER_UNSUPPORTED: %s.provider is unsupported", label)
+	if err := ValidateModelAccess(profile.Provider, profile.Protocol, profile.BaseURL); err != nil {
+		return fmt.Errorf("%s: %w", label, err)
 	}
 	if strings.TrimSpace(profile.Model) == "" {
 		return fmt.Errorf("%s.model must not be empty", label)

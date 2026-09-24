@@ -286,6 +286,8 @@ export interface LLMProfileCapabilities {
 
 export interface LLMProfile {
   name: string;
+  provider: string;
+  protocol: 'responses' | 'anthropic';
   model: string;
   capabilities: LLMProfileCapabilities;
 }

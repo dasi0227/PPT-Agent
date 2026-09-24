@@ -2,16 +2,26 @@ import { fetchClient } from './client';
 
 export const SIDE_PURPOSES = ['rename', 'compact', 'commit', 'polish', 'handoff', 'kickoff'] as const;
 export type SidePurpose = typeof SIDE_PURPOSES[number];
+export type ModelProtocol = 'responses' | 'anthropic';
+export interface ModelProvider {
+  id: string;
+  name: string;
+  default_protocol: ModelProtocol;
+  base_urls: Partial<Record<ModelProtocol, string>>;
+}
 export interface ModelConfig {
   name: string;
   provider: string;
+  protocol: ModelProtocol;
+  base_url: string;
   model: string;
   has_key: boolean;
 }
 export interface RoadConfig { default: string; fallback: string | null }
 export interface ModelSettings {
   revision: string;
-  providers: string[];
+  providers: ModelProvider[];
+  protocols: ModelProtocol[];
   llm: ModelConfig[];
   main_road: RoadConfig;
   side_road: RoadConfig & Record<SidePurpose, string | null>;
@@ -20,10 +30,12 @@ export interface ModelEdit {
   previous_name?: string;
   name: string;
   provider: string;
+  protocol: ModelProtocol;
+  base_url: string;
   model: string;
   key?: string;
 }
-export type SettingsEdit = Omit<ModelSettings, 'providers' | 'llm'> & { llm: ModelEdit[] };
+export type SettingsEdit = Omit<ModelSettings, 'providers' | 'protocols' | 'llm'> & { llm: ModelEdit[] };
 export const settingsApi = {
   get: () => fetchClient<ModelSettings>('/settings/models', { reportError: false, cache: 'no-store' }),
   reload: () => fetchClient<ModelSettings>('/settings/models/reload', {

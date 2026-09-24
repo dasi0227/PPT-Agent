@@ -20,8 +20,8 @@ func (p registryFakeProvider) Generate(context.Context, GenerateRequest) (Genera
 
 func TestRegistrySupportsMultipleProfilesForOneProvider(t *testing.T) {
 	registry, err := NewRegistry("Kimi Vision", []ProfileConfig{
-		{Name: "Kimi Vision", Provider: "kimi", Model: "kimi-k3", Key: "one"},
-		{Name: "Kimi Text", Provider: "kimi", Model: "any-new-model", Key: "two"},
+		{Name: "Kimi Vision", Provider: "kimi", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "kimi-k3", Key: "one"},
+		{Name: "Kimi Text", Provider: "kimi", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "any-new-model", Key: "two"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -36,9 +36,34 @@ func TestRegistrySupportsMultipleProfilesForOneProvider(t *testing.T) {
 	}
 }
 
+func TestRegistrySelectsProtocolIndependentlyOfBrand(t *testing.T) {
+	r, err := NewRegistry("Responses", []ProfileConfig{
+		{Name: "Responses", Provider: "kimi", Protocol: ProtocolResponses, BaseURL: "https://gateway.example/one/v1/", Model: "same-model", Key: "one"},
+		{Name: "Messages", Provider: "kimi", Protocol: ProtocolAnthropic, BaseURL: "https://gateway.example/two/v1", Model: "same-model", Key: "two"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _ := r.Resolve("Responses")
+	second, _ := r.Resolve("Messages")
+	if _, ok := first.Adapter().(*ResponsesAdapter); !ok {
+		t.Fatal("brand overrode Responses selection")
+	}
+	if _, ok := second.Adapter().(*AnthropicAdapter); !ok {
+		t.Fatal("brand overrode Anthropic selection")
+	}
+	if first.URL() != "https://gateway.example/one/v1" || first.Adapter().Name() != "kimi" || second.Adapter().Name() != "kimi" {
+		t.Fatal("endpoint or branding was lost")
+	}
+	public := r.Public()
+	if public.Profiles[0].Provider != "kimi" || public.Profiles[0].Protocol != ProtocolResponses || public.Profiles[1].Protocol != ProtocolAnthropic {
+		t.Fatal("public model identity does not match the configuration")
+	}
+}
+
 func TestRegistryUsesProductCapabilitiesForEveryConfiguredModel(t *testing.T) {
 	registry, err := NewRegistry("Unknown", []ProfileConfig{{
-		Name: "Unknown", Provider: "openai",
+		Name: "Unknown", Provider: "openai", Protocol: "responses", BaseURL: "https://api.openai.com/v1",
 		Model: "future-unregistered-model", Key: "secret",
 	}})
 	if err != nil {
@@ -88,7 +113,7 @@ func TestConfiguredProvidersUseFixedContextWindow(t *testing.T) {
 	}
 	for _, tc := range cases {
 		registry, err := NewRegistry("Profile", []ProfileConfig{{
-			Name: "Profile", Provider: tc.provider, Model: tc.model, Key: "secret",
+			Name: "Profile", Provider: tc.provider, Protocol: ProtocolResponses, BaseURL: "https://gateway.example/v1", Model: tc.model, Key: "secret",
 		}})
 		if err != nil {
 			t.Fatal(err)

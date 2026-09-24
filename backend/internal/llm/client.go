@@ -108,8 +108,8 @@ type ToolCall struct {
 	Args map[string]any
 }
 
-// ProviderContinuation is deliberately opaque to Runtime. Adapters use it for
-// provider protocol state such as OpenAI response state.
+// ProviderContinuation is client-owned, opaque protocol replay data. It never
+// references a remote conversation; each request sends its complete context.
 type ProviderContinuation struct {
 	Provider string          `json:"provider"`
 	Model    string          `json:"model"`
@@ -144,7 +144,8 @@ func (r GenerateResponse) Text() string {
 	return contentText(r.Content)
 }
 
-// Provider is the only model protocol used by the core ReAct Runtime.
+// Provider is the normalized model client used by Runtime. Brand identity is
+// independent of the Responses or Anthropic wire format selected by the registry.
 type Provider interface {
 	Name() string
 	Model() string

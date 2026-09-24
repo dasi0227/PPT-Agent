@@ -14,7 +14,7 @@ import (
 
 func TestSettingsSaveIsAtomicAndPreservesPinnedCredentials(t *testing.T) {
 	cfg := config.LLMConfig{
-		Profiles: []config.LLMProfile{{Name: "Main", Provider: "openai", Model: "main", Key: "private-main-key"}, {Name: "Side", Provider: "kimi", Model: "mini", Key: "private-side-key"}},
+		Profiles: []config.LLMProfile{{Name: "Main", Provider: "openai", Protocol: "responses", BaseURL: "https://api.openai.com/v1", Model: "main", Key: "private-main-key"}, {Name: "Side", Provider: "kimi", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "mini", Key: "private-side-key"}},
 		MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Side"},
 	}
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -33,8 +33,8 @@ func TestSettingsSaveIsAtomicAndPreservesPinnedCredentials(t *testing.T) {
 		t.Fatal("read settings exposed credentials")
 	}
 	edit := SettingsEdit{Revision: before.Revision, Profiles: []ProfileEdit{
-		{PreviousName: "Main", Name: "Renamed", Provider: "openai", Model: "main"},
-		{PreviousName: "Side", Name: "Side", Provider: "kimi", Model: "mini"},
+		{PreviousName: "Main", Name: "Renamed", Provider: "openai", Protocol: "responses", BaseURL: "https://api.openai.com/v1", Model: "main"},
+		{PreviousName: "Side", Name: "Side", Provider: "kimi", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "mini"},
 	}, Main: config.MainRoadLLMConfig{Default: "Renamed", Fallback: "Side"}, Side: cfg.SideRoad}
 	after, err := registry.SaveSettings(edit)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestSettingsSaveIsAtomicAndPreservesPinnedCredentials(t *testing.T) {
 }
 
 func TestSettingsRejectsProviderChangeWithoutReplacementKey(t *testing.T) {
-	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Model", Provider: "openai", Model: "m", Key: "secret"}}, MainRoad: config.MainRoadLLMConfig{Default: "Model"}, SideRoad: config.SideRoadLLMConfig{Default: "Model"}}
+	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Model", Provider: "openai", Protocol: "responses", BaseURL: "https://api.openai.com/v1", Model: "m", Key: "secret"}}, MainRoad: config.MainRoadLLMConfig{Default: "Model"}, SideRoad: config.SideRoadLLMConfig{Default: "Model"}}
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	raw, _ := yaml.Marshal(cfg)
 	if err := os.WriteFile(path, raw, 0600); err != nil {
@@ -90,7 +90,7 @@ func TestSettingsRejectsProviderChangeWithoutReplacementKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	settings, _ := registry.Settings()
-	edit := SettingsEdit{Revision: settings.Revision, Profiles: []ProfileEdit{{PreviousName: "Model", Name: "Model", Provider: "kimi", Model: "m"}}, Main: cfg.MainRoad, Side: cfg.SideRoad}
+	edit := SettingsEdit{Revision: settings.Revision, Profiles: []ProfileEdit{{PreviousName: "Model", Name: "Model", Provider: "kimi", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "m"}}, Main: cfg.MainRoad, Side: cfg.SideRoad}
 	if _, err := registry.SaveSettings(edit); err == nil {
 		t.Fatal("credentials were reused across providers")
 	}
@@ -101,9 +101,55 @@ func TestSettingsRejectsProviderChangeWithoutReplacementKey(t *testing.T) {
 	}
 }
 
+func TestSettingsPinsProtocolAndEndpointAndRequiresReplacementKey(t *testing.T) {
+	for _, change := range []string{"endpoint", "protocol"} {
+		t.Run(change, func(t *testing.T) {
+			cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Model", Provider: "openai", Protocol: ProtocolResponses, BaseURL: "https://first.example/v1", Model: "m", Key: "old-secret"}}, MainRoad: config.MainRoadLLMConfig{Default: "Model"}, SideRoad: config.SideRoadLLMConfig{Default: "Model"}}
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			raw, _ := yaml.Marshal(cfg)
+			if err := os.WriteFile(path, raw, 0600); err != nil {
+				t.Fatal(err)
+			}
+			r, err := NewConfiguredRegistry(path, cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pinned := r.Snapshot()
+			settings, _ := r.Settings()
+			edit := SettingsEdit{Revision: settings.Revision, Profiles: []ProfileEdit{{PreviousName: "Model", Name: "Model", Provider: "openai", Protocol: ProtocolResponses, BaseURL: "https://first.example/v1", Model: "m"}}, Main: cfg.MainRoad, Side: cfg.SideRoad}
+			if change == "endpoint" {
+				edit.Profiles[0].BaseURL = "https://second.example/prefix/v1/"
+			} else {
+				edit.Profiles[0].Protocol = ProtocolAnthropic
+			}
+			if _, err := r.SaveSettings(edit); err == nil {
+				t.Fatal("old credential crossed a connection boundary")
+			}
+			afterFailure, _ := os.ReadFile(path)
+			if string(afterFailure) != string(raw) {
+				t.Fatal("failed save changed the configuration")
+			}
+			key := "replacement-key"
+			edit.Profiles[0].Key = &key
+			after, err := r.SaveSettings(edit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			old, _ := pinned.Resolve("Model")
+			current, _ := r.Resolve("Model")
+			if old.Protocol() != ProtocolResponses || old.URL() != "https://first.example/v1" || current.Protocol() != edit.Profiles[0].Protocol || current.URL() != config.NormalizeModelBaseURL(edit.Profiles[0].BaseURL) {
+				t.Fatal("save changed a pinned connection or lost the new connection")
+			}
+			if after.Profiles[0].Protocol != current.Protocol() || after.Profiles[0].BaseURL != current.URL() || pinned.routing.Fingerprint == r.Snapshot().routing.Fingerprint {
+				t.Fatal("published configuration did not include protocol and endpoint")
+			}
+		})
+	}
+}
+
 func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 	cfg := config.LLMConfig{
-		Profiles: []config.LLMProfile{{Name: "Main", Provider: "openai", Model: "m", Key: "old-secret"}},
+		Profiles: []config.LLMProfile{{Name: "Main", Provider: "openai", Protocol: "responses", BaseURL: "https://api.openai.com/v1", Model: "m", Key: "old-secret"}},
 		MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Main"},
 	}
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -149,7 +195,7 @@ func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 	if err != nil || strings.Contains(string(public), "secret") {
 		t.Fatal("reload exposed credentials")
 	}
-	edit := SettingsEdit{Revision: before.Revision, Profiles: []ProfileEdit{{PreviousName: "Main", Name: "Main", Provider: "openai", Model: "m"}}, Main: cfg.MainRoad, Side: cfg.SideRoad}
+	edit := SettingsEdit{Revision: before.Revision, Profiles: []ProfileEdit{{PreviousName: "Main", Name: "Main", Provider: "openai", Protocol: "responses", BaseURL: "https://api.openai.com/v1", Model: "m"}}, Main: cfg.MainRoad, Side: cfg.SideRoad}
 	_, err = registry.SaveSettings(edit)
 	var conflict *SettingsError
 	if !errors.As(err, &conflict) || conflict.Code != "SETTINGS_REVISION_CONFLICT" {

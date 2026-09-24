@@ -3,7 +3,8 @@ import { HomeLogo } from '../../components/ui/HomeLogo';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom';
 import { Cpu, Eye, EyeOff, Keyboard, Loader2, Plus, RefreshCw, Route, Trash2 } from 'lucide-react';
-import { settingsApi, SIDE_PURPOSES, type SidePurpose } from '../../api/settings';
+import { settingsApi, SIDE_PURPOSES, type SidePurpose, type ModelProvider, type ModelProtocol } from '../../api/settings';
+import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { IconButton } from '../../components/ui/primitives';
 import { Select } from '../../components/ui/select';
@@ -12,17 +13,17 @@ import { useProjectStore } from '../../stores/projectStore';
 import { showGlobalError, showGlobalSuccess, showGlobalWarning } from '../../stores/toastStore';
 import { homeRoute, projectRoute } from '../workspace/routes';
 import { cn } from '../../lib/utils';
-import { applySavedSettings, makeDraft, modelChanged, prepareModelSave, savedSnapshot, settingsPayload, validation, type Draft, type DraftModel, type Editable } from './modelSettingsDraft';
+import { applySavedSettings, canKeepKey, changeProvider, changeProtocol, makeDraft, modelChanged, prepareModelSave, savedSnapshot, settingsPayload, validation, type Draft, type DraftModel, type Editable } from './modelSettingsDraft';
 import './settings.css';
 
-const providerNames: Record<string, string> = { openai: 'OpenAI', deepseek: 'DeepSeek', kimi: 'Kimi' };
+const protocolNames: Record<ModelProtocol, string> = { responses: 'Responses', anthropic: 'Anthropic Messages' };
 const purposeLabels: Record<SidePurpose, [string, string]> = {
   rename: ['会话命名', '自动命名与立即命名'], compact: ['上下文压缩', '自动压缩与手动压缩'],
   commit: ['提交说明', '生成 Git 提交标题与摘要'], polish: ['输入润色', '整理并润色当前输入'],
   handoff: ['交接内容', '生成交接说明及后续修订'], kickoff: ['启动说明', '生成开发启动说明及后续修订'],
 };
-function ModelCard({ row, edit, open, providers, busy, saving, changed, error, onOpen, onEdit, onSave, onCancel, onDelete }: {
-  row: DraftModel; edit: Editable; open: boolean; providers: string[]; busy: boolean; saving: boolean; changed: boolean; error?: string;
+function ModelCard({ row, edit, open, providers, protocols, busy, saving, changed, error, onOpen, onEdit, onSave, onCancel, onDelete }: {
+  row: DraftModel; edit: Editable; open: boolean; providers: ModelProvider[]; protocols: ModelProtocol[]; busy: boolean; saving: boolean; changed: boolean; error?: string;
   onOpen: () => void; onEdit: (edit: Editable) => void; onSave: () => void; onCancel: () => void; onDelete: () => void;
 }) {
   const [showKey, setShowKey] = useState(false);
@@ -49,7 +50,7 @@ function ModelCard({ row, edit, open, providers, busy, saving, changed, error, o
         <button ref={front} type="button" className="settings-card-face settings-card-front" disabled={busy}
           aria-expanded={open} aria-controls={`model-${row.id}`} tabIndex={open ? -1 : 0} aria-hidden={open}
           aria-label={`编辑 ${row.name || '新模型'}`} onClick={onOpen}>
-          <img src={`/model-logos/${row.provider || 'openai'}.svg`} alt="" width={60} height={60} />
+          <ModelProviderIcon provider={row.provider} size={60} className="h-[60px] w-[60px] object-contain" />
           <span>{row.name || '新模型'}</span>
           {changed && <small className="text-xs text-text-500">未保存</small>}
         </button>
@@ -57,21 +58,32 @@ function ModelCard({ row, edit, open, providers, busy, saving, changed, error, o
           aria-label={`编辑 ${row.name || '新模型'}`} aria-describedby={error ? `error-${row.id}` : undefined}
           onSubmit={(event) => { event.preventDefault(); onSave(); }} autoComplete="off" noValidate>
           <fieldset disabled={busy}>
-            <label><span>provider</span><Select
+            <label><span>品牌</span><Select
               data-provider-select
               aria-label="供应商"
               ownerId={row.id}
               value={edit.provider}
-              onValueChange={(value) => update('provider', value)}
-              options={providers.map((provider) => ({ value: provider, label: providerNames[provider] ?? provider }))}
+              onValueChange={(value) => { const provider = providers.find((item) => item.id === value); if (provider && value !== edit.provider) onEdit(changeProvider(edit, provider)); }}
+              options={providers.map((provider) => ({ value: provider.id, label: provider.name }))}
               disabled={busy}
               className="text-xs"
             /></label>
-            <label><span>name</span><input value={edit.name} onChange={(event) => update('name', event.target.value)} maxLength={80} placeholder="配置名称" /></label>
-            <label><span>model</span><input value={edit.model} onChange={(event) => update('model', event.target.value)} spellCheck={false} autoCapitalize="off" placeholder="模型标识" /></label>
-            <label><span>key</span><span className="settings-key">
+            <label><span>协议</span><Select
+              aria-label="API 协议" ownerId={row.id} value={edit.protocol}
+              onValueChange={(value) => { if (value !== edit.protocol) onEdit(changeProtocol(edit, value as ModelProtocol, providers.find((item) => item.id === edit.provider))); }}
+              options={protocols.map((protocol) => ({ value: protocol, label: protocolNames[protocol] }))}
+              disabled={busy} className="text-xs"
+            /></label>
+            <label><span>地址</span><input aria-label="API 基础地址" type="url" value={edit.base_url}
+              onChange={(event) => onEdit({ ...edit, base_url: event.target.value, key: '' })}
+              spellCheck={false} autoCapitalize="off" placeholder="https://gateway.example.com/v1"
+              aria-describedby={`url-help-${row.id}`} /></label>
+            <p id={`url-help-${row.id}`} className="settings-card-hint">填写 API 前缀（如 /v1），支持第三方或中转地址。</p>
+            <label><span>名称</span><input value={edit.name} onChange={(event) => update('name', event.target.value)} maxLength={80} placeholder="配置名称" /></label>
+            <label><span>模型</span><input value={edit.model} onChange={(event) => update('model', event.target.value)} spellCheck={false} autoCapitalize="off" placeholder="模型标识" /></label>
+            <label><span>密钥</span><span className="settings-key">
               <input type={showKey ? 'text' : 'password'} value={edit.key} onChange={(event) => update('key', event.target.value)}
-                spellCheck={false} autoCapitalize="off" placeholder={row.has_key && edit.provider === row.originalProvider ? '已配置，留空保留' : '输入 API key'} autoComplete="new-password" />
+                spellCheck={false} autoCapitalize="off" placeholder={canKeepKey(row, edit) ? '已配置，留空保留' : '输入 API key'} autoComplete="new-password" />
               <button type="button" onClick={() => setShowKey(!showKey)} aria-label={showKey ? '隐藏密钥' : '显示密钥'} aria-pressed={showKey}>
                 {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
@@ -223,7 +235,8 @@ export function SettingsPage() {
 
   function addModel() {
     if (!draft || saveInFlight.current || loading) return;
-    const row: DraftModel = { id: crypto.randomUUID(), name: '', provider: draft.providers[0], model: '', key: '', has_key: false, originalProvider: '' };
+    const provider = draft.providers[0];
+    const row: DraftModel = { id: crypto.randomUUID(), name: '', provider: provider.id, protocol: provider.default_protocol, base_url: provider.base_urls[provider.default_protocol] ?? '', model: '', key: '', has_key: false, originalProvider: '', originalProtocol: provider.default_protocol, originalBaseURL: '' };
     setDraft({ ...draft, llm: [...draft.llm, row] }); setOpenCard(row.id);
   }
 
@@ -293,7 +306,7 @@ export function SettingsPage() {
               section === 'models' ? <>
                 <div className="mb-4 flex justify-end"><button type="button" className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-accent hover:bg-accent-soft" disabled={saving} onClick={addModel}><Plus size={16} />添加模型</button></div>
                 <div ref={grid} className="settings-grid">
-                  {draft.llm.map((row) => <ModelCard key={row.id} row={row} edit={edits[row.id] ?? row} open={openCard === row.id} providers={draft.providers} busy={saving} saving={savingModelId === row.id} changed={modelChanged(row, edits[row.id])} error={cardErrors[row.id]}
+                  {draft.llm.map((row) => <ModelCard key={row.id} row={row} edit={edits[row.id] ?? row} open={openCard === row.id} providers={draft.providers} protocols={draft.protocols} busy={saving} saving={savingModelId === row.id} changed={modelChanged(row, edits[row.id])} error={cardErrors[row.id]}
                     onOpen={() => setOpenCard(row.id)} onEdit={(edit) => { setEdits((current) => ({ ...current, [row.id]: edit })); setCardErrors((current) => ({ ...current, [row.id]: '' })); }}
                     onSave={() => void saveCard(row)} onCancel={() => cancelCard(row)} onDelete={() => removeModel(row)} />)}
                 </div>

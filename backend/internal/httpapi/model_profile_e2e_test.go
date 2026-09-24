@@ -80,7 +80,7 @@ func TestLLMProfilesEndpointIsSafe(t *testing.T) {
 	}
 	body := response.Body.String()
 	for _, forbidden := range []string{
-		`"provider"`, `"url"`, `"key"`, "private-vision.invalid", "private-text.invalid", `"reasoning"`,
+		`"base_url"`, `"url"`, `"key"`, "private-vision.invalid", "private-text.invalid", `"reasoning"`,
 	} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("profile API leaked %q: %s", forbidden, body)
@@ -88,7 +88,7 @@ func TestLLMProfilesEndpointIsSafe(t *testing.T) {
 	}
 	for _, required := range []string{
 		`"default":"Vision Profile"`, `"name":"Vision Profile"`,
-		`"model":"kimi-k3"`, `"vision":true`, `"tool_calls":true`,
+		`"provider":"kimi"`, `"protocol"`, `"model":"kimi-k3"`, `"vision":true`, `"tool_calls":true`,
 	} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("profile API omitted %q: %s", required, body)
