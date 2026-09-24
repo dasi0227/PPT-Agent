@@ -1,0 +1,45 @@
+.preview-workspace {
+  container: preview-workspace / inline-size;
+}
+
+.preview-toolbar {
+  display: flex;
+  height: 48px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 0 12px;
+}
+
+.preview-theme-trigger {
+  width: 154px;
+  flex-shrink: 0;
+}
+
+/* Use the actual center pane width, including when the sidebars are resized. */
+@container preview-workspace (max-width: 650px) {
+  .preview-theme-trigger {
+    width: auto;
+  }
+
+  .preview-theme-name {
+    display: none;
+  }
+}
+
+.preview-status-bar {
+  height: 40px;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.preview-status-bar-content {
+  display: grid;
+  height: 100%;
+  min-width: 400px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}

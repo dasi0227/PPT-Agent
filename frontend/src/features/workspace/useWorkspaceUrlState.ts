@@ -24,11 +24,13 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
   const previousSlides = React.useRef<{ projectId?: string; ids: string[] }>({ ids: [] });
   const contentReady = Boolean(snapshot);
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
+  const activeDocument = useDeckStore((state) => state.activeDocument);
   const globalView = useDeckStore((state) => state.globalView);
   const previewMode = useDeckStore((state) => state.previewMode);
   const contentMode = useDeckStore((state) => state.contentMode);
   const setContentMode = useDeckStore((state) => state.setContentMode);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
+  const setActiveDocument = useDeckStore((state) => state.setActiveDocument);
   const setGlobalView = useDeckStore((state) => state.setGlobalView);
   const enterOverview = useDeckStore((state) => state.enterOverview);
   const exitOverview = useDeckStore((state) => state.exitOverview);
@@ -57,8 +59,15 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
     if (nextSlideId !== useDeckStore.getState().currentSlideId) {
       setCurrentSlideId(nextSlideId);
     }
+    const document = params.get('document');
+    const nextDocument = document === 'manifest' || document === 'design' ? document : null;
+    if (nextDocument !== useDeckStore.getState().activeDocument) {
+      // Apply after page state: selecting a page clears the document selection.
+      if (nextDocument) setActiveDocument(nextDocument);
+      else useDeckStore.setState({ activeDocument: null });
+    }
     setHydratedLocationKey(location.key);
-  }, [contentReady, enterOverview, exitOverview, hydratedLocationKey, location.key, location.search, projectId, setContentMode, setCurrentSlideId, setGlobalView, slides]);
+  }, [contentReady, enterOverview, exitOverview, hydratedLocationKey, location.key, location.search, projectId, setActiveDocument, setContentMode, setCurrentSlideId, setGlobalView, slides]);
 
   React.useEffect(() => { if (projectId && hydratedLocationKey === location.key) sessionStorage.setItem(`ppt-agent-content-mode-${projectId}`, contentMode); }, [contentMode, hydratedLocationKey, location.key, projectId]);
 
@@ -76,16 +85,18 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
       : slides[Math.min(Math.max(oldIndex, 0), slides.length - 1)]?.id;
     previousSlides.current = { projectId, ids: slides.map((slide) => slide.id) };
     if (!selectedSlideExists && currentSlideId !== (selectedSlideId ?? null)) {
-      setCurrentSlideId(selectedSlideId ?? null);
+      // Background page updates must not navigate away from a project document.
+      useDeckStore.setState({ currentSlideId: selectedSlideId ?? null });
     }
     const target = projectWorkspaceRoute(projectId, {
       slideId: selectedSlideId,
       view: globalView,
       mode: previewMode,
       content: contentMode,
+      document: activeDocument,
     });
     if (target !== current) {
       navigate(target, { replace: true });
     }
-  }, [contentMode, contentReady, currentSlideId, globalView, hydratedLocationKey, location.key, location.pathname, location.search, navigate, previewMode, projectId, setCurrentSlideId, slides]);
+  }, [activeDocument, contentMode, contentReady, currentSlideId, globalView, hydratedLocationKey, location.key, location.pathname, location.search, navigate, previewMode, projectId, slides]);
 }

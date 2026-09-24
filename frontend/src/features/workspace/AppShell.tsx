@@ -1,7 +1,6 @@
 import React from 'react';
 import { ProjectTabs } from './ProjectTabs';
 import { DeckNavigator } from '../deck/DeckNavigator';
-import { ThemeSelector } from '../viewer/ThemeSelector';
 import { PreviewWorkspace } from '../viewer/PreviewWorkspace';
 import { AgentPanel } from '../agent/AgentPanel';
 import { useUIStore } from '../../stores/uiStore';
@@ -12,8 +11,6 @@ import { workspacePanelLayout } from './panelLayout';
 
 export const AppShell: React.FC = () => {
   const preferences = useUIStore();
-  const [deckActionsTarget, setDeckActionsTarget] = React.useState<HTMLDivElement | null>(null);
-  const [themeTarget, setThemeTarget] = React.useState<HTMLDivElement | null>(null);
   const { activeProjectId } = useProjectStore();
   const shellRef = React.useRef<HTMLDivElement>(null);
   const [workspaceWidth, setWorkspaceWidth] = React.useState(() =>
@@ -52,7 +49,6 @@ export const AppShell: React.FC = () => {
   return (
     <div ref={shellRef} className="flex flex-col h-[100dvh] w-screen bg-workspace text-text-900 overflow-hidden font-sans relative">
       {activeProjectId !== null && <ProjectTabs />}
-      {activeProjectId !== null && <ThemeSelector key={activeProjectId} projectId={activeProjectId} container={themeTarget} />}
       
       <div className="flex flex-1 overflow-hidden relative">
         {activeProjectId === null ? (
@@ -66,14 +62,14 @@ export const AppShell: React.FC = () => {
             {!leftPanelHidden && (
               <>
                 <Panel id="left" order={1} defaultSize={layout.leftDefault} minSize={layout.leftMin} maxSize={26} collapsible={false} className="bg-panel border-r border-border">
-                  <DeckNavigator actionsRef={setDeckActionsTarget} />
+                  <DeckNavigator />
                 </Panel>
                 <PanelResizeHandle aria-label="调整左栏宽度" className="w-[3px] bg-border hover:bg-accent transition-colors" />
               </>
             )}
             
             <Panel id="center" order={2} defaultSize={layout.centerDefault} minSize={layout.centerMin} className="bg-canvas flex flex-col">
-              <PreviewWorkspace themeRef={setThemeTarget} deckActionsTarget={deckActionsTarget} sidebarControls={{
+              <PreviewWorkspace sidebarControls={{
                 leftHidden: leftPanelHidden,
                 rightHidden: rightPanelHidden,
                 canExpandLeft,

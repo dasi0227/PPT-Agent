@@ -13,7 +13,8 @@ import { fixedBindings, matchesShortcut } from '../lib/shortcuts';
 const sessions = new Map<string, { state: EditorState; scrollTop: number }>();
 const sourceTheme = EditorView.theme({
   '&': { height: '100%', fontSize: '13px', backgroundColor: 'var(--color-surface, #fff)' },
-  '.cm-scroller': { overflow: 'auto', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', lineHeight: '1.6' },
+  '.cm-scroller': { overflow: 'auto', scrollbarWidth: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', lineHeight: '1.6' },
+  '.cm-scroller::-webkit-scrollbar': { display: 'none' },
   '.cm-content': { minHeight: '100%', padding: '14px 0' },
   '.cm-gutters': { backgroundColor: 'var(--color-panel, #fafafa)', color: '#94a3b8', borderRight: '1px solid #e2e8f0' },
   '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#f3f7fc' },

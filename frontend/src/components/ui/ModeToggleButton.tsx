@@ -4,11 +4,12 @@ import { cn } from '../../lib/utils';
 type ModeOption = { value: string; label: string; icon: LucideIcon };
 
 /** Keep one persistent selection surface so both pointer and shortcut changes animate. */
-export function ModeToggleButton({ label, value, options, onValueChange }: {
+export function ModeToggleButton({ label, value, options, onValueChange, disabled = false }: {
   label: string;
   value: string;
   options: readonly [ModeOption, ModeOption];
   onValueChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const selectedIndex = options.findIndex(option => option.value === value);
   return (
@@ -23,9 +24,10 @@ export function ModeToggleButton({ label, value, options, onValueChange }: {
           key={optionValue}
           type="button"
           aria-pressed={value === optionValue}
+          disabled={disabled}
           onClick={() => onValueChange(optionValue)}
           className={cn(
-            'inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 font-medium transition-colors duration-200 hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft focus-visible:text-accent focus-visible:outline-none motion-reduce:transition-none',
+            'inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 font-medium transition-colors duration-200 enabled:hover:bg-accent-soft enabled:hover:text-accent focus-visible:bg-accent-soft focus-visible:text-accent focus-visible:outline-none disabled:cursor-not-allowed motion-reduce:transition-none',
             value === optionValue ? 'text-accent' : 'text-text-600',
           )}
         >

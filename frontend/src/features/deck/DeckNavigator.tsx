@@ -6,7 +6,6 @@ import {
   useState,
   type ComponentPropsWithoutRef,
   type ReactNode,
-  type Ref,
 } from 'react';
 import {
   ArrowDown,
@@ -18,6 +17,8 @@ import {
   FolderPlus,
   GripVertical,
   List,
+  NotebookPen,
+  Paintbrush,
   PanelLeftClose,
   Pencil,
   Plus,
@@ -51,6 +52,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
 import { buildRuntimeFrame } from '../viewer/runtimeFrame';
+import { partLabel } from '../viewer/semanticLabels';
 import {
   hasRenderedHTML,
   type ResourceState,
@@ -111,15 +113,15 @@ function DeckNavigatorChrome({
   sectionCount,
   onInsertSection,
   insertDisabled,
-  actionsRef,
 }: {
   pageCount: number;
   sectionCount: number;
   onInsertSection: () => void;
   insertDisabled: boolean;
-  actionsRef?: Ref<HTMLDivElement>;
 }) {
   const toggleLeftPanel = useUIStore((state) => state.toggleLeftPanel);
+  const activeDocument = useDeckStore((state) => state.activeDocument);
+  const setActiveDocument = useDeckStore((state) => state.setActiveDocument);
 
   return (
     <>
@@ -132,7 +134,6 @@ function DeckNavigatorChrome({
           <h2 className="truncate">目录</h2>
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-1">
-          <div ref={actionsRef} />
           <IconButton label="隐藏左侧目录" onClick={toggleLeftPanel}>
             <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
@@ -157,6 +158,23 @@ function DeckNavigatorChrome({
           <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
         </button>
       </div>
+      <nav aria-label="项目文档" className="shrink-0 space-y-0.5 border-b border-border px-2 py-2">
+        {([{ kind: 'manifest', icon: NotebookPen }, { kind: 'design', icon: Paintbrush }] as const).map(({ kind, icon: Icon }) => (
+          <button
+            key={kind}
+            type="button"
+            aria-current={activeDocument === kind ? 'page' : undefined}
+            onClick={() => setActiveDocument(kind)}
+            className={cn(
+              'flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm transition-colors focus-visible:bg-accent-soft focus-visible:text-accent',
+              activeDocument === kind ? 'bg-accent-soft font-medium text-accent' : 'text-text-600 hover:bg-panel-muted hover:text-text-900',
+            )}
+          >
+            <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            {partLabel(kind)}
+          </button>
+        ))}
+      </nav>
     </>
   );
 }
@@ -326,12 +344,13 @@ function SlideRow({
   );
 }
 
-export function DeckNavigator({ actionsRef }: { actionsRef?: Ref<HTMLDivElement> } = {}) {
+export function DeckNavigator() {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
   const mutateProject = useProjectStore((state) => state.mutateProject);
   const pendingMutation = useProjectStore((state) => activeProjectId ? state.mutationPendingByProjectId[activeProjectId] : false);
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
+  const activeDocument = useDeckStore((state) => state.activeDocument);
   const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const globalView = useDeckStore((state) => state.globalView);
   const { status } = useActiveSession();
@@ -409,7 +428,7 @@ export function DeckNavigator({ actionsRef }: { actionsRef?: Ref<HTMLDivElement>
     await commitMutation(request);
     if (deleteTarget.kind === 'page' && currentSlideId === deleteTarget.id) {
       const next = slides[index + 1] ?? slides[index - 1];
-      setCurrentSlideId(next?.id ?? null);
+      useDeckStore.setState({ currentSlideId: next?.id ?? null });
     }
   };
 
@@ -417,7 +436,6 @@ export function DeckNavigator({ actionsRef }: { actionsRef?: Ref<HTMLDivElement>
     return (
       <aside className="flex h-full min-h-0 flex-col border-r border-border-strong bg-panel" aria-label="演示目录">
         <DeckNavigatorChrome
-          actionsRef={actionsRef}
           pageCount={0}
           sectionCount={0}
           onInsertSection={() => {}}
@@ -434,7 +452,6 @@ export function DeckNavigator({ actionsRef }: { actionsRef?: Ref<HTMLDivElement>
     <>
       <aside className="flex h-full min-h-0 flex-col border-r border-border-strong bg-panel" aria-label="演示目录">
         <DeckNavigatorChrome
-          actionsRef={actionsRef}
           pageCount={slides.length}
           sectionCount={snapshot.outline.sections.length}
           onInsertSection={() => void insertSection()}
@@ -540,7 +557,7 @@ export function DeckNavigator({ actionsRef }: { actionsRef?: Ref<HTMLDivElement>
                           ordinal={ordinalById[node.slide_id] ?? index + 1}
                           siblingIndex={index}
                           siblingCount={section.slides.length}
-                          selected={currentSlideId === node.slide_id}
+                          selected={!activeDocument && currentSlideId === node.slide_id}
                           locked={locked}
                           pending={!snapshot.slides_by_id[node.slide_id]?.spec}
                           view={globalView}
@@ -601,7 +618,7 @@ export function DeckNavigator({ actionsRef }: { actionsRef?: Ref<HTMLDivElement>
                               ordinal={ordinalById[node.slide_id] ?? index + 1}
                               siblingIndex={index}
                               siblingCount={subsection.slides.length}
-                              selected={currentSlideId === node.slide_id}
+                              selected={!activeDocument && currentSlideId === node.slide_id}
                               locked={locked}
                               pending={!snapshot.slides_by_id[node.slide_id]?.spec}
                               view={globalView}

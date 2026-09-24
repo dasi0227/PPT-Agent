@@ -1,39 +1,25 @@
-import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   BarChart3,
-  AppWindow,
-  ChevronLeft,
-  ChevronRight,
   Code,
-  FileText,
-  FilePen,
   Layers,
-  LayoutGrid,
   List,
-  MonitorPlay,
-  MousePointer2,
-  PanelLeftOpen,
-  PanelRightOpen,
-  Presentation,
   Quote,
-  Scan,
   Table,
   TrendingUp,
   Type,
   Workflow,
-  ZoomIn,
-  ZoomOut,
   type LucideIcon,
 } from 'lucide-react';
 import type { Slide } from '../../api/types';
-import { Button, Disclosure, IconButton, InlineNotice, Skeleton } from '../../components/ui/primitives';
-import { ModeToggleButton } from '../../components/ui/ModeToggleButton';
+import { Button, Disclosure, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
+import { ProjectDocumentView } from './ProjectDocumentView';
 import { DesignSummary } from './DesignSummary';
 import { EmptyState } from './EmptyState';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
@@ -48,7 +34,6 @@ import { useThreadStore } from '../../stores/threadStore';
 import { useActiveSession, useActiveThreadId } from '../agent/useActiveSession';
 import { showGlobalWarning } from '../../stores/toastStore';
 import type { DOMSelection } from '../../api/types';
-import { ExportButton } from '../export/ExportButton';
 import { ExportProgressDialog } from '../export/ExportProgressDialog';
 import { useExportStore } from '../../stores/exportStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
@@ -56,6 +41,7 @@ import { useRunStore } from '../../stores/runStore';
 import { useCanvasPan } from './useCanvasPan';
 import { sourceDirty, sourceKey, useSourceEditorStore } from '../../stores/sourceEditorStore';
 import { useProjectHistoryStore } from '../../stores/projectHistoryStore';
+import { PreviewStatusBar, PreviewToolbar, type PreviewSidebarControls } from './PreviewControls';
 
 const ZOOM_MIN = 0.5;
 const SourceWorkspace = React.lazy(() => import('./SourceWorkspace').then((module) => ({ default: module.SourceWorkspace })));
@@ -296,21 +282,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 interface PreviewWorkspaceProps {
-  themeRef?: React.Ref<HTMLDivElement>;
-  deckActionsTarget?: HTMLDivElement | null;
-  sidebarControls?: {
-    leftHidden: boolean;
-    rightHidden: boolean;
-    canExpandLeft: boolean;
-    canExpandRight: boolean;
-    onExpandLeft: () => void;
-    onExpandRight: () => void;
-  };
+  sidebarControls?: PreviewSidebarControls;
 }
 
-export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarControls, deckActionsTarget, themeRef }) => {
+export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarControls }) => {
   const {
     currentSlideId,
+    activeDocument,
     previewMode,
     enterOverview,
     exitOverview,
@@ -370,17 +348,18 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const sourceKind = globalView === 'outline' ? 'spec' : 'html';
   const selectedSource = useSourceEditorStore((state) => projectId && currentSlide ? state.files[sourceKey(projectId, currentSlide.id, sourceKind)] : undefined);
   useEffect(() => {
-    if (contentMode === 'preview' && projectId && currentSlide) void useSourceEditorStore.getState().load(projectId, currentSlide.id, sourceKind);
-  }, [contentMode, projectId, currentSlide?.id, sourceKind]);
+    if (!activeDocument && contentMode === 'preview' && projectId && currentSlide) void useSourceEditorStore.getState().load(projectId, currentSlide.id, sourceKind);
+  }, [activeDocument, contentMode, projectId, currentSlide?.id, sourceKind]);
   const goPrev = useCallback(() => {
-    if (safePage > 0) setCurrentSlideId(slides[safePage - 1].id);
-  }, [safePage, setCurrentSlideId, slides]);
+    if (!activeDocument && safePage > 0) setCurrentSlideId(slides[safePage - 1].id);
+  }, [activeDocument, safePage, setCurrentSlideId, slides]);
   const goNext = useCallback(() => {
-    if (safePage < slides.length - 1) setCurrentSlideId(slides[safePage + 1].id);
-  }, [safePage, setCurrentSlideId, slides]);
+    if (!activeDocument && safePage < slides.length - 1) setCurrentSlideId(slides[safePage + 1].id);
+  }, [activeDocument, safePage, setCurrentSlideId, slides]);
   const zoomIn = useCallback(() => setZoom((value) => Math.min(ZOOM_MAX, Number((value * ZOOM_STEP).toFixed(3)))), []);
   const zoomOut = useCallback(() => setZoom((value) => Math.max(ZOOM_MIN, Number((value / ZOOM_STEP).toFixed(3)))), []);
   const currentHasHTML = currentSlide ? hasRenderedHTML(currentSlide) : false;
+  const presentationSlide = currentHasHTML ? currentSlide : slides.find(hasRenderedHTML);
   const currentView = currentSlide ? effectiveView(currentSlide.id, currentHasHTML) : 'html';
   const currentState = currentSlide ? getState(currentSlide) : { status: 'idle' as const };
   const runtimeSlides = useMemo<RuntimeSlide[]>(() => {
@@ -400,9 +379,9 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const selectionSlide = currentState.status === 'ready' && currentSlide?.html_hash ? {
     id: currentSlide.id, hash: currentSlide.html_hash,
   } : undefined;
-  const selectionEnabled = contentMode === 'preview' && previewMode === 'main' && currentView === 'html' && Boolean(selectionSlide) && !fullscreen
+  const selectionEnabled = !activeDocument && contentMode === 'preview' && previewMode === 'main' && currentView === 'html' && Boolean(selectionSlide) && !fullscreen
     && !['creating', 'waiting', 'paused', 'recovering', 'canceling'].includes(runSession.status);
-  const zoomEnabled = contentMode === 'preview' && hasSlides && previewMode === 'main' && currentView === 'html' && currentHasHTML;
+  const zoomEnabled = !activeDocument && contentMode === 'preview' && hasSlides && previewMode === 'main' && currentView === 'html' && currentHasHTML;
   const canvasPan = useCanvasPan({
     viewportRef: canvasRef,
     enabled: zoomEnabled && !fullscreen,
@@ -452,17 +431,17 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   }, [activeThreadId, ensureActiveThread, projectId, selectionMode, showRightPanel]);
 
   useEffect(() => {
-    if (!currentSlide || !currentHasHTML || currentView !== 'html' || previewMode !== 'main') return;
+    if (activeDocument || !currentSlide || !currentHasHTML || currentView !== 'html' || previewMode !== 'main') return;
     void load(currentSlide, 'current').then(() => {
       const previous = slides[safePage - 1];
       const next = slides[safePage + 1];
       if (previous && hasRenderedHTML(previous)) void load(previous, 'prefetch');
       if (next && hasRenderedHTML(next)) void load(next, 'prefetch');
     });
-  }, [currentHasHTML, currentSlide, currentView, load, previewMode, safePage, slides]);
+  }, [activeDocument, currentHasHTML, currentSlide, currentView, load, previewMode, safePage, slides]);
 
   useEffect(() => {
-    const onFullscreenChange = () => setFullscreen(document.fullscreenElement === canvasRef.current);
+    const onFullscreenChange = () => setFullscreen(Boolean(canvasRef.current && document.fullscreenElement === canvasRef.current));
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
@@ -473,7 +452,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
 
   useEffect(() => {
 	setSelectionMode('none');
-  }, [activeThreadId, currentSlideId, currentView, previewMode]);
+  }, [activeDocument, activeThreadId, currentSlideId, currentView, previewMode]);
 
   useEffect(() => {
     setZoom(1);
@@ -508,23 +487,38 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectionMode]);
 
-  useAppShortcuts(projectId ? {
+  const toggleOverview = useCallback(() => {
+    if (!hasSlides) return;
+    setContentMode('preview');
+    if (previewMode === 'overview') exitOverview();
+    else enterOverview();
+  }, [hasSlides, setContentMode, previewMode, exitOverview, enterOverview]);
+
+  useAppShortcuts(!projectId || !hasSlides ? {} : activeDocument ? {
+    'deck.overview': toggleOverview,
+  } : {
+    'deck.overview': toggleOverview,
     'deck.previous': goPrev,
     'deck.next': goNext,
-    'deck.overview': () => { if (hasSlides) { setContentMode('preview'); if (previewMode === 'overview') exitOverview(); else enterOverview(); } },
     'deck.zoom_in': () => { if (zoomEnabled) zoomIn(); },
     'deck.zoom_out': () => { if (zoomEnabled) zoomOut(); },
     'deck.view': () => setGlobalView(globalView === 'html' ? 'outline' : 'html'),
     'deck.form': () => setContentMode(contentMode === 'preview' ? 'source' : 'preview'),
     'deck.save': () => { if (contentMode === 'source' && projectId && currentSlide && !runBlocking && !commitBlocking && !exportBlocking && !historyBusy) void useSourceEditorStore.getState().save(sourceKey(projectId, currentSlide.id, sourceKind)); },
-  } : {});
+  });
 
   const present = useCallback(async () => {
+    const expectedSlideID = presentationSlide?.id;
+    if (!expectedSlideID) return;
+    // Mount the slide canvas while the click still carries fullscreen permission.
+    flushSync(() => {
+      setCurrentSlideId(expectedSlideID);
+      setGlobalView('html');
+      setContentMode('preview');
+      exitOverview();
+    });
     const canvas = canvasRef.current;
-    const expectedSlideID = currentSlide?.id;
-    if (!canvas || !expectedSlideID) return;
-    setGlobalView('html');
-    setContentMode('preview');
+    if (!canvas) return;
     try {
       await canvas.requestFullscreen();
     } catch {
@@ -532,122 +526,39 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     }
     replayRequestIDRef.current += 1;
     setReplayRequest({ id: replayRequestIDRef.current, slideId: expectedSlideID });
-  }, [currentSlide?.id, setContentMode, setGlobalView]);
-
-  // Keep canvas/fullscreen handlers here while displaying their controls in the directory header.
-  const deckActions = (
-    <div className="flex shrink-0 items-center gap-1">
-      <IconButton
-        label={previewMode === 'overview' ? '切换到单页视图' : '切换到概览视图'}
-        onClick={() => { setContentMode('preview'); if (previewMode === 'overview') exitOverview(); else enterOverview(); }}
-        disabled={!hasSlides}
-        className={hasSlides && previewMode === 'overview' ? 'bg-accent-soft text-accent' : undefined}
-      >
-        <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
-      </IconButton>
-      {contentMode === 'preview' && <IconButton label="全屏放映" onClick={present} disabled={!currentSlide || !currentHasHTML}>
-        <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
-      </IconButton>}
-      <div>
-        <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={(format) => projectId && void startExport(projectId, format)} />
-      </div>
-    </div>
-  );
-  const showActionsInDirectory = !leftPanelHidden && Boolean(deckActionsTarget);
+  }, [presentationSlide?.id, setCurrentSlideId, setContentMode, setGlobalView, exitOverview]);
 
   return (
-    <div className="relative flex h-full flex-col bg-canvas">
-      {showActionsInDirectory && createPortal(deckActions, deckActionsTarget!)}
-      <div className="grid min-h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-border bg-panel px-3 py-1.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          {!leftPanelHidden && !showActionsInDirectory && deckActions}
-          {leftPanelHidden && (
-            <IconButton
-              label="展开左侧目录"
-              onClick={sidebarControls?.onExpandLeft ?? ui.toggleLeftPanel}
-              disabled={sidebarControls && !sidebarControls.canExpandLeft}
-              title={sidebarControls && !sidebarControls.canExpandLeft ? '加宽窗口后可展开左侧目录' : '展开左侧目录'}
-            >
-              <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
-            </IconButton>
-          )}
-          <ModeToggleButton
-            label="切换视图"
-            value={globalView}
-            options={[
-              { value: 'outline', label: '设计稿', icon: FileText },
-              { value: 'html', label: '幻灯片', icon: Presentation },
-            ]}
-            onValueChange={value => setGlobalView(value === 'html' ? 'html' : 'outline')}
-          />
-          <ModeToggleButton
-            label="切换形态"
-            value={contentMode}
-            options={[
-              { value: 'preview', label: '预览', icon: AppWindow },
-              { value: 'source', label: '源码', icon: FilePen },
-            ]}
-            onValueChange={value => setContentMode(value === 'source' ? 'source' : 'preview')}
-          />
-        </div>
+    <div className="preview-workspace relative flex h-full min-h-0 min-w-0 flex-col bg-canvas">
+      <PreviewToolbar
+        projectId={projectId}
+        pageControlsDisabled={Boolean(activeDocument) || !hasSlides}
+        view={globalView}
+        onViewChange={setGlobalView}
+        contentMode={contentMode}
+        onContentModeChange={setContentMode}
+        selectionMode={selectionMode}
+        selectionEnabled={selectionEnabled}
+        onSelectionModeChange={setSelectionMode}
+        sidebarControls={sidebarControls ?? {
+          leftHidden: leftPanelHidden,
+          rightHidden: rightPanelHidden,
+          canExpandLeft: true,
+          canExpandRight: true,
+          onExpandLeft: ui.toggleLeftPanel,
+          onExpandRight: ui.toggleRightPanel,
+        }}
+      />
 
-        <div className="flex items-center gap-0.5 rounded-full bg-panel-muted p-0.5">
-          <IconButton
-            label="上一页"
-            onClick={goPrev}
-            disabled={!hasSlides || safePage === 0}
-            className="h-7 w-7 rounded-full transition-colors hover:bg-accent-soft hover:text-accent"
-          >
-            <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
-          </IconButton>
-          <span
-            className="flex h-7 min-w-10 shrink-0 items-center justify-center gap-1 px-1 text-[13px] tabular-nums"
-            aria-label={hasSlides ? `第 ${safePage + 1} 页，共 ${slides.length} 页` : '暂无页面'}
-          >
-            <span aria-hidden="true" className="font-semibold text-text-900">{hasSlides ? safePage + 1 : 0}</span>
-            <span aria-hidden="true" className="text-text-600">/ {hasSlides ? slides.length : 0}</span>
-          </span>
-          <IconButton
-            label="下一页"
-            onClick={goNext}
-            disabled={!hasSlides || safePage >= slides.length - 1}
-            className="h-7 w-7 rounded-full transition-colors hover:bg-accent-soft hover:text-accent"
-          >
-            <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
-          </IconButton>
-        </div>
-
-        <div className="flex min-w-0 items-center gap-1">
-          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
-            {contentMode === 'preview' && <><IconButton label="选择元素" aria-pressed={selectionMode === 'element'} onClick={() => setSelectionMode((value) => value === 'element' ? 'none' : 'element')} disabled={!selectionEnabled} className={selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}>
-              <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
-            </IconButton>
-            <IconButton label="框选区域" aria-pressed={selectionMode === 'region'} onClick={() => setSelectionMode((value) => value === 'region' ? 'none' : 'region')} disabled={!selectionEnabled} className={selectionMode === 'region' ? 'bg-accent-soft text-accent' : undefined}>
-              <Scan className="h-4 w-4" strokeWidth={1.75} />
-            </IconButton>
-            <div className="ml-1.5 flex items-center gap-1">
-              <IconButton label="缩小" onClick={zoomOut} disabled={!zoomEnabled || zoom <= ZOOM_MIN}>
-                <ZoomOut className="h-4 w-4" strokeWidth={1.75} />
-              </IconButton>
-              <IconButton label="放大" onClick={zoomIn} disabled={!zoomEnabled || zoom >= ZOOM_MAX}>
-                <ZoomIn className="h-4 w-4" strokeWidth={1.75} />
-              </IconButton>
-            </div></>}
-            {rightPanelHidden && (
-              <IconButton
-                label="展开右侧对话"
-                onClick={sidebarControls?.onExpandRight ?? ui.toggleRightPanel}
-                disabled={sidebarControls && !sidebarControls.canExpandRight}
-                title={sidebarControls && !sidebarControls.canExpandRight ? '加宽窗口后可展开右侧对话' : '展开右侧对话'}
-              >
-                <PanelRightOpen className="h-4 w-4" strokeWidth={1.75} />
-              </IconButton>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {contentMode === 'source' && projectId && currentSlide ? (
+      {activeDocument ? (
+        <ProjectDocumentView
+          key={`${projectId}:${activeDocument}`}
+          document={activeDocument}
+          snapshot={snapshot}
+          error={specError}
+          onRetry={() => { if (projectId) void loadProjectContent(projectId); }}
+        />
+      ) : contentMode === 'source' && projectId && currentSlide ? (
         <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码编辑器…</div>}>
           <SourceWorkspace projectId={projectId} slideId={currentSlide.id} kind={sourceKind} blocked={runBlocking || commitBlocking || exportBlocking || historyBusy} />
         </React.Suspense>
@@ -655,18 +566,12 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         ref={canvasRef}
         data-fullscreen={fullscreen || undefined}
         className={cn(
-          'relative flex flex-1 items-center justify-center overflow-hidden bg-canvas p-6 data-[fullscreen=true]:p-0',
+          'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-canvas p-6 data-[fullscreen=true]:p-0',
           canvasPan.canPan && 'touch-none select-none [&_iframe]:pointer-events-none',
           canvasPan.canPan && (canvasPan.dragging ? 'cursor-grabbing' : 'cursor-grab'),
         )}
         {...canvasPan.pointerHandlers}
       >
-        <div
-          ref={themeRef}
-          hidden={fullscreen}
-          className="absolute left-3 top-3 z-20 w-52 max-w-[calc(100%-1.5rem)] cursor-default rounded-lg border border-border bg-panel p-1 shadow-sm"
-          onPointerDown={event => event.stopPropagation()}
-        />
         {contentMode === 'preview' && selectedSource && sourceDirty(selectedSource) && <div className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center gap-2 rounded border border-border bg-panel px-3 py-1.5 text-xs text-text-700 shadow-sm">有未保存修改，当前为已保存内容 <button type="button" className="text-accent" onClick={() => setContentMode('source')}>编辑源码</button><button type="button" className="text-accent disabled:opacity-40" disabled={runBlocking || commitBlocking || exportBlocking || !selectedSource.writable} onClick={() => void useSourceEditorStore.getState().save(sourceKey(projectId!, currentSlide!.id, sourceKind))}>保存</button></div>}
         {previewMode === 'main' ? (
           <div
@@ -770,7 +675,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
             <p className="text-sm text-text-400">暂无页面</p>
           </div>
         ) : (
-          <div className="absolute inset-0 overflow-y-auto p-6">
+          <div className="scrollbar-none absolute inset-0 overflow-y-auto p-6">
             <div className="mx-auto mb-6 max-w-6xl">
               {snapshot?.design && <DesignSummary design={snapshot.design} />}
             </div>
@@ -794,6 +699,26 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
           </div>
         )}
       </div>}
+      <PreviewStatusBar
+        documentOpen={Boolean(activeDocument)}
+        overview={!activeDocument && previewMode === 'overview'}
+        onToggleOverview={toggleOverview}
+        canPresent={Boolean(presentationSlide)}
+        onPresent={present}
+        exportDisabled={exportDisabled}
+        exportDisabledReason={exportDisabledReason}
+        onExport={(format) => { if (projectId) void startExport(projectId, format); }}
+        pageIndex={safePage}
+        pageCount={slides.length}
+        onPrevious={goPrev}
+        onNext={goNext}
+        zoom={zoom}
+        zoomMin={ZOOM_MIN}
+        zoomMax={ZOOM_MAX}
+        zoomEnabled={zoomEnabled}
+        onZoomOut={zoomOut}
+        onZoomIn={zoomIn}
+      />
       <ExportProgressDialog />
     </div>
   );

@@ -1,4 +1,3 @@
-import { createPortal } from 'react-dom';
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Loader2, Palette } from 'lucide-react';
@@ -11,13 +10,13 @@ import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
 import { showGlobalError } from '../../stores/toastStore';
 
-export function ThemeSelector({ projectId, container }: { projectId: string | null; container?: HTMLDivElement | null }) {
+export function ThemeSelector({ projectId }: { projectId: string | null }) {
   const themeId = useProjectStore(state => projectId
     ? state.contentByProjectId[projectId]?.design.theme ?? state.projects.find(project => project.id === projectId)?.theme ?? ''
     : '');
   const setProjectTheme = useProjectStore(state => state.setProjectTheme);
   const [open, setOpen] = useState(false);
-  useEffect(() => { setOpen(false); }, [container]);
+  useEffect(() => { setOpen(false); }, [projectId]);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -78,7 +77,7 @@ export function ThemeSelector({ projectId, container }: { projectId: string | nu
 
   const name = themes.find(theme => theme.id === themeId)?.name || themeId || '选择主题';
   const enabledThemes = themes.filter(theme => !theme.disabled);
-  const selector = (
+  return (
     <DropdownMenu open={open} onOpenChange={value => { setOpen(value); if (value) void load(); }}>
       <DropdownMenuTrigger asChild>
         <button
@@ -87,12 +86,13 @@ export function ThemeSelector({ projectId, container }: { projectId: string | nu
           aria-busy={applying}
           disabled={!projectId || applying}
           title={applying ? '正在应用主题' : `切换主题：${name}`}
-          className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md bg-transparent px-2 text-left text-xs font-medium text-text-600 transition-colors hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft focus-visible:outline-none data-[state=open]:bg-accent-soft data-[state=open]:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="preview-theme-trigger flex h-8 min-w-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-transparent px-2 text-left text-xs font-medium text-text-600 transition-colors hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft focus-visible:outline-none data-[state=open]:bg-accent-soft data-[state=open]:text-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           {applying
             ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
             : <Palette className="h-3.5 w-3.5 shrink-0" />}
-          <span className="min-w-0 flex-1 truncate">{name}</span>
+          <span className="shrink-0">主题</span>
+          <span className="preview-theme-name min-w-0 flex-1 truncate">{name}</span>
           <ChevronDown className="h-3 w-3 shrink-0" />
         </button>
       </DropdownMenuTrigger>
@@ -120,6 +120,4 @@ export function ThemeSelector({ projectId, container }: { projectId: string | nu
       </DropdownMenuContent>
     </DropdownMenu>
   );
-  // Keep the keyboard action mounted when the canvas control is not visible.
-  return container === undefined ? selector : container ? createPortal(selector, container) : null;
 }

@@ -2,14 +2,17 @@ import { create } from 'zustand';
 
 export type PageView = 'outline' | 'html';
 export type ContentMode = 'preview' | 'source';
+export type ProjectDocument = 'manifest' | 'design';
 
 interface DeckState {
   currentSlideId: string | null;
+  activeDocument: ProjectDocument | null;
   previewMode: 'main' | 'overview';
   globalView: PageView;
   contentMode: ContentMode;
 
   setCurrentSlideId: (slideId: string | null) => void;
+  setActiveDocument: (document: ProjectDocument | null) => void;
   enterOverview: () => void;
   exitOverview: () => void;
   setGlobalView: (view: PageView) => void;
@@ -19,12 +22,14 @@ interface DeckState {
 
 export const useDeckStore = create<DeckState>((set, get) => ({
   currentSlideId: null,
+  activeDocument: null,
   previewMode: 'main',
   globalView: 'html',
   contentMode: 'preview',
 
-  setCurrentSlideId: (slideId) => set({ currentSlideId: slideId }),
-  enterOverview: () => set({ previewMode: 'overview' }),
+  setCurrentSlideId: (slideId) => set({ currentSlideId: slideId, activeDocument: null }),
+  setActiveDocument: (document) => set({ activeDocument: document, previewMode: 'main' }),
+  enterOverview: () => set({ previewMode: 'overview', activeDocument: null }),
   exitOverview: () => set({ previewMode: 'main' }),
 
   setGlobalView: (view) => set({ globalView: view }),

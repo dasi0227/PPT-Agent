@@ -74,7 +74,7 @@ export function SourceWorkspace({ projectId, slideId, kind, blocked }: { project
         <button type="button" aria-label="复制历史草稿" title="复制历史草稿" onClick={() => void navigator.clipboard.writeText(draft.draftText)}><Copy className="h-3.5 w-3.5" /></button>
         <button type="button" className="text-danger" onClick={() => void enqueueSourceDraft(draft.id, null).then(() => setBackups((rows) => rows.filter((row) => row.id !== draft.id)))}>删除</button>
       </div>)}
-      {selectedBackup && <pre className="mt-2 max-h-48 overflow-auto whitespace-pre font-mono text-xs" aria-label="只读历史草稿">{selectedBackup.draftText}</pre>}
+      {selectedBackup && <pre className="scrollbar-none mt-2 max-h-48 overflow-auto whitespace-pre font-mono text-xs" aria-label="只读历史草稿">{selectedBackup.draftText}</pre>}
     </div>}
     {file?.phase === 'missing' ? <div className="flex flex-1 items-center justify-center text-sm text-text-400">{kind === 'spec' ? '设计稿源文件尚未生成' : '幻灯片源文件尚未生成'}</div>
       : !file || (file.phase === 'error' && !file.baseSourceHash) ? <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-text-600">{file?.error || '正在加载源文件…'}<Button variant="secondary" onClick={() => void load(projectId, slideId, kind, true)}>重试</Button></div>
