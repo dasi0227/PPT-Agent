@@ -7,7 +7,7 @@ import (
 
 func TestModelAccessRequiresExplicitSupportedProtocolAndBaseURL(t *testing.T) {
 	for _, protocol := range []string{ProtocolResponses, ProtocolAnthropic} {
-		if err := ValidateModelAccess("openai", protocol, "https://gateway.example/provider/v1"); err != nil {
+		if err := ValidateModelAccess(protocol, "https://gateway.example/provider/v1"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -19,7 +19,7 @@ func TestModelAccessRequiresExplicitSupportedProtocolAndBaseURL(t *testing.T) {
 		{ProtocolResponses, "https://gateway.example/v1/responses"},
 		{ProtocolAnthropic, "https://gateway.example/v1/messages"},
 	} {
-		err := ValidateModelAccess("custom", tc.protocol, tc.url)
+		err := ValidateModelAccess(tc.protocol, tc.url)
 		if err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatalf("invalid configuration accepted or exposed credentials: %v", err)
 		}

@@ -11,37 +11,12 @@ const (
 	ProtocolAnthropic = "anthropic"
 )
 
-// ProviderDefinition describes branding and form presets, never adapter selection.
-type ProviderDefinition struct {
-	ID              string            `json:"id"`
-	Name            string            `json:"name"`
-	DefaultProtocol string            `json:"default_protocol"`
-	BaseURLs        map[string]string `json:"base_urls"`
-}
-
-func ModelProviders() []ProviderDefinition {
-	return []ProviderDefinition{
-		{"openai", "OpenAI", ProtocolResponses, map[string]string{ProtocolResponses: "https://api.openai.com/v1"}},
-		{"anthropic", "Anthropic", ProtocolAnthropic, map[string]string{ProtocolAnthropic: "https://api.anthropic.com/v1"}},
-		{"deepseek", "DeepSeek", ProtocolAnthropic, map[string]string{ProtocolResponses: "https://api.deepseek.com/v1", ProtocolAnthropic: "https://api.deepseek.com/anthropic/v1"}},
-		{"kimi", "Kimi", ProtocolAnthropic, map[string]string{ProtocolAnthropic: "https://api.moonshot.cn/anthropic/v1"}},
-		{"custom", "自定义", ProtocolResponses, map[string]string{}},
-	}
-}
-
 func NormalizeModelBaseURL(value string) string {
 	return strings.TrimRight(strings.TrimSpace(value), "/")
 }
 
 // BaseURL is the complete API prefix. Adapters append only /responses or /messages.
-func ValidateModelAccess(provider, protocol, baseURL string) error {
-	known := false
-	for _, item := range ModelProviders() {
-		known = known || item.ID == provider
-	}
-	if !known {
-		return errors.New("MODEL_PROVIDER_UNSUPPORTED: provider is unsupported")
-	}
+func ValidateModelAccess(protocol, baseURL string) error {
 	if protocol != ProtocolResponses && protocol != ProtocolAnthropic {
 		return errors.New("MODEL_PROTOCOL_UNSUPPORTED: protocol must be responses or anthropic")
 	}

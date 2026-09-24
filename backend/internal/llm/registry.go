@@ -19,7 +19,6 @@ const (
 
 type ProfileConfig struct {
 	Name     string
-	Provider string
 	Protocol string
 	BaseURL  string
 	Model    string
@@ -93,10 +92,11 @@ func NewRegistry(defaultName string, configs []ProfileConfig) (*Registry, error)
 	registered := make([]Profile, 0, len(configs))
 	for _, cfg := range configs {
 		baseURL := config.NormalizeModelBaseURL(cfg.BaseURL)
-		if err := config.ValidateModelAccess(cfg.Provider, cfg.Protocol, baseURL); err != nil {
+		if err := config.ValidateModelAccess(cfg.Protocol, baseURL); err != nil {
 			return nil, err
 		}
-		adapterConfig := AdapterConfig{Provider: cfg.Provider, APIKey: cfg.Key, BaseURL: baseURL, Model: cfg.Model, Timeout: cfg.Timeout}
+		provider := config.InferModelProvider(cfg.Model)
+		adapterConfig := AdapterConfig{Provider: provider, APIKey: cfg.Key, BaseURL: baseURL, Model: cfg.Model, Timeout: cfg.Timeout}
 		var adapter Provider
 		switch cfg.Protocol {
 		case ProtocolResponses:
@@ -105,7 +105,7 @@ func NewRegistry(defaultName string, configs []ProfileConfig) (*Registry, error)
 			adapter = NewAnthropicAdapter(adapterConfig)
 		}
 		registered = append(registered, Profile{
-			name: cfg.Name, provider: cfg.Provider, protocol: cfg.Protocol, model: cfg.Model, url: baseURL, adapter: adapter,
+			name: cfg.Name, provider: provider, protocol: cfg.Protocol, model: cfg.Model, url: baseURL, adapter: adapter,
 		})
 	}
 	return NewRegistryWithProfiles(defaultName, registered)

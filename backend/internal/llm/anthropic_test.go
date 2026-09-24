@@ -77,7 +77,7 @@ func TestProtocolsRejectUnauthorizedImagesBeforeSending(t *testing.T) {
 			called := false
 			s := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
 			defer s.Close()
-			r, err := NewRegistry("model", []ProfileConfig{{Name: "model", Provider: "custom", Protocol: protocol, BaseURL: s.URL + "/v1", Model: "m", Key: "key"}})
+			r, err := NewRegistry("model", []ProfileConfig{{Name: "model", Protocol: protocol, BaseURL: s.URL + "/v1", Model: "m", Key: "key"}})
 			if err != nil {
 				t.Fatal(err)
 			}

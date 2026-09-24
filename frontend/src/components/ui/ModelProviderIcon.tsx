@@ -2,6 +2,7 @@ import { Cpu } from 'lucide-react';
 
 const logos: Record<string, string> = {
   openai: 'openai', anthropic: 'claude', deepseek: 'deepseek', kimi: 'kimi',
+  mimo: 'mimo', gemini: 'gemini', qwen: 'qwen', minimax: 'minimax', zai: 'zai',
 };
 
 /** Branding follows provider, regardless of the wire protocol or gateway URL. */

@@ -30,17 +30,15 @@ type SettingsProfile struct {
 	HasKey   bool   `json:"has_key"`
 }
 type ModelSettings struct {
-	Revision  string                      `json:"revision"`
-	Providers []config.ProviderDefinition `json:"providers"`
-	Protocols []string                    `json:"protocols"`
-	Profiles  []SettingsProfile           `json:"llm"`
-	Main      config.MainRoadLLMConfig    `json:"main_road"`
-	Side      config.SideRoadLLMConfig    `json:"side_road"`
+	Revision  string                   `json:"revision"`
+	Protocols []string                 `json:"protocols"`
+	Profiles  []SettingsProfile        `json:"llm"`
+	Main      config.MainRoadLLMConfig `json:"main_road"`
+	Side      config.SideRoadLLMConfig `json:"side_road"`
 }
 type ProfileEdit struct {
 	PreviousName string  `json:"previous_name,omitempty"`
 	Name         string  `json:"name"`
-	Provider     string  `json:"provider"`
 	Protocol     string  `json:"protocol"`
 	BaseURL      string  `json:"base_url"`
 	Model        string  `json:"model"`
@@ -89,7 +87,7 @@ func buildSnapshot(cfg config.LLMConfig) (*Registry, error) {
 	}
 	profiles := make([]ProfileConfig, 0, len(cfg.Profiles))
 	for _, p := range cfg.Profiles {
-		profiles = append(profiles, ProfileConfig{Name: p.Name, Provider: p.Provider, Protocol: p.Protocol, BaseURL: p.BaseURL, Model: p.Model, Key: p.Key})
+		profiles = append(profiles, ProfileConfig{Name: p.Name, Protocol: p.Protocol, BaseURL: p.BaseURL, Model: p.Model, Key: p.Key})
 	}
 	r, err := NewRegistry(cfg.MainRoad.Default, profiles)
 	if err != nil {
@@ -156,9 +154,9 @@ func (r *Registry) ReloadSettings() (ModelSettings, error) {
 }
 
 func (m *ModelConfigManager) public() ModelSettings {
-	out := ModelSettings{Revision: m.current.revision, Providers: config.ModelProviders(), Protocols: []string{ProtocolResponses, ProtocolAnthropic}, Profiles: []SettingsProfile{}, Main: m.config.MainRoad, Side: m.config.SideRoad}
+	out := ModelSettings{Revision: m.current.revision, Protocols: []string{ProtocolResponses, ProtocolAnthropic}, Profiles: []SettingsProfile{}, Main: m.config.MainRoad, Side: m.config.SideRoad}
 	for _, p := range m.config.Profiles {
-		out.Profiles = append(out.Profiles, SettingsProfile{Name: p.Name, Provider: p.Provider, Protocol: p.Protocol, BaseURL: p.BaseURL, Model: p.Model, HasKey: p.Key != ""})
+		out.Profiles = append(out.Profiles, SettingsProfile{Name: p.Name, Provider: config.InferModelProvider(p.Model), Protocol: p.Protocol, BaseURL: p.BaseURL, Model: p.Model, HasKey: p.Key != ""})
 	}
 	return out
 }
@@ -194,10 +192,10 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 		key := ""
 		if p.Key != nil {
 			key = *p.Key
-		} else if exists && previous.Provider == strings.TrimSpace(p.Provider) && previous.Protocol == strings.TrimSpace(p.Protocol) && previous.BaseURL == config.NormalizeModelBaseURL(p.BaseURL) {
+		} else if exists && previous.Protocol == strings.TrimSpace(p.Protocol) && previous.BaseURL == config.NormalizeModelBaseURL(p.BaseURL) {
 			key = previous.Key
 		}
-		cfg.Profiles = append(cfg.Profiles, config.LLMProfile{Name: p.Name, Provider: p.Provider, Protocol: p.Protocol, BaseURL: p.BaseURL, Model: p.Model, Key: key})
+		cfg.Profiles = append(cfg.Profiles, config.LLMProfile{Name: p.Name, Protocol: p.Protocol, BaseURL: p.BaseURL, Model: p.Model, Key: key})
 	}
 	config.NormalizeLLMConfig(&cfg)
 	next, err := buildSnapshot(cfg)

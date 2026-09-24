@@ -4,15 +4,14 @@
 
 ## 配置合同
 
-每条 `llm` 配置包含 `name / provider / protocol / base_url / model / key`。`protocol` 只允许 `responses`、`anthropic`；协议与地址必须显式填写，不推断旧配置，不保留 Chat Completions 实现。
+每条 `llm` 配置包含 `name / protocol / base_url / model / key`。`protocol` 只允许 `responses`、`anthropic`；协议与地址必须显式填写，不推断旧配置，不保留 Chat Completions 实现。
 
 ```yaml
 llm:
   - name: 中转 GPT
-    provider: openai
     protocol: responses
     base_url: https://gateway.example.com/v1
-    model: your-model-id
+    model: gpt-5.6
     key: your-api-key
 main-road:
   default: 中转 GPT
@@ -20,21 +19,11 @@ side-road:
   default: 中转 GPT
 ```
 
-`provider` 表示品牌归属，只影响展示、图标及表单预填；`protocol` 决定请求结构、响应解析和鉴权头；`base_url` 表示真正的接入地址；`model` 原样传给该接口。任何支持的品牌都可搭配两种协议，后端不以品牌限制协议组合。当前品牌选项为 OpenAI、Anthropic、DeepSeek、Kimi、自定义；自定义显示公共模型图标。
+`provider` 不再是用户填写或写入 YAML 的配置项，而是后端从 `model` 推断的只读展示信息。`protocol` 决定请求结构、响应解析和鉴权头；`base_url` 表示真正的接入地址；`model` 原样传给该接口。品牌识别不会改动协议、地址或模型标识，也不限制模型的协议组合。
+
+识别规则忽略大小写，取命名空间后的模型名，再按有边界的模型系列前缀匹配：DeepSeek、Kimi/Moonshot、MiMo、GPT/ChatGPT/o1/o3/o4、Claude、Gemini、Qwen、MiniMax、GLM/ZAI。识别不到时返回 `custom`，显示通用图标，仍可正常配置和调用。后端统一推断，设置读取和模型列表共用同一套规则，前端不重复实现正则。
 
 `base_url` 是完整 API 前缀，协议适配器只追加 `/responses` 或 `/messages`。例如 `https://gateway.example.com/team/v1` 会产生 `/team/v1/responses`，不会插入或重复 `/v1`。接受 HTTP(S)，拒绝内嵌凭证、查询参数、fragment 和已包含完整接口路径的地址。尾部斜线统一移除。
-
-预填地址：
-
-| 品牌 | 默认协议 | API 前缀 |
-| --- | --- | --- |
-| OpenAI | responses | https://api.openai.com/v1 |
-| Anthropic | anthropic | https://api.anthropic.com/v1 |
-| DeepSeek | anthropic | https://api.deepseek.com/anthropic/v1 |
-| Kimi | anthropic | https://api.moonshot.cn/anthropic/v1 |
-| 自定义 | responses | 用户填写 |
-
-DeepSeek 同时提供 Responses 地址预设 `https://api.deepseek.com/v1`。预设是填写辅助，不保证任意模型都支持该入口；模型 ID 和具体能力仍遵循服务商合同。
 
 ## 协议实现
 
@@ -49,13 +38,13 @@ DeepSeek 同时提供 Responses 地址预设 `https://api.deepseek.com/v1`。预
 
 ## 设置与图标
 
-设置接口返回品牌预设和两个协议选项，前端使用同一份预设。模型卡片增加协议、地址，沿用既有单卡保存、翻转、取消、刷新和未保存提醒。
+设置接口返回两个协议选项，界面显示 `Responses` 和 `Anthropic`。模型卡片仅保留名称、模型、协议、地址和密钥五项。新卡片默认 Responses，地址由用户填写；不再通过品牌预设覆盖用户的接入地址。保存成功保持编辑面，仅点击卡片外部或取消时翻回正面。
 
-更换品牌填入对应默认协议和地址；更换协议时仅替换仍为官方预设的地址，保留用户手填的中转地址。品牌、协议或地址改变时必须重新输入密钥，前后端均校验。单纯更改名称或模型标识可以保留原密钥；密钥不通过读取接口返回。
+更换协议或地址时必须重新输入密钥，前后端均校验。单纯更改名称或模型标识可以保留原密钥，包括在同一个中转地址下切换不同品牌的模型；密钥不通过读取接口返回。
 
-模型选择列表公开 `provider`、`protocol`，不公开实际地址和密钥。设置卡片与聊天模型选择器复用 `ModelProviderIcon`，图标只取决于品牌。
+模型选择列表公开自动识别的 `provider`、配置的 `protocol`，不公开实际地址和密钥。设置卡片与聊天模型选择器复用 `ModelProviderIcon`，保存或刷新后采用后端推断的品牌图标，包括 MiMo。
 
-实际开发配置和示例配置均已补齐显式协议、地址，原模型标识和密钥保留。`DESIGN.md` 不属于本次修改范围。
+实际开发配置和示例配置均移除手填 provider 字段，保留协议、地址、模型标识和密钥。按开发期约定直接切换结构，不保留旧 provider 字段的兼容解析。`DESIGN.md` 不属于本次修改范围。
 
 ## 验收
 
@@ -75,6 +64,6 @@ npx vitest run src/features/settings/modelSettingsDraft.test.ts src/features/age
 npm run build
 ```
 
-交互验收包括：官方地址预填、第三方路径保存及刷新、两个协议分别完成带工具/截图的多轮对话、切换协议后品牌图标不变、换地址后要求输入新密钥，以及修改配置后已有任务仍保持其连接快照。
+交互验收包括：表单只显示五项、保存后品牌图标自动更新、未知模型显示通用图标、第三方路径保存及刷新、同地址与协议下跨品牌换模型保留密钥、换地址或协议后要求输入新密钥、保存和内部点击不翻回正面，以及两个协议分别完成带工具/截图的多轮对话。
 
 协议依据：[OpenAI 会话状态](https://developers.openai.com/api/docs/guides/conversation-state)、[Anthropic Messages](https://platform.claude.com/docs/en/api/messages/create)、[DeepSeek Anthropic 接入](https://api-docs.deepseek.com/guides/anthropic_api/)、[Kimi Claude Code 接入](https://platform.kimi.com/docs/guide/claude-code-kimi)。

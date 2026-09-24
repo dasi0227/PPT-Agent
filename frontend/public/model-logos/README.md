@@ -16,5 +16,6 @@
 | qwen.svg | `qwen-color.svg` |
 | zai.svg | `zai.svg` |
 | minimax.svg | `minimax-color.svg` |
+| mimo.svg | `xiaomimimo.svg`（2026-09-24 补充） |
 
 上游项目许可见 [LICENSE](LICENSE)。品牌标识及商标权归各自权利人所有；素材用于标识模型品牌，不表示获得官方背书。素材可用不代表本项目已接入该供应商。

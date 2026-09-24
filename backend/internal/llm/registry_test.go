@@ -20,8 +20,8 @@ func (p registryFakeProvider) Generate(context.Context, GenerateRequest) (Genera
 
 func TestRegistrySupportsMultipleProfilesForOneProvider(t *testing.T) {
 	registry, err := NewRegistry("Kimi Vision", []ProfileConfig{
-		{Name: "Kimi Vision", Provider: "kimi", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "kimi-k3", Key: "one"},
-		{Name: "Kimi Text", Provider: "kimi", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "any-new-model", Key: "two"},
+		{Name: "Kimi Vision", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "kimi-k3", Key: "one"},
+		{Name: "Kimi Text", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "kimi-future-model", Key: "two"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -38,8 +38,8 @@ func TestRegistrySupportsMultipleProfilesForOneProvider(t *testing.T) {
 
 func TestRegistrySelectsProtocolIndependentlyOfBrand(t *testing.T) {
 	r, err := NewRegistry("Responses", []ProfileConfig{
-		{Name: "Responses", Provider: "kimi", Protocol: ProtocolResponses, BaseURL: "https://gateway.example/one/v1/", Model: "same-model", Key: "one"},
-		{Name: "Messages", Provider: "kimi", Protocol: ProtocolAnthropic, BaseURL: "https://gateway.example/two/v1", Model: "same-model", Key: "two"},
+		{Name: "Responses", Protocol: ProtocolResponses, BaseURL: "https://gateway.example/one/v1/", Model: "moonshot/kimi-k3", Key: "one"},
+		{Name: "Messages", Protocol: ProtocolAnthropic, BaseURL: "https://gateway.example/two/v1", Model: "moonshot/kimi-k3", Key: "two"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +63,7 @@ func TestRegistrySelectsProtocolIndependentlyOfBrand(t *testing.T) {
 
 func TestRegistryUsesProductCapabilitiesForEveryConfiguredModel(t *testing.T) {
 	registry, err := NewRegistry("Unknown", []ProfileConfig{{
-		Name: "Unknown", Provider: "openai", Protocol: "responses", BaseURL: "https://api.openai.com/v1",
+		Name: "Unknown", Protocol: "responses", BaseURL: "https://api.openai.com/v1",
 		Model: "future-unregistered-model", Key: "secret",
 	}})
 	if err != nil {
@@ -113,7 +113,7 @@ func TestConfiguredProvidersUseFixedContextWindow(t *testing.T) {
 	}
 	for _, tc := range cases {
 		registry, err := NewRegistry("Profile", []ProfileConfig{{
-			Name: "Profile", Provider: tc.provider, Protocol: ProtocolResponses, BaseURL: "https://gateway.example/v1", Model: tc.model, Key: "secret",
+			Name: "Profile", Protocol: ProtocolResponses, BaseURL: "https://gateway.example/v1", Model: tc.model, Key: "secret",
 		}})
 		if err != nil {
 			t.Fatal(err)

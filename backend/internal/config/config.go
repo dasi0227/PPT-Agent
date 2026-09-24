@@ -26,7 +26,6 @@ const (
 
 type LLMProfile struct {
 	Name     string `yaml:"name"`
-	Provider string `yaml:"provider"`
 	Protocol string `yaml:"protocol"`
 	BaseURL  string `yaml:"base_url"`
 	Model    string `yaml:"model"`
@@ -136,7 +135,6 @@ func NormalizeLLMConfig(cfg *LLMConfig) {
 	for i := range cfg.Profiles {
 		p := &cfg.Profiles[i]
 		p.Name = strings.TrimSpace(p.Name)
-		p.Provider = strings.TrimSpace(p.Provider)
 		p.Protocol = strings.TrimSpace(p.Protocol)
 		p.BaseURL = NormalizeModelBaseURL(p.BaseURL)
 		p.Model = strings.TrimSpace(p.Model)
@@ -194,7 +192,7 @@ func validateLLMProfile(profile LLMProfile, label string) error {
 			return fmt.Errorf("%s.name must not contain control characters", label)
 		}
 	}
-	if err := ValidateModelAccess(profile.Provider, profile.Protocol, profile.BaseURL); err != nil {
+	if err := ValidateModelAccess(profile.Protocol, profile.BaseURL); err != nil {
 		return fmt.Errorf("%s: %w", label, err)
 	}
 	if strings.TrimSpace(profile.Model) == "" {
