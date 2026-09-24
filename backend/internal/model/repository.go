@@ -29,6 +29,7 @@ type Theme struct {
 	Name        string                   `json:"name"`
 	Description string                   `json:"description"`
 	Tags        []ThemeTag               `json:"tags"`
+	Disabled    bool                     `json:"disabled"`
 	CSS         string                   `json:"css,omitempty"`
 	CSSURL      string                   `json:"css_url"`
 	LocalPath   string                   `json:"-"`

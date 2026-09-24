@@ -50,15 +50,31 @@ func (h *RepositoryHandler) GetTheme(c *gin.Context) {
 
 func (h *RepositoryHandler) PatchTheme(c *gin.Context) {
 	var request struct {
+		Disabled    *bool             `json:"disabled"`
 		Name        *string           `json:"name"`
 		Description *string           `json:"description"`
 		Tags        *[]model.ThemeTag `json:"tags"`
 	}
-	if c.ShouldBindJSON(&request) != nil || request.Name == nil || request.Description == nil || request.Tags == nil {
+	if c.ShouldBindJSON(&request) != nil {
+		AbortWithError(c, ErrBadRequest("request body is invalid"))
+		return
+	}
+	metadataUpdate := request.Name != nil || request.Description != nil || request.Tags != nil
+	if request.Disabled == nil && !metadataUpdate {
+		AbortWithError(c, ErrBadRequest("disabled or metadata is required"))
+		return
+	}
+	if metadataUpdate && (request.Name == nil || request.Description == nil || request.Tags == nil) {
 		AbortWithError(c, ErrBadRequest("name, description, and tags are required"))
 		return
 	}
-	value, err := h.themes.UpdateMetadata(c.Param("id"), *request.Name, *request.Description, *request.Tags)
+	value, err := h.themes.Get(c.Param("id"))
+	if err == nil && metadataUpdate {
+		value, err = h.themes.UpdateMetadata(c.Param("id"), *request.Name, *request.Description, *request.Tags)
+	}
+	if err == nil && request.Disabled != nil {
+		value, err = h.themes.SetDisabled(c.Param("id"), *request.Disabled)
+	}
 	if err != nil {
 		h.repositoryError(c, err, "theme not found")
 		return

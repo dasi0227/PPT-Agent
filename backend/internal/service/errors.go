@@ -17,6 +17,7 @@ var ErrRunScopeUnsupported = errors.New("service: run scope unsupported")
 var ErrScreenshotNotFound = errors.New("service: render screenshot not found")
 
 var ErrThemeNotFound = errors.New("service: theme not found")
+var ErrThemeDisabled = errors.New("service: theme disabled")
 
 var ErrGitCommitActive = errors.New("service: project has an active Git commit")
 

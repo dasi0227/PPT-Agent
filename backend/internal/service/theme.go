@@ -68,13 +68,29 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 	if err != nil {
 		return model.Theme{}, repositoryReadError("theme", id, err)
 	}
+	disabled, err := s.metadata.GetResourceDisabled(context.Background(), resourceTypeTheme, id)
+	if err != nil {
+		return model.Theme{}, err
+	}
 	return model.Theme{
 		StyleHash: runtimeassets.Hash(cssRaw), Appearance: runtimeassets.Appearance(id, cssRaw),
 		ID: id, Name: metadata.Name, Description: metadata.Description,
-		Tags: tags,
-		CSS:  string(cssRaw), CSSURL: "/api/v1/themes/" + id + "/css",
+		Tags: tags, Disabled: disabled,
+		CSS: string(cssRaw), CSSURL: "/api/v1/themes/" + id + "/css",
 		LocalPath: cssPath, OpenURL: repositoryOpenURL(cssPath),
 	}, nil
+}
+
+func (s *ThemeService) SetDisabled(id string, disabled bool) (model.Theme, error) {
+	theme, err := s.Get(id)
+	if err != nil {
+		return model.Theme{}, err
+	}
+	if err := s.metadata.SetResourceDisabled(context.Background(), resourceTypeTheme, id, disabled, repositoryStateTimestamp()); err != nil {
+		return model.Theme{}, err
+	}
+	theme.Disabled = disabled
+	return theme, nil
 }
 
 func (s *ThemeService) UpdateMetadata(id, name, description string, values []model.ThemeTag) (model.Theme, error) {

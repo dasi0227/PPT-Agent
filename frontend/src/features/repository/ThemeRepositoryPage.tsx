@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { repositoriesApi } from '../../api/repositories';
 import type { Theme, ThemeTag } from '../../api/types';
 import { showGlobalError } from '../../stores/toastStore';
+import { cn } from '../../lib/utils';
 import {
   RepositoryCatalog,
   RepositoryDetail,
@@ -42,6 +43,8 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editOpen, setEditOpen] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
+  const pendingRef = useRef(false);
   const loadedRef = useRef(false);
   const requestRef = useRef(0);
   const load = useCallback(async () => {
@@ -74,6 +77,23 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
     `${theme.name} ${theme.description} ${theme.tags.flatMap((tag) => [tag, themeTagLabels[tag]]).join(' ')}`
       .toLowerCase().includes(query.toLowerCase())), [filter, query, themes]);
   const selected = visible.find((theme) => theme.id === selectedId) ?? visible[0];
+  const toggle = async (theme: Theme) => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setPending(theme.id);
+    const disabled = !theme.disabled;
+    setThemes(current => current.map(value => value.id === theme.id ? { ...value, disabled } : value));
+    try {
+      const updated = await repositoriesApi.setThemeDisabled(theme.id, disabled);
+      setThemes(current => current.map(value => value.id === theme.id ? { ...value, ...updated } : value));
+    } catch (cause) {
+      setThemes(current => current.map(value => value.id === theme.id ? { ...value, disabled: theme.disabled } : value));
+      showGlobalError(cause instanceof Error ? cause.message : '主题状态更新失败');
+    } finally {
+      pendingRef.current = false;
+      setPending(null);
+    }
+  };
   const deleteTheme = async (theme: Theme) => {
     try {
       await repositoriesApi.deleteTheme(theme.id);
@@ -117,6 +137,7 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
                     <div key={theme.id} hidden={!visible.includes(theme)}>
                       <RepositoryDirectoryItem
                         active={active}
+                        disabled={theme.disabled}
                         name={theme.name}
                         description={theme.description}
                         visual={<ThemePreview key={theme.appearance?.hash ?? theme.style_hash} theme={theme} miniature />}
@@ -136,14 +157,30 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
                 description={selected.description}
                 openUrl={selected.open_url}
                 properties={<RepositoryTagList tags={selected.tags.map((tag) => themeTagLabels[tag])} />}
-                actions={<SegmentedControl value={mode} options={themeShowcaseModes} onChange={setMode} label="预览页面" />}
-                contentClassName="flex items-center justify-center p-5 md:p-7 xl:p-9"
+                actions={(
+                  <div className="flex items-center gap-2.5">
+                    <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
+                      {selected.disabled ? '已关闭' : '已启用'}
+                    </span>
+                    <button type="button" role="switch" aria-checked={!selected.disabled} aria-label="切换主题状态"
+                      disabled={pending !== null} onClick={() => void toggle(selected)}
+                      className={cn('h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none disabled:opacity-50', selected.disabled ? 'bg-border-strong' : 'bg-success')}>
+                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(23,32,43,0.25)] transition-transform', !selected.disabled && 'translate-x-4')} />
+                    </button>
+                  </div>
+                )}
+                contentClassName="flex flex-col p-5 md:p-7 xl:p-9"
                 deleteNoun="主题"
                 onEdit={() => setEditOpen(true)}
                 onDelete={() => deleteTheme(selected)}
               >
-                <div className="aspect-video max-h-full w-full max-w-5xl overflow-hidden rounded-lg border border-border-strong">
-                  <ThemePreviewGallery themes={themes} selected={selected} mode={mode} />
+                <div className="mb-5 flex shrink-0 justify-end">
+                  <SegmentedControl value={mode} options={themeShowcaseModes} onChange={setMode} label="预览页面" />
+                </div>
+                <div className="flex min-h-0 flex-1 items-center justify-center">
+                  <div className="aspect-video max-h-full w-full max-w-5xl overflow-hidden rounded-lg border border-border-strong">
+                    <ThemePreviewGallery themes={themes} selected={selected} mode={mode} />
+                  </div>
                 </div>
               </RepositoryDetail>
             )}

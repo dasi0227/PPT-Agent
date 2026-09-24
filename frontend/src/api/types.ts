@@ -242,6 +242,7 @@ export interface PromptWriteRequest {
 export interface RuntimeAppearance { hash: string; theme_css_url: string; chrome_tokens: Record<string, string> }
 
 export interface Theme {
+  disabled: boolean;
   style_hash: string;
   appearance: RuntimeAppearance;
   id: string;

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -159,6 +160,16 @@ func TestSetThemePersistsThemeIDToProjectAndDesign(t *testing.T) {
 	}
 	if design.Theme != "tokyo-night" {
 		t.Fatalf("persisted design=%+v", design)
+	}
+	if _, err := svc.themes.SetDisabled("tokyo-night", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetTheme(ctx, project.ID, "tokyo-night"); !errors.Is(err, ErrThemeDisabled) {
+		t.Fatalf("disabled theme accepted: %v", err)
+	}
+	unchanged, err := svc.GetProject(ctx, project.ID)
+	if err != nil || unchanged.Theme != "tokyo-night" {
+		t.Fatalf("existing theme changed: %+v, %v", unchanged, err)
 	}
 }
 

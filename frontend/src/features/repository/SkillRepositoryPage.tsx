@@ -1,4 +1,4 @@
-import { Check, Pause } from 'lucide-react';
+import { BookOpenText } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -136,9 +136,7 @@ export function SkillRepositoryPage() {
                       name={skill.name}
                       description={skill.description}
                       descriptionLines={3}
-                      visual={skill.disabled
-                        ? <Pause className="h-4 w-4" strokeWidth={1.75} />
-                        : <Check className="h-4 w-4" strokeWidth={1.75} />}
+                      visual={<BookOpenText className="h-4 w-4" strokeWidth={1.75} />}
                       visualClassName={cn(
                         'h-9 w-9 rounded-full border-0',
                         skill.disabled ? 'bg-panel-muted text-text-400' : 'bg-success-soft text-success',

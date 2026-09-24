@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   listComponents: vi.fn(),
   getComponent: vi.fn(),
   setComponentDisabled: vi.fn(),
+  setThemeDisabled: vi.fn(),
   updateComponent: vi.fn(),
   getSkill: vi.fn(),
   setSkillDisabled: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock('../../api/repositories', () => ({
     listComponents: mocks.listComponents,
     getComponent: mocks.getComponent,
     setComponentDisabled: mocks.setComponentDisabled,
+    setThemeDisabled: mocks.setThemeDisabled,
     updateComponent: mocks.updateComponent,
     getSkill: mocks.getSkill,
     setSkillDisabled: mocks.setSkillDisabled,
@@ -80,6 +82,7 @@ function themeFixtures(): Theme[] {
   return [
     {
       id: 'editorial-serif',
+      disabled: false,
       style_hash:'css-1', appearance:{hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',chrome_tokens:{}},
       name: 'Editorial Serif',
       description: 'Clean grid',
@@ -90,6 +93,7 @@ function themeFixtures(): Theme[] {
     },
     {
       id: 'blueprint',
+      disabled: false,
       style_hash:'css-2', appearance:{hash:'appearance-2',theme_css_url:'/api/v1/themes/blueprint/css',chrome_tokens:{}},
       name: 'Blueprint',
       description: 'Dark presentation',
@@ -233,15 +237,30 @@ describe('personal repository pages', () => {
     const trigger = screen.getByRole('button', { name: '切换主题' });
     await waitFor(() => expect(trigger).toHaveTextContent('Editorial Serif'));
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
-    expect(screen.getByRole('menuitemradio', { name: 'Editorial Serif' })).toHaveAttribute('aria-checked', 'true');
+    expect(await screen.findByRole('menuitemradio', { name: 'Editorial Serif' })).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Editorial Serif' }));
     expect(mocks.setTheme).not.toHaveBeenCalled();
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
-    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Blueprint' }));
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Blueprint' }));
     await waitFor(() => expect(trigger).toHaveTextContent('Blueprint'));
     expect(mocks.setTheme).toHaveBeenCalledWith('project-7', 'blueprint');
     expect(useProjectStore.getState().contentByProjectId['project-7'].design.theme).toBe('blueprint');
     expect(useToastStore.getState().toasts).toEqual([]);
+  });
+
+  it('toggles theme availability while keeping the showcase visible below the header', async () => {
+    const themes = themeFixtures();
+    mocks.listThemes.mockResolvedValue({themes});
+    mocks.setThemeDisabled.mockResolvedValue({...themes[0], disabled:true});
+    renderPage(<ThemeRepositoryPage />);
+    const toggle = await screen.findByRole('switch', {name:'切换主题状态'});
+    expect(toggle).toHaveAttribute('aria-checked','true');
+    expect(screen.getByLabelText('预览页面').closest('header')).toBeNull();
+    fireEvent.click(toggle);
+    await waitFor(() => expect(mocks.setThemeDisabled).toHaveBeenCalledWith('editorial-serif',true));
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).toHaveAttribute('aria-checked','false');
+    expect(screen.getByLabelText('预览页面')).toBeVisible();
   });
 
   it('edits theme metadata and tags in a dialog', async () => {
@@ -288,7 +307,7 @@ describe('personal repository pages', () => {
     const trigger = screen.getByRole('button', { name: '切换主题' });
     await waitFor(() => expect(trigger).toHaveTextContent('Editorial Serif'));
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
-    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Blueprint' }));
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Blueprint' }));
     expect(trigger).toBeDisabled();
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     expect(mocks.setTheme).toHaveBeenCalledTimes(1);

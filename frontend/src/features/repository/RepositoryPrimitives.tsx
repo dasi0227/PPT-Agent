@@ -203,7 +203,7 @@ export function RepositoryDetail({
 
   return (
     <section className="flex min-h-[420px] min-w-0 flex-col bg-surface md:min-h-0" aria-label={label}>
-      <header className="flex min-h-[128px] shrink-0 flex-col items-start justify-between gap-3 border-b border-border bg-surface px-5 pb-3.5 pt-5 lg:flex-row lg:gap-6">
+      <header className="grid min-h-[128px] shrink-0 grid-cols-1 items-start gap-3 border-b border-border bg-surface px-5 pb-3.5 pt-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-x-6 lg:gap-y-1.5">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1">
             <h2 className="truncate text-base font-bold leading-6 text-text-900">{title}</h2>
@@ -230,13 +230,13 @@ export function RepositoryDetail({
             </div>
           </div>
           {properties && <div className="mt-2.5 min-w-0">{properties}</div>}
-          {description && (
-            <p className="mt-1.5 line-clamp-2 max-w-3xl text-xs font-medium leading-[18px] text-text-600">
-              {description}
-            </p>
-          )}
         </div>
         {actions && <div className="shrink-0">{actions}</div>}
+        {description && (
+          <p className="line-clamp-2 min-w-0 text-xs font-medium leading-[18px] text-text-600 lg:col-span-2">
+            {description}
+          </p>
+        )}
       </header>
       <div className={cn('min-h-0 flex-1 overflow-auto bg-canvas/70', contentClassName)}>{children}</div>
       <ConfirmModal

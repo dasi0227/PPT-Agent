@@ -246,3 +246,26 @@ func TestRuntimeResourceCacheValidation(t *testing.T) {
 		t.Fatalf("unversioned resource must revalidate: %v", response.Header())
 	}
 }
+
+func TestThemeDisabledStatePersistsWithoutRemovingPreview(t *testing.T) {
+	root := t.TempDir()
+	writeRepositoryFixture(t, root, "assets/themes/test-theme/theme.css", "/*\n---\nname: Test\ndescription: Theme\n---\n*/\n"+completeThemeFixtureCSS())
+	engine := repositoryTestRouter(t, root)
+	response := performRepositoryRequest(t, engine, http.MethodPatch, "/api/v1/themes/test-theme", `{"disabled":true}`)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"disabled":true`) {
+		t.Fatalf("disable: %d %s", response.Code, response.Body.String())
+	}
+	reloaded := repositoryTestRouter(t, root)
+	response = performRepositoryRequest(t, reloaded, http.MethodGet, "/api/v1/themes", "")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"disabled":true`) {
+		t.Fatalf("persisted list: %d %s", response.Code, response.Body.String())
+	}
+	response = performRepositoryRequest(t, reloaded, http.MethodGet, "/api/v1/themes/test-theme/css", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("disabled preview CSS: %d", response.Code)
+	}
+	response = performRepositoryRequest(t, reloaded, http.MethodPatch, "/api/v1/themes/test-theme", `{"disabled":false}`)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"disabled":false`) {
+		t.Fatalf("enable: %d %s", response.Code, response.Body.String())
+	}
+}

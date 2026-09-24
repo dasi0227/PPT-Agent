@@ -204,8 +204,15 @@ func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {
 }
 
 func (svc *ProjectService) SetTheme(ctx context.Context, id, themeID string) (model.Project, error) {
-	if svc.themes == nil || !svc.themes.Exists(themeID) {
+	if svc.themes == nil {
 		return model.Project{}, ErrThemeNotFound
+	}
+	theme, err := svc.themes.Get(themeID)
+	if err != nil {
+		return model.Project{}, ErrThemeNotFound
+	}
+	if theme.Disabled {
+		return model.Project{}, ErrThemeDisabled
 	}
 	project, err := svc.store.GetProject(ctx, id)
 	if err != nil {

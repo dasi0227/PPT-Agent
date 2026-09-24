@@ -177,6 +177,8 @@ func (h *ProjectHandler) SetTheme(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrThemeNotFound):
 			AbortWithError(c, ErrNotFound("theme not found"))
+		case errors.Is(err, service.ErrThemeDisabled):
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "THEME_DISABLED", Message: "该主题已停用，请选择其它主题"})
 		case errors.Is(err, service.ErrRunActive):
 			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project is currently locked"})
 		default:
