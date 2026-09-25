@@ -2,45 +2,45 @@ package sqlite
 
 import (
 	"context"
-	"errors"
-
+	"encoding/json"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"gorm.io/gorm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
-func (s *Store) CreateContextCompaction(ctx context.Context, compaction model.ContextCompaction) error {
-	return s.db.WithContext(ctx).Create(contextCompactionToPO(compaction)).Error
+func (s *Store) CreateContextCompaction(ctx context.Context, c model.ContextCompaction) error {
+	raw, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	_, err = s.AppendThreadEvent(ctx, c.ThreadID, threadjournal.Event{Type: "context.compaction_result", RunID: c.RunID, Payload: raw})
+	return err
 }
-
 func (s *Store) LatestThreadContextWindow(ctx context.Context, threadID string) (string, error) {
-	var row struct {
-		Payload string
+	events, err := s.ThreadEvents(ctx, threadID, 0)
+	if err != nil {
+		return "", err
 	}
-	err := s.db.WithContext(ctx).Raw(`
-		SELECT e.payload
-		FROM run_events e
-		JOIN runs r ON r.id = e.run_id
-		WHERE r.thread_id = ? AND e.type = ?
-		ORDER BY e.created_at DESC, e.seq DESC
-		LIMIT 1
-	`, threadID, string(model.EventContextWindowUpdated)).Scan(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", nil
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type == string(model.EventContextWindowUpdated) {
+			return string(events[i].Payload), nil
+		}
 	}
-	return row.Payload, err
+	return "", nil
 }
-
 func (s *Store) ListThreadContextCompactions(ctx context.Context, threadID string) ([]model.ContextCompaction, error) {
-	var rows []contextCompactionPO
-	if err := s.db.WithContext(ctx).
-		Where("thread_id = ?", threadID).
-		Order("created_at ASC, id ASC").
-		Find(&rows).Error; err != nil {
+	events, err := s.ThreadEvents(ctx, threadID, 0)
+	if err != nil {
 		return nil, err
 	}
-	out := make([]model.ContextCompaction, len(rows))
-	for index, row := range rows {
-		out[index] = row.toModel()
+	out := []model.ContextCompaction{}
+	for _, e := range events {
+		if e.Type == "context.compaction_result" {
+			var c model.ContextCompaction
+			if err := json.Unmarshal(e.Payload, &c); err != nil {
+				return nil, err
+			}
+			out = append(out, c)
+		}
 	}
 	return out, nil
 }

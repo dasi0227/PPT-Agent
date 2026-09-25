@@ -12,7 +12,8 @@ import (
 
 func TestShortcutSettingsPersistAndRejectConflicts(t *testing.T) {
 	ctx := context.Background()
-	cfg := &config.Config{DBPath: filepath.Join(t.TempDir(), "settings.db")}
+	root := t.TempDir()
+	cfg := &config.Config{WorkRoot: root, DBPath: filepath.Join(root, "settings.db")}
 	db, closeDB, err := Open(cfg, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)

@@ -14,8 +14,7 @@ func TestRunPauseLifecycleIsDurableAndAtomic(t *testing.T) {
 	seedProject(t, store)
 	ctx := context.Background()
 	if err := store.CreateThread(ctx, model.Thread{
-		ID: "thread", ProjectID: "p1", HistoryPath: "threads/thread.jsonl",
-		Status: "active", CreatedAt: 1, UpdatedAt: 1,
+		ID: "thread", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}

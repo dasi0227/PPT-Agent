@@ -2,9 +2,10 @@ package sqlite
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -16,24 +17,10 @@ import (
 // 大纲每次提交都是一份完整 slide 集合（DATA-MODEL：slides.idx 在 project 内唯一）。
 func (s *Store) ReplaceSlides(ctx context.Context, projectID string, slides []model.Slide) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var previous []slidePO
-		if err := tx.Where("project_id = ?", projectID).Find(&previous).Error; err != nil {
-			return err
-		}
-		ids := make([]string, 0, len(previous))
-		for _, slide := range previous {
-			ids = append(ids, slide.ID)
-		}
-		if err := rememberDeletedSlides(tx, projectID, ids); err != nil {
-			return err
-		}
 		if err := tx.Where("project_id = ?", projectID).Delete(&slidePO{}).Error; err != nil {
 			return err
 		}
 		for _, sl := range slides {
-			if err := forgetDeletedSlide(tx, projectID, sl.ID); err != nil {
-				return err
-			}
 			if err := tx.Create(slideToPO(sl)).Error; err != nil {
 				return err
 			}
@@ -58,39 +45,31 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 			}
 		}
 		if err := tx.Model(&projectPO{}).Where("id = ?", commit.ProjectID).Updates(map[string]any{
-			"layout_version": currentProjectLayoutVersion, "updated_at": nowUnix(),
+			"updated_at": nowUnix(),
 		}).Error; err != nil {
 			return err
 		}
 		if len(commit.DeletedSlideIDs) > 0 {
-			if err := rememberDeletedSlides(tx, commit.ProjectID, commit.DeletedSlideIDs); err != nil {
-				return err
-			}
 			if err := tx.Where("project_id = ? AND id IN ?", commit.ProjectID, commit.DeletedSlideIDs).
 				Delete(&slidePO{}).Error; err != nil {
 				return err
 			}
 		}
 		for _, slide := range commit.Slides {
-			if err := forgetDeletedSlide(tx, slide.ProjectID, slide.ID); err != nil {
-				return err
-			}
 			po := slideToPO(slide)
 			if err := tx.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
-					"project_id", "last_export_at", "generation_inputs_json",
+					"project_id", "generation_inputs_json",
 				}),
 			}).Create(&po).Error; err != nil {
 				return err
 			}
 		}
 		if commit.RunID != "" && commit.OperationID != "" {
-			now := time.Now().UnixNano()
 			receipt := idempotencyPO{
 				Scope: "artifact_commit", OwnerID: commit.RunID, Key: commit.OperationID,
-				RequestHash: commit.RequestHash, Status: "completed", ResultJSON: commit.ToolResultJSON,
-				CreatedAt: now, UpdatedAt: now,
+				RequestHash: commit.RequestHash, Status: "completed", ResultJSON: "{}",
 			}
 			if err := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "scope"}, {Name: "owner_id"}, {Name: "key"}},
@@ -106,12 +85,25 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 				return fmt.Errorf("artifact commit receipt conflicts with operation %s", commit.OperationID)
 			}
 			if commit.ToolResultJSON != "" {
-				if err := tx.Model(&idempotencyPO{}).
+				result := tx.Model(&idempotencyPO{}).
 					Where("scope = ? AND owner_id = ? AND key = ?", "tool_call", commit.RunID, commit.OperationID).
-					Updates(map[string]any{"status": "completed", "result_json": commit.ToolResultJSON, "updated_at": now}).Error; err != nil {
-					return err
+					Updates(map[string]any{"status": "completed", "result_json": commit.ToolResultJSON})
+				if result.Error != nil {
+					return result.Error
+				}
+				if result.RowsAffected != 1 {
+					return errors.New("tool replay receipt missing before artifact commit")
 				}
 			}
+			var owner struct{ ThreadID string }
+			if err := tx.Table("runs").Select("thread_id").Where("id = ?", commit.RunID).Take(&owner).Error; err != nil {
+				return mapErr(err)
+			}
+			raw, _ := json.Marshal(map[string]string{"operation_id": commit.OperationID, "request_hash": commit.RequestHash, "result_scope": "tool_call"})
+			if _, err := s.enqueueEvent(tx, owner.ThreadID, threadjournal.Event{Type: "artifact.committed", RunID: commit.RunID, Payload: raw}); err != nil {
+				return err
+			}
+
 		}
 		return nil
 	})
@@ -145,9 +137,6 @@ func (s *Store) GetSlide(ctx context.Context, id string) (model.Slide, error) {
 // InsertSlide 单页插入（不清空其它页，结构操作加页用）。
 func (s *Store) InsertSlide(ctx context.Context, sl model.Slide) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := forgetDeletedSlide(tx, sl.ProjectID, sl.ID); err != nil {
-			return err
-		}
 		return tx.Create(slideToPO(sl)).Error
 	})
 }
@@ -161,35 +150,13 @@ func (s *Store) DeleteSlideByID(ctx context.Context, slideID string) error {
 		} else if err != nil {
 			return err
 		}
-		if err := rememberDeletedSlides(tx, slide.ProjectID, []string{slideID}); err != nil {
-			return err
-		}
 		return tx.Where("id = ?", slideID).Delete(&slidePO{}).Error
 	})
 }
 
-// SetProjectStatus 更新 project 状态游标（draft/generating/ready）。
-func (s *Store) SetProjectStatus(ctx context.Context, id, status string) error {
-	return s.db.WithContext(ctx).Model(&projectPO{}).
-		Where("id = ?", id).
-		Updates(map[string]any{"status": status, "updated_at": nowUnix()}).Error
-}
-
-// Tombstones contain identity only; checkpoints restore them with slide membership.
-func rememberDeletedSlides(tx *gorm.DB, projectID string, ids []string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	return tx.Exec(`INSERT OR IGNORE INTO deleted_slides(project_id, slide_id)
- SELECT project_id, id FROM slides WHERE project_id = ? AND id IN ?`, projectID, ids).Error
-}
-
-func forgetDeletedSlide(tx *gorm.DB, projectID, slideID string) error {
-	return tx.Exec("DELETE FROM deleted_slides WHERE project_id = ? AND slide_id = ?", projectID, slideID).Error
-}
-
+// IsSlideDeleted rejects every reference outside the current project membership.
 func (s *Store) IsSlideDeleted(ctx context.Context, projectID, slideID string) (bool, error) {
 	var count int64
-	err := s.db.WithContext(ctx).Table("deleted_slides").Where("project_id = ? AND slide_id = ?", projectID, slideID).Count(&count).Error
-	return count > 0, err
+	err := s.db.WithContext(ctx).Table("slides").Where("project_id = ? AND id = ?", projectID, slideID).Count(&count).Error
+	return count == 0, err
 }

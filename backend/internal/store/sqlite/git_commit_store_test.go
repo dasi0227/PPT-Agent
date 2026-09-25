@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -14,21 +15,17 @@ func TestProjectWriteTriggersSerializeRunsAndGitCommits(t *testing.T) {
 	st := newTestStore(t)
 	if err := st.CreateProject(ctx, model.Project{
 		ID: "p1", Title: "Deck", WorkDir: t.TempDir(), Theme: "default",
-		Status: "draft", LayoutVersion: currentProjectLayoutVersion, CreatedAt: 1, UpdatedAt: 1,
+		CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CreateThread(ctx, model.Thread{
-		ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl",
-		Status: "active", CreatedAt: 1, UpdatedAt: 1,
+		ID: "t1", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	operation := model.GitCommitOperation{
-		ID: "gco_1", ProjectID: "p1", ThreadID: "t1", ClientRequestID: "req_1",
-		ModelProfile: "test", Status: model.GitCommitAccepted, CreatedAt: 1, UpdatedAt: 1,
-	}
-	if err := st.CreateGitCommitOperation(ctx, operation); err != nil {
+	command, _, err := st.AcceptCommand(ctx, "t1", model.CommandRequest{RequestKey: "req_1", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
+	if err != nil {
 		t.Fatal(err)
 	}
 	runModel := model.Run{
@@ -42,17 +39,15 @@ func TestProjectWriteTriggersSerializeRunsAndGitCommits(t *testing.T) {
 	if err := st.CreateRun(ctx, runModel); !errors.Is(err, store.ErrGitCommitActive) {
 		t.Fatalf("expected Git commit conflict, got %v", err)
 	}
-	operation.Status, operation.UpdatedAt = model.GitCommitCompleted, 2
-	if err := st.UpdateGitCommitOperation(ctx, operation); err != nil {
+	command.Status = "completed"
+	command.Result = json.RawMessage(`{"empty":true}`)
+	if err := st.SaveCommandExecution(ctx, command); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CreateRun(ctx, runModel); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateGitCommitOperation(ctx, model.GitCommitOperation{
-		ID: "gco_2", ProjectID: "p1", ThreadID: "t1", ClientRequestID: "req_2",
-		ModelProfile: "test", Status: model.GitCommitAccepted, CreatedAt: 3, UpdatedAt: 3,
-	}); !errors.Is(err, store.ErrRunActive) {
-		t.Fatalf("expected active Run conflict, got %v", err)
+	if _, _, err := st.AcceptCommand(ctx, "t1", model.CommandRequest{RequestKey: "req_2", Kind: "commit", Input: json.RawMessage(`{}`)}, 0); !errors.Is(err, store.ErrRunActive) {
+		t.Fatalf("expected active Run conflict: %v", err)
 	}
 }

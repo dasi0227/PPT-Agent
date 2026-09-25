@@ -11,6 +11,7 @@ import (
 
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
+	commands      *service.CommandService
 	history       *projecthistory.Manager
 	source        *service.SlideSourceService
 	engine        *gin.Engine
@@ -61,7 +62,10 @@ func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH 
 		attachments = attachmentH[0]
 	}
 	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, resources: resourceH, contextWindow: contextWindowH, attachment: attachments}
-	engine.Use(r.commandHistory(), r.projectHistoryGate())
+	if threadH != nil && threadH.svc.CommandStore() != nil {
+		r.commands = service.NewCommandService(threadH.svc.CommandStore(), r.executeCommand)
+	}
+	engine.Use(r.projectHistoryGate())
 	r.register()
 	return r
 }
@@ -94,6 +98,7 @@ func (r *Router) register() {
 	v1.GET("/skills/:id", r.repository.GetSkill)
 
 	if r.resources != nil {
+		v1.GET("/tags", r.resources.ListTags)
 		v1.POST("/resources", r.resources.Register)
 		v1.PATCH("/resources/:type/:id", r.resources.Patch)
 		v1.DELETE("/resources/:type/:id", r.resources.Delete)
@@ -109,13 +114,6 @@ func (r *Router) register() {
 	v1.PATCH("/projects/:id", r.project.Patch)
 	v1.GET("/projects/:id", r.project.Get)
 	v1.DELETE("/projects/:id", r.project.Delete)
-	if r.polish != nil {
-		v1.POST("/projects/:id/polish", r.polish.Polish)
-	}
-	if r.briefing != nil {
-		v1.POST("/projects/:id/kickoff", r.briefing.Kickoff)
-		v1.POST("/projects/:id/handoff", r.briefing.Handoff)
-	}
 	v1.GET("/projects/:id/content", r.project.Content)
 	v1.POST("/projects/:id/mutations", r.project.Mutate)
 	v1.PATCH("/projects/:id/theme", r.project.SetTheme)
@@ -124,31 +122,27 @@ func (r *Router) register() {
 		v1.GET("/projects/:id/attachments/:attachment_id", r.attachment.Get)
 		v1.GET("/projects/:id/attachments/:attachment_id/content", r.attachment.Content)
 	}
-	if r.gitCommit != nil {
-		v1.POST("/projects/:id/git-commits", r.gitCommit.Create)
-		v1.GET("/git-commits/:id", r.gitCommit.Get)
-		v1.POST("/git-commits/:id/cancel", r.gitCommit.Cancel)
-		v1.GET("/git-commits/:id/events", r.gitCommit.Events)
-	}
 	v1.GET("/projects/:id/threads", r.thread.List)
 	v1.GET("/projects/:id/thread-events", r.thread.Events)
 	v1.POST("/projects/:id/threads", r.thread.Create)
 	v1.PATCH("/threads/:id", r.thread.Patch)
-	v1.POST("/threads/:id/naming", r.thread.Naming)
-	v1.POST("/threads/:id/rename", r.thread.GenerateName)
 	v1.GET("/threads/:id", r.thread.Get)
 	v1.DELETE("/threads/:id", r.thread.Delete)
-	v1.GET("/threads/:id/history", r.thread.History)
+	v1.GET("/threads/:id/history", r.threadHistory)
+	v1.GET("/threads/:id/events", r.threadJournalEvents)
+	if r.commands != nil {
+		v1.POST("/threads/:id/commands", r.createCommand)
+		v1.GET("/commands/:id", r.getCommand)
+		v1.POST("/commands/:id/cancel", r.cancelCommand)
+	}
 	if r.contextWindow != nil {
 		v1.GET("/threads/:id/context-window", r.contextWindow.Get)
-		v1.POST("/threads/:id/compact", r.contextWindow.Compact)
 	}
 
 	// Run：创建 / SSE 订阅 / HITL 输入 / 取消（40-api/rest-endpoints）。
 	v1.POST("/threads/:id/runs", r.run.CreateRun)
 	v1.GET("/threads/:id/active-run", r.run.GetActiveRunForThread)
 	v1.GET("/runs/:id", r.run.GetRun)
-	v1.GET("/runs/:id/events", r.run.Events)
 	v1.GET("/runs/:id/screenshots/:screenshot_id", r.run.Screenshot)
 	v1.POST("/runs/:id/input", r.run.Input)
 	v1.POST("/runs/:id/plan-approval", r.run.PlanApproval)

@@ -473,3 +473,19 @@ func (s *ResourceService) WriteSnippet(ctx context.Context, id, content string) 
 	}
 	return s.Snippet(ctx, id)
 }
+
+// Tags reads the dictionary without exposing a tag editing surface.
+func (s *ResourceService) Tags(ctx context.Context, scope string) ([]model.TagDefinition, error) {
+	if scope != "" {
+		if _, _, _, err := resourceFile(scope); err != nil {
+			return nil, err
+		}
+	}
+	dictionary, ok := s.store.(interface {
+		ListTags(context.Context, string) ([]model.TagDefinition, error)
+	})
+	if !ok {
+		return nil, errors.New("resource tag dictionary is unavailable")
+	}
+	return dictionary.ListTags(ctx, scope)
+}

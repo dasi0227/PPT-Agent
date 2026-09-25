@@ -117,7 +117,7 @@
   {
     "id": "deck.form",
     "group": "演示文稿",
-    "label": "切换形态",
+    "label": "切换 HTML 预览与源码",
     "kind": "shortcut",
     "default": {
       "code": "KeyI",

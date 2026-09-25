@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -15,9 +16,7 @@ func (s *Store) RecordThreadNamingInput(ctx context.Context, input model.ThreadN
 	var thread model.Thread
 	shouldTrigger := false
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&threadNamingInputPO{
-			ThreadID: input.ThreadID, InputID: input.InputID, Content: input.Content, AcceptedAt: input.AcceptedAt,
-		})
+		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&idempotencyPO{Scope: "naming_input", OwnerID: input.ThreadID, Key: input.InputID, RequestHash: input.InputID, Status: "completed", ResultJSON: "{}"})
 		if result.Error != nil {
 			return result.Error
 		}
@@ -72,30 +71,6 @@ func (s *Store) BeginThreadRenameRequest(ctx context.Context, id string, expecte
 			updates["rename_input_count"] = 0
 		}
 		if err := tx.Model(&threadPO{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-			return err
-		}
-		if err := tx.First(&po, "id = ?", id).Error; err != nil {
-			return mapErr(err)
-		}
-		out = po.toModel()
-		return nil
-	})
-	return out, err
-}
-
-func (s *Store) StartThreadExplicitRenameRequest(ctx context.Context, id string, operationVersion int64, updatedAt int64) (model.Thread, error) {
-	var out model.Thread
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var po threadPO
-		if err := tx.First(&po, "id = ?", id).Error; err != nil {
-			return mapErr(err)
-		}
-		if po.AutoRenameEnabled == 0 || po.RenameOperationVersion != operationVersion {
-			return store.ErrNamingOperationConflict
-		}
-		if err := tx.Model(&threadPO{}).Where("id = ?", id).Updates(map[string]any{
-			"rename_input_count": 0, "updated_at": updatedAt,
-		}).Error; err != nil {
 			return err
 		}
 		if err := tx.First(&po, "id = ?", id).Error; err != nil {
@@ -182,112 +157,76 @@ func (s *Store) UpdateThreadNamingState(ctx context.Context, id string, title *s
 	return out, err
 }
 
-func (s *Store) GetThreadNamingOperation(ctx context.Context, threadID, operationID string) (model.ThreadNamingOperation, error) {
-	var po threadNamingOperationPO
-	if err := s.db.WithContext(ctx).First(&po, "thread_id = ? AND operation_id = ?", threadID, operationID).Error; err != nil {
-		return model.ThreadNamingOperation{}, mapErr(err)
-	}
-	return po.toModel(), nil
-}
-
-func (s *Store) CreateThreadNamingOperation(ctx context.Context, operation model.ThreadNamingOperation) (bool, error) {
-	po := threadNamingOperationPO{
-		ThreadID: operation.ThreadID, OperationID: operation.OperationID, RequestHash: operation.RequestHash,
-		Action: operation.Action, Status: operation.Status, RequestID: operation.RequestID,
-		ResultJSON: operation.ResultJSON, CreatedAt: operation.CreatedAt, UpdatedAt: operation.UpdatedAt,
-	}
-	result := s.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&po)
-	return result.RowsAffected == 1, result.Error
-}
-
-func (s *Store) CompleteThreadNamingOperation(ctx context.Context, operation model.ThreadNamingOperation) error {
-	result := s.db.WithContext(ctx).Model(&threadNamingOperationPO{}).
-		Where("thread_id = ? AND operation_id = ? AND request_hash = ?", operation.ThreadID, operation.OperationID, operation.RequestHash).
-		Updates(map[string]any{"status": operation.Status, "request_id": operation.RequestID, "result_json": operation.ResultJSON, "updated_at": operation.UpdatedAt})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return store.ErrNamingOperationConflict
-	}
-	return nil
-}
-
 func (s *Store) ListThreadNamingInputs(ctx context.Context, threadID string, limit int) ([]model.ThreadNamingInput, error) {
-	if limit < 1 {
-		limit = 20
-	}
-	var rows []threadNamingInputPO
-	if err := s.db.WithContext(ctx).Where("thread_id = ?", threadID).
-		Order("accepted_at DESC, input_id DESC").Limit(limit).Find(&rows).Error; err != nil {
+	events, err := s.ThreadEvents(ctx, threadID, 0)
+	if err != nil {
 		return nil, err
 	}
-	out := make([]model.ThreadNamingInput, len(rows))
-	for index := range rows {
-		out[len(rows)-1-index] = rows[index].toModel()
+	out := []model.ThreadNamingInput{}
+	for _, e := range events {
+		var input model.ThreadNamingInput
+		switch e.Type {
+		case "run.accepted":
+			var a runAcceptance
+			if err := json.Unmarshal(e.Payload, &a); err != nil {
+				return nil, err
+			}
+			input = model.ThreadNamingInput{ThreadID: threadID, InputID: a.ClientRequestID, Content: a.Command.Instruction, AcceptedAt: e.TS}
+		case "steering.accepted":
+			var a model.SteeringMessage
+			if err := json.Unmarshal(e.Payload, &a); err != nil {
+				return nil, err
+			}
+			input = model.ThreadNamingInput{ThreadID: threadID, InputID: a.ClientMessageID, Content: a.Content, AcceptedAt: e.TS}
+		default:
+			continue
+		}
+		out = append(out, input)
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[len(out)-limit:]
 	}
 	return out, nil
 }
-
 func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error) {
-	inputs, err := s.ListThreadNamingInputs(ctx, threadID, 16)
+	source := model.ThreadRenameContextSource{AssistantReplies: []string{}}
+	inputs, err := s.ListThreadNamingInputs(ctx, threadID, 0)
 	if err != nil {
-		return model.ThreadRenameContextSource{}, err
+		return source, err
 	}
-	var first threadNamingInputPO
-	firstResult := s.db.WithContext(ctx).Where("thread_id = ?", threadID).Order("accepted_at ASC, input_id ASC").Limit(1).Find(&first)
-	if firstResult.Error != nil {
-		return model.ThreadRenameContextSource{}, firstResult.Error
+	if len(inputs) > 16 {
+		inputs = append([]model.ThreadNamingInput{inputs[0]}, inputs[len(inputs)-16:]...)
 	}
-	if firstResult.RowsAffected > 0 && (len(inputs) == 0 || inputs[0].InputID != first.InputID) {
-		inputs = append([]model.ThreadNamingInput{first.toModel()}, inputs...)
+	source.Inputs = inputs
+	events, err := s.ListThreadEvents(ctx, threadID)
+	if err != nil {
+		return source, err
 	}
-	var eventRows []struct {
-		Type    string
-		Payload string
-	}
-	if err := s.db.WithContext(ctx).Raw(`
-		SELECT e.type, e.payload
-		FROM run_events e
-		JOIN runs r ON r.id = e.run_id
-		WHERE r.thread_id = ? AND e.type IN (?, ?)
-		ORDER BY e.created_at DESC, e.seq DESC
-		LIMIT 16
-	`, threadID, string(model.EventMessageFinal), string(model.EventPlanUpdated)).Scan(&eventRows).Error; err != nil {
-		return model.ThreadRenameContextSource{}, err
-	}
-	source := model.ThreadRenameContextSource{Inputs: inputs, AssistantReplies: []string{}}
-	for _, row := range eventRows {
-		switch row.Type {
-		case string(model.EventMessageFinal):
-			if len(source.AssistantReplies) >= 4 {
-				continue
+	for _, event := range events {
+		switch event.Type {
+		case model.EventMessageFinal:
+			var p model.MessageFinalPayload
+			if err := json.Unmarshal([]byte(event.Payload), &p); err != nil {
+				return source, err
 			}
-			var payload model.MessageFinalPayload
-			if json.Unmarshal([]byte(row.Payload), &payload) == nil && payload.Text != "" {
-				source.AssistantReplies = append(source.AssistantReplies, payload.Text)
+			source.AssistantReplies = append(source.AssistantReplies, p.Text)
+		case model.EventPlanUpdated:
+			var p model.PlanUpdatedPayload
+			if err := json.Unmarshal([]byte(event.Payload), &p); err != nil {
+				return source, err
 			}
-		case string(model.EventPlanUpdated):
-			if source.Plan != nil {
-				continue
-			}
-			var payload model.PlanUpdatedPayload
-			if json.Unmarshal([]byte(row.Payload), &payload) == nil {
-				plan := payload.Plan
-				source.Plan = &plan
-			}
+			source.Plan = &p.Plan
 		}
 	}
-	for left, right := 0, len(source.AssistantReplies)-1; left < right; left, right = left+1, right-1 {
-		source.AssistantReplies[left], source.AssistantReplies[right] = source.AssistantReplies[right], source.AssistantReplies[left]
+	if len(source.AssistantReplies) > 4 {
+		source.AssistantReplies = source.AssistantReplies[len(source.AssistantReplies)-4:]
 	}
-	var compaction contextCompactionPO
-	result := s.db.WithContext(ctx).Where("thread_id = ?", threadID).Order("created_at DESC, id DESC").Limit(1).Find(&compaction)
-	if result.Error != nil {
-		return model.ThreadRenameContextSource{}, result.Error
+	compactions, err := s.ListThreadContextCompactions(ctx, threadID)
+	if err != nil && !errors.Is(err, run.ErrRunNotFound) {
+		return source, err
 	}
-	if result.RowsAffected > 0 {
-		source.ContextSummary = compaction.Content
+	if len(compactions) > 0 {
+		source.ContextSummary = compactions[len(compactions)-1].Content
 	}
 	return source, nil
 }

@@ -1,3 +1,4 @@
+import { installTagDictionaryFixture } from '../../testSupport/resourceTags';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,6 +34,7 @@ function renderPage() {
 describe('SnippetRepositoryPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    installTagDictionaryFixture();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     useSnippetStore.setState({
       snippets: [first],

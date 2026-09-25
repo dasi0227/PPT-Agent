@@ -7,9 +7,9 @@
 package main
 
 import (
-	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/logger"
+	"github.com/dasi0227/PPT-Agent/backend/internal/persistence"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -20,7 +20,7 @@ import (
 // Injectors from wire.go:
 
 func initApp() (*App, func(), error) {
-	configConfig, err := config.Load()
+	configConfig, err := provideConfig()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -33,7 +33,7 @@ func initApp() (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	store, err := sqlite.NewStore(db, zapLogger)
+	store, err := persistence.NewStore(db, zapLogger)
 	if err != nil {
 		cleanup2()
 		cleanup()
@@ -42,8 +42,7 @@ func initApp() (*App, func(), error) {
 	healthService := service.NewHealthService(store)
 	healthHandler := httpapi.NewHealthHandler(healthService)
 	lockManager := provideLockManager()
-	historyWriter := provideHistoryWriter(store)
-	engine, err := provideEngine(store, lockManager, historyWriter, zapLogger)
+	engine, err := provideEngine(store, lockManager, zapLogger)
 	if err != nil {
 		cleanup2()
 		cleanup()
@@ -62,7 +61,7 @@ func initApp() (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	fsTranscriptStore := provideTranscriptStore()
+	fsTranscriptStore := provideTranscriptStore(store)
 	calibrationStore := provideCalibrationStore()
 	provider, err := provideRenameProvider(registry)
 	if err != nil {
@@ -150,7 +149,7 @@ func initApp() (*App, func(), error) {
 // wire.go:
 
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
-var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMRegistry,
+var providerSet = wire.NewSet(provideConfig, logger.New, sqlite.Open, persistence.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMRegistry,
 	provideRenameProvider,
 	provideThreadEventHub,
 	provideNamingService,
@@ -159,7 +158,6 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideCalibrationStore,
 	provideWorkRoot,
 	provideEngine,
-	provideHistoryWriter,
 	provideRenderWorker,
 	provideExportManager, service.NewHealthService, provideProjectService,
 	provideThreadService,

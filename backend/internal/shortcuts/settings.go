@@ -67,9 +67,6 @@ func Validate(bindings map[string]Binding) error {
 			if b.Trigger != "" || !validCode.MatchString(b.Code) || (!b.Primary && !b.Alt) || (b.Code == "Equal" && b.Shift) {
 				return fmt.Errorf("%s：请至少使用 Command/Ctrl 或 Option/Alt，可组合 Shift", def.Label)
 			}
-			if b.Primary && !b.Alt && !b.Shift && b.Code == "KeyS" {
-				return fmt.Errorf("%s：该组合保留给源码保存", def.Label)
-			}
 			if b.Primary && strings.Contains("|KeyA|KeyC|KeyV|KeyX|KeyZ|KeyY|KeyF|KeyL|KeyQ|KeyW|KeyR|KeyN|", "|"+b.Code+"|") {
 				return fmt.Errorf("%s：该组合保留给系统编辑或浏览器操作", def.Label)
 			}

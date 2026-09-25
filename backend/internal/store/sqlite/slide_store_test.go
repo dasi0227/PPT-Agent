@@ -22,7 +22,7 @@ func activeRunSpec() model.RunCommand {
 func seedProject(t *testing.T, s *Store) {
 	t.Helper()
 	if err := s.CreateProject(context.Background(), model.Project{
-		ID: "p1", Title: "t", WorkDir: "/tmp/p1", Theme: "default", Status: "draft", CreatedAt: 1, UpdatedAt: 1,
+		ID: "p1", Title: "t", WorkDir: "/tmp/p1", Theme: "default", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
@@ -90,6 +90,13 @@ func TestCommitWorkflowAtomicallyRecordsMutationReceiptAndToolResult(t *testing.
 	s := newTestStore(t)
 	seedProject(t, s)
 	ctx := context.Background()
+	if err := s.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateRun(ctx, model.Run{ID: "run", ThreadID: "t", ProjectID: "p1", Command: activeRunSpec(), Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, _, err := s.AcquireIdempotency(ctx, model.IdempotencyRecord{
 		Scope: "tool_call", OwnerID: "run", Key: "call_1", RequestHash: "tool-request", Status: "in_progress",
 	}); err != nil {
@@ -116,19 +123,6 @@ func TestCommitWorkflowAtomicallyRecordsMutationReceiptAndToolResult(t *testing.
 	}
 }
 
-func TestSetProjectStatus(t *testing.T) {
-	s := newTestStore(t)
-	seedProject(t, s)
-	ctx := context.Background()
-	if err := s.SetProjectStatus(ctx, "p1", "ready"); err != nil {
-		t.Fatalf("set status: %v", err)
-	}
-	p, _ := s.GetProject(ctx, "p1")
-	if p.Status != "ready" {
-		t.Errorf("want ready, got %q", p.Status)
-	}
-}
-
 func TestListSlidesReturnsMembership(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
@@ -148,7 +142,7 @@ func TestHasActiveRun(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if err := s.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", Command: activeRunSpec(), Status: model.RunRunning}); err != nil {
@@ -210,10 +204,17 @@ func itoaLocal(n int) string {
 	return string(b)
 }
 
-func TestDeletedSlideMetadataIsAtomicAndProjectScoped(t *testing.T) {
+func TestSlideMembershipDeletionAndReceiptAreAtomic(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
 	ctx := context.Background()
+	if err := s.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateRun(ctx, model.Run{ID: "run", ThreadID: "t", ProjectID: "p1", Command: activeRunSpec(), Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+
 	slide := model.Slide{ID: "pending", ProjectID: "p1"}
 	if err := s.InsertSlide(ctx, slide); err != nil {
 		t.Fatal(err)
@@ -237,7 +238,7 @@ func TestDeletedSlideMetadataIsAtomicAndProjectScoped(t *testing.T) {
 	}
 	for _, project := range []string{"p1", "other"} {
 		deleted, err := s.IsSlideDeleted(ctx, project, slide.ID)
-		if err != nil || deleted != (project == "p1") {
+		if err != nil || !deleted {
 			t.Fatalf("project=%s deleted=%v err=%v", project, deleted, err)
 		}
 	}

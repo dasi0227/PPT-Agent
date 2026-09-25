@@ -12,7 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
-func TestRuntimeAuthorityMigrationCreatesTablesAndIndexes(t *testing.T) {
+func TestRuntimeAuthoritySchemaCreatesControlIndexes(t *testing.T) {
 	s := newTestStore(t)
 	for _, name := range []string{"idempotency_records", "steering_inbox"} {
 		var count int64
@@ -23,7 +23,7 @@ func TestRuntimeAuthorityMigrationCreatesTablesAndIndexes(t *testing.T) {
 			t.Fatalf("missing table %s", name)
 		}
 	}
-	for _, name := range []string{"idx_runs_thread_client_request"} {
+	for _, name := range []string{"idx_runs_active_project"} {
 		var count int64
 		if err := s.db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?", name).Scan(&count).Error; err != nil {
 			t.Fatal(err)
@@ -40,13 +40,12 @@ func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
 	ctx := context.Background()
 	if err := s.CreateProject(ctx, model.Project{
 		ID: "model-project", Title: "project", WorkDir: t.TempDir(),
-		Status: "draft", CreatedAt: 1, UpdatedAt: 1,
+		CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CreateThread(ctx, model.Thread{
-		ID: "model-thread", ProjectID: "model-project", HistoryPath: "thread.jsonl",
-		Status: "active", CreatedAt: 1, UpdatedAt: 1,
+		ID: "model-thread", ProjectID: "model-project", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -135,13 +134,12 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	if err := s.CreateProject(ctx, model.Project{
-		ID: "project-1", Title: "project", WorkDir: t.TempDir(), Status: "draft", CreatedAt: 1, UpdatedAt: 1,
+		ID: "project-1", Title: "project", WorkDir: t.TempDir(), CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.CreateThread(ctx, model.Thread{
-		ID: "thread-1", ProjectID: "project-1", HistoryPath: "threads/thread-1.jsonl",
-		Status: "active", CreatedAt: 1, UpdatedAt: 1,
+		ID: "thread-1", ProjectID: "project-1", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -192,10 +190,10 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 func TestSteeringAtomicallyAdvancesScopeAndCheckpoint(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	if err := s.CreateProject(ctx, model.Project{ID: "steering-project", Title: "project", WorkDir: t.TempDir(), Status: "draft", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if err := s.CreateProject(ctx, model.Project{ID: "steering-project", Title: "project", WorkDir: t.TempDir(), CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateThread(ctx, model.Thread{ID: "steering-thread", ProjectID: "steering-project", HistoryPath: "thread.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if err := s.CreateThread(ctx, model.Thread{ID: "steering-thread", ProjectID: "steering-project", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
 	initial := model.RunScope{SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCurrentPage}, Revision: 1}
@@ -207,7 +205,7 @@ func TestSteeringAtomicallyAdvancesScopeAndCheckpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.SaveCheckpoint(ctx, workflow.RuntimeCheckpoint{
-		RunID: "steering-run", LoopID: "loop-one", Phase: workflow.PhaseExecuting,
+		ExecutionRevision: 1, RunID: "steering-run", LoopID: "loop-one", Phase: workflow.PhaseExecuting,
 		Mode: model.ModeExecute, Scope: initial, CreatedAt: 2,
 	}); err != nil {
 		t.Fatal(err)

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/persistence"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 	"go.uber.org/zap"
@@ -38,7 +39,7 @@ func initialize() error {
 		return err
 	}
 	defer closeDB()
-	st, err := sqlite.NewStore(db, zap.NewNop())
+	st, err := persistence.NewStore(db, zap.NewNop())
 	if err != nil {
 		return err
 	}

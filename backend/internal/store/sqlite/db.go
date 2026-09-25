@@ -11,16 +11,27 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workrootlock"
 )
 
 // Open 用 GORM + modernc.org/sqlite（纯 Go，无 cgo，经 glebarez 适配）打开数据库。
 // DSN 开启 WAL、busy_timeout 与外键（ADR-0012 / ARCH-BACKEND-004）。
 func Open(cfg *config.Config, log *zap.Logger) (*gorm.DB, func(), error) {
+	release, err := workrootlock.Acquire(cfg.WorkRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			release()
+		}
+	}()
 	if err := os.MkdirAll(filepath.Dir(cfg.DBPath), 0o755); err != nil {
 		return nil, nil, fmt.Errorf("create db dir: %w", err)
 	}
 	dsn := fmt.Sprintf(
-		"file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)",
+		"file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=synchronous(FULL)",
 		cfg.DBPath,
 	)
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
@@ -36,6 +47,8 @@ func Open(cfg *config.Config, log *zap.Logger) (*gorm.DB, func(), error) {
 	// 单连接即单一串行写通道，天然规避 SQLite 写竞态（ARCH-BACKEND-004）。
 	sqlDB.SetMaxOpenConns(1)
 
-	cleanup := func() { _ = sqlDB.Close() }
+	db = db.Set("ppt.work_root", cfg.WorkRoot).Session(&gorm.Session{})
+	cleanup := func() { _ = sqlDB.Close(); release() }
+	ok = true
 	return db, cleanup, nil
 }

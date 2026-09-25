@@ -7,8 +7,6 @@ export type ShortcutBindings = Record<string, ShortcutBinding>;
 export interface ShortcutSettings { revision: number; bindings: ShortcutBindings }
 export const shortcutCatalog: ShortcutDefinition[] = catalogJSON;
 export const defaultBindings: ShortcutBindings = Object.fromEntries(shortcutCatalog.map(def => [def.id, def.default]));
-// Fixed editor commands are intentionally excluded from configurable settings.
-export const fixedBindings: ShortcutBindings = { 'deck.save': { code: 'KeyS', primary: true } };
 export const triggerCharacters = '/@$#%!?&*~^:;=+-_.|\\';
 const codePattern = /^(Key[A-Z]|Digit[0-9]|Arrow(Left|Right|Up|Down)|Enter|Space|Equal|Minus|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Comma|Period|Slash|Backquote)$/;
 const reservedPrimary = new Set(['KeyA','KeyC','KeyV','KeyX','KeyZ','KeyY','KeyF','KeyL','KeyQ','KeyW','KeyR','KeyN']);
@@ -25,7 +23,6 @@ export function validateBindings(bindings: ShortcutBindings): string | null {
       if (!b.trigger || b.trigger.length !== 1 || !triggerCharacters.includes(b.trigger) || b.code || b.primary || b.alt || b.shift) return `${def.label}：请输入单个支持的标点符号`;
     } else {
       if (b.trigger || !codePattern.test(b.code ?? '') || (!b.primary && !b.alt) || (b.code === 'Equal' && b.shift)) return `${def.label}：请至少使用 Command/Ctrl 或 Option/Alt，可组合 Shift`;
-      if (bindingSignature(b) === bindingSignature(fixedBindings['deck.save'])) return `${def.label}：该组合保留给源码保存`;
       if (b.primary && reservedPrimary.has(b.code!)) return `${def.label}：该组合保留给系统编辑或浏览器操作`;
     }
     const signature = bindingSignature(b);

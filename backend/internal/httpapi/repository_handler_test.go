@@ -41,7 +41,7 @@ func completeThemeFixtureCSS() string {
 func repositoryTestRouter(t *testing.T, root string) *gin.Engine {
 	t.Helper()
 	workRoot := service.WorkRoot(root)
-	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "repository.db")}, zap.NewNop())
+	db, cleanup, err := sqlitestore.Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "repository.db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,6 +69,7 @@ func repositoryTestRouter(t *testing.T, root string) *gin.Engine {
 	engine.GET("/api/v1/skills/:id", handler.GetSkill)
 
 	resources := NewResourceHandler(service.NewResourceService(workRoot, metadata))
+	engine.GET("/api/v1/tags", resources.ListTags)
 	engine.POST("/api/v1/resources", resources.Register)
 	engine.PATCH("/api/v1/resources/:type/:id", resources.Patch)
 	engine.DELETE("/api/v1/resources/:type/:id", resources.Delete)
@@ -182,5 +183,34 @@ func TestThemeCSSVersionTracksOnlyPayload(t *testing.T) {
 	writeRepositoryFixture(t, root, path, css+"\n.card { border-style:dashed; }")
 	if got := performRepositoryRequest(t, engine, "GET", url, ""); got.Code != 409 {
 		t.Fatal("obsolete style version served")
+	}
+}
+
+func TestResourceTagsEndpointValidatesScope(t *testing.T) {
+	router := repositoryTestRouter(t, t.TempDir())
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/tags?scope=snippet", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("tags: %d %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Tags []struct {
+			Scope  string `json:"scope"`
+			Name   string `json:"name"`
+			Key    string `json:"key"`
+			System bool   `json:"is_system"`
+			Order  int    `json:"sort_order"`
+		} `json:"tags"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Tags) != 6 || response.Tags[0].Key != "identity" || response.Tags[0].Name != "身份" || !response.Tags[0].System {
+		t.Fatalf("dictionary: %+v", response.Tags)
+	}
+	invalid := httptest.NewRecorder()
+	router.ServeHTTP(invalid, httptest.NewRequest(http.MethodGet, "/api/v1/tags?scope=prompt", nil))
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid scope: %d", invalid.Code)
 	}
 }

@@ -1,3 +1,4 @@
+import { useResourceTags, useTagStore } from '../../stores/tagStore';
 import { BookOpenText } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -21,17 +22,8 @@ import {
 import { RepositoryEditDialog } from './RepositoryEditDialog';
 import { RepositoryShell } from './RepositoryShell';
 
-const skillTagLabels: Record<SkillTag, string> = {
-  workflow: '工作流',
-  methodology: '方法论',
-  manual: '操作手册',
-  experience: '开发经验',
-  other: '其它',
-};
-
-const skillTagOrder = Object.keys(skillTagLabels) as SkillTag[];
-
 export function SkillRepositoryPage() {
+  const { labels: skillTagLabels, order: skillTagOrder } = useResourceTags('skill');
   const [skills, setSkills] = useState<Skill[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
@@ -45,7 +37,7 @@ export function SkillRepositoryPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await skillsApi.list();
+      const [response] = await Promise.all([skillsApi.list(), useTagStore.getState().load('skill')]);
       setSkills(response.skills);
       setSelectedId((value) => value || response.skills[0]?.id || '');
     } catch (cause) {
@@ -60,9 +52,9 @@ export function SkillRepositoryPage() {
   const visible = useMemo(() => skills.filter((skill) => {
     const tags = skill.tags ?? [];
     return (filter === 'all' || tags.includes(filter)) &&
-      `${skill.name} ${skill.description} ${tags.flatMap((tag) => [tag, skillTagLabels[tag]]).join(' ')}`
+      `${skill.name} ${skill.description} ${tags.flatMap((tag) => [tag, (skillTagLabels[tag] ?? tag)]).join(' ')}`
         .toLowerCase().includes(query.toLowerCase());
-  }), [filter, query, skills]);
+  }), [filter, query, skills, skillTagLabels]);
   const selected = visible.find((skill) => skill.id === selectedId) ?? visible[0];
 
   useEffect(() => {
@@ -122,7 +114,7 @@ export function SkillRepositoryPage() {
                     active={filter === tag}
                     onClick={() => setFilter(tag)}
                   >
-                    {tag === 'all' ? '全部' : skillTagLabels[tag]}
+                    {tag === 'all' ? '全部' : (skillTagLabels[tag] ?? tag)}
                   </RepositoryFilterButton>
                 ))}
             >
@@ -148,7 +140,7 @@ export function SkillRepositoryPage() {
                 title={selected.name}
                 description={selected.description}
                 openUrl={selected.open_url}
-                properties={<RepositoryTagList tags={(selected.tags ?? []).map((tag) => skillTagLabels[tag])} />}
+                properties={<RepositoryTagList tags={(selected.tags ?? []).map((tag) => (skillTagLabels[tag] ?? tag))} />}
                 actions={(
                   <div className="flex items-center gap-2.5">
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
@@ -193,7 +185,7 @@ export function SkillRepositoryPage() {
           open={editOpen}
           title="编辑技能"
           value={{ name: selected.name, description: selected.description, tags: selected.tags ?? [] }}
-          tagOptions={skillTagOrder.map((tag) => ({ value: tag, label: skillTagLabels[tag] }))}
+          tagOptions={skillTagOrder.map((tag) => ({ value: tag, label: (skillTagLabels[tag] ?? tag) }))}
           onOpenChange={setEditOpen}
           onSave={updateSkill}
         />

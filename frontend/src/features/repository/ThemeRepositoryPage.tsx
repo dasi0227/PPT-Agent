@@ -1,3 +1,4 @@
+import { useResourceTags, useTagStore } from '../../stores/tagStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Palette } from 'lucide-react';
 import { repositoriesApi } from '../../api/repositories';
@@ -24,18 +25,8 @@ import {
 } from './themeShowcase';
 import { clearThemeExampleCache, ThemePreviewGallery } from './ThemePreview';
 
-const themeTagLabels: Record<ThemeTag, string> = {
-  minimal: '极简',
-  business: '商务',
-  technology: '科技',
-  cool: '清冷',
-  warm: '温暖',
-  other: '其它',
-};
-
-const themeTagOrder = Object.keys(themeTagLabels) as ThemeTag[];
-
 export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
+  const { labels: themeTagLabels, order: themeTagOrder } = useResourceTags('theme', active);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
@@ -53,7 +44,7 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
     if (!loadedRef.current) setLoading(true);
     setError('');
     try {
-      const response = await repositoriesApi.listThemes();
+      const [response] = await Promise.all([repositoriesApi.listThemes(), useTagStore.getState().load('theme')]);
       if (request !== requestRef.current) return;
       const details = response.themes;
       loadedRef.current = true;
@@ -75,8 +66,8 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
   }, [active, load]);
   const visible = useMemo(() => themes.filter((theme) =>
     (filter === 'all' || theme.tags.includes(filter)) &&
-    `${theme.name} ${theme.description} ${theme.tags.flatMap((tag) => [tag, themeTagLabels[tag]]).join(' ')}`
-      .toLowerCase().includes(query.toLowerCase())), [filter, query, themes]);
+    `${theme.name} ${theme.description} ${theme.tags.flatMap((tag) => [tag, (themeTagLabels[tag] ?? tag)]).join(' ')}`
+      .toLowerCase().includes(query.toLowerCase())), [filter, query, themes, themeTagLabels]);
   const selected = visible.find((theme) => theme.id === selectedId) ?? visible[0];
   const toggle = async (theme: Theme) => {
     if (pendingRef.current) return;
@@ -126,7 +117,7 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
               label="主题列表"
               controls={(['all', ...themeTagOrder] as const).map((tag) => (
                 <RepositoryFilterButton key={tag} active={filter === tag} onClick={() => setFilter(tag)}>
-                  {tag === 'all' ? '全部' : themeTagLabels[tag]}
+                  {tag === 'all' ? '全部' : (themeTagLabels[tag] ?? tag)}
                 </RepositoryFilterButton>
               ))}
             >
@@ -155,7 +146,7 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
                 title={selected.name}
                 description={selected.description}
                 openUrl={selected.open_url}
-                properties={<RepositoryTagList tags={selected.tags.map((tag) => themeTagLabels[tag])} />}
+                properties={<RepositoryTagList tags={selected.tags.map((tag) => (themeTagLabels[tag] ?? tag))} />}
                 actions={(
                   <div className="flex items-center gap-2.5">
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
@@ -196,7 +187,7 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
           open={active && editOpen}
           title="编辑主题"
           value={{ name: selected.name, description: selected.description, tags: selected.tags }}
-          tagOptions={themeTagOrder.map((tag) => ({ value: tag, label: themeTagLabels[tag] }))}
+          tagOptions={themeTagOrder.map((tag) => ({ value: tag, label: (themeTagLabels[tag] ?? tag) }))}
           onOpenChange={setEditOpen}
           onSave={updateTheme}
         />

@@ -14,7 +14,8 @@ import (
 
 func newRepositoryMetadataStoreForTest(t *testing.T) *Store {
 	t.Helper()
-	db, cleanup, err := Open(&config.Config{DBPath: filepath.Join(t.TempDir(), "metadata.db")}, zap.NewNop())
+	root := t.TempDir()
+	db, cleanup, err := Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "metadata.db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,6 +30,9 @@ func newRepositoryMetadataStoreForTest(t *testing.T) *Store {
 func TestResourcesPersistMetadataAndTagsAtomically(t *testing.T) {
 	ctx := context.Background()
 	st := newRepositoryMetadataStoreForTest(t)
+	if err := st.InitializeTags(ctx, []model.TagDefinition{{ID: "component-card", Scope: "component", Key: "card", Name: "Card"}, {ID: "component-list", Scope: "component", Key: "list", Name: "List"}}); err != nil {
+		t.Fatal(err)
+	}
 	original := model.Resource{Type: "component", ID: "card", Name: "Card", NormalizedName: "card", Description: "Description", Tags: []string{"card"}, CreatedAt: 1, UpdatedAt: 1}
 	if err := st.CreateResource(ctx, original); err != nil {
 		t.Fatal(err)
@@ -77,6 +81,37 @@ func TestOnlySnippetNamesAreUnique(t *testing.T) {
 			}
 		} else if err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+func TestTagDictionaryUsesDatabaseNamesAndOrder(t *testing.T) {
+	st := newRepositoryMetadataStoreForTest(t)
+	ctx := context.Background()
+	if err := st.db.Exec("UPDATE tags SET name = ?, normalized_name = ?, sort_order = ? WHERE scope = ? AND key = ?", "自定义交付", "自定义交付", -1, "snippet", "deliverable").Error; err != nil {
+		t.Fatal(err)
+	}
+	tags, err := st.ListTags(ctx, "snippet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tags) == 0 || tags[0].Key != "deliverable" || tags[0].Name != "自定义交付" {
+		t.Fatalf("dictionary = %+v", tags)
+	}
+	seed := model.TagDefinition{ID: tags[0].ID, Scope: "snippet", Key: "deliverable", Name: "交付", SortOrder: 20, IsSystem: true}
+	if err := st.InitializeTags(ctx, []model.TagDefinition{seed}); err != nil {
+		t.Fatal(err)
+	}
+	again, err := st.ListTags(ctx, "snippet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again[0].Name != "自定义交付" || again[0].SortOrder != -1 {
+		t.Fatal("initialization overwrote database metadata")
+	}
+	for _, tag := range again {
+		if tag.Scope != "snippet" {
+			t.Fatal("scope filter leaked another resource dictionary")
 		}
 	}
 }

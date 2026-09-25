@@ -1,0 +1,194 @@
+[
+  {
+    "id": "tag_theme_minimal",
+    "scope": "theme",
+    "key": "minimal",
+    "name": "极简",
+    "is_system": true,
+    "sort_order": 10
+  },
+  {
+    "id": "tag_theme_business",
+    "scope": "theme",
+    "key": "business",
+    "name": "商务",
+    "is_system": true,
+    "sort_order": 20
+  },
+  {
+    "id": "tag_theme_technology",
+    "scope": "theme",
+    "key": "technology",
+    "name": "科技",
+    "is_system": true,
+    "sort_order": 30
+  },
+  {
+    "id": "tag_theme_cool",
+    "scope": "theme",
+    "key": "cool",
+    "name": "清冷",
+    "is_system": true,
+    "sort_order": 40
+  },
+  {
+    "id": "tag_theme_warm",
+    "scope": "theme",
+    "key": "warm",
+    "name": "温暖",
+    "is_system": true,
+    "sort_order": 50
+  },
+  {
+    "id": "tag_theme_other",
+    "scope": "theme",
+    "key": "other",
+    "name": "其它",
+    "is_system": true,
+    "sort_order": 60
+  },
+  {
+    "id": "tag_component_card",
+    "scope": "component",
+    "key": "card",
+    "name": "卡片",
+    "is_system": true,
+    "sort_order": 10
+  },
+  {
+    "id": "tag_component_chart",
+    "scope": "component",
+    "key": "chart",
+    "name": "统计图",
+    "is_system": true,
+    "sort_order": 20
+  },
+  {
+    "id": "tag_component_table",
+    "scope": "component",
+    "key": "table",
+    "name": "表格",
+    "is_system": true,
+    "sort_order": 30
+  },
+  {
+    "id": "tag_component_list",
+    "scope": "component",
+    "key": "list",
+    "name": "列表",
+    "is_system": true,
+    "sort_order": 40
+  },
+  {
+    "id": "tag_component_process",
+    "scope": "component",
+    "key": "process",
+    "name": "流程",
+    "is_system": true,
+    "sort_order": 50
+  },
+  {
+    "id": "tag_component_metric",
+    "scope": "component",
+    "key": "metric",
+    "name": "指标",
+    "is_system": true,
+    "sort_order": 60
+  },
+  {
+    "id": "tag_component_other",
+    "scope": "component",
+    "key": "other",
+    "name": "其它",
+    "is_system": true,
+    "sort_order": 70
+  },
+  {
+    "id": "tag_skill_workflow",
+    "scope": "skill",
+    "key": "workflow",
+    "name": "工作流",
+    "is_system": true,
+    "sort_order": 10
+  },
+  {
+    "id": "tag_skill_methodology",
+    "scope": "skill",
+    "key": "methodology",
+    "name": "方法论",
+    "is_system": true,
+    "sort_order": 20
+  },
+  {
+    "id": "tag_skill_manual",
+    "scope": "skill",
+    "key": "manual",
+    "name": "操作手册",
+    "is_system": true,
+    "sort_order": 30
+  },
+  {
+    "id": "tag_skill_experience",
+    "scope": "skill",
+    "key": "experience",
+    "name": "开发经验",
+    "is_system": true,
+    "sort_order": 40
+  },
+  {
+    "id": "tag_skill_other",
+    "scope": "skill",
+    "key": "other",
+    "name": "其它",
+    "is_system": true,
+    "sort_order": 50
+  },
+  {
+    "id": "tag_snippet_identity",
+    "scope": "snippet",
+    "key": "identity",
+    "name": "身份",
+    "is_system": true,
+    "sort_order": 10
+  },
+  {
+    "id": "tag_snippet_deliverable",
+    "scope": "snippet",
+    "key": "deliverable",
+    "name": "交付",
+    "is_system": true,
+    "sort_order": 20
+  },
+  {
+    "id": "tag_snippet_constraint",
+    "scope": "snippet",
+    "key": "constraint",
+    "name": "约束",
+    "is_system": true,
+    "sort_order": 30
+  },
+  {
+    "id": "tag_snippet_git",
+    "scope": "snippet",
+    "key": "git",
+    "name": "Git",
+    "is_system": true,
+    "sort_order": 40
+  },
+  {
+    "id": "tag_snippet_review",
+    "scope": "snippet",
+    "key": "review",
+    "name": "审查",
+    "is_system": true,
+    "sort_order": 50
+  },
+  {
+    "id": "tag_snippet_other",
+    "scope": "snippet",
+    "key": "other",
+    "name": "其它",
+    "is_system": true,
+    "sort_order": 60
+  }
+]

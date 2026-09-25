@@ -1,3 +1,4 @@
+import { installTagDictionaryFixture } from '../../testSupport/resourceTags';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -111,7 +112,7 @@ function project(theme: string): Project {
     title: 'Project 7',
     work_dir: '/projects/project-7',
     theme,
-    status: 'ready',
+
     design_path: 'design.json',
     outline_path: 'outline.json',
 
@@ -136,6 +137,7 @@ function projectContent(theme: string): ProjectContentSnapshot {
 describe('personal repository pages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    installTagDictionaryFixture();
     clearThemeExampleCache();
     mocks.themeExample.mockImplementation(async (name:string)=>({html:`<main class="slide-stage">${name}</main>`}));
     mocks.getTheme.mockImplementation(async(id:string)=>themeFixtures().find(theme=>theme.id===id));

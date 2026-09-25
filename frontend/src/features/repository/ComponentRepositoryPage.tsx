@@ -1,3 +1,4 @@
+import { useResourceTags, useTagStore } from '../../stores/tagStore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Component } from 'lucide-react';
 import { repositoriesApi } from '../../api/repositories';
@@ -25,23 +26,9 @@ function previewKey(component: ComponentReference) {
   return JSON.stringify([component.id, component.html]);
 }
 
-const componentTagLabels: Record<ComponentTag, string> = {
-  card: '卡片',
-  chart: '统计图',
-  table: '表格',
-  list: '列表',
-  process: '流程',
-  metric: '指标',
-  other: '其它',
-};
-
-function componentTagLabel(tag: ComponentTag): string {
-  return componentTagLabels[tag];
-}
-
-const componentTagOrder = Object.keys(componentTagLabels) as ComponentTag[];
-
 export function ComponentRepositoryPage() {
+  const { labels: componentTagLabels, order: componentTagOrder } = useResourceTags('component');
+  const componentTagLabel = useCallback((tag: ComponentTag) => componentTagLabels[tag] ?? tag, [componentTagLabels]);
   const [components, setComponents] = useState<ComponentReference[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
@@ -55,7 +42,7 @@ export function ComponentRepositoryPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await repositoriesApi.listComponents();
+      const [response] = await Promise.all([repositoriesApi.listComponents(), useTagStore.getState().load('component')]);
       const details = await Promise.all(response.components.map((component) => repositoriesApi.getComponent(component.id)));
       setComponents(details);
       setSelectedId((value) => value || details[0]?.id || '');
@@ -71,10 +58,10 @@ export function ComponentRepositoryPage() {
   const filters = useMemo(() => [
     'all' as const,
     ...componentTagOrder.filter((tag) => components.some((component) => component.tags.includes(tag))),
-  ], [components]);
+  ], [components, componentTagOrder]);
   const visible = useMemo(() => components.filter((component) =>
     (filter === 'all' || component.tags.includes(filter)) &&
-    `${component.name} ${component.description} ${component.tags.flatMap((tag) => [tag, componentTagLabel(tag)]).join(' ')}`.toLowerCase().includes(query.toLowerCase())), [components, filter, query]);
+    `${component.name} ${component.description} ${component.tags.flatMap((tag) => [tag, componentTagLabel(tag)]).join(' ')}`.toLowerCase().includes(query.toLowerCase())), [components, filter, query, componentTagLabel]);
   const selected = visible.find((component) => component.id === selectedId) ?? visible[0];
   const previews = useMemo(() => components.filter(component => component.content_state === 'ready').map(component => ({
     key: previewKey(component),
@@ -207,7 +194,7 @@ export function ComponentRepositoryPage() {
           open={editOpen}
           title="编辑组件"
           value={{ name: selected.name, description: selected.description, tags: selected.tags }}
-          tagOptions={componentTagOrder.map((tag) => ({ value: tag, label: componentTagLabels[tag] }))}
+          tagOptions={componentTagOrder.map((tag) => ({ value: tag, label: (componentTagLabels[tag] ?? tag) }))}
           onOpenChange={setEditOpen}
           onSave={updateComponent}
         />

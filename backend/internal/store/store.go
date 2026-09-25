@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
 var (
@@ -16,12 +17,14 @@ var (
 	ErrResourceConflict        = errors.New("store: resource already exists")
 	ErrTagNotFound             = errors.New("store: tag not found")
 	ErrNamingOperationConflict = errors.New("store: naming operation conflict")
-	ErrCommandActivityConflict = errors.New("store: command activity already running or belongs to another command")
+	ErrCommandConflict         = errors.New("store: command attempt is active, stale, or belongs to another command")
 )
 
 // Store 是持久化层对外暴露的接口。随里程碑推进逐步扩展领域方法。
 type Store interface {
+	threadjournal.Backend
 	Health(ctx context.Context) error
+	HasActiveCommand(context.Context, string) (bool, error)
 
 	CreateProject(ctx context.Context, p model.Project) error
 	GetProject(ctx context.Context, id string) (model.Project, error)
@@ -35,12 +38,8 @@ type Store interface {
 	DeleteThread(ctx context.Context, id string) error
 	RecordThreadNamingInput(ctx context.Context, input model.ThreadNamingInput) (model.Thread, bool, error)
 	BeginThreadRenameRequest(ctx context.Context, id string, expectedOperationVersion int64, resetInputCount bool, updatedAt int64) (model.Thread, error)
-	StartThreadExplicitRenameRequest(ctx context.Context, id string, operationVersion int64, updatedAt int64) (model.Thread, error)
 	ApplyThreadRenameResult(ctx context.Context, id, title string, operationVersion int64, updatedAt int64) (model.Thread, bool, error)
 	UpdateThreadNamingState(ctx context.Context, id string, title *string, enabled *bool, resetInputCount bool, updatedAt int64) (model.Thread, error)
-	GetThreadNamingOperation(ctx context.Context, threadID, operationID string) (model.ThreadNamingOperation, error)
-	CreateThreadNamingOperation(ctx context.Context, operation model.ThreadNamingOperation) (bool, error)
-	CompleteThreadNamingOperation(ctx context.Context, operation model.ThreadNamingOperation) error
 	ListThreadNamingInputs(ctx context.Context, threadID string, limit int) ([]model.ThreadNamingInput, error)
 	LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error)
 
@@ -62,30 +61,21 @@ type Store interface {
 	ListThreadSteering(ctx context.Context, threadID string) ([]model.SteeringMessage, error)
 	MarkSteering(ctx context.Context, runID string, ids []string, status model.SteeringStatus, at int64, rejectionCode string) error
 	HasActiveRun(ctx context.Context, projectID string) (bool, error)
-	AppendEvent(ctx context.Context, e model.Event) error
+	AppendEvent(ctx context.Context, e *model.Event) error
 	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
 	ListThreadEvents(ctx context.Context, threadID string) ([]model.Event, error)
-	SaveRunContext(ctx context.Context, manifest model.RunContext) error
-	GetRunContext(ctx context.Context, runID string) (model.RunContext, error)
 
-	CreateGitCommitOperation(ctx context.Context, operation model.GitCommitOperation) error
-	GetGitCommitOperation(ctx context.Context, id string) (model.GitCommitOperation, error)
-	GetGitCommitOperationByRequest(ctx context.Context, threadID, clientRequestID string) (model.GitCommitOperation, error)
-	UpdateGitCommitOperation(ctx context.Context, operation model.GitCommitOperation) error
+	AcceptCommand(context.Context, string, model.CommandRequest, int64) (model.CommandExecution, bool, error)
+	GetCommand(context.Context, string) (model.CommandExecution, error)
+	SaveCommandExecution(context.Context, model.CommandExecution) error
+	RequestCommandCancel(context.Context, string, string, string) (model.CommandExecution, error)
+	ListActiveCommitCommands(context.Context) ([]model.CommandExecution, error)
 	HasActiveGitCommit(ctx context.Context, projectID string) (bool, error)
-	ListActiveGitCommits(ctx context.Context) ([]model.GitCommitOperation, error)
-	AppendGitCommitEvent(ctx context.Context, event model.GitCommitEvent) error
-	GitCommitEventsSince(ctx context.Context, operationID string, afterSeq int64) ([]model.GitCommitEvent, error)
-	ListThreadGitCommits(ctx context.Context, threadID string) ([]model.GitCommitOperation, error)
 
 	AppendBriefingVersion(ctx context.Context, version model.BriefingVersion) error
 	ListThreadBriefings(ctx context.Context, threadID string) ([]model.Briefing, error)
 	GetBriefingVersions(ctx context.Context, briefingID string, limit int) ([]model.BriefingVersion, error)
-	BeginCommandActivity(ctx context.Context, activity model.CommandActivity) (model.CommandActivity, error)
-	SaveCommandActivity(ctx context.Context, activity model.CommandActivity) error
-	ListThreadCommandActivities(ctx context.Context, threadID string) ([]model.CommandActivity, error)
 
-	SetProjectStatus(ctx context.Context, id, status string) error
 	ReplaceSlides(ctx context.Context, projectID string, slides []model.Slide) error
 	ListSlides(ctx context.Context, projectID string) ([]model.Slide, error)
 	GetSlide(ctx context.Context, id string) (model.Slide, error)

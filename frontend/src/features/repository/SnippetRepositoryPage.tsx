@@ -1,10 +1,10 @@
+import { useResourceTags, useTagStore } from '../../stores/tagStore';
 import { NotebookText } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Snippet, SnippetTag } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { useSnippetStore } from '../../stores/snippetStore';
 import { showGlobalError } from '../../stores/toastStore';
-import { snippetTagLabels, snippetTagOrder } from '../agent/promptMatching';
 import {
   RepositoryCatalog,
   RepositoryDetail,
@@ -20,6 +20,7 @@ import { RepositoryEditDialog } from './RepositoryEditDialog';
 import { RepositoryShell } from './RepositoryShell';
 
 export function SnippetRepositoryPage() {
+  const { labels: snippetTagLabels, order: snippetTagOrder } = useResourceTags('snippet');
   const snippets = useSnippetStore((state) => state.snippets);
   const loading = useSnippetStore((state) => state.loading);
   const loaded = useSnippetStore((state) => state.loaded);
@@ -35,7 +36,7 @@ export function SnippetRepositoryPage() {
   const [statusPending, setStatusPending] = useState(false);
 
   useEffect(() => {
-    void load().catch(() => undefined);
+    void Promise.all([load(), useTagStore.getState().load('snippet')]).catch(() => undefined);
   }, [load]);
 
   useEffect(() => {
@@ -48,11 +49,11 @@ export function SnippetRepositoryPage() {
       if (filter !== 'all' && !snippet.tags.includes(filter)) return false;
       const searchable = [
         snippet.name, snippet.description, snippet.content,
-        ...snippet.tags.flatMap((tag) => [tag, snippetTagLabels[tag]]),
+        ...snippet.tags.flatMap((tag) => [tag, (snippetTagLabels[tag] ?? tag)]),
       ].join(' ').toLocaleLowerCase();
       return searchable.includes(normalized);
     });
-  }, [filter, snippets, query]);
+  }, [filter, snippets, query, snippetTagLabels]);
   const selected = visible.find((snippet) => snippet.id === selectedId) ?? visible[0];
 
   useEffect(() => {
@@ -102,7 +103,7 @@ export function SnippetRepositoryPage() {
   return (
     <RepositoryShell section="snippet" onRefresh={() => {
       setEditOpen(false);
-      void load(true).catch(() => undefined);
+      void Promise.all([load(true), useTagStore.getState().load('snippet')]).catch(cause => showGlobalError(cause instanceof Error ? cause.message : '仓库刷新失败'));
     }}>
       <div className="flex h-full min-h-0 flex-col">
         <RepositoryPageHeader title="短语" query={query} onQueryChange={setQuery} searchLabel="搜索短语" />
@@ -112,7 +113,7 @@ export function SnippetRepositoryPage() {
               label="短语列表"
               controls={(['all', ...snippetTagOrder] as const).map((tag) => (
                 <RepositoryFilterButton key={tag} active={filter === tag} onClick={() => setFilter(tag)}>
-                  {tag === 'all' ? '全部' : snippetTagLabels[tag]}
+                  {tag === 'all' ? '全部' : (snippetTagLabels[tag] ?? tag)}
                 </RepositoryFilterButton>
               ))}
             >
@@ -139,7 +140,7 @@ export function SnippetRepositoryPage() {
                 title={selected.name}
                 description={selected.description}
                 openUrl={selected.open_url}
-                properties={<RepositoryTagList tags={selected.tags.map((tag) => snippetTagLabels[tag])} />}
+                properties={<RepositoryTagList tags={selected.tags.map((tag) => (snippetTagLabels[tag] ?? tag))} />}
                 actions={(
                   <div className="flex items-center gap-2.5">
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
@@ -188,7 +189,7 @@ export function SnippetRepositoryPage() {
           open={editOpen}
           title="编辑短语"
           value={{ name: selected.name, description: selected.description, tags: selected.tags }}
-          tagOptions={snippetTagOrder.map((tag) => ({ value: tag, label: snippetTagLabels[tag] }))}
+          tagOptions={snippetTagOrder.map((tag) => ({ value: tag, label: (snippetTagLabels[tag] ?? tag) }))}
           onOpenChange={setEditOpen}
           onSave={updateSnippetMetadata}
         />

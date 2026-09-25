@@ -16,6 +16,9 @@ import (
 // InitializeResources is an explicit operation, never a server startup hook.
 // Existing registered resources (including their user edits) are left untouched.
 func (s *ResourceService) InitializeResources(ctx context.Context, seedRoot string) error {
+	if err := s.initializeTags(ctx, seedRoot); err != nil {
+		return err
+	}
 	raw, err := os.ReadFile(filepath.Join(seedRoot, "resources.json"))
 	if err != nil {
 		return err
@@ -71,6 +74,9 @@ func (s *ResourceService) InitializeResources(ctx context.Context, seedRoot stri
 // ReplacePresets is an explicit maintenance operation for the theme/component catalogue.
 // Run it while the server is stopped; user enable/disable choices are retained.
 func (s *ResourceService) ReplacePresets(ctx context.Context, seedRoot string, componentsOnly bool) error {
+	if err := s.initializeTags(ctx, seedRoot); err != nil {
+		return err
+	}
 	raw, err := os.ReadFile(filepath.Join(seedRoot, "resources.json"))
 	if err != nil {
 		return err
@@ -161,4 +167,22 @@ func (s *ResourceService) replacePreset(ctx context.Context, r model.Resource, b
 		return errors.Join(err, rollback)
 	}
 	return nil
+}
+
+func (s *ResourceService) initializeTags(ctx context.Context, seedRoot string) error {
+	raw, err := os.ReadFile(filepath.Join(seedRoot, "tags.json"))
+	if err != nil {
+		return err
+	}
+	var tags []model.TagDefinition
+	if err := json.Unmarshal(raw, &tags); err != nil {
+		return err
+	}
+	initializer, ok := s.store.(interface {
+		InitializeTags(context.Context, []model.TagDefinition) error
+	})
+	if !ok {
+		return errors.New("resource tag initializer is unavailable")
+	}
+	return initializer.InitializeTags(ctx, tags)
 }

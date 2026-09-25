@@ -12,13 +12,12 @@ func TestBriefingStoreKeepsFullGroupsAndLimitsContextVersions(t *testing.T) {
 	st := newTestStore(t)
 	if err := st.CreateProject(ctx, model.Project{
 		ID: "p1", Title: "Deck", WorkDir: t.TempDir(), Theme: "default",
-		Status: "ready", LayoutVersion: currentProjectLayoutVersion, CreatedAt: 1, UpdatedAt: 1,
+		CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CreateThread(ctx, model.Thread{
-		ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl",
-		Status: "active", CreatedAt: 1, UpdatedAt: 1,
+		ID: "t1", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}

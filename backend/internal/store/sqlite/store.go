@@ -2,37 +2,52 @@ package sqlite
 
 import (
 	"context"
+	"sync"
 
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
-const currentProjectLayoutVersion = 6
-
 // Store 是基于 GORM 的 store.Store 实现。PO 与 GORM tag 仅存在于本包（ARCH-BACKEND-006）。
 type Store struct {
-	db  *gorm.DB
-	log *zap.Logger
+	instanceID       string
+	db               *gorm.DB
+	log              *zap.Logger
+	workRoot         string
+	deliveryLocks    sync.Map
+	deliveryFailures sync.Map
 }
 
 var _ store.Store = (*Store)(nil)
 
-// NewStore 打开后执行迁移（migrations/ 为 schema 权威源），返回可用的 store 实现。
+// NewStore accepts only the current format and recovers committed log intents.
 func NewStore(db *gorm.DB, log *zap.Logger) (*Store, error) {
-	if err := Migrate(db, log); err != nil {
+	return NewStoreWithRecovery(db, log, nil)
+}
+func NewStoreWithRecovery(db *gorm.DB, log *zap.Logger, recoverProject func(*Store, string) error) (*Store, error) {
+	if err := initializeSchema(db); err != nil {
 		return nil, err
 	}
-	if err := db.Model(&commandActivityPO{}).Where("status = ?", "loading").Updates(map[string]any{"status": "canceled", "updated_at": nowUnix() * 1000}).Error; err != nil {
+	workRoot, err := workRootFromDB(db)
+	if err != nil {
 		return nil, err
 	}
-	if err := db.Model(&threadNamingOperationPO{}).
-		Where("status IN ?", []string{"in_progress", "accepted"}).
-		Updates(map[string]any{"status": "failed", "updated_at": nowUnix()}).Error; err != nil {
+	s := &Store{instanceID: model.MustShortID("store"), db: db, log: log, workRoot: workRoot}
+	if recoverProject != nil {
+		if err := recoverProject(s, workRoot); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.recoverOutbox(context.Background()); err != nil {
 		return nil, err
 	}
-	return &Store{db: db, log: log}, nil
+	if err := s.interruptCommands(context.Background()); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func (s *Store) Health(ctx context.Context) error {

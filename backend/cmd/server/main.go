@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,7 +24,10 @@ type App struct {
 	log    *zap.Logger
 }
 
+var workRootFlag = flag.String("work-root", "", "使用指定的新工作目录；省略时使用默认目录")
+
 func main() {
+	flag.Parse()
 	app, cleanup, err := initApp()
 	if err != nil {
 		panic(err)

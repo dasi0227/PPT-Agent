@@ -1,5 +1,7 @@
 # 持久化辅助字段精简
 
+> 2026-09-25 持久化切换说明：本文中的旧数据库表、独立 user/model JSONL、命令专用执行接口及事件流描述已由[会话日志、命令与数据库重构总结](2026-09-25-session-storage-refactor-design.md)替代。其他产品行为仍按最新用户决定执行；新实现仅做静态复核，手动验收见新文档第 17 节。
+
 > 后续决定：materialization 已按 [HTML 生成参考快照与变化上下文](2026-09-25-html-generation-reference-snapshots-design.md) 整体退出，改为 SQLite 按页生成参考快照及独立渲染证据，本文其他辅助字段清理规则继续有效。
 
 ## 最新决定

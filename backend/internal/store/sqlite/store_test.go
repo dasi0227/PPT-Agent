@@ -8,12 +8,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	cfg := &config.Config{DBPath: filepath.Join(t.TempDir(), "test.db")}
+	root := t.TempDir()
+	cfg := &config.Config{WorkRoot: root, DBPath: filepath.Join(root, "test.db")}
 	db, cleanup, err := Open(cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("open: %v", err)
@@ -21,15 +21,15 @@ func newTestStore(t *testing.T) *Store {
 	t.Cleanup(cleanup)
 	s, err := NewStore(db, zap.NewNop())
 	if err != nil {
-		t.Fatalf("new store (migrate): %v", err)
+		t.Fatalf("initialize store: %v", err)
 	}
 	return s
 }
 
-func TestMigrateCreatesTables(t *testing.T) {
+func TestSchemaCreatesTables(t *testing.T) {
 	s := newTestStore(t)
 
-	want := []string{"projects", "slides", "deleted_slides", "threads", "runs", "run_events", "run_contexts"}
+	want := []string{"projects", "slides", "threads", "runs", "steering_inbox", "idempotency_records", "resources", "tags", "resource_tags", "shortcut_settings", "command_executions", "thread_event_outbox"}
 	for _, name := range want {
 		var count int64
 		if err := s.db.Raw(
@@ -60,7 +60,7 @@ func TestCascadeDelete(t *testing.T) {
 	s := newTestStore(t)
 
 	if err := s.db.Exec(
-		"INSERT INTO projects (id,title,work_dir,created_at,updated_at) VALUES (?,?,?,?,?)",
+		"INSERT INTO projects (id,title,theme,created_at,updated_at) VALUES (?,?,?,?,?)",
 		"p1", "t", "/w", 1, 1,
 	).Error; err != nil {
 		t.Fatalf("insert project: %v", err)
@@ -91,46 +91,18 @@ func TestHealth(t *testing.T) {
 	}
 }
 
-func TestMigrateIdempotent(t *testing.T) {
-	cfg := &config.Config{DBPath: filepath.Join(t.TempDir(), "idem.db")}
+func TestSchemaInitializationIdempotent(t *testing.T) {
+	root := t.TempDir()
+	cfg := &config.Config{WorkRoot: root, DBPath: filepath.Join(root, "idem.db")}
 	db, cleanup, err := Open(cfg, zap.NewNop())
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	t.Cleanup(cleanup)
-	if err := Migrate(db, zap.NewNop()); err != nil {
-		t.Fatalf("first migrate: %v", err)
+	if err := initializeSchema(db); err != nil {
+		t.Fatalf("first initialization: %v", err)
 	}
-	if err := Migrate(db, zap.NewNop()); err != nil {
-		t.Fatalf("second migrate (should be idempotent): %v", err)
-	}
-}
-
-func TestRunContextRoundTripStoresManifestOnly(t *testing.T) {
-	s := newTestStore(t)
-	ctx := context.Background()
-	if err := s.CreateProject(ctx, model.Project{ID: "p", Title: "p", WorkDir: "/tmp/p", Status: "draft", CreatedAt: 1, UpdatedAt: 1}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p", HistoryPath: "threads/t.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
-		t.Fatal(err)
-	}
-	runModel := model.Run{ID: "r", ThreadID: "t", ProjectID: "p", Command: model.RunCommand{
-		Scope: model.NewRunScope(model.ScopeAllPages),
-		Mode:  model.ModeExecute, Instruction: "x",
-	}, Status: model.RunPending, CreatedAt: 1, UpdatedAt: 1}
-	if err := s.CreateRun(ctx, runModel); err != nil {
-		t.Fatal(err)
-	}
-	want := model.RunContext{RunID: "r", ContextID: "ctx_1", Profile: "spec/deck", PackHash: "hash", EstimatedTokens: 10, BudgetTokens: 100, ManifestJSON: `{"segments":[]}`, CreatedAt: 1}
-	if err := s.SaveRunContext(ctx, want); err != nil {
-		t.Fatal(err)
-	}
-	got, err := s.GetRunContext(ctx, "r")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != want {
-		t.Fatalf("got=%+v want=%+v", got, want)
+	if err := initializeSchema(db); err != nil {
+		t.Fatalf("second initialization (should be idempotent): %v", err)
 	}
 }

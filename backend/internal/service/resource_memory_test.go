@@ -11,6 +11,7 @@ import (
 type memoryResourceStore struct {
 	mu   sync.Mutex
 	rows map[string]model.Resource
+	tags map[string]model.TagDefinition
 }
 
 func newMemoryResourceStore() *memoryResourceStore {
@@ -107,5 +108,19 @@ func (s *memoryResourceStore) DeleteResource(_ context.Context, kind, id string)
 		return store.ErrResourceNotFound
 	}
 	delete(s.rows, key)
+	return nil
+}
+
+func (s *memoryResourceStore) InitializeTags(_ context.Context, tags []model.TagDefinition) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.tags == nil {
+		s.tags = map[string]model.TagDefinition{}
+	}
+	for _, tag := range tags {
+		if _, ok := s.tags[tag.ID]; !ok {
+			s.tags[tag.ID] = tag
+		}
+	}
 	return nil
 }

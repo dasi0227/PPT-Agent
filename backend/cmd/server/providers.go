@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -44,15 +45,15 @@ func provideRenameProvider(registry *llm.Registry) (llm.Provider, error) {
 
 func provideLockManager() *run.LockManager { return run.NewLockManager() }
 
-func provideTranscriptStore() *contextengine.FSTranscriptStore {
-	return contextengine.NewFSTranscriptStore()
+func provideTranscriptStore(s *sqlitestore.Store) *contextengine.JournalTranscriptStore {
+	return contextengine.NewJournalTranscriptStore(s)
 }
 
 func provideCalibrationStore() *contextengine.CalibrationStore {
 	return contextengine.NewCalibrationStore()
 }
 
-func provideThreadService(s store.Store, transcripts *contextengine.FSTranscriptStore) *service.ThreadService {
+func provideThreadService(s store.Store, transcripts *contextengine.JournalTranscriptStore) *service.ThreadService {
 	return service.NewThreadServiceWithTranscript(s, transcripts)
 }
 
@@ -65,7 +66,7 @@ func provideNamingService(s store.Store, provider llm.Provider, hub *service.Thr
 	return svc, svc.Close
 }
 
-func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.FSTranscriptStore, calibration *contextengine.CalibrationStore, naming *service.NamingService) *service.RunService {
+func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, calibration *contextengine.CalibrationStore, naming *service.NamingService) *service.RunService {
 	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, calibration).WithNaming(naming)
 }
 
@@ -131,17 +132,12 @@ func provideResourceService(s store.Store, workRoot service.WorkRoot) (*service.
 	return svc, nil
 }
 
-func provideEngine(rs run.Store, locks *run.LockManager, hw run.HistoryWriter, log *zap.Logger) (*run.Engine, error) {
-	engine := run.NewEngine(rs, locks, hw, log)
+func provideEngine(rs run.Store, locks *run.LockManager, log *zap.Logger) (*run.Engine, error) {
+	engine := run.NewEngine(rs, locks, log)
 	if err := engine.Initialize(context.Background()); err != nil {
 		return nil, err
 	}
 	return engine, nil
-}
-
-// provideHistoryWriter 用底层 store 作为 ThreadLocator：Store 已实现 GetThread/GetProject（隐式接口）。
-func provideHistoryWriter(s store.Store) run.HistoryWriter {
-	return run.NewFSHistoryWriter(s)
 }
 
 func provideRenderWorker() (*workflow.NodeSlideRenderer, func(), error) {
@@ -153,4 +149,19 @@ func provideRenderWorker() (*workflow.NodeSlideRenderer, func(), error) {
 		return nil, nil, err
 	}
 	return renderer, func() { _ = renderer.Close() }, nil
+}
+
+func provideConfig() (*config.Config, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	if *workRootFlag != "" {
+		cfg.WorkRoot, err = filepath.Abs(*workRootFlag)
+		if err != nil {
+			return nil, err
+		}
+		cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
+	}
+	return cfg, nil
 }

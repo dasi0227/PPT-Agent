@@ -140,3 +140,12 @@ func (h *ResourceHandler) WriteSnippet(c *gin.Context) {
 	}
 	c.JSON(200, v)
 }
+
+func (h *ResourceHandler) ListTags(c *gin.Context) {
+	tags, err := h.svc.Tags(c.Request.Context(), c.Query("scope"))
+	if err != nil {
+		resourceFailure(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tags": tags})
+}
